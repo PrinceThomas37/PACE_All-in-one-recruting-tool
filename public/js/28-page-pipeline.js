@@ -125,6 +125,10 @@
     var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
     var j = joById(jid);
     if (!j) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">Job not found.</div></div>';
+    // "Best matches" ranks the WHOLE candidate database against this job, which
+    // the browser can't do (it only ever holds this job's pipeline) — so that
+    // view is server-scored and rendered separately.
+    if (STATE.bd.plMatchView === jid) return renderMatchesView(j, u);
     var rows = (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; });
     // Match scoring: best-fit candidates float to the top by default (the whole
     // point of the feature), with a toggle back to "recently added".
@@ -142,6 +146,7 @@
     var tabs =
       '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
         '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Candidates ('+rows.length+')</div>'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plOpenMatches(\''+j.id+'\')">Best matches</div>'+
         '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
         (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
       '</div>';
@@ -461,6 +466,171 @@
     STATE.page = 'applicants';
     render();
     if (window.srcLoadForCandidatesTab) srcLoadForCandidatesTab();
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BEST MATCHES — the whole candidate database, ranked against this job.
+  //
+  // The Candidates tab shows who is already tagged onto this req. This shows
+  // everyone we have, best fit first, so a recruiter stops re-reading resumes
+  // to find people they already own. Scoring happens server-side (the browser
+  // never holds the full pool) using the same rules the Match column uses —
+  // literally the same file, see match-engine.js.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  window.plOpenMatches = function(jobId){
+    STATE.bd.plMatchView = jobId;
+    STATE.bd.plMatches = { loading:true, results:[], error:'', minScore:(STATE.bd.plMatches||{}).minScore||0, q:'' };
+    render();
+    plLoadMatches();
+  };
+
+  window.plCloseMatches = function(){ STATE.bd.plMatchView = null; render(); };
+
+  function plLoadMatches(){
+    var jid = STATE.bd.plMatchView; if (!jid) return;
+    var m = STATE.bd.plMatches || {};
+    var qs = '?limit=100';
+    if (m.minScore) qs += '&min_score='+encodeURIComponent(m.minScore);
+    if (m.q) qs += '&q='+encodeURIComponent(m.q);
+    apiGet('/job-orders/'+jid+'/matches'+qs).then(function(r){
+      STATE.bd.plMatches = Object.assign({}, STATE.bd.plMatches, {
+        loading:false, error:'',
+        results:(r&&r.results)||[], total:(r&&r.total)||0,
+        poolSize:(r&&r.pool_size)||0, scoreable:!!(r&&r.scoreable)
+      });
+      render();
+    }).catch(function(e){
+      STATE.bd.plMatches = Object.assign({}, STATE.bd.plMatches, { loading:false, error:e.message||'Could not load matches' });
+      render();
+    });
+  }
+
+  window.plMatchFilter = function(kind, val){
+    STATE.bd.plMatches = Object.assign({}, STATE.bd.plMatches, kind==='min'?{minScore:parseInt(val,10)||0}:{q:val});
+    plLoadMatches();
+  };
+
+  // Tag a matched candidate onto this job — the same endpoint the Candidates
+  // page uses, so dedup and rate/availability snapshotting behave identically.
+  window.plTagMatch = function(candidateId, btn){
+    var jid = STATE.bd.plMatchView; if (!jid) return;
+    if (btn){ btn.disabled = true; btn.textContent = 'Adding…'; }
+    apiPost('/pipeline', { candidate_id:candidateId, job_order_id:jid }).then(function(){
+      showToast('Added to this job’s pipeline','success');
+      if (window.bdReloadPipeline) bdReloadPipeline();
+      // Mark it in place rather than re-fetching: the ranking shouldn't jump
+      // around underneath someone who is working down the list.
+      var m = STATE.bd.plMatches||{};
+      (m.results||[]).forEach(function(r){ if (r.candidate_id===candidateId) r._tagged = true; });
+      render();
+    }).catch(function(e){
+      showToast('Failed: '+(e.message||'could not add'),'error');
+      if (btn){ btn.disabled = false; btn.textContent = '+ Add'; }
+    });
+  };
+
+  function renderMatchesView(j, u){
+    var m = STATE.bd.plMatches || {};
+    var inPipeline = {};
+    (STATE.bd.pipeline||[]).forEach(function(p){ if (p.job_order_id===j.id && p.candidate) inPipeline[p.candidate.id] = true; });
+
+    var tabs =
+      '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plCloseMatches()">Candidates</div>'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Best matches</div>'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
+        (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
+      '</div>';
+
+    // If the job lists no skills, every score collapses onto title and location
+    // and the ranking is close to meaningless. Say so plainly and offer the fix
+    // rather than showing a confidently useless list.
+    var notice = m.scoreable === false
+      ? '<div class="card" style="padding:12px 14px;margin-bottom:12px;border-left:3px solid var(--amber)">'+
+          '<div style="font-size:13px;font-weight:700;margin-bottom:3px">This job lists no skills yet</div>'+
+          '<div style="font-size:12.5px;color:var(--text2)">Matching is mostly guesswork without them — scores below are based only on title and location. '+
+          '<button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="plParseJd(\''+j.id+'\')">Read skills from the job description</button></div>'+
+        '</div>'
+      : '';
+
+    var body;
+    if (m.loading){
+      body = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Scoring the candidate database…</div>';
+    } else if (m.error){
+      body = '<div style="padding:30px;text-align:center;color:var(--red);font-size:13px">'+esc(m.error)+'</div>';
+    } else if (!(m.results||[]).length){
+      body = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">'+
+        (m.q||m.minScore ? 'No candidates match those filters.' : 'No candidates in the database yet.')+'</div>';
+    } else {
+      var head = ['Match','Why','Candidate','Title','Employer','Exp','Work Auth','Location','Email','Mobile','']
+        .map(function(h){ return '<th style="padding:8px 9px;text-align:left;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap">'+h+'</th>'; }).join('');
+      var trs = (m.results||[]).map(function(r){
+        var c = r.candidate || {};
+        var already = r._tagged || inPipeline[c.id];
+        var td = 'padding:8px 9px;font-size:12.5px;border-top:1px solid var(--border);vertical-align:middle';
+        return '<tr'+(already?' style="opacity:.55"':'')+'>'+
+          '<td style="'+td+'">'+(window.matchBadge?matchBadge({score:r.score,band:r.band,reasons:r.reasons||[]}):esc(String(r.score)))+'</td>'+
+          // The reasons are the point: a score nobody can explain is a score
+          // nobody trusts. Show them inline, not only on hover.
+          '<td style="'+td+';color:var(--text3);font-size:11.5px;max-width:230px">'+esc((r.reasons||[]).join(' · '))+'</td>'+
+          '<td style="'+td+';font-weight:600"><a href="#" onclick="bdOpenCandidate(\''+c.id+'\');return false">'+esc(c.full_name||'—')+'</a>'+
+            (c.candidate_code?'<div style="font-size:11px;color:var(--text3)">'+esc(c.candidate_code)+'</div>':'')+'</td>'+
+          '<td style="'+td+'">'+esc(c.current_title||'—')+'</td>'+
+          '<td style="'+td+'">'+esc(c.current_employer||'—')+'</td>'+
+          '<td style="'+td+'">'+(c.experience_years!=null?esc(String(c.experience_years)):'—')+'</td>'+
+          '<td style="'+td+'">'+esc(c.work_authorization||'—')+'</td>'+
+          '<td style="'+td+'">'+esc([c.city,c.state].filter(Boolean).join(', ')||c.current_location||'—')+'</td>'+
+          '<td style="'+td+'">'+esc(c.email||'—')+'</td>'+
+          '<td style="'+td+'">'+esc(c.phone||'—')+'</td>'+
+          '<td style="'+td+';text-align:right;white-space:nowrap">'+
+            (already
+              ? '<span style="font-size:11.5px;color:var(--green);font-weight:600">✓ In pipeline</span>'
+              : '<button class="btn btn-sm btn-primary" onclick="plTagMatch(\''+c.id+'\',this)">+ Add</button>')+
+          '</td>'+
+        '</tr>';
+      }).join('');
+      body = '<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1180px">'+
+        '<thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+trs+'</tbody></table></div>';
+    }
+
+    var bands = [[0,'All'],[25,'Fair +'],[50,'Good +'],[75,'Strong only']];
+    var filters =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">'+
+        '<div style="font-size:12.5px;color:var(--text3)">'+
+          (m.loading?'':'Showing <strong style="color:var(--text2)">'+((m.results||[]).length)+'</strong> of '+(m.total||0)+' matched'+
+            (m.poolSize?' · '+m.poolSize+' candidates scored':''))+
+        '</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+          '<input class="inp" style="font-size:12px;padding:4px 8px;width:180px" placeholder="Filter by name or title"'+
+            ' value="'+esc(m.q||'')+'" onchange="plMatchFilter(\'q\',this.value)">'+
+          bands.map(function(b){ var on=(m.minScore||0)===b[0];
+            return '<button class="btn btn-sm '+(on?'btn-primary':'btn-outline')+'" onclick="plMatchFilter(\'min\',\''+b[0]+'\')">'+b[1]+'</button>'; }).join('')+
+        '</div>'+
+      '</div>';
+
+    return '<div class="page">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">'+
+        '<div><div style="font-size:19px;font-weight:800">'+esc(j.job_title||'Job')+'</div>'+
+          '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
+        '<button class="btn btn-outline" onclick="plCloseMatches()">← Back to pipeline</button>'+
+      '</div>'+
+      tabs + notice + filters + body +
+    '</div>';
+  }
+
+  // Re-read the job description and fill in blank skill/experience fields.
+  window.plParseJd = function(jobId){
+    apiPost('/job-orders/'+jobId+'/parse-jd?apply=1', {}).then(function(r){
+      if (!r || !r.applied){ showToast((r&&r.message)||'Nothing to fill from the description','info'); return; }
+      var got = Object.keys(r.derived||{}).filter(function(k){ return k!=='skills_source'; });
+      showToast('Filled in '+got.join(', ').replace(/_/g,' '),'success');
+      if (r.job_order){
+        var list = STATE.bd.jobOrders||[];
+        for (var i=0;i<list.length;i++) if (list[i].id===jobId) list[i] = r.job_order;
+      }
+      plLoadMatches();
+    }).catch(function(e){ showToast('Failed: '+(e.message||'could not parse'),'error'); });
   };
 
 })();
