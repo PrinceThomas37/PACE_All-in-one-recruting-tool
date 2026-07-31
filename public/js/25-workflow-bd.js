@@ -197,8 +197,13 @@
     var f=STATE.bd.jobFilter;
     var all=STATE.bd.jobOrders;
     var mine=all.filter(function(j){return j.bd_manager&&j.bd_manager.id===STATE.user.id;});
+    // Team's jobs = jobs managed by anyone on my reporting line (direct +
+    // transitive). Shown only to a user who actually leads a team.
+    var teamIds=(window.reportingSubtree?reportingSubtree(STATE.user.id):[]).map(function(t){return t.id;});
+    var team=teamIds.length?all.filter(function(j){return j.bd_manager&&teamIds.indexOf(j.bd_manager.id)>-1;}):[];
     var view=STATE.bd.jobsView||'all';
-    var base=view==='mine'?mine:all;
+    if(view==='team'&&!teamIds.length)view='all';
+    var base=view==='mine'?mine:view==='team'?team:all;
     var rows=base.filter(function(j){
       if(f.state&&(j.state||'')!==f.state)return false;
       if(f.status&&(j.status||'')!==f.status)return false;
@@ -208,12 +213,26 @@
       return true;
     });
     var activeCount=['state','status','job_type','priority','remote'].filter(function(k){return f[k];}).length;
+    var jobTabs=[['mine','My Jobs',mine.length]];
+    if(teamIds.length)jobTabs.push(['team',"Team's Jobs",team.length]);
+    jobTabs.push(['all','All Jobs',all.length]);
     var jobsTabBar='<div style="display:flex;gap:8px;margin-bottom:12px">'+
-      ['mine','all'].map(function(v){
-        var on=view===v, n=v==='mine'?mine.length:all.length, lbl=v==='mine'?'My Jobs':'All Jobs';
-        return '<button onclick="bdSetJobsView(\''+v+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+lbl+' ('+n+')</button>';
+      jobTabs.map(function(t){
+        var on=view===t[0];
+        return '<button onclick="bdSetJobsView(\''+t[0]+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+t[1]+' ('+t[2]+')</button>';
       }).join('')+
     '</div>';
+    // Multi-select (item 24): checkbox column + bulk status change.
+    var jsel=STATE.bd.jobSel||(STATE.bd.jobSel={});
+    STATE.bd._jobRowIds=rows.map(function(j){return j.id;}); // shown rows, for select-all
+    var selIds=rows.filter(function(j){return jsel[j.id];}).map(function(j){return j.id;});
+    var allChecked=rows.length&&rows.every(function(j){return jsel[j.id];});
+    var bulkBar=selIds.length?'<div style="display:flex;align-items:center;gap:12px;background:var(--accent-l);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--accent)">'+selIds.length+' job'+(selIds.length>1?'s':'')+' selected</span>'+
+      '<span style="font-size:12.5px;color:var(--text2)">Set status:</span>'+
+      '<select onchange="if(this.value)bdBulkStatus(this.value);this.value=\'\'" class="sel" style="font-size:12.5px;padding:5px 8px"><option value="">Choose…</option>'+JOB_STATUSES.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('')+'</select>'+
+      '<button onclick="bdJobClearSel()" style="margin-left:auto;background:transparent;color:var(--text2);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer">Clear</button>'+
+    '</div>':'';
     function fopt(key,all,list){return '<select class="sel" onchange="bdSetJobFilter(\''+key+'\',this.value)"><option value="">'+all+'</option>'+list.map(function(s){return '<option value="'+esc(s)+'"'+(f[key]===s?' selected':'')+'>'+esc(s)+'</option>';}).join("")+'</select>';}
     var body=rows.map(function(j){
       var recs=j.recruiters||[];
@@ -221,6 +240,7 @@
       var loc=[j.city,j.state].filter(Boolean).join(', ');
       var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
       return '<tr style="border-top:1px solid var(--border);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">'+
+        '<td style="padding:11px 12px;width:34px" onclick="event.stopPropagation()"><input type="checkbox" '+(jsel[j.id]?'checked':'')+' onclick="event.stopPropagation();bdJobToggleSel(\''+j.id+'\')" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)"/></td>'+
         '<td style="padding:11px 12px">'+code(j.job_code)+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+esc(j.lead_code||'')+'</div></td>'+
         '<td style="padding:11px 12px"><div style="font-weight:600;font-size:13.5px">'+esc(j.job_title||'')+'</div></td>'+
         '<td style="padding:11px 12px;font-size:12.5px">'+esc(j.client||'—')+'</td>'+
@@ -253,17 +273,25 @@
             '</div>':'')+
         '</div>'+
       '</div>'+
+      bulkBar+
       '<div class="card" style="overflow:auto">'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">'+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px">'+
           '<thead><tr style="background:var(--bg);text-align:left">'+
+            '<th style="padding:10px 12px;width:34px"><input type="checkbox" '+(allChecked?'checked':'')+' onclick="bdJobToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all shown"/></th>'+
             ['JOB CODE','JOB TITLE','CLIENT','LOCATION','STATUS','PAY RATE','RECRUITER'].map(function(h){return '<th style="padding:10px 12px;font-size:11px;color:var(--text3);font-weight:600">'+h+'</th>';}).join("")+
           '</tr></thead>'+
-          '<tbody>'+(body||'<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text3)">No jobs yet. Convert a connected lead or create one.</td></tr>')+'</tbody>'+
+          '<tbody>'+(body||'<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text3)">No jobs yet. Convert a connected lead or create one.</td></tr>')+'</tbody>'+
         '</table>'+
       '</div>'+
     '</div>';
   };
   window.bdSetJobsView=function(v){STATE.bd.jobsView=v;render();};
+  window.bdToggleJD=function(){STATE.bd.jdExpanded=!STATE.bd.jdExpanded;render();};
+  window.bdTogglePrevJD=function(){STATE.bd.jdShowPrev=!STATE.bd.jdShowPrev;STATE.bd.jdExpanded=false;render();};
+  window.bdJobToggleSel=function(id){var s=STATE.bd.jobSel||(STATE.bd.jobSel={});if(s[id])delete s[id];else s[id]=true;render();};
+  window.bdJobToggleSelAll=function(){var ids=STATE.bd._jobRowIds||[];var s=STATE.bd.jobSel||(STATE.bd.jobSel={});var allOn=ids.length&&ids.every(function(id){return s[id];});ids.forEach(function(id){if(allOn)delete s[id];else s[id]=true;});render();};
+  window.bdJobClearSel=function(){STATE.bd.jobSel={};render();};
+  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,{status:status});})).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status,'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});};
   window.bdSetJobFilter=function(k,v){STATE.bd.jobFilter[k]=v;STATE.bd.jobFilterOpen=true;render();};
   window.bdClearJobFilter=function(){STATE.bd.jobFilter={state:"",status:"",job_type:"",priority:"",remote:""};render();};
   window.bdToggleFilter=function(){STATE.bd.jobFilterOpen=!STATE.bd.jobFilterOpen;render();};
@@ -579,6 +607,27 @@
 
     function dr(lbl,val){return val?'<div style="font-size:12.5px;margin-bottom:4px"><span style="color:var(--text3)">'+lbl+': </span>'+esc(val)+'</div>':'';}
 
+    // Job-description block: a short preview with Show more/less, the "Re-write
+    // job description" action next to it, and — when a previous version was kept
+    // (on replace) — a toggle to view that earlier JD.
+    var jdText=j.job_description||'', prevText=j.previous_description||'';
+    var jdShowPrev=STATE.bd.jdShowPrev&&prevText;
+    var jdDisplay=jdShowPrev?prevText:jdText;
+    var jdExpanded=STATE.bd.jdExpanded;
+    var jdLong=jdDisplay.length>320;
+    var prevWhen=j.previous_description_at?(function(){try{return new Date(j.previous_description_at).toLocaleDateString();}catch(e){return '';}})():'';
+    var jdBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
+        '<div style="font-weight:600;font-size:13px">Job description'+(jdShowPrev?' <span style="font-size:11px;color:var(--amber);font-weight:600">· previous version'+(prevWhen?' ('+prevWhen+')':'')+'</span>':'')+'</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+          (jdLong?'<button onclick="bdToggleJD()" style="font-size:11.5px;color:var(--accent);background:none;border:0;cursor:pointer;font-weight:600">'+(jdExpanded?'Show less':'Show more')+'</button>':'')+
+          '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')" style="font-size:11.5px">✏ Re-write job description</button>'+
+          (prevText?'<button onclick="bdTogglePrevJD()" title="View the previous job description (kept until the job ends)" style="font-size:11.5px;color:'+(jdShowPrev?'var(--amber)':'var(--text3)')+';background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer">'+(jdShowPrev?'← Current JD':'Previous JD')+'</button>':'')+
+        '</div>'+
+      '</div>'+
+      (jdDisplay?'<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;'+((jdLong&&!jdExpanded)?'max-height:110px;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)':'')+'">'+esc(jdDisplay)+'</div>':'<div style="font-size:12.5px;color:var(--text3)">No job description yet.</div>')+
+    '</div>';
+
     return '<div class="page">'+
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="goPage(\'bd_joborders\')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Jobs</span></div>')+
       '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
@@ -591,7 +640,6 @@
           '<div style="display:flex;gap:8px">'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenKanban(\''+j.id+'\')">Board</button>'+
-            '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')">'+(j.posting_description?'Posting JD ✓':'Posting JD')+'</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>'+
           '</div>'+
         '</div>'+
@@ -602,7 +650,7 @@
           dr('Primary Skills',j.primary_skills)+dr('Experience',(j.exp_min||j.exp_max)?j.exp_min+'–'+j.exp_max+' yrs':'')+dr('Industry',j.industry)+
           dr('Lead',j.lead_code)+dr('Client Job ID',j.client_job_id)+dr('Job Category',j.job_category)+
         '</div>'+
-        (j.job_description?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;white-space:pre-wrap">'+esc(j.job_description)+'</div>':'')+
+        jdBlock+
       '</div>'+
       approval+
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
@@ -774,11 +822,12 @@
     STATE.modal=
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
-          '<div style="font-weight:700;font-size:15px">Posting JD — '+esc(j.job_title||'')+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">A public version of the job description with the company name and identifying details removed. Generate, review, edit, then save or copy for posting.</div>'+
+          '<div style="font-weight:700;font-size:15px">Re-write job description — '+esc(j.job_title||'')+'</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Generate a public version (company name and identifying details removed), or replace the internal job description. Generate, review, edit, then save or copy.</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          '<textarea id="pjd-text" class="sel" style="min-height:290px;resize:vertical;font-size:12.5px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
+          '<textarea id="pjd-text" class="sel" style="min-height:270px;resize:vertical;font-size:12.5px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
+          '<label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="pjd-replace" style="width:15px;height:15px;accent-color:var(--accent)"/> Replace the current job description with this text <span style="color:var(--text3)">— keeps the old one viewable until the job ends</span></label>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
           '<button class="btn btn-outline" onclick="bdGeneratePostingJD(\''+jid+'\')">✨ Generate from internal JD</button>'+
@@ -802,10 +851,18 @@
   window.bdSavePostingJD=function(jid){
     var ta=document.getElementById('pjd-text');
     var text=ta?ta.value:'';
-    apiPut('/job-orders/'+jid,{posting_description:text}).then(function(jo){
+    var replace=(document.getElementById('pjd-replace')||{}).checked;
+    var j=joById(jid)||{};
+    // Replace → the new text becomes the internal JD, and the OLD one is kept as
+    // previous_description (viewable via the toggle) until the job ends. Otherwise
+    // it's saved as the public posting description, as before.
+    var payload=replace
+      ? { job_description:text, previous_description:(j.job_description||null), previous_description_at:(j.job_description?new Date().toISOString():null) }
+      : { posting_description:text };
+    apiPut('/job-orders/'+jid,payload).then(function(jo){
       var idx=STATE.bd.jobOrders.findIndex(function(x){return x.id===jid;});
       if(idx>-1)STATE.bd.jobOrders[idx]=jo;
-      showToast('Posting JD saved','success');closeModal();
+      showToast(replace?'Job description replaced — previous version kept':'Posting JD saved','success');closeModal();
     }).catch(function(e){showToast('Failed: '+e.message,'error');});
   };
   window.bdCopyPostingJD=function(){

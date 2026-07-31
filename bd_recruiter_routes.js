@@ -94,10 +94,11 @@ module.exports = function (app, deps) {
     'start_date','end_date','duration','placement_fee','req_docs',
     'primary_skills','secondary_skills','exp_min','exp_max',
     'industry','domain','degree','languages','job_category',
-    'positions','job_description','posting_description','comments'
+    'positions','job_description','posting_description','comments',
+    'previous_description','previous_description_at'
   ];
-  // Date columns need null (not '') when empty, or Postgres rejects them.
-  const JOB_DATE_FIELDS = ['start_date','end_date'];
+  // Date/timestamp columns need null (not '') when empty, or Postgres rejects them.
+  const JOB_DATE_FIELDS = ['start_date','end_date','previous_description_at'];
   function pickJobFields(src) {
     const out = {};
     src = src || {};
