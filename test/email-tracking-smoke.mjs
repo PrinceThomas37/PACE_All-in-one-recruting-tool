@@ -1,7 +1,7 @@
 // Unit checks for the email-tracking helpers (slice 1 infrastructure).
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const et = require('/home/user/fute-lms-backend/email-tracking.js');
+const et = require('../email-tracking.js');
 
 const results = [];
 const step = (n, ok, d = '') => { results.push(ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };

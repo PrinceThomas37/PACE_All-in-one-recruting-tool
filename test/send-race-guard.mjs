@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SRC = fs.readFileSync(path.resolve('/home/user/fute-lms-backend/index.js'), 'utf8');
+const SRC = fs.readFileSync(path.resolve(new URL('../index.js', import.meta.url).pathname), 'utf8');
 const results = [];
 const step = (name, ok, detail = '') => { results.push({ name, ok }); console.log((ok ? '[PASS] ' : '[FAIL] ') + name + (detail ? ' — ' + detail : '')); };
 

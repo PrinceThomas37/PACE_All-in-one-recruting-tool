@@ -1,0 +1,87 @@
+# Keeps futé's background engine running.
+#
+# WHY THIS EXISTS
+# Render's free tier sleeps the web service after a period with no traffic, and
+# every recurring job (follow-ups, bounce/reply sweeps, workflow ticks, warm-up)
+# lives in a setInterval inside that process. When it sleeps, they all stop, and
+# nothing tells anyone. This workflow pings /cron/tick, which both wakes the
+# service and runs whatever has fallen due.
+#
+# WHY IT'S SAFE TO CALL OFTEN
+# Due-ness is persisted in the database by engine-runs.js, not held in a timer.
+# A job that isn't due is skipped. The in-process intervals and this ping can
+# never double-run the same job — whichever arrives first stamps it.
+#
+# COST
+# This repository is public, so GitHub Actions minutes are unlimited and free.
+# (If it is ever made private, this becomes billable: ~8,600 runs/month would
+# far exceed the 2,000 free minutes. Switch to cron-job.org's free tier — an
+# external HTTP pinger with no compute billing — if that happens.)
+#
+# SETUP (one time)
+#   1. Set CRON_KEY in the Render environment to a long random string.
+#   2. Add the same value as a GitHub repository secret named CRON_KEY
+#      (Settings → Secrets and variables → Actions → New repository secret).
+#   3. Optionally set the APP_BASE_URL repository *variable* if the host ever
+#      changes; it defaults to the current Render URL.
+# Until CRON_KEY is set on both sides the endpoint returns 404 and this job
+# reports that clearly rather than failing silently.
+
+name: engine heartbeat
+
+on:
+  schedule:
+    # Every 5 minutes — GitHub's minimum for scheduled workflows. Schedules are
+    # best-effort and can be delayed under load, which is fine: each job still
+    # runs on its own cadence, this only decides how promptly it's noticed.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:        # allows a manual run from the Actions tab
+
+# If a run is somehow still going when the next fires, don't stack them.
+concurrency:
+  group: engine-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the engine
+        env:
+          CRON_KEY: ${{ secrets.CRON_KEY }}
+          BASE_URL: ${{ vars.APP_BASE_URL || 'https://fute-lms-backend.onrender.com' }}
+        run: |
+          if [ -z "$CRON_KEY" ]; then
+            echo "::warning::CRON_KEY secret is not set — the heartbeat cannot authenticate."
+            echo "Add it under Settings → Secrets and variables → Actions, matching the value in Render."
+            exit 0
+          fi
+
+          # --max-time is generous: a cold Render instance takes ~30s to wake,
+          # and a due reply sweep can legitimately run for a couple of minutes.
+          # -s -S keeps the log quiet but still prints real errors.
+          body=$(curl -s -S --max-time 240 \
+                   -w '\n%{http_code}' \
+                   "${BASE_URL}/cron/tick?key=${CRON_KEY}") || {
+            echo "::warning::Ping failed to complete (service may be waking). Next run will retry."
+            exit 0
+          }
+
+          code=$(echo "$body" | tail -n1)
+          payload=$(echo "$body" | sed '$d')
+
+          echo "HTTP $code"
+          echo "$payload"
+
+          if [ "$code" = "404" ]; then
+            echo "::error::/cron/tick returned 404 — CRON_KEY is missing or does not match the value set in Render."
+            exit 1
+          fi
+
+          if [ "$code" != "200" ]; then
+            # Don't fail the workflow on a transient blip; the next tick retries
+            # and the jobs are idempotent. A persistent problem shows up as a
+            # continuous run of these warnings.
+            echo "::warning::Unexpected status $code from /cron/tick."
+          fi
