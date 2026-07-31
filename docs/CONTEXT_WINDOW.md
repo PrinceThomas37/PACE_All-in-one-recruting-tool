@@ -1,4 +1,8 @@
-# FUTE LMS Backend — Context Window (Session 4)
+# FUTE LMS Backend — Context Window (Session 6 latest; older sessions below)
+
+> **Latest work is Session 6** — jump to "## Session 6" near the end for the most
+> recent state (screen-by-screen redesign + Job White-board + stage vocabulary,
+> merged as PR #122 and live). Sessions 3–5 are kept below for history.
 
 > **Read `CLAUDE.md` at the repo root first** — it holds the durable, must-carry
 > context: who the owner is (a product owner who doesn't read code or use git — I
@@ -7,9 +11,10 @@
 > That file also tracks per-feature status (multi-tenancy slices, email-tracking
 > slices, interview auto-meeting) — keep it current.
 
-**Updated**: 2026-07-23 · **Repo**: PrinceThomas37/fute-lms-backend · **Branch**: main
-**Dev branch, Session 5**: `claude/team-hierarchy-visibility-hmjohj` (restarted from
-`main` after each merge, per the merged-PR convention — see below).
+**Updated**: 2026-07-31 · **Repo**: PrinceThomas37/PACE_All-in-one-recruting-tool
+(GitHub MCP still uses repo name `fute-lms-backend`; local dir + Render unchanged) ·
+**Branch**: main **Dev branch, Session 6**: `claude/dashboard-redesign-review-6o73ws`
+(restarted from `main` after the PR #122 merge, per the merged-PR convention).
 **Supabase project**: `teiqievahzhllojvgsku` · **Deploy**: Render
 (fute-lms-backend.onrender.com, auto-deploys from `main` — merging IS the release).
 
@@ -573,3 +578,117 @@ deliberate, flagged both times):
    reports already lands on a real-data dashboard (recruiter, or the hierarchy-
    scoped manager/team dashboard). Noted here in case that assumption ever
    breaks (e.g. a new role is added that isn't manager-like and isn't `ra`).
+
+---
+
+## Session 6 — screen-by-screen redesign + Job White-board + stage vocabulary
+
+**Dev branch**: `claude/dashboard-redesign-review-6o73ws`. **Shipped as PR #122,
+MERGED to `main` and LIVE.** Migration `032` (the stage data-rename) applied to the
+live DB **after** confirming the new build was serving. This session picked up a
+long redesign review (the owner reacting to the app screen by screen) plus a
+mailbox-health ask, and finished with "yes merge all" → merged + deployed + live
+data renamed.
+
+> **Repo note:** the GitHub repo is now `PrinceThomas37/PACE_All-in-one-recruting-tool`
+> (renamed from `fute-lms-backend`). Local dir is still `fute-lms-backend`; Render is
+> still `fute-lms-backend.onrender.com` (auto-deploys from `main`). GitHub MCP calls
+> still use owner `PrinceThomas37`, repo `fute-lms-backend` (the API resolves the
+> rename). PR #121 (an earlier review PR on this same branch) was **closed unmerged**;
+> #122 is the one that shipped.
+
+### What shipped (all in PR #122)
+
+**Navigation & Dashboard** — one consolidated sidebar; greeting-first dashboard with
+recruiting widgets reordered around next-actions; profile row + "My profile" in the
+sidebar footer.
+
+**My Team hub** — Team Insights + Reports folded into one tabbed page; "Lead Insights"
+renamed; transitive rosters. Reports tab gained date/role filters, a hot-jobs ranking,
+a per-person productivity breakdown, an org-chart view (List ⇄ Org-chart toggle), and a
+team-activity panel fed by a **new `GET /team/activity`** endpoint. Reports stay
+hierarchy-scoped (self + reporting chain; admin = whole org).
+
+**Leads / Jobs / Clients** — Leads: one colour system, number-only status chips,
+Position-first layout, horizontal-scroll fix. Jobs: a "Team's Jobs" view, JD
+show-more/less + a **"Re-write"** action that retains the prior JD (migration `031`
+added `previous_description`/`previous_description_at` on `job_orders`), multi-select
+bulk actions. Clients / Reminders / Deliverability brought into the same visual
+language.
+
+**Email mailbox sign-in health (Track A)** — a health badge on connected mailboxes
+that captures and surfaces the **exact** token-refresh error, so a broken mailbox is
+visible instead of failing silently. Migration `030` added
+`last_refresh_at`/`last_refresh_error`/`refresh_failed` on `microsoft_tokens` +
+`gmail_tokens`; logic in `mailbox-health.js`.
+
+**Job White-board (was "Candidate Pipeline")** — renamed. Cards are now
+**drag-and-drop** between stage columns; a drop runs the **same** `openStageModal()`
+as before (note, sub-stage, interview details, and the recruiter/BDM gate all still
+apply — a recruiter still can't drop into "Submitted to Client"). The per-card "Move
+to…" dropdown became a **colour-coded sub-stage** selector (`subStageColor()`:
+green = good, red = bad, amber = in progress). Handlers: `bdDragStart`/`bdDragOver`/
+`bdDrop`/`bdDragEnd`/`bdSetSubStage` in `25-workflow-bd.js`.
+
+**Stage vocabulary consolidation (the notable architectural bit)** — the submission
+lifecycle went from 12 → **11 stages**: **`Confirmation` → `Joining`**, and
+**`Rejected` + `Not Joined` merged into `Not Accepted`** (the reason lives on the
+sub-stage; `Not Accepted` sub-stages are the combined reason list). Made safe to ship
+ahead of the data rename by a **`normalizeStage()` helper on BOTH sides**
+(`bd_recruiter_routes.js` + `33-stage-modal.js`, aliases
+`Confirmation→Joining`, `Rejected|Not Joined→Not Accepted`), applied at every read
+that buckets/counts by stage (board columns, funnel, `/recruiting-dashboard`
+`by_stage`, `/reports/recruiting` funnel + per-user, `/bd-analytics`, recent-
+rejections) and normalized on the PATCH write path. Result: old stored values render
+correctly in the new columns **with or without** the migration — no card ever
+vanishes. The canonical vocabulary lives in `33-stage-modal.js`
+(`window.ATS_STAGE_LIST`/`ATS_SUB_STAGES`/`ATS_STAGE_COLORS`); duplicated copies in
+`25-workflow-bd.js` (BD_STAGES/STAGE_COLORS/STAGE_ABBR), `28-page-pipeline.js`
+(SUBSTAGE_COLORS/STAGE_RANK), `30-page-candidate.js` (STAGE_ORDER/milestones),
+`05-page-dashboard.js` (recStageColor) were all updated to match — **if a stage is
+ever renamed again, update all five plus the backend STAGES + STAGE_ALIASES.**
+
+### Migrations applied to the live DB this session
+| Migration | What | When |
+|---|---|---|
+| `030_mailbox_refresh_health.sql` | mailbox token-refresh health columns (additive) | applied |
+| `031_job_previous_description.sql` | `previous_description`(+`_at`) on `job_orders` (additive) | applied |
+| `032_stage_vocabulary.sql` | data rename `Confirmation→Joining`, `Rejected|Not Joined→Not Accepted` on `submissions` + `submission_activity` | applied **after** the new build was confirmed live (was held until the owner's "merge all"). Footprint was tiny: **1** submission (`Rejected`) + 1 activity row; 0 `Confirmation`/`Not Joined`. Verified 0 old values remain. |
+
+The migration was ordered **after** deploy on purpose: the new code is
+forward+backward compatible (normalizeStage), but the *old* live code only knew the
+old names — renaming data while old code was still serving would have briefly hidden
+that one card. Polled the live `js/33-stage-modal.js` for `normalizeStage` (deploy
+went green in ~15s), then ran the rename.
+
+### Test status
+Playwright smokes updated to the new vocabulary, all green:
+`stage-consolidation-smoke` 14/14, `workflow-gating-smoke` 25/25,
+`submission-review-smoke` 16/16, `recruiter-dashboard-smoke` 34/34,
+`job-candidate-updates-smoke` 25/25, `bash test/verify-frontend.sh` PASS.
+(Note: there is no `candidate-profile-smoke.mjs` — I guessed that name once and it
+404'd; the real candidate/board coverage is in the two smokes above.)
+
+### Open / next candidates (queued with the owner)
+- **Offer sheet** — a dedicated offer-detail capture (salary / start date /
+  offer-letter attachment) + confirmation "chase the joiner" nudges + a funnel-hover
+  that lists the candidates behind each bar (`stage_samples`). Deliberately deferred:
+  offer status is already trackable on the **Offer** column's sub-stages
+  (Preparing / Extended / Negotiating / Accepted / Declined), so this is an
+  enhancement, not a gap. This was the "offer flow / E4" part of the White-board plan
+  that was descoped to ship the board + vocabulary cleanly.
+- Everything still open from `CLAUDE.md`'s growth bets: **RLS slice 3b (held — do not
+  enable on the live DB without a fresh go-ahead)**, per-role *permission* differences,
+  candidate↔JD match scoring, CSV import/export + public API, generalized audit trail,
+  PWA polish, Stripe billing seam, and folding the legacy un-org-scoped
+  `/bd-analytics/*` into the org-scoped reports.
+
+### Session shape (for a cold resume)
+Owner reviewed the app screen by screen and reacted as a user ("this feels off",
+"rename this", "merge all"), never reading code — the standard loop. The whole
+redesign lived on ONE dev branch through several phases (nav/dashboard → My Team →
+Leads/Jobs/Clients → mailbox health → Job White-board + vocabulary), shown via
+screenshots, then merged in one shot on "yes merge all". The live-data migration was
+held until that same go-ahead and run only after confirming the deploy — same
+discipline as Session 5 (ship on branch, screenshot, wait for explicit go before
+merge or any live-DB write).
