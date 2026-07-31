@@ -55,10 +55,21 @@ we never have to rewrite to grow (see "Growth bets" below).
   the real modules in headless Chromium (guest login, inject `STATE`, assert on
   render output). `bash test/verify-frontend.sh` checks syntax + index.html.
   Run: `npm install --no-save playwright-core`; Chromium at `$PLAYWRIGHT_BROWSERS_PATH`.
-- **Two vocabularies, don't conflate:** recruiting postings live in `job_orders`
-  (12 ATS stages: Sourced … Placement); BD leads live in `jobs` (Unassigned,
-  Assigned, Connected, …). Recruiter gating: recruiters move a candidate only up to
-  "Submitted to BDM"; BD owns the later stages.
+- **Two vocabularies, don't conflate:** recruiting candidate progress lives on
+  `submissions.stage` (**11 ATS stages** since Session 6: Sourced, Screening,
+  Submitted to BDM, Submitted to Client, Interview Scheduled, Interview Completed,
+  Offer, **Joining**, Placement, **Not Accepted**, On Hold — `Joining` was
+  "Confirmation"; `Not Accepted` merges the old "Rejected" + "Not Joined"); BD leads
+  live in `jobs` (Unassigned, Assigned, Connected, …). Recruiter gating: recruiters
+  move a candidate only up to "Submitted to BDM"; BD owns the later stages.
+  - **Stage vocabulary is defined in 6 places that must stay in sync** —
+    `33-stage-modal.js` is canonical (`window.ATS_STAGE_LIST`/`ATS_SUB_STAGES`/
+    `ATS_STAGE_COLORS` + `normalizeStage()`); duplicated copies in
+    `25-workflow-bd.js`, `28-page-pipeline.js`, `30-page-candidate.js`,
+    `05-page-dashboard.js`, and the backend `bd_recruiter_routes.js` (`STAGES` +
+    `STAGE_ALIASES`). `normalizeStage()` (backend + frontend) maps any legacy stored
+    value to the current name on read and write, so a rename can ship before its data
+    migration without breaking boards/funnels/reports.
 
 ## Working conventions
 
