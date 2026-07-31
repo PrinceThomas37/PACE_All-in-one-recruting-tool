@@ -2543,6 +2543,7 @@ app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
+app.use(require('./routes/lead-sources')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
 
@@ -3168,6 +3169,17 @@ engineRunner.register('warmup_tick', {
   everyMs: 2 * 60 * 60 * 1000,
   description: 'Warm-up pool: graduate mailboxes, rescue from spam, send the next wave',
   run: () => warmupEngine.tick()
+});
+
+// ── Automatic lead sourcing (Step 2) ───────────────────────────────────────
+// Checks hourly, but each configured board has its own cadence (default daily),
+// so this mostly finds nothing to do. Postings land in the review queue and are
+// inert until a human approves them — nothing here can email anyone.
+engineRunner.register('lead_sourcing', {
+  everyMs: 60 * 60 * 1000,
+  quiet: true,          // usually nothing is due; don't fill the log with no-ops
+  description: 'Pull new postings from configured employer job boards into the review queue',
+  run: () => require('./lead-ingest').runDueSources({ supabase })
 });
 
 // ── THE HEARTBEAT ──────────────────────────────────────────────
