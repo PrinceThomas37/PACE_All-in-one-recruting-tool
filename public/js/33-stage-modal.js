@@ -29,6 +29,17 @@
   var STAGE_COLORS = {'Sourced':'var(--text3)','Screening':'#6b7280','Submitted to BDM':'var(--amber)','Submitted to Client':'var(--accent)','Interview Scheduled':'#2563eb','Interview Completed':'#1d4ed8','Offer':'#7c3aed','Confirmation':'#0891b2','Placement':'var(--green)','Rejected':'var(--red)','Not Joined':'#b91c1c','On Hold':'#9ca3af'};
   window.ATS_STAGE_COLORS = STAGE_COLORS;
 
+  // A colour for a sub-stage, semantically: green = good outcome, red = bad,
+  // amber = in-progress. Used to colour the sub-stage chip on the White-board.
+  function subStageColor(sub){
+    var s=String(sub||'').toLowerCase();
+    if(/passed|approved|accepted|cleared|placed|active|completed|shortlisted|positive|confirmed|extended|started/.test(s))return 'var(--green)';
+    if(/failed|declined|rejected|no show|withdrew|closed|negative|not reachable|counter/.test(s))return 'var(--red)';
+    if(/review|pending|progress|negotiat|preparing|awaiting|scheduled|attempted|left message|revision|sent back|hold|rescheduled|feedback|round/.test(s))return 'var(--amber)';
+    return 'var(--text3)';
+  }
+  window.subStageColor = subStageColor;
+
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function isInterviewStage(st){ return /^Interview/.test(st); }
   // ISO timestamp → value for a <input type="datetime-local"> (local time).

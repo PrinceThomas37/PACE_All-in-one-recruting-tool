@@ -750,27 +750,24 @@
     var colHtml=cols.map(function(st){
       var items=jobSubs.filter(function(s){return s.stage===st;});
       var locked=(st===BDM_GATED&&recruiterScoped);
-      return '<div style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px">'+
+      return '<div ondragover="bdDragOver(event)" ondragenter="if(!'+(locked?'true':'false')+'){this.style.background=\'var(--accent-l)\';this.style.outline=\'2px dashed var(--accent)\'}" ondragleave="this.style.background=\'var(--bg)\';this.style.outline=\'none\'" ondrop="this.style.background=\'var(--bg)\';this.style.outline=\'none\';bdDrop(event,\''+st+'\')" style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px;transition:background .1s">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
           '<div style="font-size:12px;font-weight:700;color:'+STAGE_COLORS[st]+'">'+st+'</div>'+
           '<div style="font-size:11px;color:var(--text3);font-weight:700">'+items.length+'</div>'+
         '</div>'+
         items.map(function(s){
           var c=s.candidate||{};
-          var nextStages=BD_STAGES.filter(function(x){
-            if(x===s.stage)return false;
-            if(x===BDM_GATED&&recruiterScoped)return false;
-            return true;
-          });
-          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:7px">'+
+          var subs=(window.ATS_SUB_STAGES&&ATS_SUB_STAGES[s.stage])||[];
+          var scol=window.subStageColor?subStageColor(s.sub_stage):'var(--text3)';
+          var subSel=subs.length?'<select onchange="bdSetSubStage(\''+s.id+'\',this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid '+(s.sub_stage?scol:'var(--border)')+';border-radius:7px;background:'+(s.sub_stage?scol+'1a':'var(--card)')+';color:'+(s.sub_stage?scol:'var(--text2)')+';font-weight:600;cursor:pointer">'+
+              '<option value="">Sub-stage…</option>'+
+              subs.map(function(x){return '<option value="'+esc(x)+'"'+(s.sub_stage===x?' selected':'')+'>'+esc(x)+'</option>';}).join('')+
+            '</select>':'';
+          return '<div draggable="true" ondragstart="bdDragStart(event,\''+s.id+'\')" ondragend="bdDragEnd(event)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:7px;cursor:grab">'+
             '<div style="font-weight:600;font-size:12.5px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'')+'</div>'+
-            '<div style="font-size:10.5px;color:var(--text3);margin-bottom:4px">'+code(c.candidate_code||'')+' · '+esc(c.current_title||'')+'</div>'+
-            (s.sub_stage?'<div style="font-size:10px;font-weight:700;color:var(--text2);background:var(--bg);display:inline-block;padding:1px 7px;border-radius:8px;margin-bottom:5px">'+esc(s.sub_stage)+'</div>':'')+
+            '<div style="font-size:10.5px;color:var(--text3);margin-bottom:5px">'+code(c.candidate_code||'')+' · '+esc(c.current_title||'')+'</div>'+
             (s.interview_at?'<div style="font-size:10px;color:#2563eb;margin-bottom:5px">🗓 '+esc(new Date(s.interview_at).toLocaleString())+(s.interview_location?' · '+esc(s.interview_location):'')+'</div>':'')+
-            '<select class="sel" style="font-size:11px;padding:4px 6px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
-              '<option value="">Move to…</option>'+
-              nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
-            '</select>'+
+            subSel+
           '</div>';
         }).join("")+
         (locked?'<div style="font-size:10px;color:var(--text3);text-align:center;padding:4px">🔒 BDM approval required</div>':'')+
@@ -780,12 +777,13 @@
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="bdBackFromKanban()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Back</span></div>')+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
         '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span style="font-weight:700;font-size:16px">'+esc(j.job_title||'')+'</span></div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+'</div></div>'+
+        '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+' · Job white-board</div></div>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
           '<button class="btn btn-primary" onclick="bdOpenAddCandidate(\''+j.id+'\')">+ Add Candidate</button>'+
         '</div>'+
       '</div>'+
+      '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Drag a candidate card to another column to change stage · pick a sub-stage on the card</div>'+
       '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">'+colHtml+'</div>'+
     '</div>';
   };
@@ -940,6 +938,33 @@
     openStageModal(sid,stage,function(){render();});
   };
   window.bdSetStage=function(sid,stage){bdMoveStage(sid,stage);};
+
+  // ── White-board drag-and-drop ──────────────────────────────────────────────
+  // Dropping a card on another stage column runs the SAME stage-change modal as
+  // before (openStageModal) — so notes, sub-stage, interview details and the
+  // recruiter/BDM gate all still apply. Sub-stage is changed on the card itself.
+  var _bdDragId=null;
+  window.bdDragStart=function(ev,sid){ _bdDragId=sid; try{ ev.dataTransfer.setData('text/plain',sid); ev.dataTransfer.effectAllowed='move'; }catch(e){} };
+  window.bdDragEnd=function(){ _bdDragId=null; };
+  window.bdDragOver=function(ev){ ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(e){} };
+  window.bdDrop=function(ev,stage){
+    ev.preventDefault();
+    var sid=_bdDragId||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); _bdDragId=null;
+    if(!sid||!stage)return;
+    var s=(STATE.bd.submissions||[]).find(function(x){return x.id===sid;});
+    if(!s||s.stage===stage)return;
+    var u=STATE.user;
+    if(stage===BDM_GATED&&isRec(u)&&!isBDM(u)){ showToast('Only a BD Manager can submit to the client.','error'); return; }
+    openStageModal(sid,stage,function(){render();});
+  };
+  window.bdSetSubStage=function(sid,sub){
+    if(!sub)return;
+    apiPatch('/submissions/'+sid,{sub_stage:sub}).then(function(){
+      var s=(STATE.bd.submissions||[]).find(function(x){return x.id===sid;});
+      if(s)s.sub_stage=sub;
+      render();
+    }).catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
+  };
   window.bdApproveSub=function(sid){bdMoveStage(sid,BDM_GATED);};
 
   // ── BDM: review a submission before approving ──────────────────────────────
