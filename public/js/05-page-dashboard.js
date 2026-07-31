@@ -282,8 +282,8 @@ function recDashboardLoad(){
 }
 
 function recStageColor(s){
-  if(s==='Placement'||s==='Confirmation')return"var(--green)";
-  if(s==='Rejected'||s==='Not Joined')return"var(--red)";
+  if(s==='Placement'||s==='Joining'||s==='Confirmation')return"var(--green)";
+  if(s==='Not Accepted'||s==='Rejected'||s==='Not Joined')return"var(--red)";
   if(s==='Offer')return"#7c3aed";
   if(s==='Interview Scheduled'||s==='Interview Completed')return"#2563eb";
   if(s==='On Hold')return"var(--amber)";

@@ -47,9 +47,15 @@ try {
   await page.click('button:has-text("Continue as Guest")');
   await page.waitForSelector('#sidebar', { timeout: 15000 });
 
-  // One shared 12-stage vocabulary is exported for every surface.
+  // One shared 11-stage vocabulary is exported for every surface.
   const stageList = await page.evaluate(() => window.ATS_STAGE_LIST);
-  step('Single shared stage vocabulary (12 stages)', Array.isArray(stageList) && stageList.length === 12 && stageList[0] === 'Sourced' && stageList[2] === 'Submitted to BDM');
+  step('Single shared stage vocabulary (11 stages)', Array.isArray(stageList) && stageList.length === 11 && stageList[0] === 'Sourced' && stageList[2] === 'Submitted to BDM');
+  step('Vocabulary uses Joining + Not Accepted (not Confirmation/Rejected/Not Joined)',
+    stageList.indexOf('Joining') > -1 && stageList.indexOf('Not Accepted') > -1 &&
+    stageList.indexOf('Confirmation') < 0 && stageList.indexOf('Rejected') < 0 && stageList.indexOf('Not Joined') < 0);
+  // Old stored values normalize to the new vocabulary (pre-migration safety).
+  const norm = await page.evaluate(() => [window.normalizeStage('Confirmation'), window.normalizeStage('Rejected'), window.normalizeStage('Not Joined'), window.normalizeStage('Offer')]);
+  step('normalizeStage maps old → new', norm[0] === 'Joining' && norm[1] === 'Not Accepted' && norm[2] === 'Not Accepted' && norm[3] === 'Offer');
 
   // Render the Pipeline tab with one promoted + one un-promoted candidate.
   await page.evaluate(() => {

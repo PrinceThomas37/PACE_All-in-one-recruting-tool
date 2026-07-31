@@ -43,9 +43,12 @@
     };
   }
 
-  var BD_STAGES=["Sourced","Screening","Submitted to BDM","Submitted to Client","Interview Scheduled","Interview Completed","Offer","Confirmation","Placement","Rejected","Not Joined","On Hold"];
+  var BD_STAGES=["Sourced","Screening","Submitted to BDM","Submitted to Client","Interview Scheduled","Interview Completed","Offer","Joining","Placement","Not Accepted","On Hold"];
+  // Map any pre-migration stage value (Confirmation/Rejected/Not Joined) to the
+  // current vocabulary so bucketing/counts stay correct until the data migration.
+  function nStage(x){ return (window.normalizeStage?normalizeStage(x):x); }
   var BDM_GATED="Submitted to Client";
-  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Confirmation":"#0891b2","Placement":"var(--green)","Rejected":"var(--red)","Not Joined":"#b91c1c","On Hold":"#9ca3af"};
+  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
   var JOB_TYPES=["Contract","Full-time","Contract-to-Hire","Part-time","1099","W2"];
   var EMP_LEVELS=["Entry","Associate","Mid-Senior","Director","Executive"];
   var WORK_AUTH=["US Citizen","Green Card","H1B","OPT/CPT","TN","Any"];
@@ -545,8 +548,9 @@
       results.forEach(function(r){
         var counts={},names={};
         r.subs.forEach(function(s){
-          counts[s.stage]=(counts[s.stage]||0)+1;
-          (names[s.stage]=names[s.stage]||[]).push((s.candidate&&s.candidate.full_name)||'');
+          var _ns=nStage(s.stage);
+          counts[_ns]=(counts[_ns]||0)+1;
+          (names[_ns]=names[_ns]||[]).push((s.candidate&&s.candidate.full_name)||'');
         });
         m[r.id]={counts:counts,names:names,total:r.subs.length};
       });
@@ -671,14 +675,15 @@
     var sel=STATE.bd.seqSel||[];
     var rows=subs.map(function(s){
       var c=s.candidate||{}; var on=sel.indexOf(s.id)>-1;
-      var nextStages=BD_STAGES.filter(function(x){return x!==s.stage;});
+      var curStage=nStage(s.stage);
+      var nextStages=BD_STAGES.filter(function(x){return x!==curStage;});
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
         '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleSeqSel(\''+s.id+'\')" style="cursor:pointer">'+
         '<div style="flex:1;min-width:0">'+
           '<span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'Candidate')+'</span> '+code(c.candidate_code||'')+
           (s.sub_stage?' <span style="font-size:10px;color:var(--text3)">· '+esc(s.sub_stage)+'</span>':'')+
         '</div>'+
-        '<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[s.stage]||'var(--text3)')+'">'+esc(s.stage||'')+'</span>'+
+        '<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[curStage]||'var(--text3)')+'">'+esc(curStage||'')+'</span>'+
         '<select class="sel" style="font-size:11px;padding:3px 6px;max-width:120px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
           '<option value="">Move…</option>'+
           nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
@@ -716,12 +721,12 @@
   // Compact vertical funnel — one thin column per stage instead of a tall
   // stack of horizontal bars.
   var STAGE_ABBR={'Sourced':'Sourced','Screening':'Screen','Submitted to BDM':'To BDM','Submitted to Client':'To Client',
-    'Interview Scheduled':'Int Sched','Interview Completed':'Int Done','Offer':'Offer','Confirmation':'Confirm',
-    'Placement':'Placed','Rejected':'Rejected','Not Joined':'No Join','On Hold':'Hold'};
+    'Interview Scheduled':'Int Sched','Interview Completed':'Int Done','Offer':'Offer','Joining':'Joining',
+    'Placement':'Placed','Not Accepted':'Not Acc','On Hold':'Hold'};
   function bdFunnelCard(jid){
     var subs=(STATE.bd.submissions||[]).filter(function(s){return !jid||s.job_order_id===jid;});
     var counts={};BD_STAGES.forEach(function(s){counts[s]=0;});
-    subs.forEach(function(s){if(counts[s.stage]!==undefined)counts[s.stage]++;});
+    subs.forEach(function(s){var ns=nStage(s.stage);if(counts[ns]!==undefined)counts[ns]++;});
     var max=Math.max(1,Math.max.apply(null,BD_STAGES.map(function(s){return counts[s];})));
     return '<div class="card" style="padding:14px 16px"><div style="font-weight:600;font-size:14px;margin-bottom:10px">Pipeline Funnel</div>'+
       '<div style="display:flex;align-items:flex-end;gap:6px;height:110px;overflow-x:auto">'+
@@ -748,7 +753,7 @@
     var cols=BD_STAGES;
     var backLink=isBDM(u)?'bd_jodetail':'bd_myjobs';
     var colHtml=cols.map(function(st){
-      var items=jobSubs.filter(function(s){return s.stage===st;});
+      var items=jobSubs.filter(function(s){return nStage(s.stage)===st;});
       var locked=(st===BDM_GATED&&recruiterScoped);
       return '<div ondragover="bdDragOver(event)" ondragenter="if(!'+(locked?'true':'false')+'){this.style.background=\'var(--accent-l)\';this.style.outline=\'2px dashed var(--accent)\'}" ondragleave="this.style.background=\'var(--bg)\';this.style.outline=\'none\'" ondrop="this.style.background=\'var(--bg)\';this.style.outline=\'none\';bdDrop(event,\''+st+'\')" style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px;transition:background .1s">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
@@ -757,7 +762,7 @@
         '</div>'+
         items.map(function(s){
           var c=s.candidate||{};
-          var subs=(window.ATS_SUB_STAGES&&ATS_SUB_STAGES[s.stage])||[];
+          var subs=(window.ATS_SUB_STAGES&&ATS_SUB_STAGES[nStage(s.stage)])||[];
           var scol=window.subStageColor?subStageColor(s.sub_stage):'var(--text3)';
           var subSel=subs.length?'<select onchange="bdSetSubStage(\''+s.id+'\',this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid '+(s.sub_stage?scol:'var(--border)')+';border-radius:7px;background:'+(s.sub_stage?scol+'1a':'var(--card)')+';color:'+(s.sub_stage?scol:'var(--text2)')+';font-weight:600;cursor:pointer">'+
               '<option value="">Sub-stage…</option>'+
@@ -952,7 +957,7 @@
     var sid=_bdDragId||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); _bdDragId=null;
     if(!sid||!stage)return;
     var s=(STATE.bd.submissions||[]).find(function(x){return x.id===sid;});
-    if(!s||s.stage===stage)return;
+    if(!s||nStage(s.stage)===stage)return;
     var u=STATE.user;
     if(stage===BDM_GATED&&isRec(u)&&!isBDM(u)){ showToast('Only a BD Manager can submit to the client.','error'); return; }
     openStageModal(sid,stage,function(){render();});

@@ -36,12 +36,16 @@ module.exports = function (app, deps) {
     'Interview Scheduled',
     'Interview Completed',
     'Offer',
-    'Confirmation',
+    'Joining',        // was "Confirmation"
     'Placement',
-    'Rejected',
-    'Not Joined',
+    'Not Accepted',   // merges the old "Rejected" + "Not Joined"
     'On Hold'
   ];
+  // Old → new stage aliases. Existing rows may still carry pre-migration names
+  // until migration 032 runs; normalizeStage() maps them so aggregates stay
+  // correct in the meantime (and an incoming write of an old name is accepted).
+  const STAGE_ALIASES = { 'Confirmation': 'Joining', 'Rejected': 'Not Accepted', 'Not Joined': 'Not Accepted' };
+  function normalizeStage(s) { return STAGE_ALIASES[s] || s; }
   // Stage a recruiter may NOT move INTO without BD Manager approval.
   const BDM_GATED_STAGE = 'Submitted to Client';
 
@@ -947,7 +951,7 @@ ${String(j.job_description).slice(0, 12000)}`;
   app.patch('/submissions/:id/stage', auth, async (req, res) => {
     try {
       if (notGuest(req, res)) return;
-      const newStage = req.body.stage;
+      const newStage = normalizeStage(req.body.stage);
       if (!STAGES.includes(newStage)) return res.status(400).json({ error: `Invalid stage. Allowed: ${STAGES.join(', ')}` });
 
       const { data: sub, error: subErr } = await supabase.from('submissions')
@@ -969,7 +973,7 @@ ${String(j.job_description).slice(0, 12000)}`;
         if (!RECRUITER_STAGES.includes(newStage)) {
           return res.status(403).json({ error: 'Recruiters can move candidates up to "Submitted to BDM" — the BD team owns the stages after that.' });
         }
-        if (!RECRUITER_STAGES.includes(sub.stage)) {
+        if (!RECRUITER_STAGES.includes(normalizeStage(sub.stage))) {
           return res.status(403).json({ error: 'This candidate is with the BD team now — only a BD Manager can change this stage.' });
         }
         if (newStage === 'Submitted to BDM') {
@@ -982,9 +986,10 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (newStage === BDM_GATED_STAGE && !isBDM(req)) {
         return res.status(403).json({ error: 'Only a BD Manager can approve "Submitted to BDM" candidates through to the client.' });
       }
-      // BD duty: every rejection carries its reason (client feedback, BDM call…)
-      if (newStage === 'Rejected' && !String((req.body || {}).rejection_reason || '').trim()) {
-        return res.status(400).json({ error: 'Please add the reason for rejection.' });
+      // BD duty: every "Not Accepted" carries its reason (client feedback, no-show,
+      // accepted elsewhere…)
+      if (newStage === 'Not Accepted' && !String((req.body || {}).rejection_reason || '').trim()) {
+        return res.status(400).json({ error: 'Please add the reason.' });
       }
 
       const bb = req.body || {};
@@ -998,7 +1003,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (bb.interview_address !== undefined) updates.interview_address = bb.interview_address || null;
       if (bb.interviewers !== undefined) updates.interviewers = Array.isArray(bb.interviewers) ? bb.interviewers : null;
       if (bb.submission_details !== undefined) updates.submission_details = bb.submission_details || null;
-      if (newStage === 'Rejected') updates.rejection_reason = String(bb.rejection_reason).trim();
+      if (newStage === 'Not Accepted') updates.rejection_reason = String(bb.rejection_reason).trim();
       let action = 'stage_change';
       if (newStage === BDM_GATED_STAGE && isBDM(req)) {
         updates.bdm_approved_at = new Date();
@@ -1534,7 +1539,8 @@ ${String(j.job_description).slice(0, 12000)}`;
       let week = 0, month = 0;
       const upcoming = [];
       (subs || []).forEach(s => {
-        if (byStage[s.stage] !== undefined) byStage[s.stage]++;
+        const ns = normalizeStage(s.stage);
+        if (byStage[ns] !== undefined) byStage[ns]++;
         const t = new Date(s.submitted_at || s.created_at);
         if (t >= weekAgo) week++;
         if (t >= monthStart) month++;
@@ -1547,7 +1553,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       // rejection context: not a judgement metric — shown next to the counts so
       // the recruiter knows WHY (BD records the reason on every rejection)
       const recentRejections = (subs || [])
-        .filter(s => s.stage === 'Rejected')
+        .filter(s => normalizeStage(s.stage) === 'Not Accepted')
         .sort((a, b) => new Date(b.stage_updated_at || b.created_at) - new Date(a.stage_updated_at || a.created_at))
         .slice(0, 5)
         .map(s => ({
@@ -1681,26 +1687,27 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (roleFilter) P = P.filter(p => roleFilter === 'bd' ? isBDRole(p.tagged_by) : !isBDRole(p.tagged_by));
 
       const funnel = {}; STAGES.forEach(s => { funnel[s] = 0; });
-      S.forEach(s => { if (funnel[s.stage] !== undefined) funnel[s.stage]++; });
+      S.forEach(s => { const st = normalizeStage(s.stage); if (funnel[st] !== undefined) funnel[st]++; });
 
-      const SUBMITTED = ['Submitted to BDM', 'Submitted to Client', 'Interview Scheduled', 'Interview Completed', 'Offer', 'Confirmation', 'Placement'];
-      const INTERVIEWED = ['Interview Scheduled', 'Interview Completed', 'Offer', 'Confirmation', 'Placement'];
+      const SUBMITTED = ['Submitted to BDM', 'Submitted to Client', 'Interview Scheduled', 'Interview Completed', 'Offer', 'Joining', 'Placement'];
+      const INTERVIEWED = ['Interview Scheduled', 'Interview Completed', 'Offer', 'Joining', 'Placement'];
       const feeByJob = {}; J.forEach(j => { const n = parseFloat(String(j.placement_fee || '').replace(/[^0-9.]/g, '')); feeByJob[j.id] = isNaN(n) ? 0 : n; });
 
       // Per-user productivity + per-user funnels (keyed by user id, with role).
       const byUser = {}, per_user_funnels = {};
       S.forEach(s => {
         const id = s.recruiter_id || 'none';
+        const st = normalizeStage(s.stage);
         const u = byUser[id] || (byUser[id] = {
           user_id: id, recruiter: nameOf[id] || (s.recruiter && s.recruiter.name) || 'Unassigned',
           employee_id: empOf[id] || null, role_label: isBDRole(id) ? 'BD' : 'Recruiter',
           total: 0, submitted: 0, interviews: 0, placements: 0, revenue: 0
         });
         u.total++;
-        if (SUBMITTED.includes(s.stage)) u.submitted++;
-        if (INTERVIEWED.includes(s.stage)) u.interviews++;
-        if (s.stage === 'Placement') { u.placements++; u.revenue += feeByJob[s.job_order_id] || 0; }
-        const f = per_user_funnels[id] || (per_user_funnels[id] = {}); f[s.stage] = (f[s.stage] || 0) + 1;
+        if (SUBMITTED.includes(st)) u.submitted++;
+        if (INTERVIEWED.includes(st)) u.interviews++;
+        if (st === 'Placement') { u.placements++; u.revenue += feeByJob[s.job_order_id] || 0; }
+        const f = per_user_funnels[id] || (per_user_funnels[id] = {}); f[st] = (f[st] || 0) + 1;
       });
       const by_user = Object.values(byUser).map(u => Object.assign({}, u, { fill_rate: u.total ? Math.round((u.placements / u.total) * 100) : 0 }))
         .sort((a, b) => b.placements - a.placements || b.total - a.total);
@@ -1710,7 +1717,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       // Hot jobs — active reqs ranked by (submissions + interviews) in the window.
       const closedish = st => { st = String(st || '').toLowerCase(); return st === 'closed' || st === 'filled' || st === 'cancelled'; };
       const jobAgg = {};
-      S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, interviews: 0 }); a.submissions++; if (INTERVIEWED.includes(s.stage)) a.interviews++; });
+      S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, interviews: 0 }); a.submissions++; if (INTERVIEWED.includes(normalizeStage(s.stage))) a.interviews++; });
       const hot_jobs = J.filter(j => !closedish(j.status)).map(j => { const a = jobAgg[j.id] || { submissions: 0, interviews: 0 }; return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions: a.submissions, interviews: a.interviews, score: a.submissions + a.interviews }; })
         .filter(j => j.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
 
@@ -1738,7 +1745,7 @@ ${String(j.job_description).slice(0, 12000)}`;
 
       const totals = {
         candidates_added: P.length,
-        submissions: S.filter(s => SUBMITTED.includes(s.stage)).length,
+        submissions: S.filter(s => SUBMITTED.includes(normalizeStage(s.stage))).length,
         interviews: funnel['Interview Scheduled'] + funnel['Interview Completed'],
         placements: funnel['Placement'],
         open_jobs: J.filter(j => !closedish(j.status)).length,
@@ -1837,12 +1844,13 @@ ${String(j.job_description).slice(0, 12000)}`;
         const r = recMap[s.recruiter_id];
         if (!r) return;
         r.total++;
-        if (s.stage === 'Submitted to BDM') r.submitted_to_bdm++;
-        else if (s.stage === 'Submitted to Client') r.submitted_to_client++;
-        else if (s.stage === 'Interview Scheduled') r.interview++;
-        else if (s.stage === 'Offer') r.offer++;
-        else if (s.stage === 'Placement') { r.placed++; r.revenue += feeByJob[s.job_order_id] || 0; }
-        else if (s.stage === 'Rejected') r.rejected++;
+        const st = normalizeStage(s.stage);
+        if (st === 'Submitted to BDM') r.submitted_to_bdm++;
+        else if (st === 'Submitted to Client') r.submitted_to_client++;
+        else if (st === 'Interview Scheduled') r.interview++;
+        else if (st === 'Offer') r.offer++;
+        else if (st === 'Placement') { r.placed++; r.revenue += feeByJob[s.job_order_id] || 0; }
+        else if (st === 'Not Accepted') r.rejected++;
       });
       const rows = Object.values(recMap).map(r => ({
         ...r, fill_rate: r.total ? Math.round((r.placed / r.total) * 100) : 0
@@ -1860,7 +1868,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       const { data } = await query;
       const counts = {};
       STAGES.forEach(s => { counts[s] = 0; });
-      (data || []).forEach(s => { if (counts[s.stage] !== undefined) counts[s.stage]++; });
+      (data || []).forEach(s => { const st = normalizeStage(s.stage); if (counts[st] !== undefined) counts[st]++; });
       res.json({ stages: STAGES, counts });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
