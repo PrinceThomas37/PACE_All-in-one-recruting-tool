@@ -57,8 +57,13 @@ function renderReminders(){
   }).join('');
 
   return '<div class="page">'+
-    '<div class="ph"><div class="ptitle">Reminders</div>'+
-      '<div class="psub">Follow-up reminders · '+myReminders.filter(function(r){return r.status==="pending";}).length+' pending</div>'+
+    '<div class="ph" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+      '<div><div class="ptitle">Reminders</div>'+
+        '<div class="psub">Follow-up reminders · '+myReminders.filter(function(r){return r.status==="pending";}).length+' pending</div></div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn btn-outline btn-sm" onclick="remOpenMeeting()">📅 Schedule a meeting</button>'+
+        '<button class="btn btn-primary btn-sm" onclick="remOpenAdd()">+ Add reminder</button>'+
+      '</div>'+
     '</div>'+
 
     (due.length?
@@ -95,6 +100,133 @@ function renderReminders(){
     :'')+
   '</div>';
 }
+
+// ── Add reminder ──────────────────────────────
+function remField(lbl,inner){return '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">'+lbl+'</label>'+inner+'</div>';}
+window.remOpenAdd=function(){
+  var t=todayIST();
+  STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Add reminder</div>'+
+    '<div style="padding:16px 20px;display:grid;gap:12px">'+
+      remField('Who','<input id="rem-name" class="inp" placeholder="Contact or candidate name"/>')+
+      remField('Company','<input id="rem-co" class="inp" placeholder="Company (optional)"/>')+
+      remField('Email','<input id="rem-email" class="inp" type="email" placeholder="Email (optional)"/>')+
+      '<div style="display:flex;gap:10px"><div style="flex:1">'+remField('Date','<input id="rem-date" class="inp" type="date" value="'+t+'"/>')+'</div>'+
+        '<div style="width:120px">'+remField('Time · IST','<input id="rem-time" class="inp" type="time" value="09:00"/>')+'</div></div>'+
+      remField('Note','<textarea id="rem-note" class="inp" style="min-height:70px;resize:vertical" placeholder="What to follow up on"></textarea>')+
+    '</div>'+
+    '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="remSaveAdd()">Add reminder</button></div>'+
+  '</div>';
+  render();
+};
+window.remSaveAdd=function(){
+  var name=((document.getElementById('rem-name')||{}).value||'').trim();
+  var date=(document.getElementById('rem-date')||{}).value||'';
+  if(!name){showToast('Add a name','error');return;}
+  if(!date){showToast('Pick a date','error');return;}
+  apiPost('/reminders',{contact_name:name,company_name:(document.getElementById('rem-co')||{}).value||'',email:(document.getElementById('rem-email')||{}).value||'',return_date:date,reminder_time:(document.getElementById('rem-time')||{}).value||'09:00',note:(document.getElementById('rem-note')||{}).value||'',reminder_type:'manual'})
+    .then(function(){showToast('Reminder added','success');closeModal();if(window.loadReminders)loadReminders();})
+    .catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');});
+};
+
+// ── Schedule a meeting ────────────────────────
+// Universal person search over candidates (loaded once) + lead contacts, a
+// platform picker (Teams live; Zoom/Meet coming soon), Teams link creation, then
+// an editable email preview → send + a reminder row.
+window.remOpenMeeting=function(){
+  var t=todayIST();
+  STATE._meeting={ name:'', email:'', q:'', subject:'', date:t, time:'10:00', minutes:'30', joinUrl:'', emailSubject:'', emailBody:'' };
+  if(!STATE._meetingCands){ apiGet('/candidates').then(function(d){STATE._meetingCands=d||[];if(STATE._meeting)remRenderMeeting();}).catch(function(){STATE._meetingCands=[];}); }
+  remRenderMeeting();
+};
+function remPeople(q){
+  q=(q||'').toLowerCase().trim();
+  var out=[];
+  (STATE._meetingCands||[]).forEach(function(c){var nm=c.full_name||c.name||'';var em=c.email||'';if(!em)return;if(!q||nm.toLowerCase().indexOf(q)>-1||em.toLowerCase().indexOf(q)>-1)out.push({type:'Candidate',name:nm,email:em});});
+  (STATE.jobs||[]).forEach(function(j){(jobContacts(j.id)||[]).forEach(function(c){var nm=((c.first_name||'')+' '+(c.last_name||'')).trim();var em=c.email||'';if(!em)return;if(!q||nm.toLowerCase().indexOf(q)>-1||em.toLowerCase().indexOf(q)>-1)out.push({type:'Client',name:nm||j.company_name,email:em});});});
+  var seen={};return out.filter(function(p){if(seen[p.email])return false;seen[p.email]=true;return true;}).slice(0,8);
+}
+window.remMeetingSet=function(k,v){STATE._meeting[k]=v;};
+window.remMeetingSearch=function(v){STATE._meeting.q=v;remRenderMeeting();setTimeout(function(){var s=document.getElementById('mt-q');if(s){s.focus();s.setSelectionRange(s.value.length,s.value.length);}},0);};
+window.remPickAttendee=function(name,email){STATE._meeting.name=name;STATE._meeting.email=email;STATE._meeting.q='';remRenderMeeting();};
+function remRenderMeeting(){
+  var m=STATE._meeting||{};
+  if(m.joinUrl){
+    STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:520px">'+
+      '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Send meeting invite</div>'+
+      '<div style="padding:16px 20px;display:grid;gap:12px">'+
+        '<div style="font-size:12px;color:var(--green);background:var(--green-l);padding:8px 10px;border-radius:8px">✓ Teams link created — review the email, then send.</div>'+
+        remField('To','<input id="mt-to" class="inp" value="'+escAttr(m.name+' <'+m.email+'>')+'" readonly style="color:var(--text3)"/>')+
+        remField('Subject','<input id="mt-esub" class="inp" value="'+escAttr(m.emailSubject)+'"/>')+
+        remField('Message','<textarea id="mt-ebody" class="inp" style="min-height:150px;resize:vertical">'+htmlEsc(m.emailBody)+'</textarea>')+
+      '</div>'+
+      '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="remSendMeeting()">'+ico('send',13)+' Send invite</button></div>'+
+    '</div>';
+    render();return;
+  }
+  var people=remPeople(m.q);
+  var results=(m.q&&people.length)?'<div style="border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:170px;overflow:auto">'+people.map(function(p){return '<div onclick="remPickAttendee(\''+escAttr(p.name)+'\',\''+escAttr(p.email)+'\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12.5px" onmouseenter="this.style.background=\'var(--bg)\'" onmouseleave="this.style.background=\'transparent\'"><b>'+htmlEsc(p.name)+'</b> <span style="color:var(--text3)">· '+htmlEsc(p.email)+'</span> <span style="font-size:10px;color:var(--accent)">'+p.type+'</span></div>';}).join('')+'</div>':(m.q?'<div style="font-size:11.5px;color:var(--text3);margin-top:4px">No match — type a name/email above or fill the fields below.</div>':'');
+  STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:520px">'+
+    '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Schedule a meeting</div>'+
+    '<div style="padding:16px 20px;display:grid;gap:12px">'+
+      remField('Find a person <span style="font-weight:400;color:var(--text3);text-transform:none">— candidate or client contact</span>','<input id="mt-q" class="inp" value="'+escAttr(m.q)+'" placeholder="Search by name or email" oninput="remMeetingSearch(this.value)"/>'+results)+
+      '<div style="display:flex;gap:10px"><div style="flex:1">'+remField('Name','<input id="mt-name" class="inp" value="'+escAttr(m.name)+'" onchange="remMeetingSet(\'name\',this.value)" placeholder="Attendee name"/>')+'</div>'+
+        '<div style="flex:1">'+remField('Email','<input id="mt-email" class="inp" type="email" value="'+escAttr(m.email)+'" onchange="remMeetingSet(\'email\',this.value)" placeholder="attendee@email.com"/>')+'</div></div>'+
+      remField('Subject','<input id="mt-subject" class="inp" value="'+escAttr(m.subject)+'" onchange="remMeetingSet(\'subject\',this.value)" placeholder="e.g. Intro call — futé"/>')+
+      '<div style="display:flex;gap:10px"><div style="flex:1">'+remField('Date','<input id="mt-date" class="inp" type="date" value="'+escAttr(m.date)+'" onchange="remMeetingSet(\'date\',this.value)"/>')+'</div>'+
+        '<div style="width:110px">'+remField('Time','<input id="mt-time" class="inp" type="time" value="'+escAttr(m.time)+'" onchange="remMeetingSet(\'time\',this.value)"/>')+'</div>'+
+        '<div style="width:110px">'+remField('Minutes','<select id="mt-min" class="inp" onchange="remMeetingSet(\'minutes\',this.value)">'+['15','30','45','60'].map(function(x){return '<option'+(m.minutes===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select>')+'</div></div>'+
+      remField('Platform','<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 11px;border:1.5px solid var(--accent);border-radius:8px;background:var(--accent-l);color:var(--accent)">✓ Microsoft Teams</span>'+
+        '<span style="font-size:12px;padding:6px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text3)">Zoom · soon</span>'+
+        '<span style="font-size:12px;padding:6px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text3)">Google Meet · soon</span>'+
+      '</div>')+
+    '</div>'+
+    '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="remCreateMeeting()">Create link & preview email →</button></div>'+
+  '</div>';
+  render();
+}
+window.remCreateMeeting=function(){
+  var m=STATE._meeting;
+  // pull latest field values (in case onchange didn't fire)
+  m.name=(document.getElementById('mt-name')||{}).value||m.name;
+  m.email=(document.getElementById('mt-email')||{}).value||m.email;
+  m.subject=(document.getElementById('mt-subject')||{}).value||m.subject;
+  m.date=(document.getElementById('mt-date')||{}).value||m.date;
+  m.time=(document.getElementById('mt-time')||{}).value||m.time;
+  m.minutes=(document.getElementById('mt-min')||{}).value||m.minutes;
+  if(!m.email){showToast('Add the attendee email','error');return;}
+  if(!m.date||!m.time){showToast('Pick a date and time','error');return;}
+  var start=new Date(m.date+'T'+m.time+':00');
+  var subject=m.subject||'Meeting with '+(m.name||'you');
+  showToast('Creating Teams link…','info');
+  apiPost('/meetings',{start:start.toISOString(),minutes:parseInt(m.minutes,10)||30,subject:subject,platform:'teams'}).then(function(r){
+    m.joinUrl=r.joinUrl;
+    var whenStr=start.toLocaleString('en-IN',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});
+    m.emailSubject=subject;
+    m.emailBody='Hi '+(m.name||'there')+',\n\nI\'d like to set up a quick meeting.\n\nWhen: '+whenStr+' ('+m.minutes+' min)\nJoin (Microsoft Teams): '+r.joinUrl+'\n\nLooking forward to it.';
+    remRenderMeeting();
+  }).catch(function(e){
+    var msg=(e&&e.message||e)+'';
+    if(/no_connected_mailbox/.test(msg))showToast('No connected sending mailbox — connect one under Manager Users → Email IDs first.','error');
+    else if(/meetings_permission_missing/.test(msg))showToast('Reconnect your mailbox to grant Teams-meeting permission.','error');
+    else showToast('Couldn\'t create the meeting: '+msg,'error');
+  });
+};
+window.remSendMeeting=function(){
+  var m=STATE._meeting;
+  var subject=(document.getElementById('mt-esub')||{}).value||m.emailSubject;
+  var body=(document.getElementById('mt-ebody')||{}).value||m.emailBody;
+  apiPost('/candidates/email',{recipients:[{email:m.email,name:m.name}],subject:subject,body:body}).then(function(){
+    // also drop a reminder so it shows on the day.
+    apiPost('/reminders',{contact_name:m.name||m.email,email:m.email,return_date:m.date,reminder_time:m.time,note:'Meeting · '+m.joinUrl,reminder_type:'meeting'}).catch(function(){});
+    showToast('Meeting invite sent','success');closeModal();if(window.loadReminders)loadReminders();
+  }).catch(function(e){
+    var msg=(e&&e.message||e)+'';
+    if(/no_connected_mailbox/.test(msg))showToast('No connected sending mailbox to send from.','error');
+    else showToast('Send failed: '+msg,'error');
+  });
+};
 
 // ── MAIL MERGE MODAL ───────────────────────────
 function renderMailMergeModal(){

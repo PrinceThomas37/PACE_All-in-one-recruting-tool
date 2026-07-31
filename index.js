@@ -45,6 +45,7 @@ const settingsConfig = require('./config/settings');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
+const { recordRefreshOutcome } = require('./mailbox-health');
 
 // Validate environment and centralize config at startup (fails fast with a
 // clear message if a required secret is missing).
@@ -2444,8 +2445,17 @@ async function getMicrosoftToken(userEmailId) {
   if (new Date(tokenRow.expires_at).getTime() - now.getTime() > 5 * 60 * 1000) return tokenRow.access_token;
   const refreshRes = await fetch(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, refresh_token: tokenRow.refresh_token, grant_type: 'refresh_token', scope: MS_SCOPES }) });
   const refreshed = await refreshRes.json();
-  if (refreshed.error) throw new Error('Token refresh failed: ' + refreshed.error_description);
+  if (refreshed.error) {
+    // Capture the EXACT Microsoft error (e.g. AADSTS7000215 invalid client
+    // secret vs AADSTS700082/50173 revoked refresh token) so a mailbox-wide
+    // outage is diagnosable at a glance instead of a silent, generic failure.
+    const detail = [refreshed.error, refreshed.error_description].filter(Boolean).join(': ');
+    console.error(`[ms-token] refresh failed for ${tokenRow.email_address || userEmailId}: ${detail}`);
+    await recordRefreshOutcome(supabase, 'microsoft_tokens', userEmailId, false, detail);
+    throw new Error('Token refresh failed: ' + (refreshed.error_description || refreshed.error));
+  }
   await supabase.from('microsoft_tokens').update({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || tokenRow.refresh_token, expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(), updated_at: new Date() }).eq('user_email_id', userEmailId);
+  await recordRefreshOutcome(supabase, 'microsoft_tokens', userEmailId, true, null);
   return refreshed.access_token;
 }
 
@@ -3037,6 +3047,41 @@ app.post('/submissions/:id/create-meeting', auth, async (req, res) => {
 
     res.json({ joinUrl, platform: 'Microsoft Teams' });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Generic meeting scheduler (not tied to a submission) — powers the "Schedule a
+// meeting" action on the Reminders page. Creates a Microsoft Teams online
+// meeting and returns the join link. Zoom / Google Meet need their own OAuth and
+// are offered in the UI as "coming soon".
+app.post('/meetings', auth, async (req, res) => {
+  try {
+    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot create meetings.' });
+    const b = req.body || {};
+    if ((b.platform || 'teams') !== 'teams') return res.status(400).json({ error: 'Only Microsoft Teams is available right now.' });
+    const start = new Date(b.start);
+    if (!b.start || isNaN(start.getTime())) return res.status(400).json({ error: 'Set a valid date & time.' });
+    const minutes = Math.min(240, Math.max(15, parseInt(b.minutes, 10) || 30));
+    const end = new Date(start.getTime() + minutes * 60000);
+    const subject = (b.subject || 'Meeting').slice(0, 200);
+    const mailbox = await recruiterSendingMailbox(req.user.id);
+    if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+    const accessToken = await getMicrosoftToken(mailbox.id);
+    let meeting;
+    try {
+      meeting = await graphMailRequest(accessToken, '/me/onlineMeetings', {
+        method: 'POST',
+        body: JSON.stringify({ startDateTime: start.toISOString(), endDateTime: end.toISOString(), subject })
+      });
+    } catch (e) {
+      if (/scope|permission|Authorization_RequestDenied|forbidden|AccessDenied|InvalidAuthenticationToken/i.test(String(e.message))) {
+        return res.status(409).json({ error: 'meetings_permission_missing' });
+      }
+      throw e;
+    }
+    const joinUrl = meeting && meeting.joinUrl;
+    if (!joinUrl) return res.status(502).json({ error: 'No join link returned by Microsoft.' });
+    res.json({ joinUrl, platform: 'Microsoft Teams', start: start.toISOString(), minutes });
+  } catch (err) { res.status(500).json({ error: friendlySendError(err.message) }); }
 });
 
 // recruiter_task — a dated task for the recruiter (call the candidate, collect

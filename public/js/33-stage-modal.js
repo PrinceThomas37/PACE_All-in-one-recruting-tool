@@ -14,20 +14,39 @@
     'Interview Scheduled':  ['Round 1','Round 2','Round 3','Final Round','Rescheduled'],
     'Interview Completed':  ['Awaiting Feedback','Positive','Negative','Next Round Planned'],
     'Offer':                ['Preparing','Extended','Negotiating','Accepted','Declined'],
-    'Confirmation':         ['Docs Pending','BGV In Progress','Cleared','Start Date Confirmed'],
+    'Joining':              ['Docs Pending','BGV In Progress','Cleared','Start Date Confirmed'],
     'Placement':            ['Started','Active','Completed','Extended'],
-    'Rejected':             ['By Client','By BDM','Candidate Withdrew','Position Closed'],
-    'Not Joined':           ['No Show','Accepted Elsewhere','Personal Reasons','Counter-Offered'],
+    // "Not Accepted" merges the old Rejected + Not Joined stages — the outcome is
+    // one stage, the reason is the sub-stage (colour-coded on the card).
+    'Not Accepted':         ['Rejected by Client','Rejected by BDM','Candidate Withdrew','Position Closed','Offer Declined','No Show','Accepted Elsewhere','Personal Reasons','Counter-Offered'],
     'On Hold':              ['Client Hold','Candidate Hold','Position Hold']
   };
   window.ATS_SUB_STAGES = SUB_STAGES;
 
+  // Old → new stage aliases. Existing rows may still carry the pre-migration
+  // names until the data migration runs; normalizeStage() maps them so nothing
+  // renders wrong (or a card vanishes) in the meantime.
+  var STAGE_ALIASES = { 'Confirmation':'Joining', 'Rejected':'Not Accepted', 'Not Joined':'Not Accepted' };
+  function normalizeStage(s){ return STAGE_ALIASES[s] || s; }
+  window.normalizeStage = normalizeStage;
+
   // Full ordered stage list + colors — the single vocabulary every surface
   // (pipeline, submissions grid, board, job detail) now shares.
-  var STAGE_LIST = ['Sourced','Screening','Submitted to BDM','Submitted to Client','Interview Scheduled','Interview Completed','Offer','Confirmation','Placement','Rejected','Not Joined','On Hold'];
+  var STAGE_LIST = ['Sourced','Screening','Submitted to BDM','Submitted to Client','Interview Scheduled','Interview Completed','Offer','Joining','Placement','Not Accepted','On Hold'];
   window.ATS_STAGE_LIST = STAGE_LIST;
-  var STAGE_COLORS = {'Sourced':'var(--text3)','Screening':'#6b7280','Submitted to BDM':'var(--amber)','Submitted to Client':'var(--accent)','Interview Scheduled':'#2563eb','Interview Completed':'#1d4ed8','Offer':'#7c3aed','Confirmation':'#0891b2','Placement':'var(--green)','Rejected':'var(--red)','Not Joined':'#b91c1c','On Hold':'#9ca3af'};
+  var STAGE_COLORS = {'Sourced':'var(--text3)','Screening':'#6b7280','Submitted to BDM':'var(--amber)','Submitted to Client':'var(--accent)','Interview Scheduled':'#2563eb','Interview Completed':'#1d4ed8','Offer':'#7c3aed','Joining':'#0891b2','Placement':'var(--green)','Not Accepted':'var(--red)','On Hold':'#9ca3af'};
   window.ATS_STAGE_COLORS = STAGE_COLORS;
+
+  // A colour for a sub-stage, semantically: green = good outcome, red = bad,
+  // amber = in-progress. Used to colour the sub-stage chip on the White-board.
+  function subStageColor(sub){
+    var s=String(sub||'').toLowerCase();
+    if(/passed|approved|accepted|cleared|placed|active|completed|shortlisted|positive|confirmed|extended|started/.test(s))return 'var(--green)';
+    if(/failed|declined|rejected|no show|withdrew|closed|negative|not reachable|counter/.test(s))return 'var(--red)';
+    if(/review|pending|progress|negotiat|preparing|awaiting|scheduled|attempted|left message|revision|sent back|hold|rescheduled|feedback|round/.test(s))return 'var(--amber)';
+    return 'var(--text3)';
+  }
+  window.subStageColor = subStageColor;
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function isInterviewStage(st){ return /^Interview/.test(st); }
@@ -137,9 +156,9 @@
               '</div>'+
               '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format &amp; interviewers are added automatically. Sent (and open-tracked) from your connected mailbox.</div>'+
             '</div>':'')+
-          (newStage==='Rejected'?
-            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Reason for rejection (required)</label>'+
-            '<textarea id="stg-reject" class="sel" style="min-height:56px;resize:vertical" placeholder="Client feedback, BDM decision, position closed…"></textarea></div>':'')+
+          (newStage==='Not Accepted'?
+            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Reason (required)</label>'+
+            '<textarea id="stg-reject" class="sel" style="min-height:56px;resize:vertical" placeholder="Client feedback, withdrew, no-show, accepted elsewhere…"></textarea></div>':'')+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Note <span style="color:var(--red)">*</span></label>'+
             '<textarea id="stg-note" class="sel" style="min-height:56px;resize:vertical" placeholder="Why is this candidate moving? (call summary, feedback, next step…)"></textarea></div>'+
           '<label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:8px">'+
@@ -194,9 +213,9 @@
     var note = val('stg-note').trim();
     if (!note) { showToast('Please add a note describing this stage change','error'); var nEl=document.getElementById('stg-note'); if(nEl)nEl.focus(); return; }
     var payload = { stage: mv.stage, sub_stage: val('stg-sub') || undefined, note: note };
-    if (mv.stage === 'Rejected') {
+    if (mv.stage === 'Not Accepted') {
       var rr = val('stg-reject');
-      if (!rr.trim()) { showToast('Please add the reason for rejection','error'); return; }
+      if (!rr.trim()) { showToast('Please add the reason','error'); return; }
       payload.rejection_reason = rr.trim();
     }
     if (document.getElementById('stg-iv-at')) {

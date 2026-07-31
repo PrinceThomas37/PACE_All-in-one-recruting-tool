@@ -41,11 +41,11 @@ function renderJobs(){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
     var hasEmail=(cs.find(function(c){return c.is_primary;})||cs[0]||{}).email;
-    var stageColor={Unassigned:"#94a3b8",Assigned:"#3b82f6",Connected:"#8b5cf6",Rejected:"#ef4444",Future:"#f59e0b",Qualified:"#10b981"}[j.stage]||"#64748b";
+    var stageColor=leadStageColor(j.stage);
     return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="openJob(\''+j.id+'\')">'+
       (canSequence?'<td style="padding:12px;width:34px" onclick="event.stopPropagation()">'+(hasEmail?'<input type="checkbox" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select for sequence"/>':'<span title="No contact email" style="color:var(--border2)">·</span>')+'</td>':'')+
-      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.company_name)+(j.is_duplicate?'<span style="margin-left:6px;background:#fef9c3;color:#b45309;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">DUP</span>':'')+(j.freshness==='Old'?'<span style="margin-left:6px;background:#fef2f2;color:#dc2626;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">OLD</span>':'')+(j.freshness==='New'?'<span style="margin-left:6px;background:#f0fdf4;color:#16a34a;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">NEW</span>':'')+'</div></td>'+
-      '<td style="padding:12px"><div style="font-weight:500">'+escHtml(j.position)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.location||"—")+'</div></td>'+
+      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.position)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.location||"—")+'</div></td>'+
+      '<td style="padding:12px"><div style="font-weight:500">'+escHtml(j.company_name)+(j.is_duplicate?'<span style="margin-left:6px;background:#fef9c3;color:#b45309;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">DUP</span>':'')+(j.freshness==='Old'?'<span style="margin-left:6px;background:#fef2f2;color:#dc2626;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">OLD</span>':'')+(j.freshness==='New'?'<span style="margin-left:6px;background:#f0fdf4;color:#16a34a;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">NEW</span>':'')+'</div></td>'+
       '<td style="padding:12px"><div>'+escHtml((primary.first_name||"")+" "+(primary.last_name||""))+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(primary.email||"—")+'</div></td>'+
       '<td style="padding:12px;text-align:center"><span style="background:rgba(99,102,241,.1);color:var(--accent);padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600">'+cs.length+'</span></td>'+
       (canChangeStageInline?'<td style="padding:12px"><select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1.5px solid '+stageColor+';border-radius:8px;background:'+stageColor+'1a;color:'+stageColor+';font-weight:600;cursor:pointer">'+['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'].map(function(s){return'<option value="'+s+'"'+(j.stage===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></td>':'<td style="padding:12px"><span style="background:'+stageColor+'1a;color:'+stageColor+';padding:4px 10px;border-radius:10px;font-size:11px;font-weight:600">'+j.stage+'</span></td>')+
@@ -66,15 +66,15 @@ function renderJobs(){
   var raRows=jobs.map(function(j){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
-    var stageColor={Unassigned:'#94a3b8',Assigned:'#3b82f6',Connected:'#8b5cf6',Rejected:'#ef4444',Future:'#f59e0b','In Discussion':'#f59e0b',Qualified:'#10b981'}[j.stage]||'#64748b';
+    var stageColor=leadStageColor(j.stage);
     var hoursOld=(now24-new Date(j.created_at))/3600000;
     var canRAEdit=hoursOld<=24;
     var editBtn=canRAEdit?
       '<button onclick="raFormEdit(\''+j.id+'\')" style="font-size:11px;padding:4px 10px;background:var(--accent-l);color:var(--accent);border:1px solid rgba(37,99,235,.2);border-radius:6px;cursor:pointer;font-weight:600">✏ Edit</button>':
       '<span style="font-size:10px;color:var(--text3)">Locked</span>';
     return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="openJob(\''+j.id+'\')">'+
-      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.company_name)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.company_ind||j.industry||'')+'</div></td>'+
-      '<td style="padding:12px;font-weight:500">'+escHtml(j.position)+'</td>'+
+      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.position)+'</div></td>'+
+      '<td style="padding:12px"><div style="font-weight:500">'+escHtml(j.company_name)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.company_ind||j.industry||'')+'</div></td>'+
       '<td style="padding:12px"><div>'+escHtml((primary.first_name||'')+(primary.last_name?' '+primary.last_name:''))+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(primary.email||'\u2014')+'</div></td>'+
       '<td style="padding:12px;text-align:center"><span style="background:rgba(99,102,241,.1);color:var(--accent);padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600">'+cs.length+'</span></td>'+
       '<td style="padding:12px"><span style="background:'+stageColor+'1a;color:'+stageColor+';padding:4px 10px;border-radius:10px;font-size:11px;font-weight:600">'+j.stage+'</span></td>'+
@@ -91,10 +91,10 @@ function renderJobs(){
     return '<div style="padding:24px">'+
       renderRALeadForm()+
       '<div style="margin:24px 0 12px;font-weight:700;font-size:13px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Your submitted leads ('+jobs.length+')</div>'+
-      '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+      '<div class="tbl-wrap" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px">'+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">'+
           '<thead style="background:var(--bg3);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px">'+
-            '<tr><th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Created</th><th style="padding:12px"></th></tr>'+
+            '<tr><th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Created</th><th style="padding:12px"></th></tr>'+
           '</thead>'+
           '<tbody>'+raRows+'</tbody>'+
         '</table>'+
@@ -145,21 +145,54 @@ function renderJobs(){
   var stageCounts={};
   var stageList=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
   stageList.forEach(function(s){stageCounts[s]=allJobs.filter(function(j){return j.stage===s;}).length;});
-  var stageColors={Unassigned:'var(--text3)',Assigned:'var(--accent)',Connected:'var(--green)',['In Discussion']:'#8b5cf6',Future:'var(--amber)',Rejected:'var(--red)'};
-  var stageBg={Unassigned:'var(--bg)',Assigned:'var(--accent-l)',Connected:'var(--green-l)',['In Discussion']:'#f5f3ff',Future:'var(--amber-l)',Rejected:'var(--red-l)'};
-  var stageSummary='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
+  // Number + colour only (owner's spec). The colour IS the label: blue=Assigned,
+  // green=Connected, red=Rejected, grey=Unassigned, amber=Future, violet=In
+  // Discussion — hover shows the name. Clicking filters; the Connected chip opens
+  // a drill-down list of the connected leads instead.
+  var stageSummary='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'+
     stageList.filter(function(s){return stageCounts[s]>0;}).map(function(s){
-      return '<div onclick="STATE.jobsFilter.stages=[\''+s+'\'];STATE.leadsPage=0;render()" style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:'+stageBg[s]+';border:1px solid '+stageColors[s]+'33;border-radius:20px;cursor:pointer;transition:opacity .15s" title="Filter by '+s+'">'+
-        '<div style="width:7px;height:7px;border-radius:50%;background:'+stageColors[s]+';flex-shrink:0"></div>'+
-        '<span style="font-size:12px;font-weight:600;color:'+stageColors[s]+'">'+s+'</span>'+
-        '<span style="font-size:12px;font-weight:700;color:'+stageColors[s]+'">'+stageCounts[s]+'</span>'+
+      var col=leadStageColor(s);
+      var isConn=(s==='Connected');
+      var onClick=isConn?'leadsShowConnected()':'STATE.jobsFilter.stages=[\''+s+'\'];STATE.leadsPage=0;render()';
+      return '<div onclick="'+onClick+'" title="'+s+(isConn?' — click to open the list':' — click to filter')+'" style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:'+leadStageBg(s)+';border:1px solid '+col+'44;border-radius:20px;cursor:pointer">'+
+        '<div style="width:9px;height:9px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'+
+        '<span style="font-size:14px;font-weight:800;color:'+col+'">'+stageCounts[s]+'</span>'+
+        (isConn?'<span style="font-size:11px;color:'+col+';font-weight:700">▸</span>':'')+
       '</div>';
     }).join('')+
-    '<div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px;margin-left:auto">'+
-      '<span style="font-size:12px;color:var(--text3)">Total</span>'+
-      '<span style="font-size:12px;font-weight:700;color:var(--text)">'+allJobs.length+'</span>'+
+    '<div style="display:flex;align-items:center;gap:6px;padding:7px 13px;background:var(--card);border:1px solid var(--border);border-radius:20px;margin-left:auto">'+
+      '<span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Total</span>'+
+      '<span style="font-size:14px;font-weight:800;color:var(--text)">'+allJobs.length+'</span>'+
     '</div>'+
   '</div>';
+
+  // Connected-leads drill-down (item 7): a panel listing the connected leads with
+  // their basic contact details, opened from the green "Connected" chip.
+  var connectedOverlay='';
+  if(STATE.leadsConnectedOpen){
+    var connList=allJobs.filter(function(j){return j.stage==='Connected';});
+    var connRows=connList.length?connList.map(function(j){
+      var cs=jobContacts(j.id);var pc=(cs.find(function(c){return c.is_primary;})||cs[0]||{});
+      return '<div onclick="STATE.leadsConnectedOpen=false;openJob(\''+j.id+'\')" style="display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer" onmouseenter="this.style.background=\'var(--bg)\'" onmouseleave="this.style.background=\'transparent\'">'+
+        '<div style="width:9px;height:9px;border-radius:50%;background:'+leadStageColor('Connected')+';margin-top:5px;flex-shrink:0"></div>'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:13.5px;font-weight:600">'+escHtml(j.position||'—')+' <span style="font-weight:400;color:var(--text3)">· '+escHtml(j.company_name||'')+'</span></div>'+
+          '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+escHtml(((pc.first_name||'')+' '+(pc.last_name||'')).trim()||'—')+(pc.designation?' · '+escHtml(pc.designation):'')+'</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:1px">'+[pc.email,pc.phone,(pc.linkedin?'LinkedIn':'')].filter(Boolean).map(escHtml).join(' · ')+'</div>'+
+        '</div>'+
+        '<span style="color:var(--text3);font-size:14px">›</span>'+
+      '</div>';
+    }).join(''):'<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">No connected leads yet.</div>';
+    connectedOverlay='<div onclick="leadsCloseConnected()" style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100"></div>'+
+      '<div style="position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);background:var(--card);border-left:1px solid var(--border);z-index:101;box-shadow:-8px 0 24px rgba(0,0,0,.14);display:flex;flex-direction:column">'+
+        '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
+          '<div><div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:'+leadStageColor('Connected')+'"></span>Connected leads</div>'+
+            '<div style="font-size:12px;color:var(--text3)">'+connList.length+' lead'+(connList.length===1?'':'s')+' · click one to open it</div></div>'+
+          '<button onclick="leadsCloseConnected()" style="border:0;background:none;font-size:24px;cursor:pointer;color:var(--text3);line-height:1">×</button>'+
+        '</div>'+
+        '<div style="flex:1;overflow:auto;padding:6px 18px 18px">'+connRows+'</div>'+
+      '</div>';
+  }
 
   return '<div style="padding:24px">'+
     stageSummary+
@@ -184,10 +217,10 @@ function renderJobs(){
       '<button onclick="leadClearSel()" style="background:transparent;color:var(--text2);border:1px solid var(--border);padding:8px 13px;border-radius:8px;font-size:12px;cursor:pointer">Clear</button>'+
       '<span style="font-size:11.5px;color:var(--text3);margin-left:auto">Pick your "from" mailbox(es) next — sends rotate across them, regardless of stage.</span>'+
     '</div>':'')+
-    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">'+
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+    '<div class="tbl-wrap" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px">'+
+      '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:920px">'+
         '<thead style="background:var(--bg3);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px">'+
-          '<tr>'+(canSequence?'<th style="padding:12px;width:34px"><input type="checkbox" '+(leadSelectable.length&&leadSelectable.every(function(j){return leadSel[j.id];})?'checked':'')+' onclick="leadToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all matching leads"/></th>':'')+'<th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Assigned BD</th><th style="padding:12px;text-align:left">Created</th></tr>'+
+          '<tr>'+(canSequence?'<th style="padding:12px;width:34px"><input type="checkbox" '+(leadSelectable.length&&leadSelectable.every(function(j){return leadSel[j.id];})?'checked':'')+' onclick="leadToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all matching leads"/></th>':'')+'<th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Assigned BD</th><th style="padding:12px;text-align:left">Created</th></tr>'+
         '</thead>'+
         '<tbody>'+rows+'</tbody>'+
       '</table>'+
@@ -200,8 +233,10 @@ function renderJobs(){
         '<button onclick="setLeadsPage('+(_pg+1)+')" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer" '+(_pg>=_tp-1?'disabled':'')+'>Next &#8594;</button>'+
       '</div>':'')+
     '</div>'+
-  '</div>';
+  '</div>'+connectedOverlay;
 }
+window.leadsShowConnected=function(){STATE.leadsConnectedOpen=true;render();};
+window.leadsCloseConnected=function(){STATE.leadsConnectedOpen=false;render();};
 
 // Bind search/filter inputs (called from render() after DOM replace)
 function bindJobsControls(){
@@ -307,7 +342,7 @@ function renderJobDetailModal(){
     '<div style="padding:20px 24px">'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'+
         '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Stage</label>'+
-          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">'+stageOpts+'</select>':'<div style="margin-top:5px;font-size:13px;color:var(--text)">'+j.stage+'</div>')+
+          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:8px;background:'+leadStageBg(j.stage)+';border:1.5px solid '+leadStageColor(j.stage)+';border-radius:7px;color:'+leadStageColor(j.stage)+';font-weight:600;font-size:13px">'+stageOpts+'</select>':'<div style="margin-top:5px;font-size:13px;font-weight:600;color:'+leadStageColor(j.stage)+'">'+j.stage+'</div>')+
         '</div>'+
         '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Source</label><div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.source||"—")+'</div></div>'+
       '</div>'+

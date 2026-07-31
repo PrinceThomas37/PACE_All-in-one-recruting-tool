@@ -114,12 +114,12 @@ try {
   await page.evaluate(() => {
     closeModal();
     STATE.user.role = 'bd'; STATE.user.roles = ['bd'];
-    openStageModal('sub2', 'Rejected');
+    openStageModal('sub2', 'Not Accepted');
   });
   await page.waitForTimeout(150);
   const rejectHtml = await page.evaluate(() => STATE.modal || '');
-  step('Rejected stage shows a required reason field', rejectHtml.includes('Reason for rejection'));
-  step('Stage modal header shows current → target confirmation', /Submitted to Client[\s\S]*→[\s\S]*Rejected/.test(rejectHtml), 'header did not show current→target');
+  step('Not Accepted stage shows a required reason field', rejectHtml.includes('Reason (required)'));
+  step('Stage modal header shows current → target confirmation', /Submitted to Client[\s\S]*→[\s\S]*Not Accepted/.test(rejectHtml), 'header did not show current→target');
 
   // Note is required on EVERY stage change: with a reason but no note, blocked on the note.
   const noteGuard = await page.evaluate(() => {
@@ -141,9 +141,9 @@ try {
     document.getElementById('stg-reject').value = '';
     stgApply();
     window.showToast = _orig;
-    return window.__toastMsgs.some(m => /reason for rejection/i.test(m));
+    return window.__toastMsgs.some(m => /add the reason/i.test(m));
   });
-  step('Moving to Rejected without a reason is blocked', rejectGuard);
+  step('Moving to Not Accepted without a reason is blocked', rejectGuard);
   await page.evaluate(() => { closeModal(); STATE.user.role = 'recruiter'; STATE.user.roles = ['recruiter']; });
 
   // ── 4: recent rejections shown as context on the recruiter dashboard ─────

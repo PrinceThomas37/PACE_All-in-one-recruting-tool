@@ -282,8 +282,8 @@ function recDashboardLoad(){
 }
 
 function recStageColor(s){
-  if(s==='Placement'||s==='Confirmation')return"var(--green)";
-  if(s==='Rejected'||s==='Not Joined')return"var(--red)";
+  if(s==='Placement'||s==='Joining'||s==='Confirmation')return"var(--green)";
+  if(s==='Not Accepted'||s==='Rejected'||s==='Not Joined')return"var(--red)";
   if(s==='Offer')return"#7c3aed";
   if(s==='Interview Scheduled'||s==='Interview Completed')return"#2563eb";
   if(s==='On Hold')return"var(--amber)";
@@ -581,7 +581,7 @@ function renderManagerDashboard(u){
 // for this role (routes/jobs.js) — the exact same data the Leads page uses.
 // Real lead stages (Unassigned/Assigned/Connected/In Discussion/Rejected/
 // Future), not the old demo "Positive/Negative" vocabulary from STATE.leads.
-var LEAD_STAGE_COLORS={Unassigned:'var(--text3)',Assigned:'var(--accent)',Connected:'var(--green)','In Discussion':'#8b5cf6',Future:'var(--amber)',Rejected:'var(--red)'};
+var LEAD_STAGE_COLORS=window.LEAD_STAGE_COLORS;
 function jobsInPeriod(jobs,p){
   var now=new Date();
   return jobs.filter(function(j){

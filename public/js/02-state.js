@@ -2,6 +2,22 @@
 // STATE
 // ════════════════════════════════════════════════
 
+// One canonical colour per lead stage, used everywhere (leads table + its stage
+// selects, the top status chips, the lead detail modal, and the individual
+// dashboard). Owner's spec: Assigned = blue, Connected = green, Rejected = red,
+// Unassigned = grey, and two distinct colours for the middle stages.
+window.LEAD_STAGE_COLORS = {
+  Unassigned: '#94a3b8',      // grey
+  Assigned:   '#3b82f6',      // blue
+  Connected:  '#10b981',      // green
+  'In Discussion': '#8b5cf6', // violet
+  Future:     '#f59e0b',      // amber
+  Rejected:   '#ef4444'       // red
+};
+// Soft background tint for a stage (hex + alpha).
+window.leadStageBg = function(stage){ return (window.LEAD_STAGE_COLORS[stage]||'#64748b') + '1a'; };
+window.leadStageColor = function(stage){ return window.LEAD_STAGE_COLORS[stage] || '#64748b'; };
+
 // ════════════════════════════════════════════════
 // JOBS / CONTACTS MODEL  (matches backend index.js)
 // ════════════════════════════════════════════════

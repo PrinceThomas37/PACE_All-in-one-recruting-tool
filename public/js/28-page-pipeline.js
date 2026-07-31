@@ -14,11 +14,11 @@
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function code(t){ return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>'; }
-  var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Confirmation":"#0891b2","Placement":"var(--green)","Rejected":"var(--red)","Not Joined":"#b91c1c","On Hold":"#9ca3af"};
+  var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
   // Stage ranking used to decide when a candidate has actually been *submitted*.
   // A candidate is only "Submitted" once they reach "Submitted to BDM" (i.e. sent
   // to the BD team) — before that they are merely Added/Sourced/Screening.
-  var STAGE_RANK={"Sourced":0,"Screening":1,"Submitted to BDM":2,"Submitted to Client":3,"Interview Scheduled":4,"Interview Completed":5,"Offer":6,"Confirmation":7,"Placement":8};
+  var STAGE_RANK={"Sourced":0,"Screening":1,"Submitted to BDM":2,"Submitted to Client":3,"Interview Scheduled":4,"Interview Completed":5,"Offer":6,"Joining":7,"Placement":8};
   var SUBMITTED_RANK=2;
   function isBDM(u){ return userHasAnyRole(u,'admin','bd','bd_lead'); }
   function isRec(u){ return userHasRole(u,'recruiter'); }
@@ -167,7 +167,7 @@
       // Un-promoted rows show "Not submitted"; picking a stage promotes the
       // candidate (materializes the submission) and opens the notes modal.
       var promoted = !!p.submission_id;
-      var curStage = p.submission ? (p.submission.stage||'') : '';
+      var curStage = p.submission ? (window.normalizeStage?normalizeStage(p.submission.stage||''):(p.submission.stage||'')) : '';
       // "Submitted" must mean actually sent to the BD team (stage ≥ Submitted to
       // BDM) — NOT merely tagged/promoted. A freshly added candidate reads
       // "Added"; an early-stage one shows nothing extra (the Stage cell says it).

@@ -49,7 +49,6 @@
         return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'+
           '<span style="flex:1;font-size:12.5px'+(r.is_active?'':';color:var(--text3);text-decoration:line-through')+'">'+esc(r.value)+'</span>'+
           '<label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox"'+(r.is_active?' checked':'')+' onchange="atsLkToggle(\''+r.id+'\',this.checked)"> active</label>'+
-          '<span style="cursor:pointer;color:var(--text3);font-size:12px" title="Delete" onclick="atsLkDelete(\''+r.id+'\')">✕</span>'+
         '</div>';
       }).join('') || '<div style="font-size:12px;color:var(--text3);padding:4px 0">No values.</div>';
       return '<div style="margin-bottom:16px">'+

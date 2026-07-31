@@ -43,9 +43,12 @@
     };
   }
 
-  var BD_STAGES=["Sourced","Screening","Submitted to BDM","Submitted to Client","Interview Scheduled","Interview Completed","Offer","Confirmation","Placement","Rejected","Not Joined","On Hold"];
+  var BD_STAGES=["Sourced","Screening","Submitted to BDM","Submitted to Client","Interview Scheduled","Interview Completed","Offer","Joining","Placement","Not Accepted","On Hold"];
+  // Map any pre-migration stage value (Confirmation/Rejected/Not Joined) to the
+  // current vocabulary so bucketing/counts stay correct until the data migration.
+  function nStage(x){ return (window.normalizeStage?normalizeStage(x):x); }
   var BDM_GATED="Submitted to Client";
-  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Confirmation":"#0891b2","Placement":"var(--green)","Rejected":"var(--red)","Not Joined":"#b91c1c","On Hold":"#9ca3af"};
+  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
   var JOB_TYPES=["Contract","Full-time","Contract-to-Hire","Part-time","1099","W2"];
   var EMP_LEVELS=["Entry","Associate","Mid-Senior","Director","Executive"];
   var WORK_AUTH=["US Citizen","Green Card","H1B","OPT/CPT","TN","Any"];
@@ -197,8 +200,13 @@
     var f=STATE.bd.jobFilter;
     var all=STATE.bd.jobOrders;
     var mine=all.filter(function(j){return j.bd_manager&&j.bd_manager.id===STATE.user.id;});
+    // Team's jobs = jobs managed by anyone on my reporting line (direct +
+    // transitive). Shown only to a user who actually leads a team.
+    var teamIds=(window.reportingSubtree?reportingSubtree(STATE.user.id):[]).map(function(t){return t.id;});
+    var team=teamIds.length?all.filter(function(j){return j.bd_manager&&teamIds.indexOf(j.bd_manager.id)>-1;}):[];
     var view=STATE.bd.jobsView||'all';
-    var base=view==='mine'?mine:all;
+    if(view==='team'&&!teamIds.length)view='all';
+    var base=view==='mine'?mine:view==='team'?team:all;
     var rows=base.filter(function(j){
       if(f.state&&(j.state||'')!==f.state)return false;
       if(f.status&&(j.status||'')!==f.status)return false;
@@ -208,12 +216,26 @@
       return true;
     });
     var activeCount=['state','status','job_type','priority','remote'].filter(function(k){return f[k];}).length;
+    var jobTabs=[['mine','My Jobs',mine.length]];
+    if(teamIds.length)jobTabs.push(['team',"Team's Jobs",team.length]);
+    jobTabs.push(['all','All Jobs',all.length]);
     var jobsTabBar='<div style="display:flex;gap:8px;margin-bottom:12px">'+
-      ['mine','all'].map(function(v){
-        var on=view===v, n=v==='mine'?mine.length:all.length, lbl=v==='mine'?'My Jobs':'All Jobs';
-        return '<button onclick="bdSetJobsView(\''+v+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+lbl+' ('+n+')</button>';
+      jobTabs.map(function(t){
+        var on=view===t[0];
+        return '<button onclick="bdSetJobsView(\''+t[0]+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+t[1]+' ('+t[2]+')</button>';
       }).join('')+
     '</div>';
+    // Multi-select (item 24): checkbox column + bulk status change.
+    var jsel=STATE.bd.jobSel||(STATE.bd.jobSel={});
+    STATE.bd._jobRowIds=rows.map(function(j){return j.id;}); // shown rows, for select-all
+    var selIds=rows.filter(function(j){return jsel[j.id];}).map(function(j){return j.id;});
+    var allChecked=rows.length&&rows.every(function(j){return jsel[j.id];});
+    var bulkBar=selIds.length?'<div style="display:flex;align-items:center;gap:12px;background:var(--accent-l);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap">'+
+      '<span style="font-size:13px;font-weight:700;color:var(--accent)">'+selIds.length+' job'+(selIds.length>1?'s':'')+' selected</span>'+
+      '<span style="font-size:12.5px;color:var(--text2)">Set status:</span>'+
+      '<select onchange="if(this.value)bdBulkStatus(this.value);this.value=\'\'" class="sel" style="font-size:12.5px;padding:5px 8px"><option value="">Choose…</option>'+JOB_STATUSES.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('')+'</select>'+
+      '<button onclick="bdJobClearSel()" style="margin-left:auto;background:transparent;color:var(--text2);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer">Clear</button>'+
+    '</div>':'';
     function fopt(key,all,list){return '<select class="sel" onchange="bdSetJobFilter(\''+key+'\',this.value)"><option value="">'+all+'</option>'+list.map(function(s){return '<option value="'+esc(s)+'"'+(f[key]===s?' selected':'')+'>'+esc(s)+'</option>';}).join("")+'</select>';}
     var body=rows.map(function(j){
       var recs=j.recruiters||[];
@@ -221,6 +243,7 @@
       var loc=[j.city,j.state].filter(Boolean).join(', ');
       var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
       return '<tr style="border-top:1px solid var(--border);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">'+
+        '<td style="padding:11px 12px;width:34px" onclick="event.stopPropagation()"><input type="checkbox" '+(jsel[j.id]?'checked':'')+' onclick="event.stopPropagation();bdJobToggleSel(\''+j.id+'\')" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)"/></td>'+
         '<td style="padding:11px 12px">'+code(j.job_code)+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+esc(j.lead_code||'')+'</div></td>'+
         '<td style="padding:11px 12px"><div style="font-weight:600;font-size:13.5px">'+esc(j.job_title||'')+'</div></td>'+
         '<td style="padding:11px 12px;font-size:12.5px">'+esc(j.client||'—')+'</td>'+
@@ -253,17 +276,25 @@
             '</div>':'')+
         '</div>'+
       '</div>'+
+      bulkBar+
       '<div class="card" style="overflow:auto">'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:820px">'+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px">'+
           '<thead><tr style="background:var(--bg);text-align:left">'+
+            '<th style="padding:10px 12px;width:34px"><input type="checkbox" '+(allChecked?'checked':'')+' onclick="bdJobToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all shown"/></th>'+
             ['JOB CODE','JOB TITLE','CLIENT','LOCATION','STATUS','PAY RATE','RECRUITER'].map(function(h){return '<th style="padding:10px 12px;font-size:11px;color:var(--text3);font-weight:600">'+h+'</th>';}).join("")+
           '</tr></thead>'+
-          '<tbody>'+(body||'<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text3)">No jobs yet. Convert a connected lead or create one.</td></tr>')+'</tbody>'+
+          '<tbody>'+(body||'<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text3)">No jobs yet. Convert a connected lead or create one.</td></tr>')+'</tbody>'+
         '</table>'+
       '</div>'+
     '</div>';
   };
   window.bdSetJobsView=function(v){STATE.bd.jobsView=v;render();};
+  window.bdToggleJD=function(){STATE.bd.jdExpanded=!STATE.bd.jdExpanded;render();};
+  window.bdTogglePrevJD=function(){STATE.bd.jdShowPrev=!STATE.bd.jdShowPrev;STATE.bd.jdExpanded=false;render();};
+  window.bdJobToggleSel=function(id){var s=STATE.bd.jobSel||(STATE.bd.jobSel={});if(s[id])delete s[id];else s[id]=true;render();};
+  window.bdJobToggleSelAll=function(){var ids=STATE.bd._jobRowIds||[];var s=STATE.bd.jobSel||(STATE.bd.jobSel={});var allOn=ids.length&&ids.every(function(id){return s[id];});ids.forEach(function(id){if(allOn)delete s[id];else s[id]=true;});render();};
+  window.bdJobClearSel=function(){STATE.bd.jobSel={};render();};
+  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,{status:status});})).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status,'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});};
   window.bdSetJobFilter=function(k,v){STATE.bd.jobFilter[k]=v;STATE.bd.jobFilterOpen=true;render();};
   window.bdClearJobFilter=function(){STATE.bd.jobFilter={state:"",status:"",job_type:"",priority:"",remote:""};render();};
   window.bdToggleFilter=function(){STATE.bd.jobFilterOpen=!STATE.bd.jobFilterOpen;render();};
@@ -517,8 +548,9 @@
       results.forEach(function(r){
         var counts={},names={};
         r.subs.forEach(function(s){
-          counts[s.stage]=(counts[s.stage]||0)+1;
-          (names[s.stage]=names[s.stage]||[]).push((s.candidate&&s.candidate.full_name)||'');
+          var _ns=nStage(s.stage);
+          counts[_ns]=(counts[_ns]||0)+1;
+          (names[_ns]=names[_ns]||[]).push((s.candidate&&s.candidate.full_name)||'');
         });
         m[r.id]={counts:counts,names:names,total:r.subs.length};
       });
@@ -579,6 +611,27 @@
 
     function dr(lbl,val){return val?'<div style="font-size:12.5px;margin-bottom:4px"><span style="color:var(--text3)">'+lbl+': </span>'+esc(val)+'</div>':'';}
 
+    // Job-description block: a short preview with Show more/less, the "Re-write
+    // job description" action next to it, and — when a previous version was kept
+    // (on replace) — a toggle to view that earlier JD.
+    var jdText=j.job_description||'', prevText=j.previous_description||'';
+    var jdShowPrev=STATE.bd.jdShowPrev&&prevText;
+    var jdDisplay=jdShowPrev?prevText:jdText;
+    var jdExpanded=STATE.bd.jdExpanded;
+    var jdLong=jdDisplay.length>320;
+    var prevWhen=j.previous_description_at?(function(){try{return new Date(j.previous_description_at).toLocaleDateString();}catch(e){return '';}})():'';
+    var jdBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
+        '<div style="font-weight:600;font-size:13px">Job description'+(jdShowPrev?' <span style="font-size:11px;color:var(--amber);font-weight:600">· previous version'+(prevWhen?' ('+prevWhen+')':'')+'</span>':'')+'</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+          (jdLong?'<button onclick="bdToggleJD()" style="font-size:11.5px;color:var(--accent);background:none;border:0;cursor:pointer;font-weight:600">'+(jdExpanded?'Show less':'Show more')+'</button>':'')+
+          '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')" style="font-size:11.5px">✏ Re-write job description</button>'+
+          (prevText?'<button onclick="bdTogglePrevJD()" title="View the previous job description (kept until the job ends)" style="font-size:11.5px;color:'+(jdShowPrev?'var(--amber)':'var(--text3)')+';background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer">'+(jdShowPrev?'← Current JD':'Previous JD')+'</button>':'')+
+        '</div>'+
+      '</div>'+
+      (jdDisplay?'<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;'+((jdLong&&!jdExpanded)?'max-height:110px;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)':'')+'">'+esc(jdDisplay)+'</div>':'<div style="font-size:12.5px;color:var(--text3)">No job description yet.</div>')+
+    '</div>';
+
     return '<div class="page">'+
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="goPage(\'bd_joborders\')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Jobs</span></div>')+
       '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
@@ -591,7 +644,6 @@
           '<div style="display:flex;gap:8px">'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenKanban(\''+j.id+'\')">Board</button>'+
-            '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')">'+(j.posting_description?'Posting JD ✓':'Posting JD')+'</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>'+
           '</div>'+
         '</div>'+
@@ -602,7 +654,7 @@
           dr('Primary Skills',j.primary_skills)+dr('Experience',(j.exp_min||j.exp_max)?j.exp_min+'–'+j.exp_max+' yrs':'')+dr('Industry',j.industry)+
           dr('Lead',j.lead_code)+dr('Client Job ID',j.client_job_id)+dr('Job Category',j.job_category)+
         '</div>'+
-        (j.job_description?'<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;white-space:pre-wrap">'+esc(j.job_description)+'</div>':'')+
+        jdBlock+
       '</div>'+
       approval+
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
@@ -623,14 +675,15 @@
     var sel=STATE.bd.seqSel||[];
     var rows=subs.map(function(s){
       var c=s.candidate||{}; var on=sel.indexOf(s.id)>-1;
-      var nextStages=BD_STAGES.filter(function(x){return x!==s.stage;});
+      var curStage=nStage(s.stage);
+      var nextStages=BD_STAGES.filter(function(x){return x!==curStage;});
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
         '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleSeqSel(\''+s.id+'\')" style="cursor:pointer">'+
         '<div style="flex:1;min-width:0">'+
           '<span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'Candidate')+'</span> '+code(c.candidate_code||'')+
           (s.sub_stage?' <span style="font-size:10px;color:var(--text3)">· '+esc(s.sub_stage)+'</span>':'')+
         '</div>'+
-        '<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[s.stage]||'var(--text3)')+'">'+esc(s.stage||'')+'</span>'+
+        '<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[curStage]||'var(--text3)')+'">'+esc(curStage||'')+'</span>'+
         '<select class="sel" style="font-size:11px;padding:3px 6px;max-width:120px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
           '<option value="">Move…</option>'+
           nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
@@ -668,12 +721,12 @@
   // Compact vertical funnel — one thin column per stage instead of a tall
   // stack of horizontal bars.
   var STAGE_ABBR={'Sourced':'Sourced','Screening':'Screen','Submitted to BDM':'To BDM','Submitted to Client':'To Client',
-    'Interview Scheduled':'Int Sched','Interview Completed':'Int Done','Offer':'Offer','Confirmation':'Confirm',
-    'Placement':'Placed','Rejected':'Rejected','Not Joined':'No Join','On Hold':'Hold'};
+    'Interview Scheduled':'Int Sched','Interview Completed':'Int Done','Offer':'Offer','Joining':'Joining',
+    'Placement':'Placed','Not Accepted':'Not Acc','On Hold':'Hold'};
   function bdFunnelCard(jid){
     var subs=(STATE.bd.submissions||[]).filter(function(s){return !jid||s.job_order_id===jid;});
     var counts={};BD_STAGES.forEach(function(s){counts[s]=0;});
-    subs.forEach(function(s){if(counts[s.stage]!==undefined)counts[s.stage]++;});
+    subs.forEach(function(s){var ns=nStage(s.stage);if(counts[ns]!==undefined)counts[ns]++;});
     var max=Math.max(1,Math.max.apply(null,BD_STAGES.map(function(s){return counts[s];})));
     return '<div class="card" style="padding:14px 16px"><div style="font-weight:600;font-size:14px;margin-bottom:10px">Pipeline Funnel</div>'+
       '<div style="display:flex;align-items:flex-end;gap:6px;height:110px;overflow-x:auto">'+
@@ -700,29 +753,26 @@
     var cols=BD_STAGES;
     var backLink=isBDM(u)?'bd_jodetail':'bd_myjobs';
     var colHtml=cols.map(function(st){
-      var items=jobSubs.filter(function(s){return s.stage===st;});
+      var items=jobSubs.filter(function(s){return nStage(s.stage)===st;});
       var locked=(st===BDM_GATED&&recruiterScoped);
-      return '<div style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px">'+
+      return '<div ondragover="bdDragOver(event)" ondragenter="if(!'+(locked?'true':'false')+'){this.style.background=\'var(--accent-l)\';this.style.outline=\'2px dashed var(--accent)\'}" ondragleave="this.style.background=\'var(--bg)\';this.style.outline=\'none\'" ondrop="this.style.background=\'var(--bg)\';this.style.outline=\'none\';bdDrop(event,\''+st+'\')" style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px;transition:background .1s">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
           '<div style="font-size:12px;font-weight:700;color:'+STAGE_COLORS[st]+'">'+st+'</div>'+
           '<div style="font-size:11px;color:var(--text3);font-weight:700">'+items.length+'</div>'+
         '</div>'+
         items.map(function(s){
           var c=s.candidate||{};
-          var nextStages=BD_STAGES.filter(function(x){
-            if(x===s.stage)return false;
-            if(x===BDM_GATED&&recruiterScoped)return false;
-            return true;
-          });
-          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:7px">'+
+          var subs=(window.ATS_SUB_STAGES&&ATS_SUB_STAGES[nStage(s.stage)])||[];
+          var scol=window.subStageColor?subStageColor(s.sub_stage):'var(--text3)';
+          var subSel=subs.length?'<select onchange="bdSetSubStage(\''+s.id+'\',this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid '+(s.sub_stage?scol:'var(--border)')+';border-radius:7px;background:'+(s.sub_stage?scol+'1a':'var(--card)')+';color:'+(s.sub_stage?scol:'var(--text2)')+';font-weight:600;cursor:pointer">'+
+              '<option value="">Sub-stage…</option>'+
+              subs.map(function(x){return '<option value="'+esc(x)+'"'+(s.sub_stage===x?' selected':'')+'>'+esc(x)+'</option>';}).join('')+
+            '</select>':'';
+          return '<div draggable="true" ondragstart="bdDragStart(event,\''+s.id+'\')" ondragend="bdDragEnd(event)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:7px;cursor:grab">'+
             '<div style="font-weight:600;font-size:12.5px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'')+'</div>'+
-            '<div style="font-size:10.5px;color:var(--text3);margin-bottom:4px">'+code(c.candidate_code||'')+' · '+esc(c.current_title||'')+'</div>'+
-            (s.sub_stage?'<div style="font-size:10px;font-weight:700;color:var(--text2);background:var(--bg);display:inline-block;padding:1px 7px;border-radius:8px;margin-bottom:5px">'+esc(s.sub_stage)+'</div>':'')+
+            '<div style="font-size:10.5px;color:var(--text3);margin-bottom:5px">'+code(c.candidate_code||'')+' · '+esc(c.current_title||'')+'</div>'+
             (s.interview_at?'<div style="font-size:10px;color:#2563eb;margin-bottom:5px">🗓 '+esc(new Date(s.interview_at).toLocaleString())+(s.interview_location?' · '+esc(s.interview_location):'')+'</div>':'')+
-            '<select class="sel" style="font-size:11px;padding:4px 6px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
-              '<option value="">Move to…</option>'+
-              nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
-            '</select>'+
+            subSel+
           '</div>';
         }).join("")+
         (locked?'<div style="font-size:10px;color:var(--text3);text-align:center;padding:4px">🔒 BDM approval required</div>':'')+
@@ -732,12 +782,13 @@
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="bdBackFromKanban()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Back</span></div>')+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
         '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span style="font-weight:700;font-size:16px">'+esc(j.job_title||'')+'</span></div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+'</div></div>'+
+        '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+' · Job white-board</div></div>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
           '<button class="btn btn-primary" onclick="bdOpenAddCandidate(\''+j.id+'\')">+ Add Candidate</button>'+
         '</div>'+
       '</div>'+
+      '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Drag a candidate card to another column to change stage · pick a sub-stage on the card</div>'+
       '<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">'+colHtml+'</div>'+
     '</div>';
   };
@@ -774,11 +825,12 @@
     STATE.modal=
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
-          '<div style="font-weight:700;font-size:15px">Posting JD — '+esc(j.job_title||'')+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">A public version of the job description with the company name and identifying details removed. Generate, review, edit, then save or copy for posting.</div>'+
+          '<div style="font-weight:700;font-size:15px">Re-write job description — '+esc(j.job_title||'')+'</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Generate a public version (company name and identifying details removed), or replace the internal job description. Generate, review, edit, then save or copy.</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          '<textarea id="pjd-text" class="sel" style="min-height:290px;resize:vertical;font-size:12.5px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
+          '<textarea id="pjd-text" class="sel" style="min-height:270px;resize:vertical;font-size:12.5px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
+          '<label style="display:flex;align-items:center;gap:9px;margin-top:12px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="pjd-replace" style="width:15px;height:15px;accent-color:var(--accent)"/> Replace the current job description with this text <span style="color:var(--text3)">— keeps the old one viewable until the job ends</span></label>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">'+
           '<button class="btn btn-outline" onclick="bdGeneratePostingJD(\''+jid+'\')">✨ Generate from internal JD</button>'+
@@ -802,10 +854,18 @@
   window.bdSavePostingJD=function(jid){
     var ta=document.getElementById('pjd-text');
     var text=ta?ta.value:'';
-    apiPut('/job-orders/'+jid,{posting_description:text}).then(function(jo){
+    var replace=(document.getElementById('pjd-replace')||{}).checked;
+    var j=joById(jid)||{};
+    // Replace → the new text becomes the internal JD, and the OLD one is kept as
+    // previous_description (viewable via the toggle) until the job ends. Otherwise
+    // it's saved as the public posting description, as before.
+    var payload=replace
+      ? { job_description:text, previous_description:(j.job_description||null), previous_description_at:(j.job_description?new Date().toISOString():null) }
+      : { posting_description:text };
+    apiPut('/job-orders/'+jid,payload).then(function(jo){
       var idx=STATE.bd.jobOrders.findIndex(function(x){return x.id===jid;});
       if(idx>-1)STATE.bd.jobOrders[idx]=jo;
-      showToast('Posting JD saved','success');closeModal();
+      showToast(replace?'Job description replaced — previous version kept':'Posting JD saved','success');closeModal();
     }).catch(function(e){showToast('Failed: '+e.message,'error');});
   };
   window.bdCopyPostingJD=function(){
@@ -883,6 +943,33 @@
     openStageModal(sid,stage,function(){render();});
   };
   window.bdSetStage=function(sid,stage){bdMoveStage(sid,stage);};
+
+  // ── White-board drag-and-drop ──────────────────────────────────────────────
+  // Dropping a card on another stage column runs the SAME stage-change modal as
+  // before (openStageModal) — so notes, sub-stage, interview details and the
+  // recruiter/BDM gate all still apply. Sub-stage is changed on the card itself.
+  var _bdDragId=null;
+  window.bdDragStart=function(ev,sid){ _bdDragId=sid; try{ ev.dataTransfer.setData('text/plain',sid); ev.dataTransfer.effectAllowed='move'; }catch(e){} };
+  window.bdDragEnd=function(){ _bdDragId=null; };
+  window.bdDragOver=function(ev){ ev.preventDefault(); try{ ev.dataTransfer.dropEffect='move'; }catch(e){} };
+  window.bdDrop=function(ev,stage){
+    ev.preventDefault();
+    var sid=_bdDragId||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); _bdDragId=null;
+    if(!sid||!stage)return;
+    var s=(STATE.bd.submissions||[]).find(function(x){return x.id===sid;});
+    if(!s||nStage(s.stage)===stage)return;
+    var u=STATE.user;
+    if(stage===BDM_GATED&&isRec(u)&&!isBDM(u)){ showToast('Only a BD Manager can submit to the client.','error'); return; }
+    openStageModal(sid,stage,function(){render();});
+  };
+  window.bdSetSubStage=function(sid,sub){
+    if(!sub)return;
+    apiPatch('/submissions/'+sid,{sub_stage:sub}).then(function(){
+      var s=(STATE.bd.submissions||[]).find(function(x){return x.id===sid;});
+      if(s)s.sub_stage=sub;
+      render();
+    }).catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
+  };
   window.bdApproveSub=function(sid){bdMoveStage(sid,BDM_GATED);};
 
   // ── BDM: review a submission before approving ──────────────────────────────

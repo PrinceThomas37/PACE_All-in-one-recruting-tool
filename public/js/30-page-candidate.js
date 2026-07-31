@@ -8,7 +8,8 @@
 
   // submission stage ordering, for "milestone reached" comparisons
   var STAGE_ORDER = { 'Sourced':0,'Screening':1,'Submitted to BDM':2,'Submitted to Client':3,
-    'Interview Scheduled':4,'Interview Completed':5,'Offer':6,'Confirmation':7,'Placement':8 };
+    'Interview Scheduled':4,'Interview Completed':5,'Offer':6,'Joining':7,'Placement':8 };
+  function nStage(x){ return (window.normalizeStage?normalizeStage(x):x); }
 
   // the profile lifecycle bar (matches Ceipal): each milestone maps to the
   // submission stage that marks it reached.
@@ -17,9 +18,9 @@
     { key:'submission', label:'Submission' },
     { key:'client',     label:'Client Submission', stage:'Submitted to Client' },
     { key:'interview',  label:'Interview',          stage:'Interview Scheduled' },
-    { key:'confirm',    label:'Confirmation',       stage:'Confirmation' },
+    { key:'joining',    label:'Joining',            stage:'Joining' },
     { key:'placement',  label:'Placement',          stage:'Placement' },
-    { key:'notjoined',  label:'Not Joined',         stage:'Not Joined' }
+    { key:'notaccepted',label:'Not Accepted',       stage:'Not Accepted' }
   ];
 
   if (STATE.bd) STATE.bd.profile = STATE.bd.profile || null;
@@ -104,23 +105,23 @@
     var sub = (h.submissions||[]).find(function(s){ return s.job_order_id===jobId; });
     var acts = sub ? (h.activity||[]).filter(function(a){ return a.submission_id===sub.id; }) : [];
     function actTime(stage){ var a=acts.find(function(x){ return x.new_stage===stage; }); return a?a.created_at:null; }
+    var curStage = sub ? nStage(sub.stage) : '';
     var maxOrder = -1;
     if (sub){
-      maxOrder = STAGE_ORDER[sub.stage]!=null ? STAGE_ORDER[sub.stage] : 0;
-      acts.forEach(function(a){ if(STAGE_ORDER[a.new_stage]!=null && STAGE_ORDER[a.new_stage]>maxOrder) maxOrder=STAGE_ORDER[a.new_stage]; });
+      maxOrder = STAGE_ORDER[curStage]!=null ? STAGE_ORDER[curStage] : 0;
+      acts.forEach(function(a){ var ns=nStage(a.new_stage); if(STAGE_ORDER[ns]!=null && STAGE_ORDER[ns]>maxOrder) maxOrder=STAGE_ORDER[ns]; });
     }
-    var rejected = sub && sub.stage==='Rejected';
-    var onHold = sub && sub.stage==='On Hold';
+    var notAccepted = sub && curStage==='Not Accepted';
+    var onHold = sub && curStage==='On Hold';
     return MILESTONES.map(function(m){
       var reached=false, at=null;
       if (m.key==='pipeline'){ reached = !!pipe || !!sub; at = pipe?pipe.tagged_at:(sub?sub.created_at:null); }
       else if (m.key==='submission'){ reached = !!sub; at = sub?(sub.submitted_at||sub.created_at):null; }
       else if (m.key==='client'){ reached = !!sub && (!!sub.bdm_approved_at || maxOrder>=STAGE_ORDER['Submitted to Client']); at = sub?(sub.bdm_approved_at||actTime('Submitted to Client')):null; }
-      else if (m.key==='notjoined'){ reached = !!sub && sub.stage==='Not Joined'; at = actTime('Not Joined'); }
+      else if (m.key==='notaccepted'){ reached = notAccepted; at = actTime('Not Accepted')||actTime('Rejected')||actTime('Not Joined'); }
       else { reached = !!sub && maxOrder>=STAGE_ORDER[m.stage]; at = actTime(m.stage); }
-      return { label:m.label, reached:reached, at:at };
-    }).concat(rejected?[{label:'Rejected',reached:true,at:actTime('Rejected'),bad:true}]:[])
-      .concat(onHold?[{label:'On Hold',reached:true,at:null,warn:true}]:[]);
+      return { label:m.label, reached:reached, at:at, bad:(m.key==='notaccepted'&&reached) };
+    }).concat(onHold?[{label:'On Hold',reached:true,at:null,warn:true}]:[]);
   }
 
   function lifecycleBar(jobId){
