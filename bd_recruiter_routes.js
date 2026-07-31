@@ -13,6 +13,7 @@
 const { EVENTS, emit } = require('./events');
 const { PROVIDER_IDS, providerList } = require('./config/sourcing');
 const { parseResume } = require('./resume-parser');
+const matchEngine = require('./match-engine');
 
 module.exports = function (app, deps) {
   const { supabase, auth, hasRole, notGuest, today } = deps;
@@ -24,6 +25,45 @@ module.exports = function (app, deps) {
   // Scope a read to the caller's org (no-op if no org context is resolved yet,
   // which keeps behaviour safe during the single-tenant transition).
   function withOrg(query, req) { const o = orgIdFor(req); return o ? query.eq('org_id', o) : query; }
+
+  // ── relevance engine plumbing ────────────────────────────────────────────
+  // Migrations are applied to the live DB *after* the new build is confirmed
+  // serving (see CLAUDE.md), so this code has to run correctly before migration
+  // 034 exists. Writing to a missing column fails the whole insert, which would
+  // mean nobody could create a job order. So probe once and degrade: the derived
+  // skills still get written (those columns are old), only the requirement blob
+  // is held back until the column is there.
+  let _reqColsPromise = null;
+  function hasRequirementColumns() {
+    if (!_reqColsPromise) {
+      _reqColsPromise = supabase.from('job_orders').select('requirement').limit(1)
+        .then(r => !r.error)
+        .catch(() => false);
+    }
+    return _reqColsPromise;
+  }
+
+  // Derive skills/experience from the JD and build the normalized requirement.
+  // Never overwrites a value a human typed — deriveJobSkills only returns fields
+  // that were blank on the row it was given.
+  async function applyDerivedJobFields(row) {
+    const out = {};
+    try {
+      Object.assign(out, matchEngine.deriveJobSkills(row));
+      if (await hasRequirementColumns()) {
+        out.requirement = matchEngine.buildRequirement(Object.assign({}, row, out));
+        out.requirement_at = new Date();
+      } else if (out.skills_source) {
+        // skills_source ships in the same migration as requirement.
+        delete out.skills_source;
+      }
+    } catch (err) {
+      // Parsing is a convenience. A job order must always save.
+      console.error('[match] deriving job fields failed:', err.message);
+      return {};
+    }
+    return out;
+  }
 
   // ── pipeline stage definitions ───────────────────────────────────────────
   // Canonical submission lifecycle = the Ceipal application status. `stage` holds
@@ -230,6 +270,11 @@ module.exports = function (app, deps) {
         created_by: req.user.id
       }, pickJobFields(job), orgStamp(req));
       if (!jobRow.job_title) jobRow.job_title = leadRow.position;
+      // Fill the skill/experience fields from the JD when the BD left them blank,
+      // and attach the normalized requirement. Skills carry half the match score
+      // and were previously hand-typed, so a blank field meant every candidate
+      // scored on title and location alone.
+      Object.assign(jobRow, await applyDerivedJobFields(jobRow));
       const { data: jobOrder, error } = await supabase.from('job_orders')
         .insert(jobRow).select(JOB_ORDER_SELECT).single();
       if (error) throw error;
@@ -345,9 +390,19 @@ module.exports = function (app, deps) {
       const b = req.body || {};
       const updates = Object.assign({ updated_at: new Date() }, pickJobFields(b));
       if (b.bd_manager_id !== undefined) updates.bd_manager_id = b.bd_manager_id || null;
+
+      // Re-derive against the row as it will be AFTER this edit, not just the
+      // fields being sent: a BD who pastes a JD and nothing else should still get
+      // skills filled in, and one who types skills by hand must keep them.
+      const { data: current } = await supabase.from('job_orders')
+        .select('*').eq('id', req.params.id).maybeSingle();
+      Object.assign(updates, await applyDerivedJobFields(Object.assign({}, current || {}, updates)));
+
       const { data, error } = await supabase.from('job_orders')
         .update(updates).eq('id', req.params.id).select(JOB_ORDER_SELECT).single();
       if (error) throw error;
+      // The job changed, so every cached score against it is stale.
+      invalidateJobScores(req.params.id);
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -358,6 +413,149 @@ module.exports = function (app, deps) {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can delete job orders.' });
       await supabase.from('job_orders').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ==========================================================================
+  // RELEVANCE — rank the candidate pool against a job order
+  //
+  // The browser has scored candidates for a while, but only the handful already
+  // tagged onto a job's pipeline, because that is all it ever holds. Ranking the
+  // whole database against a job has to happen server-side. Same scoring rules
+  // in both places — literally the same file (see match-engine.js).
+  // ==========================================================================
+
+  // Cached scores are an optimisation, not the source of truth: responses are
+  // always computed fresh from the current rows, so an edit can never be masked
+  // by a stale cache. The write is fire-and-forget so ranking never waits on it,
+  // and it silently no-ops until migration 034 is applied.
+  function persistScores(rows, jobOrderId, req) {
+    if (!rows.length) return;
+    const payload = rows.slice(0, 500).map(r => ({
+      org_id: orgIdFor(req) || null,
+      candidate_id: r.candidate_id,
+      job_order_id: jobOrderId,
+      score: r.score,
+      band: r.band,
+      reasons: r.reasons,
+      engine_version: matchEngine.VERSION,
+      computed_at: new Date()
+    }));
+    supabase.from('match_scores')
+      .upsert(payload, { onConflict: 'candidate_id,job_order_id' })
+      .then(() => {}, () => {});   // table may not exist yet — never surface this
+  }
+
+  function invalidateJobScores(jobOrderId) {
+    supabase.from('match_scores').delete().eq('job_order_id', jobOrderId)
+      .then(() => {}, () => {});
+  }
+
+  // GET /job-orders/:id/matches — the whole pool, best fit first.
+  //   ?limit=      how many to return (default 50, max 200)
+  //   ?min_score=  only return candidates at or above this score
+  //   ?q=          narrow the pool by name/email/title first
+  app.get('/job-orders/:id/matches', auth, async (req, res) => {
+    try {
+      if (notGuest(req, res)) return;
+
+      const { data: job, error: jobErr } = await withOrg(
+        supabase.from('job_orders').select('*').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (jobErr) throw jobErr;
+      // 404 rather than an empty list: an out-of-org id must not be
+      // distinguishable from one that doesn't exist.
+      if (!job) return res.status(404).json({ error: 'Job order not found' });
+
+      const q = String(req.query.q || '').trim().replace(/[,()]/g, ' ').trim();
+      let query = withOrg(supabase.from('candidates')
+        .select(CANDIDATE_SELECT).is('deleted_at', null), req);
+      if (q) query = query.or(
+        `full_name.ilike.%${q}%,email.ilike.%${q}%,candidate_code.ilike.%${q}%,current_title.ilike.%${q}%`
+      );
+      // Bounded so one enormous org can't turn this into a full-table scan; the
+      // app's analytics already have that problem and this shouldn't add to it.
+      const { data: candidates, error } = await query.limit(2000);
+      if (error) throw error;
+
+      const minScore = req.query.min_score != null && req.query.min_score !== ''
+        ? parseInt(req.query.min_score, 10) : null;
+      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+
+      const ranked = matchEngine.rankCandidates(candidates || [], job, {
+        minScore: Number.isNaN(minScore) ? null : minScore
+      });
+      persistScores(ranked, job.id, req);
+
+      res.json({
+        job_order: { id: job.id, job_code: job.job_code, job_title: job.job_title, client: job.client },
+        // Surfaced so the UI can say *why* scores look thin — a job with no
+        // skills listed scores everyone on title and location alone.
+        scoreable: Boolean(
+          String(job.primary_skills || '').trim() || String(job.secondary_skills || '').trim()
+        ),
+        engine_version: matchEngine.VERSION,
+        total: ranked.length,
+        pool_size: (candidates || []).length,
+        results: ranked.slice(0, limit)
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // POST /match/score — score one candidate against one job, by id or inline.
+  // Inline lets the sourcing branches score a person who isn't in the DB yet.
+  app.post('/match/score', auth, async (req, res) => {
+    try {
+      if (notGuest(req, res)) return;
+      const b = req.body || {};
+
+      let candidate = b.candidate || null;
+      if (!candidate && b.candidate_id) {
+        const { data } = await withOrg(supabase.from('candidates')
+          .select(CANDIDATE_SELECT).eq('id', b.candidate_id).is('deleted_at', null), req).maybeSingle();
+        candidate = data;
+      }
+      let job = b.job || null;
+      if (!job && b.job_order_id) {
+        const { data } = await withOrg(supabase.from('job_orders')
+          .select('*').eq('id', b.job_order_id).is('deleted_at', null), req).maybeSingle();
+        job = data;
+      }
+      if (!candidate || !job) {
+        return res.status(400).json({ error: 'Provide candidate (or candidate_id) and job (or job_order_id).' });
+      }
+
+      res.json(Object.assign({ engine_version: matchEngine.VERSION },
+        matchEngine.scoreCandidate(candidate, job)));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // POST /job-orders/:id/parse-jd — re-derive skills/experience from the JD on
+  // demand, for job orders created before this existed. Returns what it would
+  // write; `?apply=1` persists it. Only ever fills blanks.
+  app.post('/job-orders/:id/parse-jd', auth, async (req, res) => {
+    try {
+      if (notGuest(req, res)) return;
+      const { data: job } = await withOrg(
+        supabase.from('job_orders').select('*').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!job) return res.status(404).json({ error: 'Job order not found' });
+      if (!isBDM(req) && !(isRecruiter(req) && await recruiterCanTouchJob(req, req.params.id))) {
+        return res.status(403).json({ error: 'Only BD Managers or an assigned recruiter can edit this job order.' });
+      }
+
+      const derived = await applyDerivedJobFields(job);
+      if (!Object.keys(derived).length) {
+        return res.json({ applied: false, derived: {}, message: 'Nothing to fill — the skill fields are already set, or the description has no parseable detail.' });
+      }
+      if (String(req.query.apply || '') !== '1') return res.json({ applied: false, derived });
+
+      const { data, error } = await supabase.from('job_orders')
+        .update(Object.assign({ updated_at: new Date() }, derived))
+        .eq('id', req.params.id).select(JOB_ORDER_SELECT).single();
+      if (error) throw error;
+      invalidateJobScores(req.params.id);
+      res.json({ applied: true, derived, job_order: data });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

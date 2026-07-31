@@ -1,15 +1,39 @@
-// ===== CANDIDATE ↔ JOB MATCH SCORING (additive) =====
+// ===== CANDIDATE ↔ JOB MATCH SCORING =====
 // A free, deterministic rule-based match score (0–100) between a candidate and a
 // job order, so recruiters see best-fit candidates first. Uses data we already
-// have (parsed skills, experience, work auth, title, location). No backend, no
-// AI key required — an AI scorer can be layered on later behind the same API.
+// have (parsed skills, experience, work auth, title, location). No AI key
+// required — an AI re-rank can be layered on later behind the same API.
 //
-// Public API:
-//   window.matchScore(candidate, job) -> { score:Number|null, band, reasons:[] }
-//   window.matchBadge(result)         -> small colored HTML pill
-//   window.matchScoreValue(cand, job) -> Number (null → -1, for sorting)
+// ONE FILE, TWO RUNTIMES. This module is loaded by the browser as a plain
+// <script> (as it always was) AND required by the Node backend via
+// match-engine.js. That is deliberate: the score shown in the grid and the score
+// the server sorts by must be identical, and this codebase has already been
+// bitten by the same rules living in several files at once (see the stage
+// vocabulary note in CLAUDE.md — six copies to keep in sync). One file cannot
+// drift from itself.
+//
+// Public API (identical in both runtimes):
+//   matchScore(candidate, job) -> { score:Number|null, band, reasons:[] }
+//   matchBadge(result)         -> small colored HTML pill
+//   matchScoreValue(cand, job) -> Number (null → -1, for sorting)
 
-(function () {
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) {
+    module.exports = api;                       // Node: require('./public/js/38-match-score.js')
+  }
+  if (root) {                                   // Browser: the globals the pages already call
+    root.matchScore = api.matchScore;
+    root.matchScoreValue = api.matchScoreValue;
+    root.matchBadge = api.matchBadge;
+    root.MATCH_ENGINE_VERSION = api.VERSION;
+  }
+})(typeof window !== 'undefined' ? window : null, function () {
+
+  // Bump when the scoring rules change, so persisted scores can be spotted as
+  // stale rather than silently compared against results from different rules.
+  var VERSION = 1;
+
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
   // tokenize a comma/slash/newline separated field into clean lowercase terms
@@ -84,7 +108,7 @@
     return { weight: 0.05, value: same ? 1 : 0.4, reason: same ? 'same state' : 'diff state' };
   }
 
-  window.matchScore = function (cand, job){
+  function matchScore(cand, job){
     cand = cand || {}; job = job || {};
     var signals = [ skillsSignal(cand, job), experienceSignal(cand, job), workAuthSignal(cand, job),
       titleSignal(cand, job), locationSignal(cand, job) ].filter(Boolean);
@@ -94,12 +118,12 @@
     var score = Math.round((acc / totalW) * 100);
     var band = score >= 75 ? 'strong' : score >= 50 ? 'good' : score >= 25 ? 'fair' : 'low';
     return { score: score, band: band, reasons: signals.map(function (x) { return x.reason; }) };
-  };
+  }
 
-  window.matchScoreValue = function (cand, job){
-    var r = window.matchScore(cand, job);
+  function matchScoreValue(cand, job){
+    var r = matchScore(cand, job);
     return (r && r.score != null) ? r.score : -1;
-  };
+  }
 
   var BAND = {
     strong: { c: '#fff', bg: 'var(--green)', label: 'Strong' },
@@ -107,7 +131,7 @@
     fair:   { c: 'var(--text2)', bg: 'var(--bg)', label: 'Fair' },
     low:    { c: 'var(--text3)', bg: 'var(--bg)', label: 'Low' }
   };
-  window.matchBadge = function (result){
+  function matchBadge(result){
     if (!result || result.score == null) {
       return '<span style="font-size:11px;color:var(--text3)" title="Not enough job/candidate detail to score">—</span>';
     }
@@ -115,5 +139,12 @@
     var tip = esc(result.reasons.join(' · '));
     return '<span title="' + tip + '" style="display:inline-block;min-width:58px;text-align:center;font-size:11px;font-weight:700;color:' + b.c +
       ';background:' + b.bg + ';border:1px solid var(--border);border-radius:10px;padding:2px 8px">' + result.score + '% ' + b.label + '</span>';
+  }
+
+  return {
+    VERSION: VERSION,
+    matchScore: matchScore,
+    matchScoreValue: matchScoreValue,
+    matchBadge: matchBadge
   };
-})();
+});
