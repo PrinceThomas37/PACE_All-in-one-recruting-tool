@@ -398,3 +398,70 @@ Step 0 + Step 1 together, on one dev branch. It is the smallest piece that is bo
 visible and load-bearing: the owner sees every candidate in the database ranked
 against any job with reasons, and the engine becomes trustworthy enough to build
 overnight automation on. It also clears four of the listed defects along the way.
+
+---
+
+## Build log — what has actually shipped
+
+Kept here so a cold session can tell plan from reality.
+
+### Step 0 — DONE (branch `claude/continued-session-context-dj95te`, PR #124)
+`engine-runs.js` + `GET /cron/tick?key=…` + `engine_runs` (migration `033`) +
+`.github/workflows/heartbeat.yml`. Due-ness lives in the DB, so the in-process
+interval and an external ping cannot double-run a job. Fixed on the way: the
+daily follow-up guard required the clock to read *exactly* the send time (a
+sleeping service lost the whole day's follow-ups, silently); the run-on-startup
+block ignored the send time entirely; 15 test files were broken on every
+checkout by a hard-coded `/home/user/fute-lms-backend` path.
+
+### Step 1 — DONE
+`public/js/38-match-score.js` is now a UMD module loaded by **both** the browser
+and Node; `match-engine.js` requires that same file, so the score shown and the
+score sorted by cannot drift. Adds `rankCandidates()`, `deriveJobSkills()` (runs
+jd-parser over a job order's description — the skill fields were hand-typed and
+carry **half** the score), `buildRequirement()`. Endpoints
+`GET /job-orders/:id/matches`, `POST /match/score`, `POST /job-orders/:id/parse-jd`.
+UI: a **Best matches** tab per job, reasons shown inline. Migration `034`.
+
+### Step 2 — DONE (backend + screen)
+- `lead-sources/` — adapters for Greenhouse, Lever, Ashby, Workable,
+  SmartRecruiters, Recruitee, all normalising to one shape. `location.js` parses
+  free-text locations for US **and** India (the state matters: `jobs.timezone`
+  drives the send window).
+- `company-classifier.js` — keeps staffing firms out. Name patterns, description
+  tells ("our client", C2C, bench sales), and board shape (agencies post many
+  unrelated roles across many cities). Biased toward *not* excluding.
+- `why-hiring.js` — the differentiator, rule-based. **Reposts are counted
+  separately from sightings**: a posting that stays up appears every run and has
+  not been reposted, and claiming otherwise in an email is checkable.
+- `enrichment.js` — email-pattern inference + the existing DNS/MX verification.
+  Every address carries method + confidence; role mailboxes are labelled as
+  such. Never claims a mailbox exists, only that the domain accepts mail.
+- `lead-ingest.js` + `routes/lead-sources.js` + `43-page-sourced-leads.js`.
+  Migration `035`. Registered as the `lead_sourcing` engine job.
+
+**The gate:** postings land in `sourced_jobs_raw` and are inert. Only an explicit
+human approval creates the `companies`/`jobs`/`contacts` rows, after which the
+lead is indistinguishable from a manual one and flows through the existing
+distribution + sequence machinery unchanged.
+
+### Migrations written, NONE applied to the live DB
+`033_engine_runs`, `034_match_and_requirement`, `035_lead_sources`. All are
+additive and the code runs correctly without them. Awaiting an explicit
+go-ahead, per the standing rule.
+
+### Environment still required
+`CRON_KEY` in Render **and** as a GitHub Actions secret (same value). Without it
+`/cron/tick` stays closed (404) and background work only runs while the service
+happens to be awake.
+
+### Known limitation, stated honestly
+This development sandbox's network policy blocks the real job-board endpoints, so
+**adapter parsing is tested against documented response shapes but adapter URLs
+have never been exercised against a live board.** `POST /lead-sources/test` (the
+"Test it" button) exists precisely to close that gap from the deployed app, where
+egress is open. Verify each board there before trusting a nightly run.
+
+### Test files: 24, all green
+New this session: `engine-runs-smoke` 30, `match-engine-smoke` 45,
+`best-matches-smoke` 22, `lead-sourcing-smoke` 78, `sourced-leads-page-smoke` 31.
