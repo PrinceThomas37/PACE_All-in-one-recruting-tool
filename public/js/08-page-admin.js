@@ -245,7 +245,7 @@ function loadDeliverability(){
   STATE._delivLoading=true;
   var days=STATE.delivDays||30;
   Promise.all([
-    apiGet('/admin/deliverability?days='+days).catch(function(){return null;}),
+    apiGet('/admin/deliverability?days='+days+(STATE.delivView?'&view='+STATE.delivView:'')).catch(function(){return null;}),
     apiGet('/analytics/templates?days='+days).catch(function(){return [];})
   ]).then(function(r){
     STATE.deliv=r[0]; STATE.delivTemplates=r[1]||[];
@@ -254,6 +254,7 @@ function loadDeliverability(){
 }
 window.openDeliverability=function(){ STATE.page='deliverability'; STATE.deliv=undefined; render(); loadDeliverability(); };
 window.setDelivDays=function(days){ STATE.delivDays=days; STATE.deliv=undefined; render(); loadDeliverability(); };
+window.setDelivView=function(v){ STATE.delivView=v; STATE.deliv=undefined; render(); loadDeliverability(); };
 window.resumeMailbox=function(id){ apiPost('/admin/mailbox/'+id+'/resume',{}).then(function(){ showToast('Mailbox resumed','success'); loadDeliverability(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
 
 // ── Warm-up pool ──
@@ -341,6 +342,15 @@ function renderDeliverability(){
     var status=conn.status==='expired'?'':(m.auto_paused?'<span style="font-size:11px;padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700">Auto-paused</span> <button onclick="resumeMailbox(\''+m.id+'\')" style="font-size:11px;color:var(--green);background:transparent;border:0;cursor:pointer">Resume</button>':(m.warmup?'<span style="font-size:11px;padding:2px 8px;background:var(--amber-l);color:var(--amber);border-radius:6px;font-weight:600">Warm-up · cap '+m.warmup.today_cap+'/day</span>':'<span style="font-size:11px;padding:2px 8px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600">Healthy</span>'));
     return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+htmlEsc(m.name||m.email)+'</div><div style="font-size:11px;color:var(--text3)">'+htmlEsc(m.email)+' · '+m.daily_limit+'/day cap</div></div>'+connBadge+status+'</div>';
   }).join('');
+  // Personal / My team / Org-wide scope toggle — you see the sending mailboxes of
+  // your own people, not everyone's, unless you're an admin viewing org-wide.
+  var mbViewToggle='';
+  if(d){
+    var vv=d.view||'team';
+    var vopts=[['own','Personal'],['team','My team']];
+    if(d.can_org)vopts.push(['org','Org-wide']);
+    mbViewToggle='<div style="display:flex;gap:4px;padding:9px 14px;border-bottom:1px solid var(--border)">'+vopts.map(function(o){var on=vv===o[0];return '<button onclick="setDelivView(\''+o[0]+'\')" style="padding:4px 11px;border:1px solid '+(on?'var(--accent)':'var(--border)')+';border-radius:7px;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text2)')+';font-size:11.5px;font-weight:600;cursor:pointer">'+o[1]+'</button>';}).join('')+'</div>';
+  }
   // ── Warm-up pool ──
   var isAdmin=userHasRole(u,'admin');
   if(STATE.warmup===undefined&&!STATE._warmupLoading)loadWarmup();
@@ -435,7 +445,7 @@ function renderDeliverability(){
       dayFilter+
     '</div></div>'+
     statsRow+
-    card('Mailbox health (outreach cap & auto-pause)', mbRows||'<div style="padding:14px;color:var(--text3);font-size:13px">No active mailboxes.</div>')+
+    card('Mailbox health (outreach cap & auto-pause)', mbViewToggle+(mbRows||'<div style="padding:14px;color:var(--text3);font-size:13px">No active mailboxes for this scope.</div>'))+
     card('Warm-up pool'+(w&&w.pool_count?' · '+w.pool_count+' active':''), warmSub+warmRows, warmExtra)+
     card('Domain authentication & blacklists', dhSub+dhRows, dhExtra)+
     card('Reply rate by template', tplRows)+

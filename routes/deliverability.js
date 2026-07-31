@@ -26,6 +26,7 @@ const VARIANT_LABELS = { v1: 'Style 1', v2: 'Style 2', v3: 'Style 3', v4: 'Style
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, addToSuppression, warmupLimit } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
 // ── Suppression list (opt-outs / never-mail) ────────────────────────────────
 router.get('/suppression', auth, async (req, res) => {
@@ -103,6 +104,12 @@ router.get('/analytics/templates', auth, async (req, res) => {
 router.get('/admin/deliverability', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
+    // Scope the mailbox list to the caller's people, not everyone: 'own' = just
+    // their own mailboxes, 'team' = their reporting line, 'org' = the whole org
+    // (admin only). Non-admins default to their team; admins to org-wide.
+    const admin = hasRole(req, 'admin');
+    let view = ['own', 'team', 'org'].includes(req.query.view) ? req.query.view : (admin ? 'org' : 'team');
+    if (view === 'org' && !admin) view = 'team';
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
     const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
     const { data: emails } = await supabase.from('emails').select('status,created_at').gte('created_at', since);
@@ -113,7 +120,12 @@ router.get('/admin/deliverability', auth, async (req, res) => {
     try { const { count } = await supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('email_status', 'invalid'); bounced = count || 0; } catch (_) {}
     try { const { count } = await supabase.from('contacts').select('id', { count: 'exact', head: true }).not('replied_at', 'is', null); replied = count || 0; } catch (_) {}
     try { const { count } = await supabase.from('suppression_list').select('id', { count: 'exact', head: true }); suppression = count || 0; } catch (_) {}
-    const { data: mailboxes } = await supabase.from('user_emails').select('id,email_address,display_name,is_active,daily_send_limit').eq('is_active', true);
+    let mbQuery = supabase.from('user_emails').select('id,email_address,display_name,is_active,daily_send_limit,user_id').eq('is_active', true);
+    if (view !== 'org') {
+      const ids = view === 'own' ? [req.user.id] : await reportingChainIds(req.user.id, req.orgId || null);
+      mbQuery = mbQuery.in('user_id', ids);
+    }
+    const { data: mailboxes } = await mbQuery;
     const delivCols = {};
     try { const { data } = await supabase.from('user_emails').select('id,warmup_start_date,auto_paused_at'); (data || []).forEach(r => { delivCols[r.id] = r; }); } catch (_) {}
     const [warmupStart, warmupStep] = await Promise.all([
@@ -130,7 +142,7 @@ router.get('/admin/deliverability', auth, async (req, res) => {
         warmup: dc.warmup_start_date ? { since: dc.warmup_start_date, today_cap: warmupLimit(dc, warmupStart, warmupStep) } : null
       };
     });
-    res.json({ window_days: days, sent, failed, bounced_contacts: bounced, replied_contacts: replied, suppression_count: suppression, mailboxes: mailboxHealth });
+    res.json({ window_days: days, view, can_org: admin, sent, failed, bounced_contacts: bounced, replied_contacts: replied, suppression_count: suppression, mailboxes: mailboxHealth });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

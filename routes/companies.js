@@ -117,6 +117,41 @@ router.get('/companies/:id/job-orders', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Points of contact for a client — the contacts on this company's leads,
+// deduped by email (primaries first). Powers the "To" dropdown on the client
+// email compose.
+router.get('/companies/:id/contacts', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    const { data: jobs } = await withOrg(supabase.from('jobs').select('id').eq('company_id', req.params.id).is('deleted_at', null), req);
+    const jobIds = (jobs || []).map(j => j.id);
+    if (!jobIds.length) return res.json([]);
+    const { data: contacts } = await supabase.from('contacts')
+      .select('id,first_name,last_name,email,designation,phone,is_primary').in('job_id', jobIds);
+    const seen = {}, out = [];
+    (contacts || []).forEach(c => {
+      const em = (c.email || '').toLowerCase().trim();
+      if (!em || seen[em]) return; seen[em] = true;
+      out.push({ id: c.id, name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim(), email: c.email, designation: c.designation || null, phone: c.phone || null, is_primary: !!c.is_primary });
+    });
+    out.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Recent tracked emails to this client (from email_tracking, stamped with
+// company_id on POST /companies/:id/email). Powers the "Recent emails" card +
+// per-row Reply.
+router.get('/companies/:id/email-activity', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    const { data } = await withOrg(supabase.from('email_tracking')
+      .select('id,to_email,subject,sent_at,opened_at,open_count,replied_at')
+      .eq('company_id', req.params.id).order('sent_at', { ascending: false }).limit(20), req);
+    res.json(data || []);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Client documents (stored in the same private candidate-docs bucket,
 // under a client/<company_id>/... path prefix) ──────────────────────────────
 const CLIENT_DOC_BUCKET = 'candidate-docs';

@@ -36,9 +36,12 @@
   }
   function loadClientDetail(id){
     STATE.clients.jobOrders=null; STATE.clients.documents=null; STATE.clients.docsLoading=true;
+    STATE.clients.contacts=null; STATE.clients.emailActivity=null;
     apiGet('/companies/'+id+'/job-orders').then(function(d){ STATE.clients.jobOrders=d||[]; paint(); }).catch(function(){ STATE.clients.jobOrders=[]; paint(); });
     apiGet('/companies/'+id+'/documents').then(function(d){ STATE.clients.documents=d||[]; STATE.clients.docsLoading=false; paint(); })
       .catch(function(){ STATE.clients.documents=[]; STATE.clients.docsLoading=false; paint(); });
+    apiGet('/companies/'+id+'/contacts').then(function(d){ STATE.clients.contacts=d||[]; paint(); }).catch(function(){ STATE.clients.contacts=[]; });
+    apiGet('/companies/'+id+'/email-activity').then(function(d){ STATE.clients.emailActivity=d||[]; paint(); }).catch(function(){ STATE.clients.emailActivity=[]; });
   }
   window.clientsOpen = function(id){ STATE.clients.selectedId=id; STATE.clients.selDocs={}; loadClientDetail(id); paint(); };
   window.clientsBack = function(){ STATE.clients.selectedId=null; paint(); };
@@ -127,8 +130,28 @@
         '</div>'+
         docRows+
       '</div>'+
+      recentEmailsCard(c)+
     '</div>';
   }
+
+  function recentEmailsCard(c){
+    var acts=STATE.clients.emailActivity;
+    if(acts===null) return '<div class="card" style="padding:16px;margin-top:16px"><div style="font-weight:600;font-size:14px;margin-bottom:6px">Recent emails</div><div style="font-size:12.5px;color:var(--text3)">Loading…</div></div>';
+    var rows=(acts||[]).map(function(a){
+      var status=a.replied_at?'<span style="font-size:10.5px;font-weight:700;color:var(--green)">↩ Replied</span>':(a.opened_at?'<span style="font-size:10.5px;font-weight:700;color:var(--accent)">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span style="font-size:10.5px;color:var(--text3)">Sent</span>');
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.subject||'(no subject)')+'</div>'+
+          '<div style="font-size:11px;color:var(--text3)">'+esc(a.to_email||'')+' · '+fmtDate(a.sent_at)+'</div></div>'+
+        status+
+        '<button class="btn btn-sm btn-outline" onclick="clientsReply(\''+c.id+'\',\''+escAttr(a.to_email||'')+'\',\''+escAttr(a.subject||'')+'\')">Reply</button>'+
+      '</div>';
+    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No emails sent to this client yet.</div>';
+    return '<div class="card" style="padding:16px;margin-top:16px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Recent emails</div>'+rows+'</div>';
+  }
+  window.clientsReply=function(companyId,to,subject){
+    var re=/^re:/i.test(subject)?subject:('Re: '+subject);
+    clientsOpenEmail(companyId,false,{to:to,subject:re,body:'Hi,\n\n\n\nBest regards,'});
+  };
 
   window.clientsDocToggle=function(id){ STATE.clients.selDocs=STATE.clients.selDocs||{}; STATE.clients.selDocs[id]=!STATE.clients.selDocs[id]; paint(); };
 
@@ -153,11 +176,24 @@
   };
 
   // ── email compose ────────────────────────────────────────────────────────────
-  window.clientsOpenEmail = function(companyId, fromSelectedDocs){
+  window.clientsOpenEmail = function(companyId, fromSelectedDocs, prefill){
     var c=(STATE.clients.list||[]).find(function(x){ return x.id===companyId; }); if(!c) return;
     var sel=STATE.clients.selDocs||{};
     var docIds = fromSelectedDocs ? Object.keys(sel).filter(function(k){ return sel[k]; }) : [];
-    STATE.clients._emailDraft = { companyId:companyId, to:'', subject:'Following up — '+c.name, body:'Hi,\n\n\n\nBest regards,', documentIds:docIds };
+    prefill=prefill||{};
+    var contacts=STATE.clients.contacts||[];
+    var toVal=prefill.to||(contacts[0]&&contacts[0].email)||'';
+    STATE.clients._emailDraft = { companyId:companyId, to:toVal, subject:prefill.subject||('Following up — '+c.name), body:prefill.body||'Hi,\n\n\n\nBest regards,', documentIds:docIds };
+    // POC dropdown from the client's contacts, with a free-text fallback.
+    var toField = contacts.length
+      ? '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          '<select id="client-em-poc" class="sel" style="flex:1;min-width:180px" onchange="var t=document.getElementById(\'client-em-to\');if(t&&this.value)t.value=this.value">'+
+            '<option value="">— pick a contact —</option>'+
+            contacts.map(function(ct){return '<option value="'+escAttr(ct.email)+'"'+(ct.email===toVal?' selected':'')+'>'+esc(ct.name||ct.email)+(ct.designation?' · '+esc(ct.designation):'')+' ('+esc(ct.email)+')</option>';}).join('')+
+          '</select>'+
+          '<input id="client-em-to" class="sel" style="flex:1;min-width:180px" placeholder="or type an email" value="'+escAttr(toVal)+'">'+
+        '</div>'
+      : '<input id="client-em-to" class="sel" placeholder="contact@client.com" value="'+escAttr(toVal)+'">';
     STATE.modal =
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
@@ -166,7 +202,7 @@
         '</div>'+
         '<div style="padding:16px 20px">'+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>'+
-            '<input id="client-em-to" class="sel" placeholder="contact@client.com" value=""></div>'+
+            toField+'</div>'+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
             '<input id="client-em-subject" class="sel" value="'+esc(STATE.clients._emailDraft.subject)+'"></div>'+
           '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+

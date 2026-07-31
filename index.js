@@ -3049,6 +3049,41 @@ app.post('/submissions/:id/create-meeting', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Generic meeting scheduler (not tied to a submission) — powers the "Schedule a
+// meeting" action on the Reminders page. Creates a Microsoft Teams online
+// meeting and returns the join link. Zoom / Google Meet need their own OAuth and
+// are offered in the UI as "coming soon".
+app.post('/meetings', auth, async (req, res) => {
+  try {
+    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot create meetings.' });
+    const b = req.body || {};
+    if ((b.platform || 'teams') !== 'teams') return res.status(400).json({ error: 'Only Microsoft Teams is available right now.' });
+    const start = new Date(b.start);
+    if (!b.start || isNaN(start.getTime())) return res.status(400).json({ error: 'Set a valid date & time.' });
+    const minutes = Math.min(240, Math.max(15, parseInt(b.minutes, 10) || 30));
+    const end = new Date(start.getTime() + minutes * 60000);
+    const subject = (b.subject || 'Meeting').slice(0, 200);
+    const mailbox = await recruiterSendingMailbox(req.user.id);
+    if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+    const accessToken = await getMicrosoftToken(mailbox.id);
+    let meeting;
+    try {
+      meeting = await graphMailRequest(accessToken, '/me/onlineMeetings', {
+        method: 'POST',
+        body: JSON.stringify({ startDateTime: start.toISOString(), endDateTime: end.toISOString(), subject })
+      });
+    } catch (e) {
+      if (/scope|permission|Authorization_RequestDenied|forbidden|AccessDenied|InvalidAuthenticationToken/i.test(String(e.message))) {
+        return res.status(409).json({ error: 'meetings_permission_missing' });
+      }
+      throw e;
+    }
+    const joinUrl = meeting && meeting.joinUrl;
+    if (!joinUrl) return res.status(502).json({ error: 'No join link returned by Microsoft.' });
+    res.json({ joinUrl, platform: 'Microsoft Teams', start: start.toISOString(), minutes });
+  } catch (err) { res.status(500).json({ error: friendlySendError(err.message) }); }
+});
+
 // recruiter_task — a dated task for the recruiter (call the candidate, collect
 // docs, schedule an interview …), recorded as a reminder + submission activity.
 wfEngine.registerChannel('recruiter_task', async ({ step, enrollment, context }) => {
