@@ -8,6 +8,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { mailboxSignatureKey, resolveSignatureHtml } = require('../email-signature');
+const { mailboxConnections } = require('../mailbox-health');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -195,7 +196,10 @@ router.get('/users/:id/emails', auth, async (req, res) => {
         gmailSet = new Set((gtok || []).map(t => t.user_email_id));
       } catch (_) { /* gmail_tokens absent (migration 010 not applied) */ }
     }
-    res.json((data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id) })));
+    // Per-mailbox sign-in health (ok / expired / never-connected) so the UI can
+    // show a live "Connected" vs "Sign-in expired — reconnect" badge.
+    const conns = await mailboxConnections(supabase, ids);
+    res.json((data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id), connection: conns[e.id] || { connected: false, status: 'none' } })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

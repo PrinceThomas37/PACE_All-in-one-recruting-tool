@@ -45,6 +45,7 @@ const settingsConfig = require('./config/settings');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
+const { recordRefreshOutcome } = require('./mailbox-health');
 
 // Validate environment and centralize config at startup (fails fast with a
 // clear message if a required secret is missing).
@@ -2444,8 +2445,17 @@ async function getMicrosoftToken(userEmailId) {
   if (new Date(tokenRow.expires_at).getTime() - now.getTime() > 5 * 60 * 1000) return tokenRow.access_token;
   const refreshRes = await fetch(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, refresh_token: tokenRow.refresh_token, grant_type: 'refresh_token', scope: MS_SCOPES }) });
   const refreshed = await refreshRes.json();
-  if (refreshed.error) throw new Error('Token refresh failed: ' + refreshed.error_description);
+  if (refreshed.error) {
+    // Capture the EXACT Microsoft error (e.g. AADSTS7000215 invalid client
+    // secret vs AADSTS700082/50173 revoked refresh token) so a mailbox-wide
+    // outage is diagnosable at a glance instead of a silent, generic failure.
+    const detail = [refreshed.error, refreshed.error_description].filter(Boolean).join(': ');
+    console.error(`[ms-token] refresh failed for ${tokenRow.email_address || userEmailId}: ${detail}`);
+    await recordRefreshOutcome(supabase, 'microsoft_tokens', userEmailId, false, detail);
+    throw new Error('Token refresh failed: ' + (refreshed.error_description || refreshed.error));
+  }
   await supabase.from('microsoft_tokens').update({ access_token: refreshed.access_token, refresh_token: refreshed.refresh_token || tokenRow.refresh_token, expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(), updated_at: new Date() }).eq('user_email_id', userEmailId);
+  await recordRefreshOutcome(supabase, 'microsoft_tokens', userEmailId, true, null);
   return refreshed.access_token;
 }
 

@@ -17,6 +17,7 @@ const { emailSyntaxValid } = require('../email-validation');
 const { scoreEmailContent } = require('../deliverability');
 const { getSetting } = require('../config/settings');
 const { domainHealthReport } = require('../domain-health');
+const { mailboxConnections } = require('../mailbox-health');
 
 // Human-readable label for a template_variant id, shown next to the raw id
 // in the reply-rate table so PDs/BDs see a real name instead of "v1".
@@ -119,11 +120,13 @@ router.get('/admin/deliverability', auth, async (req, res) => {
       getSetting(supabase, 'mailbox_warmup_start'),
       getSetting(supabase, 'mailbox_warmup_step'),
     ]);
+    const conns = await mailboxConnections(supabase, (mailboxes || []).map(m => m.id));
     const mailboxHealth = (mailboxes || []).map(m => {
       const dc = delivCols[m.id] || {};
       return {
         id: m.id, email: m.email_address, name: m.display_name, daily_limit: m.daily_send_limit,
         auto_paused: !!dc.auto_paused_at,
+        connection: conns[m.id] || { connected: false, status: 'none' },
         warmup: dc.warmup_start_date ? { since: dc.warmup_start_date, today_cap: warmupLimit(dc, warmupStart, warmupStep) } : null
       };
     });
