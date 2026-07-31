@@ -67,6 +67,10 @@ function renderApp(){
   if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"profile"});
   if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"leads",badge:todayCnt});
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"leads"});
+  // Leads futé sourced itself, waiting for a human to approve them. Sits next to
+  // Leads because that is where the work continues once one is approved.
+  if(userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','director','associate_director'))
+    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"leads",badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
   if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"leads"});
   if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"leads"});navItems.push({id:"job_board",lbl:"All Jobs",ic:"leads"});}
   if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"leads"});
@@ -88,7 +92,7 @@ function renderApp(){
 
   var switchers=""; // removed — use team list to switch views
 
-  var pageTitles={dashboard:"Dashboard",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders"};
+  var pageTitles={dashboard:"Dashboard",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
   var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id?" · Viewing: "+STATE.viewingUser.name:"";
 
   return '<div id="sidebar">'+
