@@ -30,6 +30,11 @@ const EVENTS = {
   SENDING_RESUMED:     'sending.resumed',
   CONTACT_REPLIED:     'contact.replied',
   CONTACT_UNSUBSCRIBED:'contact.unsubscribed',
+  // The candidate-side counterparts. Without these a candidate who replied kept
+  // receiving the rest of their sequence — replies were recorded against the
+  // tracked message and nothing acted on them.
+  CANDIDATE_REPLIED:     'candidate.replied',
+  CANDIDATE_UNSUBSCRIBED:'candidate.unsubscribed',
   MAILBOX_AUTOPAUSED:  'mailbox.autopaused',
   WARMUP_STARTED:      'warmup.started',
   MAILBOX_WARMED:      'mailbox.warmed',

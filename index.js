@@ -2224,10 +2224,32 @@ async function sweepMailboxReplies(tokenRow, ownAddresses) {
     // same inbox fetch (no extra Graph calls). Best-effort; never breaks the sweep.
     try {
       const { data: trk } = await supabase.from('email_tracking')
-        .select('id').ilike('to_email', from).is('replied_at', null).limit(20);
+        .select('id,candidate_id').ilike('to_email', from).is('replied_at', null).limit(20);
+      // isOptOutReply takes TEXT, not a message — check the same two fields the
+      // contact path checks, since the preview alone often truncates before the
+      // "unsubscribe" line.
+      const replyText = (msg.bodyPreview || '').slice(0, 280);
+      const optedOut = isOptOutReply(replyText) || isOptOutReply(msg.body?.content || '');
+      const candidateIds = new Set();
       for (const r of (trk || [])) {
         await supabase.from('email_tracking').update({ replied_at: msg.receivedDateTime || new Date() }).eq('id', r.id);
+        if (r.candidate_id) candidateIds.add(r.candidate_id);
         detected++;
+      }
+      // A candidate who answers must stop receiving the rest of their sequence.
+      // Previously this loop stamped replied_at and emitted nothing, so nurture
+      // sequences kept mailing people who had already written back — the single
+      // most damaging thing an automated recruiting sequence can do.
+      for (const candidateId of candidateIds) {
+        try {
+          await supabase.from('candidates')
+            .update({ last_reply_at: msg.receivedDateTime || new Date() }).eq('id', candidateId);
+        } catch (_) { /* the column arrives with migration 036 */ }
+        emit(EVENTS.CANDIDATE_REPLIED, { candidateId, from, at: msg.receivedDateTime || new Date() });
+        if (optedOut) {
+          await addToSuppression(from, 'unsubscribe', 'candidate_reply');
+          emit(EVENTS.CANDIDATE_UNSUBSCRIBED, { candidateId, from });
+        }
       }
     } catch (_) { /* best-effort */ }
   }
@@ -2715,6 +2737,24 @@ wfEngine.registerContextLoader('submission', async (enrollment) => {
   return { submission: sub, candidate: sub.candidate || null, job_order: sub.job_order || null };
 });
 
+// entity_type 'candidate' — nurture a person who is NOT attached to a job:
+// someone in the database worth staying in touch with, an applicant we're not
+// ready to submit, a past placement. entity_id = candidates.id, job_id stays
+// null (the enrollments FK points at `jobs`, the sales table, not job_orders).
+//
+// This loader is what made the Candidates page's "Add to email sequence" button
+// a no-op: without it the engine handed every step an empty context, so
+// candidate_email read an undefined candidate, returned "no_candidate_email",
+// and the enrollment marched to `completed` without ever sending. It looked like
+// it had worked. Returning null for a missing candidate is deliberate — that
+// makes the engine exit the enrollment as `entity_missing` instead.
+wfEngine.registerContextLoader('candidate', async (enrollment) => {
+  const { data: cand } = await supabase.from('candidates')
+    .select('*').eq('id', enrollment.entity_id).is('deleted_at', null).maybeSingle();
+  if (!cand) return null;
+  return { candidate: cand, job_order: null, submission: null };
+});
+
 // The recruiter's connected sending mailbox (primary first), or null if none.
 // Checks both Microsoft (Graph) and Gmail tokens — callers dispatch the actual
 // send by mailbox.platform via sendMailboxNewMessage().
@@ -2798,6 +2838,21 @@ const DEFAULT_CANDIDATE_EMAIL = {
   body: 'Hi {{first_name}},<br><br>I came across your profile and thought of a {{position}} role we\'re working on with {{client}}. Would you be open to a quick chat about it?<br><br>Best regards'
 };
 
+// The same template with no job attached renders "Opportunity: " and "a  role
+// we're working on with ." — every job variable degrades to an empty string. A
+// candidate-only sequence is a keeping-in-touch message, not a pitch for a
+// specific req, so it needs its own wording that reads correctly with nothing
+// but a name.
+const DEFAULT_CANDIDATE_NURTURE_EMAIL = {
+  subject: 'Keeping in touch',
+  body: 'Hi {{first_name}},<br><br>Checking in to see how things are going and whether you are open to hearing about new roles at the moment. If the timing is not right, just say so and I will leave it a while.<br><br>Best regards'
+};
+
+// Pick the right default for the context we actually have.
+function defaultCandidateTemplate(job_order) {
+  return job_order ? DEFAULT_CANDIDATE_EMAIL : DEFAULT_CANDIDATE_NURTURE_EMAIL;
+}
+
 // candidate_email — sends to the candidate through the recruiter's connected
 // mailbox (same Graph path as sales outreach), respecting pause + a daily cap.
 wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }) => {
@@ -2813,26 +2868,62 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
   const cMeta = enrollment.metadata || {};
   const mailbox = (cMeta.from_mailbox_id && await connectedMailboxById(cMeta.from_mailbox_id)) || await recruiterSendingMailbox(recruiterId);
   if (!mailbox) return { outcome: 'defer', detail: { reason: 'no_connected_mailbox' } };
+  // Deliverability gates, matching what the sales `email` channel already
+  // applies. This path skipped them, so an automated candidate sequence could
+  // keep sending from a mailbox the bounce sweep had auto-paused, and ignore the
+  // warm-up ramp entirely — the two things most likely to burn a domain.
+  if (mailbox.is_active === false) return { outcome: 'defer', detail: { reason: 'mailbox_inactive' } };
+  const delivState = await loadMailboxDelivState([mailbox.id]);
+  if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('id,emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const cap = mailbox.daily_send_limit || 150;
+  const base = mailbox.daily_send_limit || 150;
+  const [warmupStart, warmupStep] = await Promise.all([
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
+  ]);
+  const wl = warmupLimit(delivState[mailbox.id], warmupStart, warmupStep);
+  const cap = wl ? Math.min(base, wl) : base;
   if ((sendLog?.emails_sent || 0) >= cap) return { outcome: 'defer', detail: { reason: 'quota' } };
 
+  const tmpl = defaultCandidateTemplate(job_order);
   const vars = buildCandidateVars({ candidate, job_order });
-  const subject = fillTemplate(cfg.subject || DEFAULT_CANDIDATE_EMAIL.subject, vars);
-  const htmlBody = fillTemplate(cfg.body || DEFAULT_CANDIDATE_EMAIL.body, vars);
+  const subject = fillTemplate(cfg.subject || tmpl.subject, vars);
+  const rendered = fillTemplate(cfg.body || tmpl.body, vars);
   try {
+    // Tracked, exactly like the one-off POST /candidates/email path. Sequence
+    // sends previously carried no pixel and wrote no email_tracking row, so they
+    // were invisible: no opens, no replies, nothing on the candidate's profile —
+    // and, because reply detection keys off email_tracking, no way for a reply
+    // to stop the sequence.
+    const signature = await getMailboxSignature(mailbox.id, recruiterId).catch(() => '');
+    const token = newTrackToken();
+    const htmlBody = injectTrackPixel(buildHtmlEmailBody(rendered, signature), token);
+
     const r = await sendMailboxNewMessage(mailbox, { to: candidate.email, subject, htmlBody });
+
+    try {
+      await supabase.from('email_tracking').insert({
+        token, channel: 'candidate_sequence',
+        candidate_id: candidate.id, job_order_id: job_order?.id || null,
+        to_email: candidate.email, subject,
+        sent_by: recruiterId, mailbox_email: mailbox.email_address || null,
+        ...(enrollment.org_id ? { org_id: enrollment.org_id } : {})
+      });
+    } catch (_) { /* tracking must never fail a send that already went out */ }
+
     await supabase.from('email_send_log').upsert(
       { user_email_id: mailbox.id, send_date: today(), emails_sent: (sendLog?.emails_sent || 0) + 1 },
       { onConflict: 'user_email_id,send_date' }
     );
+    try { await supabase.from('candidates').update({ last_contact_at: new Date() }).eq('id', candidate.id); } catch (_) {}
+
     if (submission?.id) await supabase.from('submission_activity').insert({
       submission_id: submission.id, job_order_id: job_order?.id || null, recruiter_id: recruiterId,
       action: 'sequence_email_sent', note: `${step.name}: emailed ${candidate.email}`
     });
-    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId } };
+    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId, tracked: true } };
   } catch (e) { return { outcome: 'failed', detail: { error: e.message } }; }
-}, { entity_types: ['submission'], label: 'Email the candidate', domains: ['recruiting'] });
+}, { entity_types: ['submission', 'candidate'], label: 'Email the candidate', domains: ['recruiting'] });
 
 // One-off TRACKED candidate email (not the sequence): send the job/invite to the
 // selected candidates through the recruiter's connected mailbox, embedding an
@@ -3126,7 +3217,7 @@ wfEngine.registerChannel('recruiter_task', async ({ step, enrollment, context })
     action: 'sequence_task_created', note: `${step.name} (sequence)`
   });
   return { outcome: 'done', detail: { assignee } };
-}, { entity_types: ['submission'], label: 'Recruiter task', domains: ['recruiting'] });
+}, { entity_types: ['submission', 'candidate'], label: 'Recruiter task', domains: ['recruiting'] });
 
 // submission_stage_move — advance the candidate's submission through its stages.
 wfEngine.registerChannel('submission_stage_move', async ({ step, enrollment, context }) => {
@@ -3144,11 +3235,47 @@ wfEngine.registerChannel('submission_stage_move', async ({ step, enrollment, con
   return { outcome: 'done', detail: { from: sub.stage, to: toStage } };
 }, { entity_types: ['submission'], label: 'Move submission stage', domains: ['recruiting'] });
 
+// candidate_status_move — the candidate-side counterpart. A nurture sequence
+// that only emails is a blunt instrument; this lets one finish by marking the
+// person (e.g. "Contacted" → "Nurturing", or parking someone who never replied)
+// so the state is visible in the Candidates grid rather than only in the
+// sequence's own history.
+wfEngine.registerChannel('candidate_status_move', async ({ step, enrollment, context }) => {
+  const toStatus = (step.config || {}).to_status;
+  const cand = context.candidate;
+  if (!toStatus) return { outcome: 'failed', detail: { error: 'config.to_status required' } };
+  if (!cand) return { outcome: 'skipped', detail: { reason: 'no_candidate' } };
+  if (cand.applicant_status === toStatus) return { outcome: 'skipped', detail: { reason: 'already_in_status' } };
+  const { error } = await supabase.from('candidates')
+    .update({ applicant_status: toStatus, updated_at: new Date() }).eq('id', cand.id);
+  if (error) return { outcome: 'failed', detail: { error: error.message } };
+  return { outcome: 'done', detail: { from: cand.applicant_status, to: toStatus } };
+}, { entity_types: ['candidate'], label: 'Set candidate status', domains: ['recruiting'] });
+
 // Replies, unsubscribes, and bounces end the sequence — same exits the legacy
 // follow-up path honours, expressed once against the engine.
 on(EVENTS.CONTACT_REPLIED, (e) => wfEngine.exitEntity({ entity_type: 'contact', entity_id: e.payload.contactId, reason: 'replied' }));
 on(EVENTS.CONTACT_UNSUBSCRIBED, (e) => wfEngine.exitEntity({ entity_type: 'contact', entity_id: e.payload.contactId, reason: 'unsubscribed' }));
 on(EVENTS.CONTACT_INVALIDATED, (e) => wfEngine.exitEntity({ entity_type: 'contact', entity_id: e.payload.contactId, reason: 'invalidated' }));
+
+// The candidate equivalent. Two enrollment shapes have to be ended, not one:
+// a nurture enrollment keys on the candidate id, but a job-specific enrollment
+// keys on the SUBMISSION id, and exitEntity matches entity_id exactly. Exiting
+// only the candidate would leave a submission sequence running against someone
+// who has already replied.
+async function exitCandidateSequences(candidateId, reason) {
+  if (!candidateId) return;
+  try {
+    await wfEngine.exitEntity({ entity_type: 'candidate', entity_id: candidateId, reason });
+    const { data: subs } = await supabase.from('submissions')
+      .select('id').eq('candidate_id', candidateId).is('deleted_at', null).limit(50);
+    for (const s of (subs || [])) {
+      await wfEngine.exitEntity({ entity_type: 'submission', entity_id: s.id, reason });
+    }
+  } catch (err) { console.error('[wf] candidate exit failed:', err.message); }
+}
+on(EVENTS.CANDIDATE_REPLIED, (e) => exitCandidateSequences(e.payload.candidateId, 'replied'));
+on(EVENTS.CANDIDATE_UNSUBSCRIBED, (e) => exitCandidateSequences(e.payload.candidateId, 'unsubscribed'));
 
 app.use(require('./routes/wf')({ supabase, auth, hasRole, engine: wfEngine, logActivity }));
 

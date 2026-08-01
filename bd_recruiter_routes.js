@@ -772,13 +772,33 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   // Duplicate rule (owner's spec): same normalized full name AND (email OR phone
   // matches). Returns the matching non-deleted candidates ([] = no duplicate).
-  async function findCandidateDuplicates({ full_name, email, phone, excludeId }) {
+  async function findCandidateDuplicates({ full_name, email, phone, excludeId, profile_url, source, source_external_id, req }) {
     const n = normName(full_name), e = normEmail(email), p = normPhone(phone);
+    const scope = (q) => (req ? withOrg(q, req) : q);
+
+    // Provenance match, tried first. The name+contact rule below cannot see an
+    // externally sourced person who has neither an email nor a phone — which is
+    // most of them — so the same profile would be re-imported endlessly. A
+    // profile URL identifies one human unambiguously.
+    const sel = 'id,candidate_code,full_name,email,phone,current_title,applicant_status,owner_id';
+    if (profile_url || (source && source_external_id)) {
+      try {
+        let pq = scope(supabase.from('candidates').select(sel).is('deleted_at', null).limit(10));
+        pq = profile_url
+          ? pq.eq('profile_url', profile_url)
+          : pq.eq('source', source).eq('source_external_id', source_external_id);
+        if (excludeId) pq = pq.neq('id', excludeId);
+        const { data, error } = await pq;
+        // A missing column (migration 036 not yet applied) is expected, not fatal
+        // — fall through to the name+contact rule below.
+        if (!error && data && data.length) return data;
+      } catch (_) { /* fall through */ }
+    }
+
     if (!n) return [];
     if (!e && !p) return [];                 // need at least one of email / phone to match on
-    let q = supabase.from('candidates')
-      .select('id,candidate_code,full_name,email,phone,current_title,applicant_status,owner_id')
-      .is('deleted_at', null).eq('name_norm', n).limit(25);
+    let q = scope(supabase.from('candidates').select(sel)
+      .is('deleted_at', null).eq('name_norm', n).limit(25));
     if (excludeId) q = q.neq('id', excludeId);
     const { data, error } = await q;
     if (error) throw error;
@@ -834,7 +854,7 @@ ${String(j.job_description).slice(0, 12000)}`;
     try {
       const dups = await findCandidateDuplicates({
         full_name: req.query.full_name, email: req.query.email,
-        phone: req.query.phone, excludeId: req.query.exclude_id
+        phone: req.query.phone, excludeId: req.query.exclude_id, req
       });
       res.json({ duplicate: dups.length > 0, duplicates: dups });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -885,7 +905,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       // Duplicate catch — name + (email or phone). Warn-and-offer: unless `force`,
       // return the matches (409) so the UI can offer "open existing" over a copy.
       if (!b.force) {
-        const dups = await findCandidateDuplicates({ full_name: b.full_name, email: b.email, phone: b.phone });
+        const dups = await findCandidateDuplicates({ full_name: b.full_name, email: b.email, phone: b.phone, req });
         if (dups.length) return res.status(409).json({ error: 'possible_duplicate', duplicates: dups });
       }
 
@@ -1550,8 +1570,10 @@ ${String(j.job_description).slice(0, 12000)}`;
       const phones = [...new Set(rows.map(r => normPhone(r.phone)).filter(Boolean))];
       const dupSel = 'id,candidate_code,full_name,name_norm,email_norm,phone_norm';
       let cands = [];
-      if (emails.length) { const { data } = await supabase.from('candidates').select(dupSel).is('deleted_at', null).in('email_norm', emails); cands = cands.concat(data || []); }
-      if (phones.length) { const { data } = await supabase.from('candidates').select(dupSel).is('deleted_at', null).in('phone_norm', phones); cands = cands.concat(data || []); }
+      // Org-scoped: without this the batch check can flag a row as a duplicate
+      // of a candidate belonging to a different org, and leak their code + name.
+      if (emails.length) { const { data } = await withOrg(supabase.from('candidates').select(dupSel).is('deleted_at', null).in('email_norm', emails), req); cands = cands.concat(data || []); }
+      if (phones.length) { const { data } = await withOrg(supabase.from('candidates').select(dupSel).is('deleted_at', null).in('phone_norm', phones), req); cands = cands.concat(data || []); }
       const byId = {}; cands.forEach(c => { byId[c.id] = c; }); cands = Object.values(byId);
       const findDup = (r) => {
         const n = normName(r.full_name), e = normEmail(r.email), p = normPhone(r.phone);
@@ -1570,8 +1592,15 @@ ${String(j.job_description).slice(0, 12000)}`;
           location: r.location || null, city: r.city || null, state: r.state || null, country: r.country || null,
           work_authorization: r.work_authorization || null,
           experience_years: isFinite(exp) ? exp : null,
-          skills: r.skills || null, source_url: r.source_url || null, resume_url: r.resume_url || null,
-          raw: r.raw || null, status: 'new', dup_candidate_id: dup ? dup.id : null, created_by: req.user.id
+          skills: r.skills || null, resume_url: r.resume_url || null,
+          // A LinkedIn column now arrives as linkedin_url; everything else as
+          // source_url. Both land in the existing source_url column (staging has
+          // no separate field, and adding one would mean writing to a column
+          // that does not exist until migration 036 runs). importStagedCandidate
+          // recognises a LinkedIn URL and routes it to candidates.linkedin_url.
+          source_url: r.linkedin_url || r.source_url || null,
+          raw: r.raw || null, status: 'new', dup_candidate_id: dup ? dup.id : null, created_by: req.user.id,
+          ...orgStamp(req)
         };
       });
       const { data, error } = await supabase.from('sourcing_candidates').insert(toInsert).select('id,dup_candidate_id');
@@ -1584,9 +1613,15 @@ ${String(j.job_description).slice(0, 12000)}`;
   // the review queue
   app.get('/sourcing/staged', auth, async (req, res) => {
     try {
-      let q = supabase.from('sourcing_candidates')
+      // Previously this had no org scoping, no guest check and no role check, so
+      // any authenticated session — guests included — could read every org's
+      // staged candidates. These are real people's contact details; they get the
+      // same treatment as the candidates table itself.
+      if (notGuest(req, res)) return;
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      let q = withOrg(supabase.from('sourcing_candidates')
         .select('*, dup:candidates!dup_candidate_id(id,candidate_code,full_name), imported:candidates!imported_candidate_id(id,candidate_code,full_name)')
-        .order('created_at', { ascending: false }).limit(500);
+        .order('created_at', { ascending: false }).limit(500), req);
       q = q.eq('status', req.query.status || 'new');
       if (req.query.provider) q = q.eq('provider', req.query.provider);
       const { data, error } = await q;
@@ -1595,25 +1630,55 @@ ${String(j.job_description).slice(0, 12000)}`;
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // Does this candidates table have the provenance columns yet? Migration 036 is
+  // applied after deploy, and writing to a missing column fails the whole insert
+  // — which would break importing entirely. Probe once and degrade.
+  let _provColsPromise = null;
+  function hasProvenanceColumns() {
+    if (!_provColsPromise) {
+      _provColsPromise = supabase.from('candidates').select('profile_url').limit(1)
+        .then(r => !r.error).catch(() => false);
+    }
+    return _provColsPromise;
+  }
+
+  // A LinkedIn profile deserves the dedicated column the candidate form already
+  // reads; anything else is a generic profile URL.
+  function isLinkedInUrl(u) { return /(^|\/\/|\.)linkedin\.com\/(in|pub)\//i.test(String(u || '')); }
+
   // import one staged row into `candidates` (honours dedup; optional tag to a job)
-  async function importStagedCandidate(staged, opts, userId) {
+  async function importStagedCandidate(staged, opts, userId, req) {
     const provider = staged.provider;
+    const profileUrl = staged.profile_url || staged.source_url || null;
     const payload = pickCandidateFields({
       full_name: staged.full_name, first_name: staged.first_name, last_name: staged.last_name,
       email: staged.email, phone: staged.phone, current_title: staged.current_title,
       current_employer: staged.current_employer, current_location: staged.location,
       city: staged.city, state: staged.state, country: staged.country,
       work_authorization: staged.work_authorization, experience_years: staged.experience_years,
-      skills: staged.skills, resume_url: staged.resume_url, source: provider
+      skills: staged.skills, resume_url: staged.resume_url, source: provider,
+      // Previously dropped on the floor: a LinkedIn URL imported through Sourcing
+      // survived staging and then vanished, because nothing mapped it across.
+      linkedin_url: isLinkedInUrl(profileUrl) ? profileUrl : null
     });
     if (!payload.full_name) throw new Error('Staged row has no name.');
     if (!opts.force) {
-      const dups = await findCandidateDuplicates({ full_name: staged.full_name, email: staged.email, phone: staged.phone });
+      const dups = await findCandidateDuplicates({
+        full_name: staged.full_name, email: staged.email, phone: staged.phone,
+        // Externally sourced people often have neither an email nor a phone, and
+        // the name+contact rule can't see them at all. The profile URL is the
+        // only stable identity such a person has.
+        profile_url: profileUrl, source: provider, source_external_id: staged.external_id, req
+      });
       if (dups.length) return { duplicate: true, matches: dups };
     }
     const row = Object.assign(payload, {
       candidate_code: await nextId('CN'), applicant_status: 'New lead', owner_id: userId, created_by: userId
-    });
+    }, orgStamp(req));
+    if (await hasProvenanceColumns()) {
+      row.profile_url = profileUrl;
+      row.source_external_id = staged.external_id || null;
+    }
     const { data: cand, error } = await supabase.from('candidates').insert(row).select(CANDIDATE_SELECT).single();
     if (error) throw error;
     await supabase.from('sourcing_candidates')
@@ -1638,7 +1703,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (staged.status === 'imported') return res.status(409).json({ error: 'Already imported.' });
       const b = req.body || {};
       if (b.job_order_id && !(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
-      const result = await importStagedCandidate(staged, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id);
+      const result = await importStagedCandidate(staged, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id, req);
       if (result.duplicate) return res.status(409).json({ error: 'possible_duplicate', duplicates: result.matches });
       res.status(201).json(result.candidate);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1656,7 +1721,7 @@ ${String(j.job_description).slice(0, 12000)}`;
       let imported = 0, skipped = 0;
       for (const s of (staged || [])) {
         try {
-          const r = await importStagedCandidate(s, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id);
+          const r = await importStagedCandidate(s, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id, req);
           if (r.duplicate) skipped++; else imported++;
         } catch (_) { skipped++; }
       }
@@ -1668,7 +1733,7 @@ ${String(j.job_description).slice(0, 12000)}`;
     try {
       if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      await supabase.from('sourcing_candidates').update({ status: 'discarded' }).eq('id', req.params.id);
+      await withOrg(supabase.from('sourcing_candidates').update({ status: 'discarded' }).eq('id', req.params.id), req);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
