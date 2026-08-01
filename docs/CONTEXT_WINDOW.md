@@ -1,8 +1,10 @@
-# FUTE LMS Backend — Context Window (Session 6 latest; older sessions below)
+# FUTE LMS Backend — Context Window (Session 7 latest; older sessions below)
 
-> **Latest work is Session 6** — jump to "## Session 6" near the end for the most
-> recent state (screen-by-screen redesign + Job White-board + stage vocabulary,
-> merged as PR #122 and live). Sessions 3–5 are kept below for history.
+> **Latest work is Session 7** — jump to "## Session 7" at the end. It starts the
+> **Autonomous Recruiting Engine**, the biggest bet on the roadmap; the plan of
+> record is `docs/AUTONOMOUS_ENGINE_PLAN.md` and **that file should be read before
+> planning anything new**. Session 6 (screen-by-screen redesign + Job White-board +
+> stage vocabulary, PR #122) and Sessions 3–5 are kept below for history.
 
 > **Read `CLAUDE.md` at the repo root first** — it holds the durable, must-carry
 > context: who the owner is (a product owner who doesn't read code or use git — I
@@ -692,3 +694,94 @@ screenshots, then merged in one shot on "yes merge all". The live-data migration
 held until that same go-ahead and run only after confirming the deploy — same
 discipline as Session 5 (ship on branch, screenshot, wait for explicit go before
 merge or any live-DB write).
+
+---
+
+## Session 7 — the Autonomous Recruiting Engine (Steps 0 and 1)
+
+**Dev branch**: `claude/continued-session-context-dj95te` · **PR #124 (draft, not
+merged)**. The owner opened with a big idea: futé should find its own leads *and*
+its own candidates off the internet against one shared notion of relevance, run
+outreach on both branches, then read the resulting conversations and say what to
+do next. Two branches, one brain, closed loop.
+
+> **The plan of record is `docs/AUTONOMOUS_ENGINE_PLAN.md`.** It was written and
+> committed first, deliberately, because the owner said *"I will forget later what
+> we discussed now."* `CLAUDE.md` now links it. Read it before planning new work.
+
+### Decisions the owner made (these constrain everything)
+
+| Decision | Consequence |
+|---|---|
+| **₹0 budget**, pay later once proven | Free / ToS-clean sources only |
+| **`ANTHROPIC_API_KEY` is NOT funded** | Everything is **rules-first**. AI is a seam, never a dependency. *Claude in the owner's chat ≠ the app having a key.* |
+| **Leads = end clients hiring directly** | Free employer ATS boards (Greenhouse/Lever/Ashby/Workable) *are* end-client boards → right source, plus a staffing-firm exclusion filter |
+| **Runs inside futé, not Make** | Make free = 1,000 ops/month ≈ 150 leads total, and becomes per-customer cost if sold |
+| **US + India** | Market-agnostic build; India's free coverage is genuinely thin — a data fact, not a code gap |
+
+Verified live during the session: Make is connected but empty (free tier: 1 team,
+2 scenarios, 1,000 ops/mo, 15-min minimum). Apollo is connected with **125 lead
+credits and 0 export credits**. Indeed MCP returns real structured postings. **All
+of these are on the owner's Claude account, not the app** — futé running
+unattended has none of them and needs its own server-side keys.
+
+### Step 0 — trustworthy background work (SHIPPED on the branch)
+Every recurring job was a `setInterval` in the single web process; Render's free
+tier sleeps that process and stops them all, silently. Jobs now register with
+`engine-runs.js`, which keeps **due-ness in the DB, not in a timer**, so the
+in-process interval and an external `GET /cron/tick?key=…` ping both drive the
+same work and cannot double-run it. Runs land in `engine_runs`. Free heartbeat via
+`.github/workflows/heartbeat.yml` (the repo is **public**, so Actions minutes are
+unlimited — noted in the file that going private makes it billable).
+
+Bugs fixed on the way: the daily follow-up guard required the clock to read
+*exactly* the send time (a sleeping service lost the whole day's follow-ups); the
+run-on-startup block that papered over it ignored the send time entirely, so a 2am
+redeploy sent follow-ups at 2am; and **15 test files** resolved paths from a
+hard-coded `/home/user/fute-lms-backend` left over from the repo rename, so they
+failed on any checkout.
+
+### Step 1 — one relevance engine (SHIPPED on the branch)
+`public/js/38-match-score.js` is now a **UMD module loaded by both the browser and
+Node**, and `match-engine.js` requires that same file. The score the recruiter sees
+and the score the server sorts by are one piece of code and cannot drift — the
+deliberate opposite of the stage vocabulary's six hand-synced copies.
+
+Added: `rankCandidates()`, `deriveJobSkills()` (runs the existing jd-parser over a
+job order's description to fill the skill/experience fields that were hand-typed —
+skills carry **half** the match score, so blanks meant ranking on title and
+location alone; it only ever fills blanks), and `buildRequirement()` — the single
+normalized object both sourcing branches will search against.
+Endpoints: `GET /job-orders/:id/matches`, `POST /match/score`,
+`POST /job-orders/:id/parse-jd`.
+
+**Best matches tab** on a job order: the whole database ranked, with the *reason*
+for each score inline (not just on hover), band + text filters applied
+server-side, already-tagged candidates marked in place, and an honest warning when
+the job lists no skills.
+
+### Migrations — WRITTEN, NOT APPLIED
+`033_engine_runs.sql`, `034_match_and_requirement.sql`. **Neither has been run
+against the live DB** — awaiting an explicit go-ahead per the standing rule. The
+code is deliberately safe without them: `engine_runs` inserts are best-effort, and
+the `requirement` write is held behind a one-time column probe because writing to a
+missing column would fail the whole insert and stop anyone creating a job order.
+
+### Also needed before Step 0 does anything
+`CRON_KEY` set in Render **and** as a GitHub Actions secret (same value).
+
+### Test status — 22 files, all green
+New: `engine-runs-smoke` 30/30 (incl. the concurrent interval-plus-ping race),
+`match-engine-smoke` 45/45 (incl. **server and browser returning byte-identical
+scores**), `best-matches-smoke` 22/22. Existing suites unchanged and passing.
+
+### Corrections to earlier notes
+An audit in this session claimed the Match column was missing from the Candidates
+grid and that `match-score-smoke.mjs` asserted something untrue. Wrong file: the
+test exercises `renderPipelinePage()` (the job's Candidates tab), which **does**
+have the column. It is genuinely absent only from the Candidates *database* grid.
+
+### Next
+Step 2 (lead branch: ATS job feeds → POC → why-the-role-exists → sequence),
+Step 3 (candidate branch: GitHub + CSV + the ranked internal pool), Step 4
+(conversation intelligence). Detail in `docs/AUTONOMOUS_ENGINE_PLAN.md`.

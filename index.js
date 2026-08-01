@@ -46,6 +46,7 @@ const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
+const { createEngineRunner } = require('./engine-runs');
 
 // Validate environment and centralize config at startup (fails fast with a
 // clear message if a required secret is missing).
@@ -55,6 +56,13 @@ const app = express();
 const PORT = config.port;
 
 const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
+
+// Every recurring background job registers here instead of owning a bare
+// setInterval. Due-ness is persisted in the DB, so an external pinger (needed
+// because Render's free tier sleeps this process) and the in-process intervals
+// can both drive the same work without ever double-running it. Jobs are
+// registered further down, next to the functions they call.
+const engineRunner = createEngineRunner({ supabase });
 
 // ── MIDDLEWARE ─────────────────────────────────────────────────
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
@@ -1990,42 +1998,46 @@ async function setLastFollowupRun(dateStr) {
   } catch (e) { console.error('[Cron] Failed to persist last_followup_run:', e.message); }
 }
 
-// Run follow-ups on startup if not already run today
-(async () => {
-  try {
-    const now = toIST(new Date());
-    const todayStr = now.toISOString().split('T')[0];
-    const lastRun = await getLastFollowupRun();
-    if (lastRun !== todayStr) {
-      console.log(`[Startup] Follow-ups not yet run today (last: ${lastRun || 'never'}). Running now...`);
-      await setLastFollowupRun(todayStr);
-      const result = await runFollowupEngine();
-      console.log(`[Startup] Follow-up engine result: FU1=${result.fu1_queued}, FU2=${result.fu2_queued}`);
-    } else {
-      console.log(`[Startup] Follow-ups already ran today (${lastRun}). Skipping.`);
-    }
-  } catch (e) { console.error('[Startup] Follow-up check error:', e.message); }
-})();
+// (The old run-follow-ups-on-startup block lived here. It existed to paper over
+// the process sleeping through the one minute the wall-clock check tested for,
+// but it fired the day's follow-ups immediately on boot at ANY hour — a redeploy
+// at 2am sent them at 2am, ignoring the configured send time. The registered
+// `followup` job below replaces it: the boot tick still catches a missed day,
+// but only once the configured send time has actually passed.)
 
-// Interval cron as backup — persisted to DB instead of in-memory
-setInterval(async () => {
-  try {
+// The daily follow-up run. Registered as a job rather than a bare interval so
+// an external ping can drive it too.
+//
+// Note the guard changed from "the clock reads exactly the send time" to "the
+// clock is at or past the send time and we haven't run today". The old form
+// only fired if the process happened to be awake during that one minute — on
+// Render's free tier, a sleeping service missed the whole day's follow-ups and
+// nothing said so. At-or-past is self-healing: whenever the service next wakes,
+// the day's run still happens.
+engineRunner.register('followup', {
+  everyMs: 5 * 60 * 1000,
+  quiet: true,               // polled often, fires once a day — don't log the no-ops
+  description: 'Queue fu1/fu2 follow-up emails (once daily, at the configured IST time)',
+  run: async () => {
     const now = toIST(new Date());
-    const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     const dateStr = now.toISOString().split('T')[0];
-    // This runs every minute — fetch only the two keys it needs, not the whole table.
     const { data: settingsRows } = await supabase.from('app_settings').select('key,value')
       .in('key', ['last_followup_run', 'followup_send_time']);
     const settings = {};
     (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
-    const lastRun = settings['last_followup_run'];
-    if (hhmm === (settings['followup_send_time'] || '08:30') && lastRun !== dateStr) {
-      await setLastFollowupRun(dateStr);
-      console.log(`[Cron] Follow-up engine triggered at ${hhmm} IST`);
-      await runFollowupEngine();
-    }
-  } catch (e) { console.error('[Cron] Error:', e.message); }
-}, 60000);
+
+    if (settings['last_followup_run'] === dateStr) return { skipped: 'already_ran_today' };
+
+    const [sendH, sendM] = String(settings['followup_send_time'] || '08:30').split(':').map(Number);
+    const minutesNow = now.getHours() * 60 + now.getMinutes();
+    if (minutesNow < ((sendH || 0) * 60 + (sendM || 0))) return { skipped: 'before_send_time' };
+
+    // Claim the day before doing the work, so a concurrent tick can't double-send.
+    await setLastFollowupRun(dateStr);
+    console.log(`[Cron] Follow-up engine triggered (IST ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')})`);
+    return await runFollowupEngine();
+  }
+});
 
 // ══════════════════════════════════════════════════════════════
 // BOUNCE / NDR FEEDBACK LOOP
@@ -2317,18 +2329,26 @@ app.post('/admin/sending/resume', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Sweep bounces every 30 minutes, with a first pass shortly after boot.
-setInterval(() => { runBounceSweep(); }, 30 * 60 * 1000);
-setTimeout(() => { runBounceSweep(); }, 5 * 60 * 1000);
+// The mailbox sweeps and the deferred-send retry. Cadences are unchanged; what
+// changed is that due-ness is persisted, so these keep their schedule across a
+// sleep/restart instead of resetting their timers every time the process boots.
+engineRunner.register('bounce_sweep', {
+  everyMs: 30 * 60 * 1000,
+  description: 'Read NDRs from connected mailboxes and mark bounced addresses invalid',
+  run: () => runBounceSweep()
+});
 
-// Detect prospect replies (and opt-outs) and stop their sequences, on the same
-// cadence as the bounce sweep, offset so the two don't hit Graph together.
-setInterval(() => { runReplySweep(); }, 30 * 60 * 1000);
-setTimeout(() => { runReplySweep(); }, 6 * 60 * 1000);
+engineRunner.register('reply_sweep', {
+  everyMs: 30 * 60 * 1000,
+  description: 'Detect prospect replies and opt-outs, and stop their sequences',
+  run: () => runReplySweep()
+});
 
-// Retry pending emails when leads enter their local send window (every 20 minutes)
-setInterval(() => { retryDeferredPendingSends(); }, 20 * 60 * 1000);
-setTimeout(() => { retryDeferredPendingSends(); }, 3 * 60 * 1000);
+engineRunner.register('pending_retry', {
+  everyMs: 20 * 60 * 1000,
+  description: 'Retry pending emails whose lead has entered its local send window',
+  run: () => retryDeferredPendingSends()
+});
 
 // Restore the emergency-stop state on boot so a pause survives a redeploy.
 loadSendingPaused();
@@ -2523,6 +2543,7 @@ app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
+app.use(require('./routes/lead-sources')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
 
@@ -3131,10 +3152,12 @@ on(EVENTS.CONTACT_INVALIDATED, (e) => wfEngine.exitEntity({ entity_type: 'contac
 
 app.use(require('./routes/wf')({ supabase, auth, hasRole, engine: wfEngine, logActivity }));
 
-// Advance due enrollments hourly, with a first pass shortly after boot
-// (offset from the bounce/reply sweeps so they don't stack).
-setInterval(() => { wfEngine.tick().catch(err => console.error('[wf] tick failed:', err.message)); }, 60 * 60 * 1000);
-setTimeout(() => { wfEngine.tick().catch(err => console.error('[wf] tick failed:', err.message)); }, 4 * 60 * 1000);
+// Advance due enrollments hourly.
+engineRunner.register('wf_tick', {
+  everyMs: 60 * 60 * 1000,
+  description: 'Advance due workflow enrollments to their next step',
+  run: () => wfEngine.tick()
+});
 
 // ── Warm-up pool engine — real Graph sends between our own connected mailboxes.
 // OFF by default: a mailbox only participates once an admin starts warm-up
@@ -3142,8 +3165,45 @@ setTimeout(() => { wfEngine.tick().catch(err => console.error('[wf] tick failed:
 // of ticks a day so the traffic looks organic; offset from the other sweeps.
 const warmupEngine = createWarmupEngine({ supabase, graphMailRequest, getMicrosoftToken, gmail: gmailProvider, emit, EVENTS });
 app.use(require('./routes/warmup')({ supabase, auth, hasRole, engine: warmupEngine, emit, EVENTS }));
-setInterval(() => { warmupEngine.tick().catch(err => console.error('[warmup] tick failed:', err.message)); }, 2 * 60 * 60 * 1000);
-setTimeout(() => { warmupEngine.tick().catch(err => console.error('[warmup] tick failed:', err.message)); }, 6 * 60 * 1000);
+engineRunner.register('warmup_tick', {
+  everyMs: 2 * 60 * 60 * 1000,
+  description: 'Warm-up pool: graduate mailboxes, rescue from spam, send the next wave',
+  run: () => warmupEngine.tick()
+});
+
+// ── Automatic lead sourcing (Step 2) ───────────────────────────────────────
+// Checks hourly, but each configured board has its own cadence (default daily),
+// so this mostly finds nothing to do. Postings land in the review queue and are
+// inert until a human approves them — nothing here can email anyone.
+engineRunner.register('lead_sourcing', {
+  everyMs: 60 * 60 * 1000,
+  quiet: true,          // usually nothing is due; don't fill the log with no-ops
+  description: 'Pull new postings from configured employer job boards into the review queue',
+  run: () => require('./lead-ingest').runDueSources({ supabase })
+});
+
+// ── THE HEARTBEAT ──────────────────────────────────────────────
+// Two things drive the same registered jobs, and neither can double-run one
+// because engine-runs.js persists due-ness:
+//   1. This in-process interval — works whenever the service happens to be awake.
+//   2. GET /cron/tick?key=… — an external pinger (free: GitHub Actions or
+//      cron-job.org, see .github/workflows/heartbeat.yml). This is the one that
+//      matters on Render's free tier, where the service sleeps on idle and every
+//      in-process timer stops with it.
+app.use(require('./routes/cron')({ runner: engineRunner, auth, hasRole }));
+
+// Check every 2 minutes; each job still only runs on its own cadence.
+setInterval(() => {
+  engineRunner.runDue({ triggeredBy: 'interval' })
+    .catch(err => console.error('[engine] tick failed:', err.message));
+}, 2 * 60 * 1000);
+
+// A first pass shortly after boot, so a redeploy immediately picks up anything
+// that fell due while the service was down.
+setTimeout(() => {
+  engineRunner.runDue({ triggeredBy: 'boot' })
+    .catch(err => console.error('[engine] boot tick failed:', err.message));
+}, 60 * 1000);
 
 // ── START ──────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`Fute Global LMS API v3.0.0 running on port ${PORT}`));

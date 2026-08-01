@@ -80,6 +80,38 @@ we never have to rewrite to grow (see "Growth bets" below).
 - Keep a session summary in `docs/CONTEXT_WINDOW.md` and keep **this file** current —
   it is the durable memory.
 
+## The current build: the Autonomous Recruiting Engine → `docs/AUTONOMOUS_ENGINE_PLAN.md`
+
+**Read that file before planning anything new.** It is the owner-approved four-step
+plan (Session 7) for the biggest bet on the roadmap: futé finding its own leads *and*
+its own candidates off the internet against one shared relevance engine, then reading
+the resulting conversations and telling the user what to do next. Two branches, one
+brain, closed loop.
+
+It supersedes the older `ENTERPRISE_OUTREACH_PLAN.md` §2 (Module A) as the live plan —
+that doc stays as background. Load-bearing decisions locked with the owner
+**2026-07-31**, all of which shape the code:
+
+- **₹0 budget.** Free/ToS-clean sources only. Every cost is a later switch, never a
+  dependency.
+- **No funded `ANTHROPIC_API_KEY`.** Everything ships **rules-first**, extending the
+  existing keyless convention (all 5 AI call sites already fall back to rules). AI is a
+  seam, not a requirement. *Claude in the owner's chat is not the app having a key.*
+- **Leads = end clients hiring directly**, not staffing firms — so free employer ATS
+  boards (Greenhouse/Lever/Ashby/Workable) are exactly the right source, and a
+  staffing-firm exclusion filter is required.
+- **Runs inside futé, not Make** (Make free = 1,000 ops/month ≈ 150 leads, and becomes
+  per-customer cost if we sell).
+- **US + India**, market-agnostic build — but India coverage at ₹0 is genuinely thin,
+  and that is a data fact, not a code gap.
+
+Order: **Step 0** trustworthy scheduler → **Step 1** shared relevance engine →
+**Step 2** lead branch → **Step 3** candidate branch → **Step 4** conversation
+intelligence. The plan also lists seven live defects sitting on this path (dropped
+`source_url` on candidate import, the dead `entity_type:'candidate'` sequence button,
+untracked sequence sends, Gmail mailboxes getting no reply detection at all) — these
+get fixed as part of the work, not filed away.
+
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
 Ordered by "cheapest to do now vs. most painful to retrofit":
