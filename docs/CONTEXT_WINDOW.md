@@ -797,13 +797,18 @@ Step 3 (candidate branch: GitHub + CSV + the ranked internal pool), Step 4
 
 **Dev branch**: `claude/continued-session-context-dj95te`.
 **PR #124 — MERGED** to `main` @ `ba379e4` (squash) → Render auto-deployed. Steps 0/1/2.
-**PR #125 — OPEN DRAFT** @ `0808602`. Step 3.
+**PR #125 — MERGED** to `main` @ `97d30bb`. Step 3 + this handoff. Both PRs from
+this session are now on `main` and deployed.
 **Migrations `033`–`036` — APPLIED to the live database** (2026-08-01, on the
 owner's explicit "apply the migration").
 
 > Branch mechanics: after #124 merged, the branch was restarted from the new
 > `main` and **force-with-lease** pushed. That was correct — its old commits were
-> already squash-merged. Do the same next time.
+> already squash-merged. The same was done again after #125. Do this every time a
+> PR on the session branch merges; never stack new work on merged history.
+>
+> **End state of Session 8: `main` @ `97d30bb`, everything from this session
+> merged and deployed, migrations 033–036 live, `CRON_KEY` still unset.**
 
 ### 1. What is live vs. what is waiting
 
@@ -812,7 +817,7 @@ owner's explicit "apply the migration").
 | Step 0 (trustworthy scheduler) | **Merged + deployed** |
 | Step 1 (shared relevance engine) | **Merged + deployed** |
 | Step 2 (automatic lead sourcing) | **Merged + deployed** |
-| Step 3 (candidate outreach) | **PR #125, draft, not merged** |
+| Step 3 (candidate outreach) | **Merged + deployed** (PR #125) |
 | Step 4 (conversation intelligence) | **Not started** |
 | Migrations 033–036 | **Applied to live DB** |
 | `CRON_KEY` | ❌ **NOT SET — owner-only action, blocks all overnight automation** |
@@ -1042,6 +1047,14 @@ Recommended shape — the **narrow** version, not match-the-poster:
 5. *Then* Step 4 (conversation intelligence), which otherwise adds ~20 more
    hand-written queries to the pile.
 
-Also outstanding: **set `CRON_KEY`**, merge PR #125, and verify one real
-Greenhouse/Lever board through the "Test it" button — the adapters have still
-never met a live feed.
+Also outstanding, in order of how much they matter:
+
+1. **Set `CRON_KEY`** — the single thing blocking every overnight job. Same long
+   random value in the Render environment *and* as a GitHub Actions secret named
+   `CRON_KEY`. Owner-only; nothing automated runs until it exists.
+2. **Verify one real Greenhouse/Lever board** through the "Test it" button on
+   Sourced Leads. The adapters have still never met a live feed — this sandbox's
+   network policy blocked every job-board host, so parsing is proven and the URLs
+   are not.
+3. **Try the Candidates → "Add to email sequence" button** on the live app. It
+   was dead before this session; worth one real click to confirm it isn't.
