@@ -445,10 +445,26 @@ human approval creates the `companies`/`jobs`/`contacts` rows, after which the
 lead is indistinguishable from a manual one and flows through the existing
 distribution + sequence machinery unchanged.
 
-### Migrations written, NONE applied to the live DB
-`033_engine_runs`, `034_match_and_requirement`, `035_lead_sources`. All are
-additive and the code runs correctly without them. Awaiting an explicit
-go-ahead, per the standing rule.
+### Migrations — APPLIED to the live DB 2026-08-01, on the owner's go-ahead
+`033_engine_runs`, `034_match_and_requirement`, `035_lead_sources`,
+`036_candidate_nurture`. All additive; no data rewritten.
+
+Pre-flight checks run first: none of the objects already existed, and
+`sourcing_candidates` had no duplicate `(org_id, provider, external_id)` rows
+that would have failed 036's partial unique index. Verified after: 5 new tables,
+8 new columns and 6 new indexes present; live data untouched (1,261 leads,
+9 candidates, 2 job orders, 7 submissions); `organizations.ra_mode` defaulted to
+`manual` on the single org, so sourcing stays opt-in and behaviour is unchanged.
+
+**Known posture, unchanged by this:** the 5 new tables have no RLS, matching the
+~33 existing tables (CLAUDE.md, growth bet 1, slice 3b — deferred by owner
+decision). Verified this is latent rather than live: the anon key has never been
+committed (`env.example` holds a placeholder only, confirmed across all git
+history) and the browser never talks to Supabase directly — the frontend is
+API-only against Express, which uses the service-role key server-side. It
+becomes urgent if that key ever leaks, or when a second org is onboarded.
+Two pre-existing advisor ERRORs worth carrying forward: `microsoft_tokens`
+exposes `access_token`/`refresh_token`, and `email_tracking` exposes `token`.
 
 ### Environment still required
 `CRON_KEY` in Render **and** as a GitHub Actions secret (same value). Without it
