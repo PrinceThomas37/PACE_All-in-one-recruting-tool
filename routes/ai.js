@@ -7,6 +7,11 @@
 // placeholder check), so behaviour is identical.
 // ============================================================================
 const express = require('express');
+const { fetchWithTimeout } = require('../http-client');
+
+// AI generation is slower than a normal API call but must still be bounded —
+// these run inside request handlers the browser is waiting on.
+const AI_TIMEOUT_MS = 30000;
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -22,7 +27,7 @@ router.post('/ai/generate-email', auth, async (req, res) => {
       return res.json({ subject: fill(template?.subject || 'Opportunity at {{company}}'), body: fill(template?.body || 'Hi {{fn}},') });
     }
     const prompt = `Write a hyper-personalized cold outreach email for a business development executive at Fute Global LLC.\nContact: ${vars.fn} ${vars.ln || ''}, ${vars.desig || ''} at ${vars.company} (${vars.ind || ''}, ${vars.loc || ''})\nPosition: ${vars.pos || ''}\nFormat:\nSubject: [subject line]\n\n[email body]`;
-    const response = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 600, messages: [{ role: 'user', content: prompt }] }) });
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 600, messages: [{ role: 'user', content: prompt }] }) }, { timeoutMs: AI_TIMEOUT_MS });
     const aiData = await response.json();
     const text = aiData.content?.[0]?.text || '';
     const subjectMatch = text.match(/Subject:\s*(.+)/i);
@@ -60,11 +65,11 @@ Cover these points naturally:
 
 Keep it concise, informative and actionable. End with one sentence about what the team should focus on today based on the data.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
-    });
+    }, { timeoutMs: AI_TIMEOUT_MS });
     const aiData = await response.json();
     const summary = aiData.content?.[0]?.text?.trim() || 'Summary unavailable.';
     res.json({ summary });

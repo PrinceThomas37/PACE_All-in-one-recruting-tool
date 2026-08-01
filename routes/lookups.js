@@ -6,6 +6,11 @@
 // Route paths, handler logic and behaviour are unchanged from the original.
 // ============================================================================
 const express = require('express');
+const { fetchWithRetry } = require('../http-client');
+
+// Zip lookup fires per keystroke from the autocomplete, so it gets a short
+// budget — a slow third party must never hold an app request handler open.
+const ZIP_TIMEOUT_MS = 5000;
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -17,7 +22,7 @@ router.get('/lookup/zipcode', auth, async (req, res) => {
   try {
     const { zip } = req.query;
     if (!zip || zip.length < 3) return res.json([]);
-    const resp = await fetch(`https://api.zippopotam.us/us/${zip.trim()}`);
+    const resp = await fetchWithRetry(`https://api.zippopotam.us/us/${encodeURIComponent(zip.trim())}`, {}, { timeoutMs: ZIP_TIMEOUT_MS, retries: 1 });
     if (!resp.ok) return res.json([]);
     const data = await resp.json();
     const places = (data.places || []).map(p => ({

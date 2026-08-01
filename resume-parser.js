@@ -12,6 +12,9 @@
 // ============================================================================
 
 const { SKILL_DICTIONARIES } = require('./skill-dictionaries');
+const { fetchWithTimeout } = require('./http-client');
+
+const AI_TIMEOUT_MS = 30000;
 
 // Lazy requires so a missing optional dep degrades to "unsupported file type"
 // instead of crashing boot.
@@ -109,11 +112,11 @@ async function parseResumeAI(text) {
 
 RESUME:
 ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
-    });
+    }, { timeoutMs: AI_TIMEOUT_MS });
     const aiData = await response.json();
     const raw = aiData.content?.[0]?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);

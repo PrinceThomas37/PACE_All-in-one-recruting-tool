@@ -14,6 +14,9 @@ const { EVENTS, emit } = require('./events');
 const { PROVIDER_IDS, providerList } = require('./config/sourcing');
 const { parseResume } = require('./resume-parser');
 const matchEngine = require('./match-engine');
+const { fetchWithTimeout } = require('./http-client');
+
+const AI_TIMEOUT_MS = 30000;
 
 module.exports = function (app, deps) {
   const { supabase, auth, hasRole, notGuest, today } = deps;
@@ -605,11 +608,11 @@ JOB TITLE: ${j.job_title || ''}
 
 DESCRIPTION:
 ${String(j.job_description).slice(0, 12000)}`;
-          const response = await fetch('https://api.anthropic.com/v1/messages', {
+          const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
             body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2500, messages: [{ role: 'user', content: prompt }] })
-          });
+          }, { timeoutMs: AI_TIMEOUT_MS });
           const aiData = await response.json();
           const text = aiData.content?.[0]?.text?.trim();
           // belt-and-braces: scrub the AI output too, in case a name slipped through

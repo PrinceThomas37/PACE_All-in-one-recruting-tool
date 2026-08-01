@@ -14,6 +14,11 @@
 //   ctx = { supabase, google: { clientId, clientSecret, redirectUri, scopes } }
 // ============================================================================
 
+const { fetchWithRetry } = require('./http-client');
+
+const GMAIL_TIMEOUT_MS = 20000;
+const OAUTH_TIMEOUT_MS = 15000;
+
 function createGmailProvider(ctx) {
   const { supabase, google } = ctx;
   const cfg = google || {};
@@ -34,10 +39,12 @@ function createGmailProvider(ctx) {
     return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
   }
   async function oauthToken(params) {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
+    // retryUnsafe: a token exchange/refresh is idempotent, and a transient
+    // failure here takes the whole mailbox offline until the next sweep.
+    const res = await fetchWithRetry('https://oauth2.googleapis.com/token', {
       method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams(params),
-    });
+    }, { timeoutMs: OAUTH_TIMEOUT_MS, retryUnsafe: true, retries: 2 });
     return res.json();
   }
   async function exchangeCode(code) {
@@ -62,9 +69,15 @@ function createGmailProvider(ctx) {
   }
 
   async function api(token, path, options = {}) {
-    const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
+    // Reads retry (fetchWithRetry's default); a send POST gets the timeout only,
+    // so a slow-but-delivered message is never sent twice.
+    const res = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me${path}`, {
       ...options,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
+    }, {
+      timeoutMs: GMAIL_TIMEOUT_MS,
+      onRetry: ({ attempt, delayMs, reason }) =>
+        console.warn(`[gmail] ${reason} on ${path} — retry ${attempt} in ${delayMs}ms`),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error?.message || `Gmail API ${res.status}`);

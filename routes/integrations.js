@@ -9,15 +9,13 @@
 const express = require('express');
 const integrations = require('../config/integrations');
 const { verifyEmailAddress } = require('../email-verify');
+const httpClient = require('../http-client');
 
+// Thin adapter over the shared client, keeping this file's (url, ms, options)
+// argument order so the provider tests below are unchanged. No retry: these are
+// "is this key valid" pings where a fast honest answer beats a slow one.
 async function pingJson(url, ms = 8000, options = {}) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(url, { ...options, signal: ctrl.signal });
-    const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data };
-  } finally { clearTimeout(t); }
+  return httpClient.fetchJson(url, options, { timeoutMs: ms, retries: 0 });
 }
 
 // Provider-specific, cheap connection tests (validate the key without spending

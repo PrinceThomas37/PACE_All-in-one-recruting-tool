@@ -6,6 +6,15 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { parseJobDescription, buildResearchFromLeadData, normalizeIndustry, normalizeJobTitle, titleSimilarity } = require('./jd-parser');
 const { learnSkillsForIndustry } = require('./learned-skills');
+const { fetchWithRetry, fetchWithTimeout } = require('./http-client');
+const { createRateLimiter, clientIp } = require('./middleware/rate-limit');
+
+// Outbound call budgets. Graph and the token endpoint sit on the critical path
+// of the background sweeps, which run in the single web process — an untimed
+// call there stalls every other job behind it.
+const GRAPH_TIMEOUT_MS = 20000;
+const OAUTH_TIMEOUT_MS = 15000;
+const AI_TIMEOUT_MS = 30000;
 
 function persistLearnedSkills(industry, research) {
   if (!research || !research.requirements) return;
@@ -65,8 +74,46 @@ const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
 const engineRunner = createEngineRunner({ supabase });
 
 // ── MIDDLEWARE ─────────────────────────────────────────────────
+// Render terminates TLS at its own proxy and forwards, so without this every
+// request reports the proxy's address as req.ip and the rate limiters below
+// would count the entire internet as one client. Trust exactly ONE hop — the
+// platform's — so a client cannot spoof its way past a limit by sending its
+// own X-Forwarded-For.
+app.set('trust proxy', 1);
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
 app.use(express.json({ limit: '5mb' }));
+
+// ── Rate limits on the unauthenticated surface ─────────────────
+// Everything else sits behind `auth`. These three are reachable by anyone, and
+// each of them costs the single web process real work per hit.
+//
+// Login gets TWO limiters because they stop different attacks: per-IP stops one
+// host spraying many accounts; per-email stops a distributed guess at one
+// account. Both are far above what a human mistyping a password will hit.
+const loginIpLimiter = createRateLimiter({
+  name: 'login-ip', windowMs: 15 * 60 * 1000, max: 30,
+  message: 'Too many sign-in attempts. Please wait a few minutes and try again.',
+  onLimit: (req) => console.warn(`[rate-limit] login blocked for ip ${clientIp(req)}`),
+});
+const loginEmailLimiter = createRateLimiter({
+  name: 'login-email', windowMs: 15 * 60 * 1000, max: 10,
+  keyFn: (req) => String(req.body?.email || '').toLowerCase().trim() || null,
+  message: 'Too many sign-in attempts for this account. Please wait a few minutes and try again.',
+  onLimit: (req) => console.warn(`[rate-limit] login blocked for account ${String(req.body?.email || '').toLowerCase().trim()}`),
+});
+app.use('/auth/login', loginIpLimiter, loginEmailLimiter);
+
+// The heartbeat is key-gated, but the key check runs after the request is
+// accepted, so unbounded probing is still free work. Generous: a legitimate
+// pinger runs a few times an hour, and the endpoint is deliberately safe to
+// call often.
+app.use('/cron/tick', createRateLimiter({ name: 'cron', windowMs: 60 * 1000, max: 60 }));
+
+// The pixel is NOT given a 429 — see routes/tracking.js. A mail client that
+// gets an error instead of an image shows a broken-image box to the recipient,
+// which is a worse outcome than an uncounted open. The limiter is passed in and
+// used to skip the DB write instead.
+const pixelLimiter = createRateLimiter({ name: 'pixel', windowMs: 60 * 1000, max: 120 });
 
 // ── Multi-tenant context ───────────────────────────────────────
 // Every request carries an org context (req.orgId). Until every user record and
@@ -973,7 +1020,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     const poolIndustries = Object.keys(pool_stats.by_industry || {}).filter(Boolean);
     const industryKeys = poolIndustries.length ? poolIndustries.reduce((o,k) => { o[k]='<pct>'; return o; }, {}) : {'Other':'<pct>'};
     const prompt = `You are a lead distribution engine for Fute Global LLC.\nPool: ${JSON.stringify(pool_stats)}\nManager: ${manager?.name}\nCapacity: ${capacity}\nInstructions: "${priority_text}"\nRespond ONLY with valid JSON:\n{"total_to_send":<number>,"by_freshness":{"New":<pct>,"Normal":<pct>,"Old":<pct>},"by_industry":${JSON.stringify(industryKeys)},"by_timezone":{"EST":<pct>,"CST":<pct>,"MST":<pct>,"PST":<pct>},"exclude_duplicates":<bool>,"summary":"<text>"}`;
-    const aiResp = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }) });
+    const aiResp = await fetchWithTimeout('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }) }, { timeoutMs: AI_TIMEOUT_MS });
     const aiData = await aiResp.json();
     const ratio = JSON.parse((aiData.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim());
     res.json(ratio);
@@ -982,7 +1029,10 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
 
 // ── Microsoft Graph threaded send (follow-ups quote prior emails like Gmail/Outlook) ──
 async function graphMailRequest(accessToken, path, options = {}) {
-  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+  // Timeout + retry via http-client: a hung Graph socket used to hang its caller
+  // forever, and these callers are the background sweeps. Retries apply to reads
+  // only (fetchWithRetry's default) so a POST /sendMail is never duplicated.
+  const res = await fetchWithRetry(`https://graph.microsoft.com/v1.0${path}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -993,6 +1043,10 @@ async function graphMailRequest(accessToken, path, options = {}) {
       Prefer: 'IdType="ImmutableId"',
       ...(options.headers || {})
     }
+  }, {
+    timeoutMs: GRAPH_TIMEOUT_MS,
+    onRetry: ({ attempt, delayMs, reason }) =>
+      console.warn(`[graph] ${reason} on ${path} — retry ${attempt} in ${delayMs}ms`),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error?.message || `Graph API ${res.status}`);
@@ -2485,7 +2539,9 @@ async function getMicrosoftToken(userEmailId) {
   if (error || !tokenRow) throw new Error('No Microsoft token found. Please reconnect.');
   const now = new Date();
   if (new Date(tokenRow.expires_at).getTime() - now.getTime() > 5 * 60 * 1000) return tokenRow.access_token;
-  const refreshRes = await fetch(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, refresh_token: tokenRow.refresh_token, grant_type: 'refresh_token', scope: MS_SCOPES }) });
+  // retryUnsafe: a token refresh is idempotent — replaying it costs nothing and
+  // a transient failure here takes the whole mailbox offline until the next sweep.
+  const refreshRes = await fetchWithRetry(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, refresh_token: tokenRow.refresh_token, grant_type: 'refresh_token', scope: MS_SCOPES }) }, { timeoutMs: OAUTH_TIMEOUT_MS, retryUnsafe: true, retries: 2 });
   const refreshed = await refreshRes.json();
   if (refreshed.error) {
     // Capture the EXACT Microsoft error (e.g. AADSTS7000215 invalid client
@@ -2547,6 +2603,7 @@ const routeCtx = {
   loadAllJobs, JOB_SELECT, getTimezoneFromLocation, persistLearnedSkills,
   getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache,
+  pixelLimiter,
 };
 app.use(require('./routes/auth')(routeCtx));
 app.use(require('./routes/microsoft')(routeCtx));
