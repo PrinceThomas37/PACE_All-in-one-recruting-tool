@@ -79,6 +79,12 @@ we never have to rewrite to grow (see "Growth bets" below).
   auditors might.
 - Keep a session summary in `docs/CONTEXT_WINDOW.md` and keep **this file** current —
   it is the durable memory.
+- **Before moving ANY file, read `docs/CONTEXT_WINDOW.md` § "DEPENDENCY MAP"
+  (Session 8).** Ten things break on a naive move and several fail *silently* —
+  notably `learned-skills.js` (`__dirname`-relative JSON, resets with no error),
+  two tests that read `index.js` as raw text, and the deliberate server→browser
+  require in `match-engine.js`. A restructure without it will break production
+  quietly.
 
 ## The current build: the Autonomous Recruiting Engine → `docs/AUTONOMOUS_ENGINE_PLAN.md`
 

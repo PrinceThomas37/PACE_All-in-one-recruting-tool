@@ -1,6 +1,11 @@
-# FUTE LMS Backend — Context Window (Session 7 latest; older sessions below)
+# FUTE LMS Backend — Context Window (Session 8 latest; older sessions below)
 
-> **Latest work is Session 7** — jump to "## Session 7" at the end. It starts the
+> **Latest work is Session 8** — jump to "## Session 8" at the very end. Session 8
+> shipped Steps 0-3, merged and deployed Steps 0-2, applied migrations 033-036 to
+> the LIVE database, and carries a **dependency map that must be read before any
+> folder restructure**. Session 7 below is the same body of work mid-flight.
+>
+> **Previously: Session 7** — jump to "## Session 7". It starts the
 > **Autonomous Recruiting Engine**, the biggest bet on the roadmap; the plan of
 > record is `docs/AUTONOMOUS_ENGINE_PLAN.md` and **that file should be read before
 > planning anything new**. Session 6 (screen-by-screen redesign + Job White-board +
@@ -785,3 +790,258 @@ have the column. It is genuinely absent only from the Candidates *database* grid
 Step 2 (lead branch: ATS job feeds → POC → why-the-role-exists → sequence),
 Step 3 (candidate branch: GitHub + CSV + the ranked internal pool), Step 4
 (conversation intelligence). Detail in `docs/AUTONOMOUS_ENGINE_PLAN.md`.
+
+---
+
+## Session 8 — Autonomous Engine Steps 0–3 shipped, merged, migrated + a full repo-structure review
+
+**Dev branch**: `claude/continued-session-context-dj95te`.
+**PR #124 — MERGED** to `main` @ `ba379e4` (squash) → Render auto-deployed. Steps 0/1/2.
+**PR #125 — OPEN DRAFT** @ `0808602`. Step 3.
+**Migrations `033`–`036` — APPLIED to the live database** (2026-08-01, on the
+owner's explicit "apply the migration").
+
+> Branch mechanics: after #124 merged, the branch was restarted from the new
+> `main` and **force-with-lease** pushed. That was correct — its old commits were
+> already squash-merged. Do the same next time.
+
+### 1. What is live vs. what is waiting
+
+| | State |
+|---|---|
+| Step 0 (trustworthy scheduler) | **Merged + deployed** |
+| Step 1 (shared relevance engine) | **Merged + deployed** |
+| Step 2 (automatic lead sourcing) | **Merged + deployed** |
+| Step 3 (candidate outreach) | **PR #125, draft, not merged** |
+| Step 4 (conversation intelligence) | **Not started** |
+| Migrations 033–036 | **Applied to live DB** |
+| `CRON_KEY` | ❌ **NOT SET — owner-only action, blocks all overnight automation** |
+
+**`CRON_KEY` is the one thing standing between "deployed" and "working."** It must
+be the same long random value in **both** the Render environment **and** as a
+GitHub Actions secret named `CRON_KEY`. Until then `/cron/tick` returns 404 and
+background jobs only run while somebody happens to be using the app.
+
+### 2. Migrations applied to the live DB — evidence
+
+Pre-flight (all confirmed before touching anything): none of the 5 tables, 8
+columns or 6 indexes already existed; `sourcing_candidates` had **no** duplicate
+`(org_id, provider, external_id)` rows that would have failed 036's partial
+unique index.
+
+| Migration | What |
+|---|---|
+| `033_engine_runs` | `engine_runs` table + 2 indexes |
+| `034_match_and_requirement` | `job_orders.requirement`/`requirement_at`/`skills_source`; `match_scores` + 4 indexes |
+| `035_lead_sources` | `lead_sources`, `sourced_jobs_raw`, `enrichment_cache`; `organizations.ra_mode` |
+| `036_candidate_nurture` | `candidates.profile_url`/`source_external_id`/`last_reply_at`/`last_contact_at`; partial unique index on `sourcing_candidates` |
+
+Post-apply verification: 5 tables + 8 columns + 6 indexes present. **Live data
+untouched** — 1,261 `jobs`, 9 `candidates`, 2 `job_orders`, 7 `submissions`,
+1 `organizations` with `ra_mode='manual'`. Sourcing therefore stays **opt-in**;
+nothing runs on its own until a board is added.
+
+**RLS posture (checked, not assumed).** The 5 new tables have no RLS, matching
+~33 existing ones — the deferral recorded in `CLAUDE.md` growth bet 1, slice 3b.
+Verified this is **latent, not live**: the anon key has **never** been committed
+(searched all git history; `env.example` holds a placeholder), and the browser
+never talks to Supabase directly — the frontend is API-only against Express,
+which uses the service-role key server-side. It becomes urgent if that key leaks
+(**the repo is public**) or when org #2 is onboarded. Two advisor ERRORs worth
+carrying: `microsoft_tokens` exposes `access_token`/`refresh_token`, and
+`email_tracking` exposes `token`.
+
+### 3. Step 3 scope pivot — GitHub was dropped, deliberately
+
+The plan had Step 3 leading with GitHub candidate sourcing. The owner asked
+*"why would system find contacts on GitHub — does it have a contact database?"*
+**It does not, and they were right.** GitHub is where developers publish code;
+roughly a quarter surface a public email. Good **discovery**, poor **contact**
+source — it does not solve the ₹0 wall. Also: GitHub's acceptable-use policy
+prohibits using API-obtained data for unsolicited email, so an auto-emailing
+feature could not have shipped in a sellable product anyway.
+
+**No GitHub code was written.** Step 3 became "fix what you already own."
+Don't re-litigate this; the analysis is in `docs/AUTONOMOUS_ENGINE_PLAN.md`
+under "Step 3 — REVISED".
+
+Owner also chose: sequences may target **everyone, with a warning on sourced
+candidates** (judgement sits with the user, not a hard block).
+
+### 4. The five defects Step 3 closed
+
+1. **The Candidates page "Add to email sequence" button did nothing** — and
+   *looked like it worked*. No `candidate` context loader existed, so the engine
+   handed every step an empty context; the channel read an undefined candidate,
+   returned `no_candidate_email`, and the enrolment advanced to `completed`
+   without sending. The worst failure mode there is: silent success.
+2. **Sequence sends were invisible** — no pixel, no `email_tracking` row, and
+   they skipped the signature, the HTML wrapper, and every deliverability gate
+   the sales channel applies (so they could send from an **auto-paused** mailbox).
+3. **A candidate who replied kept getting emailed** — no `CANDIDATE_REPLIED`
+   event, no `exitEntity` for candidates *or* submissions.
+4. **Every LinkedIn URL imported via Sourcing was discarded** on import.
+5. **`GET /sourcing/staged` was wide open** — no org scoping, no guest check, no
+   role check. Batch dedup and the discard route were unscoped too.
+
+Also fixed while writing the tests: the first version of the candidate opt-out
+check passed a message *object* to `isOptOutReply`, which takes **text** — it
+would have stringified and silently failed to honour unsubscribes.
+
+**Known gap left open, on purpose:** the reply sweep is **Microsoft-only**, so a
+sequence sent from a Gmail mailbox still cannot auto-exit on reply.
+`gmail-provider.listMessages/getMessage` exist and **nothing calls them**. Step 4.
+
+### 5. Tests: 25 files, all green
+
+New this session: `engine-runs-smoke` 30/30, `match-engine-smoke` 45/45 (asserts
+the Node and browser scorers return **byte-identical** results),
+`best-matches-smoke` 22/22, `lead-sourcing-smoke` 78/78,
+`sourced-leads-page-smoke` 31/31, `candidate-sequence-smoke` 33/33 (includes a
+case that deliberately omits the context loader, to prove the test catches the
+original silent no-op).
+
+**Sandbox limitation, unchanged:** the network policy blocks the real job-board
+endpoints *and* the Render host. Adapter **parsing** is tested against documented
+shapes; adapter **URLs have never hit a live board.** `POST /lead-sources/test`
+(the "Test it" button) exists to close that from the deployed app.
+
+---
+
+## 6. Repo structure review — the owner shared two reference images
+
+The owner shared a Node backend folder-structure infographic and a "System Design
+Roadmap 2026" and asked what futé matches and what should change, with a hard
+constraint: **no extra cost**.
+
+### The decisive finding
+
+**`docs/REFACTOR_MANIFEST.md` records a prior 14-PR refactor (#67–#80) run
+against two guides written by an actual developer the owner brought in.** The
+current `config/` + `routes/` + `middleware/` shape, with routers as
+`(ctx) => Router` factories, was that effort's **deliberate endpoint** — it did
+not adopt controllers/services/models, by choice. An infographic is not a higher
+authority than that. Its own rule was *"never touch the whole thing at once."*
+
+**But the gains eroded:** that refactor took `index.js` 3,649 → 2,615. It is now
+**3,337** and climbing (127 lines added this session alone). The problem is not
+folder names — it is that new work keeps landing in the two biggest files.
+
+The guides themselves (`FRONTEND_REFACTORING_GUIDE.md`,
+`BACKEND_REFACTORING_GUIDE.md`) are **gone** — not in the repo, not in git
+history. The manifest is the only surviving record.
+
+### Image 1 verdict
+Already matching: `config/`, `routes/`, `middleware/`, `test/`, `.env` handling,
+`.gitignore` (working — `.env` ignored, never committed), `package.json`.
+Genuinely missing, by value: **`models/`** (the only gap with evidence — see §7),
+**`services/`** (25 modules loose at root), and **splitting the two oversized
+files** (not in the image at all, and the real problem).
+Not worth doing: `src/`, `controllers/`, `utils/`, `server.js` rename, Dockerfile.
+Trivial: delete the stray `gitignore` (no dot) beside the real `.gitignore`.
+
+### Image 2 verdict (₹0 filter applied)
+**Already done (5/20):** DB indexing (64 indexes), event-driven architecture, API
+design, caching, most of idempotency/retries.
+**Real and free (4):** rate limiting (**none exists**; public endpoints are
+`/o/:token.gif` and `/cron/tick`); **timeouts on Microsoft Graph and Gmail — they
+have none, and a hung call can stall an entire reply sweep** (job boards, DNS and
+verification *do* have them); retry-with-backoff on outbound calls; a capacity
+estimate.
+**Not applicable (9):** replication, sharding, consistent hashing, leader
+election, distributed transactions, consistency models, CDN, microservices, load
+balancing. The app has **1,261 leads and one server**.
+**Message queues** — the one true architectural gap, but pointless until 2+
+servers, and Render free runs one. Correction to something said mid-session: it
+would **not** need paid Redis; `pg-boss` runs on the existing Postgres.
+
+---
+
+## 7. ⚠ DEPENDENCY MAP — READ BEFORE ANY RESTRUCTURE
+
+Ten ways moving files breaks this repo, highest risk first. **Several fail
+silently.**
+
+1. **`learned-skills.js:9` uses `__dirname` to find `learned-skills.json`.** Move
+   the module without the JSON and `loadLearnedSkills()` returns `{}` (it's
+   `existsSync`-guarded) while `saveLearnedSkills()` **writes a brand-new JSON at
+   the new path**. No error, no log — learned skills silently reset.
+2. **`test/send-race-guard.mjs:19` and `test/candidate-sequence-smoke.mjs:249`
+   read `index.js` as raw text** and regex-assert on its source. **Any** extraction
+   out of index.js breaks them even when runtime behaviour is identical.
+3. **`match-engine.js:24` requires `./public/js/38-match-score.js`** — the only
+   server→browser require in the repo, and deliberate (one scorer, two runtimes).
+   **Do not move `38-match-score.js`**: it is pinned by three independent things —
+   the `<script>` tag at `public/index.html:52`, `test/verify-frontend.sh`, and
+   this require.
+4. **`routeCtx` (`index.js:2540-2550`) captures 32 values at one instant.**
+   Extracting any of them must preserve define → build-ctx → mount ordering, or
+   boot dies with TDZ errors. `const`s don't hoist.
+5. **4 bespoke mounts are ordering-load-bearing** — `gmail` (2553), `wf` (3280),
+   `warmup` (3294), `cron` (3320). They sit far from the main 2551-2568 block
+   because they need engines constructed first. Cannot be hoisted alone.
+6. **`bd_recruiter_routes.js` takes `(app, deps)`, not `(ctx) => Router`** — it
+   registers ~65 routes directly on `app`, and duplicates `withOrg`/`orgStamp`
+   from index.js. Converting it is the single biggest job.
+7. **All 27 `test/*.mjs` use `../`-relative paths** (`../public`, `../index.js`,
+   `../<module>.js`). A `unit/` + `integration/` split makes **every one** off by
+   a level. `test/verify-frontend.sh:12` does `cd "$(dirname $0)/.."` and breaks
+   the same way.
+8. **`require('../lead-sources')` ×2 is directory-form** — renaming the folder or
+   its `index.js` breaks it silently at require time.
+9. **`express.static('public')` (`index.js:491`) is CWD-relative**, not
+   `__dirname`-relative. It only works because `npm start` runs from the root.
+10. **Exactly ONE dynamic require** in the whole tree (`resume-parser.js:18`,
+    npm names only). Every other relative require is a **string literal** — so a
+    mechanical rewrite is genuinely viable. This is the good news.
+
+**Scale of a models layer: 574 raw `supabase.from(` calls across 31 files** —
+`index.js` 155, `bd_recruiter_routes.js` 113, `routes/auth.js` 27,
+`warmup-engine.js` 21. That count *is* the argument: four org-scoping leaks
+appeared in one session, all the same shape — a hand-written query that forgot
+`withOrg()`. Note `config/integrations.js` (8 queries) and `config/settings.js`
+(2) hold DB access and are not pure config. Three table names are **computed**
+(`mailbox-health.js:63`, `index.js:2795` `resolveEmailAttachments`,
+`index.js:2822` `connectedMailboxById`) so a naive per-table split misses them.
+
+**`index.js` extraction budget (~2,090 of 3,337 lines could move, leaving ~1,200):**
+Graph send pipeline 983-1338 (356) · send loop 1339-1665 (327, contains the
+253-line `processPendingEmailSends`) · follow-up engine 1807-2048 (242) · mailbox
+sweeps 2049-2307 (259) · **recruiting workflow channels + candidate/meeting routes
+2729-3256 (528 — the biggest single opportunity, recruiting logic sitting in a
+sales-oriented file)** · send-window + throttle helpers 114-337 (224) · email
+generation 637-789 (153).
+
+**`bd_recruiter_routes.js` (2,140) splits cleanly into:** `routes/job-orders.js`
+(158-733), `routes/candidates.js` (734-1069 + 1459-1479), `routes/submissions.js`
+(1070-1286), `routes/pipeline.js` (1287-1458), `routes/sourcing.js` (1550-1753),
+`routes/recruiting-analytics.js` (1754-2140), plus `services/match.js` (29-67) and
+`services/pipeline-stages.js` (68-157).
+
+**Test split:** 10 pure unit (`authorize`, `config-env`, `email-tracking-smoke`,
+`settings`, `engine-runs-smoke`, `lead-sourcing-smoke`, `lead-stage-permission`,
+`candidate-sequence-smoke`, `send-race-guard`, `backend-smoke` — the last spawns a
+real server, arguably integration) · 17 Playwright browser tests ·
+`match-engine-smoke` is hybrid (dynamic Playwright import at L174).
+**`playwright-core` is used by 17 tests but is NOT in `package.json`.**
+
+---
+
+## 8. Where to pick up
+
+**Owner's stated intent (end of Session 8):** do the **restructure first in a
+fresh session**, then Step 4. They were running low on credits and asked for this
+handoff instead of starting the work.
+
+Recommended shape — the **narrow** version, not match-the-poster:
+1. `models/` data-access layer so org-scoping is automatic, not remembered.
+2. Split `index.js` and `bd_recruiter_routes.js` (see §7 line maps).
+3. The four free reliability items — **timeouts on Graph/Gmail first**, it is the
+   only item across both images that can bite today.
+4. Move the 25 root modules into `services/` (optional, cosmetic).
+5. *Then* Step 4 (conversation intelligence), which otherwise adds ~20 more
+   hand-written queries to the pile.
+
+Also outstanding: **set `CRON_KEY`**, merge PR #125, and verify one real
+Greenhouse/Lever board through the "Test it" button — the adapters have still
+never met a live feed.

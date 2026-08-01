@@ -36,7 +36,12 @@
     experience:'experience_years', experienceyears:'experience_years', yearsofexperience:'experience_years', totalexperience:'experience_years', exp:'experience_years',
     skills:'skills', keyskills:'skills',
     resume:'resume_url', resumeurl:'resume_url', resumelink:'resume_url',
-    url:'source_url', profile:'source_url', profileurl:'source_url', link:'source_url', linkedin:'source_url', sourceurl:'source_url'
+    // LinkedIn gets its own field. It used to map to source_url, which the
+    // import path then discarded — so every LinkedIn URL uploaded through
+    // Sourcing was silently lost. Everything else stays a generic profile link.
+    linkedin:'linkedin_url', linkedinurl:'linkedin_url', linkedinprofile:'linkedin_url', li:'linkedin_url',
+    url:'source_url', profile:'source_url', profileurl:'source_url', link:'source_url', sourceurl:'source_url',
+    github:'source_url', githuburl:'source_url', portfolio:'source_url', website:'source_url'
   };
   function rowsToRecords(matrix){
     if (!matrix.length) return [];
