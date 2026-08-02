@@ -6,18 +6,24 @@
 // ============================================================================
 const express = require('express');
 const { TRANSPARENT_GIF } = require('../email-tracking');
+const { clientIp } = require('../middleware/rate-limit');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth } = ctx;
+  const { supabase, auth, pixelLimiter } = ctx;
 
   // Public tracking pixel — the recipient's email client requests this when the
   // message is opened. Always returns the gif (even for an unknown/blank token)
   // so nothing about our data is revealed, and an open is never allowed to error.
   router.get('/o/:token', async (req, res) => {
     const token = String(req.params.token || '').replace(/\.gif$/i, '').trim();
+    // Rate limited by SKIPPING THE DB WORK, never by returning an error: a mail
+    // client that gets a 429 instead of an image renders a broken-image box to
+    // the recipient, which is worse than an uncounted open. Over the limit, the
+    // pixel still returns — we just stop paying for the read+write.
+    const withinLimit = pixelLimiter ? pixelLimiter.consume(`pixel:${clientIp(req)}`).allowed : true;
     try {
-      if (token) {
+      if (token && withinLimit) {
         const { data } = await supabase.from('email_tracking')
           .select('id,open_count,opened_at').eq('token', token).maybeSingle();
         if (data) {

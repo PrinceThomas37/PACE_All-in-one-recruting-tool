@@ -41,9 +41,34 @@ we never have to rewrite to grow (see "Growth bets" below).
 
 ## The stack (so it isn't re-derived each time)
 
-- **Backend:** Node/Express — `index.js` (email/lead engine) + `bd_recruiter_routes.js`
-  (ATS: candidates, pipeline, submissions, job orders). Plus assorted `*.js` engines
-  (mailmerge, warmup, jd-parser, resume-parser).
+- **Backend:** Node/Express — `index.js` (the **sales/lead** engine: leads, the send
+  loop, follow-ups, mailbox sweeps) + `routes/*.js` + `routes/recruiting/*.js` (the
+  ATS). Plus assorted `*.js` engines (mailmerge, warmup, jd-parser, resume-parser).
+  - **Session 9 restructure:** `bd_recruiter_routes.js` went from 2,140 lines to a
+    **43-line mounter** over `routes/recruiting/{job-orders,candidates,submissions,
+    pipeline,lookups,sourcing,analytics,outreach}.js`; the helpers they share are
+    built once in `services/recruiting-core.js` (+ `services/candidate-fields.js`).
+    `index.js` went 3,403 → **2,868** by moving the recruiting workflow channels and
+    the candidate/client email + interview endpoints into
+    `routes/recruiting/outreach.js`.
+  - **`routes/recruiting/*` register on `app` directly, not as mounted Routers, so
+    REGISTRATION ORDER IS LOAD-BEARING** (`/job-orders/browse` before
+    `/job-orders/:id`; `/candidates/check-duplicate` before `/candidates/:id`).
+    `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
+- **Data access: use `models/` — do NOT hand-write `supabase.from()` on tenant
+  tables.** `db.forRequest(req).from('candidates')` scopes to the caller's org by
+  construction; `db.global.from(…)` is for the 8 tables with no `org_id`;
+  `db.crossOrg(…)` is the named, greppable escape hatch. Anything else throws.
+  This exists because org scoping used to depend on remembering `withOrg()` on ~574
+  hand-written queries, and four cross-org leaks got in that way. `models/tables.js`
+  is verified against the live schema (38 tenant / 8 global) — **a migration that
+  adds a table with `org_id` must add it there.** Conversion is incremental: raw
+  `supabase` still works, so unconverted call sites are unaffected.
+- **All outbound HTTP goes through `http-client.js`** (`fetchWithTimeout` /
+  `fetchWithRetry`). Node's `fetch` has no default timeout and a hung Graph/Gmail
+  socket used to stall a whole background sweep. **Retries are safe methods only** —
+  retrying a `POST /me/sendMail` on a timeout would send the email twice; use
+  `retryUnsafe` only where a replay is genuinely idempotent (token refresh).
 - **Data:** Supabase (Postgres + storage bucket `candidate-docs`). Project
   `teiqievahzhllojvgsku`. Migrations in `migrations/`.
 - **Frontend:** plain `<script>` modules in `public/js/NN-*.js`, loaded in order by
@@ -51,10 +76,13 @@ we never have to rewrite to grow (see "Growth bets" below).
   `render()` / `goPage()` are wrapped by each page module.
 - **Deploy:** Render (`fute-lms-backend.onrender.com`), auto-deploys from `main`.
   → Merging to `main` IS the release. That's how the owner gets to try things live.
-- **Tests:** `test/*.mjs` Playwright smokes that serve `public/` statically and drive
-  the real modules in headless Chromium (guest login, inject `STATE`, assert on
-  render output). `bash test/verify-frontend.sh` checks syntax + index.html.
-  Run: `npm install --no-save playwright-core`; Chromium at `$PLAYWRIGHT_BROWSERS_PATH`.
+- **Tests: `npm test`** runs all 32 suites via `test/run-all.mjs` and reports one
+  summary. It judges by **exit code**, not by grepping stdout — the suites print
+  results in two different formats, so a stdout grep silently mis-reports whole
+  suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
+  17 suites are Playwright: `playwright-core` is now a devDependency, Chromium at
+  `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). If 17 suites fail at once with a
+  module error, that is the missing dep, not 17 broken tests.
 - **Two vocabularies, don't conflate:** recruiting candidate progress lives on
   `submissions.stage` (**11 ATS stages** since Session 6: Sourced, Screening,
   Submitted to BDM, Submitted to Client, Interview Scheduled, Interview Completed,
@@ -66,8 +94,9 @@ we never have to rewrite to grow (see "Growth bets" below).
     `33-stage-modal.js` is canonical (`window.ATS_STAGE_LIST`/`ATS_SUB_STAGES`/
     `ATS_STAGE_COLORS` + `normalizeStage()`); duplicated copies in
     `25-workflow-bd.js`, `28-page-pipeline.js`, `30-page-candidate.js`,
-    `05-page-dashboard.js`, and the backend `bd_recruiter_routes.js` (`STAGES` +
-    `STAGE_ALIASES`). `normalizeStage()` (backend + frontend) maps any legacy stored
+    `05-page-dashboard.js`, and the backend **`services/recruiting-core.js`**
+    (`STAGES` + `STAGE_ALIASES` — moved there from `bd_recruiter_routes.js` in the
+    Session 9 split). `normalizeStage()` (backend + frontend) maps any legacy stored
     value to the current name on read and write, so a rename can ship before its data
     migration without breaking boards/funnels/reports.
 

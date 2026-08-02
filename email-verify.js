@@ -15,15 +15,12 @@
 // ============================================================================
 const { emailSyntaxValid } = require('./email-validation');
 const { getActiveVerifier } = require('./config/integrations');
+const httpClient = require('./http-client');
 
+// Thin adapter over the shared client, keeping this file's (url, ms, options)
+// argument order so the provider adapters below are unchanged.
 async function fetchJson(url, ms = 8000, options = {}) {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), ms);
-  try {
-    const res = await fetch(url, { ...options, signal: ctrl.signal });
-    const data = await res.json().catch(() => ({}));
-    return { ok: res.ok, status: res.status, data };
-  } finally { clearTimeout(t); }
+  return httpClient.fetchJson(url, options, { timeoutMs: ms });
 }
 
 // ── Provider adapters ────────────────────────────────────────────────────────

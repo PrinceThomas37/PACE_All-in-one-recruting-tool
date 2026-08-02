@@ -7,6 +7,9 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { resolveSignatureHtml, fillSignatureHtml } = require('../email-signature');
+const { fetchWithTimeout, fetchWithRetry } = require('../http-client');
+
+const OAUTH_TIMEOUT_MS = 15000;
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -33,11 +36,13 @@ router.get('/auth/microsoft/callback', async (req, res) => {
     if (msError) return res.send(`<script>window.opener&&window.opener.postMessage({type:'ms_oauth_error',error:'${msError}'},'*');window.close();</script>`);
     if (!code || !state) return res.status(400).send('Missing code or state');
     const { userEmailId, userId } = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());
-    const tokenRes = await fetch(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, code, redirect_uri: MS_REDIRECT, grant_type: 'authorization_code', scope: MS_SCOPES }) });
+    // No retry on the code exchange: an OAuth authorization code is single-use,
+    // so a replay fails with invalid_grant and buries the real error.
+    const tokenRes = await fetchWithTimeout(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, code, redirect_uri: MS_REDIRECT, grant_type: 'authorization_code', scope: MS_SCOPES }) }, { timeoutMs: OAUTH_TIMEOUT_MS });
     const tokens = await tokenRes.json();
     if (tokens.error) return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:'${tokens.error_description}'},'*');window.close();</scr`+`ipt>`);
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-    const profileRes = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+    const profileRes = await fetchWithRetry('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } }, { timeoutMs: OAUTH_TIMEOUT_MS });
     const profile = await profileRes.json();
     const emailAddress = profile.mail || profile.userPrincipalName || '';
 

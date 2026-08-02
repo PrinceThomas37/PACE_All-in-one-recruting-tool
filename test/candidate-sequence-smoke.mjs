@@ -246,7 +246,15 @@ const SEED = () => ({
 // The job-attached default renders "Opportunity: " and "a  role we're working
 // on with ." when there is no job_order — every variable degrades to empty.
 {
-  const src = require('node:fs').readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+  // This block asserts on SOURCE TEXT, so it has to follow the code when it
+  // moves. The candidate_email channel and its templates were extracted from
+  // index.js into routes/recruiting/outreach.js (index.js is the sales engine;
+  // this was ~547 lines of recruiting logic sitting inside it). Reading the
+  // wrong file here would make every assertion below silently vacuous, so the
+  // file is checked for content before anything is matched against it.
+  const src = require('node:fs').readFileSync(new URL('../routes/recruiting/outreach.js', import.meta.url), 'utf8');
+  ok('the recruiting outreach module is where the candidate channel lives',
+    /registerChannel\('candidate_email'/.test(src), 'candidate_email channel not found — did it move again?');
   ok('a separate nurture default exists', /DEFAULT_CANDIDATE_NURTURE_EMAIL/.test(src));
   const block = (src.match(/DEFAULT_CANDIDATE_NURTURE_EMAIL\s*=\s*\{[\s\S]*?\};/) || [''])[0];
   ok('the nurture template references no job variables',

@@ -1,6 +1,11 @@
-# FUTE LMS Backend — Context Window (Session 8 latest; older sessions below)
+# FUTE LMS Backend — Context Window (Session 9 latest; older sessions below)
 
-> **Latest work is Session 8** — jump to "## Session 8" at the very end. Session 8
+> **Latest work is Session 9** — jump to "## Session 9" at the very end. It is the
+> **restructure** the owner asked for at the end of Session 8, done: reliability
+> (timeouts/retries/rate limits), a `models/` layer that makes org scoping
+> structural, and the two oversized files split. Backend-only, no UI change.
+>
+> **Previously: Session 8** — jump to "## Session 8". Session 8
 > shipped Steps 0-3, merged and deployed Steps 0-2, applied migrations 033-036 to
 > the LIVE database, and carries a **dependency map that must be read before any
 > folder restructure**. Session 7 below is the same body of work mid-flight.
@@ -1045,3 +1050,195 @@ Recommended shape — the **narrow** version, not match-the-poster:
 Also outstanding: **set `CRON_KEY`**, merge PR #125, and verify one real
 Greenhouse/Lever board through the "Test it" button — the adapters have still
 never met a live feed.
+
+---
+
+## Session 9 — the restructure (Session 8 §8 items 1–4, done)
+
+**Dev branch**: `claude/context-file-continuation-yzne2a`, branched level with
+`main` after PR #125 merged. Four commits, each independently tested and pushed.
+**Backend-only — nothing about the app looks or behaves differently.** That is
+the point: this session bought structure and safety, not features.
+
+Picked up exactly where Session 8 §8 left it: *"do the restructure first in a
+fresh session, then Step 4."*
+
+### 1. Reliability — the two items that could bite today
+
+**Timeouts on every outbound call** (`http-client.js`). Node's `fetch` has **no
+default timeout**, and every outbound call used it bare. A hung Microsoft Graph
+or Gmail socket hung its caller forever — and those callers are the background
+sweeps in the single web process, so one bad connection could stall an entire
+reply sweep with no error and no log.
+
+Now behind `fetchWithTimeout` / `fetchWithRetry`: `graphMailRequest`, the MS
+token refresh, the Gmail provider's `oauthToken` + `api`, the MS OAuth callback,
+the zip lookup, all four Anthropic call sites. `email-verify.js` and
+`routes/integrations.js` had each grown their own AbortController helper; both
+now adapt to the shared one.
+
+> **The retry rule, do not widen it casually:** a timeout does not mean the
+> server never got the request. Retrying `POST /me/sendMail` would send the same
+> email twice. Retries are **safe methods only** unless a caller passes
+> `retryUnsafe` — used only for token refresh (idempotent, and a transient
+> failure there takes a whole mailbox offline). The OAuth **code exchange stays
+> un-retried**: an authorization code is single-use, so a replay fails with
+> `invalid_grant` and buries the real error.
+
+`lead-sources/index.js` keeps its own fetcher — it already had a timeout,
+injectable `fetchImpl` and bespoke error shaping covered by 78 tests.
+
+**Rate limits on the unauthenticated surface** (`middleware/rate-limit.js`).
+There were none. `POST /auth/login` was the real gap — unlimited guesses against
+a bcrypt hash is both a break-in route and a CPU-exhaustion route on a
+one-process service. Two limiters, because they stop different attacks and
+neither masks the other: **per-IP** (one host spraying many accounts) and
+**per-email** (one account guessed from many IPs). `/cron/tick` is limited too
+(key-gated, but the check runs after the request is accepted).
+
+The **pixel is limited by skipping the DB write, never by returning 429** — a
+mail client that gets an error renders a broken-image box to the recipient,
+which is worse than an uncounted open.
+
+Also set **`trust proxy: 1`**. Render terminates TLS at its proxy, so without it
+every request reports the proxy's address and the limiters would have counted
+the whole internet as one client. Exactly one hop, so `X-Forwarded-For` can't be
+spoofed past a limit.
+
+### 2. `models/` — org scoping you cannot forget
+
+The evidence for this was already in the repo: ~574 raw `supabase.from()` calls,
+and **four cross-org leaks in one session, every one the same shape** — a
+hand-written query that forgot `withOrg()`. The failure is silent (more rows,
+never an error), so reviewing 574 call sites is not a control.
+
+```js
+db.forRequest(req).from('candidates').select('*')   // scoped by construction
+db.forOrg(orgId).from('jobs').select('*')           // background jobs
+db.global.from('app_settings').select('*')          // no org_id column
+db.crossOrg('emails').select('*')                   // deliberate, greppable
+```
+
+Anything else throws `TenancyError` — a global table through a scoped accessor,
+a tenant table through `db.global`, or a table in neither list (a typo).
+
+**Not an ORM.** Every method returns the real Supabase builder, so all existing
+chaining works and converting call sites is mechanical. Transitional semantics
+match the `withOrg()` it replaces: no resolvable org ⇒ no filter.
+
+`models/tables.js` is verified against the **live schema**, not the migrations —
+022 created 33 tenant tables but 024/027/034/035 added five more, so the
+migration list alone is already wrong. **38 tenant / 8 global.**
+
+**Converted `routes/contacts.js` + `routes/reminders.js`, which closed a real
+bug**, not just proved the pattern: `PATCH /contacts/:id/email-status` updated a
+contact **by id with no org filter and — unlike the PUT/DELETE beside it — no
+`canTouchJob` check either**, so a BD in one org could patch another org's
+contact by guessing an id. Its OOO reminder was written unstamped. All four
+`/reminders` endpoints scoped by `user_id` alone.
+
+Safety was **checked, not assumed**: the live DB has one org and **zero null
+`org_id` rows** in any affected table (3,123 contacts, 6 reminders), so adding
+these filters is a provable no-op today and correct once org #2 exists.
+
+> **Recorded, not fixed:** `microsoft_tokens` and `gmail_tokens` have **no
+> `org_id`**. Reached only via `user_emails` (which is scoped), so not a live
+> leak — but close it with RLS (growth bet 1, slice 3b) before org #2.
+
+### 3. The two oversized files, split
+
+| | before | after |
+|---|---|---|
+| `bd_recruiter_routes.js` | 2,140 | **43** (mounter only) |
+| `index.js` | 3,403 | **2,868** |
+
+`routes/recruiting/{job-orders,candidates,submissions,pipeline,lookups,sourcing,analytics,outreach}.js`
++ `services/recruiting-core.js` + `services/candidate-fields.js`.
+
+**Why a shared core rather than just cutting the file up:** the old file relied
+on **function hoisting across its sections**. `recruiterCanTouchJob` was defined
+in the pipeline block and called from job-orders, relevance and sourcing;
+`invalidateJobScores` was defined in the relevance block and called from the
+CRUD above it; `SUBMISSION_SELECT` was declared in submissions and used by
+pipeline's promote. Cutting on section boundaries breaks exactly those calls —
+and breaks them **silently**, because the handlers catch broadly.
+
+A static scan for shared identifiers **caught four such references after the
+first cut** (`CANDIDATE_SELECT` in job-orders; `SUBMISSION_SELECT` / `EVENTS` /
+`emit` in pipeline). None would have thrown at load time.
+
+> **One near-miss worth carrying:** while moving `recruiterCanTouchJob` I
+> rewrote it as "BDM → true, non-recruiter → false". The original is
+> `if (!(isRecruiter(req) && !isBDM(req))) return true` — it constrains **only a
+> pure recruiter** and returns true for every other role. The rewrite would have
+> locked roles like `ra` out of job orders. Restored verbatim. **When moving
+> code, move it; do not tidy it on the way.**
+
+`index.js` is the **sales** engine (leads, send loop, follow-ups, sweeps). The
+~547 lines of recruiting logic inside it — the recruiting workflow channels,
+`POST /candidates/email`, `/companies/:id/email`, the interview-invite /
+create-meeting / meetings endpoints, `exitCandidateSequences` — moved to
+`routes/recruiting/outreach.js`. Mounted with a **call, not a top-of-file
+require**, because it needs `wfEngine` and the send helpers to exist first (same
+reason the wf/warmup/cron mounts sit where they do). All 18 values it needs are
+defined well before the mount point — no TDZ hazard.
+
+### 4. Verification (this touched the live send path, so it is heavier than "tests pass")
+
+- **Route parity:** the 58 pre-split recruiting route paths are byte-identical
+  before/after (diffed). `test/recruiting-routes-mounted.mjs` boots the **real
+  server** and asserts all **63** answer non-404 — from a **hard-coded** list
+  taken from the pre-split file, because a list regenerated from current source
+  would happily agree with a route that had just been deleted. It also asserts
+  an unknown path **does** 404, so those non-404s mean something, and pins the
+  two order-dependent literal routes.
+- **No logic lost:** every non-comment line of both old files is present in the
+  new ones. The only lines that "disappear" are `require` paths and the deps
+  destructure.
+- **The org-scoping test was run against the pre-conversion code and fails 11 of
+  13**, naming each unscoped query. It is a guard, not a rubber stamp.
+
+### 5. Packaging gaps found while verifying
+
+- **`playwright-core` was used by 17 suites and was not in `package.json`** —
+  now a devDependency. Without it, 17 suites fail with a module error that looks
+  like 17 broken tests.
+- **`npm test`** added (`test/run-all.mjs`). It judges by **exit code**: the
+  suites print results in two formats, and grepping stdout mis-reported 20
+  passing suites as failures during this session. Do not re-invent that grep.
+- Deleted the stray `gitignore` beside the real `.gitignore` (byte-identical,
+  inert) — the trivial cleanup flagged in Session 8 §6.
+
+### 6. Test status — 32 suites, all green
+
+New: `http-client-smoke` 45/45, `rate-limit-smoke` 26/26, `models-smoke` 47/47,
+`org-scoping-routes-smoke` 13/13, `recruiting-routes-mounted` 6/6.
+`test/candidate-sequence-smoke.mjs` asserts on **source text** and was reading
+`index.js`; it now reads `routes/recruiting/outreach.js` and gained a guard that
+fails loudly if the channel is not in the file it is reading — left alone it
+would have kept passing while asserting nothing.
+
+### 7. Where to pick up
+
+**Not done from Session 8 §8:** moving the 27 root modules into `services/`
+(item 4 — cosmetic, deliberately skipped). Of the four free reliability items,
+timeouts + retries + rate limiting are done; **a capacity estimate was not**.
+
+Still outstanding, unchanged and owner-facing:
+1. **`CRON_KEY` — still not set.** Same long random value in **both** Render's
+   env and a GitHub Actions secret. Until then `/cron/tick` 404s and background
+   jobs only run while somebody is using the app. **This blocks all overnight
+   automation and only the owner can do it.**
+2. **Verify one real Greenhouse/Lever board** through the "Test it" button — the
+   adapters have still never met a live feed (the sandbox blocks those hosts).
+3. **Step 4 — conversation intelligence.** The restructure that was meant to
+   come first is now done, so this is next. Note the known gap it inherits: the
+   reply sweep is **Microsoft-only**, so a sequence sent from a Gmail mailbox
+   cannot auto-exit on reply. `gmail-provider.listMessages/getMessage` exist and
+   **nothing calls them.**
+4. RLS (slice 3b) — **still do not enable on the live DB without a fresh
+   go-ahead.**
+
+**No migrations were written or applied this session.** The only live-DB access
+was **read-only** schema/count queries used to verify the tenancy registry and
+prove the new org filters are a no-op.
