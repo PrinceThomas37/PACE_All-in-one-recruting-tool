@@ -76,6 +76,16 @@ we never have to rewrite to grow (see "Growth bets" below).
   `render()` / `goPage()` are wrapped by each page module.
 - **Deploy:** Render (`fute-lms-backend.onrender.com`), auto-deploys from `main`.
   → Merging to `main` IS the release. That's how the owner gets to try things live.
+- **⚠ Render is on the FREE tier — treat instance hours as a hard budget.**
+  The owner flagged this explicitly. The free plan spins the service down after
+  ~15 min of no traffic and allows ~750 instance hours/month. Anything that keeps
+  the service permanently awake consumes ~730 h/month and leaves no headroom, so
+  **a frequent external pinger is a cost, not a free win.** The GitHub heartbeat
+  is therefore **every 30 min, not every 5** (`.github/workflows/heartbeat.yml`
+  carries the full reasoning). Due-ness lives in the DB, so a slower heartbeat
+  delays jobs but never skips them. Before adding anything that polls the server
+  on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
+  normal consequence of this and are why outbound timeouts are generous.
 - **Tests: `npm test`** runs all 32 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole

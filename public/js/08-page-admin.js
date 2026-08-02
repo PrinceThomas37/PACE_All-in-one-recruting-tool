@@ -459,3 +459,126 @@ function renderDeliverability(){
   '</div>';
 }
 
+
+// ── Background engine card (Admin page) ─────────────────────────────────────
+// futé's recurring work (follow-ups, reply/bounce sweeps, workflow ticks,
+// warm-up, lead sourcing) runs on a schedule. Until this card existed there was
+// NO way to see any of it from inside the app — if the engine stopped, the only
+// symptom was follow-ups quietly not going out, and you'd have to go to GitHub
+// to find out why. That is a bad answer for something meant to run unattended.
+//
+// The important distinction this card draws: CRON_KEY being set is not the same
+// as the heartbeat working. The key has to match on both sides (Render and the
+// GitHub Actions secret); a mismatch makes /cron/tick 404 and nothing runs. So
+// the status is driven by whether a ping has ACTUALLY ARRIVED recently, not by
+// whether a variable exists.
+function loadEngineStatus(force){
+  if(STATE._engineLoading)return;
+  if(STATE.engineStatus&&!force)return;
+  STATE._engineLoading=true;
+  apiGet('/admin/engine/status').then(function(r){
+    STATE.engineStatus=r||{};
+    STATE._engineLoading=false;
+    scheduleRender();
+  }).catch(function(){
+    // A failure here must never blank the Admin page — the card degrades to
+    // "couldn't read status" and everything else on the page still works.
+    STATE.engineStatus={_error:true};
+    STATE._engineLoading=false;
+    scheduleRender();
+  });
+}
+window.refreshEngineStatus=function(){STATE.engineStatus=null;loadEngineStatus(true);render();};
+
+function engineAgo(iso){
+  if(!iso)return 'never';
+  var secs=Math.floor((Date.now()-new Date(iso).getTime())/1000);
+  if(secs<0)secs=0;
+  if(secs<60)return secs+'s ago';
+  if(secs<3600)return Math.floor(secs/60)+'m ago';
+  if(secs<86400)return Math.floor(secs/3600)+'h ago';
+  return Math.floor(secs/86400)+'d ago';
+}
+function engineEvery(ms){
+  if(!ms)return '—';
+  var m=Math.round(ms/60000);
+  if(m<60)return 'every '+m+'m';
+  var h=Math.round(m/60);
+  return 'every '+h+'h';
+}
+window.runEngineJob=function(job){
+  showToast('Running '+job+'…','info');
+  apiPost('/admin/engine/run/'+encodeURIComponent(job),{}).then(function(r){
+    if(r&&r.ok===false&&r.error){showToast(job+' failed: '+r.error,'error');}
+    else{showToast(job+' finished','success');}
+    STATE.engineStatus=null;loadEngineStatus(true);
+  }).catch(function(e){
+    showToast('Could not run '+job+': '+(e&&e.message||e),'error');
+  });
+};
+
+function renderEngineCard(isAdmin){
+  var s=STATE.engineStatus;
+  if(s===undefined||s===null){
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text3)">Checking background engine…</div>';
+  }
+  if(s._error){
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text3)">'+
+      'Background engine status unavailable. <button onclick="refreshEngineStatus()" style="border:0;background:none;color:var(--accent);cursor:pointer;font-size:13px">Retry</button></div>';
+  }
+
+  var jobs=s.jobs||[];
+  // Three distinct states, because they need three different actions:
+  //   healthy  — pings arriving, nothing to do
+  //   no key   — CRON_KEY unset, setup never done
+  //   silent   — key is set but no ping has arrived: the two values disagree
+  var state = s.heartbeat_healthy ? 'healthy' : (s.cron_configured ? 'silent' : 'unset');
+  var tone = state==='healthy'
+    ? {bg:'var(--card)',bd:'var(--border)',dot:'var(--green)',fg:'var(--text)'}
+    : state==='silent'
+      ? {bg:'#fffbeb',bd:'#fcd34d',dot:'#d97706',fg:'#92400e'}
+      : {bg:'#fef2f2',bd:'#fca5a5',dot:'#dc2626',fg:'#b91c1c'};
+  var headline = state==='healthy'
+    ? 'Background engine: running'
+    : state==='silent'
+      ? 'Background engine: not receiving its heartbeat'
+      : 'Background engine: not set up';
+  var explain = state==='healthy'
+    ? 'Last heartbeat '+engineAgo(s.last_cron_ping_at)+'. Jobs run on their own schedule whether or not anyone is using the app.'
+    : state==='silent'
+      ? 'CRON_KEY is set on the server, but no heartbeat has arrived in over an hour. The usual cause is the value in Render and the GitHub Actions secret not matching exactly.'
+      : 'CRON_KEY is not set, so the heartbeat cannot sign in. Scheduled work only runs while somebody has the app open.';
+
+  var overdue=jobs.filter(function(j){return j.overdue;}).length;
+
+  var rows=jobs.map(function(j){
+    var lateTone=j.running?'var(--accent)':(j.overdue?'#b45309':'var(--text3)');
+    var lateLbl=j.running?'running now':(j.last_run_at?engineAgo(j.last_run_at):'never run');
+    return '<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-top:1px solid var(--border)">'+
+      '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:'+(j.running?'var(--accent)':(j.overdue?'#f59e0b':'var(--green)'))+'"></span>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13px;font-weight:600">'+htmlEsc(j.description||j.job)+'</div>'+
+        '<div style="font-size:11.5px;color:var(--text3)">'+htmlEsc(j.job)+' · '+engineEvery(j.every_ms)+'</div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:'+lateTone+';font-weight:'+(j.overdue?'600':'400')+';white-space:nowrap">'+lateLbl+'</div>'+
+      (isAdmin?'<button onclick="runEngineJob(\''+htmlEsc(j.job)+'\')" style="padding:4px 10px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Run now</button>':'')+
+    '</div>';
+  }).join('');
+
+  var open=!!STATE.engineExpanded;
+  return '<div style="background:'+tone.bg+';border:1px solid '+tone.bd+';border-radius:var(--r2);margin-bottom:16px;overflow:hidden">'+
+    '<div style="padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
+      '<div style="flex:1;min-width:220px">'+
+        '<div style="font-weight:700;font-size:14px;color:'+tone.fg+';display:flex;align-items:center;gap:8px">'+
+          '<span style="width:9px;height:9px;border-radius:50%;background:'+tone.dot+';display:inline-block"></span>'+
+          htmlEsc(headline)+
+          (overdue?'<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e">'+overdue+' overdue</span>':'')+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:3px">'+htmlEsc(explain)+'</div>'+
+      '</div>'+
+      '<button onclick="refreshEngineStatus()" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer">Refresh</button>'+
+      '<button onclick="STATE.engineExpanded='+(open?'false':'true')+';render()" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer">'+(open?'Hide jobs':'Show '+jobs.length+' jobs')+'</button>'+
+    '</div>'+
+    (open?'<div style="background:var(--card)">'+(rows||'<div style="padding:14px;font-size:13px;color:var(--text3)">No jobs registered.</div>')+'</div>':'')+
+  '</div>';
+}

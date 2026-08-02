@@ -374,6 +374,7 @@ function renderAdmin(){
   if(!userHasRole(u,'admin')){STATE.page='dashboard';return renderDashboard();}
   if(STATE.sendingPaused===undefined){loadSendingStatus();}
   if(STATE.raModes===undefined){loadManagerRaModes();}
+  if(STATE.engineStatus===undefined){loadEngineStatus();}
   var selectedUserId=STATE.adminSelectedUser||null;
   if(selectedUserId){return renderAdminUserDetail(selectedUserId);}
   if((STATE.adminView||'list')==='org'){return renderAdminOrgChart();}
@@ -481,6 +482,7 @@ function renderAdmin(){
       '</div>'+
     '</div></div>'+
     stopCard+
+    renderEngineCard(isAdmin)+
     '<div style="margin-bottom:14px">'+
       '<input class="inp" placeholder="Search by name, email, employee ID…" value="'+htmlEsc(STATE.adminSearch||'')+'" oninput="STATE.adminSearch=this.value;render()" style="max-width:360px">'+
     '</div>'+
