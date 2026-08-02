@@ -8,6 +8,7 @@ const { parseJobDescription, buildResearchFromLeadData, normalizeIndustry, norma
 const { learnSkillsForIndustry } = require('./learned-skills');
 const { fetchWithRetry, fetchWithTimeout } = require('./http-client');
 const { createRateLimiter, clientIp } = require('./middleware/rate-limit');
+const { createDb } = require('./models');
 
 // Outbound call budgets. Graph and the token endpoint sit on the critical path
 // of the background sweeps, which run in the single web process — an untimed
@@ -65,6 +66,14 @@ const app = express();
 const PORT = config.port;
 
 const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
+
+// Org-scoped data access. Through `db` you cannot query a tenant table without
+// declaring which org it is for — the alternative is remembering withOrg() on
+// every one of ~574 hand-written queries, which is how four cross-org leaks
+// reached the codebase in a single session. See models/index.js.
+// Migration is incremental and per-module: `supabase` stays available, so an
+// unconverted call site keeps working exactly as before.
+const db = createDb(supabase);
 
 // Every recurring background job registers here instead of owning a bare
 // setInterval. Due-ness is persisted in the DB, so an external pinger (needed
@@ -2594,7 +2603,7 @@ function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
 // Shared helpers/middleware stay defined above; routers receive them via ctx so
 // their closures and behaviour are identical to the original inline routes.
 const routeCtx = {
-  supabase, auth, hasRole, notGuest, today, orgIdFor, withOrg, orgStamp,
+  supabase, db, auth, hasRole, notGuest, today, orgIdFor, withOrg, orgStamp,
   loadMailboxSignatures, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody,
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
   logActivity, INDUSTRIES, normInd,
