@@ -61,6 +61,12 @@ const ROUTES = [
   ['POST', '/sourcing/search'],
   ['GET', '/recruiting-dashboard'], ['GET', '/reports/recruiting'], ['GET', '/team/activity'],
   ['GET', '/bd-analytics/recruiters'], ['GET', '/bd-analytics/funnel'],
+  // Extracted from index.js into routes/recruiting/outreach.js. These are the
+  // live candidate/client send path and the interview endpoints — the ones
+  // where a silent break costs an email that never goes out.
+  ['POST', '/candidates/email'], ['POST', '/companies/x/email'],
+  ['POST', '/submissions/x/interview-invite'], ['POST', '/submissions/x/create-meeting'],
+  ['POST', '/meetings'],
 ];
 
 // Routes whose literal path must win over a sibling :id pattern. Registration
