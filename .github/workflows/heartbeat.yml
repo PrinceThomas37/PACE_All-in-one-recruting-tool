@@ -31,10 +31,28 @@ name: engine heartbeat
 
 on:
   schedule:
-    # Every 5 minutes — GitHub's minimum for scheduled workflows. Schedules are
-    # best-effort and can be delayed under load, which is fine: each job still
-    # runs on its own cadence, this only decides how promptly it's noticed.
-    - cron: '*/5 * * * *'
+    # ── WHY 30 MINUTES AND NOT 5 ──────────────────────────────────────────
+    # This was */5. On Render's FREE tier that is actively harmful, because the
+    # free plan bills INSTANCE HOURS and spins the service down after ~15
+    # minutes with no traffic. Pinging every 5 minutes means it can never idle
+    # long enough to sleep — the service stays awake 24/7 and burns roughly 730
+    # hours a month against a ~750-hour monthly allowance. That is ~97% of the
+    # budget with no headroom, and if the account ever runs a second free
+    # service the allowance is blown and the app gets suspended until the month
+    # resets.
+    #
+    # At 30 minutes the service is awake for roughly half the time (~365
+    # hours/month), which leaves real headroom.
+    #
+    # What it costs: the finest job cadence that matters is the 30-minute reply
+    # and bounce sweeps, which now run every 30-60 minutes instead of every 30.
+    # The daily follow-up batch fires within ~30 minutes of its send time rather
+    # than within ~5. Due-ness lives in the DB (engine-runs.js), so nothing is
+    # ever SKIPPED by a slower heartbeat — it just happens later.
+    #
+    # If the service moves to a paid Render instance it never sleeps anyway, and
+    # this can go back to '*/5 * * * *' for tighter reply detection.
+    - cron: '*/30 * * * *'
   workflow_dispatch:        # allows a manual run from the Actions tab
 
 # If a run is somehow still going when the next fires, don't stack them.

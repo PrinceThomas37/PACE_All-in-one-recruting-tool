@@ -57,13 +57,28 @@ module.exports = (ctx) => {
   });
 
   // What the admin UI reads: is the engine actually running, and what happened.
+  //
+  // `cron_configured` only says a key is SET. That is not the same as the
+  // heartbeat working — the GitHub Actions secret has to match the Render one,
+  // and a mismatch shows up as /cron/tick 404ing, which is invisible from in
+  // here. So this also reports whether an external ping has actually arrived
+  // recently, which is the thing that is really being asked.
   router.get('/admin/engine/status', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Forbidden' });
     try {
+      const recent = await runner.recent(req.query.limit || 30);
+      const lastCron = recent.find(r => r.triggered_by === 'cron');
+      const lastCronAt = lastCron ? lastCron.started_at : null;
+      // The heartbeat fires far more often than this; anything older than an
+      // hour means it is not arriving, whatever the env var says.
+      const heartbeatHealthy = !!lastCronAt && (Date.now() - new Date(lastCronAt).getTime()) < 60 * 60 * 1000;
       res.json({
         jobs: await runner.status(),
-        recent: await runner.recent(req.query.limit || 30),
-        cron_configured: Boolean(process.env.CRON_KEY)
+        recent,
+        cron_configured: Boolean(process.env.CRON_KEY),
+        last_cron_ping_at: lastCronAt,
+        heartbeat_healthy: heartbeatHealthy,
+        server_time: new Date().toISOString(),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
