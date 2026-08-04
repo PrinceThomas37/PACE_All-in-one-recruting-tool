@@ -163,8 +163,12 @@ const req = { orgId: ORG, user: { org_id: ORG } };
 
 // ── 7. The registry itself ───────────────────────────────────────────────────
 {
-  // Verified against the live schema of project teiqievahzhllojvgsku.
-  ok('the registry covers all 38 live tenant tables', TENANT_TABLES.size === 38, String(TENANT_TABLES.size));
+  // Verified against the live schema of project teiqievahzhllojvgsku: 38 tables
+  // carried org_id at the time of the check, plus conversation_messages, which
+  // migration 037 adds and which is registered ahead of being applied.
+  ok('the registry covers all 38 live tenant tables + the one migration 037 adds',
+    TENANT_TABLES.size === 39, String(TENANT_TABLES.size));
+  ok('conversation_messages is registered as tenant data', TENANT_TABLES.has('conversation_messages'));
   ok('the registry lists the 8 live global tables', GLOBAL_TABLES.size === 8, String(GLOBAL_TABLES.size));
   const overlap = [...TENANT_TABLES].filter(t => GLOBAL_TABLES.has(t));
   ok('no table is in both lists', overlap.length === 0, overlap.join(','));

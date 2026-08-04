@@ -9,6 +9,7 @@ const { learnSkillsForIndustry } = require('./learned-skills');
 const { fetchWithRetry, fetchWithTimeout } = require('./http-client');
 const { createRateLimiter, clientIp } = require('./middleware/rate-limit');
 const { createDb } = require('./models');
+const conversationIntel = require('./conversation-intel');
 
 // Outbound call budgets. Graph and the token endpoint sit on the critical path
 // of the background sweeps, which run in the single web process — an untimed
@@ -2258,6 +2259,67 @@ async function sweepMailboxReplies(tokenRow, ownAddresses) {
   catch (e) { console.error(`[ReplySweep] list for ${tokenRow.email_address}: ${e.message}`); return 0; }
 
   const messages = data.value || [];
+  const { detected, newest } = await processInboundMessages(messages, ownAddresses, tokenRow, since);
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
+  return detected;
+}
+
+// Persist one message of a conversation, quote-stripped and trimmed.
+//
+// Best-effort by design, and guarded twice over:
+//   * migration 037 may not be applied yet — a missing table must not break the
+//     reply sweep, which is doing load-bearing work (stopping sequences);
+//   * the sweep deliberately re-reads an overlapping window, so the SAME message
+//     is offered repeatedly. The unique index on (provider, message_key) makes
+//     that a no-op, and a conflict here is success, not an error.
+//
+// If the table is missing we stop trying for the rest of the process rather than
+// throwing a caught error per message per sweep.
+let _convStoreDisabled = false;
+async function storeConversationMessage(msg, { direction, from, tokenRow, contactId, candidateId, jobId }) {
+  if (_convStoreDisabled) return;
+  try {
+    const raw = msg.body?.content || msg.bodyPreview || '';
+    const body = conversationIntel.cleanForStorage(raw);
+    const intent = conversationIntel.classifyIntent(body);
+    const { error } = await supabase.from('conversation_messages').insert({
+      contact_id: contactId || null,
+      candidate_id: candidateId || null,
+      job_id: jobId || null,
+      provider: msg._provider === 'gmail' ? 'gmail' : 'microsoft',
+      thread_key: msg.conversationId || msg.threadId || null,
+      message_key: msg.id || null,
+      direction,
+      from_email: from || null,
+      to_email: tokenRow?.email_address || null,
+      subject: (msg.subject || '').slice(0, 500),
+      body,
+      sent_at: msg.receivedDateTime || new Date().toISOString(),
+      intent: intent ? intent.id : null,
+      has_question: conversationIntel.hasQuestion(body),
+    });
+    if (error) {
+      // 23505 = unique violation = we already have this message. Expected.
+      if (error.code === '23505') return;
+      if (/relation .*conversation_messages.* does not exist/i.test(error.message || '')) {
+        console.warn('[conversation] migration 037 not applied yet — not storing message bodies');
+        _convStoreDisabled = true;
+        return;
+      }
+      throw error;
+    }
+  } catch (err) {
+    if (/does not exist/i.test(String(err.message || ''))) { _convStoreDisabled = true; return; }
+    console.error('[conversation] store failed:', err.message);
+  }
+}
+
+// The reply-handling brain, shared by the Microsoft and Gmail sweeps. Gmail
+// messages are reshaped into Graph's shape by gmailProvider.normalizeMessage,
+// so exactly one set of matching rules runs over both providers — the
+// alternative is two copies that drift, which is how the stage vocabulary ended
+// up hand-synced across six files.
+async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
   let detected = 0, newest = since;
   for (const msg of messages) {
     if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
@@ -2267,6 +2329,18 @@ async function sweepMailboxReplies(tokenRow, ownAddresses) {
     if (!from || ownAddresses.has(from)) continue; // ignore internal / our own mail
     const { data: matches } = await supabase.from('contacts')
       .select('id,job_id,replied_at,email').ilike('email', from).limit(10);
+
+    // Keep the actual message (Step 4). Before this, the only trace of an
+    // inbound reply was contacts.reply_snippet — 280 characters of the FIRST
+    // reply and nothing else, which is not enough to say who owes whom a reply.
+    // Stored regardless of whether the address matches a contact, since an
+    // unmatched reply is still part of the conversation.
+    await storeConversationMessage(msg, {
+      direction: 'inbound', from, tokenRow,
+      contactId: matches?.[0]?.id || null,
+      jobId: matches?.[0]?.job_id || null,
+    });
+
     for (const c of (matches || [])) {
       if (c.replied_at) continue; // already recorded
       const snippet = (msg.bodyPreview || '').slice(0, 280);
@@ -2316,21 +2390,67 @@ async function sweepMailboxReplies(tokenRow, ownAddresses) {
       }
     } catch (_) { /* best-effort */ }
   }
+  return { detected, newest };
+}
+
+// Gmail counterpart of sweepMailboxReplies. Until this existed, a Gmail-only
+// mailbox got NO reply detection at all — gmail-provider's listMessages and
+// getMessage were written and nothing ever called them. The consequence was the
+// worst kind: a nurture sequence sent from a Gmail mailbox kept emailing people
+// who had already written back, because nothing could see the reply.
+async function sweepGmailReplies(tokenRow, ownAddresses) {
+  if (!gmailProvider.isConfigured()) return 0;
+
+  const sinceKey = `reply_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+
+  // Gmail's search takes whole days, so this over-fetches slightly rather than
+  // risking a miss at the boundary; the `since` comparison below is exact and
+  // per-message dedup is handled by replied_at/last_reply_at already being set.
+  const afterDay = new Date(Math.max(0, Date.parse(since) - 24 * 3600 * 1000))
+    .toISOString().slice(0, 10).replace(/-/g, '/');
+  let heads;
+  try {
+    heads = await gmailProvider.listMessages(tokenRow.user_email_id, {
+      labelIds: ['INBOX'], q: `after:${afterDay}`, maxResults: 50,
+    });
+  } catch (e) { console.error(`[ReplySweep/gmail] list for ${tokenRow.email_address}: ${e.message}`); return 0; }
+
+  const messages = [];
+  for (const h of (heads || [])) {
+    try {
+      const raw = await gmailProvider.getMessage(tokenRow.user_email_id, h.id, { format: 'full' });
+      const norm = gmailProvider.normalizeMessage(raw);
+      // Re-apply the exact `since` bound the day-granular query could not.
+      if (norm && (!since || norm.receivedDateTime > since)) messages.push(norm);
+    } catch (_) { /* one unreadable message must not end the sweep */ }
+  }
+
+  const { detected, newest } = await processInboundMessages(messages, ownAddresses, tokenRow, since);
   await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
   return detected;
 }
 
 async function runReplySweep() {
   try {
-    const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address');
-    if (!tokens || !tokens.length) return 0;
+    const { data: msTokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address');
+    const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address');
+    const ms = msTokens || [], gm = gmTokens || [];
+    if (!ms.length && !gm.length) return 0;
+
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    tokens.forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...ms, ...gm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+
     let total = 0;
-    for (const t of tokens) {
+    for (const t of ms) {
       try { total += await sweepMailboxReplies(t, ownAddresses); }
       catch (e) { console.error(`[ReplySweep] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of gm) {
+      try { total += await sweepGmailReplies(t, ownAddresses); }
+      catch (e) { console.error(`[ReplySweep/gmail] ${t.email_address}: ${e.message}`); }
     }
     if (total) console.log(`[ReplySweep] detected ${total} repl(ies) — sequences stopped`);
     return total;
