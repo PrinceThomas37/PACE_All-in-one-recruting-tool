@@ -36,6 +36,11 @@ function renderDashboard(){
   var u=STATE.viewingUser||STATE.user;
   var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
 
+  // "What needs you today" — loaded once per dashboard visit. Guests have no
+  // backend behind this, and a "view as" preview must not fetch the viewer's
+  // own queue and label it someone else's.
+  if(!u.isGuest&&!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
+
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
   if(!isViewingOther&&isPureRecruiter(u))return renderRecruiterDashboard(u);
@@ -421,6 +426,8 @@ function renderRecruiterDashboard(u){
       '</div>'+
     '</div>'+
 
+    renderNextActionsCard()+
+
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your desk…</div>':'')+
 
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
@@ -540,6 +547,8 @@ function renderManagerDashboard(u){
         '<div><div class="bstat-val">'+(bs['Placement']||0)+'</div><div class="bstat-lbl">Placements</div></div>'+
       '</div>'+
     '</div>'+
+
+    renderNextActionsCard()+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your team\'s desk…</div>':'')+
 
@@ -665,6 +674,8 @@ function renderIndividualDashboard(u){
         '<div><div class="bstat-val">'+dups+'</div><div class="bstat-lbl">Duplicates</div></div>'+
       '</div>'+
     '</div>'+
+
+    renderNextActionsCard()+
 
     '<div class="flex gap2 mb4 flex-wrap">'+pickers+'</div>'+
 

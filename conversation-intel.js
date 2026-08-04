@@ -234,7 +234,11 @@ function analyzeThread(messages, opts = {}) {
 
   const questionPending = !!lastIn && last.direction === 'inbound' && hasQuestion(lastIn.body || '');
   const intent = lastIn ? classifyIntent(lastIn.body || '') : null;
-  const commitments = lastIn ? extractCommitments(lastIn.body || '', now) : [];
+  // Commitments resolve against WHEN THE MESSAGE WAS SENT, not now. "next week"
+  // said twelve days ago came due five days ago; resolving it against the
+  // current clock would push it perpetually into the future and no promise
+  // would ever be flagged as overdue.
+  const commitments = lastIn ? extractCommitments(lastIn.body || '', lastIn._t) : [];
 
   // State is deliberately coarse. These are the distinctions that change what
   // the user should DO; finer shades would be noise on a daily queue.
