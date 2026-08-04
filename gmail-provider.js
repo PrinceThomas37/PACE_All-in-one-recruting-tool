@@ -161,6 +161,60 @@ function createGmailProvider(ctx) {
     return api(token, `/messages/${id}?${p}`);
   }
 
+  // Reshape a Gmail message into the SAME shape Microsoft Graph returns, so the
+  // reply sweep can run one set of matching rules over both providers instead of
+  // growing a second copy. Two copies of that logic is exactly how the stage
+  // vocabulary ended up hand-synced across six files.
+  //
+  // Gmail nests the body in a MIME part tree and puts everything else in
+  // headers; Graph gives flat fields. This flattens Gmail to Graph's shape.
+  function normalizeMessage(raw) {
+    if (!raw) return null;
+    const headers = {};
+    for (const h of (raw.payload?.headers || [])) headers[String(h.name || '').toLowerCase()] = h.value;
+
+    // Walk the MIME tree, preferring text/plain (already quote-light) and
+    // falling back to text/html.
+    function pickBody(part, want) {
+      if (!part) return '';
+      if (part.mimeType === want && part.body?.data) return decodeB64Url(part.body.data);
+      for (const p of (part.parts || [])) {
+        const found = pickBody(p, want);
+        if (found) return found;
+      }
+      return '';
+    }
+    const text = pickBody(raw.payload, 'text/plain');
+    const html = pickBody(raw.payload, 'text/html');
+    const content = text || html || raw.snippet || '';
+
+    // Gmail's internalDate is epoch millis as a string.
+    const received = raw.internalDate
+      ? new Date(Number(raw.internalDate)).toISOString()
+      : (headers.date ? new Date(headers.date).toISOString() : new Date().toISOString());
+
+    // "Ada Lovelace <ada@x.com>" -> ada@x.com
+    const fromRaw = headers.from || '';
+    const addr = (/<([^>]+)>/.exec(fromRaw) || [null, fromRaw])[1].trim().toLowerCase();
+
+    return {
+      id: raw.id,
+      threadId: raw.threadId,
+      subject: headers.subject || '',
+      from: { emailAddress: { address: addr, name: fromRaw.replace(/<[^>]*>/, '').trim() } },
+      receivedDateTime: received,
+      bodyPreview: (raw.snippet || content).slice(0, 500),
+      body: { contentType: text ? 'text' : 'html', content },
+      internetMessageHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
+      _provider: 'gmail',
+    };
+  }
+
+  function decodeB64Url(data) {
+    try { return Buffer.from(String(data).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); }
+    catch (_) { return ''; }
+  }
+
   // ── Spam rescue / labels — remove SPAM, add INBOX ───────────────────────────
   async function modifyLabels(userEmailId, id, { add, remove } = {}) {
     const token = await getToken(userEmailId);
@@ -173,6 +227,7 @@ function createGmailProvider(ctx) {
   return {
     isConfigured, authorizeUrl, exchangeCode, getToken, getProfileEmail,
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
+    normalizeMessage,
   };
 }
 

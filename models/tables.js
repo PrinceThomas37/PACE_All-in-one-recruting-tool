@@ -27,6 +27,11 @@ const TENANT_TABLES = new Set([
   'client_documents',
   'companies',
   'contacts',
+  // Added by migration 037 (conversation intelligence). Listed here ahead of the
+  // migration being applied to the live DB, deliberately: the registry states
+  // what the table IS, and the code that writes it degrades safely while the
+  // table is still missing.
+  'conversation_messages',
   'email_send_log',
   'email_templates',
   'email_tracking',
