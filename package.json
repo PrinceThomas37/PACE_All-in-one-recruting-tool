@@ -1,7 +1,7 @@
 {
-  "name": "fute-lms-backend",
+  "name": "pace-recruiting",
   "version": "1.0.0",
-  "description": "Fute Global LLC - Lead Management Software API",
+  "description": "PACE — all-in-one recruiting platform (ATS + lead management) API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

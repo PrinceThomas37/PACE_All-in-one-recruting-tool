@@ -9,6 +9,7 @@
 // ============================================================================
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const sso = require('../services/sso');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -37,6 +38,43 @@ module.exports = (ctx) => {
     try {
       if (!provider.isConfigured()) return notConfiguredPage(res);
       const { code, state, error: gErr } = req.query;
+
+      // SIGN-IN vs MAILBOX-CONNECT — same registered redirect URI, told apart by
+      // a signed state. See routes/microsoft.js for the full reasoning.
+      const signIn = sso.readSignInState(state);
+      if (signIn) {
+        if (gErr) return res.status(400).send(sso.failurePage(String(gErr)));
+        if (!code) return res.status(400).send(sso.failurePage('Google did not return an authorization code.'));
+        try {
+          const tokens = await provider.exchangeCode(code);
+          if (tokens.error) return res.status(400).send(sso.failurePage(tokens.error_description || tokens.error));
+
+          // Prefer the id_token: it carries email_verified, which the userinfo
+          // endpoint's plain email does not. An UNVERIFIED address must never
+          // start a session — otherwise someone registers a Google account
+          // claiming your work address and signs in as you.
+          let email = '', verified = null;
+          if (tokens.id_token) {
+            try {
+              const claims = JSON.parse(Buffer.from(String(tokens.id_token).split('.')[1], 'base64').toString());
+              email = claims.email || '';
+              verified = claims.email_verified;
+            } catch (_) { /* fall back below */ }
+          }
+          if (!email) email = await provider.getProfileEmail(tokens.access_token);
+          if (verified === false) {
+            return res.status(403).send(sso.failurePage('That Google address is not verified. Verify it with Google, then try again.'));
+          }
+
+          const out = await sso.sessionForEmail(supabase, email, { provider: 'google' });
+          if (!out.ok) return res.status(403).send(sso.failurePage(out.message));
+          return res.send(sso.completionPage(out.token, signIn.redirect || '/'));
+        } catch (err) {
+          console.error('[sso/google] callback failed:', err.message);
+          return res.status(500).send(sso.failurePage('Sign-in failed. Please try again.'));
+        }
+      }
+
       if (gErr) return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',error:'${gErr}'},'*');window.close();</scr` + `ipt>`);
       if (!code || !state) return res.status(400).send('Missing code or state');
       const parsed = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());

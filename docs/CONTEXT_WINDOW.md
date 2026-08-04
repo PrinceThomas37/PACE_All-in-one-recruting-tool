@@ -1242,3 +1242,125 @@ Still outstanding, unchanged and owner-facing:
 **No migrations were written or applied this session.** The only live-DB access
 was **read-only** schema/count queries used to verify the tenancy registry and
 prove the new org filters are a no-op.
+
+---
+
+## Session 9, part 2 — Step 4 shipped, and the automation actually switched on
+
+Same dev branch, restarted from `main` after each merge. **Three PRs merged and
+deployed this session: #127 (restructure), #128 (engine card + heartbeat), #129
+(Step 4).** `main` verified green after every merge.
+
+### 1. `CRON_KEY` is SET and VERIFIED — the automation is live
+
+This had been outstanding since Session 7 and blocked everything overnight. The
+owner set it; **verification was done from the GitHub Actions log, not taken on
+trust**, because "success" on that workflow is misleading — it deliberately
+`exit 0`s with a warning when the key is missing.
+
+The run that proves it (`workflow_dispatch`, head `9351a22`):
+
+```
+CRON_KEY: ***
+HTTP 200
+{"ok":true,"ran":[],"skipped":["followup","bounce_sweep","reply_sweep",
+ "pending_retry","wf_tick","warmup_tick","lead_sourcing"]}
+```
+
+`ran:[]` with everything `skipped` is correct — nothing was due. Skipping when
+not due is the mechanism that stops the pinger and the in-process timers from
+double-running a job.
+
+**An earlier run on the same day showed `CRON_KEY:` empty** — that is what the
+unset state looks like in the log, worth recognising.
+
+### 2. Render free tier — a constraint that changed a decision
+
+The owner flagged Render is on the **free tier**. That made the old `*/5`
+heartbeat actively harmful: the free plan bills **instance hours** and sleeps
+after ~15 min idle, so a 5-minute ping meant the service never slept — ~730 h
+against a ~750 h monthly allowance, i.e. no headroom, and a second free service
+would blow it and suspend the app.
+
+Changed to **`*/30`** (~365 h/month). Due-ness lives in the DB, so this delays
+jobs and never skips them. **Now recorded in `CLAUDE.md` as durable memory** —
+ask what a new poller costs before adding one.
+
+**Worth knowing:** the Actions history showed the scheduled runs were already
+landing roughly **hourly**, not every 5 minutes — GitHub throttles schedules on
+free/public repos. So `*/5` was never delivering what it claimed, and `*/30` is
+closer to what GitHub will actually give. Expect 30-60 min in practice.
+
+### 3. Background engine card (PR #128)
+
+The recurring jobs had **no representation in the UI at all** — the
+`/admin/engine/status` endpoint existed and nothing read it. If the engine
+stopped, the only symptom was follow-ups quietly not going out.
+
+The card's whole point is a distinction: **`CRON_KEY` being set is not the same
+as the heartbeat working.** The key must match in Render AND the GitHub secret;
+a mismatch 404s `/cron/tick` while the server still reports "configured". So the
+card keys off `heartbeat_healthy` (has a ping actually arrived in the last hour),
+not off the env var. Three states: running / not receiving its heartbeat / not
+set up. `engine-card-smoke` specifically asserts the middle state does NOT render
+as healthy — a green light there would be worse than no card.
+
+### 4. Step 4 — conversation intelligence (PR #129)
+
+| Piece | What |
+|---|---|
+| `conversation-intel.js` | reads a thread → direction, elapsed time each way, question pending, intent floor, commitments, headline, priority. **Pure + injectable clock.** |
+| `next-action.js` | ranks it into one daily queue: replies owed, commitments come due, reminders, silences worth chasing |
+| `routes/next-actions.js` | `GET /next-actions`, hierarchy-scoped (own/team/org) |
+| `public/js/44-next-actions.js` | the "Needs you today" card on all three real-login dashboards |
+| `migrations/037_conversation_intel.sql` | `conversation_messages` — **WRITTEN, NOT APPLIED** |
+
+**Gmail reply detection did not exist.** `gmail-provider.listMessages/getMessage`
+were written and **nothing ever called them**, so a sequence sent from a Gmail
+mailbox kept emailing people who had already replied. Fixed by normalizing Gmail
+messages into **Graph's shape** and extracting the per-message logic into one
+shared `processInboundMessages`. One brain, two fetchers.
+
+**Reminders never fired.** Written for years by the OOO flow and the workflow
+engine, read only by their own page; nothing anywhere surfaced a due one. They
+now enter the queue.
+
+**Two bugs the tests caught, both of which would have quietly discredited the
+feature:**
+1. commitments resolved against `now` instead of the message's send time, so
+   "next week" said twelve days ago stayed perpetually seven days in the future
+   and no promise could ever come due;
+2. reminder due-ness compared against the **end** of the due day, so every
+   reminder fired a day late.
+
+**Design rules pinned by tests, do not relax them:**
+- opted-out / "not interested" threads produce **no action, ever** (compliance);
+- a send from yesterday is **not** queued (a list full of "you emailed them
+  yesterday" is one nobody opens);
+- conversation-driven items are **not dismissible** — they vanish when the fact
+  changes. A queue you can clear without doing the work stops describing reality.
+
+### 5. Test status — 36 suites
+
+New this part: `conversation-intel-smoke` 64/64, `gmail-sweep-smoke` 33/33,
+`next-action-smoke` 36/36, `engine-card-smoke` 18/18.
+
+### 6. Where to pick up
+
+1. **Apply migration 037** when the owner gives a fresh go-ahead — it is what
+   lets futé keep the real conversation instead of 280 chars of the first reply.
+   Everything works without it; the reasoning is just thinner.
+2. **Verify one real Greenhouse/Lever board** through the "Test it" button — the
+   adapters have still never met a live feed (sandbox blocks those hosts).
+3. Outbound messages are not yet written to `conversation_messages` — threads
+   take the outbound side from the `emails` table. Fine today; worth unifying
+   when the one-timeline work (plan Step 4, "one unified timeline") is done.
+4. Still open and unchanged: RLS slice 3b (**never enable on the live DB without
+   a fresh go-ahead**), per-role permissions, CSV import/export + public API,
+   generalized audit trail, PWA polish, Stripe seam, folding the legacy
+   un-org-scoped `/bd-analytics/*` into the org-scoped reports, and retiring the
+   orphaned "Manager Users" page.
+
+**Live-DB posture this session: READ-ONLY.** The only queries run against
+Supabase were schema/count reads used to verify the tenancy registry and to
+prove the new org filters were a no-op. No migration was applied.

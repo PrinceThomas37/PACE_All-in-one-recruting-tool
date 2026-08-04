@@ -189,7 +189,7 @@
         '<div style="font-size:15px;font-weight:700;margin-bottom:6px">No boards being watched yet</div>'+
         '<div style="font-size:13px;color:var(--text2);max-width:560px;margin:0 auto 14px">'+
           'Add a company whose careers page runs on Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Recruitee, '+
-          'and futé will check it daily for new openings and bring them here for you to review.</div>'+
+          'and PACE will check it daily for new openings and bring them here for you to review.</div>'+
         '<button class="btn btn-primary" onclick="srcdSetView(\'sources\')">Add a board to watch</button>'+
       '</div>';
     }
@@ -272,7 +272,7 @@
           '</label>';
         }).join('')
       : '<div style="font-size:12.5px;color:var(--text3);padding:6px 0">'+
-          'No contact worked out yet. Add the company’s website and futé will work out the likely email format.'+
+          'No contact worked out yet. Add the company’s website and PACE will work out the likely email format.'+
         '</div>';
 
     return '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
@@ -380,7 +380,7 @@
         }).join('');
 
     return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-        '<div style="font-size:12.5px;color:var(--text3)">futé checks each board once a day and brings anything new to the review queue.</div>'+
+        '<div style="font-size:12.5px;color:var(--text3)">PACE checks each board once a day and brings anything new to the review queue.</div>'+
         (s.adding?'':'<button class="btn btn-primary btn-sm" onclick="srcdToggleAdd()">+ Watch a board</button>')+
       '</div>'+ addBlock + rows;
   }
@@ -412,7 +412,7 @@
     return '<div class="page">'+
       '<div style="margin-bottom:12px">'+
         '<div style="font-size:19px;font-weight:800">Sourced Leads</div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">Openings futé found on its own. Nothing is contacted until you add it here.</div>'+
+        '<div style="font-size:12.5px;color:var(--text3)">Openings PACE found on its own. Nothing is contacted until you add it here.</div>'+
       '</div>'+
       tabs + filters +
       (s.view==='queue' ? renderQueue() : renderSources()) +

@@ -841,7 +841,9 @@ window.openAddUser=function(){
         '<div class="fgrp"><label class="flbl">Role</label><select class="sel" id="u-role">'+roleOpts+'</select></div>'+
         '<div class="fgrp"><label class="flbl">Platform</label><select class="sel" id="u-plt"><option>Gmail</option><option>Outlook</option></select></div>'+
       '</div>'+
-      '<div style="font-size:12px;color:var(--text3);padding:8px 10px;background:var(--bg);border-radius:var(--r)">Default password: <strong>Fute@2024</strong></div>'+
+      '<div style="font-size:12px;color:var(--text3);padding:8px 10px;background:var(--bg);border-radius:var(--r);line-height:1.5">'+
+        'They sign in with <strong>Continue with Microsoft</strong> or <strong>Google</strong> using this email address — no password is created or shared.'+
+      '</div>'+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
       '<button class="btn btn-primary" onclick="saveUser(null)">Add user</button></div>'+

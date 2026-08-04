@@ -119,6 +119,12 @@ app.use('/auth/login', loginIpLimiter, loginEmailLimiter);
 // call often.
 app.use('/cron/tick', createRateLimiter({ name: 'cron', windowMs: 60 * 1000, max: 60 }));
 
+// Signup requests and the org-domain lookup are unauthenticated too. The domain
+// lookup in particular answers "do you know this company", so an unbounded one
+// is a free enumeration oracle.
+app.use('/auth/signup-request', createRateLimiter({ name: 'signup', windowMs: 60 * 60 * 1000, max: 10 }));
+app.use('/auth/sso/for-domain', createRateLimiter({ name: 'sso-domain', windowMs: 15 * 60 * 1000, max: 60 }));
+
 // The pixel is NOT given a 429 — see routes/tracking.js. A mail client that
 // gets an error instead of an image shows a broken-image box to the recipient,
 // which is a worse outcome than an uncounted open. The limiter is passed in and
@@ -2753,6 +2759,10 @@ app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
+// SSO sign-in. Mounted with gmailProvider + config so it can report which
+// providers are actually configured; the callbacks live in the microsoft/gmail
+// route modules, which already own each provider's registered redirect URI.
+app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
 

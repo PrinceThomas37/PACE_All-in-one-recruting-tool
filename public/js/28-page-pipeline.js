@@ -358,7 +358,7 @@
             '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
             '<button class="btn btn-outline" onclick="plCopyEmailJD()">Copy</button>'+
             '<button class="btn btn-outline" onclick="plSendEmailJD()">Open in mail app</button>'+
-            '<button class="btn btn-primary" onclick="plSendTracked()">✉ Send tracked through futé</button>'+
+            '<button class="btn btn-primary" onclick="plSendTracked()">✉ Send tracked through PACE</button>'+
           '</div>'+
         '</div>'+
       '</div>';

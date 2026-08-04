@@ -539,3 +539,13 @@ function renderVarChipBar(subjId,bodyId){
   '</div>';
 }
 
+
+// The signed-in customer's own name. PACE is the product; the organisation is
+// whoever is using it — Fute Global is one customer among others. The Admin
+// header used to hard-code "Fute Global LLC", which was fine when there was one
+// tenant and is wrong now.
+function orgDisplayName(){
+  return (STATE.org&&STATE.org.name)
+    ||(STATE.user&&(STATE.user.org_name||STATE.user.orgName))
+    ||'Your organisation';
+}
