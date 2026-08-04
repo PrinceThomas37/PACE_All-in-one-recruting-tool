@@ -157,6 +157,28 @@ intelligence. The plan also lists seven live defects sitting on this path (dropp
 untracked sequence sends, Gmail mailboxes getting no reply detection at all) — these
 get fixed as part of the work, not filed away.
 
+**ALL FIVE STEPS ARE NOW SHIPPED AND LIVE** (Steps 0-3 in Sessions 7-8, Step 4 in
+Session 9). What that means in practice:
+
+- **`conversation-intel.js`** reads a thread and returns who owes whom a reply,
+  elapsed time each way, outstanding questions, an intent floor, commitments, a
+  plain-English headline and a priority. **Pure, with an injectable clock** — every
+  headline is a factual claim about elapsed time, so never call it with the real
+  clock in a test. Rules-first; the AI seam sits behind the same output shape.
+- **`next-action.js`** ranks all of that into one "needs you today" queue
+  (`GET /next-actions`, hierarchy-scoped like `/reports/recruiting`), surfaced by
+  `public/js/44-next-actions.js` on all three real-login dashboards.
+  **Opted-out / "not interested" threads must never produce an action** — that is
+  a compliance rule, not a preference, and it is pinned by a test.
+- **Reply detection now covers Gmail as well as Outlook.** One shared
+  `processInboundMessages` in index.js; Gmail messages are reshaped into Graph's
+  shape by `gmailProvider.normalizeMessage`. **Do not add a second sweep** — two
+  copies is how the stage vocabulary ended up hand-synced across six files.
+- **⚠ Migration `037_conversation_intel.sql` (`conversation_messages`) is WRITTEN
+  but NOT APPLIED to the live DB.** Until it is, threads fall back to the `emails`
+  table + `contacts.replied_at`/`reply_snippet` — thinner, still correct. The
+  write path is guarded so the app is right either way. Needs a fresh go-ahead.
+
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
 Ordered by "cheapest to do now vs. most painful to retrofit":
