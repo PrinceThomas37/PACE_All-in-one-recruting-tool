@@ -38,6 +38,30 @@ function createGmailProvider(ctx) {
     });
     return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
   }
+
+  // SIGN-IN ONLY. Deliberately NOT authorizeUrl above.
+  //
+  // authorizeUrl requests gmail.send + gmail.modify, which are Google
+  // RESTRICTED scopes: they require Google's security review before anyone
+  // outside a small test list can consent, and they show the user a consent
+  // screen asking to "read, compose and send email" — an absurd thing to demand
+  // from someone who only wants to log in.
+  //
+  // Signing in needs identity and nothing else, and openid/email/profile are
+  // ORDINARY scopes: no review, and an honest consent screen ("see your name
+  // and email"). Reusing the mailbox URL here would have silently made Google
+  // sign-in depend on the very approval process it is supposed to sidestep.
+  const SIGNIN_SCOPES = 'openid email profile';
+  function signInAuthorizeUrl(state) {
+    requireConfigured();
+    const p = new URLSearchParams({
+      client_id: cfg.clientId, response_type: 'code', redirect_uri: cfg.redirectUri,
+      scope: SIGNIN_SCOPES, state,
+      // No offline access: sign-in needs no refresh token, so don't ask for one.
+      prompt: 'select_account',
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+  }
   async function oauthToken(params) {
     // retryUnsafe: a token exchange/refresh is idempotent, and a transient
     // failure here takes the whole mailbox offline until the next sweep.
@@ -227,7 +251,7 @@ function createGmailProvider(ctx) {
   return {
     isConfigured, authorizeUrl, exchangeCode, getToken, getProfileEmail,
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
-    normalizeMessage,
+    normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
   };
 }
 

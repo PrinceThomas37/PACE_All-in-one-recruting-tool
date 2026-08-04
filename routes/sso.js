@@ -130,7 +130,11 @@ module.exports = (ctx) => {
           ));
         }
         const state = sso.signState({ provider: 'google', redirect: redirectTo });
-        return res.redirect(gmailProvider.authorizeUrl(state));
+        // signInAuthorizeUrl, NOT authorizeUrl: the latter asks for gmail.send +
+        // gmail.modify (Google RESTRICTED scopes), which would both demand
+        // Google's security review and show a "read and send your email"
+        // consent screen to somebody who only wants to log in.
+        return res.redirect(gmailProvider.signInAuthorizeUrl(state));
       }
 
       return res.status(404).send(sso.failurePage('Unknown sign-in provider.'));

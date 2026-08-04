@@ -42,9 +42,9 @@ function renderLogin(){
       '<div class="login-top">'+
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'+
           '<div style="line-height:1;flex-shrink:0"><span style="font-family:var(--display);font-weight:700;font-size:36px;color:#fff;letter-spacing:-.5px">PA</span><span style="font-family:var(--display);font-weight:700;font-size:36px;color:#F5C23B;letter-spacing:-.5px">CE</span></div>'+
-          '<div><div style="font-family:var(--display);font-weight:700;font-size:20px;color:#fff;line-height:1.2">PACE</div><div style="font-size:12px;color:rgba(255,255,255,.82);margin-top:2px">All-in-one Recruiting Platform</div></div>'+
+          '<div><div style="font-family:var(--display);font-weight:700;font-size:17px;color:#fff;line-height:1.25">All-in-one Recruiting Platform</div><div style="font-size:12px;color:rgba(255,255,255,.82);margin-top:3px">Applicant tracking · Lead management · Outreach</div></div>'+
         '</div>'+
-        '<div style="font-size:11.5px;color:rgba(255,255,255,.65);border-top:1px solid rgba(255,255,255,.2);padding-top:10px">Applicant tracking · Lead management · Outreach</div>'+
+        '<div style="font-size:11.5px;color:rgba(255,255,255,.65);border-top:1px solid rgba(255,255,255,.2);padding-top:10px">Sign in to your workspace</div>'+
       '</div>'+
       '<div class="login-body">'+
         '<div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px">'+

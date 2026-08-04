@@ -156,6 +156,33 @@ function fakeSupabase() {
   ok('the SSO session TTL matches the password login (8h)', sso.SESSION_TTL === '8h', sso.SESSION_TTL);
 }
 
+// ── 6. Google SIGN-IN must not request mailbox scopes ───────────────────────
+// The bug this guards: the sign-in flow originally reused the MAILBOX
+// authorize URL, which asks for gmail.send + gmail.modify. Those are Google
+// RESTRICTED scopes — they require Google's security review before anyone
+// outside a test list can consent, and they show "read, compose and send
+// email" to someone who only wants to log in. Signing in needs identity only.
+{
+  const { createGmailProvider } = require('../gmail-provider.js');
+  const g = createGmailProvider({ supabase: null, google: {
+    clientId: 'cid', clientSecret: 'sec', redirectUri: 'https://app.test/cb',
+    scopes: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify openid',
+  }});
+  const signIn = decodeURIComponent(g.signInAuthorizeUrl('STATE123'));
+  ok('sign-in does NOT request gmail.send', !/gmail\.send/.test(signIn), signIn);
+  ok('sign-in does NOT request gmail.modify', !/gmail\.modify/.test(signIn), signIn);
+  ok('sign-in requests openid', /openid/.test(signIn));
+  ok('sign-in requests email', /\bemail\b/.test(signIn));
+  ok('sign-in does not ask for offline access (no refresh token needed)', !/access_type=offline/.test(signIn), signIn);
+  ok('the state is carried', /STATE123/.test(signIn));
+
+  // The mailbox flow must still request the mailbox scopes — this fix must not
+  // have quietly broken sending.
+  const mailbox = decodeURIComponent(g.authorizeUrl('S'));
+  ok('the MAILBOX flow still requests gmail.send', /gmail\.send/.test(mailbox));
+  ok('...and still asks for offline access (it needs a refresh token)', /access_type=offline/.test(mailbox));
+}
+
 console.log('\n=== SSO SMOKE ===');
 let failed = 0;
 for (const r of results) {
