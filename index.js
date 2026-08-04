@@ -2763,6 +2763,7 @@ app.use(require('./routes/next-actions')(routeCtx));
 // providers are actually configured; the callbacks live in the microsoft/gmail
 // route modules, which already own each provider's registered redirect URI.
 app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
+app.use(require('./routes/org-domains')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
 

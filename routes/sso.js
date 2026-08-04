@@ -12,6 +12,7 @@
 // ============================================================================
 const express = require('express');
 const sso = require('../services/sso');
+const orgDomains = require('../services/org-domains');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -36,34 +37,46 @@ module.exports = (ctx) => {
   // "Log In with your Organization" — which identity provider does this email
   // domain sign in with?
   //
-  // Today this answers from the users already in the system: if people on that
-  // domain exist, send them to a configured provider. That is honest about what
-  // is built — full SAML/Okta federation (per-org IdP metadata, certificates) is
-  // a separate piece, and THIS ENDPOINT IS THE SEAM IT SLOTS INTO. An unknown
+  // Answered from VERIFIED domain claims first (org_domains), falling back to
+  // "do accounts already exist on that domain" while nothing is claimed yet.
+  // Only verified claims count — an unverified one proves nothing and must
+  // never influence where somebody is sent to sign in.
+  //
+  // Full SAML/Okta federation (per-org IdP metadata, certificates) is still a
+  // separate piece, and THIS ENDPOINT IS THE SEAM IT SLOTS INTO. An unknown
   // domain gets a plain "we don't know you" rather than a dead redirect.
   //
   // Free mail providers are refused outright: nobody's *organisation* is
   // gmail.com, and treating one as an org is how a domain-based system gets
   // hijacked later.
-  const FREE_MAIL = new Set([
-    'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com',
-    'yahoo.com', 'yahoo.co.in', 'icloud.com', 'me.com', 'aol.com', 'proton.me',
-    'protonmail.com', 'gmx.com', 'mail.com', 'zoho.com', 'rediffmail.com',
-  ]);
-
   router.get('/auth/sso/for-domain', async (req, res) => {
     try {
-      const domain = String(req.query.domain || '').toLowerCase().trim().replace(/^@/, '');
+      const domain = orgDomains.normalizeDomain(req.query.domain);
       if (!domain || domain.indexOf('.') < 0) {
         return res.json({ provider: null, message: 'That does not look like a company domain.' });
       }
-      if (FREE_MAIL.has(domain)) {
+      if (orgDomains.isFreeMailDomain(domain)) {
         return res.json({
           provider: null,
           message: `${domain} is a personal email provider, not an organisation. Use the Microsoft or Google button above.`,
         });
       }
 
+      // A VERIFIED claim is the authoritative answer. Only verified rows are
+      // consulted — an unverified claim proves nothing and must never influence
+      // where somebody is sent to sign in.
+      try {
+        const { data: claimed } = await ctx.supabase.from('org_domains')
+          .select('org_id,domain').eq('domain', domain).not('verified_at', 'is', null).maybeSingle();
+        if (claimed) {
+          const provider = microsoftReady() ? 'microsoft' : googleReady() ? 'google' : null;
+          if (provider) return res.json({ provider, domain, org_known: true });
+        }
+      } catch (_) { /* migration 038 not applied yet — fall through */ }
+
+      // Fallback while no domains are claimed: infer from the accounts that
+      // already exist on that domain. Useful today, and superseded the moment a
+      // real claim is verified.
       const { data: rows } = await ctx.supabase.from('users')
         .select('id,platform').ilike('email', `%@${domain}`).eq('is_active', true)
         .is('deleted_at', null).limit(5);

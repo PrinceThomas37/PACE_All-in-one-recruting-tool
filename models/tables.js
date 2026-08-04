@@ -76,6 +76,12 @@ const GLOBAL_TABLES = new Set([
   'microsoft_tokens',  // same. See the note in models/index.js about this.
   'id_sequences',      // human-readable id counters
   'organizations',     // the tenant table itself
+  // org_domains HAS an org_id, but is listed here on purpose: sign-in looks it
+  // up BY DOMAIN before any org context exists, so a request-scoped accessor
+  // could never read it. It is reached via the raw client with an explicit
+  // .eq('org_id', …) in the admin routes, and by domain (no org filter) in the
+  // sign-in lookup — which is the one query that legitimately spans orgs.
+  'org_domains',
 ]);
 
 const isTenantTable = (t) => TENANT_TABLES.has(t);
