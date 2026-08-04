@@ -2753,6 +2753,10 @@ app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
+// SSO sign-in. Mounted with gmailProvider + config so it can report which
+// providers are actually configured; the callbacks live in the microsoft/gmail
+// route modules, which already own each provider's registered redirect URI.
+app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
 

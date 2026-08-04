@@ -8,6 +8,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { resolveSignatureHtml, fillSignatureHtml } = require('../email-signature');
 const { fetchWithTimeout, fetchWithRetry } = require('../http-client');
+const sso = require('../services/sso');
 
 const OAUTH_TIMEOUT_MS = 15000;
 
@@ -33,6 +34,38 @@ router.get('/auth/microsoft/connect', async (req, res) => {
 router.get('/auth/microsoft/callback', async (req, res) => {
   try {
     const { code, state, error: msError } = req.query;
+    // SIGN-IN vs MAILBOX-CONNECT. Both arrive at this one registered redirect
+    // URI; the state says which. Doing it this way means enabling "Sign in with
+    // Microsoft" needed no change to the Azure app registration. The state is a
+    // signed JWT, so this branch cannot be entered by forging a query string.
+    const signIn = sso.readSignInState(state);
+    if (signIn) {
+      if (msError) return res.status(400).send(sso.failurePage(String(msError)));
+      if (!code) return res.status(400).send(sso.failurePage('Microsoft did not return an authorization code.'));
+      try {
+        const tRes = await fetchWithTimeout(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, code, redirect_uri: MS_REDIRECT, grant_type: 'authorization_code', scope: MS_SCOPES }),
+        }, { timeoutMs: OAUTH_TIMEOUT_MS });
+        const t = await tRes.json();
+        if (t.error) return res.status(400).send(sso.failurePage(t.error_description || t.error));
+
+        const pRes = await fetchWithRetry('https://graph.microsoft.com/v1.0/me',
+          { headers: { Authorization: `Bearer ${t.access_token}` } }, { timeoutMs: OAUTH_TIMEOUT_MS });
+        const profile = await pRes.json();
+        // Entra guarantees userPrincipalName; `mail` is only set when a mailbox
+        // exists, so it is preferred but cannot be relied on alone.
+        const email = profile.mail || profile.userPrincipalName || '';
+
+        const out = await sso.sessionForEmail(supabase, email, { provider: 'microsoft' });
+        if (!out.ok) return res.status(403).send(sso.failurePage(out.message));
+        return res.send(sso.completionPage(out.token, signIn.redirect || '/'));
+      } catch (err) {
+        console.error('[sso/microsoft] callback failed:', err.message);
+        return res.status(500).send(sso.failurePage('Sign-in failed. Please try again.'));
+      }
+    }
+
     if (msError) return res.send(`<script>window.opener&&window.opener.postMessage({type:'ms_oauth_error',error:'${msError}'},'*');window.close();</script>`);
     if (!code || !state) return res.status(400).send('Missing code or state');
     const { userEmailId, userId } = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());

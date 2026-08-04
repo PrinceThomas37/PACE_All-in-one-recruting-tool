@@ -119,7 +119,16 @@ router.post('/users', auth, async (req, res) => {
     const { name, email, password, roles, role, employee_id, designation, platform } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
     const userRoles = roles || (role ? [role] : ['ra']);
-    const hash = await bcrypt.hash(password || 'Fute@2024', 10);
+    // Every new user used to get the SAME password, 'Fute@2024' — hard-coded in
+    // this file, shown in the admin UI, and never forced to change. Anyone who
+    // had ever seen it could sign in as any newly-created colleague.
+    //
+    // Now: an admin may still set an explicit password, but the default is a
+    // random one nobody knows. That is deliberately NOT a lockout — the intended
+    // way in is "Continue with Microsoft / Google", which needs no password at
+    // all. An admin who wants a password account sets one on purpose.
+    const initialPassword = password || require('crypto').randomBytes(24).toString('base64url');
+    const hash = await bcrypt.hash(initialPassword, 10);
     // New staff belong to the creating admin's organization (multi-tenant).
     const orgId = ctx.orgIdFor ? ctx.orgIdFor(req) : (req.orgId || null);
     const { data, error } = await supabase.from('users').insert({

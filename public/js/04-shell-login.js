@@ -18,10 +18,7 @@ function renderLogin(){
       '<div class="login-body">'+
         '<div style="font-family:var(--display);font-weight:600;font-size:17px;margin-bottom:5px">Welcome back</div>'+
         '<div style="font-size:13px;color:var(--text3);margin-bottom:20px">Sign in with your Fute Global account</div>'+
-        '<button class="google-btn" onclick="showToast(\'Google Workspace login coming soon. Use email and password for now.\',\'info\')">'+
-          '<span style="width:20px;height:20px;display:inline-flex">'+icon("google")+'</span>'+
-          'Continue with Google Workspace'+
-        '</button>'+
+        ssoButtons()+
         '<button onclick="doGuestLogin()" style="display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:10px;border:1.5px dashed rgba(30,122,60,.35);border-radius:8px;background:rgba(30,122,60,0.05);font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:14px;font-family:inherit;color:#1E7A3C">'+
           '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E7A3C" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'+
           'Continue as Guest &nbsp;<span style="font-size:11px;color:#9ca3af;font-weight:400">· Portfolio preview</span>'+
@@ -134,3 +131,85 @@ function renderApp(){
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}
 
+
+// ── SSO sign-in ─────────────────────────────────────────────────────────────
+// "Continue with Microsoft / Google" — the flow people expect from every other
+// tool they use. Replaces a button that used to be a placeholder: it showed
+// "Google Workspace login coming soon" and did nothing, which is worse than no
+// button at all.
+//
+// A provider's button only renders when that provider is actually configured on
+// the server (GET /auth/sso/providers), so a visible button always works.
+function loadSsoProviders(){
+  if(STATE.ssoProviders!==undefined||STATE._ssoLoading)return;
+  STATE._ssoLoading=true;
+  // Plain fetch, not apiGet — this runs on the login screen, before any session
+  // exists, and must never trigger the 401 handling that bounces to login.
+  fetch(API_URL+'/auth/sso/providers').then(function(r){return r.json();}).then(function(d){
+    STATE.ssoProviders=(d&&d.providers)||[];
+    STATE._ssoLoading=false;
+    render();
+  }).catch(function(){
+    // If we can't tell, show nothing rather than a button that may fail.
+    STATE.ssoProviders=[];
+    STATE._ssoLoading=false;
+  });
+}
+
+var SSO_ICON={
+  microsoft:'<svg width="18" height="18" viewBox="0 0 23 23"><path fill="#f35325" d="M1 1h10v10H1z"/><path fill="#81bc06" d="M12 1h10v10H12z"/><path fill="#05a6f0" d="M1 12h10v10H1z"/><path fill="#ffba08" d="M12 12h10v10H12z"/></svg>',
+  google:'<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-3.9H24v7.1h12.1c-.2 1.8-1.6 4.5-4.5 6.4l6.9 5.4c4.1-3.8 6.6-9.4 6.6-15z"/><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.8 1.3-4.3 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C7.9 40.9 15.4 46 24 46z"/><path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.8-2.9-.8-4.4s.3-3 .7-4.4l-7.1-5.5A22 22 0 0 0 2 24c0 3.5.9 6.9 2.4 9.9l7.1-5.5z"/><path fill="#EB4335" d="M24 9.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 3.4 29.9 1 24 1 15.4 1 7.9 6.1 4.4 13.5l7.1 5.5C13.3 13.3 18.2 9.5 24 9.5z"/></svg>'
+};
+
+function ssoButtons(){
+  if(STATE.ssoProviders===undefined){loadSsoProviders();return '';}
+  var list=STATE.ssoProviders||[];
+  if(!list.length)return '';
+  return list.map(function(p){
+    return '<button class="google-btn" onclick="startSso(\''+p.id+'\')">'+
+      '<span style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">'+(SSO_ICON[p.id]||'')+'</span>'+
+      htmlEsc(p.label)+
+    '</button>';
+  }).join('');
+}
+
+window.startSso=function(provider){
+  // A full-page redirect, not a popup: popups get blocked, and the identity
+  // providers increasingly refuse to render inside one.
+  window.location.href=API_URL+'/auth/sso/'+encodeURIComponent(provider);
+};
+
+// Pick up the session the SSO callback hands back.
+//
+// It arrives in the URL FRAGMENT (#sso=…), never the query string — fragments
+// are not sent to the server, so the token stays out of access logs, proxy logs
+// and Referer headers. It is consumed and scrubbed from the address bar
+// immediately so it can't be shoulder-surfed or pasted into a bug report.
+function consumeSsoToken(){
+  var h=window.location.hash||'';
+  var m=/[#&]sso=([^&]+)/.exec(h);
+  if(!m)return false;
+  var token=decodeURIComponent(m[1]);
+  try{history.replaceState(null,'',window.location.pathname+window.location.search);}catch(_){window.location.hash='';}
+  sessionStorage.setItem('fg_token',token);
+  STATE.token=token;
+  // Fetch the profile with the new token; on failure fall back to the login
+  // screen rather than a half-signed-in state.
+  fetch(API_URL+'/users/me',{headers:{Authorization:'Bearer '+token}})
+    .then(function(r){return r.ok?r.json():Promise.reject(new Error('profile'));})
+    .then(function(u){
+      STATE.user=normaliseUser(u);
+      sessionStorage.setItem('fg_user',JSON.stringify(STATE.user));
+      STATE.page='dashboard';
+      // Same tail as the password path (23-auth-guest.js) so an SSO session and
+      // a password session are indistinguishable from here on.
+      loadAppData();
+    })
+    .catch(function(){
+      sessionStorage.removeItem('fg_token');
+      STATE.token=null;STATE.user=null;STATE.page='login';
+      showToast('Signed in, but your profile could not be loaded. Please try again.','error');
+      render();
+    });
+  return true;
+}
