@@ -94,7 +94,7 @@ window.guestSimulate=function(action,payload){
 };
 
 window.doLogin=function(){
-  if(IS_FILE){showToast('Open via fute-lms-backend.onrender.com','warning');return;}
+  if(IS_FILE){showToast('Open PACE in your browser, not from a file','warning');return;}
   var em=(document.getElementById('login-email')||{}).value||'';
   var pw=(document.getElementById('login-pass')||{}).value||'';
   if(!em||!pw){var e=document.getElementById('login-err');if(e){e.textContent='Enter email and password';e.style.display='block';}return;}

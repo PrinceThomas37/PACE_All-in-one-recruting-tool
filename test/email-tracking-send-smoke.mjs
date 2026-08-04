@@ -1,5 +1,5 @@
 // Verifies email-tracking slice 2 (the visible payoff):
-//  - the "Email JD" modal offers a "Send tracked through futé" action
+//  - the "Email JD" modal offers a "Send tracked through PACE" action
 //  - plSendTracked posts recipients (with candidate_id) + subject/body/job to
 //    POST /candidates/email
 //  - the candidate profile shows an Email activity card with "Opened" / "not opened"
@@ -62,7 +62,7 @@ try {
     await new Promise(r => setTimeout(r, 50));
     return { modal, captured };
   });
-  step('Email JD modal offers "Send tracked through futé"', /Send tracked through fut/.test(send.modal));
+  step('Email JD modal offers "Send tracked through PACE"', /Send tracked through PACE/.test(send.modal));
   step('Modal still offers the mail-app fallback', /Open in mail app/.test(send.modal));
   step('plSendTracked posts to /candidates/email', send.captured && send.captured.url === '/candidates/email', send.captured && send.captured.url);
   step('payload carries the job id', send.captured && send.captured.body.job_order_id === 'j1');
