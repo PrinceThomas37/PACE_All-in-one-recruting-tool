@@ -1614,3 +1614,28 @@ package.json in Session 9 without updating the lock file. Fixed by running
   product tour) and pre-existing, but under self-serve signup it deserves a
   fresh decision. Not changed here; changing it unasked would break the demo.
 - Step 4 (plan entitlements + the Stripe seam) is untouched.
+
+## Session 10 addendum — migrations 037, 038 and 039 APPLIED
+
+Owner gave an explicit go-ahead ("apply all three, then merge"). Applied in
+order against project `teiqievahzhllojvgsku`, then verified against the live
+schema rather than trusting the "success" return:
+
+| Check | Result |
+|---|---|
+| Tables with RLS disabled | **0 of 48** (was 37) |
+| Tables with no service-role policy | 0 · 48 policies |
+| `org_id` on `microsoft_tokens` / `gmail_tokens` | present, backfilled, 0 nulls |
+| `users.last_login_at` / `last_login_method` | present |
+| `users_role_check` | now includes `associate_director`, `director` |
+| Default org | `plan=internal, kind=internal` |
+| `org_domains`, `conversation_messages` | exist |
+
+`npm test` re-run after: 40/40. The live Render service could not be reached
+from the sandbox (the agent proxy 403s `*.onrender.com`, the same block that
+stops the Greenhouse/Lever adapters being tested), so the post-apply check is
+schema-level plus the local suite — not a live request. Nothing in the batch
+changes a code path the running deployment takes: every column is additive, and
+RLS is transparent to the service key the backend connects with.
+
+**Next migration number is 040.**

@@ -43,9 +43,8 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 
 ## Self-serve signup — built, switched OFF
 
-All four steps of the plan now have code. **Steps 1–2 are merged; steps 3–4 sit
-on the dev branch.** Nothing is open to the public, because the whole thing is
-behind one env var:
+Steps 1–3 are built and merged. Nothing is open to the public, because the whole
+thing sits behind one env var:
 
 1. ✅ Organisations get plan / status / kind
 2. ✅ Domain claiming with DNS verification
@@ -59,8 +58,9 @@ signing in with Microsoft/Google gets the same "ask your administrator" refusal
 they always got, and no account is created. Turning it on is a Render env var,
 not a release.
 
-**Do not turn it on until migrations 038 AND 039 are applied.** 039 is the
-isolation batch; it exists precisely so it lands *before* strangers can create
+**Its prerequisites are now met** — migrations 038 and 039 are applied (below),
+so switching it on is a decision rather than a dependency. 039 is the isolation
+batch, and it exists precisely so it landed *before* strangers can create
 workspaces, not after.
 
 ### How a sign-in routes (the three destinations, and only three)
@@ -77,27 +77,36 @@ we deliberately refuse, and it is pinned by a test.
 
 ## Owner actions outstanding (only they can do these)
 
-1. **Apply migrations 037, 038, 039** (see below) — one go-ahead, then me.
-2. **Google sign-in** — create a Google Cloud OAuth client, set
+1. **Google sign-in** — create a Google Cloud OAuth client, set
    `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Render. Redirect URI must be
    exactly `https://<host>/auth/google/callback`. The button then appears by
    itself. **Do the host rename first if it is going to happen at all.**
-3. **Rename the Render host** (optional) — `fute-lms-backend.onrender.com` is
+2. **Rename the Render host** (optional) — `fute-lms-backend.onrender.com` is
    still the live address. Needs the Render service renamed **and** the Azure
    app registration updated, together.
-4. Verify one real Greenhouse/Lever board via the "Test it" button — the
+3. Verify one real Greenhouse/Lever board via the "Test it" button — the
    adapters have never met a live feed (the sandbox blocks those hosts).
 
-## Migrations written but NOT applied to the live DB
+## Migrations — ALL APPLIED to the live DB (2026-08-05)
 
-| | What | Consequence of waiting |
-|---|---|---|
-| `037_conversation_intel` | `conversation_messages` | Threads fall back to the `emails` table + `contacts.replied_at`. Thinner, still correct. |
-| `038_org_domains_and_plans` | `org_domains`, plus plan/status/kind on `organizations` | Domain claiming returns "not enabled yet". Self-serve signup cannot be switched on. |
-| `039_tenant_isolation` | RLS on 37 tables; `org_id` on the two OAuth token tables; `last_login_at`/`method`; the role CHECK fix | **The anon key can currently read every table, including `microsoft_tokens` — customers' mailbox refresh tokens.** Also: picking Associate Director or Director as a role fails at the database today. |
+`037_conversation_intel`, `038_org_domains_and_plans` and `039_tenant_isolation`
+were applied together with the owner's explicit go-ahead, and verified against
+the live schema afterwards:
 
-All three are additive and degrade safely. **Never apply a migration to the live
-database without a fresh, explicit go-ahead.**
+| Verified | Result |
+|---|---|
+| Tables with RLS disabled | **0 of 48** (was 37, including `microsoft_tokens`) |
+| Tables missing a service-role policy | 0 · 48 policies total |
+| `org_id` on `microsoft_tokens` / `gmail_tokens` | present, backfilled, **0 nulls** |
+| `users.last_login_at` / `last_login_method` | present — `sso.js` was writing to columns that did not exist |
+| `users_role_check` | now accepts `associate_director` and `director` |
+| Default org | `plan=internal, kind=internal` — reads as ours, not a paying customer |
+
+`conversation_messages` and `org_domains` exist, so conversation intelligence
+stores real threads and domain claiming answers for real.
+
+**The next migration is 040.** Never apply one to the live database without a
+fresh, explicit go-ahead — this one had it.
 
 ---
 

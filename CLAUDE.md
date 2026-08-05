@@ -66,11 +66,11 @@ we never have to rewrite to grow (see "Growth bets" below).
     `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
 - **Data access: use `models/` — do NOT hand-write `supabase.from()` on tenant
   tables.** `db.forRequest(req).from('candidates')` scopes to the caller's org by
-  construction; `db.global.from(…)` is for the 8 tables with no `org_id`;
+  construction; `db.global.from(…)` is for the 7 tables with no `org_id`;
   `db.crossOrg(…)` is the named, greppable escape hatch. Anything else throws.
   This exists because org scoping used to depend on remembering `withOrg()` on ~574
   hand-written queries, and four cross-org leaks got in that way. `models/tables.js`
-  is verified against the live schema (38 tenant / 8 global) — **a migration that
+  is verified against the live schema (41 tenant / 7 global) — **a migration that
   adds a table with `org_id` must add it there.** Conversion is incremental: raw
   `supabase` still works, so unconverted call sites are unaffected.
 - **All outbound HTTP goes through `http-client.js`** (`fetchWithTimeout` /
@@ -95,7 +95,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 38 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 40 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
@@ -226,15 +226,18 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      below), and RLS (slice 3b, next).
    - **Slice 3a DONE** (migration `023`): `org_id` is now `NOT NULL` on all tenant
      tables (safe — every row backfilled + column DEFAULT).
-   - **Slice 3b WRITTEN, NOT APPLIED** (migration `039_tenant_isolation`): RLS +
-     service-role policies on the **37 tables that still have it disabled** — which
-     today includes `microsoft_tokens`, i.e. customers' mailbox refresh tokens are
-     readable with the anon key. Same migration gives `microsoft_tokens`/
-     `gmail_tokens` an `org_id` (both moved to `TENANT_TABLES`). Proven-safe pattern
-     (already live on 9 tables; the backend uses the SERVICE key and the browser
-     never touches Supabase). **This must be applied BEFORE `SELF_SERVE_SIGNUP` is
-     turned on, never after** — that is the whole reason it is one batch. **Do NOT
-     apply it to the live DB without an explicit, fresh go-ahead.**
+   - **Slice 3b DONE** (migration `039_tenant_isolation`, applied 2026-08-05): RLS
+     + service-role policies on the 37 tables that still had it disabled — which
+     included `microsoft_tokens`, i.e. customers' mailbox refresh tokens were
+     readable with the anon key. Verified after: **0 of 48 tables without RLS, 0
+     without a service-role policy.** Same migration gave `microsoft_tokens`/
+     `gmail_tokens` an `org_id` (both now in `TENANT_TABLES`), added
+     `users.last_login_at`/`last_login_method`, and widened `users_role_check` to
+     accept `associate_director`/`director` — roles the UI had offered since
+     migration 026 and the database had rejected ever since. It landed BEFORE
+     `SELF_SERVE_SIGNUP` was turned on, which is the whole reason it is one batch.
+     **The next migration is 040; never apply one to the live DB without an
+     explicit, fresh go-ahead.**
    - **Self-serve signup is built and switched OFF** (`services/provisioning.js`).
      Where a brand-new sign-in lands is a **pure function** (`decide()`) because
      routing somebody into the wrong org is a breach that produces no error message.
