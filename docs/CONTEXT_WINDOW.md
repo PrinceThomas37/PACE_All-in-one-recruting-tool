@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-05 (end of Session 11) · **Repo**:
+**Updated**: 2026-08-05 (end of Session 11, after the #134 merge) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**: `claude/context-window-docs-t5ia4s`
@@ -35,33 +35,27 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Background automation actually running** — `CRON_KEY` is set and verified
 - **SSO sign-in with Microsoft** (Google is built but needs credentials)
 - The PACE rebrand and the rebuilt login page
-- Self-serve signup steps 1–3 (switched OFF — see below)
+- Self-serve signup, all four steps (switched OFF — see below)
+- **Plans, limits and entitlements — enforced, not decorative.** The default org
+  is on the `internal` plan (unlimited), so nothing changed for it.
+- **No guest / demo mode anywhere.** `Bearer guest` used to grant read-only
+  access to the default org's live data. Closed in production by **#134**.
 
-## ⏳ On the dev branch, NOT yet merged — PR #134
+## Waiting on the owner (nothing technical is blocked)
 
-Two things are finished, tested (41/41) and waiting on the owner. **They are not
-live until #134 merges**, so do not describe them as shipped:
-
-1. **The guest bypass and all demo data are removed.** `Bearer guest` granted
-   read-only access to the DEFAULT org — a real customer's live data — and
-   `01-seed-demo.js` generated a fake world a user briefly saw before their own
-   data loaded. Both gone, along with the legacy lead-gen dashboard that only
-   the demo data ever fed.
-2. **Plans, entitlements and the Stripe seam** (self-serve step 4).
-
-**Waiting on the owner, and the reason each is theirs:**
 - **Prices.** Deliberately `null` on every tier — what PACE costs is a product
   decision, and an invented number on a screen looks decided. Proposed to them:
   Starter ₹4,000 / Pro ₹12,000 / Business ₹30,000 per month. One-line change in
-  `services/plans.js`.
-- **Whether to take card payments at all.** Plans and limits are real without
-  Stripe; online payment needs a Stripe account. The alternative they were
-  offered is invoicing and changing plans by hand.
+  `services/plans.js`; the billing card says "pricing not published yet" until
+  then.
+- **Whether to take card payments at all.** Plans and limits are enforced
+  without Stripe; online payment needs a Stripe account and migration 040. The
+  alternative offered was invoicing and changing plans by hand.
 
 ## Self-serve signup — built, switched OFF
 
-Steps 1–3 are merged; step 4 is on PR #134. Nothing is open to the public,
-because the whole thing sits behind one env var:
+All four steps are merged and live. Nothing is open to the public, because the
+whole thing sits behind one env var:
 
 1. ✅ Organisations get plan / status / kind
 2. ✅ Domain claiming with DNS verification
@@ -104,10 +98,8 @@ we deliberately refuse, and it is pinned by a test.
    app registration updated, together.
 3. Verify one real Greenhouse/Lever board via the "Test it" button — the
    adapters have never met a live feed (the sandbox blocks those hosts).
-4. **Set prices, and decide whether to take card payments** — see PR #134 above.
-   Both block nothing technically; plans are enforced either way.
-5. **Merge #134** (their call, as always) — then the guest bypass is closed in
-   production, not just on a branch.
+4. **Set prices, and decide whether to take card payments** — see above. Neither
+   blocks anything technically; plans are enforced either way.
 
 ## Plans — the rules that must not be softened
 
@@ -204,9 +196,22 @@ go-ahead.**
 
 ## Where this session ended
 
-PR **#134** open as a draft, 41/41 green, containing the guest/demo removal and
-plans+payments. The owner has been shown the billing screen and asked for prices
-and a payments decision. Nothing else is in flight.
+**#133 and #134 both merged; `main` verified 41/41 green after each.** The guest
+bypass is closed in production, not just on a branch. Migrations 037-039 are
+applied and verified; **040 is written and unapplied** and only matters when
+payments are switched on.
+
+Nothing is in flight. The owner has the billing screen and two open decisions
+(prices, payments). **The next thing I proposed building is CSV import/export**
+— a customer leaving Bullhorn or Ceipal cannot bring their candidates today,
+which is the biggest remaining blocker to selling to anyone who already has
+data.
+
+> Note for a future session: the live Render service is **not reachable from
+> this sandbox** (the agent proxy 403s `*.onrender.com`, the same block that
+> stops the Greenhouse/Lever adapters being tested). Post-merge verification is
+> therefore `main` + the full suite + schema checks, never a live request. Say
+> so rather than implying the deployed app was smoke-tested.
 
 ## Working rules
 

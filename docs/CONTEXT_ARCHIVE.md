@@ -1761,3 +1761,27 @@ app is correct before and after.
 ## Tests: 41 suites
 
 New `plans-billing-smoke` (69 assertions). `npm test` green after each part.
+
+## Session 11 close-out — #134 merged
+
+Merged to `main` (squash, `19383bb`) on the owner's "Merge #134". `main` checked
+out fresh and verified after: **41/41 suites**, and greps confirming zero
+remaining `Bearer guest` / `isGuest` / `notGuest` references anywhere in
+`index.js`, `routes/`, `services/`, `middleware/` or `public/js/`, with
+`01-seed-demo.js` and `23-auth-guest.js` replaced by `01-constants.js` and
+`23-auth.js`.
+
+**The guest authentication bypass is now closed in production**, which was the
+point — it had been open the whole time self-serve signup was being built.
+
+**Not verified against the running deployment**, and this is worth remembering:
+the sandbox cannot reach `*.onrender.com` (the agent proxy 403s it, the same
+block that stops the Greenhouse/Lever adapters being tested). Post-merge
+confidence comes from `main` + the full suite + live schema queries, never from
+a request to the deployed app. Do not imply otherwise in a handoff.
+
+Left open deliberately: prices (`price: null` on every tier — the owner's call),
+whether to take card payments at all, and migration `040_billing.sql`, which is
+written, unapplied, and only matters once payments are switched on. Proposed
+next: **CSV import/export**, because a customer migrating off Bullhorn or Ceipal
+cannot bring their candidates today.
