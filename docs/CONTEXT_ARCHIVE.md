@@ -1469,3 +1469,23 @@ rather than rewritten from memory.
 New: `sso-smoke` 44/44, `org-domains-smoke` 56/56 (including both takeover
 cases). Renaming a button meant updating `email-tracking-send-smoke` — an
 intentional rename, so the assertion moved with it.
+
+### Session 9 close-out
+
+Merged to `main` in order: **#127** (restructure), **#128** (engine card +
+30-min heartbeat), **#129** (Step 4 conversation intelligence), **#130**
+(PACE rebrand + SSO sign-in), **#131** (claimable domains + the Google scope fix
++ this context split). `main` verified green after every merge.
+
+**`CRON_KEY` is set and verified** — proven from the GitHub Actions job log
+(`HTTP 200`, all seven jobs reporting), not from the workflow's green tick,
+which shows success even when the key is missing.
+
+**Left deliberately unapplied:** migrations 037 (`conversation_messages`) and
+038 (`org_domains` + org plans). Both additive, both degrade safely.
+
+**The context discipline starts here.** From this session on:
+`docs/CONTEXT_WINDOW.md` is rewritten to describe the present and stays short;
+this archive is appended to and never edited. If a future session finds the
+window growing past ~200 lines, that is the signal it has been appended to by
+mistake — move the excess here.

@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-02 (Session 9) · **Repo**:
+**Updated**: 2026-08-02 (end of Session 9) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**: `claude/context-file-continuation-yzne2a`
@@ -40,6 +40,8 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Background automation actually running** — `CRON_KEY` is set and verified
 - **SSO sign-in with Microsoft** (Google is built but needs credentials)
 - The PACE rebrand and the rebuilt login page
+- **Domain claiming with DNS verification** — code live; dormant until
+  migration 038 is applied, when it starts answering "not enabled yet" instead
 
 ## Owner actions outstanding (only they can do these)
 
@@ -66,8 +68,8 @@ database without a fresh, explicit go-ahead.**
 
 ## What I was doing when this session ended
 
-Building **self-serve signup**, in four steps. Steps 1–2 are done (PR #131,
-draft):
+Building **self-serve signup**, in four steps. Steps 1–2 are **merged and live**
+(PR #131):
 
 1. ✅ Organisations get plan / status / kind
 2. ✅ Domain claiming with DNS verification
