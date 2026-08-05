@@ -91,7 +91,9 @@ const engineRunner = createEngineRunner({ supabase });
 // own X-Forwarded-For.
 app.set('trust proxy', 1);
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
-app.use(express.json({ limit: '5mb' }));
+// `verify` keeps the raw bytes on the request. Stripe signs the exact body it
+// sent, so a re-serialised object cannot be verified — see routes/plans.js.
+app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── Rate limits on the unauthenticated surface ─────────────────
 // Everything else sits behind `auth`. These three are reachable by anyone, and
@@ -171,12 +173,11 @@ function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header) return res.status(401).json({ error: 'No token' });
   const token = header.replace('Bearer ', '');
-  // Guest bypass — read-only portfolio access
-  if (token === 'guest') {
-    req.user = { id: 'guest', name: 'Guest User', email: 'guest@futeglobal.com', role: 'bd', roles: ['bd'], isGuest: true, org_id: DEFAULT_ORG_ID };
-    req.orgId = DEFAULT_ORG_ID;
-    return next();
-  }
+  // There is deliberately no unauthenticated bypass here any more. A "guest"
+  // token used to hand anyone read-only access to the DEFAULT org — which is a
+  // real customer's live data. That was defensible while PACE was one company's
+  // internal tool and is not once strangers can sign up. If a product tour comes
+  // back it must be served from its own seeded org, never from this one.
   let claims;
   try {
     claims = jwt.verify(token, process.env.JWT_SECRET);
@@ -195,10 +196,10 @@ function auth(req, res, next) {
   next();
 }
 
-// Authorization helpers (hasRole, notGuest, canTouchJob, requireRole) live in
+// Authorization helpers (hasRole, canTouchJob, requireRole) live in
 // middleware/authorize.js. canTouchJob needs the Supabase client, so the module
 // is a factory. Behaviour is identical to the previous inline definitions.
-const { hasRole, notGuest, canTouchJob, requireRole } = require('./middleware/authorize')({ supabase });
+const { hasRole, canTouchJob, requireRole } = require('./middleware/authorize')({ supabase });
 
 const today = () => new Date().toISOString().split('T')[0];
 
@@ -586,14 +587,6 @@ app.use(express.static('public', {
     }
   }
 }));
-// Block all write operations for guest users
-app.use(function(req, res, next) {
-  if (['POST','PUT','PATCH','DELETE'].includes(req.method)) {
-    const token = (req.headers.authorization||'').replace('Bearer ','');
-    if (token === 'guest') return res.status(403).json({ error: 'Guest users have read-only access.' });
-  }
-  next();
-});
 // Any successful write may change jobs/contacts, so drop the /jobs cache — this
 // is what keeps the cache invisible to users (their own edits show up on the
 // very next poll). Internal mutations (send loop, sweeps) are covered by the TTL.
@@ -660,7 +653,6 @@ async function loadAllJobs(orgId) {
 
 app.post('/emails/retry-pending-window', auth, async (req, res) => {
   try {
-    if (notGuest(req, res)) return;
     let managerId = req.user.id;
     if (hasRole(req, 'admin', 'ra_lead') && req.body?.manager_id) managerId = req.body.manager_id;
     if (activeSendByUser.has(managerId)) {
@@ -676,7 +668,6 @@ app.post('/emails/retry-pending-window', auth, async (req, res) => {
 // Send a reminder follow-up through the Graph engine (fresh, non-threaded), like outreach.
 app.post('/emails/reminder-send', auth, async (req, res) => {
   try {
-    if (notGuest(req, res)) return;
     const { reminder_id, contact_id, job_id, to_email, subject, body } = req.body;
     if (!to_email || !emailSyntaxValid(to_email)) return res.status(400).json({ error: 'Valid recipient email required' });
     if (!subject || !subject.trim() || !body || !body.trim()) return res.status(400).json({ error: 'Subject and body required' });
@@ -2755,7 +2746,7 @@ function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
 // Shared helpers/middleware stay defined above; routers receive them via ctx so
 // their closures and behaviour are identical to the original inline routes.
 const routeCtx = {
-  supabase, db, auth, hasRole, notGuest, today, orgIdFor, withOrg, orgStamp,
+  supabase, db, auth, hasRole, today, orgIdFor, withOrg, orgStamp,
   loadMailboxSignatures, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody,
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
   logActivity, INDUSTRIES, normInd,
@@ -2790,8 +2781,9 @@ app.use(require('./routes/next-actions')(routeCtx));
 // route modules, which already own each provider's registered redirect URI.
 app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 app.use(require('./routes/org-domains')(routeCtx));
+app.use(require('./routes/plans')(routeCtx));
 
-require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, notGuest, today, orgIdFor });
+require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor });
 
 // ── Event-bus subscribers (the "react" half of the spherical structure) ─────
 // Registered after the work functions above exist; emitters elsewhere just
@@ -3022,5 +3014,5 @@ setTimeout(() => {
 }, 60 * 1000);
 
 // ── START ──────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Fute Global LMS API v3.0.0 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`PACE API v3.0.0 running on port ${PORT}`));
 module.exports = app;

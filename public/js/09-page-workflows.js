@@ -483,6 +483,7 @@ function renderAdmin(){
     '</div></div>'+
     stopCard+
     renderEngineCard(isAdmin)+
+    (isAdmin?renderPlanCard():'')+
     (isAdmin?renderOrgDomainsCard():'')+
     '<div style="margin-bottom:14px">'+
       '<input class="inp" placeholder="Search by name, email, employee ID…" value="'+htmlEsc(STATE.adminSearch||'')+'" oninput="STATE.adminSearch=this.value;render()" style="max-width:360px">'+

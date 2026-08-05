@@ -3,7 +3,7 @@
 // ----------------------------------------------------------------------------
 // Mounted from index.js with a single line:
 //
-//     require('./bd_recruiter_routes')(app, { supabase, db, auth, hasRole, notGuest, today });
+//     require('./bd_recruiter_routes')(app, { supabase, db, auth, hasRole, today });
 //
 // This file used to BE all ~65 recruiting routes plus every helper they share:
 // one 2,140-line closure. It is now just the mounter. The routes live in

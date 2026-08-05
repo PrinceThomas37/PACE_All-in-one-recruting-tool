@@ -158,7 +158,7 @@ window.setEmailTab=function(t){STATE.emailTab=t;STATE.raLeadSelectedBD=null;STAT
 
 
 function loadPendingSummary(){
-  if(!STATE.user||!STATE.token||STATE.token==='guest')return;
+  if(!STATE.user||!STATE.token)return;
   var q='';
   if(userHasRole(STATE.user,'ra_lead')&&STATE.raLeadSelectedBD)q='?manager_id='+encodeURIComponent(STATE.raLeadSelectedBD);
   apiGet('/emails/pending-summary'+q).then(function(d){STATE.pendingSummary=d;scheduleRender();}).catch(function(){});
@@ -220,7 +220,7 @@ function startProgressPoll(){
   if(STATE._progressPollTimer)return;
   var _emailRefreshCount=0;
   function pollOnce(){
-    if(!STATE.user||!STATE.token||STATE.token==='guest'){STATE._progressPollTimer=null;return;}
+    if(!STATE.user||!STATE.token){STATE._progressPollTimer=null;return;}
     // Hidden tab with no send in flight: skip the request, check again later.
     if(document.hidden&&!(STATE.sendProgress&&STATE.sendProgress.active)){
       STATE._progressPollTimer=setTimeout(pollOnce,30000);return;

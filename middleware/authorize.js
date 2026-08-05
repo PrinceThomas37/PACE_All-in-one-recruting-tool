@@ -7,7 +7,7 @@
 // verbatim (behaviour unchanged) so authorization lives in one place.
 //
 // Factory form because canTouchJob needs the Supabase client:
-//   const { hasRole, notGuest, canTouchJob, requireRole } =
+//   const { hasRole, canTouchJob, requireRole } =
 //     require('./middleware/authorize')({ supabase });
 // ============================================================================
 
@@ -22,16 +22,6 @@ module.exports = function createAuthorize({ supabase }) {
     }
     // Legacy: single role field
     return roles.includes(u.role);
-  }
-
-  // Guest guard — block write operations. Returns true (and sends 403) when the
-  // caller is a guest, so handlers can early-return: `if (notGuest(req, res)) return;`
-  function notGuest(req, res) {
-    if (req.user && req.user.isGuest) {
-      res.status(403).json({ error: 'Guest users cannot perform write operations.' });
-      return true;
-    }
-    return false;
   }
 
   // Ownership check for a job by id (admins bypass).
@@ -51,5 +41,5 @@ module.exports = function createAuthorize({ supabase }) {
     };
   }
 
-  return { hasRole, notGuest, canTouchJob, requireRole };
+  return { hasRole, canTouchJob, requireRole };
 };

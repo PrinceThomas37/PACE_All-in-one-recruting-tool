@@ -8,7 +8,7 @@ const { EVENTS, emit } = require('../../events');
 
 module.exports = function (app, core) {
   const {
-    supabase, db, auth, hasRole, notGuest, today,
+    supabase, db, auth, hasRole, today,
     orgIdFor, orgStamp, withOrg,
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
@@ -48,7 +48,6 @@ module.exports = function (app, core) {
   // tag a candidate (from the pool) into a job order's pipeline
   app.post('/pipeline', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       if (!b.candidate_id || !b.job_order_id) return res.status(400).json({ error: 'candidate_id and job_order_id required' });
@@ -89,7 +88,6 @@ module.exports = function (app, core) {
   // change a pipeline entry's status
   app.patch('/pipeline/:id/status', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const st = req.body.status;
       if (!PIPELINE_STATUSES.includes(st)) return res.status(400).json({ error: `Invalid pipeline status. Allowed: ${PIPELINE_STATUSES.join(', ')}` });
@@ -107,7 +105,6 @@ module.exports = function (app, core) {
   // edit a pipeline entry's snapshot fields (rate / availability / employer …)
   app.patch('/pipeline/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: row, error: e0 } = await supabase.from('candidate_pipeline')
         .select('job_order_id').eq('id', req.params.id).is('deleted_at', null).single();
@@ -127,7 +124,6 @@ module.exports = function (app, core) {
   // promote a pipeline entry into a formal submission
   app.post('/pipeline/:id/promote', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: pl, error: e0 } = await supabase.from('candidate_pipeline')
         .select('*').eq('id', req.params.id).is('deleted_at', null).single();
@@ -175,7 +171,6 @@ module.exports = function (app, core) {
 
   app.delete('/pipeline/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       await supabase.from('candidate_pipeline').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });

@@ -18,6 +18,7 @@
 // ============================================================================
 const express = require('express');
 const { buildNextActions, summarize } = require('../next-action');
+const entitlements = require('../services/entitlements');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -28,7 +29,14 @@ module.exports = (ctx) => {
 
   router.get('/next-actions', auth, async (req, res) => {
     try {
-      if (req.user?.isGuest) return res.json({ items: [], summary: summarize([]), scope: 'guest' });
+      // Reading conversations and ranking them is the differentiator, so it is
+      // where the paid tiers start. An empty queue with a reason beats a 402
+      // here: this is a dashboard widget, and a card that explains itself is
+      // better than one that renders an error.
+      const feature = await entitlements.featureGate(supabase, req, 'conversation_intel', { orgIdFor });
+      if (feature.blocked) {
+        return res.json({ items: [], summary: summarize([]), scope: 'none', locked: feature.body });
+      }
 
       const org = orgIdFor(req);
       const isAdmin = (req.user.roles || []).includes('admin') || req.user.role === 'admin';

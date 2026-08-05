@@ -9,7 +9,7 @@ const createCandidateFields = require('../../services/candidate-fields');
 
 module.exports = function (app, core) {
   const {
-    supabase, db, auth, hasRole, notGuest, today,
+    supabase, db, auth, hasRole, today,
     orgIdFor, orgStamp, withOrg,
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
@@ -29,7 +29,6 @@ module.exports = function (app, core) {
   // stage rows parsed client-side (CSV/XLSX) with a batch duplicate check
   app.post('/sourcing/import-file', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       const provider = PROVIDER_IDS.includes(b.provider) ? b.provider : 'csv';
@@ -89,7 +88,6 @@ module.exports = function (app, core) {
       // any authenticated session — guests included — could read every org's
       // staged candidates. These are real people's contact details; they get the
       // same treatment as the candidates table itself.
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       let q = withOrg(supabase.from('sourcing_candidates')
         .select('*, dup:candidates!dup_candidate_id(id,candidate_code,full_name), imported:candidates!imported_candidate_id(id,candidate_code,full_name)')
@@ -168,7 +166,6 @@ module.exports = function (app, core) {
 
   app.post('/sourcing/staged/:id/import', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: staged, error: e0 } = await supabase.from('sourcing_candidates').select('*').eq('id', req.params.id).single();
       if (e0 || !staged) return res.status(404).json({ error: 'Staged candidate not found' });
@@ -183,7 +180,6 @@ module.exports = function (app, core) {
 
   app.post('/sourcing/import-selected', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       const ids = Array.isArray(b.ids) ? b.ids : [];
@@ -203,7 +199,6 @@ module.exports = function (app, core) {
 
   app.delete('/sourcing/staged/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       await withOrg(supabase.from('sourcing_candidates').update({ status: 'discarded' }).eq('id', req.params.id), req);
       res.json({ success: true });
@@ -213,7 +208,6 @@ module.exports = function (app, core) {
   // people-search for API providers — scaffolded; honest not-configured response
   app.post('/sourcing/search', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const provider = (req.body && req.body.provider) || '';
       if (!PROVIDER_IDS.includes(provider)) return res.status(400).json({ error: 'Unknown provider.' });

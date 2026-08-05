@@ -238,7 +238,6 @@ function parseExcelDate(val){
 }
 
 window.triggerImport=function(){
-  if(STATE.user&&STATE.user.isGuest){guestSimulate('importExcel',{});return;}
   var el=document.getElementById("xl-import");
   if(el){el.value="";el.click();}
 }
@@ -492,7 +491,6 @@ function renderImportProgressModal(done,total,logLines,finished,summary){
 }
 
 window.confirmImport=function(){
-  if(STATE.user&&STATE.user.isGuest){guestSimulate('importExcel',{});return;}
   if(!STATE.importPreview||!STATE.importPreview.length){closeModal();return;}
   var mapped=STATE.importPreview.map(function(r){return mapCol(r,COL_MAP);});
   var groups=groupImportRows(mapped);

@@ -4,11 +4,12 @@
 // ============================================================================
 
 const { parseResume } = require('../../resume-parser');
+const entitlements = require('../../services/entitlements');
 const createCandidateFields = require('../../services/candidate-fields');
 
 module.exports = function (app, core) {
   const {
-    supabase, db, auth, hasRole, notGuest, today,
+    supabase, db, auth, hasRole, today,
     orgIdFor, orgStamp, withOrg,
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
@@ -110,8 +111,9 @@ module.exports = function (app, core) {
 
   app.post('/candidates', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const b = req.body || {};
       if (!b.full_name || !String(b.full_name).trim()) return res.status(400).json({ error: 'full_name required' });
 
@@ -138,8 +140,9 @@ module.exports = function (app, core) {
 
   app.put('/candidates/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const b = req.body || {};
       const updates = Object.assign(pickCandidateFields(b), { updated_at: new Date(), updated_by: req.user.id });
       if (b.owner_id !== undefined) updates.owner_id = b.owner_id || null;
@@ -153,8 +156,9 @@ module.exports = function (app, core) {
 
   app.delete('/candidates/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       await supabase.from('candidates').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -188,8 +192,9 @@ module.exports = function (app, core) {
 
   app.post('/candidates/:id/notes', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const b = req.body || {};
       if (!b.body || !String(b.body).trim()) return res.status(400).json({ error: 'body required' });
       const noteType = NOTE_TYPES.includes(b.note_type) ? b.note_type : 'applicant_reference';
@@ -204,8 +209,9 @@ module.exports = function (app, core) {
 
   app.delete('/candidates/:id/notes/:noteId', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       await supabase.from('candidate_notes').update({ deleted_at: new Date() })
         .eq('id', req.params.noteId).eq('candidate_id', req.params.id);
       res.json({ success: true });
@@ -235,8 +241,9 @@ module.exports = function (app, core) {
 
   app.post('/candidates/:id/documents', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const b = req.body || {};
       if (!b.filename || !b.data_base64) return res.status(400).json({ error: 'filename and data_base64 required' });
       const raw = String(b.data_base64).replace(/^data:.*;base64,/, '');
@@ -269,8 +276,9 @@ module.exports = function (app, core) {
 
   app.delete('/candidates/:id/documents/:docId', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const { data: doc } = await supabase.from('candidate_documents')
         .select('storage_path').eq('id', req.params.docId).eq('candidate_id', req.params.id).single();
       await supabase.from('candidate_documents').update({ deleted_at: new Date() })

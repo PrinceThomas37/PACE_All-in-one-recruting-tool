@@ -2,7 +2,6 @@
 window.changeJobStage=function(jid,st){
   var j=jobById(jid);if(!j)return;
   if(j.stage===st)return;
-  if(STATE.user&&STATE.user.isGuest){guestSimulate('stageChange',{id:jid,stage:st});return;}
   var old=j.stage;j.stage=st;
   if(!STATE._pendingStageChanges)STATE._pendingStageChanges={};
   STATE._pendingStageChanges[jid]=st;

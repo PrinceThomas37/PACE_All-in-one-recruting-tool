@@ -20,10 +20,6 @@ function renderLogin(){
     // ── Log In ──────────────────────────────────────────────────────────────
     ssoButtons()+
     orgSsoButton()+
-    '<button onclick="doGuestLogin()" style="display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:10px;border:1.5px dashed rgba(30,122,60,.35);border-radius:8px;background:rgba(30,122,60,0.05);font-size:13.5px;font-weight:500;cursor:pointer;margin-bottom:14px;font-family:inherit;color:#1E7A3C">'+
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1E7A3C" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>'+
-      'Continue as Guest &nbsp;<span style="font-size:11px;color:#9ca3af;font-weight:400">· Product tour</span>'+
-    '</button>'+
     '<div class="or-div">Or</div>'+
     '<div class="fgrp"><label class="flbl">Email</label><input class="inp" id="login-email" type="email" placeholder="Work email"/></div>'+
     '<div class="fgrp"><label class="flbl">Password</label><div style="position:relative"><input class="inp" id="login-pass" type="password" placeholder="Enter your password" style="padding-right:40px"/><button type="button" onclick="var i=document.getElementById(\'login-pass\');i.type=i.type===\'password\'?\'text\':\'password\'" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;color:var(--text3);padding:0;display:flex;align-items:center"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>'+
@@ -116,22 +112,12 @@ function renderApp(){
 
   return '<div id="sidebar">'+
     '<div class="sb-brand"><div class="sb-logo">'+
-      '<div style="line-height:1;flex-shrink:0"><span style="font-family:var(--display);font-weight:700;font-size:22px;color:var(--accent);letter-spacing:-.5px">fut</span><span style="font-family:var(--display);font-weight:700;font-size:22px;color:#F5C23B;letter-spacing:-.5px">é</span></div>'+
-      '<div><div class="sb-name">Global</div><div class="sb-sub">Lead Management</div></div>'+
+      '<div style="line-height:1;flex-shrink:0"><span style="font-family:var(--display);font-weight:700;font-size:22px;color:var(--accent);letter-spacing:-.5px">PA</span><span style="font-family:var(--display);font-weight:700;font-size:22px;color:#F5C23B;letter-spacing:-.5px">CE</span></div>'+
+      '<div><div class="sb-name">Recruiting</div><div class="sb-sub">ATS &amp; Leads</div></div>'+
     '</div></div>'+
     '<div class="sb-nav"><div class="sb-lbl">Menu</div>'+nav+'</div>'+
     '<div class="sb-footer">'+
-      (u.isGuest?
-        '<div style="background:var(--accent-l);border:1px solid rgba(30,122,60,.2);border-radius:8px;padding:8px 10px;margin-bottom:8px">'+
-          '<div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px">GUEST MODE · Portfolio Preview</div>'+
-          '<div style="font-size:10.5px;color:var(--text3);margin-bottom:7px">Switch view to explore different roles:</div>'+
-          '<div style="display:flex;gap:5px;flex-wrap:wrap">'+
-            '<button onclick="guestSwitchRole(\'bd\')" style="font-size:10.5px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:'+(u.role==='bd'?'var(--accent)':'var(--card)')+';color:'+(u.role==='bd'?'#fff':'var(--text2)')+';cursor:pointer;font-weight:600">BD Manager</button>'+
-            '<button onclick="guestSwitchRole(\'ra\')" style="font-size:10.5px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:'+(u.role==='ra'?'var(--accent)':'var(--card)')+';color:'+(u.role==='ra'?'#fff':'var(--text2)')+';cursor:pointer;font-weight:600">RA</button>'+
-            '<button onclick="guestSwitchRole(\'ra_lead\')" style="font-size:10.5px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:'+(u.role==='ra_lead'?'var(--accent)':'var(--card)')+';color:'+(u.role==='ra_lead'?'#fff':'var(--text2)')+';cursor:pointer;font-weight:600">RA Lead</button>'+
-          '</div>'+
-        '</div>':'')  +
-      '<div class="user-row" onclick="goPage(\'profile\')" title="Open my profile">'+av(u,"32")+'<div style="flex:1;min-width:0"><div class="u-name">'+u.name+(u.isGuest?'<span style="font-size:9px;background:#F5C23B;color:#78350f;padding:1px 5px;border-radius:4px;font-weight:700;margin-left:5px">GUEST</span>':'')+'</div><div class="u-role">'+roleLabel(u.role)+'</div><div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px">My profile ›</div></div></div>'+
+      '<div class="user-row" onclick="goPage(\'profile\')" title="Open my profile">'+av(u,"32")+'<div style="flex:1;min-width:0"><div class="u-name">'+u.name+'</div><div class="u-role">'+roleLabel(u.role)+'</div><div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px">My profile ›</div></div></div>'+
       '<div class="signout" onclick="signOut()">Sign out</div>'+
     '</div>'+
   '</div>'+
@@ -227,7 +213,7 @@ function consumeSsoToken(){
       STATE.user=normaliseUser(u);
       sessionStorage.setItem('fg_user',JSON.stringify(STATE.user));
       STATE.page='dashboard';
-      // Same tail as the password path (23-auth-guest.js) so an SSO session and
+      // Same tail as the password path (23-auth.js) so an SSO session and
       // a password session are indistinguishable from here on.
       loadAppData();
     })

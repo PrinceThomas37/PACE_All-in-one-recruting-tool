@@ -26,13 +26,17 @@ const req = (user) => ({ user });
   ok('hasRole: legacy single role no match', hasRole(req({ role: 'ra' }), 'admin') === false);
 }
 
-// notGuest
+// There is no guest guard any more, and that is the assertion: the "guest"
+// token used to grant read-only access to the DEFAULT org — a real customer's
+// live data — and both the door and the notGuest guard that softened it are
+// gone. A helper that no longer exists cannot be reintroduced by accident
+// without this failing.
 {
-  const { notGuest } = createAuthorize({ supabase: mockSupabase(null) });
-  let sent = null;
-  const res = { status: (c) => ({ json: (b) => { sent = { c, b }; } }) };
-  ok('notGuest: guest → true and 403', notGuest(req({ isGuest: true }), res) === true && sent.c === 403);
-  ok('notGuest: normal user → false', notGuest(req({ id: 'u1' }), { status: () => ({ json: () => {} }) }) === false);
+  const helpers = createAuthorize({ supabase: mockSupabase(null) });
+  ok('notGuest no longer exists', helpers.notGuest === undefined);
+  ok('the surviving helpers are hasRole / canTouchJob / requireRole',
+    Object.keys(helpers).sort().join(',') === 'canTouchJob,hasRole,requireRole',
+    Object.keys(helpers).sort().join(','));
 }
 
 // requireRole middleware
