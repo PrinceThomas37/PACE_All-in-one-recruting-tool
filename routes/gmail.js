@@ -53,12 +53,13 @@ module.exports = (ctx) => {
           // endpoint's plain email does not. An UNVERIFIED address must never
           // start a session — otherwise someone registers a Google account
           // claiming your work address and signs in as you.
-          let email = '', verified = null;
+          let email = '', verified = null, name = '';
           if (tokens.id_token) {
             try {
               const claims = JSON.parse(Buffer.from(String(tokens.id_token).split('.')[1], 'base64').toString());
               email = claims.email || '';
               verified = claims.email_verified;
+              name = claims.name || '';
             } catch (_) { /* fall back below */ }
           }
           if (!email) email = await provider.getProfileEmail(tokens.access_token);
@@ -66,7 +67,9 @@ module.exports = (ctx) => {
             return res.status(403).send(sso.failurePage('That Google address is not verified. Verify it with Google, then try again.'));
           }
 
-          const out = await sso.sessionForEmail(supabase, email, { provider: 'google' });
+          // `name` is only used if an account is being created for the first
+          // time (self-serve signup). Matching is always on the verified address.
+          const out = await sso.sessionForEmail(supabase, email, { provider: 'google', name });
           if (!out.ok) return res.status(403).send(sso.failurePage(out.message));
           return res.send(sso.completionPage(out.token, signIn.redirect || '/'));
         } catch (err) {

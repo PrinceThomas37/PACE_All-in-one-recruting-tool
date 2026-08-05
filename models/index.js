@@ -31,10 +31,11 @@
 // org_id column has a DEFAULT of the platform's default org, so single-tenant
 // behaviour is preserved exactly. Tighten this once a second org is onboarded.
 //
-// KNOWN GAP, recorded not fixed: microsoft_tokens and gmail_tokens have no
-// org_id. They are only ever reached via user_emails (which is org-scoped), so
-// this is not a live leak — but it is the thing to close before onboarding a
-// second org, alongside RLS (growth bet 1, slice 3b).
+// THAT GAP IS NOW CLOSED: microsoft_tokens and gmail_tokens gained an org_id in
+// migration 039 (the isolation batch that ships with self-serve signup), and
+// both moved into TENANT_TABLES. RLS landed in the same migration. Neither was
+// a live leak while there was one tenant — which is exactly why they had to be
+// fixed before there could be a second.
 // ============================================================================
 
 const { isTenantTable, isGlobalTable, isKnownTable, TENANT_TABLES } = require('./tables');

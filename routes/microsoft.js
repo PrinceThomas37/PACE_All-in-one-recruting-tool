@@ -57,7 +57,9 @@ router.get('/auth/microsoft/callback', async (req, res) => {
         // exists, so it is preferred but cannot be relied on alone.
         const email = profile.mail || profile.userPrincipalName || '';
 
-        const out = await sso.sessionForEmail(supabase, email, { provider: 'microsoft' });
+        // displayName is only used if an account is being created for the first
+        // time (self-serve signup). Matching is always on the verified address.
+        const out = await sso.sessionForEmail(supabase, email, { provider: 'microsoft', name: profile.displayName });
         if (!out.ok) return res.status(403).send(sso.failurePage(out.message));
         return res.send(sso.completionPage(out.token, signIn.redirect || '/'));
       } catch (err) {

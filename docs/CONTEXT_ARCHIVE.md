@@ -1489,3 +1489,128 @@ which shows success even when the key is missing.
 this archive is appended to and never edited. If a future session finds the
 window growing past ~200 lines, that is the signal it has been appended to by
 mistake — move the excess here.
+
+---
+
+# Session 10 — self-serve signup step 3, and the isolation batch that had to ship with it
+
+Branch `claude/context-window-docs-t5ia4s`. Picked up exactly where Session 9's
+context window pointed: **step 3 of self-serve signup — route a sign-in.**
+
+## What step 3 actually is
+
+Someone signs in with Microsoft or Google, PACE has never seen the address, and
+something has to decide where they land. Three destinations, and only three:
+
+| Situation | Destination |
+|---|---|
+| Their domain has a **verified** claim **and** auto-join is on | join that org, with the role the claim specifies |
+| Their domain has a **verified** claim and auto-join is off | refused — "ask your administrator to invite you" |
+| Nobody has proved they own the domain (or it is free mail) | a **private** workspace of their own |
+
+The whole decision lives in `services/provisioning.js` as **`decide()` — pure,
+no I/O, no clock, no env**. That is deliberate. Routing alice@acme.com into the
+wrong organisation is not a bug, it is a breach, and it produces no error
+message: it just quietly works, for the wrong person. `provision()` writes rows
+and decides nothing; `decide()` decides and writes nothing.
+
+### The rule that is easiest to get wrong
+
+**Sharing a domain is not membership.** bob@acme.com does NOT join
+alice@acme.com's workspace just because they share a domain — that is the
+unverified auto-join we spent Session 9 refusing, wearing a friendlier hat. On
+an unclaimed domain everyone is alone until somebody proves ownership via DNS.
+Pinned by a test.
+
+Other pinned rules: an unverified claim routes nobody **even with auto_join
+explicitly on**; `auto_join_role` is validated against a whitelist rather than
+trusted (it comes from a row an org admin controls — untreated, `'admin'` would
+be a way to mint admins); seats are enforced at the join; suspended and
+cancelled orgs stop **existing members** signing in too, not just new ones.
+
+## The switch: SELF_SERVE_SIGNUP
+
+Off unless the env var is exactly `on`. Off, `sessionForEmail` behaves precisely
+as it did before this session — an existing active user gets a session and
+nobody else does, with the same "ask your administrator" wording. So the code
+ships and deploys **long before the front door opens**, and opening it is one
+Render env var, not a release.
+
+It is an env var and not an app setting on purpose: it is a decision about the
+whole deployment, it depends on migrations being applied, and it must not be
+reachable by anyone who happens to be an admin of some org.
+
+## Migration 039 — the isolation batch (WRITTEN, NOT APPLIED)
+
+Session 9's window said RLS and the two org_id-less token tables **must land in
+the same batch as step 3, never after**. This is that batch, and the reason is
+blunt: PACE has been safe partly *by accident*, because everyone using it works
+for one company. Self-serve signup ends that in a single deploy.
+
+Checked against the live DB before writing it — **37 tables had RLS disabled**,
+including `microsoft_tokens`, i.e. OAuth **refresh tokens for customers' real
+mailboxes readable with the anon key**. `gmail_tokens` already had it (migration
+010). So 039:
+
+1. Enables RLS + a service-role policy on all 37 (plus 037/038's tables,
+   guarded, so it applies in either order). Safe because the backend connects
+   with the **service** key — `config/env.js` requires it, there is no anon-key
+   code path, and the browser never talks to Supabase directly.
+2. Gives `microsoft_tokens` / `gmail_tokens` an `org_id`, backfilled via
+   `user_id` then via `user_emails`, with the same transitional column DEFAULT
+   every other tenant table has. Both moved to `TENANT_TABLES`.
+3. Adds `users.last_login_at` / `last_login_method`. **`services/sso.js` has
+   been writing these since sign-in shipped and they did not exist** — the write
+   was a silent no-op, and the comment claiming migration 038 added them was
+   wrong.
+4. Widens `users_role_check`. The live constraint was
+   `('ra','ra_lead','bd','bd_lead','admin','recruiter')` — **Associate Director
+   and Director were missing**, though migration 026 added them to every role
+   picker in the UI. Choosing either currently fails at the database. Found by
+   reading the live constraint, not the migration files.
+
+## The org-less session gate
+
+`orgIdFor()` falls back to the platform's first org when a request has no org on
+it. With one org that is right; with two it silently means "**give this session
+the first customer's data**". So `auth()` in index.js now refuses a token with
+no `org_id` — but **only once more than one org is possible** (self-serve on, or
+>1 row in `organizations` at boot). With self-serve off and one org, an org-less
+token still works, because breaking every live session would be an outage
+dressed as a safety fix. Both halves are pinned by `test/org-session-gate.mjs`,
+which boots the real server twice.
+
+`orgIdFor()` itself was left alone on purpose. Returning `null` there looks
+safer and is worse: background sweeps call `withOrg()` with no user, and null
+turns a scoped query into an **unscoped** one.
+
+## Frontend
+
+The Sign Up tab is now two panels, and which one shows is decided by the SERVER
+(`self_serve` on `GET /auth/sso/providers`), never guessed. On: "Sign up with
+Microsoft / Google", no form, no password, plus a plain-English note about what
+happens if your company already uses PACE. Off: the Session 9 request-capture
+panel, unchanged.
+
+"Log In with your Organization" on an unrecognised domain used to be a dead end.
+With self-serve on it is an offer — but it **confirms first**, because that
+button silently creating a brand-new workspace would be a surprise.
+
+## Tests: 40 suites, all green
+
+New: `self-serve-signup-smoke` (53 assertions — the switch, unverified claims,
+role validation, seats, suspension, the create race, hostile slugs) and
+`org-session-gate` (5, two real server boots). `models-smoke` updated for the
+registry change: 41 tenant / 7 global.
+
+`npm ci` was **broken on arrival** — `playwright-core` was added to
+package.json in Session 9 without updating the lock file. Fixed by running
+`npm install` and committing the lock.
+
+## Left open, deliberately
+
+- **The guest bypass.** `Authorization: Bearer guest` gives read-only access to
+  the DEFAULT org — which is the owner's own live data. Deliberate (it is the
+  product tour) and pre-existing, but under self-serve signup it deserves a
+  fresh decision. Not changed here; changing it unasked would break the demo.
+- Step 4 (plan entitlements + the Stripe seam) is untouched.

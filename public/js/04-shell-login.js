@@ -168,11 +168,16 @@ function loadSsoProviders(){
   // exists, and must never trigger the 401 handling that bounces to login.
   fetch(API_URL+'/auth/sso/providers').then(function(r){return r.json();}).then(function(d){
     STATE.ssoProviders=(d&&d.providers)||[];
+    // Can this deployment actually create a workspace on the spot, or should
+    // Sign Up keep capturing requests for a human? Same rule as the buttons:
+    // never offer something the server cannot do.
+    STATE.selfServe=!!(d&&d.self_serve);
     STATE._ssoLoading=false;
     render();
   }).catch(function(){
     // If we can't tell, show nothing rather than a button that may fail.
     STATE.ssoProviders=[];
+    STATE.selfServe=false;
     STATE._ssoLoading=false;
   });
 }
@@ -262,6 +267,13 @@ window.startOrgSso=function(){
   fetch(API_URL+'/auth/sso/for-domain?domain='+encodeURIComponent(domain))
     .then(function(r){return r.json();})
     .then(function(d){
+      // Nobody has claimed this domain, but self-serve is on — so instead of a
+      // dead end this is an offer. Say so before redirecting: "log in with your
+      // organization" silently creating a brand-new workspace would be a
+      // surprise, and the difference matters to whoever is clicking.
+      if(d&&d.provider&&d.new_workspace){
+        if(!confirm('We don’t have a workspace for '+domain+' yet.\n\nContinue to create your own workspace? If your company already uses PACE, ask your administrator to invite you instead.'))return;
+      }
       if(d&&d.provider){window.location.href=API_URL+'/auth/sso/'+encodeURIComponent(d.provider);return;}
       showToast(d&&d.message?d.message:'We could not find a sign-in method for '+domain+'. Use Microsoft or Google above, or ask your administrator.','warning');
     })
@@ -269,15 +281,40 @@ window.startOrgSso=function(){
 };
 
 // ── Sign Up ─────────────────────────────────────────────────────────────────
-// Self-serve signup (a company claiming its domain, or an individual recruiter
-// getting a personal workspace) is genuinely not built yet — it needs
-// organisation provisioning, domain verification and tenant isolation first.
+// Two panels, and which one shows is decided by the SERVER (self_serve on
+// GET /auth/sso/providers), never guessed here.
 //
-// So this panel does the one honest thing available: it RECORDS the request so
-// nobody who wants in is lost, and says exactly what happens next. It does not
-// pretend to create an account. A tab that silently did nothing would repeat
-// the mistake of the old "Google login coming soon" button.
+//   Self-serve ON  → a real signup. You continue with Microsoft or Google, and
+//                    the account you sign in with becomes your workspace — or
+//                    joins your company's, if your company has verified its
+//                    domain and switched auto-join on. There is no form to
+//                    fill in and no password to choose, because the identity
+//                    provider has already proved who you are.
+//   Self-serve OFF → the request-capture panel below, which is honest about
+//                    being a waiting list. Better than a tab that silently
+//                    does nothing (the old "Google login coming soon" button).
 function renderSignupPanel(){
+  // Landing straight on this tab must not skip the capability lookup — which
+  // panel to show depends on it.
+  if(STATE.ssoProviders===undefined){loadSsoProviders();return '';}
+  if(STATE.selfServe&&(STATE.ssoProviders||[]).length){
+    return '<div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.55">'+
+        'Create your PACE workspace in one step — no password to choose. Sign in with your work account and we’ll set everything up.'+
+      '</div>'+
+      (STATE.ssoProviders||[]).map(function(p){
+        return '<button class="google-btn" onclick="startSso(\''+p.id+'\')">'+
+          '<span style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">'+(SSO_ICON[p.id]||'')+'</span>'+
+          htmlEsc(String(p.label||'').replace(/^Continue with/,'Sign up with'))+
+        '</button>';
+      }).join('')+
+      '<div style="font-size:11.5px;color:var(--text3);margin-top:14px;line-height:1.55;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">'+
+        '<strong style="color:var(--text2)">If your company already uses PACE</strong> and has verified its email domain, you’ll join their workspace automatically. '+
+        'Otherwise you get a private workspace of your own — you can invite your team and claim your domain from there.'+
+      '</div>'+
+      '<div style="font-size:11.5px;color:var(--text3);margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
+        '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
+      '</div>';
+  }
   if(STATE.signupSent){
     return '<div style="text-align:center;padding:14px 4px">'+
       '<div style="font-size:34px;line-height:1;margin-bottom:10px">✓</div>'+

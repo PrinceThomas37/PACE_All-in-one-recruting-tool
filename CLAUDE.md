@@ -226,11 +226,26 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      below), and RLS (slice 3b, next).
    - **Slice 3a DONE** (migration `023`): `org_id` is now `NOT NULL` on all tenant
      tables (safe — every row backfilled + column DEFAULT).
-   - **Slice 3b DEFERRED by owner decision:** enabling RLS (row-level security) with
-     org-keyed / service-role policies to close the anon-key exposure. Proven-safe
-     pattern (already live on 8 tables; frontend is API-only) but touches the live
-     prod DB, so hold it until closer to onboarding a second org. **Do NOT enable RLS
-     on the live DB without an explicit, fresh go-ahead.**
+   - **Slice 3b WRITTEN, NOT APPLIED** (migration `039_tenant_isolation`): RLS +
+     service-role policies on the **37 tables that still have it disabled** — which
+     today includes `microsoft_tokens`, i.e. customers' mailbox refresh tokens are
+     readable with the anon key. Same migration gives `microsoft_tokens`/
+     `gmail_tokens` an `org_id` (both moved to `TENANT_TABLES`). Proven-safe pattern
+     (already live on 9 tables; the backend uses the SERVICE key and the browser
+     never touches Supabase). **This must be applied BEFORE `SELF_SERVE_SIGNUP` is
+     turned on, never after** — that is the whole reason it is one batch. **Do NOT
+     apply it to the live DB without an explicit, fresh go-ahead.**
+   - **Self-serve signup is built and switched OFF** (`services/provisioning.js`).
+     Where a brand-new sign-in lands is a **pure function** (`decide()`) because
+     routing somebody into the wrong org is a breach that produces no error message.
+     Three destinations only: verified claim + auto-join → join it; verified claim,
+     auto-join off → "ask your admin"; anything else → a **private** workspace.
+     **Sharing a domain is not membership** — two people on an unclaimed domain get
+     two separate workspaces. Nothing happens at all unless `SELF_SERVE_SIGNUP=on`.
+   - **`orgIdFor()`'s default-org fallback is deliberate — do not "fix" it to return
+     null.** Background sweeps call `withOrg()` with no user, and null turns a scoped
+     query into an UNSCOPED one. The hole is closed in `auth()` instead: an org-less
+     session token is refused once more than one org is possible.
 2. **Configurable roles & permissions per org** — we already have roles; make them
    data so different customers can mirror their own org charts.
    - **Reporting hierarchy DONE** (migration `026`): `users.manager_id`, self-

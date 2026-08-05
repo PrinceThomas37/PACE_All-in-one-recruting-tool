@@ -164,21 +164,29 @@ const req = { orgId: ORG, user: { org_id: ORG } };
 // ── 7. The registry itself ───────────────────────────────────────────────────
 {
   // Verified against the live schema of project teiqievahzhllojvgsku: 38 tables
-  // carried org_id at the time of the check, plus conversation_messages, which
-  // migration 037 adds and which is registered ahead of being applied.
-  ok('the registry covers all 38 live tenant tables + the one migration 037 adds',
-    TENANT_TABLES.size === 39, String(TENANT_TABLES.size));
+  // carried org_id at the time of the check, plus conversation_messages
+  // (migration 037) and the two OAuth token tables that migration 039 gives an
+  // org_id — all three registered ahead of being applied, because the registry
+  // states what a table IS and the code that touches it degrades safely.
+  ok('the registry covers the live tenant tables plus those migrations 037/039 add',
+    TENANT_TABLES.size === 41, String(TENANT_TABLES.size));
   ok('conversation_messages is registered as tenant data', TENANT_TABLES.has('conversation_messages'));
-  // 8 live global tables + org_domains, which migration 038 adds and which is
+  // The token tables hold refresh tokens for customers' real mailboxes. They
+  // were global only because they had no org_id, on the reasoning that
+  // user_emails (which IS scoped) was the only way in. Migration 039 closes
+  // that before a second tenant exists rather than after.
+  for (const t of ['microsoft_tokens', 'gmail_tokens'])
+    ok(`${t} is tenant data since migration 039`, TENANT_TABLES.has(t) && !GLOBAL_TABLES.has(t));
+  // 6 live global tables + org_domains, which migration 038 adds and which is
   // deliberately listed as global: sign-in reads it BY DOMAIN before any org
   // context exists, so a request-scoped accessor could never reach it.
-  ok('the registry lists the 8 live global tables + org_domains', GLOBAL_TABLES.size === 9, String(GLOBAL_TABLES.size));
+  ok('the registry lists the remaining global tables + org_domains', GLOBAL_TABLES.size === 7, String(GLOBAL_TABLES.size));
   ok('org_domains is reachable without an org context', GLOBAL_TABLES.has('org_domains'));
   const overlap = [...TENANT_TABLES].filter(t => GLOBAL_TABLES.has(t));
   ok('no table is in both lists', overlap.length === 0, overlap.join(','));
   for (const t of ['candidates', 'job_orders', 'submissions', 'jobs', 'companies', 'contacts', 'users', 'email_tracking'])
     ok(`${t} is registered as tenant data`, TENANT_TABLES.has(t));
-  for (const t of ['app_settings', 'organizations', 'engine_runs', 'microsoft_tokens'])
+  for (const t of ['app_settings', 'organizations', 'engine_runs'])
     ok(`${t} is registered as global`, GLOBAL_TABLES.has(t));
 }
 
