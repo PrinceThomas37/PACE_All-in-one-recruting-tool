@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { mailboxSignatureKey, resolveSignatureHtml } = require('../email-signature');
 const { mailboxConnections } = require('../mailbox-health');
+const entitlements = require('../services/entitlements');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -118,6 +119,10 @@ router.post('/users', auth, async (req, res) => {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
     const { name, email, password, roles, role, employee_id, designation, platform } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Name and email required' });
+    // Seats are what the plan sells. Checked here as well as at self-serve
+    // join, because an admin adding colleagues is the other way to fill them.
+    const seatGate = await entitlements.gate(supabase, req, 'seats', { orgIdFor });
+    if (seatGate.blocked) return res.status(seatGate.status).json(seatGate.body);
     const userRoles = roles || (role ? [role] : ['ra']);
     // Every new user used to get the SAME password, 'Fute@2024' — hard-coded in
     // this file, shown in the admin UI, and never forced to change. Anyone who
@@ -217,6 +222,8 @@ router.post('/users/:id/emails', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
     const { email_address, display_name, platform, daily_send_limit, is_primary } = req.body;
     if (!email_address) return res.status(400).json({ error: 'email_address required' });
+    const mbGate = await entitlements.gate(supabase, req, 'mailboxes', { orgIdFor });
+    if (mbGate.blocked) return res.status(mbGate.status).json(mbGate.body);
     // If setting as primary, unset others first
     if (is_primary) {
       await supabase.from('user_emails').update({ is_primary: false }).eq('user_id', req.params.id);

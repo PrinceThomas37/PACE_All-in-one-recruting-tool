@@ -83,6 +83,11 @@ we never have to rewrite to grow (see "Growth bets" below).
 - **Frontend:** plain `<script>` modules in `public/js/NN-*.js`, loaded in order by
   `public/index.html`. **No build step, no bundler.** Global `window.*` + `STATE`.
   `render()` / `goPage()` are wrapped by each page module.
+- **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
+  read-only access to the DEFAULT org — a real customer's live data — and
+  `01-seed-demo.js` generated a fake world that a real user briefly saw before
+  their own data loaded. Both gone. If a product tour is wanted, it is its own
+  seeded organisation with a real login, never a bypass.
 - **Deploy:** Render (`fute-lms-backend.onrender.com`), auto-deploys from `main`.
   → Merging to `main` IS the release. That's how the owner gets to try things live.
 - **⚠ Render is on the FREE tier — treat instance hours as a hard budget.**
@@ -95,13 +100,17 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 40 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 41 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
   17 suites are Playwright: `playwright-core` is now a devDependency, Chromium at
   `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). If 17 suites fail at once with a
   module error, that is the missing dep, not 17 broken tests.
+  - **Browser suites enter the app via `test/helpers/enter-app.mjs`**, which sets
+    `STATE.user`/`STATE.token` and re-renders. They used to click "Continue as
+    Guest", which meant every browser test depended on a production auth bypass
+    existing. **Never reintroduce a product-side bypass to make a test easier.**
 - **Two vocabularies, don't conflate:** recruiting candidate progress lives on
   `submissions.stage` (**11 ATS stages** since Session 6: Sourced, Screening,
   Submitted to BDM, Submitted to Client, Interview Scheduled, Interview Completed,
@@ -352,8 +361,21 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
 7. **Audit trail everywhere** — generalize the submission activity log; buyers want
    accountability.
 8. **Mobile-friendly / PWA polish** — recruiters live on phones; cheap CSS work.
-9. **Billing later, stubbed now (Stripe)** — leave a seam for self-serve signup +
-   subscription so it plugs in without a rewrite.
+9. **Billing — DONE (Session 11), payments switched off.** `services/plans.js`
+   holds the tiers as data and is PURE; `services/entitlements.js` counts usage
+   and gates creates; `services/billing.js` is the Stripe seam (no `stripe` npm
+   package — outbound HTTP goes through `http-client.js` like everything else).
+   Three rules that must not be softened:
+   - **A limit that is not enforced is a claim.** Every number is checked on
+     CREATE and refused with **402** (a billing wall, not a 403 permission error).
+   - **Being over a limit never deletes anything.** Enforcement is create-only,
+     so a downgrade keeps every row and just blocks adding. Never add a code path
+     that removes, hides or locks data because of a plan.
+   - **Only the signed webhook may change a plan.** A browser "success" redirect
+     is something anyone can type into their own URL bar.
+   **Pricing is deliberately `null` on every tier** — that is the owner's call,
+   and `services/plans.js` is the one place to set it. The default org is on the
+   `internal` plan (unlimited), so none of this changed the live deployment.
 10. **Clients as a first-class concept + document attach/send (DONE this session,
     migration `027`).** "Clients" aren't a separate table — they're `companies`
     (the same table the leads engine already uses) that have at least one

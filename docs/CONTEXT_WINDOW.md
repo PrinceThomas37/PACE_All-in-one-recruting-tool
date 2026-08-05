@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-05 (end of Session 10) · **Repo**:
+**Updated**: 2026-08-05 (end of Session 11) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**: `claude/context-window-docs-t5ia4s`
@@ -40,6 +40,10 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Background automation actually running** — `CRON_KEY` is set and verified
 - **SSO sign-in with Microsoft** (Google is built but needs credentials)
 - The PACE rebrand and the rebuilt login page
+- **Plans, limits and entitlements — enforced, not decorative.** The default org
+  is on the `internal` plan (unlimited), so nothing changed for it.
+- **No guest / demo mode anywhere.** `Bearer guest` used to grant read-only
+  access to the default org's live data; it and all seeded fake data are gone.
 
 ## Self-serve signup — built, switched OFF
 
@@ -49,8 +53,9 @@ thing sits behind one env var:
 1. ✅ Organisations get plan / status / kind
 2. ✅ Domain claiming with DNS verification
 3. ✅ **Route a sign-in** — `services/provisioning.js`
-4. ⬜ Plan entitlements + the Stripe seam (seats *are* enforced at join; nothing
-   else is)
+4. ✅ **Plan entitlements + the Stripe seam** — `services/plans.js` (rules,
+   pure), `services/entitlements.js` (counts + gates), `services/billing.js`
+   (Stripe, inert until keys are set)
 
 **`SELF_SERVE_SIGNUP` must be exactly `on` for any of it to do anything.** With
 it unset — how the service ships and how it is deployed today — a stranger
@@ -87,7 +92,26 @@ we deliberately refuse, and it is pinned by a test.
 3. Verify one real Greenhouse/Lever board via the "Test it" button — the
    adapters have never met a live feed (the sandbox blocks those hosts).
 
-## Migrations — ALL APPLIED to the live DB (2026-08-05)
+## Plans — what is enforced, and what is not decided
+
+Free 2 seats / 3 job orders / 50 candidates / 1 mailbox · Starter 5/25/1,000/3 ·
+Pro 20/∞/10,000/10 · Business unlimited · `internal` = ours, unlimited.
+
+- **Enforced on CREATE** (`POST /users`, `/users/:id/emails`, `/job-orders`,
+  `/candidates`) with **402**, not 403 — a billing wall is not a permission
+  error. Feature gates: sourcing = Pro+, conversation intelligence = Starter+.
+- **Being over a limit never deletes anything.** Enforcement is create-only, so
+  a downgrade keeps every row and simply blocks adding. Say this in any UI that
+  shows a limit.
+- **Pricing is deliberately unset** (`price: null` on every tier). What PACE
+  costs is the owner's call; the billing card says "pricing not published yet"
+  rather than showing an invented number. `services/plans.js` is the one place
+  to fill them in.
+- **Payments are off** until `STRIPE_SECRET_KEY` is set. The webhook is the ONLY
+  thing that may change a plan — a browser "success" redirect is something
+  anyone can type into their own URL bar.
+
+## Migrations — 037-039 APPLIED to the live DB (2026-08-05)
 
 `037_conversation_intel`, `038_org_domains_and_plans` and `039_tenant_isolation`
 were applied together with the owner's explicit go-ahead, and verified against
@@ -105,8 +129,12 @@ the live schema afterwards:
 `conversation_messages` and `org_domains` exist, so conversation intelligence
 stores real threads and domain claiming answers for real.
 
-**The next migration is 040.** Never apply one to the live database without a
-fresh, explicit go-ahead — this one had it.
+**Migration `040_billing.sql` is WRITTEN and NOT APPLIED.** Three nullable
+billing columns, an index, and a CHECK on `organizations.plan`. Nothing reads
+them unless Stripe is configured, so the app is correct before and after — it
+only needs applying before payments are switched on. **The next number is 041.
+Never apply a migration to the live database without a fresh, explicit
+go-ahead.**
 
 ---
 
@@ -140,15 +168,21 @@ fresh, explicit go-ahead — this one had it.
 - **Render is on the FREE tier** — instance hours are a hard budget. The
   heartbeat is every 30 min for that reason. Ask what a new poller costs.
 - **When moving code, move it — do not tidy it on the way.**
-- **When a claim about behaviour is load-bearing, test the claim.** Two claims
-  died this session: `last_login_at` was being written to a column that did not
-  exist, and the role picker offered two roles the database rejects.
+- **When a claim about behaviour is load-bearing, test the claim.** Claims that
+  have died this way: `last_login_at` written to a column that did not exist;
+  a role picker offering two roles the database rejected; a dashboard whose
+  widgets only ever had demo data behind them.
+- **A failed usage count must ALLOW, not refuse.** Blocking a paying customer
+  because a COUNT query timed out is far worse than one row over a limit.
+- **The browser tests are not allowed to need a production bypass.** All 17
+  entered the app by clicking "Continue as Guest". They use
+  `test/helpers/enter-app.mjs` now — drive STATE from the test instead.
 
 ## Deliberately open, not forgotten
 
-- **The guest bypass.** `Authorization: Bearer guest` gives read-only access to
-  the DEFAULT org — the owner's own live data. Deliberate (it is the product
-  tour) and pre-existing, but self-serve signup makes it worth a fresh decision.
+- **There is no product tour any more.** The guest bypass was how one existed.
+  If a demo is wanted again it must be its own seeded organisation with a real
+  login — never a bypass, and never pointed at a customer's live org.
 - Cold-email templates and the resume letterhead still say "Fute Global" —
   that is the **customer's** identity and must become per-org config, not a
   rename to PACE.
@@ -161,7 +195,7 @@ fresh, explicit go-ahead — this one had it.
 
 ## Working rules
 
-`npm test` (40 suites, judged by **exit code** — the suites print two different
+`npm test` (41 suites, judged by **exit code** — the suites print two different
 formats, so grepping stdout mis-reports them) · `bash test/verify-frontend.sh` ·
 build on the dev branch → screenshot → draft PR → merge only on an explicit
 "merge it" → it deploys. The owner does not read code; show them the running app

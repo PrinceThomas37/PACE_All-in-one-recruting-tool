@@ -11,6 +11,7 @@
 // through the existing distribution and sequencing machinery unchanged.
 // ============================================================================
 const express = require('express');
+const entitlements = require('../services/entitlements');
 const { providerList, fetchBoard, getProvider } = require('../lead-sources');
 const { runDueSources, ingestSource } = require('../lead-ingest');
 const { classifyCompany } = require('../company-classifier');
@@ -146,6 +147,9 @@ module.exports = (ctx) => {
   router.post('/lead-sources/:id/run', auth, async (req, res) => {
     try {
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
+      // Automatic sourcing is a paid feature — gate where a run is STARTED.
+      const gate = await entitlements.featureGate(supabase, req, 'sourcing', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       const { data: source } = await withOrg(
         supabase.from('lead_sources').select('*').eq('id', req.params.id).is('deleted_at', null), req
       ).maybeSingle();
@@ -158,6 +162,9 @@ module.exports = (ctx) => {
   router.post('/lead-sources/run-all', auth, async (req, res) => {
     try {
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
+      // Automatic sourcing is a paid feature — gate where a run is STARTED.
+      const gate = await entitlements.featureGate(supabase, req, 'sourcing', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
       res.json(await runDueSources({ supabase }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

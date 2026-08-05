@@ -91,7 +91,9 @@ const engineRunner = createEngineRunner({ supabase });
 // own X-Forwarded-For.
 app.set('trust proxy', 1);
 app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE'], allowedHeaders: ['Content-Type','Authorization'] }));
-app.use(express.json({ limit: '5mb' }));
+// `verify` keeps the raw bytes on the request. Stripe signs the exact body it
+// sent, so a re-serialised object cannot be verified — see routes/plans.js.
+app.use(express.json({ limit: '5mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── Rate limits on the unauthenticated surface ─────────────────
 // Everything else sits behind `auth`. These three are reachable by anyone, and
@@ -2779,6 +2781,7 @@ app.use(require('./routes/next-actions')(routeCtx));
 // route modules, which already own each provider's registered redirect URI.
 app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 app.use(require('./routes/org-domains')(routeCtx));
+app.use(require('./routes/plans')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor });
 
@@ -3011,5 +3014,5 @@ setTimeout(() => {
 }, 60 * 1000);
 
 // ── START ──────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`Fute Global LMS API v3.0.0 running on port ${PORT}`));
+app.listen(PORT, () => console.log(`PACE API v3.0.0 running on port ${PORT}`));
 module.exports = app;

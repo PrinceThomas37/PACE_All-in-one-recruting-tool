@@ -5,6 +5,7 @@
 // ============================================================================
 
 const matchEngine = require('../../match-engine');
+const entitlements = require('../../services/entitlements');
 const { fetchWithTimeout } = require('../../http-client');
 const createCandidateFields = require('../../services/candidate-fields');
 
@@ -87,6 +88,8 @@ module.exports = function (app, core) {
   app.post('/job-orders', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can create job orders.' });
+      const gate = await entitlements.gate(supabase, req, 'job_orders', { orgIdFor });
+      if (gate.blocked) return res.status(gate.status).json(gate.body);
 
       const b = req.body || {};
       const lead = b.lead || {};

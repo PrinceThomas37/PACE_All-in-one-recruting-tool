@@ -1639,3 +1639,125 @@ changes a code path the running deployment takes: every column is additive, and
 RLS is transparent to the service key the backend connects with.
 
 **Next migration number is 040.**
+
+---
+
+# Session 11 — the guest bypass is gone, and plans became real
+
+Two asks, in order: "remove the demo data everything from both frontend and
+backend", then "work on plans and payments".
+
+## Part 1 — the guest bypass and the demo world
+
+`Authorization: Bearer guest` was an **authentication bypass**. It handed anyone
+who sent that header read-only access to the DEFAULT organisation — which is a
+real customer's live data — with role `bd`. Defensible while PACE was one
+company's internal tool. Indefensible the session after strangers could sign
+themselves up. Gone: the door in `auth()`, the write-blocking middleware that
+existed only for it, `notGuest` and its 51 call sites, and the five `isGuest`
+refusals in outreach.
+
+The demo world went with it. `01-seed-demo.js` generated 25 invented staff, a
+dozen invented companies, and hundreds of fake leads/activities/jobs/sent-emails
+at page load, and `STATE` was initialised from them — so **a real user briefly
+saw invented rows before `loadAppData()` returned**. What survived is the part
+real screens use (the BD stage vocabulary, the industry/source lists,
+`todayIST`/`fmtDate`/`uname`/`stageClass`), now `01-constants.js`. Every
+collection starts `[]`.
+
+`23-auth-guest.js` → `23-auth.js`: the guest user, the demo leads, the role
+switcher and the whole `guestSimulate` layer (which faked the RESULT of every
+write so the tour appeared to work) deleted; `doLogin`/`doLogout`/`loginAs` kept
+verbatim.
+
+### The knock-on nobody would have predicted
+
+Removing the demo data removed the last reader of the **legacy lead-gen
+dashboard** — ~150 lines in `renderDashboard` keyed off `STATE.leads`. Only the
+guest session ever filled that collection, so for every real login it rendered a
+wall of zeroes. Deleted. "View as" now gets `renderIndividualDashboard(u)`,
+which is built on `STATE.jobs` and filters by the user it is handed, so
+previewing somebody's desk shows THEIR desk.
+
+### The tests were the hard part
+
+**All 17 Playwright suites entered the app by clicking "Continue as Guest."**
+Every browser test in the repo depended on a production authentication bypass
+existing. They now use `test/helpers/enter-app.mjs`, which sets `STATE.user` /
+`STATE.token` and re-renders — which is what they always actually needed, and
+grants nothing in the product. One assertion had to change honestly rather than
+be weakened: `recruiter-dashboard-smoke` checked a BD sees "Response rate trend"
+and "Industry breakdown", widgets that only ever existed on the demo-fed
+dashboard; it now asserts a BD lands on the team desk.
+
+Two stale-branding bugs found on the way: the sidebar still said **"futé Global
+· Lead Management"** months after the PACE rebrand (the login screen had been
+updated, the app shell had not), and the startup banner said "Fute Global LMS
+API".
+
+## Part 2 — plans and payments (step 4)
+
+`services/plans.js` — the tiers as data, pure. Free (2 seats / 3 job orders / 50
+candidates / 1 mailbox), Starter, Pro, Business, plus `internal`, which the
+default org is on, **which is why none of this changes anything for the existing
+deployment**.
+
+Two rules the file exists to keep:
+
+1. **A limit that is not enforced is a claim, not a limit.** Every number is
+   checked at the point of creation — `POST /users`, `POST /users/:id/emails`,
+   `POST /job-orders`, `POST /candidates` — and refused with **402 Payment
+   Required** (not 403: this is a billing wall, not a permission error) and a
+   message naming the plan and the number.
+2. **Raising or lowering a limit must never break anyone already over it.**
+   Enforcement is on CREATE only. A downgraded org keeps everything and simply
+   cannot add. Nothing is ever deleted, hidden or locked. The billing screen
+   says so in words on the over-limit row.
+
+Feature gates: `sourcing` (Pro+) blocks where a run is STARTED;
+`conversation_intel` (Starter+) returns an empty `/next-actions` queue with a
+`locked` reason rather than a 402, because it is a dashboard widget and a card
+that explains itself beats one that renders an error.
+
+`services/entitlements.js` is the I/O half. Counts are **not cached** — a stale
+count is a limit that is wrong in one of two ways — and **every count is
+individually guarded so a failure ALLOWS**. Refusing a paying customer because a
+COUNT timed out is far worse than one row over.
+
+### The Stripe seam
+
+`services/billing.js`. **No `stripe` npm package**, deliberately: the codebase's
+rule is that all outbound HTTP goes through `http-client.js`, and a dependency
+that does nothing until someone signs up for Stripe is weight in every install.
+Stripe's REST API over `fetchWithTimeout` is a dozen lines.
+
+**The webhook is the only thing that may change a plan.** A checkout session says
+what somebody INTENDED to buy; the webhook is Stripe saying what happened, and it
+is signed. If the browser's success redirect could set the plan, anyone who can
+read their own URL bar could upgrade themselves to Business for free. Signature
+verification takes an **injectable clock** — a check that only passes "now" is
+untestable, and an untested signature check is decoration. Pinned: forged secret,
+tampered body, stale timestamp, future timestamp, missing header, malformed
+header, wrong-length signature (which would otherwise throw in
+`timingSafeEqual`), and multi-`v1` rotation.
+
+`planChangeFor` ignores unknown event types rather than guessing — Stripe sends
+dozens, and acting on one nobody read is how a paying customer gets downgraded.
+Nobody can buy their way onto `internal`. A cancelled subscription drops to Free
+and **does not suspend the workspace or touch its data**.
+
+**Pricing is deliberately null on every tier.** What PACE costs is the owner's
+decision; an invented number would end up on a screen looking decided. The
+billing card says "pricing not published yet" until they are filled in, and
+`services/plans.js` is the one place to change them.
+
+### Migration 040 (written, NOT applied)
+
+Three nullable billing columns, an index, and a CHECK on `organizations.plan`.
+Deliberately tiny: plans and enforcement are already real without any schema
+change, because 038 gave `organizations` its `plan`/`status`/`seats_limit`. The
+app is correct before and after.
+
+## Tests: 41 suites
+
+New `plans-billing-smoke` (69 assertions). `npm test` green after each part.
