@@ -12,7 +12,7 @@ const AI_TIMEOUT_MS = 30000;
 
 module.exports = function (app, core) {
   const {
-    supabase, db, auth, hasRole, notGuest, today,
+    supabase, db, auth, hasRole, today,
     orgIdFor, orgStamp, withOrg,
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
@@ -30,7 +30,6 @@ module.exports = function (app, core) {
   // Convert an existing CONNECTED lead (a jobs row) into a job order.
   app.post('/job-orders/from-lead/:jobId', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can convert leads to job orders.' });
 
       const { data: lead, error: leadErr } = await supabase
@@ -87,7 +86,6 @@ module.exports = function (app, core) {
   // gets an LD- code, THEN the job order is created from it and gets a JOB- code.
   app.post('/job-orders', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can create job orders.' });
 
       const b = req.body || {};
@@ -249,7 +247,6 @@ module.exports = function (app, core) {
 
   app.put('/job-orders/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       // BD managers can edit any job order; recruiters can edit a job they are
       // assigned to (so the people actually working the req can keep it current).
       if (!isBDM(req) && !(isRecruiter(req) && await recruiterCanTouchJob(req, req.params.id))) {
@@ -277,7 +274,6 @@ module.exports = function (app, core) {
 
   app.delete('/job-orders/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can delete job orders.' });
       await supabase.from('job_orders').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
@@ -299,7 +295,6 @@ module.exports = function (app, core) {
   //   ?q=          narrow the pool by name/email/title first
   app.get('/job-orders/:id/matches', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
 
       const { data: job, error: jobErr } = await withOrg(
         supabase.from('job_orders').select('*').eq('id', req.params.id).is('deleted_at', null), req
@@ -348,7 +343,6 @@ module.exports = function (app, core) {
   // Inline lets the sourcing branches score a person who isn't in the DB yet.
   app.post('/match/score', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       const b = req.body || {};
 
       let candidate = b.candidate || null;
@@ -377,7 +371,6 @@ module.exports = function (app, core) {
   // write; `?apply=1` persists it. Only ever fills blanks.
   app.post('/job-orders/:id/parse-jd', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       const { data: job } = await withOrg(
         supabase.from('job_orders').select('*').eq('id', req.params.id).is('deleted_at', null), req
       ).maybeSingle();
@@ -428,7 +421,6 @@ module.exports = function (app, core) {
 
   app.post('/job-orders/:id/posting-jd', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       if (!(await recruiterCanTouchJob(req, req.params.id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
       const { data: j, error } = await supabase.from('job_orders')
@@ -468,7 +460,6 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   app.post('/job-orders/:id/recruiters', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can assign recruiters.' });
       const recruiterIds = req.body.recruiter_ids || (req.body.recruiter_id ? [req.body.recruiter_id] : []);
       if (!recruiterIds.length) return res.status(400).json({ error: 'recruiter_ids required' });
@@ -490,7 +481,6 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   app.delete('/job-orders/:id/recruiters/:rid', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can unassign recruiters.' });
       await supabase.from('recruiter_assignments')
         .delete().eq('job_order_id', req.params.id).eq('recruiter_id', req.params.rid);
@@ -501,7 +491,6 @@ ${String(j.job_description).slice(0, 12000)}`;
   // ── Assignment requests: recruiter asks to be put on a job ────────────────
   app.post('/job-orders/:id/request-assignment', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isRecruiter(req)) return res.status(403).json({ error: 'Recruiters only.' });
       const jid = req.params.id, uid = req.user.id;
       const assigned = await assignedJobOrderIds(uid);
@@ -535,7 +524,6 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   app.post('/assignment-requests/:id/decide', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can decide assignment requests.' });
       const action = (req.body && req.body.action) || '';
       if (!['approve', 'decline'].includes(action)) return res.status(400).json({ error: "action must be 'approve' or 'decline'" });

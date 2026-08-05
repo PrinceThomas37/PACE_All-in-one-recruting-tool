@@ -7,7 +7,7 @@ const { EVENTS, emit } = require('../../events');
 
 module.exports = function (app, core) {
   const {
-    supabase, db, auth, hasRole, notGuest, today,
+    supabase, db, auth, hasRole, today,
     orgIdFor, orgStamp, withOrg,
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
@@ -51,7 +51,6 @@ module.exports = function (app, core) {
   // add a candidate (from the shared pool) to a job order
   app.post('/submissions', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       if (!b.candidate_id || !b.job_order_id) {
@@ -109,7 +108,6 @@ module.exports = function (app, core) {
   // move a submission to a new stage — enforces the BDM approval gate
   app.patch('/submissions/:id/stage', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       const newStage = normalizeStage(req.body.stage);
       if (!STAGES.includes(newStage)) return res.status(400).json({ error: `Invalid stage. Allowed: ${STAGES.join(', ')}` });
 
@@ -197,7 +195,6 @@ module.exports = function (app, core) {
   // edit a submission's display fields (revision status / rate / employer …)
   app.patch('/submissions/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: sub, error: e0 } = await supabase.from('submissions')
         .select('job_order_id').eq('id', req.params.id).is('deleted_at', null).single();
@@ -218,7 +215,6 @@ module.exports = function (app, core) {
 
   app.delete('/submissions/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       await supabase.from('submissions').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });

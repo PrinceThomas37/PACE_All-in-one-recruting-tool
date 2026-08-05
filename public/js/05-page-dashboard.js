@@ -24,193 +24,40 @@ function isPureRecruiter(u){
 }
 // A "manager" for dashboard purposes = anyone who runs a desk / leads people:
 // admin, BD, BD Lead, Associate Director, Director, RA Lead. They get the real,
-// hierarchy-scoped team dashboard (built on /recruiting-dashboard) instead of
-// the legacy lead-gen dashboard, which reads STATE.leads — dead seed data that
-// is empty for every real login.
+// hierarchy-scoped team dashboard, built on /recruiting-dashboard.
 function isManagerRole(u){
   return userHasAnyRole(u,'admin','bd','bd_lead','associate_director','director','ra_lead');
 }
 
 function renderDashboard(){
-  // Support "view as" — admin/BD can click a team member to see their dashboard
+  // Support "view as" — admin/BD can click a team member to see their dashboard.
   var u=STATE.viewingUser||STATE.user;
   var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
 
-  // "What needs you today" — loaded once per dashboard visit. Guests have no
-  // backend behind this, and a "view as" preview must not fetch the viewer's
-  // own queue and label it someone else's.
-  if(!u.isGuest&&!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
+  // "What needs you today" — loaded once per dashboard visit. A "view as"
+  // preview must not fetch the viewer's own queue and label it someone else's.
+  if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
 
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
-  if(!isViewingOther&&isPureRecruiter(u))return renderRecruiterDashboard(u);
-  // Managers on a real login get the team dashboard (team roster + team's
-  // recruiting desk, from the live hierarchy-scoped endpoint). Data-driven: a
-  // plain "ra"/"bd" who's been given reports via the flexible hierarchy also
-  // qualifies, not just the fixed manager-ish roles. The guest/demo session
-  // stays on the legacy lead dashboard below — it has seeded STATE.leads and no
-  // backend to serve /recruiting-dashboard, so it's the better showcase.
-  if(!isViewingOther&&!u.isGuest&&(isManagerRole(u)||getTeam(u).length))return renderManagerDashboard(u);
-  // Everyone else on a real login (typically a plain "ra" with no reports) gets
-  // the real individual dashboard, built on STATE.jobs — the same data the Leads
-  // page already uses (GET /jobs is scoped server-side to what this user owns).
-  // The legacy tail below reads STATE.leads, which is dead seed data for every
-  // real login; it stays only for the guest demo and the "view as" preview.
-  if(!isViewingOther&&!u.isGuest)return renderIndividualDashboard(u);
-  var pl=periodLeads(u);
-  var total=pl.length;
-  var emailed=pl.filter(function(l){return l.sent}).length;
-  var pos=pl.filter(function(l){return l.stage==="Positive"||l.stage==="Connected"}).length;
-  var pend=pl.filter(function(l){return l.stage==="Active"}).length;
-  var rr=total?Math.round(emailed/total*100):0;
+  if(isPureRecruiter(u))return renderRecruiterDashboard(u);
 
-  var hour=new Date().getHours();
-  var greet=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
+  // Managers get the team dashboard (team roster + the team's recruiting desk,
+  // from the live hierarchy-scoped endpoint). Data-driven: a plain "ra"/"bd"
+  // who has been given reports also qualifies, not just the manager-ish roles.
+  // Not for a "view as" preview — that endpoint answers for whoever is holding
+  // the session, so it would show the viewer's numbers under someone else's name.
+  if(!isViewingOther&&(isManagerRole(u)||getTeam(u).length))return renderManagerDashboard(u);
 
-  // period picker
-  var periods=["daily","weekly","monthly","quarterly"];
-  var pickers=periods.map(function(p){
-    return '<button class="fc'+(STATE.period===p?" on":"") + '" onclick="setPeriod(\''+p+'\')" style="text-transform:capitalize">'+p+'</button>';
-  }).join("");
-
-  // team card — only show for actual logged-in user (not when viewing someone else).
-  // Recruiters don't work leads, so their all-zero rows are excluded from this table.
-  var team=(isViewingOther?[]:getTeam(u)).filter(function(t){return !isPureRecruiter(t);});
-  var canClickTeam=(STATE.user.role==="admin"||STATE.user.role==="bd");
-  var teamRows=team.map(function(t){
-    var tl=getMyLeads(t);
-    var tlp=filterPeriod(tl,STATE.period);
-    var pos_=tlp.filter(function(l){return l.stage==="Positive"||l.stage==="Connected"}).length;
-    var neg_=tlp.filter(function(l){return l.stage==="Negative"}).length;
-    var resp_=tlp.filter(function(l){return l.sent}).length;
-    var rr_=tlp.length?Math.round(resp_/tlp.length*100):0;
-    var rrColor=rr_>50?"var(--green)":rr_>25?"var(--amber)":"var(--text3)";
-    var clickStyle=canClickTeam?'cursor:pointer':'cursor:default';
-    var hoverStyle=canClickTeam?' onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'transparent\'"':"";
-    var clickAttr=canClickTeam?' onclick="viewAs(\''+t.id+'\')"':"";
-    return '<div'+clickAttr+hoverStyle+' style="'+clickStyle+';display:flex;flex-direction:row;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);transition:background .1s;background:transparent">'+
-      '<div class="av av-36 '+t.avc+'" style="flex-shrink:0">'+t.av+'</div>'+
-      '<div style="flex:1;min-width:0;overflow:hidden">'+
-        '<div style="font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">'+t.name+'</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);white-space:nowrap">'+roleLabel(t.role)+(t.empId?' · '+t.empId:'')+'</div>'+
-      '</div>'+
-      '<div style="display:flex;flex-direction:row;gap:0;align-items:center;flex-shrink:0">'+
-        '<div style="text-align:center;width:72px">'+
-          '<div style="font-family:var(--display);font-weight:700;font-size:17px;color:var(--accent);line-height:1.2">'+tlp.length+'</div>'+
-          '<div style="font-size:10px;color:var(--text3)">leads</div>'+
-        '</div>'+
-        '<div style="text-align:center;width:80px">'+
-          '<div style="font-family:var(--display);font-weight:700;font-size:17px;color:'+rrColor+';line-height:1.2">'+rr_+'%</div>'+
-          '<div style="font-size:10px;color:var(--text3)">response</div>'+
-        '</div>'+
-        '<div style="text-align:center;width:60px">'+
-          '<div style="font-family:var(--display);font-weight:700;font-size:17px;color:var(--green);line-height:1.2">'+pos_+'</div>'+
-          '<div style="font-size:10px;color:var(--text3)">positive</div>'+
-        '</div>'+
-        '<div style="text-align:center;width:60px">'+
-          '<div style="font-family:var(--display);font-weight:700;font-size:17px;color:var(--red);line-height:1.2">'+neg_+'</div>'+
-          '<div style="font-size:10px;color:var(--text3)">negative</div>'+
-        '</div>'+
-        (canClickTeam?'<div style="width:20px;text-align:center;color:var(--text3);font-size:13px">›</div>':'')+
-      '</div>'+
-    '</div>';
-  }).join("");
-
-  // industry breakdown
-  var indMap={};
-  var allMy=getMyLeads(u);
-  allMy.forEach(function(l){var co=STATE.companies.find(function(c){return c.id===l.coid});if(co)indMap[co.ind]=(indMap[co.ind]||0)+1;});
-  var indArr=Object.entries(indMap).sort(function(a,b){return b[1]-a[1]}).slice(0,7);
-  var maxI=indArr.length?indArr[0][1]:1;
-  var indRows=indArr.map(function(e){
-    var pct=Math.round(e[1]/maxI*100);
-    return '<div class="ind-row">'+
-      '<div style="font-size:13px;min-width:110px">'+e[0]+'</div>'+
-      '<div class="ind-bg"><div class="ind-fill" style="width:'+pct+'%;background:var(--accent)"></div></div>'+
-      '<div style="font-size:12px;font-family:var(--mono);color:var(--text3);min-width:22px;text-align:right">'+e[1]+'</div>'+
-    '</div>';
-  }).join("");
-
-  // response rate bars (last 4 weeks)
-  var bars=[3,2,1,0].map(function(w){
-    var wEnd=new Date();wEnd.setDate(wEnd.getDate()-w*7);
-    var wStart=new Date(wEnd);wStart.setDate(wStart.getDate()-7);
-    var wl=allMy.filter(function(l){var d=new Date(l.date);return d>=wStart&&d<=wEnd;});
-    var we=wl.filter(function(l){return l.sent}).length;
-    var rate=wl.length?Math.round(we/wl.length*100):0;
-    var bg=rate>60?"var(--green)":rate>30?"var(--amber)":"var(--accent)";
-    return '<div class="bar-col"><div class="bar-fill" style="height:'+Math.max(4,rate)+'%;background:'+bg+'"></div><div class="bar-lbl">W'+(4-w)+'</div></div>';
-  }).join("");
-
-  // stage pills
-  var stagePills=STAGES.map(function(s){
-    var cnt=pl.filter(function(l){return l.stage===s}).length;
-    if(!cnt)return"";
-    var c=s==="Positive"?"var(--green)":s==="Negative"?"var(--red)":s==="Connected"?"var(--accent)":"var(--text)";
-    return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
-      '<div style="font-family:var(--display);font-size:22px;font-weight:700;color:'+c+'">'+cnt+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+s+'</div>'+
-    '</div>';
-  }).join("");
-
-  return '<div class="page">'+
-    (isViewingOther?
-      '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--amber-l);border:1px solid rgba(217,119,6,.25);border-radius:var(--r2);margin-bottom:14px;font-size:13px">'+
-        '<span style="font-size:16px">👁</span>'+
-        '<span>You are viewing <strong>'+u.name+'</strong>\'s dashboard as an observer.</span>'+
-        '<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:12px" onclick="stopViewing()">← Back to mine</button>'+
-      '</div>'
-    :"")+
-    '<div class="banner">'+
-      '<div style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:var(--r2);padding:10px 16px;text-align:right">'+
-        '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
-        '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
-      '</div>'+
-      '<div class="banner-name">'+(isViewingOther?u.name+"'s Dashboard":greet+', '+u.name.split(" ")[0]+' 👋')+'</div>'+
-      '<div class="banner-sub">'+roleLabel(u.role)+'</div>'+
-      '<div class="banner-stats">'+
-        '<div><div class="bstat-val">'+total+'</div><div class="bstat-lbl">Leads this period</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+emailed+'</div><div class="bstat-lbl">Emails sent</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+rr+'%</div><div class="bstat-lbl">Response rate</div></div>'+
-        '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+pos+'</div><div class="bstat-lbl">Positive</div></div>'+
-      '</div>'+
-    '</div>'+
-
-    '<div class="flex gap2 mb4 flex-wrap">'+pickers+'</div>'+
-
-    (team.length?
-      '<div class="card mb4">'+
-        '<div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">'+
-          '<div>'+
-            '<div class="fw6">'+(u.role==="ra"?"Your BD Manager":"Your Team")+'</div>'+
-            (canClickTeam&&!isViewingOther?'<div style="font-size:11px;color:var(--text3);margin-top:2px">Click any member to view their dashboard</div>':'')+
-          '</div>'+
-          '<div style="display:flex;flex-direction:row;align-items:center;flex-shrink:0">'+
-            '<div style="text-align:center;width:72px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Leads</div>'+
-            '<div style="text-align:center;width:80px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Response</div>'+
-            '<div style="text-align:center;width:60px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Pos</div>'+
-            '<div style="text-align:center;width:60px;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Neg</div>'+
-            (canClickTeam?'<div style="width:20px"></div>':'')+
-          '</div>'+
-        '</div>'+
-        '<div>'+teamRows+'</div>'+
-        '<div style="padding:8px 14px;background:var(--bg);border-top:1px solid var(--border);border-radius:0 0 var(--r3) var(--r3);font-size:11.5px;color:var(--text3)">Showing stats for: <strong style="color:var(--text)">'+STATE.period+'</strong></div>'+
-      '</div>'
-    :"")+
-
-    '<div class="g2 mb4">'+
-      '<div class="card cp"><div class="flex jb aic mb3"><div><div class="fw6">Response rate trend</div><div class="f12 text3">Last 4 weeks</div></div><span class="bdg bdg-blue">'+rr+'% avg</span></div><div class="bar-chart">'+bars+'</div></div>'+
-      '<div class="card cp"><div class="fw6 mb3">Industry breakdown</div>'+(indRows||'<div class="text3 f13">No leads yet</div>')+'</div>'+
-    '</div>'+
-
-    '<div class="card cp"><div class="flex jb aic mb3"><div class="fw6">Pipeline overview</div><div class="f12 text3">'+STATE.period+'</div></div><div class="flex gap2 flex-wrap">'+stagePills+'</div></div>'+
-
-    renderRemindersWidget()+
-
-  '</div>';
+  // Everyone else — and every "view as" preview — gets the individual
+  // dashboard, which is built on STATE.jobs and filters by the user it is
+  // handed, so previewing somebody else's desk shows THEIR jobs.
+  //
+  // There used to be a fourth branch here: a ~150-line lead-gen dashboard
+  // reading STATE.leads. That collection was only ever filled by the guest
+  // demo's generated data, so for every real login it rendered a wall of
+  // zeroes. It went with the demo data.
+  return renderIndividualDashboard(u);
 }
 
 // ── REMINDERS WIDGET (shared: BD + recruiter dashboards) ──────────────

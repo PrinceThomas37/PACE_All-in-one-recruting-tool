@@ -564,7 +564,6 @@ function resolveComposeRecipient(){
   return null;
 }
 window.sendEmail=function(){
-  if(STATE.user&&STATE.user.isGuest){guestSimulate('sendEmail',{to:(STATE.genEmail&&STATE.genEmail.email)||'contact'});return;}
   var ge=STATE.genEmail;
   if(!ge){
     var recip=resolveComposeRecipient();

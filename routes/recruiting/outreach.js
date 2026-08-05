@@ -235,7 +235,6 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
 // a clear 409 (no_connected_mailbox) so the UI can fall back to the mail app.
 app.post('/candidates/email', auth, async (req, res) => {
   try {
-    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot send email.' });
     const b = req.body || {};
     const recipients = Array.isArray(b.recipients) ? b.recipients : [];
     const subject = String(b.subject || '').trim();
@@ -288,7 +287,6 @@ app.post('/candidates/email', auth, async (req, res) => {
 // (clients are a BD concept; recruiters only ever email candidates).
 app.post('/companies/:id/email', auth, async (req, res) => {
   try {
-    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot send email.' });
     if (!hasRole(req, 'admin', 'bd', 'bd_lead')) return res.status(403).json({ error: 'BD role required.' });
     const b = req.body || {};
     const to = String(b.to || '').trim();
@@ -363,7 +361,6 @@ function buildInterviewInviteText(sub, candidate, job, role) {
 // Email the interview details to the candidate and/or the BD manager.
 app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
   try {
-    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot send email.' });
     const b = req.body || {};
     const roles = Array.isArray(b.recipients) ? b.recipients : [];
     const wantCandidate = roles.includes('candidate') || b.candidate === true;
@@ -424,7 +421,6 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
 // a clear 409 the UI can explain instead of a raw Graph error.
 app.post('/submissions/:id/create-meeting', auth, async (req, res) => {
   try {
-    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot create meetings.' });
     const b = req.body || {};
     const { data: sub } = await supabase.from('submissions')
       .select('id, interview_at, candidate:candidates(full_name), job:job_orders(job_title)')
@@ -471,7 +467,6 @@ app.post('/submissions/:id/create-meeting', auth, async (req, res) => {
 // are offered in the UI as "coming soon".
 app.post('/meetings', auth, async (req, res) => {
   try {
-    if (req.user.isGuest) return res.status(403).json({ error: 'Guests cannot create meetings.' });
     const b = req.body || {};
     if ((b.platform || 'teams') !== 'teams') return res.status(400).json({ error: 'Only Microsoft Teams is available right now.' });
     const start = new Date(b.start);

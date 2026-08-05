@@ -6,6 +6,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { enterApp, switchRole, waitForLogin } from './helpers/enter-app.mjs';
 
 const PUBLIC_DIR = path.resolve(new URL('../public', import.meta.url).pathname);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -43,8 +44,8 @@ try {
   page.on('pageerror', e => pageErrors.push(String(e)));
 
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button:has-text("Continue as Guest")', { timeout: 15000 });
-  await page.click('button:has-text("Continue as Guest")');
+  await waitForLogin(page);
+  await enterApp(page);
   await page.waitForSelector('#sidebar', { timeout: 15000 });
 
   // Morph the guest into a pure recruiter with a stubbed /recruiting-dashboard payload
@@ -155,7 +156,13 @@ try {
   await page.evaluate(() => { jbCloseModal(); goPage('dashboard'); });
   await page.waitForTimeout(200);
 
-  // Sanity: BD guest still gets the classic dashboard
+  // Sanity: a BD gets the manager/team dashboard, not the recruiter one.
+  //
+  // This used to assert the legacy lead-gen widgets ("Response rate trend",
+  // "Industry breakdown"). That dashboard is gone: it read STATE.leads, which
+  // was only ever filled by the guest demo's generated data, so for a real
+  // login it rendered a wall of zeroes. A BD is a manager role, so the
+  // assertion is now that they land on the team desk.
   await page.evaluate(() => {
     STATE.user.role = 'bd'; STATE.user.roles = ['bd'];
     document.querySelectorAll('[data-bdnav],[data-atsnav],[data-srcnav]').forEach(e => e.remove());
@@ -165,7 +172,10 @@ try {
   const bdContent = await page.evaluate(() => document.getElementById('content').innerHTML);
   const bdNav = await page.evaluate(() =>
     Array.from(document.querySelectorAll('.sb-nav .nav-item')).map(e => e.textContent.trim()));
-  step('BD still sees lead widgets', bdContent.includes('Response rate trend') && bdContent.includes('Industry breakdown'));
+  step('BD lands on the team desk, not the recruiter dashboard',
+    bdContent.includes('Your team') && !bdContent.includes('No jobs on your desk yet'), bdContent.slice(0, 200));
+  step('BD dashboard shows no seeded lead-gen widgets',
+    !bdContent.includes('Response rate trend'), 'the legacy demo-fed dashboard is gone');
   step('BD still sees Leads nav', bdNav.includes('Leads'), bdNav.join(' | '));
   step('BD has no All Jobs nav (their Jobs page covers it)', !bdNav.includes('All Jobs'), bdNav.join(' | '));
 

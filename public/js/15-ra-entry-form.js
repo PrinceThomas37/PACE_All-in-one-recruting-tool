@@ -557,7 +557,6 @@ window.raFormSubmit=function(){
   // 21-day company cooldown check
   var cooldown=companyCooldownCheck(f.coName);
   if(cooldown){showToast(f.coName+' is in a 21-day cooldown. '+cooldown.daysLeft+' day'+(cooldown.daysLeft!==1?'s':'')+' remaining.','warning');return;}
-  if(guestSimulate('addJob',{coName:f.coName,position:f.position,industry:f.industry,location:f.location,contacts:validContacts}))return;
 
   STATE.raFormSubmitting=true;render();
 

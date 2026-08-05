@@ -226,7 +226,7 @@ module.exports = function createRecruitingCore(deps) {
 
   return {
     // passthrough of the raw deps every route module needs
-    supabase, db: deps.db, auth: deps.auth, hasRole, notGuest: deps.notGuest, today: deps.today,
+    supabase, db: deps.db, auth: deps.auth, hasRole, today: deps.today,
     // multi-tenant
     orgIdFor, orgStamp, withOrg,
     // relevance

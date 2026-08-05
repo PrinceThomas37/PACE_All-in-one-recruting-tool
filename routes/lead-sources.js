@@ -18,7 +18,7 @@ const { findContacts, normalizeDomain } = require('../enrichment');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, notGuest, withOrg, orgStamp, orgIdFor, logActivity } = ctx;
+  const { supabase, auth, hasRole, withOrg, orgStamp, orgIdFor, logActivity } = ctx;
 
   // Sourcing decides who the desk talks to, so it is a BD/admin concern.
   const canManage = (req) => hasRole(req, 'admin', 'bd_lead', 'ra_lead', 'director', 'associate_director');
@@ -36,7 +36,6 @@ module.exports = (ctx) => {
   // ── CRUD ──────────────────────────────────────────────────────────────────
   router.get('/lead-sources', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       const { data, error } = await withOrg(supabase.from('lead_sources')
         .select('*').is('deleted_at', null).order('created_at', { ascending: false }), req);
       if (error) throw error;
@@ -49,7 +48,6 @@ module.exports = (ctx) => {
 
   router.post('/lead-sources', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       if (!getProvider(b.provider)) return res.status(400).json({ error: 'Unknown provider.' });
@@ -83,7 +81,6 @@ module.exports = (ctx) => {
 
   router.put('/lead-sources/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       const updates = { updated_at: new Date() };
@@ -102,7 +99,6 @@ module.exports = (ctx) => {
 
   router.delete('/lead-sources/:id', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       await withOrg(supabase.from('lead_sources')
         .update({ deleted_at: new Date() }).eq('id', req.params.id), req);
@@ -117,7 +113,6 @@ module.exports = (ctx) => {
   // development environment — this is how you confirm one actually works.
   router.post('/lead-sources/test', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       const result = await fetchBoard(b.provider, b.board_token, { timeoutMs: 20000 });
@@ -150,7 +145,6 @@ module.exports = (ctx) => {
   // Run one source right now rather than waiting for its schedule.
   router.post('/lead-sources/:id/run', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: source } = await withOrg(
         supabase.from('lead_sources').select('*').eq('id', req.params.id).is('deleted_at', null), req
@@ -163,7 +157,6 @@ module.exports = (ctx) => {
   // Run every due source (also driven by the background engine).
   router.post('/lead-sources/run-all', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canManage(req)) return res.status(403).json({ error: 'Not permitted.' });
       res.json(await runDueSources({ supabase }));
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -172,7 +165,6 @@ module.exports = (ctx) => {
   // ── the review queue ──────────────────────────────────────────────────────
   router.get('/sourced-leads', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       const status = String(req.query.status || 'new');
       const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
 
@@ -201,7 +193,6 @@ module.exports = (ctx) => {
 
   router.post('/sourced-leads/:id/reject', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canReview(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data, error } = await withOrg(supabase.from('sourced_jobs_raw').update({
         status: 'rejected', reviewed_by: req.user.id, reviewed_at: new Date()
@@ -218,7 +209,6 @@ module.exports = (ctx) => {
   // distribution engine, the sequence engine, the send loop — is untouched.
   router.post('/sourced-leads/:id/approve', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canReview(req)) return res.status(403).json({ error: 'Not permitted.' });
 
       const { data: staged } = await withOrg(
@@ -329,7 +319,6 @@ module.exports = (ctx) => {
   // Re-run contact inference for one staged lead, e.g. after adding the domain.
   router.post('/sourced-leads/:id/find-contacts', auth, async (req, res) => {
     try {
-      if (notGuest(req, res)) return;
       if (!canReview(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: staged } = await withOrg(
         supabase.from('sourced_jobs_raw').select('*').eq('id', req.params.id), req

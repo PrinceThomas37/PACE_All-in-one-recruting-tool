@@ -177,7 +177,7 @@ function startBackgroundPoll(){
     // full page reload.
     apiGet('/users').then(function(raw){
       STATE.users=(raw||[]).map(normaliseUser);
-      if(STATE.user&&!STATE.user.isGuest){
+      if(STATE.user){
         var me=STATE.users.find(function(u){return u.id===STATE.user.id;});
         if(me){STATE.user.name=me.name;STATE.user.email=me.email;STATE.user.role=me.role;STATE.user.roles=me.roles;}
       }

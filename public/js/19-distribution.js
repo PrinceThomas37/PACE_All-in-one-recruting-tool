@@ -169,7 +169,6 @@ window.confirmAssignToManager=function(){
   var ratio=STATE._assignRatio;
   var managerId=STATE._assignManagerId;
   if(!ratio||!managerId)return;
-  if(guestSimulate('assignLeads',{count:ratio.total_to_send||3}))return;
   var m=STATE.users.find(function(u){return u.id===managerId;})||{name:'Manager'};
   var emailAccounts=(STATE.userEmailsCache[managerId]||[]).filter(function(a){return a.is_active;});
   var totalCapacity=emailAccounts.reduce(function(s,a){return s+(a.daily_send_limit||300);},0);

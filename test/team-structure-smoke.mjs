@@ -6,6 +6,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { enterApp, switchRole, waitForLogin } from './helpers/enter-app.mjs';
 
 const PUBLIC_DIR = path.resolve(new URL('../public', import.meta.url).pathname);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -47,8 +48,8 @@ try {
   const page = await context.newPage();
   page.on('pageerror', e => pageErrors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button:has-text("Continue as Guest")', { timeout: 15000 });
-  await page.click('button:has-text("Continue as Guest")');
+  await waitForLogin(page);
+  await enterApp(page);
   await page.waitForSelector('#sidebar', { timeout: 15000 });
 
   // Load the org into STATE via the real normaliser.
@@ -70,7 +71,7 @@ try {
 
   // 2. renderOrgSubtree nests transitive reports and marks the viewer
   const tree = await page.evaluate(() => {
-    STATE.user = Object.assign({}, STATE.user, { id: 'dana', role: 'director', roles: ['director'], name: 'Dana Director', isGuest: true });
+    STATE.user = Object.assign({}, STATE.user, { id: 'dana', role: 'director', roles: ['director'], name: 'Dana Director' });
     return renderOrgSubtree('dana', { click: 'none' });
   });
   step('Org subtree shows the whole line', tree.includes('Dana Director') && tree.includes('Lee Lead') && tree.includes('Mia Recruit') && tree.includes('Sam Recruit'));
@@ -142,7 +143,7 @@ try {
   // seed. Ora has no reports and role 'ra' — the one role left that isn't a
   // recruiter or a manager, so it must hit renderIndividualDashboard().
   const ra = await page.evaluate(() => {
-    STATE.user = Object.assign({}, STATE.user, { id: 'ora', role: 'ra', roles: ['ra'], name: 'Ora Analyst', isGuest: false });
+    STATE.user = Object.assign({}, STATE.user, { id: 'ora', role: 'ra', roles: ['ra'], name: 'Ora Analyst' });
     STATE.jobs = [
       { id: 'j1', position: 'Backend Engineer', company_name: 'Acme Co', industry: 'Software', location: 'Remote', stage: 'Connected', is_duplicate: false, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() },
       { id: 'j2', position: 'Frontend Engineer', company_name: 'Beta Inc', industry: 'Software', location: 'NYC', stage: 'Unassigned', is_duplicate: false, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() },

@@ -14,6 +14,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
+import { enterApp, switchRole, waitForLogin } from './helpers/enter-app.mjs';
 
 const PUBLIC_DIR = path.resolve(new URL('../public', import.meta.url).pathname);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -46,8 +47,8 @@ try {
   page.on('pageerror', e => pageErrors.push(String(e)));
 
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button:has-text("Continue as Guest")', { timeout: 15000 });
-  await page.click('button:has-text("Continue as Guest")');
+  await waitForLogin(page);
+  await enterApp(page);
   await page.waitForSelector('#sidebar', { timeout: 15000 });
 
   await page.evaluate(() => {

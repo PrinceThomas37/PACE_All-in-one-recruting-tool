@@ -28,7 +28,6 @@ module.exports = (ctx) => {
 
   router.get('/next-actions', auth, async (req, res) => {
     try {
-      if (req.user?.isGuest) return res.json({ items: [], summary: summarize([]), scope: 'guest' });
 
       const org = orgIdFor(req);
       const isAdmin = (req.user.roles || []).includes('admin') || req.user.role === 'admin';

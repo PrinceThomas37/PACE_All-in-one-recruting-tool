@@ -21,51 +21,6 @@ window.leadStageColor = function(stage){ return window.LEAD_STAGE_COLORS[stage] 
 // ════════════════════════════════════════════════
 // JOBS / CONTACTS MODEL  (matches backend index.js)
 // ════════════════════════════════════════════════
-function genJobs(seedLeads, companies){
-  // Group seedLeads by (company + position) -> 1 job + N contacts
-  var jobs = [], contacts = [], jmap = {};
-  var stages = ["Active","In Progress","Interview","Closed","Lost"];
-  for (var i=0;i<seedLeads.length;i++){
-    var l = seedLeads[i];
-    var key = l.coid + "||" + l.pos;
-    var jid = jmap[key];
-    if (!jid){
-      jid = "j" + (jobs.length+1);
-      jmap[key] = jid;
-      var co = companies.find(function(c){return c.id===l.coid;}) || {};
-      jobs.push({
-        id: jid,
-        company_id: l.coid,
-        company_name: co.name || "",
-        company_ind: co.ind || "",
-        company_web: co.web || "",
-        position: l.pos,
-        location: l.loc || "",
-        source: l.src || "LinkedIn",
-        job_url: "",
-        stage: stages[Math.floor(Math.random()*3)],
-        notes: "",
-        created_by: l.aid,
-        assigned_to: l.aid,
-        created_date: l.created || new Date().toISOString().slice(0,10),
-        created_at: new Date().toISOString()
-      });
-    }
-    contacts.push({
-      id: "c" + (contacts.length+1),
-      job_id: jid,
-      first_name: l.fn,
-      last_name: l.ln || "",
-      designation: l.desig || "",
-      email: l.email || "",
-      phone: l.phone || "",
-      linkedin: "",
-      is_primary: contacts.filter(function(c){return c.job_id===jid;}).length===0,
-      email_sent_at: l.sent || null
-    });
-  }
-  return { jobs: jobs, contacts: contacts };
-}
 function getMyJobs(u){
   if (!u) return [];
   if (userHasAnyRole(u,'admin','ra_lead')) return STATE.jobs.slice();
@@ -96,9 +51,9 @@ var STATE = {
 
   user: null,
   page: "dashboard",
-  users: JSON.parse(JSON.stringify(USERS)),
-  leads: genLeads(),
-  companies: JSON.parse(JSON.stringify(COMPANIES)),
+  users: [],
+  leads: [],
+  companies: [],
   activities: [],
   emails: [],
   toasts: [],
@@ -199,14 +154,13 @@ var STATE = {
   raFormSubmitting:false,
 };
 
-// No pre-seeded reminders — users set them manually from the OOO list
-STATE.activities = genActs(STATE.leads);
-var _seed = genJobs(STATE.leads, STATE.companies);
-STATE.jobs = _seed.jobs;
-STATE.contacts = _seed.contacts;
-STATE.emails = STATE.leads.filter(function(l){return l.sent}).slice(0,6).map(function(l,i){
-  var co=STATE.companies.find(function(c){return c.id===l.coid})||{};
-  var body="Hi "+l.fn+",\n\nI came across "+co.name+" and was really impressed by what you're building in the "+(co.ind||"")+" space.\n\nAt Fute Global, we specialize in connecting organizations with top-tier talent. Given your role as "+l.desig+", I believe we could be genuinely helpful with your "+l.pos+" search.\n\nWould you be open to a quick 15-minute call this week?\n\nWarm regards,\nFute Global LLC";
-  return{id:"e"+i,lid:l.id,by:l.aid,to:l.email,subj:"Connecting re: "+l.pos+" at "+(co?co.name:""),body:body,plt:l.plt||"Gmail",dt:l.sent,status:"sent"};
-});
+// Nothing is pre-seeded. Every collection starts empty and is filled by
+// loadAppData() from the API after sign-in. There used to be a generated roster
+// of fake staff, companies, leads and sent emails here so the guest tour had
+// something to show; with the tour gone, seeding it would only mean a real user
+// briefly sees invented rows before their own data arrives.
+STATE.activities = [];
+STATE.jobs = [];
+STATE.contacts = [];
+STATE.emails = [];
 

@@ -1,5 +1,5 @@
 // Frontend smoke test — boots public/index.html in headless Chromium using the
-// fully client-side guest/demo mode (no backend required) and asserts that the
+// signed-in state driven from the test (no backend required) and asserts that the
 // app loads from the split js/ modules and renders every major screen without
 // JavaScript errors.
 //
@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { enterApp, switchRole, waitForLogin } from './helpers/enter-app.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
@@ -74,13 +75,13 @@ try {
   });
 
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('button:has-text("Continue as Guest")', { timeout: 15000 });
+  await waitForLogin(page);
   step('Login screen renders', (await page.locator('.login-card').count()) > 0);
 
-  await page.click('button:has-text("Continue as Guest")');
+  await enterApp(page);
   await page.waitForSelector('#sidebar', { timeout: 15000 });
   await page.waitForSelector('#content', { timeout: 15000 });
-  step('Guest login → dashboard renders', (await page.locator('#content').innerHTML()).length > 200);
+  step('Sign-in → dashboard renders', (await page.locator('#content').innerHTML()).length > 200);
 
   async function visit(label, pageId) {
     await page.evaluate((id) => window.goPage(id), pageId);
@@ -94,13 +95,13 @@ try {
     await visit(label, id);
   }
 
-  await page.evaluate(() => window.guestSwitchRole('ra'));
+  await switchRole(page, 'ra');
   await page.waitForTimeout(250);
   step('Switch role → RA', (await page.locator('#sidebar').count()) > 0);
   await visit('RA Dashboard', 'dashboard');
   await visit('RA Insights', 'insights');
 
-  await page.evaluate(() => window.guestSwitchRole('ra_lead'));
+  await switchRole(page, 'ra_lead');
   await page.waitForTimeout(250);
   step('Switch role → RA Lead', (await page.locator('#sidebar').count()) > 0);
   await visit('Assign Leads', 'assign');
