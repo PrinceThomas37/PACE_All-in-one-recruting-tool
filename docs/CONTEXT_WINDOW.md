@@ -13,16 +13,11 @@ to `main` IS the release · **Dev branch**: `claude/context-window-docs-t5ia4s`
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
-This split exists because a single ever-growing context file makes every new
-session pay to read old news, and eventually the important parts get skimmed.
-
-| File | Job | Rule |
-|---|---|---|
-| `docs/CONTEXT_WINDOW.md` (this) | **Current state only.** What is live, what is pending, what to do next, what will bite you. | **REWRITE it. Keep it under ~200 lines.** Delete anything that is no longer true. |
-| `docs/CONTEXT_ARCHIVE.md` | **Everything that ever happened**, newest last. | **APPEND ONLY. Never edit, never delete, never summarise away.** |
-
-At the end of a session: append the narrative to the archive, then **rewrite**
-this file to describe the new present. Nothing is ever lost; the read stays short.
+**This file: current state only. REWRITE it each session, keep it under ~200
+lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
+that ever happened, **append-only — never edited, never summarised away.** At
+the end of a session, append the narrative to the archive, then rewrite this to
+describe the new present. Nothing is lost; the read stays short.
 
 ---
 
@@ -40,15 +35,33 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Background automation actually running** — `CRON_KEY` is set and verified
 - **SSO sign-in with Microsoft** (Google is built but needs credentials)
 - The PACE rebrand and the rebuilt login page
-- **Plans, limits and entitlements — enforced, not decorative.** The default org
-  is on the `internal` plan (unlimited), so nothing changed for it.
-- **No guest / demo mode anywhere.** `Bearer guest` used to grant read-only
-  access to the default org's live data; it and all seeded fake data are gone.
+- Self-serve signup steps 1–3 (switched OFF — see below)
+
+## ⏳ On the dev branch, NOT yet merged — PR #134
+
+Two things are finished, tested (41/41) and waiting on the owner. **They are not
+live until #134 merges**, so do not describe them as shipped:
+
+1. **The guest bypass and all demo data are removed.** `Bearer guest` granted
+   read-only access to the DEFAULT org — a real customer's live data — and
+   `01-seed-demo.js` generated a fake world a user briefly saw before their own
+   data loaded. Both gone, along with the legacy lead-gen dashboard that only
+   the demo data ever fed.
+2. **Plans, entitlements and the Stripe seam** (self-serve step 4).
+
+**Waiting on the owner, and the reason each is theirs:**
+- **Prices.** Deliberately `null` on every tier — what PACE costs is a product
+  decision, and an invented number on a screen looks decided. Proposed to them:
+  Starter ₹4,000 / Pro ₹12,000 / Business ₹30,000 per month. One-line change in
+  `services/plans.js`.
+- **Whether to take card payments at all.** Plans and limits are real without
+  Stripe; online payment needs a Stripe account. The alternative they were
+  offered is invoicing and changing plans by hand.
 
 ## Self-serve signup — built, switched OFF
 
-Steps 1–3 are built and merged. Nothing is open to the public, because the whole
-thing sits behind one env var:
+Steps 1–3 are merged; step 4 is on PR #134. Nothing is open to the public,
+because the whole thing sits behind one env var:
 
 1. ✅ Organisations get plan / status / kind
 2. ✅ Domain claiming with DNS verification
@@ -91,43 +104,37 @@ we deliberately refuse, and it is pinned by a test.
    app registration updated, together.
 3. Verify one real Greenhouse/Lever board via the "Test it" button — the
    adapters have never met a live feed (the sandbox blocks those hosts).
+4. **Set prices, and decide whether to take card payments** — see PR #134 above.
+   Both block nothing technically; plans are enforced either way.
+5. **Merge #134** (their call, as always) — then the guest bypass is closed in
+   production, not just on a branch.
 
-## Plans — what is enforced, and what is not decided
+## Plans — the rules that must not be softened
 
 Free 2 seats / 3 job orders / 50 candidates / 1 mailbox · Starter 5/25/1,000/3 ·
-Pro 20/∞/10,000/10 · Business unlimited · `internal` = ours, unlimited.
+Pro 20/∞/10,000/10 · Business unlimited · `internal` = ours, unlimited (the
+default org is on it, which is why none of this changed the live deployment).
 
 - **Enforced on CREATE** (`POST /users`, `/users/:id/emails`, `/job-orders`,
   `/candidates`) with **402**, not 403 — a billing wall is not a permission
   error. Feature gates: sourcing = Pro+, conversation intelligence = Starter+.
 - **Being over a limit never deletes anything.** Enforcement is create-only, so
-  a downgrade keeps every row and simply blocks adding. Say this in any UI that
-  shows a limit.
-- **Pricing is deliberately unset** (`price: null` on every tier). What PACE
-  costs is the owner's call; the billing card says "pricing not published yet"
-  rather than showing an invented number. `services/plans.js` is the one place
-  to fill them in.
-- **Payments are off** until `STRIPE_SECRET_KEY` is set. The webhook is the ONLY
-  thing that may change a plan — a browser "success" redirect is something
-  anyone can type into their own URL bar.
+  a downgrade keeps every row and just blocks adding. Never add a path that
+  removes, hides or locks data over billing.
+- **Only the signed webhook may change a plan.** A browser "success" redirect is
+  something anyone can type into their own URL bar.
+- **A failed usage count ALLOWS.** Blocking a paying customer because a COUNT
+  timed out is worse than one row over.
 
 ## Migrations — 037-039 APPLIED to the live DB (2026-08-05)
 
-`037_conversation_intel`, `038_org_domains_and_plans` and `039_tenant_isolation`
-were applied together with the owner's explicit go-ahead, and verified against
-the live schema afterwards:
-
-| Verified | Result |
-|---|---|
-| Tables with RLS disabled | **0 of 48** (was 37, including `microsoft_tokens`) |
-| Tables missing a service-role policy | 0 · 48 policies total |
-| `org_id` on `microsoft_tokens` / `gmail_tokens` | present, backfilled, **0 nulls** |
-| `users.last_login_at` / `last_login_method` | present — `sso.js` was writing to columns that did not exist |
-| `users_role_check` | now accepts `associate_director` and `director` |
-| Default org | `plan=internal, kind=internal` — reads as ours, not a paying customer |
-
-`conversation_messages` and `org_domains` exist, so conversation intelligence
-stores real threads and domain claiming answers for real.
+Applied with the owner's go-ahead and **verified against the live schema**, not
+trusted from the success return. The headline: **0 of 48 tables without RLS**
+(was 37, including `microsoft_tokens` — customers' mailbox refresh tokens were
+readable with the anon key), `org_id` backfilled on both token tables with no
+nulls, `users.last_login_at`/`last_login_method` finally existing (`sso.js` had
+been writing to columns that did not), and `users_role_check` accepting
+`associate_director`/`director`. Full detail in the archive.
 
 **Migration `040_billing.sql` is WRITTEN and NOT APPLIED.** Three nullable
 billing columns, an index, and a CHECK on `organizations.plan`. Nothing reads
@@ -172,8 +179,6 @@ go-ahead.**
   have died this way: `last_login_at` written to a column that did not exist;
   a role picker offering two roles the database rejected; a dashboard whose
   widgets only ever had demo data behind them.
-- **A failed usage count must ALLOW, not refuse.** Blocking a paying customer
-  because a COUNT query timed out is far worse than one row over a limit.
 - **The browser tests are not allowed to need a production bypass.** All 17
   entered the app by clicking "Continue as Guest". They use
   `test/helpers/enter-app.mjs` now — drive STATE from the test instead.
@@ -190,8 +195,18 @@ go-ahead.**
   — `/auth/sso/for-domain` is the seam.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
-- Growth bets not started: per-role permissions, CSV import/export + public API,
-  generalized audit trail, PWA polish, Stripe billing.
+- Growth bets not started: per-role permissions, **CSV import/export + public
+  API**, generalized audit trail, PWA polish.
+  - **CSV import/export is the one I'd do next** and the one I put to the owner:
+    a customer leaving Bullhorn or Ceipal has to bring their candidates with
+    them, and today they cannot. It is the biggest remaining blocker to selling
+    to somebody who already has data.
+
+## Where this session ended
+
+PR **#134** open as a draft, 41/41 green, containing the guest/demo removal and
+plans+payments. The owner has been shown the billing screen and asked for prices
+and a payments decision. Nothing else is in flight.
 
 ## Working rules
 
