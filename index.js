@@ -136,16 +136,31 @@ const pixelLimiter = createRateLimiter({ name: 'pixel', windowMs: 60 * 1000, max
 // token carries an org_id, we fall back to the platform's default (first) org so
 // single-tenant behaviour is unchanged. DEFAULT_ORG_ID is resolved once at boot.
 let DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || null;
+// Is more than one organisation possible on this deployment? That question
+// changes what "no org on the session" MEANS. With one org it is a harmless
+// legacy token and defaulting is right; with several it is a session we cannot
+// scope, and defaulting would hand it the first org's data — a real customer's.
+let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 async function resolveDefaultOrg() {
-  if (DEFAULT_ORG_ID) return DEFAULT_ORG_ID;
   try {
-    const { data } = await supabase.from('organizations').select('id').order('created_at', { ascending: true }).limit(1).single();
-    if (data && data.id) DEFAULT_ORG_ID = data.id;
+    const { data } = await supabase.from('organizations').select('id')
+      .order('created_at', { ascending: true }).limit(2);
+    if (Array.isArray(data)) {
+      if (!DEFAULT_ORG_ID && data[0]) DEFAULT_ORG_ID = data[0].id;
+      if (data.length > 1) MULTI_ORG = true;
+    }
   } catch (_) { /* organizations table absent — leave null, column defaults cover it */ }
   return DEFAULT_ORG_ID;
 }
 resolveDefaultOrg();
 // Exposed so route modules can stamp/scope by the caller's org.
+//
+// The DEFAULT_ORG_ID fallback stays exactly as it was, deliberately: background
+// sweeps and cron ticks call withOrg() with no user, and returning null there
+// would turn a scoped query into an unscoped one — the opposite of a fix. What
+// closes the hole is auth() below, which refuses an org-less USER SESSION
+// outright once more than one organisation can exist, so no request that
+// carries a person ever reaches this fallback.
 function orgIdFor(req) { return (req && req.user && req.user.org_id) || DEFAULT_ORG_ID || null; }
 // Same withOrg/orgStamp pattern as bd_recruiter_routes.js, for the leads/email
 // engine's own queries (jobs/companies/contacts live here, not in that module).
@@ -162,11 +177,22 @@ function auth(req, res, next) {
     req.orgId = DEFAULT_ORG_ID;
     return next();
   }
+  let claims;
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    req.orgId = orgIdFor(req);
-    next();
-  } catch { res.status(401).json({ error: 'Invalid token' }); }
+    claims = jwt.verify(token, process.env.JWT_SECRET);
+  } catch { return res.status(401).json({ error: 'Invalid token' }); }
+  // A session with no organisation on it cannot be scoped. While there is only
+  // one org that is harmless (it defaults there anyway), but the moment a
+  // second exists, "no org" would silently mean "the first org" — i.e. somebody
+  // else's candidates, leads and mailboxes. Every token minted since
+  // multi-tenancy landed carries org_id, so this only ever catches a stale one,
+  // and the fix for a stale token is to sign in again.
+  if (MULTI_ORG && !claims.org_id) {
+    return res.status(401).json({ error: 'Your session is out of date. Please sign in again.' });
+  }
+  req.user = claims;
+  req.orgId = orgIdFor(req);
+  next();
 }
 
 // Authorization helpers (hasRole, notGuest, canTouchJob, requireRole) live in

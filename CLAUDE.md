@@ -66,11 +66,11 @@ we never have to rewrite to grow (see "Growth bets" below).
     `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
 - **Data access: use `models/` — do NOT hand-write `supabase.from()` on tenant
   tables.** `db.forRequest(req).from('candidates')` scopes to the caller's org by
-  construction; `db.global.from(…)` is for the 8 tables with no `org_id`;
+  construction; `db.global.from(…)` is for the 7 tables with no `org_id`;
   `db.crossOrg(…)` is the named, greppable escape hatch. Anything else throws.
   This exists because org scoping used to depend on remembering `withOrg()` on ~574
   hand-written queries, and four cross-org leaks got in that way. `models/tables.js`
-  is verified against the live schema (38 tenant / 8 global) — **a migration that
+  is verified against the live schema (41 tenant / 7 global) — **a migration that
   adds a table with `org_id` must add it there.** Conversion is incremental: raw
   `supabase` still works, so unconverted call sites are unaffected.
 - **All outbound HTTP goes through `http-client.js`** (`fetchWithTimeout` /
@@ -95,7 +95,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 38 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 40 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
@@ -226,11 +226,29 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      below), and RLS (slice 3b, next).
    - **Slice 3a DONE** (migration `023`): `org_id` is now `NOT NULL` on all tenant
      tables (safe — every row backfilled + column DEFAULT).
-   - **Slice 3b DEFERRED by owner decision:** enabling RLS (row-level security) with
-     org-keyed / service-role policies to close the anon-key exposure. Proven-safe
-     pattern (already live on 8 tables; frontend is API-only) but touches the live
-     prod DB, so hold it until closer to onboarding a second org. **Do NOT enable RLS
-     on the live DB without an explicit, fresh go-ahead.**
+   - **Slice 3b DONE** (migration `039_tenant_isolation`, applied 2026-08-05): RLS
+     + service-role policies on the 37 tables that still had it disabled — which
+     included `microsoft_tokens`, i.e. customers' mailbox refresh tokens were
+     readable with the anon key. Verified after: **0 of 48 tables without RLS, 0
+     without a service-role policy.** Same migration gave `microsoft_tokens`/
+     `gmail_tokens` an `org_id` (both now in `TENANT_TABLES`), added
+     `users.last_login_at`/`last_login_method`, and widened `users_role_check` to
+     accept `associate_director`/`director` — roles the UI had offered since
+     migration 026 and the database had rejected ever since. It landed BEFORE
+     `SELF_SERVE_SIGNUP` was turned on, which is the whole reason it is one batch.
+     **The next migration is 040; never apply one to the live DB without an
+     explicit, fresh go-ahead.**
+   - **Self-serve signup is built and switched OFF** (`services/provisioning.js`).
+     Where a brand-new sign-in lands is a **pure function** (`decide()`) because
+     routing somebody into the wrong org is a breach that produces no error message.
+     Three destinations only: verified claim + auto-join → join it; verified claim,
+     auto-join off → "ask your admin"; anything else → a **private** workspace.
+     **Sharing a domain is not membership** — two people on an unclaimed domain get
+     two separate workspaces. Nothing happens at all unless `SELF_SERVE_SIGNUP=on`.
+   - **`orgIdFor()`'s default-org fallback is deliberate — do not "fix" it to return
+     null.** Background sweeps call `withOrg()` with no user, and null turns a scoped
+     query into an UNSCOPED one. The hole is closed in `auth()` instead: an org-less
+     session token is refused once more than one org is possible.
 2. **Configurable roles & permissions per org** — we already have roles; make them
    data so different customers can mirror their own org charts.
    - **Reporting hierarchy DONE** (migration `026`): `users.manager_id`, self-

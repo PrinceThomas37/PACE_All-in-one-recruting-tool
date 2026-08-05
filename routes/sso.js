@@ -13,6 +13,7 @@
 const express = require('express');
 const sso = require('../services/sso');
 const orgDomains = require('../services/org-domains');
+const provisioning = require('../services/provisioning');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -25,12 +26,18 @@ module.exports = (ctx) => {
   // provider behind it is actually configured. A button that always shows and
   // sometimes fails is worse than no button — that is exactly what the old
   // placeholder "Google Workspace login coming soon" toast was.
+  //
+  // `self_serve` tells the login screen whether the Sign Up tab can actually
+  // create a workspace, or whether it should keep capturing requests for a
+  // human to action. Same principle as the buttons: never offer something the
+  // deployment cannot do.
   router.get('/auth/sso/providers', (_req, res) => {
     res.json({
       providers: [
         { id: 'microsoft', label: 'Continue with Microsoft', enabled: microsoftReady() },
         { id: 'google', label: 'Continue with Google', enabled: googleReady() },
       ].filter(p => p.enabled),
+      self_serve: provisioning.selfServeEnabled(),
     });
   });
 
@@ -82,6 +89,13 @@ module.exports = (ctx) => {
         .is('deleted_at', null).limit(5);
 
       if (!rows || !rows.length) {
+        // With self-serve on, an unrecognised domain is not a dead end — it is
+        // somebody who can create their own workspace right now. Send them at a
+        // provider rather than at their administrator.
+        if (provisioning.selfServeEnabled()) {
+          const provider = microsoftReady() ? 'microsoft' : googleReady() ? 'google' : null;
+          if (provider) return res.json({ provider, domain, org_known: false, new_workspace: true });
+        }
         return res.json({
           provider: null,
           message: `We don't recognise ${domain} yet. Ask your administrator to add you, or use Sign Up to request access.`,

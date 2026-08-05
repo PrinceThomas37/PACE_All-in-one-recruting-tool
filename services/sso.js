@@ -25,13 +25,18 @@
 //      Fragments are not sent to the server, so the session token stays out of
 //      access logs, proxy logs and Referer headers. The page clears it from the
 //      address bar immediately.
-//   4. NO ACCOUNT IS CREATED HERE. Sign-in matches an EXISTING user by email.
-//      Self-serve signup (personal workspaces, domain-claimed orgs) is a
-//      deliberate separate step — it needs org provisioning, domain
-//      verification and the tenant isolation work first.
+//   4. AN ACCOUNT IS ONLY EVER CREATED BY services/provisioning.js, and only
+//      when self-serve signup is switched on (SELF_SERVE_SIGNUP=on). With it
+//      off — the shipping default — this file behaves exactly as it always
+//      has: an existing, active, non-deleted user gets a session and nobody
+//      else does. Where a brand-new address ends up is a decision with real
+//      blast radius (route it wrong and somebody is inside another company's
+//      candidate database), so it lives in one pure, exhaustively tested
+//      function rather than being spread through this callback.
 // ============================================================================
 
 const jwt = require('jsonwebtoken');
+const provisioning = require('./provisioning');
 
 const STATE_TTL_SECONDS = 600;          // 10 minutes to complete a sign-in
 const SESSION_TTL = '8h';               // matches the password login path
@@ -83,26 +88,41 @@ function failurePage(message) {
  *
  * Returns { ok, token, user } or { ok:false, reason, message }.
  * `reason` is machine-readable; `message` is what a human should be shown.
+ *
+ * `name` is the display name the provider gave us (Microsoft `displayName`,
+ * Google `name`). It is only used when an account is being created — matching
+ * is always on the verified email address, never on a name.
  */
-async function sessionForEmail(supabase, email, { provider }) {
+async function sessionForEmail(supabase, email, { provider, name } = {}) {
   const addr = String(email || '').toLowerCase().trim();
   if (!addr) {
     return { ok: false, reason: 'no_email', message: `${provider} did not return an email address for this account.` };
   }
 
-  const { data: user, error } = await supabase.from('users').select('*')
+  const { data: found, error } = await supabase.from('users').select('*')
     .eq('email', addr).eq('is_active', true).is('deleted_at', null).maybeSingle();
 
   if (error) return { ok: false, reason: 'lookup_failed', message: 'Could not look up that account. Please try again.' };
 
-  if (!user) {
-    // Deliberately explicit rather than vague. This is a B2B tool where an
-    // admin adds people; "no account" is a real, actionable answer, and hiding
-    // it just makes the person retry the same thing.
-    return {
-      ok: false, reason: 'no_account',
-      message: `No futé account exists for ${addr}. Ask your administrator to add you, then sign in again.`,
-    };
+  let user = found;
+  let created = false;
+
+  if (user) {
+    // An existing account still has to belong to a workspace that is allowed to
+    // be used. Suspending an org must actually stop its people signing in,
+    // otherwise "suspended" is a label rather than a state.
+    const org = await provisioning.loadOrg(supabase, user.org_id);
+    const verdict = provisioning.decide({ email: addr, user, org, selfServe: provisioning.selfServeEnabled() });
+    if (verdict.action === 'refuse') return { ok: false, reason: verdict.reason, message: verdict.message };
+  } else {
+    // No account. Either self-serve is off — in which case this returns the
+    // same "ask your administrator" refusal it always has — or it decides
+    // between joining a verified-domain org and a private workspace.
+    const routed = await provisioning.routeNewSignIn(supabase, { email: addr, name });
+    if (!routed.ok) return { ok: false, reason: routed.reason, message: routed.message };
+    user = routed.user;
+    created = routed.created;
+    console.log(`[sso] provisioned ${addr} via ${provider} — ${routed.reason} (org ${user.org_id})`);
   }
 
   const roles = user.roles || (user.role ? [user.role] : []);
@@ -112,13 +132,15 @@ async function sessionForEmail(supabase, email, { provider }) {
   );
 
   // Record how they got in — useful for support ("I can't log in") and for
-  // spotting an account that has never used SSO.
+  // spotting an account that has never used SSO. The columns arrive with
+  // migration 039; before that this is a no-op, and it must never be allowed to
+  // fail a login either way.
   try {
     await supabase.from('users').update({ last_login_at: new Date(), last_login_method: provider }).eq('id', user.id);
-  } catch (_) { /* columns arrive with migration 038; never block a login on this */ }
+  } catch (_) { /* never block a login on bookkeeping */ }
 
   const { password_hash, ...safeUser } = user;
-  return { ok: true, token, user: { ...safeUser, roles } };
+  return { ok: true, token, user: { ...safeUser, roles }, created };
 }
 
 module.exports = {

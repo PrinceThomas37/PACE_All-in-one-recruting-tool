@@ -27,20 +27,23 @@ const TENANT_TABLES = new Set([
   'client_documents',
   'companies',
   'contacts',
-  // Added by migration 037 (conversation intelligence). Listed here ahead of the
-  // migration being applied to the live DB, deliberately: the registry states
-  // what the table IS, and the code that writes it degrades safely while the
-  // table is still missing.
+  // Added by migration 037 (conversation intelligence), applied 2026-08-05.
   'conversation_messages',
   'email_send_log',
   'email_templates',
   'email_tracking',
   'emails',
   'follow_ups',
+  // Added by migration 039 (the isolation batch), applied 2026-08-05. These hold
+  // OAuth refresh tokens for customers' real mailboxes, so they moved out of
+  // GLOBAL_TABLES the moment a second tenant became possible. Reached today by
+  // raw `supabase.from(...)` keyed on user_email_id, which is unaffected.
+  'gmail_tokens',
   'job_orders',
   'jobs',
   'lead_sources',
   'match_scores',
+  'microsoft_tokens',   // see gmail_tokens above — migration 039
   'recruiter_assignments',
   'recruiting_lookups',
   'reminders',
@@ -72,8 +75,6 @@ const GLOBAL_TABLES = new Set([
   'enrichment_cache',  // a shared cache of PUBLIC company data; scoping it per
                        // org would just make every org pay to re-fetch the same
                        // public facts. Deliberate.
-  'gmail_tokens',      // reached only via user_emails, which IS org-scoped.
-  'microsoft_tokens',  // same. See the note in models/index.js about this.
   'id_sequences',      // human-readable id counters
   'organizations',     // the tenant table itself
   // org_domains HAS an org_id, but is listed here on purpose: sign-in looks it
