@@ -169,7 +169,11 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   ok('the registry covers all 38 live tenant tables + the one migration 037 adds',
     TENANT_TABLES.size === 39, String(TENANT_TABLES.size));
   ok('conversation_messages is registered as tenant data', TENANT_TABLES.has('conversation_messages'));
-  ok('the registry lists the 8 live global tables', GLOBAL_TABLES.size === 8, String(GLOBAL_TABLES.size));
+  // 8 live global tables + org_domains, which migration 038 adds and which is
+  // deliberately listed as global: sign-in reads it BY DOMAIN before any org
+  // context exists, so a request-scoped accessor could never reach it.
+  ok('the registry lists the 8 live global tables + org_domains', GLOBAL_TABLES.size === 9, String(GLOBAL_TABLES.size));
+  ok('org_domains is reachable without an org context', GLOBAL_TABLES.has('org_domains'));
   const overlap = [...TENANT_TABLES].filter(t => GLOBAL_TABLES.has(t));
   ok('no table is in both lists', overlap.length === 0, overlap.join(','));
   for (const t of ['candidates', 'job_orders', 'submissions', 'jobs', 'companies', 'contacts', 'users', 'email_tracking'])

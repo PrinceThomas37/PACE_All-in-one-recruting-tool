@@ -1,4 +1,4 @@
-# futé — project memory (read me first, every session)
+# PACE — project memory (read me first, every session)
 
 > **This section is not optional and must be carried into every context window / handoff.**
 > If you are summarizing this project for a future session, copy the two sections
@@ -28,9 +28,18 @@ merge and deploy so they can use the real thing → I tell them plainly what's n
 
 ## What we're building
 
-futé is a **recruiting ATS + lead-management platform being built to sell
-commercially** (SaaS), competitive with the established ATS products (Ceipal,
-Bullhorn, and the like). Every decision is a product decision in service of that.
+PACE is a **recruiting ATS + lead-management platform sold to other companies**
+(SaaS), competitive with the established ATS products (Ceipal, Bullhorn, and the
+like). Every decision is a product decision in service of that.
+
+**PACE is the product; Fute Global is a customer.** (It was named "futé" until
+Session 9, when the owner renamed it and redefined the business model: enterprises
+register their email domain and their people flow in, individuals can sign up
+alone, and access is gated by plan. LinkedIn was the reference — per-user
+workflows plus organisation-assigned ones.) Anywhere the code still says "Fute
+Global" in **outbound customer content** — cold-email templates, the resume
+letterhead — that is the CUSTOMER'S identity and must become per-org
+configuration, NOT a rename to PACE.
 
 **Build philosophy: spend nothing now, scale later.** Prefer free tiers and infra we
 already have. Don't add paid services unless they clearly earn it. But make the
@@ -86,7 +95,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 32 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 38 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
@@ -116,9 +125,15 @@ we never have to rewrite to grow (see "Growth bets" below).
   session's dev branch → open a **draft PR** → when the owner approves, merge + let it
   deploy. Keep commits/PRs clean; the owner won't read them, but future-me and buyers'
   auditors might.
-- Keep a session summary in `docs/CONTEXT_WINDOW.md` and keep **this file** current —
-  it is the durable memory.
-- **Before moving ANY file, read `docs/CONTEXT_WINDOW.md` § "DEPENDENCY MAP"
+- **Two context files, two different jobs — keep the discipline:**
+  - `docs/CONTEXT_WINDOW.md` = **current state only**, kept under ~200 lines and
+    **REWRITTEN** each session. This is what a new session reads.
+  - `docs/CONTEXT_ARCHIVE.md` = the full history, **APPEND-ONLY**. Never edited,
+    never deleted, never summarised away.
+  At the end of a session: append the narrative to the archive, then rewrite the
+  window to describe the new present. Nothing is lost; the read stays short.
+  Keep **this file** current too — it is the durable memory.
+- **Before moving ANY file, read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
   (Session 8).** Ten things break on a naive move and several fail *silently* —
   notably `learned-skills.js` (`__dirname`-relative JSON, resets with no error),
   two tests that read `index.js` as raw text, and the deliberate server→browser
@@ -231,7 +246,7 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      roles are hierarchy/reporting-only, no new capabilities); a full
      configurable-permissions system remains future work.
    - **Session 5 DONE: team structure + visibility fix** (PRs #117, #118 +
-     migration 029) — see `docs/CONTEXT_WINDOW.md` "Session 5" for the full
+     migration 029) — see `docs/CONTEXT_ARCHIVE.md` "Session 5" for the full
      writeup. The hierarchy existed but nothing in the UI used it consistently:
      the Dashboard "Your Team" widget had a live bug (keyed off a dead `bdm`
      field, so it silently showed the whole org to everyone but recruiters),
