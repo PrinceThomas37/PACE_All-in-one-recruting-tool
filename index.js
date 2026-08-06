@@ -2787,6 +2787,9 @@ app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
+// Layer-3 Step 3 scaffolding — dark until a real Twilio account exists (see
+// twilio-provider.js). Mounted now so activation needs no further deploy.
+app.use(require('./routes/telephony')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which

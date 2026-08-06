@@ -224,6 +224,21 @@ Session 9). What that means in practice:
   never a silent write. **This is real, tested code sitting inert, not a
   hypothetical** — the moment a key is funded it starts working with no
   further deploy.
+- **Phone/WhatsApp scaffolding exists and is also DARK.** `twilio-provider.js`
+  (outbound send + inbound webhook signature validation — no `twilio` npm
+  package, same `http-client.js` convention as the Stripe seam) and
+  `routes/telephony.js` (public inbound webhooks, mirroring
+  `routes/tracking.js`'s trust model) are real, tested code with **no live
+  Twilio account behind them** — `isConfigured()` is false with no
+  `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`, and the webhook routes fail closed
+  (403) rather than accepting anything unverified. Migration
+  `042_phone_numbers.sql` is written, **not applied.** This is scaffolding
+  only, not a finished channel — no account has been purchased (real recurring
+  cost, needs its own explicit go-ahead per the architecture-mapping plan's
+  Twilio pricing section), no number is provisioned, and Meta's WhatsApp
+  Business verification (weeks, not code) hasn't been started. Activating it
+  for real requires an actual Twilio account and its credentials — something
+  only the owner can create.
 
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
