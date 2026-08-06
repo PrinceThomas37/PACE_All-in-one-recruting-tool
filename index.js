@@ -2353,15 +2353,29 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
     const { data: matches } = await supabase.from('contacts')
       .select('id,job_id,replied_at,email').ilike('email', from).limit(10);
 
+    // Candidate-side match, looked up here (not just further down) so the one
+    // conversation_messages row for this physical email can carry both a
+    // contact_id and a candidate_id: the table is keyed one row per
+    // (provider, message_key), not one row per matched entity, so a second
+    // insert below for the same message would just silently lose to that
+    // unique index instead of actually recording the candidate side.
+    let candTrk = [];
+    try {
+      const { data } = await supabase.from('email_tracking')
+        .select('id,candidate_id,job_order_id').ilike('to_email', from).is('replied_at', null).limit(20);
+      candTrk = data || [];
+    } catch (_) { /* best-effort */ }
+
     // Keep the actual message (Step 4). Before this, the only trace of an
     // inbound reply was contacts.reply_snippet — 280 characters of the FIRST
     // reply and nothing else, which is not enough to say who owes whom a reply.
-    // Stored regardless of whether the address matches a contact, since an
+    // Stored regardless of whether the address matches anyone, since an
     // unmatched reply is still part of the conversation.
     await storeConversationMessage(msg, {
       direction: 'inbound', from, tokenRow,
       contactId: matches?.[0]?.id || null,
-      jobId: matches?.[0]?.job_id || null,
+      candidateId: candTrk?.[0]?.candidate_id || null,
+      jobId: matches?.[0]?.job_id || candTrk?.[0]?.job_order_id || null,
     });
 
     for (const c of (matches || [])) {
@@ -2380,18 +2394,17 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       detected++;
     }
     // Candidate email tracking: a reply from this address answers any tracked
-    // candidate/interview email we sent it — mark those rows replied. Reuses this
-    // same inbox fetch (no extra Graph calls). Best-effort; never breaks the sweep.
+    // candidate/interview email we sent it — mark those rows replied. Reuses the
+    // candTrk lookup from above (no extra query, no extra Graph calls).
+    // Best-effort; never breaks the sweep.
     try {
-      const { data: trk } = await supabase.from('email_tracking')
-        .select('id,candidate_id').ilike('to_email', from).is('replied_at', null).limit(20);
       // isOptOutReply takes TEXT, not a message — check the same two fields the
       // contact path checks, since the preview alone often truncates before the
       // "unsubscribe" line.
       const replyText = (msg.bodyPreview || '').slice(0, 280);
       const optedOut = isOptOutReply(replyText) || isOptOutReply(msg.body?.content || '');
       const candidateIds = new Set();
-      for (const r of (trk || [])) {
+      for (const r of candTrk) {
         await supabase.from('email_tracking').update({ replied_at: msg.receivedDateTime || new Date() }).eq('id', r.id);
         if (r.candidate_id) candidateIds.add(r.candidate_id);
         detected++;

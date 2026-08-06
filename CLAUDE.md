@@ -198,10 +198,17 @@ Session 9). What that means in practice:
   `processInboundMessages` in index.js; Gmail messages are reshaped into Graph's
   shape by `gmailProvider.normalizeMessage`. **Do not add a second sweep** — two
   copies is how the stage vocabulary ended up hand-synced across six files.
-- **⚠ Migration `037_conversation_intel.sql` (`conversation_messages`) is WRITTEN
-  but NOT APPLIED to the live DB.** Until it is, threads fall back to the `emails`
-  table + `contacts.replied_at`/`reply_snippet` — thinner, still correct. The
-  write path is guarded so the app is right either way. Needs a fresh go-ahead.
+- **Migration `037_conversation_intel.sql` (`conversation_messages`) is APPLIED**
+  to the live DB (owner go-ahead, this session). Full conversation bodies now
+  store for both `contacts` and `candidates` — before this session only the
+  contact side was ever wired to store there (a latent bug: the two entities
+  share one unique index on `(provider, message_key)`, so a second insert for
+  the same physical message silently lost to the first). `/next-actions` also
+  now surfaces candidate threads, not just BD leads, and carries a new advisory
+  `stage_suggested` item when a candidate thread shows a positive-intent reply —
+  it never asserts which stage to move to (that vocabulary stays owned by
+  `services/recruiting-core.js`). See `docs/AUTONOMOUS_ENGINE_PLAN.md` §4 and
+  the architecture-mapping plan this came from for the fuller Layer-3 rollout.
 
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
