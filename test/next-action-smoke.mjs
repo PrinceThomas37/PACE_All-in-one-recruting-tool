@@ -174,6 +174,25 @@ const thread = (over) => ({
     !items.some(i => i.entity_id === 'cand2'), JSON.stringify(items));
 }
 
+// ── 6c. Signal verification — low-confidence AI extractions, dark today ────
+{
+  const sig = { entity_type: 'candidate', entity_id: 'cand9', name: 'Ada', company: 'Acme',
+    job_id: 'j1', owner_id: 'u1', field: 'next_step', value: 'call back Friday', confidence: 42 };
+  const items = buildNextActions({ signals: [sig], now: NOW });
+  ok('a low-confidence signal produces a signal_verify action', items.length === 1, JSON.stringify(items));
+  const item = items[0];
+  ok('...naming the extracted value and confidence', /call back Friday/.test(item.reason) && /42%/.test(item.reason), item.reason);
+  ok('...tagged to the right entity', item.entity_type === 'candidate' && item.entity_id === 'cand9');
+  ok('...kind is signal_verify', item.kind === KIND.SIGNAL_VERIFY);
+}
+{
+  // No signals passed (the default — no funded ANTHROPIC_API_KEY means this
+  // is always [] in production today) must not affect anything else.
+  const items = buildNextActions({ threads: [thread()], now: NOW });
+  ok('omitting signals entirely is safe and unrelated to other kinds',
+    items.length === 1 && items[0].kind === KIND.REPLY_DUE, JSON.stringify(items));
+}
+
 // ── 7. Summary for the dashboard card ───────────────────────────────────────
 {
   const items = buildNextActions({

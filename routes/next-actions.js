@@ -214,6 +214,43 @@ module.exports = (ctx) => {
         });
       }
 
+      // ── AI-extracted signals awaiting verification (conversation-ai.js) ───
+      // Always empty today: conversation_summaries only gets written by
+      // conversation-signals-job.js, which itself no-ops with no funded
+      // ANTHROPIC_API_KEY. Guarded the same way conversation_messages is —
+      // migration 041 may not be applied, and that must not break this route.
+      const entityMeta = new Map(threads.map(t => [`${t.entity_type}:${t.entity_id}`, t]));
+      let signals = [];
+      const collectSignals = (rows, entityType, idCol) => {
+        for (const row of (rows || [])) {
+          const entityId = row[idCol];
+          const meta = entityMeta.get(`${entityType}:${entityId}`);
+          if (!meta) continue;
+          for (const nv of (row.needs_verification || [])) {
+            signals.push({
+              entity_type: entityType, entity_id: entityId,
+              name: meta.name, company: meta.company,
+              job_id: meta.job_id, owner_id: meta.owner_id,
+              field: nv.field, value: nv.value, confidence: nv.confidence,
+            });
+          }
+        }
+      };
+      try {
+        if (contacts.length) {
+          const { data, error } = await supabase.from('conversation_summaries')
+            .select('contact_id,needs_verification')
+            .in('contact_id', contacts.map(c => c.id)).limit(2000);
+          if (!error) collectSignals(data, 'contact', 'contact_id');
+        }
+        if (candIds.length) {
+          const { data, error } = await supabase.from('conversation_summaries')
+            .select('candidate_id,needs_verification')
+            .in('candidate_id', candIds).limit(2000);
+          if (!error) collectSignals(data, 'candidate', 'candidate_id');
+        }
+      } catch (_) { /* table not there yet */ }
+
       // ── Reminders: created for years, never surfaced anywhere ─────────────
       let remQ = withOrg(
         supabase.from('reminders')
@@ -227,6 +264,7 @@ module.exports = (ctx) => {
       const items = buildNextActions({
         threads,
         reminders: reminders || [],
+        signals,
         now: Date.now(),
         limit: Number(req.query.limit) || 50,
       });

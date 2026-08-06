@@ -48,7 +48,8 @@ var NA_KIND={
   commitment_due: {lbl:'They promised',bg:'#fef3c7', fg:'#92400e'},
   reminder_due:   {lbl:'Reminder',     bg:'#e0e7ff', fg:'#3730a3'},
   nudge:          {lbl:'No reply yet', bg:'#f1f5f9', fg:'#475569'},
-  stage_suggested:{lbl:'Positive signal', bg:'#dcfce7', fg:'#15803d'}
+  stage_suggested:{lbl:'Positive signal', bg:'#dcfce7', fg:'#15803d'},
+  signal_verify:  {lbl:'Confirm this?',  bg:'#ede9fe', fg:'#6d28d9'}
 };
 
 function renderNextActionsCard(){

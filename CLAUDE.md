@@ -209,6 +209,21 @@ Session 9). What that means in practice:
   it never asserts which stage to move to (that vocabulary stays owned by
   `services/recruiting-core.js`). See `docs/AUTONOMOUS_ENGINE_PLAN.md` §4 and
   the architecture-mapping plan this came from for the fuller Layer-3 rollout.
+- **The AI seam behind conversation-intel.js now has real code, and it is
+  DARK.** `conversation-ai.js` extracts 7 structured signals + an updated
+  running summary from a new inbound message, each with a self-reported 0–100
+  confidence (mirrors the architecture blueprint this was built from); a batch
+  job (`conversation-signals-job.js`, registered on `engineRunner` as
+  `conversation_signals`) writes the result to `conversation_summaries`
+  (migration `041_conversation_summaries.sql` — **written, NOT yet applied to
+  the live DB**, needs its own fresh go-ahead per the rule below). Everything
+  here short-circuits before any query or network call while
+  `ANTHROPIC_API_KEY` is unset/placeholder — same posture as the 5 pre-existing
+  AI call sites in `routes/ai.js`. Signals below the confidence floor (75)
+  surface in `/next-actions` as a new `signal_verify` item — a yes/no question,
+  never a silent write. **This is real, tested code sitting inert, not a
+  hypothetical** — the moment a key is funded it starts working with no
+  further deploy.
 
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
@@ -252,8 +267,10 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      accept `associate_director`/`director` — roles the UI had offered since
      migration 026 and the database had rejected ever since. It landed BEFORE
      `SELF_SERVE_SIGNUP` was turned on, which is the whole reason it is one batch.
-     **The next migration is 040; never apply one to the live DB without an
-     explicit, fresh go-ahead.**
+     **Migrations continued past this: 037 (conversation_messages) is applied;
+     040 (billing) and 041 (conversation_summaries) are written but not yet
+     applied — never apply one to the live DB without an explicit, fresh
+     go-ahead.**
    - **Self-serve signup is built and switched OFF** (`services/provisioning.js`).
      Where a brand-new sign-in lands is a **pure function** (`decide()`) because
      routing somebody into the wrong org is a breach that produces no error message.

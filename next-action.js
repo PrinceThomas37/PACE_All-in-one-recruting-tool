@@ -29,6 +29,7 @@ const KIND = {
   REMINDER_DUE: 'reminder_due',     // an explicit reminder came due
   NUDGE: 'nudge',                   // we wrote, silence, long enough to chase
   STAGE_SUGGESTED: 'stage_suggested', // a candidate signal worth a manual stage move
+  SIGNAL_VERIFY: 'signal_verify',   // an AI-extracted signal below the confidence floor
 };
 
 const dayDiff = (a, b) => Math.floor((a - b) / DAY_MS);
@@ -41,11 +42,15 @@ const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
  *               job_id, owner_id, messages:[{direction,sent_at,body}] }]
  * reminders: [{ id, user_id, return_date, note, contact_name, company_name,
  *               contact_id, job_id, status }]
+ * signals:   [{ entity_type, entity_id, name, company, job_id, owner_id,
+ *               field, value, confidence }] — low-confidence AI extractions
+ *              from conversation-ai.js awaiting a human yes/no (dark today:
+ *              this is always [] until an ANTHROPIC_API_KEY is funded).
  *
  * Returns items: { kind, entity_type, entity_id, title, subtitle, reason,
  *                  priority, due_at, overdue_days, state, intent }
  */
-function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50 } = {}) {
+function buildNextActions({ threads = [], reminders = [], signals = [], now = Date.now(), limit = 50 } = {}) {
   const items = [];
 
   for (const t of threads) {
@@ -133,6 +138,26 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     }
   }
 
+  // Low-confidence AI signals awaiting a human yes/no. The blueprint's own
+  // rule: below the confidence floor, the model's guess is shown as a
+  // question, never folded into the record silently. Always [] until a key
+  // is funded — this loop is real code sitting dark, not a hypothetical.
+  for (const s of signals) {
+    items.push({
+      kind: KIND.SIGNAL_VERIFY,
+      entity_type: s.entity_type, entity_id: s.entity_id,
+      title: s.name || 'Unknown',
+      subtitle: s.company || null,
+      job_id: s.job_id || null, owner_id: s.owner_id || null,
+      reason: `AI thinks: "${s.value}" (${s.field.replace(/_/g, ' ')}) — ${Math.round(s.confidence)}% sure. Confirm?`,
+      state: 'unverified',
+      intent: null,
+      priority: 20,
+      due_at: null,
+      overdue_days: null,
+    });
+  }
+
   // Reminders: the feature that existed and never fired.
   for (const r of reminders) {
     if (r.status && r.status !== 'pending') continue;
@@ -179,7 +204,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
 
 /** Small headline counts for the dashboard card. */
 function summarize(items) {
-  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0 };
+  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0, signal_verify: 0 };
   for (const i of items) if (by[i.kind] !== undefined) by[i.kind]++;
   return { total: items.length, by_kind: by, top: items[0] || null };
 }

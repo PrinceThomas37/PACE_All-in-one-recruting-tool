@@ -3003,6 +3003,18 @@ engineRunner.register('lead_sourcing', {
   run: () => require('./lead-ingest').runDueSources({ supabase })
 });
 
+// ── Conversation AI seam (Step 4b) — dark until ANTHROPIC_API_KEY is funded.
+// conversation-ai.isConfigured() short-circuits the whole job before any query
+// when there is no key, so this is a genuine no-op on every tick today —
+// registered now so the moment a key is added, it starts working with no
+// further deploy. See conversation-signals-job.js and migrations/041.
+engineRunner.register('conversation_signals', {
+  everyMs: 60 * 60 * 1000,
+  quiet: true,
+  description: 'Extract AI signals + update running summaries for new inbound conversation messages',
+  run: () => require('./conversation-signals-job').runDue({ supabase })
+});
+
 // ── THE HEARTBEAT ──────────────────────────────────────────────
 // Two things drive the same registered jobs, and neither can double-run one
 // because engine-runs.js persists due-ness:
