@@ -47,7 +47,8 @@ var NA_KIND={
   reply_due:      {lbl:'Reply due',    bg:'#fee2e2', fg:'#b91c1c'},
   commitment_due: {lbl:'They promised',bg:'#fef3c7', fg:'#92400e'},
   reminder_due:   {lbl:'Reminder',     bg:'#e0e7ff', fg:'#3730a3'},
-  nudge:          {lbl:'No reply yet', bg:'#f1f5f9', fg:'#475569'}
+  nudge:          {lbl:'No reply yet', bg:'#f1f5f9', fg:'#475569'},
+  stage_suggested:{lbl:'Positive signal', bg:'#dcfce7', fg:'#15803d'}
 };
 
 function renderNextActionsCard(){
@@ -100,6 +101,7 @@ function renderNextActionsCard(){
           chip(bk.commitment_due,'promised','#92400e')+
           chip(bk.reminder_due,'reminders','#3730a3')+
           chip(bk.nudge,'to chase','#475569')+
+          chip(bk.stage_suggested,'positive signal','#15803d')+
         '</div>'+
       '</div>'+
       '<button onclick="refreshNextActions()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">Refresh</button>'+
