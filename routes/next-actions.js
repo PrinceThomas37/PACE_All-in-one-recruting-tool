@@ -127,6 +127,93 @@ module.exports = (ctx) => {
         };
       });
 
+      // ── Candidates side: submissions the caller (or their chain) owns ─────
+      // Mirrors the contacts block above. Before this, /next-actions only ever
+      // looked at BD leads — a recruiter's own candidate conversations never
+      // appeared in "needs you today" at all, even though conversation-intel.js
+      // and next-action.js were always entity-type-agnostic.
+      let subQ = withOrg(
+        supabase.from('submissions')
+          .select('id,candidate_id,job_order_id,recruiter_id,stage,candidate:candidates(id,full_name,email,last_reply_at),job_order:job_orders(job_title,client)')
+          .is('deleted_at', null),
+        req
+      );
+      if (!isAdmin && chain) subQ = subQ.in('recruiter_id', chain);
+      const { data: subs } = await subQ.limit(MAX_THREAD_PEOPLE);
+      const candIds = [...new Set((subs || []).map(s => s.candidate_id).filter(Boolean))];
+
+      const msgsByCandidate = new Map();
+      if (candIds.length) {
+        try {
+          const { data: msgs, error } = await supabase.from('conversation_messages')
+            .select('candidate_id,direction,body,sent_at')
+            .in('candidate_id', candIds)
+            .order('sent_at', { ascending: true })
+            .limit(2000);
+          if (!error) {
+            for (const m of (msgs || [])) {
+              if (!m.candidate_id) continue;
+              if (!msgsByCandidate.has(m.candidate_id)) msgsByCandidate.set(m.candidate_id, []);
+              msgsByCandidate.get(m.candidate_id).push(m);
+            }
+          }
+        } catch (_) { /* table not there yet — fall back below */ }
+      }
+
+      // Outbound sends already recorded via the tracked-send path
+      // (POST /candidates/email, interview invites) so a thread has both sides
+      // even before 037 is applied.
+      const sentByCandidate = new Map();
+      if (candIds.length) {
+        try {
+          const { data: sent } = await withOrg(
+            supabase.from('email_tracking').select('candidate_id,sent_at,subject')
+              .in('candidate_id', candIds),
+            req
+          ).limit(2000);
+          for (const e of (sent || [])) {
+            if (!e.candidate_id) continue;
+            if (!sentByCandidate.has(e.candidate_id)) sentByCandidate.set(e.candidate_id, []);
+            sentByCandidate.get(e.candidate_id).push(e);
+          }
+        } catch (_) { /* best effort */ }
+      }
+
+      for (const s of (subs || [])) {
+        const cand = s.candidate;
+        if (!cand) continue;
+        const stored = msgsByCandidate.get(cand.id) || [];
+        const messages = stored.length ? stored.slice() : [];
+
+        if (!stored.length) {
+          // Thinner fallback, same shape as the contacts one: the sends we
+          // logged via email_tracking, plus the single last-reply timestamp
+          // candidates.last_reply_at keeps (no snippet text exists for
+          // candidates today, unlike contacts.reply_snippet — so this message
+          // carries timing but an empty body, which is enough for the "waiting
+          // on you" / staleness signals even though intent classification
+          // degrades to none until 037 is applied and real bodies are stored).
+          for (const e of (sentByCandidate.get(cand.id) || [])) {
+            messages.push({ direction: 'outbound', sent_at: e.sent_at, body: e.subject || '' });
+          }
+          if (cand.last_reply_at) {
+            messages.push({ direction: 'inbound', sent_at: cand.last_reply_at, body: '' });
+          }
+        }
+
+        threads.push({
+          entity_type: 'candidate',
+          entity_id: cand.id,
+          name: cand.full_name || cand.email,
+          email: cand.email,
+          company: s.job_order?.client || s.job_order?.job_title || null,
+          job_id: s.job_order_id,
+          owner_id: s.recruiter_id || null,
+          stage: s.stage,
+          messages,
+        });
+      }
+
       // ── Reminders: created for years, never surfaced anywhere ─────────────
       let remQ = withOrg(
         supabase.from('reminders')

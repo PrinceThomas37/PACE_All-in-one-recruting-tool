@@ -143,6 +143,37 @@ const thread = (over) => ({
     buildNextActions({ reminders: [{ id: 'bad', return_date: 'nope', status: 'pending' }], now: NOW }).length === 0);
 }
 
+// ── 6b. Stage suggestion — candidate threads only, advisory not automatic ──
+{
+  const candidate = thread({
+    entity_type: 'candidate', entity_id: 'cand1', name: 'Grace Hopper', stage: 'Screening',
+    messages: [m('outbound', 5, 'Hi, are you open to a new role?'), m('inbound', 1, 'Yes, sounds good — happy to chat.')],
+  });
+  const items = buildNextActions({ threads: [candidate], now: NOW });
+  const suggestion = items.find(i => i.kind === KIND.STAGE_SUGGESTED);
+  ok('a positive-intent candidate reply produces a stage suggestion', !!suggestion, JSON.stringify(items));
+  ok('...naming the current stage', /Screening/.test(suggestion.reason), suggestion.reason);
+  ok('...tagged to the candidate entity', suggestion.entity_type === 'candidate' && suggestion.entity_id === 'cand1');
+}
+{
+  // Same positive reply, but on a contact (BD lead) thread — no ATS stage
+  // exists for a lead, so no stage suggestion should ever fire there.
+  const lead = thread({ entity_id: 'lead1', messages: [m('outbound', 5, 'Hi'), m('inbound', 1, 'Sounds good, let\'s set up a call.')] });
+  const items = buildNextActions({ threads: [lead], now: NOW });
+  ok('a contact/lead thread never produces a stage suggestion', !items.some(i => i.kind === KIND.STAGE_SUGGESTED), JSON.stringify(items));
+}
+{
+  // A candidate thread with no positive intent (or no stage on record) must
+  // not produce a suggestion — this is advisory on signal, not on every reply.
+  const candidate = thread({
+    entity_type: 'candidate', entity_id: 'cand2', stage: 'Screening',
+    messages: [m('outbound', 5, 'Hi'), m('inbound', 1, 'Not interested, thanks.')],
+  });
+  const items = buildNextActions({ threads: [candidate], now: NOW });
+  ok('a "not interested" candidate reply produces no stage suggestion (or any action)',
+    !items.some(i => i.entity_id === 'cand2'), JSON.stringify(items));
+}
+
 // ── 7. Summary for the dashboard card ───────────────────────────────────────
 {
   const items = buildNextActions({

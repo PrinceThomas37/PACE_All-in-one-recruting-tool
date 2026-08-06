@@ -28,6 +28,7 @@ const KIND = {
   COMMITMENT_DUE: 'commitment_due', // we said we'd do something by now
   REMINDER_DUE: 'reminder_due',     // an explicit reminder came due
   NUDGE: 'nudge',                   // we wrote, silence, long enough to chase
+  STAGE_SUGGESTED: 'stage_suggested', // a candidate signal worth a manual stage move
 };
 
 const dayDiff = (a, b) => Math.floor((a - b) / DAY_MS);
@@ -107,6 +108,29 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         overdue_days: late,
       });
     }
+
+    // A candidate thread carrying a positive signal (interested, wants to talk,
+    // asked for rates/info) — worth a manual look at whether their ATS stage
+    // should move. Advisory only, and deliberately does NOT know the stage
+    // taxonomy or what the "next" stage would be: that vocabulary lives in
+    // services/recruiting-core.js and CLAUDE.md is explicit that it must not be
+    // duplicated across more files than it already is. The recruiter decides
+    // the actual move; this only says a signal is there worth acting on.
+    if (t.entity_type === 'candidate' && t.stage && a.intent && a.intent.tone === 'good') {
+      items.push({
+        kind: KIND.STAGE_SUGGESTED,
+        entity_type: t.entity_type, entity_id: t.entity_id,
+        title: t.name || t.email || 'Unknown',
+        subtitle: t.company || null,
+        job_id: t.job_id || null, owner_id: t.owner_id || null,
+        reason: `${a.intent.label} — currently at "${t.stage}". Worth moving them forward?`,
+        state: a.state,
+        intent: a.intent.id,
+        priority: 35 + (a.needs_reply ? 5 : 0),
+        due_at: null,
+        overdue_days: a.days_since_inbound,
+      });
+    }
   }
 
   // Reminders: the feature that existed and never fired.
@@ -155,7 +179,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
 
 /** Small headline counts for the dashboard card. */
 function summarize(items) {
-  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0 };
+  const by = { reply_due: 0, commitment_due: 0, reminder_due: 0, nudge: 0, stage_suggested: 0 };
   for (const i of items) if (by[i.kind] !== undefined) by[i.kind]++;
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
