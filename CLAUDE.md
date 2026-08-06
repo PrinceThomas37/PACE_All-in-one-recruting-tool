@@ -224,21 +224,33 @@ Session 9). What that means in practice:
   never a silent write. **This is real, tested code sitting inert, not a
   hypothetical** — the moment a key is funded it starts working with no
   further deploy.
-- **Phone/WhatsApp scaffolding exists and is also DARK.** `twilio-provider.js`
-  (outbound send + inbound webhook signature validation — no `twilio` npm
-  package, same `http-client.js` convention as the Stripe seam) and
-  `routes/telephony.js` (public inbound webhooks, mirroring
-  `routes/tracking.js`'s trust model) are real, tested code with **no live
-  Twilio account behind them** — `isConfigured()` is false with no
-  `TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`, and the webhook routes fail closed
-  (403) rather than accepting anything unverified. Migration
-  `042_phone_numbers.sql` is written, **not applied.** This is scaffolding
-  only, not a finished channel — no account has been purchased (real recurring
-  cost, needs its own explicit go-ahead per the architecture-mapping plan's
-  Twilio pricing section), no number is provisioned, and Meta's WhatsApp
-  Business verification (weeks, not code) hasn't been started. Activating it
-  for real requires an actual Twilio account and its credentials — something
-  only the owner can create.
+- **Phone/call/SMS/WhatsApp scaffolding exists and is also DARK — and it is
+  CARRIER-AGNOSTIC, not tied to Twilio.** `telephony/registry.js` defines one
+  adapter interface (`isConfigured`/`verifyWebhook`/`normalizeInbound`/
+  `ackResponse`/`sendMessage`); `telephony/twilio.js` is one adapter behind
+  it (no `twilio` npm package, same `http-client.js` convention as the Stripe
+  seam); `telephony/generic.js` is a second adapter — a shared-secret HMAC
+  webhook contract any other carrier (Exotel, Vonage, Plivo, a client's own
+  PBX relay, anything) can be pointed at with zero new code. Whichever
+  adapter normalizes a message, `telephony/inbound.js` runs the ONE shared
+  matching/storage pipeline — mirrors how `gmailProvider.normalizeMessage`
+  lets email's `processInboundMessages` stay a single function across two
+  providers; **do not write a second inbound-handling copy per carrier**,
+  add a new adapter file instead. `routes/telephony.js` is a thin dispatcher
+  (`POST /telephony/:provider/inbound`) that never touches a vendor's API
+  shape directly. All of this is real, tested code with **no live carrier
+  account behind any adapter** — every `isConfigured()` is false with no
+  credentials set, and every webhook fails closed (403) rather than
+  accepting anything unverified. Migration `042_phone_numbers.sql`
+  (`provider` names whichever registry adapter owns a number) is written,
+  **not applied.** This is scaffolding only, not a finished channel — no
+  account has been purchased with any carrier (real recurring cost, needs
+  its own explicit go-ahead per the architecture-mapping plan's Twilio
+  pricing section, which is representative of the cost shape generally), no
+  number is provisioned, and Meta's WhatsApp Business verification (weeks,
+  not code) hasn't been started for the WhatsApp channel specifically.
+  Activating any of this for real requires an actual carrier account and its
+  credentials — something only the owner can create.
 
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 

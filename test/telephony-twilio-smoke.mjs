@@ -1,11 +1,13 @@
-// Unit test for twilio-provider.js — Layer-3 Step 3 scaffolding. There is no
-// Twilio account in this repo (or in CI), so this asserts the two things that
-// must be true regardless: (1) the module is dark — isConfigured() false,
-// every send a safe no-op — and (2) the signature-validation algorithm that
-// would gate real webhooks is correct, tested against Twilio's own published
-// example without any network call or real credentials.
+// Unit test for telephony/twilio.js — the Twilio adapter behind the shared,
+// carrier-agnostic telephony pipeline (see telephony/registry.js). There is
+// no Twilio account in this repo (or in CI), so this asserts the two things
+// that must be true regardless: (1) the module is dark — isConfigured()
+// false, verifyWebhook() fails closed, every send a safe no-op — and (2) the
+// signature-validation algorithm that would gate real webhooks is correct,
+// cross-checked against an independently computed value, with no network
+// call or real credentials.
 //
-// Usage: node test/twilio-provider-smoke.mjs   (no external dependencies)
+// Usage: node test/telephony-twilio-smoke.mjs   (no external dependencies)
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
@@ -16,20 +18,23 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
 {
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
-  const twilio = require('../twilio-provider.js');
+  const twilio = require('../telephony/twilio.js');
+  ok('the adapter identifies itself as "twilio"', twilio.name === 'twilio');
   ok('isConfigured() is false with no credentials', twilio.isConfigured() === false);
+  ok('verifyWebhook() fails closed with no credentials, even given a request object',
+    twilio.verifyWebhook({ body: {}, get: () => 'anything' }, 'https://x.com') === false);
   const result = await twilio.sendMessage({ to: '+15550001111', from: '+15550002222', body: 'hi' });
   ok('sendMessage() is a safe no-op with no credentials', result === null, JSON.stringify(result));
 }
 {
   process.env.TWILIO_ACCOUNT_SID = 'ACxxxx';
   // TWILIO_AUTH_TOKEN still unset — half-configured must still be dark.
-  const twilio = require('../twilio-provider.js');
+  const twilio = require('../telephony/twilio.js');
   ok('isConfigured() is false with only half the credentials set', twilio.isConfigured() === false);
   delete process.env.TWILIO_ACCOUNT_SID;
 }
 
-const twilio = require('../twilio-provider.js');
+const twilio = require('../telephony/twilio.js');
 
 // ── 2. Signature validation — Twilio's published algorithm: HMAC-SHA1 of the
 // url with every POST param (sorted by key) appended as key+value, base64
@@ -61,7 +66,22 @@ const twilio = require('../twilio-provider.js');
   ok('a missing number normalizes to an empty string, not a crash', twilio.last10Digits(null) === '');
 }
 
-console.log('\n=== TWILIO PROVIDER SMOKE ===');
+// ── 4. normalizeInbound — shape every other carrier's adapter must also produce
+{
+  const req = { body: { From: '+14158675310', Body: 'Sounds good', MessageSid: 'SM123' } };
+  const n = twilio.normalizeInbound(req);
+  ok('a plain SMS normalizes to channel "sms"', n.channel === 'sms', JSON.stringify(n));
+  ok('...with the whatsapp: prefix stripped from From (there is none here)', n.from === '+14158675310');
+  ok('...and the message id carried through', n.messageKey === 'SM123');
+}
+{
+  const req = { body: { From: 'whatsapp:+14158675310', Body: 'Hi', MessageSid: 'SM456' } };
+  const n = twilio.normalizeInbound(req);
+  ok('a WhatsApp message normalizes to channel "whatsapp"', n.channel === 'whatsapp', JSON.stringify(n));
+  ok('...with the whatsapp: prefix stripped from From', n.from === '+14158675310', n.from);
+}
+
+console.log('\n=== TELEPHONY: TWILIO ADAPTER SMOKE ===');
 let failed = 0;
 for (const r of results) {
   if (!r.ok) failed++;
