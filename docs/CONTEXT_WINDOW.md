@@ -4,10 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-24 (end of Session 12) · **Repo**:
+**Updated**: 2026-08-24 (end of Session 13) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Dev branch**: `claude/google-account-connection-hz15uj`
+to `main` IS the release · **Dev branch**: `claude/in-app-email-mailbox-4rsheq`
 
 ---
 
@@ -65,29 +65,36 @@ Everything through `040_billing.sql` is applied (see `CLAUDE.md`'s "Growth
 bets" §9 and §1 for the fuller multi-tenancy/billing state — that section is
 kept current and is the right place to check plan/RLS/billing status).
 
-## 🔜 Next task, explicitly asked for by the owner: a real in-app inbox
+## ✅ Just shipped (Session 13): the in-app mailbox
 
-PACE has **no general inbox today**. Connected mailboxes (Microsoft + Gmail)
-are used for (a) sending outreach/candidate email and (b) a behind-the-scenes
-30-min reply-detection sweep that links a reply into its lead/candidate's
-conversation thread — but there is no unified "everything that landed in this
-mailbox" view, and no reply-from-app UI for anything outside a lead/candidate
-thread. The owner wants to work mailboxes from inside PACE instead of
-switching to Gmail/Outlook.
+PACE now has a real mail client over each user's connected mailboxes — folders
+and labels, message list, reading pane, reply / reply-all, compose, archive,
+trash, mark read/unread, search, attachments, and a **Lead / Candidate chip** on
+any sender already in the ATS. `services/mail-provider.js` (one adapter over
+Graph *and* Gmail) → `routes/mailbox.js` (13 endpoints) →
+`public/js/47-page-mailbox.js` ("Inbox" in the sidebar, above Email).
 
-**Not started.** Scope it before building:
-- v1 is probably read-only: list threads across a user's connected mailboxes,
-  open one and read it — using the existing Graph/Gmail read scopes already
-  granted (`Mail.ReadWrite` / `gmail.modify`), no new OAuth consent needed.
-- Reply-from-app is the natural fast-follow, reusing the existing send
-  dispatch (`sendMailboxNewMessage`, platform-aware) rather than building a
-  second send path.
-- Think about API rate limits per mailbox before polling more than the
-  current 30-min sweep, and about Render free-tier instance hours (see
-  `CLAUDE.md`'s heartbeat note) before adding any new scheduled poll.
-- Storage: `conversation_messages` (migration 037) already stores full bodies
-  for tracked lead/candidate threads — decide whether a general inbox reuses
-  that table (widening its scope) or needs its own.
+**No migration and no new OAuth consent** — `Mail.ReadWrite` / `gmail.modify`
+already covered it, so nobody reconnects a mailbox.
+
+Four rules in that feature that must not be softened (all pinned by tests, and
+spelled out in `CLAUDE.md`'s Growth-bets §3):
+- **Nothing is mirrored into Postgres** — every read is a live pass-through.
+  `conversation_messages` (037) was deliberately *not* widened to hold inbox
+  traffic; it stays the intelligence layer's record of threads PACE is working.
+- **Your own mailboxes only**, admin included. 404 for someone else's (so ids
+  can't be probed), 409 for yours-but-disconnected.
+- **Nothing destroys mail** — delete is move-to-Trash; neither provider's
+  permanent-delete is reachable from this app.
+- **Bodies render in a sandboxed iframe** (no scripts, no same-origin) and
+  **remote images stay blocked until asked for**.
+
+Sending reuses the outreach engine's provider calls (no second send path) but
+does *not* pixel-track — tracking belongs to outreach, not to a personal reply.
+
+**Not in v1, deliberately:** drafts are read-only, no forward-with-attachments,
+no move-to-folder picker in the UI (the API supports it), no shared/delegated
+mailboxes, and the unread badge is a 60s cached poll rather than a live push.
 
 ## Owner actions outstanding
 
@@ -144,6 +151,12 @@ default org is on it).
   `next-action.js` (the ranking on top of it) is the same discipline.
 - **One reply sweep, not two.** `processInboundMessages` serves Outlook *and*
   Gmail; Gmail messages are reshaped into Graph's shape.
+- **Graph's `/move` returns a NEW message id** — the old one stops resolving the
+  instant the message lands in the destination folder. Gmail's id never changes.
+  Any code that moves a message must take the id it is handed back.
+- **A new nav item does not get the slot right after Dashboard.** "My Jobs"
+  (recruiter) and "My Team" (team lead) each sit there deliberately and both are
+  pinned by tests. Tools go at the head of the tools block, before Email.
 - **Retries are safe-methods-only** in `http-client.js`. Retrying a
   `POST /me/sendMail` on a timeout sends the email twice.
 - **Use `models/` for tenant tables**, not hand-written `supabase.from()`.
@@ -175,11 +188,12 @@ default org is on it).
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API** (still the one CLAUDE.md flags as highest-leverage next), generalized
   audit trail, PWA polish.
-- **The in-app inbox — see "Next task" above. This is the live one.**
+- In-app mailbox v1 shipped; the v1 gaps listed above (drafts, forward,
+  move-picker, shared mailboxes, live push) are the obvious follow-ups.
 
 ## Working rules
 
-`npm test` (43 suites now, judged by **exit code**) · `bash
+`npm test` (45 suites now, judged by **exit code**) · `bash
 test/verify-frontend.sh` · build on the dev branch → test → screenshot/show →
 draft PR → merge only on an explicit "merge it"/"do it" → for anything
 touching the live DB, apply the migration only on a fresh explicit go-ahead,

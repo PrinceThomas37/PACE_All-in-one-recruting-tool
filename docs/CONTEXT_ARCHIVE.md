@@ -1877,3 +1877,147 @@ real in-app inbox** so mailbox work can happen inside PACE instead of
 switching to Gmail/Outlook. Scope it properly before building — likely v1 as
 read-only unified inbox (list threads across connected mailboxes, open one),
 reply-from-app as a fast follow. No code started on this yet.
+
+# Session 13 — the in-app mailbox
+
+The owner's ask, in their words: *"I want to build an in-app mailbox — inbox,
+sent, labels and everything like an outbox setup — can we do that for the emails
+connected to the user?"* This was the task Session 12 ended by naming, so it
+started from a scoped-but-unwritten position.
+
+## The decision that shaped everything: pass-through, not sync
+
+The obvious build is to mirror mailboxes into Postgres and serve the UI from
+our own tables. It was rejected before any code, for three reasons that are all
+pre-existing constraints on this project:
+
+1. **Supabase is free-tier.** Every message body of every connected mailbox is
+   the most expensive thing this product could possibly store, and it buys
+   nothing a live read does not already give.
+2. **Render is free-tier.** A sync needs a poller; a poller keeps the service
+   awake and eats the ~750 instance-hour budget (the same reasoning that put the
+   heartbeat at 30 min instead of 5). A pass-through needs no schedule at all.
+3. **A mirror drifts.** "Why isn't my email showing" and "I deleted this an hour
+   ago" are the two ways a synced inbox loses its user, and both are unfixable
+   by design. A live read is never wrong.
+
+So every list and every body is read from the provider on demand, and every
+write (read/unread, move, archive, trash, reply) lands on the real mailbox.
+
+**`conversation_messages` (migration 037) was deliberately not widened** to hold
+this traffic. That table is the intelligence layer's record of the threads PACE
+is actively *working* — a lead's or a candidate's conversation. This is a mail
+client. Same emails sometimes, entirely different job. Merging them would have
+made the intelligence layer's queries answer a different question than they were
+written to answer.
+
+**No migration was needed and none was applied. 042 is still the next number.**
+**No new OAuth consent either** — Microsoft already grants `Mail.ReadWrite` and
+Gmail already grants `gmail.modify`, which between them cover folders, labels,
+reads, moves and trash. Nobody has to reconnect a mailbox.
+
+## What got built
+
+**`services/mail-provider.js`** (~700 lines) — one interface over both
+providers. `createMailProvider(ctx).forMailbox(userEmailRow)` returns an adapter
+whose methods are identical whichever platform is behind it: `listFolders`,
+`listMessages`, `getMessage`, `getAttachment`, `setRead`, `setFlagged`, `move`,
+`archive`, `trash`, `reply`, `listThread`. Everything above it speaks one
+vocabulary. The awkward parts are all in here:
+
+- Graph has real folders with a `wellKnownName`; Gmail has labels and a fixed
+  set of system ids. Both collapse to seven canonical *kinds*, and the UI sorts
+  and icons by kind, never by name — so a renamed or non-English folder still
+  lands correctly, and a user label literally named "SENT" stays custom.
+- **Graph's move returns a NEW message id** — the old one stops resolving the
+  moment the message lands in the destination folder. Gmail's id never changes.
+  Both return `{id}` so the client just takes what it is given.
+- **Archive is its own verb**, because the providers disagree about what
+  archiving *is*: Graph moves to an Archive folder, Gmail has no such label and
+  archiving means dropping INBOX.
+- Gmail's `labels.list` carries no counts and its `messages.list` returns ids
+  only, so folders and list rows each need a fan-out. Both are pooled (6 and 8
+  concurrent) — sequential is a visibly slow inbox, all-at-once trips the
+  per-user rate limit.
+- Reply-all excludes the replying mailbox and never duplicates the sender (the
+  two classic reply-all bugs), and Gmail replies carry `In-Reply-To`/
+  `References` so the thread holds in the *recipient's* client, not just ours.
+
+`gmail-provider.js` gained the reads this needed: `listMessagePage` (the sweep's
+`listMessages` deliberately drops the page token; a mail client has to
+paginate), `listLabels`, `getLabel`, `getThread`, `getAttachment`, `trashMessage`.
+
+**`routes/mailbox.js`** — 13 endpoints. `ownedMailbox()` is the only door in and
+the authorisation is deliberately *stricter* than the rest of the app: **your
+own mailboxes only, admin included.** An admin here can already reassign leads,
+read every candidate and change roles; silently reading a colleague's personal
+mail is a different kind of power and should be an explicit, audited feature if
+it is ever wanted, never a side effect of the admin flag. Someone else's mailbox
+answers **404**, identical to a nonexistent one, so ids cannot be enumerated; a
+disconnected one answers **409** with a code the UI turns into "Reconnect",
+because that is a fixable state and must not read as an error.
+
+The genuinely PACE-specific bit: each page of messages is cross-referenced
+against `contacts` and `candidates` in the caller's org, so a sender who is
+already someone we are working gets a **Lead** or **Candidate** chip that jumps
+straight to their record. That is the entire reason to read mail inside an ATS
+rather than in Outlook.
+
+Sending reuses the same provider calls the outreach engine uses — no second send
+path — but deliberately does **not** inject the open-tracking pixel or write an
+`email_tracking` row. Tracking belongs to outreach, measuring whether a campaign
+landed. Pixel-tracking a personal reply to a colleague is a different thing and
+not one this product should do silently.
+
+**`public/js/47-page-mailbox.js`** — the three-pane client. Two safety
+behaviours worth protecting from a future "simplification":
+
+- **The body renders in a sandboxed iframe** with no `allow-scripts` and no
+  `allow-same-origin` (only `allow-popups`, so links still work), on top of the
+  server-side sanitiser. An email body is the most hostile HTML this app
+  handles; even a sanitiser bug cannot then reach STATE, the session token, or
+  the DOM.
+- **Remote images are blocked until the reader asks**, per message, with a
+  banner saying why. An inbound remote image is usually a tracking pixel — the
+  exact technique PACE uses on its own outbound mail.
+
+Delete says out loud that the mail moved to Trash and is still recoverable,
+because the user just changed their real mailbox and needs to know where it went.
+
+## The nav slot, and not taking one that was already spoken for
+
+Inbox was first placed immediately after Dashboard, which broke two suites:
+`recruiter-dashboard-smoke` ("My Jobs right after Dashboard") and
+`team-structure-smoke` ("My Team right after Dashboard"). Both assertions encode
+deliberate earlier product decisions — Session 5 specifically fixed "My Team"
+being stranded at the bottom. The tests were **not** loosened. Inbox moved to
+the head of the tools block, immediately before Email, which is also the more
+honest grouping: Inbox reads, Email sends, and they now sit together. It is not
+role-gated — a connected mailbox is a personal thing, and a recruiter has as
+much right to read their own mail as a BD does.
+
+## Tests
+
+Two new suites, **45/45 suites green** (was 43).
+
+- `test/mailbox-smoke.mjs` (97 checks) — folder-kind mapping, address parsing
+  (including the comma inside a quoted display name that breaks a naive split),
+  the sanitiser against a dozen XSS vectors, both providers normalising to
+  *identical* keys, reply-all recipient rules, and two guarantees stated as the
+  absence of a call: **Microsoft trash never issues a DELETE, Gmail trash never
+  calls a delete.** Plus the full authorisation matrix, asserting not only the
+  status code but that a refused request **never reaches the provider at all**.
+- `test/mailbox-page-smoke.mjs` (45 checks, Playwright) — the page end to end,
+  including that the iframe sandbox has neither `allow-scripts` nor
+  `allow-same-origin`, that the body is not written into the page itself, that
+  blocked images are announced rather than silently dropped, and that an empty
+  reply never reaches the network.
+- `test/backend-smoke.mjs` grew all 13 mailbox routes (mounted + auth-gated).
+
+## What is deliberately not in v1
+
+Drafts are listed but not editable in-app (the folder shows, opening one is
+read-only); no forward-with-attachments; no move-to-folder picker in the UI
+(archive/trash cover the common cases, and the API already supports an arbitrary
+move); no shared or delegated mailboxes; no push/webhook notification, so the
+unread badge is a 60-second cached poll rather than live.

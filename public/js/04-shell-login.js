@@ -78,6 +78,15 @@ function renderApp(){
   var canReports=userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','recruiter');
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
 
+  // The in-app mailbox. Deliberately NOT role-gated: a connected mailbox is a
+  // personal thing, not a desk-specific one, and a recruiter has as much right
+  // to read their own mail here as a BD does. Someone with no mailbox connected
+  // gets a "set one up" page rather than a hidden nav item they never discover.
+  // The unread count is fetched lazily and cached (60s server-side, 60s here),
+  // so rendering the sidebar costs nothing.
+  if(typeof refreshUnread==='function')refreshUnread();
+  var inboxBadge=(STATE.mailbox&&STATE.mailbox.unread)||null;
+
   var navItems=[{id:"dashboard",lbl:"Dashboard",ic:"dashboard"}];
   if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"profile"});
   if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"leads",badge:todayCnt});
@@ -91,6 +100,7 @@ function renderApp(){
   if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"leads"});
   if(bdm||recruiter)navItems.push({id:"applicants",lbl:"Candidates",ic:"profile"});
   if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"admin"});
+  navItems.push({id:"mailbox",lbl:"Inbox",ic:"email",badge:inboxBadge});
   if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Email",ic:"email"});
   navItems.push(raOnly?{id:"insights",lbl:"Insights",ic:"dashboard"}:{id:"reminders",lbl:"Reminders",ic:"star",badge:remBadge});
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"dashboard"});
@@ -107,7 +117,7 @@ function renderApp(){
 
   var switchers=""; // removed — use team list to switch views
 
-  var pageTitles={dashboard:"Dashboard",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
+  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
   var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id?" · Viewing: "+STATE.viewingUser.name:"";
 
   return '<div id="sidebar">'+
