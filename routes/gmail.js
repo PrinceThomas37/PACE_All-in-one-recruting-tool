@@ -10,6 +10,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const sso = require('../services/sso');
+const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -127,9 +128,13 @@ module.exports = (ctx) => {
   router.delete('/auth/google/:userEmailId', auth, async (req, res) => {
     try {
       if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
+      const { data: mailbox } = await supabase.from('user_emails').select('user_id').eq('id', req.params.userEmailId).maybeSingle();
       await supabase.from('gmail_tokens').delete().eq('user_email_id', req.params.userEmailId);
       await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
-      res.json({ success: true });
+      // Move any leads still pointed at this mailbox before it went dead, so
+      // they don't silently sit in "pending" forever — see mailbox-reassign.js.
+      const reassignment = mailbox ? await reassignJobsOffMailbox(supabase, req.params.userEmailId, mailbox.user_id) : null;
+      res.json({ success: true, reassignment });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
