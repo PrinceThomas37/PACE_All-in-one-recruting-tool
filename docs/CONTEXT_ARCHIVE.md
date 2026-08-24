@@ -1761,3 +1761,119 @@ app is correct before and after.
 ## Tests: 41 suites
 
 New `plans-billing-smoke` (69 assertions). `npm test` green after each part.
+
+---
+
+# Session 12 — Gmail sending fixed end-to-end, and the noise came out of "Needs you today"
+
+**Note on the gap before this entry:** `docs/CONTEXT_WINDOW.md` had drifted
+badly stale — still describing PR #134 as open when `CLAUDE.md` (kept current
+through the gap) shows it merged long ago, self-serve signup steps 1-4 all
+live-but-switched-off, migration 040 applied, and most of the "Growth bets"
+list (multi-tenancy slices 1-3b, clients, tracked email, billing) done in
+sessions that were never archived here. This session did not attempt to
+reconstruct that missing history — `CLAUDE.md` is what carried state forward
+correctly during the gap and remains the source of truth for it. This entry
+picks up from the actual present and both files are now back in sync.
+
+## Part 1 — connecting Gmail, and the two Google-side approvals it needed
+
+Walked the owner through Admin → user → Outreach Email IDs → Connect for a
+Gmail mailbox. Two expected one-time Google Cloud steps, not app bugs:
+"Google hasn't verified this app" (Testing-mode OAuth consent screen — add the
+account under Test Users, or Continue through the warning) and "Gmail API has
+not been used" (enable it on the project in Cloud Console). Advised **against**
+publishing the OAuth consent screen to Production while unverified — `gmail.
+send`/`gmail.modify` are sensitive scopes, and an unverified published app can
+hard-block *everyone*, worse than Testing mode's warn-and-continue. Test users
+were sufficient for internal use.
+
+## Part 2 — leads stuck in "Pending" forever, twice, same root cause
+
+Once connected, "Send all pending" queued 12 emails and sent 0, all showing
+"sending mailbox disabled — skipped". Traced via Supabase: the leads' jobs
+still pointed `sending_email_id` at two **deactivated Microsoft mailboxes**
+whose OAuth tokens were dead (`AADSTS500341` — account deleted from the
+directory; `AADSTS65001` — consent revoked). Unblocked immediately by
+repointing those 5 jobs' `sending_email_id` to the new Gmail mailbox.
+
+Root cause, found in `/distribute/execute` (`index.js`): it only ever queried
+`microsoft_tokens` for "is this account connected" and never filtered
+`user_emails.is_active` — so it kept handing new leads to dead Microsoft
+mailboxes forever and could **never** select a connected Gmail mailbox at all,
+since it had no path to `gmail_tokens` in the first place. Fixed: scope the
+candidate pool to `is_active=true`, check both `microsoft_tokens` AND
+`gmail_tokens`, exclude any row with `refresh_failed=true`. **PR #137.**
+
+The owner then asked the obvious follow-up: what happens if a mailbox gets
+deactivated *after* leads are already assigned to it? Same bug in reverse —
+confirmed in code (`processPendingEmailSends` skips a job whose sending
+mailbox `is_active===false` rather than failing it, so it sits in pending
+forever, silently). Built `services/mailbox-reassign.js`: on deactivation/
+disconnect, automatically move the mailbox's still-open leads to another
+active, connected mailbox for the same user (primary preferred), or report
+them as "stranded" if none exists. Wired into all three places a mailbox goes
+inactive (`PATCH`/`DELETE .../emails/:eid`, Microsoft/Gmail disconnect), with
+the outcome now surfaced in the UI toast instead of staying silent. Same PR
+#137 (second commit). Immediately hit new leads with the *same* two dead
+Microsoft mailboxes again (35 more stuck) — reassigned those too, same fix.
+
+**42/42 → merged.** New `test/mailbox-reassign-smoke.mjs`.
+
+## Part 3 — a 1,249-lead cleanup
+
+Owner asked to delete every lead in `Unassigned` (942) and `Assigned` (307)
+stage, keeping converted-client leads and all candidate/ATS data untouched.
+Verified before deleting: zero overlap between the delete-set and any
+company that already has a real `job_order` (checked both by `company_id`
+join and directly by `job_orders.source_lead_id`), so nothing client-side was
+at risk. Cascade chain required deleting in order — `emails.follow_up_id`
+had to be nulled before `follow_ups` could go, `follow_ups`/`reminders` before
+`jobs` (both have `NO ACTION` FKs onto `jobs`/`contacts`). Executed with
+explicit confirmation first. Final counts: 10 Connected, 1 In Discussion,
+1 Rejected remained — exactly the leads with real activity.
+
+## Part 4 — "Needs you today" was about to become 1,000+ items of noise
+
+Owner explained the "Needs you today" ↔ automation relationship precisely:
+at 200 emails/day and ~15% reply rate over a month, the "To chase" nudge (any
+BD lead silent 3+ days after an outbound) would flood the queue — most of
+those leads are still `Assigned` and already being chased automatically by
+the fu1/fu2 follow-up engine (confirmed in code: `runFollowupEngine` is hard-
+gated on `job.stage === 'Assigned'`, default day 3 / day 7). Fix: a BD-lead
+nudge in `next-action.js` now only fires once the lead's stage is `Connected`
+or `In Discussion` — a real, ongoing conversation. `Assigned`/`Unassigned`/
+`Rejected` never nudge this way (`Rejected` = closed door, same treatment as
+opted-out). `reply_due` (someone actually waiting on a reply) is untouched —
+that's always urgent regardless of stage. Candidate/ATS threads are unaffected
+(different stage vocabulary entirely).
+
+Same conversation surfaced the actual product gap behind the noise: nothing
+returns a lead that never replied back to the pool. Built
+`services/lead-recycle.js` + a new daily `lead_recycle` engine job: a lead
+sitting in `Assigned` with **zero replies** for 30+ days (configurable via
+`app_settings.lead_recycle_days`) is automatically returned to `Unassigned`
+— cleared of its BD/mailbox assignment, `freshness='Old'` so it resurfaces
+first on the next distribution run. Any lead with even one reply is left
+alone; that's engagement, not dead weight. `POST /leads/recycle/run` for a
+manual trigger.
+
+**Migration `041_lead_recycling.sql`** — `jobs.recycled_count` /
+`jobs.last_recycled_at`, visibility-only, applied with explicit go-ahead.
+**43/43 → merged.** New `test/lead-recycle-smoke.mjs`; `test/next-action-
+smoke.mjs` grew a dedicated stage-gating section (Assigned/Rejected/
+Unassigned/undefined all suppressed, Connected/In Discussion nudge, candidate
+threads unaffected, `reply_due` unaffected by the gate).
+
+## Where this session ended, and what's next
+
+Both PRs (#137, #138) merged to `main` and deployed. Owner asked, and was told
+plainly: PACE has **no general inbox today** — connected mailboxes are used
+for sending and for the behind-the-scenes reply-detection sweep that feeds
+lead/candidate conversation threads, but there is no unified "read every email
+that landed here" view, and no reply-from-app UI for anything outside a
+lead/candidate thread. **Next session's explicit task, per the owner: build a
+real in-app inbox** so mailbox work can happen inside PACE instead of
+switching to Gmail/Outlook. Scope it properly before building — likely v1 as
+read-only unified inbox (list threads across connected mailboxes, open one),
+reply-from-app as a fast follow. No code started on this yet.
