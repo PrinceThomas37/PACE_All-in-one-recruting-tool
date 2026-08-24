@@ -60,7 +60,7 @@ const thread = (over) => ({
 {
   const fresh = thread({ entity_id: 'fresh', name: 'Fresh', messages: [m('outbound', 4, 'Hi'), m('inbound', 1, 'What are the rates?')] });
   const stale = thread({ entity_id: 'stale', name: 'Stale', messages: [m('outbound', 20, 'Hi'), m('inbound', 9, 'What are the rates?')] });
-  const quiet = thread({ entity_id: 'quiet', name: 'Quiet', messages: [m('outbound', 9, 'Hi there')] });
+  const quiet = thread({ entity_id: 'quiet', name: 'Quiet', stage: 'Connected', messages: [m('outbound', 9, 'Hi there')] });
   const items = buildNextActions({ threads: [fresh, stale, quiet], now: NOW });
 
   const idx = (id) => items.findIndex(i => i.entity_id === id);
@@ -174,10 +174,43 @@ const thread = (over) => ({
     !items.some(i => i.entity_id === 'cand2'), JSON.stringify(items));
 }
 
+// ── 6c. BD-lead nudges only fire once the lead is actually engaged ─────────
+// At outreach volume (hundreds of leads a month), a silence-nudge on every
+// still-'Assigned' lead is noise — the fu1/fu2 engine is already chasing
+// those on its own schedule. A nudge should only appear once there's a real,
+// ongoing conversation ('Connected' / 'In Discussion').
+{
+  const silentQuiet = (stage) => thread({ entity_id: 'nudge-' + stage, stage, messages: [m('outbound', 9, 'Hi there')] });
+  for (const stage of ['Assigned', 'Rejected', 'Unassigned', undefined]) {
+    const items = buildNextActions({ threads: [silentQuiet(stage)], now: NOW });
+    ok(`a silent BD lead in stage "${stage}" is NOT nudged`, items.length === 0, JSON.stringify(items));
+  }
+  for (const stage of ['Connected', 'In Discussion']) {
+    const items = buildNextActions({ threads: [silentQuiet(stage)], now: NOW });
+    ok(`a silent BD lead in stage "${stage}" IS nudged`, items.length === 1 && items[0].kind === KIND.NUDGE, JSON.stringify(items));
+  }
+}
+{
+  // Candidate (ATS) threads use a different stage vocabulary entirely and are
+  // not subject to this gate — a candidate nudge should fire regardless.
+  const candidateQuiet = thread({ entity_type: 'candidate', entity_id: 'cand-quiet', stage: 'Screening', messages: [m('outbound', 9, 'Hi there')] });
+  const items = buildNextActions({ threads: [candidateQuiet], now: NOW });
+  ok('a silent candidate thread is still nudged regardless of ATS stage', items.length === 1 && items[0].kind === KIND.NUDGE, JSON.stringify(items));
+}
+{
+  // The gate is specifically on the silent NUDGE — an actual unanswered reply
+  // from a BD lead must still surface even while the lead is 'Assigned',
+  // since that is someone actively waiting on a human, not routine silence.
+  const stillAssignedButReplied = thread({ entity_id: 'assigned-reply', stage: 'Assigned' });
+  const items = buildNextActions({ threads: [stillAssignedButReplied], now: NOW });
+  ok('a reply_due item is NOT suppressed by the Assigned-stage nudge gate',
+    items.length === 1 && items[0].kind === KIND.REPLY_DUE, JSON.stringify(items));
+}
+
 // ── 7. Summary for the dashboard card ───────────────────────────────────────
 {
   const items = buildNextActions({
-    threads: [thread(), thread({ entity_id: 'q', name: 'Quiet', messages: [m('outbound', 9, 'Hi')] })],
+    threads: [thread(), thread({ entity_id: 'q', name: 'Quiet', stage: 'Connected', messages: [m('outbound', 9, 'Hi')] })],
     reminders: [{ id: 'r', user_id: 'u1', return_date: ago(1), note: 'x', status: 'pending' }],
     now: NOW,
   });
