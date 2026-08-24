@@ -120,7 +120,11 @@ window.connectGmailUserEmail=function(userId,userEmailId){
 window.toggleUserEmailActive=function(userId,emailId,active){
   apiPatch('/users/'+userId+'/emails/'+emailId,{is_active:active}).then(function(e){
     STATE.userEmailsCache[userId]=(STATE.userEmailsCache[userId]||[]).map(function(x){return x.id===emailId?e:x;});
-    showToast(active?'Activated':'Deactivated','success');render();
+    var r=e.reassignment;
+    if(r&&r.reassigned)showToast('Deactivated — moved '+r.reassigned+' lead'+(r.reassigned!==1?'s':'')+' to another mailbox','success');
+    else if(r&&r.stranded)showToast('Deactivated — '+r.stranded+' lead'+(r.stranded!==1?'s':'')+' have no other connected mailbox and will stay pending until you connect one','error');
+    else showToast(active?'Activated':'Deactivated','success');
+    render();
   }).catch(function(e){showToast('Failed: '+e.message,'error');});
 };
 
@@ -133,9 +137,13 @@ window.setPrimaryEmail=function(userId,emailId){
 
 window.deleteUserEmail=function(userId,emailId){
   if(!confirm('Remove this email ID?'))return;
-  apiDelete('/users/'+userId+'/emails/'+emailId).then(function(){
+  apiDelete('/users/'+userId+'/emails/'+emailId).then(function(res){
     STATE.userEmailsCache[userId]=(STATE.userEmailsCache[userId]||[]).filter(function(x){return x.id!==emailId;});
-    showToast('Email removed','success');render();
+    var r=res&&res.reassignment;
+    if(r&&r.reassigned)showToast('Removed — moved '+r.reassigned+' lead'+(r.reassigned!==1?'s':'')+' to another mailbox','success');
+    else if(r&&r.stranded)showToast('Removed — '+r.stranded+' lead'+(r.stranded!==1?'s':'')+' have no other connected mailbox and will stay pending until you connect one','error');
+    else showToast('Email removed','success');
+    render();
   }).catch(function(e){showToast('Failed: '+e.message,'error');});
 };
 

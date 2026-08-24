@@ -10,6 +10,7 @@ const jwt = require('jsonwebtoken');
 const { mailboxSignatureKey, resolveSignatureHtml } = require('../email-signature');
 const { mailboxConnections } = require('../mailbox-health');
 const entitlements = require('../services/entitlements');
+const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -270,15 +271,26 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
     const { data, error } = await supabase.from('user_emails').update(updates)
       .eq('id', req.params.eid).eq('user_id', req.params.id).select().single();
     if (error) throw error;
-    res.json(data);
+
+    // Deactivating a mailbox would otherwise leave any lead already pointed
+    // at it stuck in "pending" forever with no visible reason — move them to
+    // another active, connected mailbox for this user (or report if none).
+    let reassignment = null;
+    if (is_active === false) {
+      reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
+    }
+    res.json({ ...data, reassignment });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/users/:id/emails/:eid', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    // Move any leads off this mailbox before it's gone entirely — otherwise
+    // they either block the delete or lose their sending mailbox outright.
+    const reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
     await supabase.from('user_emails').delete().eq('id', req.params.eid).eq('user_id', req.params.id);
-    res.json({ success: true });
+    res.json({ success: true, reassignment });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

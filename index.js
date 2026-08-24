@@ -1756,16 +1756,25 @@ app.post('/distribute/execute', auth, async (req, res) => {
     const { manager_id, ratio } = req.body;
     if (!manager_id || !ratio) return res.status(400).json({ error: 'manager_id and ratio required' });
 
-    // Get manager's email accounts that have a connected Microsoft token (ready to send)
+    // Get manager's active email accounts that have a working, connected token
+    // (Microsoft or Gmail — leads used to only ever go to Microsoft mailboxes,
+    // silently starving Gmail accounts and any mailbox whose token had gone
+    // bad, since a stale/broken token row still counted as "connected").
     const { data: allUserEmails } = await supabase.from('user_emails')
-      .select('id,email_address,display_name,daily_send_limit').eq('user_id', manager_id);
-    if (!allUserEmails?.length) return res.status(400).json({ error: 'Manager has no email IDs configured' });
-    // Only use accounts with a valid OAuth token
-    const { data: connectedTokens } = await supabase.from('microsoft_tokens')
-      .select('user_email_id').in('user_email_id', allUserEmails.map(e => e.id));
-    const connectedIds = new Set((connectedTokens || []).map(t => t.user_email_id));
+      .select('id,email_address,display_name,daily_send_limit').eq('user_id', manager_id).eq('is_active', true);
+    if (!allUserEmails?.length) return res.status(400).json({ error: 'Manager has no active email IDs configured' });
+    const emailIds = allUserEmails.map(e => e.id);
+    const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
+      supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
+      supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
+    ]);
+    const connectedIds = new Set(
+      [...(msTokens || []), ...(gmailTokens || [])]
+        .filter(t => !t.refresh_failed)
+        .map(t => t.user_email_id)
+    );
     const userEmails = allUserEmails.filter(e => connectedIds.has(e.id));
-    if (!userEmails?.length) return res.status(400).json({ error: 'Manager has no connected Microsoft email accounts — please connect via Manage Users' });
+    if (!userEmails?.length) return res.status(400).json({ error: 'Manager has no connected, working email accounts — please connect or reconnect one under Email IDs' });
 
     const todayDate = today();
     const { data: sendLogs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', todayDate);
