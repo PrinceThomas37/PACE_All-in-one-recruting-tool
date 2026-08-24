@@ -4,10 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-05 (end of Session 11) · **Repo**:
+**Updated**: 2026-08-24 (end of Session 12) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Dev branch**: `claude/context-window-docs-t5ia4s`
+to `main` IS the release · **Dev branch**: `claude/google-account-connection-hz15uj`
 
 ---
 
@@ -19,7 +19,11 @@ that ever happened, **append-only — never edited, never summarised away.** At
 the end of a session, append the narrative to the archive, then rewrite this to
 describe the new present. Nothing is lost; the read stays short.
 
----
+**This file had drifted stale for several sessions before this rewrite** (it
+still described PR #134 as open; `CLAUDE.md` was the thing actually kept
+current in the meantime). If you're picking this up cold: `CLAUDE.md` is the
+durable source of truth for anything this file and the archive don't cover —
+trust it over an old-looking line here.
 
 ## What PACE is
 
@@ -29,119 +33,86 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 
 ## What is live right now
 
-- The recruiting ATS + BD lead engine, multi-tenant by `org_id` on 38 tables
+- The recruiting ATS + BD lead engine, multi-tenant by `org_id`
 - **Autonomous Recruiting Engine, all 5 steps** — scheduler, shared relevance
   engine, lead sourcing, candidate outreach, conversation intelligence
-- **Background automation actually running** — `CRON_KEY` is set and verified
-- **SSO sign-in with Microsoft** (Google is built but needs credentials)
-- The PACE rebrand and the rebuilt login page
-- Self-serve signup steps 1–3 (switched OFF — see below)
+- **Self-serve signup is built end-to-end but switched OFF** (`SELF_SERVE_SIGNUP`
+  env var). Plans/entitlements/Stripe seam are real; pricing is deliberately
+  `null` — the owner's call, one line in `services/plans.js` when decided.
+  Guest-mode/demo-data bypass is fully removed (Session 11) — there is no
+  product tour today.
+- **Lead distribution now correctly uses every connected mailbox** — Microsoft
+  and Gmail, active + working tokens only (Session 12, PR #137). A mailbox
+  going inactive auto-moves its open leads to another working one instead of
+  stranding them (`services/mailbox-reassign.js`).
+- **"Needs you today" no longer floods with stale-Assigned-lead noise** — a
+  BD-lead nudge only fires once the lead is `Connected`/`In Discussion`
+  (Session 12, PR #138). **Leads silent in `Assigned` for 30+ days now
+  auto-recycle back to `Unassigned`** daily (`services/lead-recycle.js`,
+  configurable via `app_settings.lead_recycle_days`, default 30).
+- SSO sign-in with Microsoft (Google sign-in is built, needs
+  `GOOGLE_CLIENT_ID`/`SECRET` — separate from the per-user Gmail *sending*
+  connection below, which is live and working)
 
-## ⏳ On the dev branch, NOT yet merged — PR #134
+## Migrations — 041 is the latest APPLIED (2026-08-24)
 
-Two things are finished, tested (41/41) and waiting on the owner. **They are not
-live until #134 merges**, so do not describe them as shipped:
+`041_lead_recycling.sql` — `jobs.recycled_count` / `jobs.last_recycled_at`,
+visibility-only. Applied with explicit go-ahead, verified against live schema.
+**The next migration number is 042. Never apply one to the live DB without a
+fresh, explicit go-ahead**, even when the feature itself was already agreed.
 
-1. **The guest bypass and all demo data are removed.** `Bearer guest` granted
-   read-only access to the DEFAULT org — a real customer's live data — and
-   `01-seed-demo.js` generated a fake world a user briefly saw before their own
-   data loaded. Both gone, along with the legacy lead-gen dashboard that only
-   the demo data ever fed.
-2. **Plans, entitlements and the Stripe seam** (self-serve step 4).
+Everything through `040_billing.sql` is applied (see `CLAUDE.md`'s "Growth
+bets" §9 and §1 for the fuller multi-tenancy/billing state — that section is
+kept current and is the right place to check plan/RLS/billing status).
 
-**Waiting on the owner, and the reason each is theirs:**
-- **Prices.** Deliberately `null` on every tier — what PACE costs is a product
-  decision, and an invented number on a screen looks decided. Proposed to them:
-  Starter ₹4,000 / Pro ₹12,000 / Business ₹30,000 per month. One-line change in
-  `services/plans.js`.
-- **Whether to take card payments at all.** Plans and limits are real without
-  Stripe; online payment needs a Stripe account. The alternative they were
-  offered is invoicing and changing plans by hand.
+## 🔜 Next task, explicitly asked for by the owner: a real in-app inbox
 
-## Self-serve signup — built, switched OFF
+PACE has **no general inbox today**. Connected mailboxes (Microsoft + Gmail)
+are used for (a) sending outreach/candidate email and (b) a behind-the-scenes
+30-min reply-detection sweep that links a reply into its lead/candidate's
+conversation thread — but there is no unified "everything that landed in this
+mailbox" view, and no reply-from-app UI for anything outside a lead/candidate
+thread. The owner wants to work mailboxes from inside PACE instead of
+switching to Gmail/Outlook.
 
-Steps 1–3 are merged; step 4 is on PR #134. Nothing is open to the public,
-because the whole thing sits behind one env var:
+**Not started.** Scope it before building:
+- v1 is probably read-only: list threads across a user's connected mailboxes,
+  open one and read it — using the existing Graph/Gmail read scopes already
+  granted (`Mail.ReadWrite` / `gmail.modify`), no new OAuth consent needed.
+- Reply-from-app is the natural fast-follow, reusing the existing send
+  dispatch (`sendMailboxNewMessage`, platform-aware) rather than building a
+  second send path.
+- Think about API rate limits per mailbox before polling more than the
+  current 30-min sweep, and about Render free-tier instance hours (see
+  `CLAUDE.md`'s heartbeat note) before adding any new scheduled poll.
+- Storage: `conversation_messages` (migration 037) already stores full bodies
+  for tracked lead/candidate threads — decide whether a general inbox reuses
+  that table (widening its scope) or needs its own.
 
-1. ✅ Organisations get plan / status / kind
-2. ✅ Domain claiming with DNS verification
-3. ✅ **Route a sign-in** — `services/provisioning.js`
-4. ✅ **Plan entitlements + the Stripe seam** — `services/plans.js` (rules,
-   pure), `services/entitlements.js` (counts + gates), `services/billing.js`
-   (Stripe, inert until keys are set)
+## Owner actions outstanding
 
-**`SELF_SERVE_SIGNUP` must be exactly `on` for any of it to do anything.** With
-it unset — how the service ships and how it is deployed today — a stranger
-signing in with Microsoft/Google gets the same "ask your administrator" refusal
-they always got, and no account is created. Turning it on is a Render env var,
-not a release.
-
-**Its prerequisites are now met** — migrations 038 and 039 are applied (below),
-so switching it on is a decision rather than a dependency. 039 is the isolation
-batch, and it exists precisely so it landed *before* strangers can create
-workspaces, not after.
-
-### How a sign-in routes (the three destinations, and only three)
-
-| Situation | Destination |
-|---|---|
-| Domain has a **verified** claim **and** auto-join is on | join that org, role from the claim |
-| Domain has a **verified** claim, auto-join off | refused — ask your admin to invite you |
-| Domain unclaimed, or free mail | a **private** workspace of their own |
-
-**Sharing a domain is not membership.** Two people on an unclaimed domain get
-two separate workspaces — never a shared one. That is the unverified auto-join
-we deliberately refuse, and it is pinned by a test.
-
-## Owner actions outstanding (only they can do these)
-
-1. **Google sign-in** — create a Google Cloud OAuth client, set
-   `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in Render. Redirect URI must be
-   exactly `https://<host>/auth/google/callback`. The button then appears by
-   itself. **Do the host rename first if it is going to happen at all.**
-2. **Rename the Render host** (optional) — `fute-lms-backend.onrender.com` is
-   still the live address. Needs the Render service renamed **and** the Azure
-   app registration updated, together.
-3. Verify one real Greenhouse/Lever board via the "Test it" button — the
-   adapters have never met a live feed (the sandbox blocks those hosts).
-4. **Set prices, and decide whether to take card payments** — see PR #134 above.
-   Both block nothing technically; plans are enforced either way.
-5. **Merge #134** (their call, as always) — then the guest bypass is closed in
-   production, not just on a branch.
+1. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
+   `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
+2. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
+   never met a live feed (sandbox blocks those hosts).
+3. **Set prices, decide on card payments** — `services/plans.js`, one line.
+   Both block nothing technically; plan limits enforce either way.
+4. **Turn on `SELF_SERVE_SIGNUP`** whenever the owner wants strangers able to
+   sign themselves up — purely an env var flip, not a release.
 
 ## Plans — the rules that must not be softened
 
 Free 2 seats / 3 job orders / 50 candidates / 1 mailbox · Starter 5/25/1,000/3 ·
 Pro 20/∞/10,000/10 · Business unlimited · `internal` = ours, unlimited (the
-default org is on it, which is why none of this changed the live deployment).
+default org is on it).
 
-- **Enforced on CREATE** (`POST /users`, `/users/:id/emails`, `/job-orders`,
-  `/candidates`) with **402**, not 403 — a billing wall is not a permission
-  error. Feature gates: sourcing = Pro+, conversation intelligence = Starter+.
-- **Being over a limit never deletes anything.** Enforcement is create-only, so
-  a downgrade keeps every row and just blocks adding. Never add a path that
-  removes, hides or locks data over billing.
-- **Only the signed webhook may change a plan.** A browser "success" redirect is
-  something anyone can type into their own URL bar.
-- **A failed usage count ALLOWS.** Blocking a paying customer because a COUNT
-  timed out is worse than one row over.
-
-## Migrations — 037-039 APPLIED to the live DB (2026-08-05)
-
-Applied with the owner's go-ahead and **verified against the live schema**, not
-trusted from the success return. The headline: **0 of 48 tables without RLS**
-(was 37, including `microsoft_tokens` — customers' mailbox refresh tokens were
-readable with the anon key), `org_id` backfilled on both token tables with no
-nulls, `users.last_login_at`/`last_login_method` finally existing (`sso.js` had
-been writing to columns that did not), and `users_role_check` accepting
-`associate_director`/`director`. Full detail in the archive.
-
-**Migration `040_billing.sql` is WRITTEN and NOT APPLIED.** Three nullable
-billing columns, an index, and a CHECK on `organizations.plan`. Nothing reads
-them unless Stripe is configured, so the app is correct before and after — it
-only needs applying before payments are switched on. **The next number is 041.
-Never apply a migration to the live database without a fresh, explicit
-go-ahead.**
+- **Enforced on CREATE** with **402**, not 403 — a billing wall, not a
+  permission error. Feature gates: sourcing = Pro+, conversation
+  intelligence = Starter+.
+- **Being over a limit never deletes anything.** Create-only enforcement.
+- **Only the signed Stripe webhook may change a plan.**
+- **A failed usage count ALLOWS** — never block a paying customer on a
+  timed-out COUNT.
 
 ---
 
@@ -150,68 +121,67 @@ go-ahead.**
 **Before moving ANY file** → `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
 (Session 8). Ten things break on a naive move and several fail *silently*.
 
-- **Where a sign-in lands is a pure function** (`provisioning.decide`) for a
-  reason: getting it wrong puts somebody inside another company's data and
-  produces no error. Keep the deciding out of the writing.
-- **`orgIdFor()` falling back to the default org is deliberate — do not "fix" it
-  to return null.** Background sweeps call `withOrg()` with no user, and null
-  turns a scoped query into an unscoped one. The hole is closed in `auth()`
-  instead, which refuses an org-less *session* once multi-org is possible.
+- **A mailbox "connected" check must cover both platforms and check the token
+  is actually alive.** `/distribute/execute` only ever checked
+  `microsoft_tokens` with no `is_active`/`refresh_failed` filter — Gmail could
+  never be selected, and dead Microsoft tokens kept getting reused forever.
+  Fixed Session 12; if you add another mailbox-selection code path, check both
+  `microsoft_tokens` AND `gmail_tokens`, exclude `refresh_failed`, filter
+  `is_active`.
+- **A job whose sending mailbox goes inactive does not fail its pending
+  emails — it silently skips them forever.** Any code path that deactivates,
+  disconnects, or deletes a `user_emails` row must call
+  `services/mailbox-reassign.js`'s `reassignJobsOffMailbox` first, or leads
+  strand with zero visible error.
+- **`orgIdFor()` falling back to the default org is deliberate — do not "fix"
+  it to return null.** Background sweeps call `withOrg()` with no user, and
+  null turns a scoped query into an unscoped one.
 - **`routes/recruiting/*` register on `app` directly, not as Routers** — so
-  **registration order is load-bearing** (`/job-orders/browse` before
-  `/job-orders/:id`; `/candidates/check-duplicate` before `/candidates/:id`).
-  `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
-- **`conversation-intel.js` has an injectable clock — never test it against the
-  real one.** Every headline it writes is a claim about elapsed time.
+  **registration order is load-bearing**. `test/recruiting-routes-mounted.mjs`
+  boots the real server and pins all mounted routes.
+- **`conversation-intel.js` has an injectable clock — never test it against
+  the real one.** Every headline it writes is a claim about elapsed time.
+  `next-action.js` (the ranking on top of it) is the same discipline.
 - **One reply sweep, not two.** `processInboundMessages` serves Outlook *and*
   Gmail; Gmail messages are reshaped into Graph's shape.
 - **Retries are safe-methods-only** in `http-client.js`. Retrying a
   `POST /me/sendMail` on a timeout sends the email twice.
-- **Use `models/` for tenant tables**, not hand-written `supabase.from()`. Four
-  cross-org leaks arrived the old way. A migration adding an `org_id` table must
-  add it to `models/tables.js` (now 41 tenant / 7 global).
-- **The stage vocabulary lives in 6 places.** `33-stage-modal.js` is canonical;
-  the backend copy is `services/recruiting-core.js`.
-- **Render is on the FREE tier** — instance hours are a hard budget. The
-  heartbeat is every 30 min for that reason. Ask what a new poller costs.
-- **When moving code, move it — do not tidy it on the way.**
-- **When a claim about behaviour is load-bearing, test the claim.** Claims that
-  have died this way: `last_login_at` written to a column that did not exist;
-  a role picker offering two roles the database rejected; a dashboard whose
-  widgets only ever had demo data behind them.
-- **The browser tests are not allowed to need a production bypass.** All 17
-  entered the app by clicking "Continue as Guest". They use
-  `test/helpers/enter-app.mjs` now — drive STATE from the test instead.
+- **Use `models/` for tenant tables**, not hand-written `supabase.from()`.
+- **The stage vocabulary lives in 6 places.** `33-stage-modal.js` is
+  canonical; the backend copy is `services/recruiting-core.js`. Note this is
+  the **ATS candidate stage** vocabulary — BD **lead** stages (`Unassigned`,
+  `Assigned`, `Connected`, `In Discussion`, `Rejected`) are a *different*,
+  smaller vocabulary on `jobs.stage`, not the same 11 stages. Don't conflate
+  them when touching lead-side code (distribution, recycling, next-actions).
+- **Render is on the FREE tier** — instance hours are a hard budget. Ask what
+  a new poller costs before adding one.
+- **When a claim about behaviour is load-bearing, test the claim.**
+- **The browser tests are not allowed to need a production bypass** — use
+  `test/helpers/enter-app.mjs`.
+- **A destructive DB action (bulk delete, direct SQL fix) always needs: check
+  FK cascade rules first (`information_schema` — `NO ACTION` means you must
+  clear the referencing rows yourself, in dependency order), verify scope with
+  counts before running, get explicit confirmation, verify after.** Done twice
+  this session (stuck-lead mailbox fixes, the 1,249-lead cleanup) without
+  incident by following exactly that order.
 
 ## Deliberately open, not forgotten
 
-- **There is no product tour any more.** The guest bypass was how one existed.
-  If a demo is wanted again it must be its own seeded organisation with a real
-  login — never a bypass, and never pointed at a customer's live org.
 - Cold-email templates and the resume letterhead still say "Fute Global" —
-  that is the **customer's** identity and must become per-org config, not a
-  rename to PACE.
-- "Log In with your Organization" routes by domain; it is **not** full SAML yet
-  — `/auth/sso/for-domain` is the seam.
+  that is the **customer's** identity, must become per-org config.
+- "Log In with your Organization" routes by domain; **not** full SAML yet.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
 - Growth bets not started: per-role permissions, **CSV import/export + public
-  API**, generalized audit trail, PWA polish.
-  - **CSV import/export is the one I'd do next** and the one I put to the owner:
-    a customer leaving Bullhorn or Ceipal has to bring their candidates with
-    them, and today they cannot. It is the biggest remaining blocker to selling
-    to somebody who already has data.
-
-## Where this session ended
-
-PR **#134** open as a draft, 41/41 green, containing the guest/demo removal and
-plans+payments. The owner has been shown the billing screen and asked for prices
-and a payments decision. Nothing else is in flight.
+  API** (still the one CLAUDE.md flags as highest-leverage next), generalized
+  audit trail, PWA polish.
+- **The in-app inbox — see "Next task" above. This is the live one.**
 
 ## Working rules
 
-`npm test` (41 suites, judged by **exit code** — the suites print two different
-formats, so grepping stdout mis-reports them) · `bash test/verify-frontend.sh` ·
-build on the dev branch → screenshot → draft PR → merge only on an explicit
-"merge it" → it deploys. The owner does not read code; show them the running app
-and plain English.
+`npm test` (43 suites now, judged by **exit code**) · `bash
+test/verify-frontend.sh` · build on the dev branch → test → screenshot/show →
+draft PR → merge only on an explicit "merge it"/"do it" → for anything
+touching the live DB, apply the migration only on a fresh explicit go-ahead,
+right before merge, not on general feature agreement. The owner does not read
+code; show them the running app and plain English.
