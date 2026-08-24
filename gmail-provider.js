@@ -117,11 +117,50 @@ function createGmailProvider(ctx) {
   function base64url(str) {
     return Buffer.from(str, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
-  function buildRaw({ from, to, subject, htmlBody, headers, inReplyTo, references, attachments }) {
+
+  // RFC 5322 headers are ASCII. A raw UTF-8 byte in a Subject is not "mostly
+  // fine" — receiving clients guess a charset, and the usual wrong guess is
+  // Latin-1, which turns an em-dash (U+2014, bytes E2 80 94) into "â€"". That
+  // is exactly the mojibake a subject line comes back with.
+  //
+  // RFC 2047 encoded-words are the fix, and they are capped at 75 characters
+  // each, so a long non-ASCII subject has to be split across several. The split
+  // must land on a CHARACTER boundary — chopping a multi-byte character in half
+  // produces a different, worse corruption than the one being fixed.
+  const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
+  function encodeMimeHeader(value) {
+    const s = String(value == null ? '' : value);
+    if (ASCII_PRINTABLE.test(s)) return s;
+    // 75 - len('=?UTF-8?B?' + '?=') = 63 base64 chars → 45 raw bytes at most.
+    const MAX_BYTES = 45;
+    const words = [];
+    let chunk = '', bytes = 0;
+    for (const ch of s) {                     // iterates by code point, not code unit
+      const size = Buffer.byteLength(ch, 'utf8');
+      if (bytes + size > MAX_BYTES) { words.push(chunk); chunk = ''; bytes = 0; }
+      chunk += ch; bytes += size;
+    }
+    if (chunk) words.push(chunk);
+    // Continuation encoded-words are joined by CRLF + a space (folding).
+    return words.map(w => `=?UTF-8?B?${Buffer.from(w, 'utf8').toString('base64')}?=`).join('\r\n ');
+  }
+
+  // "Ada Lovelace <ada@x.io>" — only the display name may need encoding; the
+  // address itself must stay literal or it stops being an address.
+  function encodeAddressHeader(value) {
+    const s = String(value == null ? '' : value);
+    if (ASCII_PRINTABLE.test(s)) return s;
+    const m = /^(.*?)(<[^>]+>)\s*$/.exec(s);
+    if (!m) return encodeMimeHeader(s);
+    return `${encodeMimeHeader(m[1].trim().replace(/^["']|["']$/g, ''))} ${m[2]}`;
+  }
+
+  function buildRaw({ from, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments }) {
     const head = [];
-    if (from) head.push(`From: ${from}`);
-    head.push(`To: ${to}`);
-    head.push(`Subject: ${subject || ''}`);
+    if (from) head.push(`From: ${encodeAddressHeader(from)}`);
+    head.push(`To: ${encodeAddressHeader(to)}`);
+    if (cc) head.push(`Cc: ${encodeAddressHeader(cc)}`);
+    head.push(`Subject: ${encodeMimeHeader(subject || '')}`);
     head.push('MIME-Version: 1.0');
     if (inReplyTo) head.push(`In-Reply-To: ${inReplyTo}`);
     if (references) head.push(`References: ${references}`);
@@ -141,10 +180,11 @@ function createGmailProvider(ctx) {
     const parts = [`--${boundary}`, 'Content-Type: text/html; charset="UTF-8"', '', htmlBody || ''];
     attachments.forEach((a) => {
       const b64 = String(a.base64 || '').match(/.{1,76}/g) || [];
+      const fname = encodeMimeHeader(String(a.filename || 'attachment').replace(/"/g, ''));
       parts.push(`--${boundary}`,
-        `Content-Type: ${a.contentType || 'application/octet-stream'}; name="${a.filename}"`,
+        `Content-Type: ${a.contentType || 'application/octet-stream'}; name="${fname}"`,
         'Content-Transfer-Encoding: base64',
-        `Content-Disposition: attachment; filename="${a.filename}"`,
+        `Content-Disposition: attachment; filename="${fname}"`,
         '', ...b64);
     });
     parts.push(`--${boundary}--`);
@@ -152,17 +192,17 @@ function createGmailProvider(ctx) {
   }
 
   // ── Send (fresh) ────────────────────────────────────────────────────────────
-  async function sendNewMessage(userEmailId, { to, subject, htmlBody, headers, fromAddress, attachments }) {
+  async function sendNewMessage(userEmailId, { to, cc, subject, htmlBody, headers, fromAddress, attachments }) {
     const token = await getToken(userEmailId);
-    const raw = buildRaw({ from: fromAddress, to, subject, htmlBody, headers, attachments });
+    const raw = buildRaw({ from: fromAddress, to, cc, subject, htmlBody, headers, attachments });
     const r = await api(token, '/messages/send', { method: 'POST', body: JSON.stringify({ raw }) });
     return { messageId: r.id, threadId: r.threadId };
   }
 
   // ── Send (threaded reply) — pass the parent's Message-ID for proper threading ─
-  async function sendThreadReply(userEmailId, { to, subject, htmlBody, headers, fromAddress, threadId, inReplyTo, references }) {
+  async function sendThreadReply(userEmailId, { to, cc, subject, htmlBody, headers, fromAddress, threadId, inReplyTo, references, attachments }) {
     const token = await getToken(userEmailId);
-    const raw = buildRaw({ from: fromAddress, to, subject, htmlBody, headers, inReplyTo, references });
+    const raw = buildRaw({ from: fromAddress, to, cc, subject, htmlBody, headers, inReplyTo, references, attachments });
     const body = { raw }; if (threadId) body.threadId = threadId;
     const r = await api(token, '/messages/send', { method: 'POST', body: JSON.stringify(body) });
     return { messageId: r.id, threadId: r.threadId };
@@ -303,6 +343,8 @@ function createGmailProvider(ctx) {
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
     // In-app mailbox reads (services/mail-provider.js)
     listMessagePage, listLabels, getLabel, getThread, getAttachment, trashMessage,
+    // Exported for testing — header encoding is easy to get subtly wrong.
+    encodeMimeHeader, encodeAddressHeader,
   };
 }
 

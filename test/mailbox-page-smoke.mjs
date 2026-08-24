@@ -122,6 +122,10 @@ try {
       window.__calls.push(['GET', p]);
       if (/^\/mailbox\/accounts/.test(p)) return Promise.resolve(F.accounts);
       if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 4, mailboxes: 2 });
+      // The server returns the signature already FILLED — the bug this guards
+      // is the raw template ({{sender}}) reaching a real recipient.
+      if (/\/signature$/.test(p)) return Promise.resolve({
+        html: '<div><b>Priya Sharma</b><br>Recruitment Manager | Fute Global LLC</div>' });
       if (/\/folders$/.test(p)) return Promise.resolve(F.folders);
       if (/\/messages\?/.test(p)) {
         // Search narrows to one row, so the test can tell the two apart.
@@ -221,33 +225,156 @@ try {
     window.__calls.find(c => c[0] === 'PATCH' && /\/messages\/m1$/.test(c[1])));
   step('Opening a message marks it read on the server', !!readCall && readCall[2].read === true);
 
-  // ── reply ──────────────────────────────────────────────────────────────────
+  // ── reply composer ─────────────────────────────────────────────────────────
   await page.evaluate(() => window.mbReply(false));
-  await page.waitForSelector('#mb-reply-body', { timeout: 5000 });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
   step('Reply opens an inline composer, not a modal',
-    await page.evaluate(() => !!document.getElementById('mb-reply-body') && !document.querySelector('.overlay')));
+    await page.evaluate(() => !!document.getElementById('mb-comp-body') && !document.querySelector('.overlay')));
   step('It says the original will be quoted',
     (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('quoted underneath'));
+
+  // The reported gap: no visible, editable subject on a reply.
+  const replyFields = await page.evaluate(() => ({
+    to: (document.getElementById('mb-comp-to') || {}).value,
+    subject: (document.getElementById('mb-comp-subject') || {}).value,
+    hasSubject: !!document.getElementById('mb-comp-subject'),
+  }));
+  step('Reply shows an editable Subject, prefilled with Re:',
+    replyFields.hasSubject && /^Re: /.test(replyFields.subject), JSON.stringify(replyFields));
+  step('Reply prefills To with the sender', replyFields.to === 'ada.okafor@fidelity.com', replyFields.to);
+
+  // The reported gap: signature was forced on. It is now off by default.
+  const sigDefault = await page.evaluate(() => STATE.mailbox.composer.sig);
+  step('Signature is OFF by default on a reply', sigDefault === false, String(sigDefault));
+  step('A signature picker is offered',
+    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('No signature'));
+
   if (SHOTS) {
-    await page.evaluate(() => { document.getElementById('mb-reply-body').value = 'Friday 3pm is confirmed — sending both profiles this afternoon.'; });
+    await page.evaluate(() => {
+      document.getElementById('mb-comp-body').value = 'Friday 3pm is confirmed — sending both profiles this afternoon.';
+      window.mbCompField('body', document.getElementById('mb-comp-body').value);
+    });
     await page.screenshot({ path: path.join(SHOTS, 'inbox-reply.png'), fullPage: false });
   }
 
-  await page.evaluate(() => { document.getElementById('mb-reply-body').value = 'Friday 3pm is confirmed.'; });
-  await page.evaluate(() => window.mbSendReply());
+  // Turning the signature on fetches the FILLED signature to preview — the bug
+  // being guarded is a template going out with {{sender}} still in it.
+  await page.evaluate(() => window.mbCompSetSig(true));
+  await page.waitForFunction(() => STATE.mailbox.sigHtml !== null, { timeout: 5000 });
+  const sigPreview = await page.evaluate(() => ({
+    fetched: window.__calls.some(c => /\/signature$/.test(c[1] || '')),
+    html: document.getElementById('content').innerHTML,
+  }));
+  step('Choosing "My signature" fetches it from the server', sigPreview.fetched);
+  step('The preview shows the FILLED signature, not the raw template',
+    sigPreview.html.includes('Priya Sharma') && !sigPreview.html.includes('{{sender}}'));
+  await page.evaluate(() => window.mbCompSetSig(false));
+
+  await page.evaluate(() => {
+    document.getElementById('mb-comp-body').value = 'Friday 3pm is confirmed.';
+    document.getElementById('mb-comp-subject').value = 'Re: Friday 3pm — confirmed';
+  });
+  await page.evaluate(() => window.mbSendComposer());
   await page.waitForTimeout(300);
   const replyCall = await page.evaluate(() => window.__calls.find(c => /\/reply$/.test(c[1] || '')));
-  step('Reply posts to the reply endpoint with the typed body',
-    !!replyCall && replyCall[2].body === 'Friday 3pm is confirmed.' && replyCall[2].reply_all === false);
+  step('Reply posts the typed body', !!replyCall && replyCall[2].body === 'Friday 3pm is confirmed.');
+  step('Reply posts the EDITED subject',
+    !!replyCall && replyCall[2].subject === 'Re: Friday 3pm — confirmed', JSON.stringify(replyCall && replyCall[2].subject));
+  step('Reply says the signature is off', !!replyCall && replyCall[2].include_signature === false);
+  step('reply_all is false for a plain reply', !!replyCall && replyCall[2].reply_all === false);
 
   // An empty reply must not reach the network — a wasted send against a real
   // mailbox's daily limit.
   await page.evaluate(() => { window.__calls = []; window.mbReply(false); });
-  await page.waitForSelector('#mb-reply-body', { timeout: 5000 });
-  await page.evaluate(() => { document.getElementById('mb-reply-body').value = '   '; window.mbSendReply(); });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
+  await page.evaluate(() => { document.getElementById('mb-comp-body').value = '   '; window.mbSendComposer(); });
   await page.waitForTimeout(200);
   step('An empty reply is refused before it hits the network',
     await page.evaluate(() => !window.__calls.some(c => /\/reply$/.test(c[1] || ''))));
+
+  // ── reply all ──────────────────────────────────────────────────────────────
+  await page.evaluate(() => { window.__calls = []; window.mbReply(true); });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
+  const ra = await page.evaluate(() => ({
+    to: document.getElementById('mb-comp-to').value,
+    cc: (document.getElementById('mb-comp-cc') || {}).value || '',
+  }));
+  step('Reply all prefills Cc with the other participants', /hiring@fidelity\.com/.test(ra.cc), ra.cc);
+  step('Reply all never cc:s the replying mailbox itself', !/priya@futeglobal\.com/.test(ra.cc), ra.cc);
+  step('Reply all never duplicates the sender in Cc', !/ada\.okafor/.test(ra.cc), ra.cc);
+
+  // ── forward ────────────────────────────────────────────────────────────────
+  await page.evaluate(() => { window.__calls = []; window.mbForward(); });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
+  const fw = await page.evaluate(() => ({
+    to: document.getElementById('mb-comp-to').value,
+    subject: document.getElementById('mb-comp-subject').value,
+    html: document.getElementById('content').innerHTML,
+  }));
+  step('Forward starts with an empty To', fw.to === '', fw.to);
+  step('Forward prefills the subject with Fwd:', /^Fwd: /.test(fw.subject), fw.subject);
+  step('Forward says the original attachments come along',
+    fw.html.includes('carried over'), 'the user needs to know this');
+
+  // A forward with nobody to forward to must not reach the network.
+  await page.evaluate(() => window.mbSendComposer());
+  await page.waitForTimeout(200);
+  step('A forward with no recipient is refused before the network',
+    await page.evaluate(() => !window.__calls.some(c => /\/forward$/.test(c[1] || ''))));
+
+  await page.evaluate(() => {
+    document.getElementById('mb-comp-to').value = 'colleague@futeglobal.com';
+    document.getElementById('mb-comp-body').value = 'FYI — worth a look.';
+    window.mbSendComposer();
+  });
+  await page.waitForTimeout(300);
+  const fwCall = await page.evaluate(() => window.__calls.find(c => /\/forward$/.test(c[1] || '')));
+  step('Forward posts to the forward endpoint with recipient and note',
+    !!fwCall && fwCall[2].to === 'colleague@futeglobal.com' && fwCall[2].body === 'FYI — worth a look.',
+    JSON.stringify(fwCall && fwCall[2]));
+  step('Forward carries the Fwd: subject', !!fwCall && /^Fwd: /.test(fwCall[2].subject));
+
+  // ── attachments ────────────────────────────────────────────────────────────
+  await page.evaluate(() => { window.__calls = []; window.mbReply(false); });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
+  step('An "Attach files" button is offered on a reply',
+    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('Attach files'));
+  step('There is a real file input behind it',
+    await page.evaluate(() => !!document.getElementById('mb-comp-files')));
+
+  // Drive the file input for real rather than faking STATE.
+  await page.setInputFiles('#mb-comp-files', {
+    name: 'rahul-menon-cv.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 fake resume'),
+  });
+  await page.waitForFunction(() => (STATE.mailbox.composer.files || []).length === 1, { timeout: 5000 });
+  step('A chosen file appears as a chip',
+    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('rahul-menon-cv.pdf'));
+
+  await page.evaluate(() => {
+    document.getElementById('mb-comp-body').value = 'CV attached.';
+    window.mbSendComposer();
+  });
+  await page.waitForTimeout(300);
+  const attCall = await page.evaluate(() => window.__calls.find(c => /\/reply$/.test(c[1] || '')));
+  step('The attachment is sent, base64-encoded, with its name and type',
+    !!attCall && attCall[2].attachments.length === 1
+      && attCall[2].attachments[0].filename === 'rahul-menon-cv.pdf'
+      && attCall[2].attachments[0].content_type === 'application/pdf'
+      && Buffer.from(attCall[2].attachments[0].base64, 'base64').toString().includes('fake resume'),
+    JSON.stringify(attCall && attCall[2].attachments && attCall[2].attachments[0] &&
+      { f: attCall[2].attachments[0].filename, t: attCall[2].attachments[0].content_type }));
+
+  // Removing it takes it back off.
+  await page.evaluate(() => { window.__calls = []; window.mbReply(false); });
+  await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
+  await page.setInputFiles('#mb-comp-files', {
+    name: 'note.txt', mimeType: 'text/plain', buffer: Buffer.from('hello'),
+  });
+  await page.waitForFunction(() => (STATE.mailbox.composer.files || []).length === 1, { timeout: 5000 });
+  await page.evaluate(() => window.mbRemoveFile(0));
+  step('A file can be removed again',
+    await page.evaluate(() => (STATE.mailbox.composer.files || []).length === 0));
+  await page.evaluate(() => window.mbCancelComposer());
 
   // ── delete says what it actually did ───────────────────────────────────────
   await page.evaluate(() => { window.__calls = []; window.mbTrash('m3'); });
@@ -299,6 +426,10 @@ try {
 
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'inbox-compose.png'), fullPage: false });
 
+  step('Compose offers attachments and a signature picker',
+    (await page.evaluate(() => document.querySelector('.modal').innerHTML)).includes('Attach files')
+    && (await page.evaluate(() => document.querySelector('.modal').innerHTML)).includes('No signature'));
+
   await page.evaluate(() => {
     window.__calls = [];
     document.getElementById('mb-c-to').value = 'ada.okafor@fidelity.com';
@@ -310,6 +441,7 @@ try {
   const sent = await page.evaluate(() => window.__calls.find(c => /\/send$/.test(c[1] || '')));
   step('Compose posts to the send endpoint with what was typed',
     !!sent && sent[2].to === 'ada.okafor@fidelity.com' && sent[2].body === 'Attaching both now.');
+  step('Compose defaults to no signature too', !!sent && sent[2].include_signature === false);
 
   // ── the no-mailbox state is a setup screen, not an error ───────────────────
   await page.evaluate(() => {

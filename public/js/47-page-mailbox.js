@@ -31,7 +31,12 @@
     folders:null, folderId:null, foldersLoading:false,
     messages:null, nextCursor:null, listLoading:false, q:'',
     selectedId:null, message:null, msgLoading:false,
-    crm:{}, showImages:false, replying:false, replyAll:false,
+    crm:{}, showImages:false,
+    // One composer serves reply / reply-all / forward. Its field values live
+    // HERE and not in the DOM, because render() rebuilds #content from a string
+    // — anything typed but not in STATE is lost the moment anything else
+    // repaints. oninput writes through; nothing repaints per keystroke.
+    composer:null, sigHtml:null, sigLoading:false,
     unread:0, error:null
   };
   var M = function(){ return STATE.mailbox; };
@@ -116,7 +121,7 @@
   function loadMessage(id){
     var m=M();
     m.selectedId=id; m.message=null; m.msgLoading=true;
-    m.showImages=false; m.replying=false; m.replyAll=false;
+    m.showImages=false; m.composer=null;
     paint();
     var p='/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id);
     apiGet(p).then(function(d){
@@ -192,30 +197,171 @@
       .then(function(){ showToast('Moved to Trash — still recoverable in your mailbox','success'); removeFromList(id); })
       .catch(function(e){ showToast('Could not delete: '+e.message,'error'); });
   };
-  window.mbReply=function(all){
-    var m=M(); if(!m.message)return;
-    m.replying=true; m.replyAll=!!all; paint();
-    var ta=document.getElementById('mb-reply-body'); if(ta) ta.focus();
+  // ── the composer: reply / reply all / forward ───────────────────────────────
+  // Whether a signature goes on is REMEMBERED, and defaults to off. A signature
+  // belongs on outreach; repeating a postal address in every message of a live
+  // thread reads like a mail-merge, which is what the owner ran into.
+  function sigPrefKey(){ return 'pace_mb_sig_'+((STATE.user&&STATE.user.id)||'anon'); }
+  function sigPrefGet(){ try{ return localStorage.getItem(sigPrefKey())==='1'; }catch(e){ return false; } }
+  function sigPrefSet(on){ try{ localStorage.setItem(sigPrefKey(), on?'1':'0'); }catch(e){} }
+
+  function addrLine(list){ return (list||[]).map(function(a){return a.email;}).filter(Boolean).join(', '); }
+
+  function openComposer(mode){
+    var m=M(); var x=m.message; if(!x)return;
+    var to='', cc='', subject='';
+    if(mode==='forward'){
+      to=''; cc='';
+      subject=/^(fw|fwd):/i.test(x.subject||'')?x.subject:('Fwd: '+(x.subject||''));
+    } else {
+      var all=mode==='replyAll';
+      to=addrLine([x.from]);
+      if(all){
+        // Everyone else who was on it, minus us — the two classic reply-all
+        // bugs are mailing yourself and mailing the sender twice.
+        var own=((m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{}).email_address||'';
+        var seen={}; seen[(x.from&&x.from.email)||'']=1; seen[own.toLowerCase()]=1;
+        cc=addrLine((x.to||[]).concat(x.cc||[]).filter(function(a){
+          if(!a.email||seen[a.email])return false; seen[a.email]=1; return true;
+        }));
+      }
+      subject=/^re:/i.test(x.subject||'')?x.subject:('Re: '+(x.subject||''));
+    }
+    m.composer={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], sig:sigPrefGet(), showCc:!!cc, sending:false };
+    paint();
+    var ta=document.getElementById('mb-comp-body'); if(ta)ta.focus();
+  }
+  window.mbReply=function(all){ openComposer(all?'replyAll':'reply'); };
+  window.mbForward=function(){ openComposer('forward'); };
+  window.mbCancelComposer=function(){ var m=M(); m.composer=null; paint(); };
+  window.mbCancelReply=window.mbCancelComposer;   // older name, still referenced
+  window.mbCompField=function(k,v){ var m=M(); if(m.composer) m.composer[k]=v; };
+  window.mbCompToggleCc=function(){ var m=M(); if(!m.composer)return; m.composer.showCc=!m.composer.showCc; paint(); };
+  window.mbCompSetSig=function(on){
+    var m=M(); if(!m.composer)return;
+    m.composer.sig=!!on; sigPrefSet(!!on);
+    if(m.composer.sig) loadSignature();
+    paint();
   };
-  window.mbCancelReply=function(){ var m=M(); m.replying=false; paint(); };
-  window.mbSendReply=function(){
-    var m=M(); if(!m.message)return;
-    var ta=document.getElementById('mb-reply-body');
-    var body=(ta&&ta.value||'').trim();
-    if(!body){ showToast('Write a message first','warning'); return; }
-    var btn=document.getElementById('mb-reply-send');
-    if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(m.message.id)+'/reply',
-      { body:body, reply_all:!!m.replyAll })
-      .then(function(){ showToast('Reply sent','success'); m.replying=false; paint(); })
+
+  function loadSignature(){
+    var m=M(); if(m.sigHtml!==null||m.sigLoading||!m.activeId)return;
+    m.sigLoading=true;
+    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/signature')
+      .then(function(d){ m.sigHtml=(d&&d.html)||''; m.sigLoading=false; paint(); })
+      .catch(function(){ m.sigHtml=''; m.sigLoading=false; });
+  }
+
+  // ── attachments ─────────────────────────────────────────────────────────────
+  var MAX_ATTACH_BYTES=3.5*1024*1024;
+  window.mbPickFiles=function(){ var i=document.getElementById('mb-comp-files'); if(i)i.click(); };
+  window.mbFilesChosen=function(input){
+    var m=M(); if(!m.composer||!input.files||!input.files.length)return;
+    var files=Array.prototype.slice.call(input.files);
+    var pending=files.length;
+    files.forEach(function(f){
+      var r=new FileReader();
+      r.onload=function(){
+        // readAsDataURL gives "data:<type>;base64,<payload>" — the server wants
+        // the payload, and strips the prefix defensively too.
+        var b64=String(r.result||'').replace(/^data:[^;]*;base64,/,'');
+        m.composer.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size, base64:b64 });
+        if(--pending===0) afterFiles();
+      };
+      r.onerror=function(){ if(--pending===0) afterFiles(); showToast('Could not read '+f.name,'error'); };
+      r.readAsDataURL(f);
+    });
+    input.value='';
+    function afterFiles(){
+      var total=m.composer.files.reduce(function(n,f){return n+f.size;},0);
+      if(total>MAX_ATTACH_BYTES){
+        showToast('That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something or send a link instead','warning');
+      }
+      paint();
+    }
+  };
+  window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paint(); };
+
+  window.mbSendComposer=function(){
+    var m=M(); var c=m.composer; if(!c||!m.message||c.sending)return;
+    // Read straight from the DOM as well as STATE: oninput keeps STATE current,
+    // but reading here means a send can never lose a last keystroke.
+    ['to','cc','subject','body'].forEach(function(k){
+      var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value;
+    });
+    if(c.mode!=='forward' && !String(c.body||'').trim()){ showToast('Write a message first','warning'); return; }
+    if(c.mode==='forward' && !String(c.to||'').trim()){ showToast('Who are you forwarding this to?','warning'); return; }
+    var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
+    if(total>MAX_ATTACH_BYTES){
+      showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return;
+    }
+    c.sending=true; paint();
+    var payload={
+      body:c.body, subject:c.subject,
+      to:c.to, cc:c.cc,
+      include_signature:!!c.sig,
+      attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
+    };
+    var path='/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(m.message.id)+
+      (c.mode==='forward'?'/forward':'/reply');
+    if(c.mode!=='forward') payload.reply_all=(c.mode==='replyAll');
+    apiPost(path,payload)
+      .then(function(){
+        showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
+        m.composer=null; paint();
+      })
       .catch(function(e){
-        showToast('Send failed: '+e.message,'error');
-        if(btn){ btn.disabled=false; btn.textContent='Send'; }
+        c.sending=false; paint();
+        showToast((c.mode==='forward'?'Forward':'Send')+' failed: '+e.message,'error');
       });
   };
+  // Older name kept so nothing that still calls it silently does nothing.
+  window.mbSendReply=window.mbSendComposer;
+
+  // ── compose (new message) ───────────────────────────────────────────────────
   window.mbCompose=function(prefillTo){
     var m=M();
     if(!m.activeId){ showToast('Connect a mailbox first','warning'); return; }
+    m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false };
+    if(m.compose.sig) loadSignature();
+    paintComposeModal();
+  };
+  window.mbComposeField=function(k,v){ var m=M(); if(m.compose) m.compose[k]=v; };
+  window.mbComposeSetSig=function(on){
+    var m=M(); if(!m.compose)return;
+    m.compose.sig=!!on; sigPrefSet(!!on);
+    if(m.compose.sig) loadSignature();
+    paintComposeModal();
+  };
+  window.mbComposePickFiles=function(){ var i=document.getElementById('mb-c-files'); if(i)i.click(); };
+  window.mbComposeFilesChosen=function(input){
+    var m=M(); if(!m.compose||!input.files||!input.files.length)return;
+    var files=Array.prototype.slice.call(input.files); var pending=files.length;
+    ['to','cc','subject','body'].forEach(function(k){
+      var el=document.getElementById('mb-c-'+k); if(el) m.compose[k]=el.value;
+    });
+    files.forEach(function(f){
+      var r=new FileReader();
+      r.onload=function(){
+        m.compose.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size,
+          base64:String(r.result||'').replace(/^data:[^;]*;base64,/,'') });
+        if(--pending===0) paintComposeModal();
+      };
+      r.onerror=function(){ if(--pending===0) paintComposeModal(); };
+      r.readAsDataURL(f);
+    });
+    input.value='';
+  };
+  window.mbComposeRemoveFile=function(i){
+    var m=M(); if(!m.compose)return;
+    ['to','cc','subject','body'].forEach(function(k){
+      var el=document.getElementById('mb-c-'+k); if(el) m.compose[k]=el.value;
+    });
+    m.compose.files.splice(i,1); paintComposeModal();
+  };
+
+  function paintComposeModal(){
+    var m=M(); var c=m.compose; if(!c)return;
     var from=(m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{};
     STATE.modal=
       '<div class="modal modal-w640" onclick="event.stopPropagation()">'+
@@ -224,41 +370,45 @@
           '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>'+
-            '<input id="mb-c-to" class="sel" placeholder="someone@company.com" value="'+escAttr(prefillTo||'')+'"></div>'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cc <span style="color:var(--text3)">(optional)</span></label>'+
-            '<input id="mb-c-cc" class="sel" placeholder=""></div>'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
-            '<input id="mb-c-subject" class="sel" placeholder=""></div>'+
+          field('mb-c-to','To','someone@company.com',c.to,'mbComposeField(\'to\',this.value)')+
+          field('mb-c-cc','Cc <span style="color:var(--text3)">(optional)</span>','',c.cc,'mbComposeField(\'cc\',this.value)')+
+          field('mb-c-subject','Subject','',c.subject,'mbComposeField(\'subject\',this.value)')+
           '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+
-            '<textarea id="mb-c-body" class="sel" style="min-height:200px;resize:vertical;font-size:12.5px;line-height:1.55"></textarea></div>'+
+            '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
+          renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
+          renderSigRow(c.sig,'mbComposeSetSig')+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
-          '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()">Send</button>'+
+          '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
       '</div>';
     render();
-  };
+  }
+  function field(id,label,ph,val,oninput){
+    return '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+'</label>'+
+      '<input id="'+id+'" class="sel" placeholder="'+escAttr(ph)+'" value="'+escAttr(val||'')+'" oninput="'+oninput+'"></div>';
+  }
+
   window.mbSendCompose=function(){
-    var m=M();
-    var to=(document.getElementById('mb-c-to')||{}).value||'';
-    var cc=(document.getElementById('mb-c-cc')||{}).value||'';
-    var subject=(document.getElementById('mb-c-subject')||{}).value||'';
-    var body=(document.getElementById('mb-c-body')||{}).value||'';
-    if(!to.trim()){ showToast('Who is this going to?','warning'); return; }
-    if(!body.trim()){ showToast('Write a message first','warning'); return; }
-    var btn=document.getElementById('mb-c-send');
-    if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/send',{to:to,cc:cc,subject:subject,body:body})
-      .then(function(){ showToast('Sent','success'); closeModal(); })
-      .catch(function(e){
-        showToast('Send failed: '+e.message,'error');
-        if(btn){ btn.disabled=false; btn.textContent='Send'; }
-      });
+    var m=M(); var c=m.compose; if(!c||c.sending)return;
+    ['to','cc','subject','body'].forEach(function(k){
+      var el=document.getElementById('mb-c-'+k); if(el) c[k]=el.value;
+    });
+    if(!String(c.to||'').trim()){ showToast('Who is this going to?','warning'); return; }
+    if(!String(c.body||'').trim()){ showToast('Write a message first','warning'); return; }
+    var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
+    if(total>MAX_ATTACH_BYTES){ showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return; }
+    c.sending=true; paintComposeModal();
+    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/send',{
+      to:c.to, cc:c.cc, subject:c.subject, body:c.body,
+      include_signature:!!c.sig,
+      attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
+    })
+      .then(function(){ showToast('Sent','success'); m.compose=null; closeModal(); })
+      .catch(function(e){ c.sending=false; paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
   };
-  // The point of reading mail inside an ATS rather than in Gmail: this sender
-  // is already someone we are working, so go straight to their record.
+
   window.mbOpenCrm=function(email,ev){
     if(ev&&ev.stopPropagation)ev.stopPropagation();
     var link=(M().crm||{})[String(email||'').toLowerCase()];
@@ -494,6 +644,7 @@
         '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">'+
           '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">Reply</button>'+
           ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
+          '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
           '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
           '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
           '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
@@ -502,7 +653,7 @@
       renderBlockedImagesBar(x)+
       renderAttachments(x)+
       renderBody(x)+
-      renderReplyBox(x)+
+      renderComposer(x)+
     '</div>';
   }
 
@@ -565,20 +716,90 @@
     '</div>';
   }
 
-  function renderReplyBox(x){
+  // Shared attachment row: the "Attach files" button, the chips, and the hidden
+  // file input that actually opens the picker.
+  function renderAttachRow(files, pickFn, removeFn, inputId, onChange){
+    files=files||[];
+    var total=files.reduce(function(n,f){return n+(f.size||0);},0);
+    var over=total>MAX_ATTACH_BYTES;
+    return '<div style="margin-top:10px">'+
+      '<input type="file" id="'+inputId+'" multiple style="display:none" onchange="'+onChange+'">'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+        '<button class="btn btn-xs btn-outline" onclick="'+pickFn+'">📎 Attach files</button>'+
+        files.map(function(f,i){
+          return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 9px">'+
+            esc(f.name)+' <span style="color:var(--text3)">'+fmtSize(f.size)+'</span>'+
+            '<button onclick="'+removeFn+'('+i+')" title="Remove" style="color:var(--text3);font-size:13px;line-height:1;padding:0 3px">✕</button></span>';
+        }).join('')+
+      '</div>'+
+      (over?'<div style="font-size:11px;color:var(--red);margin-top:5px">That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something, or send the big files as a link.</div>':'')+
+    '</div>';
+  }
+
+  // The signature picker. Off by default and remembered, with the real filled
+  // signature shown when it is on — so what you pick is what the recipient gets.
+  function renderSigRow(on, setFn){
     var m=M();
-    if(!m.replying) return '';
-    var to=m.replyAll
-      ? [who(x.from)].concat((x.to||[]).map(who),(x.cc||[]).map(who)).join(', ')
-      : who(x.from);
-    return '<div style="border-top:1px solid var(--border);padding:12px 18px;background:var(--bg)">'+
-      '<div style="font-size:11.5px;color:var(--text3);margin-bottom:6px">'+
-        (m.replyAll?'Reply all to ':'Reply to ')+esc(to)+
-        ' — the original message is quoted underneath automatically.</div>'+
-      '<textarea id="mb-reply-body" class="sel" style="min-height:110px;resize:vertical;font-size:12.5px;line-height:1.55;background:#fff" placeholder="Write your reply…"></textarea>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">'+
-        '<button class="btn btn-sm btn-outline" onclick="mbCancelReply()">Cancel</button>'+
-        '<button class="btn btn-sm btn-primary" id="mb-reply-send" onclick="mbSendReply()">Send</button>'+
+    return '<div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
+      '<label style="font-size:11px;color:var(--text2);padding-top:5px">Signature</label>'+
+      '<select class="sel" style="width:auto;font-size:12px;padding:4px 8px" onchange="'+setFn+'(this.value===\'1\')">'+
+        '<option value="0"'+(on?'':' selected')+'>No signature</option>'+
+        '<option value="1"'+(on?' selected':'')+'>My signature</option>'+
+      '</select>'+
+      (on
+        ? '<div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;background:var(--card);max-height:120px;overflow:auto">'+
+            (m.sigLoading?'<span style="font-size:11px;color:var(--text3)">Loading…</span>'
+              : (m.sigHtml?m.sigHtml:'<span style="font-size:11px;color:var(--text3)">No signature saved for this mailbox.</span>'))+
+          '</div>'
+        : '')+
+    '</div>';
+  }
+
+  function renderComposer(x){
+    var m=M(); var c=m.composer;
+    if(!c) return '';
+    var fwd=c.mode==='forward';
+    var title=fwd?'Forward':(c.mode==='replyAll'?'Reply all':'Reply');
+
+    return '<div style="border-top:1px solid var(--border);padding:12px 18px;background:var(--bg);max-height:62%;overflow-y:auto">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
+        '<div style="font-size:12px;font-weight:700">'+title+'</div>'+
+        (fwd?'':'<div style="font-size:11px;color:var(--text3)">The original is quoted underneath automatically.</div>')+
+        (fwd?'<div style="font-size:11px;color:var(--text3)">Attachments on the original are carried over.</div>':'')+
+      '</div>'+
+
+      // To — editable everywhere. A forward starts empty; a reply is prefilled.
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
+        '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">To</label>'+
+        '<input id="mb-comp-to" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.to||'')+'" '+
+          'placeholder="'+(fwd?'someone@company.com':'')+'" oninput="mbCompField(\'to\',this.value)">'+
+        (c.showCc?'':'<button class="btn btn-xs btn-ghost" onclick="mbCompToggleCc()">Add Cc</button>')+
+      '</div>'+
+      (c.showCc
+        ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
+            '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">Cc</label>'+
+            '<input id="mb-comp-cc" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.cc||'')+'" oninput="mbCompField(\'cc\',this.value)">'+
+          '</div>'
+        : '')+
+
+      // Subject — visible and editable on reply and forward alike. It was
+      // previously decided for you by the mail provider and never shown.
+      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
+        '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">Subject</label>'+
+        '<input id="mb-comp-subject" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.subject||'')+'" oninput="mbCompField(\'subject\',this.value)">'+
+      '</div>'+
+
+      '<textarea id="mb-comp-body" class="sel" oninput="mbCompField(\'body\',this.value)" '+
+        'style="min-height:110px;resize:vertical;font-size:12.5px;line-height:1.55;background:#fff" '+
+        'placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'">'+esc(c.body||'')+'</textarea>'+
+
+      renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
+      renderSigRow(c.sig,'mbCompSetSig')+
+
+      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">'+
+        '<button class="btn btn-sm btn-outline" onclick="mbCancelComposer()">Cancel</button>'+
+        '<button class="btn btn-sm btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+
+          (c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
       '</div>'+
     '</div>';
   }

@@ -337,6 +337,28 @@ function forwardSubject(subject) {
   return /^(fw|fwd):/i.test(s) ? s : `Fwd: ${s}`;
 }
 
+// The "---------- Forwarded message ----------" block. A forward has to carry
+// the original's envelope (who sent it, when, to whom) — that is the entire
+// content of a forward, and dropping it makes the mail unreadable to whoever
+// receives it.
+function forwardHeaderBlock(msg) {
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const addr = (a) => (a && a.name ? `${a.name} <${a.email}>` : (a && a.email) || '');
+  const rows = [
+    ['From', addr(msg.from)],
+    ['Date', msg.date ? new Date(msg.date).toUTCString() : ''],
+    ['Subject', msg.subject || ''],
+    ['To', (msg.to || []).map(addr).join(', ')],
+  ];
+  if ((msg.cc || []).length) rows.push(['Cc', (msg.cc || []).map(addr).join(', ')]);
+  return '<div style="margin:16px 0 8px">'
+    + '<div style="color:#777;font-size:12px;margin-bottom:8px">---------- Forwarded message ----------</div>'
+    + rows.filter(r => r[1]).map(r =>
+        `<div style="font-size:12px;color:#555"><b>${r[0]}:</b> ${esc(r[1])}</div>`).join('')
+    + '</div>';
+}
+
 // The quoted original, in the shape both Gmail and Outlook produce, so a reply
 // from PACE looks like a reply from anywhere else in the recipient's client.
 function quoteBlock(msg, bodyHtml) {
@@ -348,6 +370,13 @@ function quoteBlock(msg, bodyHtml) {
     + `<div style="font-size:12px;color:#777;margin-bottom:8px">On ${esc(when)}, ${esc(who)} wrote:</div>`
     + (bodyHtml || '')
     + `</div>`;
+}
+
+// A base64 string's decoded size, without decoding it. Used for budgeting
+// attachment bytes before anything is sent.
+function approxBytes(b64) {
+  const n = String(b64 || '').replace(/=+$/, '').length;
+  return Math.floor(n * 3 / 4);
 }
 
 // ── The adapter ─────────────────────────────────────────────────────────────
@@ -504,24 +533,55 @@ function createMailProvider(ctx) {
     // INBOX. One verb, two correct implementations.
     async function archive(id) { return move(id, 'archive'); }
 
-    async function reply(id, { htmlBody, replyAll = false, to, cc }) {
+    // Graph builds the draft (quoting the original for us), we patch in the
+    // user's text and any edits, then send. Shared by reply and forward because
+    // only the endpoint and the recipient rules differ.
+    async function composeFromDraft(id, endpoint, { htmlBody, to, cc, subject, attachments, prepend }) {
       const t = await token();
-      const endpoint = replyAll ? 'createReplyAll' : 'createReply';
       const draft = await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}/${endpoint}`, {
         method: 'POST', body: JSON.stringify({}),
       });
       const full = await graphMailRequest(t, `/me/messages/${draft.id}?$select=body,subject,conversationId`);
       const quoted = full.body?.content || '';
-      const patch = { body: { contentType: 'HTML', content: quoted ? `${htmlBody}<br><br>${quoted}` : htmlBody } };
+      const lead = (htmlBody || '') + (prepend || '');
+      const patch = { body: { contentType: 'HTML', content: quoted ? `${lead}<br><br>${quoted}` : lead } };
       // Graph addresses createReply to the original SENDER, which is correct
       // here (unlike the follow-up path, where the "original" is our own sent
       // message and the sender is us). Only override when the caller edited the
-      // recipients by hand.
+      // recipients by hand. createForward has NO recipients, so a forward must
+      // always supply them.
       if (to?.length) patch.toRecipients = to.map(a => ({ emailAddress: { address: a.email || a } }));
       if (cc?.length) patch.ccRecipients = cc.map(a => ({ emailAddress: { address: a.email || a } }));
+      // A subject the user actually edited wins over Graph's automatic
+      // "Re:"/"Fw:" — otherwise the field we show them does nothing.
+      if (subject) patch.subject = subject;
       await graphMailRequest(t, `/me/messages/${draft.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      // Attachments are added to the draft one call at a time; Graph has no
+      // batch form for the simple (<3MB) upload.
+      for (const a of (attachments || [])) {
+        await graphMailRequest(t, `/me/messages/${draft.id}/attachments`, {
+          method: 'POST',
+          body: JSON.stringify({
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: a.filename || 'attachment',
+            contentType: a.contentType || 'application/octet-stream',
+            contentBytes: a.base64 || '',
+          }),
+        });
+      }
       await graphMailRequest(t, `/me/messages/${draft.id}/send`, { method: 'POST' });
       return { ok: true, thread_id: full.conversationId || null };
+    }
+
+    async function reply(id, { htmlBody, replyAll = false, to, cc, subject, attachments }) {
+      return composeFromDraft(id, replyAll ? 'createReplyAll' : 'createReply',
+        { htmlBody, to, cc, subject, attachments });
+    }
+
+    // createForward carries the original's own attachments across for us, which
+    // is the whole reason to use it rather than rebuilding the message.
+    async function forward(id, { htmlBody, to, cc, subject, attachments }) {
+      return composeFromDraft(id, 'createForward', { htmlBody, to, cc, subject, attachments });
     }
 
     // Every message in one conversation, oldest first — the thread view.
@@ -540,7 +600,7 @@ function createMailProvider(ctx) {
     return {
       platform: 'Microsoft', mailbox,
       listFolders, listMessages, getMessage, getAttachment,
-      setRead, setFlagged, move, trash, archive, reply, listThread,
+      setRead, setFlagged, move, trash, archive, reply, forward, listThread,
     };
   }
 
@@ -649,17 +709,16 @@ function createMailProvider(ctx) {
       return { ok: true, id: msgId };
     }
 
-    async function reply(msgId, { htmlBody, replyAll = false, to, cc }) {
+    async function reply(msgId, { htmlBody, replyAll = false, to, cc, subject, attachments }) {
       const original = await getMessage(msgId, { blockRemoteImages: false });
       const rec = (to?.length || cc?.length)
         ? { to: (to || []).map(a => ({ email: a.email || a })), cc: (cc || []).map(a => ({ email: a.email || a })) }
         : replyRecipients(original, { replyAll, ownAddress: mailbox.email_address });
       const body = htmlBody + quoteBlock(original, original.body_html);
-      const headers = {};
-      if (rec.cc?.length) headers.Cc = rec.cc.map(a => a.email).join(', ');
       const r = await gmailProvider.sendThreadReply(id, {
         to: rec.to.map(a => a.email).join(', '),
-        subject: replySubject(original.subject),
+        cc: rec.cc?.length ? rec.cc.map(a => a.email).join(', ') : undefined,
+        subject: subject || replySubject(original.subject),
         htmlBody: body,
         fromAddress: mailbox.email_address,
         threadId: original.thread_id,
@@ -667,9 +726,41 @@ function createMailProvider(ctx) {
         // the recipient's client even though Gmail groups it correctly on ours.
         inReplyTo: original.message_id_header || undefined,
         references: [original.references_header, original.message_id_header].filter(Boolean).join(' ') || undefined,
-        headers,
+        attachments,
       });
       return { ok: true, thread_id: r.threadId || original.thread_id || null };
+    }
+
+    // Gmail has no createForward, so the message is rebuilt: the user's note,
+    // the forwarded-message envelope, then the original body. The original's
+    // attachments are re-downloaded and re-attached — a forward that silently
+    // drops the resume it was forwarding is worse than no forward at all.
+    async function forward(msgId, { htmlBody, to, cc, subject, attachments, maxAttachBytes }) {
+      const original = await getMessage(msgId, { blockRemoteImages: false });
+      const carried = [...(attachments || [])];
+      let budget = (maxAttachBytes || 0) - carried.reduce((n, a) => n + approxBytes(a.base64), 0);
+      for (const a of (original.attachments || [])) {
+        if (a.inline) continue;                 // signature logos, not real files
+        if (budget <= 0) break;
+        try {
+          const got = await gmailProvider.getAttachment(id, msgId, a.id);
+          const b64 = String(got.data || '').replace(/-/g, '+').replace(/_/g, '/');
+          const size = approxBytes(b64);
+          if (size > budget) continue;
+          budget -= size;
+          carried.push({ filename: a.name || 'attachment', contentType: a.content_type, base64: b64 });
+        } catch (_) { /* one unreadable attachment must not fail the forward */ }
+      }
+      const body = (htmlBody || '') + forwardHeaderBlock(original) + (original.body_html || '');
+      const r = await gmailProvider.sendNewMessage(id, {
+        to: (to || []).map(a => a.email || a).join(', '),
+        cc: (cc || []).length ? (cc || []).map(a => a.email || a).join(', ') : undefined,
+        subject: subject || forwardSubject(original.subject),
+        htmlBody: body,
+        fromAddress: mailbox.email_address,
+        attachments: carried,
+      });
+      return { ok: true, thread_id: r.threadId || null };
     }
 
     async function listThread(threadId) {
@@ -682,7 +773,7 @@ function createMailProvider(ctx) {
     return {
       platform: 'Gmail', mailbox,
       listFolders, listMessages, getMessage, getAttachment,
-      setRead, setFlagged, move, trash, archive, reply, listThread,
+      setRead, setFlagged, move, trash, archive, reply, forward, listThread,
     };
   }
 
@@ -704,5 +795,6 @@ module.exports = {
   sanitizeEmailHtml, hasRemoteImages, textToHtml,
   normalizeGraphMessage, normalizeGmailMessage,
   extractGmailBody, gmailAttachments,
-  replyRecipients, replySubject, forwardSubject, quoteBlock,
+  replyRecipients, replySubject, forwardSubject, quoteBlock, forwardHeaderBlock,
+  approxBytes,
 };

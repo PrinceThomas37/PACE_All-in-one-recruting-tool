@@ -331,6 +331,25 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      deliberately no second send path — but does **not** inject the tracking
      pixel or write `email_tracking` rows: tracking belongs to outreach, not to
      a personal reply.
+   - **Composer round 2 (same session), from the owner using it for real:**
+     reply/reply-all/forward now share one composer with an **editable To, Cc
+     and Subject**, **file attachments** (3.5MB/message — deliberately under
+     `express.json`'s 5MB body cap so the friendly refusal fires, not an opaque
+     413), and a **Forward** verb (Graph `createForward`; the Gmail adapter
+     rebuilds the message and re-downloads the original's attachments).
+     **`{{sender}}` SHIPPED TO A REAL RECIPIENT** — signature templates carry
+     `{{sender}}`/`{{senderemail}}` and only the outreach path called
+     `fillSignatureHtml`; the mailbox router appended the raw template. Fixed,
+     and the signature is now **off by default with a picker** (remembered per
+     user) — a signature belongs on outreach, not on every message of a live
+     thread. **Anything that composes mail must call `fillSignatureHtml`**;
+     `GET /mailbox/:mid/signature` returns the filled version so the composer
+     previews exactly what the recipient gets.
+   - **`gmail-provider.js` now RFC 2047-encodes headers.** Raw UTF-8 in a
+     `Subject:` is what turns an em-dash into `Ã¢Â€Â"` in the recipient's
+     client. `encodeMimeHeader` folds into ≤75-char encoded-words and splits on
+     **character**, not byte, boundaries — a byte-boundary split corrupts
+     multi-byte characters differently and worse.
    - **Slice 1 DONE** (migration `024`): open-tracking *infrastructure* — an
      `email_tracking` table (org-scoped), a public pixel endpoint `GET /o/:token.gif`
      (records opens, returns a 1×1 gif, never errors), a `GET /candidates/:id/

@@ -92,9 +92,19 @@ spelled out in `CLAUDE.md`'s Growth-bets §3):
 Sending reuses the outreach engine's provider calls (no second send path) but
 does *not* pixel-track — tracking belongs to outreach, not to a personal reply.
 
-**Not in v1, deliberately:** drafts are read-only, no forward-with-attachments,
-no move-to-folder picker in the UI (the API supports it), no shared/delegated
-mailboxes, and the unread badge is a 60s cached poll rather than a live push.
+**Round 2, after the owner used it:** reply/reply-all/forward share one composer
+with editable **To / Cc / Subject**, **attachments** (3.5MB per message, capped
+below express's 5MB body limit so the friendly refusal fires), and **Forward**.
+The signature is **off by default with a picker** — and is now *filled*: the
+first version appended the raw template, so `{{sender}}` reached a real
+recipient. **Anything that composes mail must call `fillSignatureHtml`** —
+`getMailboxSignature` returns a template, not a signature.
+Also fixed: `gmail-provider.js` now RFC 2047-encodes `Subject`/`From`/filenames,
+which is what turns an em-dash into `Ã¢Â€Â"` in the recipient's client.
+
+**Not in v1, deliberately:** drafts are read-only, no move-to-folder picker in
+the UI (the API supports it), no shared/delegated mailboxes, and the unread
+badge is a 60s cached poll rather than a live push.
 
 ## Owner actions outstanding
 
@@ -188,8 +198,9 @@ default org is on it).
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API** (still the one CLAUDE.md flags as highest-leverage next), generalized
   audit trail, PWA polish.
-- In-app mailbox v1 shipped; the v1 gaps listed above (drafts, forward,
-  move-picker, shared mailboxes, live push) are the obvious follow-ups.
+- In-app mailbox shipped and iterated once on real use; the gaps listed above
+  (drafts, move-picker, shared mailboxes, live push) are the obvious
+  follow-ups.
 
 ## Working rules
 
