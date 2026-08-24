@@ -44,7 +44,7 @@ module.exports = (ctx) => {
       const scope = isAdmin ? 'org' : (chain && chain.length > 1 ? 'team' : 'own');
 
       // ── Leads side: contacts on jobs owned by the caller (or their chain) ──
-      let jobQ = withOrg(supabase.from('jobs').select('id,position,assigned_to_bd,company:companies(name)'), req);
+      let jobQ = withOrg(supabase.from('jobs').select('id,position,stage,assigned_to_bd,company:companies(name)'), req);
       if (!isAdmin && chain) jobQ = jobQ.in('assigned_to_bd', chain);
       const { data: jobs } = await jobQ.limit(MAX_THREAD_PEOPLE);
       const jobById = new Map((jobs || []).map(j => [j.id, j]));
@@ -123,6 +123,7 @@ module.exports = (ctx) => {
           company: job?.company?.name || null,
           job_id: c.job_id,
           owner_id: job?.assigned_to_bd || null,
+          stage: job?.stage || null,
           messages,
         };
       });

@@ -143,6 +143,7 @@ let DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || null;
 // legacy token and defaulting is right; with several it is a session we cannot
 // scope, and defaulting would hand it the first org's data — a real customer's.
 let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
+const { isRecyclable } = require('./services/lead-recycle');
 async function resolveDefaultOrg() {
   try {
     const { data } = await supabase.from('organizations').select('id')
@@ -2080,6 +2081,50 @@ async function runFollowupEngine() {
   } catch (err) { console.error('[FollowupEngine] Error:', err.message); return { ...log, error: err.message }; }
 }
 
+// ══════════════════════════════════════════════════════════════
+// LEAD RECYCLING — 'Assigned' leads with no reply for too long, returned to
+// Unassigned for redistribution instead of sitting there forever. See
+// services/lead-recycle.js for the (pure, tested) decision logic; this is
+// just the I/O wrapper, mirroring runFollowupEngine's shape.
+// ══════════════════════════════════════════════════════════════
+async function runLeadRecycleSweep() {
+  const log = { checked: 0, recycled: 0 };
+  try {
+    const { data: settingRow } = await supabase.from('app_settings').select('value').eq('key', 'lead_recycle_days').maybeSingle();
+    const thresholdDays = parseInt(settingRow?.value || '30', 10) || 30;
+    const cutoffIso = new Date(Date.now() - thresholdDays * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: candidates, error } = await supabase.from('jobs')
+      .select('id,stage,assigned_at,recycled_count,contacts(replied_at)')
+      .eq('stage', 'Assigned').is('deleted_at', null).lte('assigned_at', cutoffIso);
+    if (error) throw error;
+    log.checked = (candidates || []).length;
+
+    const now = Date.now();
+    for (const job of (candidates || [])) {
+      if (!isRecyclable(job, job.contacts, now, thresholdDays)) continue;
+      const nowTs = new Date();
+      await supabase.from('jobs').update({
+        stage: 'Unassigned', assigned_to_bd: null, assigned_at: null, sending_email_id: null,
+        freshness: 'Old', recycled_count: (job.recycled_count || 0) + 1, last_recycled_at: nowTs, updated_at: nowTs,
+      }).eq('id', job.id);
+      await supabase.from('follow_ups').update({ status: 'expired' }).eq('job_id', job.id).eq('status', 'active');
+      await logActivity(job.id, null, null, 'lead_recycled', `Recycled to Unassigned pool after ${thresholdDays} days with no reply`);
+      log.recycled++;
+    }
+    console.log(`[LeadRecycle] Checked: ${log.checked}, recycled: ${log.recycled} (threshold ${thresholdDays}d)`);
+    return log;
+  } catch (err) { console.error('[LeadRecycle] Error:', err.message); return { ...log, error: err.message }; }
+}
+
+app.post('/leads/recycle/run', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'Admin only' });
+    const result = await runLeadRecycleSweep();
+    res.json({ success: true, ...result });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 function toIST(date) { const utc = date.getTime() + date.getTimezoneOffset() * 60000; return new Date(utc + 5.5 * 3600000); }
 
 async function getLastFollowupRun() {
@@ -2592,6 +2637,12 @@ engineRunner.register('reply_sweep', {
   everyMs: 30 * 60 * 1000,
   description: 'Detect prospect replies and opt-outs, and stop their sequences',
   run: () => runReplySweep()
+});
+
+engineRunner.register('lead_recycle', {
+  everyMs: 24 * 60 * 60 * 1000,
+  description: 'Return Assigned leads with no reply after the configured threshold (default 30 days) to Unassigned for redistribution',
+  run: () => runLeadRecycleSweep()
 });
 
 engineRunner.register('pending_retry', {

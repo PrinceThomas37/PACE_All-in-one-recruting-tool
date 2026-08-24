@@ -72,19 +72,33 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     } else if (a.priority > 0) {
       // Long silence after our message — worth a chase, but clearly ranked
       // below someone who is actually waiting on us.
-      items.push({
-        kind: KIND.NUDGE,
-        entity_type: t.entity_type, entity_id: t.entity_id,
-        title: t.name || t.email || 'Unknown',
-        subtitle: t.company || null,
-        job_id: t.job_id || null, owner_id: t.owner_id || null,
-        reason: a.headline,
-        state: a.state,
-        intent: a.intent ? a.intent.id : null,
-        priority: a.priority,
-        due_at: null,
-        overdue_days: a.days_since_outbound,
-      });
+      //
+      // BD leads only: while a lead is still 'Assigned', the follow-up engine
+      // (fu1/fu2) is already chasing it on its own schedule — a silence-nudge
+      // on top of that is noise, and at outreach volume it is a LOT of noise
+      // (hundreds of leads a month sitting in Assigned with no reply yet is
+      // normal, not urgent). 'Rejected' is a closed door same as opted-out —
+      // nudging to chase someone who said no is not useful either. So a BD
+      // lead only earns a nudge once it has moved to 'Connected' or
+      // 'In Discussion' — i.e. there is a real, ongoing conversation to keep
+      // alive. Candidate threads (ATS stage vocabulary, unrelated) are not
+      // gated by this — ATS stages don't map to "engaged vs not yet".
+      const bdLeadNotEngagedYet = t.entity_type === 'contact' && !['Connected', 'In Discussion'].includes(t.stage);
+      if (!bdLeadNotEngagedYet) {
+        items.push({
+          kind: KIND.NUDGE,
+          entity_type: t.entity_type, entity_id: t.entity_id,
+          title: t.name || t.email || 'Unknown',
+          subtitle: t.company || null,
+          job_id: t.job_id || null, owner_id: t.owner_id || null,
+          reason: a.headline,
+          state: a.state,
+          intent: a.intent ? a.intent.id : null,
+          priority: a.priority,
+          due_at: null,
+          overdue_days: a.days_since_outbound,
+        });
+      }
     }
 
     // A commitment THEY made that has come due — "they said they'd come back
