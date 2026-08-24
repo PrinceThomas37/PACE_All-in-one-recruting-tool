@@ -2021,3 +2021,68 @@ read-only); no forward-with-attachments; no move-to-folder picker in the UI
 (archive/trash cover the common cases, and the API already supports an arbitrary
 move); no shared or delegated mailboxes; no push/webhook notification, so the
 unread badge is a 60-second cached poll rather than live.
+
+## Session 13, part 2 — the owner used it, and found four things
+
+Merged part 1 to `main` (PR #140) and the owner worked real mail in it. Their
+report, verbatim: *"i do not need signature on replies, or i should be able to
+select the signature. Also, there is no option to see or edit subject line in
+reply or reply all and no forward. and no button for attachements."* Their
+screenshot also showed two things they did not mention.
+
+**The bug that shipped: `{{sender}}` reached a real recipient.** Signature
+templates hold `{{sender}}` / `{{senderemail}}` placeholders. The outreach path
+fills them via `fillSignatureHtml` (index.js:1309). `routes/mailbox.js` called
+`getMailboxSignature` and appended the result **raw**, so a reply sent from the
+Inbox went out reading "**{{sender}}** / Recruitment Manager | Fute Global LLC".
+Entirely self-inflicted, in the first version, and visible to whoever received
+it. The lesson worth carrying: `getMailboxSignature` returns a TEMPLATE, not a
+signature — anything that composes mail must fill it.
+
+Fixed, and then made a choice rather than a default: the signature is **off
+unless asked for**, with a picker that remembers the choice per user, and
+`GET /mailbox/:mid/signature` returns the *filled* signature so the composer
+previews exactly what the recipient will see. A signature belongs on outreach;
+repeating a postal address in every message of a live thread reads like a
+mail-merge, which is what the owner was reacting to.
+
+**The three gaps** became one shared composer for reply / reply-all / forward:
+editable **To, Cc and Subject** (the subject was previously decided by the mail
+provider and never shown), **attachments** via a real file input with chips and
+a size cap, and **Forward** — Graph's `createForward` (which carries the
+original's attachments across for free), and for Gmail an adapter that rebuilds
+the message, re-downloads the original's attachments and re-attaches them within
+a byte budget, because a forward that silently drops the resume it was
+forwarding is worse than no forward.
+
+Composer field values live in `STATE.mailbox.composer`, not the DOM: `render()`
+rebuilds `#content` from a string, so anything typed and not written through
+would be lost by any repaint. `oninput` writes through and nothing repaints per
+keystroke.
+
+**Two attachment guards, not one.** The router's cap is 3.5MB of decoded
+attachment, set deliberately BELOW `express.json`'s app-wide 5MB body cap, so a
+realistic attachment hits our check and gets a sentence explaining what to do
+instead of an opaque 413 from the body parser. Both are now asserted, including
+the gap between them — that distinction was found by a test failing, not by
+reading the code.
+
+**The mojibake the owner did not mention.** Their screenshot's subject read
+`Director of Engineering Ã¢Â€Â" Site Civil` — an em-dash (U+2014, bytes
+E2 80 94) read as Latin-1. `gmail-provider.js`'s `buildRaw` was putting raw
+UTF-8 straight into the `Subject:` header. RFC 5322 headers are ASCII; a
+receiving client then guesses a charset and Latin-1 is the usual wrong guess.
+Now RFC 2047-encoded (`encodeMimeHeader`), folded into ≤75-character
+encoded-words, splitting on **character** boundaries — a byte-boundary split
+would cut a multi-byte character in half and corrupt it differently and worse.
+Applied to Subject, From display names and attachment filenames.
+**Honest caveat: this fixes the Gmail send path going forward. The specific
+subject in that screenshot could not be traced to its origin from here** — the
+sandbox blocks outbound calls to the Render host, so the raw message was never
+inspected. If it recurs on a Microsoft mailbox it is a different bug.
+
+**45/45 suites green.** `mailbox-smoke` 97 → 132 checks (signature filled +
+off-by-default, subject override, forward, attachment ordering — attachments
+must be added to the draft BEFORE the send, or an empty email goes out — the
+data: URI prefix strip, both size guards, and RFC 2047 round-tripping including
+a multi-byte fold). `mailbox-page-smoke` 45 → 70.

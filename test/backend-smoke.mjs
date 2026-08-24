@@ -124,6 +124,8 @@ try {
   check('DELETE /mailbox/x/messages/y → 401 (mailbox)', await req('DELETE', '/mailbox/x/messages/y'), 401);
   check('GET /mailbox/x/threads/t → 401 (mailbox)', await req('GET', '/mailbox/x/threads/t'), 401);
   check('POST /mailbox/x/messages/y/reply → 401 (mailbox)', await req('POST', '/mailbox/x/messages/y/reply'), 401);
+  check('POST /mailbox/x/messages/y/forward → 401 (mailbox)', await req('POST', '/mailbox/x/messages/y/forward'), 401);
+  check('GET /mailbox/x/signature → 401 (mailbox)', await req('GET', '/mailbox/x/signature'), 401);
   check('POST /mailbox/x/send → 401 (mailbox)', await req('POST', '/mailbox/x/send'), 401);
   // ATS candidate database (Slice 1) — mounted + auth-gated.
   check('GET /candidates → 401 (bd-recruiter, gated)', await req('GET', '/candidates'), 401);

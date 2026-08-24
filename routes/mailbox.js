@@ -23,8 +23,15 @@
 // Mounted via: app.use(require('./routes/mailbox')(ctx));
 // ============================================================================
 const express = require('express');
-const { createMailProvider } = require('../services/mail-provider');
+const { createMailProvider, approxBytes } = require('../services/mail-provider');
 const { mailboxConnections } = require('../mailbox-health');
+const { fillSignatureHtml } = require('../email-signature');
+
+// express.json() is capped at 5mb for the whole app, and base64 inflates a file
+// by about a third — so this is the real ceiling, set below the body limit with
+// room for the rest of the payload. Enforced with a plain-English message,
+// because the alternative is an opaque 413 the user cannot act on.
+const MAX_ATTACH_BYTES = 3.5 * 1024 * 1024;
 
 // The nav badge asks for an unread count on every render. That is one provider
 // call per mailbox per render, which is both slow and rude to the API — so the
@@ -43,6 +50,63 @@ module.exports = (ctx) => {
   } = ctx;
 
   const mail = createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider });
+
+  // THE SIGNATURE, AND THE BUG THIS FIXES.
+  //
+  // Signature templates hold {{sender}} and {{senderemail}} placeholders that
+  // the outreach path fills via fillSignatureHtml (index.js). The first version
+  // of this router appended the RAW template, so real replies went out reading
+  // "{{sender}} / Recruitment Manager | Fute Global LLC". Filling it is not
+  // optional — an unfilled placeholder is visible to the recipient.
+  //
+  // And it is now OFF unless asked for. A signature belongs on outreach; on a
+  // reply to a conversation already in flight it is noise, and repeating a
+  // postal address in every message of a thread reads like a mail-merge.
+  async function signatureFor(mailbox, userId, include) {
+    if (!include) return '';
+    try {
+      const raw = await getMailboxSignature(mailbox.id, userId);
+      return fillSignatureHtml(raw, {
+        displayName: mailbox.display_name || mailbox.email_address || '',
+        emailAddress: mailbox.email_address || '',
+      });
+    } catch (_) { return ''; }
+  }
+
+  // Attachments arrive as [{ filename, content_type, base64 }]. Validated
+  // before anything is sent: a send that fails halfway through a 6MB upload has
+  // already cost the user their message.
+  function readAttachments(body) {
+    const list = Array.isArray(body.attachments) ? body.attachments : [];
+    if (!list.length) return { attachments: [] };
+    let total = 0;
+    const out = [];
+    for (const a of list.slice(0, 20)) {
+      const base64 = String(a.base64 || '').replace(/^data:[^;]*;base64,/, '');
+      if (!base64) continue;
+      total += approxBytes(base64);
+      out.push({
+        filename: String(a.filename || 'attachment').slice(0, 200),
+        contentType: a.content_type || a.contentType || 'application/octet-stream',
+        base64,
+      });
+    }
+    if (total > MAX_ATTACH_BYTES) {
+      return { error: {
+        status: 413,
+        body: {
+          error: `Attachments total ${(total / 1048576).toFixed(1)} MB — the limit is ${(MAX_ATTACH_BYTES / 1048576).toFixed(1)} MB per message. Send the larger files as a link instead.`,
+          code: 'attachments_too_large',
+        },
+      } };
+    }
+    return { attachments: out };
+  }
+
+  function parseAddressField(v) {
+    if (Array.isArray(v)) return v.map(x => ({ email: String(x.email || x).trim() })).filter(a => a.email);
+    return String(v || '').split(/[,;]/).map(x => ({ email: x.trim() })).filter(a => a.email);
+  }
 
   // ── The only door in ───────────────────────────────────────────────────────
   // Resolves a mailbox id to a row ONLY if it belongs to the caller, is active,
@@ -146,6 +210,17 @@ module.exports = (ctx) => {
         // be opened; the UI uses this to decide between "open" and "reconnect".
         readable: m.is_active !== false && !!(conns[m.id] && conns[m.id].connected),
       })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // What the signature actually looks like, filled. The composer shows this
+  // under its "Signature" picker so "My signature" is an informed choice rather
+  // than a gamble — which is how the unfilled-placeholder bug stayed invisible.
+  router.get('/mailbox/:mid/signature', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try {
+      res.json({ html: await signatureFor(mailbox, req.user.id, true) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -318,14 +393,45 @@ module.exports = (ctx) => {
     if (error) return res.status(error.status).json(error.body);
     const text = String(req.body.body || '').trim();
     if (!text) return res.status(400).json({ error: 'Message body is empty' });
+    const att = readAttachments(req.body);
+    if (att.error) return res.status(att.error.status).json(att.error.body);
     try {
-      const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
-      const htmlBody = buildHtmlEmailBody(text, signature || '', false);
+      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
+      const htmlBody = buildHtmlEmailBody(text, signature, false);
       const r = await mail.forMailbox(mailbox).reply(req.params.id, {
         htmlBody,
         replyAll: !!req.body.reply_all,
-        to: Array.isArray(req.body.to) ? req.body.to : null,
-        cc: Array.isArray(req.body.cc) ? req.body.cc : null,
+        to: req.body.to ? parseAddressField(req.body.to) : null,
+        cc: req.body.cc ? parseAddressField(req.body.cc) : null,
+        subject: req.body.subject ? String(req.body.subject) : null,
+        attachments: att.attachments,
+      });
+      res.json({ success: true, ...r });
+    } catch (err) { providerError(res, err); }
+  });
+
+  // Forward. Graph's createForward carries the original's attachments across
+  // for us; the Gmail adapter re-downloads and re-attaches them, because a
+  // forward that silently drops the resume it was forwarding is worse than no
+  // forward at all.
+  router.post('/mailbox/:mid/messages/:id/forward', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    const to = parseAddressField(req.body.to);
+    if (!to.length) return res.status(400).json({ error: 'Who are you forwarding this to?' });
+    const att = readAttachments(req.body);
+    if (att.error) return res.status(att.error.status).json(att.error.body);
+    try {
+      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
+      // A forward with no note is normal — unlike a reply, the content is the
+      // forwarded message itself, so an empty body is not an empty email.
+      const htmlBody = buildHtmlEmailBody(String(req.body.body || ''), signature, false);
+      const r = await mail.forMailbox(mailbox).forward(req.params.id, {
+        htmlBody, to,
+        cc: req.body.cc ? parseAddressField(req.body.cc) : null,
+        subject: req.body.subject ? String(req.body.subject) : null,
+        attachments: att.attachments,
+        maxAttachBytes: MAX_ATTACH_BYTES,
       });
       res.json({ success: true, ...r });
     } catch (err) { providerError(res, err); }
@@ -338,18 +444,24 @@ module.exports = (ctx) => {
     const text = String(req.body.body || '').trim();
     if (!to) return res.status(400).json({ error: 'A recipient is required' });
     if (!text) return res.status(400).json({ error: 'Message body is empty' });
+    const att = readAttachments(req.body);
+    if (att.error) return res.status(att.error.status).json(att.error.body);
     try {
-      const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
-      const htmlBody = buildHtmlEmailBody(text, signature || '', false);
+      const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
+      const htmlBody = buildHtmlEmailBody(text, signature, false);
       const subject = String(req.body.subject || '(no subject)');
       const cc = String(req.body.cc || '').trim();
       if (mailbox.platform === 'Gmail') {
         await gmailProvider.sendNewMessage(mailbox.id, {
-          to, subject, htmlBody, fromAddress: mailbox.email_address,
-          headers: cc ? { Cc: cc } : {},
+          to, cc: cc || undefined, subject, htmlBody,
+          fromAddress: mailbox.email_address, attachments: att.attachments,
         });
       } else {
-        await sendMicrosoftNewMessage(mailbox.id, { to, subject, htmlBody, cc: cc ? [cc] : undefined });
+        await sendMicrosoftNewMessage(mailbox.id, {
+          to, subject, htmlBody,
+          cc: cc ? cc.split(/[,;]/).map(x => x.trim()).filter(Boolean) : undefined,
+          attachments: att.attachments,
+        });
       }
       res.json({ success: true });
     } catch (err) { providerError(res, err); }
