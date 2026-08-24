@@ -107,6 +107,24 @@ try {
   check('POST /parse-jd → 401 (extracted)', await req('POST', '/parse-jd'), 401);
   check('GET /jobs/x/contacts → 401 (extracted)', await req('GET', '/jobs/x/contacts'), 401);
   check('GET /users/x/job-orders → 401 (new, gated)', await req('GET', '/users/x/job-orders'), 401);
+
+  // The in-app mailbox (routes/mailbox.js). Every one of these reads or writes a
+  // real customer mailbox, so "mounted and auth-gated" is the floor: a route
+  // that silently stopped being registered would 404 here, and one that lost
+  // its auth middleware would answer something other than 401.
+  check('GET /mailbox/accounts → 401 (mailbox, gated)', await req('GET', '/mailbox/accounts'), 401);
+  check('GET /mailbox/unread-count → 401 (mailbox)', await req('GET', '/mailbox/unread-count'), 401);
+  check('GET /mailbox/x/folders → 401 (mailbox)', await req('GET', '/mailbox/x/folders'), 401);
+  check('GET /mailbox/x/messages → 401 (mailbox)', await req('GET', '/mailbox/x/messages'), 401);
+  check('GET /mailbox/x/messages/y → 401 (mailbox)', await req('GET', '/mailbox/x/messages/y'), 401);
+  check('GET /mailbox/x/messages/y/attachments/z → 401 (mailbox)', await req('GET', '/mailbox/x/messages/y/attachments/z'), 401);
+  check('PATCH /mailbox/x/messages/y → 401 (mailbox)', await req('PATCH', '/mailbox/x/messages/y'), 401);
+  check('POST /mailbox/x/messages/y/move → 401 (mailbox)', await req('POST', '/mailbox/x/messages/y/move'), 401);
+  check('POST /mailbox/x/messages/y/archive → 401 (mailbox)', await req('POST', '/mailbox/x/messages/y/archive'), 401);
+  check('DELETE /mailbox/x/messages/y → 401 (mailbox)', await req('DELETE', '/mailbox/x/messages/y'), 401);
+  check('GET /mailbox/x/threads/t → 401 (mailbox)', await req('GET', '/mailbox/x/threads/t'), 401);
+  check('POST /mailbox/x/messages/y/reply → 401 (mailbox)', await req('POST', '/mailbox/x/messages/y/reply'), 401);
+  check('POST /mailbox/x/send → 401 (mailbox)', await req('POST', '/mailbox/x/send'), 401);
   // ATS candidate database (Slice 1) — mounted + auth-gated.
   check('GET /candidates → 401 (bd-recruiter, gated)', await req('GET', '/candidates'), 401);
   check('GET /candidates/check-duplicate → 401 (new, gated)', await req('GET', '/candidates/check-duplicate'), 401);

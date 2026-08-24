@@ -300,6 +300,37 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
 3. **App-tracked candidate email** (not just `mailto:`): route candidate emails through
    the sending subsystem we already have → open/reply tracking = a real selling point,
    no new infra.
+   - **THE IN-APP MAILBOX IS DONE (Session 13).** A real three-pane mail client
+     over the user's connected mailboxes — folders/labels, message list, reading
+     pane, reply/reply-all, compose, archive, trash, mark read/unread, search,
+     attachments. `services/mail-provider.js` is one adapter over Graph AND
+     Gmail (`forMailbox(row)` dispatches on `platform`); `routes/mailbox.js` is
+     the API; `public/js/47-page-mailbox.js` is the page. **No new OAuth
+     consent** — `Mail.ReadWrite` and `gmail.modify` already cover all of it, so
+     nobody reconnects.
+     Four rules that must not be softened:
+     * **Nothing is mirrored into Postgres.** Every read is a live pass-through.
+       Storage is free-tier, a sync needs a poller (instance hours), and a
+       mirror drifts in ways that are unfixable by design. **`conversation_messages`
+       (037) was deliberately NOT widened to hold general inbox traffic** — that
+       table is the intelligence layer's record of threads PACE is *working*.
+     * **Your own mailboxes only** — not "yours plus admin's". `ownedMailbox()`
+       in routes/mailbox.js is the single door, and it answers **404** for
+       someone else's mailbox (indistinguishable from a nonexistent one, so ids
+       cannot be probed) and **409** for yours-but-disconnected. Pinned by
+       `test/mailbox-smoke.mjs`, including that a refused request never reaches
+       the provider at all.
+     * **Nothing destroys mail.** Delete is a MOVE to Deleted Items / a call to
+       `messages.trash`. Neither provider's permanent-delete is reachable from
+       this app, and the tests assert the absence of that call.
+     * **The body renders in a sandboxed iframe** (no `allow-scripts`, no
+       `allow-same-origin`) on top of server-side sanitising, and **remote
+       images are blocked until the reader asks** — an inbound pixel is the same
+       technique PACE uses on its own outbound mail.
+     Sending reuses the SAME provider calls the outreach engine uses — there is
+     deliberately no second send path — but does **not** inject the tracking
+     pixel or write `email_tracking` rows: tracking belongs to outreach, not to
+     a personal reply.
    - **Slice 1 DONE** (migration `024`): open-tracking *infrastructure* — an
      `email_tracking` table (org-scoped), a public pixel endpoint `GET /o/:token.gif`
      (records opens, returns a 1×1 gif, never errors), a `GET /candidates/:id/

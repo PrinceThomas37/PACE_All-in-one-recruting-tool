@@ -1114,7 +1114,7 @@ async function resolveSentMessageId(accessToken, { conversationId, toEmail, fall
   return { id: fallbackId, conversationId };
 }
 
-async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, attachments }) {
+async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, attachments, cc }) {
   const accessToken = await getMicrosoftToken(userEmailId);
   const msg = await graphMailRequest(accessToken, '/me/messages', {
     method: 'POST',
@@ -1122,6 +1122,9 @@ async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, att
       subject,
       body: { contentType: 'HTML', content: htmlBody },
       toRecipients: [{ emailAddress: { address: to } }],
+      // cc arrived with the in-app mailbox (a person writing a real email
+      // expects a Cc field). Every outreach caller omits it and is unchanged.
+      ...((cc && cc.length) ? { ccRecipients: cc.map(a => ({ emailAddress: { address: a } })) } : {}),
       ...((attachments && attachments.length) ? { attachments: attachments.map(a => ({
         '@odata.type': '#microsoft.graph.fileAttachment',
         name: a.filename, contentType: a.contentType || 'application/octet-stream', contentBytes: a.base64
@@ -2829,6 +2832,10 @@ const routeCtx = {
   getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache,
   pixelLimiter,
+  // The in-app mailbox (routes/mailbox.js) reads and writes real mailboxes
+  // through the SAME provider calls the outreach engine sends with — there is
+  // deliberately no second send path.
+  graphMailRequest, gmailProvider, sendMicrosoftNewMessage,
 };
 app.use(require('./routes/auth')(routeCtx));
 app.use(require('./routes/microsoft')(routeCtx));
@@ -2849,6 +2856,7 @@ app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
+app.use(require('./routes/mailbox')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which
 // providers are actually configured; the callbacks live in the microsoft/gmail
 // route modules, which already own each provider's registered redirect URI.

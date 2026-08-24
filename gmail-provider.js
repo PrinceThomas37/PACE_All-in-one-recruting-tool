@@ -239,6 +239,55 @@ function createGmailProvider(ctx) {
     catch (_) { return ''; }
   }
 
+  // ── Inbox reads (the in-app mailbox) ────────────────────────────────────────
+  // listMessages above deliberately drops the page token — the reply sweep only
+  // ever wants one window. A mail client has to paginate, so this returns the
+  // whole page envelope instead of overloading the sweep's helper.
+  async function listMessagePage(userEmailId, { labelIds, q, maxResults, pageToken } = {}) {
+    const token = await getToken(userEmailId);
+    const p = new URLSearchParams();
+    (labelIds || []).forEach((l) => p.append('labelIds', l));
+    if (q) p.set('q', q);
+    if (pageToken) p.set('pageToken', pageToken);
+    p.set('maxResults', String(maxResults || 25));
+    const r = await api(token, `/messages?${p}`);
+    return { messages: r.messages || [], nextPageToken: r.nextPageToken || null, resultSizeEstimate: r.resultSizeEstimate || 0 };
+  }
+
+  // Gmail has folders only in the sense that it has labels. labels.list is one
+  // call and carries no counts; labels.get carries counts and is one call per
+  // label — hence the two functions, and the caller decides how many counts are
+  // worth fetching.
+  async function listLabels(userEmailId) {
+    const token = await getToken(userEmailId);
+    const r = await api(token, '/labels');
+    return r.labels || [];
+  }
+  async function getLabel(userEmailId, labelId) {
+    const token = await getToken(userEmailId);
+    return api(token, `/labels/${encodeURIComponent(labelId)}`);
+  }
+
+  async function getThread(userEmailId, threadId, { format = 'metadata' } = {}) {
+    const token = await getToken(userEmailId);
+    const p = new URLSearchParams({ format });
+    ['From', 'To', 'Cc', 'Subject', 'Date', 'Message-ID', 'References'].forEach((h) => p.append('metadataHeaders', h));
+    return api(token, `/threads/${encodeURIComponent(threadId)}?${p}`);
+  }
+
+  async function getAttachment(userEmailId, messageId, attachmentId) {
+    const token = await getToken(userEmailId);
+    return api(token, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+  }
+
+  // TRASH, never DELETE. messages.delete is permanent and irreversible; trash is
+  // recoverable by the user from Gmail itself. Nothing in PACE should be able to
+  // destroy a customer's mail outright.
+  async function trashMessage(userEmailId, messageId) {
+    const token = await getToken(userEmailId);
+    return api(token, `/messages/${encodeURIComponent(messageId)}/trash`, { method: 'POST' });
+  }
+
   // ── Spam rescue / labels — remove SPAM, add INBOX ───────────────────────────
   async function modifyLabels(userEmailId, id, { add, remove } = {}) {
     const token = await getToken(userEmailId);
@@ -252,6 +301,8 @@ function createGmailProvider(ctx) {
     isConfigured, authorizeUrl, exchangeCode, getToken, getProfileEmail,
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
+    // In-app mailbox reads (services/mail-provider.js)
+    listMessagePage, listLabels, getLabel, getThread, getAttachment, trashMessage,
   };
 }
 
