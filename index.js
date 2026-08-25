@@ -31,6 +31,9 @@ const {
   buildEmailVars,
   fillTemplate,
   resolveTemplate,
+  DEFER_SENDER,
+  applySenderIdentity,
+  displayNameFromAddress,
   buildRotatingTemplateDeck,
   isRandomTemplateMode,
   getVariantById
@@ -782,8 +785,12 @@ function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap
         const bodyTmpl = variant
           ? variant.o1.body
           : resolveTemplate(tmplSettings[`u_${bd.id}_tmpl_o1_body`], 'o1_body');
-        const senderDisplayName = job.sending_email?.display_name || bdPrimaryEmailMap[bd.id]?.display_name || bd.name || '';
-        const vars = buildEmailVars({ job, contact, senderDisplayName });
+        // Leave {{sender}} in the queued text. Which mailbox sends this row is
+        // decided at SEND time (the lead's mailbox can change, or a sequence can
+        // rotate it), and the signature is filled from that same mailbox — so
+        // baking a name here is how the body and the signature end up naming two
+        // different people.
+        const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
         const subject = fillTemplate(subjTmpl, vars);
         const body = fillTemplate(bodyTmpl, vars);
         const resolvedSendingEmail = job.sending_email || bdPrimaryEmailMap[bd.id];
@@ -835,7 +842,9 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   (bdUsers || []).forEach(u => { bdMap[u.id] = u; });
   const allBdIds = [...new Set([callerUserId, ...bdIds])];
   const { data: bdEmailRows } = allBdIds.length
-    ? await supabase.from('user_emails').select('id,user_id,email_address,display_name,is_primary').in('user_id', allBdIds).order('is_primary', { ascending: false })
+    ? await supabase.from('user_emails').select('id,user_id,email_address,display_name,is_primary,created_at').in('user_id', allBdIds)
+        .eq('is_active', true)
+        .order('is_primary', { ascending: false }).order('created_at', { ascending: true })
     : { data: [] };
   const bdPrimaryEmailMap = {};
   (bdEmailRows || []).forEach(e => { if (!bdPrimaryEmailMap[e.user_id]) bdPrimaryEmailMap[e.user_id] = e; });
@@ -883,11 +892,17 @@ app.post('/emails/generate', auth, async (req, res) => {
     // Pre-fetch primary sending email for each BD (used as fallback if job.sending_email_id is null)
     const allBdIds = [...new Set([req.user.id, ...bdIds])];
     const { data: bdEmailRows } = allBdIds.length
-      ? await supabase.from('user_emails').select('id,user_id,email_address,display_name,is_primary').in('user_id', allBdIds).order('is_primary', { ascending: false })
+      ? await supabase.from('user_emails').select('id,user_id,email_address,display_name,is_primary,created_at').in('user_id', allBdIds)
+        .eq('is_active', true)
+        .order('is_primary', { ascending: false }).order('created_at', { ascending: true })
       : { data: [] };
+    // First row wins: is_primary first, then oldest. Without BOTH an is_active
+    // filter and a deterministic tie-break this picked an arbitrary mailbox —
+    // including a DEACTIVATED one — whenever a user had several and none was
+    // flagged primary.
     const bdPrimaryEmailMap = {};
     (bdEmailRows || []).forEach(e => {
-      if (!bdPrimaryEmailMap[e.user_id]) bdPrimaryEmailMap[e.user_id] = e; // first = primary (ordered desc)
+      if (!bdPrimaryEmailMap[e.user_id]) bdPrimaryEmailMap[e.user_id] = e;
     });
 
     const tmplKeys = allBdIds.flatMap(id => [
@@ -1306,10 +1321,18 @@ async function deliverViaGmail(email, userEmailId, htmlBody, sendingEmail) {
 }
 
 async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEmail) {
-  const filledSig = fillSignatureHtml(signatureHtml, {
-    displayName: sendingEmail?.display_name || '',
-    emailAddress: sendingEmail?.email_address || email.from_email || ''
-  });
+  // ONE identity for the whole message. The body, the subject and the signature
+  // are all filled from the mailbox this send actually authenticates with, so
+  // "I'm <name>" in the body can never disagree with the name in the signature
+  // or with the From address the recipient sees.
+  const senderAddress = sendingEmail?.email_address || email.from_email || '';
+  const senderIdentity = {
+    displayName: sendingEmail?.display_name || displayNameFromAddress(senderAddress),
+    emailAddress: senderAddress
+  };
+  const filledSig = fillSignatureHtml(signatureHtml, senderIdentity);
+  const subject = applySenderIdentity(email.subject, senderIdentity);
+  email = { ...email, subject, body: applySenderIdentity(email.body, senderIdentity) };
   const htmlBody = buildHtmlEmailBody(email.body, filledSig);
   // Provider dispatch: Gmail mailboxes go through the Gmail adapter; everything
   // else keeps the exact Microsoft Graph path unchanged.
@@ -2027,9 +2050,9 @@ async function runFollowupEngine() {
         const dupKey = `${fu.job_id}:${fu.contact_id}`;
         if (liveOutreachPairs.has(dupKey)) { log.skipped_duplicate = (log.skipped_duplicate || 0) + 1; continue; }
         const bdId = job.assigned_to_bd;
-        // Use sending email display_name so signature matches the From address
-        const senderName = job.sending_email?.display_name || bdMap[bdId] || 'Fute Global';
-        const vars = buildEmailVars({ job, contact, senderDisplayName: senderName });
+        // Deferred to send time so the name always matches the mailbox that
+        // actually sends (and therefore the signature).
+        const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
         const useRandomFu = isRandomTemplateMode(settings[`u_${bdId}_random_template_mode`]);
         let subjTmpl, bodyTmpl, variantId;
         if (useRandomFu) {
@@ -2946,8 +2969,9 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   if ((liveRows || []).some(r => isLiveOutreachRow(r))) return { outcome: 'defer', detail: { reason: 'duplicate_guard' } };
 
   const bdId = job.assigned_to_bd || enrollment.enrolled_by;
-  const senderName = mailbox.display_name || 'Fute Global';
-  const vars = buildEmailVars({ job, contact, senderDisplayName: senderName });
+  // Deferred like the other queue paths: this row may be pinned to `mailbox`,
+  // but the send path is the single place the sender identity is resolved.
+  const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
   const key = cfg.template_key || 'initial';
   let subjTmpl = cfg.subject, bodyTmpl = cfg.body;
   if (!subjTmpl || !bodyTmpl) {

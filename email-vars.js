@@ -296,7 +296,9 @@ function buildEmailVars({ job, contact, senderDisplayName }) {
     ind: job?.company?.industry || job?.industry || '',
     loc,
     desig: contact?.designation || 'Hiring Manager',
-    sender: senderDisplayName || '',
+    // `null` is meaningful: it leaves {{sender}} in the text so the SEND path can
+    // fill it from the mailbox that actually sends (see DEFER_SENDER below).
+    sender: senderDisplayName === null ? null : (senderDisplayName || ''),
     skill_1: filteredSkills[0] || '',
     skill_2: filteredSkills[1] || '',
     skill_3: filteredSkills[2] || '',
@@ -342,6 +344,42 @@ function resolveTemplate(saved, templateKey) {
   return normalizeSenderTitle(val);
 }
 
+
+// ── SENDER IDENTITY ──────────────────────────────────────────────────────────
+// The name in the body and the name in the signature must be the same person,
+// and that person is whoever's mailbox actually sends the message — which is
+// NOT known when an email is queued. A lead can be reassigned, its sending
+// mailbox swapped, or a sequence can rotate the "from" mailbox, all AFTER the
+// row is written and BEFORE it goes out. So queue time leaves {{sender}} and
+// {{senderemail}} in place (pass senderDisplayName: DEFER_SENDER) and the send
+// path fills them from the same mailbox row it fills the signature from.
+const DEFER_SENDER = null;
+
+// Last-resort display name when a mailbox row has no display_name:
+// "prince.thomas@futeglobal.com" -> "Prince Thomas". Never returns a raw token.
+function displayNameFromAddress(emailAddress) {
+  const local = String(emailAddress || '').split('@')[0];
+  if (!local) return '';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Fill {{sender}} / {{senderemail}} from the mailbox that is actually sending.
+ * Text with no tokens (already-filled legacy rows, hand-edited drafts) is
+ * returned untouched, so this is safe to run over every outbound message.
+ */
+function applySenderIdentity(text, { displayName, emailAddress } = {}) {
+  const address = String(emailAddress || '');
+  const name = String(displayName || '') || displayNameFromAddress(address);
+  return String(text == null ? '' : text)
+    .replace(/{{sender}}/g, name)
+    .replace(/{{senderemail}}/g, address);
+}
+
 module.exports = {
   DEFAULT_TEMPLATES,
   OUTREACH_VARIANTS,
@@ -349,6 +387,9 @@ module.exports = {
   getVariantById,
   buildEmailVars,
   fillTemplate,
+  DEFER_SENDER,
+  applySenderIdentity,
+  displayNameFromAddress,
   formatSkillsLine,
   formatJobResp,
   formatCompanyService,
