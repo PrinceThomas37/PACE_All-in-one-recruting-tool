@@ -15,6 +15,7 @@
 // module reads the exact same Map/functions the pipeline writes.
 // ============================================================================
 const express = require('express');
+const { renderStoredEmail } = require('../email-vars');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -41,23 +42,24 @@ router.get('/emails', auth, async (req, res) => {
       if (data.length < 1000) break;
       from += 1000;
     }
-    // A queued email keeps {{sender}} until it is sent, and the preview has to
-    // render it from the mailbox that will actually send it. That is the job's
-    // mailbox unless a sequence pinned this row to a rotated one — resolve those
-    // few here (a second query rather than a second embed of user_emails, which
-    // is the same table the job embed already pulls).
+    // A queued email keeps {{sender}} in storage until it is sent, so it is
+    // rendered HERE — once, for every screen — from the mailbox that will
+    // actually send it. No page should have to know the token exists.
+    //
+    // Which mailbox, in the same order the send loop picks it: the row's pinned
+    // mailbox (a sequence rotating its "from"), else the lead's, else the row's
+    // from_email supplies the name.
     const pinnedIds = [...new Set(allData.map(e => e.sending_email_id).filter(Boolean))];
+    const pinnedById = {};
     if (pinnedIds.length) {
       const { data: pinned } = await supabase.from('user_emails')
         .select('id,email_address,display_name').in('id', pinnedIds);
-      const byId = {};
-      (pinned || []).forEach(m => { byId[m.id] = m; });
-      allData = allData.map(e => (
-        e.sending_email_id && byId[e.sending_email_id]
-          ? { ...e, sending_email: byId[e.sending_email_id] }
-          : e
-      ));
+      (pinned || []).forEach(m => { pinnedById[m.id] = m; });
     }
+    allData = allData.map((e) => {
+      const mailbox = (e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null;
+      return { ...e, ...renderStoredEmail(e, mailbox), sending_email: mailbox };
+    });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -179,9 +181,36 @@ router.patch('/emails/:id', auth, async (req, res) => {
     const updates = {};
     if (subject !== undefined) updates.subject = subject;
     if (body !== undefined) updates.body = body;
+
+    // The editor is handed the RENDERED text (real name, no {{sender}}), so
+    // saving it back verbatim would freeze that name into the row and undo the
+    // whole point of resolving it at send time. Opening the editor and pressing
+    // Save without typing anything is not an edit — keep what is stored.
+    const { data: current } = await supabase.from('emails')
+      .select('subject,body,from_email,sending_email_id,job:jobs(sending_email_id,sending_email:user_emails!sending_email_id(id,email_address,display_name))')
+      .eq('id', req.params.id).eq('sent_by', req.user.id).maybeSingle();
+    if (current) {
+      let mailbox = current.job?.sending_email || null;
+      if (current.sending_email_id) {
+        const { data: pinned } = await supabase.from('user_emails')
+          .select('id,email_address,display_name').eq('id', current.sending_email_id).maybeSingle();
+        if (pinned) mailbox = pinned;
+      }
+      const rendered = renderStoredEmail(current, mailbox);
+      if (updates.subject === rendered.subject) delete updates.subject;
+      if (updates.body === rendered.body) delete updates.body;
+      // Answer with the rendered row for the same reason GET /emails does: the
+      // editor must never be handed a raw {{sender}} back.
+      if (!Object.keys(updates).length) return res.json({ ...current, ...rendered });
+
+      const { data, error } = await supabase.from('emails').update(updates).eq('id', req.params.id).eq('sent_by', req.user.id).select().single();
+      if (error) throw error;
+      return res.json({ ...data, ...renderStoredEmail(data, mailbox) });
+    }
+
     const { data, error } = await supabase.from('emails').update(updates).eq('id', req.params.id).eq('sent_by', req.user.id).select().single();
     if (error) throw error;
-    res.json(data);
+    res.json({ ...data, ...renderStoredEmail(data, null) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

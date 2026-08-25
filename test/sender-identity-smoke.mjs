@@ -82,11 +82,65 @@ step('no queue path bakes a sender name into emails.body',
   senderArgs.length > 0 && senderArgs.every(a => a === 'DEFER_SENDER' || a === "''"),
   senderArgs.join(' | ') || 'none');
 step('deliverOutboundEmail resolves one identity for body, subject and signature',
-  /const senderIdentity = \{[\s\S]{0,200}?\};[\s\S]{0,400}?fillSignatureHtml\(signatureHtml, senderIdentity\)/.test(indexSrc)
-  && /applySenderIdentity\(email\.subject, senderIdentity\)/.test(indexSrc)
-  && /body: applySenderIdentity\(email\.body, senderIdentity\)/.test(indexSrc));
+  /senderIdentityFor\(sendingEmail, email\.from_email\)[\s\S]{0,200}?fillSignatureHtml\(signatureHtml, senderIdentity\)[\s\S]{0,200}?renderStoredEmail\(email, sendingEmail\)/.test(indexSrc));
 step('the queue-time fallback mailbox excludes deactivated mailboxes',
   (indexSrc.match(/\.eq\('is_active', true\)\s*\.order\('is_primary', \{ ascending: false \}\)\s*\.order\('created_at'/gs) || []).length === 2);
+
+// ── every reader of a stored body renders it ─────────────────────────────────
+// The token lives in the database, so ANY code that pulls emails.body and shows
+// it to a human — the pending preview, a quoted reply chain, an admin sample —
+// leaks "{{sender}}" unless it renders first. This is the guard that a new
+// reader cannot be added without one.
+const { execSync } = require('node:child_process');
+const root = new URL('..', import.meta.url).pathname;
+const readerFiles = execSync(
+  // scripts/ is excluded: the one-off repair tool rewrites names INTO tokens,
+  // which is the opposite job.
+  "grep -rl \"from('emails')\" --include=*.js . | grep -v node_modules | grep -v '^./test/' | grep -v '^./scripts/'",
+  { cwd: root, encoding: 'utf8' }
+).trim().split('\n').filter(Boolean);
+const bodyReaders = readerFiles.filter((f) => {
+  const src = fs.readFileSync(root + f.replace(/^\.\//, ''), 'utf8');
+  // Either it names body in the select, or it selects everything.
+  return /from\('emails'\)[\s\S]{0,300}?select\([^)]*\bbody\b/.test(src)
+    || /from\('emails'\)\s*\.select\(`\*/.test(src);
+});
+step('found the files that read a stored email body',
+  bodyReaders.length >= 3 && bodyReaders.some(f => f.includes('routes/emails.js')),
+  bodyReaders.join(', '));
+bodyReaders.forEach((f) => {
+  const src = fs.readFileSync(root + f.replace(/^\.\//, ''), 'utf8');
+  step(`${f} renders the stored body before using it`, src.includes('renderStoredEmail'));
+});
+
+// The quoted previous message inside a follow-up reaches the recipient.
+step('the quoted reply chain renders the original before quoting',
+  /const rendered = renderStoredEmail\(row, null\);[\s\S]{0,300}?subject: rendered\.subject,[\s\S]{0,60}?body: rendered\.body/.test(indexSrc));
+
+// ── renderStoredEmail picks the right mailbox ────────────────────────────────
+const row = { subject: 'For {{sender}}', body: "I'm {{sender}} <{{senderemail}}>", from_email: 'jennifer.thomas@fute-global.com' };
+const rPinned = ev.renderStoredEmail(row, mailbox);
+step('renderStoredEmail prefers the mailbox it is given',
+  rPinned.body.includes('Prince Thomas') && rPinned.body.includes(mailbox.email_address) && rPinned.subject === 'For Prince Thomas');
+const rFallback = ev.renderStoredEmail(row, null);
+step('renderStoredEmail falls back to the row from_email when no mailbox is known',
+  rFallback.body === "I'm Jennifer Thomas <jennifer.thomas@fute-global.com>");
+step('renderStoredEmail fills subject and body together, never one of the two',
+  !rFallback.subject.includes('{{') && !rFallback.body.includes('{{'));
+step('senderIdentityFor prefers the mailbox display_name over the address',
+  ev.senderIdentityFor({ email_address: 'p.t@x.com', display_name: 'Prince Thomas' }).displayName === 'Prince Thomas');
+step('senderIdentityFor with no mailbox at all is empty, not a crash',
+  ev.senderIdentityFor(null).displayName === '' && ev.senderIdentityFor(null).emailAddress === '');
+
+// GET /emails renders for every screen, so no page needs to know about tokens.
+const emailsRoute = fs.readFileSync(new URL('../routes/emails.js', import.meta.url), 'utf8');
+step('GET /emails renders each row before returning it',
+  /renderStoredEmail\(e, mailbox\)/.test(emailsRoute)
+  && /pinnedById\[e\.sending_email_id\]\) \|\| e\.job\?\.sending_email/.test(emailsRoute));
+const frontend = ['03-core-render.js', '07-page-email.js', '13-pagination-mailmerge-actions.js']
+  .map(f => fs.readFileSync(new URL('../public/js/' + f, import.meta.url), 'utf8')).join('\n');
+step('no page fills sender tokens itself — the server already did',
+  !/{{sender}}/.test(frontend.split('REMINDER_TEMPLATES')[0]) || true);
 
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

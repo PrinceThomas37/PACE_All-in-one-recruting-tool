@@ -32,8 +32,8 @@ const {
   fillTemplate,
   resolveTemplate,
   DEFER_SENDER,
-  applySenderIdentity,
-  displayNameFromAddress,
+  senderIdentityFor,
+  renderStoredEmail,
   buildRotatingTemplateDeck,
   isRandomTemplateMode,
   getVariantById
@@ -1271,12 +1271,15 @@ async function buildQuotedChainFromDb({ jobId, contactId, followupType }) {
       .order('sent_at', { ascending: false }).limit(5);
     const row = (data || []).find(filterFn);
     if (!row) return '';
+    // The stored body still carries {{sender}} — quoting it raw would show the
+    // token to the recipient inside their own previous message.
+    const rendered = renderStoredEmail(row, null);
     return buildOutlookQuoteBlock({
       fromName: row.from_email?.split('@')[0] || 'Sender',
       fromEmail: row.from_email,
       sentAt: row.sent_at,
-      subject: row.subject,
-      body: row.body
+      subject: rendered.subject,
+      body: rendered.body
     });
   };
   if (followupType === 'fu2') {
@@ -1325,14 +1328,10 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   // are all filled from the mailbox this send actually authenticates with, so
   // "I'm <name>" in the body can never disagree with the name in the signature
   // or with the From address the recipient sees.
-  const senderAddress = sendingEmail?.email_address || email.from_email || '';
-  const senderIdentity = {
-    displayName: sendingEmail?.display_name || displayNameFromAddress(senderAddress),
-    emailAddress: senderAddress
-  };
+  const senderIdentity = senderIdentityFor(sendingEmail, email.from_email);
   const filledSig = fillSignatureHtml(signatureHtml, senderIdentity);
-  const subject = applySenderIdentity(email.subject, senderIdentity);
-  email = { ...email, subject, body: applySenderIdentity(email.body, senderIdentity) };
+  email = { ...email, ...renderStoredEmail(email, sendingEmail) };
+  const subject = email.subject;
   const htmlBody = buildHtmlEmailBody(email.body, filledSig);
   // Provider dispatch: Gmail mailboxes go through the Gmail adapter; everything
   // else keeps the exact Microsoft Graph path unchanged.
