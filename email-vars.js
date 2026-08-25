@@ -368,9 +368,27 @@ function displayNameFromAddress(emailAddress) {
 }
 
 /**
+ * The sender identity for a mailbox row, with the address as the name of last
+ * resort. `mailbox` may be null — a queued email whose lead has no sending
+ * mailbox still has a from_email to fall back on.
+ */
+function senderIdentityFor(mailbox, fallbackAddress) {
+  const emailAddress = mailbox?.email_address || fallbackAddress || '';
+  return {
+    displayName: mailbox?.display_name || displayNameFromAddress(emailAddress),
+    emailAddress
+  };
+}
+
+/**
  * Fill {{sender}} / {{senderemail}} from the mailbox that is actually sending.
  * Text with no tokens (already-filled legacy rows, hand-edited drafts) is
  * returned untouched, so this is safe to run over every outbound message.
+ *
+ * EVERY reader of a stored emails.body must go through this. The text sits in
+ * the database with the token still in it, so anything that shows it to a human
+ * — the pending preview, a quoted reply chain in a follow-up — shows "{{sender}}"
+ * unless it is filled first. `renderStoredEmail` below is the shape to reach for.
  */
 function applySenderIdentity(text, { displayName, emailAddress } = {}) {
   const address = String(emailAddress || '');
@@ -378,6 +396,19 @@ function applySenderIdentity(text, { displayName, emailAddress } = {}) {
   return String(text == null ? '' : text)
     .replace(/{{sender}}/g, name)
     .replace(/{{senderemail}}/g, address);
+}
+
+/**
+ * Render a stored email row for display or for quoting: subject and body filled
+ * from the mailbox it will send from (or did send from). One call, so a caller
+ * cannot fill the body and forget the subject.
+ */
+function renderStoredEmail(row, mailbox) {
+  const identity = senderIdentityFor(mailbox, row?.from_email);
+  return {
+    subject: applySenderIdentity(row?.subject, identity),
+    body: applySenderIdentity(row?.body, identity)
+  };
 }
 
 module.exports = {
@@ -390,6 +421,8 @@ module.exports = {
   DEFER_SENDER,
   applySenderIdentity,
   displayNameFromAddress,
+  senderIdentityFor,
+  renderStoredEmail,
   formatSkillsLine,
   formatJobResp,
   formatCompanyService,

@@ -348,27 +348,6 @@ function buildClientEmailVars(l,co,sender){
     local_line:localLine,city:city
   };
 }
-// Mirror of applySenderIdentity/displayNameFromAddress in email-vars.js.
-// Queued emails keep {{sender}} / {{senderemail}} until they are sent, so any
-// screen that PREVIEWS a queued email has to render them the way the send path
-// will: from the mailbox that will actually send it.
-window.senderDisplayNameFromAddress=function(addr){
-  var local=String(addr||'').split('@')[0];
-  if(!local)return '';
-  return local.split(/[._-]+/).filter(Boolean).map(function(w){
-    return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
-  }).join(' ');
-};
-// `mailbox` is the user_emails row the email will be sent from (email.job.sending_email).
-window.fillSenderTokens=function(text,mailbox){
-  var addr=(mailbox&&mailbox.email_address)||'';
-  var name=(mailbox&&mailbox.display_name)||window.senderDisplayNameFromAddress(addr);
-  return String(text==null?'':text).replace(/{{sender}}/g,name).replace(/{{senderemail}}/g,addr);
-};
-window.pendingEmailSendingMailbox=function(e){
-  return (e&&e.sending_email)||(e&&e.job&&e.job.sending_email)||null;
-};
-
 function fillEmail(tmpl,l,co,sender){
   var map=buildClientEmailVars(l,co,sender);
   return normalizeSenderTitle(tmpl.replace(/{{(\w+)}}/g,function(m,k){

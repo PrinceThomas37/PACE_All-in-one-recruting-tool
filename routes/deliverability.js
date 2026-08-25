@@ -13,6 +13,7 @@
 // so they're the same singletons index.js uses).
 // ============================================================================
 const express = require('express');
+const { renderStoredEmail } = require('../email-vars');
 const { emailSyntaxValid } = require('../email-validation');
 const { scoreEmailContent } = require('../deliverability');
 const { getSetting } = require('../config/settings');
@@ -77,7 +78,9 @@ router.get('/analytics/templates', auth, async (req, res) => {
       const v = e.template_variant || 'default';
       byVar[v] = byVar[v] || { variant: v, sent: 0, contacts: new Set(), sample: null };
       byVar[v].sent++;
-      if (!byVar[v].sample && e.subject) byVar[v].sample = { subject: e.subject, body: e.body || '' };
+      // The stored body keeps {{sender}} until it is sent; this sample is shown
+      // on the Admin templates page, so render it like every other reader does.
+      if (!byVar[v].sample && e.subject) byVar[v].sample = renderStoredEmail(e, null);
       if (e.contact_id) { byVar[v].contacts.add(e.contact_id); contactIds.add(e.contact_id); }
     });
     let repliedSet = new Set();
