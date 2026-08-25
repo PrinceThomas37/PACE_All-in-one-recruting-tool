@@ -30,6 +30,11 @@
 
 const LAST_RUN_PREFIX = 'cron_last_';
 
+// Deliberately NOT under LAST_RUN_PREFIX: this is not a job, it is the fact that
+// the external pinger reached us. See recordPing below for why it has to be a
+// separate fact from "a job ran".
+const PING_KEY = 'engine_last_external_ping';
+
 function createEngineRunner({ supabase }) {
   const jobs = new Map();        // name -> { everyMs, run, description }
   const inFlight = new Set();    // names currently executing in THIS process
@@ -148,6 +153,32 @@ function createEngineRunner({ supabase }) {
     return { ran, skipped, at: new Date().toISOString() };
   }
 
+  // ── the external heartbeat ────────────────────────────────────────────────
+  // "Is the pinger reaching us?" and "did the pinger run a job?" are different
+  // questions, and the admin card used to answer the first with the second.
+  // That reads backwards: runDue only records a run when something is DUE, so a
+  // ping arriving during a busy period — when the in-process intervals have
+  // already done the work — leaves no trace and looks like a dead heartbeat.
+  // The card therefore went red precisely when the app was healthiest and most
+  // used. So record the ping itself, on arrival, whether or not it had work.
+
+  async function recordPing(when) {
+    try {
+      await supabase.from('app_settings').upsert(
+        { key: PING_KEY, value: (when || new Date()).toISOString(), updated_at: new Date() },
+        { onConflict: 'key' }
+      );
+    } catch { /* non-fatal — the ping still ran whatever is due */ }
+  }
+
+  async function lastPingAt() {
+    try {
+      const { data } = await supabase.from('app_settings')
+        .select('value').eq('key', PING_KEY).maybeSingle();
+      return data && data.value ? data.value : null;
+    } catch { return null; }
+  }
+
   // ── introspection (what the UI shows) ─────────────────────────────────────
 
   async function status() {
@@ -176,7 +207,7 @@ function createEngineRunner({ supabase }) {
     } catch { return []; }
   }
 
-  return { register, runJob, runDue, isDue, status, recent, names: () => [...jobs.keys()] };
+  return { register, runJob, runDue, isDue, status, recent, recordPing, lastPingAt, names: () => [...jobs.keys()] };
 }
 
 module.exports = { createEngineRunner };

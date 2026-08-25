@@ -472,6 +472,13 @@ function renderDeliverability(){
 // GitHub Actions secret); a mismatch makes /cron/tick 404 and nothing runs. So
 // the status is driven by whether a ping has ACTUALLY ARRIVED recently, not by
 // whether a variable exists.
+//
+// `last_cron_ping_at` is the arrival of the ping itself, not the last job it
+// happened to run. Those are different facts, and reading the second as the
+// first is what made this card cry wolf: a ping that finds nothing due runs
+// nothing and leaves no job record, which is the NORMAL case while the app is
+// awake and its in-process timers are doing the work first. The card went amber
+// exactly when the system was healthiest.
 function loadEngineStatus(force){
   if(STATE._engineLoading)return;
   if(STATE.engineStatus&&!force)return;

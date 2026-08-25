@@ -196,6 +196,40 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok('names() lists every registered job', runner.names().join(',') === 'a');
 }
 
+// ── 8b. The ping timestamp is stored apart from the job timestamps ───────────
+// It has to be a separate fact: a ping that finds nothing due runs no job, so
+// recording it through a job stamp would make a quiet, healthy period look like
+// a dead pinger.
+{
+  const fake = fakeSupabase();
+  const runner = createEngineRunner({ supabase: fake.client });
+  runner.register('a', { everyMs: 60_000, description: 'does a thing', run: async () => {} });
+
+  ok('no ping recorded yet reads as null', (await runner.lastPingAt()) === null);
+
+  await runner.recordPing();
+  const first = await runner.lastPingAt();
+  ok('recordPing stores a timestamp', typeof first === 'string' && !Number.isNaN(Date.parse(first)));
+
+  await runner.recordPing(new Date('2026-01-02T03:04:05.000Z'));
+  ok('recordPing overwrites rather than accumulating',
+    (await runner.lastPingAt()) === '2026-01-02T03:04:05.000Z');
+
+  // The ping key must not masquerade as a job, or it would show up in the card's
+  // job list and could make a job look recently run.
+  ok('the ping is not stored under the job prefix, and invents no job',
+    (await runner.status()).length === 1 && runner.names().join(',') === 'a');
+
+  // Recording a ping must never be able to stop the work it precedes.
+  const broken = fakeSupabase({ failTable: 'app_settings' });
+  const brittle = createEngineRunner({ supabase: broken.client });
+  let ranAnyway = false;
+  brittle.register('b', { everyMs: 60_000, run: async () => { ranAnyway = true; } });
+  await brittle.recordPing();
+  await brittle.runDue({ triggeredBy: 'cron' });
+  ok('a failed ping write is swallowed and the jobs still run', ranAnyway === true);
+}
+
 // ── 9. The /cron/tick endpoint itself ────────────────────────────────────────
 // This is the contract an external pinger depends on, so exercise the real
 // router rather than trusting it. A stub runner keeps the DB out of it.
@@ -204,11 +238,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const makeCronRoutes = require('../routes/cron.js');
 
   const calls = [];
+  const pings = [];
+  let recentRows = [];
+  let storedPing = null;
   const stubRunner = {
     runDue: async (opts) => { calls.push(opts); return { ran: [{ job: 'sweep', ok: true, ms: 12, counts: { found: 2 } }], skipped: ['wf_tick'], at: 'now' }; },
     runJob: async (name) => (name === 'sweep' ? { job: name, ran: true, ok: true } : { job: name, ran: false, reason: 'unknown_job' }),
     status: async () => [{ job: 'sweep' }],
-    recent: async () => [],
+    recent: async () => recentRows,
+    recordPing: async () => { pings.push(Date.now()); storedPing = new Date().toISOString(); },
+    lastPingAt: async () => storedPing,
     names: () => ['sweep']
   };
   // Minimal auth stubs matching index.js's real shapes.
@@ -247,6 +286,51 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   const unknown = await fetch(base + '/admin/engine/run/nope', { method: 'POST' });
   ok('running an unknown job returns 404 with the valid names', unknown.status === 404);
+
+  // ── the heartbeat signal ──────────────────────────────────────────────────
+  // The admin card must answer "is the pinger reaching us", not "did the pinger
+  // run a job". Those come apart whenever the app is awake: the in-process
+  // intervals get to the due jobs first, the ping finds nothing to do, and the
+  // old signal — the last cron-TRIGGERED job run — goes stale on a perfectly
+  // healthy system. That is the false alarm this pins.
+  const pingsBefore = pings.length;
+  await get('/cron/tick?key=sekret');
+  ok('every accepted tick records the ping itself', pings.length === pingsBefore + 1);
+
+  const rejected = pings.length;
+  await get('/cron/tick?key=nope');
+  ok('a rejected tick records nothing', pings.length === rejected);
+
+  // A ping that finds nothing due writes no engine_runs row at all...
+  recentRows = [];
+  const quiet = await get('/admin/engine/status');
+  ok('...and the engine still reports healthy', quiet.body.heartbeat_healthy === true, JSON.stringify(quiet.body.last_cron_ping_at));
+  ok('the reported heartbeat time is the ping, not a job run',
+    quiet.body.last_cron_ping_at === storedPing && quiet.body.last_cron_job_run_at === null);
+
+  // Jobs running under the in-process interval are not evidence either way.
+  recentRows = [{ triggered_by: 'interval', started_at: new Date().toISOString() }];
+  const intervalOnly = await get('/admin/engine/status');
+  ok('an interval-run job is not mistaken for a heartbeat',
+    intervalOnly.body.heartbeat_healthy === true && intervalOnly.body.last_cron_job_run_at === null);
+
+  // A genuinely stale ping is still reported as stale — the alarm has to work.
+  storedPing = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const stale = await get('/admin/engine/status');
+  ok('a three-hour-old ping reads as unhealthy', stale.body.heartbeat_healthy === false);
+
+  // A server not yet pinged since this shipped falls back to the old signal,
+  // so the card does not claim a dead engine for the first half hour.
+  storedPing = null;
+  recentRows = [{ triggered_by: 'cron', started_at: new Date().toISOString() }];
+  const fallback = await get('/admin/engine/status');
+  ok('with no ping recorded yet it falls back to the last cron-run job',
+    fallback.body.heartbeat_healthy === true && fallback.body.last_cron_ping_at === recentRows[0].started_at);
+
+  storedPing = null; recentRows = [];
+  const nothing = await get('/admin/engine/status');
+  ok('no ping and no cron run is genuinely unhealthy',
+    nothing.body.heartbeat_healthy === false && nothing.body.last_cron_ping_at === null);
 
   if (prevKey === undefined) delete process.env.CRON_KEY; else process.env.CRON_KEY = prevKey;
   server.close();
