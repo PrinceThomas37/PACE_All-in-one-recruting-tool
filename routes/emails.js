@@ -41,6 +41,23 @@ router.get('/emails', auth, async (req, res) => {
       if (data.length < 1000) break;
       from += 1000;
     }
+    // A queued email keeps {{sender}} until it is sent, and the preview has to
+    // render it from the mailbox that will actually send it. That is the job's
+    // mailbox unless a sequence pinned this row to a rotated one — resolve those
+    // few here (a second query rather than a second embed of user_emails, which
+    // is the same table the job embed already pulls).
+    const pinnedIds = [...new Set(allData.map(e => e.sending_email_id).filter(Boolean))];
+    if (pinnedIds.length) {
+      const { data: pinned } = await supabase.from('user_emails')
+        .select('id,email_address,display_name').in('id', pinnedIds);
+      const byId = {};
+      (pinned || []).forEach(m => { byId[m.id] = m; });
+      allData = allData.map(e => (
+        e.sending_email_id && byId[e.sending_email_id]
+          ? { ...e, sending_email: byId[e.sending_email_id] }
+          : e
+      ));
+    }
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

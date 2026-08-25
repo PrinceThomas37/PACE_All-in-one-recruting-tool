@@ -182,9 +182,9 @@ function renderEmail(){
           '</div>'+
           '<div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)">'+
             '<div><strong>To:</strong> '+htmlEsc(pe.to_email)+'</div>'+
-            '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(pe.subject||'')+'</div>'+
+            '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(fillSenderTokens(pe.subject||'',pendingEmailSendingMailbox(pe)))+'</div>'+
           '</div>'+
-          '<div style="padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(pe.body||'')+'</div>'+
+          '<div style="padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(fillSenderTokens(pe.body||'',pendingEmailSendingMailbox(pe)))+'</div>'+
           '<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
           '</div>'+
