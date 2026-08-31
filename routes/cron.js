@@ -41,6 +41,11 @@ module.exports = (ctx) => {
       // whether this endpoint exists or whether a key is configured.
       return res.status(404).json({ error: 'not_found' });
     }
+    // Record the ping BEFORE doing any work, and regardless of whether there is
+    // any: this is the only evidence that the pinger is reaching us. A tick that
+    // finds nothing due runs nothing, and if arriving were only visible through
+    // work done, a healthy quiet period would look identical to a dead pinger.
+    await runner.recordPing();
     try {
       const result = await runner.runDue({ triggeredBy: 'cron', only: req.query.job || undefined });
       res.json({
@@ -67,16 +72,22 @@ module.exports = (ctx) => {
     if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Forbidden' });
     try {
       const recent = await runner.recent(req.query.limit || 30);
+      // The ping timestamp is the real signal. Fall back to the last cron-run
+      // job for a server that has not been pinged since this shipped — that is
+      // the old, noisier signal, but it stops the card claiming a dead engine
+      // for the first half hour after a deploy.
       const lastCron = recent.find(r => r.triggered_by === 'cron');
-      const lastCronAt = lastCron ? lastCron.started_at : null;
-      // The heartbeat fires far more often than this; anything older than an
-      // hour means it is not arriving, whatever the env var says.
+      const pingAt = await runner.lastPingAt();
+      const lastCronAt = pingAt || (lastCron ? lastCron.started_at : null);
+      // The heartbeat fires every 30 minutes; anything older than an hour means
+      // it is not arriving, whatever the env var says.
       const heartbeatHealthy = !!lastCronAt && (Date.now() - new Date(lastCronAt).getTime()) < 60 * 60 * 1000;
       res.json({
         jobs: await runner.status(),
         recent,
         cron_configured: Boolean(process.env.CRON_KEY),
         last_cron_ping_at: lastCronAt,
+        last_cron_job_run_at: lastCron ? lastCron.started_at : null,
         heartbeat_healthy: heartbeatHealthy,
         server_time: new Date().toISOString(),
       });
