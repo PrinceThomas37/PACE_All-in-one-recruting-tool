@@ -425,4 +425,92 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
 .tb-ico svg,.tbar-ico svg,.dwr-act svg,.kebab svg,.feed-ic svg,.notice-ic svg{width:17px;height:17px}
 .notice-ic svg{width:19px;height:19px}
 .dwr-nav svg{width:16px;height:16px}
-.pgtab svg,.strip-l svg,.cell-id small svg,.pill svg{width:13px;height:13px}
+.pgtab svg,.strip-l svg,.cell-id small svg,.pill svg,.dwr-stat svg{width:13px;height:13px}
+
+/* ── 8. SEQUENCE BUILDER ─────────────────────────────────────────────────── */
+/* The steps of a sequence drawn down the page as a timeline, because that is
+   what a sequence IS: a thing that happens on Day 1, then Day 4, then Day 9.
+   A list of rows in a 480px modal hid the one fact that matters most — WHEN
+   each step actually goes out. */
+.seq-modal{width:1040px;max-width:94vw}
+.seq{padding:4px 0 8px}
+.seq-row{display:flex;gap:0;align-items:stretch}
+.seq-gut{width:104px;flex-shrink:0;position:relative;padding-top:2px}
+.seq-day{
+  display:inline-flex;align-items:center;height:24px;padding:0 12px;
+  background:var(--hover);border:1px solid var(--line);border-radius:6px;
+  font-size:12px;font-weight:600;color:var(--ink2);white-space:nowrap;
+}
+/* The connector: a single line down the gutter, stopping at the last step so
+   the timeline does not appear to continue into nothing. */
+.seq-gut::after{
+  content:"";position:absolute;left:19px;top:30px;bottom:-14px;width:2px;background:var(--line);
+}
+.seq-row:last-of-type .seq-gut::after{display:none}
+.seq-main{flex:1;min-width:0;padding-bottom:14px}
+.seq-when{
+  display:flex;align-items:center;gap:7px;
+  font-size:12.5px;color:var(--ink2);margin:8px 0 8px;
+}
+.seq-when svg{width:14px;height:14px;color:var(--accent);flex-shrink:0}
+.seq-when b{color:var(--ink);font-weight:600}
+.seq-card{
+  border:1px solid var(--line2);border-radius:10px;background:var(--card);
+  overflow:hidden;
+}
+.seq-card-h{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;background:#FAFBFC;border-bottom:1px solid var(--line);
+}
+.seq-badge{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--sel);color:var(--accent);border-radius:7px;
+  padding:4px 10px;font-size:12.5px;font-weight:600;white-space:nowrap;
+}
+.seq-badge svg{width:14px;height:14px}
+.seq-card-h input.seq-name{
+  flex:1;min-width:0;height:30px;padding:0 10px;font-size:13px;
+  background:var(--card);border:1px solid var(--line2);border-radius:7px;outline:none;
+}
+.seq-card-h input.seq-name:focus{border-color:var(--accent)}
+.seq-tools{display:flex;gap:2px;margin-left:auto}
+.seq-body{padding:12px;display:flex;flex-direction:column;gap:9px}
+.seq-line{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.seq-delay{
+  display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink2);
+}
+.seq-delay input{
+  width:54px;height:30px;text-align:center;font-size:13px;
+  border:1px solid var(--line2);border-radius:7px;background:var(--card);outline:none;
+}
+.seq-sel{
+  height:30px;padding:0 8px;font-size:12.5px;background:var(--card);
+  border:1px solid var(--line2);border-radius:7px;outline:none;cursor:pointer;
+}
+.seq-in{
+  height:30px;padding:0 9px;font-size:12.5px;background:var(--card);
+  border:1px solid var(--line2);border-radius:7px;outline:none;flex:1;min-width:170px;
+}
+.seq-ta{
+  padding:8px 9px;font-size:12.5px;line-height:1.55;background:var(--card);
+  border:1px solid var(--line2);border-radius:7px;outline:none;
+  width:100%;min-height:76px;resize:vertical;font-family:inherit;
+}
+.seq-in:focus,.seq-ta:focus,.seq-sel:focus,.seq-delay input:focus{border-color:var(--accent)}
+.seq-add{
+  display:inline-flex;align-items:center;gap:7px;
+  border:1px dashed var(--line2);background:transparent;color:var(--ink2);
+  border-radius:9px;padding:9px 16px;font-size:13px;font-weight:500;cursor:pointer;
+}
+.seq-add:hover{border-color:var(--accent);color:var(--accent);background:var(--sel)}
+.seq-add svg{width:15px;height:15px}
+.seq-hint{
+  display:flex;align-items:center;gap:9px;margin-top:14px;
+  background:#FFFBEB;border:1px solid #FDE68A;border-radius:9px;
+  padding:11px 13px;font-size:12.5px;color:#92400E;
+}
+.seq-hint svg{width:15px;height:15px;flex-shrink:0}
+@media(max-width:760px){
+  .seq-gut{width:74px}
+  .seq-gut::after{left:14px}
+}

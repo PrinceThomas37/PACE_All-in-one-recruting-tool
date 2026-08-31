@@ -1,8 +1,13 @@
 // ===== CANDIDATE PROFILE MODULE (additive) =====
-// The Ceipal candidate profile: header, the lifecycle progress bar (per job),
-// the candidate's pipelines & submissions across every job, and the activity
-// log. Read-only over the ATS tables (no new schema). Slice 4 of
-// docs/ATS_RECRUITING_PLAN.md.
+// The candidate profile, as a DRAWER that opens over whichever list you were
+// on — the lifecycle progress bar (per job), the candidate's pipelines &
+// submissions across every job, notes, documents, resume, tracked email and
+// the activity log, behind tabs. Read-only over the ATS tables (no new
+// schema). Slice 4 of docs/ATS_RECRUITING_PLAN.md.
+//
+// It is an overlay, never a page: closing it returns you to the same list with
+// the same filters, selection and scroll position, because the list was never
+// navigated away from.
 
 (function () {
 
@@ -51,11 +56,23 @@
       (hist.pipeline||[]).concat(hist.submissions||[]).forEach(function(x){
         if(x.job && !STATE.bd.jobOrders.some(function(j){return j.id===x.job.id;})) STATE.bd.jobOrders.push(x.job);
       });
-      goPage('bd_candidate');
+      // The profile is a DRAWER over whatever list you came from, not a page
+      // you navigate to. STATE.page is deliberately left alone: closing the
+      // drawer must put you back on the same list, with the same filters, the
+      // same selection and the same scroll position — which it does for free
+      // if we never left the page in the first place.
+      STATE.bd.profileOpen = true;
+      render();
     }).catch(function(e){ showToast('Failed to load candidate: '+e.message,'error'); });
   };
+  window.cpClose = function(){
+    if (!STATE.bd) return;
+    STATE.bd.profileOpen = false;
+    STATE.bd.profile = null;
+    render();
+  };
   window.bdReloadCandidateProfile = function(){
-    if(STATE.page!=='bd_candidate' || !STATE.bd.profile) return;
+    if(!STATE.bd.profileOpen || !STATE.bd.profile) return;
     var id = STATE.bd.profile.id;
     Promise.all([ apiGet('/candidates/'+id), apiGet('/candidates/'+id+'/history') ]).then(function(r){
       STATE.bd.profile.candidate = r[0]||STATE.bd.profile.candidate;
@@ -66,37 +83,29 @@
   window.cpReloadNotes = function(){ var p=STATE.bd.profile; if(!p)return; apiGet('/candidates/'+p.id+'/notes').then(function(d){ p.notes=d||[]; render(); }).catch(function(){}); };
   window.cpReloadDocs  = function(){ var p=STATE.bd.profile; if(!p)return; apiGet('/candidates/'+p.id+'/documents').then(function(d){ p.documents=d||[]; render(); }).catch(function(){}); };
 
-  // ── routing wrap ──────────────────────────────────────────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page === 'bd_candidate'){ paintProfile(); var t=document.querySelector('.tb-title'); if(t) t.textContent='Candidate'; }
-  };
-  var _prevGoPage = window.goPage;
-  window.goPage = function(p){
-    if (p === 'bd_candidate'){ STATE.page='bd_candidate'; STATE.modal=null; render(); return; }
-    return _prevGoPage.apply(this, arguments);
-  };
-  function paintProfile(){ var c=document.getElementById('content'); if(!c) return; c.innerHTML = renderCandidateProfile(); }
+  // ── the drawer is an overlay, not a page ──────────────────────────────────
+  // Registered with the kit so the shell draws it above #content. There is no
+  // 'bd_candidate' page any more — one code path, so the profile cannot drift
+  // into looking like two different things depending on how it was opened.
+  UI.registerOverlay('candidate', function(){
+    return (STATE.bd && STATE.bd.profileOpen && STATE.bd.profile) ? renderCandidateProfile() : '';
+  });
+
+  // Escape closes it, like every other dismissible layer in the app. Bound
+  // once, at module load, because the drawer's markup is rebuilt on every
+  // render and a handler bound to it would be lost each time.
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape') return;
+    if (STATE.modal) return;                       // the modal owns Escape first
+    if (STATE.bd && STATE.bd.profileOpen) cpClose();
+  });
 
   window.bdProfileSelectJob = function(jid){ if(STATE.bd.profile) STATE.bd.profile.selJob = jid; render(); };
 
-  // ── back-navigation: return to wherever the profile was opened from ────────
-  function backLabel(back){
-    var labels = { bd_pipeline:'Candidates', bd_kanban:'Board', bd_jodetail:'Job', bd_myjobs:'My Jobs', applicants:'Candidates' };
-    return labels[(back&&back.page)||''] || 'Candidates';
-  }
-  window.cpGoBack = function(){
-    if (window.navBack && STATE.nav && STATE.nav.stack && STATE.nav.stack.length>1) return navBack();
-    var back = (STATE.bd.profile && STATE.bd.profile.back) || {};
-    if (back.joId){
-      if (back.page==='bd_pipeline') return bdOpenPipeline(back.joId);
-      if (back.page==='bd_kanban') return bdOpenKanban(back.joId);
-      if (back.page==='bd_jodetail') return bdOpenJobOrder(back.joId);
-    }
-    if (back.page==='bd_myjobs') return goPage('bd_myjobs');
-    goPage('applicants');
-  };
+  // Going "back" from a profile is now just closing the layer over the list —
+  // the list was never left. Kept under the old name because five call sites
+  // and the nav-history module reference it.
+  window.cpGoBack = function(){ cpClose(); };
 
   // ── lifecycle computation ──────────────────────────────────────────────────
   function computeMilestones(jobId){
@@ -145,7 +154,7 @@
   // clobber it via `window.renderProfile =`, which silently broke My Profile
   // for every user (it rendered "No candidate loaded." instead).
   window.renderCandidateProfile = function(){
-    var pr = STATE.bd.profile; if(!pr) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">No candidate loaded.</div></div>';
+    var pr = STATE.bd.profile; if(!pr) return '';
     var c = pr.candidate||{}, h = pr.history||{pipeline:[],submissions:[],activity:[]};
 
     // jobs this candidate touches (union of pipeline + submissions)
@@ -155,32 +164,6 @@
     var jobs = Object.keys(jobMap).map(function(k){ return jobMap[k]; });
     var selJob = pr.selJob || (jobs[0] && (jobs[0].job&&jobs[0].job.id || jobs[0].job_order_id));
     if (selJob && !jobMap[selJob]) selJob = jobs[0] && jobs[0].job && jobs[0].job.id;
-
-    function field(lbl,val){ return '<div style="margin-bottom:8px"><div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.3px">'+lbl+'</div><div style="font-size:13px;color:var(--text)">'+esc(val||'—')+'</div></div>'; }
-
-    var header =
-      '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-          '<div>'+
-            '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">'+code(c.candidate_code||'')+
-              '<span style="font-size:20px;font-weight:700">'+esc(c.full_name||'')+'</span>'+
-              (c.applicant_status?'<span style="font-size:11px;font-weight:700;color:var(--accent);background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">'+esc(c.applicant_status)+'</span>':'')+
-            '</div>'+
-            '<div style="font-size:13px;color:var(--text3)">'+esc(c.headline||c.current_title||'')+(c.current_employer?' · '+esc(c.current_employer):'')+'</div>'+
-          '</div>'+
-          '<div style="display:flex;gap:8px">'+
-            '<button class="btn btn-sm btn-outline" onclick="cpOpenEmail()">✉ Email</button>'+
-            '<button class="btn btn-sm btn-outline" onclick="atsOpenEdit(\''+c.id+'\')">Edit</button>'+
-          '</div>'+
-        '</div>'+
-        '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">'+
-          field('Email',c.email)+field('Mobile',c.phone)+field('Work Authorization',c.work_authorization)+
-          field('Location',loc(c))+field('Experience',c.experience_years!=null?c.experience_years+' yrs':'')+field('Source',c.source)+
-          field('Availability',c.availability)+field('Notice Period',c.notice_period)+field('Current CTC',c.current_ctc)+
-          field('Bill Rate',c.bill_rate)+field('Pay Rate',c.pay_rate)+field('Ownership',(c.owner&&c.owner.name)||'')+
-        '</div>'+
-        (c.skills?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px"><span style="color:var(--text3)">Skills: </span>'+esc(c.skills)+'</div>':'')+
-      '</div>';
 
     // lifecycle bar with a job selector
     var jobSel = jobs.length>1 ?
@@ -324,10 +307,139 @@
     var emailCard = '<div class="card" style="padding:16px;margin-bottom:16px">'+
       '<div style="font-weight:600;font-size:14px;margin-bottom:8px">Email activity</div>'+eaRows+'</div>';
 
-    return '<div class="page">'+
-      (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="cpGoBack()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← '+esc(backLabel(pr.back))+'</span></div>')+
-      header + lifecycle + resumeCard + jobsCard + emailCard + notesCard + docsCard + actCard +
-    '</div>';
+    // ── the drawer ────────────────────────────────────────────────────────
+    // Left: who this person is. Right: everything that has happened to them,
+    // behind tabs.
+    //
+    // EVERY tab panel is rendered; the inactive ones carry `hidden`. Two
+    // reasons, both practical: switching tabs is then instant and does not
+    // rebuild the DOM (so a half-typed note survives a click on "Jobs"), and
+    // the résumé iframe is not torn down and refetched every time you look
+    // away from it.
+    var tabKey = pr.tab || 'activity';
+    var counts = {
+      activity: (h.activity||[]).length,
+      jobs: jobs.length,
+      notes: (pr.notes||[]).length,
+      emails: (pr.emailActivity||[]).length,
+      docs: (pr.documents||[]).length
+    };
+    var TABS = [
+      { id:'activity', label:'Activity',  n:counts.activity },
+      { id:'jobs',     label:'Jobs',      n:counts.jobs     },
+      { id:'emails',   label:'Emails',    n:counts.emails   },
+      { id:'notes',    label:'Notes',     n:counts.notes    },
+      { id:'docs',     label:'Documents', n:counts.docs     },
+      { id:'resume',   label:'Resume'                       }
+    ];
+    var tabBar = '<div class="pgtabs">'+TABS.map(function(t){
+      var n = (t.n===0||t.n) ? '<span class="pgtab-n">'+t.n+'</span>' : '';
+      return '<div class="pgtab'+(tabKey===t.id?' on':'')+'" data-cptab="'+t.id+'" onclick="cpTab(\''+t.id+'\')">'+esc(t.label)+n+'</div>';
+    }).join('')+'</div>';
+
+    function panel(id, html){
+      return '<div class="feed" data-cppanel="'+id+'"'+(tabKey===id?'':' hidden')+' style="padding:16px 18px">'+html+'</div>';
+    }
+    var body =
+      panel('activity', lifecycle + actCard) +
+      panel('jobs',     jobsCard) +
+      panel('emails',   emailCard) +
+      panel('notes',    notesCard) +
+      panel('docs',     docsCard) +
+      panel('resume',   resumeCard || '<div class="dt-empty">No résumé on file yet. Upload one from the Documents tab.</div>');
+
+    // ── left pane ─────────────────────────────────────────────────────────
+    var ea = pr.emailActivity || [];
+    var stats = [
+      { v: ea.length,                                          label:'Sent',    icon:'mail'     },
+      { v: ea.filter(function(e){return e.opened_at;}).length,  label:'Opened',  icon:'mailopen' },
+      { v: ea.filter(function(e){return e.replied_at;}).length, label:'Replied', icon:'reply'    },
+      { v: jobs.length,                                         label:'Jobs',    icon:'doc'      }
+    ];
+
+    var acts = [
+      { icon:'note',  title:'Notes',            onclick:"cpTab('notes')" },
+      { icon:'phone', title:c.phone?('Call '+c.phone):'No phone on file',
+        onclick: c.phone ? "window.location.href='tel:"+UI.attr(String(c.phone).replace(/[^0-9+]/g,''))+"'" : "showToast('No phone number on file','info')" },
+      { icon:'mail',  title:'Email this candidate', onclick:'cpOpenEmail()' },
+      { icon:'check', title:'Add to a job',      onclick:"atsAddToJob('"+c.id+"')" },
+      { icon:'doc',   title:'Résumé',            onclick:"cpTab('resume')" },
+      { icon:'cog',   title:'Edit details',      onclick:"atsOpenEdit('"+c.id+"')" }
+    ];
+
+    // An empty field is only worth a row if its absence is itself information.
+    // Email / phone / location always show (a candidate with no email is a
+    // problem you want to see); the rest simply disappear when unset, rather
+    // than padding the pane with a column of em-dashes.
+    function opt(k, v, o){ return (v==null||v==='') ? '' : UI.kv(k, v, o); }
+    function money(v){ return v==null||v==='' ? '' : v; }
+    var fields =
+      UI.kv('Email', c.email ? '<a href="mailto:'+esc(c.email)+'" style="color:var(--accent)">'+esc(c.email)+'</a>'+
+              '<span class="verified" style="margin-left:5px;vertical-align:-2px">'+UI.ic('verified')+'</span>' : '',
+            { html:true, placeholder:'No email on file' }) +
+      UI.kv('Phone number', c.phone, { placeholder:'—' }) +
+      UI.kv('Location', loc(c)) +
+      opt('Work authorization', c.work_authorization) +
+      opt('Experience', c.experience_years!=null ? c.experience_years+' yrs' : '') +
+      opt('Availability', c.availability) +
+      opt('Notice period', c.notice_period) +
+      opt('Source', c.source) +
+      opt('Current CTC', money(c.current_ctc)) +
+      opt('Bill rate', money(c.bill_rate)) +
+      opt('Pay rate', money(c.pay_rate)) +
+      opt('Ownership', (c.owner&&c.owner.name)||'') +
+      opt('Added', c.created_at ? fmtDT(c.created_at) : '') +
+      opt('Skills', c.skills);
+
+    // Step through the list without closing the drawer — the arrows walk the
+    // page of rows the profile was opened from. Only within the loaded page:
+    // silently fetching the next page behind an arrow press would make the
+    // list underneath disagree with what the arrows do.
+    var sib = (function(){
+      var list = (STATE.ats && STATE.ats.rows) || [];
+      var i = list.findIndex(function(x){ return x.id === c.id; });
+      if (i < 0) return { prev:null, next:null };
+      return { prev: i>0 ? list[i-1].id : null, next: i<list.length-1 ? list[i+1].id : null };
+    })();
+
+    var subtitle = [c.headline||c.current_title, c.current_employer].filter(Boolean).join(' · ');
+    var avatarInitials = (String(c.full_name||'?').trim().split(/\s+/).slice(0,2)
+      .map(function(w){ return (w[0]||''); }).join('') || '?').toUpperCase();
+    var avatar = '<div class="av av-48 av-ra" style="font-size:16px">'+esc(avatarInitials)+'</div>';
+
+    return UI.drawer({
+      avatar: avatar,
+      name:   c.full_name || 'Candidate',
+      sub:    subtitle,
+      acts:   acts,
+      stats:  stats,
+      onclose:'cpClose()',
+      onprev: sib.prev ? "bdOpenCandidate('"+sib.prev+"')" : '',
+      onnext: sib.next ? "bdOpenCandidate('"+sib.next+"')" : '',
+      onmenu: "atsOpenEdit('"+c.id+"')",
+      fields:
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">'+
+          (c.candidate_code?'<span class="pill mute" style="font-family:var(--mono);font-size:11px">'+esc(c.candidate_code)+'</span>':'')+
+          (c.applicant_status?UI.pill(c.applicant_status,'info',true):'')+
+        '</div>'+ fields,
+      tabs: tabBar,
+      body: body
+    });
+  };
+
+  // Switching tabs shows and hides panels that are already in the DOM. It
+  // deliberately does NOT call render(): a full rebuild would discard whatever
+  // is half-typed in the note box, and re-fetch the résumé iframe.
+  window.cpTab = function(id){
+    if (STATE.bd && STATE.bd.profile) STATE.bd.profile.tab = id;
+    var root = document.querySelector('.dwr-right');
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('[data-cppanel]'), function(el){
+      el.hidden = el.getAttribute('data-cppanel') !== id;
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-cptab]'), function(el){
+      el.classList.toggle('on', el.getAttribute('data-cptab') === id);
+    });
   };
 
   // ── email the candidate, from their own profile ─────────────────────────────

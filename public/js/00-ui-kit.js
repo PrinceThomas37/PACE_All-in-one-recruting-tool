@@ -54,6 +54,8 @@ window.UI = (function () {
     plus:      S+'<path d="M12 5v14M5 12h14"/></svg>',
     x:         S+'<path d="M18 6 6 18M6 6l12 12"/></svg>',
     left:      S+'<path d="m15 18-6-6 6-6"/></svg>',
+    up:        S+'<path d="m18 15-6-6-6 6"/></svg>',
+    down:      S+'<path d="m6 9 6 6 6-6"/></svg>',
     right:     S+'<path d="m9 18 6-6-6-6"/></svg>',
     eye:       S+'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
     reply:     S+'<path d="M9 17l-5-5 5-5"/><path d="M4 12h11a5 5 0 0 1 5 5v2"/></svg>',
@@ -270,8 +272,33 @@ window.UI = (function () {
       '<div class="pg-body">'+(o.body||'')+'</div></div>';
   }
 
+  // ── Overlays ─────────────────────────────────────────────────────────────
+  // A drawer has to render ON TOP of whatever page is underneath, which means
+  // it cannot live inside #content — that is the page. Modules register a
+  // renderer here and the shell calls renderOverlays() once, after the page.
+  //
+  // Registration is by NAME and idempotent, because module files are evaluated
+  // once but wrap render() repeatedly; pushing blindly would stack duplicate
+  // drawers on top of each other.
+  var _overlays = {};
+  var _overlayOrder = [];
+  function registerOverlay(name, fn){
+    if (!_overlays[name]) _overlayOrder.push(name);
+    _overlays[name] = fn;
+  }
+  function renderOverlays(){
+    return _overlayOrder.map(function(n){
+      try { return _overlays[n]() || ''; } catch (e) { return ''; }
+    }).join('');
+  }
+  // Is any overlay currently showing? The shell asks before letting a
+  // background refresh rebuild the DOM — a rebuild under an open drawer wipes
+  // whatever the user was half-way through typing into it.
+  function anyOverlayOpen(){ return renderOverlays() !== ''; }
+
   return {
     esc:esc, attr:attr, ic:ic, ICONS:ICONS,
+    registerOverlay:registerOverlay, renderOverlays:renderOverlays, anyOverlayOpen:anyOverlayOpen,
     tabs:tabs, strip:strip, toolbar:toolbar, table:table, page:page,
     idCell:idCell, pill:pill, ring:ring, toggle:toggle, kebab:kebab,
     check:check, dash:dash, notice:notice, kv:kv, drawer:drawer, feed:feed,

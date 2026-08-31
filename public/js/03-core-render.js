@@ -100,7 +100,11 @@ function scheduleRender(){
     // wipes any unsaved input — even if the user has just switched windows and
     // the input has temporarily lost focus.
     var modalOpen=!!(STATE.modal||(document.getElementById('modal-overlay')&&document.getElementById('modal-overlay').style.display!=='none'));
-    if(modalOpen||STATE.detailLead)return;
+    // An open drawer counts too: it is a form on top of the page, and a
+    // background rebuild would throw away a half-written note the same way it
+    // would throw away a half-filled modal.
+    var overlayOpen=!!(window.UI&&UI.anyOverlayOpen&&UI.anyOverlayOpen());
+    if(modalOpen||overlayOpen||STATE.detailLead)return;
     render();
   },16);
 }

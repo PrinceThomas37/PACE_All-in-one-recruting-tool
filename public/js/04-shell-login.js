@@ -188,7 +188,7 @@ function renderApp(){
     '</div>'+
     '<div id="content">'+renderPage()+'</div>'+
   '</div>'+
-  renderToasts()+renderModal();
+  renderToasts()+renderModal()+UI.renderOverlays();
 }
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}
