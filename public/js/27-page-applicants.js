@@ -20,7 +20,8 @@
       loading:false, rows:[], total:0, page:1, limit:25,
       q:'', filters:{ applicant_status:'', source:'', state:'', work_authorization:'',
         availability:'', experience_min:'', experience_max:'', created_from:'', created_to:'', has_resume:'' },
-      advOpen:false, form:{}, editId:null, dupMatches:[], sel:{}, view:'grid'
+      advOpen:false, form:{}, editId:null, dupMatches:[], sel:{}, view:'grid',
+      counts:{}, countsTotal:null, countsLoaded:false
     };
   }
   if (!STATE.ats.sel) STATE.ats.sel = {};
@@ -59,6 +60,32 @@
   function creatorName(c){ return (c.creator && c.creator.name) || '—'; }
 
   // ── data ─────────────────────────────────────────────────────────────────────
+  // How many candidates exist in total, ignoring the filters — the denominator
+  // the stat strip and the tab count are measured against. `a.total` is the
+  // FILTERED count and belongs to the pager, not to either of those.
+  function poolTotal(a){ return a.countsTotal!=null ? a.countsTotal : (a.total||0); }
+
+  // The stat strip's per-status numbers. Deliberately NOT refetched on every
+  // filter change: they describe the whole pool, so a filter must not move
+  // them — otherwise clicking "Interviewing" would rewrite the very number the
+  // click was aimed at.
+  function loadStatusCounts(){
+    var statuses = lk('applicant_status', APPLICANT_STATUSES);
+    return apiGet('/candidates/status-counts?statuses='+encodeURIComponent(statuses.join(',')))
+      .then(function(r){
+        STATE.ats.counts = (r&&r.counts)||{};
+        STATE.ats.countsTotal = (r&&r.total)||0;
+        STATE.ats.countsLoaded = true;
+        paintATSPage();
+      })
+      .catch(function(){
+        // A strip that cannot count is a strip that shows "·", not zeroes —
+        // a fabricated 0 reads as "nobody is interviewing", which is a lie.
+        STATE.ats.countsLoaded = false; paintATSPage();
+      });
+  }
+  window.atsReload = function(){ STATE.ats.countsLoaded=false; loadApplicants(); loadStatusCounts(); };
+
   function loadApplicants(){
     STATE.ats.loading = true; paintATSPage();
     var a = STATE.ats, p = ['page='+a.page, 'limit='+a.limit];
@@ -85,6 +112,7 @@
       render();
       if (window.atsLoadLookups) atsLoadLookups();
       loadApplicants();
+      loadStatusCounts();
       return;
     }
     return _prevGoPage.apply(this, arguments);
@@ -103,123 +131,174 @@
     if (v === 'sourcing' && window.srcLoadForCandidatesTab) srcLoadForCandidatesTab();
     render();
   };
+  // The same tab bar the grid draws, exported for the Sourcing view so the two
+  // halves of the Candidates page cannot drift apart visually.
   window.atsTabBar = function(){
-    var v = STATE.ats.view || 'grid';
-    function tab(key, label){
-      var active = v === key;
-      return '<button onclick="atsSetView(\''+key+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent)':'var(--card)')+';color:'+(active?'#fff':'var(--text2)')+'">'+label+'</button>';
-    }
-    return '<div style="display:flex;gap:8px;margin-bottom:14px">'+tab('grid','All Candidates')+tab('sourcing','Sourcing')+'</div>';
+    return UI.tabs([
+      { id:'grid',     label:'All Candidates', n:poolTotal(STATE.ats), onclick:"atsSetView('grid')" },
+      { id:'sourcing', label:'Sourcing',                               onclick:"atsSetView('sourcing')" }
+    ], STATE.ats.view || 'grid');
   };
 
-  // ── grid ──────────────────────────────────────────────────────────────────────
+  // ── grid ────────────────────────────────────────────────────────────────────
+  // Laid out on the shared UI kit (public/js/00-ui-kit.js): page tabs, a stat
+  // strip that doubles as the status filter, one toolbar row, then a dense
+  // table. The strip's numbers come from GET /candidates/status-counts, so
+  // clicking "Interviewing" filters to exactly the number it shows.
   function renderApplicants(){
-    var a = STATE.ats;
-    var fopt = function(key, all, list){
-      return '<select class="sel" style="max-width:170px" onchange="atsSetFilter(\''+key+'\',this.value)">'+
-        '<option value="">'+all+'</option>'+
-        list.map(function(s){ return '<option value="'+esc(s)+'"'+(a.filters[key]===s?' selected':'')+'>'+esc(s)+'</option>'; }).join('')+
-      '</select>';
-    };
-    var u = STATE.user, canManage = userHasAnyRole(u,'admin','bd_lead');
-    var owners = (STATE.users||[]).filter(function(x){ return userHasAnyRole(x,'admin','bd','bd_lead','recruiter'); });
+    var a = STATE.ats, u = STATE.user;
     var f = a.filters;
+    var canManage = userHasAnyRole(u,'admin','bd_lead');
+    var owners = (STATE.users||[]).filter(function(x){ return userHasAnyRole(x,'admin','bd','bd_lead','recruiter'); });
+    var statuses = lk('applicant_status', APPLICANT_STATUSES);
     var advActive = f.availability||f.experience_min||f.experience_max||f.created_from||f.created_to||f.has_resume||f.owner_id;
     var anyActive = a.q||f.applicant_status||f.source||f.work_authorization||f.state||advActive;
+
+    // ── tabs ──────────────────────────────────────────────────────────────
+    var tabs = UI.tabs([
+      { id:'grid',     label:'All Candidates', n:poolTotal(a), onclick:"atsSetView('grid')" },
+      { id:'sourcing', label:'Sourcing',                        onclick:"atsSetView('sourcing')" }
+    ], a.view||'grid',
+      (canManage?'<button class="btn btn-outline btn-sm" onclick="atsOpenLookupsManager()">Manage lists</button>':'')+
+      '<button class="btn btn-primary btn-sm" onclick="atsOpenNew()">'+UI.ic('plus')+'New Candidate</button>');
+
+    // ── stat strip: total + one cell per status, each a filter ────────────
+    var counts = a.counts || {};
+    var stripItems = [{
+      v:poolTotal(a), label:'Total', on:!f.applicant_status,
+      onclick:"atsSetFilter('applicant_status','')"
+    },{ sep:true }];
+    statuses.forEach(function(st){
+      stripItems.push({
+        v: (a.countsLoaded ? (counts[st]||0) : '·'),
+        label: st,
+        on: f.applicant_status===st,
+        onclick: "atsSetFilter('applicant_status','"+UI.attr(st)+"')"
+      });
+    });
+    var strip = UI.strip(stripItems);
+
+    // ── toolbar ───────────────────────────────────────────────────────────
+    var fopt = function(key, all, list){
+      return '<select class="sel" style="width:auto;height:34px;padding:0 26px 0 10px;font-size:13px" onchange="atsSetFilter(\''+key+'\',this.value)">'+
+        '<option value="">'+all+'</option>'+
+        list.map(function(x){ return '<option value="'+esc(x)+'"'+(f[key]===x?' selected':'')+'>'+esc(x)+'</option>'; }).join('')+
+      '</select>';
+    };
+    var toolbar = UI.toolbar({
+      search:{ value:a.q, placeholder:'Search name, email, phone, CN- code…',
+               oninput:'atsSetSearch(this.value)',
+               onkeydown:"if(event.key===&#39;Enter&#39;)atsApplySearch()" },
+      icons:[
+        { icon:'search',  title:'Search',            onclick:'atsApplySearch()' },
+        { icon:'filter',  title:'Advanced filters',  onclick:'atsToggleAdvanced()', on:!!(a.advOpen||advActive) },
+        { sep:true },
+        { icon:'refresh', title:'Reload',            onclick:'atsReload()' },
+        { icon:'x',       title:'Clear all filters', onclick:'atsClearFilters()', off:!anyActive }
+      ],
+      right: fopt('source','All sources',lk('source',SOURCES))+
+             fopt('work_authorization','All work auth',lk('work_authorization',WORK_AUTH))+
+             fopt('state','All states',US_STATES)
+    });
+
+    // ── advanced panel (unchanged fields, restyled) ───────────────────────
     var advPanel = a.advOpen ? (
-      '<div class="card" style="padding:12px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">'+
-        '<div><label style="font-size:11px;color:var(--text2)">Availability</label>'+
+      '<div class="card" style="padding:12px 14px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">'+
+        '<div><label class="flbl">Availability</label>'+
           '<select class="sel" onchange="atsSetFilter(\'availability\',this.value)"><option value="">Any</option>'+
-          lk('availability',AVAILABILITY).map(function(s){ return '<option value="'+esc(s)+'"'+(f.availability===s?' selected':'')+'>'+esc(s)+'</option>'; }).join('')+'</select></div>'+
-        '<div><label style="font-size:11px;color:var(--text2)">Ownership</label>'+
+          lk('availability',AVAILABILITY).map(function(x){ return '<option value="'+esc(x)+'"'+(f.availability===x?' selected':'')+'>'+esc(x)+'</option>'; }).join('')+'</select></div>'+
+        '<div><label class="flbl">Ownership</label>'+
           '<select class="sel" onchange="atsSetFilter(\'owner_id\',this.value)"><option value="">Anyone</option>'+
           owners.map(function(o){ return '<option value="'+o.id+'"'+(f.owner_id===o.id?' selected':'')+'>'+esc(o.name)+'</option>'; }).join('')+'</select></div>'+
-        '<div><label style="font-size:11px;color:var(--text2)">Experience (yrs)</label>'+
+        '<div><label class="flbl">Experience (yrs)</label>'+
           '<div style="display:flex;gap:6px"><input class="sel" type="number" placeholder="min" value="'+esc(f.experience_min)+'" onchange="atsSetFilter(\'experience_min\',this.value)">'+
           '<input class="sel" type="number" placeholder="max" value="'+esc(f.experience_max)+'" onchange="atsSetFilter(\'experience_max\',this.value)"></div></div>'+
-        '<div><label style="font-size:11px;color:var(--text2)">Created from</label><input class="sel" type="date" value="'+esc(f.created_from)+'" onchange="atsSetFilter(\'created_from\',this.value)"></div>'+
-        '<div><label style="font-size:11px;color:var(--text2)">Created to</label><input class="sel" type="date" value="'+esc(f.created_to)+'" onchange="atsSetFilter(\'created_to\',this.value)"></div>'+
-        '<div style="display:flex;align-items:end"><label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox"'+(f.has_resume==='1'?' checked':'')+' onchange="atsSetFilter(\'has_resume\',this.checked?\'1\':\'\')"> Has résumé</label></div>'+
+        '<div><label class="flbl">Created from</label><input class="sel" type="date" value="'+esc(f.created_from)+'" onchange="atsSetFilter(\'created_from\',this.value)"></div>'+
+        '<div><label class="flbl">Created to</label><input class="sel" type="date" value="'+esc(f.created_to)+'" onchange="atsSetFilter(\'created_to\',this.value)"></div>'+
+        '<div style="display:flex;align-items:end"><label style="font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="ck"'+(f.has_resume==='1'?' checked':'')+' onchange="atsSetFilter(\'has_resume\',this.checked?\'1\':\'\')"> Has résumé</label></div>'+
       '</div>') : '';
-    var toolbar =
-      atsTabBar()+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">'+
-        '<div><div style="font-size:18px;font-weight:700">Candidates</div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">'+(a.total||0)+' candidate'+(a.total===1?'':'s')+' in the database</div></div>'+
-        '<div style="display:flex;gap:8px">'+
-          (canManage?'<button class="btn btn-outline" onclick="atsOpenLookupsManager()">Manage lists</button>':'')+
-          '<button class="btn btn-primary" onclick="atsOpenNew()">+ New Candidate</button>'+
-        '</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
-        '<input class="sel" style="max-width:280px" placeholder="Search name, email, phone, CN- code…" value="'+esc(a.q)+'" '+
-          'oninput="atsSetSearch(this.value)" onkeydown="if(event.key===\'Enter\')atsApplySearch()">'+
-        '<button class="btn btn-sm btn-outline" onclick="atsApplySearch()">Search</button>'+
-        fopt('applicant_status','All statuses',lk('applicant_status',APPLICANT_STATUSES))+
-        fopt('source','All sources',lk('source',SOURCES))+
-        fopt('work_authorization','All work auth',lk('work_authorization',WORK_AUTH))+
-        fopt('state','All states',US_STATES)+
-        '<button class="btn btn-sm '+(a.advOpen?'btn-primary':'btn-outline')+'" onclick="atsToggleAdvanced()">Advanced '+(a.advOpen?'▴':'▾')+(advActive?' •':'')+'</button>'+
-        (anyActive?'<button class="btn btn-sm btn-outline" onclick="atsClearFilters()">Clear</button>':'')+
-      '</div>'+advPanel;
 
-    if (a.loading) return '<div class="page">'+toolbar+'<div style="text-align:center;padding:50px;color:var(--text3)">Loading candidates…</div></div>';
+    if (a.loading) return UI.page({ tabs:tabs, strip:strip, toolbar:toolbar,
+      body:'<div class="dt-empty">Loading candidates…</div>' });
 
+    // ── selection ─────────────────────────────────────────────────────────
     var selIds = Object.keys(a.sel).filter(function(k){ return a.sel[k]; });
     var allOn = a.rows.length && a.rows.every(function(c){ return a.sel[c.id]; });
     var bulkBar = selIds.length ?
-      '<div class="card" style="padding:9px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px">'+
-        '<span style="font-size:12.5px;color:var(--text2)"><b>'+selIds.length+'</b> selected</span>'+
-        '<button class="btn btn-sm btn-primary" onclick="atsSequenceSelected()">▶ Add to email sequence</button>'+
+      '<div class="card" style="padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">'+
+        '<span style="font-size:12.5px;color:var(--ink2)"><b>'+selIds.length+'</b> selected</span>'+
+        '<button class="btn btn-sm btn-primary" onclick="atsSequenceSelected()">'+UI.ic('send')+'Add to email sequence</button>'+
         '<button class="btn btn-sm btn-outline" onclick="atsClearSel()">Clear</button>'+
       '</div>' : '';
 
-    var head = ['<input type="checkbox" '+(allOn?'checked':'')+' onclick="atsToggleSelAll()">','Candidate ID','Name','Email','Mobile','City','State','Source','Status','Job Title','Ownership','Work Auth','Created By','Created','']
-      .map(function(h){ return '<th style="text-align:left;padding:9px 10px;font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">'+h+'</th>'; }).join('');
+    // ── table ─────────────────────────────────────────────────────────────
+    // The identity column carries name + email together, the way every list in
+    // the benchmark tools does: one glance tells you who, not just what.
+    var cols = [
+      { raw: UI.check(allOn, 'atsToggleSelAll()'), w:'34px' },
+      { label:'Candidate',  icon:'user' },
+      { label:'Status' },
+      { label:'Title' },
+      { label:'Location' },
+      { label:'Phone' },
+      { label:'Source' },
+      { label:'Work auth' },
+      { label:'Owner' },
+      { label:'Added' },
+      { label:'', w:'120px' }
+    ];
+    var rows = a.rows.map(function(c){
+      return [
+        { html: UI.check(!!a.sel[c.id], "atsToggleSel('"+c.id+"')") },
+        { html: UI.idCell(c.full_name||'—', c.email||'', "bdOpenCandidate('"+c.id+"')",
+                 { verified:!!c.email, badge: c.candidate_code?'<span class="pill mute" style="font-family:var(--mono);font-size:10.5px">'+esc(c.candidate_code)+'</span>':'' }) },
+        { html: statusPill(c.applicant_status), cls:'tight' },
+        { html: esc(jobTitle(c)) },
+        { html: esc(loc(c)), cls:'tight' },
+        { html: UI.dash(c.phone), cls:'tight' },
+        { html: UI.dash(c.source), cls:'tight' },
+        { html: UI.dash(c.work_authorization), cls:'tight' },
+        { html: UI.dash(ownerName(c)), cls:'tight' },
+        { html: '<span style="color:var(--ink3)">'+fmtDate(c.created_at)+'</span>', cls:'tight' },
+        { html: '<button class="btn btn-sm btn-outline" onclick="atsAddToJob(\''+c.id+'\')">Add to Job</button>', cls:'tight' }
+      ];
+    });
 
-    var body = a.rows.map(function(c){
-      return '<tr style="border-top:1px solid var(--border)">'+
-        '<td style="padding:9px 10px"><input type="checkbox" '+(a.sel[c.id]?'checked':'')+' onclick="atsToggleSel(\''+c.id+'\')"></td>'+
-        '<td style="padding:9px 10px;white-space:nowrap">'+code(c.candidate_code||'—')+'</td>'+
-        '<td style="padding:9px 10px;white-space:nowrap"><span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span></td>'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc(c.email||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(c.phone||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc(c.city||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(c.state||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(c.source||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12px;white-space:nowrap">'+statusBadge(c.applicant_status)+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc(jobTitle(c))+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(ownerName(c))+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(c.work_authorization||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;white-space:nowrap">'+esc(creatorName(c))+'</td>'+
-        '<td style="padding:9px 10px;font-size:12px;color:var(--text3);white-space:nowrap">'+fmtDate(c.created_at)+'</td>'+
-        '<td style="padding:9px 10px;white-space:nowrap">'+
-          '<button class="btn btn-sm btn-outline" onclick="atsAddToJob(\''+c.id+'\')">Add to Job</button>'+
-        '</td>'+
-      '</tr>';
-    }).join('');
+    var table = UI.table({
+      cols: cols, rows: rows, minWidth:'1180px',
+      empty: anyActive
+        ? 'No candidates match these filters. <span style="color:var(--accent);cursor:pointer" onclick="atsClearFilters()">Clear them &rarr;</span>'
+        : 'No candidates yet. <span style="color:var(--accent);cursor:pointer" onclick="atsOpenNew()">Add the first one &rarr;</span>'
+    });
 
-    if (!a.rows.length) body = '<tr><td colspan="15" style="padding:40px;text-align:center;color:var(--text3)">No candidates match. '+
-      '<span style="color:var(--accent);cursor:pointer" onclick="atsOpenNew()">Add the first one →</span></td></tr>';
-
+    // ── pager ─────────────────────────────────────────────────────────────
     var totalPages = Math.max(1, Math.ceil((a.total||0)/a.limit));
     var fromN = a.total ? (a.page-1)*a.limit+1 : 0, toN = Math.min(a.page*a.limit, a.total);
     var pager =
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12.5px;color:var(--text3)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12.5px;color:var(--ink3)">'+
         '<div>'+fromN+'–'+toN+' of '+(a.total||0)+'</div>'+
         '<div style="display:flex;gap:6px;align-items:center">'+
-          '<button class="btn btn-sm btn-outline" '+(a.page<=1?'disabled style="opacity:.5"':'')+' onclick="atsGoPage('+(a.page-1)+')">‹ Prev</button>'+
+          '<button class="btn btn-sm btn-outline" '+(a.page<=1?'disabled style="opacity:.5"':'')+' onclick="atsGoPage('+(a.page-1)+')">&lsaquo; Prev</button>'+
           '<span>Page '+a.page+' / '+totalPages+'</span>'+
-          '<button class="btn btn-sm btn-outline" '+(a.page>=totalPages?'disabled style="opacity:.5"':'')+' onclick="atsGoPage('+(a.page+1)+')">Next ›</button>'+
+          '<button class="btn btn-sm btn-outline" '+(a.page>=totalPages?'disabled style="opacity:.5"':'')+' onclick="atsGoPage('+(a.page+1)+')">Next &rsaquo;</button>'+
         '</div>'+
       '</div>';
 
-    return '<div class="page">'+toolbar+bulkBar+
-      '<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1100px">'+
-        '<thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>'+
-      pager+
-    '</div>';
+    return UI.page({ tabs:tabs, strip:strip, toolbar:toolbar,
+      body: advPanel + bulkBar + table + pager });
   }
+
+  // Status as a coloured pill in the kit's vocabulary, replacing the old inline
+  // span. Tones are semantic, not decorative: anything that stops work being
+  // done to a person (Do Not Call / Blacklisted) reads red or amber.
+  function statusPill(s){
+    var tone = {
+      'New lead':'mute','Active':'ok','Submitted':'info','Interviewing':'cool',
+      'Placed':'ok','Do Not Call':'warn','Blacklisted':'bad','Inactive':'mute'
+    }[s] || 'mute';
+    return UI.pill(s||'—', tone, true);
+  }
+
 
   // ── multi-select → email sequence ───────────────────────────────────────────
   window.atsToggleSel = function(id){ STATE.ats.sel[id]=!STATE.ats.sel[id]; render(); };
@@ -237,12 +316,6 @@
     if(typeof wfStartSequence!=='function'){ showToast('Sequencing module not loaded','error'); return; }
     wfStartSequence('candidate', items, { anyStage:true });
   };
-
-  function statusBadge(s){
-    var col = { 'New lead':'var(--text3)','Active':'var(--green)','Submitted':'var(--accent)','Interviewing':'#2563eb',
-      'Placed':'var(--green)','Do Not Call':'var(--amber)','Blacklisted':'var(--red)','Inactive':'#9ca3af' }[s] || 'var(--text3)';
-    return '<span style="font-weight:700;color:'+col+';background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">'+esc(s||'—')+'</span>';
-  }
 
   // ── search / filter / pagination handlers ────────────────────────────────────
   window.atsSetSearch = function(v){ STATE.ats.q = v; };

@@ -40,7 +40,8 @@ const ROUTES = [
   ['POST', '/job-orders/x/recruiters'], ['DELETE', '/job-orders/x/recruiters/y'],
   ['POST', '/job-orders/x/request-assignment'], ['GET', '/assignment-requests'],
   ['POST', '/assignment-requests/x/decide'], ['GET', '/users/x/job-orders'],
-  ['GET', '/candidates'], ['GET', '/candidates/check-duplicate'], ['GET', '/candidates/x'],
+  ['GET', '/candidates'], ['GET', '/candidates/check-duplicate'],
+  ['GET', '/candidates/status-counts'], ['GET', '/candidates/x'],
   ['GET', '/candidates/x/history'], ['POST', '/candidates'], ['PUT', '/candidates/x'],
   ['DELETE', '/candidates/x'],
   ['GET', '/candidates/x/notes'], ['POST', '/candidates/x/notes'],
@@ -74,6 +75,7 @@ const ROUTES = [
 const LITERAL_BEFORE_PARAM = [
   ['GET', '/job-orders/browse'],
   ['GET', '/candidates/check-duplicate'],
+  ['GET', '/candidates/status-counts'],
 ];
 
 const child = spawn('node', ['index.js'], {

@@ -121,8 +121,9 @@
         jobs.map(function(j){ return '<option value="'+j.id+'"'+(s.tagJob===j.id?' selected':'')+'>'+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||''))+'</option>'; }).join('')+'</select>' :
       '<button class="btn btn-sm btn-outline" onclick="srcLoadJobs()">Tag to a job…</button>';
 
-    return '<div class="page">'+
-      (window.atsTabBar?atsTabBar():'')+
+    return UI.page({
+      tabs: (window.atsTabBar?atsTabBar():''),
+      body:
       '<div style="font-size:18px;font-weight:700;margin-bottom:2px">Sourcing</div>'+
       '<div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Bring candidates from any job board into your database. CSV/Excel works today; API boards activate when credentials are added.</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:18px">'+providerCards+'</div>'+
@@ -135,8 +136,8 @@
         '</div>'+
       '</div>'+
       (s.loading?'<div style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>':
-        '<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1000px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>')+
-    '</div>';
+        '<div class="dt-wrap"><table class="dt" style="min-width:1000px"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>')
+    });
   };
 
   // ── file import ─────────────────────────────────────────────────────────────

@@ -1,0 +1,428 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PACE UI KIT — the app "structure" layer.
+
+   Loaded AFTER styles.css and deliberately overrides only the shell and the
+   list/table/detail vocabulary. Everything a page already draws with .card,
+   .btn, .bdg, .inp etc. keeps working untouched, so this can be adopted page
+   by page instead of in one risky sweep.
+
+   The layout language is modelled on the outreach tools the owner benchmarked
+   against (Saleshandy): a slim icon rail that expands on hover, a quiet top
+   bar carrying the page identity, per-page tabs with counts, a horizontal
+   stat strip, one toolbar row, and a dense bordered table. The palette stays
+   PACE's (green accent), because the shape is what makes a product feel
+   familiar — not the hue.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --rail-w:60px;          /* collapsed icon rail */
+  --rail-w-open:232px;    /* expanded, on hover */
+  --topbar-h:52px;
+  --ink:#0F172A;
+  --ink2:#475569;
+  --ink3:#8A98AB;
+  --line:#E6EAF0;
+  --line2:#D6DEE8;
+  --hover:#F4F6F9;
+  --sel:#EDF7F0;          /* accent-tinted selection ground */
+}
+
+/* ── 1. THE RAIL ─────────────────────────────────────────────────────────── */
+/* Collapsed by default so the working area is as wide as possible; the label
+   is always in the DOM (never re-rendered on hover) so expanding costs one
+   CSS transition and nothing else. Hover-to-expand overlays the content
+   rather than pushing it, which is why #main keeps a fixed left margin. */
+body.ui-kit #app{display:block;height:100vh;overflow:hidden}
+
+body.ui-kit #sidebar{
+  position:fixed;top:0;left:0;bottom:0;z-index:40;
+  width:var(--rail-w);min-width:0;
+  background:var(--card);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;overflow:hidden;
+  transition:width .16s cubic-bezier(.4,0,.2,1);
+  box-shadow:none;
+}
+body.ui-kit #sidebar:hover,
+body.ui-kit #sidebar.pinned{width:var(--rail-w-open);box-shadow:var(--sh2)}
+
+body.ui-kit #main{
+  margin-left:var(--rail-w);height:100vh;
+  display:flex;flex-direction:column;overflow:hidden;min-width:0;
+}
+
+/* Brand: the mark alone when collapsed, mark + wordmark when open. */
+body.ui-kit .sb-brand{
+  height:var(--topbar-h);min-height:var(--topbar-h);
+  display:flex;align-items:center;padding:0 0 0 15px;
+  border-bottom:1px solid var(--line);overflow:hidden;
+}
+body.ui-kit .rail-mark{
+  width:30px;height:30px;flex-shrink:0;border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),var(--accent-m));
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-family:var(--display);font-weight:700;font-size:13px;letter-spacing:-.4px;
+}
+body.ui-kit .rail-word{
+  font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:-.4px;
+  margin-left:10px;white-space:nowrap;
+  opacity:0;transform:translateX(-6px);transition:opacity .14s,transform .16s;
+}
+body.ui-kit #sidebar:hover .rail-word,
+body.ui-kit #sidebar.pinned .rail-word{opacity:1;transform:none}
+
+/* Nav */
+body.ui-kit .sb-nav{padding:8px;flex:1;overflow-y:auto;overflow-x:hidden}
+body.ui-kit .sb-nav::-webkit-scrollbar{width:0}
+body.ui-kit .sb-lbl{
+  font-size:9.5px;font-weight:700;color:var(--ink3);letter-spacing:.09em;
+  text-transform:uppercase;padding:12px 10px 4px;white-space:nowrap;
+  opacity:0;transition:opacity .14s;height:26px;
+}
+body.ui-kit #sidebar:hover .sb-lbl,
+body.ui-kit #sidebar.pinned .sb-lbl{opacity:1}
+
+body.ui-kit .nav-item{
+  display:flex;align-items:center;gap:0;
+  height:38px;padding:0 0 0 10px;margin-bottom:2px;
+  border-radius:9px;color:var(--ink2);font-size:13.5px;font-weight:500;
+  cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;
+  transition:background .12s,color .12s;position:relative;
+}
+body.ui-kit .nav-item:hover{background:var(--hover);color:var(--ink)}
+body.ui-kit .nav-item.active{background:var(--sel);color:var(--accent);font-weight:600}
+body.ui-kit .nav-icon{
+  width:24px;min-width:24px;height:18px;opacity:.6;
+  display:flex;align-items:center;justify-content:flex-start;
+}
+body.ui-kit .nav-item.active .nav-icon{opacity:1}
+body.ui-kit .nav-txt{
+  margin-left:8px;opacity:0;transform:translateX(-6px);
+  transition:opacity .14s,transform .16s;
+}
+body.ui-kit #sidebar:hover .nav-txt,
+body.ui-kit #sidebar.pinned .nav-txt{opacity:1;transform:none}
+
+/* Collapsed, a badge has nowhere to sit — it becomes a dot on the icon.
+   Expanded, it returns to a counted pill on the right. */
+body.ui-kit .nav-badge{
+  position:absolute;left:26px;top:9px;
+  min-width:7px;height:7px;padding:0;border-radius:99px;
+  background:var(--gold);color:transparent;font-size:0;overflow:hidden;
+  transition:none;
+}
+body.ui-kit #sidebar:hover .nav-badge,
+body.ui-kit #sidebar.pinned .nav-badge{
+  position:static;margin-left:auto;margin-right:10px;
+  min-width:auto;height:auto;padding:1px 7px;border-radius:10px;
+  background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+  font-family:var(--mono);
+}
+body.ui-kit .nav-item.active .nav-badge{background:var(--accent)}
+
+/* Footer group: settings-ish items + the person */
+body.ui-kit .sb-footer{margin-top:auto;padding:8px;border-top:1px solid var(--line);overflow:hidden}
+body.ui-kit .user-row{
+  display:flex;align-items:center;height:44px;padding:0 0 0 5px;
+  border-radius:9px;cursor:pointer;white-space:nowrap;overflow:hidden;
+}
+body.ui-kit .user-row:hover{background:var(--hover)}
+body.ui-kit .user-meta{
+  margin-left:9px;min-width:0;opacity:0;transform:translateX(-6px);
+  transition:opacity .14s,transform .16s;
+}
+body.ui-kit #sidebar:hover .user-meta,
+body.ui-kit #sidebar.pinned .user-meta{opacity:1;transform:none}
+body.ui-kit .u-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+body.ui-kit .u-role{font-size:11px;color:var(--ink3)}
+
+/* ── 2. TOP BAR ──────────────────────────────────────────────────────────── */
+body.ui-kit #topbar{
+  height:var(--topbar-h);min-height:var(--topbar-h);
+  background:var(--card);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;padding:0 18px;gap:10px;
+}
+body.ui-kit .tb-title{
+  font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:-.2px;
+  display:flex;align-items:center;gap:8px;
+}
+.tb-count{
+  background:var(--hover);color:var(--ink2);border:1px solid var(--line);
+  font-size:11px;font-weight:700;font-family:var(--mono);
+  padding:1px 7px;border-radius:6px;
+}
+.tb-crumb{color:var(--ink3);font-weight:500}
+.tb-icons{display:flex;align-items:center;gap:2px}
+.tb-ico{
+  width:32px;height:32px;border-radius:8px;color:var(--ink3);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  position:relative;transition:background .12s,color .12s;
+}
+.tb-ico:hover{background:var(--hover);color:var(--ink)}
+.tb-ico .dot{
+  position:absolute;top:6px;right:7px;width:6px;height:6px;
+  border-radius:99px;background:var(--red);
+}
+.tb-user{
+  display:flex;align-items:center;gap:5px;padding:3px 6px 3px 3px;
+  border-radius:99px;cursor:pointer;transition:background .12s;
+}
+.tb-user:hover{background:var(--hover)}
+
+/* ── 3. PAGE FRAME ───────────────────────────────────────────────────────── */
+/* A page is: [tabs] [strip] [toolbar] [content]. Each is optional. */
+body.ui-kit #content{flex:1;overflow-y:auto;overflow-x:hidden;background:var(--bg)}
+.pg{padding:0;height:100%;display:flex;flex-direction:column;min-height:0}
+.pg-body{flex:1;min-height:0;overflow:auto;padding:16px 18px 28px}
+
+.pgtabs{
+  display:flex;align-items:center;gap:2px;
+  background:var(--card);border-bottom:1px solid var(--line);
+  padding:0 18px;min-height:44px;overflow-x:auto;
+}
+.pgtabs::-webkit-scrollbar{height:0}
+.pgtab{
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  padding:12px 12px 11px;font-size:13.5px;font-weight:500;color:var(--ink2);
+  border-bottom:2px solid transparent;cursor:pointer;transition:color .12s;
+}
+.pgtab:hover{color:var(--ink)}
+.pgtab.on{color:var(--accent);font-weight:600;border-bottom-color:var(--accent)}
+.pgtab-n{
+  font-size:11px;font-weight:700;font-family:var(--mono);
+  color:var(--ink3);background:var(--hover);border-radius:5px;padding:0 5px;
+}
+.pgtab.on .pgtab-n{color:var(--accent);background:var(--sel)}
+.pgtabs-right{margin-left:auto;display:flex;align-items:center;gap:10px;padding-left:16px}
+
+/* Stat strip — one row of "big number / small label", the first cell framed
+   when it is the active filter. Clicking a stat is a filter, so the whole
+   cell is the hit target. */
+.strip{
+  display:flex;align-items:stretch;gap:0;flex-wrap:wrap;
+  background:var(--card);border-bottom:1px solid var(--line);padding:10px 12px;
+}
+.strip-i{
+  padding:8px 20px 8px 12px;border-radius:10px;cursor:default;
+  border:1px solid transparent;min-width:96px;
+}
+.strip-i.click{cursor:pointer}
+.strip-i.click:hover{background:var(--hover)}
+.strip-i.on{background:var(--sel);border-color:rgba(30,122,60,.25)}
+.strip-v{font-size:21px;font-weight:700;letter-spacing:-.5px;line-height:1.15;font-family:var(--display)}
+.strip-l{
+  font-size:12px;color:var(--ink2);margin-top:2px;
+  display:flex;align-items:center;gap:5px;white-space:nowrap;
+}
+.strip-l svg{width:13px;height:13px;opacity:.65}
+.strip-sep{width:1px;background:var(--line);margin:8px 12px}
+
+/* Toolbar — search, icon actions, then the primary button hard right. */
+.tbar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:var(--card);border-bottom:1px solid var(--line);padding:10px 18px;
+}
+.tbar-search{position:relative;flex-shrink:0}
+.tbar-search svg{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  width:14px;height:14px;color:var(--ink3);pointer-events:none;
+}
+.tbar-search input{
+  width:230px;height:34px;padding:0 10px 0 30px;
+  background:var(--card);border:1px solid var(--line2);border-radius:8px;
+  font-size:13px;outline:none;transition:border-color .12s,box-shadow .12s;
+}
+.tbar-search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,122,60,.1)}
+.tbar-ico{
+  width:32px;height:32px;border-radius:8px;color:var(--ink3);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:background .12s,color .12s;
+}
+.tbar-ico:hover{background:var(--hover);color:var(--ink)}
+.tbar-ico.on{background:var(--sel);color:var(--accent)}
+.tbar-ico[disabled],.tbar-ico.off{opacity:.4;pointer-events:none}
+.tbar-sep{width:1px;height:20px;background:var(--line2);margin:0 4px}
+.tbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+
+/* ── 4. DATA TABLE ───────────────────────────────────────────────────────── */
+.dt-wrap{
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  overflow:auto;
+}
+table.dt{width:100%;border-collapse:collapse;font-size:13px}
+/* Sentence case, not the app's older SHOUTED headers: a column label is read
+   dozens of times a minute and lowercase is measurably faster to scan. */
+table.dt thead th{
+  position:sticky;top:0;z-index:1;
+  background:#F7F9FB;border-bottom:1px solid var(--line);
+  text-align:left;padding:9px 12px;white-space:nowrap;
+  font-size:12px;font-weight:600;color:var(--ink2);
+  text-transform:none;letter-spacing:0;
+}
+table.dt thead th .th-i{display:inline-flex;align-items:center;gap:5px}
+table.dt tbody td{
+  padding:11px 12px;border-bottom:1px solid var(--line);
+  color:var(--ink);vertical-align:middle;
+}
+table.dt tbody tr:last-child td{border-bottom:none}
+table.dt tbody tr:hover{background:#FAFBFC}
+table.dt .num{text-align:right;font-family:var(--mono)}
+table.dt .tight{white-space:nowrap}
+.dt-empty{padding:52px 20px;text-align:center;color:var(--ink3);font-size:13px}
+
+/* The primary cell: a bold clickable name over a quiet secondary line. */
+.cell-id{min-width:0}
+.cell-id b{
+  font-size:13.5px;font-weight:600;color:var(--ink);
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+}
+.cell-id b:hover{color:var(--accent)}
+.cell-id small{
+  display:flex;align-items:center;gap:4px;
+  font-size:12px;color:var(--ink3);margin-top:1px;
+}
+.verified{color:var(--green);display:inline-flex}
+
+/* ── 5. SMALL PARTS ──────────────────────────────────────────────────────── */
+.pill{
+  display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+  padding:3px 9px;border-radius:99px;font-size:12px;font-weight:500;
+  background:var(--hover);color:var(--ink2);
+}
+.pill i{width:6px;height:6px;border-radius:99px;background:currentColor;flex-shrink:0}
+.pill.ok{background:#E7F7EC;color:#166534}
+.pill.warn{background:#FEF3C7;color:#92400E}
+.pill.bad{background:#FEE2E2;color:#B91C1C}
+.pill.info{background:#E0F2FE;color:#075985}
+.pill.cool{background:#EDE9FE;color:#5B21B6}
+.pill.mute{background:#F1F5F9;color:#64748B}
+.pill.out{background:transparent;border:1px solid currentColor}
+
+.ring{
+  width:34px;height:34px;border-radius:99px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;font-family:var(--mono);
+  border:1.5px solid currentColor;
+}
+.ring.ok{color:#16A34A}
+.ring.warn{color:#D97706}
+.ring.bad{color:#DC2626}
+.ring.mute{color:var(--ink3)}
+
+/* Switch — the row-level on/off from the benchmark's account table. */
+.sw{
+  width:32px;height:18px;border-radius:99px;background:var(--line2);
+  position:relative;cursor:pointer;flex-shrink:0;
+  transition:background .14s;display:inline-block;vertical-align:middle;
+}
+.sw::after{
+  content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;
+  border-radius:99px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);
+  transition:transform .14s;
+}
+.sw.on{background:var(--accent)}
+.sw.on::after{transform:translateX(14px)}
+
+.kebab{
+  width:26px;height:26px;border-radius:7px;color:var(--ink3);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.kebab:hover{background:var(--hover);color:var(--ink)}
+
+.ck{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;vertical-align:middle}
+
+/* Notice band — the "get set up" banner at the top of a page. */
+.notice{
+  display:flex;align-items:center;gap:14px;
+  background:#EFF6FF;border:1px solid #DBEAFE;border-radius:12px;
+  padding:14px 16px;margin-bottom:14px;
+}
+.notice-ic{
+  width:38px;height:38px;border-radius:99px;background:#DBEAFE;color:#1D4ED8;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.notice h4{font-size:14px;font-weight:600;margin-bottom:2px}
+.notice p{font-size:12.5px;color:var(--ink2);margin:0}
+.notice .btn{margin-left:auto;flex-shrink:0}
+
+/* ── 6. DETAIL DRAWER ────────────────────────────────────────────────────── */
+/* A record opens over the list instead of navigating away, so the list keeps
+   its scroll position, its filters and its selection. Two panes: the record
+   on the left, its activity on the right. */
+.dwr-scrim{
+  position:fixed;inset:0;z-index:60;background:rgba(15,23,42,.45);
+  display:flex;align-items:stretch;justify-content:flex-end;
+  animation:dwrFade .14s ease-out;
+}
+@keyframes dwrFade{from{opacity:0}to{opacity:1}}
+.dwr{
+  width:calc(100% - 200px);max-width:1500px;height:100%;
+  display:flex;gap:14px;padding:14px 14px 14px 0;
+  animation:dwrIn .18s cubic-bezier(.4,0,.2,1);
+}
+@keyframes dwrIn{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+.dwr-nav{
+  display:flex;flex-direction:column;gap:6px;padding:0 12px;justify-content:flex-start;
+}
+.dwr-nav div{
+  width:38px;height:38px;border-radius:8px;background:#1E293B;color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:.9;
+}
+.dwr-nav div:hover{opacity:1}
+.dwr-pane{
+  background:var(--card);border-radius:14px;box-shadow:var(--sh3);
+  display:flex;flex-direction:column;min-height:0;overflow:hidden;
+}
+.dwr-left{width:420px;flex-shrink:0}
+.dwr-right{flex:1;min-width:0}
+.dwr-head{padding:20px 20px 14px;border-bottom:1px solid var(--line)}
+.dwr-name{font-family:var(--display);font-size:20px;font-weight:700;letter-spacing:-.3px}
+.dwr-sub{font-size:12.5px;color:var(--ink2);margin-top:2px;line-height:1.45}
+.dwr-acts{display:flex;gap:8px;margin-top:14px}
+.dwr-act{
+  width:32px;height:32px;border-radius:99px;background:var(--hover);color:var(--ink2);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .12s;
+}
+.dwr-act:hover{background:var(--sel);color:var(--accent)}
+.dwr-stats{display:flex;border-bottom:1px solid var(--line)}
+.dwr-stat{flex:1;padding:12px 8px;text-align:center;border-right:1px solid var(--line)}
+.dwr-stat:last-child{border-right:none}
+.dwr-stat b{display:block;font-size:19px;font-weight:700;font-family:var(--display)}
+.dwr-stat span{
+  font-size:11.5px;color:var(--ink3);display:flex;align-items:center;
+  justify-content:center;gap:4px;margin-top:2px;
+}
+.dwr-fields{padding:16px 20px;overflow-y:auto;flex:1;min-height:0}
+.kv{margin-bottom:14px}
+.kv-k{font-size:11.5px;font-weight:600;color:var(--ink2);margin-bottom:3px}
+.kv-v{font-size:13.5px;color:var(--ink);word-break:break-word}
+.kv-v.empty{color:var(--ink3)}
+
+/* Activity feed */
+.feed{padding:16px 20px;overflow-y:auto;flex:1;min-height:0}
+.feed-day{font-size:12px;font-weight:600;color:var(--ink2);margin:4px 0 12px}
+.feed-row{display:flex;gap:11px;align-items:flex-start;padding:8px 0}
+.feed-ic{
+  width:26px;height:26px;border-radius:99px;background:var(--sel);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.feed-tx{flex:1;min-width:0;font-size:13px;color:var(--ink);line-height:1.5}
+.feed-tm{font-size:11.5px;color:var(--ink3);white-space:nowrap;flex-shrink:0}
+
+/* ── 7. RESPONSIVE ───────────────────────────────────────────────────────── */
+@media(max-width:900px){
+  body.ui-kit #sidebar:hover{width:var(--rail-w)}   /* no hover-expand on touch */
+  .dwr{width:100%;padding:0}
+  .dwr-nav{display:none}
+  .dwr-left{width:100%}
+  .dwr-right{display:none}
+  .tbar-search input{width:100%}
+  .tbar-search{flex:1}
+}
+
+/* SVGs in this kit are sized by their slot, never by a width attribute, so the
+   same icon markup can be reused at any scale. */
+body.ui-kit .nav-icon svg{width:18px;height:18px}
+.tb-ico svg,.tbar-ico svg,.dwr-act svg,.kebab svg,.feed-ic svg,.notice-ic svg{width:17px;height:17px}
+.notice-ic svg{width:19px;height:19px}
+.dwr-nav svg{width:16px;height:16px}
+.pgtab svg,.strip-l svg,.cell-id small svg,.pill svg{width:13px;height:13px}

@@ -109,7 +109,15 @@ try {
   const navItems = await page.evaluate(() =>
     Array.from(document.querySelectorAll('.sb-nav .nav-item')).map(e => e.textContent.trim()));
   step('Nav hides Leads', !navItems.includes('Leads'), navItems.join(' | '));
-  step('Nav keeps My Jobs after Dashboard', navItems[0] === 'Dashboard' && navItems[1] === 'My Jobs', navItems.join(' | '));
+  // The rail is grouped (Work / Records / Outreach / Insight), so "right after
+  // Dashboard" is no longer a flat index. What still has to hold is the intent:
+  // Dashboard leads, and inside Records a recruiter's OWN jobs come before the
+  // shared board and before the candidate pool.
+  step('Nav starts at Dashboard', navItems[0] === 'Dashboard', navItems.join(' | '));
+  step('Nav puts My Jobs ahead of All Jobs and Candidates',
+    navItems.indexOf('My Jobs') > -1 &&
+    navItems.indexOf('My Jobs') < navItems.indexOf('All Jobs') &&
+    navItems.indexOf('My Jobs') < navItems.indexOf('Candidates'), navItems.join(' | '));
   // Sourcing moved inside the Candidates tab (a sub-tab, not its own nav item).
   step('Nav keeps Candidates, no separate Sourcing item', navItems.includes('Candidates') && !navItems.includes('Sourcing'));
 
