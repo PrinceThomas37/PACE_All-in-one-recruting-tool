@@ -514,3 +514,59 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   .seq-gut{width:74px}
   .seq-gut::after{left:14px}
 }
+
+/* ── 9. COMPOSE: EDITOR + LIVE PREVIEW ───────────────────────────────────── */
+/* Writing an email and seeing what lands are the same task, so they sit side
+   by side. The preview is not decoration: {{sender}} and {{senderemail}} are
+   resolved from the mailbox that will actually send, which is the one thing
+   about this app that has previously gone wrong in a way a recipient saw. */
+.cmp{display:flex;gap:16px;align-items:flex-start}
+.cmp-edit{flex:1;min-width:0}
+.cmp-prev{
+  width:430px;flex-shrink:0;position:sticky;top:0;
+  background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;
+}
+.cmp-prev-h{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.cmp-prev-h svg{width:15px;height:15px;color:var(--accent)}
+.cmp-prev-h b{font-size:13px;font-weight:600}
+.cmp-fld{
+  display:flex;align-items:center;gap:0;border-bottom:1px solid var(--line);
+}
+.cmp-fld > label{
+  width:56px;flex-shrink:0;padding:0 12px;font-size:12.5px;color:var(--ink2);font-weight:500;
+}
+.cmp-fld select,.cmp-fld .cmp-static{
+  flex:1;min-width:0;height:38px;padding:0 10px;font-size:13px;
+  border:none;border-left:1px solid var(--line);background:var(--card);
+  outline:none;color:var(--ink);
+}
+.cmp-fld select{cursor:pointer;appearance:auto}
+.cmp-static{display:flex;align-items:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmp-mail{padding:16px 18px;max-height:56vh;overflow-y:auto}
+.cmp-meta{font-size:12.5px;color:var(--ink2);margin-bottom:3px}
+.cmp-meta b{color:var(--ink);font-weight:600}
+.cmp-subject{font-size:14px;font-weight:600;margin:10px 0 14px;line-height:1.4}
+.cmp-body{
+  font-size:13.5px;line-height:1.62;color:var(--ink);white-space:pre-wrap;word-wrap:break-word;
+}
+.cmp-sig{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.cmp-unset{
+  background:#FFFBEB;color:#92400E;border-radius:4px;padding:0 3px;
+  font-family:var(--mono);font-size:12px;
+}
+.cmp-foot{
+  padding:10px 14px;border-top:1px solid var(--line);background:#FAFBFC;
+  font-size:11.5px;color:var(--ink3);display:flex;align-items:center;gap:7px;
+}
+.cmp-foot svg{width:13px;height:13px;flex-shrink:0}
+.var-chip{
+  display:inline-flex;align-items:center;
+  font-family:var(--mono);font-size:11.5px;
+  background:var(--hover);border:1px solid var(--line);border-radius:6px;
+  padding:2px 7px;margin:0 5px 5px 0;cursor:pointer;color:var(--ink2);
+}
+.var-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--sel)}
+@media(max-width:1180px){
+  .cmp{flex-direction:column}
+  .cmp-prev{width:100%;position:static}
+}

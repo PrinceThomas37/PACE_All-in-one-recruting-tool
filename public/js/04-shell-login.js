@@ -110,7 +110,7 @@ function renderApp(){
   if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"building",grp:G_REC});
   if(bdm||recruiter)navItems.push({id:"applicants",lbl:"Candidates",ic:"user",grp:G_REC});
 
-  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Sequences",ic:"mail",grp:G_OUT});
+  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Email",ic:"mail",grp:G_OUT});
   if(userHasAnyRole(u,'admin','bd_lead','ra_lead'))navItems.push({id:"deliverability",lbl:"Deliverability",ic:"shield",grp:G_OUT});
 
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"chart",grp:G_INS});
@@ -138,7 +138,7 @@ function renderApp(){
     return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
   }).join('');
 
-  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Sequences",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
+  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing
