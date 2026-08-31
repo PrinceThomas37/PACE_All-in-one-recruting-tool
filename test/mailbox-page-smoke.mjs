@@ -167,8 +167,12 @@ try {
   step('Messages are listed', html.includes('interview Friday?') && html.includes('Updated CV'));
   step('The sender is shown', html.includes('Ada Okafor') && html.includes('Rahul Menon'));
   step('Previews are shown', html.includes('Friday 3pm works for us'));
-  step('An unread message is bold, a read one is not',
-    (html.match(/font-weight:700/g) || []).length >= 2 && html.includes('font-weight:500'));
+  // Weight is carried by a class now, not an inline style, so assert on the
+  // class the list actually uses. The behaviour pinned is the same: unread rows
+  // are marked and read ones are not.
+  step('An unread message is marked, a read one is not',
+    (html.match(/class="mb-row[^"]*\bunread\b/g) || []).length >= 2 &&
+    /class="mb-row(?![^"]*unread)[^"]*"/.test(html));
   step('An attachment is flagged in the list', html.includes('📎'));
   step('Both mailboxes are offered in the account picker',
     html.includes('priya@futeglobal.com') && html.includes('priya.recruiting@gmail.com'));
@@ -402,7 +406,11 @@ try {
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 1, { timeout: 5000 });
   html = await page.evaluate(() => document.getElementById('content').innerHTML);
   step('Search narrows the list', html.includes('Updated CV') && !html.includes('interview Friday?'));
-  step('A "Clear" affordance appears with an active search', html.includes('>Clear<'));
+  // The clear affordance is a toolbar icon rather than a text button now. It is
+  // always present and disabled when there is nothing to clear, so the thing to
+  // assert is that an active search ENABLES it.
+  step('A "Clear" affordance is offered with an active search',
+    /class="tbar-ico(?![^"]*\boff\b)[^"]*"[^>]*onclick="mbClearSearch\(\)"/.test(html));
 
   await page.evaluate(() => { window.mbClearSearch(); });
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 3, { timeout: 5000 });
