@@ -69,6 +69,12 @@ function buildCompanyContext(postings) {
 //
 // deps: { supabase, fetchImpl? }  — fetchImpl is injected by tests
 // Returns a summary suitable for engine_runs.counts.
+// `now` is injectable for the same reason conversation-intel.js takes a clock:
+// the hiring-reason inference is a claim about elapsed time ("open 105 days"),
+// so a test that pins fixture dates but not the clock silently changes meaning
+// as real time passes — a posting dated in the fixture drifts from "just posted"
+// to "long open" and the expected category changes with it. Production passes
+// nothing and gets the real clock.
 async function ingestSource(source, deps) {
   const { supabase } = deps;
   const summary = {
@@ -114,7 +120,7 @@ async function ingestSource(source, deps) {
   }
 
   const ctx = buildCompanyContext(postings);
-  const now = new Date();
+  const now = deps.now ? new Date(deps.now) : new Date();
 
   for (const posting of postings) {
     try {

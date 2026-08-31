@@ -249,7 +249,17 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   const source = { id: 'src1', org_id: 'org1', provider: 'greenhouse', board_token: 'acme',
     company_name: 'Acme Corp', company_domain: null, filters: null, every_hours: 24 };
 
-  const r1 = await ingest.ingestSource(source, { supabase: db.client, fetchImpl: fakeFetch });
+  // Pin the clock. The FEED dates above are fixed, and the hiring reason is a
+  // claim about elapsed time, so running against the real clock quietly changed
+  // what this fixture MEANS: postings written as "recent" aged past the 60-day
+  // hard-to-fill threshold, which outscores the team-build signal, and the
+  // team-build assertion below began failing on a date rather than on a code
+  // change. NOW sits shortly after the newest posting, which is the world the
+  // fixture was written to describe.
+  const NOW = new Date('2026-07-22T00:00:00Z');
+  const ingestOpts = { supabase: db.client, fetchImpl: fakeFetch, now: NOW };
+
+  const r1 = await ingest.ingestSource(source, ingestOpts);
   ok('the ingest finds every posting', r1.found === 3, JSON.stringify(r1));
   ok('new postings are staged', r1.staged === 3, JSON.stringify(r1));
 
@@ -264,7 +274,7 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   ok('the company verdict is recorded on each row', staged.every(s => s.company_kind));
 
   // Re-running must not duplicate the queue — the whole point of content_hash.
-  const r2 = await ingest.ingestSource(source, { supabase: db.client, fetchImpl: fakeFetch });
+  const r2 = await ingest.ingestSource(source, ingestOpts);
   ok('re-running stages nothing new', r2.staged === 0 && r2.updated === 3, JSON.stringify(r2));
   ok('the queue did not grow', db.rows.sourced_jobs_raw.length === 3);
   ok('seeing a posting again is counted', staged.every(s => s.seen_count === 2));
@@ -272,9 +282,24 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
 
   // A genuine relist: the feed's publish date moves forward.
   FEED.jobs[0].updated_at = '2026-07-25T00:00:00Z';
-  await ingest.ingestSource(source, { supabase: db.client, fetchImpl: fakeFetch });
+  await ingest.ingestSource(source, ingestOpts);
   const relisted = staged.find(s => s.city === 'Dallas');
   ok('a moved publish date counts as a repost', relisted.repost_count === 1, String(relisted.repost_count));
+
+  // The clock is really injected, not decoration. Run the SAME feed a year
+  // later: every posting is now long-open, which outscores the team-build
+  // signal, and the categories change. This is what was silently happening to
+  // the assertion above as real time passed.
+  const dbLater = fakeDb();
+  await ingest.ingestSource(source,
+    { supabase: dbLater.client, fetchImpl: fakeFetch, now: new Date('2027-07-22T00:00:00Z') });
+  const later = dbLater.rows.sourced_jobs_raw;
+  ok('the injected clock actually drives the hiring reason',
+    later.every(s2 => s2.hiring_reason.category === 'hard_to_fill'),
+    later.map(s2 => s2.hiring_reason.category).join(','));
+  ok('...and with no clock given, production still gets the real one',
+    typeof (await ingest.ingestSource(source,
+      { supabase: fakeDb().client, fetchImpl: fakeFetch })).staged === 'number');
 
   // Filters.
   const db2 = fakeDb();
