@@ -58,6 +58,7 @@ const { loadConfig } = require('./config/env');
 const settingsConfig = require('./config/settings');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
+const { orderPendingForSend } = require('./send-queue-order');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -383,26 +384,6 @@ async function loadMailboxSignatures(mailboxIds, userId) {
 async function getMailboxSignature(userEmailId, userId) {
   const map = await loadMailboxSignatures([userEmailId], userId);
   return resolveSignatureHtml(map[userEmailId]);
-}
-
-function interleaveByMailbox(emails) {
-  const buckets = new Map();
-  emails.forEach(e => {
-    const mb = e.job?.sending_email_id || '_none';
-    if (!buckets.has(mb)) buckets.set(mb, []);
-    buckets.get(mb).push(e);
-  });
-  const keys = [...buckets.keys()];
-  const out = [];
-  let progress = true;
-  while (progress) {
-    progress = false;
-    for (const k of keys) {
-      const q = buckets.get(k);
-      if (q && q.length) { out.push(q.shift()); progress = true; }
-    }
-  }
-  return out;
 }
 
 function domainSendsInLastHour(domainTimestamps, domain) {
@@ -1419,6 +1400,10 @@ async function fetchPendingEmailsForUser(userId) {
       .select(PENDING_EMAIL_JOB_SELECT)
       .eq('sent_by', userId)
       .eq('status', 'pending')
+      // Ordered for two reasons: .range() pagination without an ORDER BY can
+      // repeat or skip rows between pages, and the send loop wants the oldest
+      // email first within a priority band.
+      .order('created_at', { ascending: true })
       .range(from, from + 999);
     if (error) throw error;
     if (!data || !data.length) break;
@@ -1515,7 +1500,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     if (isInLeadSendWindow(leadTz, new Date(), sendWindow)) inWindow.push(email);
     else outWindow.push(email);
   }
-  const ordered = interleaveByMailbox(inWindow).concat(outWindow);
+  const ordered = orderPendingForSend(inWindow).concat(orderPendingForSend(outWindow));
 
   for (const email of ordered) {
     if (isSendingPaused() || isManagerPaused(userId)) {
