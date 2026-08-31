@@ -194,61 +194,146 @@ function renderWfStartModal(){
   '</div>';
   render();
 }
+// ── The sequence builder ────────────────────────────────────────────────────
+// Drawn as a TIMELINE, not a list of rows: Day 1, then Day 4, then Day 9, with
+// each step's card hanging off the day it fires. A sequence's whole meaning is
+// "what goes out, and when" — the old 480px stack of rows showed the what and
+// buried the when inside a number input, so nobody could see at a glance that
+// their follow-up landed the same afternoon as the first touch.
+//
+// The DAY SHOWN IS CUMULATIVE and computed here, while `delay_days` stays
+// relative to the previous step on the record. Storing the absolute day would
+// mean re-writing every later step whenever an earlier delay changed.
+function wfStepDays(steps){
+  var day = 1, out = [];
+  (steps||[]).forEach(function(s, i){
+    var d = parseInt(s.delay_days, 10) || 0;
+    day = (i === 0) ? 1 + d : day + d;
+    out.push(day);
+  });
+  return out;
+}
+
+// The channel icon, so a step is identifiable before it is read.
+var WF_CHANNEL_ICON = {
+  email:'mail', candidate_email:'mail', bd_touch:'phone', reminder:'bell',
+  stage_move:'right', submission_stage_move:'right', candidate_status_move:'right',
+  recruiter_task:'check'
+};
+
+// The plain-English sentence above each card: when this step actually goes out.
+// It is written from the data, never hard-coded, because a step that says it
+// sends on day 4 while the record says 0 is worse than no sentence at all.
+function wfWhenLine(step, i, day){
+  var ic = UI.ic('send');
+  if (i === 0){
+    return '<div class="seq-when">'+ic+'<span>Sending as a <b>new email</b> on <b>day '+day+'</b>, counted from the moment the sequence is activated.</span></div>';
+  }
+  var d = parseInt(step.delay_days,10) || 0;
+  var thread = step.config && step.config.thread;
+  return '<div class="seq-when">'+UI.ic('reply')+'<span>Sending '+
+    (thread ? '<b>in the same thread</b>' : 'as a <b>new email</b>')+
+    ' on <b>day '+day+'</b> — '+(d ? '<b>'+d+' day'+(d===1?'':'s')+'</b> after step '+i : 'the same day as step '+i)+'.</span></div>';
+}
+
 function refreshWfBuilder(){
   var b=STATE.wfBuilder; if(!b)return;
   if(!b.entity_type)b.entity_type='contact';
   var channels=wfChannelsForEntity(b.entity_type);
   var stages=(WF_ENTITY_TYPES[b.entity_type]&&WF_ENTITY_TYPES[b.entity_type].stages)||['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'];
+  var days=wfStepDays(b.steps);
+
   var stepRows=b.steps.map(function(s,i){
     var chanOpts=channels.map(function(c){return '<option value="'+c+'"'+(s.channel===c?' selected':'')+'>'+(WF_CHANNEL_LABELS[c]||c)+'</option>';}).join('');
+
+    // ── per-channel configuration ───────────────────────────────────────
     var cfg='';
     if(s.channel==='email'){
-      cfg='<select onchange="wfStepCfg('+i+',\'template_key\',this.value)" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+['initial','fu1','fu2'].map(function(k){return '<option value="'+k+'"'+((s.config&&s.config.template_key)===k?' selected':'')+'>'+k+'</option>';}).join('')+'</select>'+
-        '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:4px"><input type="checkbox" '+(s.config&&s.config.thread?'checked':'')+' onchange="wfStepCfg('+i+',\'thread\',this.checked)">thread</label>';
+      cfg='<div class="seq-line">'+
+        '<span style="font-size:12.5px;color:var(--ink2)">Template</span>'+
+        '<select class="seq-sel" onchange="wfStepCfg('+i+',\'template_key\',this.value)">'+
+          ['initial','fu1','fu2'].map(function(k){return '<option value="'+k+'"'+((s.config&&s.config.template_key)===k?' selected':'')+'>'+k+'</option>';}).join('')+
+        '</select>'+
+        '<label style="font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer">'+
+          '<input type="checkbox" class="ck" '+(s.config&&s.config.thread?'checked':'')+' onchange="wfStepCfg('+i+',\'thread\',this.checked);refreshWfBuilder()">'+
+          'Keep it in the same thread</label>'+
+      '</div>';
     } else if(s.channel==='candidate_email'){
-      cfg='<div style="display:flex;flex-direction:column;gap:5px;width:100%">'+
-        '<input placeholder="'+((STATE.wfBuilder&&STATE.wfBuilder.entity_type)==='candidate'?'Subject (blank = default; {{first_name}} only — no job attached)':'Subject (leave blank for default; vars: {{first_name}} {{position}} {{client}})')+'" value="'+htmlEsc(s.config&&s.config.subject||'')+'" oninput="wfStepCfg('+i+',\'subject\',this.value)" style="font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+
-        '<textarea placeholder="Email body (blank = default; vars ok, HTML)" oninput="wfStepCfg('+i+',\'body\',this.value)" style="font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);min-height:56px;font-family:inherit">'+htmlEsc(s.config&&s.config.body||'')+'</textarea></div>';
+      var subPh=(b.entity_type==='candidate')
+        ? 'Subject (blank = default; {{first_name}} only — no job attached)'
+        : 'Subject (blank = default; vars: {{first_name}} {{position}} {{client}})';
+      cfg='<input class="seq-in" style="flex:1 1 100%" placeholder="'+subPh+'" value="'+htmlEsc(s.config&&s.config.subject||'')+'" oninput="wfStepCfg('+i+',\'subject\',this.value)">'+
+        '<textarea class="seq-ta" placeholder="Email body (blank = default; variables and HTML are fine)" oninput="wfStepCfg('+i+',\'body\',this.value)">'+htmlEsc(s.config&&s.config.body||'')+'</textarea>';
     } else if(s.channel==='stage_move'||s.channel==='submission_stage_move'){
-      cfg='<select onchange="wfStepCfg('+i+',\'to_stage\',this.value)" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+stages.map(function(st){return '<option value="'+st+'"'+((s.config&&s.config.to_stage)===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select>';
+      cfg='<div class="seq-line"><span style="font-size:12.5px;color:var(--ink2)">Move to</span>'+
+        '<select class="seq-sel" onchange="wfStepCfg('+i+',\'to_stage\',this.value)">'+stages.map(function(st){return '<option value="'+st+'"'+((s.config&&s.config.to_stage)===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></div>';
     } else if(s.channel==='candidate_status_move'){
-      cfg='<select onchange="wfStepCfg('+i+',\'to_status\',this.value)" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+stages.map(function(st){return '<option value="'+st+'"'+((s.config&&s.config.to_status)===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select>';
+      cfg='<div class="seq-line"><span style="font-size:12.5px;color:var(--ink2)">Set status to</span>'+
+        '<select class="seq-sel" onchange="wfStepCfg('+i+',\'to_status\',this.value)">'+stages.map(function(st){return '<option value="'+st+'"'+((s.config&&s.config.to_status)===st?' selected':'')+'>'+st+'</option>';}).join('')+'</select></div>';
     } else if(s.channel==='recruiter_task'){
-      cfg='<input placeholder="Task note (e.g. Call the candidate, collect docs)" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)" style="font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);flex:1;min-width:160px">';
+      cfg='<input class="seq-in" style="flex:1 1 100%" placeholder="Task note (e.g. Call the candidate, collect docs)" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)">';
     } else {
-      cfg='<input placeholder="Task note" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)" style="font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);flex:1;min-width:120px">'+
-        '<input placeholder="Suggested message (vars ok)" value="'+htmlEsc(s.config&&s.config.message||'')+'" oninput="wfStepCfg('+i+',\'message\',this.value)" style="font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);flex:1;min-width:120px">';
+      cfg='<div class="seq-line">'+
+        '<input class="seq-in" placeholder="Task note" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)">'+
+        '<input class="seq-in" placeholder="Suggested message (variables ok)" value="'+htmlEsc(s.config&&s.config.message||'')+'" oninput="wfStepCfg('+i+',\'message\',this.value)">'+
+      '</div>';
     }
-    return '<div style="border:1px solid var(--border2);border-radius:8px;padding:9px 10px;margin-bottom:7px;background:var(--bg3)">'+
-      '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'+
-        '<span style="font-size:11px;font-weight:700;color:var(--text3);min-width:16px">'+(i+1)+'.</span>'+
-        '<input placeholder="Step name" value="'+htmlEsc(s.name||'')+'" oninput="wfStepField('+i+',\'name\',this.value)" style="flex:1;font-size:12.5px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+
-        '<button onclick="wfMoveStep('+i+',-1)" style="border:1px solid var(--border);background:transparent;border-radius:6px;cursor:pointer;color:var(--text2)">↑</button>'+
-        '<button onclick="wfMoveStep('+i+',1)" style="border:1px solid var(--border);background:transparent;border-radius:6px;cursor:pointer;color:var(--text2)">↓</button>'+
-        '<button onclick="wfRemoveStep('+i+')" style="border:1px solid #ef4444;color:#ef4444;background:transparent;border-radius:6px;cursor:pointer">×</button>'+
-      '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
-        '<select onchange="wfStepField('+i+',\'channel\',this.value)" style="font-size:12px;padding:5px;border:1px solid var(--border);border-radius:6px;background:var(--bg)">'+chanOpts+'</select>'+
-        '<label style="font-size:12px;color:var(--text2)">after <input type="number" min="0" max="90" value="'+(s.delay_days||0)+'" onchange="wfStepField('+i+',\'delay_days\',this.value)" style="width:48px;font-size:12px;padding:4px;border:1px solid var(--border);border-radius:6px;background:var(--bg)"> day(s)</label>'+
-        cfg+
+
+    var isMail = s.channel==='email' || s.channel==='candidate_email';
+    return '<div class="seq-row">'+
+      '<div class="seq-gut"><span class="seq-day">Day '+days[i]+'</span></div>'+
+      '<div class="seq-main">'+
+        (isMail ? wfWhenLine(s, i, days[i]) : '<div class="seq-when">'+UI.ic('bolt')+
+           '<span>Runs on <b>day '+days[i]+'</b>'+(i? ' — '+(parseInt(s.delay_days,10)||0)+' day(s) after step '+i : '')+'.</span></div>')+
+        '<div class="seq-card">'+
+          '<div class="seq-card-h">'+
+            '<span class="seq-badge">'+UI.ic(WF_CHANNEL_ICON[s.channel]||'bolt')+'Step '+(i+1)+'</span>'+
+            '<input class="seq-name" placeholder="Name this step (optional)" value="'+htmlEsc(s.name||'')+'" oninput="wfStepField('+i+',\'name\',this.value)">'+
+            '<div class="seq-tools">'+
+              '<span class="kebab" title="Move up" onclick="wfMoveStep('+i+',-1)">'+UI.ic('up')+'</span>'+
+              '<span class="kebab" title="Move down" onclick="wfMoveStep('+i+',1)">'+UI.ic('down')+'</span>'+
+              '<span class="kebab" title="Remove this step" onclick="wfRemoveStep('+i+')" style="color:var(--red)">'+UI.ic('trash')+'</span>'+
+            '</div>'+
+          '</div>'+
+          '<div class="seq-body">'+
+            '<div class="seq-line">'+
+              '<select class="seq-sel" onchange="wfStepField('+i+',\'channel\',this.value)">'+chanOpts+'</select>'+
+              (i===0
+                ? '<span style="font-size:12.5px;color:var(--ink3)">The first step starts the sequence.</span>'
+                : '<span class="seq-delay">wait <input type="number" min="0" max="90" value="'+(s.delay_days||0)+'" onchange="wfStepField('+i+',\'delay_days\',this.value);refreshWfBuilder()"> day(s) after the previous step</span>')+
+            '</div>'+
+            cfg+
+          '</div>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }).join('');
+
   var entityPicker=b.id
-    ? '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Applies to: <b style="color:var(--text2)">'+((WF_ENTITY_TYPES[b.entity_type]||{}).label||b.entity_type)+'</b></div>'
+    ? '<div style="font-size:12.5px;color:var(--ink2);margin-bottom:12px">Applies to: <b>'+((WF_ENTITY_TYPES[b.entity_type]||{}).label||b.entity_type)+'</b></div>'
     : '<select onchange="wfSetEntityType(this.value)" class="inp" style="margin-bottom:12px">'+Object.keys(WF_ENTITY_TYPES).map(function(et){return '<option value="'+et+'"'+(b.entity_type===et?' selected':'')+'>'+WF_ENTITY_TYPES[et].label+'</option>';}).join('')+'</select>';
-  STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
-    '<div class="mh"><div class="mt">'+(b.id?'Edit sequence':'New sequence')+'</div></div>'+
+
+  // One follow-up doubles reply rates in practice, so a one-step sequence gets
+  // a nudge rather than being silently accepted as finished.
+  var hint = b.steps.length < 2
+    ? '<div class="seq-hint">'+UI.ic('bolt')+'<span>It is usually the follow-up that gets the reply. Consider adding one more step.</span></div>'
+    : '';
+
+  STATE.modal='<div class="modal seq-modal" style="max-height:90vh;overflow-y:auto">'+
+    '<div class="mh"><div class="mt">'+(b.id?'Edit sequence':'New sequence')+'</div>'+
+      '<div style="font-size:12.5px;color:var(--ink3)">'+b.steps.length+' step'+(b.steps.length===1?'':'s')+
+        (b.steps.length?' · finishes on day '+days[days.length-1]:'')+'</div>'+
+    '</div>'+
     '<div class="mb_">'+
       '<input placeholder="Sequence name (e.g. Java Dev – Client X pipeline)" value="'+htmlEsc(b.name)+'" oninput="wfBuilderField(\'name\',this.value)" class="inp" style="margin-bottom:8px">'+
       '<input placeholder="Description" value="'+htmlEsc(b.description)+'" oninput="wfBuilderField(\'description\',this.value)" class="inp" style="margin-bottom:8px">'+
       entityPicker+
-      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Steps (delay counts from the previous step)</div>'+
-      stepRows+
-      '<button onclick="wfAddStep()" style="border:1px dashed var(--border2);background:transparent;color:var(--text2);border-radius:8px;padding:7px;width:100%;cursor:pointer;font-size:12px">+ Add step</button>'+
-      (b.id?'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Editing steps is blocked while this workflow has active enrollments.</div>':'')+
+      '<div class="seq">'+stepRows+'</div>'+
+      '<button class="seq-add" onclick="wfAddStep()">'+UI.ic('plus')+'Add step</button>'+
+      hint+
+      (b.id?'<div style="font-size:11.5px;color:var(--ink3);margin-top:10px">Editing steps is blocked while this sequence has active enrollments.</div>':'')+
     '</div>'+
-    '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button><button class="btn" onclick="wfSaveDefinition()">Save</button></div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button><button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button></div>'+
   '</div>';
   render();
 }

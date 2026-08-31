@@ -6,6 +6,114 @@ function loadMySendingStatus(){
   }).catch(function(){if(STATE.mySendingPaused===undefined)STATE.mySendingPaused=false;});
 }
 
+// ── COMPOSE PREVIEW ─────────────────────────────────────────────────────────
+// What the recipient will actually see, rebuilt from STATE on every keystroke.
+//
+// Two rules make this worth having rather than decorative:
+//
+//  1. {{sender}} / {{senderemail}} resolve from the SELECTED SENDING MAILBOX,
+//     never from the logged-in user. That is the rule the send path follows,
+//     and a preview that used the logged-in user instead would have shown
+//     "Prince Thomas" for the exact bug where 152 emails went out under the
+//     wrong name.
+//  2. A variable that CANNOT be filled is left visible and highlighted rather
+//     than silently blanked. "Hi ," in the preview looks like a typo; a marked
+//     {{fn}} tells you the recipient has no first name on record, which is the
+//     actual problem to fix before sending.
+
+// The recipient/lead a compose is aimed at, or nulls when none is picked yet.
+function composeTarget(){
+  var contact=null, job=null;
+  if(STATE.composeContactId){
+    var parts=String(STATE.composeContactId).split('|');
+    contact=(STATE.contacts||[]).find(function(c){return c.id===parts[0];})||null;
+    job=(STATE.jobs||[]).find(function(j){return j.id===parts[1];})||null;
+  }
+  return { contact:contact, job:job };
+}
+
+function composeVars(){
+  var t=composeTarget(), c=t.contact, j=t.job;
+  var u=STATE.user||{};
+  var emails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]);
+  var from=emails.find(function(e){return e.id===STATE.composeFromEmailId;})||null;
+  return {
+    '{{fn}}':          c?(c.first_name||''):'',
+    '{{first_name}}':  c?(c.first_name||''):'',
+    '{{ln}}':          c?(c.last_name||''):'',
+    '{{pos}}':         j?(j.position||j.job_title||''):'',
+    '{{company}}':     j?(j.company_name||''):'',
+    '{{loc}}':         j?[j.city,j.state].filter(Boolean).join(', '):'',
+    // The sender comes from the MAILBOX, not the session. See the note above.
+    '{{sender}}':      from?(from.display_name||from.email_address||''):'',
+    '{{senderemail}}': from?(from.email_address||''):''
+  };
+}
+
+// Fill variables into ALREADY-ESCAPED text. Unfillable ones survive as a
+// highlighted chip so they are impossible to miss.
+function composeFillEscaped(escaped){
+  var vars=composeVars();
+  return String(escaped||'').replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, function(match, name){
+    var key='{{'+name.toLowerCase()+'}}';
+    var val=vars[key];
+    if(val===undefined) return '<span class="cmp-unset" title="Not a variable this app fills">'+htmlEsc(match)+'</span>';
+    if(val==='')        return '<span class="cmp-unset" title="Nothing on record to fill this with">'+htmlEsc(match)+'</span>';
+    return htmlEsc(val);
+  });
+}
+
+// The body of the preview panel: subject, message, signature.
+function composePreviewInner(){
+  var u=STATE.user||{};
+  var emails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]);
+  var from=emails.find(function(e){return e.id===STATE.composeFromEmailId;})||null;
+
+  var subj=String(STATE.composeSubj||'');
+  var body=String(STATE.composeBody||'');
+  if(!subj && !body){
+    return '<div style="color:var(--ink3);font-size:13px;padding:26px 0;text-align:center">'+
+      'Start typing a subject or message and it appears here, filled in for this recipient.</div>';
+  }
+
+  // The signature the selected mailbox will append. Shown only once it has
+  // actually loaded — inventing one would be showing the recipient something
+  // that may not be what goes out.
+  var sigRaw = from && STATE.emailSignaturesCache ? STATE.emailSignaturesCache[from.id] : undefined;
+  var sigHtml='';
+  if(sigRaw){
+    var normalized = (typeof normalizeMailboxSignature==='function') ? normalizeMailboxSignature(sigRaw) : sigRaw;
+    sigHtml = (typeof fillSignatureHtml==='function')
+      ? fillSignatureHtml(normalized, (from.display_name||from.email_address||''), (from.email_address||''))
+      : normalized;
+  }
+
+  return (subj?'<div class="cmp-subject">'+composeFillEscaped(htmlEsc(subj))+'</div>':'')+
+    '<div class="cmp-body">'+composeFillEscaped(htmlEsc(body))+'</div>'+
+    (sigHtml?'<div class="cmp-sig">'+sigHtml+'</div>':'');
+}
+
+// Repaint only the preview. A full render() on every keystroke would rebuild
+// the textarea and fight the caret.
+function composeRepaintPreview(){
+  var el=document.getElementById('cmp-mail');
+  if(el)el.innerHTML=composePreviewInner();
+}
+
+// Insert a merge variable at the caret in the message box.
+window.composeInsertVar=function(v){
+  var ta=document.getElementById('email-body');
+  if(!ta){ STATE.composeBody=(STATE.composeBody||'')+v; render(); return; }
+  var s=ta.selectionStart==null?ta.value.length:ta.selectionStart;
+  var e=ta.selectionEnd==null?s:ta.selectionEnd;
+  ta.value=ta.value.slice(0,s)+v+ta.value.slice(e);
+  STATE.composeBody=ta.value;
+  ta.focus();
+  var pos=s+v.length;
+  try{ ta.setSelectionRange(pos,pos); }catch(err){}
+  composeRepaintPreview();
+};
+
 function renderEmail(){
   var u=STATE.user;
   // BD sees pending+queued+sent; others see sent only
@@ -81,18 +189,19 @@ function renderEmail(){
     '</div>';
   }
 
-  var tabBar=tabs.map(function(t){
-    var lbl;
-    if(t==='pending'){
-      var ps=STATE.pendingSummary;
-      if(ps&&ps.total_pending){
-        lbl='Pending ('+ps.total_pending+(ps.ready_now?': '+ps.ready_now+' now':'')+(ps.waiting_window?(', '+ps.waiting_window+' waiting'):'')+')';
-      }else{
-        lbl='Pending'+(pending.length?' ('+pending.length+')':'');
-      }
-    }else if(t==='outreachplan'){lbl='Outreach Plan';}else{lbl=t.charAt(0).toUpperCase()+t.slice(1);}
-    return '<div class="tab'+(STATE.emailTab===t?' active':'')+'" onclick="setEmailTab(\''+t+'\')">'+lbl+'</div>';
-  }).join('');
+  // Tabs on the shared kit. The Pending count is the number of emails actually
+  // waiting; the "N now / M waiting" split stays in the sub-line under the tab
+  // rather than being crammed into the label.
+  var TAB_LABELS={pending:'Pending',compose:'Compose',sent:'Sent',outreachplan:'Outreach Plan',sequence:'Sequence'};
+  var ps=STATE.pendingSummary;
+  var tabBar=UI.tabs(tabs.map(function(t){
+    var n=null;
+    if(t==='pending')n=(ps&&ps.total_pending)||pending.length||null;
+    return { id:t, label:TAB_LABELS[t]||t, n:n, onclick:"setEmailTab('"+t+"')" };
+  }), STATE.emailTab,
+    (ps&&ps.total_pending&&STATE.emailTab==='pending'
+      ? '<span style="font-size:12px;color:var(--ink3)">'+((ps.ready_now||0)+' ready now · '+(ps.waiting_window||0)+' waiting for the send window')+'</span>'
+      : ''));
 
   // ── PENDING TAB ──
   var pendingHtml='';
@@ -445,19 +554,46 @@ function renderEmail(){
     }).join('');
   }
 
+  // ── COMPOSE TAB ──────────────────────────────────────────────────────────
+  // Editor on the left, a live preview of the actual email on the right, with
+  // the "From" mailbox chosen inside the preview — because which mailbox sends
+  // is not a setting, it is part of what the recipient reads.
+  //
+  // The preview resolves {{sender}} / {{senderemail}} FROM THE SELECTED
+  // MAILBOX, which is the same rule the send path follows. This is the one
+  // thing in this app that has previously gone wrong where a recipient could
+  // see it (Session 14: 152 emails went out signed by the wrong person), and a
+  // preview that quietly showed the logged-in user's name instead would hide
+  // exactly that class of mistake rather than catch it.
   var composeHtml='';
   if(STATE.emailTab==='compose'){
     var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail);
 
-    // Recipient badge
-    var recipientBadge='';
+    var composeEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
+    var composeFromId=STATE.composeFromEmailId||(composeEmails.find(function(e){return e.is_primary;})||composeEmails[0]||{}).id;
+    if(composeFromId&&!STATE.composeFromEmailId)STATE.composeFromEmailId=composeFromId;
+
+    // Who is this going to? Either a contact on a lead, or a typed address.
+    var toName='', toEmail='', toCompany='', toJob=null, toContact=null;
     if(STATE.composeContactId){
       var parts=STATE.composeContactId.split('|');
-      var cc=STATE.contacts.find(function(c){return c.id===parts[0];});
-      var cj=myJobs.find(function(j){return j.id===parts[1];});
-      if(cc)recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:8px">'+
-        '<div style="flex:1;font-size:13px"><strong>'+escHtml((cc.first_name||'')+' '+(cc.last_name||''))+'</strong>'+(cc.designation?' \u00b7 '+escHtml(cc.designation):'')+
-          '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">'+escHtml(cc.email||'(no email on record)')+'</div>'+(cj?'<div style="font-size:11px;color:var(--text3)">'+escHtml(cj.company_name)+'</div>':'')+
+      toContact=STATE.contacts.find(function(c){return c.id===parts[0];})||null;
+      toJob=myJobs.find(function(j){return j.id===parts[1];})||null;
+      if(toContact){
+        toName=((toContact.first_name||'')+' '+(toContact.last_name||'')).trim();
+        toEmail=toContact.email||'';
+        toCompany=(toJob&&toJob.company_name)||'';
+      }
+    } else if(STATE.manualEmail){
+      toEmail=STATE.manualEmail;
+    }
+
+    // Recipient badge (kept — it is how you confirm you picked the right person)
+    var recipientBadge='';
+    if(toContact){
+      recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:8px">'+
+        '<div style="flex:1;font-size:13px"><strong>'+escHtml(toName)+'</strong>'+(toContact.designation?' · '+escHtml(toContact.designation):'')+
+          '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">'+escHtml(toEmail||'(no email on record)')+'</div>'+(toCompany?'<div style="font-size:11px;color:var(--text3)">'+escHtml(toCompany)+'</div>':'')+
         '</div>'+
         '<button class="btn-icon" onclick="STATE.composeContactId=null;STATE.composeCompanyId=null;STATE.genEmail=null;render()">'+ico('x',13)+'</button>'+
       '</div>';
@@ -468,17 +604,12 @@ function renderEmail(){
       '</div>';
     }
 
-    var composeFromOpts='';
-    var composeEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
-    var composeFromId=STATE.composeFromEmailId||(composeEmails.find(function(e){return e.is_primary;})||composeEmails[0]||{}).id;
-    if(composeFromId&&!STATE.composeFromEmailId)STATE.composeFromEmailId=composeFromId;
-    if(composeEmails.length){
-      composeFromOpts=composeEmails.map(function(e){
-        return '<option value="'+e.id+'"'+(e.id===composeFromId?' selected':'')+'>'+htmlEsc(e.display_name||e.email_address)+' &lt;'+htmlEsc(e.email_address)+'&gt;</option>';
-      }).join('');
-    }
+    // ── the editor ───────────────────────────────────────────────────────
+    var varChips=['{{fn}}','{{pos}}','{{company}}','{{loc}}','{{sender}}'].map(function(v){
+      return '<span class="var-chip" title="Insert '+v+' into the message" onclick="composeInsertVar(\''+v+'\')">'+v+'</span>';
+    }).join('');
 
-    composeHtml='<div style="max-width:520px">'+
+    var editor=
       '<div class="card cp mb3">'+
         '<div class="fw6 mb2" style="font-size:13px">To</div>'+
         '<select class="sel mb2" onchange="STATE.composeCompanyId=this.value;STATE.composeContactId=null;render()">'+coOpts+'</select>'+
@@ -488,28 +619,56 @@ function renderEmail(){
         '<input class="inp" placeholder="name@company.com" id="manual-email-inp" value="'+htmlEsc(STATE.manualEmail||'')+'" oninput="STATE.manualEmail=this.value||null;STATE.composeContactId=null;STATE.composeCompanyId=null;render()"/>'+
         recipientBadge+
       '</div>'+
-      '<div class="card cp mb3">'+
-        (composeEmails.length?
-          '<div class="fgrp" style="margin-bottom:0"><label class="flbl">From</label><select class="sel" onchange="selectComposeFromEmail(this.value)">'+composeFromOpts+'</select></div>'
-          :'<div style="font-size:12px;color:var(--amber)">No sending email ID assigned — ask your admin to add one.</div>')+
-      '</div>'+
       (STATE.composeContext==='reminder'?
         '<div class="card cp mb3">'+
           '<div class="fw6 mb2" style="font-size:13px">Reminder templates</div>'+
           '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Pick a template (fills from the lead), edit if needed, then Send. It goes through the email engine.</div>'+
           REMINDER_TEMPLATES.map(function(t,i){return '<button type="button" class="btn btn-outline btn-sm" style="margin:0 6px 6px 0" onclick="applyReminderTemplate('+i+')">'+escHtml(t.name)+'</button>';}).join('')+
         '</div>':'')+
-      '<div class="card cp mb3">'+
-        '<div class="fgrp"><label class="flbl">Subject</label><input class="inp" id="email-subj" value="'+htmlEsc(STATE.composeSubj)+'" oninput="STATE.composeSubj=this.value" placeholder="Email subject"/></div>'+
-        '<div class="fgrp"><label class="flbl">Message</label><textarea class="txta w100" style="min-height:180px" id="email-body" oninput="STATE.composeBody=this.value" placeholder="Write your message here...">'+htmlEsc(STATE.composeBody)+'</textarea></div>'+
+      '<div class="card cp">'+
+        '<div class="fgrp"><label class="flbl">Subject</label>'+
+          '<input class="inp" id="email-subj" value="'+htmlEsc(STATE.composeSubj)+'" oninput="STATE.composeSubj=this.value;composeRepaintPreview()" placeholder="Email subject"/></div>'+
+        '<div class="fgrp"><label class="flbl">Message</label>'+
+          '<textarea class="txta w100" style="min-height:220px" id="email-body" oninput="STATE.composeBody=this.value;composeRepaintPreview()" placeholder="Write your message here...">'+htmlEsc(STATE.composeBody)+'</textarea></div>'+
+        '<div style="margin-top:6px">'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-bottom:5px">Click to insert:</div>'+varChips+
+        '</div>'+
         '<div style="display:flex;justify-content:flex-end;margin-top:12px">'+
           '<button class="btn btn-primary" onclick="'+(STATE.composeContext==='reminder'?'sendReminderViaEngine()':'sendEmail()')+'" '+((hasRecipient&&composeEmails.length)?'':'disabled style="opacity:.5;cursor:not-allowed"')+'>'+ico('send',13)+' Send</button>'+
         '</div>'+
-      '</div>'+
-    '</div>';
+      '</div>';
+
+    // ── the preview ──────────────────────────────────────────────────────
+    var fromOpts=composeEmails.map(function(e){
+      return '<option value="'+e.id+'"'+(e.id===composeFromId?' selected':'')+'>'+
+        htmlEsc((e.display_name||e.email_address)+' <'+e.email_address+'>')+'</option>';
+    }).join('');
+
+    // Ask for the signature of whichever mailbox is selected, so the preview
+    // shows the sign-off the recipient will actually get rather than a guess.
+    if(composeFromId&&(!STATE.emailSignaturesCache||STATE.emailSignaturesCache[composeFromId]===undefined)){
+      if(typeof loadMailboxSignature==='function')loadMailboxSignature(u.id,composeFromId);
+    }
+
+    var preview=
+      '<div class="cmp-prev">'+
+        '<div class="cmp-prev-h">'+UI.ic('mailopen')+'<b>Email preview</b>'+
+          '<span style="margin-left:auto;font-size:11.5px;color:var(--ink3)">exactly what they receive</span></div>'+
+        '<div class="cmp-fld"><label>From</label>'+
+          (composeEmails.length
+            ? '<select onchange="selectComposeFromEmail(this.value)">'+fromOpts+'</select>'
+            : '<div class="cmp-static" style="color:var(--amber)">No sending email ID assigned</div>')+
+        '</div>'+
+        '<div class="cmp-fld"><label>To</label>'+
+          '<div class="cmp-static">'+(toEmail?htmlEsc((toName?toName+' <':'')+toEmail+(toName?'>':'')):'<span style="color:var(--ink3)">Pick a recipient</span>')+'</div>'+
+        '</div>'+
+        '<div class="cmp-mail" id="cmp-mail">'+composePreviewInner()+'</div>'+
+        '<div class="cmp-foot">'+UI.ic('shield')+
+          '<span>Your signature is added when the email is sent, from the mailbox above.</span></div>'+
+      '</div>';
+
+    composeHtml='<div class="cmp"><div class="cmp-edit">'+editor+'</div>'+preview+'</div>';
   }
-
-
 
   // OOO reminder cards for dashboard
   var today=todayIST();
@@ -552,20 +711,20 @@ function renderEmail(){
     bdSummaryCard=renderTodaySummaryCard(STATE.todaySummary);
   }
 
-  return '<div class="page">'+
-    (oooCards?'<div style="padding:0 24px;padding-top:16px">'+oooCards+'</div>':'')+
-    (bdSummaryCard?'<div style="padding:0 24px;padding-top:16px">'+bdSummaryCard+'</div>':'')+
-    '<div class="ph"><div class="ptitle">Email</div>'+
-      '<div class="psub">'+(isBD?'Compose emails or manage your outreach plan':'Email')+' · '+u.name+'</div>'+
-    '</div>'+
-    pausedBanner+
-    progressBar+
-    '<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:18px;overflow-x:auto">'+tabBar+'</div>'+
-    (STATE.emailTab==='pending'?pendingHtml:'')+
-    (STATE.emailTab==='compose'?composeHtml:'')+
-    (STATE.emailTab==='sent'?sentHtml:'')+
-    (STATE.emailTab==='outreachplan'?tmplHtml:'')+
-    (STATE.emailTab==='sequence'?renderSequenceBody():'')+
-  '</div>';
+  // The page identity already lives in the top bar, so the old in-page title
+  // block is gone — it was the second "Email" heading on the same screen.
+  return UI.page({
+    tabs: tabBar,
+    body:
+      oooCards+
+      bdSummaryCard+
+      pausedBanner+
+      progressBar+
+      (STATE.emailTab==='pending'?pendingHtml:'')+
+      (STATE.emailTab==='compose'?composeHtml:'')+
+      (STATE.emailTab==='sent'?sentHtml:'')+
+      (STATE.emailTab==='outreachplan'?tmplHtml:'')+
+      (STATE.emailTab==='sequence'?renderSequenceBody():'')
+  });
 }
 

@@ -29,6 +29,7 @@
   STATE.mailbox = STATE.mailbox || {
     accounts:null, accountsLoading:false, activeId:null,
     folders:null, folderId:null, foldersLoading:false,
+    thread:null, threadId:null,
     messages:null, nextCursor:null, listLoading:false, q:'',
     selectedId:null, message:null, msgLoading:false,
     crm:{}, showImages:false,
@@ -98,7 +99,7 @@
   function loadMessages(cursor){
     var m=M(); if(!m.activeId)return;
     m.listLoading=true;
-    if(!cursor){ m.messages=null; m.selectedId=null; m.message=null; }
+    if(!cursor){ m.messages=null; m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; }
     paint();
     var p='/mailbox/'+encodeURIComponent(m.activeId)+'/messages?limit=25';
     if(m.folderId) p+='&folder='+encodeURIComponent(m.folderId);
@@ -132,10 +133,37 @@
       // Opening a message marks it read, the way every mail client behaves.
       // Optimistic locally so the row un-bolds immediately.
       if(d.unread) markRead(id, true, true);
+      loadThread(d);
     }).catch(function(e){
       if(m.selectedId!==id)return;
       m.msgLoading=false; m.error=e.message; paint();
     });
+  }
+
+  // The rest of the conversation. A reply read on its own is half a story —
+  // "yes please" means nothing without the message it answers.
+  //
+  // The thread endpoint returns SUMMARIES, not bodies, so the other messages
+  // render collapsed and clicking one loads it through loadMessage() like any
+  // other. That keeps ONE code path for opening mail (and for marking it read)
+  // instead of a second, quieter one that would drift out of step.
+  function loadThread(msg){
+    var m=M();
+    var tid=msg&&msg.thread_id;
+    if(!tid){ m.thread=null; m.threadId=null; return; }
+    if(m.threadId===tid && m.thread) return;   // already have it
+    m.threadId=tid; m.thread=null;
+    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/threads/'+encodeURIComponent(tid))
+      .then(function(list){
+        if(m.threadId!==tid)return;
+        m.thread=list||[];
+        paint();
+      })
+      .catch(function(){
+        // No thread is not an error — a one-message conversation is the common
+        // case, and the reader falls back to showing just this message.
+        if(m.threadId===tid){ m.thread=[]; paint(); }
+      });
   }
 
   function markRead(id, read, quiet){
@@ -161,7 +189,7 @@
   window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
   window.mbSelectFolder=function(id){ var m=M(); if(m.folderId===id)return; m.folderId=id; loadMessages(); };
   window.mbOpen=function(id){ loadMessage(id); };
-  window.mbBack=function(){ var m=M(); m.selectedId=null; m.message=null; paint(); };
+  window.mbBack=function(){ var m=M(); m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; paint(); };
   window.mbLoadMore=function(){ var m=M(); if(m.nextCursor) loadMessages(m.nextCursor); };
   window.mbRefresh=function(){ var m=M(); m.crm={}; loadMessages(); refreshUnread(true); };
   window.mbSearch=function(v){
@@ -487,26 +515,53 @@
   function renderMailbox(){
     var m=M();
     if(m.accountsLoading||m.accounts===null)
-      return '<div class="page"><div style="text-align:center;padding:60px;color:var(--text3)">Loading your mailboxes…</div></div>';
+      return '<div class="pg"><div class="dt-empty">Loading your mailboxes…</div></div>';
 
     var readable=(m.accounts||[]).filter(function(a){return a.readable;});
     if(!readable.length) return renderNoMailbox();
 
-    return '<div class="page" style="padding:0;height:100%;display:flex;flex-direction:column;overflow:hidden">'+
+    // TWO panes, not three. The folder rail became a picker in the toolbar:
+    // it cost 190px on every screen to save one click on the folder switch
+    // most people make a handful of times a day, and the two panes that carry
+    // the work — the conversation list and the conversation — were paying for
+    // it. Nothing is lost; every folder, custom ones included, is in the list.
+    return '<div class="mb">'+
+      renderMbTabs()+
       renderTopBar(readable)+
-      '<div style="flex:1;display:flex;min-height:0;border-top:1px solid var(--border)">'+
-        renderFolderRail()+
+      '<div class="mb-panes'+(m.selectedId?' reading':'')+'">'+
         renderList()+
         renderReader()+
       '</div>'+
     '</div>';
   }
 
+  // All / Unread, plus where you are in the folder. The count is the number of
+  // messages actually loaded, never an estimate.
+  function renderMbTabs(){
+    var m=M();
+    var list=m.messages||[];
+    var unread=list.filter(function(x){return x.unread;}).length;
+    var folder=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
+    var right=folder
+      ? '<span style="font-size:12px;color:var(--ink3)">'+esc(folder.name)+
+        (list.length?' · '+list.length+' loaded':'')+'</span>'
+      : '';
+    return UI.tabs([
+      { id:'all',    label:'All',    n:list.length, onclick:"mbSetFilter('all')" },
+      { id:'unread', label:'Unread', n:unread,      onclick:"mbSetFilter('unread')" }
+    ], m.filter||'all', right);
+  }
+
+  // A view filter over what is already loaded — deliberately NOT a server
+  // query. "Unread" here means "unread among the messages on screen", which is
+  // the honest reading of a list that pages in 25 at a time.
+  window.mbSetFilter=function(f){ var m=M(); m.filter=f; paint(); };
+
   // Nothing connected. This is a setup state, not an error — say what to do.
   function renderNoMailbox(){
     var m=M();
     var broken=(m.accounts||[]).filter(function(a){return !a.readable;});
-    return '<div class="page">'+
+    return '<div class="pg"><div class="pg-body">'+
       '<div class="card" style="max-width:560px;margin:40px auto;padding:32px;text-align:center">'+
         '<div style="color:var(--text3);margin-bottom:14px">'+icon('inbox',40)+'</div>'+
         '<div style="font-weight:700;font-size:17px;margin-bottom:6px">No mailbox connected yet</div>'+
@@ -524,69 +579,70 @@
           : '')+
         '<button class="btn btn-primary" onclick="goPage(\'emailaccounts\')">Set up a mailbox</button>'+
       '</div>'+
-    '</div>';
+    '</div></div>';
   }
 
   function renderTopBar(readable){
     var m=M();
     var accountPicker = readable.length>1
-      ? '<select class="sel" style="width:auto;max-width:280px;font-size:12.5px" onchange="mbSelectAccount(this.value)">'+
+      ? '<select class="seq-sel" style="max-width:280px" onchange="mbSelectAccount(this.value)">'+
           readable.map(function(a){
             return '<option value="'+escAttr(a.id)+'"'+(a.id===m.activeId?' selected':'')+'>'+
               esc(a.email_address)+(a.platform==='Gmail'?' · Gmail':' · Outlook')+'</option>';
           }).join('')+
         '</select>'
       : '<div style="font-size:13px;font-weight:600">'+esc((readable[0]||{}).email_address||'')+
-        '<span style="font-weight:400;color:var(--text3)"> · '+esc((readable[0]||{}).platform==='Gmail'?'Gmail':'Outlook')+'</span></div>';
+        '<span style="font-weight:400;color:var(--ink3)"> · '+esc((readable[0]||{}).platform==='Gmail'?'Gmail':'Outlook')+'</span></div>';
 
-    return '<div style="padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--card)">'+
-      accountPicker+
-      '<div style="flex:1;min-width:160px;position:relative">'+
-        '<input class="sel" id="mb-search" placeholder="Search this mailbox…" value="'+escAttr(m.q||'')+'" '+
-          'onkeydown="mbSearchKey(event)" style="font-size:12.5px;padding-right:'+(m.q?'60px':'12px')+'">'+
-        (m.q?'<button class="btn btn-xs btn-ghost" onclick="mbClearSearch()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%)">Clear</button>':'')+
-      '</div>'+
-      '<button class="btn btn-sm btn-outline" onclick="mbRefresh()">Refresh</button>'+
-      '<button class="btn btn-sm btn-primary" onclick="mbCompose()">Compose</button>'+
-    '</div>';
-  }
-
-  function renderFolderRail(){
-    var m=M();
-    if(m.foldersLoading) return '<div style="width:190px;border-right:1px solid var(--border);padding:14px;color:var(--text3);font-size:12px">Loading…</div>';
     var folders=m.folders||[];
-    return '<div style="width:190px;min-width:190px;border-right:1px solid var(--border);background:var(--card);overflow-y:auto;padding:8px 0">'+
-      folders.map(function(f){
-        var on=f.id===m.folderId;
-        return '<div onclick="mbSelectFolder(\''+escAttr(f.id)+'\')" '+
-          'style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:12.5px;'+
-          (on?'background:var(--accent-l);color:var(--accent-d);font-weight:600;border-left:2px solid var(--accent)':'color:var(--text2);border-left:2px solid transparent')+'">'+
-          icon(f.kind)+
-          '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</span>'+
-          (f.unread?'<span style="font-size:10.5px;font-weight:700;background:var(--accent);color:#fff;border-radius:999px;padding:1px 6px;min-width:20px;text-align:center">'+f.unread+'</span>':'')+
-        '</div>';
-      }).join('')+
-      (folders.length?'':'<div style="padding:14px;color:var(--text3);font-size:12px">No folders</div>')+
-    '</div>';
+    var folderPicker = m.foldersLoading
+      ? '<span style="font-size:12.5px;color:var(--ink3)">Loading folders…</span>'
+      : (folders.length
+        ? '<select class="seq-sel" style="max-width:230px" onchange="mbSelectFolder(this.value)">'+
+            folders.map(function(f){
+              return '<option value="'+escAttr(f.id)+'"'+(f.id===m.folderId?' selected':'')+'>'+
+                esc(f.name)+(f.unread?' ('+f.unread+')':'')+'</option>';
+            }).join('')+
+          '</select>'
+        : '');
+
+    return UI.toolbar({
+      search:{ value:m.q||'', placeholder:'Search this mailbox…', onkeydown:'mbSearchKey(event)' },
+      icons:[
+        { icon:'x', title:'Clear search', onclick:'mbClearSearch()', off:!m.q },
+        { sep:true },
+        { icon:'refresh', title:'Refresh', onclick:'mbRefresh()' }
+      ],
+      right: folderPicker + accountPicker +
+        '<button class="btn btn-primary btn-sm" onclick="mbCompose()">'+UI.ic('plus')+'Compose</button>'
+    }).replace('id="mb-search-placeholder"','');
   }
 
   function renderList(){
     var m=M();
     var wide=!m.selectedId;
+    var all=m.messages||[];
+    var rows=(m.filter==='unread')?all.filter(function(x){return x.unread;}):all;
     var body;
-    if(m.listLoading&&m.messages===null) body='<div style="padding:40px;text-align:center;color:var(--text3);font-size:12.5px">Loading messages…</div>';
-    else if(m.error&&!(m.messages||[]).length)
-      body='<div style="padding:30px;text-align:center;color:var(--red);font-size:12.5px">'+esc(m.error)+'</div>';
-    else if(!(m.messages||[]).length)
-      body='<div style="padding:40px;text-align:center;color:var(--text3);font-size:12.5px">'+(m.q?'Nothing matched “'+esc(m.q)+'”':'Nothing here')+'</div>';
-    else body=(m.messages||[]).map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
+    if(m.listLoading&&m.messages===null) body='<div class="dt-empty">Loading messages…</div>';
+    else if(m.error&&!all.length)        body='<div class="dt-empty" style="color:var(--red)">'+esc(m.error)+'</div>';
+    else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'”':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
+    else body=rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
 
-    return '<div style="'+(wide?'flex:1':'width:380px;min-width:340px')+';border-right:1px solid var(--border);overflow-y:auto;background:var(--card)">'+
+    return '<div class="mb-list'+(wide?' wide':'')+'">'+
       body+
       (m.nextCursor
         ? '<div style="padding:12px;text-align:center"><button class="btn btn-sm btn-outline" onclick="mbLoadMore()"'+(m.listLoading?' disabled':'')+'>'+(m.listLoading?'Loading…':'Load more')+'</button></div>'
         : '')+
     '</div>';
+  }
+
+  // The initials block that identifies a correspondent at a glance.
+  function mbAvatar(party,size){
+    var nm=(party&&(party.name||party.email))||'?';
+    var initials=String(nm).trim().split(/[\s@.]+/).slice(0,2)
+      .map(function(w){ return (w[0]||''); }).join('').toUpperCase()||'?';
+    return '<div class="av av-'+(size||28)+' av-bd">'+esc(initials)+'</div>';
   }
 
   function renderRow(x, active){
@@ -596,53 +652,50 @@
     var outbound=folder&&(folder.kind==='sent'||folder.kind==='drafts');
     var party=outbound?((x.to||[])[0]||{}):(x.from||{});
     var partyEmail=party.email||'';
-    return '<div onclick="mbOpen(\''+escAttr(x.id)+'\')" '+
-      'style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;'+
-      (active?'background:var(--accent-l);':(x.unread?'background:#fff;':'background:var(--card);'))+'">'+
-      '<div style="display:flex;align-items:baseline;gap:8px">'+
-        '<div style="flex:1;min-width:0;font-size:12.5px;'+(x.unread?'font-weight:700;color:var(--text)':'font-weight:500;color:var(--text2)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
-          (outbound?'To ':'')+esc(who(party))+'</div>'+
-        (crmChip(partyEmail)||'')+
-        '<div style="font-size:10.5px;color:var(--text3);flex:none">'+esc(fmtWhen(x.date))+'</div>'+
-      '</div>'+
-      '<div style="font-size:12.5px;margin-top:2px;'+(x.unread?'font-weight:600;color:var(--text)':'color:var(--text2)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
-        esc(x.subject||'(no subject)')+'</div>'+
-      '<div style="display:flex;align-items:center;gap:6px;margin-top:2px">'+
-        '<div style="flex:1;min-width:0;font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.preview||'')+'</div>'+
-        (x.has_attachments?'<span title="Has attachments" style="font-size:11px;color:var(--text3);flex:none">📎</span>':'')+
+    return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+'" onclick="mbOpen(\''+escAttr(x.id)+'\')">'+
+      mbAvatar(party,28)+
+      '<div class="mb-row-b">'+
+        '<div class="mb-row-t">'+
+          '<div class="mb-who">'+(outbound?'To ':'')+esc(who(party))+'</div>'+
+          (crmChip(partyEmail)||'')+
+          '<div class="mb-when">'+esc(fmtWhen(x.date))+'</div>'+
+        '</div>'+
+        '<div class="mb-subj">'+esc(x.subject||'(no subject)')+'</div>'+
+        '<div class="mb-prev">'+esc(x.preview||'')+
+          (x.has_attachments?' <span title="Has attachments">📎</span>':'')+'</div>'+
       '</div>'+
     '</div>';
   }
 
   function renderReader(){
     var m=M();
-    if(!m.selectedId) return '';
+    if(!m.selectedId)
+      return '<div class="mb-read"><div class="mb-empty">'+UI.ic('mailopen')+
+        '<div>Pick a conversation to read it here.</div></div></div>';
     if(m.msgLoading&&!m.message)
-      return '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:12.5px">Opening…</div>';
+      return '<div class="mb-read"><div class="mb-empty">Opening…</div></div>';
     var x=m.message;
-    if(!x) return '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--red);font-size:12.5px">'+esc(m.error||'Could not open this message')+'</div>';
+    if(!x) return '<div class="mb-read"><div class="mb-empty" style="color:var(--red)">'+esc(m.error||'Could not open this message')+'</div></div>';
 
-    var toLine=(x.to||[]).map(who).join(', ');
-    var ccLine=(x.cc||[]).map(who).join(', ');
+    // The conversation, oldest first, with the open message expanded in place.
+    // When the thread has not arrived (or there is none) the open message is
+    // the whole conversation — which is true, not a placeholder.
+    var thread=(m.thread&&m.thread.length)?m.thread:[x];
+    var hasOthers=thread.length>1;
 
-    return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--card)">'+
-      // header
-      '<div style="padding:14px 18px;border-bottom:1px solid var(--border)">'+
+    var msgs=thread.map(function(t){
+      return (t.id===x.id) ? renderOpenMessage(x, hasOthers) : renderCollapsedMessage(t);
+    }).join('');
+
+    return '<div class="mb-read">'+
+      '<div class="mb-head">'+
         '<div style="display:flex;align-items:flex-start;gap:10px">'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:15px;font-weight:700;line-height:1.35">'+esc(x.subject||'(no subject)')+'</div>'+
-            '<div style="font-size:12px;color:var(--text2);margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
-              '<b>'+esc(who(x.from))+'</b>'+
-              '<span style="color:var(--text3)">&lt;'+esc((x.from||{}).email||'')+'&gt;</span>'+
-              (crmChip((x.from||{}).email)||'')+
-            '</div>'+
-            '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">To '+esc(toLine||'—')+
-              (ccLine?' · Cc '+esc(ccLine):'')+' · '+esc(fmtFull(x.date))+'</div>'+
-          '</div>'+
-          '<button class="btn btn-xs btn-ghost" onclick="mbBack()" title="Close">✕</button>'+
+          '<div class="mb-title" style="flex:1;min-width:0">'+esc(x.subject||'(no subject)')+
+            (hasOthers?'<span class="pill mute">'+thread.length+' messages</span>':'')+'</div>'+
+          '<span class="kebab" title="Close" onclick="mbBack()">'+UI.ic('x')+'</span>'+
         '</div>'+
-        '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">'+
-          '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">Reply</button>'+
+        '<div class="mb-acts">'+
+          '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
           ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
           '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
           '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
@@ -650,16 +703,53 @@
           '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
         '</div>'+
       '</div>'+
+      '<div class="mb-thread">'+msgs+renderComposer(x)+'</div>'+
+    '</div>';
+  }
+
+  // One message in the thread, opened: header, warnings, attachments, body.
+  function renderOpenMessage(x, inThread){
+    var toLine=(x.to||[]).map(who).join(', ');
+    var ccLine=(x.cc||[]).map(who).join(', ');
+    return '<div class="mb-msg open">'+
+      '<div class="mb-msg-h">'+
+        mbAvatar(x.from,32)+
+        '<div class="mb-msg-b">'+
+          '<div class="mb-from">'+esc(who(x.from))+
+            '<span class="addr">&lt;'+esc((x.from||{}).email||'')+'&gt;</span>'+
+            (crmChip((x.from||{}).email)||'')+'</div>'+
+          '<div class="mb-to">To '+esc(toLine||'—')+(ccLine?' · Cc '+esc(ccLine):'')+'</div>'+
+        '</div>'+
+        '<div class="mb-msg-when">'+esc(fmtFull(x.date))+'</div>'+
+        '<div class="mb-msg-ico">'+
+          '<span class="kebab" title="Reply" onclick="mbReply(false)">'+UI.ic('reply')+'</span>'+
+          '<span class="kebab" title="Forward" onclick="mbForward()">'+UI.ic('right')+'</span>'+
+        '</div>'+
+      '</div>'+
       renderBlockedImagesBar(x)+
       renderAttachments(x)+
-      renderBody(x)+
-      renderComposer(x)+
+      renderBody(x, inThread)+
+    '</div>';
+  }
+
+  // The other messages in the thread — summaries only, because the thread
+  // endpoint does not carry bodies. Clicking one opens it the normal way.
+  function renderCollapsedMessage(t){
+    return '<div class="mb-msg'+(t.unread?' unread':'')+'" onclick="mbOpen(\''+escAttr(t.id)+'\')">'+
+      '<div class="mb-msg-h">'+
+        mbAvatar(t.from,28)+
+        '<div class="mb-msg-b">'+
+          '<div class="mb-from" style="font-size:13px">'+esc(who(t.from))+'</div>'+
+          '<div class="mb-collapsed">'+esc(t.preview||'(no preview)')+'</div>'+
+        '</div>'+
+        '<div class="mb-msg-when">'+esc(fmtWhen(t.date))+'</div>'+
+      '</div>'+
     '</div>';
   }
 
   function renderBlockedImagesBar(x){
     if(!x.has_remote_images||M().showImages) return '';
-    return '<div style="padding:8px 18px;background:var(--amber-l);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--amber)">'+
+    return '<div class="mb-bar">'+
       '<span style="flex:1">Images in this message are blocked — loading them tells the sender you opened it.</span>'+
       '<button class="btn btn-xs btn-outline" onclick="mbShowImages()">Show images</button>'+
     '</div>';
@@ -669,7 +759,7 @@
     var m=M();
     var files=(x.attachments||[]).filter(function(a){return !a.inline;});
     if(!files.length) return '';
-    return '<div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">'+
+    return '<div class="mb-att">'+
       files.map(function(a){
         var url=API_URL+'/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(x.id)+
           '/attachments/'+encodeURIComponent(a.id)+'?name='+encodeURIComponent(a.name||'attachment');
@@ -699,7 +789,7 @@
   // means the body cannot run code and cannot reach this origin even if the
   // server-side sanitiser missed something. allow-popups is the one grant, so
   // that clicking a link in an email still works.
-  function renderBody(x){
+  function renderBody(x, inThread){
     var doc='<!doctype html><html><head><meta charset="utf-8">'+
       '<style>'+
         'html,body{margin:0;padding:16px 18px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;'+
@@ -710,9 +800,13 @@
         'a{color:#1E7A3C}'+
         'pre{white-space:pre-wrap;word-wrap:break-word}'+
       '</style></head><body>'+(x.body_html||'<i>(no content)</i>')+'</body></html>';
-    return '<div style="flex:1;min-height:0;overflow:hidden">'+
+    // The height is FIXED and the body scrolls inside itself. Auto-sizing to
+    // the content would mean measuring the iframe from the parent, which needs
+    // allow-same-origin — the very grant that keeps a hostile email boxed in.
+    // A shorter box inside a thread, where several messages share the screen.
+    return '<div class="mb-body'+(inThread?' short':'')+'">'+
       '<iframe title="Message body" sandbox="allow-popups allow-popups-to-escape-sandbox" '+
-        'style="width:100%;height:100%;border:0;background:#fff" srcdoc="'+escAttr(doc)+'"></iframe>'+
+        'srcdoc="'+escAttr(doc)+'"></iframe>'+
     '</div>';
   }
 
