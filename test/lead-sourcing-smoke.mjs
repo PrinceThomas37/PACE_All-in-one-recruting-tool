@@ -154,6 +154,36 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   ok('several copies of one title reads as a team build', team.category === 'team_build');
   ok('the team-build angle states the count', /4 Java Developer openings/.test(team.angle), team.angle);
 
+  // Precedence, decided by the owner on 2026-08-31: two openings for the same
+  // job beats "this has been open a while". A long-open posting can just be one
+  // nobody took down; two of the same title is real headcount and budget, and it
+  // is the better opener. Before this, age (4) outscored two-same-title (3) and
+  // the pitch was the weaker of the two.
+  const oldPost = { title: 'Java Developer', description: 'x', posted_at: '2026-05-18T00:00:00Z' };
+  const twoOpen = inferHiringReason(oldPost, { now, same_title_count: 2 });
+  ok('two openings outrank a role open 105 days',
+    twoOpen.category === 'team_build', `${twoOpen.category} @ ${twoOpen.score}`);
+  ok('...and the outreach angle leads with the team build, not the age',
+    /two/i.test(twoOpen.angle) || /openings/i.test(twoOpen.angle), twoOpen.angle);
+
+  // But a role that is long-open AND genuinely reposted is a real hard-to-fill
+  // story, and that combination still wins. Two openings is not a trump card.
+  const oldAndReposted = inferHiringReason(oldPost, { now, same_title_count: 2, repost_count: 2 });
+  ok('long-open AND reposted still reads as hard to fill',
+    oldAndReposted.category === 'hard_to_fill', `${oldAndReposted.category} @ ${oldAndReposted.score}`);
+
+  // Three or more outranks everything hard_to_fill can accumulate (4 + 4).
+  const threeOpen = inferHiringReason(oldPost, { now, same_title_count: 3, repost_count: 2 });
+  ok('three openings outrank even a long-open, reposted role',
+    threeOpen.category === 'team_build', `${threeOpen.category} @ ${threeOpen.score}`);
+
+  // The winner is chosen with a strict `>`, so a tie would be settled by object
+  // key order rather than by a decision. Nothing may tie the hard_to_fill max.
+  const hardMax = inferHiringReason(oldPost, { now, repost_count: 2 }).score;
+  ok('no team-build weight ties the hard-to-fill maximum',
+    twoOpen.score !== hardMax && threeOpen.score !== hardMax + 0,
+    `two=${twoOpen.score} three=${threeOpen.score} hardMax=${hardMax}`);
+
   const stated = inferHiringReason({ title: 'SRE', description: 'This is a backfill for a departing engineer.', posted_at: now }, { now });
   ok('a stated reason is believed over inference', stated.category === 'backfill' && stated.confidence === 'high');
 
@@ -294,9 +324,17 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   await ingest.ingestSource(source,
     { supabase: dbLater.client, fetchImpl: fakeFetch, now: new Date('2027-07-22T00:00:00Z') });
   const later = dbLater.rows.sourced_jobs_raw;
+  // The lone Product Designer has no twin, so age is all it has and it flips to
+  // hard_to_fill — that is the clock doing the work. The two Java roles do NOT
+  // flip, because two openings of one title outranks age (see why-hiring.js #5).
+  const lonely = later.find(s2 => s2.title === 'Product Designer');
+  const twins = later.filter(s2 => s2.title === 'Senior Java Developer');
   ok('the injected clock actually drives the hiring reason',
-    later.every(s2 => s2.hiring_reason.category === 'hard_to_fill'),
-    later.map(s2 => s2.hiring_reason.category).join(','));
+    lonely.hiring_reason.category === 'hard_to_fill',
+    later.map(s2 => s2.title + '=' + s2.hiring_reason.category).join(', '));
+  ok('a long-open role with a twin stays a team build, however old it gets',
+    twins.length === 2 && twins.every(s2 => s2.hiring_reason.category === 'team_build'),
+    twins.map(s2 => s2.hiring_reason.category).join(','));
   ok('...and with no clock given, production still gets the real one',
     typeof (await ingest.ingestSource(source,
       { supabase: fakeDb().client, fetchImpl: fakeFetch })).staged === 'number');

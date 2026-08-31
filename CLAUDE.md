@@ -73,6 +73,36 @@ we never have to rewrite to grow (see "Growth bets" below).
   is verified against the live schema (41 tenant / 7 global) — **a migration that
   adds a table with `org_id` must add it there.** Conversion is incremental: raw
   `supabase` still works, so unconverted call sites are unaffected.
+- **The OUTBOUND SEND PATH has one rule: the sender is resolved at SEND time,
+  from the mailbox that actually sends.** `emails.body`/`subject` keep
+  `{{sender}}`/`{{senderemail}}` in storage (queue paths pass
+  `DEFER_SENDER`), because a lead's mailbox can change, or a sequence rotate
+  it, between queueing and sending — baking a name at queue time is how a cold
+  email went out saying "I'm Jennifer Thomas" over Prince Thomas's From line
+  and signature (Session 14, 152 emails affected).
+  **Therefore EVERY reader of a stored body must call `renderStoredEmail(row,
+  mailbox)` first** (`email-vars.js`) — it fills subject and body together so
+  a caller cannot render one and forget the other. `GET /emails` renders for
+  all screens (no page knows the token exists); `deliverOutboundEmail`,
+  `buildQuotedChainFromDb` and the analytics sample each render too. That
+  quoted chain is why this matters beyond cosmetics: it was putting the raw
+  token inside the *recipient's* own quoted message.
+  `test/sender-identity-smoke.mjs` greps for every file reading `emails.body`
+  and fails if one does not render.
+- **Send-queue ORDER is a business decision, not an implementation detail.**
+  The queue drains at one email per 75-105s inside an 8-hour window in each
+  lead's timezone, so whatever is at the back may not go out at all.
+  `send-queue-order.js` (pure) puts fresh outreach ahead of follow-ups, with
+  mailbox interleaving preserved inside each band. Do not reorder it casually,
+  and never remove the `ORDER BY` from the pending fetch — it paginates with
+  `.range()`, which repeats or skips rows without one.
+- **KNOWN, UNFIXED (as of Session 14): a dead mailbox sign-in destroys
+  emails.** An auth failure marks each email `failed` with no retry, one every
+  ~90s, and `emails` has no column to record why — so `friendlySendError`'s
+  correct sentence goes only to an in-memory cache and dies with the process.
+  Root cause of the 31 Aug incident was Google expiring refresh tokens after
+  exactly 7 days for OAuth apps in **"Testing"** publishing status. See
+  `docs/CONTEXT_WINDOW.md` § "Pick this up first".
 - **All outbound HTTP goes through `http-client.js`** (`fetchWithTimeout` /
   `fetchWithRetry`). Node's `fetch` has no default timeout and a hung Graph/Gmail
   socket used to stall a whole background sweep. **Retries are safe methods only** —
@@ -100,7 +130,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 41 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 49 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.

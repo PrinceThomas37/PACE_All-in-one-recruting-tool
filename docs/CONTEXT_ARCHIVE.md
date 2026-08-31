@@ -2086,3 +2086,223 @@ off-by-default, subject override, forward, attachment ordering — attachments
 must be added to the draft BEFORE the send, or an empty email goes out — the
 data: URI prefix strip, both size guards, and RFC 2047 round-tripping including
 a multi-byte fold). `mailbox-page-smoke` 45 → 70.
+
+---
+
+# Session 14 (2026-08-25 → 2026-08-31) — one bad name in a cold email, and everything it pulled out
+
+Started with a screenshot: a cold email whose body read "I'm **Jennifer
+Thomas** at Fute Global LLC" while its From address and signature both said
+**Prince Thomas**. Ended nine changes later having fixed two send-path bugs, a
+lying health indicator, a queue-order problem that was costing a day of
+outreach, a test that had rotted with the calendar, a scoring weight that
+contradicted its own comment, and a diagnosis of why eleven follow-ups died
+without saying why.
+
+## Part 1 — the sender mismatch (PR #142)
+
+**The two names came from two different places at two different times.** Queue
+time baked `{{sender}}` into `emails.body` from `job.sending_email?.display_name
+|| the BD's fallback mailbox || the BD user's name`. Send time filled the
+signature — and chose the From address — from the mailbox the send actually
+authenticated with, re-read from the lead right then. Anything that changed the
+lead's mailbox in between stranded the old name in the body.
+
+For the reported email that gap was **three minutes**, and the timestamps say
+so exactly:
+
+- `20:28:04` queued. The lead had no resolvable sending mailbox at that instant,
+  so the name fell back to another mailbox of the same user:
+  `jennifer.thomas@fute-global.com`, which is **`is_active = false`**.
+- `20:31:11` the lead's `sending_email_id` was set to the new Gmail mailbox.
+- next morning it sent from Prince's mailbox, signed Prince, body saying
+  Jennifer.
+
+**152 already-sent emails carried the mismatch**; 3 more sat in the queue.
+
+Fixed by resolving the sender in exactly one place — the send path.
+`buildEmailVars` gained `DEFER_SENDER` (`null`), which leaves the token in the
+queued text; all three queue paths use it. `deliverOutboundEmail` computes one
+`senderIdentity` and fills body, subject **and** signature from it, so they
+cannot disagree by construction. A mailbox with no `display_name` falls back to
+its address (`prince.thomas@…` → "Prince Thomas") — never a raw token.
+
+Second, smaller defect fixed alongside: the fallback mailbox lookup had **no
+`is_active` filter and no tie-break**, so with several mailboxes and none
+flagged primary it took whichever row Postgres returned first — here, the
+deactivated one. Now active-only, primary first, then oldest.
+
+## Part 2 — the same fix, done properly (PR #143)
+
+**#142 picked the wrong shape and the owner caught it.** It left the token in
+the database and taught exactly ONE screen to fill it. But the token lives in
+storage, so *every* reader has to know about it — and three did not:
+
+- the pending preview showed a raw `{{sender}}` to the owner, who stopped
+  sending over it (correctly);
+- **`buildQuotedChainFromDb` quoted the stored body verbatim into follow-ups —
+  a recipient would have seen `{{sender}}` inside their own earlier message**;
+- `GET /analytics/templates` fed a sample body to the Admin templates page.
+
+The preview was the symptom; the quoted chain was the one that would have
+reached a customer.
+
+Resolved on the **server**, once, for everyone. `email-vars.js` gained
+`senderIdentityFor(mailbox, fallbackAddress)` and `renderStoredEmail(row,
+mailbox)` — which fills subject and body **together**, so a caller cannot render
+one and forget the other. `GET /emails` renders every row before returning it,
+picking the mailbox exactly the way the send loop does (row's pinned mailbox →
+lead's → `from_email` supplies the name). The client-side fill from #142 was
+deleted; **no page knows the token exists any more.**
+
+Because the editor is now handed rendered text, `PATCH /emails/:id` compares
+what comes back against the rendered row and drops unchanged fields — opening
+the editor and pressing Save is no longer an edit, so it cannot freeze a name
+into an unsent row. A genuine edit is stored as typed.
+
+**The lesson worth carrying:** a placeholder left in stored data is a promise
+that every future reader will remember to resolve it. `sender-identity-smoke`
+now greps for every file that reads `emails.body` and requires each to call
+`renderStoredEmail`, so a fourth reader cannot be added without one.
+
+## Part 3 — the heartbeat that cried wolf (in PR #144)
+
+The Admin card said **"Background engine: not receiving its heartbeat"** while
+the heartbeat was arriving perfectly — the GitHub Action had run at 14:21,
+15:22 and 16:08, all successful, every job up to date.
+
+It asked *"did a job run because of cron in the last hour?"* and read the
+answer as *"is the pinger reaching us?"*. Those come apart **by design**:
+`runDue` only records a run when a job is DUE, so a ping arriving while the app
+is awake — when the in-process intervals have already claimed the due jobs —
+runs nothing and leaves no trace. **The indicator went amber precisely when the
+system was healthiest and most used**, and blamed a `CRON_KEY` mismatch that
+did not exist.
+
+`/cron/tick` now stamps `app_settings.engine_last_external_ping` **before doing
+any work and regardless of whether there is any**. The stamp sits deliberately
+OUTSIDE the `cron_last_` prefix — it is not a job, and storing it there would
+list a phantom job on the card. A rejected tick records nothing, so the signal
+cannot be spoofed healthy. A server not yet pinged falls back to the old signal
+so the card does not claim a dead engine for the first half hour after a deploy.
+
+## Part 4 — queue order was costing a day of outreach (in PR #144)
+
+The owner assigned leads; the emails sat in "Pending". Nothing was broken —
+**the queue drains at one email every 75–105 seconds inside an 8-hour window
+measured in each lead's own timezone**, which makes order a business decision:
+whatever is at the back may not go out at all.
+
+Order was arrival order, so the morning's follow-up batch sat in front of every
+lead assigned during the day. Live that afternoon: **36 follow-ups ahead of 20
+just-assigned leads.** At the measured rate the new outreach would have reached
+the 16:00 cutoff and rolled to the next day.
+
+Initial outreach now goes first; follow-ups after; mailbox interleaving
+preserved inside each band so one mailbox's queue still cannot starve another's.
+Nothing else moved — not the cap, the window, the pacing or the domain spacing.
+The ordering moved to `send-queue-order.js` (pure, tested by behaviour rather
+than by grepping index.js). Also fixed while in there: the pending fetch had
+**no ORDER BY** while paginating with `.range()`, which can repeat or skip rows
+between pages.
+
+**The owner cleared that day's backlog by hand** — 25 pending follow-ups deleted
+after a snapshot. Their `follow_ups` schedules had already been marked complete
+when the emails were first queued, so they do not regenerate: those 25 contacts
+simply never got their final touch. Said plainly at the time rather than left to
+be discovered.
+
+## Part 5 — a test that rotted with the calendar (PR #145)
+
+`lead-sourcing-smoke` had been failing on *"two identical titles are recognised
+as a team build"*. **Nothing in the code caused it.** The fixture pins posting
+dates but `ingestSource` read the real clock, and the hiring reason is a claim
+about elapsed time — so postings written as "recent" aged past the 60-day
+hard-to-fill threshold (weight 4), which outscored two-same-title (weight 3),
+and every row came back `hard_to_fill`. **The assertion failed on a date.**
+
+Exactly the trap `CLAUDE.md` already records for `conversation-intel.js`.
+`why-hiring.js` already accepted `context.now`; only the ingest around it failed
+to pass one through. `ingestSource(source, { …, now })` now takes an optional
+clock; production passes nothing and gets the real one. Two guards added so it
+cannot rot silently again.
+
+**I had told the owner this was "a real bug in live code" before checking, and
+corrected it explicitly.** It was a test defect; the product was right all along.
+
+## Part 6 — a weight that contradicted its own comment (PR #146, OPEN)
+
+`why-hiring.js` §5 already said a team build is "the single best staffing
+opportunity on this list — multiple placements, one client". The weights
+disagreed: a company with two of the same job was pitched *"this has been open a
+while"*. **Owner's call: two openings now outranks age.**
+
+- two openings → **5** (beats age alone at 4, still loses to long-open AND
+  reposted at 4+4=8, which is a genuine hard-to-fill story)
+- three or more → **9**, above every `hard_to_fill` combination
+
+Ties avoided on purpose: the winner is picked with a strict `>`, so a tie would
+be settled by object key order, which is not a decision. A test pins that
+nothing ties the `hard_to_fill` maximum.
+
+What a prospect reads changed from *"Your Senior Java Developer opening has been
+live about 105 days."* to *"You have 2 Senior Java Developer openings live at
+once — that is a team build, not a single hire."*
+
+Side effect named rather than buried: two openings now scores 5, crossing
+medium → **high** confidence.
+
+## Part 7 — why eleven follow-ups died in silence (DIAGNOSED, NOT FIXED)
+
+Eleven fu2 follow-ups were marked `failed` on 31 Aug with no reason recorded.
+The chain is provable:
+
+1. **Nothing was wrong with the recipients.** All eleven had a delivered initial
+   (24 Aug) and a delivered fu1 (27 Aug). None suppressed, none opted out, none
+   bounced, all `email_status = valid`.
+2. **The split is a clock, not a property of the emails.** Gmail thread ids are
+   time-ordered. Of 23 fu2 attempted that day, **every thread ≤ `1a0390af`
+   failed and every thread ≥ `1a0390c8` sent — 23 of 23, no exceptions.**
+   Adjacent ids at the same company, opposite outcomes.
+3. **`gmail_tokens.created_at` for the sending mailbox is `18:23:35` that day** —
+   the mailbox was RECONNECTED at that moment. Everything before failed,
+   everything after succeeded.
+4. **The mailbox was connected 24 Aug 17:27. Google expires refresh tokens after
+   exactly 7 days for OAuth apps in "Testing" publishing status** — and this
+   app is deliberately in Testing (Session 13, Part 1: publishing an unverified
+   app with `gmail.send` scopes can hard-block everyone, worse than Testing's
+   warn-and-continue). 24 Aug 17:27 + 7 days = **31 Aug 17:27**. The failing run
+   began 18:07, forty minutes later.
+5. **Why nothing failed earlier that day:** the 04:53 and 11:29 runs were
+   outside the 08:00–16:00 lead-local window (00:53 and 07:29 EST). The first
+   in-window attempt of the day was the first attempt after expiry.
+6. **Why exactly eleven:** the run lasted 948s and pacing is ~90s between
+   attempts, failures included. 948 / 90 ≈ 11. It burned one email every ninety
+   seconds until the run ended.
+
+**Three defects this exposed, none yet fixed:**
+
+- **A dead mailbox destroys emails permanently.** An auth failure sets
+  `status='failed'` with no retry — contrast the thread-deferral path, which
+  releases back to `pending`. Those eleven will never be sent.
+- **The loop keeps going.** Once the sign-in is dead nothing from that mailbox
+  can succeed, yet it destroyed one more every 90 seconds.
+- **The reason is never persisted.** `emails` has no error column.
+  `friendlySendError` produced exactly the right sentence — *"Sending mailbox
+  sign-in expired — reconnect it under Settings → Email IDs"* — into an
+  in-memory progress cache, during an unattended 6pm cron run, and it died with
+  the process. **The app knew, and told nobody.**
+
+**This recurs every 7 days.** Next expiry ≈ 7 Sept 18:23.
+
+## Other findings recorded in passing
+
+- **`emails.sent_at` defaults to `CURRENT_DATE`**, so an unsent draft already
+  carries a send date. Harmless for sending; any "emails sent on X" report is
+  quietly counting drafts.
+- **Render's free tier sleeps the instance after ~15 min without inbound
+  traffic, and the send loop generates none.** The 18:07 run lasting 15.8
+  minutes is that timeout, not a coincidence.
+- The historic failure bursts (27 Jul – 7 Aug, all failed / zero sent) match
+  Session 12's dead-Microsoft-mailbox story — different cause, same silent
+  symptom.

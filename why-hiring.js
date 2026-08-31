@@ -93,9 +93,23 @@ function inferHiringReason(posting = {}, context = {}) {
 
   // 5. Several copies of the SAME title is a team build, and it is the single
   //    best staffing opportunity on this list — multiple placements, one client.
+  //
+  //    WEIGHTS (owner's call, 2026-08-31): this now OUTRANKS age. It did not,
+  //    which contradicted the paragraph above: a role open 60+ days scored 4 and
+  //    two identical openings scored 3, so a company with two of the same job
+  //    was pitched "this has been open a while" instead of "you are building a
+  //    team". Long-open can just mean a stale posting nobody took down; two
+  //    openings of one title means real headcount and budget, and it is the
+  //    better opener. So:
+  //      two openings  -> 5, which beats age alone (4) but still loses to a role
+  //                       that is BOTH long-open and reposted (4+4=8) — that
+  //                       combination is a genuine hard-to-fill story.
+  //      three or more -> 9, above every hard_to_fill combination there is.
+  //    Ties are avoided on purpose: the winner is picked with a strict `>`, so a
+  //    tie would be decided by object key order, which is not a decision.
   const sameTitle = Number(context.same_title_count || 0);
-  if (sameTitle >= 3) bump('team_build', 5, `${sameTitle} openings for this same role`);
-  else if (sameTitle === 2) bump('team_build', 3, 'two openings for this same role');
+  if (sameTitle >= 3) bump('team_build', 9, `${sameTitle} openings for this same role`);
+  else if (sameTitle === 2) bump('team_build', 5, 'two openings for this same role');
 
   // Pick the winner.
   let category = 'unknown', best = 0;
