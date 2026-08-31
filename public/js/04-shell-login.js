@@ -87,59 +87,103 @@ function renderApp(){
   if(typeof refreshUnread==='function')refreshUnread();
   var inboxBadge=(STATE.mailbox&&STATE.mailbox.unread)||null;
 
-  var navItems=[{id:"dashboard",lbl:"Dashboard",ic:"dashboard"}];
-  if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"profile"});
-  if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"leads",badge:todayCnt});
-  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"leads"});
-  // Leads futé sourced itself, waiting for a human to approve them. Sits next to
+  // ── The rail's menu ──────────────────────────────────────────────────────
+  // Grouped, because a flat list of fourteen items is a list nobody reads. The
+  // groups follow how the work actually splits: what you do today (Work), the
+  // records you work on (Records), the mail machinery (Outreach), and the
+  // numbers (Insight). A group with no visible items disappears entirely.
+  var G_WORK='Work', G_REC='Records', G_OUT='Outreach', G_INS='Insight';
+  var navItems=[{id:"dashboard",lbl:"Dashboard",ic:"grid",grp:G_WORK}];
+  if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"users",grp:G_WORK});
+  navItems.push({id:"mailbox",lbl:"Inbox",ic:"inbox",badge:inboxBadge,grp:G_WORK});
+  navItems.push(raOnly?{id:"insights",lbl:"Insights",ic:"chart",grp:G_INS}
+                      :{id:"reminders",lbl:"Reminders",ic:"bell",badge:remBadge,grp:G_WORK});
+
+  if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"send",badge:todayCnt,grp:G_REC});
+  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"check",grp:G_REC});
+  // Leads PACE sourced itself, waiting for a human to approve them. Sits next to
   // Leads because that is where the work continues once one is approved.
   if(userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','director','associate_director'))
-    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"leads",badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
-  if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"leads"});
-  if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"leads"});navItems.push({id:"job_board",lbl:"All Jobs",ic:"leads"});}
-  if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"leads"});
-  if(bdm||recruiter)navItems.push({id:"applicants",lbl:"Candidates",ic:"profile"});
-  if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"admin"});
-  navItems.push({id:"mailbox",lbl:"Inbox",ic:"email",badge:inboxBadge});
-  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Email",ic:"email"});
-  navItems.push(raOnly?{id:"insights",lbl:"Insights",ic:"dashboard"}:{id:"reminders",lbl:"Reminders",ic:"star",badge:remBadge});
-  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"dashboard"});
-  // BD / BD Lead (not admin): own lead-gen performance — "Lead Insights".
-  if(userHasAnyRole(u,'bd','bd_lead')&&!isAdmin)navItems.push({id:"bdinsights",lbl:"Lead Insights",ic:"dashboard"});
-  if(canReports&&!leadsAnyTeam)navItems.push({id:"reports",lbl:"Reports",ic:"reports"});
-  if(userHasAnyRole(u,'admin','bd_lead','ra_lead'))navItems.push({id:"deliverability",lbl:"Deliverability",ic:"dashboard"});
+    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"search",grp:G_REC,badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
+  if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"doc",grp:G_REC});
+  if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"doc",grp:G_REC});navItems.push({id:"job_board",lbl:"All Jobs",ic:"search",grp:G_REC});}
+  if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"building",grp:G_REC});
+  if(bdm||recruiter)navItems.push({id:"applicants",lbl:"Candidates",ic:"user",grp:G_REC});
 
-  var nav=navItems.map(function(n){
+  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Sequences",ic:"mail",grp:G_OUT});
+  if(userHasAnyRole(u,'admin','bd_lead','ra_lead'))navItems.push({id:"deliverability",lbl:"Deliverability",ic:"shield",grp:G_OUT});
+
+  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"chart",grp:G_INS});
+  // BD / BD Lead (not admin): own lead-gen performance — "Lead Insights".
+  if(userHasAnyRole(u,'bd','bd_lead')&&!isAdmin)navItems.push({id:"bdinsights",lbl:"Lead Insights",ic:"chart",grp:G_INS});
+  if(canReports&&!leadsAnyTeam)navItems.push({id:"reports",lbl:"Reports",ic:"chart",grp:G_INS});
+  if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_INS});
+
+  // De-duplicate: Insights can be pushed twice for an admin who is also an RA
+  // lead, and a doubled nav item looks like a bug to the person using it.
+  var seen={};
+  navItems=navItems.filter(function(n){ if(seen[n.id])return false; seen[n.id]=true; return true; });
+
+  function navRow(n){
     var active=STATE.page===n.id?" active":"";
     var badge=n.badge&&n.badge>0?'<span class="nav-badge">'+n.badge+'</span>':"";
-    return '<div class="nav-item'+active+'" onclick="goPage(\''+n.id+'\')"><span class="nav-icon">'+icon(n.ic)+'</span>'+n.lbl+badge+'</div>';
-  }).join("");
+    return '<div class="nav-item'+active+'" onclick="goPage(\''+n.id+'\')" title="'+n.lbl+'">'+
+      '<span class="nav-icon">'+UI.ic(n.ic)+'</span>'+
+      '<span class="nav-txt">'+n.lbl+'</span>'+badge+
+    '</div>';
+  }
+  var nav=[G_WORK,G_REC,G_OUT,G_INS].map(function(g){
+    var rows=navItems.filter(function(n){return n.grp===g;});
+    if(!rows.length)return '';
+    return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
+  }).join('');
 
-  var switchers=""; // removed — use team list to switch views
+  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Sequences",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
 
-  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
-  var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id?" · Viewing: "+STATE.viewingUser.name:"";
+  // The count beside the page title. Each page owns its own number, so this is
+  // a lookup rather than something the shell can compute — a page with nothing
+  // countable simply has no chip, which is quieter than a "0".
+  var counts={
+    applicants:(STATE.ats&&(STATE.ats.countsTotal!=null?STATE.ats.countsTotal:STATE.ats.total))||null,
+    mailbox:(STATE.mailbox&&STATE.mailbox.unread)||null,
+    sourced:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||null,
+    reminders:remBadge
+  };
+  var countChip=counts[STATE.page]?'<span class="tb-count">'+counts[STATE.page]+'</span>':'';
+  var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id
+    ?'<span class="tb-crumb">· Viewing '+htmlEsc(STATE.viewingUser.name)+'</span>':'';
 
   return '<div id="sidebar">'+
-    '<div class="sb-brand"><div class="sb-logo">'+
-      '<div style="line-height:1;flex-shrink:0"><span style="font-family:var(--display);font-weight:700;font-size:22px;color:var(--accent);letter-spacing:-.5px">PA</span><span style="font-family:var(--display);font-weight:700;font-size:22px;color:#F5C23B;letter-spacing:-.5px">CE</span></div>'+
-      '<div><div class="sb-name">Recruiting</div><div class="sb-sub">ATS &amp; Leads</div></div>'+
-    '</div></div>'+
-    '<div class="sb-nav"><div class="sb-lbl">Menu</div>'+nav+'</div>'+
+    '<div class="sb-brand">'+
+      '<div class="rail-mark">P</div>'+
+      '<div class="rail-word"><span style="color:var(--accent)">PA</span><span style="color:#C99A18">CE</span></div>'+
+    '</div>'+
+    '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
-      '<div class="user-row" onclick="goPage(\'profile\')" title="Open my profile">'+av(u,"32")+'<div style="flex:1;min-width:0"><div class="u-name">'+u.name+'</div><div class="u-role">'+roleLabel(u.role)+'</div><div style="font-size:10.5px;color:var(--accent);font-weight:600;margin-top:1px">My profile ›</div></div></div>'+
-      '<div class="signout" onclick="signOut()">Sign out</div>'+
+      '<div class="user-row" onclick="goPage(\'profile\')" title="'+htmlEsc(u.name)+' — open my profile">'+
+        av(u,"32")+
+        '<div class="user-meta" style="flex:1;min-width:0">'+
+          '<div class="u-name">'+htmlEsc(u.name)+'</div>'+
+          '<div class="u-role">'+roleLabel(u.role)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="nav-item" onclick="signOut()" title="Sign out">'+
+        '<span class="nav-icon">'+UI.ic('ban')+'</span><span class="nav-txt">Sign out</span>'+
+      '</div>'+
     '</div>'+
   '</div>'+
   '<div id="main">'+
     '<div id="topbar">'+
-      '<div>'+
-        '<div class="tb-title">'+pageTitles[STATE.page]+viewingName+'</div>'+
-      '</div>'+
-      '<div class="tb-right">'+
+      '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
+      '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
-          '<button class="btn btn-outline btn-sm" onclick="stopViewing()" style="font-size:12px">← Back to my dashboard</button>'
-        :"")+
+          '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
+        '<div class="tb-icons">'+
+          '<div class="tb-ico" title="What needs you today" onclick="goPage(\'dashboard\')">'+UI.ic('bolt')+'</div>'+
+          '<div class="tb-ico" title="Reminders" onclick="goPage(\'reminders\')">'+UI.ic('bell')+
+            (remBadge?'<span class="dot"></span>':'')+'</div>'+
+        '</div>'+
+        '<div class="tb-user" onclick="goPage(\'profile\')">'+av(u,"28")+'</div>'+
       '</div>'+
     '</div>'+
     '<div id="content">'+renderPage()+'</div>'+

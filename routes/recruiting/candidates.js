@@ -74,6 +74,37 @@ module.exports = function (app, core) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // GET /candidates/status-counts?statuses=a,b,c
+  //
+  // Feeds the stat strip at the top of the Candidates page: how many people sit
+  // in each status, right now, across everything the caller can see. Answered
+  // with one HEAD count per status (`head:true` returns the number and no rows),
+  // so the cost is a handful of index counts rather than reading the pool.
+  //
+  // The status VOCABULARY comes from the caller, not from here. Statuses are a
+  // per-org managed lookup, so the page that renders the strip is the only thing
+  // that knows the current list; hard-coding it here would make a customer's
+  // renamed status silently vanish from their own strip.
+  //
+  // Registered before /candidates/:id so the literal path wins the match.
+  app.get('/candidates/status-counts', auth, async (req, res) => {
+    try {
+      const asked = String(req.query.statuses || '')
+        .split(',').map(s => s.trim()).filter(Boolean).slice(0, 24);
+      const base = () => withOrg(
+        supabase.from('candidates').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+        req
+      );
+      const [{ count: total }, ...rest] = await Promise.all([
+        base(),
+        ...asked.map(s => base().eq('applicant_status', s)),
+      ]);
+      const counts = {};
+      asked.forEach((s, i) => { counts[s] = rest[i].count || 0; });
+      res.json({ total: total || 0, counts });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   app.get('/candidates/:id', auth, async (req, res) => {
     try {
       const { data, error } = await supabase.from('candidates')

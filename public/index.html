@@ -6,8 +6,9 @@
 <title>PACE — All-in-one Recruiting Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/styles.css"/>
+<link rel="stylesheet" href="/ui.css"/>
 </head>
-<body>
+<body class="ui-kit">
 <div id="app"><div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#64748B">Loading PACE...</div></div>
 
 <!--
@@ -15,6 +16,7 @@
   single public/app.js. They share one global scope, so LOAD ORDER MATTERS
   and must not be changed. See public/js/README.md.
 -->
+<script src="/js/00-ui-kit.js"></script>
 <script src="/js/01-constants.js"></script>
 <script src="/js/02-state.js"></script>
 <script src="/js/03-core-render.js"></script>
