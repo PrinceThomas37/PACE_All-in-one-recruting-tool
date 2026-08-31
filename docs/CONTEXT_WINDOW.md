@@ -4,10 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-24 (end of Session 13) · **Repo**:
+**Updated**: 2026-08-31 (end of Session 14) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Dev branch**: `claude/in-app-email-mailbox-4rsheq`
+to `main` IS the release · **Dev branch**:
+`claude/email-id-signature-mismatch-9yznjk`
 
 ---
 
@@ -19,11 +20,9 @@ that ever happened, **append-only — never edited, never summarised away.** At
 the end of a session, append the narrative to the archive, then rewrite this to
 describe the new present. Nothing is lost; the read stays short.
 
-**This file had drifted stale for several sessions before this rewrite** (it
-still described PR #134 as open; `CLAUDE.md` was the thing actually kept
-current in the meantime). If you're picking this up cold: `CLAUDE.md` is the
-durable source of truth for anything this file and the archive don't cover —
-trust it over an old-looking line here.
+If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
+anything this file and the archive don't cover — trust it over an old-looking
+line here.
 
 ## What PACE is
 
@@ -41,15 +40,14 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
   `null` — the owner's call, one line in `services/plans.js` when decided.
   Guest-mode/demo-data bypass is fully removed (Session 11) — there is no
   product tour today.
-- **Lead distribution now correctly uses every connected mailbox** — Microsoft
-  and Gmail, active + working tokens only (Session 12, PR #137). A mailbox
-  going inactive auto-moves its open leads to another working one instead of
-  stranding them (`services/mailbox-reassign.js`).
-- **"Needs you today" no longer floods with stale-Assigned-lead noise** — a
-  BD-lead nudge only fires once the lead is `Connected`/`In Discussion`
-  (Session 12, PR #138). **Leads silent in `Assigned` for 30+ days now
-  auto-recycle back to `Unassigned`** daily (`services/lead-recycle.js`,
-  configurable via `app_settings.lead_recycle_days`, default 30).
+- **Lead distribution uses every connected mailbox** (Microsoft + Gmail, live
+  tokens only); a mailbox going inactive auto-moves its leads
+  (`services/mailbox-reassign.js`). Leads silent in `Assigned` 30+ days
+  auto-recycle to `Unassigned` (`services/lead-recycle.js`).
+- **The in-app mailbox** (Session 13) — a real mail client over connected
+  mailboxes. Its four inviolable rules are in `CLAUDE.md` Growth bets §3:
+  nothing mirrored into Postgres, your own mailboxes only, nothing destroys
+  mail, bodies in a sandboxed iframe with remote images blocked.
 - SSO sign-in with Microsoft (Google sign-in is built, needs
   `GOOGLE_CLIENT_ID`/`SECRET` — separate from the per-user Gmail *sending*
   connection below, which is live and working)
@@ -65,49 +63,64 @@ Everything through `040_billing.sql` is applied (see `CLAUDE.md`'s "Growth
 bets" §9 and §1 for the fuller multi-tenancy/billing state — that section is
 kept current and is the right place to check plan/RLS/billing status).
 
-## ✅ Just shipped (Session 13): the in-app mailbox
+**042 will most likely be an error column on `emails`** — the send path has
+nowhere to record *why* a send failed, which is why the 7-day Gmail expiry was
+invisible. Session 14 added no migration.
 
-PACE now has a real mail client over each user's connected mailboxes — folders
-and labels, message list, reading pane, reply / reply-all, compose, archive,
-trash, mark read/unread, search, attachments, and a **Lead / Candidate chip** on
-any sender already in the ATS. `services/mail-provider.js` (one adapter over
-Graph *and* Gmail) → `routes/mailbox.js` (13 endpoints) →
-`public/js/47-page-mailbox.js` ("Inbox" in the sidebar, above Email).
+## ✅ Just shipped (Session 14): the outbound send path, made honest
 
-**No migration and no new OAuth consent** — `Mail.ReadWrite` / `gmail.modify`
-already covered it, so nobody reconnects a mailbox.
+Five merged PRs, all live. Full narrative in the archive; the load-bearing
+outcomes:
 
-Four rules in that feature that must not be softened (all pinned by tests, and
-spelled out in `CLAUDE.md`'s Growth-bets §3):
-- **Nothing is mirrored into Postgres** — every read is a live pass-through.
-  `conversation_messages` (037) was deliberately *not* widened to hold inbox
-  traffic; it stays the intelligence layer's record of threads PACE is working.
-- **Your own mailboxes only**, admin included. 404 for someone else's (so ids
-  can't be probed), 409 for yours-but-disconnected.
-- **Nothing destroys mail** — delete is move-to-Trash; neither provider's
-  permanent-delete is reachable from this app.
-- **Bodies render in a sandboxed iframe** (no scripts, no same-origin) and
-  **remote images stay blocked until asked for**.
+- **The sender's name is resolved in ONE place — the moment of sending, from
+  the mailbox that actually sends** (#142, #143). It used to be baked in at
+  queue time from a different chain, so changing a lead's mailbox stranded the
+  old name: a cold email went out saying "I'm Jennifer Thomas" over Prince
+  Thomas's From line and signature. 152 sent emails carried that mismatch.
+  The rule this leaves behind is in Traps below and must not be softened.
+- **Fresh leads jump ahead of follow-ups in the send queue** (#144). The queue
+  drains at one email per 75–105s inside an 8-hour lead-local window, so order
+  decides who goes out *at all* — 36 follow-ups were sitting in front of 20
+  leads assigned that afternoon. `send-queue-order.js` is pure and tested by
+  behaviour; cap, window, pacing and domain spacing all unchanged.
+- **The Admin engine card stopped crying wolf** (#144) — it measured "did a job
+  run because of cron" rather than "did the ping arrive", and a ping finds
+  nothing due whenever the app is awake, so it went amber when healthiest.
+- **`ingestSource` takes an injectable clock** (#145), after its test spent
+  weeks failing on a *date* rather than a code change.
 
-Sending reuses the outreach engine's provider calls (no second send path) but
-does *not* pixel-track — tracking belongs to outreach, not to a personal reply.
+## ⏭ Pick this up first (Session 15)
 
-**Round 2, after the owner used it:** reply/reply-all/forward share one composer
-with editable **To / Cc / Subject**, **attachments** (3.5MB per message, capped
-below express's 5MB body limit so the friendly refusal fires), and **Forward**.
-The signature is **off by default with a picker** — and is now *filled*: the
-first version appended the raw template, so `{{sender}}` reached a real
-recipient. **Anything that composes mail must call `fillSignatureHtml`** —
-`getMailboxSignature` returns a template, not a signature.
-Also fixed: `gmail-provider.js` now RFC 2047-encodes `Subject`/`From`/filenames,
-which is what turns an em-dash into `Ã¢Â€Â"` in the recipient's client.
+**1. PR #146 is OPEN and ready to merge** — reweights `why-hiring.js` so two
+openings of the same title outranks "open 60+ days" (owner's decision). Two
+openings → 5, three or more → 9, above every `hard_to_fill` combination. All
+49 suites green.
 
-**Not in v1, deliberately:** drafts are read-only, no move-to-folder picker in
-the UI (the API supports it), no shared/delegated mailboxes, and the unread
-badge is a 60s cached poll rather than a live push.
+**2. The Gmail connection dies every 7 days, and silently destroys emails.**
+Fully diagnosed on 31 Aug, **nothing fixed yet** (archive Session 14 Part 7 has
+the evidence chain). Eleven follow-ups were marked `failed` with no reason
+recorded because the mailbox's refresh token had expired 40 minutes earlier.
+
+- **Root cause is Google-side:** the OAuth consent screen is in **"Testing"**
+  publishing status, where Google expires refresh tokens after exactly 7 days.
+  Connected 24 Aug 17:27 → died 31 Aug 17:27. Reconnected 18:23; next expiry
+  ≈ **7 Sept 18:23**. Owner was asked whether `futeglobal.com` is Google
+  Workspace — if it is, switching the app to **"Internal"** removes the 7-day
+  limit *and* the unverified warning, with no code. **Answer still needed.**
+- **Three code defects to fix regardless:** an auth failure marks each email
+  `failed` forever with no retry (the thread-deferral path releases back to
+  `pending` — do that instead); the loop keeps burning one email every 90s
+  after the sign-in is known dead (stop that mailbox on the first one); and
+  **`emails` has no error column**, so `friendlySendError`'s correct sentence
+  ("Sending mailbox sign-in expired — reconnect it") went only to an in-memory
+  cache during an unattended cron run and died with the process.
+- **The 11 failed follow-ups were never delivered** and can be re-queued.
 
 ## Owner actions outstanding
 
+0. **BLOCKING: is `futeglobal.com` on Google Workspace?** Decides the fix for
+   the 7-day Gmail expiry above (Internal app = no expiry, no code) vs. living
+   with a weekly reconnect. Asked 31 Aug, unanswered.
 1. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
    `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
 2. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
@@ -119,32 +132,24 @@ badge is a 60s cached poll rather than a live push.
 
 ## Plans — the rules that must not be softened
 
-Free 2 seats / 3 job orders / 50 candidates / 1 mailbox · Starter 5/25/1,000/3 ·
-Pro 20/∞/10,000/10 · Business unlimited · `internal` = ours, unlimited (the
-default org is on it).
+Tiers and limits live in `services/plans.js`; the full table and rationale are
+in `CLAUDE.md` Growth bets §9, kept current. The four rules:
 
-- **Enforced on CREATE** with **402**, not 403 — a billing wall, not a
-  permission error. Feature gates: sourcing = Pro+, conversation
-  intelligence = Starter+.
+- **Enforced on CREATE with 402**, not 403 — a billing wall, not a permission
+  error. Sourcing = Pro+, conversation intelligence = Starter+.
 - **Being over a limit never deletes anything.** Create-only enforcement.
 - **Only the signed Stripe webhook may change a plan.**
 - **A failed usage count ALLOWS** — never block a paying customer on a
   timed-out COUNT.
-
----
 
 ## Traps that will bite you (learned the hard way)
 
 **Before moving ANY file** → `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
 (Session 8). Ten things break on a naive move and several fail *silently*.
 
-- **A mailbox "connected" check must cover both platforms and check the token
-  is actually alive.** `/distribute/execute` only ever checked
-  `microsoft_tokens` with no `is_active`/`refresh_failed` filter — Gmail could
-  never be selected, and dead Microsoft tokens kept getting reused forever.
-  Fixed Session 12; if you add another mailbox-selection code path, check both
-  `microsoft_tokens` AND `gmail_tokens`, exclude `refresh_failed`, filter
-  `is_active`.
+- **Any mailbox-selection path must check BOTH `microsoft_tokens` and
+  `gmail_tokens`, exclude `refresh_failed`, and filter `is_active`** — checking
+  one table silently made Gmail unselectable and reused dead tokens forever.
 - **A job whose sending mailbox goes inactive does not fail its pending
   emails — it silently skips them forever.** Any code path that deactivates,
   disconnects, or deletes a `user_emails` row must call
@@ -158,7 +163,19 @@ default org is on it).
   boots the real server and pins all mounted routes.
 - **`conversation-intel.js` has an injectable clock — never test it against
   the real one.** Every headline it writes is a claim about elapsed time.
-  `next-action.js` (the ranking on top of it) is the same discipline.
+  `next-action.js` and **`lead-ingest.js`'s `ingestSource`** are the same
+  discipline. `lead-sourcing-smoke` failed for weeks on a *date* because the
+  ingest read the real clock against fixed fixture dates (Session 14).
+- **`emails.body` holds `{{sender}}` until send time — every reader must call
+  `renderStoredEmail(row, mailbox)` first.** Miss it and the token reaches a
+  screen, or worse a *recipient* (it was being quoted into follow-ups).
+  `sender-identity-smoke` greps for readers and fails if one doesn't render.
+- **A dead mailbox sign-in currently DESTROYS emails** — auth failure sets
+  `failed` with no retry, one every 90s, and the reason is never persisted
+  (`emails` has no error column). Diagnosed, not fixed — see "Pick this up
+  first". Any send-path work should fix this rather than route around it.
+- **`emails.sent_at` defaults to `CURRENT_DATE`**, so an unsent draft already
+  carries a send date. Any "sent on X" report is counting drafts.
 - **One reply sweep, not two.** `processInboundMessages` serves Outlook *and*
   Gmail; Gmail messages are reshaped into Graph's shape.
 - **Graph's `/move` returns a NEW message id** — the old one stops resolving the
@@ -170,23 +187,20 @@ default org is on it).
 - **Retries are safe-methods-only** in `http-client.js`. Retrying a
   `POST /me/sendMail` on a timeout sends the email twice.
 - **Use `models/` for tenant tables**, not hand-written `supabase.from()`.
-- **The stage vocabulary lives in 6 places.** `33-stage-modal.js` is
-  canonical; the backend copy is `services/recruiting-core.js`. Note this is
-  the **ATS candidate stage** vocabulary — BD **lead** stages (`Unassigned`,
-  `Assigned`, `Connected`, `In Discussion`, `Rejected`) are a *different*,
-  smaller vocabulary on `jobs.stage`, not the same 11 stages. Don't conflate
-  them when touching lead-side code (distribution, recycling, next-actions).
+- **The stage vocabulary lives in 6 places** (`33-stage-modal.js` canonical,
+  `services/recruiting-core.js` on the backend). That is the **ATS candidate**
+  vocabulary — BD **lead** stages on `jobs.stage` are a different, smaller set.
+  Don't conflate them in lead-side code.
 - **Render is on the FREE tier** — instance hours are a hard budget. Ask what
   a new poller costs before adding one.
 - **When a claim about behaviour is load-bearing, test the claim.**
 - **The browser tests are not allowed to need a production bypass** — use
   `test/helpers/enter-app.mjs`.
-- **A destructive DB action (bulk delete, direct SQL fix) always needs: check
-  FK cascade rules first (`information_schema` — `NO ACTION` means you must
-  clear the referencing rows yourself, in dependency order), verify scope with
-  counts before running, get explicit confirmation, verify after.** Done twice
-  this session (stuck-lead mailbox fixes, the 1,249-lead cleanup) without
-  incident by following exactly that order.
+- **A destructive DB action always needs, in this order:** check FK cascade
+  rules (`information_schema`; `NO ACTION` means clear referencing rows
+  yourself), verify scope with counts, take a snapshot, get explicit
+  confirmation, verify after. Followed for the 25-follow-up delete (Session 14)
+  and the 1,249-lead cleanup (Session 13) without incident.
 
 ## Deliberately open, not forgotten
 
@@ -198,15 +212,26 @@ default org is on it).
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API** (still the one CLAUDE.md flags as highest-leverage next), generalized
   audit trail, PWA polish.
-- In-app mailbox shipped and iterated once on real use; the gaps listed above
-  (drafts, move-picker, shared mailboxes, live push) are the obvious
-  follow-ups.
+- In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker in the UI
+  (the API supports it), no shared/delegated mailboxes, unread badge is a 60s
+  cached poll not a live push.
+- **The 25 final follow-ups deleted on 31 Aug do not regenerate** — their
+  `follow_ups` schedules were already marked complete when first queued. Those
+  contacts got their initial + one follow-up and no third touch. Deliberate,
+  owner's instruction.
 
 ## Working rules
 
-`npm test` (45 suites now, judged by **exit code**) · `bash
+`npm test` (49 suites now, judged by **exit code**) · `bash
 test/verify-frontend.sh` · build on the dev branch → test → screenshot/show →
 draft PR → merge only on an explicit "merge it"/"do it" → for anything
 touching the live DB, apply the migration only on a fresh explicit go-ahead,
 right before merge, not on general feature agreement. The owner does not read
 code; show them the running app and plain English.
+
+**Two habits this session paid for repeatedly:** check whether a failing test
+is failing on *live code* or on the *calendar* before calling it a product bug
+(and correct yourself out loud if you got it wrong), and when a placeholder is
+left in stored data, find EVERY reader before declaring it fixed — the first
+attempt at the sender fix taught exactly one screen and left the token leaking
+into follow-ups a customer would have read.
