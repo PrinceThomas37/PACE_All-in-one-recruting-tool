@@ -2502,3 +2502,98 @@ The owner asked for four screens and got them, but the durable value is that the
 *fifth* screen is now an afternoon instead of a week. When a request is "make it
 look like this", the honest reading is usually "give the app a structure it
 doesn't have" — and the structure is the deliverable, not the screenshots.
+
+---
+
+# Session 15, part 2 — the rollout, and a decision to park something
+
+Two more PRs on the same thread: **#149** (the context files) and **#150** (the
+kit across every remaining list page). Plus one owner decision worth recording
+precisely, because the risk with it is a future session re-raising it.
+
+## The rollout
+
+**Leads.** The six stage chips became the stat strip, and the stage *names* came
+back with them. They had been number-and-colour only, with the name on hover —
+recorded in the code as "owner's spec", but that spec was a workaround for
+having nowhere to put a label in a row of chips. The strip has the room, so the
+label returned and the stage colour stayed as the dot: both the original intent
+(colour-coded, scannable) and the thing it had been trading away.
+
+The rule that matters: **strip counts come from ALL of the user's leads, never
+the filtered set.** The strip is the denominator you filter against; if
+filtering moved it, clicking "Connected 3" would rewrite the very number the
+click was aimed at. Same rule already applied on Candidates and now on Clients
+and All Jobs.
+
+"Connected" kept its drill-down rather than being made consistent with the other
+cells, because that panel shows each connected lead's email, phone and LinkedIn
+— information the table does not carry. Consistency would have cost a real
+capability. The chevron says the click does something different.
+
+**Clients.** The record became a drawer over the list. Two things had to be
+fixed rather than inherited:
+
+- **An overlay's data must repaint the overlay.** `paint()` rebuilds `#content`,
+  and a drawer is drawn *after* `#content`, so all four detail fetches were
+  landing in state and never reaching the screen. `paintDetail()` replaces just
+  the drawer node. This is now a trap in the window file — it will bite every
+  future drawer.
+- **`recentEmailsCard()` had lost its only caller.** A client's email history
+  was dead code, and had been for a while. It is back as an Emails tab. This
+  turned up only because converting a page forces you to account for every part
+  of it — which is an argument for the conversion beyond how it looks.
+
+**Sourced Leads.** The status filter *is* the summary here — every cell is a
+queue you can stand in and the number is how much is waiting in it — so it
+became the strip directly. Labels stayed in the user's language rather than the
+database's: "To review", not `new`.
+
+**All Jobs.** Card grid kept deliberately: a job on the board is a pitch you
+read, not a row you scan. It gained the frame and a strip answering what a
+recruiter actually opens the board for.
+
+**Reports.** Split into strip / filters / body so the standalone page could hang
+them off the kit's frame while the My Team hub still gets one blob for its tab.
+The alternative — duplicating the reports content for the two contexts — is how
+a page ends up with two versions that drift.
+
+**Not converted, deliberately:** the dashboards, Admin, the pipeline board, My
+Team, Assign Leads. Card- and board-shaped, not list-shaped. Forcing the table
+treatment on them would make them worse, and "the rollout is finished" is not
+worth a worse screen.
+
+## Tests: pinning behaviour, not markup
+
+Three assertions moved across #147–#150, each off an implementation detail and
+onto the behaviour it was really protecting:
+
+- a flat nav index (`navItems[1] === 'My Jobs'`) → Dashboard first, and a
+  recruiter's own jobs ahead of the shared board and the candidate pool;
+- an inline `font-weight:700` → unread rows are *marked*;
+- a `(2)` bracket format → every status still says how much is waiting in it.
+
+Every **safety** assertion was left exactly as it was and still passes: the
+sandboxed body, blocked remote images, no permanent-delete call, own-mailboxes
+only. A redesign is allowed to move a cosmetic assertion; it is never allowed to
+relax one of those.
+
+## The parked decision
+
+On 2026-09-01 the owner said of the Gmail 7-day expiry: *"We will work on this
+but not now."*
+
+That is a decision, and it is recorded in the window file under a heading that
+says **do not re-raise it as blocking**. The full diagnosis sits with it so a
+future session does not have to re-derive it: the OAuth consent screen is in
+"Testing" status, Google expires refresh tokens after exactly 7 days there, and
+if `futeglobal.com` is on Google Workspace then switching the app to "Internal"
+fixes it with no code at all. Three code defects are worth fixing whatever
+Google says — release to `pending` rather than `failed` on an auth failure, stop
+the mailbox on the first failure instead of burning one email every 90s, and add
+the error column (migration 042) so the app can say out loud what went wrong.
+
+The discipline worth keeping: when an owner defers something, write down *what
+was deferred and what was already known about it*, not just that it was
+deferred. Otherwise the next session either pesters them again or starts the
+diagnosis from zero.

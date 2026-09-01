@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-31 (end of Session 15) · **Repo**:
+**Updated**: 2026-09-01 (Session 15, part 2) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**:
@@ -15,7 +15,10 @@ to `main` IS the release · **Dev branch**:
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
 **This file: current state only. REWRITE it each session, keep it under ~200
-lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
+lines, delete anything no longer true.** (It currently runs ~270. Three passes
+already removed everything that merely duplicated `CLAUDE.md`; what is left is
+live state. If you can genuinely retire something — a parked item that got
+resolved, a trap that moved into `CLAUDE.md` — do, and bring it back down.) `docs/CONTEXT_ARCHIVE.md`: everything
 that ever happened, **append-only — never edited, never summarised away.** At
 the end of a session, append the narrative to the archive, then rewrite this to
 describe the new present. Nothing is lost; the read stays short.
@@ -42,15 +45,10 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Lead distribution uses every connected mailbox** (Microsoft + Gmail, live
   tokens only); a mailbox going inactive auto-moves its leads. Leads silent in
   `Assigned` 30+ days auto-recycle to `Unassigned`.
-- **The in-app mailbox** (Session 13, restructured Session 15) — a real mail
-  client over connected mailboxes, now **two panes with a threaded reader**.
-  Its four inviolable rules are in `CLAUDE.md` Growth bets §3: nothing mirrored
-  into Postgres, your own mailboxes only, nothing destroys mail, bodies in a
-  sandboxed iframe with remote images blocked.
-- **The shared UI kit** (Session 15) — `public/ui.css` + `public/js/00-ui-kit.js`.
-  The app finally has one layout vocabulary: icon rail, top bar, page tabs, stat
-  strip, toolbar, dense table, record drawer. See "The UI kit" below before
-  building any new screen.
+- **The in-app mailbox** (Session 13, restructured Session 15) — two panes with
+  a threaded reader. Its four inviolable rules are in `CLAUDE.md` Growth bets §3.
+- **The shared UI kit** (Session 15) — one layout vocabulary for the whole app.
+  See "The UI kit" below before building any new screen.
 - SSO sign-in with Microsoft. Google sign-in is built but needs
   `GOOGLE_CLIENT_ID`/`SECRET` — **distinct from** the per-user Gmail *sending*
   connection, which is live and working.
@@ -58,111 +56,114 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 ## Migrations — 041 is the latest APPLIED (2026-08-24)
 
 `041_lead_recycling.sql` — `jobs.recycled_count` / `jobs.last_recycled_at`,
-visibility-only. Applied with explicit go-ahead, verified against live schema.
+visibility-only. Everything through `040_billing.sql` is applied; `CLAUDE.md`
+Growth bets §1 and §9 are kept current and are the right place to check the
+multi-tenancy / RLS / billing state.
+
 **The next migration number is 042. Never apply one to the live DB without a
 fresh, explicit go-ahead**, even when the feature itself was already agreed.
-
-Everything through `040_billing.sql` is applied (see `CLAUDE.md`'s "Growth
-bets" §9 and §1 for the fuller multi-tenancy/billing state — that section is
-kept current and is the right place to check plan/RLS/billing status).
-
-**042 will most likely be an error column on `emails`** — the send path has
-nowhere to record *why* a send failed, which is why the 7-day Gmail expiry was
-invisible. Sessions 14 and 15 added no migration.
+042 is most likely the error column on `emails` — see "Parked by the owner".
+Sessions 14 and 15 added no migration.
 
 ## ✅ Just shipped (Session 15): the app got a structure
 
-The owner started using **Saleshandy**, sent nine screenshots, and asked for
-PACE's frontend to be made alike. Two PRs, **#147** and **#148**, both merged
-and live. The lasting output is not any one screen — it is the shared layout
-vocabulary underneath them, which the codebase had never had.
+The owner benchmarked PACE against **Saleshandy** and asked for it to be made
+alike. Four PRs — **#147** through **#150** — all merged and live. The lasting
+output is not any one screen but the shared layout vocabulary underneath them,
+which the codebase had never had.
 
-- **The UI kit.** `public/ui.css` + `public/js/00-ui-kit.js` — pure string
-  builders, no state, no DOM, safe at the head of the load order. It overrides
-  **only** the shell and the list/table/detail vocabulary; `.card`/`.btn`/
-  `.bdg`/`.inp` keep working, so pages move over one at a time.
-- **The rail** is grouped Work / Records / Outreach / Insight, collapses to
-  60px and expands on hover as an overlay so content never reflows.
-- **Candidates** is the first page on the kit: tabs, a status stat strip that
-  doubles as the filter, one toolbar, a dense table. Fed by a new read-only
-  `GET /candidates/status-counts`.
-- **The candidate profile is now a DRAWER over the list, not a page** — see
-  Traps. There is no `bd_candidate` page any more.
-- **The sequence builder is a timeline** — Day 1 → Day 4 → Day 9 down a
-  connector, cumulative days computed at render time.
-- **Compose has a live preview** with the From picker inside it, resolving
-  `{{sender}}` from the selected mailbox — the same rule the send path follows.
-- **The inbox is two panes and shows the whole thread**, using the
-  `/threads/:tid` endpoint that already existed with no caller.
+- **The UI kit** (`public/ui.css` + `public/js/00-ui-kit.js`) — see the section
+  below before building anything.
+- **The rail** is grouped Work / Records / Outreach / Insight, 60px, expanding
+  on hover as an overlay so content never reflows.
+- **Every list page is on the kit**: Candidates, Leads, Clients, Sourced Leads,
+  All Jobs, Reports, Email, Inbox.
+- **Records open as drawers over their list** — candidates and clients both.
+- **The sequence builder is a timeline** (Day 1 → Day 4 → Day 9).
+- **Compose has a live preview** with the From picker inside it.
+- **The inbox is two panes and shows the whole thread.**
+- One new read-only endpoint, `GET /candidates/status-counts`. No migration.
 
-Full narrative, and the reasoning behind each trade, in the archive's
-"Session 15".
+Three latent bugs surfaced on the way and were fixed: a client's email history
+had lost its only caller and was dead code; the BD "convert to job" bar was
+inserting itself above the page's own identity; and `/mailbox/:mid/threads/:tid`
+had existed with no caller since Session 13.
+
+Full narrative and the reasoning behind each trade: archive, "Session 15".
 
 ## ⏭ Pick this up first (Session 16)
 
-**1. The Gmail connection dies every 7 days, and silently destroys emails.**
-Fully diagnosed on 31 Aug, **still nothing fixed** (archive Session 14 Part 7
-has the evidence chain). Eleven follow-ups were marked `failed` with no reason
-recorded because the mailbox's refresh token had expired 40 minutes earlier.
+**1. Finish the UI-kit rollout.** Done: Candidates, Leads, Clients, Sourced
+Leads, All Jobs, Reports, Email, Inbox — every list-shaped page. **Still on
+their own markup:** the dashboards (`05-page-dashboard.js`, `16-insights.js`),
+Admin (`08-page-admin.js`), the pipeline/board (`28-page-pipeline.js`), My Team
+(`42-page-myteam.js`), Assign Leads (`21-assign-leads.js`) and the orphaned
+Manager Users page. These are card- and board-shaped, not list-shaped, so each
+needs its own judgement rather than the same table treatment — which is why they
+were left rather than forced. They still look fine; they are simply not
+identical to the rest yet.
 
+**2. Growth bets the owner has not been offered recently.** `CLAUDE.md` still
+flags **CSV import/export + a small public API** as the highest-leverage
+unstarted bet (buyers need to migrate in and integrate). Per-role permissions
+and a generalized audit trail are the other two that make PACE sellable rather
+than merely usable.
+
+## ⏸ Parked by the owner — do NOT re-raise as blocking
+
+**The Gmail 7-day expiry.** On 2026-09-01 the owner said, in as many words:
+*"We will work on this but not now."* That is a decision, not an oversight.
+**Do not open a session by asking about it again, and do not treat it as
+blocking other work.** Raise it only if it causes a fresh, visible incident, or
+if the owner asks what is outstanding.
+
+What is parked, so it is not re-derived from scratch later (full evidence chain
+in the archive, Session 14 Part 7):
+
+- **Symptom:** a dead Gmail sign-in destroys queued emails. An auth failure
+  marks each email `failed` with no retry, one every ~90s, and the reason is
+  never persisted — `emails` has no error column, so `friendlySendError`'s
+  correct sentence went only to an in-memory cache during an unattended cron run
+  and died with the process. Eleven follow-ups were lost this way on 31 Aug and
+  were never delivered; they can still be re-queued.
 - **Root cause is Google-side:** the OAuth consent screen is in **"Testing"**
   publishing status, where Google expires refresh tokens after exactly 7 days.
-  Connected 24 Aug 17:27 → died 31 Aug 17:27. Reconnected 18:23; next expiry
-  ≈ **7 Sept 18:23**. Owner was asked whether `futeglobal.com` is Google
-  Workspace — if it is, switching the app to **"Internal"** removes the 7-day
-  limit *and* the unverified warning, with no code. **Answer still needed.**
-- **Three code defects to fix regardless:** an auth failure marks each email
-  `failed` forever with no retry (the thread-deferral path releases back to
-  `pending` — do that instead); the loop keeps burning one email every 90s
-  after the sign-in is known dead (stop that mailbox on the first one); and
-  **`emails` has no error column**, so `friendlySendError`'s correct sentence
-  ("Sending mailbox sign-in expired — reconnect it") went only to an in-memory
-  cache during an unattended cron run and died with the process.
-- **The 11 failed follow-ups were never delivered** and can be re-queued.
-
-**2. Finish the UI-kit rollout.** Done: Candidates, Leads, Clients, Sourced
-Leads, All Jobs, Reports, Email, Inbox. **Still on their own markup:** the
-dashboards (`05-page-dashboard.js`, `16-insights.js`), Admin (`08-page-admin.js`),
-the pipeline/board (`28-page-pipeline.js`), My Team (`42-page-myteam.js`),
-Assign Leads (`21-assign-leads.js`) and the orphaned Manager Users page. Those
-are card- and board-shaped rather than list-shaped, so they need a judgement
-call per page rather than the same table treatment — which is why they were left
-rather than forced.
+  Connected 24 Aug 17:27 → died 31 Aug 17:27. **If `futeglobal.com` is on Google
+  Workspace, switching the app to "Internal" removes the 7-day limit and the
+  unverified warning, with no code at all.** That question is the one input
+  needed, and it is the owner's to answer when they choose to.
+- **Three code defects worth fixing whatever Google says:** release to `pending`
+  on an auth failure instead of `failed` (the thread-deferral path already does
+  this — copy it); stop a mailbox on the FIRST auth failure rather than burning
+  one email every 90s after the sign-in is known dead; and add the error column
+  (**migration 042**, still unclaimed) so the app can say out loud what went
+  wrong.
 
 ## The UI kit — read before building any screen
 
 `public/ui.css` + `public/js/00-ui-kit.js`. Everything returns an HTML **string**,
-matching the render-to-string convention; no framework, no build step.
+matching the render-to-string convention; no framework, no build step. The
+drawer, grouped-rail and hidden-panel rules are written out in `CLAUDE.md`
+(stack §Frontend) — this is the practical summary.
 
-- **Use `UI.page({tabs, strip, toolbar, body})`** for a page, not a bare
-  `<div class="page">`. `UI.tabs`, `UI.strip`, `UI.toolbar`, `UI.table`,
-  `UI.idCell`, `UI.pill`, `UI.ring`, `UI.toggle`, `UI.check`, `UI.kv`,
-  `UI.notice`, `UI.feed`, `UI.drawer`, `UI.ic` are the vocabulary. Adding a
-  twelfth hand-rolled table is how the app got into this state.
-- **The kit is scoped by `body.ui-kit`** (set in `index.html`) and overrides
-  only the shell + list/table/detail styles. `styles.css` still owns
-  `.card`/`.btn`/`.bdg`/`.inp`/modals, so an unconverted page is unaffected.
-- **A drawer is an overlay, not a page.** Register it with
-  `UI.registerOverlay(name, fn)` — **by name, idempotent**, because module files
-  are evaluated once but wrap `render()` repeatedly and pushing blindly stacks
-  duplicate drawers. `renderApp()` calls `UI.renderOverlays()` after `#content`.
-- **`scheduleRender()` skips a background rebuild while any overlay is open**
-  (`UI.anyOverlayOpen()`), the same as it does for a modal — a rebuild under a
-  drawer throws away a half-typed note.
-- **Panels behind tabs inside a drawer all render, with `hidden` on the
-  inactive ones**, and the tab handler toggles `el.hidden` rather than calling
-  `render()`. That is what lets a note survive a tab click and stops an iframe
-  being refetched.
-- **A stat strip never fabricates a number.** Show `·` until real counts land;
-  a `0` is a claim ("nobody is interviewing") and may be false.
-- **A strip/tab count measures the whole pool; the pager keeps the filtered
+- **Build with `UI.page({tabs, strip, toolbar, body})`**, not a bare
+  `<div class="page">`. Parts: `tabs`, `strip`, `toolbar`, `table`, `idCell`,
+  `pill`, `ring`, `toggle`, `check`, `kv`, `notice`, `feed`, `drawer`, `ic`.
+  **Never hand-roll another table** — eleven of those is how the app got here.
+- **Scoped by `body.ui-kit`**; it overrides only the shell and list/table/detail
+  styles, so `styles.css` still owns `.card`/`.btn`/`.bdg`/`.inp`/modals and an
+  unconverted page is unaffected.
+- **A drawer is an overlay**: `UI.registerOverlay(name, fn)`, drawn after
+  `#content`, and `scheduleRender()` skips a rebuild while one is open.
+- **A strip never fabricates a number.** Show `·` until real counts land; a `0`
+  is a claim, and it may be false.
+- **A strip or tab count measures the whole pool; the pager keeps the filtered
   number.** Mixing them makes a filtered list feel broken.
 
 ## Owner actions outstanding
 
-0. **BLOCKING: is `futeglobal.com` on Google Workspace?** Decides the fix for
-   the 7-day Gmail expiry above (Internal app = no expiry, no code) vs. living
-   with a weekly reconnect. Asked 31 Aug, unanswered.
+0. ~~Is `futeglobal.com` on Google Workspace?~~ **Parked by the owner on
+   1 Sept — see "Parked by the owner" above. Do not re-raise as blocking.**
 1. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
    `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
 2. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
@@ -213,20 +214,14 @@ these are the ones it does not cover.**
   who is also an RA lead used to get two "Insights" rows). Still pinned by
   tests: Dashboard first, and a recruiter's "My Jobs" ahead of "All Jobs" and
   "Candidates".
-- **The candidate profile is a DRAWER; `STATE.page` must stay untouched when it
-  opens.** That is the whole reason closing it returns you to the same list with
-  the same filters, selection and scroll. There is no `bd_candidate` page — do
-  not reintroduce one "for deep links". Two paths to one screen is how the stage
-  vocabulary ended up hand-synced across six files.
-- **A sandboxed message body cannot be auto-sized.** Measuring an iframe from
-  the parent needs `allow-same-origin`, the exact grant that keeps a hostile
-  email boxed in. Mail bodies get a fixed height and scroll inside themselves.
-  Do not "fix" this.
-- **Anything previewing an outbound email resolves `{{sender}}` from the
-  SELECTED MAILBOX, never the logged-in user.** A preview using the session user
-  would have shown the right name for the exact Session 14 bug where 152 emails
-  went out under the wrong one — hiding it instead of catching it. An unfillable
-  variable stays visible and highlighted, never silently blanked.
+- **A record detail is a drawer; a sandboxed mail body cannot be auto-sized;
+  a compose preview resolves `{{sender}}` from the selected mailbox.** All three
+  are written out in full in `CLAUDE.md` (stack §Frontend, Growth bets §3, and
+  the outbound-send-path rule). Do not "fix" any of them.
+- **An overlay's data must repaint the overlay, not `#content`.** A page's own
+  `paint()` rebuilds `#content` only, and a drawer is drawn *after* it — so a
+  fetch that lands while a drawer is open reaches state and never the screen.
+  `41-page-clients.js`'s `paintDetail()` is the pattern.
 - **When a claim about behaviour is load-bearing, test the claim.**
 - **Browser tests are never allowed to need a production bypass** — use
   `test/helpers/enter-app.mjs`.
@@ -251,10 +246,8 @@ these are the ones it does not cover.**
 - In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker in the UI
   (the API supports it), no shared/delegated mailboxes, unread badge is a 60s
   cached poll not a live push.
-- **The 25 final follow-ups deleted on 31 Aug do not regenerate** — their
-  `follow_ups` schedules were already marked complete when first queued. Those
-  contacts got their initial + one follow-up and no third touch. Deliberate,
-  owner's instruction.
+- **The 25 final follow-ups deleted on 31 Aug do not regenerate** (their
+  schedules were already complete). Deliberate, owner's instruction.
 
 ## Working rules
 
