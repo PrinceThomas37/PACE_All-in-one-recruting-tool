@@ -387,36 +387,33 @@
 
   function renderPage(){
     var s = STATE.sourced;
-    if (!canSource(STATE.user)) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">Not available for your role.</div></div>';
+    if (!canSource(STATE.user))
+      return UI.page({ body:'<div class="dt-empty">Not available for your role.</div>' });
 
     var counts = s.counts||{};
-    var statuses = [['new','To review',counts['new']||0],['duplicate','Already have',counts['duplicate']||0],
-                    ['promoted','Added',counts['promoted']||0],['rejected','Dismissed',counts['rejected']||0]];
+    // Labels in the user's language, not the database's: `new` is work waiting,
+    // `duplicate` means we already have it, `promoted` means it made it in.
+    var statuses = [['new','To review'],['duplicate','Already have'],
+                    ['promoted','Added'],['rejected','Dismissed']];
 
-    var tabs = '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
-      [['queue','Review queue'],['sources','Boards watched']].map(function(v){
-        var on = s.view===v[0];
-        return '<div style="padding:8px 16px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'var(--accent)':'var(--text3)')+
-          ';cursor:pointer'+(on?';border-bottom:2px solid var(--accent)':'')+'" onclick="srcdSetView(\''+v[0]+'\')">'+v[1]+'</div>';
-      }).join('')+'</div>';
+    var tabs = UI.tabs([
+      { id:'queue',   label:'Review queue',  n:(counts['new']||0), onclick:"srcdSetView('queue')" },
+      { id:'sources', label:'Boards watched',                      onclick:"srcdSetView('sources')" }
+    ], s.view||'queue',
+      '<span style="font-size:12px;color:var(--ink3)">Openings PACE found on its own. Nothing is contacted until you add it here.</span>');
 
-    var filters = s.view!=='queue' ? '' :
-      '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">'+
-        statuses.map(function(st){
-          var on = s.status===st[0];
-          return '<button class="btn btn-sm '+(on?'btn-primary':'btn-outline')+'" onclick="srcdSetStatus(\''+st[0]+'\')">'+
-            st[1]+(st[2]?' ('+st[2]+')':'')+'</button>';
-        }).join('')+
-      '</div>';
+    // The status filter IS the strip on this page — every cell is a queue you
+    // can stand in, and the number is how much is in it.
+    var strip = s.view!=='queue' ? '' : UI.strip(statuses.map(function(st){
+      return { v:(counts[st[0]]||0), label:st[1], on:s.status===st[0],
+               onclick:"srcdSetStatus('"+st[0]+"')" };
+    }));
 
-    return '<div class="page">'+
-      '<div style="margin-bottom:12px">'+
-        '<div style="font-size:19px;font-weight:800">Sourced Leads</div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">Openings PACE found on its own. Nothing is contacted until you add it here.</div>'+
-      '</div>'+
-      tabs + filters +
-      (s.view==='queue' ? renderQueue() : renderSources()) +
-    '</div>';
+    return UI.page({
+      tabs: tabs,
+      strip: strip,
+      body: (s.view==='queue' ? renderQueue() : renderSources())
+    });
   }
 
 })();

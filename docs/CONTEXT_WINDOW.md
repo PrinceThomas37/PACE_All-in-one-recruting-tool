@@ -120,11 +120,14 @@ recorded because the mailbox's refresh token had expired 40 minutes earlier.
   cache during an unattended cron run and died with the process.
 - **The 11 failed follow-ups were never delivered** and can be re-queued.
 
-**2. Move the remaining pages onto the UI kit.** Leads, Jobs, Clients, Sourced
-Leads, Reports, Admin and the dashboards still draw their own headers and
-tables, so the app is half-migrated and looks it. This is now cheap — which was
-the whole point of building the kit first — and it is the obvious next slice to
-offer the owner. Leads is the highest-traffic and should go first.
+**2. Finish the UI-kit rollout.** Done: Candidates, Leads, Clients, Sourced
+Leads, All Jobs, Reports, Email, Inbox. **Still on their own markup:** the
+dashboards (`05-page-dashboard.js`, `16-insights.js`), Admin (`08-page-admin.js`),
+the pipeline/board (`28-page-pipeline.js`), My Team (`42-page-myteam.js`),
+Assign Leads (`21-assign-leads.js`) and the orphaned Manager Users page. Those
+are card- and board-shaped rather than list-shaped, so they need a judgement
+call per page rather than the same table treatment — which is why they were left
+rather than forced.
 
 ## The UI kit — read before building any screen
 
@@ -239,9 +242,9 @@ these are the ones it does not cover.**
 - "Log In with your Organization" routes by domain; **not** full SAML yet.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
-- **Most pages are not on the UI kit yet** — Leads, Jobs, Clients, Sourced
-  Leads, Reports, Admin, the dashboards. The app is half-migrated and looks it.
-  Cheap now; see "Pick this up first" §2.
+- **The card/board pages are not on the UI kit yet** — the dashboards, Admin,
+  the pipeline board, My Team, Assign Leads. Every list page is converted; see
+  "Pick this up first" §2 for why these were left.
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API** (still the one CLAUDE.md flags as highest-leverage next), generalized
   audit trail, PWA polish.

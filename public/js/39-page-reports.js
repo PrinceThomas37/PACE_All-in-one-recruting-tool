@@ -228,36 +228,64 @@
   // renderReportsBody() returns the inner content (no .page wrapper) so it can be
   // embedded as the "Reports" tab inside the My Team hub. renderReports() keeps
   // the standalone page for users who reach Reports as its own nav item.
-  window.renderReportsBody = function(){
+  // The reports content, split into its three bands so the standalone page can
+  // hang them off the kit's frame while the My Team hub still gets one blob it
+  // can drop into a tab.
+  function reportsParts(){
     var r = STATE.reports;
-    if (!r.data) return '<div style="font-size:18px;font-weight:700;margin-bottom:6px">Reports</div>'+
-      '<div style="text-align:center;padding:50px;color:var(--text3)">'+(r.loading?'Loading reports…':'No data yet.')+'</div>';
+    if (!r.data) return null;
     var d = r.data, t = d.totals || {};
     var ttf = d.avg_time_to_fill != null ? d.avg_time_to_fill + ' days' : '—';
-    var header = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-      '<div><div style="font-size:18px;font-weight:700">Reports</div>'+
-      '<div style="font-size:12.5px;color:var(--text3)">'+(d.scope==='org'?'Whole-desk recruiting analytics':(d.scope==='team'?'Your numbers plus your team’s ('+(d.team_size-1)+' report'+(d.team_size!==2?'s':'')+')':'Your recruiting numbers'))+'</div></div>'+
-      '<button class="btn btn-sm btn-outline" onclick="reportsReload()">↻ Refresh</button></div>';
-    var tiles = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
-      tile('Candidates added', t.candidates_added||0)+
-      tile('Submissions', t.submissions||0)+
-      tile('Interviews', t.interviews||0)+
-      tile('Placements', t.placements||0)+
-      tile('Open jobs', t.open_jobs||0)+
-      tile('Avg time-to-fill', ttf)+
-      tile('Revenue', money(t.revenue))+
-    '</div>';
-    // by_user is the new per-person breakdown (with role); fall back to the old
+
+    var strip = UI.strip([
+      { v:(t.candidates_added||0), label:'Candidates added', icon:'user' },
+      { v:(t.submissions||0),      label:'Submissions',      icon:'send' },
+      { v:(t.interviews||0),       label:'Interviews',       icon:'cal' },
+      { v:(t.placements||0),       label:'Placements',       icon:'check' },
+      { sep:true },
+      { v:(t.open_jobs||0),        label:'Open jobs',        icon:'doc' },
+      { v:ttf,                     label:'Avg time-to-fill',  icon:'clock' },
+      { v:money(t.revenue),        label:'Revenue',          icon:'dollar' }
+    ]);
+
+    // by_user is the per-person breakdown (with role); fall back to the older
     // by_recruiter shape if an older backend is answering.
     var people = (d.by_user && d.by_user.length) ? d.by_user
       : (d.by_recruiter||[]).map(function(x,i){ return Object.assign({ user_id:'r'+i, role_label:'Recruiter' }, x); });
-    return header+filterBar(d)+
-      (r.loading?'<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Updating…</div>':'')+
-      tiles+
+
+    var body =
+      (r.loading?'<div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Updating…</div>':'')+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'+funnelCard(d.funnel,d.stages)+trendCard(d.trend)+'</div>'+
       hotJobsCard(d.hot_jobs||[])+
       byUserCard(people, d.per_user_funnels||{}, d.stages||[])+
       clientsCard(d.top_clients||[]);
+
+    return { strip:strip, filters:filterBar(d), body:body, scope:d.scope, team_size:d.team_size };
+  }
+
+  // Embedded form — used as the "Reports" tab inside the My Team hub, where the
+  // page frame belongs to that page, not to this one.
+  window.renderReportsBody = function(){
+    var p = reportsParts();
+    if (!p) return '<div class="dt-empty">'+(STATE.reports.loading?'Loading reports…':'No data yet.')+'</div>';
+    return '<div style="margin:-16px -18px 14px">'+p.strip+'</div>'+p.filters+p.body;
   };
-  window.renderReports = function(){ return '<div class="page">'+renderReportsBody()+'</div>'; };
+
+  // Standalone page. The "Reports" heading it used to draw is gone — the top bar
+  // already says Reports, and two identical headings on one screen is noise.
+  window.renderReports = function(){
+    var p = reportsParts();
+    if (!p) return UI.page({ body:'<div class="dt-empty">'+(STATE.reports.loading?'Loading reports…':'No data yet.')+'</div>' });
+    var scopeLine = p.scope==='org' ? 'Whole-desk recruiting analytics'
+      : (p.scope==='team' ? 'Your numbers plus your team’s ('+(p.team_size-1)+' report'+(p.team_size!==2?'s':'')+')'
+                          : 'Your recruiting numbers');
+    return UI.page({
+      strip: p.strip,
+      toolbar: UI.toolbar({
+        icons:[{ icon:'refresh', title:'Reload', onclick:'reportsReload()' }],
+        right:'<span style="font-size:12.5px;color:var(--ink3)">'+esc(scopeLine)+'</span>'
+      }),
+      body: p.filters + p.body
+    });
+  };
 })();
