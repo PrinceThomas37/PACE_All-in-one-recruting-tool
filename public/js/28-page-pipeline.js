@@ -89,14 +89,8 @@
   }
 
   // ── render + routing wrap (mirrors the applicants module) ────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page === 'bd_pipeline'){
-      paintPipelinePage();
-      var t = document.querySelector('.tb-title'); if (t) t.textContent = 'Candidates';
-    }
-  };
+  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
+  // Its page title lives in the shell's pageTitles map like every other page.
   var _prevGoPage = window.goPage;
   window.goPage = function(p){
     if (p === 'bd_pipeline'){ STATE.page='bd_pipeline'; STATE.modal=null; render(); return; }
@@ -117,7 +111,8 @@
     loadPipeline(jid).then(function(){ render(); });
   };
 
-  function paintPipelinePage(){ var c=document.getElementById('content'); if(!c) return; c.innerHTML = renderPipelinePage(); }
+  function paintPipelinePage(){ if(STATE.page!=='bd_pipeline') return; paintPageContent(); }
+  UI.registerPage('bd_pipeline', function(){ return renderPipelinePage(); });
 
   // ── the page ──────────────────────────────────────────────────────────────
   window.renderPipelinePage = function(){

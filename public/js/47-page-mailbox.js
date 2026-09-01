@@ -43,11 +43,11 @@
   var M = function(){ return STATE.mailbox; };
 
   // ── nav + routing ──────────────────────────────────────────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page==='mailbox'){ paint(); var t=document.querySelector('.tb-title'); if(t) t.textContent='Inbox'; }
-  };
+  // The shell draws this page and repaints it THROUGH paint() below (see
+  // UI.registerPage at the foot of the render section). It used to wrap
+  // render() and rewrite #content after the shell had already written it,
+  // which meant two full writes per repaint — and every write threw away the
+  // <iframe> holding the message you were reading.
   var _prevGoPage = window.goPage;
   window.goPage = function(p){
     if (p==='mailbox'){
@@ -58,7 +58,74 @@
     }
     return _prevGoPage.apply(this, arguments);
   };
-  function paint(){ if(STATE.page!=='mailbox')return; var c=document.getElementById('content'); if(c) c.innerHTML=renderMailbox(); }
+  // ── painting ───────────────────────────────────────────────────────────────
+  // The screen is drawn in REGIONS and each one is written only when its html
+  // actually changes. This is not an optimisation: the open message's body
+  // lives in a sandboxed <iframe>, and re-creating that element blanks the
+  // pane for a beat and resets the reader's scroll position back to the top.
+  // Marking a message read (which ticks the unread badge) used to do exactly
+  // that to the message being read.
+  //
+  // _regs holds the strings currently on screen. renderMailbox() fills it as
+  // it builds, so the first granular paint after a full draw compares against
+  // the truth rather than rewriting everything once.
+  var _regs=null;
+
+  function put(id, html, prev){
+    if(html===prev) return true;                 // already on screen — leave the DOM alone
+    var el=document.getElementById(id); if(!el) return false;
+    return putRegion(el, html, false);
+  }
+  function putOuter(id, html, prev){
+    if(html===prev) return true;
+    var el=document.getElementById(id); if(!el) return false;
+    return putRegion(el, html, true);
+  }
+
+  function paint(){
+    if(STATE.page!=='mailbox')return;
+    var c=document.getElementById('content'); if(!c) return;
+    var m=M();
+    var readable=(m.accounts||[]).filter(function(a){return a.readable;});
+    // No standing mailbox layout (first draw, or a whole-page state like
+    // "loading your mailboxes") → draw the page whole.
+    if(!_regs || !document.getElementById('mb-root') || m.accountsLoading || m.accounts===null || !readable.length){
+      c.innerHTML=renderMailbox();
+      return;
+    }
+    var p=parts(readable);
+    var ok=true;
+    ok = put('mb-tabs', p.tabs, _regs.tabs) && ok;
+    ok = put('mb-toolbar', p.toolbar, _regs.toolbar) && ok;
+    ok = putOuter('mb-list', p.list, _regs.list) && ok;
+    var panes=document.getElementById('mb-panes');
+    if(panes) panes.className='mb-panes'+(p.reading?' reading':'');
+    if(p.shape!==_regs.shape || p.shape!=='msg'){
+      ok = putOuter('mb-read', p.reader, _regs.reader) && ok;
+    }else{
+      // Same open message: head, the summaries either side of it, and the
+      // composer are separate regions precisely so that the thread arriving,
+      // or a reply box opening, does not touch #mb-open and its iframe.
+      ok = put('mb-head', p.head, _regs.head) && ok;
+      ok = put('mb-before', p.before, _regs.before) && ok;
+      ok = put('mb-open', p.open, _regs.open) && ok;
+      ok = put('mb-after', p.after, _regs.after) && ok;
+      ok = put('mb-comp', p.comp, _regs.comp) && ok;
+      // Whether the body box is the short in-thread size is a CLASS, applied
+      // here rather than baked into #mb-open's html — otherwise the thread
+      // arriving would rewrite the iframe just to make it shorter.
+      var body=document.querySelector('#mb-open .mb-body');
+      if(body){ if(p.short) body.classList.add('short'); else body.classList.remove('short'); }
+    }
+    // A region we expected was missing — fall back to a whole draw rather than
+    // leaving a half-updated screen.
+    if(!ok){ c.innerHTML=renderMailbox(); return; }
+    _regs=p;
+  }
+  // The shell draws the page, and repaints it through paint() — so a shell
+  // repaint (a badge, a toast, a background refresh) costs the reading pane
+  // nothing.
+  UI.registerPage('mailbox', function(){ return renderMailbox(); }, paint);
 
   // ── data ───────────────────────────────────────────────────────────────────
   function loadAccounts(force){
@@ -514,6 +581,7 @@
 
   function renderMailbox(){
     var m=M();
+    _regs=null;
     if(m.accountsLoading||m.accounts===null)
       return '<div class="pg"><div class="dt-empty">Loading your mailboxes…</div></div>';
 
@@ -525,14 +593,66 @@
     // most people make a handful of times a day, and the two panes that carry
     // the work — the conversation list and the conversation — were paying for
     // it. Nothing is lost; every folder, custom ones included, is in the list.
-    return '<div class="mb">'+
-      renderMbTabs()+
-      renderTopBar(readable)+
-      '<div class="mb-panes'+(m.selectedId?' reading':'')+'">'+
-        renderList()+
-        renderReader()+
+    var p=parts(readable);
+    _regs=p;
+    return '<div class="mb" id="mb-root">'+
+      '<div id="mb-tabs" style="flex:none">'+p.tabs+'</div>'+
+      '<div id="mb-toolbar" style="flex:none">'+p.toolbar+'</div>'+
+      '<div class="mb-panes'+(p.reading?' reading':'')+'" id="mb-panes">'+
+        p.list+
+        p.reader+
       '</div>'+
     '</div>';
+  }
+
+  // Every region of the screen, as strings, built once per paint. paint()
+  // compares them against what is already showing and writes only the
+  // difference; renderMailbox() concatenates them for a first draw.
+  function parts(readable){
+    var m=M();
+    var p={
+      reading:!!m.selectedId,
+      tabs:renderMbTabs(),
+      toolbar:renderTopBar(readable),
+      list:renderList(),
+      shape:readerShape()
+    };
+    if(p.shape!=='msg'){ p.reader=renderEmptyReader(p.shape); return p; }
+
+    var x=m.message;
+    // The conversation, oldest first, with the open message expanded in place.
+    // When the thread has not arrived (or there is none) the open message is
+    // the whole conversation — which is true, not a placeholder.
+    var thread=(m.thread&&m.thread.length)?m.thread:[x];
+    var at=-1;
+    for(var i=0;i<thread.length;i++){ if(thread[i].id===x.id){ at=i; break; } }
+    if(at<0){ thread=[x]; at=0; }
+    p.short=thread.length>1;
+    p.head=renderHead(x, thread.length);
+    p.before=thread.slice(0,at).map(renderCollapsedMessage).join('');
+    p.open=renderOpenMessage(x);
+    p.after=thread.slice(at+1).map(renderCollapsedMessage).join('');
+    p.comp=renderComposer(x);
+    p.reader='<div class="mb-read" id="mb-read" data-shape="msg">'+
+      '<div class="mb-head" id="mb-head">'+p.head+'</div>'+
+      '<div class="mb-thread" id="mb-thread">'+
+        '<div id="mb-before">'+p.before+'</div>'+
+        '<div id="mb-open"'+(p.short?' data-short="1"':'')+'>'+p.open+'</div>'+
+        '<div id="mb-after">'+p.after+'</div>'+
+        '<div id="mb-comp">'+p.comp+'</div>'+
+      '</div>'+
+    '</div>';
+    return p;
+  }
+
+  // Which of the four reading-pane states we are in. A change of shape
+  // replaces the pane; staying in 'msg' updates it region by region.
+  function readerShape(){
+    var m=M();
+    if(!m.selectedId) return 'none';
+    if(m.msgLoading&&!m.message) return 'loading';
+    if(!m.message) return 'error';
+    return 'msg';
   }
 
   // All / Unread, plus where you are in the folder. The count is the number of
@@ -629,7 +749,7 @@
     else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'”':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
     else body=rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
 
-    return '<div class="mb-list'+(wide?' wide':'')+'">'+
+    return '<div class="mb-list'+(wide?' wide':'')+'" id="mb-list">'+
       body+
       (m.nextCursor
         ? '<div style="padding:12px;text-align:center"><button class="btn btn-sm btn-outline" onclick="mbLoadMore()"'+(m.listLoading?' disabled':'')+'>'+(m.listLoading?'Loading…':'Load more')+'</button></div>'
@@ -667,48 +787,37 @@
     '</div>';
   }
 
-  function renderReader(){
+  // The three states that are not an open message. Kept as one element with
+  // the same id, so switching between them replaces the pane cleanly.
+  function renderEmptyReader(shape){
     var m=M();
-    if(!m.selectedId)
-      return '<div class="mb-read"><div class="mb-empty">'+UI.ic('mailopen')+
-        '<div>Pick a conversation to read it here.</div></div></div>';
-    if(m.msgLoading&&!m.message)
-      return '<div class="mb-read"><div class="mb-empty">Opening…</div></div>';
-    var x=m.message;
-    if(!x) return '<div class="mb-read"><div class="mb-empty" style="color:var(--red)">'+esc(m.error||'Could not open this message')+'</div></div>';
+    var inner;
+    if(shape==='none')         inner=UI.ic('mailopen')+'<div>Pick a conversation to read it here.</div>';
+    else if(shape==='loading') inner='Opening…';
+    else                       inner='<span style="color:var(--red)">'+esc(m.error||'Could not open this message')+'</span>';
+    return '<div class="mb-read" id="mb-read" data-shape="'+shape+'"><div class="mb-empty">'+inner+'</div></div>';
+  }
 
-    // The conversation, oldest first, with the open message expanded in place.
-    // When the thread has not arrived (or there is none) the open message is
-    // the whole conversation — which is true, not a placeholder.
-    var thread=(m.thread&&m.thread.length)?m.thread:[x];
-    var hasOthers=thread.length>1;
-
-    var msgs=thread.map(function(t){
-      return (t.id===x.id) ? renderOpenMessage(x, hasOthers) : renderCollapsedMessage(t);
-    }).join('');
-
-    return '<div class="mb-read">'+
-      '<div class="mb-head">'+
-        '<div style="display:flex;align-items:flex-start;gap:10px">'+
-          '<div class="mb-title" style="flex:1;min-width:0">'+esc(x.subject||'(no subject)')+
-            (hasOthers?'<span class="pill mute">'+thread.length+' messages</span>':'')+'</div>'+
-          '<span class="kebab" title="Close" onclick="mbBack()">'+UI.ic('x')+'</span>'+
-        '</div>'+
-        '<div class="mb-acts">'+
-          '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
-          ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
-          '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
-          '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
-          '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
-          '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
-        '</div>'+
+  // The subject line and the verbs that act on the open message.
+  function renderHead(x, threadLen){
+    var hasOthers=threadLen>1;
+    return '<div style="display:flex;align-items:flex-start;gap:10px">'+
+        '<div class="mb-title" style="flex:1;min-width:0">'+esc(x.subject||'(no subject)')+
+          (hasOthers?'<span class="pill mute">'+threadLen+' messages</span>':'')+'</div>'+
+        '<span class="kebab" title="Close" onclick="mbBack()">'+UI.ic('x')+'</span>'+
       '</div>'+
-      '<div class="mb-thread">'+msgs+renderComposer(x)+'</div>'+
-    '</div>';
+      '<div class="mb-acts">'+
+        '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
+        ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
+        '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
+        '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
+      '</div>';
   }
 
   // One message in the thread, opened: header, warnings, attachments, body.
-  function renderOpenMessage(x, inThread){
+  function renderOpenMessage(x){
     var toLine=(x.to||[]).map(who).join(', ');
     var ccLine=(x.cc||[]).map(who).join(', ');
     return '<div class="mb-msg open">'+
@@ -728,7 +837,7 @@
       '</div>'+
       renderBlockedImagesBar(x)+
       renderAttachments(x)+
-      renderBody(x, inThread)+
+      renderBody(x)+
     '</div>';
   }
 
@@ -789,7 +898,7 @@
   // means the body cannot run code and cannot reach this origin even if the
   // server-side sanitiser missed something. allow-popups is the one grant, so
   // that clicking a link in an email still works.
-  function renderBody(x, inThread){
+  function renderBody(x){
     var doc='<!doctype html><html><head><meta charset="utf-8">'+
       '<style>'+
         'html,body{margin:0;padding:16px 18px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;'+
@@ -803,8 +912,10 @@
     // The height is FIXED and the body scrolls inside itself. Auto-sizing to
     // the content would mean measuring the iframe from the parent, which needs
     // allow-same-origin — the very grant that keeps a hostile email boxed in.
-    // A shorter box inside a thread, where several messages share the screen.
-    return '<div class="mb-body'+(inThread?' short':'')+'">'+
+    // The shorter in-thread size is a class paint() toggles, NOT part of this
+    // string: if it were, the thread arriving would rewrite the iframe — the
+    // very thing that made the reading pane blink and lose its scroll.
+    return '<div class="mb-body">'+
       '<iframe title="Message body" sandbox="allow-popups allow-popups-to-escape-sandbox" '+
         'srcdoc="'+escAttr(doc)+'"></iframe>'+
     '</div>';

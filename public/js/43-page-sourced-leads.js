@@ -20,11 +20,7 @@
   };
 
   // ── routing (same wrap-render pattern the other pages use) ────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page==='sourced'){ paint(); var t=document.querySelector('.tb-title'); if(t) t.textContent='Sourced Leads'; }
-  };
+  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
   var _prevGoPage = window.goPage;
   window.goPage = function(p){
     if (p==='sourced'){
@@ -34,7 +30,8 @@
     }
     return _prevGoPage.apply(this, arguments);
   };
-  function paint(){ if(STATE.page!=='sourced')return; var c=document.getElementById('content'); if(c) c.innerHTML=renderPage(); }
+  function paint(){ if(STATE.page!=='sourced')return; paintPageContent(); }
+  UI.registerPage('sourced', function(){ return renderPage(); });
 
   // ── data ──────────────────────────────────────────────────────────────────
   function loadQueue(){

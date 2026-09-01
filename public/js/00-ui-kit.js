@@ -296,9 +296,45 @@ window.UI = (function () {
   // whatever the user was half-way through typing into it.
   function anyOverlayOpen(){ return renderOverlays() !== ''; }
 
+  // ── Pages ────────────────────────────────────────────────────────────────
+  // A page module registers the function that DRAWS its screen, so the shell
+  // can draw it in the first pass.
+  //
+  // Before this registry, nine pages (Inbox, Clients, Candidates, Reports, My
+  // Team, Sourced Leads, the BD job pages) were missing from renderPage()'s
+  // switch: the shell wrote "Page not found" into #content and the module
+  // overwrote it a moment later. Every repaint was therefore two writes, the
+  // first of them wrong — a visible flash, and on the Inbox a destroyed and
+  // reloaded message-body iframe.
+  //
+  // `paint` is optional. A page that gives one is repainted through it (the
+  // Inbox does, so it can update a region at a time and leave the body iframe
+  // standing); a page without one is repainted by the shell, which writes the
+  // whole page string only when it differs from what is already on screen.
+  var _pages = {};
+  function registerPage(name, renderFn, paintFn){
+    _pages[name] = { render:renderFn, paint:paintFn||null };
+  }
+  function hasPage(name){ return !!_pages[name]; }
+  function hasPagePaint(name){ return !!(_pages[name] && _pages[name].paint); }
+  function pageHtml(name){
+    var p=_pages[name]; if(!p) return null;
+    try { return p.render()||''; }
+    catch(e){
+      return '<div class="pg"><div class="pg-body"><div class="dt-empty" style="color:var(--red)">'+
+        'Could not draw this page: '+esc(e&&e.message||e)+'</div></div></div>';
+    }
+  }
+  function paintPage(name){
+    var p=_pages[name]; if(!p||!p.paint) return false;
+    p.paint(); return true;
+  }
+
   return {
     esc:esc, attr:attr, ic:ic, ICONS:ICONS,
     registerOverlay:registerOverlay, renderOverlays:renderOverlays, anyOverlayOpen:anyOverlayOpen,
+    registerPage:registerPage, hasPage:hasPage, hasPagePaint:hasPagePaint,
+    pageHtml:pageHtml, paintPage:paintPage,
     tabs:tabs, strip:strip, toolbar:toolbar, table:table, page:page,
     idCell:idCell, pill:pill, ring:ring, toggle:toggle, kebab:kebab,
     check:check, dash:dash, notice:notice, kv:kv, drawer:drawer, feed:feed,

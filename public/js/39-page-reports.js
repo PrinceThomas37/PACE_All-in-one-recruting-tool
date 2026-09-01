@@ -45,11 +45,7 @@
   window.reportsToggleExpand = function(id){ if(STATE.reports.expanded[id]) delete STATE.reports.expanded[id]; else STATE.reports.expanded[id]=true; repaintReports(); };
 
   // ── nav + routing (wrap, like the job-board module) ──────────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page === 'reports') paint();
-  };
+  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
   // (The "Reports" nav item is now built by the sidebar in 04-shell-login.js —
   // shown standalone only to users who don't have the "My Team" hub, which
   // carries Reports as a tab. paint() sets the page title.)
@@ -58,7 +54,8 @@
     if (p === 'reports'){ STATE.page='reports'; STATE.modal=null; render(); loadReport(); return; }
     return _prevGoPage.apply(this, arguments);
   };
-  function paint(){ if(STATE.page!=='reports') return; var c=document.getElementById('content'); if(!c) return; c.innerHTML = renderReports(); var t=document.querySelector('.tb-title'); if(t) t.textContent='Reports'; }
+  function paint(){ if(STATE.page!=='reports') return; paintPageContent(); }
+  UI.registerPage('reports', function(){ return renderReports(); });
 
   function tile(label, value, sub){
     return '<div class="card" style="padding:14px 16px;flex:1;min-width:130px">'+

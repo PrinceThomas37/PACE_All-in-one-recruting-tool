@@ -2502,3 +2502,118 @@ The owner asked for four screens and got them, but the durable value is that the
 *fifth* screen is now an afternoon instead of a week. When a request is "make it
 look like this", the honest reading is usually "give the app a structure it
 doesn't have" — and the structure is the deliverable, not the screenshots.
+
+---
+
+# Session 16 — the screen glitch: why the app blinked, and the render engine that fixed it
+
+**Branch** `claude/screen-glitch-diagnosis-7k0f8y` · **No migration** · 50/50
+suites green.
+
+## What the owner reported
+
+Two screen recordings, no words beyond "see the glitch that's happening when
+something happens on the screen, diagnose why it's happening". Clip 1 was the
+Clients page (1.4s); clip 2 was the Inbox (6.9s).
+
+## The diagnosis (frame-by-frame, not guesswork)
+
+Both clips were decoded with ffmpeg and diffed frame against frame. Clip 1
+turned out to contain no visible change at all except the mouse cursor — the
+recording had started just after the event. **Everything the owner saw is in
+clip 2**, and it is unambiguous once measured (ink pixels inside the reading
+pane, per frame):
+
+| time  | reading pane |
+|-------|--------------|
+| 0.5–3.2s | blank, "Opening…" — 2.7s of server latency |
+| 3.3–4.3s | the message body appears; the owner scrolls into it |
+| **4.4–5.8s** | **body gone for 1.4s**, header and buttons still there |
+| 5.9s | body returns — **scrolled back to the top**, losing their place |
+| 6.3s, 6.9s | two more blanks |
+
+Frames 4.4–5.8s are *pixel-identical*, so it was not a paint stutter: the body
+was genuinely gone and being rebuilt.
+
+## Root cause — two faults, stacked
+
+**1. Every state change rebuilt the entire application.** `render()` was
+`root.innerHTML = renderApp()`. An email body lives in a sandboxed `<iframe>`,
+and re-creating an iframe re-parses it from zero and resets its internal
+scroll. The specific trigger in the recording: opening a message marks it read
+→ `markRead()` → `refreshUnread()` → the unread badge falls 24 → 23 →
+`scheduleRender()` → the whole app is rebuilt. **Reading an email is what wiped
+the email being read.**
+
+**2. Nine pages were missing from `renderPage()`'s switch.** `mailbox`,
+`clients`, `applicants`, `reports`, `myteam`, `sourced`, `job_board`,
+`bd_pipeline` and the BD job pages all fell through to
+`return "<div class='page'>Page not found</div>"`. Each of those modules wrapped
+`render()` and repainted `#content` itself a moment later. So every repaint on
+nine of the app's pages was: blank → "Page not found" → the real content — a
+visible flash, and a second iframe teardown on top of the first.
+
+A related consequence of the same design: modals and drawers carry CSS entry
+animations (`styles.css` `mIn`, `ui.css` `dwrIn`), so they replayed their
+pop/slide-in whenever anything else on the page updated.
+
+## The fix — the shell draws in regions, and writes only what changed
+
+- **`UI.registerPage(name, render, paint?)`** (`00-ui-kit.js`) — the same
+  idiom as the existing overlay registry. A page module registers the function
+  that draws its screen, so the shell draws the *real* page on the first pass.
+  All nine are registered; "Page not found" is now genuinely unreachable and a
+  test asserts it.
+- **`renderApp()` split into four regions** (`04-shell-login.js`): the rail,
+  the topbar, the page, and the layer above the page (modal + drawers, now
+  inside a stable `#layer`). It records each piece in `window._shellParts`.
+- **`render()` gained an in-place path** (`03-core-render.js`): while the page
+  is unchanged and the shell is standing, each region is rewritten **only if
+  its html string differs from what is on screen**. An unchanged region is left
+  alone — so its DOM survives, and with it iframes, scroll positions, entry
+  animations and the caret. A page *change* still rebuilds wholesale, because
+  nothing survives that anyway. `putRegion()` carries the caret across a
+  legitimate rewrite.
+- **`paintPageContent()` is now the one way to repaint the page body.** Every
+  page module's `paint()` funnels through it, so the shell's record of what is
+  on screen can never go stale.
+- **The Inbox paints region by region** (`47-page-mailbox.js`): tabs, toolbar,
+  list, and inside the reader `#mb-head`, `#mb-before`, `#mb-open`, `#mb-after`,
+  `#mb-comp`. The open message sits in its own region between the two halves of
+  the thread **specifically so that the thread arriving does not touch it** —
+  that was the 6.3s flicker. The shorter in-thread body height is applied as a
+  CSS class by `paint()`, never baked into `#mb-open`'s html, for the same
+  reason: making the box shorter must not reload the message.
+
+## Proof
+
+`test/screen-stability-smoke.mjs` (new, 19 assertions) drives the real page and
+asserts **node identity** rather than pixels — if the same iframe element is
+still on the page, it was never reloaded. It fires the exact trigger from the
+recording (the badge ticking down), plus a full `render()`, a background
+refresh, a toast, the thread arriving and the composer opening, and requires
+the message to survive all of them while the badge, thread and composer still
+update. Its last assertion deliberately does the *old* thing once — rewrites
+`#content` wholesale — and requires the test to notice, so none of the others
+can pass for free.
+
+Measured before/after on identical scripted runs, same trigger, same frame:
+body ink 11,465 → **1,572** (blank) before the fix; 11,465 → **11,465** after.
+
+## What this session did not do
+
+- **No migration.** 042 is still unclaimed.
+- **The 2.7s "Opening…" is untouched** — that is Render free-tier latency plus
+  the Graph/Gmail round trip, a real problem but a different one.
+- The Gmail 7-day expiry is still unfixed, and the owner's blocking question
+  (is `futeglobal.com` on Google Workspace?) is still unanswered.
+
+## The lesson worth carrying
+
+"Rebuild everything on every change" is a fine default right up to the moment
+the page holds something the DOM cannot re-create for free — an iframe, a
+scroll position, a media element, a half-typed note. The app had already grown
+four separate hand-rolled workarounds for that (focus restore, scroll restore,
+`scheduleRender`'s modal guard, the job board's manual caret restore); the
+glitch was the fifth symptom of the same cause. Fix the render model once and
+all five stop being anyone's problem.

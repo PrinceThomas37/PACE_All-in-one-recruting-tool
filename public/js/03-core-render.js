@@ -36,11 +36,58 @@ function startClock(){
   },1000);
 }
 
+// ── Painting: write a region only when it actually changed ──────────────────
+// The app used to rebuild EVERYTHING for every change: `#app.innerHTML =
+// renderApp()`. A mailbox unread badge ticking 24 → 23 therefore destroyed and
+// re-created the message you were reading — and because an email body lives in
+// an <iframe>, re-creating it blanks the pane for a beat and throws away where
+// you had scrolled to. That was the flicker.
+//
+// Now the shell draws in regions (rail, topbar, page, the layer above it) and
+// each one is only written when its HTML differs from what is on screen. An
+// unchanged region is left alone, which means its DOM — iframes, scroll
+// positions, CSS entry animations, the caret in a text box — survives.
+var _shellFor=null;                 // which page the DOM currently holds
+function _resetShell(){ _shellFor=null; if(window._shellParts) window._shellParts={}; }
+
+// Replace an element, or its contents, only if the html is new. Returns true
+// if it wrote. Keeps the caret where it was: a region can legitimately change
+// (a "Sending…" label) while the user is typing inside it.
+function putRegion(el, html, outer){
+  if(!el) return false;
+  var ae=document.activeElement;
+  var fid=ae&&el.contains(ae)?ae.id:'';
+  var s0=fid&&typeof ae.selectionStart==='number'?ae.selectionStart:-1;
+  var s1=fid&&typeof ae.selectionEnd==='number'?ae.selectionEnd:-1;
+  if(outer) el.outerHTML=html; else el.innerHTML=html;
+  if(fid){
+    var back=document.getElementById(fid);
+    if(back&&back!==document.activeElement){
+      try{ back.focus(); if(s0>=0&&back.setSelectionRange) back.setSelectionRange(s0,s1); }catch(e){}
+    }
+  }
+  return true;
+}
+
+// Repaint the page body — the one entry point every page module uses. A page
+// that registered its own painter (the Inbox) repaints region by region; every
+// other page is written whole, but only when the html is different.
+function paintPageContent(){
+  var c=document.getElementById('content'); if(!c) return;
+  if(UI.hasPagePaint(STATE.page)) return void UI.paintPage(STATE.page);
+  var html=renderPageContent();
+  var parts=window._shellParts||(window._shellParts={});
+  if(parts.content===html) return;
+  parts.content=html;
+  putRegion(c, html, false);
+}
+
 function render(){
   var root=document.getElementById("app");
   if(!root)return;
-  if(!STATE.user){root.innerHTML=renderLogin();bindLogin();return;}
+  if(!STATE.user){_resetShell();root.innerHTML=renderLogin();bindLogin();return;}
   if(STATE.loading){
+    _resetShell();
     root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg)">'+
       '<div style="width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>'+
       '<div style="font-size:13.5px;color:var(--text3)">Loading your data...</div>'+
@@ -63,7 +110,11 @@ function render(){
   var winScroll=window.scrollY||0;
   // Signal to blur handlers that this blur is from a DOM rebuild, not user action
   STATE._rendering=true;
-  root.innerHTML=renderApp();
+  // Same page, shell already standing → patch the regions that moved. A page
+  // CHANGE still rebuilds wholesale: nothing on screen survives it anyway.
+  var standing=_shellFor===STATE.page&&document.getElementById('sidebar')&&
+               document.getElementById('content')&&document.getElementById('layer');
+  if(standing) patchShell(); else { root.innerHTML=renderApp(); _shellFor=STATE.page; }
   STATE._rendering=false;
   bindApp();
   startClock();
@@ -82,9 +133,27 @@ function render(){
     var _els=document.querySelectorAll(_focusTag.toLowerCase()+'[placeholder]');
     for(var _i=0;_i<_els.length;_i++){if(_els[_i].placeholder===_focusPh){_restored=_els[_i];break;}}
   }
-  if(_restored&&document.body.contains(_restored)){
+  if(_restored&&document.body.contains(_restored)&&_restored!==document.activeElement){
     _restored.focus();
     if(_selStart>=0&&_restored.setSelectionRange){try{_restored.setSelectionRange(_selStart,_selEnd);}catch(e){}}
+  }
+}
+
+// The in-place path: four regions, each rewritten only if its html moved.
+function patchShell(){
+  var parts=window._shellParts||(window._shellParts={});
+  var sidebar=renderSidebar();
+  if(parts.sidebar!==sidebar){ parts.sidebar=sidebar; putRegion(document.getElementById('sidebar'),sidebar,true); }
+  var topbar=renderTopbar();
+  if(parts.topbar!==topbar){ parts.topbar=topbar; putRegion(document.getElementById('topbar'),topbar,true); }
+  paintPageContent();
+  // The modal and the drawers sit above the page. Rewriting this layer when
+  // nothing about it changed would replay their entry animations on every
+  // background refresh — the "pop" the owner saw whenever anything updated.
+  var modal=renderModal(), overlays=UI.renderOverlays();
+  if(parts.modal!==modal||parts.overlays!==overlays){
+    parts.modal=modal; parts.overlays=overlays;
+    putRegion(document.getElementById('layer'),modal+overlays,false);
   }
 }
 
