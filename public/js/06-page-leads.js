@@ -37,26 +37,50 @@ function renderJobs(){
   var leadSelCount=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length;
   var _tp=Math.max(1,Math.ceil(jobs.length/20));
   var _pg=Math.min(STATE.leadsPage||0,_tp-1);
+  // Rows for UI.table — arrays of cells, so the column list below is the only
+  // place that decides what a lead row shows.
   var rows=jobs.slice(_pg*20,(_pg+1)*20).map(function(j){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
     var hasEmail=(cs.find(function(c){return c.is_primary;})||cs[0]||{}).email;
     var stageColor=leadStageColor(j.stage);
-    return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="openJob(\''+j.id+'\')">'+
-      (canSequence?'<td style="padding:12px;width:34px" onclick="event.stopPropagation()">'+(hasEmail?'<input type="checkbox" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select for sequence"/>':'<span title="No contact email" style="color:var(--border2)">·</span>')+'</td>':'')+
-      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.position)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.location||"—")+'</div></td>'+
-      '<td style="padding:12px"><div style="font-weight:500">'+escHtml(j.company_name)+(j.is_duplicate?'<span style="margin-left:6px;background:#fef9c3;color:#b45309;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">DUP</span>':'')+(j.freshness==='Old'?'<span style="margin-left:6px;background:#fef2f2;color:#dc2626;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">OLD</span>':'')+(j.freshness==='New'?'<span style="margin-left:6px;background:#f0fdf4;color:#16a34a;font-size:10px;padding:1px 6px;border-radius:6px;font-weight:600">NEW</span>':'')+'</div></td>'+
-      '<td style="padding:12px"><div>'+escHtml((primary.first_name||"")+" "+(primary.last_name||""))+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(primary.email||"—")+'</div></td>'+
-      '<td style="padding:12px;text-align:center"><span style="background:rgba(99,102,241,.1);color:var(--accent);padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600">'+cs.length+'</span></td>'+
-      (canChangeStageInline?'<td style="padding:12px"><select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" style="font-size:11px;padding:4px 8px;border:1.5px solid '+stageColor+';border-radius:8px;background:'+stageColor+'1a;color:'+stageColor+';font-weight:600;cursor:pointer">'+['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'].map(function(s){return'<option value="'+s+'"'+(j.stage===s?' selected':'')+'>'+s+'</option>';}).join('')+'</select></td>':'<td style="padding:12px"><span style="background:'+stageColor+'1a;color:'+stageColor+';padding:4px 10px;border-radius:10px;font-size:11px;font-weight:600">'+j.stage+'</span></td>')+
-      '<td style="padding:12px;font-size:12px;color:var(--text2)">'+(j.assigned_bd_name?'<div style="font-weight:500">'+escHtml(j.assigned_bd_name)+'</div><div style="font-size:10px;color:var(--text3)">'+( j.assigned_at?(new Date(j.assigned_at)).toLocaleDateString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"")+'</div>':'<span style="color:var(--text3)">—</span>')+'</td>'+
-      '<td style="padding:12px;font-size:11px;color:var(--text3)">'+
-        (j.created_at?'<div>'+escHtml(j.created_date||new Date(j.created_at).toISOString().slice(0,10))+'</div><div style="font-size:10px;margin-top:1px">'+new Date(new Date(j.created_at).getTime()+5.5*3600000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})+'</div>':escHtml(j.created_date||''))+
-      '</td>'+
-    '</tr>';
-  }).join("");
 
-  if(!rows)rows='<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text3)">No leads found yet.</td></tr>';
+    // Freshness/duplicate markers, as pills rather than three hand-rolled spans.
+    var marks=(j.is_duplicate?UI.pill('DUP','warn'):'')+
+      (j.freshness==='Old'?UI.pill('OLD','bad'):'')+
+      (j.freshness==='New'?UI.pill('NEW','ok'):'');
+
+    var stageCell=canChangeStageInline
+      ? '<select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" '+
+        'style="font-size:12px;padding:4px 8px;border:1px solid '+stageColor+'55;border-radius:7px;background:'+stageColor+'14;color:'+stageColor+';font-weight:600;cursor:pointer">'+
+        ['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'].map(function(st){
+          return '<option value="'+st+'"'+(j.stage===st?' selected':'')+'>'+st+'</option>';
+        }).join('')+'</select>'
+      : '<span class="pill" style="background:'+stageColor+'14;color:'+stageColor+'"><i></i>'+escHtml(j.stage)+'</span>';
+
+    var cells=[];
+    if(canSequence) cells.push({ cls:'tight', html:
+      '<span onclick="event.stopPropagation()">'+
+        (hasEmail
+          ? '<input type="checkbox" class="ck" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" title="Select for sequence">'
+          : '<span title="No contact email" style="color:var(--ink3)">·</span>')+
+      '</span>' });
+    cells.push({ html: UI.idCell(j.position||'—', j.location||'', null, { badge: marks }) });
+    cells.push({ html: escHtml(j.company_name||'—') });
+    cells.push({ html: UI.idCell(((primary.first_name||'')+' '+(primary.last_name||'')).trim()||'—', primary.email||'', null,
+                   { verified: !!primary.email }) });
+    cells.push({ cls:'tight', html: UI.pill(String(cs.length),'info') });
+    cells.push({ cls:'tight', html: stageCell });
+    cells.push({ cls:'tight', html: j.assigned_bd_name
+      ? UI.idCell(j.assigned_bd_name, j.assigned_at
+          ? new Date(j.assigned_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
+          : '', null)
+      : '<span style="color:var(--ink3)">—</span>' });
+    cells.push({ cls:'tight', html: '<span style="color:var(--ink3)">'+
+      escHtml(j.created_date||(j.created_at?new Date(j.created_at).toISOString().slice(0,10):''))+'</span>' });
+
+    return { cells: cells, onclick: "openJob('"+j.id+"')" };
+  });
 
   // RA sees form at top + their leads below; others see search/filter + table
   var isRA=(u.role==='ra');
@@ -67,40 +91,40 @@ function renderJobs(){
     var cs=jobContacts(j.id);
     var primary=cs[0]||{};
     var stageColor=leadStageColor(j.stage);
-    var hoursOld=(now24-new Date(j.created_at))/3600000;
-    var canRAEdit=hoursOld<=24;
-    var editBtn=canRAEdit?
-      '<button onclick="raFormEdit(\''+j.id+'\')" style="font-size:11px;padding:4px 10px;background:var(--accent-l);color:var(--accent);border:1px solid rgba(37,99,235,.2);border-radius:6px;cursor:pointer;font-weight:600">✏ Edit</button>':
-      '<span style="font-size:10px;color:var(--text3)">Locked</span>';
-    return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer" onclick="openJob(\''+j.id+'\')">'+
-      '<td style="padding:12px"><div style="font-weight:600;color:var(--text)">'+escHtml(j.position)+'</div></td>'+
-      '<td style="padding:12px"><div style="font-weight:500">'+escHtml(j.company_name)+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(j.company_ind||j.industry||'')+'</div></td>'+
-      '<td style="padding:12px"><div>'+escHtml((primary.first_name||'')+(primary.last_name?' '+primary.last_name:''))+'</div><div style="font-size:11px;color:var(--text3)">'+escHtml(primary.email||'\u2014')+'</div></td>'+
-      '<td style="padding:12px;text-align:center"><span style="background:rgba(99,102,241,.1);color:var(--accent);padding:3px 9px;border-radius:10px;font-size:11px;font-weight:600">'+cs.length+'</span></td>'+
-      '<td style="padding:12px"><span style="background:'+stageColor+'1a;color:'+stageColor+';padding:4px 10px;border-radius:10px;font-size:11px;font-weight:600">'+j.stage+'</span></td>'+
-      '<td style="padding:12px;font-size:11px;color:var(--text3)">'+
-        (j.created_at?'<div>'+escHtml(j.created_date||new Date(j.created_at).toISOString().slice(0,10))+'</div><div style="font-size:10px;margin-top:1px">'+new Date(new Date(j.created_at).getTime()+5.5*3600000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true})+'</div>':escHtml(j.created_date||''))+
-      '</td>'+
-      '<td style="padding:12px" onclick="event.stopPropagation()">'+editBtn+'</td>'+
-    '</tr>';
-  }).join('');
-  if(!raRows)raRows='<tr><td colspan="7" style="padding:40px;text-align:center;color:var(--text3)">No leads submitted yet. Use the form above to add your first lead.</td></tr>';
-
+    // An RA may correct their own lead for 24 hours; after that it is locked,
+    // and saying "Locked" is kinder than hiding the button with no explanation.
+    var canRAEdit=(now24-new Date(j.created_at))/3600000<=24;
+    return { onclick:"openJob('"+j.id+"')", cells:[
+      { html: UI.idCell(j.position||'—', '', null) },
+      { html: UI.idCell(j.company_name||'—', j.company_ind||j.industry||'', null) },
+      { html: UI.idCell(((primary.first_name||'')+' '+(primary.last_name||'')).trim()||'—', primary.email||'', null,
+               { verified: !!primary.email }) },
+      { cls:'tight', html: UI.pill(String(cs.length),'info') },
+      { cls:'tight', html: '<span class="pill" style="background:'+stageColor+'14;color:'+stageColor+'"><i></i>'+escHtml(j.stage)+'</span>' },
+      { cls:'tight', html: '<span style="color:var(--ink3)">'+
+          escHtml(j.created_date||(j.created_at?new Date(j.created_at).toISOString().slice(0,10):''))+'</span>' },
+      { cls:'tight', html: '<span onclick="event.stopPropagation()">'+(canRAEdit
+          ? '<button class="btn btn-sm btn-outline" onclick="raFormEdit(\''+j.id+'\')">Edit</button>'
+          : '<span style="font-size:11.5px;color:var(--ink3)">Locked</span>')+'</span>' }
+    ]};
+  });
 
   if(isRA){
-    return '<div style="padding:24px">'+
-      renderRALeadForm()+
-      '<div style="margin:24px 0 12px;font-weight:700;font-size:13px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Your submitted leads ('+jobs.length+')</div>'+
-      '<div class="tbl-wrap" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px">'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:760px">'+
-          '<thead style="background:var(--bg3);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px">'+
-            '<tr><th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Created</th><th style="padding:12px"></th></tr>'+
-          '</thead>'+
-          '<tbody>'+raRows+'</tbody>'+
-        '</table>'+
-      '</div>'+
-      '<div style="margin-top:10px;font-size:12px;color:var(--text3)">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' submitted by you</div>'+
-    '</div>';
+    return UI.page({
+      toolbar: UI.toolbar({
+        search:{ value:f.search||'', placeholder:'Search your leads…',
+                 oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
+        right:'<span style="font-size:12.5px;color:var(--ink3)">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' submitted by you</span>'
+      }),
+      body:
+        renderRALeadForm()+
+        '<div style="margin:20px 0 10px;font-weight:600;font-size:14px">Your submitted leads</div>'+
+        UI.table({
+          cols:['Position','Company','Primary contact','Contacts','Stage','Created',{label:'',w:'90px'}],
+          rows:raRows, minWidth:'820px',
+          empty:'No leads submitted yet. Use the form above to add your first one.'
+        })
+    });
   }
 
   var allStagesList=['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'];
@@ -140,31 +164,38 @@ function renderJobs(){
       '</div>':'')  +
   '</div>';
 
-  // Stage summary counts from ALL jobs (not filtered)
+  // ── the stat strip ────────────────────────────────────────────────────
+  // Counts come from ALL of this user's leads, never the filtered set: the
+  // strip is the denominator you filter against, so filtering must not move it.
+  //
+  // These used to be number-and-colour chips with the name only on hover — a
+  // workaround for having nowhere to put the label. The strip has room, so the
+  // name is back and the stage colour stays as the dot. Clicking a stage
+  // filters to it; clicking Total clears the stage filter.
   var allJobs=getMyJobs(u);
   var stageCounts={};
   var stageList=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
-  stageList.forEach(function(s){stageCounts[s]=allJobs.filter(function(j){return j.stage===s;}).length;});
-  // Number + colour only (owner's spec). The colour IS the label: blue=Assigned,
-  // green=Connected, red=Rejected, grey=Unassigned, amber=Future, violet=In
-  // Discussion — hover shows the name. Clicking filters; the Connected chip opens
-  // a drill-down list of the connected leads instead.
-  var stageSummary='<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">'+
-    stageList.filter(function(s){return stageCounts[s]>0;}).map(function(s){
-      var col=leadStageColor(s);
-      var isConn=(s==='Connected');
-      var onClick=isConn?'leadsShowConnected()':'STATE.jobsFilter.stages=[\''+s+'\'];STATE.leadsPage=0;render()';
-      return '<div onclick="'+onClick+'" title="'+s+(isConn?' — click to open the list':' — click to filter')+'" style="display:flex;align-items:center;gap:7px;padding:7px 13px;background:'+leadStageBg(s)+';border:1px solid '+col+'44;border-radius:20px;cursor:pointer">'+
-        '<div style="width:9px;height:9px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'+
-        '<span style="font-size:14px;font-weight:800;color:'+col+'">'+stageCounts[s]+'</span>'+
-        (isConn?'<span style="font-size:11px;color:'+col+';font-weight:700">▸</span>':'')+
-      '</div>';
-    }).join('')+
-    '<div style="display:flex;align-items:center;gap:6px;padding:7px 13px;background:var(--card);border:1px solid var(--border);border-radius:20px;margin-left:auto">'+
-      '<span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Total</span>'+
-      '<span style="font-size:14px;font-weight:800;color:var(--text)">'+allJobs.length+'</span>'+
-    '</div>'+
-  '</div>';
+  stageList.forEach(function(st){stageCounts[st]=allJobs.filter(function(j){return j.stage===st;}).length;});
+
+  var stripItems=[{
+    v:allJobs.length, label:'Total leads',
+    on:!(f.stages&&f.stages.length),
+    onclick:"STATE.jobsFilter.stages=[];STATE.leadsPage=0;render()"
+  },{ sep:true }];
+  stageList.filter(function(st){return stageCounts[st]>0;}).forEach(function(st){
+    // "Connected" keeps its drill-down: the panel shows each connected lead's
+    // email, phone and LinkedIn, which the table does not. Deliberate, and the
+    // chevron says the click does something different.
+    var isConn=(st==='Connected');
+    stripItems.push({
+      v:stageCounts[st],
+      label:st+(isConn?' ▸':''),
+      on:!isConn&&!!(f.stages&&f.stages.length===1&&f.stages[0]===st),
+      onclick:isConn?'leadsShowConnected()'
+                    :"STATE.jobsFilter.stages=['"+st+"'];STATE.leadsPage=0;render()"
+    });
+  });
+  var stageSummary=UI.strip(stripItems);
 
   // Connected-leads drill-down (item 7): a panel listing the connected leads with
   // their basic contact details, opened from the green "Connected" chip.
@@ -194,57 +225,82 @@ function renderJobs(){
       '</div>';
   }
 
-  return '<div style="padding:24px">'+
-    stageSummary+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;flex-wrap:wrap">'+
-      '<div style="display:flex;gap:10px;align-items:center;flex:1;min-width:280px;flex-wrap:wrap">'+
-        '<input id="jobs-search" placeholder="Search jobs, companies, contacts..." value="'+escAttr(f.search)+'" style="flex:1;max-width:340px;padding:9px 13px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-size:13px"/>'+
+  var clearFilters="STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];"+
+    "STATE.jobsFilter.dateRange='all';STATE.jobsFilter.dateFrom='';STATE.jobsFilter.dateTo='';"+
+    "STATE.openDrop=null;STATE.leadsPage=0;render()";
+
+  // The bulk bar only exists when something is selected, so it sits in the body
+  // rather than the toolbar — a permanently-reserved empty strip is worse.
+  var bulkBar=(canSequence&&leadSelCount)?
+    '<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+      '<span style="font-size:13px;font-weight:600">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
+      '<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>'+
+      '<button class="btn btn-sm btn-outline" onclick="leadClearSel()">Clear</button>'+
+      '<span style="font-size:11.5px;color:var(--ink3);margin-left:auto">You pick the "from" mailboxes next — sends rotate across them, whatever the stage.</span>'+
+    '</div>':'';
+
+  var cols=[];
+  if(canSequence) cols.push({ w:'34px', raw:
+    '<input type="checkbox" class="ck" '+
+    (leadSelectable.length&&leadSelectable.every(function(j){return leadSel[j.id];})?'checked':'')+
+    ' onclick="leadToggleSelAll()" title="Select every lead matching these filters">' });
+  cols=cols.concat([
+    { label:'Position', icon:'doc' },
+    { label:'Company' },
+    { label:'Primary contact', icon:'user' },
+    { label:'Contacts' },
+    { label:'Stage' },
+    { label:'Assigned BD' },
+    { label:'Created' }
+  ]);
+
+  return UI.page({
+    strip: stageSummary,
+    toolbar: UI.toolbar({
+      search:{ value:f.search||'', placeholder:'Search leads, companies, contacts…',
+               oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
+      icons:[
+        { icon:'x', title:'Clear all filters', onclick:clearFilters, off:!anyActive }
+      ],
+      right:
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+
         mkChkDrop('Industry','industries',allIndustriesList,f.industries||[],indActive)+
         dateBtn+
-        (anyActive?'<button onclick="STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];STATE.jobsFilter.dateRange=\'all\';STATE.jobsFilter.dateFrom=\'\';STATE.jobsFilter.dateTo=\'\';STATE.openDrop=null;STATE.leadsPage=0;render()" style="padding:7px 12px;border:1.5px solid var(--red);border-radius:8px;background:var(--red-l);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">&#10005; Clear</button>':'')+
+        (userHasAnyRole(u,'ra_lead','admin')
+          ? '<button class="btn btn-sm btn-outline" onclick="openExportLeads()">'+UI.ic('dl')+'Export</button>':'')+
+        '<button class="btn btn-sm btn-outline" onclick="triggerImport()">Import Excel</button>'+
+        (u.role!=='ra'?'<button class="btn btn-sm btn-primary" onclick="openAddJob()">'+UI.ic('plus')+'Add Lead</button>':'')+
+        '<input type="file" id="xl-import" accept=".xlsx,.xls" style="display:none" onchange="importXL(this)"/>'
+    }),
+    body:
+      bulkBar+
+      UI.table({
+        cols:cols, rows:rows, minWidth:'1020px',
+        empty: anyActive||f.search
+          ? 'No leads match these filters. <span style="color:var(--accent);cursor:pointer" onclick="'+escAttr(clearFilters)+'">Clear them &rarr;</span>'
+          : 'No leads yet.'
+      })+
+      '<div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12.5px;color:var(--ink3)">'+
+        '<div>'+jobs.length+' lead'+(jobs.length===1?'':'s')+'</div>'+
+        (_tp>1?'<div style="display:flex;gap:6px;align-items:center">'+
+          '<button class="btn btn-sm btn-outline" onclick="setLeadsPage('+(_pg-1)+')"'+(_pg===0?' disabled style="opacity:.5"':'')+'>&lsaquo; Prev</button>'+
+          '<span>Page '+(_pg+1)+' / '+_tp+'</span>'+
+          '<button class="btn btn-sm btn-outline" onclick="setLeadsPage('+(_pg+1)+')"'+(_pg>=_tp-1?' disabled style="opacity:.5"':'')+'>Next &rsaquo;</button>'+
+        '</div>':'')+
       '</div>'+
-      '<div style="display:flex;gap:8px;align-items:center">'+
-        (u.role==='ra_lead'||u.role==='admin'?'<button onclick="openExportLeads()" style="background:var(--card);color:var(--text);border:1.5px solid var(--border);padding:9px 15px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px">'+ico("dl",13)+' Export</button>':'')+
-        '<button onclick="triggerImport()" style="background:var(--card);color:var(--text);border:1.5px solid var(--border);padding:9px 15px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px">'+ico("upload",13)+' Import Excel</button>'+
-        (u.role!=='ra'?'<button onclick="openAddJob()" style="background:var(--accent);color:#fff;border:0;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px">+ Add Lead</button>':'')+
-        '<input type="file" id="xl-import" accept=".xlsx,.xls" style="display:none" onchange="importXL(this)"/>'+
-      '</div>'+
-    '</div>'+
-    (canSequence&&leadSelCount?'<div style="position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;padding:11px 15px;background:var(--accent-l);border:1px solid var(--accent);border-radius:10px;margin-bottom:12px;flex-wrap:wrap">'+
-      '<span style="font-size:13px;font-weight:700;color:var(--accent)">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
-      '<button onclick="leadStartSequence()" style="background:var(--accent);color:#fff;border:0;padding:8px 15px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer">▶ Sequence selected</button>'+
-      '<button onclick="leadClearSel()" style="background:transparent;color:var(--text2);border:1px solid var(--border);padding:8px 13px;border-radius:8px;font-size:12px;cursor:pointer">Clear</button>'+
-      '<span style="font-size:11.5px;color:var(--text3);margin-left:auto">Pick your "from" mailbox(es) next — sends rotate across them, regardless of stage.</span>'+
-    '</div>':'')+
-    '<div class="tbl-wrap" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px">'+
-      '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:920px">'+
-        '<thead style="background:var(--bg3);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px">'+
-          '<tr>'+(canSequence?'<th style="padding:12px;width:34px"><input type="checkbox" '+(leadSelectable.length&&leadSelectable.every(function(j){return leadSel[j.id];})?'checked':'')+' onclick="leadToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all matching leads"/></th>':'')+'<th style="padding:12px;text-align:left">Position</th><th style="padding:12px;text-align:left">Company</th><th style="padding:12px;text-align:left">Primary Contact</th><th style="padding:12px;text-align:center">Contacts</th><th style="padding:12px;text-align:left">Stage</th><th style="padding:12px;text-align:left">Assigned BD</th><th style="padding:12px;text-align:left">Created</th></tr>'+
-        '</thead>'+
-        '<tbody>'+rows+'</tbody>'+
-      '</table>'+
-    '</div>'+
-    '<div style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
-      '<div style="font-size:12px;color:var(--text3)">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' · page '+(_pg+1)+' of '+_tp+'</div>'+
-      (_tp>1?'<div style="display:flex;gap:5px">'+
-        '<button onclick="setLeadsPage('+(_pg-1)+')" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer" '+(_pg===0?'disabled':'')+'>&#8592; Prev</button>'+
-        '<span style="padding:5px 10px;font-size:12px;font-weight:600">'+(_pg+1)+' / '+_tp+'</span>'+
-        '<button onclick="setLeadsPage('+(_pg+1)+')" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer" '+(_pg>=_tp-1?'disabled':'')+'>Next &#8594;</button>'+
-      '</div>':'')+
-    '</div>'+
-  '</div>'+connectedOverlay;
+      connectedOverlay
+  });
 }
 window.leadsShowConnected=function(){STATE.leadsConnectedOpen=true;render();};
 window.leadsCloseConnected=function(){STATE.leadsConnectedOpen=false;render();};
 
 // Bind search/filter inputs (called from render() after DOM replace)
-function bindJobsControls(){
-  var s=document.getElementById("jobs-search");
-  if(s)s.oninput=function(){STATE.jobsFilter.search=this.value;render();var x=document.getElementById("jobs-search");if(x){x.focus();x.setSelectionRange(x.value.length,x.value.length);}};
-  var st=document.getElementById("jobs-stage");
-  if(st)st.onchange=function(){STATE.jobsFilter.stage=this.value;render();};
-}
+// The search box and the stage <select> this used to wire up are now built by
+// UI.toolbar with their handlers inline, and render() restores focus and caret
+// by placeholder after a rebuild — so there is nothing left to bind. Kept as a
+// no-op because 05-page-dashboard.js calls it on every leads render; deleting
+// it there and here in one go is a separate, unrelated change.
+function bindJobsControls(){}
 
 function openJob(id){ STATE.detailJob=id; STATE.jobSeqSel=[]; STATE.modal={type:"jobDetail",id:id}; render(); if(typeof loadJobEnrollments==='function')loadJobEnrollments(id); }
 window.jobToggleSeqSel=function(cid){ STATE.jobSeqSel=STATE.jobSeqSel||[]; var i=STATE.jobSeqSel.indexOf(cid); if(i>-1)STATE.jobSeqSel.splice(i,1); else STATE.jobSeqSel.push(cid); render(); };

@@ -71,7 +71,7 @@
     var t = document.querySelector('.tb-title'); if (t) t.textContent = 'All Jobs';
 
     if (STATE.jb.loading || STATE.jb.list === null){
-      content.innerHTML = '<div class="page"><div style="text-align:center;padding:60px;color:var(--text3)">Loading all jobs…</div></div>';
+      content.innerHTML = UI.page({ body:'<div class="dt-empty">Loading all jobs…</div>' });
       if (STATE.jb.list === null) load();
       return;
     }
@@ -103,22 +103,38 @@
       '</div>';
     }).join('');
 
-    content.innerHTML = '<div class="page">'+
-      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'+
-        '<input id="jb-search" class="inp" style="max-width:340px" placeholder="Search title, client, skills, location…" value="'+esc(STATE.jb.q||'')+'" oninput="jbSearch(this.value)"/>'+
-        '<span style="font-size:12.5px;color:var(--text3)">'+jobs.length+' of '+STATE.jb.list.length+' jobs · newest first</span>'+
-      '</div>'+
-      (jobs.length
+    // Counts describe every job on the board, not the search result — the strip
+    // is what you are searching within.
+    var all = STATE.jb.list||[];
+    var mine = all.filter(function(j){ return j.assigned_to_me; }).length;
+    var asked = all.filter(function(j){ return j.my_request; }).length;
+    var hot = all.filter(function(j){ return j.priority && j.priority!=='Normal'; }).length;
+
+    content.innerHTML = UI.page({
+      strip: UI.strip([
+        { v:all.length, label:'Open jobs',    icon:'doc' },
+        { sep:true },
+        { v:mine,       label:'On your desk', icon:'user' },
+        { v:asked,      label:'You asked for', icon:'send' },
+        { v:hot,        label:'High priority', icon:'flame' }
+      ]),
+      toolbar: UI.toolbar({
+        search:{ value:STATE.jb.q||'', placeholder:'Search title, client, skills, location…',
+                 oninput:'jbSearch(this.value)' },
+        right:'<span style="font-size:12.5px;color:var(--ink3)">'+jobs.length+' of '+all.length+' jobs · newest first</span>'
+      }),
+      body: (jobs.length
         ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px">'+cards+'</div>'
-        : '<div class="card" style="padding:40px;text-align:center;color:var(--text3)">'+(STATE.jb.list.length?'No jobs match your search.':'No jobs in the company yet — jobs appear here when the BD team opens them.')+'</div>')+
-    '</div>' + modalHtml();
+        : '<div class="dt-empty">'+(all.length?'No jobs match your search.':'No jobs in the company yet — they appear here when the BD team opens them.')+'</div>')
+    }) + modalHtml();
   }
 
   window.jbSearch = function(v){
     STATE.jb.q = v;
-    var content = document.getElementById('content');
     paint();
-    var inp = document.getElementById('jb-search');
+    // paint() replaces #content wholesale, so the box that was being typed into
+    // is gone. Put the caret back where it was, or every keystroke loses focus.
+    var inp = document.querySelector('.tbar-search input');
     if (inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   };
 

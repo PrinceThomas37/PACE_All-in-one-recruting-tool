@@ -111,7 +111,12 @@ try {
   step('Parsed skills are shown', /Spring Boot/.test(html));
   step('A row with no contact says so', /no contact yet/.test(html));
   step('A row with a contact says how many', /1 possible contact/.test(html));
-  step('Status filters carry counts', /To review \(2\)/.test(html) && /Already have \(1\)/.test(html));
+  // The status filters are the page's stat strip now, so the count sits above
+  // the label rather than in brackets after it. Same behaviour being pinned:
+  // every status says how much is waiting in it.
+  const stripCount = (label, n) =>
+    new RegExp('"strip-v">' + n + '</div><div class="strip-l">' + label + '<').test(html);
+  step('Status filters carry counts', stripCount('To review', 2) && stripCount('Already have', 1));
   step('Both tabs are offered', /Review queue/.test(html) && /Boards watched/.test(html));
 
   // ── nothing becomes a lead without a person ──────────────────────────────

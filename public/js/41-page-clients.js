@@ -34,109 +34,192 @@
     return apiGet('/clients').then(function(d){ STATE.clients.list=d||[]; STATE.clients.loading=false; paint(); })
       .catch(function(e){ STATE.clients.loading=false; showToast('Failed to load clients: '+e.message,'error'); paint(); });
   }
+  // Repaint just the open drawer. paint() rebuilds #content, and the drawer is
+  // an OVERLAY drawn after #content — so these four responses would otherwise
+  // land in state and never reach the screen.
+  function paintDetail(){
+    var el=document.querySelector('.dwr-scrim');
+    if(!el) return paint();
+    var html=renderClientDetail();
+    if(!html) return;
+    var d=document.createElement('div'); d.innerHTML=html;
+    if(d.firstChild) el.replaceWith(d.firstChild);
+  }
+
   function loadClientDetail(id){
     STATE.clients.jobOrders=null; STATE.clients.documents=null; STATE.clients.docsLoading=true;
     STATE.clients.contacts=null; STATE.clients.emailActivity=null;
-    apiGet('/companies/'+id+'/job-orders').then(function(d){ STATE.clients.jobOrders=d||[]; paint(); }).catch(function(){ STATE.clients.jobOrders=[]; paint(); });
-    apiGet('/companies/'+id+'/documents').then(function(d){ STATE.clients.documents=d||[]; STATE.clients.docsLoading=false; paint(); })
-      .catch(function(){ STATE.clients.documents=[]; STATE.clients.docsLoading=false; paint(); });
-    apiGet('/companies/'+id+'/contacts').then(function(d){ STATE.clients.contacts=d||[]; paint(); }).catch(function(){ STATE.clients.contacts=[]; });
-    apiGet('/companies/'+id+'/email-activity').then(function(d){ STATE.clients.emailActivity=d||[]; paint(); }).catch(function(){ STATE.clients.emailActivity=[]; });
+    apiGet('/companies/'+id+'/job-orders').then(function(d){ STATE.clients.jobOrders=d||[]; paintDetail(); }).catch(function(){ STATE.clients.jobOrders=[]; paintDetail(); });
+    apiGet('/companies/'+id+'/documents').then(function(d){ STATE.clients.documents=d||[]; STATE.clients.docsLoading=false; paintDetail(); })
+      .catch(function(){ STATE.clients.documents=[]; STATE.clients.docsLoading=false; paintDetail(); });
+    apiGet('/companies/'+id+'/contacts').then(function(d){ STATE.clients.contacts=d||[]; paintDetail(); }).catch(function(){ STATE.clients.contacts=[]; });
+    apiGet('/companies/'+id+'/email-activity').then(function(d){ STATE.clients.emailActivity=d||[]; paintDetail(); }).catch(function(){ STATE.clients.emailActivity=[]; });
   }
-  window.clientsOpen = function(id){ STATE.clients.selectedId=id; STATE.clients.selDocs={}; loadClientDetail(id); paint(); };
-  window.clientsBack = function(){ STATE.clients.selectedId=null; paint(); };
+  // Opening or closing a client changes an OVERLAY, which lives outside
+  // #content — so these go through render(), not paint().
+  window.clientsOpen = function(id){ STATE.clients.selectedId=id; STATE.clients.selDocs={}; loadClientDetail(id); render(); };
+  window.clientsBack = function(){ STATE.clients.selectedId=null; render(); };
   window.clientsSearch = function(v){ STATE.clients.q=v; paint(); };
 
   // ── list page ────────────────────────────────────────────────────────────────
+  // The client record opens OVER its list, the same as a candidate: close it and
+  // you are back on the same list with the same search still typed.
+  UI.registerOverlay('client', function(){
+    return (STATE.page==='clients' && STATE.clients && STATE.clients.selectedId)
+      ? renderClientDetail() : '';
+  });
+
   function renderClients(){
-    if (STATE.clients.selectedId) return renderClientDetail();
-    if (STATE.clients.loading || STATE.clients.list===null) return '<div class="page"><div style="text-align:center;padding:60px;color:var(--text3)">Loading clients…</div></div>';
+    if (STATE.clients.loading || STATE.clients.list===null)
+      return UI.page({ body:'<div class="dt-empty">Loading clients…</div>' });
+
+    var all=STATE.clients.list||[];
     var q=(STATE.clients.q||'').toLowerCase();
-    var list=(STATE.clients.list||[]).filter(function(c){ return !q || (c.name||'').toLowerCase().indexOf(q)>-1; });
+    var list=all.filter(function(c){ return !q || (c.name||'').toLowerCase().indexOf(q)>-1; });
+
+    // Counts describe every client, not the filtered view — the strip is what
+    // you filter against, so searching must not move it.
+    var openJos=all.reduce(function(n,c){ return n+(c.open_job_order_count||0); },0);
+    var totalJos=all.reduce(function(n,c){ return n+(c.job_order_count||0); },0);
+    var withOpen=all.filter(function(c){ return c.open_job_order_count>0; }).length;
+
     var rows=list.map(function(c){
-      return '<tr style="border-top:1px solid var(--border);cursor:pointer" onclick="clientsOpen(\''+c.id+'\')">'+
-        '<td style="padding:11px 12px"><div style="font-weight:600;font-size:13.5px">'+esc(c.name)+'</div>'+(c.website?'<div style="font-size:11px;color:var(--text3)">'+esc(c.website)+'</div>':'')+'</td>'+
-        '<td style="padding:11px 12px;font-size:12.5px">'+esc(c.industry||'—')+'</td>'+
-        '<td style="padding:11px 12px;font-size:12.5px">'+esc(c.location||'—')+'</td>'+
-        '<td style="padding:11px 12px;font-size:12.5px">'+c.job_order_count+' total'+(c.open_job_order_count?' · '+c.open_job_order_count+' open':'')+'</td>'+
-      '</tr>';
-    }).join('');
-    return '<div class="page">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div style="font-size:13px;color:var(--text3)">Companies with at least one job order — leads that converted into real business.</div>'+
-        '<input class="inp" style="max-width:260px" placeholder="Search clients…" value="'+esc(STATE.clients.q||'')+'" oninput="clientsSearch(this.value)"/>'+
-      '</div>'+
-      '<div class="card" style="overflow:auto">'+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:640px">'+
-          '<thead><tr style="background:var(--bg);text-align:left">'+
-            ['CLIENT','INDUSTRY','LOCATION','JOB ORDERS'].map(function(h){ return '<th style="padding:10px 12px;font-size:11px;color:var(--text3);font-weight:600">'+h+'</th>'; }).join('')+
-          '</tr></thead>'+
-          '<tbody>'+(rows||'<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--text3)">No clients yet — clients appear here once a lead converts into a job order.</td></tr>')+'</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>';
+      return { onclick:"clientsOpen('"+c.id+"')", cells:[
+        { html: UI.idCell(c.name||'—', c.website||'', null) },
+        { html: UI.dash(c.industry) },
+        { cls:'tight', html: UI.dash(c.location) },
+        { cls:'tight', html: c.open_job_order_count
+            ? UI.pill(c.open_job_order_count+' open','ok',true)+
+              '<span style="margin-left:7px;color:var(--ink3)">'+c.job_order_count+' total</span>'
+            : '<span style="color:var(--ink3)">'+(c.job_order_count||0)+' total</span>' }
+      ]};
+    });
+
+    return UI.page({
+      strip: UI.strip([
+        { v:all.length,  label:'Clients',          icon:'building' },
+        { sep:true },
+        { v:withOpen,    label:'Hiring right now', icon:'flame' },
+        { v:openJos,     label:'Open job orders',  icon:'doc' },
+        { v:totalJos,    label:'Job orders, all time' }
+      ]),
+      toolbar: UI.toolbar({
+        search:{ value:STATE.clients.q||'', placeholder:'Search clients…', oninput:'clientsSearch(this.value)' },
+        right:'<span style="font-size:12.5px;color:var(--ink3)">Companies with at least one job order — leads that turned into real business.</span>'
+      }),
+      body: UI.table({
+        cols:[{label:'Client',icon:'building'},'Industry','Location','Job orders'],
+        rows:rows, minWidth:'680px',
+        empty: q
+          ? 'No client matches “'+esc(STATE.clients.q)+'”.'
+          : 'No clients yet — a company appears here once one of its leads converts into a job order.'
+      })
+    });
   }
 
-  // ── client detail ────────────────────────────────────────────────────────────
   function renderClientDetail(){
     var c=(STATE.clients.list||[]).find(function(x){ return x.id===STATE.clients.selectedId; }); if(!c) return '';
     var jobs=STATE.clients.jobOrders;
-    var jobRows=(jobs||[]).map(function(j){
-      return '<tr style="border-top:1px solid var(--border)">'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc(j.job_code||'')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:600">'+esc(j.job_title||'')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc(j.status||'')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px">'+esc((j.bd_manager&&j.bd_manager.name)||'—')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12px;color:var(--text3)">'+fmtDate(j.created_at)+'</td>'+
-      '</tr>';
-    }).join('') || '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--text3);font-size:12.5px">No job orders.</td></tr>';
-
+    var docs=STATE.clients.documents;
     var sel=STATE.clients.selDocs||{};
     var selIds=Object.keys(sel).filter(function(k){ return sel[k]; });
-    var docs=STATE.clients.documents;
+    var tab=STATE.clients.tab||'jobs';
+
+    var jobRows=(jobs||[]).map(function(j){
+      return { cells:[
+        { cls:'tight', html:'<span style="font-family:var(--mono);font-size:11.5px;color:var(--ink3)">'+esc(j.job_code||'')+'</span>' },
+        { html: esc(j.job_title||'—') },
+        { cls:'tight', html: j.status ? UI.pill(j.status, /open|active/i.test(j.status)?'ok':'mute', true) : UI.dash('') },
+        { cls:'tight', html: UI.dash((j.bd_manager&&j.bd_manager.name)||'') },
+        { cls:'tight', html:'<span style="color:var(--ink3)">'+fmtDate(j.created_at)+'</span>' }
+      ]};
+    });
+
     var docRows=(docs||[]).map(function(d){
-      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
-        '<input type="checkbox" '+(sel[d.id]?'checked':'')+' onclick="clientsDocToggle(\''+d.id+'\')"/>'+
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)">'+
+        '<input type="checkbox" class="ck" '+(sel[d.id]?'checked':'')+' onclick="clientsDocToggle(\''+d.id+'\')">'+
         '<div style="flex:1;min-width:0">'+
           '<div style="font-size:13px;font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+fmtDate(d.uploaded_at)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--ink3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+fmtDate(d.uploaded_at)+'</div>'+
         '</div>'+
-        '<span style="cursor:pointer;color:var(--text3);font-size:12px" onclick="clientsDeleteDoc(\''+d.id+'\')">✕</span>'+
+        '<span class="kebab" title="Delete" onclick="clientsDeleteDoc(\''+d.id+'\')">'+UI.ic('trash')+'</span>'+
       '</div>';
-    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No documents yet.</div>';
+    }).join('') || '<div class="dt-empty">No documents yet.</div>';
 
-    return '<div class="page">'+
-      '<div style="margin-bottom:10px"><span onclick="clientsBack()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← All Clients</span></div>'+
-      '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:start">'+
-          '<div><div style="font-size:20px;font-weight:700">'+esc(c.name)+'</div>'+
-            '<div style="font-size:13px;color:var(--text3);margin-top:2px">'+esc(c.industry||'')+(c.location?' · '+esc(c.location):'')+(c.website?' · '+esc(c.website):'')+'</div></div>'+
-          '<button class="btn btn-sm btn-primary" onclick="clientsOpenEmail(\''+c.id+'\')">✉ Email this client</button>'+
-        '</div>'+
+    var tabBar='<div class="pgtabs">'+
+      [{id:'jobs',label:'Job orders',n:(jobs?jobs.length:0)},
+       {id:'emails',label:'Emails',n:(STATE.clients.emailActivity||[]).length},
+       {id:'docs',label:'Documents',n:(docs?docs.length:0)}].map(function(t){
+        return '<div class="pgtab'+(tab===t.id?' on':'')+'" data-cltab="'+t.id+'" onclick="clientsTab(\''+t.id+'\')">'+
+          t.label+'<span class="pgtab-n">'+t.n+'</span></div>';
+      }).join('')+'</div>';
+
+    // Both panels render; the inactive one is hidden. Same reason as the
+    // candidate drawer — a tab click must not rebuild the DOM under an upload.
+    var body=
+      '<div class="feed" data-clpanel="jobs" style="padding:16px 18px"'+(tab==='jobs'?'':' hidden')+'>'+
+        UI.table({ cols:['Code','Title','Status','BD manager','Created'], rows:jobRows,
+                   minWidth:'620px', empty:'No job orders for this client yet.' })+
       '</div>'+
-      '<div class="card" style="padding:0;margin-bottom:16px;overflow-x:auto">'+
-        '<div style="padding:14px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border)">Job Orders ('+(jobs?jobs.length:0)+')</div>'+
-        '<table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr style="background:var(--bg)">'+
-          ['Code','Title','Status','BD Manager','Created'].map(function(h){ return '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3);font-weight:700">'+h+'</th>'; }).join('')+
-        '</tr></thead><tbody>'+jobRows+'</tbody></table>'+
+      '<div class="feed" data-clpanel="emails" style="padding:16px 18px"'+(tab==='emails'?'':' hidden')+'>'+
+        recentEmailsCard(c)+
       '</div>'+
-      '<div class="card" style="padding:16px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-          '<div style="font-weight:600;font-size:14px">Documents'+(selIds.length?' · '+selIds.length+' selected':'')+'</div>'+
+      '<div class="feed" data-clpanel="docs" style="padding:16px 18px"'+(tab==='docs'?'':' hidden')+'>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+          '<div style="font-weight:600;font-size:13.5px">Documents'+(selIds.length?' · '+selIds.length+' selected':'')+'</div>'+
           '<div style="display:flex;gap:8px">'+
             (selIds.length?'<button class="btn btn-sm btn-outline" onclick="clientsOpenEmail(\''+c.id+'\',true)">Email selected</button>':'')+
-            '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">+ Upload<input type="file" id="client-doc-file" style="display:none" onchange="clientsUploadDoc(this)"></label>'+
+            '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">'+UI.ic('plus')+'Upload'+
+              '<input type="file" id="client-doc-file" style="display:none" onchange="clientsUploadDoc(this)"></label>'+
           '</div>'+
-        '</div>'+
-        docRows+
-      '</div>'+
-      recentEmailsCard(c)+
-    '</div>';
+        '</div>'+ docRows+
+      '</div>';
+
+    var initials=(String(c.name||'?').trim().split(/\s+/).slice(0,2)
+      .map(function(w){ return (w[0]||''); }).join('')||'?').toUpperCase();
+
+    return UI.drawer({
+      avatar:'<div class="av av-48 av-bd" style="font-size:16px">'+esc(initials)+'</div>',
+      name: c.name||'Client',
+      sub: [c.industry, c.location].filter(Boolean).join(' · '),
+      onclose:'clientsBack()',
+      acts:[
+        { icon:'mail',     title:'Email this client', onclick:"clientsOpenEmail('"+c.id+"')" },
+        { icon:'mailopen', title:'Email history',     onclick:"clientsTab('emails')" },
+        { icon:'doc',      title:'Documents',         onclick:"clientsTab('docs')" }
+      ],
+      stats:[
+        { v:(c.open_job_order_count||0), label:'Open',      icon:'flame' },
+        { v:(c.job_order_count||0),      label:'All time',  icon:'doc' },
+        { v:(docs?docs.length:0),        label:'Documents', icon:'note' }
+      ],
+      fields:
+        UI.kv('Industry', c.industry, { placeholder:'Not recorded' })+
+        UI.kv('Location', c.location, { placeholder:'Not recorded' })+
+        (c.website
+          ? UI.kv('Website','<a href="'+esc(/^https?:/.test(c.website)?c.website:'https://'+c.website)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(c.website)+'</a>',{ html:true })
+          : UI.kv('Website','',{ placeholder:'Not recorded' })),
+      tabs: tabBar,
+      body: body
+    });
   }
+
+  // Toggles the panel that is already in the DOM — never a re-render, so an
+  // in-progress upload or a half-made selection survives a tab click.
+  window.clientsTab=function(id){
+    if(STATE.clients) STATE.clients.tab=id;
+    var root=document.querySelector('.dwr-right'); if(!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('[data-clpanel]'), function(el){
+      el.hidden = el.getAttribute('data-clpanel')!==id;
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-cltab]'), function(el){
+      el.classList.toggle('on', el.getAttribute('data-cltab')===id);
+    });
+  };
 
   function recentEmailsCard(c){
     var acts=STATE.clients.emailActivity;
-    if(acts===null) return '<div class="card" style="padding:16px;margin-top:16px"><div style="font-weight:600;font-size:14px;margin-bottom:6px">Recent emails</div><div style="font-size:12.5px;color:var(--text3)">Loading…</div></div>';
+    if(acts===null) return '<div class="dt-empty">Loading email history…</div>';
     var rows=(acts||[]).map(function(a){
       var status=a.replied_at?'<span style="font-size:10.5px;font-weight:700;color:var(--green)">↩ Replied</span>':(a.opened_at?'<span style="font-size:10.5px;font-weight:700;color:var(--accent)">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span style="font-size:10.5px;color:var(--text3)">Sent</span>');
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
@@ -145,15 +228,15 @@
         status+
         '<button class="btn btn-sm btn-outline" onclick="clientsReply(\''+c.id+'\',\''+escAttr(a.to_email||'')+'\',\''+escAttr(a.subject||'')+'\')">Reply</button>'+
       '</div>';
-    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No emails sent to this client yet.</div>';
-    return '<div class="card" style="padding:16px;margin-top:16px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Recent emails</div>'+rows+'</div>';
+    }).join('') || '<div class="dt-empty">No emails sent to this client yet.</div>';
+    return rows;
   }
   window.clientsReply=function(companyId,to,subject){
     var re=/^re:/i.test(subject)?subject:('Re: '+subject);
     clientsOpenEmail(companyId,false,{to:to,subject:re,body:'Hi,\n\n\n\nBest regards,'});
   };
 
-  window.clientsDocToggle=function(id){ STATE.clients.selDocs=STATE.clients.selDocs||{}; STATE.clients.selDocs[id]=!STATE.clients.selDocs[id]; paint(); };
+  window.clientsDocToggle=function(id){ STATE.clients.selDocs=STATE.clients.selDocs||{}; STATE.clients.selDocs[id]=!STATE.clients.selDocs[id]; paintDetail(); };
 
   // ── documents ────────────────────────────────────────────────────────────────
   window.clientsUploadDoc = function(input){
