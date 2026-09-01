@@ -2306,3 +2306,199 @@ The chain is provable:
 - The historic failure bursts (27 Jul – 7 Aug, all failed / zero sent) match
   Session 12's dead-Microsoft-mailbox story — different cause, same silent
   symptom.
+
+---
+
+# Session 15 — the app got a structure
+
+The owner started using **Saleshandy** and sent nine screenshots, asking for
+PACE's frontend to be compared against them and made alike. This session is
+almost entirely frontend, and its lasting output is not any one screen but the
+**shared layout vocabulary underneath them** — the thing the codebase had never
+had.
+
+Two PRs, both merged and deployed: **#147** (shell + kit + Candidates) and
+**#148** (the four screens the owner picked).
+
+## Why this was worth doing at all
+
+Every page in `public/js/` had invented its own header, its own table, its own
+badge, its own toolbar, in inline styles. That is why the app read as several
+products stitched together, and why each new page cost more than the last —
+there was nothing to reuse, so every page started from zero. The benchmark was
+useful precisely because it is *conventional*: a slim icon rail, a quiet top
+bar, per-page tabs with counts, a stat strip, one toolbar row, a dense table.
+Copying the **shape** is what makes a product feel familiar; copying the hue is
+not, which is why PACE stayed green.
+
+## What was built
+
+### `public/ui.css` + `public/js/00-ui-kit.js` — the kit
+
+Pure string builders. No state, no DOM, no side effects, so it is safe at the
+head of the load order (it is script `00`, before `01-constants.js`). It
+**overrides only the shell and the list/table/detail vocabulary** — `.card`,
+`.btn`, `.bdg`, `.inp` and everything else in `styles.css` keep working
+untouched. That was the whole design constraint: pages move over one at a time,
+never in one sweep, so a half-migrated app is always shippable.
+
+Components: `page`, `tabs`, `strip`, `toolbar`, `table`, `idCell`, `pill`,
+`ring`, `toggle`, `kebab`, `check`, `notice`, `kv`, `drawer`, `feed`, plus one
+stroked icon family at weight 1.7 (`UI.ic`). The kit is scoped by
+`body.ui-kit`, set in `index.html`.
+
+### The rail
+
+Grouped **Work / Records / Outreach / Insight**. A flat list of fourteen items
+is a list nobody reads. It collapses to 60px and expands to 232px on hover as
+an *overlay*, so content never reflows. Details that mattered:
+
+- Groups with no visible items disappear entirely.
+- A duplicate item is de-duplicated — Insights was pushed twice for an admin who
+  is also an RA lead, and a doubled nav item reads as a bug.
+- A badge has nowhere to sit when collapsed, so it becomes a **dot on the icon**
+  rather than being dropped.
+
+`test/recruiter-dashboard-smoke.mjs` had pinned `navItems[1] === 'My Jobs'`.
+Grouping breaks a flat index, so the assertion moved onto the intent it was
+really protecting: Dashboard first, and a recruiter's own jobs ahead of the
+shared board and the candidate pool.
+
+### Candidates, and one new endpoint
+
+Tabs, a status stat strip, a toolbar, and an identity column carrying name +
+email + code together. The strip is fed by a new **`GET /candidates/status-counts`**
+— one `head:true` count per status, so the cost is a handful of index counts
+rather than reading the pool.
+
+Three decisions worth keeping:
+
+- **The status VOCABULARY comes from the caller**, not the server. Statuses are
+  a per-org managed lookup, so hard-coding the list server-side would make a
+  customer's renamed status silently vanish from their own strip.
+- **The strip never fabricates a number.** Until the counts land it renders
+  `·`, never `0` — a `0` reads as "nobody is interviewing", which would be false.
+- **The strip and tab count measure the whole pool; the pager keeps the filtered
+  number.** Mixing the two is what makes a filtered list feel broken.
+
+Registered before `/candidates/:id` and pinned in
+`test/recruiting-routes-mounted.mjs`, both in the mounted list and in
+`LITERAL_BEFORE_PARAM`.
+
+### The candidate profile became a drawer
+
+This is the biggest behavioural change in the session. Clicking a candidate used
+to `goPage('bd_candidate')`, so coming back cost you your filters, your
+selection and your scroll position — which is why people stopped opening
+candidates. It now opens as a layer over the list and **`STATE.page` is
+deliberately untouched**, so closing it returns you to a list that was never
+left.
+
+- The kit gained an **overlay registry**. A drawer cannot live inside `#content`
+  — that *is* the page — so modules register a renderer and `renderApp()` calls
+  `UI.renderOverlays()` after it. Registration is **by name and idempotent**,
+  because module files are evaluated once but wrap `render()` repeatedly and
+  pushing blindly would stack duplicate drawers.
+- `scheduleRender()` now treats an open overlay like an open modal and skips the
+  background rebuild. A rebuild under a drawer throws away a half-typed note.
+- Left pane: identity + fields. Right: Activity / Jobs / Emails / Notes /
+  Documents / Resume. **Every panel renders; inactive ones carry `hidden`** —
+  so switching tabs neither rebuilds the DOM (a half-written note survives) nor
+  tears down and refetches the résumé iframe. `cpTab()` toggles `el.hidden`
+  and never calls `render()`.
+- Empty fields are dropped rather than padding the pane with em-dashes —
+  **except email, phone and location, where the absence is itself information**.
+- Prev/next arrows walk `STATE.ats.rows`. **Only the loaded page**: silently
+  fetching the next page behind an arrow press would make the list underneath
+  disagree with what the arrows do.
+- **There is no `bd_candidate` page any more.** One code path, so the profile
+  cannot drift into two things depending on how it was opened. `cpGoBack()`
+  survives under its old name (five call sites + nav-history reference it) and
+  now just closes.
+
+### The sequence builder became a timeline
+
+A sequence's whole meaning is "what goes out, and when". The old 480px stack of
+rows showed the *what* and buried the *when* inside a number input, so nobody
+could see that their follow-up landed the same afternoon as the first touch. It
+now reads **Day 1 → Day 4 → Day 9** down a connector, each step's card hanging
+off the day it fires, with a plain-English sentence above it saying whether it
+opens a new thread or continues the old one.
+
+**The day shown is cumulative and computed at render time** (`wfStepDays`);
+`delay_days` stays relative to the previous step on the record. Storing the
+absolute day would mean rewriting every later step whenever an earlier delay
+changed.
+
+### Compose got a live preview, with the From picker inside it
+
+Editor left, the real email right. The sending mailbox is chosen **inside the
+preview**, because which mailbox sends is not a setting — it is part of what the
+recipient reads.
+
+- **`{{sender}}` / `{{senderemail}}` resolve from the SELECTED MAILBOX**, never
+  from the logged-in user — the same rule the send path follows. This is the
+  point of the whole feature: a preview that used the session user instead would
+  have rendered "Prince Thomas" for exactly the Session 14 case where 152 emails
+  went out under the wrong name. It would have **hidden** that class of bug
+  rather than caught it.
+- **An unfillable variable stays visible and highlighted** (`.cmp-unset`).
+  "Hi ," in a preview reads as a typo; a marked `{{fn}}` says the contact has no
+  first name on record, which is the actual thing to fix before sending.
+- The signature shown is the selected mailbox's, through `fillSignatureHtml` —
+  the same call the send path makes — and only once loaded. Inventing a
+  placeholder would be showing a sign-off that may not be what goes out.
+- Typing repaints **only** `#cmp-mail`. A full `render()` per keystroke would
+  rebuild the textarea and fight the caret.
+
+The page also moved onto the shared frame, losing its duplicate in-page "Email"
+heading. **The nav label went back to "Email"** — renaming it "Sequences" in
+#147 was wrong; Sequence is one tab of five on that page. Recorded here because
+it is the kind of tidy-looking rename that is worth *un*-doing.
+
+### The inbox became two panes and shows the thread
+
+- **The folder rail became a toolbar picker.** It cost 190px on every screen to
+  save one click on a switch people make a handful of times a day, and the two
+  panes carrying the work were paying for it. Nothing is lost: every folder,
+  custom ones included, is in the list with its unread count.
+- The reader shows the **conversation**, oldest first, open message expanded in
+  place, the rest collapsed to a line. It uses **`GET /mailbox/:mid/threads/:tid`,
+  which already existed and had no caller.**
+- The thread endpoint returns **summaries, not bodies**, so a collapsed message
+  opens through the same `loadMessage()` as any other. One code path for opening
+  mail — and for marking it read — rather than a second, quieter one that would
+  drift.
+- **Message bodies keep a FIXED height and scroll inside themselves.** Sizing an
+  iframe to its content means measuring it from the parent, which needs
+  `allow-same-origin` — the exact grant that keeps a hostile email boxed in. The
+  sandbox rule wins; a short message gets some empty space. This is a deliberate
+  trade, not an oversight.
+- **"Unread" is a view filter over what is already loaded**, not a server query
+  — the honest reading of a list that pages in 25 at a time.
+
+Two assertions in `mailbox-page-smoke.mjs` moved off implementation details onto
+the behaviour they were pinning: unread rows are *marked* (by class now, not an
+inline `font-weight:700`), and an active search *enables* the clear affordance
+(a toolbar icon now, not a text button). All four safety assertions — sandboxed
+body, blocked remote images, no permanent-delete call, own-mailboxes-only — were
+untouched and still pass. 70/70.
+
+## What this session did not do
+
+- **No migration.** The only backend change is one read-only endpoint. 042 is
+  still unclaimed, and still most likely the error column on `emails`.
+- **The Gmail 7-day expiry is still unfixed**, and the owner's blocking question
+  (is `futeglobal.com` on Google Workspace?) is still unanswered. Next expiry
+  after the 31 Aug reconnect was ≈ 7 Sept 18:23.
+- **Most pages have not moved onto the kit yet** — Leads, Jobs, Clients, Sourced
+  Leads, Reports, Admin and the dashboards still draw their own headers and
+  tables. That is the natural next slice and it is now cheap, which was the
+  entire point of building the kit first.
+
+## The lesson worth carrying
+
+The owner asked for four screens and got them, but the durable value is that the
+*fifth* screen is now an afternoon instead of a week. When a request is "make it
+look like this", the honest reading is usually "give the app a structure it
+doesn't have" — and the structure is the deliverable, not the screenshots.

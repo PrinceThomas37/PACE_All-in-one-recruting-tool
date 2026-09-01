@@ -89,6 +89,12 @@ we never have to rewrite to grow (see "Growth bets" below).
   token inside the *recipient's* own quoted message.
   `test/sender-identity-smoke.mjs` greps for every file reading `emails.body`
   and fails if one does not render.
+  **Anything that PREVIEWS an outbound email follows the same rule**: the
+  compose preview (Session 15) resolves `{{sender}}`/`{{senderemail}}` from the
+  *selected sending mailbox*, never the logged-in user. A preview keyed off the
+  session user would have rendered the correct name for the exact case above —
+  hiding the bug rather than catching it. A variable that cannot be filled stays
+  visible and highlighted; never blank it silently.
 - **Send-queue ORDER is a business decision, not an implementation detail.**
   The queue drains at one email per 75-105s inside an 8-hour window in each
   lead's timezone, so whatever is at the back may not go out at all.
@@ -113,6 +119,30 @@ we never have to rewrite to grow (see "Growth bets" below).
 - **Frontend:** plain `<script>` modules in `public/js/NN-*.js`, loaded in order by
   `public/index.html`. **No build step, no bundler.** Global `window.*` + `STATE`.
   `render()` / `goPage()` are wrapped by each page module.
+  - **Session 15 gave the app ONE layout vocabulary: `public/ui.css` +
+    `public/js/00-ui-kit.js`.** Pure string builders (no state, no DOM, no side
+    effects), which is why it can sit at the head of the load order. Build a
+    screen with `UI.page({tabs, strip, toolbar, body})` and the parts —
+    `UI.tabs/strip/toolbar/table/idCell/pill/ring/toggle/check/kv/notice/feed/
+    drawer/ic` — **not another hand-rolled table**; eleven of those is how the
+    app came to read as several products. The kit is scoped by `body.ui-kit` and
+    overrides **only** the shell and the list/table/detail styles, so
+    `.card`/`.btn`/`.bdg`/`.inp` still work and pages migrate one at a time.
+    Most pages are NOT converted yet — Leads, Jobs, Clients, Reports, Admin and
+    the dashboards still draw their own.
+  - **A record detail is a DRAWER over its list, not a page.** Register it with
+    `UI.registerOverlay(name, fn)` — by name, idempotent, because module files
+    are evaluated once but wrap `render()` repeatedly and pushing blindly stacks
+    duplicate drawers. `renderApp()` draws overlays after `#content`, and
+    `scheduleRender()` skips a background rebuild while one is open (it would
+    throw away a half-typed note). **`STATE.page` must stay untouched when a
+    drawer opens** — that is the entire reason closing it returns you to the
+    same list with the same filters, selection and scroll. Tab panels inside a
+    drawer all render with `hidden` on the inactive ones, toggled directly
+    rather than via `render()`.
+  - **The rail is grouped** Work / Records / Outreach / Insight and expands on
+    hover as an overlay. Nav order is no longer a flat index; de-duplicate items
+    by id.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before
@@ -338,6 +368,16 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      the API; `public/js/47-page-mailbox.js` is the page. **No new OAuth
      consent** — `Mail.ReadWrite` and `gmail.modify` already cover all of it, so
      nobody reconnects.
+     **Session 15 restructured it to TWO panes with a threaded reader**: the
+     folder rail became a toolbar picker (it cost 190px on every screen to save
+     one click), and the reader shows the whole conversation via the
+     `/mailbox/:mid/threads/:tid` endpoint that already existed with no caller.
+     The thread endpoint returns SUMMARIES, so a collapsed message opens through
+     the same `loadMessage()` as any other — one code path for opening mail and
+     marking it read. **A sandboxed body cannot be auto-sized** (measuring an
+     iframe from the parent needs `allow-same-origin`, the exact grant that keeps
+     a hostile email boxed in), so bodies get a fixed height and scroll inside
+     themselves. Do not "fix" that.
      Four rules that must not be softened:
      * **Nothing is mirrored into Postgres.** Every read is a live pass-through.
        Storage is free-tier, a sync needs a poller (instance hours), and a

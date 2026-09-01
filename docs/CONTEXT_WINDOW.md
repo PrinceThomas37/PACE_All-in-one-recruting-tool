@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-08-31 (end of Session 14) · **Repo**:
+**Updated**: 2026-08-31 (end of Session 15) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**:
-`claude/email-id-signature-mismatch-9yznjk`
+`claude/app-structure-redesign-5jp1sq`
 
 ---
 
@@ -36,21 +36,24 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **Autonomous Recruiting Engine, all 5 steps** — scheduler, shared relevance
   engine, lead sourcing, candidate outreach, conversation intelligence
 - **Self-serve signup is built end-to-end but switched OFF** (`SELF_SERVE_SIGNUP`
-  env var). Plans/entitlements/Stripe seam are real; pricing is deliberately
-  `null` — the owner's call, one line in `services/plans.js` when decided.
-  Guest-mode/demo-data bypass is fully removed (Session 11) — there is no
-  product tour today.
+  env var). Pricing is deliberately `null` — the owner's call, one line in
+  `services/plans.js`. No guest/demo bypass exists (removed Session 11), so
+  there is no product tour today.
 - **Lead distribution uses every connected mailbox** (Microsoft + Gmail, live
-  tokens only); a mailbox going inactive auto-moves its leads
-  (`services/mailbox-reassign.js`). Leads silent in `Assigned` 30+ days
-  auto-recycle to `Unassigned` (`services/lead-recycle.js`).
-- **The in-app mailbox** (Session 13) — a real mail client over connected
-  mailboxes. Its four inviolable rules are in `CLAUDE.md` Growth bets §3:
-  nothing mirrored into Postgres, your own mailboxes only, nothing destroys
-  mail, bodies in a sandboxed iframe with remote images blocked.
-- SSO sign-in with Microsoft (Google sign-in is built, needs
-  `GOOGLE_CLIENT_ID`/`SECRET` — separate from the per-user Gmail *sending*
-  connection below, which is live and working)
+  tokens only); a mailbox going inactive auto-moves its leads. Leads silent in
+  `Assigned` 30+ days auto-recycle to `Unassigned`.
+- **The in-app mailbox** (Session 13, restructured Session 15) — a real mail
+  client over connected mailboxes, now **two panes with a threaded reader**.
+  Its four inviolable rules are in `CLAUDE.md` Growth bets §3: nothing mirrored
+  into Postgres, your own mailboxes only, nothing destroys mail, bodies in a
+  sandboxed iframe with remote images blocked.
+- **The shared UI kit** (Session 15) — `public/ui.css` + `public/js/00-ui-kit.js`.
+  The app finally has one layout vocabulary: icon rail, top bar, page tabs, stat
+  strip, toolbar, dense table, record drawer. See "The UI kit" below before
+  building any new screen.
+- SSO sign-in with Microsoft. Google sign-in is built but needs
+  `GOOGLE_CLIENT_ID`/`SECRET` — **distinct from** the per-user Gmail *sending*
+  connection, which is live and working.
 
 ## Migrations — 041 is the latest APPLIED (2026-08-24)
 
@@ -65,40 +68,41 @@ kept current and is the right place to check plan/RLS/billing status).
 
 **042 will most likely be an error column on `emails`** — the send path has
 nowhere to record *why* a send failed, which is why the 7-day Gmail expiry was
-invisible. Session 14 added no migration.
+invisible. Sessions 14 and 15 added no migration.
 
-## ✅ Just shipped (Session 14): the outbound send path, made honest
+## ✅ Just shipped (Session 15): the app got a structure
 
-Five merged PRs, all live. Full narrative in the archive; the load-bearing
-outcomes:
+The owner started using **Saleshandy**, sent nine screenshots, and asked for
+PACE's frontend to be made alike. Two PRs, **#147** and **#148**, both merged
+and live. The lasting output is not any one screen — it is the shared layout
+vocabulary underneath them, which the codebase had never had.
 
-- **The sender's name is resolved in ONE place — the moment of sending, from
-  the mailbox that actually sends** (#142, #143). It used to be baked in at
-  queue time from a different chain, so changing a lead's mailbox stranded the
-  old name: a cold email went out saying "I'm Jennifer Thomas" over Prince
-  Thomas's From line and signature. 152 sent emails carried that mismatch.
-  The rule this leaves behind is in Traps below and must not be softened.
-- **Fresh leads jump ahead of follow-ups in the send queue** (#144). The queue
-  drains at one email per 75–105s inside an 8-hour lead-local window, so order
-  decides who goes out *at all* — 36 follow-ups were sitting in front of 20
-  leads assigned that afternoon. `send-queue-order.js` is pure and tested by
-  behaviour; cap, window, pacing and domain spacing all unchanged.
-- **The Admin engine card stopped crying wolf** (#144) — it measured "did a job
-  run because of cron" rather than "did the ping arrive", and a ping finds
-  nothing due whenever the app is awake, so it went amber when healthiest.
-- **`ingestSource` takes an injectable clock** (#145), after its test spent
-  weeks failing on a *date* rather than a code change.
+- **The UI kit.** `public/ui.css` + `public/js/00-ui-kit.js` — pure string
+  builders, no state, no DOM, safe at the head of the load order. It overrides
+  **only** the shell and the list/table/detail vocabulary; `.card`/`.btn`/
+  `.bdg`/`.inp` keep working, so pages move over one at a time.
+- **The rail** is grouped Work / Records / Outreach / Insight, collapses to
+  60px and expands on hover as an overlay so content never reflows.
+- **Candidates** is the first page on the kit: tabs, a status stat strip that
+  doubles as the filter, one toolbar, a dense table. Fed by a new read-only
+  `GET /candidates/status-counts`.
+- **The candidate profile is now a DRAWER over the list, not a page** — see
+  Traps. There is no `bd_candidate` page any more.
+- **The sequence builder is a timeline** — Day 1 → Day 4 → Day 9 down a
+  connector, cumulative days computed at render time.
+- **Compose has a live preview** with the From picker inside it, resolving
+  `{{sender}}` from the selected mailbox — the same rule the send path follows.
+- **The inbox is two panes and shows the whole thread**, using the
+  `/threads/:tid` endpoint that already existed with no caller.
 
-## ⏭ Pick this up first (Session 15)
+Full narrative, and the reasoning behind each trade, in the archive's
+"Session 15".
 
-**1. PR #146 is OPEN and ready to merge** — reweights `why-hiring.js` so two
-openings of the same title outranks "open 60+ days" (owner's decision). Two
-openings → 5, three or more → 9, above every `hard_to_fill` combination. All
-49 suites green.
+## ⏭ Pick this up first (Session 16)
 
-**2. The Gmail connection dies every 7 days, and silently destroys emails.**
-Fully diagnosed on 31 Aug, **nothing fixed yet** (archive Session 14 Part 7 has
-the evidence chain). Eleven follow-ups were marked `failed` with no reason
+**1. The Gmail connection dies every 7 days, and silently destroys emails.**
+Fully diagnosed on 31 Aug, **still nothing fixed** (archive Session 14 Part 7
+has the evidence chain). Eleven follow-ups were marked `failed` with no reason
 recorded because the mailbox's refresh token had expired 40 minutes earlier.
 
 - **Root cause is Google-side:** the OAuth consent screen is in **"Testing"**
@@ -116,6 +120,41 @@ recorded because the mailbox's refresh token had expired 40 minutes earlier.
   cache during an unattended cron run and died with the process.
 - **The 11 failed follow-ups were never delivered** and can be re-queued.
 
+**2. Move the remaining pages onto the UI kit.** Leads, Jobs, Clients, Sourced
+Leads, Reports, Admin and the dashboards still draw their own headers and
+tables, so the app is half-migrated and looks it. This is now cheap — which was
+the whole point of building the kit first — and it is the obvious next slice to
+offer the owner. Leads is the highest-traffic and should go first.
+
+## The UI kit — read before building any screen
+
+`public/ui.css` + `public/js/00-ui-kit.js`. Everything returns an HTML **string**,
+matching the render-to-string convention; no framework, no build step.
+
+- **Use `UI.page({tabs, strip, toolbar, body})`** for a page, not a bare
+  `<div class="page">`. `UI.tabs`, `UI.strip`, `UI.toolbar`, `UI.table`,
+  `UI.idCell`, `UI.pill`, `UI.ring`, `UI.toggle`, `UI.check`, `UI.kv`,
+  `UI.notice`, `UI.feed`, `UI.drawer`, `UI.ic` are the vocabulary. Adding a
+  twelfth hand-rolled table is how the app got into this state.
+- **The kit is scoped by `body.ui-kit`** (set in `index.html`) and overrides
+  only the shell + list/table/detail styles. `styles.css` still owns
+  `.card`/`.btn`/`.bdg`/`.inp`/modals, so an unconverted page is unaffected.
+- **A drawer is an overlay, not a page.** Register it with
+  `UI.registerOverlay(name, fn)` — **by name, idempotent**, because module files
+  are evaluated once but wrap `render()` repeatedly and pushing blindly stacks
+  duplicate drawers. `renderApp()` calls `UI.renderOverlays()` after `#content`.
+- **`scheduleRender()` skips a background rebuild while any overlay is open**
+  (`UI.anyOverlayOpen()`), the same as it does for a modal — a rebuild under a
+  drawer throws away a half-typed note.
+- **Panels behind tabs inside a drawer all render, with `hidden` on the
+  inactive ones**, and the tab handler toggles `el.hidden` rather than calling
+  `render()`. That is what lets a note survive a tab click and stops an iframe
+  being refetched.
+- **A stat strip never fabricates a number.** Show `·` until real counts land;
+  a `0` is a claim ("nobody is interviewing") and may be false.
+- **A strip/tab count measures the whole pool; the pager keeps the filtered
+  number.** Mixing them makes a filtered list feel broken.
+
 ## Owner actions outstanding
 
 0. **BLOCKING: is `futeglobal.com` on Google Workspace?** Decides the fix for
@@ -130,19 +169,21 @@ recorded because the mailbox's refresh token had expired 40 minutes earlier.
 4. **Turn on `SELF_SERVE_SIGNUP`** whenever the owner wants strangers able to
    sign themselves up — purely an env var flip, not a release.
 
-## Plans — the rules that must not be softened
+## Plans and billing
 
-Tiers and limits live in `services/plans.js`; the full table and rationale are
-in `CLAUDE.md` Growth bets §9, kept current. The four rules:
-
-- **Enforced on CREATE with 402**, not 403 — a billing wall, not a permission
-  error. Sourcing = Pro+, conversation intelligence = Starter+.
-- **Being over a limit never deletes anything.** Create-only enforcement.
-- **Only the signed Stripe webhook may change a plan.**
-- **A failed usage count ALLOWS** — never block a paying customer on a
-  timed-out COUNT.
+Tiers, limits and the four rules that must not be softened live in `CLAUDE.md`
+Growth bets §9, which is kept current — read it there rather than a stale copy
+here. The one-line summary: enforced on CREATE with **402**, never deletes
+anything, only the signed Stripe webhook may change a plan, and a failed usage
+count **allows**.
 
 ## Traps that will bite you (learned the hard way)
+
+`CLAUDE.md` already carries the durable ones — `models/` for tenant tables, the
+six-place stage vocabulary, the free-tier instance budget, `renderStoredEmail`
+on every reader of `emails.body`, safe-methods-only retries, the deliberate
+`orgIdFor()` fallback, and `routes/recruiting/*` registration order. **Read it;
+these are the ones it does not cover.**
 
 **Before moving ANY file** → `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
 (Session 8). Ten things break on a naive move and several fail *silently*.
@@ -150,57 +191,46 @@ in `CLAUDE.md` Growth bets §9, kept current. The four rules:
 - **Any mailbox-selection path must check BOTH `microsoft_tokens` and
   `gmail_tokens`, exclude `refresh_failed`, and filter `is_active`** — checking
   one table silently made Gmail unselectable and reused dead tokens forever.
-- **A job whose sending mailbox goes inactive does not fail its pending
-  emails — it silently skips them forever.** Any code path that deactivates,
-  disconnects, or deletes a `user_emails` row must call
-  `services/mailbox-reassign.js`'s `reassignJobsOffMailbox` first, or leads
-  strand with zero visible error.
-- **`orgIdFor()` falling back to the default org is deliberate — do not "fix"
-  it to return null.** Background sweeps call `withOrg()` with no user, and
-  null turns a scoped query into an unscoped one.
-- **`routes/recruiting/*` register on `app` directly, not as Routers** — so
-  **registration order is load-bearing**. `test/recruiting-routes-mounted.mjs`
-  boots the real server and pins all mounted routes.
-- **`conversation-intel.js` has an injectable clock — never test it against
-  the real one.** Every headline it writes is a claim about elapsed time.
-  `next-action.js` and **`lead-ingest.js`'s `ingestSource`** are the same
-  discipline. `lead-sourcing-smoke` failed for weeks on a *date* because the
-  ingest read the real clock against fixed fixture dates (Session 14).
-- **`emails.body` holds `{{sender}}` until send time — every reader must call
-  `renderStoredEmail(row, mailbox)` first.** Miss it and the token reaches a
-  screen, or worse a *recipient* (it was being quoted into follow-ups).
-  `sender-identity-smoke` greps for readers and fails if one doesn't render.
-- **A dead mailbox sign-in currently DESTROYS emails** — auth failure sets
-  `failed` with no retry, one every 90s, and the reason is never persisted
-  (`emails` has no error column). Diagnosed, not fixed — see "Pick this up
+- **A job whose sending mailbox goes inactive does not fail its pending emails
+  — it silently skips them forever.** Any path that deactivates, disconnects or
+  deletes a `user_emails` row must call `reassignJobsOffMailbox`
+  (`services/mailbox-reassign.js`) first, or leads strand with no visible error.
+- **A dead mailbox sign-in currently DESTROYS emails** — `failed` with no retry,
+  one every 90s, reason never persisted. Diagnosed, not fixed; see "Pick this up
   first". Any send-path work should fix this rather than route around it.
 - **`emails.sent_at` defaults to `CURRENT_DATE`**, so an unsent draft already
   carries a send date. Any "sent on X" report is counting drafts.
-- **One reply sweep, not two.** `processInboundMessages` serves Outlook *and*
-  Gmail; Gmail messages are reshaped into Graph's shape.
 - **Graph's `/move` returns a NEW message id** — the old one stops resolving the
-  instant the message lands in the destination folder. Gmail's id never changes.
-  Any code that moves a message must take the id it is handed back.
-- **A new nav item does not get the slot right after Dashboard.** "My Jobs"
-  (recruiter) and "My Team" (team lead) each sit there deliberately and both are
-  pinned by tests. Tools go at the head of the tools block, before Email.
-- **Retries are safe-methods-only** in `http-client.js`. Retrying a
-  `POST /me/sendMail` on a timeout sends the email twice.
-- **Use `models/` for tenant tables**, not hand-written `supabase.from()`.
-- **The stage vocabulary lives in 6 places** (`33-stage-modal.js` canonical,
-  `services/recruiting-core.js` on the backend). That is the **ATS candidate**
-  vocabulary — BD **lead** stages on `jobs.stage` are a different, smaller set.
-  Don't conflate them in lead-side code.
-- **Render is on the FREE tier** — instance hours are a hard budget. Ask what
-  a new poller costs before adding one.
+  instant the message lands. Gmail's id never changes. Take the id you're handed.
+- **Injectable clocks are not optional** in `conversation-intel.js`,
+  `next-action.js` and `lead-ingest.js`'s `ingestSource`. Every headline is a
+  claim about elapsed time; `lead-sourcing-smoke` failed for weeks on a *date*.
+- **The rail is GROUPED (Work / Records / Outreach / Insight)**, so nav order is
+  no longer a flat index. A new item joins a group; de-duplicate by id (an admin
+  who is also an RA lead used to get two "Insights" rows). Still pinned by
+  tests: Dashboard first, and a recruiter's "My Jobs" ahead of "All Jobs" and
+  "Candidates".
+- **The candidate profile is a DRAWER; `STATE.page` must stay untouched when it
+  opens.** That is the whole reason closing it returns you to the same list with
+  the same filters, selection and scroll. There is no `bd_candidate` page — do
+  not reintroduce one "for deep links". Two paths to one screen is how the stage
+  vocabulary ended up hand-synced across six files.
+- **A sandboxed message body cannot be auto-sized.** Measuring an iframe from
+  the parent needs `allow-same-origin`, the exact grant that keeps a hostile
+  email boxed in. Mail bodies get a fixed height and scroll inside themselves.
+  Do not "fix" this.
+- **Anything previewing an outbound email resolves `{{sender}}` from the
+  SELECTED MAILBOX, never the logged-in user.** A preview using the session user
+  would have shown the right name for the exact Session 14 bug where 152 emails
+  went out under the wrong one — hiding it instead of catching it. An unfillable
+  variable stays visible and highlighted, never silently blanked.
 - **When a claim about behaviour is load-bearing, test the claim.**
-- **The browser tests are not allowed to need a production bypass** — use
+- **Browser tests are never allowed to need a production bypass** — use
   `test/helpers/enter-app.mjs`.
 - **A destructive DB action always needs, in this order:** check FK cascade
   rules (`information_schema`; `NO ACTION` means clear referencing rows
   yourself), verify scope with counts, take a snapshot, get explicit
-  confirmation, verify after. Followed for the 25-follow-up delete (Session 14)
-  and the 1,249-lead cleanup (Session 13) without incident.
+  confirmation, verify after.
 
 ## Deliberately open, not forgotten
 
@@ -209,6 +239,9 @@ in `CLAUDE.md` Growth bets §9, kept current. The four rules:
 - "Log In with your Organization" routes by domain; **not** full SAML yet.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
+- **Most pages are not on the UI kit yet** — Leads, Jobs, Clients, Sourced
+  Leads, Reports, Admin, the dashboards. The app is half-migrated and looks it.
+  Cheap now; see "Pick this up first" §2.
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API** (still the one CLAUDE.md flags as highest-leverage next), generalized
   audit trail, PWA polish.
@@ -222,16 +255,25 @@ in `CLAUDE.md` Growth bets §9, kept current. The four rules:
 
 ## Working rules
 
-`npm test` (49 suites now, judged by **exit code**) · `bash
-test/verify-frontend.sh` · build on the dev branch → test → screenshot/show →
-draft PR → merge only on an explicit "merge it"/"do it" → for anything
-touching the live DB, apply the migration only on a fresh explicit go-ahead,
-right before merge, not on general feature agreement. The owner does not read
-code; show them the running app and plain English.
+`npm test` (49 suites, judged by **exit code**) · `bash test/verify-frontend.sh`
+· build on the dev branch → test → screenshot/show → draft PR → merge only on an
+explicit "merge it" → apply a migration only on a fresh explicit go-ahead, right
+before merge, never on general feature agreement. **The owner does not read
+code**; show them the running app and plain English.
 
-**Two habits this session paid for repeatedly:** check whether a failing test
-is failing on *live code* or on the *calendar* before calling it a product bug
-(and correct yourself out loud if you got it wrong), and when a placeholder is
-left in stored data, find EVERY reader before declaring it fixed — the first
-attempt at the sender fix taught exactly one screen and left the token leaking
-into follow-ups a customer would have read.
+**Habits these sessions paid for:**
+
+- When a test breaks during a redesign, ask whether it pinned **behaviour** or
+  **markup**. Session 15 moved three assertions off inline styles and a flat
+  nav index onto the behaviour they were really protecting — and left every
+  safety assertion (sandbox, blocked images, no permanent delete, own mailboxes
+  only) untouched. Never relax one of those to make a redesign pass.
+- Check whether a failing test is failing on *live code* or on the *calendar*
+  before calling it a product bug — and correct yourself out loud if you got it
+  wrong.
+- When a placeholder is left in stored data, find EVERY reader before declaring
+  it fixed. The first attempt at the sender fix taught exactly one screen and
+  left the token leaking into follow-ups a customer would have read.
+- When the owner says "make it look like this", the honest reading is usually
+  "give the app a structure it doesn't have". The structure is the deliverable;
+  the screenshots are the brief.
