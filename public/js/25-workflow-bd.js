@@ -100,16 +100,21 @@
     });
     var bar=document.createElement('div');
     bar.setAttribute('data-bd-taskbar','1');
-    bar.style.cssText='display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:0 0 12px 0';
+    bar.className='card';
+    bar.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 14px;margin:0 0 12px 0;flex-wrap:wrap';
     bar.innerHTML=
-      '<span style="font-size:12.5px;color:var(--text2)">Select connected leads to convert into jobs.</span>'+
-      '<span style="font-size:12px;color:var(--text3)">'+sel.length+' selected'+(sel.length?' · '+connSel.length+' connected':'')+'</span>'+
+      '<span style="font-size:12.5px;color:var(--ink2)">Select connected leads to convert into jobs.</span>'+
+      '<span style="font-size:12px;color:var(--ink3)">'+sel.length+' selected'+(sel.length?' · '+connSel.length+' connected':'')+'</span>'+
       '<div style="margin-left:auto;display:flex;gap:8px">'+
         (sel.length?'<button class="btn btn-sm btn-outline" onclick="bdClearLeadSel()">Clear</button>':'')+
         '<button class="btn btn-sm btn-primary" '+(connSel.length?'':'disabled style="opacity:.5;cursor:not-allowed"')+' onclick="bdConvertSelected()">Convert to Job'+(connSel.length>1?' ('+connSel.length+')':'')+'</button>'+
       '</div>';
-    var page=content.querySelector('.page')||content.firstElementChild;
-    if(page)page.insertBefore(bar,page.firstChild);else content.insertBefore(bar,content.firstChild);
+    // Insert into the page BODY, not above the page. On a kit page the frame is
+    // tabs → strip → toolbar → .pg-body, and dropping a bar in front of all of
+    // that put it above the page's own identity. `.page` is the pre-kit
+    // fallback, for the screens that have not been converted yet.
+    var host=content.querySelector('.pg-body')||content.querySelector('.page')||content.firstElementChild;
+    if(host)host.insertBefore(bar,host.firstChild);else content.insertBefore(bar,content.firstChild);
     addLeadCheckboxes();
   }
 
@@ -121,7 +126,7 @@
     var already=STATE.bd.jobOrders.map(function(o){return o.source_lead_id;});
     var wrap=document.createElement('div');
     wrap.setAttribute('data-bd-leadpick','1');
-    wrap.style.cssText='background:var(--accent-l);border:1px solid rgba(30,122,60,.22);border-radius:10px;padding:10px 14px;margin:0 0 14px 0';
+    wrap.style.cssText='background:var(--accent-l);border:1px solid rgba(30,122,60,.22);border-radius:10px;padding:10px 14px;margin:0 0 12px 0';
     wrap.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">Connected leads ('+connected.length+') — tick to convert</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:8px">'+
       connected.map(function(j){
