@@ -637,6 +637,23 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
    being auto-sized. */
 .mb-body{height:420px;background:#fff}
 .mb-body.short{height:260px}
+/* ONE message on screen and no reply box open: the body fills the pane and is
+   the ONLY thing that scrolls. Two nested scrollers meant a wheel over the
+   message scrolled the text, reached its end and then jerked the whole pane —
+   and each of those pane scrolls moved a sandboxed iframe, which the browser
+   answers with a re-raster the reader sees as a flicker. With a thread on
+   screen the pane must scroll, so `solo` simply is not applied. */
+.mb-thread.solo{display:flex;flex-direction:column;padding-bottom:14px}
+/* `auto`, not `hidden`: the body flexes to fit, so this never scrolls in
+   practice — but on a very short window the message header must not become
+   unreachable. */
+/* #mb-open is the paint region wrapping the open message, so IT is the flex
+   child of the pane — the card inside it has to be stretched in turn. */
+.mb-thread.solo > #mb-open{flex:1;min-height:0;display:flex;flex-direction:column}
+.mb-thread.solo > #mb-open > .mb-msg.open{
+  flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0;
+}
+.mb-thread.solo > #mb-open > .mb-msg.open > .mb-body{flex:1;height:auto;min-height:120px}
 .mb-body iframe{width:100%;height:100%;border:0;background:#fff;display:block}
 .mb-bar{
   padding:8px 15px;background:var(--amber-l);border-bottom:1px solid var(--line);
