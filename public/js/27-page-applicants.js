@@ -97,11 +97,7 @@
   }
 
   // ── nav + routing (wrap, like the BD module) ─────────────────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page === 'applicants') paintATSPage();
-  };
+  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
 
   // (The "Candidates" nav item is now built by the sidebar in 04-shell-login.js.)
 
@@ -118,11 +114,10 @@
     return _prevGoPage.apply(this, arguments);
   };
 
-  function paintATSPage(){
-    if (STATE.page !== 'applicants') return;
-    var c = document.getElementById('content'); if(!c) return;
-    c.innerHTML = (STATE.ats.view === 'sourcing' && window.renderSourcing) ? renderSourcing() : renderApplicants();
-  }
+  function paintATSPage(){ if (STATE.page !== 'applicants') return; paintPageContent(); }
+  UI.registerPage('applicants', function(){
+    return (STATE.ats.view === 'sourcing' && window.renderSourcing) ? renderSourcing() : renderApplicants();
+  });
 
   // Candidates / Sourcing sub-tabs — Sourcing used to be its own top-level nav
   // item; it now lives inside the Candidates tab since both work the same pool.

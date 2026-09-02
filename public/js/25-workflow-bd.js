@@ -82,7 +82,8 @@
   window.render=function(){
     _origRender.apply(this,arguments);
     if(STATE.page==='leads')injectLeadsTaskbar();
-    if(BD_PAGES[STATE.page])paintBDPage();
+    // The four BD pages are drawn by the shell (UI.registerPage below); this
+    // wrapper no longer repaints #content behind it.
   };
 
   // (BD nav items — Jobs / My Jobs — are now built by the sidebar in
@@ -172,12 +173,14 @@
     return _origGoPage.apply(this,arguments);
   };
 
+  UI.registerPage('bd_joborders',function(){ return renderJobOrders(); });
+  UI.registerPage('bd_myjobs',   function(){ return renderMyJobs(); });
+  UI.registerPage('bd_jodetail', function(){ return renderJobOrderDetail(); });
+  UI.registerPage('bd_kanban',   function(){ return renderKanban(); });
+
   function paintBDPage(){
-    var c=document.getElementById('content'); if(!c)return;
-    if(STATE.page==='bd_joborders')c.innerHTML=renderJobOrders();
-    else if(STATE.page==='bd_myjobs')c.innerHTML=renderMyJobs();
-    else if(STATE.page==='bd_jodetail')c.innerHTML=renderJobOrderDetail();
-    else if(STATE.page==='bd_kanban')c.innerHTML=renderKanban();
+    if(!BD_PAGES[STATE.page])return;
+    paintPageContent();
     if(STATE.page==='bd_joborders'&&STATE.bd.jobFilterOpen&&!STATE.bd._filterDocBound){
       STATE.bd._filterDocBound=true;
       setTimeout(function(){

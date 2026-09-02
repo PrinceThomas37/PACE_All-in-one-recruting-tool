@@ -16,11 +16,7 @@
   function leadsATeam(u){ return !!(u && window.directReportsOf && directReportsOf(u.id).length); }
 
   // ── nav + routing (wrap, like the reports/clients modules) ───────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page==='myteam'){ paint(); var t=document.querySelector('.tb-title'); if(t) t.textContent='My Team'; }
-  };
+  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
   // (The "My Team" nav item is now built by the sidebar in 04-shell-login.js —
   // same data-driven gate: shown to anyone with at least one direct report.)
   var _prevGoPage = window.goPage;
@@ -34,7 +30,8 @@
     if (p==='bdleadinsights' && leadsATeam(STATE.user)){ STATE.page='myteam'; STATE.myteamTab='insights'; STATE.modal=null; render(); if(window.recDashboardLoad) recDashboardLoad(); return; }
     return _prevGoPage.apply(this, arguments);
   };
-  function paint(){ if(STATE.page!=='myteam')return; var c=document.getElementById('content'); if(c) c.innerHTML=renderMyTeam(); }
+  function paint(){ if(STATE.page!=='myteam')return; paintPageContent(); }
+  UI.registerPage('myteam', function(){ return renderMyTeam(); });
 
   // Tab switch within the hub. The Reports tab lazy-loads /reports/recruiting.
   window.myteamTab = function(t){ STATE.myteamTab=t; if(t==='reports') ensureReports(); paint(); };

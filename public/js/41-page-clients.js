@@ -14,11 +14,8 @@
   STATE.clients = STATE.clients || { list:null, loading:false, q:'', selectedId:null, jobOrders:null, documents:null, docsLoading:false };
 
   // ── nav + routing ───────────────────────────────────────────────────────────
-  var _prevRender = window.render;
-  window.render = function(){
-    _prevRender.apply(this, arguments);
-    if (STATE.page==='clients'){ paint(); var t=document.querySelector('.tb-title'); if(t) t.textContent='Clients'; }
-  };
+  // The shell draws this page itself now (UI.registerPage below), so there is
+  // no render() wrapper repainting #content a second time.
   // (The "Clients" nav item is now built by the sidebar in 04-shell-login.js,
   // positioned above Candidates.)
   var _prevGoPage = window.goPage;
@@ -26,7 +23,8 @@
     if (p==='clients'){ STATE.page='clients'; STATE.modal=null; STATE.clients.selectedId=null; render(); loadClients(); return; }
     return _prevGoPage.apply(this, arguments);
   };
-  function paint(){ if(STATE.page!=='clients')return; var c=document.getElementById('content'); if(c) c.innerHTML=renderClients(); }
+  function paint(){ if(STATE.page!=='clients')return; paintPageContent(); }
+  UI.registerPage('clients', function(){ return renderClients(); });
 
   // ── data ─────────────────────────────────────────────────────────────────────
   function loadClients(){

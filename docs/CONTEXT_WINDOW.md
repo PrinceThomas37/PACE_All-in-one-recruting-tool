@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-01 (Session 15, part 2) · **Repo**:
+**Updated**: 2026-09-01 (end of Session 16) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Dev branch**:
-`claude/app-structure-redesign-5jp1sq`
+`claude/screen-glitch-diagnosis-7k0f8y`
 
 ---
 
@@ -65,7 +65,26 @@ fresh, explicit go-ahead**, even when the feature itself was already agreed.
 042 is most likely the error column on `emails` — see "Parked by the owner".
 Sessions 14 and 15 added no migration.
 
-## ✅ Just shipped (Session 15): the app got a structure
+## ✅ Just shipped (Session 16): the screen stopped blinking
+
+The owner sent two screen recordings of a "glitch". Decoded frame by frame, the
+Inbox clip showed the message body **vanishing for 1.4s and coming back scrolled
+to the top**, twice more after that. Cause: `render()` was
+`root.innerHTML = renderApp()` — every change rebuilt the whole app, and an
+email body lives in a sandboxed `<iframe>`, which reloads when re-created. The
+trigger was marking the message read, which ticks the unread badge. **Reading an
+email was what wiped the email being read.** Second fault: nine pages were
+missing from `renderPage()`'s switch, so every repaint on them wrote
+"Page not found" and overwrote it a beat later.
+
+**The render engine now draws in regions and writes only what changed** — see
+"The render model" below. Same-page repaints leave untouched regions' DOM
+standing, so iframes, scroll positions, modal/drawer entry animations and the
+caret all survive. Pinned by `test/screen-stability-smoke.mjs` (19 assertions,
+node identity not pixels, including one that proves the test can detect a
+rebuild). 50/50 suites green. **No migration.**
+
+## Previously (Session 15): the app got a structure
 
 The owner benchmarked PACE against **Saleshandy** and asked for it to be made
 alike. Four PRs — **#147** through **#150** — all merged and live. The lasting
@@ -91,7 +110,28 @@ had existed with no caller since Session 13.
 
 Full narrative and the reasoning behind each trade: archive, "Session 15".
 
-## ⏭ Pick this up first (Session 16)
+## The render model — read this before touching any page
+
+- **`render()` has two paths.** Page changed (or no shell) → full rebuild.
+  Same page → **patch**: rail, topbar, page body and the `#layer` above it are
+  each rewritten *only if their html string differs from what is on screen*.
+- **A page module never writes `#content` itself.** It registers its renderer
+  with **`UI.registerPage(name, renderFn, paintFn?)`** — same idiom as
+  `UI.registerOverlay` — and its own `paint()` calls **`paintPageContent()`**.
+  Writing `content.innerHTML` directly makes the shell's record of the screen
+  stale and the flicker comes back.
+- **`renderPage()` (05-page-dashboard.js) is now the fallback**, not the only
+  route. A page that is registered never reaches it. "Page not found" is
+  unreachable and a test keeps it that way.
+- **The Inbox paints region by region** (`#mb-head`, `#mb-before`, `#mb-open`,
+  `#mb-after`, `#mb-comp`). The open message sits between the two halves of the
+  thread **so the thread arriving does not touch it**, and the shorter
+  in-thread body height is a CSS class `paint()` toggles — never part of
+  `#mb-open`'s html. Bake either into that string and the message reloads.
+- **Anything that must survive a repaint needs its own region** — iframes,
+  media, canvases, anything with internal scroll.
+
+## ⏭ Pick this up first (Session 17)
 
 **1. Finish the UI-kit rollout.** Done: Candidates, Leads, Clients, Sourced
 Leads, All Jobs, Reports, Email, Inbox — every list-shaped page. **Still on
@@ -103,7 +143,12 @@ needs its own judgement rather than the same table treatment — which is why th
 were left rather than forced. They still look fine; they are simply not
 identical to the rest yet.
 
-**2. Growth bets the owner has not been offered recently.** `CLAUDE.md` still
+**2. The 2.7s "Opening…" on the Inbox.** Session 16 measured it and
+deliberately did not touch it: it is Render free-tier latency plus the
+Graph/Gmail round trip, not a rendering fault. The honest fixes are a warmer
+service, or showing the list row's preview text while the body loads.
+
+**3. Growth bets the owner has not been offered recently.** `CLAUDE.md` still
 flags **CSV import/export + a small public API** as the highest-leverage
 unstarted bet (buyers need to migrate in and integrate). Per-role permissions
 and a generalized audit trail are the other two that make PACE sellable rather
@@ -232,8 +277,8 @@ these are the ones it does not cover.**
 
 ## Deliberately open, not forgotten
 
-- Cold-email templates and the resume letterhead still say "Fute Global" —
-  that is the **customer's** identity, must become per-org config.
+- Cold-email templates and the resume letterhead still say "Fute Global" — the
+  **customer's** identity, must become per-org config.
 - "Log In with your Organization" routes by domain; **not** full SAML yet.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
@@ -251,7 +296,7 @@ these are the ones it does not cover.**
 
 ## Working rules
 
-`npm test` (49 suites, judged by **exit code**) · `bash test/verify-frontend.sh`
+`npm test` (50 suites, judged by **exit code**) · `bash test/verify-frontend.sh`
 · build on the dev branch → test → screenshot/show → draft PR → merge only on an
 explicit "merge it" → apply a migration only on a fresh explicit go-ahead, right
 before merge, never on general feature agreement. **The owner does not read
@@ -260,10 +305,8 @@ code**; show them the running app and plain English.
 **Habits these sessions paid for:**
 
 - When a test breaks during a redesign, ask whether it pinned **behaviour** or
-  **markup**. Session 15 moved three assertions off inline styles and a flat
-  nav index onto the behaviour they were really protecting — and left every
-  safety assertion (sandbox, blocked images, no permanent delete, own mailboxes
-  only) untouched. Never relax one of those to make a redesign pass.
+  **markup** — and never relax a safety assertion (sandbox, blocked images, no
+  permanent delete, own mailboxes only) to make a redesign pass.
 - Check whether a failing test is failing on *live code* or on the *calendar*
   before calling it a product bug — and correct yourself out loud if you got it
   wrong.
@@ -273,3 +316,11 @@ code**; show them the running app and plain English.
 - When the owner says "make it look like this", the honest reading is usually
   "give the app a structure it doesn't have". The structure is the deliverable;
   the screenshots are the brief.
+- **When the owner reports something visual, measure it before theorising.**
+  Session 16's two clips were decoded frame by frame; one turned out to contain
+  no glitch at all, and the other pinned the fault to a single 1.4s window with
+  a specific trigger. Say plainly when a piece of evidence shows nothing.
+- A "rebuild everything" render is fine until the page holds something the DOM
+  cannot re-create for free. The app had grown four separate workarounds for
+  that (focus restore, scroll restore, `scheduleRender`'s modal guard, the job
+  board's manual caret restore) before the glitch made it a fifth.

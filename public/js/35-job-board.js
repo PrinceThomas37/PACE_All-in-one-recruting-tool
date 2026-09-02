@@ -23,7 +23,7 @@
   var _prevRender = window.render;
   window.render = function(){
     _prevRender.apply(this, arguments);
-    if (STATE.page === 'job_board') paint();
+    // 'job_board' is drawn by the shell (UI.registerPage below).
     if (STATE.page === 'dashboard') injectRequestsCard();
   };
 
@@ -66,14 +66,13 @@
     return '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();jbRequest(\''+j.id+'\')">Request assignment</button>';
   }
 
-  function paint(){
-    var content = document.getElementById('content'); if (!content) return;
-    var t = document.querySelector('.tb-title'); if (t) t.textContent = 'All Jobs';
+  function paint(){ if (STATE.page !== 'job_board') return; paintPageContent(); }
+  UI.registerPage('job_board', function(){ return renderJobBoard(); });
 
+  function renderJobBoard(){
     if (STATE.jb.loading || STATE.jb.list === null){
-      content.innerHTML = UI.page({ body:'<div class="dt-empty">Loading all jobs…</div>' });
       if (STATE.jb.list === null) load();
-      return;
+      return UI.page({ body:'<div class="dt-empty">Loading all jobs…</div>' });
     }
 
     var q = (STATE.jb.q||'').toLowerCase();
@@ -110,7 +109,7 @@
     var asked = all.filter(function(j){ return j.my_request; }).length;
     var hot = all.filter(function(j){ return j.priority && j.priority!=='Normal'; }).length;
 
-    content.innerHTML = UI.page({
+    return UI.page({
       strip: UI.strip([
         { v:all.length, label:'Open jobs',    icon:'doc' },
         { sep:true },
@@ -132,8 +131,9 @@
   window.jbSearch = function(v){
     STATE.jb.q = v;
     paint();
-    // paint() replaces #content wholesale, so the box that was being typed into
-    // is gone. Put the caret back where it was, or every keystroke loses focus.
+    // The search box has no id for the shell's caret restore to key off, and
+    // the result count above the grid changes on every keystroke — so put the
+    // caret back by hand, or typing loses focus.
     var inp = document.querySelector('.tbar-search input');
     if (inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   };

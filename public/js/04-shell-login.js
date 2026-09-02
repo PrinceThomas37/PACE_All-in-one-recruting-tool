@@ -54,7 +54,36 @@ function renderLogin(){
 }
 
 
+// The shell, in FOUR independently drawable regions: the rail, the topbar, the
+// page, and the layer above the page (modal + overlays).
+//
+// renderApp() assembles them for a first paint and records each piece in
+// window._shellParts, so the render engine knows exactly what is on screen and
+// can later rewrite ONLY the region whose string changed. That is the whole
+// trick behind the flicker fix: a badge going 24 → 23 rewrites the rail, and
+// leaves the message you are reading — iframe, scroll position and all —
+// untouched.
 function renderApp(){
+  var parts=window._shellParts=window._shellParts||{};
+  parts.sidebar=renderSidebar();
+  parts.topbar=renderTopbar();
+  parts.content=renderPageContent();
+  parts.modal=renderModal();
+  parts.overlays=UI.renderOverlays();
+  return parts.sidebar+
+    '<div id="main">'+parts.topbar+'<div id="content">'+parts.content+'</div></div>'+
+    renderToasts()+
+    '<div id="layer">'+parts.modal+parts.overlays+'</div>';
+}
+
+// The page body: a registered page draws itself, everything else goes through
+// the original renderPage() switch.
+function renderPageContent(){
+  if(UI.hasPage(STATE.page)) return UI.pageHtml(STATE.page);
+  return renderPage();
+}
+
+function renderSidebar(){
   var u=STATE.user;
   var today=todayIST();
   var myLeads=getMyLeads(u);
@@ -138,21 +167,6 @@ function renderApp(){
     return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
   }).join('');
 
-  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
-
-  // The count beside the page title. Each page owns its own number, so this is
-  // a lookup rather than something the shell can compute — a page with nothing
-  // countable simply has no chip, which is quieter than a "0".
-  var counts={
-    applicants:(STATE.ats&&(STATE.ats.countsTotal!=null?STATE.ats.countsTotal:STATE.ats.total))||null,
-    mailbox:(STATE.mailbox&&STATE.mailbox.unread)||null,
-    sourced:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||null,
-    reminders:remBadge
-  };
-  var countChip=counts[STATE.page]?'<span class="tb-count">'+counts[STATE.page]+'</span>':'';
-  var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id
-    ?'<span class="tb-crumb">· Viewing '+htmlEsc(STATE.viewingUser.name)+'</span>':'';
-
   return '<div id="sidebar">'+
     '<div class="sb-brand">'+
       '<div class="rail-mark">P</div>'+
@@ -171,9 +185,28 @@ function renderApp(){
         '<span class="nav-icon">'+UI.ic('ban')+'</span><span class="nav-txt">Sign out</span>'+
       '</div>'+
     '</div>'+
-  '</div>'+
-  '<div id="main">'+
-    '<div id="topbar">'+
+  '</div>';
+}
+
+function renderTopbar(){
+  var u=STATE.user;
+  var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
+  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
+
+  // The count beside the page title. Each page owns its own number, so this is
+  // a lookup rather than something the shell can compute — a page with nothing
+  // countable simply has no chip, which is quieter than a "0".
+  var counts={
+    applicants:(STATE.ats&&(STATE.ats.countsTotal!=null?STATE.ats.countsTotal:STATE.ats.total))||null,
+    mailbox:(STATE.mailbox&&STATE.mailbox.unread)||null,
+    sourced:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||null,
+    reminders:remBadge
+  };
+  var countChip=counts[STATE.page]?'<span class="tb-count">'+counts[STATE.page]+'</span>':'';
+  var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id
+    ?'<span class="tb-crumb">· Viewing '+htmlEsc(STATE.viewingUser.name)+'</span>':'';
+
+  return '<div id="topbar">'+
       '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
       '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
@@ -185,10 +218,7 @@ function renderApp(){
         '</div>'+
         '<div class="tb-user" onclick="goPage(\'profile\')">'+av(u,"28")+'</div>'+
       '</div>'+
-    '</div>'+
-    '<div id="content">'+renderPage()+'</div>'+
-  '</div>'+
-  renderToasts()+renderModal()+UI.renderOverlays();
+  '</div>';
 }
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}

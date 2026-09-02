@@ -118,7 +118,32 @@ we never have to rewrite to grow (see "Growth bets" below).
   `teiqievahzhllojvgsku`. Migrations in `migrations/`.
 - **Frontend:** plain `<script>` modules in `public/js/NN-*.js`, loaded in order by
   `public/index.html`. **No build step, no bundler.** Global `window.*` + `STATE`.
-  `render()` / `goPage()` are wrapped by each page module.
+  `goPage()` is wrapped by each page module.
+  - **THE RENDER ENGINE WRITES ONLY WHAT CHANGED (Session 16).** `render()`
+    used to be `root.innerHTML = renderApp()` — every change rebuilt the whole
+    app. That is what made the screen blink: an email body lives in a sandboxed
+    `<iframe>`, and re-creating an iframe reloads it and resets its scroll, so
+    the unread badge ticking 24 → 23 wiped the message being read. Now the
+    shell draws in **four regions** (rail, topbar, page, the `#layer` holding
+    modal + drawers) and a same-page repaint rewrites a region **only if its
+    html string differs from what is on screen**. Untouched regions keep their
+    DOM — iframes, scroll positions, entry animations, the caret. A page
+    *change* still rebuilds wholesale.
+  - **A page module must NOT write `#content` itself.** It registers its
+    renderer with **`UI.registerPage(name, renderFn, paintFn?)`** (the same
+    idiom as `UI.registerOverlay`) and its own `paint()` calls
+    **`paintPageContent()`**. Writing `content.innerHTML` directly leaves the
+    shell's record of the screen stale and the flicker returns. Nine pages —
+    Inbox, Clients, Candidates, Reports, My Team, Sourced Leads, All Jobs, the
+    BD job pages, the pipeline — were missing from `renderPage()`'s switch and
+    fell through to **"Page not found"**, which the shell wrote and the module
+    overwrote a beat later; all nine are registered and a test keeps it so.
+  - **Anything that must survive a repaint needs its own region.** In the Inbox
+    the open message is `#mb-open`, sitting between `#mb-before` and
+    `#mb-after` precisely so the thread arriving does not touch it, and the
+    shorter in-thread body height is a CSS class `paint()` toggles rather than
+    part of that region's html. `test/screen-stability-smoke.mjs` pins all of
+    this by node identity.
   - **Session 15 gave the app ONE layout vocabulary: `public/ui.css` +
     `public/js/00-ui-kit.js`.** Pure string builders (no state, no DOM, no side
     effects), which is why it can sit at the head of the load order. Build a
@@ -160,13 +185,13 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 49 suites via `test/run-all.mjs` and reports one
+- **Tests: `npm test`** runs all 50 suites via `test/run-all.mjs` and reports one
   summary. It judges by **exit code**, not by grepping stdout — the suites print
   results in two different formats, so a stdout grep silently mis-reports whole
   suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
-  17 suites are Playwright: `playwright-core` is now a devDependency, Chromium at
-  `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). If 17 suites fail at once with a
-  module error, that is the missing dep, not 17 broken tests.
+  18 suites are Playwright: `playwright-core` is now a devDependency, Chromium at
+  `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). If they fail at once with a
+  module error, that is the missing dep, not 18 broken tests.
   - **Browser suites enter the app via `test/helpers/enter-app.mjs`**, which sets
     `STATE.user`/`STATE.token` and re-renders. They used to click "Continue as
     Guest", which meant every browser test depended on a production auth bypass
