@@ -2712,3 +2712,86 @@ four separate hand-rolled workarounds for that (focus restore, scroll restore,
 `scheduleRender`'s modal guard, the job board's manual caret restore); the
 glitch was the fifth symptom of the same cause. Fix the render model once and
 all five stop being anyone's problem.
+
+---
+
+# Session 16, part 2 — the second flicker: a repaint every 2 seconds, and two scrollbars
+
+The first fix shipped and the owner filmed the Inbox again: still a flicker
+while reading. Same method — decode the clip, measure, then read code.
+
+## What the second clip actually shows
+
+4.5s of the Inbox with a message open. The body area goes **completely white
+for two frames at 0.10s and again at 2.33s**, then comes back. Measured against
+the frame before it, the returning content is **pixel-identical, at the same
+scroll position** (4px of difference across the whole body region).
+
+That is the tell. A rebuilt iframe reloads and resets its scroll to the top;
+this one came back exactly where it was. So the element was never replaced —
+the browser **re-rastered** it. An email body is an out-of-process sandboxed
+iframe, and Chrome answers a style invalidation on an ancestor by throwing away
+that frame's raster and redrawing it. For two frames you see white.
+
+Two faults produced it, and both are ours.
+
+## Fault 1 — a repaint every two seconds
+
+`startProgressPoll()` (`11-bind-and-actions.js`) polls `/emails/send-progress`
+**every 2 seconds while a send is running** and called `scheduleRender()` on
+every tick regardless of whether anything had changed. The owner is a BD/admin
+with the send loop live, so the whole app repainted under whatever they were
+doing, twice a minute at rest and every 2s mid-send. The gap between the two
+white frames in the clip is 2.23 seconds.
+
+It now compares the payload and renders only when it moved, and only refreshes
+the email list while the Email page is actually open (`goPage('email')` reloads
+it on entry, so nothing goes stale).
+
+## Fault 2 — a repaint that "changed nothing" still wrote three attributes
+
+The region painter from part 1 skipped every unchanged html string — but it
+still ran three unconditional class writes per paint: `mb-panes`, `mb-body`
+(the `short` toggle) and `mb-thread`. **Setting an attribute invalidates style
+even when the value is identical**, and all three sit above the iframe. So the
+"do nothing" path was invalidating style around the message body every 2
+seconds. `setClass()` now compares before writing.
+
+The invariant is therefore stricter than "not rebuilt": **a repaint that
+changes nothing must write nothing**, asserted with a MutationObserver over
+`#main` expecting zero records. Restoring the unconditional write makes it fail
+with exactly `attributes:mb-panes[class] | attributes:mb-body short[class] |
+attributes:mb-thread[class]`, which is how we know it is measuring the real
+thing.
+
+## The third thing, found while reproducing: two scrollbars
+
+Reproducing the wheel-scroll locally turned up something the clip also shows.
+The reading pane scrolled AND the 420px message body scrolled inside it
+(`threadScrollH` 580 vs `threadClientH` 478). A wheel over the message scrolled
+the text, reached its end, then jerked the whole pane — and every one of those
+pane scrolls moved a sandboxed iframe, which is more re-rastering. Only 111px
+of the 420px body was even visible before the pane had to be scrolled.
+
+A single-message conversation with no reply box open now gets `.mb-thread.solo`:
+the body fills the pane and is the only thing that scrolls (`threadScrollH` 478
+== `threadClientH` 478, body height 338 rather than a 420px box with 111px
+visible). With a real thread on screen the pane has to scroll, so `solo` is not
+applied. The sandbox rule is untouched — nothing is measured through the iframe,
+the layout simply stops needing to know the content's height.
+
+## What was NOT changed
+
+The sandboxed iframe, the blocked remote images, and the "never innerHTML an
+email body into the page" rule. Auto-sizing the iframe to its content would fix
+this more completely and is still not worth `allow-scripts` or
+`allow-same-origin`; flexbox gets the same result without granting anything.
+
+## The lesson worth carrying
+
+Two rounds, one root: *the page kept being touched when nothing had changed.*
+Round one it was the whole app being rebuilt; round two it was three attribute
+writes and a 2-second timer. When the artefact is a flash rather than a
+rebuild, stop asking "what re-created this element" and start asking "what
+invalidated it" — and let the test assert the absence of writes, not the
+presence of the right ones.

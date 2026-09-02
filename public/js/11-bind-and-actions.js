@@ -233,15 +233,28 @@ function startProgressPoll(){
       if(STATE._progressDismissed&&newProgress&&newProgress.done&&!newProgress.active)newProgress=null;
       var hadProgress=!!STATE.sendProgress;
       STATE.sendProgress=newProgress;
+      // WHILE A SEND IS RUNNING THIS POLLS EVERY 2 SECONDS, so it must repaint
+      // only when the banner would actually say something different. It used to
+      // call scheduleRender() on every poll, which meant the whole app rebuilt
+      // twice a minute — or every 2s mid-send — under whatever the user was
+      // doing. On the Inbox that is a style invalidation on an ancestor of the
+      // message-body iframe every 2s, which is enough to make the browser
+      // re-raster it: the white flash the owner filmed.
+      var sig=newProgress?JSON.stringify(newProgress):'';
+      var moved=sig!==(STATE._progressSig||'');
+      STATE._progressSig=sig;
       if(d&&d.active){
-        scheduleRender();
+        if(moved)scheduleRender();
         _emailRefreshCount++;
-        if(_emailRefreshCount%3===0)loadEmailsForCurrentUser();
+        // The email list is only on screen on the Email page; refreshing it
+        // from here while the user is elsewhere is a repaint nobody asked for.
+        // goPage('email') reloads it on entry, so nothing goes stale.
+        if(_emailRefreshCount%3===0&&STATE.page==='email')loadEmailsForCurrentUser();
       }
-      else if(!!newProgress!==hadProgress){scheduleRender();}
+      else if(!!newProgress!==hadProgress||moved){scheduleRender();}
       if(d&&d.done&&!d.active){
         _emailRefreshCount=0;
-        loadEmailsForCurrentUser();
+        if(STATE.page==='email')loadEmailsForCurrentUser();
         // Auto-dismiss only clean runs; keep failures up until the user reviews/dismisses them.
         if(!d.failed){setTimeout(function(){STATE.sendProgress=null;scheduleRender();},30000);}
       }

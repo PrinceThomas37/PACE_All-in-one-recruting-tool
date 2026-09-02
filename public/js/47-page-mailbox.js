@@ -71,6 +71,8 @@
   // the truth rather than rewriting everything once.
   var _regs=null;
 
+  function setClass(el, want){ if(el && el.className!==want) el.className=want; }
+
   function put(id, html, prev){
     if(html===prev) return true;                 // already on screen — leave the DOM alone
     var el=document.getElementById(id); if(!el) return false;
@@ -98,8 +100,12 @@
     ok = put('mb-tabs', p.tabs, _regs.tabs) && ok;
     ok = put('mb-toolbar', p.toolbar, _regs.toolbar) && ok;
     ok = putOuter('mb-list', p.list, _regs.list) && ok;
-    var panes=document.getElementById('mb-panes');
-    if(panes) panes.className='mb-panes'+(p.reading?' reading':'');
+    // Write a class ONLY when it changes. Assigning the same className still
+    // sets the attribute, which invalidates style on an ancestor of the message
+    // body — and an out-of-process sandboxed iframe answers that by re-rastering
+    // itself, which reads on screen as a white flash. An idle repaint must not
+    // touch the DOM at all.
+    setClass(document.getElementById('mb-panes'), 'mb-panes'+(p.reading?' reading':''));
     if(p.shape!==_regs.shape || p.shape!=='msg'){
       ok = putOuter('mb-read', p.reader, _regs.reader) && ok;
     }else{
@@ -114,8 +120,8 @@
       // Whether the body box is the short in-thread size is a CLASS, applied
       // here rather than baked into #mb-open's html — otherwise the thread
       // arriving would rewrite the iframe just to make it shorter.
-      var body=document.querySelector('#mb-open .mb-body');
-      if(body){ if(p.short) body.classList.add('short'); else body.classList.remove('short'); }
+      setClass(document.querySelector('#mb-open .mb-body'), 'mb-body'+(p.short?' short':''));
+      setClass(document.getElementById('mb-thread'), 'mb-thread'+(p.solo?' solo':''));
     }
     // A region we expected was missing — fall back to a whole draw rather than
     // leaving a half-updated screen.
@@ -628,6 +634,14 @@
     for(var i=0;i<thread.length;i++){ if(thread[i].id===x.id){ at=i; break; } }
     if(at<0){ thread=[x]; at=0; }
     p.short=thread.length>1;
+    // ONE SCROLLBAR, not two. A single-message conversation with no reply box
+    // open lets the body fill the pane and scroll inside itself; the pane does
+    // not scroll at all. Before this the pane scrolled AND the 420px body
+    // scrolled, so a wheel over the message scrolled the text, hit its end and
+    // then jerked the whole pane — and every one of those pane scrolls moved
+    // the iframe, which is what made reading feel like it was flickering.
+    // With several messages on screen the pane has to scroll, so it does.
+    p.solo=(thread.length===1)&&!m.composer;
     p.head=renderHead(x, thread.length);
     p.before=thread.slice(0,at).map(renderCollapsedMessage).join('');
     p.open=renderOpenMessage(x);
@@ -635,7 +649,7 @@
     p.comp=renderComposer(x);
     p.reader='<div class="mb-read" id="mb-read" data-shape="msg">'+
       '<div class="mb-head" id="mb-head">'+p.head+'</div>'+
-      '<div class="mb-thread" id="mb-thread">'+
+      '<div class="mb-thread'+(p.solo?' solo':'')+'" id="mb-thread">'+
         '<div id="mb-before">'+p.before+'</div>'+
         '<div id="mb-open"'+(p.short?' data-short="1"':'')+'>'+p.open+'</div>'+
         '<div id="mb-after">'+p.after+'</div>'+

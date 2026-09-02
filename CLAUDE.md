@@ -144,6 +144,26 @@ we never have to rewrite to grow (see "Growth bets" below).
     shorter in-thread body height is a CSS class `paint()` toggles rather than
     part of that region's html. `test/screen-stability-smoke.mjs` pins all of
     this by node identity.
+  - **AN IDLE REPAINT MUST WRITE NOTHING — not even the same class back.**
+    Surviving as the same element is not enough (Session 16, round 2). Setting
+    an attribute always invalidates style, and a style invalidation on an
+    ancestor of the message-body iframe makes the browser re-raster that
+    out-of-process frame: a white flash, with the content returning identical
+    and at the same scroll position. `paint()` therefore goes through
+    `setClass()`, which compares before it writes, and the test asserts **zero
+    MutationObserver records** for a repaint that changes nothing.
+  - **A repaint on a timer is a repaint under the user's hands.** The
+    send-progress poll (`11-bind-and-actions.js`) runs **every 2 seconds** while
+    a send is in flight and used to `scheduleRender()` on every tick; that is
+    the cadence in the owner's second recording. It now renders only when the
+    payload actually changed, and only refreshes the email list while the Email
+    page is open. Before adding any poll, ask what it repaints.
+  - **The Inbox reading pane has ONE scroller for a one-message conversation.**
+    `.mb-thread.solo` lets the body fill the pane; the pane itself does not
+    scroll. Two nested scrollers meant a wheel over the message scrolled the
+    text, hit its end, then jerked the whole pane — and every pane scroll moved
+    a sandboxed iframe. With a real thread on screen the pane must scroll, so
+    `solo` is simply not applied.
   - **Session 15 gave the app ONE layout vocabulary: `public/ui.css` +
     `public/js/00-ui-kit.js`.** Pure string builders (no state, no DOM, no side
     effects), which is why it can sit at the head of the load order. Build a

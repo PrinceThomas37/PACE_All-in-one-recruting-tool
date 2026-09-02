@@ -78,7 +78,17 @@ missing from `renderPage()`'s switch, so every repaint on them wrote
 "Page not found" and overwrote it a beat later.
 
 **The render engine now draws in regions and writes only what changed** — see
-"The render model" below. Same-page repaints leave untouched regions' DOM
+"The render model" below.
+
+**Round 2 (same session):** the owner filmed it again and the body was still
+flashing white — for two frames, returning *pixel-identical at the same scroll
+position*, which means it was re-rastered, not rebuilt. Two causes, both ours:
+the send-progress poll called `scheduleRender()` **every 2 seconds** while a
+send was running whether or not anything had changed, and the "changed nothing"
+paint still wrote three classes (`mb-panes`, `mb-body`, `mb-thread`) — and
+setting an attribute invalidates style even when the value is identical, which
+is enough to make the browser re-raster a sandboxed iframe. Both fixed; the
+Inbox reading pane also went from two nested scrollbars to one. Same-page repaints leave untouched regions' DOM
 standing, so iframes, scroll positions, modal/drawer entry animations and the
 caret all survive. Pinned by `test/screen-stability-smoke.mjs` (19 assertions,
 node identity not pixels, including one that proves the test can detect a
@@ -130,6 +140,16 @@ Full narrative and the reasoning behind each trade: archive, "Session 15".
   `#mb-open`'s html. Bake either into that string and the message reloads.
 - **Anything that must survive a repaint needs its own region** — iframes,
   media, canvases, anything with internal scroll.
+- **A repaint that changes nothing must WRITE nothing — not even the same class
+  back.** Setting an attribute invalidates style, and a style invalidation
+  above a sandboxed iframe makes the browser re-raster it: a white flash. Use
+  `setClass()` in the Inbox painter, and keep the MutationObserver assertion in
+  `test/screen-stability-smoke.mjs` honest.
+- **Before adding anything that repaints on a timer, ask what it repaints.**
+  The send-progress poll fires every 2s mid-send; that was round 2 of this bug.
+- **The Inbox reading pane has ONE scroller for a single message**
+  (`.mb-thread.solo`). Two nested scrollers jerk the pane and drag the iframe
+  through a re-raster on every scroll.
 
 ## ⏭ Pick this up first (Session 17)
 

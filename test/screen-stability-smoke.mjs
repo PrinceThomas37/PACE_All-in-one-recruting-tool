@@ -70,16 +70,21 @@ try {
     });
     window.__messages = [msg('m1', 'Right to Represent', '<p>' + 'body line<br>'.repeat(80) + '</p>'),
                          msg('m2', 'Re: Right to Represent', '<p>second</p>')];
+    // A conversation of ONE — the common case, and the one that gets a single
+    // scrollbar. m1/m2 share thread t1 and stay the multi-message case.
+    window.__solo = msg('m3', 'A conversation of one', '<p>' + 'line<br>'.repeat(60) + '</p>');
+    window.__solo.thread_id = 't3';
     window.apiGet = function (p) {
       if (/\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: window.__unread });
       if (/\/mailbox\/accounts/.test(p)) return Promise.resolve([
         { id: 'mb1', email_address: 'prince@example.test', platform: 'Gmail', readable: true, is_active: true }
       ]);
       if (/\/folders$/.test(p)) return Promise.resolve([{ id: 'INBOX', name: 'Inbox', kind: 'inbox', unread: 2 }]);
+      if (/\/threads\/t3/.test(p)) return Promise.resolve([window.__solo]);
       if (/\/threads\//.test(p)) { window.__threadCalls++; return Promise.resolve(window.__messages); }
       const one = /\/messages\/([^?/]+)/.exec(p);
-      if (one) return Promise.resolve(window.__messages.find(m => m.id === one[1]));
-      if (/\/messages/.test(p)) return Promise.resolve({ messages: window.__messages, next_cursor: null, crm: {} });
+      if (one) return Promise.resolve(window.__messages.concat([window.__solo]).find(m => m.id === one[1]));
+      if (/\/messages/.test(p)) return Promise.resolve({ messages: window.__messages.concat([window.__solo]), next_cursor: null, crm: {} });
       return Promise.resolve({});
     };
     window.apiPatch = function () { return Promise.resolve({}); };
@@ -210,7 +215,89 @@ try {
   await page.waitForSelector('#mb-root', { timeout: 8000 });
   step('…and coming back rebuilds the Inbox', true);
 
-  // ── 6. the test can tell the difference ──────────────────────────────────
+  // ── 6. an idle repaint must not touch the DOM AT ALL ─────────────────────
+  // Surviving as the same element is not enough. Writing an attribute — even
+  // the same class back onto the same node — invalidates style on an ancestor
+  // of the message body, and an out-of-process sandboxed iframe answers that by
+  // re-rastering itself. On screen that is a white flash, with the content
+  // returning identical and at the same scroll position. So the invariant is
+  // stricter than "not rebuilt": a repaint that changes nothing must WRITE
+  // nothing.
+  await page.evaluate(() => {
+    STATE.mailbox.thread = null; STATE.mailbox.threadId = null; STATE.mailbox.composer = null;
+    window.mbOpen('m1');
+  });
+  await page.waitForSelector('#mb-open .mb-body iframe', { timeout: 8000 });
+  await page.waitForTimeout(300);
+  const idleMutations = await page.evaluate(async () => {
+    const seen = [];
+    const obs = new MutationObserver(ms => ms.forEach(m => seen.push(
+      m.type + ':' + (m.target.id || m.target.className || m.target.nodeName) +
+      (m.type === 'attributes' ? '[' + m.attributeName + ']' : ''))));
+    obs.observe(document.getElementById('main'),
+      { subtree: true, childList: true, attributes: true, characterData: true });
+    window.render(); window.render();
+    window.scheduleRender();
+    await new Promise(r => setTimeout(r, 250));
+    obs.disconnect();
+    return seen;
+  });
+  step('A repaint that changes nothing writes nothing to the DOM',
+    idleMutations.length === 0, idleMutations.slice(0, 6).join(' | '));
+
+  // ── 7. a send in flight must not disturb the message being read ──────────
+  // The send-progress poll runs every 2 SECONDS while a send is running, and
+  // used to call scheduleRender() on every tick regardless of whether anything
+  // had changed — a repaint under the reader twice a minute at rest and every
+  // 2s mid-send. That is the cadence in the owner's recording.
+  const pollMutations = await page.evaluate(async () => {
+    const prevGet = window.apiGet;
+    window.apiGet = function (p) {
+      if (/send-progress/.test(p)) return Promise.resolve({ active: true, sent: 3, total: 10 });
+      return prevGet(p);
+    };
+    const seen = [];
+    const obs = new MutationObserver(ms => ms.forEach(m => seen.push(m.type)));
+    obs.observe(document.getElementById('mb-read'),
+      { subtree: true, childList: true, attributes: true, characterData: true });
+    window.stopProgressPoll(); window.STATE._progressSig = null;
+    window.startProgressPoll();
+    await new Promise(r => setTimeout(r, 5200));   // three polls
+    window.stopProgressPoll();
+    obs.disconnect();
+    window.apiGet = prevGet;
+    return seen;
+  });
+  step('A send running in the background never touches the open message',
+    pollMutations.length <= 1, pollMutations.length + ' mutations over three 2s polls');
+
+  // ── 8. one message, one scrollbar ────────────────────────────────────────
+  // Two nested scrollers (the pane AND the 420px body) meant a wheel over the
+  // message scrolled the text, hit its end, then jerked the whole pane — and
+  // every pane scroll moved the iframe.
+  await page.evaluate(() => window.mbOpen('m3'));
+  await page.waitForFunction(() => (STATE.mailbox.message || {}).id === 'm3' &&
+    (STATE.mailbox.thread || []).length === 1, { timeout: 8000 });
+  await page.waitForTimeout(150);
+  const scrollers = await page.evaluate(() => {
+    const t = document.getElementById('mb-thread');
+    return { solo: t.className.indexOf('solo') > -1, scrollH: t.scrollHeight, clientH: t.clientHeight };
+  });
+  step('A single message gives the reading pane one scrollbar, not two',
+    scrollers.solo && scrollers.scrollH <= scrollers.clientH + 1, JSON.stringify(scrollers));
+
+  // With a real thread the pane has to scroll, so `solo` must come back off.
+  await page.evaluate(() => {
+    STATE.mailbox.thread = window.__messages.concat([]); STATE.mailbox.threadId = 't1';
+    STATE.mailbox.message = window.__messages[0]; STATE.mailbox.selectedId = 'm1';
+    window.UI.paintPage('mailbox');
+  });
+  await page.waitForTimeout(120);
+  const threadScroll = await page.evaluate(() =>
+    document.getElementById('mb-thread').className.indexOf('solo') > -1);
+  step('…and a multi-message thread still scrolls as one pane', !threadScroll);
+
+  // ── 9. the test can tell the difference ──────────────────────────────────
   // Everything above is a claim that a DOM node SURVIVED. That claim is only
   // worth anything if this test would notice the node being replaced — which
   // is what the old whole-app rebuild did on every change. So do the old thing
