@@ -2795,3 +2795,219 @@ writes and a 2-second timer. When the artefact is a flash rather than a
 rebuild, stop asking "what re-created this element" and start asking "what
 invalidated it" — and let the test assert the absence of writes, not the
 presence of the right ones.
+
+# Session 17 — the outreach generator (reconstructed from the commit record)
+
+*Written up in Session 18 from the commits and `CLAUDE.md`, because Session 17
+ended without appending its own narrative. The durable rules it produced are in
+`CLAUDE.md`; what follows is the sequence, not a retelling of reasoning that was
+never written down.*
+
+Six PRs built the Email → **Generator** tab: **#154** added it, **#155** rebuilt
+how it reads a pasted posting and made it sign from the mailbox, **#156** fixed
+the signature (`{{sender}}` had shipped to a real prospect, and the body was
+signing itself on top of a signature that would be appended anyway), **#157**
+made it read the employer and the city out of the posting rather than the form,
+and **#158** replaced "regenerate and hope" with **four framings offered at
+once** — and stopped the generator writing about the contact's own CV, because
+none of the 30 replied threads in the owner's own history mentions the
+recipient's background, and an email that opens *I read your profile* is not the
+email that earned those replies.
+
+The lasting shape: `services/outreach-generator.js` is pure and holds both the
+rules writer and the AI seam behind one output shape, and the rules writer is
+the product rather than a degraded mode — with no funded key, every email the
+feature has ever sent came out of those functions.
+
+---
+
+# Session 18 — an AI seam that any provider can fill, and a budget in front of it
+
+The owner's question was a product question, not a technical one: *are there
+free open-source AIs I can use, and how do I stop them eating everything the
+moment I paste a key?* Both halves shipped. A third thing happened in the
+middle, which is the part worth reading twice.
+
+## Where it started: six copies of one integration
+
+Six features want an AI — cold-email drafting, the daily import briefing,
+resume parsing, the job-description scrub, lead-distribution advice and the
+outreach generator. Every one of them held its own copy of Anthropic's URL, its
+key header and its model name. So "use a different provider" was not a setting.
+It was six edits, and until somebody made them, an unfunded deployment ran all
+six on their rules fallback with no way to change that from inside the product.
+
+`services/ai-provider.js` (**PR #159**) is the one door. Callers ask for text;
+it resolves which provider is configured, speaks that provider's wire format,
+and returns `null` when none of them can answer.
+
+**Two wire formats cover four providers.** Anthropic's (`x-api-key`, system as
+a *field*) and the OpenAI-compatible one (`Bearer`, system as the first
+*message*). Groq, OpenRouter and a self-hosted Ollama all speak the second,
+which is the whole reason supporting three new providers is one adapter rather
+than three. `buildRequest`/`parseResponse` are pure, so the exact bytes sent to
+each provider are pinned offline rather than discovered in production.
+
+**Providers chain; the admin's pick only leads.** Admin → Integrations grows a
+"use this provider first" radio, and every other configured provider stays as a
+fallback. That chain is precisely what makes a *free tier* safe to build on: a
+spent daily allowance falls through to the next provider, and then to the rules
+writer. Losing a free tier costs a dropdown change, not a feature.
+
+**Ollama is keyless, so its server address is what turns it on.** Its connection
+test says plainly when the address is unreachable *from the PACE server*, which
+is the failure an operator actually hits the first time they point it at their
+own laptop and expect a deployed service to reach it.
+
+## The thing worth reading twice: two clean merges, one broken screen
+
+While #159 was in flight the owner merged **#160**, their own feature (below),
+written against the same file in a different session. Neither branch was wrong.
+#159 **deleted** a small local helper, `aiConfigured()`, and pointed everything
+at the provider layer. #160 **added a new call** to that helper, in a different
+part of the same file. Git saw a deletion in one region and a call in another,
+found no overlapping lines, and merged both without complaint.
+
+`main` shipped a handler calling a function that no longer existed. Every load
+of the Compose tab returned **500 `aiConfigured is not defined`** — the first
+call that tab makes.
+
+**#162** restored it (as a call to the provider layer, which is what #159
+intended) and added the guard. The guard is the valuable artefact, and its first
+version is worth recording as a failure: *calling the endpoint and asserting the
+response carries no ReferenceError passes with the bug still in place*, because
+the handler awaits the database first and, against a dead test database, times
+out long before it reaches the bad line. The test that works reads the **source**
+and asks the only question that matters — is every function this file calls
+actually defined in it?
+
+The lesson generalises past this file: **a clean merge is not a correct merge
+when one side deletes a symbol and the other side adds a use of it.** Two
+sessions editing one file will keep producing this. The cheap discipline is to
+merge `main` into the branch and re-run the suite *immediately before* every
+merge, not after — which is what Session 18 then did for #161.
+
+## What the owner built: Compose folded into the composer that actually sends
+
+**#160**, merged by the owner mid-session. Two tabs were two ways to write the
+same email and only one of them sent it: the old Compose tab's Send opened a
+Gmail/Outlook deeplink in a new tab and pushed a "sent" record into browser
+memory that no backend ever saw — **no tracking pixel, no `email_tracking` row,
+no open or reply detection, and nothing in PACE's own Sent list.** So the merge
+went the opposite way from the obvious one: the *generator* absorbed Compose,
+because the generator really sends. A real send still lands in the connected
+mailbox's own Sent folder, so nothing is lost. The reminder flow kept the old
+body, since it goes through the send engine rather than this composer.
+
+The recipient can now come from either side of the split that used to separate
+the two tabs. **Someone already in PACE** — `GET /outreach/recipients` searches
+contacts and companies *together*, because a person looking for "Berks" does not
+know or care which table the answer is in; picking a person fills address, first
+name, title and company, and picking a company lists its contacts so a second
+click finishes the job (`GET /outreach/company-contacts/:id`). **Or someone
+new**, typed in and written nowhere. Either way the rest of the composer is
+unchanged, so the four framings, the signature preview and the tracked send do
+not care how the recipient arrived.
+
+**"Sent from here"** (`GET /outreach/sent`) lists what went out and what came
+back — Sent, Opened, or Replied — and a **replied** row offers "Convert to
+lead". An opened one deliberately does not: an open is information, a reply is a
+live conversation, and until it is a lead it is invisible to the pipeline, the
+follow-up engine, the "needs you today" queue and every report. Converting
+(`POST /outreach/convert-lead`) reuses an existing company by name, creates the
+lead at stage **Connected** — which is what "they replied" means here — and marks
+the contact replied. An address already on a lead is refused rather than
+duplicated, and a reply already converted is refused too. **No migration:**
+`email_tracking` has carried an unused `lead_id` column since 024, which is
+exactly what it was for.
+
+## Then the owner asked the right question
+
+*"The moment I paste this key, are all the available tokens eaten out
+automatically? I don't know how much a token gets used to read one email, one
+lead, one JD."*
+
+The reassuring half of the answer is that a free account has no card on it, so
+nothing here can produce a charge. The real risk is different and was genuinely
+uncovered: **a daily allowance emptied by mid-morning**, after which every AI
+feature silently reverts to its rules output for the rest of the day with
+nothing on screen explaining why.
+
+And there was one genuinely uncapped path. The outreach generator takes a job
+posting the user **pastes**, so its length was whatever a careers page happened
+to contain — navigation menus and all — sent verbatim to the largest model.
+Everything else had a ceiling by accident (a `slice(0, 20000)` here, a
+`slice(0, 12000)` there) rather than by policy.
+
+**`services/ai-budget.js` (PR #161)** decides three things before a call goes
+out, in the order they matter:
+
+1. **What we send.** Cost is dominated by input length, and input length is
+   whatever a user pasted. Every feature declares an input ceiling, and long
+   input is **trimmed, not refused** — a resume's fields are on its first page —
+   with the trim marked in the text, because a model that can see its input was
+   cut behaves better than one that thinks the document ended.
+2. **Which model.** Pulling fields out of a resume and writing a cold email are
+   not the same job. Extraction runs on the small fast model; only prose a
+   prospect will read gets the bigger one. Per provider, via
+   `PROVIDERS[id].models` — and both tiers are identical on Ollama, which has no
+   allowance to spend and may not have a second model pulled.
+3. **How many.** A per-org daily ceiling on tokens and requests, checked
+   **before** the call, against an estimate that deliberately rounds up (input
+   plus the longest answer the request permits — a meter that counts only what
+   came back can be blown past by one long reply).
+
+**Over budget is not an error.** It is the same `null` as "no provider
+configured", and the feature's rules writer answers; a call refused this way
+never reaches the provider at all. That is the only reason the ceiling can be
+made strict without being risky, and it is the rule that must not be softened.
+
+The meter lives in `app_settings`, keyed `ai_usage_<org>_<YYYY-MM-DD>`, so it
+needs **no migration** and expires by simply never being read again. It is a
+meter, not an audit log — it answers "how much is left today", which is the
+question a budget asks; a per-call history is a later upgrade and its own table.
+Recording is best-effort on purpose: a counter that throws would take down the
+feature it exists to protect.
+
+Defaults are **150,000 tokens and 250 requests** per org per day, set under the
+free tiers' own daily allowances so the day's budget runs out before the
+*provider's* does. Being throttled by your own settings is diagnosable; being
+throttled by Groq at 2pm looks like the feature broke. Admin → Integrations
+shows a usage bar, both caps as editable numbers, and a per-feature table of
+model tier, per-request ceiling and spend today — because a cap nobody can see
+the other side of is a guess. Blank means "use the default"; a typed `0`
+genuinely means "no AI today", and the two are deliberately not collapsed.
+
+Measured per-request costs, given to the owner in plain numbers so the budget
+could be reasoned about rather than trusted: a resume parse ~1,900 tokens
+typical / 4,700 worst case; a JD clean ~2,000 / 5,500; a generated outreach
+email ~1,650 / 4,000; a cold-email draft ~700 / 1,600; the daily briefing ~800 /
+1,600. 150,000/day is roughly 30 resumes, 30 emails and 10 JD cleanups.
+
+## What shipped
+
+**#159** (provider layer), **#161** (budget) — both merged to `main` and
+deployed. **#160** and **#162** were the owner's own merges. **No migration**
+was needed by any of it, which was a design goal rather than luck: both new
+subsystems were deliberately built on `app_settings` and on columns that already
+existed.
+
+Tests: `test/ai-provider-smoke.mjs` (48 checks — both wire formats byte for
+byte, chain ordering and fallbacks, the null-not-throw contract under an
+all-providers-failing 429, and a grep that fails if any file calls a provider
+URL directly again) and `test/ai-budget-smoke.mjs` (37 checks — trimming a
+100k-character paste to ~500 tokens on a word boundary, per-feature clamping,
+model tiering, per-org meter isolation, yesterday's spend not counting against
+today, a refused call making zero HTTP requests, and a zero cap switching AI off
+without disconnecting the key). **53/53 suites green.**
+
+## Left honestly open
+
+The six prompts were all written for Claude, which follows nuanced instructions
+about tone better than the free open models do. Nobody has yet put a free
+model's output next to the rules writer's on a real posting. The honest possible
+outcome is that the free model writes *worse* than the rules writer for the
+email generator specifically — in which case the right answer is to leave that
+feature on rules and spend the free tier on resume parsing and JD cleanup, where
+the bar is lower and the win is larger. That comparison needs the owner's eyes
+on real output; it is not a judgement to make on their behalf.
