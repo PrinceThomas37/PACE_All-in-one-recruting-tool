@@ -25,6 +25,7 @@ const express = require('express');
 const { fetchWithTimeout } = require('../http-client');
 const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
+const { fillSignatureHtml } = require('../email-signature');
 const gen = require('../services/outreach-generator');
 
 // Drafting is slower than a normal API call but the browser is waiting on it.
@@ -55,6 +56,27 @@ module.exports = (ctx) => {
   }
 
   const txtOf = (v) => String(v == null ? '' : v).trim();
+
+  // THE SIGNATURE IS A TEMPLATE, AND AN UNFILLED PLACEHOLDER IS VISIBLE TO THE
+  // RECIPIENT. Signature HTML holds {{sender}} and {{senderemail}}; this router
+  // appended the raw template on its first real send, so a live prospect got an
+  // email signed "{{sender}} / Recruitment Manager | Fute Global LLC" with
+  // "{{senderemail}}" where the address should be.
+  //
+  // routes/mailbox.js carries a comment describing this exact bug, from the
+  // last time it happened. Anything that composes mail fills the signature —
+  // and it fills it from the MAILBOX, so the name in the signature is the name
+  // on the From line.
+  async function mailboxSignature(mailbox, userId) {
+    if (!mailbox) return '';
+    try {
+      const raw = await getMailboxSignature(mailbox.id, userId);
+      return fillSignatureHtml(raw, {
+        displayName: mailbox.display_name || mailbox.email_address || '',
+        emailAddress: mailbox.email_address || '',
+      });
+    } catch (_) { return ''; }
+  }
 
   // ── WHO THE EMAIL IS FROM ────────────────────────────────────────────────
   // The name in the sign-off comes from the MAILBOX THAT WILL SEND, not from
@@ -98,7 +120,8 @@ module.exports = (ctx) => {
           display_name: mailbox.display_name || null,
           platform: mailbox.platform || 'Microsoft'
         } : null,
-        sender: identity
+        sender: identity,
+        signature_html: await mailboxSignature(mailbox, req.user.id)
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -115,6 +138,10 @@ module.exports = (ctx) => {
         orgCompanyName(req), recruiterSendingMailbox(req.user.id)
       ]);
       const identity = await senderIdentity(req, mailbox);
+      // Whether the body signs itself depends on whether a signature will be
+      // appended — so the draft on screen is exactly what the recipient gets.
+      const signatureHtml = await mailboxSignature(mailbox, req.user.id);
+      const draftOpts = { companyName, omitSignOff: !!signatureHtml.trim() };
       const withSender = {
         ...input,
         sender: {
@@ -126,9 +153,10 @@ module.exports = (ctx) => {
 
       if (!aiConfigured()) {
         return res.json({
-          ...gen.rulesDraft(withSender, { companyName }),
+          ...gen.rulesDraft(withSender, draftOpts),
           ai_available: false,
-          sends_as: mailbox ? mailbox.email_address : null
+          sends_as: mailbox ? mailbox.email_address : null,
+          signature_html: signatureHtml
         });
       }
 
@@ -143,7 +171,7 @@ module.exports = (ctx) => {
           body: JSON.stringify({
             model: AI_MODEL,
             max_tokens: 1000,
-            system: gen.buildSystemPrompt(companyName),
+            system: gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff }),
             messages: [{ role: 'user', content: gen.buildUserPayload(withSender) }]
           })
         }, { timeoutMs: AI_TIMEOUT_MS });
@@ -156,15 +184,17 @@ module.exports = (ctx) => {
         return res.json({
           ...parsed, mode: 'ai', ai_available: true,
           sends_as: mailbox ? mailbox.email_address : null,
+          signature_html: signatureHtml,
           usage: { input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0 }
         });
       } catch (aiErr) {
         // A drafting failure is not a dead end — the rules engine writes the
         // same shape. The page says which engine produced what it is showing.
         return res.json({
-          ...gen.rulesDraft(withSender, { companyName }),
+          ...gen.rulesDraft(withSender, draftOpts),
           ai_available: true,
           sends_as: mailbox ? mailbox.email_address : null,
+          signature_html: signatureHtml,
           ai_error: aiErr.message
         });
       }
@@ -189,7 +219,7 @@ module.exports = (ctx) => {
         return res.status(409).json({ error: 'This address has opted out of email from us.' });
       }
 
-      const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
+      const signature = await mailboxSignature(mailbox, req.user.id);
       const token = newTrackToken();
       const htmlBody = injectTrackPixel(buildHtmlEmailBody(bodyText, signature), token);
       await sendMailboxNewMessage(mailbox, { to, subject, htmlBody });
