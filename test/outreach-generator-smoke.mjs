@@ -388,6 +388,47 @@ for (const f of composers) {
     'a call site still uses the unfilled template');
 }
 
+// ── One composer, and a reply that can become a lead ───────────────────────
+// Compose and Generator were two ways to write the same email and only one of
+// them sent it — the old Compose tab opened a webmail deeplink and recorded the
+// send nowhere. The tabs are merged into the one that actually sends.
+const emailPage = readFileSync(path.join(ROOT, 'public/js/07-page-email.js'), 'utf8');
+ok('there is no separate Generator tab any more',
+  !/'generator'/.test(emailPage.split('var tabs=')[1].split('\n')[0]),
+  emailPage.split('var tabs=')[1].split('\n')[0]);
+ok('the Compose tab draws the composer that really sends',
+  /emailTab==='compose'[\s\S]{0,300}renderOutreachGenBody/.test(emailPage));
+ok('an old link to the generator tab still lands somewhere real',
+  /t==='generator'\)t='compose'/.test(readFileSync(path.join(ROOT, 'public/js/11-bind-and-actions.js'), 'utf8')));
+
+const genPage = readFileSync(path.join(ROOT, 'public/js/48-page-outreach-gen.js'), 'utf8');
+ok('the composer can take a recipient from the database',
+  /outreach\/recipients/.test(genPage) && /outreachPickContact/.test(genPage));
+ok('and can still take one typed in from scratch',
+  /outreachRecipMode\('new'\)|recipMode:'new'/.test(genPage));
+ok('a replied send offers to become a lead',
+  /outreachConvertLead/.test(genPage) && /Convert to lead/.test(genPage));
+ok('only a REPLY offers it — an open is information, not a conversation',
+  /r\.replied_at[\s\S]{0,400}Convert to lead/.test(genPage) &&
+  !/r\.opened_at[\s\S]{0,120}Convert to lead/.test(genPage));
+
+// The conversion reuses the columns that already exist. email_tracking has
+// carried an unused lead_id since migration 024, which is what it was for —
+// so none of this needs a migration against the live database.
+ok('the conversion stamps the tracking row rather than adding a column',
+  /lead_id: (job\.id|existing\[0\]\.job_id)/.test(routerSrc), 'convert-lead never records the lead it made');
+ok('an address already on a lead is refused, not duplicated',
+  /contact_exists/.test(routerSrc));
+ok('a reply already converted is refused too',
+  /already_converted/.test(routerSrc));
+ok('the new lead lands on the stage that means "they replied"',
+  /stage: 'Connected'/.test(routerSrc), 'a converted reply should not start at Unassigned');
+ok('the sent list only ever shows this user their own sends',
+  /\.eq\('sent_by', req\.user\.id\)/.test(routerSrc));
+ok('every new read is org-scoped',
+  (routerSrc.match(/withOrg\(supabase\.from/g) || []).length >= 5,
+  String((routerSrc.match(/withOrg\(supabase\.from/g) || []).length));
+
 // ── the routes are mounted and auth-gated ──────────────────────────────────
 const PORT = 20000 + Math.floor(Math.random() * 20000);
 const child = spawn('node', ['index.js'], {
@@ -422,7 +463,9 @@ try {
   if (booted) {
     const unknown = await req('GET', '/definitely-not-a-route-xyz');
     ok('an unknown path 404s (so 401 below means the route exists)', unknown === 404, unknown);
-    for (const [m, p] of [['GET', '/outreach/sender'], ['POST', '/outreach/generate'], ['POST', '/outreach/send']]) {
+    for (const [m, p] of [['GET', '/outreach/sender'], ['POST', '/outreach/generate'], ['POST', '/outreach/send'],
+                          ['GET', '/outreach/recipients'], ['GET', '/outreach/company-contacts/x'],
+                          ['GET', '/outreach/sent'], ['POST', '/outreach/convert-lead']]) {
       const s = await req(m, p);
       ok(`${m} ${p} is mounted and requires a token`, s === 401, s);
     }
