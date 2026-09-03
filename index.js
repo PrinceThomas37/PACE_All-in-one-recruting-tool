@@ -3039,13 +3039,22 @@ wfEngine.registerChannel('stage_move', async ({ step, enrollment, context }) => 
 // endpoints. Mounted here, not required at the top of the file, because it
 // needs wfEngine and the send helpers to already exist (same reason the wf /
 // warmup / cron mounts sit where they do).
-require('./routes/recruiting/outreach')(app, {
+const recruitingOutreach = require('./routes/recruiting/outreach')(app, {
   supabase, auth, hasRole, today, wfEngine, gmailProvider, config, settingsConfig,
   graphMailRequest, sendMicrosoftNewMessage, buildHtmlEmailBody,
   getMailboxSignature, getMicrosoftToken, warmupLimit,
   isSendingPaused, isManagerPaused, loadMailboxDelivState, loadSuppressedSet,
   friendlySendError,
 });
+
+// ── Outreach generator (the Email page's "Generator" tab) ──────────────────
+// Mounted here, after the block above, because it sends through that block's
+// mailbox helpers rather than its own copy of them.
+app.use(require('./routes/outreach-generator')({
+  ...routeCtx, loadSuppressedSet,
+  recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
+  sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
+}));
 
 app.use(require('./routes/wf')({ supabase, auth, hasRole, engine: wfEngine, logActivity }));
 
