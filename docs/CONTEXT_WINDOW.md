@@ -4,24 +4,21 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-01 (end of Session 16) · **Repo**:
+**Updated**: 2026-09-03 (end of Session 18) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Dev branch**:
-`claude/screen-glitch-diagnosis-7k0f8y`
+to `main` IS the release · **Dev branch this session**:
+`claude/ai-token-budget-glejpx` (merged)
 
 ---
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
 **This file: current state only. REWRITE it each session, keep it under ~200
-lines, delete anything no longer true.** (It currently runs ~270. Three passes
-already removed everything that merely duplicated `CLAUDE.md`; what is left is
-live state. If you can genuinely retire something — a parked item that got
-resolved, a trap that moved into `CLAUDE.md` — do, and bring it back down.) `docs/CONTEXT_ARCHIVE.md`: everything
+lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
 that ever happened, **append-only — never edited, never summarised away.** At
 the end of a session, append the narrative to the archive, then rewrite this to
-describe the new present. Nothing is lost; the read stays short.
+describe the new present.
 
 If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
@@ -38,309 +35,209 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - The recruiting ATS + BD lead engine, multi-tenant by `org_id`
 - **Autonomous Recruiting Engine, all 5 steps** — scheduler, shared relevance
   engine, lead sourcing, candidate outreach, conversation intelligence
-- **Self-serve signup is built end-to-end but switched OFF** (`SELF_SERVE_SIGNUP`
-  env var). Pricing is deliberately `null` — the owner's call, one line in
-  `services/plans.js`. No guest/demo bypass exists (removed Session 11), so
-  there is no product tour today.
-- **Lead distribution uses every connected mailbox** (Microsoft + Gmail, live
-  tokens only); a mailbox going inactive auto-moves its leads. Leads silent in
-  `Assigned` 30+ days auto-recycle to `Unassigned`.
-- **The in-app mailbox** (Session 13, restructured Session 15) — two panes with
-  a threaded reader. Its four inviolable rules are in `CLAUDE.md` Growth bets §3.
+- **The in-app mailbox** (Session 13, restructured 15) — two panes, threaded
+  reader. Its four inviolable rules are in `CLAUDE.md` Growth bets §3.
 - **The shared UI kit** (Session 15) — one layout vocabulary for the whole app.
-  See "The UI kit" below before building any new screen.
-- SSO sign-in with Microsoft. Google sign-in is built but needs
-  `GOOGLE_CLIENT_ID`/`SECRET` — **distinct from** the per-user Gmail *sending*
-  connection, which is live and working.
+- **The outreach generator + composer** (Sessions 17-18), and **any AI provider
+  behind a daily budget** (Session 18) — both below.
+- **Self-serve signup built but switched OFF** (`SELF_SERVE_SIGNUP`). Pricing is
+  deliberately `null`. No guest/demo bypass exists, so no product tour today.
+- Lead distribution across every connected mailbox (Microsoft + Gmail); leads
+  silent in `Assigned` 30+ days auto-recycle.
+- SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —
+  **distinct from** per-user Gmail *sending*, which is live.
 
 ## Migrations — 041 is the latest APPLIED (2026-08-24)
-
-`041_lead_recycling.sql` — `jobs.recycled_count` / `jobs.last_recycled_at`,
-visibility-only. Everything through `040_billing.sql` is applied; `CLAUDE.md`
-Growth bets §1 and §9 are kept current and are the right place to check the
-multi-tenancy / RLS / billing state.
 
 **The next migration number is 042. Never apply one to the live DB without a
 fresh, explicit go-ahead**, even when the feature itself was already agreed.
 042 is most likely the error column on `emails` — see "Parked by the owner".
-Sessions 14 and 15 added no migration.
+Sessions 14-18 added no migration; Session 18 avoided one deliberately (both new
+subsystems sit on `app_settings` and on `email_tracking.lead_id`, which has
+existed unused since 024).
 
-## ✅ Just shipped (Session 16): the screen stopped blinking
+## ✅ Just shipped (Session 18): AI became a setting, and got a budget
 
-The owner sent two screen recordings of a "glitch". Decoded frame by frame, the
-Inbox clip showed the message body **vanishing for 1.4s and coming back scrolled
-to the top**, twice more after that. Cause: `render()` was
-`root.innerHTML = renderApp()` — every change rebuilt the whole app, and an
-email body lives in a sandboxed `<iframe>`, which reloads when re-created. The
-trigger was marking the message read, which ticks the unread badge. **Reading an
-email was what wiped the email being read.** Second fault: nine pages were
-missing from `renderPage()`'s switch, so every repaint on them wrote
-"Page not found" and overwrote it a beat later.
+The owner asked whether free open-source AI could power the app without paying
+per token. Two PRs, both merged and live.
 
-**The render engine now draws in regions and writes only what changed** — see
-"The render model" below.
+**PR #159 — `services/ai-provider.js`.** Six features each held their own copy
+of Anthropic's URL, key header and model name, so "use another provider" was six
+edits, not a setting. Now they call `complete(supabase, {...})`. Groq,
+OpenRouter and a self-hosted Ollama are selectable in Admin → Integrations, keys
+pasted in the UI, no redeploy. **Providers chain** — the admin's pick leads, the
+rest are fallbacks, and behind all of them the rules writer.
 
-**Round 2 (same session):** the owner filmed it again and the body was still
-flashing white — for two frames, returning *pixel-identical at the same scroll
-position*, which means it was re-rastered, not rebuilt. Two causes, both ours:
-the send-progress poll called `scheduleRender()` **every 2 seconds** while a
-send was running whether or not anything had changed, and the "changed nothing"
-paint still wrote three classes (`mb-panes`, `mb-body`, `mb-thread`) — and
-setting an attribute invalidates style even when the value is identical, which
-is enough to make the browser re-raster a sandboxed iframe. Both fixed; the
-Inbox reading pane also went from two nested scrollbars to one. Same-page repaints leave untouched regions' DOM
-standing, so iframes, scroll positions, modal/drawer entry animations and the
-caret all survive. Pinned by `test/screen-stability-smoke.mjs` (19 assertions,
-node identity not pixels, including one that proves the test can detect a
-rebuild). 50/50 suites green. **No migration.**
+**PR #161 — `services/ai-budget.js`.** Input is trimmed per feature (the pasted
+job posting was the one genuinely uncapped input in the app), extraction runs on
+the small model and only prose a prospect reads gets the big one, and a per-org
+daily ceiling is checked **before** each call. Defaults 150k tokens / 250
+requests a day, both editable in Admin with a live per-feature usage table.
 
-## Previously (Session 15): the app got a structure
+**Both rulesets are written out in `CLAUDE.md`** (the AI-provider block and the
+AI-budget block) — read them there, not from a copy here. The single rule that
+must never be softened: **`complete()` returning `null` — unconfigured, key
+rejected, free tier spent, over budget — is an ordinary outcome meaning "write
+it with the rules", never an error and never a 5xx.**
 
-The owner benchmarked PACE against **Saleshandy** and asked for it to be made
-alike. Four PRs — **#147** through **#150** — all merged and live. The lasting
-output is not any one screen but the shared layout vocabulary underneath them,
-which the codebase had never had.
+**Owner's own merge this session, PR #160:** the old Compose tab is folded into
+the generator, because Compose's "Send" only opened a mail deeplink and invented
+a sent record no backend ever saw — no pixel, no tracking row, no reply
+detection. Recipients now come from a search across contacts *and* companies
+(`/outreach/recipients`, `/outreach/company-contacts/:id`) or are typed in fresh;
+"Sent from here" (`/outreach/sent`) shows Sent/Opened/Replied, and a **replied**
+row (never a merely opened one) offers Convert to lead (`/outreach/convert-lead`,
+lands at stage **Connected**).
 
-- **The UI kit** (`public/ui.css` + `public/js/00-ui-kit.js`) — see the section
-  below before building anything.
-- **The rail** is grouped Work / Records / Outreach / Insight, 60px, expanding
-  on hover as an overlay so content never reflows.
-- **Every list page is on the kit**: Candidates, Leads, Clients, Sourced Leads,
-  All Jobs, Reports, Email, Inbox.
-- **Records open as drawers over their list** — candidates and clients both.
-- **The sequence builder is a timeline** (Day 1 → Day 4 → Day 9).
-- **Compose has a live preview** with the From picker inside it.
-- **The inbox is two panes and shows the whole thread.**
-- One new read-only endpoint, `GET /candidates/status-counts`. No migration.
+## ⚠ The merge trap this session exposed — read before editing a shared file
 
-Three latent bugs surfaced on the way and were fixed: a client's email history
-had lost its only caller and was dead code; the BD "convert to job" bar was
-inserting itself above the page's own identity; and `/mailbox/:mid/threads/:tid`
-had existed with no caller since Session 13.
+#159 **deleted** a local helper (`aiConfigured`); #160, written in another
+session against the same file, **added a new call to it** elsewhere in that file.
+Git saw a deletion in one region and a call in another, found no overlapping
+lines, and merged both. `main` shipped a call to a function that no longer
+existed and every load of the Compose tab returned 500. **#162** fixed it.
 
-Full narrative and the reasoning behind each trade: archive, "Session 15".
+Two things to carry:
 
-## The render model — read this before touching any page
+- **A clean merge is not a correct merge when one side deletes a symbol and the
+  other adds a use of it.** Merge `main` into your branch and re-run the suite
+  *immediately before* merging, not after.
+- **The first guard written for it passed with the bug still in place** — the
+  handler awaits the database first and times out against a dead test DB before
+  reaching the bad line. The working guard reads the **source** and asks whether
+  every function the file calls is defined in it. It lives in
+  `test/outreach-generator-smoke.mjs`; extend it rather than re-inventing it.
 
-- **`render()` has two paths.** Page changed (or no shell) → full rebuild.
-  Same page → **patch**: rail, topbar, page body and the `#layer` above it are
-  each rewritten *only if their html string differs from what is on screen*.
-- **A page module never writes `#content` itself.** It registers its renderer
-  with **`UI.registerPage(name, renderFn, paintFn?)`** — same idiom as
-  `UI.registerOverlay` — and its own `paint()` calls **`paintPageContent()`**.
-  Writing `content.innerHTML` directly makes the shell's record of the screen
-  stale and the flicker comes back.
-- **`renderPage()` (05-page-dashboard.js) is now the fallback**, not the only
-  route. A page that is registered never reaches it. "Page not found" is
-  unreachable and a test keeps it that way.
-- **The Inbox paints region by region** (`#mb-head`, `#mb-before`, `#mb-open`,
-  `#mb-after`, `#mb-comp`). The open message sits between the two halves of the
-  thread **so the thread arriving does not touch it**, and the shorter
-  in-thread body height is a CSS class `paint()` toggles — never part of
-  `#mb-open`'s html. Bake either into that string and the message reloads.
-- **Anything that must survive a repaint needs its own region** — iframes,
-  media, canvases, anything with internal scroll.
-- **A repaint that changes nothing must WRITE nothing — not even the same class
-  back.** Setting an attribute invalidates style, and a style invalidation
-  above a sandboxed iframe makes the browser re-raster it: a white flash. Use
-  `setClass()` in the Inbox painter, and keep the MutationObserver assertion in
-  `test/screen-stability-smoke.mjs` honest.
-- **Before adding anything that repaints on a timer, ask what it repaints.**
-  The send-progress poll fires every 2s mid-send; that was round 2 of this bug.
-- **The Inbox reading pane has ONE scroller for a single message**
-  (`.mb-thread.solo`). Two nested scrollers jerk the pane and drag the iframe
-  through a re-raster on every scroll.
+## ⏭ Pick this up first (Session 19)
 
-## ⏭ Pick this up first (Session 17)
+**1. Put a free model's output next to the rules writer's, on a real posting.**
+The six prompts were written for Claude; free open models follow tone
+instructions less well. It is entirely possible the honest verdict for the
+*email generator* is "keep the rules version" while the free tier earns its
+place on resume parsing and JD cleanup. **This needs the owner's eyes on real
+output — do not decide it for them.** Nothing else in the AI work is unfinished.
 
-**1. Finish the UI-kit rollout.** Done: Candidates, Leads, Clients, Sourced
-Leads, All Jobs, Reports, Email, Inbox — every list-shaped page. **Still on
-their own markup:** the dashboards (`05-page-dashboard.js`, `16-insights.js`),
-Admin (`08-page-admin.js`), the pipeline/board (`28-page-pipeline.js`), My Team
-(`42-page-myteam.js`), Assign Leads (`21-assign-leads.js`) and the orphaned
-Manager Users page. These are card- and board-shaped, not list-shaped, so each
-needs its own judgement rather than the same table treatment — which is why they
-were left rather than forced. They still look fine; they are simply not
-identical to the rest yet.
+**2. Finish the UI-kit rollout.** Every list-shaped page is converted. Still on
+their own markup: the dashboards (`05-page-dashboard.js`, `16-insights.js`),
+Admin (`08-page-admin.js`), the pipeline board (`28-page-pipeline.js`), My Team
+(`42-page-myteam.js`), Assign Leads (`21-assign-leads.js`), the orphaned Manager
+Users page. Card- and board-shaped, so each needs its own judgement rather than
+the same table treatment — which is why they were left, not forgotten.
 
-**2. The 2.7s "Opening…" on the Inbox.** Session 16 measured it and
-deliberately did not touch it: it is Render free-tier latency plus the
-Graph/Gmail round trip, not a rendering fault. The honest fixes are a warmer
-service, or showing the list row's preview text while the body loads.
-
-**3. Growth bets the owner has not been offered recently.** `CLAUDE.md` still
-flags **CSV import/export + a small public API** as the highest-leverage
-unstarted bet (buyers need to migrate in and integrate). Per-role permissions
-and a generalized audit trail are the other two that make PACE sellable rather
-than merely usable.
+**3. Growth bets not offered recently.** `CLAUDE.md` still flags **CSV
+import/export + a small public API** as the highest-leverage unstarted bet.
+Per-role permissions and a generalized audit trail are the other two that make
+PACE sellable rather than merely usable.
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 
-**The Gmail 7-day expiry.** On 2026-09-01 the owner said, in as many words:
-*"We will work on this but not now."* That is a decision, not an oversight.
-**Do not open a session by asking about it again, and do not treat it as
-blocking other work.** Raise it only if it causes a fresh, visible incident, or
+**The Gmail 7-day expiry.** On 2026-09-01 the owner said: *"We will work on this
+but not now."* That is a decision. **Do not open a session by asking about it,
+and do not treat it as blocking.** Raise it only on a fresh visible incident, or
 if the owner asks what is outstanding.
 
-What is parked, so it is not re-derived from scratch later (full evidence chain
-in the archive, Session 14 Part 7):
-
-- **Symptom:** a dead Gmail sign-in destroys queued emails. An auth failure
-  marks each email `failed` with no retry, one every ~90s, and the reason is
-  never persisted — `emails` has no error column, so `friendlySendError`'s
-  correct sentence went only to an in-memory cache during an unattended cron run
-  and died with the process. Eleven follow-ups were lost this way on 31 Aug and
-  were never delivered; they can still be re-queued.
-- **Root cause is Google-side:** the OAuth consent screen is in **"Testing"**
-  publishing status, where Google expires refresh tokens after exactly 7 days.
-  Connected 24 Aug 17:27 → died 31 Aug 17:27. **If `futeglobal.com` is on Google
-  Workspace, switching the app to "Internal" removes the 7-day limit and the
-  unverified warning, with no code at all.** That question is the one input
-  needed, and it is the owner's to answer when they choose to.
+- **Symptom:** a dead Gmail sign-in destroys queued emails — `failed` with no
+  retry, one every ~90s, reason never persisted (`emails` has no error column,
+  so `friendlySendError`'s correct sentence dies with the process). Eleven
+  follow-ups were lost this way on 31 Aug; they can still be re-queued.
+- **Root cause is Google-side:** the OAuth consent screen is in **"Testing"**,
+  where refresh tokens expire after exactly 7 days. **If `futeglobal.com` is on
+  Google Workspace, switching the app to "Internal" removes the limit with no
+  code at all.** That question is the owner's to answer when they choose to.
 - **Three code defects worth fixing whatever Google says:** release to `pending`
-  on an auth failure instead of `failed` (the thread-deferral path already does
-  this — copy it); stop a mailbox on the FIRST auth failure rather than burning
-  one email every 90s after the sign-in is known dead; and add the error column
-  (**migration 042**, still unclaimed) so the app can say out loud what went
-  wrong.
+  not `failed` on an auth failure (the thread-deferral path already does this);
+  stop a mailbox on the FIRST auth failure; add the error column (**migration
+  042**, still unclaimed).
 
-## The UI kit — read before building any screen
+## Rendering and the UI kit — read before touching any screen
 
-`public/ui.css` + `public/js/00-ui-kit.js`. Everything returns an HTML **string**,
-matching the render-to-string convention; no framework, no build step. The
-drawer, grouped-rail and hidden-panel rules are written out in `CLAUDE.md`
-(stack §Frontend) — this is the practical summary.
-
-- **Build with `UI.page({tabs, strip, toolbar, body})`**, not a bare
-  `<div class="page">`. Parts: `tabs`, `strip`, `toolbar`, `table`, `idCell`,
-  `pill`, `ring`, `toggle`, `check`, `kv`, `notice`, `feed`, `drawer`, `ic`.
-  **Never hand-roll another table** — eleven of those is how the app got here.
-- **Scoped by `body.ui-kit`**; it overrides only the shell and list/table/detail
-  styles, so `styles.css` still owns `.card`/`.btn`/`.bdg`/`.inp`/modals and an
-  unconverted page is unaffected.
-- **A drawer is an overlay**: `UI.registerOverlay(name, fn)`, drawn after
-  `#content`, and `scheduleRender()` skips a rebuild while one is open.
-- **A strip never fabricates a number.** Show `·` until real counts land; a `0`
-  is a claim, and it may be false.
-- **A strip or tab count measures the whole pool; the pager keeps the filtered
-  number.** Mixing them makes a filtered list feel broken.
+Both rulesets are written out in `CLAUDE.md` (stack §Frontend). Do not work from
+a paraphrase; the four that get broken most often are: a page registers with
+`UI.registerPage()` and paints via `paintPageContent()`, **never**
+`content.innerHTML`; anything that must survive a repaint (iframes, media,
+internal scroll) needs its own region; **a repaint that changes nothing must
+write nothing — not even the same class back**; and you build with
+`UI.page({tabs, strip, toolbar, body})` rather than hand-rolling a twelfth table.
+A strip never fabricates a number — show `·` until real counts land. Pinned by
+`test/screen-stability-smoke.mjs`.
 
 ## Owner actions outstanding
 
-0. ~~Is `futeglobal.com` on Google Workspace?~~ **Parked by the owner on
-   1 Sept — see "Parked by the owner" above. Do not re-raise as blocking.**
-1. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
+1. **Paste a free AI key** — console.groq.com → API Keys → Admin → Integrations
+   → Groq → Test → Save → "use this provider first". Nothing about the app
+   changes until this is done; every AI feature runs its rules version.
+2. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
    `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
-2. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
-   never met a live feed (sandbox blocks those hosts).
-3. **Set prices, decide on card payments** — `services/plans.js`, one line.
-   Both block nothing technically; plan limits enforce either way.
-4. **Turn on `SELF_SERVE_SIGNUP`** whenever the owner wants strangers able to
-   sign themselves up — purely an env var flip, not a release.
-
-## Plans and billing
-
-Tiers, limits and the four rules that must not be softened live in `CLAUDE.md`
-Growth bets §9, which is kept current — read it there rather than a stale copy
-here. The one-line summary: enforced on CREATE with **402**, never deletes
-anything, only the signed Stripe webhook may change a plan, and a failed usage
-count **allows**.
+3. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
+   never met a live feed (the sandbox blocks those hosts).
+4. **Set prices, decide on card payments** — `services/plans.js`, one line.
+5. **Turn on `SELF_SERVE_SIGNUP`** whenever strangers should be able to sign up.
 
 ## Traps that will bite you (learned the hard way)
 
-`CLAUDE.md` already carries the durable ones — `models/` for tenant tables, the
-six-place stage vocabulary, the free-tier instance budget, `renderStoredEmail`
-on every reader of `emails.body`, safe-methods-only retries, the deliberate
-`orgIdFor()` fallback, and `routes/recruiting/*` registration order. **Read it;
-these are the ones it does not cover.**
+`CLAUDE.md` carries the durable ones — `models/` for tenant tables, the six-place
+stage vocabulary, the free-tier instance budget, `renderStoredEmail` on every
+reader of `emails.body`, safe-methods-only retries, the deliberate `orgIdFor()`
+fallback, `routes/recruiting/*` registration order, and both AI blocks. **Read
+it; these are the ones it does not cover.**
 
-**Before moving ANY file** → `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
-(Session 8). Ten things break on a naive move and several fail *silently*.
+**Before moving ANY file** → archive § "DEPENDENCY MAP" (Session 8). Ten things
+break on a naive move and several fail *silently*.
 
 - **Any mailbox-selection path must check BOTH `microsoft_tokens` and
-  `gmail_tokens`, exclude `refresh_failed`, and filter `is_active`** — checking
-  one table silently made Gmail unselectable and reused dead tokens forever.
-- **A job whose sending mailbox goes inactive does not fail its pending emails
-  — it silently skips them forever.** Any path that deactivates, disconnects or
-  deletes a `user_emails` row must call `reassignJobsOffMailbox`
-  (`services/mailbox-reassign.js`) first, or leads strand with no visible error.
-- **A dead mailbox sign-in currently DESTROYS emails** — `failed` with no retry,
-  one every 90s, reason never persisted. Diagnosed, not fixed; see "Pick this up
-  first". Any send-path work should fix this rather than route around it.
-- **`emails.sent_at` defaults to `CURRENT_DATE`**, so an unsent draft already
-  carries a send date. Any "sent on X" report is counting drafts.
-- **Graph's `/move` returns a NEW message id** — the old one stops resolving the
-  instant the message lands. Gmail's id never changes. Take the id you're handed.
+  `gmail_tokens`, exclude `refresh_failed`, and filter `is_active`.**
+- **A job whose sending mailbox goes inactive silently skips its pending emails
+  forever** — any path that deactivates/disconnects/deletes a `user_emails` row
+  must call `reassignJobsOffMailbox` first.
+- **`emails.sent_at` defaults to `CURRENT_DATE`** — an unsent draft already
+  carries a send date, so "sent on X" reports count drafts.
+- **Graph's `/move` returns a NEW message id**; Gmail's never changes.
 - **Injectable clocks are not optional** in `conversation-intel.js`,
-  `next-action.js` and `lead-ingest.js`'s `ingestSource`. Every headline is a
-  claim about elapsed time; `lead-sourcing-smoke` failed for weeks on a *date*.
-- **The rail is GROUPED (Work / Records / Outreach / Insight)**, so nav order is
-  no longer a flat index. A new item joins a group; de-duplicate by id (an admin
-  who is also an RA lead used to get two "Insights" rows). Still pinned by
-  tests: Dashboard first, and a recruiter's "My Jobs" ahead of "All Jobs" and
-  "Candidates".
-- **A record detail is a drawer; a sandboxed mail body cannot be auto-sized;
-  a compose preview resolves `{{sender}}` from the selected mailbox.** All three
-  are written out in full in `CLAUDE.md` (stack §Frontend, Growth bets §3, and
-  the outbound-send-path rule). Do not "fix" any of them.
-- **An overlay's data must repaint the overlay, not `#content`.** A page's own
-  `paint()` rebuilds `#content` only, and a drawer is drawn *after* it — so a
-  fetch that lands while a drawer is open reaches state and never the screen.
+  `next-action.js`, and `lead-ingest.js`'s `ingestSource`.
+- **The rail is GROUPED**, so nav order is not a flat index; de-duplicate by id.
+- **An overlay's data must repaint the overlay, not `#content`** —
   `41-page-clients.js`'s `paintDetail()` is the pattern.
-- **When a claim about behaviour is load-bearing, test the claim.**
-- **Browser tests are never allowed to need a production bypass** — use
-  `test/helpers/enter-app.mjs`.
-- **A destructive DB action always needs, in this order:** check FK cascade
-  rules (`information_schema`; `NO ACTION` means clear referencing rows
-  yourself), verify scope with counts, take a snapshot, get explicit
-  confirmation, verify after.
+- **Browser tests never need a production bypass** — `test/helpers/enter-app.mjs`.
+- **When a claim about behaviour is load-bearing, test the claim** — and check
+  it fails with the bug reintroduced, or it may be pinning nothing.
+- **A destructive DB action needs, in order:** check FK cascade rules, verify
+  scope with counts, snapshot, explicit confirmation, verify after.
 
 ## Deliberately open, not forgotten
 
 - Cold-email templates and the resume letterhead still say "Fute Global" — the
   **customer's** identity, must become per-org config.
-- "Log In with your Organization" routes by domain; **not** full SAML yet.
+- "Log In with your Organization" routes by domain; **not** full SAML.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
-- **The card/board pages are not on the UI kit yet** — the dashboards, Admin,
-  the pipeline board, My Team, Assign Leads. Every list page is converted; see
-  "Pick this up first" §2 for why these were left.
+- The card/board pages are not on the UI kit yet (see "Pick this up first" §2).
 - Growth bets not started: per-role permissions, **CSV import/export + public
-  API** (still the one CLAUDE.md flags as highest-leverage next), generalized
-  audit trail, PWA polish.
+  API**, generalized audit trail, PWA polish.
 - In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker in the UI
   (the API supports it), no shared/delegated mailboxes, unread badge is a 60s
   cached poll not a live push.
-- **The 25 final follow-ups deleted on 31 Aug do not regenerate** (their
-  schedules were already complete). Deliberate, owner's instruction.
+- A per-call AI usage history (the meter is a daily counter, not an audit log).
 
 ## Working rules
 
-`npm test` (50 suites, judged by **exit code**) · `bash test/verify-frontend.sh`
-· build on the dev branch → test → screenshot/show → draft PR → merge only on an
-explicit "merge it" → apply a migration only on a fresh explicit go-ahead, right
-before merge, never on general feature agreement. **The owner does not read
-code**; show them the running app and plain English.
+`npm test` (**53 suites**, judged by **exit code**) ·
+`bash test/verify-frontend.sh` · build on the dev branch → test → screenshot/show
+→ draft PR → **merge only on an explicit "merge it"** → apply a migration only on
+a fresh explicit go-ahead, right before merge, never on general feature
+agreement. **The owner does not read code**; show them the running app and plain
+English.
 
 **Habits these sessions paid for:**
 
-- When a test breaks during a redesign, ask whether it pinned **behaviour** or
-  **markup** — and never relax a safety assertion (sandbox, blocked images, no
-  permanent delete, own mailboxes only) to make a redesign pass.
-- Check whether a failing test is failing on *live code* or on the *calendar*
-  before calling it a product bug — and correct yourself out loud if you got it
-  wrong.
+- Ask whether a broken test pinned **behaviour** or **markup** — and never relax
+  a safety assertion to make a redesign pass.
+- **Measure before theorising** when the owner reports something visual, and say
+  plainly when a piece of evidence shows nothing.
 - When a placeholder is left in stored data, find EVERY reader before declaring
-  it fixed. The first attempt at the sender fix taught exactly one screen and
-  left the token leaking into follow-ups a customer would have read.
-- When the owner says "make it look like this", the honest reading is usually
-  "give the app a structure it doesn't have". The structure is the deliverable;
-  the screenshots are the brief.
-- **When the owner reports something visual, measure it before theorising.**
-  Session 16's two clips were decoded frame by frame; one turned out to contain
-  no glitch at all, and the other pinned the fault to a single 1.4s window with
-  a specific trigger. Say plainly when a piece of evidence shows nothing.
-- A "rebuild everything" render is fine until the page holds something the DOM
-  cannot re-create for free. The app had grown four separate workarounds for
-  that (focus restore, scroll restore, `scheduleRender`'s modal guard, the job
-  board's manual caret restore) before the glitch made it a fifth.
+  it fixed.
+- **Answer a cost question with measured numbers**, not reassurance. The owner
+  asked what a token costs per email/lead/JD; the answer that was useful was a
+  table of real per-request figures, and the feature that came out of it was a
+  meter they can see.
+- **Re-run the suite against freshly merged `main` immediately before merging.**
+  Two clean merges have now broken production between them.
