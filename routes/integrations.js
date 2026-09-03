@@ -8,6 +8,7 @@
 // ============================================================================
 const express = require('express');
 const integrations = require('../config/integrations');
+const aiBudget = require('../services/ai-budget');
 const { verifyEmailAddress } = require('../email-verify');
 const httpClient = require('../http-client');
 
@@ -136,6 +137,48 @@ module.exports = (ctx) => {
       const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key');
       const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url');
       res.json(await testProvider(req.params.id, key, { base_url }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // What the org has spent on AI today, and the ceilings it is spending
+  // against. This is what makes a budget real to the person setting it: a cap
+  // nobody can see the other side of is a guess.
+  router.get('/admin/ai-budget', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      const [caps, spent] = await Promise.all([
+        aiBudget.getCaps(supabase), aiBudget.getSpend(supabase, req.orgId),
+      ]);
+      res.json({
+        caps, spent, day: aiBudget.dayKey(),
+        defaults: { tokens: aiBudget.DEFAULT_DAILY_TOKENS, calls: aiBudget.DEFAULT_DAILY_CALLS },
+        features: Object.entries(aiBudget.FEATURES).map(([id, f]) => ({
+          id, label: f.label, max_input_tokens: f.in, max_output_tokens: f.out, tier: f.tier,
+          spent_today: spent.by_feature[id] || 0,
+        })),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Change the daily ceilings. Blank clears the setting back to the default;
+  // 0 is a legitimate value meaning "no AI today", which is why it is not
+  // treated as blank.
+  router.post('/admin/ai-budget', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      const b = req.body || {};
+      const writes = [];
+      const set = (key, v) => {
+        if (v === undefined) return;
+        if (v === '' || v === null) { writes.push(supabase.from('app_settings').delete().eq('key', key)); return; }
+        const n = Number(v);
+        if (!isFinite(n) || n < 0) return;
+        writes.push(supabase.from('app_settings').upsert({ key, value: String(Math.floor(n)), updated_at: new Date() }, { onConflict: 'key' }));
+      };
+      set(aiBudget.CAP_TOKENS_KEY, b.tokens);
+      set(aiBudget.CAP_CALLS_KEY, b.calls);
+      await Promise.all(writes);
+      res.json({ caps: await aiBudget.getCaps(supabase) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

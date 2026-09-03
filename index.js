@@ -1055,7 +1055,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     const poolIndustries = Object.keys(pool_stats.by_industry || {}).filter(Boolean);
     const industryKeys = poolIndustries.length ? poolIndustries.reduce((o,k) => { o[k]='<pct>'; return o; }, {}) : {'Other':'<pct>'};
     const prompt = `You are a lead distribution engine for Fute Global LLC.\nPool: ${JSON.stringify(pool_stats)}\nManager: ${manager?.name}\nCapacity: ${capacity}\nInstructions: "${priority_text}"\nRespond ONLY with valid JSON:\n{"total_to_send":<number>,"by_freshness":{"New":<pct>,"Normal":<pct>,"Old":<pct>},"by_industry":${JSON.stringify(industryKeys)},"by_timezone":{"EST":<pct>,"CST":<pct>,"MST":<pct>,"PST":<pct>},"exclude_duplicates":<bool>,"summary":"<text>"}`;
-    const out = await aiProvider.complete(supabase, { prompt, maxTokens: 400 });
+    const out = await aiProvider.complete(supabase, { prompt, maxTokens: 400, feature: 'lead_ratio', orgId: req.orgId });
     if (!out) return res.json(buildAutoRatio(pool_stats, capacity));
     const ratio = JSON.parse(out.text.replace(/```json|```/g, '').trim());
     res.json(ratio);

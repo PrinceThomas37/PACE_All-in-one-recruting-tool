@@ -106,14 +106,14 @@ function parseResumeRules(text) {
 // `store` is the supabase client, needed only to look up which provider is
 // configured. Without it (or without a provider) this returns null and the
 // rules parser is the whole answer, exactly as before.
-async function parseResumeAI(text, store) {
+async function parseResumeAI(text, store, orgId) {
   if (!store) return null;
   try {
     const prompt = `Extract candidate fields from this resume. Reply with ONLY a JSON object (no markdown, no commentary) with these keys (omit any you cannot find): full_name, email, phone, linkedin_url, current_title, current_employer, city, state, country, experience_years (number), skills (comma-separated string, max 25), work_authorization, summary (2 sentences max).
 
 RESUME:
 ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
-    const completion = await aiProvider.complete(store, { prompt, maxTokens: 700 });
+    const completion = await aiProvider.complete(store, { prompt, maxTokens: 700, feature: 'resume_parse', orgId });
     if (!completion) return null;
     const raw = completion.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -132,10 +132,10 @@ ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
 }
 
 // ── entry point ─────────────────────────────────────────────────────────────
-async function parseResume(buffer, filename, store) {
+async function parseResume(buffer, filename, store, orgId) {
   const text = (await extractResumeText(buffer, filename)).replace(/\r/g, '').trim();
   if (!text || text.length < 40) throw new Error('Could not read any text from this file.');
-  const ai = await parseResumeAI(text, store);
+  const ai = await parseResumeAI(text, store, orgId);
   const rules = parseResumeRules(text);
   // AI wins where it answered; rules fill the gaps (and are the whole answer without a key)
   const fields = Object.assign({}, rules, ai || {});
