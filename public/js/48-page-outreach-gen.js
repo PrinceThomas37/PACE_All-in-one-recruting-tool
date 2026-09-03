@@ -214,7 +214,8 @@
     }
     return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-      '<div style="font-size:12.5px;flex:1;min-width:180px">Sends as <strong>'+esc(s.mailbox.email)+'</strong>'+
+      '<div style="font-size:12.5px;flex:1;min-width:180px">Sends as <strong>'+
+        esc((s.sender&&s.sender.name)||s.mailbox.email)+'</strong> &lt;'+esc(s.mailbox.email)+'&gt;'+
         (s.company_name?' · '+esc(s.company_name):'')+
         '<div style="font-size:11.5px;color:var(--text3)">'+
           (s.ai?'Drafted by the AI writer.':'Drafted by the built-in rules writer — no API key is configured, so this costs nothing.')+

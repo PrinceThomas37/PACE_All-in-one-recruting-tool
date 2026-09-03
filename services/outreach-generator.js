@@ -25,6 +25,13 @@
 
 const DEFAULT_COMPANY = 'our firm';
 
+/** "Berks Group" → "Berks Group's"; "Health Partners" → "Health Partners'". */
+function possessive(name) {
+  const n = String(name || '').trim();
+  if (!n) return '';
+  return /s$/i.test(n) ? n + "'" : n + "'s";
+}
+
 // ── Rule 1-15, given to the model verbatim. Kept as an array of lines so a
 // diff shows which rule changed rather than one reflowed paragraph.
 function buildSystemPrompt(companyName) {
@@ -114,101 +121,356 @@ function parseAiDraft(text) {
 }
 
 // ── Reading the posting ────────────────────────────────────────────────────
-// Job boards paste in with furniture around the actual posting. These are the
-// lines that are never content, dropped before anything else looks at the text.
-const CLUTTER = /^(quick apply|apply now|easy apply|continue|save|share|report job|sign in|back to (search|results)|show more|read more|see all jobs|job details|full[- ]time|part[- ]time|·|•|\|)\s*$|^(\d+(\.\d+)?\s*(out of|stars?|reviews?)|posted \d)\b/i;
+//
+// Everything below exists because a pasted job posting is not prose. It is a
+// job board's HTML flattened into text: headings glued onto the sentence that
+// follows them ("Required ExperienceSignificant experience supervising..."),
+// salary chips and "Posted 12 days ago" mixed in with the actual brief, and
+// often no title line at all because the person copied from below the heading.
+//
+// The first version of this file read the posting line by line and took the
+// first short line as the title. On a real Berks Construction posting that
+// produced the title "$110K" and found no skills at all. So the reading is now
+// done in four passes — unglue, de-clutter, split required from preferred, and
+// only then extract — and each pass is exported so a bad email can be traced
+// to the pass that misread it.
 
-function contentLines(jd) {
+// Job boards concatenate a heading onto the next sentence. The seam is a
+// lowercase run followed by a capital, and splitting on it is what makes
+// "OSHA 30 certificationProcore experience" readable as two requirements.
+// The lowercase run must be 3+ characters so real names survive: "McDonald"
+// and "DeWalt" are not two words.
+function normalizeText(jd) {
   return String(jd || '')
-    .split(/\r?\n/)
-    .map(l => l.replace(/\s+/g, ' ').trim())
-    .filter(l => l && !CLUTTER.test(l));
+    .replace(/\r/g, '')
+    .replace(/([a-z]{3,})\.([A-Z])/g, '$1.\n$2')
+    .replace(/([a-z]{3,}|[,;)])([A-Z])/g, '$1\n$2')
+    .replace(/[ \t]+/g, ' ');
 }
 
+// Furniture, not content: apply buttons, salary chips, star ratings, benefit
+// pills, posting age. Also the generic headings that a paste often starts with
+// — "Job description" is the single most common first line, and taking it as
+// the role title is exactly the mistake this list prevents.
+const CLUTTER = [
+  /^(quick apply|apply now|easy apply|apply|continue|save|share|report( job)?|sign in|back to (search|results)|show (all|more)|read more|see all jobs|be seen first|view in recruiter|message|follow|more)\b/i,
+  /^\$[\d,.]+\s*[-–—]?\s*\$?[\d,.]*\s*(\/\s*)?(yr|year|hr|hour|k)?\b/i,
+  /^\d+(\.\d+)?\s*(out of|star|review)/i,
+  /^posted\s+\d/i,
+  /^(full|part)[- ]time\b/i,
+  /^[·•|\-–—\s]*$/,
+  /^(medical|dental|vision)[,\s]/i,
+];
+const GENERIC_HEADING = /^(job\s*)?(description|details|summary|overview|posting|type|id|function|requirements?|responsibilities|qualifications|benefits|compensation|salary|location|about( us| the (role|company|job))?|who we are|why (join|work)|the (position|role|opportunity)|company description|what we.?re looking for|equal opportunity|core responsibilities)\b[:\s]*$/i;
+
+function contentLines(jd) {
+  return normalizeText(jd)
+    .split('\n')
+    .map(l => l.replace(/\s+/g, ' ').trim())
+    .filter(l => l && !CLUTTER.some(re => re.test(l)));
+}
+
+// Required vs preferred is not cosmetic — it is the difference between a real
+// gate and a nice-to-have. Reading "OSHA 30 certification" out of a Preferred
+// Qualifications block and telling the client their role is hard to fill
+// because of a certification requirement is confidently wrong, and the client
+// is the one person who knows it is wrong.
+const REQUIRED_MARK = /(required experience|requirements?|qualifications|what we.?re looking for|must have|minimum (qualifications|requirements))/i;
+// Anchored to the start of a line, because the bare word "preferred" occurs
+// inside requirements all the time — "10+ years ... is strongly preferred" was
+// cutting the required block off mid-sentence, which is how the email ended up
+// saying the bar was "10+ years ... experience is strongly".
+const PREFERRED_MARK = /^(preferred(\s+(qualifications|skills|experience|requirements))?|nice[- ]to[- ]have|bonus(\s+points)?|desired(\s+qualifications)?|pluses)\b/im;
+
+function sections(jd) {
+  const text = contentLines(jd).join('\n');
+  const req = text.search(REQUIRED_MARK);
+  const pref = text.search(PREFERRED_MARK);
+  
+  const required = req >= 0 ? text.slice(req, pref > req ? pref : undefined) : text;
+  const preferred = pref >= 0 ? text.slice(pref) : '';
+  return { all: text, required, preferred };
+}
+
+// ── The role title ─────────────────────────────────────────────────────────
+// Three ways in, most reliable first. A posting that names the role in a
+// sentence ("BCG is seeking an experienced Construction Superintendent to
+// lead...") is more trustworthy than any line-position guess, because the
+// person pasting often starts below the heading.
+const SEEKING = /\b(?:seeking|looking for|hiring|in search of|recruiting|to hire|need)\s+(?:an?\s+)?(?:experienced\s+|qualified\s+|seasoned\s+|talented\s+|motivated\s+|senior\s+|junior\s+|full[- ]time\s+|part[- ]time\s+)*([A-Z][A-Za-z0-9/&.'\- ]{2,45}?)\s+(?:to|who|that|for|with|in|at|responsible|,|\.|$)/;
 const TITLE_HINT = /^(job title|position|role|title)\s*[:\-]\s*(.+)$/i;
 
-/** Best guess at the role's name — used for the subject line and history. */
+function looksLikeTitle(line) {
+  const l = line.replace(/[:\s]+$/, '');
+  if (!l || l.length > 70) return false;
+  if (GENERIC_HEADING.test(l)) return false;
+  if (/[$@]|\d{3,}/.test(l)) return false;          // salary chips, phone numbers
+  if (/[.!?]$/.test(l)) return false;               // a sentence, not a heading
+  const words = l.split(/\s+/);
+  if (words.length < 1 || words.length > 8) return false;
+  return /^[A-Z]/.test(l) && /[a-z]/.test(l);
+}
+
 function extractRoleTitle(jd) {
-  const lines = contentLines(jd);
-  for (const l of lines.slice(0, 25)) {
-    const m = l.match(TITLE_HINT);
-    if (m && m[2].trim()) return m[2].trim().slice(0, 70);
+  const text = contentLines(jd).join('\n');
+  const m = text.match(SEEKING);
+  if (m && looksLikeTitle(m[1])) return m[1].trim().replace(/\s+/g, ' ');
+  for (const l of text.split('\n').slice(0, 30)) {
+    const h = l.match(TITLE_HINT);
+    if (h && looksLikeTitle(h[2])) return h[2].trim().slice(0, 70);
   }
-  // Otherwise the first short line that reads like a heading rather than prose.
-  for (const l of lines) {
-    if (l.length <= 70 && l.split(' ').length <= 9 && !/[.!?]$/.test(l) && /[a-z]/i.test(l)) {
-      return l.replace(/\s*[-–|].*$/, '').trim().slice(0, 70);
-    }
+  for (const l of text.split('\n')) {
+    if (looksLikeTitle(l)) return l.replace(/[:\s]+$/, '').slice(0, 70);
   }
   return '';
 }
 
-// Each signal is one honest reason a role sits open. `phrase` goes into the
-// email as the researched paragraph; `why` goes into the diagnosis. Order is
-// priority — the first match wins, so the most specific reasons sit first.
+// ── What the role actually asks for ────────────────────────────────────────
+// Extraction from the posting's OWN words, not a lookup against a dictionary
+// of skills someone thought of in advance. A fixed dictionary is why the first
+// version found nothing in a construction posting: it had been written while
+// thinking about accounting and software roles.
+const TOO_GENERIC = /^(microsoft |ms )?(outlook|word|excel|office|powerpoint|google|windows|email|computer|internet|the|this|that|a|an|our|your|their|work|working|job|position|role|team|company|business|customer|client|significant|strong|extensive|demonstrated|relevant|prior|previous|proven|required|preferred|minimum|desired|excellent|solid|hands|ability|years?|experience|qualifications?|responsibilities)s?\b/i;
+const CERT_NEAR = /([A-Z][A-Za-z0-9]*(?:[ \t]+[A-Z0-9][A-Za-z0-9]*){0,2})[ \t]+(?:certification|certificate|certified|licen[cs]e[d]?)\b/g;
+const TOOL_NEAR = /(?:^|[ \t])([A-Z][A-Za-z0-9.+#]{2,20}(?:[ \t]+[A-Z][A-Za-z0-9.+#]{2,20})?)[ \t]+experience\b/gm;
+// The connector is captured, not discarded: "experience supervising X" and
+// "experience with X" have to come back out of the email grammatical, and
+// which one it was is the only way to know.
+const EXP_PHRASE = /\bexperience\s+(with|in|supervising|coordinating|leading|managing|running|reading|performing)\s+([^.;:\n]{2,80})/gi;
+const YEARS_PHRASE = /(\d{1,2}\s*\+?\s*years?[^.;:\n]{0,90})/i;
+
+// "10+ years of commercial construction supervision experience is strongly
+// preferred" — the trailing verdict is the posting's grammar, not part of the
+// bar, and it has to come off BEFORE the phrase is trimmed to length or the
+// trim lands mid-verdict ("...experience is strong").
+function cleanYears(t) {
+  return String(t || '')
+    .replace(/\s+(is|are)\s+(strongly\s+|highly\s+)?(preferred|required|desired|a plus|necessary|essential)\b.*$/i, '')
+    // and the same verdict when the capture window already clipped it
+    .replace(/\s+(is|are)\s+\w*$/i, '');
+}
+
+const TAIL_STOP = /\b(a|an|the|of|in|on|at|to|for|and|or|with|from|by|as|is|are|that|which|their|our|your)$/i;
+
+function tidyPhrase(p, opts) {
+  const maxWords = (opts && opts.maxWords) || 7;
+  let out = String(p || '').trim()
+    .replace(/^(a|an|the|of|in|with|and|or)\s+/i, '')
+    .replace(/^(active|current|valid|applicable|appropriate|unrestricted)\s+/i, '')
+    .replace(/\s*\band\/or\b.*$/i, '')
+    .replace(/,?\s*\band other\b.*$/i, '')
+    .replace(/^((?:[^,]*,){2}[^,]*),.*$/, '$1')
+    .replace(/[,;:.\s]+$/, '')
+    .replace(/\s+/g, ' ');
+  let words = out.split(' ');
+  if (words.length > maxWords) words = words.slice(0, maxWords);
+  // Truncating on a word count regularly landed on "...experience in an", which
+  // reads as a sentence that was cut off — because it was.
+  while (words.length > 2 && TAIL_STOP.test(words[words.length - 1])) words.pop();
+  return words.join(' ');
+}
+
+/**
+ * Short phrases naming what this role needs, in the posting's own language.
+ * Ordered so the ones a recruiter would actually say out loud come first:
+ * the domain experience, then the named tools and certifications.
+ */
+function extractRequirements(jd) {
+  const s = sections(jd);
+  const out = [];
+  const add = (p, prep) => {
+    const t = tidyPhrase(p);
+    if (!t || t.length < 3 || TOO_GENERIC.test(t)) return;
+    if (out.some(e => e.text.toLowerCase() === t.toLowerCase())) return;
+    // The article is stripped before the generic-phrase check (so "the ability
+    // to..." is still rejected) but put back for the sentence, because
+    // "experience in adult intensive care unit" is not English.
+    const art = (String(p).trim().match(/^(an?)\s+/i) || [])[1];
+    const withArt = art && t.split(' ').length >= 3 ? art.toLowerCase() + ' ' + t : t;
+    out.push({ prep: prep || 'in', text: t, clause: (prep || 'in') + ' ' + withArt });
+  };
+
+  let m;
+  const domain = s.required || s.all;
+  const expRe = new RegExp(EXP_PHRASE.source, EXP_PHRASE.flags);
+  while ((m = expRe.exec(domain)) && out.length < 4) {
+    const prep = /^(with|in)$/i.test(m[1]) ? 'in' : m[1].toLowerCase();
+    add(m[2], prep);
+  }
+
+  // Named tools and certifications read as researched detail in an email —
+  // "Procore and OSHA 30" tells a client you read past the job title.
+  const named = [];
+  const scope = (s.required + '\n' + s.preferred) || s.all;
+  const certRe = new RegExp(CERT_NEAR.source, CERT_NEAR.flags);
+  while ((m = certRe.exec(scope))) { const t = tidyPhrase(m[1]); if (t && !TOO_GENERIC.test(t)) named.push(t); }
+  // A product name is a word the posting never uses in lower case. "Procore
+  // experience" is a tool; "Commercial retail construction experience" is not,
+  // and no dictionary of tool names would have known the difference for every
+  // industry we sell into.
+  const lowered = new Set((scope.match(/\b[a-z][a-z0-9.+#]{2,}\b/g) || []));
+  const toolRe = new RegExp(TOOL_NEAR.source, TOOL_NEAR.flags);
+  while ((m = toolRe.exec(scope))) {
+    const t = tidyPhrase(m[1]);
+    if (!t || TOO_GENERIC.test(t)) continue;
+    if (t.split(' ').some(w => lowered.has(w.toLowerCase()))) continue;
+    named.push(t);
+  }
+
+  return { phrases: out.slice(0, 3), named: [...new Set(named)].slice(0, 3) };
+}
+
+// Kept for callers that only want the flat list (and for the older tests).
+function extractSkills(jd) {
+  const r = extractRequirements(jd);
+  return [...r.phrases.map(p => p.text), ...r.named].slice(0, 3);
+}
+
+// ── Why is this role hard to fill? ─────────────────────────────────────────
+// Each signal must carry EVIDENCE from the posting, because the diagnosis is
+// shown to a client who knows their own job better than we do. A signal that
+// only matches inside the Preferred block is not a gate and is not used.
 const SIGNALS = [
-  { re: /\b(security clearance|top secret|ts\/sci|secret clearance|public trust)\b/i,
-    phrase: (m) => 'the clearance requirement narrows the pool before skills are even on the table',
+  { id: 'clearance', re: /\b(security clearance|top secret|ts\/sci|secret clearance|public trust)\b/i,
+    phrase: () => 'the clearance requirement narrows the pool before skills are even on the table',
     why: 'A clearance requirement is the hardest filter in the posting — most qualified people are screened out by it, not by skill.' },
-  { re: /\b(licen[cs]ed?|certifi(ed|cation)|\bP\.?E\.?\b|CPA|CDL|PMP|RN\b|LPN\b|OSHA|journeyman|red seal)\b/i,
-    phrase: (m) => 'the licence and certification requirements cut the candidate pool down sharply',
+  { id: 'seniority', re: YEARS_PHRASE, requiredOnly: true,
+    phrase: (m) => 'the bar is ' + tidyPhrase(cleanYears(m[1]), { maxWords: 11 }) + ', which is a small and mostly-employed group',
+    why: (m) => 'The experience bar — ' + tidyPhrase(cleanYears(m[1]), { maxWords: 11 }) + ' — is the real filter here; most applicants are screened out on it before anything else.' },
+  { id: 'licence', re: /\b(licen[cs]ed?|certifi(ed|cation)|\bP\.?E\.?\b|CPA|CDL|PMP|RN\b|LPN\b|journeyman|red seal)\b/i,
+    requiredOnly: true,
+    phrase: () => 'the licence and certification requirements cut the pool down sharply',
     why: 'The posting gates on a licence or certification, which is a much smaller pool than the job title suggests.' },
-  { re: /\b(1[0-9]|[7-9])\+?\s*(\+)?\s*years?\b/i,
-    phrase: (m) => 'the experience bar in the posting is set high for this market',
-    why: 'The years-of-experience requirement is high enough that most applicants are filtered out on the first pass.' },
-  { re: /\b(bilingual|spanish|mandarin|french)[- ]?(speaking|fluen)/i,
+  { id: 'language', re: /\b(bilingual|spanish|mandarin|french|german)[- ]?(speaking|fluen)/i,
     phrase: () => 'the language requirement on top of the technical side is an unusual combination',
     why: 'A language requirement stacked on the technical requirements is a genuinely rare combination.' },
-  { re: /\b(night shift|graveyard|rotating shift|weekend|on[- ]call|24\/7)\b/i,
+  { id: 'shift', re: /\b(night shift|graveyard|rotating shift|weekends?|on[- ]call|24\/7)\b/i,
     phrase: () => 'the shift pattern is what usually costs this kind of role its applicants',
     why: 'The schedule, not the skills, is what typically loses candidates on this type of role.' },
-  { re: /\b(travel|relocat)\w*\s*(up to\s*)?\d{0,3}%?/i,
-    phrase: () => 'the travel expectation tends to thin out otherwise qualified candidates',
-    why: 'Travel or relocation expectations usually cost a posting most of its otherwise qualified applicants.' },
-  { re: /\b(on[- ]?site|in[- ]?office|in person)\b/i,
+  { id: 'travel', re: /\b(travel to assigned|willingness to travel|travel is required|required to travel|relocat\w+)\b/i,
+    phrase: () => 'the travel that comes with the project assignments thins the field further',
+    why: 'Travel expectations usually cost a posting most of its otherwise qualified applicants.' },
+  { id: 'onsite', re: /\b(on[- ]?site|in[- ]?office|in person)\b/i,
     phrase: () => 'a fully on-site role competes against a lot of remote offers for the same skills',
     why: 'On-site work for skills that are widely hired remotely is a competitive disadvantage in the market.' },
-  { re: /\b(wear (many|multiple) hats|both .* and|in addition to|as well as)\b/i,
+  { id: 'span', re: /\b(wear (many|multiple) hats|both .{3,40} and|in addition to)\b/i,
     phrase: () => 'the role spans two functions that are usually two separate hires',
-    why: 'The posting combines responsibilities that are normally split across two roles, so single candidates rarely match all of it.' }
+    why: 'The posting combines responsibilities that are normally split across two roles, so single candidates rarely match all of it.' },
 ];
 
-/** Which real constraint is making this hard to fill? */
+// A range this wide is a client telling you they do not know what the market
+// costs — which is a recruiter's opening, not a candidate problem. Worth
+// saying out loud, but never as the sole diagnosis.
+const WIDE_RANGE = /\$\s?(\d{2,3})[,.]?\d{0,3}\s*[-–—]\s*\$?\s?(\d{2,3})[,.]?\d{0,3}/;
+
+const DRIVERS_LICENCE = /\bvalid\s+driver'?s?\s+licen[cs]e\b/gi;
+
+// Evidence is quoted back to a client who knows the job better than we do, so
+// it has to be a readable fragment of their posting, not the one word that
+// happened to match.
+function evidenceAround(hay, match) {
+  const idx = hay.indexOf(match);
+  if (idx < 0) return match.trim().slice(0, 90);
+  // Centre the quote on the match. Anchoring to the start of the line put the
+  // wrong sentence in front of it on postings that run several requirements
+  // together, which reads as if we quoted the wrong thing.
+  const lineStart = Math.max(0, hay.lastIndexOf('\n', idx) + 1);
+  const sentStart = Math.max(lineStart, hay.lastIndexOf('. ', idx) + 1);
+  let end = hay.indexOf('\n', idx + match.length);
+  if (end < 0) end = hay.length;
+  const dot = hay.indexOf('. ', idx + match.length);
+  if (dot >= 0 && dot < end) end = dot + 1;
+  return hay.slice(sentStart, Math.min(end, sentStart + 140)).replace(/\s+/g, ' ').trim();
+}
+
 function diagnoseSignal(jd, notes) {
-  const hay = String(jd || '') + '\n' + String(notes || '');
-  for (const s of SIGNALS) {
-    const m = hay.match(s.re);
-    if (m) return { phrase: s.phrase(m), why: s.why };
+  const s = sections(jd);
+  const extra = String(notes || '');
+  for (const sig of SIGNALS) {
+    let hay = sig.requiredOnly ? (s.required + '\n' + extra) : (s.all + '\n' + extra);
+    if (sig.id === 'licence') hay = hay.replace(DRIVERS_LICENCE, '');
+    const m = hay.match(sig.re);
+    if (!m) continue;
+    return {
+      id: sig.id,
+      phrase: typeof sig.phrase === 'function' ? sig.phrase(m) : sig.phrase,
+      why: typeof sig.why === 'function' ? sig.why(m) : sig.why,
+      evidence: evidenceAround(hay, m[0] || ''),
+    };
   }
   return null;
 }
 
-/** Skills that are actually in the posting — never invented. */
-const SKILL_WORDS = ['payroll','accounts payable','accounts receivable','general ledger','month-end close',
-  'QuickBooks','Sage','SAP','Workday','NetSuite','Excel','estimating','project management','scheduling',
-  'blueprint','AutoCAD','Revit','welding','fabrication','maintenance','quality control','safety',
-  'HR','recruiting','benefits','onboarding','compliance','collections','job costing','reconciliation',
-  'Java','Python','.NET','React','SQL','AWS','Azure','Kubernetes','DevOps','data engineering','nursing'];
-
-function extractSkills(jd) {
-  const hay = String(jd || '');
-  const found = [];
-  for (const s of SKILL_WORDS) {
-    const re = new RegExp('(^|[^a-z])' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z]|$)', 'i');
-    if (re.test(hay) && found.indexOf(s) < 0) found.push(s);
-    if (found.length === 3) break;
-  }
-  return found;
+// ── Who are we writing to? ─────────────────────────────────────────────────
+// The same posting goes to a Controller, a VP and an HR coordinator very
+// differently. This is the whole point of the tool: it is one email to one
+// person about one job, not a mailshot.
+const AUDIENCES = [
+  { kind: 'finance', re: /\b(controller|cfo|chief financial|finance|accounting|treasur|bookkeep)\b/i },
+  { kind: 'hr',      re: /\b(hr\b|human resources|talent|recruit|people (ops|operations)|staffing)\b/i },
+  { kind: 'exec',    re: /\b(ceo|coo|owner|president|principal|partner|founder|vice president|\bvp\b|svp|evp|director|managing)\b/i },
+  { kind: 'manager', re: /\b(manager|superintendent|supervisor|foreman|lead|head of|chief)\b/i },
+];
+function audienceOf(title) {
+  const t = String(title || '');
+  for (const a of AUDIENCES) if (a.re.test(t)) return a.kind;
+  return 'unknown';
 }
 
-const FINANCE_TITLE = /\b(controller|cfo|finance|accounting|treasur|owner|president|principal)\b/i;
+// Career-history words worth naming back to someone. The value is not that we
+// know their CV — it is that it explains why this email went to them and not
+// to the careers form.
+const TRACK = [
+  [/\bestimat(or|ing)\b/i, 'estimating'],
+  [/\bpre[- ]?construction\b/i, 'pre-construction'],
+  [/\bproject (manager|management)\b/i, 'project management'],
+  [/\b(superintendent|foreman|field)\b/i, 'the field'],
+  [/\b(operations|ops)\b/i, 'operations'],
+  [/\b(recruit\w*|talent)\b/i, 'recruiting'],
+  [/\b(account\w*|controller|audit\w*)\b/i, 'accounting'],
+  [/\bengineer\w*\b/i, 'engineering'],
+  [/\b(sales|business development)\b/i, 'sales'],
+];
 
-/** The ONE detail from the notes we are allowed to use (rule 5). */
-function oneNoteDetail(notes) {
-  const n = txt(notes);
+/**
+ * The ONE detail from the notes (rule 5) — and it has to be a FACT, not the
+ * person's own name. The first version split the notes on the first sentence
+ * boundary, so a pasted LinkedIn profile produced the email sentence "Ed Jones,
+ * which is why I am writing to you rather than through the posting." That is
+ * worse than saying nothing.
+ */
+function pickNoteDetail(notes, opts) {
+  const n = String(notes || '').trim();
   if (!n) return '';
-  const first = n.split(/(?<=[.!?])\s+|\n/)[0] || n;
-  return first.trim().replace(/[.\s]+$/, '').slice(0, 140);
+  const o = opts || {};
+  const name = String(o.contactName || '').trim();
+
+  const mutual = n.match(/\bmutual (?:connection|friend|contact|acquaintance)\s+([A-Z][a-z]+)/i);
+  if (mutual) return 'we have ' + mutual[1] + ' in common';
+
+  // Prior roles inside the same notes, minus whatever their title is now — the
+  // interesting part is where they came FROM.
+  const current = String(o.contactTitle || '');
+  const track = [];
+  for (const [re, label] of TRACK) {
+    if (re.test(n) && !re.test(current) && track.indexOf(label) < 0) track.push(label);
+    if (track.length === 2) break;
+  }
+  if (track.length) return 'you came up through ' + joinList(track);
+
+  const repost = n.match(/re-?posted(?:\s+after\s+(\d+)\s+days?)?/i);
+  if (repost) return repost[1] ? 'the role has been re-posted after ' + repost[1] + ' days' : 'the role has been re-posted';
+
+  const tenure = n.match(/\b(\d{1,2})\s*(?:yrs?|years?)\b/);
+  if (tenure && o.company) return 'you have been at ' + o.company + ' for ' + tenure[1] + ' years';
+
+  // Nothing structured found. Fall back to the first real sentence, but never
+  // to something that is only the person's name or title.
+  const first = (n.split(/(?<=[.!?])\s+|\n/)[0] || '').trim().replace(/[.\s]+$/, '');
+  if (!first || first.length < 12) return '';
+  if (name && first.toLowerCase().replace(/[^a-z]/g, '') === name.toLowerCase().replace(/[^a-z]/g, '')) return '';
+  if (current && first.toLowerCase().includes(current.toLowerCase()) && first.length < current.length + 12) return '';
+  return first.slice(0, 120);
 }
 
 function joinList(items) {
@@ -218,14 +480,28 @@ function joinList(items) {
   return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
 }
 
+/** "Construction Superintendent" → "Construction Superintendents". */
+function pluralRole(title) {
+  const t = String(title || '').trim().replace(/\s*[-–—(,/].*$/, '').trim();
+  if (!t) return 'people';
+  if (/s$/i.test(t)) return t;
+  if (/y$/i.test(t)) return t.slice(0, -1) + 'ies';
+  if (/(ch|sh|x|z)$/i.test(t)) return t + 'es';
+  return t + 's';
+}
+
 function wordCount(s) { return String(s || '').trim().split(/\s+/).filter(Boolean).length; }
 
 /**
  * The keyless engine. Writes the email from a sentence plan rather than a
- * fill-in-the-blank template: which sentences appear, and in which order, is
+ * fill-in-the-blank template: which sentences appear, and in what order, is
  * decided by the same rules the model is given — the no-agencies short form,
- * the follow-up short form, and finance-first fee placement all change the
- * shape of the message, not just a word inside it.
+ * the follow-up short form, finance-first fee placement, and now the reader's
+ * role and their own background.
+ *
+ * The sender identity comes in from the caller and is the MAILBOX's, not the
+ * logged-in user's. A draft signed by one person and sent from another's
+ * address is the exact failure that cost 152 cold emails in Session 14.
  */
 function rulesDraft(input, options) {
   const i = input || {};
@@ -233,14 +509,13 @@ function rulesDraft(input, options) {
   const sender = i.sender || {};
   const senderName = txt(sender.name) || 'me';
   const senderTitle = txt(sender.title);
-  const first = txt(i.contact_first_name) || 'there';
+  const first = firstNameOf(i.contact_first_name);
   const company = txt(i.company);
   const role = extractRoleTitle(i.job_description);
   const roleLabel = role || 'the role you have open';
   const loc = txt(i.location);
-  // Two newlines, not one: the sign-off is its own block, and a "Best regards,"
-  // glued to the last sentence is the tell that an email was assembled rather
-  // than written.
+  // Two newlines: the sign-off is its own block, and a "Best regards," glued to
+  // the last sentence is the tell that an email was assembled, not written.
   const signOff = '\n\n' + ['Best regards,', senderName, [senderTitle, co].filter(Boolean).join(', ')]
     .filter(Boolean).join('\n');
 
@@ -249,7 +524,7 @@ function rulesDraft(input, options) {
     const body = [
       'Hi ' + first + ',',
       '',
-      'This is ' + senderName + ' at ' + co + ', following up on ' + roleLabel +
+      'This is ' + senderName + ' at ' + co + ', following up on ' + (role ? 'the ' + role + ' role' : 'the role') +
         (loc ? ' in ' + loc : '') + '. Is it still open?',
       '',
       "If it's filled, or you'd rather I stop, say so and I'll close the file. " +
@@ -264,9 +539,11 @@ function rulesDraft(input, options) {
   }
 
   const signal = diagnoseSignal(i.job_description, i.notes);
-  const skills = extractSkills(i.job_description);
-  const detail = oneNoteDetail(i.notes);
-  const financeFirst = FINANCE_TITLE.test(txt(i.contact_title));
+  const reqs = extractRequirements(i.job_description);
+  const audience = audienceOf(i.contact_title);
+  const detail = pickNoteDetail(i.notes, {
+    contactName: i.contact_first_name, contactTitle: i.contact_title, company
+  });
   const feeLine = 'There is no charge for reviewing resumes. We only charge a fee on a successful placement.';
   const cta = 'Would it be worth sending you a couple of resumes to look at?';
 
@@ -276,7 +553,7 @@ function rulesDraft(input, options) {
     const body = [
       'Hi ' + first + ',',
       '',
-      'This is ' + senderName + ' at ' + co + '. I saw the note on your ' + roleLabel +
+      'This is ' + senderName + ' at ' + co + '. I saw the note on the ' + (role || 'job') +
         ' posting about placement inquiries, so I will keep this to one message and leave it with you.',
       '',
       (signal ? 'Reading the posting, ' + signal.phrase + '. ' : '') +
@@ -290,59 +567,86 @@ function rulesDraft(input, options) {
     };
   }
 
-  // ── Standard first outreach (rules 1, 2, 5, 7-10).
-  // The role has already been named in the opening line when we know the
-  // company, so naming it again one sentence later is the repetition that makes
-  // a generated email read as generated.
-  const namedAlready = !!company;
-  const subjectPhrase = namedAlready
-    ? 'the posting'
-    : 'the posting for ' + roleLabel + (loc ? ' in ' + loc : '');
-  const observation = signal
-    ? 'I read through ' + subjectPhrase + ', and ' + signal.phrase + '.'
-    : 'I read through ' + subjectPhrase + ', and it is a narrower brief than the title suggests.';
-  const skillLine = skills.length
-    ? ' We have people with ' + joinList(skills) + ' experience who are open to a direct hire and have not been shown to you yet.'
-    : ' We have people who look like a fit and are open to a direct hire.';
-  // Rule 5: ONE detail from the notes, and it sits in the opening where a real
-  // person would put it — not bolted on after the ask, where it reads as a
-  // postscript someone remembered to add.
-  const detailLine = detail
-    ? ' ' + detail.charAt(0).toUpperCase() + detail.slice(1) + ', which is why I am writing to you rather than through the posting.'
-    : '';
+  // ── Sentence 1: who this is and which posting. Rule 1 — identity first.
+  const opening = 'This is ' + senderName + ' at ' + co + '. I came across ' +
+    (company ? possessive(company) + ' ' : 'the ') + roleLabel + ' opening' + (loc ? ' in ' + loc : '') + '.';
 
-  const paras = ['Hi ' + first + ',', '',
-    'This is ' + senderName + ' at ' + co + '.' +
-      (company ? ' I came across ' + company + "'s opening for " + roleLabel +
-        (loc ? ' in ' + loc : '') + '.' : '') + detailLine];
-  if (financeFirst) {
-    // Rule 9: for a finance-first reader, cost is the real objection — it goes
+  // ── Sentence 2: why THIS person, not the careers form. Factual about what we
+  // did, never a guess about how they feel about it (rule 5).
+  const REACH = {
+    exec: 'I sent this to you rather than through the careers form because a hire like this usually gets decided at your level, not on a job board.',
+    manager: "I sent this to you rather than through the careers form because you're the one carrying the work while the seat is open.",
+    finance: 'I sent this to you rather than through the careers form because the cost of the hire is the part that usually needs answering first.',
+    hr: '',
+    unknown: ''
+  };
+  const reach = detail
+    ? 'I sent this to you rather than through the careers form — ' + detail + '.'
+    : (REACH[audience] || '');
+
+  // ── The researched paragraph (rule 2). This is the point of the email, so it
+  // quotes what the posting actually asks for rather than adjectives.
+  const observation = signal
+    ? 'Reading the posting, ' + signal.phrase + '.'
+    : 'Reading the posting, it is a narrower brief than the title suggests.';
+  // What we can actually offer, in the posting's own words. Naming the tools
+  // and certifications it asks for is the cheapest possible proof that a human
+  // read past the job title.
+  const who = role ? pluralRole(role) : 'people';
+  const supplyBits = [];
+  if (reqs.phrases.length) supplyBits.push('with experience ' + reqs.phrases[0].clause);
+  if (reqs.named.length) supplyBits.push((supplyBits.length ? 'plus ' : 'with ') + joinList(reqs.named) + ' behind them');
+  const supply = supplyBits.length
+    ? 'We have ' + who + ' ' + supplyBits.join(', ') + ', open to a direct hire and not yet in front of you.'
+    : 'We have ' + who + ' who match that brief, open to a direct hire and not yet in front of you.';
+
+  const paras = ['Hi ' + first + ',', '', [opening, reach].filter(Boolean).join(' ')];
+  if (audience === 'finance') {
+    // Rule 9: for a finance-first reader, cost is the real objection, so it goes
     // ahead of the ask instead of after it.
-    paras.push('', observation + skillLine, '', feeLine, '', cta);
+    paras.push('', observation + ' ' + supply, '', feeLine, '', cta);
   } else {
-    paras.push('', observation + skillLine, '', cta, '', feeLine);
+    paras.push('', observation + ' ' + supply, '', cta, '', feeLine);
   }
   let body = paras.join('\n') + signOff;
 
-  // Rule 7 is a length rule, so it is checked rather than hoped for. The note
-  // detail is the first thing dropped when the email runs long — it is the one
-  // sentence that is nice to have rather than load-bearing.
-  if (wordCount(body) > 165 && detailLine) {
-    paras[2] = paras[2].replace(detailLine, '');
+  // Rule 7 is a length rule, so it is checked rather than hoped for. The
+  // "why you" sentence is the first thing dropped when the email runs long —
+  // it is the one that is nice to have rather than load-bearing.
+  if (wordCount(body) > 170 && reach) {
+    paras[2] = opening;
     body = paras.join('\n') + signOff;
   }
 
+  const diagnosisBits = [
+    signal ? signal.why : 'No single hard constraint stood out in the posting, so this leads on the specifics of the brief itself.'
+  ];
+  if (signal && signal.evidence) diagnosisBits.push('Taken from the posting’s own wording: “' + signal.evidence + '”.');
+  if (audience === 'finance') diagnosisBits.push('The contact reads as finance-first, so the fee framing sits ahead of the ask.');
+  else if (audience === 'exec') diagnosisBits.push('The contact is senior enough to decide, so this is addressed to them as the decision-maker rather than as a screener.');
+  if (WIDE_RANGE.test(String(i.job_description || ''))) {
+    diagnosisBits.push('The salary range in the posting is unusually wide, which usually means the market rate is still an open question — useful leverage on a follow-up.');
+  }
+
   return {
-    subject: (role ? role : 'Your opening') + (loc ? ' in ' + loc : '') + ' — candidates ready to review',
-    diagnosis: (signal ? signal.why : 'No single hard constraint stood out in the posting, so this leads on the specifics of the brief itself.') +
-      (financeFirst ? ' The contact reads as finance-first, so the fee framing sits ahead of the ask.' : ''),
+    subject: (role || 'Your opening') + (loc ? ' in ' + loc : '') + ' — candidates ready to review',
+    diagnosis: diagnosisBits.join(' '),
     email: body,
     mode: 'rules'
   };
 }
 
+/** "Ed Jones" → "Ed". A full name in a greeting reads like a mail merge. */
+function firstNameOf(name) {
+  const n = txt(name);
+  if (!n) return 'there';
+  return n.split(/\s+/)[0];
+}
+
 module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
-  rulesDraft, extractRoleTitle, extractSkills, diagnoseSignal, contentLines, wordCount
+  rulesDraft, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
+  contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
+  firstNameOf, wordCount
 };

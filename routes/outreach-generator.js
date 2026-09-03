@@ -54,14 +54,29 @@ module.exports = (ctx) => {
     } catch (_) { return gen.DEFAULT_COMPANY; }
   }
 
-  // The caller's job title. Not on the JWT (claims carry id/email/roles/name
-  // only), so it is read from `users` — a missing one is an empty string, never
-  // a guess.
-  async function senderTitle(req) {
+  const txtOf = (v) => String(v == null ? '' : v).trim();
+
+  // ── WHO THE EMAIL IS FROM ────────────────────────────────────────────────
+  // The name in the sign-off comes from the MAILBOX THAT WILL SEND, not from
+  // the logged-in session. This is the Session 14 rule and it is not a detail:
+  // a draft signed "BD Lead 1" going out over prince.thomas@futeglobal.com is
+  // the same failure that put "I'm Jennifer Thomas" over Prince Thomas's From
+  // line on 152 cold emails. The mailbox is the identity; the session is just
+  // whoever is typing.
+  //
+  // Falling back to the session name is only for the case where the mailbox has
+  // no display name of its own — never a preference for the session.
+  async function senderIdentity(req, mailbox) {
+    let title = '';
     try {
       const { data } = await supabase.from('users').select('designation').eq('id', req.user.id).maybeSingle();
-      return (data && data.designation) || '';
-    } catch (_) { return ''; }
+      title = (data && data.designation) || '';
+    } catch (_) { /* a missing title is an empty string, never a guess */ }
+    return {
+      name: (mailbox && txtOf(mailbox.display_name)) || txtOf(req.user.name) || '',
+      email: (mailbox && mailbox.email_address) || req.user.email || '',
+      title,
+    };
   }
 
   // Everything the page needs to say "this will send as ...", including the
@@ -69,11 +84,11 @@ module.exports = (ctx) => {
   // instead of letting someone write an email they cannot send).
   router.get('/outreach/sender', auth, async (req, res) => {
     try {
-      const [mailbox, companyName, title] = await Promise.all([
+      const [mailbox, companyName] = await Promise.all([
         recruiterSendingMailbox(req.user.id),
-        orgCompanyName(req),
-        senderTitle(req)
+        orgCompanyName(req)
       ]);
+      const identity = await senderIdentity(req, mailbox);
       res.json({
         company_name: companyName,
         ai: aiConfigured(),
@@ -83,7 +98,7 @@ module.exports = (ctx) => {
           display_name: mailbox.display_name || null,
           platform: mailbox.platform || 'Microsoft'
         } : null,
-        sender: { name: req.user.name || '', title }
+        sender: identity
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -94,20 +109,27 @@ module.exports = (ctx) => {
       const check = gen.validateInput(input);
       if (!check.ok) return res.status(400).json({ error: 'Fill in: ' + check.missing.join(', ') + '.' });
 
-      const [companyName, defaultTitle] = await Promise.all([orgCompanyName(req), senderTitle(req)]);
-      // The sender identity is the caller's, never whatever the page posted —
-      // the same rule the send path follows.
+      // Resolve the mailbox BEFORE drafting: the draft has to be signed by
+      // whoever is going to send it, and the page never gets to say who that is.
+      const [companyName, mailbox] = await Promise.all([
+        orgCompanyName(req), recruiterSendingMailbox(req.user.id)
+      ]);
+      const identity = await senderIdentity(req, mailbox);
       const withSender = {
         ...input,
         sender: {
-          name: req.user.name || '',
-          title: String((input.sender && input.sender.title) || defaultTitle || '').trim(),
-          email: req.user.email || ''
+          name: identity.name,
+          title: String((input.sender && input.sender.title) || identity.title || '').trim(),
+          email: identity.email
         }
       };
 
       if (!aiConfigured()) {
-        return res.json({ ...gen.rulesDraft(withSender, { companyName }), ai_available: false });
+        return res.json({
+          ...gen.rulesDraft(withSender, { companyName }),
+          ai_available: false,
+          sends_as: mailbox ? mailbox.email_address : null
+        });
       }
 
       try {
@@ -133,6 +155,7 @@ module.exports = (ctx) => {
         const usage = data.usage || {};
         return res.json({
           ...parsed, mode: 'ai', ai_available: true,
+          sends_as: mailbox ? mailbox.email_address : null,
           usage: { input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0 }
         });
       } catch (aiErr) {
@@ -141,6 +164,7 @@ module.exports = (ctx) => {
         return res.json({
           ...gen.rulesDraft(withSender, { companyName }),
           ai_available: true,
+          sends_as: mailbox ? mailbox.email_address : null,
           ai_error: aiErr.message
         });
       }
