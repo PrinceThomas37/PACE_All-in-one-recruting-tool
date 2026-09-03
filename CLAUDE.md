@@ -497,6 +497,18 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        sequence channel, interview invites) — one `filledSignature()` helper
        now, and `test/outreach-generator-smoke.mjs` greps every mail-composing
        router and fails if one appends a raw saved signature.
+     * **Four framings, one set of facts — and the POC's CV is not one of the
+       facts.** `rulesVariants()` returns every angle at once (Direct, Short,
+       Saves them work, The hard part; three more for follow-ups) and the page
+       puts a picker above the preview, keeping edits PER VARIANT. Each opener
+       is one that earned replies in the owner's 30 replied threads. **NONE of
+       those 30 mentions the contact's background**, so `pickNoteDetail` no
+       longer emits tenure or career history — an email opening "you came up
+       through estimating and pre-construction" reads as *I read your profile*,
+       not *I read your posting*. What survives: a mutual connection, a prior
+       conversation, something about the ROLE (re-posted, open N days). The
+       contact's title still shapes register and fee placement via
+       `audienceOf()`; it is never printed.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by

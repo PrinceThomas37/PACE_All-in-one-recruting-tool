@@ -88,12 +88,27 @@ ok('a phrase never ends on a dangling preposition',
 ok('the note detail is never just the contact\'s own name',
   !/^ed jones$/i.test(gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' })),
   gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' }));
-ok('a career history becomes a fact about where they came from',
-  /estimating/.test(gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' })),
-  gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' }));
+// The owner read an email opening with "you came up through estimating and
+// pre-construction" and called it off topic — and the 30 replied threads agree:
+// not one of them mentions the contact's background. A pasted profile is now
+// worth NOTHING to the email, which is the correct amount.
+ok('a pasted CV produces no sentence at all',
+  gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' }) === '',
+  JSON.stringify(gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' })));
+ok('no email built from a pasted profile mentions their career',
+  !/came up through|have been at .* for \d/.test(
+    gen.rulesVariants({ outreach_type: 'first', contact_first_name: 'Ed Jones',
+      contact_title: 'Vice President', company: 'Berks Construction Group, LLC',
+      job_description: CONSTRUCTION, notes: LINKEDIN,
+      sender: { name: 'Prince Thomas', title: 'Account Manager' } }, { companyName: CO })
+      .variants.map(v => v.email).join('\n')));
+ok('something about the ROLE is still fair game',
+  gen.pickNoteDetail('Re-posted after 22 days.', {}).kind === 'role');
+ok('a prior conversation is still fair game',
+  gen.pickNoteDetail('We spoke in March about a different role.', {}).kind === 'prior');
 ok('a mutual connection is picked over anything else in the notes',
-  gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {}) === 'we have Priya in common',
-  gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {}));
+  gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {}).text === 'we have Priya in common',
+  JSON.stringify(gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {})));
 ok('empty notes produce no detail sentence', gen.pickNoteDetail('', {}) === '');
 
 // Who we are writing to changes the email, not just a word in it.
@@ -174,11 +189,12 @@ ok('the company name is a parameter, not a constant',
 
 // ── rule 9: finance-first readers get cost before the ask ──────────────────
 const fin = gen.rulesDraft({ ...base, contact_title: 'Controller' }, { companyName: CO });
+const feeAt = (e) => e.search(/no (charge|cost)/i);
+const askAt = (e) => e.search(/resumes?[^.]*\?/i);
 ok('a Controller sees the fee line BEFORE the ask (rule 9)',
-  fin.email.indexOf('no charge for reviewing resumes') < fin.email.indexOf('Would it be worth'),
-  fin.email);
+  feeAt(fin.email) >= 0 && feeAt(fin.email) < askAt(fin.email), fin.email);
 ok('a non-finance contact sees the ask first (rule 9)',
-  d1.email.indexOf('Would it be worth') < d1.email.indexOf('no charge for reviewing resumes'));
+  askAt(d1.email) < feeAt(d1.email), d1.email);
 ok('the diagnosis says why the fee moved', /finance-first/i.test(fin.diagnosis), fin.diagnosis);
 
 // ── rule 6: the no-agencies short form ─────────────────────────────────────
@@ -191,8 +207,10 @@ ok('saying no is a one-word reply (rule 6)', /reply "no"/i.test(na.email), na.em
 
 // ── rule 12: the follow-up short form ──────────────────────────────────────
 const fu = gen.rulesDraft({ ...base, outreach_type: 'followup' }, { companyName: CO });
-ok('a follow-up is under 60 words (rule 12)', gen.wordCount(fu.email) < 60, gen.wordCount(fu.email));
-ok('a follow-up asks whether the role is still open (rule 12)', /still open/i.test(fu.email), fu.email);
+ok('a follow-up is short (rule 12)', gen.wordCount(fu.email) < 85, gen.wordCount(fu.email));
+ok('one of the follow-up framings asks whether the role is still open',
+  gen.rulesVariants({ ...base, outreach_type: 'followup' }, { companyName: CO })
+    .variants.some(v => /still open/i.test(v.email)));
 ok('a follow-up does not repeat the pitch (rule 12)',
   !/no charge for reviewing resumes/i.test(fu.email), fu.email);
 
@@ -271,6 +289,56 @@ ok('a typed company still wins when it is a real company',
 ok("the contact's title is never printed, only used to aim the email",
   !/Vice President/.test(gen.rulesDraft({ ...base, contact_title: 'Vice President',
     company: 'Berks Construction Group', job_description: CONSTRUCTION }, { companyName: CO }).email));
+
+// ── Four framings, one set of facts ────────────────────────────────────────
+// Picking beats regenerating: regenerating gives you another guess, a picker
+// gives you the actual choice. Each framing is an opener that earned replies in
+// the owner's sent mail.
+const vr = gen.rulesVariants({
+  ...base, contact_title: 'Vice President', company: 'Berks Construction Group, LLC',
+  location: 'Lancaster, PA', job_description: CONSTRUCTION
+}, { companyName: CO });
+ok('a first outreach offers four framings', vr.variants.length === 4, vr.variants.length);
+ok('each carries a label and a one-line explanation of its angle',
+  vr.variants.every(v => v.label && v.blurb && v.id), JSON.stringify(vr.variants.map(v => v.id)));
+ok('every framing is a distinct email',
+  new Set(vr.variants.map(v => v.email)).size === 4);
+ok('every framing names the real role',
+  vr.variants.every(v => /Construction Superintendent/.test(v.email)),
+  vr.variants.map(v => v.email.split('\n')[2]).join(' || '));
+ok('no framing ever names a wrong employer',
+  vr.variants.every(v => !/Vice President/.test(v.email)));
+ok('every framing asks about resumes, and none asks for a call',
+  vr.variants.every(v => /resumes?/i.test(v.email) && /\?/.test(v.email)) &&
+  vr.variants.every(v => !/\b(call|meeting|15 minutes)\b/i.test(v.email)));
+ok('every framing carries the fee line',
+  vr.variants.every(v => /no (charge|cost)/i.test(v.email)));
+ok('every framing stays inside the length rule',
+  vr.variants.every(v => v.words >= 55 && v.words <= 170), JSON.stringify(vr.variants.map(v => v.words)));
+ok('each reports its own word count', vr.variants.every(v => v.words === gen.wordCount(v.email)));
+ok('only the researched framing states the constraint as its angle',
+  !/^This version leads/.test(vr.variants.find(v => v.id === 'researched').diagnosis) &&
+  vr.variants.filter(v => v.id !== 'researched').every(v => /^This version leads/.test(v.diagnosis)),
+  vr.variants.map(v => v.diagnosis.slice(0, 40)).join(' | '));
+ok('the other three say the constraint is background, not what they claim',
+  vr.variants.filter(v => v.id !== 'researched').every(v => /Not stated in this version/.test(v.diagnosis)));
+ok('a follow-up gets its own three framings',
+  gen.rulesVariants({ ...base, outreach_type: 'followup', job_description: CONSTRUCTION }, { companyName: CO })
+    .variants.length === 3);
+ok('every follow-up framing stays under 85 words',
+  gen.rulesVariants({ ...base, outreach_type: 'followup', job_description: CONSTRUCTION }, { companyName: CO })
+    .variants.every(v => v.words < 85),
+  JSON.stringify(gen.rulesVariants({ ...base, outreach_type: 'followup', job_description: CONSTRUCTION }, { companyName: CO }).variants.map(v => v.words)));
+ok('a no-agencies posting offers ONE shape, because rule 6 dictates it',
+  gen.rulesVariants({ ...base, no_agencies: true, job_description: CONSTRUCTION }, { companyName: CO })
+    .variants.length === 1);
+ok('rulesDraft still returns the first framing, for callers with no picker',
+  gen.rulesDraft({ ...base, contact_title: 'Vice President', company: 'Berks Construction Group, LLC',
+    location: 'Lancaster, PA', job_description: CONSTRUCTION }, { companyName: CO }).email === vr.variants[0].email);
+ok('a finance-first reader gets the fee before the ask in EVERY framing',
+  gen.rulesVariants({ ...base, contact_title: 'Controller', job_description: CONSTRUCTION }, { companyName: CO })
+    .variants.every(v => feeAt(v.email) >= 0 && feeAt(v.email) < askAt(v.email)),
+  'a framing put the ask before the fee for a Controller');
 
 // ── The signature, and the two bugs a live send exposed ────────────────────
 // A first real send to a real prospect went out with TWO sign-offs — the body's
