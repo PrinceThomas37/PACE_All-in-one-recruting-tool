@@ -19,16 +19,59 @@
 
 const PREFIX = 'int_';
 const ACTIVE_VERIFIER_KEY = 'int_email_verify_active';
+const ACTIVE_AI_KEY = 'int_ai_active';
 
 // Registry. `test` names a provider-specific connection test (routes/integrations
 // implements them); `env_fallback` lets a value come from an env var if unset.
+//
+// FIELD FLAGS
+//   secret:false  — not a credential (a model name, a server address). Shown in
+//                   the admin UI as plain text, and returned unmasked, because
+//                   masking a value the operator has to be able to read is just
+//                   a way to lose it.
+//   optional:true — does not count towards "configured". A model override is a
+//                   preference; the key is the connection.
+//
+// `ai:true` marks a text-generation provider that services/ai-provider.js can
+// use. Exactly one is the ACTIVE one (ACTIVE_AI_KEY); the others stay as
+// fallbacks, which is what makes a free tier safe to rely on.
 const INTEGRATIONS = [
   {
-    id: 'anthropic', category: 'AI', label: 'Anthropic (Claude)',
-    description: 'Powers AI email drafting and summaries.',
+    id: 'anthropic', category: 'AI', label: 'Anthropic (Claude)', ai: true,
+    description: 'Paid, highest quality. Powers AI email drafting, resume parsing and summaries.',
     docs: 'https://console.anthropic.com/settings/keys',
     fields: [{ key: 'api_key', label: 'API key', placeholder: 'sk-ant-…' }],
     env_fallback: { api_key: 'ANTHROPIC_API_KEY' }, test: 'anthropic',
+  },
+  {
+    id: 'groq', category: 'AI', label: 'Groq (free tier)', ai: true,
+    description: 'Free, fast, no credit card. Runs open models (Llama, Qwen, gpt-oss) on Groq hardware.',
+    docs: 'https://console.groq.com/keys',
+    fields: [
+      { key: 'api_key', label: 'API key', placeholder: 'gsk_…' },
+      { key: 'model', label: 'Model (optional)', placeholder: 'llama-3.3-70b-versatile', secret: false, optional: true },
+    ],
+    env_fallback: { api_key: 'GROQ_API_KEY' }, test: 'groq',
+  },
+  {
+    id: 'openrouter', category: 'AI', label: 'OpenRouter (free tier)', ai: true,
+    description: 'One key across dozens of open models, several of them free. Useful as a fallback when another free tier is spent.',
+    docs: 'https://openrouter.ai/keys',
+    fields: [
+      { key: 'api_key', label: 'API key', placeholder: 'sk-or-…' },
+      { key: 'model', label: 'Model (optional)', placeholder: 'meta-llama/llama-3.3-70b-instruct:free', secret: false, optional: true },
+    ],
+    env_fallback: { api_key: 'OPENROUTER_API_KEY' }, test: 'openrouter',
+  },
+  {
+    id: 'ollama', category: 'AI', label: 'Ollama (self-hosted)', ai: true,
+    description: 'An open model running on a server you control. No key, no per-token cost, and no candidate data leaves your network — but the server must be reachable from PACE.',
+    docs: 'https://ollama.com/download',
+    fields: [
+      { key: 'base_url', label: 'Server address', placeholder: 'http://localhost:11434', secret: false },
+      { key: 'model', label: 'Model (optional)', placeholder: 'llama3.1:8b', secret: false, optional: true },
+    ],
+    env_fallback: { base_url: 'OLLAMA_BASE_URL' }, test: 'ollama',
   },
   {
     id: 'zerobounce', category: 'Email verification', label: 'ZeroBounce',
@@ -76,6 +119,7 @@ async function isConfigured(supabase, id) {
   const def = BY_ID.get(id);
   if (!def) return false;
   for (const f of def.fields) {
+    if (f.optional) continue;
     const v = await getSecret(supabase, id, f.key);
     if (!v) return false;
   }
@@ -91,26 +135,38 @@ async function getAll(supabase) {
   } catch (_) {}
   const stored = {}; rows.forEach((r) => { stored[r.key] = r.value; });
   const activeVerifier = stored[ACTIVE_VERIFIER_KEY] || null;
+  const activeAi = stored[ACTIVE_AI_KEY] || null;
 
   const items = INTEGRATIONS.map((def) => {
     const fields = def.fields.map((f) => {
       const raw = stored[keyName(def.id, f.key)];
       const envVar = def.env_fallback && def.env_fallback[f.key];
       const fromEnv = !raw && envVar && !!process.env[envVar];
-      return { ...f, configured: !!raw || fromEnv, hint: raw ? mask(raw) : (fromEnv ? 'set via environment' : null), from_env: fromEnv };
+      const isSecret = f.secret !== false;
+      return {
+        ...f,
+        configured: !!raw || fromEnv,
+        // A non-secret value is handed back as-is: the operator needs to see
+        // which model or server is in force to be able to change it.
+        hint: raw ? (isSecret ? mask(raw) : raw) : (fromEnv ? 'set via environment' : null),
+        value: (!isSecret && raw) ? raw : null,
+        secret: isSecret,
+        from_env: fromEnv,
+      };
     });
     return {
       id: def.id, category: def.category, label: def.label, description: def.description,
-      docs: def.docs, verifier: !!def.verifier, has_test: !!def.test,
-      fields, configured: fields.every((f) => f.configured),
+      docs: def.docs, verifier: !!def.verifier, ai: !!def.ai, has_test: !!def.test,
+      fields, configured: fields.every((f) => f.optional || f.configured),
       active_verifier: def.verifier ? (activeVerifier === def.id) : undefined,
+      active_ai: def.ai ? (activeAi === def.id) : undefined,
     };
   });
 
   // group by category, preserving registry order
   const order = []; const groups = {};
   items.forEach((it) => { if (!groups[it.category]) { groups[it.category] = []; order.push(it.category); } groups[it.category].push(it); });
-  return { categories: order.map((c) => ({ category: c, items: groups[c] })), active_verifier: activeVerifier };
+  return { categories: order.map((c) => ({ category: c, items: groups[c] })), active_verifier: activeVerifier, active_ai: activeAi };
 }
 
 // Save fields for one integration. Empty string clears (disconnects) that field.
@@ -144,6 +200,25 @@ async function setActiveVerifier(supabase, id) {
   return error ? { error: error.message } : { success: true };
 }
 
+// The AI provider the features should prefer. Only a *choice* is stored here —
+// whether it is usable (key present, server reachable) is decided at call time
+// by services/ai-provider.js, so choosing a provider and then losing its key
+// degrades to the next one rather than turning AI off.
+async function setActiveAi(supabase, id) {
+  const def = id ? BY_ID.get(id) : null;
+  if (id && (!def || !def.ai)) return { error: 'Not an AI provider' };
+  if (!id) { try { await supabase.from('app_settings').delete().eq('key', ACTIVE_AI_KEY); } catch (_) {} return { success: true }; }
+  const { error } = await supabase.from('app_settings').upsert({ key: ACTIVE_AI_KEY, value: id, updated_at: new Date() }, { onConflict: 'key' });
+  return error ? { error: error.message } : { success: true };
+}
+
+async function getActiveAi(supabase) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', ACTIVE_AI_KEY).maybeSingle();
+    return data?.value || null;
+  } catch (_) { return null; }
+}
+
 // The verifier the send-time hook should use: the explicitly-active one if its
 // key is set, else the first configured verifier. Returns { id, key } or null.
 async function getActiveVerifier(supabase) {
@@ -167,4 +242,5 @@ module.exports = {
   INTEGRATIONS, BY_ID, keyName,
   getSecret, isConfigured, getAll, setIntegration, clearIntegration,
   setActiveVerifier, getActiveVerifier,
+  setActiveAi, getActiveAi,
 };

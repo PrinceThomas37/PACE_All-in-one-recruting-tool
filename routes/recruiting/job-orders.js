@@ -6,10 +6,9 @@
 
 const matchEngine = require('../../match-engine');
 const entitlements = require('../../services/entitlements');
-const { fetchWithTimeout } = require('../../http-client');
+const aiProvider = require('../../services/ai-provider');
 const createCandidateFields = require('../../services/candidate-fields');
 
-const AI_TIMEOUT_MS = 30000;
 
 module.exports = function (app, core) {
   const {
@@ -433,8 +432,7 @@ module.exports = function (app, core) {
       if (!j.job_description || !j.job_description.trim()) return res.status(400).json({ error: 'This job has no description to rewrite.' });
 
       const names = [j.client, j.end_client, j.client_manager, j.company && j.company.name];
-      const key = process.env.ANTHROPIC_API_KEY;
-      if (key && key !== 'your_anthropic_api_key_here') {
+      {
         try {
           const prompt = `Rewrite this job description for public posting on job boards. Remove ALL identifying details of the hiring company: company names (${names.filter(Boolean).join(', ') || 'any company names present'}), people's names, emails, phone numbers, URLs, and street addresses. Refer to the company only as "our client". Keep every requirement, responsibility, pay/benefit detail, and location (city/state is fine). Keep the same structure and roughly the same length. Reply with ONLY the rewritten description — no preamble.
 
@@ -442,13 +440,11 @@ JOB TITLE: ${j.job_title || ''}
 
 DESCRIPTION:
 ${String(j.job_description).slice(0, 12000)}`;
-          const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-            body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 2500, messages: [{ role: 'user', content: prompt }] })
-          }, { timeoutMs: AI_TIMEOUT_MS });
-          const aiData = await response.json();
-          const text = aiData.content?.[0]?.text?.trim();
+          // Null (no provider, or all of them failing) drops to the rules
+          // scrub below — which is the guarantee, since the AI output gets
+          // scrubbed too regardless.
+          const out = await aiProvider.complete(supabase, { prompt, maxTokens: 2500 });
+          const text = out && out.text.trim();
           // belt-and-braces: scrub the AI output too, in case a name slipped through
           if (text) return res.json({ posting: scrubJobDescription(text, names), used_ai: true });
         } catch (_) { /* fall through to rules */ }

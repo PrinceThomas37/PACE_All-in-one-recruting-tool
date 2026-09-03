@@ -105,6 +105,12 @@ function renderIntegrationsModal(){
         ?'<span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:var(--green-l);color:var(--green)">Connected</span>'
         :'<span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:var(--bg3);color:var(--text3)">Not configured</span>';
       var fields=it.fields.map(function(f){
+        // A model name or a server address is not a credential: show it as
+        // readable text with its current value, or the operator can never see
+        // which model is actually in force.
+        if(f.secret===false){
+          return '<input class="inp" id="intg-'+it.id+'-'+f.key+'" type="text" value="'+htmlEsc(f.value||'')+'" placeholder="'+htmlEsc(f.placeholder||f.label)+'" title="'+htmlEsc(f.label)+'" style="margin-bottom:6px"/>';
+        }
         return '<input class="inp" id="intg-'+it.id+'-'+f.key+'" type="password" autocomplete="new-password" placeholder="'+(f.configured?htmlEsc(f.hint||'configured'):htmlEsc(f.placeholder||f.label))+'" style="margin-bottom:6px"/>';
       }).join('');
       var t=tests[it.id]; var testHtml='';
@@ -113,7 +119,9 @@ function renderIntegrationsModal(){
         :'<span style="font-size:11.5px;margin-left:6px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✓ '+htmlEsc(t.detail||'OK'):'✗ '+htmlEsc(t.error||'failed'))+'</span>'; }
       var activeToggle=it.verifier
         ?'<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);cursor:pointer;margin-top:2px"><input type="checkbox" '+(it.active_verifier?'checked':'')+' onchange="setActiveVerifier(\''+it.id+'\',this.checked)"> Use this verifier for pre-send checks</label>'
-        :'';
+        :(it.ai
+        ?'<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);cursor:pointer;margin-top:2px"><input type="radio" name="intg-active-ai" '+(it.active_ai?'checked':'')+' onchange="setActiveAi(\''+it.id+'\')"> Use this provider first</label>'
+        :'');
       return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div style="font-weight:600;font-size:13px">'+htmlEsc(it.label)+'</div>'+badge+'</div>'+
         '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">'+htmlEsc(it.description)+(it.docs?' · <a href="'+htmlEsc(it.docs)+'" target="_blank" rel="noopener" style="color:var(--accent)">Get key ↗</a>':'')+'</div>'+
@@ -128,7 +136,7 @@ function renderIntegrationsModal(){
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
-      cards+(cat.category==='Email verification'?emailVerifyTester():'')+
+      (cat.category==='AI'?aiProviderNote():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
@@ -152,17 +160,38 @@ function emailVerifyTester(){
 window.saveIntegration=function(id){
   var it=intgFind(id); if(!it)return;
   var values={};
-  it.fields.forEach(function(f){ var el=document.getElementById('intg-'+id+'-'+f.key); if(el&&el.value!=='')values[f.key]=el.value; });
-  if(!Object.keys(values).length){ showToast('Enter a key first','warning'); return; }
+  it.fields.forEach(function(f){
+    var el=document.getElementById('intg-'+id+'-'+f.key); if(!el)return;
+    // A blank secret means "leave the stored one alone"; a blank plain field
+    // means "clear this override" — otherwise a model name could be set but
+    // never unset.
+    if(el.value!=='')values[f.key]=el.value;
+    else if(f.secret===false&&f.value)values[f.key]='';
+  });
+  if(!Object.keys(values).length){ showToast('Enter a value first','warning'); return; }
   apiPost('/admin/integrations/'+id,{values:values}).then(function(r){ STATE.integrations=r; showToast('Saved','success'); renderIntegrationsModal(); })
     .catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
 };
 window.testIntegration=function(id){
   var el=document.getElementById('intg-'+id+'-api_key');
-  var body=(el&&el.value)?{api_key:el.value}:{};
+  var burl=document.getElementById('intg-'+id+'-base_url');
+  var body={};
+  if(el&&el.value)body.api_key=el.value;
+  if(burl&&burl.value)body.base_url=burl.value;
   STATE._intgTest=STATE._intgTest||{}; STATE._intgTest[id]={pending:true}; renderIntegrationsModal();
   apiPost('/admin/integrations/'+id+'/test',body).then(function(r){ STATE._intgTest[id]=r; renderIntegrationsModal(); })
     .catch(function(e){ STATE._intgTest[id]={ok:false,error:(e&&e.message||e)}; renderIntegrationsModal(); });
+};
+function aiProviderNote(){
+  return '<div style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;color:var(--text3);line-height:1.5">'+
+    'AI is optional everywhere in PACE — email drafting, resume parsing, job-description cleanup and the daily briefing all have a built-in non-AI version that runs when no provider is set up. '+
+    'Connect one below to improve them. <b>Groq</b> and <b>OpenRouter</b> are free and need no credit card; <b>Ollama</b> runs a model on a server you own. '+
+    'The one marked "use first" is tried first, and if it is unavailable or out of free requests, the others are tried before falling back to the built-in version.'+
+  '</div>';
+}
+window.setActiveAi=function(id){
+  apiPost('/admin/integrations/'+id,{active:true}).then(function(r){ STATE.integrations=r; showToast('Provider preference saved','success'); renderIntegrationsModal(); })
+    .catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
 };
 window.setActiveVerifier=function(id,on){
   apiPost('/admin/integrations/'+id,{active:!!on}).then(function(r){ STATE.integrations=r; renderIntegrationsModal(); })

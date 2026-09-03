@@ -315,6 +315,34 @@ Session 9). What that means in practice:
   `services/recruiting-core.js`). See `docs/AUTONOMOUS_ENGINE_PLAN.md` §4 and
   the architecture-mapping plan this came from for the fuller Layer-3 rollout.
 
+- **EVERY AI CALL GOES THROUGH `services/ai-provider.js` (Session 18).** Six
+  features want an AI — cold-email drafting, the daily import briefing, resume
+  parsing, the job-description scrub, lead-distribution advice and the outreach
+  generator — and each used to hold its own copy of Anthropic's URL, key header
+  and model name, so "use a different provider" was six edits rather than a
+  setting. Now they call `complete(supabase, {system, prompt, maxTokens})`.
+  Four rules:
+  * **`complete()` returns NULL, never throws, and null means "write it with
+    the rules."** Not configured, key rejected, free tier spent, local box
+    unreachable, body unparseable — all the same outcome, because the rules
+    writer behind that null is what production actually runs on today. Never
+    turn a null into a 500.
+  * **Two wire formats, not N providers.** `anthropic` (x-api-key, system as a
+    *field*) and `openai` (Bearer, system as the first *message*) — Groq,
+    OpenRouter and a self-hosted Ollama all speak the second, which is why
+    supporting them is one adapter. `buildRequest`/`parseResponse` are PURE so
+    the exact bytes per provider are pinned offline by
+    `test/ai-provider-smoke.mjs`, which also greps the tree and fails if any
+    file calls a provider URL directly.
+  * **Providers chain; the admin's pick only leads.** Admin → Integrations has
+    a "use this provider first" radio (`int_ai_active`); the rest stay as
+    fallbacks. That chain is what makes a *free tier* safe to build on — losing
+    one costs a dropdown, and until then it degrades rather than errors.
+  * **A free tier is not a commercial promise.** Groq/OpenRouter are free and
+    keyless-to-sign-up, Ollama is the operator's own box (`base_url` is what
+    turns it on — no key exists to check). None of them may ever become a
+    requirement for a feature to work.
+
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
 Ordered by "cheapest to do now vs. most painful to retrofit":

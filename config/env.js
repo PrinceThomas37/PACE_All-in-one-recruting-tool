@@ -75,8 +75,11 @@ function loadConfig() {
   if (!process.env.MICROSOFT_REDIRECT_URI) {
     warnings.push(`MICROSOFT_REDIRECT_URI not set — defaulting to ${DEFAULT_MICROSOFT_REDIRECT_URI}`);
   }
-  if (!config.anthropicApiKey) {
-    warnings.push('ANTHROPIC_API_KEY not set — AI generation endpoints will be unavailable.');
+  if (!config.anthropicApiKey && !process.env.GROQ_API_KEY && !process.env.OPENROUTER_API_KEY && !process.env.OLLAMA_BASE_URL) {
+    // Not a failure: every AI feature has a rules writer behind it. This says
+    // which half of each feature is running, and that a free provider can be
+    // switched on from Admin → Integrations without a redeploy.
+    warnings.push('No AI provider set in the environment — AI features run on their rules fallback. Add a free provider (Groq / OpenRouter / Ollama) in Admin → Integrations.');
   }
   if (!config.google.clientId || !config.google.clientSecret) {
     warnings.push('Gmail not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) — Gmail connect + send will be unavailable (Microsoft is unaffected).');

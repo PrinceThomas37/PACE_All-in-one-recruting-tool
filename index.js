@@ -148,6 +148,10 @@ let DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || null;
 // scope, and defaulting would hand it the first org's data — a real customer's.
 let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 const { isRecyclable } = require('./services/lead-recycle');
+// One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
+// Ollama). Returns null when none is usable, and every caller has a rules
+// fallback behind that null.
+const aiProvider = require('./services/ai-provider');
 async function resolveDefaultOrg() {
   try {
     const { data } = await supabase.from('organizations').select('id')
@@ -1045,14 +1049,15 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     const { priority_text, pool_stats, manager_id } = req.body;
     const { data: manager } = await supabase.from('users').select('id,name').eq('id', manager_id).single();
     const capacity = pool_stats.capacity || 150;
-    if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY === 'your_anthropic_api_key_here') return res.json(buildAutoRatio(pool_stats, capacity));
+    // No provider configured (or every one of them failing) falls through to
+    // buildAutoRatio below — the rules split, which is what runs today.
     // Build dynamic industry keys from what's actually in the pool
     const poolIndustries = Object.keys(pool_stats.by_industry || {}).filter(Boolean);
     const industryKeys = poolIndustries.length ? poolIndustries.reduce((o,k) => { o[k]='<pct>'; return o; }, {}) : {'Other':'<pct>'};
     const prompt = `You are a lead distribution engine for Fute Global LLC.\nPool: ${JSON.stringify(pool_stats)}\nManager: ${manager?.name}\nCapacity: ${capacity}\nInstructions: "${priority_text}"\nRespond ONLY with valid JSON:\n{"total_to_send":<number>,"by_freshness":{"New":<pct>,"Normal":<pct>,"Old":<pct>},"by_industry":${JSON.stringify(industryKeys)},"by_timezone":{"EST":<pct>,"CST":<pct>,"MST":<pct>,"PST":<pct>},"exclude_duplicates":<bool>,"summary":"<text>"}`;
-    const aiResp = await fetchWithTimeout('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, messages: [{ role: 'user', content: prompt }] }) }, { timeoutMs: AI_TIMEOUT_MS });
-    const aiData = await aiResp.json();
-    const ratio = JSON.parse((aiData.content?.[0]?.text || '{}').replace(/```json|```/g, '').trim());
+    const out = await aiProvider.complete(supabase, { prompt, maxTokens: 400 });
+    if (!out) return res.json(buildAutoRatio(pool_stats, capacity));
+    const ratio = JSON.parse(out.text.replace(/```json|```/g, '').trim());
     res.json(ratio);
   } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || 150)); }
 });
