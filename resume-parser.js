@@ -3,7 +3,8 @@
 // ----------------------------------------------------------------------------
 // Turns an uploaded resume (PDF / DOCX / TXT / RTF) into candidate fields.
 // Two tiers, mirroring the app's other AI features:
-//   1. AI parse (Anthropic) when ANTHROPIC_API_KEY is configured — accurate
+//   1. AI parse when an AI provider is configured (Admin → Integrations;
+//      Anthropic, Groq, OpenRouter or a self-hosted Ollama) — accurate
 //      structured extraction.
 //   2. Rule-based fallback — regex for email/phone/LinkedIn, a name heuristic,
 //      experience-years detection, and skills matched against the same
@@ -12,9 +13,7 @@
 // ============================================================================
 
 const { SKILL_DICTIONARIES } = require('./skill-dictionaries');
-const { fetchWithTimeout } = require('./http-client');
-
-const AI_TIMEOUT_MS = 30000;
+const aiProvider = require('./services/ai-provider');
 
 // Lazy requires so a missing optional dep degrades to "unsupported file type"
 // instead of crashing boot.
@@ -103,22 +102,20 @@ function parseResumeRules(text) {
   return out;
 }
 
-// ── AI parse (Anthropic; graceful null when unconfigured/failed) ────────────
-async function parseResumeAI(text) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key || key === 'your_anthropic_api_key_here') return null;
+// ── AI parse (graceful null when unconfigured/failed) ───────────────────────
+// `store` is the supabase client, needed only to look up which provider is
+// configured. Without it (or without a provider) this returns null and the
+// rules parser is the whole answer, exactly as before.
+async function parseResumeAI(text, store) {
+  if (!store) return null;
   try {
     const prompt = `Extract candidate fields from this resume. Reply with ONLY a JSON object (no markdown, no commentary) with these keys (omit any you cannot find): full_name, email, phone, linkedin_url, current_title, current_employer, city, state, country, experience_years (number), skills (comma-separated string, max 25), work_authorization, summary (2 sentences max).
 
 RESUME:
 ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
-    const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 700, messages: [{ role: 'user', content: prompt }] })
-    }, { timeoutMs: AI_TIMEOUT_MS });
-    const aiData = await response.json();
-    const raw = aiData.content?.[0]?.text || '';
+    const completion = await aiProvider.complete(store, { prompt, maxTokens: 700 });
+    if (!completion) return null;
+    const raw = completion.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
     const parsed = JSON.parse(jsonMatch[0]);
@@ -135,10 +132,10 @@ ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
 }
 
 // ── entry point ─────────────────────────────────────────────────────────────
-async function parseResume(buffer, filename) {
+async function parseResume(buffer, filename, store) {
   const text = (await extractResumeText(buffer, filename)).replace(/\r/g, '').trim();
   if (!text || text.length < 40) throw new Error('Could not read any text from this file.');
-  const ai = await parseResumeAI(text);
+  const ai = await parseResumeAI(text, store);
   const rules = parseResumeRules(text);
   // AI wins where it answered; rules fill the gaps (and are the whole answer without a key)
   const fields = Object.assign({}, rules, ai || {});

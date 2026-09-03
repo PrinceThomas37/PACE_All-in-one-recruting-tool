@@ -20,7 +20,25 @@ async function pingJson(url, ms = 8000, options = {}) {
 
 // Provider-specific, cheap connection tests (validate the key without spending
 // real work / tokens where possible).
-async function testProvider(id, key) {
+async function testProvider(id, key, extra = {}) {
+  // Ollama is keyless — its "connection" is a reachable server address, so it
+  // is tested before the no-key guard below rather than after it.
+  if (id === 'ollama') {
+    const root = String(extra.base_url || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+    if (!root) return { ok: false, error: 'Enter the server address first' };
+    try {
+      const r = await pingJson(`${root}/api/tags`, 5000);
+      const models = (r.data && r.data.models) || [];
+      if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+      return models.length
+        ? { ok: true, detail: `Reachable · ${models.length} model${models.length === 1 ? '' : 's'} (${models.slice(0, 3).map(m => m.name).join(', ')})` }
+        : { ok: true, detail: 'Reachable — but no model pulled yet (run: ollama pull llama3.1:8b)' };
+    } catch (e) {
+      // Nearly always the real cause: a laptop Ollama is not reachable from a
+      // deployed server, and saying so beats a bare connect error.
+      return { ok: false, error: `Could not reach ${root} from the PACE server — ${e.message}` };
+    }
+  }
   if (!key) return { ok: false, error: 'No key configured' };
   try {
     if (id === 'anthropic') {
@@ -28,6 +46,18 @@ async function testProvider(id, key) {
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       });
       return r.ok ? { ok: true, detail: 'Key valid' } : { ok: false, error: r.data?.error?.message || `HTTP ${r.status}` };
+    }
+    if (id === 'groq') {
+      const r = await pingJson('https://api.groq.com/openai/v1/models', 8000, { headers: { Authorization: `Bearer ${key}` } });
+      const n = (r.data?.data || []).length;
+      return r.ok ? { ok: true, detail: n ? `Key valid · ${n} models available` : 'Key valid' }
+                  : { ok: false, error: r.data?.error?.message || `HTTP ${r.status}` };
+    }
+    if (id === 'openrouter') {
+      const r = await pingJson('https://openrouter.ai/api/v1/key', 8000, { headers: { Authorization: `Bearer ${key}` } });
+      if (!r.ok) return { ok: false, error: r.data?.error?.message || `HTTP ${r.status}` };
+      const lim = r.data?.data?.limit_remaining;
+      return { ok: true, detail: (lim === null || lim === undefined) ? 'Key valid' : `Key valid · ${lim} credits remaining` };
     }
     if (id === 'zerobounce') {
       const r = await pingJson(`https://api.zerobounce.net/v2/getcredits?api_key=${encodeURIComponent(key)}`);
@@ -76,7 +106,12 @@ module.exports = (ctx) => {
         if (r.error) return res.status(400).json({ error: r.error });
       }
       if (b.active !== undefined) {
-        const r = await integrations.setActiveVerifier(supabase, b.active ? req.params.id : null);
+        // One "active" flag, two registries: an AI provider and an email
+        // verifier are each chosen from their own group.
+        const def = integrations.BY_ID.get(req.params.id);
+        const r = def && def.ai
+          ? await integrations.setActiveAi(supabase, b.active ? req.params.id : null)
+          : await integrations.setActiveVerifier(supabase, b.active ? req.params.id : null);
         if (r.error) return res.status(400).json({ error: r.error });
       }
       res.json(await integrations.getAll(supabase));
@@ -99,7 +134,8 @@ module.exports = (ctx) => {
       if (!admin(req, res)) return;
       if (!integrations.BY_ID.has(req.params.id)) return res.status(404).json({ error: 'Unknown integration' });
       const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key');
-      res.json(await testProvider(req.params.id, key));
+      const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url');
+      res.json(await testProvider(req.params.id, key, { base_url }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

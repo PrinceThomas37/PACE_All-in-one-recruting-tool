@@ -30,7 +30,7 @@ module.exports = function (app, core) {
       const buffer = Buffer.from(raw, 'base64');
       if (!buffer.length) return res.status(400).json({ error: 'empty file' });
       if (buffer.length > 4.5 * 1024 * 1024) return res.status(413).json({ error: 'File too large (max ~4.5 MB).' });
-      const { fields, used_ai, text } = await parseResume(buffer, b.filename);
+      const { fields, used_ai, text } = await parseResume(buffer, b.filename, supabase);
       res.json({ fields, used_ai, resume_text: text });
     } catch (err) { res.status(400).json({ error: err.message }); }
   });

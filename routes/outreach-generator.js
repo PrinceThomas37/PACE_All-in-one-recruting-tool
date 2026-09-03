@@ -14,7 +14,8 @@
 //     way they do everywhere else.
 //   • It does not require an API key. Drafting falls back to the rules engine
 //     in services/outreach-generator.js, which is the whole feature minus the
-//     prose polish. A deployment with no ANTHROPIC_API_KEY still gets emails.
+//     prose polish. A deployment with no AI provider still gets emails, and so
+//     does one whose free tier ran out mid-afternoon.
 //
 // The sending address is NOT a user choice: it is the outreach mailbox already
 // assigned to the caller (recruiterSendingMailbox). Letting the page name a
@@ -22,20 +23,15 @@
 // ============================================================================
 
 const express = require('express');
-const { fetchWithTimeout } = require('../http-client');
+const aiProvider = require('../services/ai-provider');
 const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml } = require('../email-signature');
 const gen = require('../services/outreach-generator');
 
-// Drafting is slower than a normal API call but the browser is waiting on it.
-const AI_TIMEOUT_MS = 30000;
-const AI_MODEL = process.env.OUTREACH_AI_MODEL || 'claude-sonnet-5';
-
-function aiConfigured() {
-  const k = process.env.ANTHROPIC_API_KEY;
-  return !!k && k !== 'your_anthropic_api_key_here';
-}
+// An explicit override for this feature only; otherwise the model comes from
+// whichever provider Admin → Integrations has configured.
+const AI_MODEL = process.env.OUTREACH_AI_MODEL || null;
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -163,35 +159,26 @@ module.exports = (ctx) => {
         signature_html: signatureHtml
       };
 
-      if (!aiConfigured()) {
+      if (!(await aiProvider.isAvailable(supabase))) {
         return res.json({ ...built.variants[0], ...base, ai_available: false });
       }
 
       try {
-        const response = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': process.env.ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01'
-          },
-          body: JSON.stringify({
-            model: AI_MODEL,
-            max_tokens: 1000,
-            system: gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff }),
-            messages: [{ role: 'user', content: gen.buildUserPayload(withSender) }]
-          })
-        }, { timeoutMs: AI_TIMEOUT_MS });
-        if (!response.ok) throw new Error('ai_http_' + response.status);
-        const data = await response.json();
-        const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-        const parsed = gen.parseAiDraft(text);
+        const out = await aiProvider.complete(supabase, {
+          model: AI_MODEL || undefined,
+          maxTokens: 1000,
+          system: gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff }),
+          prompt: gen.buildUserPayload(withSender),
+        });
+        if (!out) throw new Error('ai_unavailable');
+        const parsed = gen.parseAiDraft(out.text);
         if (!parsed) throw new Error('ai_unparseable');
-        const usage = data.usage || {};
+        const usage = out.usage || {};
         // The AI writes one email; the rules writer's framings stay alongside it
         // so the choice is never lost when a key is configured.
         return res.json({
           ...parsed, mode: 'ai', ai_available: true, ...base,
+          engine: out.provider, engine_model: out.model,
           variants: [{ id: 'ai', label: 'AI draft', blurb: 'Written by the AI writer for this posting.',
                        subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
                        words: gen.wordCount(parsed.email), mode: 'ai' }].concat(built.variants),
