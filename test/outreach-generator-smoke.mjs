@@ -231,6 +231,47 @@ ok('an answer with no email is rejected rather than half-used',
   gen.parseAiDraft('{"subject":"S"}') === null);
 ok('prose alone is rejected', gen.parseAiDraft('Sorry, I cannot do that.') === null);
 
+// ── The Company box, filled in from a LinkedIn headline ────────────────────
+// "Vice President at Berks Construction" is how LinkedIn writes a headline, and
+// "Vice President" went into the Company box — so the email read "I came across
+// Vice President's Construction Superintendent opening". The posting names the
+// employer, so the form is no longer the authority on it.
+ok('the employer is read out of the posting',
+  gen.extractCompany(CONSTRUCTION) === 'Berks Construction Group', gen.extractCompany(CONSTRUCTION));
+ok('and out of postings in other industries',
+  gen.extractCompany(NURSE) === 'St. Marina Health Partners' &&
+  gen.extractCompany(BACKEND) === 'Northwind Logistics',
+  gen.extractCompany(NURSE) + ' / ' + gen.extractCompany(BACKEND));
+ok('the city is read out of the posting too',
+  gen.extractLocation(NURSE) === 'Toledo, OH', gen.extractLocation(NURSE));
+ok('a job title in the Company box is recognised',
+  gen.looksLikeJobTitle('Vice President') && gen.looksLikeJobTitle('Senior Estimator'));
+ok('a real company is never mistaken for a job title',
+  !gen.looksLikeJobTitle('Berks Construction Group, LLC') &&
+  !gen.looksLikeJobTitle('Climate HVAC Solutions') &&
+  !gen.looksLikeJobTitle("Director's Choice Ltd"));
+
+const misfiled = gen.rulesDraft({
+  ...base, company: 'Vice President', contact_title: 'Vice President',
+  location: '', job_description: CONSTRUCTION, notes: LINKEDIN
+}, { companyName: CO });
+ok('a misfiled company never reaches the email',
+  !/Vice President/.test(misfiled.email), misfiled.email.split('\n')[2]);
+ok('the posting\'s employer is used instead',
+  /Berks Construction Group/.test(misfiled.email), misfiled.email.split('\n')[2]);
+ok('and the page is told what was refused',
+  misfiled.company_rejected === 'Vice President', String(misfiled.company_rejected));
+ok('the draft reports what it read, so a wrong value is visible',
+  misfiled.used.role === 'Construction Superintendent' &&
+  misfiled.used.company === 'Berks Construction Group',
+  JSON.stringify(misfiled.used));
+ok('a typed company still wins when it is a real company',
+  gen.rulesDraft({ ...base, company: 'Robert Caylor Construction Co', job_description: CONSTRUCTION }, { companyName: CO })
+    .used.company === 'Robert Caylor Construction Co');
+ok("the contact's title is never printed, only used to aim the email",
+  !/Vice President/.test(gen.rulesDraft({ ...base, contact_title: 'Vice President',
+    company: 'Berks Construction Group', job_description: CONSTRUCTION }, { companyName: CO }).email));
+
 // ── The signature, and the two bugs a live send exposed ────────────────────
 // A first real send to a real prospect went out with TWO sign-offs — the body's
 // own "Best regards, Prince Thomas, Account Manager, Fute Global" and then the

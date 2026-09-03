@@ -239,13 +239,14 @@
         '<div class="fgrp"><label class="flbl">Contact first name</label>'+
           '<input class="inp" id="og-first" placeholder="Susan" value="'+esc(f.contact_first_name)+'" oninput="outreachGenField(\'contact_first_name\',this.value)"></div>'+
         '<div class="fgrp"><label class="flbl">Contact title (optional)</label>'+
-          '<input class="inp" id="og-title" placeholder="Controller / HR Manager" value="'+esc(f.contact_title)+'" oninput="outreachGenField(\'contact_title\',this.value)"></div>'+
+          '<input class="inp" id="og-title" placeholder="Controller / HR Manager" value="'+esc(f.contact_title)+'" oninput="outreachGenField(\'contact_title\',this.value)">'+
+          '<div style="font-size:11px;color:var(--text3);margin-top:3px">Shapes how the email is written. Never printed in it.</div></div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
-        '<div class="fgrp"><label class="flbl">Company</label>'+
-          '<input class="inp" id="og-company" placeholder="Robert Caylor Construction Co" value="'+esc(f.company)+'" oninput="outreachGenField(\'company\',this.value)"></div>'+
+        '<div class="fgrp"><label class="flbl">Company (optional)</label>'+
+          '<input class="inp" id="og-company" placeholder="read from the posting" value="'+esc(f.company)+'" oninput="outreachGenField(\'company\',this.value)"></div>'+
         '<div class="fgrp"><label class="flbl">Location (optional)</label>'+
-          '<input class="inp" id="og-loc" placeholder="Tucson, AZ" value="'+esc(f.location)+'" oninput="outreachGenField(\'location\',this.value)"></div>'+
+          '<input class="inp" id="og-loc" placeholder="read from the posting" value="'+esc(f.location)+'" oninput="outreachGenField(\'location\',this.value)"></div>'+
       '</div>'+
       '<div class="fgrp"><label class="flbl">Send to</label>'+
         '<input class="inp" id="og-to" placeholder="susan@company.com" value="'+esc(f.to)+'" oninput="outreachGenField(\'to\',this.value)">'+
@@ -287,6 +288,23 @@
       return '<div class="card cp" style="text-align:center;color:var(--text3);font-size:13px;padding:36px 16px">'+
         'Fill in the posting and the contact, then generate. The angle and the email show up here.</div>';
     }
+    // WHAT THE EMAIL DECIDED IT WAS WRITING ABOUT, stated on its own line.
+    // A wrong company reads as one clause inside a paragraph and is easy to
+    // send past — "Vice President's Construction Superintendent opening" went
+    // out that way. Here it is a labelled value you can check at a glance.
+    var u=d.used||{};
+    var readRow=function(lbl,val,warn){
+      return '<div style="display:flex;gap:8px;padding:3px 0;font-size:12px">'+
+        '<span style="color:var(--text3);min-width:66px">'+lbl+'</span>'+
+        '<span style="font-weight:600;color:'+(warn?'#b45309':'var(--text)')+'">'+esc(val||'—')+'</span></div>';
+    };
+    var readCard=(u.role||u.company||u.location)?
+      '<div style="border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;background:var(--bg)">'+
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Read from the posting</div>'+
+        readRow('Role',u.role)+readRow('Company',u.company)+readRow('Location',u.location)+
+        (d.company_rejected?
+          '<div style="margin-top:6px;font-size:11.5px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
+      '</div>':'';
     var modeNote=d.mode==='rules'
       ? '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Written by the built-in rules writer.'+
         (d.ai_error?' The AI writer was unavailable for this one.':'')+'</div>'
@@ -297,6 +315,7 @@
       : '';
     return '<div class="card cp">'+
       sentBanner+
+      readCard+
       modeNote+
       (d.diagnosis?'<div style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+
         '<strong>Why this angle:</strong> '+esc(d.diagnosis)+'</div>':'')+
