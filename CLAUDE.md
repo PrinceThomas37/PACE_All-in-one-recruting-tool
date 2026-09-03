@@ -465,6 +465,32 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      client. `encodeMimeHeader` folds into ≤75-char encoded-words and splits on
      **character**, not byte, boundaries — a byte-boundary split corrupts
      multi-byte characters differently and worse.
+   - **THE OUTREACH GENERATOR IS DONE (Session 17)** — Email → **Generator**
+     tab. Paste a job posting plus who you found, get one researched cold email
+     and a one-line diagnosis of why the role is hard to fill, edit it, send it.
+     `services/outreach-generator.js` is PURE (no db, no fetch, no clock) and
+     holds both engines behind ONE output shape `{subject, diagnosis, email}`:
+     `rulesDraft()` writes from a sentence plan, and `buildSystemPrompt()` /
+     `buildUserPayload()` / `parseAiDraft()` are the AI seam. Three rules:
+     * **The rules writer is the product, not a degraded mode.** There is no
+       funded `ANTHROPIC_API_KEY`, so in production every email this feature
+       sends comes out of those functions — and an AI call that fails or comes
+       back unparseable falls back to them rather than erroring. The page says
+       which engine wrote what it is showing.
+     * **The sending address is never a page parameter.** `/outreach/send`
+       resolves the caller's assigned mailbox itself (`recruiterSendingMailbox`,
+       handed over by `routes/recruiting/outreach.js` — which now RETURNS its
+       send helpers precisely so this router did not have to grow a second send
+       path). A From address chosen by the client is an identity chosen by the
+       client.
+     * **The sending company is a parameter, resolved per request from
+       `organizations.name`.** This text goes to a customer's prospects under
+       the customer's name; "Fute Global LLC" is one org's identity.
+     Rule-shaped behaviour (no-agencies short form, follow-up short form,
+     finance-first fee placement, the one-detail-from-notes limit, never naming
+     a skill absent from the posting) is pinned by
+     `test/outreach-generator-smoke.mjs`. The tab's meter and Recent list are
+     localStorage, per browser, deliberately — nothing downstream reads them.
    - **Slice 1 DONE** (migration `024`): open-tracking *infrastructure* — an
      `email_tracking` table (org-scoped), a public pixel endpoint `GET /o/:token.gif`
      (records opens, returns a 1×1 gif, never errors), a `GET /candidates/:id/

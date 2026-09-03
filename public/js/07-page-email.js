@@ -120,7 +120,7 @@ function renderEmail(){
   var isBD=userHasAnyRole(u,'bd','bd_lead','admin','ra_lead');
   var pending=STATE.pendingEmails||[];
   var sentEmails=STATE.sentEmails||[];
-  var tabs=isBD?['pending','compose','sent','outreachplan','sequence']:['compose','sent','outreachplan'];
+  var tabs=isBD?['pending','compose','generator','sent','outreachplan','sequence']:['compose','generator','sent','outreachplan'];
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
   // ── Sending paused banner — shown BEFORE the user tries to send, not just
@@ -192,7 +192,7 @@ function renderEmail(){
   // Tabs on the shared kit. The Pending count is the number of emails actually
   // waiting; the "N now / M waiting" split stays in the sub-line under the tab
   // rather than being crammed into the label.
-  var TAB_LABELS={pending:'Pending',compose:'Compose',sent:'Sent',outreachplan:'Outreach Plan',sequence:'Sequence'};
+  var TAB_LABELS={pending:'Pending',compose:'Compose',generator:'Generator',sent:'Sent',outreachplan:'Outreach Plan',sequence:'Sequence'};
   var ps=STATE.pendingSummary;
   var tabBar=UI.tabs(tabs.map(function(t){
     var n=null;
@@ -722,6 +722,9 @@ function renderEmail(){
       progressBar+
       (STATE.emailTab==='pending'?pendingHtml:'')+
       (STATE.emailTab==='compose'?composeHtml:'')+
+      // The Generator tab is drawn by 48-page-outreach-gen.js, which loads
+      // after this file — hence the guard rather than a bare call.
+      (STATE.emailTab==='generator'?(typeof renderOutreachGenBody==='function'?renderOutreachGenBody():''):'')+
       (STATE.emailTab==='sent'?sentHtml:'')+
       (STATE.emailTab==='outreachplan'?tmplHtml:'')+
       (STATE.emailTab==='sequence'?renderSequenceBody():'')

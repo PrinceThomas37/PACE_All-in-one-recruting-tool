@@ -575,4 +575,11 @@ async function exitCandidateSequences(candidateId, reason) {
 }
 on(EVENTS.CANDIDATE_REPLIED, (e) => exitCandidateSequences(e.payload.candidateId, 'replied'));
 on(EVENTS.CANDIDATE_UNSUBSCRIBED, (e) => exitCandidateSequences(e.payload.candidateId, 'unsubscribed'));
+
+// The two send helpers are handed back to the caller so other routers can send
+// through THIS path rather than growing a second one. routes/outreach-generator
+// is the first taker: it resolves the same assigned mailbox and dispatches by
+// the same platform rules, which is why a Gmail user's generated email behaves
+// exactly like their candidate email does.
+return { recruiterSendingMailbox, sendMailboxNewMessage, connectedMailboxById };
 };

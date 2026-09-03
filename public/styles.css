@@ -267,3 +267,8 @@ tr.sel-row td{background:var(--accent-l)}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center}
 .bar-fill{width:100%;border-radius:4px 4px 0 0;transition:height .4s ease;min-height:3px}
 .bar-lbl{font-size:10.5px;color:var(--text3);margin-top:4px;text-align:center}
+
+/* Outreach Generator (Email → Generator): the form and the finished email sit
+   side by side, but below ~1000px that gives each of them a column too narrow
+   to paste a job description into, so they stack. */
+@media (max-width:1000px){ .og-grid{grid-template-columns:1fr !important} }
