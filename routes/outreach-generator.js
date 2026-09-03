@@ -110,7 +110,14 @@ module.exports = (ctx) => {
       const identity = await senderIdentity(req, mailbox);
       res.json({
         company_name: companyName,
-        ai: aiConfigured(),
+        // Whether an AI writer is configured is the provider's question now, not
+        // this file's. Two branches merged cleanly into a break here: #159
+        // replaced the local aiConfigured() helper with services/ai-provider,
+        // and #160 added a NEW call to the helper in this handler. Git had no
+        // reason to see a conflict — the helper was deleted in one region and
+        // called in another — so main shipped with the call and without the
+        // function, and every load of the Compose tab got a 500.
+        ai: await aiProvider.isAvailable(supabase),
         mailbox: mailbox ? {
           id: mailbox.id,
           email: mailbox.email_address,

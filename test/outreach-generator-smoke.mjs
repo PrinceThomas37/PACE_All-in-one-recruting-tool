@@ -429,6 +429,68 @@ ok('every new read is org-scoped',
   (routerSrc.match(/withOrg\(supabase\.from/g) || []).length >= 5,
   String((routerSrc.match(/withOrg\(supabase\.from/g) || []).length));
 
+// ── CALLED BUT NEVER DEFINED ───────────────────────────────────────────────
+// The bug this exists for: two Claude sessions edited routes/outreach-generator
+// at the same time. One replaced the local aiConfigured() helper with
+// services/ai-provider; the other added a NEW call to that helper elsewhere in
+// the same file. Neither branch was wrong. Git saw no conflict — a deletion in
+// one region, a call in another — merged both, and main shipped a handler
+// calling a function that no longer existed. Every load of the Compose tab
+// returned 500.
+//
+// Calling the endpoint does NOT catch this: the handler awaits the database
+// first, and against a dead test database it times out before it ever reaches
+// the bad line. So this reads the source instead and asks the only question
+// that matters — is every function this file calls actually defined in it?
+const JS_GLOBALS = new Set(['require','String','Number','Boolean','Object','Array','JSON','Promise',
+  'Date','Math','parseInt','parseFloat','isNaN','isFinite','setTimeout','clearTimeout','setInterval',
+  'clearInterval','console','Error','TypeError','RangeError','RegExp','Buffer','process','Set','Map',
+  'Symbol','encodeURIComponent','decodeURIComponent','encodeURI','decodeURI','structuredClone','fetch',
+  'if','for','while','switch','catch','return','typeof','function','new','await','do','else','throw','case',
+  'of','in','delete','void','yield','instanceof']);
+
+function undefinedCalls(src) {
+  // Everything this file brings into scope: declarations, destructured imports
+  // and ctx fields, function parameters, and catch bindings.
+  const declared = new Set();
+  const add = (n) => { if (n) declared.add(n); };
+  for (const m of src.matchAll(/\b(?:function|class)\s+([A-Za-z_$][\w$]*)/g)) add(m[1]);
+  for (const m of src.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) add(m[1]);
+  // const { a, b: c } = require(...) / = ctx
+  for (const m of src.matchAll(/\b(?:const|let|var)\s*\{([^}]+)\}\s*=/g)) {
+    for (const piece of m[1].split(',')) {
+      const name = piece.includes(':') ? piece.split(':')[1] : piece;
+      add(name.trim().replace(/\s.*$/, ''));
+    }
+  }
+  for (const m of src.matchAll(/(?:function\s*[A-Za-z_$\w]*|=>)?\s*\(([^)]*)\)\s*(?:=>|\{)/g)) {
+    for (const piece of m[1].split(',')) add(piece.trim().split(/[\s=]/)[0].replace(/[{}.]/g, ''));
+  }
+  for (const m of src.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)/g)) add(m[1]);
+
+  // Every bare call that is not a method call (no dot before it).
+  const bad = new Set();
+  for (const m of src.matchAll(/(^|[^.\w$'"`])([A-Za-z_$][\w$]*)\s*\(/gm)) {
+    const name = m[2];
+    if (JS_GLOBALS.has(name) || declared.has(name)) continue;
+    bad.add(name);
+  }
+  return [...bad];
+}
+
+for (const f of composers) {
+  // Comments name helpers in prose, and a Supabase select string like
+  // "jobs!inner(position)" looks exactly like a function call. Neither is code,
+  // so both come out before anything is counted.
+  const src = readFileSync(path.join(ROOT, f), 'utf8')
+    .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``');
+  const missing = undefinedCalls(src);
+  ok(`${f} calls no function it does not define`, missing.length === 0, missing.join(', '));
+}
+
 // ── the routes are mounted and auth-gated ──────────────────────────────────
 const PORT = 20000 + Math.floor(Math.random() * 20000);
 const child = spawn('node', ['index.js'], {
@@ -463,6 +525,34 @@ try {
   if (booted) {
     const unknown = await req('GET', '/definitely-not-a-route-xyz');
     ok('an unknown path 404s (so 401 below means the route exists)', unknown === 404, unknown);
+    // A 401 only proves the route is MOUNTED. It says nothing about whether the
+    // handler runs — and the handler is where a merge breaks things. Two Claude
+    // sessions worked this file at once: one replaced the local aiConfigured()
+    // helper with services/ai-provider, the other added a new CALL to that
+    // helper in a different part of the same file. Git saw no conflict, both
+    // merged, and main shipped a handler that called a function nobody defined.
+    // Every load of the Compose tab got a 500 that no test noticed.
+    //
+    // So each read endpoint is also called WITH a token: a fast
+    // "is not defined" is the failure; anything else — including a timeout
+    // against the dead dummy database — means the handler got past its own
+    // dependencies, which is all this can prove without a real database.
+    const jwt = require(path.join(ROOT, 'node_modules/jsonwebtoken'));
+    const authed = (p) => new Promise((resolve) => {
+      const token = jwt.sign({ id: 'u1', email: 'a@b.c', roles: ['bd'], role: 'bd', name: 'T', org_id: 'o1' }, 'test-secret');
+      const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method: 'GET', timeout: 8000,
+        headers: { Authorization: `Bearer ${token}` } },
+        (res) => { let b = ''; res.on('data', d => { b += d; }); res.on('end', () => resolve(b)); });
+      r.on('timeout', () => { r.destroy(); resolve('__timeout__'); });
+      r.on('error', () => resolve('__error__'));
+      r.end();
+    });
+    for (const p of ['/outreach/sender', '/outreach/sent', '/outreach/recipients?q=ed']) {
+      const body = await authed(p);
+      ok(`GET ${p} runs its handler (no ReferenceError)`,
+        !/is not defined|is not a function/i.test(body), body.slice(0, 160));
+    }
+
     for (const [m, p] of [['GET', '/outreach/sender'], ['POST', '/outreach/generate'], ['POST', '/outreach/send'],
                           ['GET', '/outreach/recipients'], ['GET', '/outreach/company-contacts/x'],
                           ['GET', '/outreach/sent'], ['POST', '/outreach/convert-lead']]) {
