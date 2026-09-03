@@ -228,6 +228,65 @@ function extractRoleTitle(jd) {
   return '';
 }
 
+// ── The employer, and where the job is ────────────────────────────────────
+// Both are in the posting, so asking a person to retype them is asking for a
+// typo. It got one: a LinkedIn profile reads "Vice President at Berks
+// Construction", and "Vice President" ended up in the Company box, so the email
+// went out saying "I came across Vice President's Construction Superintendent
+// opening". The posting knew the answer the whole time.
+
+// Company suffixes are the reliable signal — a title almost never carries one.
+const CO_SUFFIX = /\b(llc|l\.l\.c|inc|inc\.|incorporated|corp|corporation|co\.|company|companies|ltd|limited|group|holdings|associates|partners|partnership|solutions|services|systems|industries|technologies|enterprises|labs|works|studio|agency|consulting|construction|manufacturing|health|healthcare|medical|clinic|hospital|university|college|bank|capital|ventures|foundation|institute)\b/i;
+const TITLE_WORD = /\b(president|vp|v\.p|ceo|cfo|coo|cto|chief|owner|principal|partner|founder|director|manager|supervisor|superintendent|foreman|estimator|engineer|controller|accountant|recruiter|coordinator|analyst|specialist|administrator|assistant|associate|officer|lead|head|executive|designer|developer|technician|nurse|attorney|paralegal|representative|agent|consultant)\b/i;
+
+/**
+ * Does this value look like a person's job title rather than an employer?
+ * Used to refuse a Company field that was filled in from a LinkedIn headline.
+ * A name carrying a company suffix always wins — "Director's Choice Ltd" is a
+ * company, and this must not throw away a real one to catch a wrong one.
+ */
+function looksLikeJobTitle(value) {
+  const v = String(value || '').trim();
+  if (!v) return false;
+  if (CO_SUFFIX.test(v)) return false;
+  if (v.split(/\s+/).length > 6) return false;
+  return TITLE_WORD.test(v);
+}
+
+// "Berks Construction Group (BCG) is seeking an experienced Construction
+// Superintendent to lead..." — the employer is whatever precedes the verb.
+const COMPANY_SEEKING = /(?:^|[.\n])\s*([A-Z][A-Za-z0-9&.,'\-]*(?:\s+[A-Z(][A-Za-z0-9&.,'\-)]*){0,5}?)\s*(?:\([A-Z]{2,6}\)\s*)?\b(?:is|are|has been)\s+(?:currently\s+)?(?:seeking|looking for|hiring|in search of|recruiting)/;
+
+function extractCompany(jd) {
+  const text = contentLines(jd).join('\n');
+  const m = text.match(COMPANY_SEEKING);
+  if (m) {
+    const c = m[1].trim().replace(/[,.]$/, '');
+    if (c.split(/\s+/).length <= 6 && !looksLikeJobTitle(c) && !/^(we|our|the|this|they|it)$/i.test(c)) return c;
+  }
+  // Otherwise a line that is plainly a company name — a suffix is the tell.
+  for (const l of text.split('\n').slice(0, 12)) {
+    if (l.length <= 60 && CO_SUFFIX.test(l) && !/\bis\b|\bseeking\b|:/i.test(l)) {
+      return l.replace(/[,.]$/, '').trim();
+    }
+  }
+  return '';
+}
+
+// "Lancaster, PA" on its own line, or "in Tucson, AZ" inside a sentence.
+const LOC_LINE = /^([A-Z][A-Za-z.'\- ]{1,28},\s*(?:[A-Z]{2}|[A-Z][a-z]+(?:\s[A-Z][a-z]+)?))\b/;
+const LOC_INLINE = /\b(?:in|at|near)\s+([A-Z][A-Za-z.'\-]+(?:\s[A-Z][A-Za-z.'\-]+)?,\s*[A-Z]{2})\b/;
+
+function extractLocation(jd) {
+  const lines = contentLines(jd);
+  for (const l of lines.slice(0, 12)) {
+    const m = l.match(LOC_LINE);
+    if (m && !CO_SUFFIX.test(m[1])) return m[1].trim();
+  }
+  const m2 = lines.join('\n').match(LOC_INLINE);
+  return m2 ? m2[1].trim() : '';
+}
+
 // ── What the role actually asks for ────────────────────────────────────────
 // Extraction from the posting's OWN words, not a lookup against a dictionary
 // of skills someone thought of in advance. A fixed dictionary is why the first
@@ -513,10 +572,20 @@ function rulesDraft(input, options) {
   const senderName = txt(sender.name) || 'me';
   const senderTitle = txt(sender.title);
   const first = firstNameOf(i.contact_first_name);
-  const company = txt(i.company);
   const role = extractRoleTitle(i.job_description);
   const roleLabel = role || 'the role you have open';
-  const loc = txt(i.location);
+
+  // THE POSTING OUTRANKS THE FORM for the employer and the city. A typed value
+  // is used when it is plausibly a company; a value that reads as a person's
+  // job title is refused outright, because printing it produces "I came across
+  // Vice President's Construction Superintendent opening" — which is what a
+  // LinkedIn headline pasted into the Company box actually produced.
+  const typedCompany = txt(i.company);
+  const companyRejected = looksLikeJobTitle(typedCompany);
+  const company = (companyRejected || !typedCompany)
+    ? extractCompany(i.job_description)
+    : typedCompany;
+  const loc = txt(i.location) || extractLocation(i.job_description);
   // Two newlines: the sign-off is its own block, and a "Best regards," glued to
   // the last sentence is the tell that an email was assembled, not written.
   // WHEN A MAILBOX SIGNATURE WILL BE APPENDED, THE BODY MUST NOT SIGN ITSELF.
@@ -642,7 +711,11 @@ function rulesDraft(input, options) {
     subject: (role || 'Your opening') + (loc ? ' in ' + loc : '') + ' — candidates ready to review',
     diagnosis: diagnosisBits.join(' '),
     email: body,
-    mode: 'rules'
+    mode: 'rules',
+    // What the email actually used, so the page can show it rather than leaving
+    // the writer to spot a wrong name inside a paragraph.
+    used: { role: role, company: company, location: loc },
+    company_rejected: companyRejected ? typedCompany : null
   };
 }
 
@@ -657,6 +730,7 @@ module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
   rulesDraft, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
+  extractCompany, extractLocation, looksLikeJobTitle,
   contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
   firstNameOf, wordCount
 };
