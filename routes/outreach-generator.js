@@ -38,6 +38,7 @@ module.exports = (ctx) => {
   const {
     supabase, auth, today, buildHtmlEmailBody, getMailboxSignature,
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage,
+    withOrg, orgStamp, logActivity,
   } = ctx;
 
   // The org's own name — this text goes out under the CUSTOMER's identity, so
@@ -109,7 +110,14 @@ module.exports = (ctx) => {
       const identity = await senderIdentity(req, mailbox);
       res.json({
         company_name: companyName,
-        ai: aiConfigured(),
+        // Whether an AI writer is configured is the provider's question now, not
+        // this file's. Two branches merged cleanly into a break here: #159
+        // replaced the local aiConfigured() helper with services/ai-provider,
+        // and #160 added a NEW call to the helper in this handler. Git had no
+        // reason to see a conflict — the helper was deleted in one region and
+        // called in another — so main shipped with the call and without the
+        // function, and every load of the Compose tab got a 500.
+        ai: await aiProvider.isAvailable(supabase),
         mailbox: mailbox ? {
           id: mailbox.id,
           email: mailbox.email_address,
@@ -198,6 +206,156 @@ module.exports = (ctx) => {
         // same shape. The page says which engine produced what it is showing.
         return res.json({ ...built.variants[0], ...base, ai_available: true, ai_error: aiErr.message });
       }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── WHO THIS IS GOING TO ────────────────────────────────────────────────
+  // The composer takes a recipient two ways: someone already in the database,
+  // or someone typed in from scratch. This is the first. Contacts and companies
+  // are searched together because a person looking for "Berks" does not know or
+  // care which table the answer is in.
+  router.get('/outreach/recipients', auth, async (req, res) => {
+    try {
+      const q = String(req.query.q || '').trim();
+      if (q.length < 2) return res.json({ contacts: [], companies: [] });
+      const like = `%${q}%`;
+      const [contacts, companies] = await Promise.all([
+        withOrg(supabase.from('contacts')
+          .select('id,first_name,last_name,email,designation,job_id,jobs(position,company_id,companies(name))')
+          .or(`email.ilike.${like},first_name.ilike.${like},last_name.ilike.${like}`)
+          .not('email', 'is', null).limit(8), req),
+        withOrg(supabase.from('companies')
+          .select('id,name,industry,location').ilike('name', like).is('deleted_at', null).limit(6), req),
+      ]);
+      res.json({
+        contacts: (contacts.data || []).map(c => ({
+          id: c.id, email: c.email,
+          name: [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
+          title: c.designation || '',
+          company: (c.jobs && c.jobs.companies && c.jobs.companies.name) || '',
+          position: (c.jobs && c.jobs.position) || '',
+          job_id: c.job_id || null,
+        })),
+        companies: (companies.data || []).map(co => ({
+          id: co.id, name: co.name, industry: co.industry || '', location: co.location || ''
+        })),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Contacts on one company, so picking a company then a person is two clicks
+  // rather than a second search.
+  router.get('/outreach/company-contacts/:id', auth, async (req, res) => {
+    try {
+      const { data: rows } = await withOrg(supabase.from('contacts')
+        .select('id,first_name,last_name,email,designation,job_id,jobs!inner(position,company_id)')
+        .eq('jobs.company_id', req.params.id).not('email', 'is', null).limit(25), req);
+      res.json((rows || []).map(c => ({
+        id: c.id, email: c.email,
+        name: [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
+        title: c.designation || '', position: (c.jobs && c.jobs.position) || '', job_id: c.job_id || null
+      })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── WHAT HAPPENED TO WHAT YOU SENT ──────────────────────────────────────
+  // Generator sends are not attached to a lead, by design for now — so this is
+  // the only place they can be seen. Opens and replies come from the tracking
+  // row the send writes; the reply timestamp is stamped by the same 30-minute
+  // inbox sweep that watches every other tracked send.
+  router.get('/outreach/sent', auth, async (req, res) => {
+    try {
+      const { data } = await withOrg(supabase.from('email_tracking')
+        .select('token,to_email,subject,sent_at,opened_at,open_count,replied_at,lead_id')
+        .eq('channel', 'outreach').eq('sent_by', req.user.id)
+        .order('sent_at', { ascending: false }).limit(40), req);
+      res.json(data || []);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── A REPLY BECOMES A LEAD ──────────────────────────────────────────────
+  // Someone who wrote back is, by definition, a live conversation — and until
+  // it is a lead it is invisible to the pipeline, the follow-up engine, the
+  // "needs you today" queue and every report. This is the one action that moves
+  // it across, and it is deliberately a DECISION rather than something the send
+  // path does on its own: not every reply is worth tracking as a lead.
+  //
+  // Nothing here needs a migration — email_tracking has carried an unused
+  // lead_id column since 024, which is exactly what it was for.
+  router.post('/outreach/convert-lead', auth, async (req, res) => {
+    try {
+      const b = req.body || {};
+      const token = String(b.token || '').trim();
+      const email = String(b.email || '').trim().toLowerCase();
+      if (!token && !email) return res.status(400).json({ error: 'token or email required' });
+
+      let trk = null;
+      if (token) {
+        const { data } = await withOrg(supabase.from('email_tracking')
+          .select('id,token,to_email,subject,lead_id').eq('token', token), req).maybeSingle();
+        if (!data) return res.status(404).json({ error: 'Not found' });
+        if (data.lead_id) return res.status(409).json({ error: 'already_converted', job_id: data.lead_id });
+        trk = data;
+      }
+      const toEmail = (trk && trk.to_email) || email;
+      if (!toEmail) return res.status(400).json({ error: 'No recipient address on that send.' });
+
+      // Already in the database? Then this is not a new lead, and saying so
+      // beats silently creating a duplicate of a lead somebody is working.
+      const { data: existing } = await withOrg(supabase.from('contacts')
+        .select('id,job_id').ilike('email', toEmail).limit(1), req);
+      if (existing && existing.length && existing[0].job_id) {
+        if (trk) await supabase.from('email_tracking').update({ lead_id: existing[0].job_id }).eq('id', trk.id);
+        return res.status(409).json({ error: 'contact_exists', job_id: existing[0].job_id });
+      }
+
+      const org = orgStamp(req);
+      const companyName = String(b.company || '').trim();
+      let companyId = null;
+      if (companyName) {
+        const { data: found } = await withOrg(supabase.from('companies')
+          .select('id').ilike('name', companyName).limit(1), req);
+        companyId = (found && found[0] && found[0].id) || null;
+        if (!companyId) {
+          const { data: made, error: cErr } = await supabase.from('companies').insert(Object.assign({
+            name: companyName, location: String(b.location || '') || null, created_by: req.user.id
+          }, org)).select('id').single();
+          if (cErr) throw cErr;
+          companyId = made.id;
+        }
+      }
+
+      const { data: job, error: jErr } = await supabase.from('jobs').insert(Object.assign({
+        company_id: companyId,
+        position: String(b.position || b.subject || 'Outreach reply').slice(0, 200),
+        location: String(b.location || '') || null,
+        source: 'Outreach generator',
+        stage: 'Connected',          // they replied — that is what Connected means
+        notes: String(b.notes || 'Created from a reply to a generated outreach email.'),
+        created_by: req.user.id,
+        assigned_to: req.user.id,
+        created_date: new Date().toISOString().split('T')[0]
+      }, org)).select('id').single();
+      if (jErr) throw jErr;
+
+      const name = String(b.name || '').trim();
+      await supabase.from('contacts').insert(Object.assign({
+        job_id: job.id,
+        first_name: name.split(/\s+/)[0] || '',
+        last_name: name.split(/\s+/).slice(1).join(' ') || '',
+        designation: String(b.title || '') || null,
+        email: toEmail,
+        is_primary: true,
+        replied_at: new Date()
+      }, org));
+
+      if (trk) await supabase.from('email_tracking').update({ lead_id: job.id }).eq('id', trk.id);
+      try {
+        if (logActivity) await logActivity(job.id, null, req.user.id, 'lead_created',
+          `Converted from an outreach reply (${toEmail})`);
+      } catch (_) { /* audit is best-effort */ }
+
+      res.status(201).json({ job_id: job.id, company_id: companyId });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

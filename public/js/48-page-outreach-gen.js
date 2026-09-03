@@ -29,7 +29,11 @@
   function blankForm(){
     return { outreach_type:'first', contact_first_name:'', contact_title:'', company:'',
              location:'', to:'', no_agencies:false, no_agencies_text:'', notes:'',
-             job_description:'', sender_title:'' };
+             job_description:'', sender_title:'',
+             // Where the recipient came from: a record already in PACE, or typed
+             // in from scratch. Kept on the form because it decides what the
+             // send is attached to, not just how the picker looks.
+             pickedContactId:null, pickedJobId:null };
   }
 
   function G(){
@@ -39,7 +43,11 @@
       // Which framing is on screen, and the edits made to each one. Switching
       // between them must not throw away a sentence you just rewrote — that is
       // the difference between a picker and a regenerate button.
-      variantId:null, edits:{}
+      variantId:null, edits:{},
+      // Recipient search — the "someone already in PACE" half of the composer.
+      recipMode:'new', recipQuery:'', recipResults:null, recipSearching:false,
+      // What you have already sent from here, and what came back.
+      sent:null, sentLoading:false, converting:null
     };
     return STATE.outreachGen;
   }
@@ -83,13 +91,88 @@
     }).catch(function(){ g.senderLoading=false; g.sender={mailbox:null,company_name:'',sender:{}}; render(); });
   };
 
+  // ── the recipient half of the composer ────────────────────────────────────
+  window.outreachRecipMode=function(m){
+    var g=collectDom(); g.recipMode=m;
+    if(m==='new'){ g.form.pickedContactId=null; g.form.pickedJobId=null; }
+    render();
+  };
+
+  var _recipTimer=null;
+  window.outreachRecipSearch=function(q){
+    var g=G(); g.recipQuery=q;
+    clearTimeout(_recipTimer);
+    if(String(q||'').trim().length<2){ g.recipResults=null; return; }
+    // Debounced: a request per keystroke would be a request per keystroke.
+    _recipTimer=setTimeout(function(){
+      g.recipSearching=true;
+      apiGet('/outreach/recipients?q='+encodeURIComponent(q)).then(function(r){
+        g.recipSearching=false; g.recipResults=r; render();
+      }).catch(function(){ g.recipSearching=false; g.recipResults={contacts:[],companies:[]}; render(); });
+    },300);
+  };
+
+  // Picking a person fills the same fields you would otherwise type, so the
+  // rest of the composer does not care which way the recipient arrived.
+  window.outreachPickContact=function(json){
+    var c=JSON.parse(decodeURIComponent(json));
+    var g=G(), f=g.form;
+    f.to=c.email||''; f.contact_first_name=(c.name||'').split(/\s+/)[0]||'';
+    f.contact_title=c.title||''; f.company=c.company||'';
+    f.pickedContactId=c.id||null; f.pickedJobId=c.job_id||null;
+    g.recipResults=null; g.recipQuery=c.name||c.email||'';
+    render();
+  };
+  window.outreachPickCompany=function(json){
+    var co=JSON.parse(decodeURIComponent(json));
+    var g=G();
+    g.form.company=co.name||''; if(co.location) g.form.location=co.location;
+    g.recipResults=null; g.recipQuery=co.name||'';
+    apiGet('/outreach/company-contacts/'+encodeURIComponent(co.id)).then(function(rows){
+      g.recipResults={contacts:rows||[],companies:[]}; render();
+    }).catch(function(){ render(); });
+  };
+
+  // ── what you have sent, and what came back ────────────────────────────────
+  window.loadOutreachSent=function(force){
+    var g=G();
+    if(g.sentLoading||(g.sent&&!force)) return;
+    g.sentLoading=true;
+    apiGet('/outreach/sent').then(function(rows){
+      g.sentLoading=false; g.sent=rows||[]; render();
+    }).catch(function(){ g.sentLoading=false; g.sent=[]; render(); });
+  };
+
+  window.outreachConvertLead=function(token){
+    var g=G();
+    var row=(g.sent||[]).filter(function(r){return r.token===token;})[0];
+    if(!row) return;
+    g.converting=token; render();
+    apiPost('/outreach/convert-lead',{
+      token:token, email:row.to_email, subject:row.subject,
+      name:g.form.contact_first_name||'', company:g.form.company||'',
+      title:g.form.contact_title||'', location:g.form.location||''
+    }).then(function(r){
+      g.converting=null;
+      showToast('Lead created — open it from the Leads page','success');
+      g.sent=null; loadOutreachSent(true);
+    }).catch(function(e){
+      g.converting=null;
+      var m=e.message==='contact_exists' ? 'That address is already on a lead in PACE.'
+          : e.message==='already_converted' ? 'This reply has already been converted.'
+          : (e.message||'Could not create the lead.');
+      showToast(m,'warning'); g.sent=null; loadOutreachSent(true);
+    });
+  };
+
   window.outreachGenField=function(k,v){ G().form[k]=v; };
   window.outreachGenToggle=function(k,v){ G().form[k]=!!v; render(); };
   window.outreachGenType=function(v){ G().form.outreach_type=v; render(); };
   window.outreachGenAdjust=function(v){ G().adjustment=v; };
 
   window.outreachGenReset=function(){
-    var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sent=null;
+    var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sentOk=null;
+    g.recipQuery=''; g.recipResults=null;
     g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={}; render();
   };
 
@@ -154,7 +237,7 @@
       render(); return;
     }
 
-    g.loading=true; g.error=null; g.sent=null; render();
+    g.loading=true; g.error=null; g.sentOk=null; render();
     apiPost('/outreach/generate',{
       outreach_type:f.outreach_type,
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
@@ -182,7 +265,8 @@
     if(!to){ g.error='Enter the address this should go to.'; render(); return; }
     g.sending=true; g.error=null; render();
     apiPost('/outreach/send',{to:to,subject:cur.subject,body:cur.email}).then(function(r){
-      g.sending=false; g.sent={to:to,mailbox:r.mailbox};
+      g.sending=false; g.sentOk={to:to,mailbox:r.mailbox};
+      g.sent=null; loadOutreachSent(true);   // the list has a new row in it now
       pushHistory(cur.subject||'',g.form.company,true);
       showToast('Sent to '+to,'success');
       render();
@@ -251,6 +335,67 @@
           (s.ai?'Drafted by the AI writer.':'Drafted by the built-in rules writer — no API key is configured, so this costs nothing.')+
         '</div>'+
       '</div>'+
+    '</div>';
+  }
+
+  function recipientCard(){
+    var g=G(), f=g.form;
+    var tab=function(id,lbl){
+      var on=g.recipMode===id;
+      return '<button type="button" onclick="outreachRecipMode(\''+id+'\')" style="'+
+        'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
+        'background:'+(on?'var(--accent-l)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+';'+
+        'font-weight:'+(on?'600':'500')+';font-size:12.5px;border-radius:99px;padding:6px 13px;'+
+        'cursor:pointer;font-family:inherit">'+lbl+'</button>';
+    };
+
+    var results='';
+    if(g.recipMode==='existing'){
+      var r=g.recipResults;
+      if(g.recipSearching){
+        results='<div style="font-size:12px;color:var(--text3);padding:8px 2px">Searching…</div>';
+      } else if(r){
+        var rows=[];
+        (r.contacts||[]).forEach(function(c){
+          var j=encodeURIComponent(JSON.stringify(c));
+          rows.push('<div onclick="outreachPickContact(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
+            'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
+            '<strong>'+esc(c.name||c.email)+'</strong>'+(c.title?' · '+esc(c.title):'')+
+            '<div style="font-size:11.5px;color:var(--text3)">'+esc(c.email)+(c.company?' · '+esc(c.company):'')+'</div></div>');
+        });
+        (r.companies||[]).forEach(function(co){
+          var j=encodeURIComponent(JSON.stringify(co));
+          rows.push('<div onclick="outreachPickCompany(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
+            'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
+            '<strong>'+esc(co.name)+'</strong> <span style="color:var(--text3)">— company</span>'+
+            '<div style="font-size:11.5px;color:var(--text3)">'+esc([co.industry,co.location].filter(Boolean).join(' · ')||'see its contacts')+'</div></div>');
+        });
+        results=rows.length
+          ? '<div style="border:1px solid var(--border2);border-radius:var(--r);max-height:230px;overflow:auto;margin-top:8px">'+rows.join('')+'</div>'
+          : '<div style="font-size:12px;color:var(--text3);padding:8px 2px">Nothing in PACE matches that. Use <strong>Someone new</strong> to add them.</div>';
+      }
+    }
+
+    // Once a recipient is settled, show it as a fact rather than leaving the
+    // writer to re-read four separate boxes to check who this is going to.
+    var chosen=(f.to||f.contact_first_name)?
+      '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:10px">'+
+        '<div style="flex:1;min-width:0;font-size:13px"><strong>'+esc(f.contact_first_name||f.to)+'</strong>'+
+          (f.contact_title?' · '+esc(f.contact_title):'')+
+          '<div style="font-size:11.5px;color:var(--accent);font-weight:600">'+esc(f.to||'(no address yet)')+'</div>'+
+          (f.company?'<div style="font-size:11px;color:var(--text3)">'+esc(f.company)+'</div>':'')+
+        '</div>'+
+        (f.pickedContactId?'<span class="bdg bdg-blue" style="font-size:10.5px">in PACE</span>':'')+
+      '</div>':'';
+
+    return '<div class="card cp mb3">'+
+      '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+        tab('existing','Someone in PACE')+tab('new','Someone new')+
+      '</div>'+
+      (g.recipMode==='existing'
+        ? '<input class="inp" placeholder="Search by name, email or company" value="'+esc(g.recipQuery)+'" oninput="outreachRecipSearch(this.value)">'+results
+        : '<div style="font-size:11.5px;color:var(--text3)">Fill in the contact and company below — nothing is saved to PACE unless you convert a reply into a lead.</div>')+
+      chosen+
     '</div>';
   }
 
@@ -372,9 +517,9 @@
       ? '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Written by the built-in rules writer.'+
         (d.ai_error?' The AI writer was unavailable for this one.':'')+'</div>'
       : '';
-    var sentBanner=g.sent
+    var sentBanner=g.sentOk
       ? '<div style="background:var(--green-l);border-radius:var(--r);padding:9px 12px;font-size:12.5px;margin-bottom:10px">'+
-        'Sent to <strong>'+esc(g.sent.to)+'</strong> from '+esc(g.sent.mailbox)+'.</div>'
+        'Sent to <strong>'+esc(g.sentOk.to)+'</strong> from '+esc(g.sentOk.mailbox)+'.</div>'
       : '';
     return '<div class="card cp">'+
       sentBanner+
@@ -418,6 +563,43 @@
     '</div>';
   }
 
+  function sentCard(){
+    var g=G();
+    if(g.sent===null){ if(!g.sentLoading) setTimeout(function(){loadOutreachSent();},0); return ''; }
+    if(!g.sent.length) return '';
+    var fmt=function(d){ try{ return new Date(d).toLocaleDateString(); }catch(e){ return ''; } };
+    return '<div class="card cp mt3">'+
+      '<div style="font-size:12px;color:var(--text3);font-weight:600;margin-bottom:8px">Sent from here</div>'+
+      g.sent.slice(0,12).map(function(r){
+        // A reply is the only status worth acting on, so it is the only one that
+        // gets a button. Opens are information; a reply is a live conversation
+        // that is invisible to the pipeline until somebody makes it a lead.
+        var status = r.replied_at
+          ? '<span style="color:var(--green);font-weight:600">Replied</span>'
+          : r.opened_at
+            ? '<span style="color:var(--accent)">Opened'+(r.open_count>1?' · '+r.open_count+'×':'')+'</span>'
+            : '<span style="color:var(--text3)">Sent</span>';
+        var action = r.lead_id
+          ? '<span style="font-size:11.5px;color:var(--text3)">lead created</span>'
+          : (r.replied_at
+              ? '<button class="btn btn-outline btn-sm" '+(g.converting===r.token?'disabled style="opacity:.6"':'')+
+                ' onclick="outreachConvertLead(\''+esc(r.token)+'\')">'+
+                (g.converting===r.token?'Creating…':'Convert to lead')+'</button>'
+              : '');
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)">'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.to_email||'')+'</div>'+
+            '<div style="font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
+          '</div>'+
+          '<div style="font-size:11.5px;white-space:nowrap">'+status+'</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);white-space:nowrap">'+fmt(r.sent_at)+'</div>'+
+          '<div style="min-width:112px;text-align:right">'+action+'</div>'+
+        '</div>';
+      }).join('')+
+      '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Replies land in your Inbox and you can answer them there. Converting one makes it a lead, so the reply also reaches the pipeline, your reports and the follow-up engine.</div>'+
+    '</div>';
+  }
+
   function historyCard(){
     var h=readHistory();
     if(!h.length) return '';
@@ -437,8 +619,8 @@
     var err=g.error?'<div style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+esc(g.error)+'</div>':'';
     return senderCard()+meterCard()+err+
       '<div class="og-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">'+
-        '<div>'+inputsCard()+'</div>'+
-        '<div>'+outputCard()+historyCard()+'</div>'+
+        '<div>'+recipientCard()+inputsCard()+'</div>'+
+        '<div>'+outputCard()+sentCard()+'</div>'+
       '</div>';
   };
 })();
