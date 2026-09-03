@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,106 @@ const results = [];
 const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail: String(detail) });
 
 const CO = 'Acme Staffing LLC';
+
+// Real postings, pasted the way a person actually pastes them — starting at
+// "Job description", with the board's furniture still in, and the headings
+// glued onto the sentences that follow. Every one of these was a bug report
+// from the owner before it was a fixture.
+const FIX = (n) => readFileSync(path.join(__dirname, 'fixtures', n), 'utf8');
+const CONSTRUCTION = FIX('posting-construction.txt');
+const NURSE = FIX('posting-nurse.txt');
+const BACKEND = FIX('posting-backend.txt');
+const LINKEDIN = FIX('contact-linkedin.txt');
+
+// ── The bug report of 2026-09-03, pinned ───────────────────────────────────
+// A Construction Superintendent posting produced an email whose subject was
+// "Job description in Lancaster, PA", named no real skills, and blamed a
+// certification requirement that lived in the PREFERRED block. Each assertion
+// below is one of those failures.
+ok('a paste that starts at "Job description" still finds the real title',
+  gen.extractRoleTitle(CONSTRUCTION) === 'Construction Superintendent', gen.extractRoleTitle(CONSTRUCTION));
+ok('a salary chip is never mistaken for the job title',
+  !/\$/.test(gen.extractRoleTitle(CONSTRUCTION)), gen.extractRoleTitle(CONSTRUCTION));
+ok('"Job description" is never the job title',
+  !/^job\s*description$/i.test(gen.extractRoleTitle(CONSTRUCTION)));
+ok('headings glued to the next sentence are ungrued',
+  gen.normalizeText('Required ExperienceSignificant experience').includes('\nSignificant'));
+ok('a real name is not split by the unglue pass',
+  gen.normalizeText('McDonald and DeWalt').includes('McDonald'), gen.normalizeText('McDonald and DeWalt'));
+ok('required and preferred are separated on a HEADING, not the word "preferred"',
+  gen.sections(CONSTRUCTION).required.includes('10+ years'),
+  gen.sections(CONSTRUCTION).required.slice(-90));
+ok('a certification that is only PREFERRED is not reported as the gate',
+  gen.diagnoseSignal(CONSTRUCTION, '').id === 'seniority', JSON.stringify(gen.diagnoseSignal(CONSTRUCTION, '')));
+ok("a driver's licence is not a hiring gate",
+  gen.diagnoseSignal("Requirements Valid driver's license. 5 years of field experience.", '').id !== 'licence');
+ok('the diagnosis quotes the posting cleanly, not a clipped verdict',
+  /10\+ years of commercial construction supervision experience$/.test(gen.diagnoseSignal(CONSTRUCTION, '').why.split('—')[1].trim().replace(/\s+—.*$/, '')) ||
+  gen.diagnoseSignal(CONSTRUCTION, '').why.includes('10+ years of commercial construction supervision experience —'),
+  gen.diagnoseSignal(CONSTRUCTION, '').why);
+ok('real requirements are extracted from a construction posting',
+  gen.extractRequirements(CONSTRUCTION).phrases.length > 0,
+  JSON.stringify(gen.extractRequirements(CONSTRUCTION)));
+ok('the tools it names are real tools, not adjectives',
+  JSON.stringify(gen.extractRequirements(CONSTRUCTION).named.sort()) === JSON.stringify(['OSHA 30', 'Procore']),
+  JSON.stringify(gen.extractRequirements(CONSTRUCTION).named));
+
+// The same extraction has to work on industries this code was never written
+// against — that is the difference between a parser and a hard-coded example.
+ok('a nursing posting yields its own title and credentials',
+  gen.extractRoleTitle(NURSE) === 'Registered Nurse - ICU' &&
+  gen.extractRequirements(NURSE).named.includes('ACLS'),
+  gen.extractRoleTitle(NURSE) + ' / ' + gen.extractRequirements(NURSE).named);
+ok('a backend posting yields its own title and stack',
+  gen.extractRoleTitle(BACKEND) === 'Senior Backend Engineer' &&
+  gen.extractRequirements(BACKEND).phrases.some(p => /Java/.test(p.text)),
+  gen.extractRoleTitle(BACKEND) + ' / ' + JSON.stringify(gen.extractRequirements(BACKEND).phrases));
+ok('a phrase never ends on a dangling preposition',
+  !gen.extractRequirements(NURSE).phrases.some(p => /\b(in|an|a|the|of|and|with|for)$/i.test(p.text)),
+  JSON.stringify(gen.extractRequirements(NURSE).phrases));
+
+// A pasted LinkedIn profile is notes, and the ONE detail taken from it has to
+// be a fact. The first version emitted the sentence "Ed Jones, which is why I
+// am writing to you rather than through the posting."
+ok('the note detail is never just the contact\'s own name',
+  !/^ed jones$/i.test(gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' })),
+  gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' }));
+ok('a career history becomes a fact about where they came from',
+  /estimating/.test(gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' })),
+  gen.pickNoteDetail(LINKEDIN, { contactName: 'Ed Jones', contactTitle: 'Vice President' }));
+ok('a mutual connection is picked over anything else in the notes',
+  gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {}) === 'we have Priya in common',
+  gen.pickNoteDetail('Mutual connection Priya introduced us. She has been there 9 years.', {}));
+ok('empty notes produce no detail sentence', gen.pickNoteDetail('', {}) === '');
+
+// Who we are writing to changes the email, not just a word in it.
+ok('a VP reads as an executive', gen.audienceOf('Vice President of Operations') === 'exec');
+ok('a Controller reads as finance first', gen.audienceOf('Controller') === 'finance');
+ok('a talent partner reads as HR', gen.audienceOf('Talent Acquisition Partner') === 'hr');
+ok('a superintendent reads as the hiring manager', gen.audienceOf('Site Superintendent') === 'manager');
+
+// Grammar that a recruiter would notice before a client did.
+ok('a specialisation after a dash is dropped before pluralising',
+  gen.pluralRole('Registered Nurse - ICU') === 'Registered Nurses', gen.pluralRole('Registered Nurse - ICU'));
+ok('a company already ending in s takes a bare apostrophe',
+  gen.possessive('Health Partners') === "Health Partners'", gen.possessive('Health Partners'));
+ok('a greeting uses the first name only', gen.firstNameOf('Ed Jones') === 'Ed');
+
+// The whole email, on the posting that produced the bug report.
+const real = gen.rulesDraft({
+  outreach_type: 'first', contact_first_name: 'Ed Jones', contact_title: 'Vice President',
+  company: 'Berks Construction Group, LLC', location: 'Lancaster, PA',
+  job_description: CONSTRUCTION, notes: LINKEDIN,
+  sender: { name: 'Prince Thomas', title: 'Account Manager' }
+}, { companyName: CO });
+ok('the subject names the real role', real.subject.startsWith('Construction Superintendent'), real.subject);
+ok('the email greets Ed, not "Ed Jones"', real.email.startsWith('Hi Ed,'), real.email.slice(0, 20));
+ok('the email names what the posting actually asks for',
+  /Procore/.test(real.email) && /OSHA 30/.test(real.email), real.email);
+ok('the email names the role, not "Job description"',
+  /Construction Superintendent/.test(real.email) && !/Job description/i.test(real.email), real.email);
+ok('the email stays inside the length rule', gen.wordCount(real.email) <= 170, gen.wordCount(real.email));
+
 const JD = [
   'Quick Apply',
   '4.1 out of 5 stars',

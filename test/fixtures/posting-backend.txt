@@ -1,0 +1,5 @@
+Job description
+Job Description:
+Northwind Logistics is hiring a Senior Backend Engineer to own our carrier-integration platform. You will design services that move freight data between shippers and carriers at scale.
+What we're looking forRequired Experience7+ years of professional backend development.Strong experience with Java and Spring Boot.Experience building and operating distributed systems in AWS.Experience with Kafka or a comparable event bus.Demonstrated ability to lead technical design reviews.This role is fully on-site in our Chicago office four days per week.
+Preferred QualificationsKubernetes experienceTerraform experienceExperience in freight, 3PL, or supply-chain software
