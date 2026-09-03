@@ -3056,7 +3056,7 @@ const recruitingOutreach = require('./routes/recruiting/outreach')(app, {
 // Mounted here, after the block above, because it sends through that block's
 // mailbox helpers rather than its own copy of them.
 app.use(require('./routes/outreach-generator')({
-  ...routeCtx, loadSuppressedSet,
+  ...routeCtx, loadSuppressedSet, withOrg, orgStamp, logActivity,
   recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
   sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
 }));
