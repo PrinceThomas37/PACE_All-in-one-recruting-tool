@@ -343,6 +343,34 @@ Session 9). What that means in practice:
     turns it on — no key exists to check). None of them may ever become a
     requirement for a feature to work.
 
+- **WHAT AN AI CALL MAY COST IS DECIDED BEFORE IT IS MADE —
+  `services/ai-budget.js` (Session 18).** A free tier is a daily allowance, and
+  the way to lose one before lunch is to send a user's pasted 30,000-character
+  job page to the biggest model forty times. So `complete()` takes a `feature`
+  and an `orgId`, and the budget layer: **trims** input to that feature's
+  ceiling (long input is cut, never refused — a resume's fields are on page
+  one), **clamps** `max_tokens` down to the feature's ceiling, **tiers** the
+  model (`fast` for extraction, `quality` only for prose a prospect reads —
+  `PROVIDERS[id].models`), and **refuses** the call once the org's daily
+  token/request ceiling is reached. Rules that hold:
+  * **Over budget is NOT an error.** It is the same `null` as "no provider",
+    and the feature's rules writer answers. That is the only reason a budget
+    can be strict without being risky — never turn it into a 4xx.
+  * **The check is BEFORE the call, on an estimate that rounds up** (input +
+    the longest permitted answer). A meter that only counts what came back can
+    be blown past by one long reply.
+  * **A caller with no `feature` gets the tightest allowance, not an unlimited
+    one** — otherwise "forgot to name it" becomes the way to bypass the budget.
+  * **The meter is `app_settings`, keyed `ai_usage_<org>_<YYYY-MM-DD>`** — no
+    migration, expires by never being read again, per-org. It is a meter, not
+    an audit log; a per-call history is a later upgrade and its own table.
+    Recording is best-effort: a counter that throws must never take down the
+    feature it protects.
+  * Caps live in `app_settings` (`ai_daily_token_cap` / `ai_daily_call_cap`),
+    default 150k tokens / 250 requests, edited in Admin → Integrations. **Blank
+    means "use the default"; a typed 0 genuinely means "no AI today"** — do not
+    collapse those two.
+
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
 Ordered by "cheapest to do now vs. most painful to retrofit":

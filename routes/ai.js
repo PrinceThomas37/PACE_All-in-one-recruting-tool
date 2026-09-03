@@ -23,7 +23,7 @@ router.post('/ai/generate-email', auth, async (req, res) => {
     const fill = (s) => (s || '').replace(/{{(\w+)}}/g, (m, k) => vars[k] || m);
     const fallback = () => res.json({ subject: fill(template?.subject || 'Opportunity at {{company}}'), body: fill(template?.body || 'Hi {{fn}},') });
     const prompt = `Write a hyper-personalized cold outreach email for a business development executive at Fute Global LLC.\nContact: ${vars.fn} ${vars.ln || ''}, ${vars.desig || ''} at ${vars.company} (${vars.ind || ''}, ${vars.loc || ''})\nPosition: ${vars.pos || ''}\nFormat:\nSubject: [subject line]\n\n[email body]`;
-    const out = await ai.complete(supabase, { prompt, maxTokens: 600 });
+    const out = await ai.complete(supabase, { prompt, maxTokens: 600, feature: 'cold_email', orgId: req.orgId });
     if (!out) return fallback();
     const text = out.text || '';
     const subjectMatch = text.match(/Subject:\s*(.+)/i);
@@ -57,7 +57,7 @@ Cover these points naturally:
 
 Keep it concise, informative and actionable. End with one sentence about what the team should focus on today based on the data.`;
 
-    const out = await ai.complete(supabase, { prompt, maxTokens: 400 });
+    const out = await ai.complete(supabase, { prompt, maxTokens: 400, feature: 'import_briefing', orgId: req.orgId });
     if (!out) return res.json({ summary: 'AI summary unavailable — no AI provider configured (Admin → Integrations).' });
     res.json({ summary: out.text, provider: out.provider });
   } catch (err) { res.status(500).json({ error: err.message }); }

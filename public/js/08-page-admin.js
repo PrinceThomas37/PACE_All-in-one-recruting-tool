@@ -94,6 +94,9 @@ window.openIntegrationsModal=function(){
   render();
   apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); })
     .catch(function(e){ closeModal(); showToast('Failed to load integrations: '+(e&&e.message||e),'error'); });
+  // The budget loads alongside: an empty meter is fine, a missing one is not —
+  // nobody should paste a key without seeing what it is allowed to spend.
+  apiGet('/admin/ai-budget').then(function(r){ STATE.aiBudget=r; renderIntegrationsModal(); }).catch(function(){});
 };
 function intgFind(id){ var out=null; ((STATE.integrations&&STATE.integrations.categories)||[]).forEach(function(c){c.items.forEach(function(x){if(x.id===id)out=x;});}); return out; }
 function renderIntegrationsModal(){
@@ -136,7 +139,7 @@ function renderIntegrationsModal(){
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
-      (cat.category==='AI'?aiProviderNote():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
+      (cat.category==='AI'?aiProviderNote()+aiBudgetCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
@@ -181,6 +184,44 @@ window.testIntegration=function(id){
   STATE._intgTest=STATE._intgTest||{}; STATE._intgTest[id]={pending:true}; renderIntegrationsModal();
   apiPost('/admin/integrations/'+id+'/test',body).then(function(r){ STATE._intgTest[id]=r; renderIntegrationsModal(); })
     .catch(function(e){ STATE._intgTest[id]={ok:false,error:(e&&e.message||e)}; renderIntegrationsModal(); });
+};
+function aiBudgetCard(){
+  var b=STATE.aiBudget;
+  if(!b)return '';
+  var pct=b.caps.tokens>0?Math.min(100,Math.round((b.spent.tokens/b.caps.tokens)*100)):100;
+  var bar='<div style="height:6px;border-radius:3px;background:var(--bg3);overflow:hidden;margin:6px 0 4px"><div style="height:100%;width:'+pct+'%;background:'+(pct>85?'var(--red)':pct>60?'var(--amber)':'var(--green)')+'"></div></div>';
+  var rows=(b.features||[]).map(function(f){
+    return '<tr><td style="padding:2px 8px 2px 0;color:var(--text2)">'+htmlEsc(f.label)+'</td>'+
+      '<td style="padding:2px 8px 2px 0;color:var(--text3)">'+(f.tier==='fast'?'small model':'better model')+'</td>'+
+      '<td style="padding:2px 8px 2px 0;color:var(--text3);text-align:right">'+f.max_input_tokens.toLocaleString()+' in / '+f.max_output_tokens.toLocaleString()+' out</td>'+
+      '<td style="padding:2px 0;text-align:right;font-weight:600">'+(f.spent_today||0).toLocaleString()+'</td></tr>';
+  }).join('');
+  return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+    '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Daily budget</div>'+
+    '<div style="font-size:11.5px;color:var(--text3);line-height:1.5">Spending is capped per day so a free allowance cannot be used up in one morning. '+
+      'Past the cap, features go back to their built-in version until tomorrow — nothing breaks and nothing is charged.</div>'+
+    bar+
+    '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px"><b>'+b.spent.tokens.toLocaleString()+'</b> of '+b.caps.tokens.toLocaleString()+' tokens used today · <b>'+b.spent.calls.toLocaleString()+'</b> of '+b.caps.calls.toLocaleString()+' requests</div>'+
+    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'+
+      '<input class="inp" id="aib-tokens" type="number" min="0" value="'+b.caps.tokens+'" title="Tokens per day" style="width:120px"/>'+
+      '<span style="font-size:11.5px;color:var(--text3)">tokens/day</span>'+
+      '<input class="inp" id="aib-calls" type="number" min="0" value="'+b.caps.calls+'" title="Requests per day" style="width:90px"/>'+
+      '<span style="font-size:11.5px;color:var(--text3)">requests/day</span>'+
+      '<button class="btn btn-sm btn-primary" onclick="saveAiBudget()">Save</button>'+
+    '</div>'+
+    '<table style="width:100%;font-size:11px;border-collapse:collapse">'+
+      '<tr style="color:var(--text3);text-transform:uppercase;letter-spacing:.05em;font-size:9.5px">'+
+        '<td style="padding-bottom:4px">Feature</td><td>Model</td><td style="text-align:right">Per request</td><td style="text-align:right">Used today</td></tr>'+
+      rows+
+    '</table>'+
+  '</div>';
+}
+window.saveAiBudget=function(){
+  var t=document.getElementById('aib-tokens'), c=document.getElementById('aib-calls');
+  apiPost('/admin/ai-budget',{tokens:t?t.value:undefined,calls:c?c.value:undefined}).then(function(){
+    showToast('Budget saved','success');
+    return apiGet('/admin/ai-budget').then(function(r){ STATE.aiBudget=r; renderIntegrationsModal(); });
+  }).catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
 };
 function aiProviderNote(){
   return '<div style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;color:var(--text3);line-height:1.5">'+

@@ -26,12 +26,21 @@
 // Groq, OpenRouter and Ollama all speak the second one, which is why adding
 // them is one adapter and not three.
 //
+// WHAT IT COSTS IS DECIDED HERE, BEFORE THE CALL
+// A free tier is a daily allowance, and the way to lose one is to send a
+// user's pasted 30,000-character job page to the biggest model 40 times. So
+// every call names its FEATURE, and services/ai-budget.js trims the input,
+// caps the answer, picks the cheap model for extraction work, and refuses the
+// call once the org's daily ceiling is reached. A refusal is the same null as
+// "no provider" — the rules writer answers instead.
+//
 // The builders/parsers below are PURE (no network, no db, no clock) so the
 // exact bytes we put on the wire for each provider are testable offline.
 // ============================================================================
 
 const { fetchWithTimeout } = require('../http-client');
 const integrations = require('../config/integrations');
+const budget = require('./ai-budget');
 
 // AI generation is slower than a normal API call but must still be bounded —
 // these run inside request handlers a browser is waiting on.
@@ -45,16 +54,21 @@ const PROVIDERS = {
     id: 'anthropic', label: 'Anthropic (Claude)', wire: 'anthropic',
     url: 'https://api.anthropic.com/v1/messages',
     model: 'claude-sonnet-4-20250514',
+    // Extraction does not need the big model; prose the customer's prospect
+    // will read does. One tier down is typically ~10x cheaper per token.
+    models: { fast: 'claude-haiku-4-5-20251001', quality: 'claude-sonnet-4-20250514' },
   },
   groq: {
     id: 'groq', label: 'Groq', wire: 'openai',
     url: 'https://api.groq.com/openai/v1/chat/completions',
     model: 'llama-3.3-70b-versatile',
+    models: { fast: 'llama-3.1-8b-instant', quality: 'llama-3.3-70b-versatile' },
   },
   openrouter: {
     id: 'openrouter', label: 'OpenRouter', wire: 'openai',
     url: 'https://openrouter.ai/api/v1/chat/completions',
     model: 'meta-llama/llama-3.3-70b-instruct:free',
+    models: { fast: 'meta-llama/llama-3.2-3b-instruct:free', quality: 'meta-llama/llama-3.3-70b-instruct:free' },
   },
   ollama: {
     id: 'ollama', label: 'Ollama (self-hosted)', wire: 'openai',
@@ -63,6 +77,10 @@ const PROVIDERS = {
     // no account to authenticate against.
     url: null, keyless: true,
     model: 'llama3.1:8b',
+    // A self-hosted box has no allowance to spend, so both tiers are whatever
+    // the operator pulled. Tiering here would just fail on a model they do
+    // not have.
+    models: { fast: 'llama3.1:8b', quality: 'llama3.1:8b' },
   },
 };
 
@@ -165,8 +183,11 @@ async function resolveChain(supabase) {
     // A placeholder left in an env var is not configuration.
     if (!def.keyless && (!key || /^your_.*_here$/i.test(key))) continue;
     if (!def.url && !baseUrl) continue;
+    // An admin-typed model is an OVERRIDE, kept distinct from the default so
+    // the per-feature tiering below can tell "they chose this" from "nobody
+    // chose anything".
     const model = await integrations.getSecret(supabase, id, 'model');
-    chain.push({ id, key, baseUrl, model: model || def.model });
+    chain.push({ id, key, baseUrl, model_override: model || null, model: model || def.model });
   }
   return chain;
 }
@@ -175,19 +196,54 @@ async function isAvailable(supabase) {
   return (await resolveChain(supabase)).length > 0;
 }
 
+// Which model this provider should use for this kind of work. An admin's
+// explicit model override wins outright — they typed it, they meant it — and
+// otherwise the feature's tier picks between the provider's fast and quality
+// models.
+function modelFor(entry, tier) {
+  if (entry.model_override) return entry.model_override;
+  const def = PROVIDERS[entry.id];
+  return (def.models && def.models[tier]) || entry.model || def.model;
+}
+
 // Ask for text. Returns { text, usage, provider, model } or NULL — and null is
 // an ordinary outcome, not an error: it means "write it with the rules".
+//
+// Callers pass `feature` (a key of ai-budget's FEATURES) and `orgId`. Both are
+// optional and both should be given: without a feature the call gets the
+// smallest allowance rather than an unlimited one, and without an org the
+// spend lands on the default meter.
 //
 // A provider that fails (bad key, rate limit, timeout, unparseable body) is
 // skipped and the next one tried, because a daily free-tier ceiling is the
 // expected failure here, not the exceptional one.
 async function complete(supabase, opts = {}) {
   const chain = await resolveChain(supabase);
+  if (!chain.length) return null;
+
+  // 1. What may this feature send, and how long an answer may it ask for?
+  const limits = budget.featureLimits(opts.feature);
+  const system = opts.system ? budget.trimToTokens(opts.system, limits.in) : null;
+  const prompt = budget.trimToTokens(opts.prompt, limits.in);
+  const maxTokens = Math.min(opts.maxTokens || limits.out, limits.out);
+
+  // 2. Would this call fit inside what is left of today? Estimated high, on
+  //    purpose: input plus the longest answer the request permits.
+  const estimated = budget.estimateTokens(system) + budget.estimateTokens(prompt) + maxTokens;
+  const spent = await budget.getSpend(supabase, opts.orgId);
+  const verdict = budget.checkBudget(spent, estimated, await budget.getCaps(supabase));
+  if (!verdict.allowed) {
+    // Not an error, and not a provider problem: today's allowance is spent, so
+    // the feature writes with its rules until tomorrow.
+    console.warn(`[ai] ${opts.feature || 'other'} skipped — ${verdict.reason} (used ${verdict.used} of ${verdict.cap})`);
+    return null;
+  }
+
   for (const entry of chain) {
+    const model = opts.model || modelFor(entry, limits.tier);
     const req = buildRequest(entry.id, {
-      key: entry.key, baseUrl: entry.baseUrl,
-      model: opts.model || entry.model,
-      system: opts.system, prompt: opts.prompt, maxTokens: opts.maxTokens,
+      key: entry.key, baseUrl: entry.baseUrl, model,
+      system, prompt, maxTokens,
     });
     if (!req) continue;
     try {
@@ -195,7 +251,12 @@ async function complete(supabase, opts = {}) {
       if (!response.ok) throw new Error('ai_http_' + response.status);
       const parsed = parseResponse(entry.id, await response.json());
       if (!parsed) throw new Error('ai_unparseable');
-      return { ...parsed, provider: entry.id, model: opts.model || entry.model };
+      // Charge the meter with what the provider actually billed, falling back
+      // to the estimate when it reports nothing — never to zero, or a provider
+      // that omits usage would be free forever.
+      const actual = (parsed.usage.input_tokens + parsed.usage.output_tokens) || estimated;
+      await budget.recordSpend(supabase, opts.orgId, opts.feature, actual);
+      return { ...parsed, provider: entry.id, model, tier: limits.tier, budget_remaining: verdict.remaining_tokens };
     } catch (err) {
       // Never fatal: the loop moves on, and an empty loop means rules output.
       console.warn(`[ai] ${entry.id} failed (${err.message}) — trying next provider`);
@@ -206,6 +267,7 @@ async function complete(supabase, opts = {}) {
 
 module.exports = {
   PROVIDERS, PROVIDER_ORDER, AI_TIMEOUT_MS,
-  buildRequest, parseResponse, endpointFor,
+  buildRequest, parseResponse, endpointFor, modelFor,
   resolveChain, isAvailable, complete,
+  budget,
 };

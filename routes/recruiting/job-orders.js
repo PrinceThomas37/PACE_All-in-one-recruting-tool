@@ -443,7 +443,7 @@ ${String(j.job_description).slice(0, 12000)}`;
           // Null (no provider, or all of them failing) drops to the rules
           // scrub below — which is the guarantee, since the AI output gets
           // scrubbed too regardless.
-          const out = await aiProvider.complete(supabase, { prompt, maxTokens: 2500 });
+          const out = await aiProvider.complete(supabase, { prompt, maxTokens: 2500, feature: 'jd_scrub', orgId: req.orgId });
           const text = out && out.text.trim();
           // belt-and-braces: scrub the AI output too, in case a name slipped through
           if (text) return res.json({ posting: scrubJobDescription(text, names), used_ai: true });

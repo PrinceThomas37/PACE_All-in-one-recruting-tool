@@ -172,11 +172,20 @@ module.exports = (ctx) => {
       }
 
       try {
+        // The posting is PASTED, so its length is whatever a job page happened
+        // to contain — the one genuinely uncapped input in the app. Trim it
+        // here rather than letting the budget trim the whole payload, so the
+        // fields after it (the regeneration adjustment especially) survive.
+        // The rules engine still reads the full text; only the AI's copy is cut.
+        const forAi = {
+          ...withSender,
+          job_description: aiProvider.budget.trimToTokens(withSender.job_description, 2200),
+        };
         const out = await aiProvider.complete(supabase, {
           model: AI_MODEL || undefined,
-          maxTokens: 1000,
+          maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId,
           system: gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff }),
-          prompt: gen.buildUserPayload(withSender),
+          prompt: gen.buildUserPayload(forAi),
         });
         if (!out) throw new Error('ai_unavailable');
         const parsed = gen.parseAiDraft(out.text);
