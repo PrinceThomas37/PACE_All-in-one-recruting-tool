@@ -274,6 +274,13 @@
     '</div>';
   }
 
+  // The signature comes back with the draft; the sender lookup carries it too,
+  // so a draft made before that call landed still previews correctly.
+  function sigHtml(d){
+    var g=G();
+    return (d&&d.signature_html)||(g.sender&&g.sender.signature_html)||'';
+  }
+
   function outputCard(){
     var g=G(), d=g.draft;
     if(!d){
@@ -302,6 +309,16 @@
       '<div class="fgrp"><label class="flbl">Email body</label>'+
         '<textarea class="txta w100" id="og-body" style="min-height:320px">'+esc(d.email)+'</textarea>'+
       '</div>'+
+      // WHAT THE RECIPIENT GETS, NOT WHAT THE DRAFT SAYS. The signature is
+      // appended by the send path and holds {{sender}}/{{senderemail}}
+      // placeholders; showing it here, already filled from the sending mailbox,
+      // is the only way an unfilled one is caught before a prospect sees it.
+      // The first real send went out signed "{{sender}}".
+      (sigHtml(d)?
+        '<div class="fgrp"><label class="flbl">Signature (added automatically)</label>'+
+          '<div style="border:1px solid var(--border2);border-radius:var(--r);padding:12px;background:var(--bg);max-height:190px;overflow:auto">'+sigHtml(d)+'</div>'+
+          (/\{\{/.test(sigHtml(d))?'<div style="font-size:11.5px;color:#b91c1c;margin-top:5px">This signature still has an unfilled variable in it — tell me before you send.</div>':'')+
+        '</div>':'')+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
         '<button class="btn btn-primary" onclick="outreachGenSend()" '+(g.sending?'disabled style="opacity:.6"':'')+'>'+
           (g.sending?'Sending…':'Send from my outreach mailbox')+'</button>'+

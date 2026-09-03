@@ -34,8 +34,11 @@ function possessive(name) {
 
 // ── Rule 1-15, given to the model verbatim. Kept as an array of lines so a
 // diff shows which rule changed rather than one reflowed paragraph.
-function buildSystemPrompt(companyName) {
+function buildSystemPrompt(companyName, opts) {
   const co = String(companyName || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY;
+  const rule14 = (opts && opts.omitSignOff)
+    ? '14. The sender\'s email signature is appended automatically after your text, so close with "Thanks," and NOTHING else — no name, no title, no company, no contact details. A second sign-off above the signature is a visible mistake.'
+    : `14. Close with the sender's real name, title, and "${co}" — nothing more decorative. Do not add a phone or email signature line unless asked.`;
   return [
     `You write cold outreach emails for a contingency recruiting team at ${co}. You are given a job posting and details about the hiring contact. You produce exactly one short, natural, non-pushy email plus a one-sentence diagnosis of the real hiring problem.`,
     '',
@@ -53,7 +56,7 @@ function buildSystemPrompt(companyName) {
     '11. No filler, no marketing adjectives (passionate, dynamic, exceptional, cutting-edge, seamless), no exclamation points, no emoji. Plain sentence case. Contractions are fine.',
     '12. If this is a FOLLOW-UP rather than a first outreach, do not repeat the full pitch. Keep it under 60 words: ask if the role is still open, offer a graceful exit, and only restate that resumes are ready if wanted.',
     "13. If the posting names a specific HR or recruiting contact with a formal application process, that signals a slightly more corporate register. If it's clearly a small owner-operator business, keep it plainer and more direct.",
-    `14. Close with the sender's real name, title, and "${co}" — nothing more decorative. Do not add a phone or email signature line unless asked.`,
+    rule14,
     '15. If adjustment instructions are provided for a regeneration, apply them while keeping every rule above.',
     '',
     'Return ONLY valid JSON, no markdown fences, no prose outside the JSON, in exactly this shape:',
@@ -516,8 +519,15 @@ function rulesDraft(input, options) {
   const loc = txt(i.location);
   // Two newlines: the sign-off is its own block, and a "Best regards," glued to
   // the last sentence is the tell that an email was assembled, not written.
-  const signOff = '\n\n' + ['Best regards,', senderName, [senderTitle, co].filter(Boolean).join(', ')]
-    .filter(Boolean).join('\n');
+  // WHEN A MAILBOX SIGNATURE WILL BE APPENDED, THE BODY MUST NOT SIGN ITSELF.
+  // The recipient of the first real send got both: "Best regards, Prince Thomas,
+  // Account Manager, Fute Global" and then the full signature card underneath
+  // it. The signature carries the name, title, company and contact details —
+  // so the body stops at "Thanks," and lets it.
+  const signOff = (options || {}).omitSignOff
+    ? '\n\nThanks,'
+    : '\n\n' + ['Best regards,', senderName, [senderTitle, co].filter(Boolean).join(', ')]
+        .filter(Boolean).join('\n');
 
   // ── Follow-up (rule 12): under 60 words, no pitch, an explicit way out.
   if (i.outreach_type === 'followup') {

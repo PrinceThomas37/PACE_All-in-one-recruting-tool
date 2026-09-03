@@ -231,6 +231,54 @@ ok('an answer with no email is rejected rather than half-used',
   gen.parseAiDraft('{"subject":"S"}') === null);
 ok('prose alone is rejected', gen.parseAiDraft('Sorry, I cannot do that.') === null);
 
+// ── The signature, and the two bugs a live send exposed ────────────────────
+// A first real send to a real prospect went out with TWO sign-offs — the body's
+// own "Best regards, Prince Thomas, Account Manager, Fute Global" and then the
+// mailbox signature card under it — and the signature itself was the RAW
+// template, so the recipient read "{{sender}}" and "{{senderemail}}".
+const signed = gen.rulesDraft({ ...base, job_description: CONSTRUCTION }, { companyName: CO, omitSignOff: true });
+ok('with a mailbox signature, the body does not sign itself',
+  signed.email.trim().endsWith('Thanks,'), signed.email.slice(-90));
+ok('and it carries no name, title or company in the closing',
+  !/Best regards/.test(signed.email) && !new RegExp(CO + '$').test(signed.email.trim()),
+  signed.email.slice(-120));
+ok('without a signature the body still signs itself',
+  gen.rulesDraft({ ...base, job_description: CONSTRUCTION }, { companyName: CO }).email.includes('Best regards,'));
+ok('the AI writer is told the same thing, so both engines sign once',
+  /close with "Thanks," and NOTHING else/.test(gen.buildSystemPrompt(CO, { omitSignOff: true })));
+ok('and told the opposite when no signature follows',
+  /Close with the sender.s real name/.test(gen.buildSystemPrompt(CO)));
+
+// The router must FILL the signature template rather than append it raw. This
+// is asserted against the source because the alternative is a live send.
+const routerSrc = readFileSync(path.join(ROOT, 'routes/outreach-generator.js'), 'utf8');
+ok('the send path fills the signature template',
+  /fillSignatureHtml/.test(routerSrc), 'routes/outreach-generator.js never calls fillSignatureHtml');
+ok('it never appends a raw getMailboxSignature result straight to the body',
+  !/const signature = await getMailboxSignature/.test(routerSrc));
+ok('the signature is filled from the MAILBOX, not the session user',
+  /displayName: mailbox\.display_name/.test(routerSrc));
+ok('the page is handed the filled signature so the preview is honest',
+  /signature_html/.test(routerSrc) &&
+  /signature_html/.test(readFileSync(path.join(ROOT, 'public/js/48-page-outreach-gen.js'), 'utf8')));
+
+// EVERY path that composes mail must fill the signature — this is the guard
+// that makes the rule repo-wide instead of a comment in one file. The bug was
+// found in routes/mailbox.js once, then shipped again in the outreach generator
+// AND was sitting unnoticed in all four send paths of routes/recruiting/
+// outreach.js, where it had been reaching candidates and clients.
+const composers = ['routes/outreach-generator.js', 'routes/recruiting/outreach.js', 'routes/mailbox.js'];
+for (const f of composers) {
+  const src = readFileSync(path.join(ROOT, f), 'utf8');
+  if (!/getMailboxSignature/.test(src)) continue;
+  ok(`${f} fills the signature template before sending`,
+    /fillSignatureHtml/.test(src), 'composes mail but never calls fillSignatureHtml');
+  ok(`${f} never passes a raw saved signature into the body`,
+    !/=\s*await getMailboxSignature\([^)]*\)(\.catch\([^)]*\))?;/.test(
+      src.replace(/const raw = await getMailboxSignature\([^)]*\);/g, '')),
+    'a call site still uses the unfilled template');
+}
+
 // ── the routes are mounted and auth-gated ──────────────────────────────────
 const PORT = 20000 + Math.floor(Math.random() * 20000);
 const child = spawn('node', ['index.js'], {

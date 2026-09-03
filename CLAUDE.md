@@ -486,6 +486,17 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      * **The sending company is a parameter, resolved per request from
        `organizations.name`.** This text goes to a customer's prospects under
        the customer's name; "Fute Global LLC" is one org's identity.
+     * **The mailbox signature is a TEMPLATE and the body must not sign itself
+       on top of it.** The first real send to a live prospect went out with two
+       sign-offs and a signature reading `{{sender}}` / `{{senderemail}}`, so
+       `/outreach/generate` now resolves the mailbox signature BEFORE drafting,
+       fills it, tells `rulesDraft`/`buildSystemPrompt` to close at "Thanks,"
+       when one exists, and returns it as `signature_html` for the page to
+       preview. The same omission was live in all four send paths of
+       `routes/recruiting/outreach.js` (candidate email, client email, the
+       sequence channel, interview invites) — one `filledSignature()` helper
+       now, and `test/outreach-generator-smoke.mjs` greps every mail-composing
+       router and fails if one appends a raw saved signature.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by

@@ -23,6 +23,7 @@ const { EVENTS, on } = require('../../events');
 const { fillTemplate } = require('../../email-vars');
 const { emailSyntaxValid } = require('../../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
+const { fillSignatureHtml } = require('../../email-signature');
 
 module.exports = function (app, ctx) {
   const {
@@ -113,6 +114,27 @@ async function resolveEmailAttachments(table, ids) {
   return out;
 }
 
+// THE SIGNATURE IS A TEMPLATE. Saved signature HTML holds {{sender}} and
+// {{senderemail}}, and every path that composes mail has to fill them before
+// the recipient sees them — from the MAILBOX, so the name in the signature is
+// the name on the From line.
+//
+// All four send paths in this file appended the raw template instead, so
+// candidates, clients and interview invitees have been receiving mail signed
+// "{{sender}} / Recruitment Manager | Fute Global LLC". routes/mailbox.js
+// carries a comment about the same bug from the last time it was found there,
+// which is exactly why it now lives in ONE helper rather than four call sites.
+async function filledSignature(mailbox, userId) {
+  if (!mailbox) return '';
+  try {
+    const raw = await getMailboxSignature(mailbox.id, userId);
+    return fillSignatureHtml(raw, {
+      displayName: mailbox.display_name || mailbox.email_address || '',
+      emailAddress: mailbox.email_address || '',
+    });
+  } catch (_) { return ''; }
+}
+
 // A specific mailbox by id, but only if it's active AND connected — used by
 // sequence rotation so a chosen "from" mailbox that can't actually send is
 // rejected (caller falls back to the recruiter's primary).
@@ -199,7 +221,7 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
     // were invisible: no opens, no replies, nothing on the candidate's profile —
     // and, because reply detection keys off email_tracking, no way for a reply
     // to stop the sequence.
-    const signature = await getMailboxSignature(mailbox.id, recruiterId).catch(() => '');
+    const signature = await filledSignature(mailbox, recruiterId);
     const token = newTrackToken();
     const htmlBody = injectTrackPixel(buildHtmlEmailBody(rendered, signature), token);
 
@@ -245,7 +267,7 @@ app.post('/candidates/email', auth, async (req, res) => {
     const mailbox = await recruiterSendingMailbox(req.user.id);
     if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
 
-    const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
+    const signature = await filledSignature(mailbox, req.user.id);
     const suppressed = await loadSuppressedSet(recipients.map(r => r.email).filter(Boolean));
     const attachments = await resolveEmailAttachments('candidate_documents', b.document_ids);
     const orgId = req.orgId || null;
@@ -301,7 +323,7 @@ app.post('/companies/:id/email', auth, async (req, res) => {
     const suppressed = await loadSuppressedSet([to]);
     if (suppressed.has(to.toLowerCase())) return res.status(409).json({ error: 'This address has opted out of email from us.' });
 
-    const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
+    const signature = await filledSignature(mailbox, req.user.id);
     const attachments = await resolveEmailAttachments('client_documents', b.document_ids);
     const token = newTrackToken();
     const htmlBody = injectTrackPixel(buildHtmlEmailBody(bodyText, signature), token);
@@ -385,7 +407,7 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
 
     const mailbox = await recruiterSendingMailbox(req.user.id);
     if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
-    const signature = await getMailboxSignature(mailbox.id, req.user.id).catch(() => '');
+    const signature = await filledSignature(mailbox, req.user.id);
     const subject = 'Interview scheduled: ' + (candidate.full_name || 'Candidate') + ' — ' + (job.job_title || 'Role');
     const orgId = req.orgId || null;
     const results = [];
