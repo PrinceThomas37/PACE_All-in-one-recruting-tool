@@ -54,7 +54,7 @@ function buildSystemPrompt(companyName, opts) {
     '9. Fee or cost language belongs AFTER the call to action, never before it — unless the contact is explicitly a Controller, CFO, or other finance-first decision-maker, in which case cost framing can move earlier since price is the real objection for that reader.',
     '10. Default fee framing, unless told otherwise: "There is no charge for reviewing candidate resumes. We only charge a fee for successful placement," or a natural variant. Never state a specific percentage.',
     '11. No filler, no marketing adjectives (passionate, dynamic, exceptional, cutting-edge, seamless), no exclamation points, no emoji. Plain sentence case. Contractions are fine.',
-    '12. If this is a FOLLOW-UP rather than a first outreach, do not repeat the full pitch. Keep it under 60 words: ask if the role is still open, offer a graceful exit, and only restate that resumes are ready if wanted.',
+    '12. If this is a FOLLOW-UP rather than a first outreach, do not repeat the full pitch. Keep it under 85 words: ask one thing, offer a graceful exit, and only restate that resumes are ready if wanted. (The 60-word ceiling here was a guess; the follow-up wording with the most replies behind it runs about 65.)',
     "13. If the posting names a specific HR or recruiting contact with a formal application process, that signals a slightly more corporate register. If it's clearly a small owner-operator business, keep it plainer and more direct.",
     rule14,
     '15. If adjustment instructions are provided for a regeneration, apply them while keeping every rule above.',
@@ -507,32 +507,53 @@ function pickNoteDetail(notes, opts) {
   const o = opts || {};
   const name = String(o.contactName || '').trim();
 
+  // A mutual connection is the ONE person-fact worth naming. It is a fact about
+  // the relationship, not about them, and it explains the email.
   const mutual = n.match(/\bmutual (?:connection|friend|contact|acquaintance)\s+([A-Z][a-z]+)/i);
-  if (mutual) return 'we have ' + mutual[1] + ' in common';
+  if (mutual) return { kind: 'mutual', text: 'we have ' + mutual[1] + ' in common' };
 
-  // Prior roles inside the same notes, minus whatever their title is now — the
-  // interesting part is where they came FROM.
-  const current = String(o.contactTitle || '');
-  const track = [];
-  for (const [re, label] of TRACK) {
-    if (re.test(n) && !re.test(current) && track.indexOf(label) < 0) track.push(label);
-    if (track.length === 2) break;
-  }
-  if (track.length) return 'you came up through ' + joinList(track);
-
+  // Something about the ROLE, which is what the email is about.
   const repost = n.match(/re-?posted(?:\s+after\s+(\d+)\s+days?)?/i);
-  if (repost) return repost[1] ? 'the role has been re-posted after ' + repost[1] + ' days' : 'the role has been re-posted';
+  if (repost) {
+    return { kind: 'role', text: repost[1]
+      ? 'I noticed it has been re-posted after ' + repost[1] + ' days'
+      : 'I noticed it has been re-posted' };
+  }
+  const open = n.match(/\b(?:open|posted|live|up)\s+(?:for\s+)?(\d{1,3})\s*(?:\+\s*)?days?\b/i);
+  if (open) return { kind: 'role', text: 'I noticed it has been open ' + open[1] + ' days' };
 
-  const tenure = n.match(/\b(\d{1,2})\s*(?:yrs?|years?)\b/);
-  if (tenure && o.company) return 'you have been at ' + o.company + ' for ' + tenure[1] + ' years';
+  // A PRIOR CONVERSATION is context about us and them, and always relevant.
+  if (/\b(spoke|talked|met|called|emailed|last time|previously|earlier this year)\b/i.test(n)) {
+    const sent = (n.split(/(?<=[.!?])\s+|\n/).find(l => /\b(spoke|talked|met|called|emailed|last time|previously)\b/i.test(l)) || '').trim();
+    if (sent && sent.length >= 12 && sent.length <= 140) {
+      return { kind: 'prior', text: sent.replace(/[.\s]+$/, '').toLowerCase().startsWith('we ') ? sent.replace(/[.\s]+$/, '') : 'we have spoken before' };
+    }
+  }
 
-  // Nothing structured found. Fall back to the first real sentence, but never
-  // to something that is only the person's name or title.
+  // DELIBERATELY NOT USED: tenure and career history.
+  //
+  // An earlier version opened with "you came up through estimating and
+  // pre-construction" and "you have been at X for 9 years", read out of a
+  // pasted LinkedIn profile. The owner's reaction on reading one was that it
+  // felt off topic — and the 30 replied threads back that up: NOT ONE of them
+  // mentions the contact's background. Every winner's second sentence is about
+  // the role, the difficulty of filling it, or the candidates. Someone's CV is
+  // something we know, not something they asked us to bring up, and leading
+  // with it says "I read your profile" rather than "I read your job posting".
+  //
+  // The contact's title still shapes the email — audienceOf() decides the
+  // register and whether cost comes before the ask — it just never becomes a
+  // topic. Their career history is left in the notes where it belongs.
+
+  const current = String(o.contactTitle || '');
   const first = (n.split(/(?<=[.!?])\s+|\n/)[0] || '').trim().replace(/[.\s]+$/, '');
   if (!first || first.length < 12) return '';
   if (name && first.toLowerCase().replace(/[^a-z]/g, '') === name.toLowerCase().replace(/[^a-z]/g, '')) return '';
-  if (current && first.toLowerCase().includes(current.toLowerCase()) && first.length < current.length + 12) return '';
-  return first.slice(0, 120);
+  if (current && first.toLowerCase().includes(current.toLowerCase())) return '';
+  // A pasted profile is a wall of headings and dates, not a sentence — using it
+  // verbatim is how "Ed Jones, which is why I am writing to you" happened.
+  if (/\b(present|yrs?|mos?|connections?|followers?|endorsement)\b/i.test(first)) return '';
+  return { kind: 'note', text: first.slice(0, 120) };
 }
 
 function joinList(items) {
@@ -554,168 +575,289 @@ function pluralRole(title) {
 
 function wordCount(s) { return String(s || '').trim().split(/\s+/).filter(Boolean).length; }
 
-/**
- * The keyless engine. Writes the email from a sentence plan rather than a
- * fill-in-the-blank template: which sentences appear, and in what order, is
- * decided by the same rules the model is given — the no-agencies short form,
- * the follow-up short form, finance-first fee placement, and now the reader's
- * role and their own background.
- *
- * The sender identity comes in from the caller and is the MAILBOX's, not the
- * logged-in user's. A draft signed by one person and sent from another's
- * address is the exact failure that cost 152 cold emails in Session 14.
- */
-function rulesDraft(input, options) {
+// ── The shared ingredients every variant is built from ─────────────────────
+// Reading the posting and the contact happens ONCE; the variants differ only in
+// which sentences they use and in what order. That is the whole point — four
+// different framings of the same researched facts, not four different guesses.
+function draftParts(input, options) {
   const i = input || {};
-  const co = txt((options || {}).companyName) || DEFAULT_COMPANY;
+  const o = options || {};
+  const co = txt(o.companyName) || DEFAULT_COMPANY;
   const sender = i.sender || {};
   const senderName = txt(sender.name) || 'me';
   const senderTitle = txt(sender.title);
-  const first = firstNameOf(i.contact_first_name);
-  const role = extractRoleTitle(i.job_description);
-  const roleLabel = role || 'the role you have open';
 
-  // THE POSTING OUTRANKS THE FORM for the employer and the city. A typed value
-  // is used when it is plausibly a company; a value that reads as a person's
-  // job title is refused outright, because printing it produces "I came across
-  // Vice President's Construction Superintendent opening" — which is what a
-  // LinkedIn headline pasted into the Company box actually produced.
+  const role = extractRoleTitle(i.job_description);
   const typedCompany = txt(i.company);
   const companyRejected = looksLikeJobTitle(typedCompany);
-  const company = (companyRejected || !typedCompany)
-    ? extractCompany(i.job_description)
-    : typedCompany;
+  const company = (companyRejected || !typedCompany) ? extractCompany(i.job_description) : typedCompany;
   const loc = txt(i.location) || extractLocation(i.job_description);
-  // Two newlines: the sign-off is its own block, and a "Best regards," glued to
-  // the last sentence is the tell that an email was assembled, not written.
-  // WHEN A MAILBOX SIGNATURE WILL BE APPENDED, THE BODY MUST NOT SIGN ITSELF.
-  // The recipient of the first real send got both: "Best regards, Prince Thomas,
-  // Account Manager, Fute Global" and then the full signature card underneath
-  // it. The signature carries the name, title, company and contact details —
-  // so the body stops at "Thanks," and lets it.
-  const signOff = (options || {}).omitSignOff
-    ? '\n\nThanks,'
-    : '\n\n' + ['Best regards,', senderName, [senderTitle, co].filter(Boolean).join(', ')]
-        .filter(Boolean).join('\n');
 
-  // ── Follow-up (rule 12): under 60 words, no pitch, an explicit way out.
-  if (i.outreach_type === 'followup') {
-    const body = [
-      'Hi ' + first + ',',
-      '',
-      'This is ' + senderName + ' at ' + co + ', following up on ' + (role ? 'the ' + role + ' role' : 'the role') +
-        (loc ? ' in ' + loc : '') + '. Is it still open?',
-      '',
-      "If it's filled, or you'd rather I stop, say so and I'll close the file. " +
-        'Otherwise resumes are ready whenever you want them.'
-    ].join('\n') + signOff;
-    return {
-      subject: 'Still open? ' + (role || 'your opening') + (loc ? ' — ' + loc : ''),
-      diagnosis: 'Follow-up with no reply yet, so this asks one question — is the role still open — and gives an explicit way to say no rather than repeating the original pitch.',
-      email: body,
-      mode: 'rules'
-    };
-  }
-
-  const signal = diagnoseSignal(i.job_description, i.notes);
   const reqs = extractRequirements(i.job_description);
+  const signal = diagnoseSignal(i.job_description, i.notes);
   const audience = audienceOf(i.contact_title);
   const detail = pickNoteDetail(i.notes, {
     contactName: i.contact_first_name, contactTitle: i.contact_title, company
   });
-  const feeLine = 'There is no charge for reviewing resumes. We only charge a fee on a successful placement.';
-  const cta = 'Would it be worth sending you a couple of resumes to look at?';
 
-  // ── No-agencies (rule 6): acknowledge it in the first two sentences, stay
-  // under 90 words, and make saying no the easiest thing to do.
+  // "Construction Superintendents with experience supervising commercial
+  // construction projects for a General Contractor, plus OSHA 30 and Procore"
+  const who = role ? pluralRole(role) : 'people';
+  const creds = [];
+  if (reqs.phrases.length) creds.push('experience ' + reqs.phrases[0].clause);
+  if (reqs.named.length) creds.push(joinList(reqs.named));
+  const credit = creds.length ? creds[0] + (creds[1] ? ', plus ' + creds[1] : '') : '';
+
+  return {
+    co, senderName, senderTitle,
+    first: firstNameOf(i.contact_first_name),
+    role, roleLabel: role || 'the role you have open',
+    company, companyRejected: companyRejected ? typedCompany : null,
+    loc, locIn: loc ? ' in ' + loc : '',
+    at: company ? ' at ' + company : '',
+    reqs, signal, audience, detail, who, credit,
+    // Rule 9: for a finance-first reader, cost is the real objection, so it goes
+    // ahead of the ask rather than after it.
+    financeFirst: audience === 'finance',
+    feeLine: 'There is no charge for reviewing resumes. We only charge a fee on a successful placement.',
+    contingencyLine: 'We work on a contingency basis, with no cost to review resumes.',
+    // The sign-off is omitted when a mailbox signature will be appended — see
+    // the note in the send path. Two sign-offs reached a live prospect once.
+    signOff: o.omitSignOff
+      ? '\n\nThanks,'
+      : '\n\n' + ['Best regards,', senderName, [senderTitle, co].filter(Boolean).join(', ')]
+          .filter(Boolean).join('\n'),
+  };
+}
+
+// The ONE optional sentence about the person or the situation. Everything the
+// data supports and nothing it does not: a mutual connection, a prior
+// conversation, something about the ROLE. Never their CV.
+function contextSentence(p) {
+  if (p.detail && p.detail.kind === 'mutual') {
+    // Just the fact. The Direct variant already says "reached out directly",
+    // and two "directly"s in three sentences reads as filler.
+    return p.detail.text.charAt(0).toUpperCase() + p.detail.text.slice(1) + '.';
+  }
+  if (p.detail && p.detail.kind === 'prior') {
+    return p.detail.text.replace(/[.\s]+$/, '') + ', so I will keep this brief.';
+  }
+  if (p.detail && p.detail.kind === 'role') {
+    return p.detail.text.charAt(0).toUpperCase() + p.detail.text.slice(1) + '.';
+  }
+  if (p.detail && p.detail.kind === 'note') {
+    return p.detail.text.charAt(0).toUpperCase() + p.detail.text.slice(1) + '.';
+  }
+  return '';
+}
+
+function assemble(p, paras) {
+  return paras.filter(x => x !== null && x !== undefined).join('\n') + p.signOff;
+}
+
+// Order the ask and the fee by who is reading (rule 9).
+function askThenFee(p, ask, fee) {
+  return p.financeFirst ? ['', fee, '', ask] : ['', ask, '', fee];
+}
+
+// ── The four framings ──────────────────────────────────────────────────────
+// Each is an opener that actually earned replies in the 30 threads the owner
+// pulled from his sent mail, rebuilt on the facts read out of this posting.
+// The labels are what a person picks between, so they name the ANGLE, not the
+// template.
+const VARIANTS = [
+  {
+    id: 'direct',
+    label: 'Direct',
+    blurb: 'Saw the role, reached out. Leads on how short the ramp would be.',
+    subject: (p) => (p.role || 'Your opening') + ' hire' + p.locIn,
+    build: (p) => {
+      const ctx = contextSentence(p);
+      const open = 'This is ' + p.senderName + ' at ' + p.co + '. Saw the ' + p.roleLabel +
+        ' opening' + p.at + p.locIn + ' and wanted to reach out directly.';
+      const pitch = p.credit
+        ? 'The people we have in mind already have ' + p.credit + ', so the ramp would be short.'
+        : 'The people we have in mind line up well against the brief, so the ramp would be short.';
+      return assemble(p, ['Hi ' + p.first + ',', '', [open, ctx].filter(Boolean).join(' '), '', pitch]
+        .concat(askThenFee(p, 'Can I send their resumes over?', p.feeLine)));
+    }
+  },
+  {
+    id: 'short',
+    label: 'Short',
+    blurb: 'Promises brevity and keeps it. Availability and exclusivity up front.',
+    subject: (p) => 'Relevant profiles for ' + (p.role || 'your opening'),
+    build: (p) => {
+      // `who` is already the plural of the role, so naming the role again in
+      // the same sentence reads like a template that forgot what it just said.
+      const fit = (p.credit ? ', ' : ' ') +
+        (p.role ? 'who fit your opening' + p.locIn + '.' : 'who fit ' + p.roleLabel + p.locIn + '.');
+      const open = 'I will keep this short. I am ' + p.senderName + ' at ' + p.co + '. We have ' +
+        p.who + (p.credit ? ' with ' + p.credit : '') + fit;
+      return assemble(p, ['Hi ' + p.first + ',', '', open, '',
+        'Direct hire, available now, and not screened for you yet.']
+        .concat(askThenFee(p, 'Want me to send the resumes?', p.feeLine)));
+    }
+  },
+  {
+    id: 'effort',
+    label: 'Saves them work',
+    blurb: 'Acknowledges the search is slow and offers to shortcut it.',
+    subject: (p) => (p.role || 'Your opening') + ' hire' + p.locIn,
+    build: (p) => {
+      const ctx = contextSentence(p);
+      const open = 'This is ' + p.senderName + ' at ' + p.co + '. Sourcing for a ' + p.roleLabel +
+        p.locIn + ' takes time, so I will make it easier: we already have ' + p.who +
+        (p.credit ? ' with ' + p.credit : ' who match the brief') + ', ready to interview.';
+      return assemble(p, ['Hi ' + p.first + ',', '', [open, ctx].filter(Boolean).join(' ')]
+        .concat(askThenFee(p, 'Want me to forward a few resumes?', p.contingencyLine)));
+    }
+  },
+  {
+    id: 'researched',
+    label: 'The hard part',
+    blurb: 'Names the one thing in the posting that makes this role hard to fill.',
+    subject: (p) => (p.role || 'Your opening') + p.locIn + ' — candidates ready to review',
+    build: (p) => {
+      const ctx = contextSentence(p);
+      const open = 'This is ' + p.senderName + ' at ' + p.co + '. I came across ' +
+        (p.company ? possessive(p.company) + ' ' : 'the ') + p.roleLabel + ' opening' + p.locIn + '.';
+      const observation = p.signal
+        ? 'Reading the posting, ' + p.signal.phrase + '.'
+        : 'Reading the posting, it is a narrower brief than the title suggests.';
+      const supply = 'We have ' + p.who + (p.credit ? ' with ' + p.credit : ' who match that brief') +
+        ', open to a direct hire and not yet in front of you.';
+      return assemble(p, ['Hi ' + p.first + ',', '', [open, ctx].filter(Boolean).join(' '), '',
+        observation + ' ' + supply]
+        .concat(askThenFee(p, 'Would it be worth sending you a couple of resumes to look at?', p.feeLine)));
+    }
+  }
+];
+
+// Follow-ups have their own shapes. "Following up on our previous message" is
+// the single most-replied opener in the owner's sent mail — six of the thirty —
+// so it leads, and the still-open check that drew the only outright no is kept
+// only here, where asking is the point.
+const FOLLOWUP_VARIANTS = [
+  {
+    id: 'followup_standard',
+    label: 'Standard follow-up',
+    blurb: 'The wording with the most replies behind it.',
+    subject: (p) => 'Following up on ' + (p.role || 'your opening') + p.locIn,
+    build: (p) => assemble(p, ['Hi ' + p.first + ',', '',
+      'Following up on my note about the ' + p.roleLabel + ' role' + p.locIn +
+        '. My team has worked several similar searches since, and the ' + p.who.toLowerCase() + ' are still available.',
+      '', 'Reviewing resumes is free and there is no obligation — happy to send two or three over.',
+      '', 'If the role is filled, or this is not useful, just say so and I will close the file.'])
+  },
+  {
+    id: 'followup_open',
+    label: 'Still open?',
+    blurb: 'One question and a clean exit. Shortest of the three.',
+    subject: (p) => 'Still open? ' + (p.role || 'your opening') + (p.loc ? ' — ' + p.loc : ''),
+    build: (p) => assemble(p, ['Hi ' + p.first + ',', '',
+      'This is ' + p.senderName + ' at ' + p.co + ', following up on ' + p.roleLabel + p.locIn + '. Is it still open?',
+      '', "If it's filled, or you'd rather I stop, say so and I'll close the file. Otherwise resumes are ready whenever you want them."])
+  },
+  {
+    id: 'followup_value',
+    label: 'One more offer',
+    blurb: 'Restates what is on the table without repeating the pitch.',
+    subject: (p) => 'Re: ' + (p.role || 'your opening') + p.locIn,
+    build: (p) => assemble(p, ['Hi ' + p.first + ',', '',
+      'Circling back on the ' + p.roleLabel + ' role' + p.locIn + '. Nothing has changed on my side — ' +
+        (p.credit ? p.who.toLowerCase() + ' with ' + p.credit + ' are' : p.who.toLowerCase() + ' are') +
+        ' ready whenever you want to look.',
+      '', 'Two or three resumes, no cost and no obligation. Worth a look?'])
+  }
+];
+
+// The note above the draft has to describe THE VERSION ON SCREEN. Only the
+// "hard part" variant states the constraint in the email, so on the other three
+// the constraint is background — useful to know before a reply comes back, but
+// describing it as the angle would be describing an email that is not there.
+const ANGLE_NOTE = {
+  direct: 'This version leads on the ramp: people who have already done this work elsewhere, so there is less to teach.',
+  short: 'This version leads on availability and exclusivity — ready now, and not yet shown to them.',
+  effort: 'This version leads on the effort the search costs them, and offers to shortcut it.',
+  researched: null,
+};
+
+function diagnosisFor(p, variant, jd) {
+  const bits = [];
+  const angle = ANGLE_NOTE[variant && variant.id];
+  if (angle) bits.push(angle);
+  const constraint = p.signal ? p.signal.why
+    : 'No single hard constraint stood out in the posting, so this leads on the specifics of the brief itself.';
+  bits.push(angle ? 'Not stated in this version, but worth knowing: ' + constraint.charAt(0).toLowerCase() + constraint.slice(1) : constraint);
+  if (p.signal && p.signal.evidence) bits.push('Taken from the posting’s own wording: “' + p.signal.evidence + '”.');
+  if (p.financeFirst) bits.push('The contact reads as finance-first, so the fee framing sits ahead of the ask.');
+  else if (p.audience === 'exec') bits.push('The contact is senior enough to decide, so this is addressed to them as the decision-maker rather than as a screener.');
+  if (WIDE_RANGE.test(String(jd || ''))) {
+    bits.push('The salary range in the posting is unusually wide, which usually means the market rate is still an open question — useful leverage on a follow-up.');
+  }
+  return bits.join(' ');
+}
+
+/**
+ * Every framing of this email, so the writer picks rather than regenerates.
+ * The facts are identical across them; only the angle changes.
+ */
+function rulesVariants(input, options) {
+  const i = input || {};
+  const p = draftParts(i, options);
+  const jd = i.job_description;
+
+  // The no-agencies form is dictated by rule 6 — under 90 words, the notice
+  // acknowledged in the opening, an explicit way out. There is only one shape
+  // that satisfies it, so there is nothing to choose between.
   if (i.no_agencies) {
-    const body = [
-      'Hi ' + first + ',',
-      '',
-      'This is ' + senderName + ' at ' + co + '. I saw the note on the ' + (role || 'job') +
+    const body = assemble(p, ['Hi ' + p.first + ',', '',
+      'This is ' + p.senderName + ' at ' + p.co + '. I saw the note on the ' + (p.role || 'job') +
         ' posting about placement inquiries, so I will keep this to one message and leave it with you.',
-      '',
-      (signal ? 'Reading the posting, ' + signal.phrase + '. ' : '') +
-        'If resumes are useful we have people ready; if not, reply "no" and I will not follow up again.'
-    ].join('\n') + signOff;
+      '', (p.signal ? 'Reading the posting, ' + p.signal.phrase + '. ' : '') +
+        'If resumes are useful we have people ready; if not, reply "no" and I will not follow up again.']);
     return {
-      subject: (role || 'Your opening') + (loc ? ' — ' + loc : '') + ' — one message only',
-      diagnosis: 'The posting carries a no-agencies notice, so this acknowledges it in the opening, stays short, and makes declining a one-word reply.',
-      email: body,
-      mode: 'rules'
+      variants: [{
+        id: 'no_agencies', label: 'One message only',
+        blurb: 'Required shape when the posting says no agencies.',
+        subject: (p.role || 'Your opening') + (p.loc ? ' — ' + p.loc : '') + ' — one message only',
+        diagnosis: 'The posting carries a no-agencies notice, so this acknowledges it in the opening, stays short, and makes declining a one-word reply.',
+        email: body, words: wordCount(body), mode: 'rules'
+      }],
+      used: { role: p.role, company: p.company, location: p.loc },
+      company_rejected: p.companyRejected
     };
   }
 
-  // ── Sentence 1: who this is and which posting. Rule 1 — identity first.
-  const opening = 'This is ' + senderName + ' at ' + co + '. I came across ' +
-    (company ? possessive(company) + ' ' : 'the ') + roleLabel + ' opening' + (loc ? ' in ' + loc : '') + '.';
-
-  // ── Sentence 2: why THIS person, not the careers form. Factual about what we
-  // did, never a guess about how they feel about it (rule 5).
-  const REACH = {
-    exec: 'I sent this to you rather than through the careers form because a hire like this usually gets decided at your level, not on a job board.',
-    manager: "I sent this to you rather than through the careers form because you're the one carrying the work while the seat is open.",
-    finance: 'I sent this to you rather than through the careers form because the cost of the hire is the part that usually needs answering first.',
-    hr: '',
-    unknown: ''
-  };
-  const reach = detail
-    ? 'I sent this to you rather than through the careers form — ' + detail + '.'
-    : (REACH[audience] || '');
-
-  // ── The researched paragraph (rule 2). This is the point of the email, so it
-  // quotes what the posting actually asks for rather than adjectives.
-  const observation = signal
-    ? 'Reading the posting, ' + signal.phrase + '.'
-    : 'Reading the posting, it is a narrower brief than the title suggests.';
-  // What we can actually offer, in the posting's own words. Naming the tools
-  // and certifications it asks for is the cheapest possible proof that a human
-  // read past the job title.
-  const who = role ? pluralRole(role) : 'people';
-  const supplyBits = [];
-  if (reqs.phrases.length) supplyBits.push('with experience ' + reqs.phrases[0].clause);
-  if (reqs.named.length) supplyBits.push((supplyBits.length ? 'plus ' : 'with ') + joinList(reqs.named) + ' behind them');
-  const supply = supplyBits.length
-    ? 'We have ' + who + ' ' + supplyBits.join(', ') + ', open to a direct hire and not yet in front of you.'
-    : 'We have ' + who + ' who match that brief, open to a direct hire and not yet in front of you.';
-
-  const paras = ['Hi ' + first + ',', '', [opening, reach].filter(Boolean).join(' ')];
-  if (audience === 'finance') {
-    // Rule 9: for a finance-first reader, cost is the real objection, so it goes
-    // ahead of the ask instead of after it.
-    paras.push('', observation + ' ' + supply, '', feeLine, '', cta);
-  } else {
-    paras.push('', observation + ' ' + supply, '', cta, '', feeLine);
-  }
-  let body = paras.join('\n') + signOff;
-
-  // Rule 7 is a length rule, so it is checked rather than hoped for. The
-  // "why you" sentence is the first thing dropped when the email runs long —
-  // it is the one that is nice to have rather than load-bearing.
-  if (wordCount(body) > 170 && reach) {
-    paras[2] = opening;
-    body = paras.join('\n') + signOff;
-  }
-
-  const diagnosisBits = [
-    signal ? signal.why : 'No single hard constraint stood out in the posting, so this leads on the specifics of the brief itself.'
-  ];
-  if (signal && signal.evidence) diagnosisBits.push('Taken from the posting’s own wording: “' + signal.evidence + '”.');
-  if (audience === 'finance') diagnosisBits.push('The contact reads as finance-first, so the fee framing sits ahead of the ask.');
-  else if (audience === 'exec') diagnosisBits.push('The contact is senior enough to decide, so this is addressed to them as the decision-maker rather than as a screener.');
-  if (WIDE_RANGE.test(String(i.job_description || ''))) {
-    diagnosisBits.push('The salary range in the posting is unusually wide, which usually means the market rate is still an open question — useful leverage on a follow-up.');
-  }
-
+  const set = i.outreach_type === 'followup' ? FOLLOWUP_VARIANTS : VARIANTS;
+  const followupNote = 'Follow-up with no reply yet, so this stays short, asks one thing, and gives an explicit way to say no rather than repeating the original pitch.';
+  const variants = set.map(v => {
+    const email = v.build(p);
+    return {
+      id: v.id, label: v.label, blurb: v.blurb,
+      subject: v.subject(p),
+      diagnosis: i.outreach_type === 'followup' ? followupNote : diagnosisFor(p, v, jd),
+      email, words: wordCount(email), mode: 'rules'
+    };
+  });
   return {
-    subject: (role || 'Your opening') + (loc ? ' in ' + loc : '') + ' — candidates ready to review',
-    diagnosis: diagnosisBits.join(' '),
-    email: body,
-    mode: 'rules',
-    // What the email actually used, so the page can show it rather than leaving
-    // the writer to spot a wrong name inside a paragraph.
-    used: { role: role, company: company, location: loc },
-    company_rejected: companyRejected ? typedCompany : null
+    variants,
+    used: { role: p.role, company: p.company, location: p.loc },
+    company_rejected: p.companyRejected
+  };
+}
+
+/**
+ * The single default draft — the first variant. Kept because the send path and
+ * every caller that does not offer a choice still wants one email.
+ */
+function rulesDraft(input, options) {
+  const r = rulesVariants(input, options);
+  const v = r.variants[0];
+  return {
+    subject: v.subject, diagnosis: v.diagnosis, email: v.email, mode: 'rules',
+    used: r.used, company_rejected: r.company_rejected
   };
 }
 
@@ -729,7 +871,7 @@ function firstNameOf(name) {
 module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
-  rulesDraft, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
+  rulesDraft, rulesVariants, draftParts, contextSentence, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
   extractCompany, extractLocation, looksLikeJobTitle,
   contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
   firstNameOf, wordCount

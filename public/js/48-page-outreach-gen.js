@@ -35,7 +35,11 @@
   function G(){
     if(!STATE.outreachGen) STATE.outreachGen={
       form:blankForm(), draft:null, loading:false, sending:false,
-      error:null, sent:null, sender:null, senderLoading:false, adjustment:'', overCapAsked:false
+      error:null, sent:null, sender:null, senderLoading:false, adjustment:'', overCapAsked:false,
+      // Which framing is on screen, and the edits made to each one. Switching
+      // between them must not throw away a sentence you just rewrote — that is
+      // the difference between a picker and a regenerate button.
+      variantId:null, edits:{}
     };
     return STATE.outreachGen;
   }
@@ -86,7 +90,26 @@
 
   window.outreachGenReset=function(){
     var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sent=null;
-    g.adjustment=''; g.overCapAsked=false; render();
+    g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={}; render();
+  };
+
+  // The variant currently on screen, with any edits applied over it.
+  function currentVariant(){
+    var g=G(), d=g.draft;
+    if(!d) return null;
+    var list=(d.variants&&d.variants.length)?d.variants:[d];
+    var v=null;
+    for(var i=0;i<list.length;i++){ if(list[i].id===g.variantId){ v=list[i]; break; } }
+    if(!v) v=list[0];
+    var e=g.edits[v.id];
+    return e ? {id:v.id,label:v.label,blurb:v.blurb,diagnosis:v.diagnosis,words:v.words,
+                subject:e.subject,email:e.email} : v;
+  }
+
+  window.outreachPickVariant=function(id){
+    var g=collectDom();          // keep whatever is typed in the box we are leaving
+    g.variantId=id;
+    render();
   };
 
   function collectDom(){
@@ -101,9 +124,12 @@
       var el=document.getElementById(ids[k]); if(el) g.form[k]=el.value;
     });
     var subj=document.getElementById('og-subject'), body=document.getElementById('og-body');
-    if(g.draft){
-      if(subj) g.draft.subject=subj.value;
-      if(body) g.draft.email=body.value;
+    var cur=currentVariant();
+    if(cur&&(subj||body)){
+      // Edits are stored PER VARIANT so switching away and back returns your
+      // version, not the generated one.
+      g.edits[cur.id]={subject:subj?subj.value:cur.subject, email:body?body.value:cur.email};
+      if(g.draft){ g.draft.subject=g.edits[cur.id].subject; g.draft.email=g.edits[cur.id].email; }
     }
     var adj=document.getElementById('og-adjust'); if(adj) g.adjustment=adj.value;
     return g;
@@ -139,6 +165,8 @@
       adjustment:useAdjustment?g.adjustment:''
     }).then(function(r){
       g.loading=false; g.draft=r; g.overCapAsked=false;
+      g.edits={};
+      g.variantId=(r.variants&&r.variants.length)?r.variants[0].id:null;
       bumpUsage();
       render();
     }).catch(function(e){
@@ -148,13 +176,14 @@
 
   window.outreachGenSend=function(){
     var g=collectDom();
-    if(!g.draft) return;
+    var cur=currentVariant();
+    if(!cur) return;
     var to=String(g.form.to||'').trim();
     if(!to){ g.error='Enter the address this should go to.'; render(); return; }
     g.sending=true; g.error=null; render();
-    apiPost('/outreach/send',{to:to,subject:g.draft.subject,body:g.draft.email}).then(function(r){
+    apiPost('/outreach/send',{to:to,subject:cur.subject,body:cur.email}).then(function(r){
       g.sending=false; g.sent={to:to,mailbox:r.mailbox};
-      pushHistory(g.form.company&&(g.draft.subject||''),g.form.company,true);
+      pushHistory(cur.subject||'',g.form.company,true);
       showToast('Sent to '+to,'success');
       render();
     }).catch(function(e){
@@ -167,8 +196,9 @@
   };
 
   window.outreachGenCopy=function(which){
-    var g=collectDom(); if(!g.draft) return;
-    var text=which==='subject'?g.draft.subject:g.draft.email;
+    collectDom();
+    var cur=currentVariant(); if(!cur) return;
+    var text=which==='subject'?cur.subject:cur.email;
     if(navigator.clipboard&&navigator.clipboard.writeText){
       navigator.clipboard.writeText(text).then(function(){ showToast('Copied','success'); })
         .catch(function(){ showToast('Copy failed — select the text and copy manually','error'); });
@@ -288,6 +318,38 @@
       return '<div class="card cp" style="text-align:center;color:var(--text3);font-size:13px;padding:36px 16px">'+
         'Fill in the posting and the contact, then generate. The angle and the email show up here.</div>';
     }
+    var cur=currentVariant();
+    var list=(d.variants&&d.variants.length)?d.variants:[d];
+
+    // ── THE PICKER, above the preview ──────────────────────────────────────
+    // Four framings of the SAME researched facts, each an opener that earned
+    // replies in the 30 threads this was built from. Picking beats regenerating:
+    // regenerating gives you another guess, this gives you the actual choice.
+    var picker='';
+    if(list.length>1){
+      picker='<div style="margin-bottom:12px">'+
+        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Pick an angle</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        list.map(function(v){
+          var on=v.id===cur.id;
+          var edited=!!g.edits[v.id];
+          return '<button type="button" onclick="outreachPickVariant(\''+v.id+'\')" '+
+            'title="'+esc(v.blurb||'')+'" style="'+
+            'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
+            'background:'+(on?'var(--accent-l)':'var(--card)')+';'+
+            'color:'+(on?'var(--accent)':'var(--text2)')+';'+
+            'font-weight:'+(on?'600':'500')+';font-size:12.5px;border-radius:99px;'+
+            'padding:6px 13px;cursor:pointer;font-family:inherit">'+
+            esc(v.label||v.id)+
+            '<span style="opacity:.65;font-weight:400"> · '+(v.words||0)+'w</span>'+
+            (edited?'<span title="you have edited this one" style="opacity:.8"> ·&nbsp;edited</span>':'')+
+            '</button>';
+        }).join('')+
+        '</div>'+
+        (cur.blurb?'<div style="font-size:11.5px;color:var(--text3);margin-top:6px">'+esc(cur.blurb)+'</div>':'')+
+      '</div>';
+    }
+
     // WHAT THE EMAIL DECIDED IT WAS WRITING ABOUT, stated on its own line.
     // A wrong company reads as one clause inside a paragraph and is easy to
     // send past — "Vice President's Construction Superintendent opening" went
@@ -305,7 +367,8 @@
         (d.company_rejected?
           '<div style="margin-top:6px;font-size:11.5px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
       '</div>':'';
-    var modeNote=d.mode==='rules'
+
+    var modeNote=cur.mode==='rules'
       ? '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Written by the built-in rules writer.'+
         (d.ai_error?' The AI writer was unavailable for this one.':'')+'</div>'
       : '';
@@ -316,17 +379,18 @@
     return '<div class="card cp">'+
       sentBanner+
       readCard+
+      picker+
       modeNote+
-      (d.diagnosis?'<div style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+
-        '<strong>Why this angle:</strong> '+esc(d.diagnosis)+'</div>':'')+
+      (cur.diagnosis?'<div style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+
+        '<strong>Why this angle:</strong> '+esc(cur.diagnosis)+'</div>':'')+
       '<div class="fgrp"><label class="flbl">Subject</label>'+
         '<div style="display:flex;gap:8px">'+
-          '<input class="inp" id="og-subject" style="flex:1" value="'+esc(d.subject)+'">'+
+          '<input class="inp" id="og-subject" style="flex:1" value="'+esc(cur.subject)+'">'+
           '<button class="btn btn-outline btn-sm" onclick="outreachGenCopy(\'subject\')">Copy</button>'+
         '</div>'+
       '</div>'+
       '<div class="fgrp"><label class="flbl">Email body</label>'+
-        '<textarea class="txta w100" id="og-body" style="min-height:320px">'+esc(d.email)+'</textarea>'+
+        '<textarea class="txta w100" id="og-body" style="min-height:320px">'+esc(cur.email)+'</textarea>'+
       '</div>'+
       // WHAT THE RECIPIENT GETS, NOT WHAT THE DRAFT SAYS. The signature is
       // appended by the send path and holds {{sender}}/{{senderemail}}

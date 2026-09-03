@@ -151,13 +151,20 @@ module.exports = (ctx) => {
         }
       };
 
+      // Every framing at once, so the writer picks instead of regenerating and
+      // hoping for a different sentence. The first is the default; the rest sit
+      // behind the picker above the preview.
+      const built = gen.rulesVariants(withSender, draftOpts);
+      const base = {
+        variants: built.variants,
+        used: built.used,
+        company_rejected: built.company_rejected,
+        sends_as: mailbox ? mailbox.email_address : null,
+        signature_html: signatureHtml
+      };
+
       if (!aiConfigured()) {
-        return res.json({
-          ...gen.rulesDraft(withSender, draftOpts),
-          ai_available: false,
-          sends_as: mailbox ? mailbox.email_address : null,
-          signature_html: signatureHtml
-        });
+        return res.json({ ...built.variants[0], ...base, ai_available: false });
       }
 
       try {
@@ -181,22 +188,19 @@ module.exports = (ctx) => {
         const parsed = gen.parseAiDraft(text);
         if (!parsed) throw new Error('ai_unparseable');
         const usage = data.usage || {};
+        // The AI writes one email; the rules writer's framings stay alongside it
+        // so the choice is never lost when a key is configured.
         return res.json({
-          ...parsed, mode: 'ai', ai_available: true,
-          sends_as: mailbox ? mailbox.email_address : null,
-          signature_html: signatureHtml,
+          ...parsed, mode: 'ai', ai_available: true, ...base,
+          variants: [{ id: 'ai', label: 'AI draft', blurb: 'Written by the AI writer for this posting.',
+                       subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
+                       words: gen.wordCount(parsed.email), mode: 'ai' }].concat(built.variants),
           usage: { input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0 }
         });
       } catch (aiErr) {
         // A drafting failure is not a dead end — the rules engine writes the
         // same shape. The page says which engine produced what it is showing.
-        return res.json({
-          ...gen.rulesDraft(withSender, draftOpts),
-          ai_available: true,
-          sends_as: mailbox ? mailbox.email_address : null,
-          signature_html: signatureHtml,
-          ai_error: aiErr.message
-        });
+        return res.json({ ...built.variants[0], ...base, ai_available: true, ai_error: aiErr.message });
       }
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
