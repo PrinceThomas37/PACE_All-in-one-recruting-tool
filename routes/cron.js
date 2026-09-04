@@ -79,9 +79,23 @@ module.exports = (ctx) => {
       const lastCron = recent.find(r => r.triggered_by === 'cron');
       const pingAt = await runner.lastPingAt();
       const lastCronAt = pingAt || (lastCron ? lastCron.started_at : null);
-      // The heartbeat fires every 30 minutes; anything older than an hour means
-      // it is not arriving, whatever the env var says.
-      const heartbeatHealthy = !!lastCronAt && (Date.now() - new Date(lastCronAt).getTime()) < 60 * 60 * 1000;
+      // WHAT "LATE" ACTUALLY MEANS HERE (measured, 2026-09-04).
+      // The workflow asks for every 30 minutes, but GitHub treats scheduled
+      // workflows as best-effort and delivers this one every 3-5 HOURS in
+      // practice (observed run times that day: 01:12, 06:24, 11:37, 16:05,
+      // 19:03 UTC — every one of them HTTP 200 with all jobs run). So a
+      // one-hour threshold called a perfectly healthy engine broken, and the
+      // card then blamed a CRON_KEY mismatch that did not exist.
+      // Three states now: on time, late (GitHub throttling — normal, jobs are
+      // delayed but never skipped because due-ness lives in the database), and
+      // silent (long enough that something is genuinely wrong).
+      const sincePing = lastCronAt ? Date.now() - new Date(lastCronAt).getTime() : null;
+      const LATE_AFTER_MS = 90 * 60 * 1000;
+      const SILENT_AFTER_MS = 8 * 60 * 60 * 1000;
+      const heartbeatHealthy = sincePing !== null && sincePing < LATE_AFTER_MS;
+      const heartbeatState = sincePing === null ? 'silent'
+        : sincePing < LATE_AFTER_MS ? 'healthy'
+        : sincePing < SILENT_AFTER_MS ? 'late' : 'silent';
       res.json({
         jobs: await runner.status(),
         recent,
@@ -89,6 +103,8 @@ module.exports = (ctx) => {
         last_cron_ping_at: lastCronAt,
         last_cron_job_run_at: lastCron ? lastCron.started_at : null,
         heartbeat_healthy: heartbeatHealthy,
+        heartbeat_state: heartbeatState,
+        minutes_since_ping: sincePing === null ? null : Math.round(sincePing / 60000),
         server_time: new Date().toISOString(),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }

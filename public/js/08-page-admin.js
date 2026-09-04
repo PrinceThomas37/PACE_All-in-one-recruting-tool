@@ -96,7 +96,19 @@ window.openIntegrationsModal=function(){
     .catch(function(e){ closeModal(); showToast('Failed to load integrations: '+(e&&e.message||e),'error'); });
   // The budget loads alongside: an empty meter is fine, a missing one is not —
   // nobody should paste a key without seeing what it is allowed to spend.
-  apiGet('/admin/ai-budget').then(function(r){ STATE.aiBudget=r; renderIntegrationsModal(); }).catch(function(){});
+  apiGet('/admin/ai-budget').then(function(r){
+    STATE.aiBudget=r; renderIntegrationsModal();
+    // Never tested, but a provider IS configured → answer the question without
+    // waiting to be asked. One ~20-token call, and only when there is no stored
+    // result to show.
+    if(!r||!r.last_test){
+      var anyConfigured=false;
+      ((STATE.integrations&&STATE.integrations.categories)||[]).forEach(function(c){
+        c.items.forEach(function(it){ if(it.ai&&it.configured)anyConfigured=true; });
+      });
+      if(anyConfigured&&!STATE.aiHealth)runAiHealthTest();
+    }
+  }).catch(function(){});
 };
 function intgFind(id){ var out=null; ((STATE.integrations&&STATE.integrations.categories)||[]).forEach(function(c){c.items.forEach(function(x){if(x.id===id)out=x;});}); return out; }
 function renderIntegrationsModal(){
@@ -233,6 +245,19 @@ function attemptLine(a){
   return head+'</div>';
 }
 function aiHealthCard(){
+  try{ return aiHealthCardInner(); }
+  catch(err){
+    // Never let this card be the thing that hides a fault. If it throws, say so
+    // on screen with the message — a silent redraw is exactly the symptom this
+    // whole feature exists to eliminate.
+    return '<div style="border:1px solid var(--red);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+      '<div style="font-weight:600;font-size:13px;color:var(--red)">The AI status card could not draw</div>'+
+      '<div style="font-size:11.5px;color:var(--text2);margin-top:4px">'+htmlEsc((err&&err.message)||String(err))+'</div>'+
+      '<button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="runAiHealthTest()">Try the test again</button>'+
+    '</div>';
+  }
+}
+function aiHealthCardInner(){
   var d=STATE.aiHealth;
   var b=STATE.aiBudget;
   var lastErr=b&&b.last_error;
@@ -280,6 +305,14 @@ function aiHealthCard(){
   '</div>';
 }
 window.runAiHealthTest=function(){
+  try{ return runAiHealthTestInner(); }
+  catch(err){
+    STATE.aiHealth={configured:true,working:false,attempts:[{provider:'browser',model:'',ok:false,
+      error:'This screen hit an error before it could ask the server: '+((err&&err.message)||String(err))}]};
+    try{ renderIntegrationsModal(); }catch(_){ alert('AI test failed: '+((err&&err.message)||String(err))); }
+  }
+};
+function runAiHealthTestInner(){
   STATE.aiHealth={pending:true,since:Date.now()}; renderIntegrationsModal();
   // A promise that never settles renders as a spinner forever, which reads as
   // "the button does nothing" — the precise complaint this card exists to
@@ -306,7 +339,7 @@ window.runAiHealthTest=function(){
     STATE.aiHealth={configured:true,attempts:[{provider:'request',model:'',ok:false,error:msg}],working:false};
     renderIntegrationsModal();
   }));
-};
+}
 window.saveAiBudget=function(){
   var t=document.getElementById('aib-tokens'), c=document.getElementById('aib-calls');
   apiPost('/admin/ai-budget',{tokens:t?t.value:undefined,calls:c?c.value:undefined}).then(function(){
@@ -700,22 +733,33 @@ function renderEngineCard(isAdmin){
   //   healthy  — pings arriving, nothing to do
   //   no key   — CRON_KEY unset, setup never done
   //   silent   — key is set but no ping has arrived: the two values disagree
-  var state = s.heartbeat_healthy ? 'healthy' : (s.cron_configured ? 'silent' : 'unset');
+  // The server now distinguishes "late" (GitHub delivering the schedule hours
+  // apart — normal, and NOT a key problem) from "silent" (nothing for 8+ hours,
+  // which really is broken). Falling back to the old boolean keeps this working
+  // against a server that has not deployed the new field yet.
+  var state = !s.cron_configured ? 'unset'
+    : (s.heartbeat_state || (s.heartbeat_healthy ? 'healthy' : 'silent'));
   var tone = state==='healthy'
     ? {bg:'var(--card)',bd:'var(--border)',dot:'var(--green)',fg:'var(--text)'}
-    : state==='silent'
-      ? {bg:'#fffbeb',bd:'#fcd34d',dot:'#d97706',fg:'#92400e'}
-      : {bg:'#fef2f2',bd:'#fca5a5',dot:'#dc2626',fg:'#b91c1c'};
+    : state==='late'
+      ? {bg:'var(--card)',bd:'var(--border)',dot:'#d97706',fg:'var(--text)'}
+      : state==='silent'
+        ? {bg:'#fffbeb',bd:'#fcd34d',dot:'#d97706',fg:'#92400e'}
+        : {bg:'#fef2f2',bd:'#fca5a5',dot:'#dc2626',fg:'#b91c1c'};
   var headline = state==='healthy'
     ? 'Background engine: running'
-    : state==='silent'
-      ? 'Background engine: not receiving its heartbeat'
-      : 'Background engine: not set up';
+    : state==='late'
+      ? 'Background engine: running, heartbeat arriving late'
+      : state==='silent'
+        ? 'Background engine: no heartbeat for hours'
+        : 'Background engine: not set up';
   var explain = state==='healthy'
     ? 'Last heartbeat '+engineAgo(s.last_cron_ping_at)+'. Jobs run on their own schedule whether or not anyone is using the app.'
-    : state==='silent'
-      ? 'CRON_KEY is set on the server, but no heartbeat has arrived in over an hour. The usual cause is the value in Render and the GitHub Actions secret not matching exactly.'
-      : 'CRON_KEY is not set, so the heartbeat cannot sign in. Scheduled work only runs while somebody has the app open.';
+    : state==='late'
+      ? 'Last heartbeat '+engineAgo(s.last_cron_ping_at)+'. The schedule asks for every 30 minutes, but GitHub delivers scheduled runs when it has capacity — often hours apart. Nothing is broken and nothing is skipped: a job that falls due simply runs at the next heartbeat.'
+      : state==='silent'
+        ? 'Nothing has arrived for 8+ hours, which is longer than GitHub\'s usual delay. Check that CRON_KEY in Render and the GitHub Actions secret match exactly, and that the "engine heartbeat" workflow is still enabled.'
+        : 'CRON_KEY is not set, so the heartbeat cannot sign in. Scheduled work only runs while somebody has the app open.';
 
   var overdue=jobs.filter(function(j){return j.overdue;}).length;
 

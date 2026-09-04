@@ -164,6 +164,33 @@ globalThis.fetch = realFetch;
 step('the card shows those models with instructions to paste one',
   page.includes('This provider currently offers') && page.includes('Paste one of these into the model box'));
 
+// ── 8. the card cannot be the thing that hides a fault ───────────────────────
+// The owner reported the modal "glitching and showing itself" — a redraw with
+// no change, which is what happens when the card throws before it can render a
+// result. So both the card and the click handler have an error boundary, and
+// the exception becomes visible text rather than a silent flash.
+step('the card render is wrapped in an error boundary',
+  /function aiHealthCard\(\)\{\s*try\{ return aiHealthCardInner\(\); \}/.test(page));
+step('a thrown card shows the error message on screen',
+  page.includes('The AI status card could not draw'));
+step('the click handler has its own boundary',
+  /function runAiHealthTestInner\(\)/.test(page) && page.includes('hit an error before it could ask the server'));
+step('the boundary offers a way to retry',
+  /could not draw[\s\S]{0,400}onclick="runAiHealthTest\(\)"/.test(page));
+
+// ── 9. it answers its own question ───────────────────────────────────────────
+// A screen titled "Is AI actually working?" should not depend on a button being
+// pressed — especially not while a click that does not land is a live suspect.
+const openFn = page.slice(page.indexOf('window.openIntegrationsModal'), page.indexOf('function intgFind'));
+step('opening the screen runs the test when nothing has been recorded yet',
+  /if\(!r\|\|!r\.last_test\)/.test(openFn) && openFn.includes('runAiHealthTest()'));
+step('it only self-runs when a provider is actually configured',
+  /it\.ai&&it\.configured/.test(openFn));
+step('a stored result is shown instead of spending another call',
+  openFn.includes('!r.last_test'));
+step('it does not self-run over a result already on screen',
+  /!STATE\.aiHealth/.test(openFn));
+
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);
