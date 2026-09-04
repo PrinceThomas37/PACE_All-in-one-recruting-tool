@@ -3011,3 +3011,139 @@ email generator specifically — in which case the right answer is to leave that
 feature on rules and spend the free tier on resume parsing and JD cleanup, where
 the bar is lower and the win is larger. That comparison needs the owner's eyes
 on real output; it is not a judgement to make on their behalf.
+
+# Session 18, part 2 — the owner used it, and nothing worked in a way nobody could see
+
+Part 1 shipped the provider layer and the budget. Part 2 is what happened when
+the owner actually pasted a key: **five rounds, and the AI still has not been
+proven to run.** What did get fixed is everything that made that impossible to
+diagnose — which turned out to be the more valuable half.
+
+## First: four AI features, not six
+
+Asked where AI lives in the product, the honest audit came back different from
+the code. Six features hold an AI seam; **two of them cannot be reached at
+all.** The daily import briefing (`/ai/generate-summary`) has a working backend
+and **no caller anywhere in the frontend**. Cold-email drafting
+(`/ai/generate-email`) is called only from `12-manager-users.js` — the orphaned
+Manager Users page — and even inside that file the function is never invoked.
+
+So the live count is **four**: resume parsing, the job-description scrub, the
+outreach generator, and lead-distribution advice. Sessions 18 part 1 said "six"
+repeatedly because that is what the code holds; nobody had checked the UI.
+Deciding what to do with the two dead ones is still open (the briefing is worth
+wiring to the dashboard; the cold-email drafter is superseded by the generator
+and worth deleting).
+
+## What the owner found in five minutes of real use
+
+Screenshots of Assign Leads, and three faults in them — none about AI:
+
+1. **The typed count was read only by the Auto path.** Typing `10` and then
+   describing priorities previewed the whole **162-lead** pool. That preview
+   total is exactly what `/distribute/execute` assigns, and assignment starts
+   sending immediately, so a display bug sat one click away from a mass send.
+2. **A typed instruction was dropped in silence, under a heading that said AI.**
+   "80% construction and 20% accounting" produced 4% across 25 industries — the
+   correct rules output, presented as though an AI had chosen it.
+3. **`pool-stats` selected each lead's `freshness` and never counted it**, so
+   the Freshness column was structurally always empty, for every engine, since
+   it was built.
+
+Fixed in **#164**, with `test/lead-distribution-preview-smoke.mjs` pinning the
+one that matters: the number the preview shows is the same object execute
+receives.
+
+## The real subject: a silent fallback nobody could see through
+
+The owner pasted a valid Groq key, saw the provider card report **"Key valid ·
+14 models available"**, saved it — and every feature carried on writing with its
+rules. Nothing on any screen said why.
+
+That is the safety net working and the operator being forgotten. **The `null`
+that shields a recruiter from a provider failure also hides the cause from the
+person trying to fix it**, and from outside, "AI is off" and "AI is broken" are
+identical. Four rounds of fixing that, each prompted by the owner reporting that
+the previous one still showed nothing:
+
+**#164 — the ability to ask at all.** A provider card's "Test" lists models: it
+proves the KEY is accepted and nothing more. A generation can still fail on the
+model *name*, a per-model permission, or a rate limit — every one of those
+indistinguishable from having no key. `diagnose()` asks each configured provider
+for one word through the real path; `describeHttpError` reads the provider's own
+error body instead of discarding it, turning `HTTP 400` into
+`model_decommissioned: <name>`, which names the fix.
+
+**#165 — the answer must be visible.** The owner clicked and the card reverted
+to its previous state. Cause: the card was drawn INSIDE `aiBudgetCard()`, which
+returns `''` when the budget has not loaded — so the diagnostic vanished
+precisely when something was wrong. Also, several outcomes had no branch at all
+and fell through to the default. And the deeper gap: *"nothing configured"* and
+*"the key you just saved is not being found"* looked identical, so `diagnose()`
+now reports every provider, whether a key was found, and its last four
+characters.
+
+**#166 — the answer must survive the trip.** Driving the real button in a
+browser here produced a visible result in every case that could be simulated
+(JSON, a 404, junk), so the failure was not reproducible in this environment.
+Rather than guess a fourth time: the result is written to `app_settings`
+(`ai_last_test`) as it is produced and returned with the budget, so reopening
+Admin → Integrations shows the last test with a timestamp. The request stops
+waiting after 45 seconds and names the likely cause (the service sleeps when
+idle). Providers are tried in parallel with a 12-second leash rather than in
+series at 20. And a failure now carries its fix: the list of models that
+provider actually offers, fetched only after an attempt has failed, with
+instructions to paste one into the model box.
+
+**#167 — it should not need asking.** The owner's words were *"it glitches and
+shows itself"* — a modal redrawing unchanged, which is what happens when the
+card throws before rendering: `STATE.modal` keeps its old value and the click
+looks ignored. Both the card and the handler got error boundaries. And the
+screen now **runs the test itself on open** when a provider is configured and
+nothing has been recorded — sidestepping the button entirely for anyone whose
+click is not landing.
+
+**Still unknown at session end: whether the AI actually runs.** The leading
+suspect remains the Groq model names in `PROVIDERS`, which were written from
+memory and have never been checked against a real response, because this sandbox
+cannot reach `api.groq.com`. If that is it, the fix is one word in the model box
+and the card now prints the valid names.
+
+## The heartbeat alarm was false, and it accused a correct setup
+
+The Admin card said no heartbeat had arrived in over an hour and blamed
+`CRON_KEY` in Render not matching the GitHub secret. **The Actions history
+disproves both halves.** On 2026-09-04 the heartbeat fired at 01:12, 06:24,
+11:37, 16:05 and 19:03 UTC — every one HTTP 200, all six jobs run.
+
+GitHub treats scheduled workflows as best-effort and was delivering the
+30-minute schedule every 3-5 hours. A one-hour threshold therefore reported a
+healthy engine as broken, and acting on its advice would have meant rotating a
+key that was already correct — the worst kind of alert. Three states now:
+healthy (<90 min), **late** (GitHub throttling; jobs are delayed but never
+skipped, because due-ness lives in the database), and silent (8h+, where the
+key-mismatch advice belongs). The measurement is recorded in `heartbeat.yml` so
+nobody re-derives it, and the fix is in the reporting rather than in pinging
+harder, which would eat the free-tier instance-hour budget.
+
+## Two process notes worth keeping
+
+**A test that pins wording is not a test that pins behaviour.** #167's first
+commit turned `engine-card-smoke` red. Its safety assertions — a silent engine
+must never read as healthy, the states must stay distinguishable — passed
+untouched; only the text moved, because the old text was wrong. Reading that
+distinction correctly is the difference between fixing a test and weakening one.
+
+**Waiting on `npm test` in the background needs care.** Several waiter loops
+used `pgrep -f run-all.mjs`, which matched their own command line and never
+exited. Harmless, but it wasted a lot of a session; wait on the node process
+specifically, or just run the suite in the foreground with a long timeout.
+
+## The lesson
+
+A fallback that protects the user must never be invisible to the operator.
+Every one of these four rounds was the same bug in a different place: the
+product degraded gracefully, and told nobody. Graceful degradation without
+observability is indistinguishable from being broken — and this session spent
+five rounds proving it, because the diagnostic itself kept degrading gracefully
+and telling nobody.

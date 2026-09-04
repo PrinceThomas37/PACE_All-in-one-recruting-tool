@@ -371,6 +371,42 @@ Session 9). What that means in practice:
     means "use the default"; a typed 0 genuinely means "no AI today"** — do not
     collapse those two.
 
+- **AI IS WIRED IN SIX PLACES AND REACHABLE IN FOUR (audited Session 18).**
+  Live: resume parsing, the job-description scrub, the outreach generator,
+  lead-distribution advice. **Dead:** the daily import briefing
+  (`/ai/generate-summary` — works, and nothing in the frontend calls it) and
+  cold-email drafting (`/ai/generate-email` — reachable only from the orphaned
+  `12-manager-users.js`, and never invoked even there). Do not repeat "six AI
+  features" without re-checking the UI; the code count and the product count
+  are different numbers.
+
+- **A FALLBACK THAT PROTECTS THE USER MUST NEVER BE INVISIBLE TO THE OPERATOR
+  (Session 18, four rounds).** `complete()` returning null is right for a
+  recruiter and useless for whoever is trying to find out why nothing happened —
+  from outside, "AI is off" and "AI is broken" look identical. So:
+  `aiProvider.diagnose()` asks each configured provider for one word through the
+  REAL path; `describeHttpError` reads the provider's own error body rather than
+  discarding it (`HTTP 400` → `model_decommissioned: <name>` names the fix); a
+  failed attempt fetches the models that provider DOES offer; the result is
+  stored server-side (`ai_last_test`) so it survives the trip to the browser;
+  and the card runs itself on open. **A provider card's "Test" proves only that
+  the KEY is accepted — it lists models. It says nothing about whether a
+  generation with the model we ask for works, and those two failures have
+  identical symptoms.**
+  * **The Groq/OpenRouter model names in `PROVIDERS` were written from memory
+    and have never been verified against a real response** — the dev sandbox
+    cannot reach those hosts. If AI is silently falling back, check the model
+    name FIRST.
+
+- **"Background engine: not receiving its heartbeat" is usually a FALSE ALARM.**
+  GitHub treats `schedule` as best-effort: measured 2026-09-04, the 30-minute
+  workflow was delivered every 3-5 hours (01:12, 06:24, 11:37, 16:05, 19:03 UTC
+  — every one HTTP 200 with all six jobs run). Jobs are delayed, never skipped,
+  because due-ness lives in the database. The card now says "running, heartbeat
+  arriving late" and reserves the CRON_KEY-mismatch advice for 8h+ of silence.
+  **Do not "fix" this by pinging harder** — that spends the free-tier instance
+  hours the owner flagged as a hard budget.
+
 ## Growth bets (cost ~nothing now, scale later) — pick from these proactively
 
 Ordered by "cheapest to do now vs. most painful to retrofit":
