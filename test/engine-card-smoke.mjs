@@ -9,9 +9,17 @@
 // server still happily reports "configured". A card that showed a green light
 // in that state would be worse than no card at all.
 //
-// Three states, three different actions, so all three are asserted:
-//   healthy — pings arriving
-//   silent  — key set, no ping in over an hour (the values disagree)
+// FOUR states now, three different actions, so all four are asserted:
+//   healthy — pings arriving on time
+//   late    — key set, ping older than 90 min but under 8 hours. NOT a fault:
+//             GitHub runs scheduled workflows when it has capacity, and on
+//             2026-09-04 delivered this one every 3-5 hours (01:12, 06:24,
+//             11:37, 16:05, 19:03 UTC), every one HTTP 200 with all six jobs
+//             run. The card used to call that broken and blame a CRON_KEY
+//             mismatch — advice that would have had the owner rotate a key
+//             that was already correct.
+//   silent  — nothing for 8+ hours (longer than GitHub's usual delay), which
+//             is where the key-mismatch advice belongs
 //   unset   — no key at all (setup never done)
 import http from 'node:http';
 import fs from 'node:fs';
@@ -98,9 +106,28 @@ try {
     jobs: JOBS, recent: [], cron_configured: true, heartbeat_healthy: false, last_cron_ping_at: null,
   });
   txt = await page.textContent('.page');
-  step('silent: does NOT claim the engine is running', !/Background engine: running/.test(txt));
-  step('silent: says the heartbeat is not arriving', /not receiving its heartbeat/.test(txt));
-  step('silent: names the likely cause (values not matching)', /not matching exactly/.test(txt), txt.slice(0, 300));
+  step('silent: does NOT claim the engine is running on time',
+    !/Background engine: running$/m.test(txt));
+  step('silent: says no heartbeat has arrived for hours', /no heartbeat for hours/.test(txt));
+  step('silent: names the likely cause (the two values disagreeing)',
+    /CRON_KEY in Render and the GitHub Actions secret match/.test(txt), txt.slice(0, 300));
+
+  // ── 2b. Late — the state that used to be reported as broken ───────────────
+  // A ping two hours old. The engine is fine; GitHub is simply delivering the
+  // schedule slowly. This must read as running, and must NOT accuse the setup.
+  await setStatus(page, {
+    jobs: JOBS, recent: [], cron_configured: true, heartbeat_healthy: false,
+    heartbeat_state: 'late', minutes_since_ping: 120,
+    last_cron_ping_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+  });
+  txt = await page.textContent('.page');
+  step('late: says the engine is RUNNING', /Background engine: running, heartbeat arriving late/.test(txt));
+  step('late: blames GitHub scheduling, not the configuration',
+    /GitHub delivers scheduled runs when it has capacity/.test(txt));
+  step('late: does NOT tell the owner to go checking keys',
+    !/CRON_KEY in Render and the GitHub Actions secret match/.test(txt), txt.slice(0, 200));
+  step('late: says outright that nothing is skipped',
+    /Nothing is broken and nothing is skipped/.test(txt));
 
   // ── 3. Unset ──────────────────────────────────────────────────────────────
   await setStatus(page, {
@@ -110,7 +137,7 @@ try {
   step('unset: says the engine is not set up', /Background engine: not set up/.test(txt));
   step('unset: explains the consequence in plain language',
     /only runs while somebody has the app open/.test(txt), txt.slice(0, 300));
-  step('unset: is distinct from the silent state', !/not receiving its heartbeat/.test(txt));
+  step('unset: is distinct from the silent state', !/no heartbeat for hours/.test(txt));
 
   // ── 4. The job list ───────────────────────────────────────────────────────
   await page.evaluate(() => { STATE.engineExpanded = true; render(); });

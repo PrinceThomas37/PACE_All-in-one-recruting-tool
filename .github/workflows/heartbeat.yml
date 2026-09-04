@@ -12,6 +12,15 @@
 # A job that isn't due is skipped. The in-process intervals and this ping can
 # never double-run the same job — whichever arrives first stamps it.
 #
+# WHAT ACTUALLY HAPPENS (measured 2026-09-04, not assumed)
+# GitHub treats `schedule` as BEST-EFFORT and runs it when it has capacity. On
+# this repository the 30-minute schedule was delivered every 3-5 hours: 01:12,
+# 06:24, 11:37, 16:05, 19:03 UTC — every one HTTP 200 with all six jobs run.
+# That is not a fault to fix here; it is what a free scheduled workflow is. The
+# Admin card was reading a 30-minute cadence as a promise and calling a healthy
+# engine broken, which is corrected in routes/cron.js rather than by pinging
+# harder (see the instance-hour budget below).
+#
 # COST
 # This repository is public, so GitHub Actions minutes are unlimited and free.
 # (If it is ever made private, this becomes billable: ~8,600 runs/month would
