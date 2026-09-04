@@ -9,6 +9,7 @@
 const express = require('express');
 const integrations = require('../config/integrations');
 const aiBudget = require('../services/ai-budget');
+const aiProvider = require('../services/ai-provider');
 const { verifyEmailAddress } = require('../email-verify');
 const httpClient = require('../http-client');
 
@@ -140,6 +141,20 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // Does an AI actually generate, right now, through the real path?
+  //
+  // A provider card's "Test" lists models — it proves the KEY is accepted and
+  // nothing more. A generation can still fail on the model name, a per-model
+  // permission, or a rate limit, and the symptom is identical to having no key
+  // at all: the feature quietly writes with its rules. This asks for one word
+  // from each configured provider and reports its own words back.
+  router.post('/admin/integrations/ai-test', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      res.json(await aiProvider.diagnose(supabase, { tier: (req.body && req.body.tier) || 'fast' }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // What the org has spent on AI today, and the ceilings it is spending
   // against. This is what makes a budget real to the person setting it: a cap
   // nobody can see the other side of is a guess.
@@ -151,6 +166,9 @@ module.exports = (ctx) => {
       ]);
       res.json({
         caps, spent, day: aiBudget.dayKey(),
+        // The last thing that went wrong, so a silent fallback has a reason
+        // attached to it instead of being indistinguishable from "switched off".
+        last_error: await aiProvider.getLastError(supabase),
         defaults: { tokens: aiBudget.DEFAULT_DAILY_TOKENS, calls: aiBudget.DEFAULT_DAILY_CALLS },
         features: Object.entries(aiBudget.FEATURES).map(([id, f]) => ({
           id, label: f.label, max_input_tokens: f.in, max_output_tokens: f.out, tier: f.tier,
