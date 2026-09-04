@@ -316,8 +316,31 @@ async function getLastError(supabase) {
 // identical symptoms (the feature quietly writes with its rules). This tries
 // the real call, on the real model, and hands back the provider's own words.
 async function diagnose(supabase, opts = {}) {
+  // Report on EVERY provider, not just the usable ones. "Nothing is configured"
+  // and "the key you just saved is not being found" are different problems with
+  // the same symptom, and the second one is the one that wastes an afternoon.
+  const seen = [];
+  for (const id of PROVIDER_ORDER) {
+    const def = PROVIDERS[id];
+    const key = def.keyless ? null : await integrations.getSecret(supabase, id, 'api_key');
+    const baseUrl = def.url ? null : await integrations.getSecret(supabase, id, 'base_url');
+    const placeholder = !!key && /^your_.*_here$/i.test(key);
+    seen.push({
+      provider: id,
+      // Never the key itself — enough to recognise the one you pasted.
+      key_found: !!key && !placeholder,
+      key_hint: key && !placeholder ? '••••' + String(key).slice(-4) : null,
+      address: baseUrl || null,
+      usable: def.keyless ? !!baseUrl : (!!key && !placeholder),
+      why: def.keyless
+        ? (baseUrl ? null : 'no server address saved')
+        : (placeholder ? 'the placeholder value is still in place'
+                       : (key ? null : 'no key saved for this provider')),
+    });
+  }
+
   const chain = await resolveChain(supabase);
-  if (!chain.length) return { configured: false, attempts: [] };
+  if (!chain.length) return { configured: false, providers: seen, attempts: [] };
   const tier = opts.tier || 'fast';
   const attempts = [];
   for (const entry of chain) {
@@ -338,7 +361,7 @@ async function diagnose(supabase, opts = {}) {
       attempts.push({ provider: entry.id, model, ok: false, ms: Date.now() - started, error: err.message });
     }
   }
-  return { configured: true, attempts, working: attempts.some(a => a.ok) };
+  return { configured: true, providers: seen, attempts, working: attempts.some(a => a.ok) };
 }
 
 module.exports = {

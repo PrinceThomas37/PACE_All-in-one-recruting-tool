@@ -139,7 +139,7 @@ function renderIntegrationsModal(){
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
-      (cat.category==='AI'?aiProviderNote()+aiBudgetCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
+      (cat.category==='AI'?aiProviderNote()+aiHealthCard()+aiBudgetCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
@@ -196,8 +196,7 @@ function aiBudgetCard(){
       '<td style="padding:2px 8px 2px 0;color:var(--text3);text-align:right">'+f.max_input_tokens.toLocaleString()+' in / '+f.max_output_tokens.toLocaleString()+' out</td>'+
       '<td style="padding:2px 0;text-align:right;font-weight:600">'+(f.spent_today||0).toLocaleString()+'</td></tr>';
   }).join('');
-  return aiHealthCard()+
-    '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+  return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
     '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Daily budget</div>'+
     '<div style="font-size:11.5px;color:var(--text3);line-height:1.5">Spending is capped per day so a free allowance cannot be used up in one morning. '+
       'Past the cap, features go back to their built-in version until tomorrow — nothing breaks and nothing is charged.</div>'+
@@ -225,30 +224,39 @@ function aiHealthCard(){
   var d=STATE.aiHealth;
   var b=STATE.aiBudget;
   var lastErr=b&&b.last_error;
-  var body='';
+  var panel=function(bg,bd,html){
+    return '<div style="background:'+bg+';border:1px solid '+bd+';border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;line-height:1.6">'+html+'</div>';
+  };
+  var body;
   if(d&&d.pending){
-    body='<div style="font-size:11.5px;color:var(--text3)">Asking each connected provider for one word…</div>';
+    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word…');
+  }else if(d&&d.attempts&&d.attempts.length){
+    var lines=d.attempts.map(function(a){
+      return '<div style="margin-bottom:4px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span><br>'+
+        htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'))+'</div>';
+    }).join('');
+    body=d.working
+      ?panel('var(--green-l)','var(--green)','<b style="color:var(--green)">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
+      :panel('#fef2f2','var(--red)','<b style="color:var(--red)">AI IS NOT WORKING.</b> Every feature is writing with its built-in version. Below is what each provider said — that text names the problem.<br><br>'+lines);
   }else if(d&&d.configured===false){
-    body='<div style="font-size:11.5px;color:var(--text3)">No provider is connected yet, so every feature is running its built-in version. That is a working state, not an error.</div>';
-  }else if(d&&d.attempts){
-    body=d.attempts.map(function(a){
-      return '<div style="font-size:11.5px;margin-bottom:3px;color:'+(a.ok?'var(--green)':'var(--red)')+'">'+
-        (a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+' <span style="color:var(--text3)">('+htmlEsc(a.model||'')+')</span> — '+
-        htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'))+
-      '</div>';
-    }).join('')+(d.working
-      ?'<div style="font-size:11.5px;color:var(--green);font-weight:600;margin-top:4px">AI is working — the features will use it.</div>'
-      :'<div style="font-size:11.5px;color:var(--red);font-weight:600;margin-top:4px">No provider generated anything, so every feature is writing with its built-in version. The line above is the provider\'s own explanation.</div>');
+    // The important distinction: nothing saved, versus something saved that is
+    // not being found. The per-provider list makes that unmissable.
+    var rows=(d.providers||[]).map(function(p){
+      return '<div style="margin-bottom:3px"><b>'+htmlEsc(p.provider)+'</b> — '+
+        (p.usable?'<span style="color:var(--green)">ready</span>':'<span style="color:var(--text3)">'+htmlEsc(p.why||'not set up')+'</span>')+
+        (p.key_hint?' <span style="color:var(--text3)">(key '+htmlEsc(p.key_hint)+')</span>':'')+'</div>';
+    }).join('');
+    body=panel('#fffbeb','var(--amber,#f59e0b)','<b>No provider is connected, so no AI ran.</b> Every feature is using its built-in version — that is a working state, not a crash. If you saved a key and it is not listed as ready below, the save did not stick and that is a bug worth reporting.<br><br>'+rows);
   }else if(lastErr){
-    body='<div style="font-size:11.5px;color:var(--text3)">Not tested yet. The last failure recorded was:</div>'+
+    body=panel('#fef2f2','var(--red)','<b>Not tested yet.</b> The last failure recorded was:<br>'+
       (lastErr.failures||[]).map(function(f){
-        return '<div style="font-size:11.5px;color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span> — '+htmlEsc(f.error||'')+'</div>';
-      }).join('');
+        return '<div style="color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span><br>'+htmlEsc(f.error||'')+'</div>';
+      }).join(''));
   }else{
-    body='<div style="font-size:11.5px;color:var(--text3)">Run this after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back.</div>';
+    body=panel('var(--bg3)','var(--border2)','Click <b>Test AI generation</b> after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back to its built-in version.');
   }
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
       '<div style="font-weight:600;font-size:13px">Is AI actually working?</div>'+
       '<button class="btn btn-sm btn-primary" onclick="runAiHealthTest()">Test AI generation</button>'+
     '</div>'+body+
@@ -257,12 +265,16 @@ function aiHealthCard(){
 window.runAiHealthTest=function(){
   STATE.aiHealth={pending:true}; renderIntegrationsModal();
   apiPost('/admin/integrations/ai-test',{}).then(function(r){
-    STATE.aiHealth=r;
-    // Refresh the meter too: a successful test spends a few tokens, and seeing
-    // that number move is the second half of the proof.
-    return apiGet('/admin/ai-budget').then(function(b){ STATE.aiBudget=b; renderIntegrationsModal(); });
+    // A response that is not the shape we expect must not silently become
+    // "nothing happened" — the whole point of this card is that it always says
+    // something.
+    STATE.aiHealth=(r&&typeof r==='object')?r:{configured:true,attempts:[{provider:'server',model:'',ok:false,error:'The server replied with nothing usable.'}],working:false};
+    renderIntegrationsModal();
+    return apiGet('/admin/ai-budget').then(function(bb){ STATE.aiBudget=bb; renderIntegrationsModal(); }).catch(function(){});
   }).catch(function(e){
-    STATE.aiHealth={configured:true,attempts:[{provider:'request',model:'',ok:false,error:(e&&e.message)||String(e)}],working:false};
+    var msg=(e&&e.message)||String(e);
+    if(/Unexpected token|JSON/i.test(msg))msg='The server did not answer this request — if PACE was just updated, wait a minute for the deploy to finish and try again. ('+msg+')';
+    STATE.aiHealth={configured:true,attempts:[{provider:'request',model:'',ok:false,error:msg}],working:false};
     renderIntegrationsModal();
   });
 };
