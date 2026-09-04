@@ -89,7 +89,7 @@ window.saveSystemSettings=function(){
 
 // ── Integrations & API Keys (admin) ──
 window.openIntegrationsModal=function(){
-  STATE._intgTest={}; STATE._emailVerifyResult=null;
+  STATE._intgTest={}; STATE._emailVerifyResult=null; STATE.aiHealth=null;
   STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">Integrations & API Keys</div></div><div class="mb_" style="padding:24px;text-align:center;color:var(--text3)">Loading…</div></div>';
   render();
   apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); })
@@ -196,7 +196,8 @@ function aiBudgetCard(){
       '<td style="padding:2px 8px 2px 0;color:var(--text3);text-align:right">'+f.max_input_tokens.toLocaleString()+' in / '+f.max_output_tokens.toLocaleString()+' out</td>'+
       '<td style="padding:2px 0;text-align:right;font-weight:600">'+(f.spent_today||0).toLocaleString()+'</td></tr>';
   }).join('');
-  return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+  return aiHealthCard()+
+    '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
     '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Daily budget</div>'+
     '<div style="font-size:11.5px;color:var(--text3);line-height:1.5">Spending is capped per day so a free allowance cannot be used up in one morning. '+
       'Past the cap, features go back to their built-in version until tomorrow — nothing breaks and nothing is charged.</div>'+
@@ -216,6 +217,55 @@ function aiBudgetCard(){
     '</table>'+
   '</div>';
 }
+// Proof, not inference: one real generation through the same path the features
+// use. A provider card's "Test" only lists models — it cannot tell you whether
+// the model we ASK for will answer, and that failure looks exactly like having
+// no key at all.
+function aiHealthCard(){
+  var d=STATE.aiHealth;
+  var b=STATE.aiBudget;
+  var lastErr=b&&b.last_error;
+  var body='';
+  if(d&&d.pending){
+    body='<div style="font-size:11.5px;color:var(--text3)">Asking each connected provider for one word…</div>';
+  }else if(d&&d.configured===false){
+    body='<div style="font-size:11.5px;color:var(--text3)">No provider is connected yet, so every feature is running its built-in version. That is a working state, not an error.</div>';
+  }else if(d&&d.attempts){
+    body=d.attempts.map(function(a){
+      return '<div style="font-size:11.5px;margin-bottom:3px;color:'+(a.ok?'var(--green)':'var(--red)')+'">'+
+        (a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+' <span style="color:var(--text3)">('+htmlEsc(a.model||'')+')</span> — '+
+        htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'))+
+      '</div>';
+    }).join('')+(d.working
+      ?'<div style="font-size:11.5px;color:var(--green);font-weight:600;margin-top:4px">AI is working — the features will use it.</div>'
+      :'<div style="font-size:11.5px;color:var(--red);font-weight:600;margin-top:4px">No provider generated anything, so every feature is writing with its built-in version. The line above is the provider\'s own explanation.</div>');
+  }else if(lastErr){
+    body='<div style="font-size:11.5px;color:var(--text3)">Not tested yet. The last failure recorded was:</div>'+
+      (lastErr.failures||[]).map(function(f){
+        return '<div style="font-size:11.5px;color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span> — '+htmlEsc(f.error||'')+'</div>';
+      }).join('');
+  }else{
+    body='<div style="font-size:11.5px;color:var(--text3)">Run this after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back.</div>';
+  }
+  return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">'+
+      '<div style="font-weight:600;font-size:13px">Is AI actually working?</div>'+
+      '<button class="btn btn-sm btn-primary" onclick="runAiHealthTest()">Test AI generation</button>'+
+    '</div>'+body+
+  '</div>';
+}
+window.runAiHealthTest=function(){
+  STATE.aiHealth={pending:true}; renderIntegrationsModal();
+  apiPost('/admin/integrations/ai-test',{}).then(function(r){
+    STATE.aiHealth=r;
+    // Refresh the meter too: a successful test spends a few tokens, and seeing
+    // that number move is the second half of the proof.
+    return apiGet('/admin/ai-budget').then(function(b){ STATE.aiBudget=b; renderIntegrationsModal(); });
+  }).catch(function(e){
+    STATE.aiHealth={configured:true,attempts:[{provider:'request',model:'',ok:false,error:(e&&e.message)||String(e)}],working:false};
+    renderIntegrationsModal();
+  });
+};
 window.saveAiBudget=function(){
   var t=document.getElementById('aib-tokens'), c=document.getElementById('aib-calls');
   apiPost('/admin/ai-budget',{tokens:t?t.value:undefined,calls:c?c.value:undefined}).then(function(){

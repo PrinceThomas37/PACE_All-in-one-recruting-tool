@@ -220,6 +220,7 @@ function modelFor(entry, tier) {
 async function complete(supabase, opts = {}) {
   const chain = await resolveChain(supabase);
   if (!chain.length) return null;
+  const failures = [];
 
   // 1. What may this feature send, and how long an answer may it ask for?
   const limits = budget.featureLimits(opts.feature);
@@ -248,9 +249,9 @@ async function complete(supabase, opts = {}) {
     if (!req) continue;
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
-      if (!response.ok) throw new Error('ai_http_' + response.status);
+      if (!response.ok) throw new Error(await describeHttpError(response));
       const parsed = parseResponse(entry.id, await response.json());
-      if (!parsed) throw new Error('ai_unparseable');
+      if (!parsed) throw new Error('the provider replied, but with no usable text in it');
       // Charge the meter with what the provider actually billed, falling back
       // to the estimate when it reports nothing — never to zero, or a provider
       // that omits usage would be free forever.
@@ -259,15 +260,91 @@ async function complete(supabase, opts = {}) {
       return { ...parsed, provider: entry.id, model, tier: limits.tier, budget_remaining: verdict.remaining_tokens };
     } catch (err) {
       // Never fatal: the loop moves on, and an empty loop means rules output.
+      // But the reason is REMEMBERED — see recordFailure. A null that cannot be
+      // explained is the difference between "AI is off" and "AI is broken", and
+      // from the outside those two look identical.
       console.warn(`[ai] ${entry.id} failed (${err.message}) — trying next provider`);
+      failures.push({ provider: entry.id, model, error: err.message });
     }
   }
+  if (failures.length) await recordFailure(supabase, opts.feature, failures);
   return null;
+}
+
+// A provider's own error text is the single most useful thing when a feature
+// silently falls back — "model_decommissioned: llama-3.1-8b" tells you what to
+// do; "HTTP 400" does not. Bodies are capped and never contain the key.
+async function describeHttpError(response) {
+  let detail = '';
+  try {
+    const body = await response.text();
+    try {
+      const j = JSON.parse(body);
+      detail = (j.error && (j.error.message || j.error.code)) || j.message || '';
+    } catch (_) { detail = body; }
+  } catch (_) {}
+  detail = String(detail).replace(/\s+/g, ' ').trim().slice(0, 300);
+  return `HTTP ${response.status}${detail ? ' — ' + detail : ''}`;
+}
+
+// The last failure, kept where an admin can see it. One row, overwritten: this
+// answers "why is it not working right now", not "what has ever gone wrong".
+const LAST_ERROR_KEY = 'ai_last_error';
+async function recordFailure(supabase, feature, failures) {
+  try {
+    await supabase.from('app_settings').upsert({
+      key: LAST_ERROR_KEY,
+      value: JSON.stringify({ at: new Date().toISOString(), feature: feature || 'other', failures }),
+      updated_at: new Date(),
+    }, { onConflict: 'key' });
+  } catch (_) { /* diagnostics must never break the feature */ }
+}
+
+async function getLastError(supabase) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_ERROR_KEY).maybeSingle();
+    return data && data.value ? JSON.parse(data.value) : null;
+  } catch (_) { return null; }
+}
+
+// Actually generate something, through the real path, and report what each
+// configured provider said.
+//
+// WHY THIS EXISTS: the "Test" button on a provider card checks that the KEY is
+// accepted — it lists models. That proves nothing about whether a generation
+// with the model WE ask for succeeds, and those are different failures with
+// identical symptoms (the feature quietly writes with its rules). This tries
+// the real call, on the real model, and hands back the provider's own words.
+async function diagnose(supabase, opts = {}) {
+  const chain = await resolveChain(supabase);
+  if (!chain.length) return { configured: false, attempts: [] };
+  const tier = opts.tier || 'fast';
+  const attempts = [];
+  for (const entry of chain) {
+    const model = modelFor(entry, tier);
+    const started = Date.now();
+    const req = buildRequest(entry.id, {
+      key: entry.key, baseUrl: entry.baseUrl, model,
+      prompt: 'Reply with the single word: ready', maxTokens: 16,
+    });
+    if (!req) { attempts.push({ provider: entry.id, model, ok: false, error: 'could not build a request for this provider' }); continue; }
+    try {
+      const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 20000 });
+      if (!response.ok) throw new Error(await describeHttpError(response));
+      const parsed = parseResponse(entry.id, await response.json());
+      if (!parsed) throw new Error('the provider replied, but with no usable text in it');
+      attempts.push({ provider: entry.id, model, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) });
+    } catch (err) {
+      attempts.push({ provider: entry.id, model, ok: false, ms: Date.now() - started, error: err.message });
+    }
+  }
+  return { configured: true, attempts, working: attempts.some(a => a.ok) };
 }
 
 module.exports = {
   PROVIDERS, PROVIDER_ORDER, AI_TIMEOUT_MS,
   buildRequest, parseResponse, endpointFor, modelFor,
-  resolveChain, isAvailable, complete,
+  resolveChain, isAvailable, complete, diagnose,
+  describeHttpError, getLastError, LAST_ERROR_KEY,
   budget,
 };

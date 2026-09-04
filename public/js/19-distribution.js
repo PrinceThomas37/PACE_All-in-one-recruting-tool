@@ -107,8 +107,16 @@ function showRatioPreview(ratio){
   var bi=ratio.by_industry||{};
   var btz=ratio.by_timezone||{};
   prev.style.display='block';
+  // An instruction the rules engine cannot follow must be reported, not
+  // swallowed: an even split shown under "AI" reads as the AI disagreeing with
+  // you, when in fact nothing read your sentence.
+  var ignoredPriorities=(ratio.engine!=='ai')&&!!(STATE._assignPriorityText||'').trim();
+  var engineNote=ignoredPriorities
+    ?'<div style="font-size:11.5px;color:var(--amber);background:var(--amber-l,#fef3c7);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5"><b>Your priorities were not applied.</b> No AI provider answered, so this is the built-in balanced split. Connect a provider in Admin → Integrations to have instructions like this followed.</div>'
+    :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">'+(ratio.engine==='ai'?'Written by the AI'+(ratio.engine_model?' ('+htmlEsc(ratio.engine_model)+')':''):'Built-in balanced split — no AI provider is connected.')+'</div>';
   prev.innerHTML='<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px">'+
     '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Distribution preview \u2014 '+ratio.total_to_send+' leads</div>'+
+    engineNote+
     '<div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px">'+htmlEsc(ratio.summary||'')+'</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11.5px">'+
       '<div><div style="color:var(--text3);margin-bottom:3px">Freshness</div>'+Object.keys(bf).map(function(k){return '<div>'+k+': <strong>'+bf[k]+'%</strong></div>';}).join('')+'</div>'+
@@ -134,6 +142,7 @@ function generateAutoRatio(){
   var ps=Object.assign({},pool,{capacity:capacity});
   var prev=document.getElementById('assign-ratio-preview');
   if(prev){prev.style.display='block';prev.innerHTML='<div style="font-size:12px;color:var(--text3);padding:10px">Calculating balanced ratio\u2026</div>';}
+  STATE._assignPriorityText='';
   apiPost('/distribute/generate-ratio',{priority_text:'balanced auto distribution',pool_stats:ps,manager_id:managerId}).then(function(ratio){
     showRatioPreview(ratio);
   }).catch(function(e){
@@ -151,11 +160,18 @@ window.generateAssignRatio=function(){
   var managerId=STATE._assignManagerId;
   var emailAccounts=(STATE.userEmailsCache[managerId]||[]).filter(function(a){return a.is_active;});
   var capacity=emailAccounts.reduce(function(s,a){return s+(a.daily_send_limit||300);},0);
+  // The typed count is read HERE TOO. Only the Auto path used to, so typing 10
+  // and then describing priorities produced a preview for the whole pool — and
+  // that preview number is what /distribute/execute assigns and starts sending.
+  var manualEl=document.getElementById('assign-manual-count');
+  var manualCount=manualEl&&manualEl.value?parseInt(manualEl.value):0;
+  if(manualCount>0)capacity=Math.min(manualCount,pool.total||99999);
   var ps=Object.assign({},pool,{capacity:capacity});
   var btn=document.getElementById('gen-ratio-btn');
   if(btn){btn.textContent='Generating\u2026';btn.disabled=true;}
   var prev=document.getElementById('assign-ratio-preview');
   if(prev){prev.style.display='block';prev.innerHTML='<div style="font-size:12px;color:var(--text3);padding:10px">\u2728 AI is generating your ratio\u2026</div>';}
+  STATE._assignPriorityText=text;
   apiPost('/distribute/generate-ratio',{priority_text:text,pool_stats:ps,manager_id:managerId}).then(function(ratio){
     showRatioPreview(ratio);
     if(btn){btn.textContent='\u2728 Regenerate';btn.disabled=false;}

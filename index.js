@@ -1040,7 +1040,7 @@ app.get('/jobs/:job_id/activity', auth, async (req, res) => {
 function buildAutoRatio(pool_stats, capacity) {
   const total = Math.min(pool_stats?.total || 0, capacity);
   function evenSplit(obj) { const keys = Object.keys(obj).filter(k => obj[k] > 0); if (!keys.length) return {}; const base = Math.floor(100 / keys.length); const result = {}; let rem = 100; keys.forEach((k, i) => { result[k] = i === keys.length - 1 ? rem : base; rem -= base; }); return result; }
-  return { total_to_send: total, by_freshness: evenSplit(pool_stats?.by_freshness || {}), by_industry: evenSplit(pool_stats?.by_industry || {}), by_timezone: evenSplit(pool_stats?.by_timezone || {}), exclude_duplicates: false, summary: `Auto-balanced distribution of ${total} leads.` };
+  return { total_to_send: total, by_freshness: evenSplit(pool_stats?.by_freshness || {}), by_industry: evenSplit(pool_stats?.by_industry || {}), by_timezone: evenSplit(pool_stats?.by_timezone || {}), exclude_duplicates: false, engine: 'rules', summary: `Auto-balanced distribution of ${total} leads.` };
 }
 
 app.post('/distribute/generate-ratio', auth, async (req, res) => {
@@ -1056,9 +1056,13 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     const industryKeys = poolIndustries.length ? poolIndustries.reduce((o,k) => { o[k]='<pct>'; return o; }, {}) : {'Other':'<pct>'};
     const prompt = `You are a lead distribution engine for Fute Global LLC.\nPool: ${JSON.stringify(pool_stats)}\nManager: ${manager?.name}\nCapacity: ${capacity}\nInstructions: "${priority_text}"\nRespond ONLY with valid JSON:\n{"total_to_send":<number>,"by_freshness":{"New":<pct>,"Normal":<pct>,"Old":<pct>},"by_industry":${JSON.stringify(industryKeys)},"by_timezone":{"EST":<pct>,"CST":<pct>,"MST":<pct>,"PST":<pct>},"exclude_duplicates":<bool>,"summary":"<text>"}`;
     const out = await aiProvider.complete(supabase, { prompt, maxTokens: 400, feature: 'lead_ratio', orgId: req.orgId });
+    // A typed instruction that only the AI can honour must not disappear in
+    // silence: the answer says which engine produced it, so the page can tell
+    // the user their 80/20 was not applied instead of showing an even split
+    // under a heading that says AI.
     if (!out) return res.json(buildAutoRatio(pool_stats, capacity));
     const ratio = JSON.parse(out.text.replace(/```json|```/g, '').trim());
-    res.json(ratio);
+    res.json({ ...ratio, engine: 'ai', engine_model: out.model });
   } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || 150)); }
 });
 

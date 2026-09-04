@@ -57,10 +57,15 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
       if (data.length < batchSize) break;
       from += batchSize;
     }
-    const stats = { total: pool.length, by_industry: {}, by_timezone: {}, duplicates: 0 };
+    // by_freshness was missing while `freshness` was being selected — so the
+    // preview's Freshness column was structurally always empty, whatever the
+    // pool contained and whichever engine produced the split.
+    const stats = { total: pool.length, by_freshness: {}, by_industry: {}, by_timezone: {}, duplicates: 0 };
     pool.forEach(j => {
       const rawInd = j.industry || j.company?.industry || '';
       const ind = normInd(rawInd) || 'Unknown';
+      const fresh = j.freshness || 'Unknown';
+      stats.by_freshness[fresh] = (stats.by_freshness[fresh] || 0) + 1;
       stats.by_industry[ind] = (stats.by_industry[ind] || 0) + 1;
       stats.by_timezone[j.timezone || 'Unknown'] = (stats.by_timezone[j.timezone || 'Unknown'] || 0) + 1;
       if (j.is_duplicate) stats.duplicates++;
