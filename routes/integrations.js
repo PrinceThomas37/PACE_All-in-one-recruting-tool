@@ -169,6 +169,10 @@ module.exports = (ctx) => {
         // The last thing that went wrong, so a silent fallback has a reason
         // attached to it instead of being indistinguishable from "switched off".
         last_error: await aiProvider.getLastError(supabase),
+        // The last test's OWN result, so the answer survives anything that
+        // happens between the server and the browser: reopening this screen
+        // shows it again instead of losing it.
+        last_test: await aiProvider.getLastTest(supabase),
         defaults: { tokens: aiBudget.DEFAULT_DAILY_TOKENS, calls: aiBudget.DEFAULT_DAILY_CALLS },
         features: Object.entries(aiBudget.FEATURES).map(([id, f]) => ({
           id, label: f.label, max_input_tokens: f.in, max_output_tokens: f.out, tier: f.tier,
