@@ -4,11 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-03 (end of Session 18) · **Repo**:
+**Updated**: 2026-09-04 (end of Session 18, part 2) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Dev branch this session**:
-`claude/ai-token-budget-glejpx` (merged)
+to `main` IS the release · **Last merged**: #167 (`b5b227e`)
 
 ---
 
@@ -56,78 +55,102 @@ Sessions 14-18 added no migration; Session 18 avoided one deliberately (both new
 subsystems sit on `app_settings` and on `email_tracking.lead_id`, which has
 existed unused since 024).
 
-## ✅ Just shipped (Session 18): AI became a setting, and got a budget
+## ✅ Shipped (Session 18): AI became a setting, got a budget, and learned to explain itself
 
-The owner asked whether free open-source AI could power the app without paying
-per token. Two PRs, both merged and live.
+Seven PRs, all merged and live: **#159** provider layer, **#161** budget,
+**#164** diagnosis + three Assign-Leads faults, **#165** the answer must be
+visible, **#166** the answer must survive the trip, **#167** it answers without
+being asked + the heartbeat alarm. (#160/#162 were the owner's own merges.)
 
-**PR #159 — `services/ai-provider.js`.** Six features each held their own copy
-of Anthropic's URL, key header and model name, so "use another provider" was six
-edits, not a setting. Now they call `complete(supabase, {...})`. Groq,
-OpenRouter and a self-hosted Ollama are selectable in Admin → Integrations, keys
-pasted in the UI, no redeploy. **Providers chain** — the admin's pick leads, the
-rest are fallbacks, and behind all of them the rules writer.
+**Any provider, behind a daily budget.** `services/ai-provider.js` is the one
+door for every AI call; `services/ai-budget.js` decides what a call may cost
+before it is made. Groq, OpenRouter and a self-hosted Ollama are selectable in
+Admin → Integrations, keys pasted in the UI, no redeploy. **Both rulesets are
+written out in `CLAUDE.md`** — read them there. The rule that must never be
+softened: **`complete()` returning `null` is an ordinary outcome meaning "write
+it with the rules", never an error.**
 
-**PR #161 — `services/ai-budget.js`.** Input is trimmed per feature (the pasted
-job posting was the one genuinely uncapped input in the app), extraction runs on
-the small model and only prose a prospect reads gets the big one, and a per-org
-daily ceiling is checked **before** each call. Defaults 150k tokens / 250
-requests a day, both editable in Admin with a live per-feature usage table.
+**AI can now explain its own silence.** Admin → Integrations has an "Is AI
+actually working?" card that asks each configured provider for one word through
+the real path, reports the provider's own error text, lists the models that
+provider offers when an attempt fails, stores the result server-side
+(`ai_last_test`) so reopening the screen shows it, and **runs itself on open**
+when a provider is configured and nothing has been recorded.
 
-**Both rulesets are written out in `CLAUDE.md`** (the AI-provider block and the
-AI-budget block) — read them there, not from a copy here. The single rule that
-must never be softened: **`complete()` returning `null` — unconfigured, key
-rejected, free tier spent, over budget — is an ordinary outcome meaning "write
-it with the rules", never an error and never a 5xx.**
+**Owner's own merge, #160:** Compose is folded into the generator (the old
+Compose "Send" only opened a mail deeplink and invented a sent record no backend
+saw). Recipients come from a search across contacts *and* companies, or are
+typed fresh; "Sent from here" shows Sent/Opened/Replied, and a **replied** row
+(never a merely opened one) offers Convert to lead at stage **Connected**.
 
-**Owner's own merge this session, PR #160:** the old Compose tab is folded into
-the generator, because Compose's "Send" only opened a mail deeplink and invented
-a sent record no backend ever saw — no pixel, no tracking row, no reply
-detection. Recipients now come from a search across contacts *and* companies
-(`/outreach/recipients`, `/outreach/company-contacts/:id`) or are typed in fresh;
-"Sent from here" (`/outreach/sent`) shows Sent/Opened/Replied, and a **replied**
-row (never a merely opened one) offers Convert to lead (`/outreach/convert-lead`,
-lands at stage **Connected**).
+## ⚠ AI IS WIRED IN 6 PLACES BUT REACHABLE IN 4
 
-## ⚠ The merge trap this session exposed — read before editing a shared file
+Audited this session, and it did not match the code. Live and reachable:
+**resume parsing**, **job-description scrub**, **outreach generator**,
+**lead-distribution advice**. Dead:
+
+- **Daily import briefing** (`/ai/generate-summary`) — works, and **nothing in
+  the frontend calls it**. Worth wiring to the dashboard.
+- **Cold-email drafting** (`/ai/generate-email`) — called only from
+  `12-manager-users.js` (the orphaned page), and never invoked even there.
+  Superseded by the generator; worth deleting.
+
+Do not repeat "six AI features" without re-checking the UI.
+
+## ⚠ The merge trap — read before editing a shared file
 
 #159 **deleted** a local helper (`aiConfigured`); #160, written in another
-session against the same file, **added a new call to it** elsewhere in that file.
-Git saw a deletion in one region and a call in another, found no overlapping
-lines, and merged both. `main` shipped a call to a function that no longer
-existed and every load of the Compose tab returned 500. **#162** fixed it.
-
-Two things to carry:
+session against the same file, **added a call to it** elsewhere. Git saw a
+deletion in one region and a call in another, merged both, and `main` shipped a
+500 on every load of the Compose tab. **#162** fixed it.
 
 - **A clean merge is not a correct merge when one side deletes a symbol and the
-  other adds a use of it.** Merge `main` into your branch and re-run the suite
-  *immediately before* merging, not after.
+  other adds a use of it.** Merge `main` in and re-run the suite *immediately
+  before* merging, not after.
 - **The first guard written for it passed with the bug still in place** — the
-  handler awaits the database first and times out against a dead test DB before
-  reaching the bad line. The working guard reads the **source** and asks whether
-  every function the file calls is defined in it. It lives in
-  `test/outreach-generator-smoke.mjs`; extend it rather than re-inventing it.
+  handler awaits the database and times out before reaching the bad line. The
+  working guard reads the **source** and asks whether every function a file
+  calls is defined in it (`test/outreach-generator-smoke.mjs`). Extend it rather
+  than re-inventing it.
 
-## ⏭ Pick this up first (Session 19)
+## ⏭ PICK THIS UP FIRST (Session 19)
 
-**1. Put a free model's output next to the rules writer's, on a real posting.**
+**1. THE ONE OPEN QUESTION: does the AI actually run?** Unknown at session end.
+The owner pasted a valid Groq key (card shows Connected, `••••10c6`, and Groq's
+own test replies "Key valid · 14 models available") and **every feature still
+wrote with its rules.** Four rounds of work went into making that explicable;
+none of it has yet produced a verdict, because the owner had not reported the
+result when the session ended.
+
+**Ask them to open Admin → Integrations and read the card** (it runs itself on
+open — no click). Then:
+- 🟢 green → done, AI is live, move to the comparison below.
+- 🔴 red with a provider message → **that message names the fix.** Leading
+  suspect: the Groq model names in `PROVIDERS` (`llama-3.1-8b-instant` /
+  `llama-3.3-70b-versatile`) were **written from memory and have never been
+  checked against a real response** — this sandbox cannot reach
+  `api.groq.com`. If they are wrong, the card now prints the valid names and
+  the fix is one word in the Groq card's model box.
+- 🟡 "no provider connected" → the save is not sticking; that is a new bug.
+
+**2. Then: free model vs the rules writer, side by side, on a real posting.**
 The six prompts were written for Claude; free open models follow tone
-instructions less well. It is entirely possible the honest verdict for the
-*email generator* is "keep the rules version" while the free tier earns its
-place on resume parsing and JD cleanup. **This needs the owner's eyes on real
-output — do not decide it for them.** Nothing else in the AI work is unfinished.
+instructions less well. The honest verdict for the *email generator* may be
+"keep the rules version" while the free tier earns its place on resume parsing
+and JD cleanup. **This needs the owner's eyes on real output — do not decide it
+for them.**
 
-**2. Finish the UI-kit rollout.** Every list-shaped page is converted. Still on
+**3. The two dead AI features** — wire the briefing to the dashboard, delete the
+cold-email drafter. See the audit above.
+
+**4. Finish the UI-kit rollout.** Every list-shaped page is converted. Still on
 their own markup: the dashboards (`05-page-dashboard.js`, `16-insights.js`),
 Admin (`08-page-admin.js`), the pipeline board (`28-page-pipeline.js`), My Team
 (`42-page-myteam.js`), Assign Leads (`21-assign-leads.js`), the orphaned Manager
-Users page. Card- and board-shaped, so each needs its own judgement rather than
-the same table treatment — which is why they were left, not forgotten.
+Users page. Card- and board-shaped, so each needs its own judgement.
 
-**3. Growth bets not offered recently.** `CLAUDE.md` still flags **CSV
+**5. Growth bets not offered recently.** `CLAUDE.md` still flags **CSV
 import/export + a small public API** as the highest-leverage unstarted bet.
-Per-role permissions and a generalized audit trail are the other two that make
-PACE sellable rather than merely usable.
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 
@@ -163,9 +186,10 @@ A strip never fabricates a number — show `·` until real counts land. Pinned b
 
 ## Owner actions outstanding
 
-1. **Paste a free AI key** — console.groq.com → API Keys → Admin → Integrations
-   → Groq → Test → Save → "use this provider first". Nothing about the app
-   changes until this is done; every AI feature runs its rules version.
+1. **Report what the Admin → Integrations card says.** A free Groq key is
+   already pasted and saved (`••••10c6`, marked "use first"); the card runs
+   itself on open, no click. **That one line is the input Session 19 needs** —
+   see "Pick this up first".
 2. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
    `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
 3. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
@@ -200,6 +224,11 @@ break on a naive move and several fail *silently*.
 - **Browser tests never need a production bypass** — `test/helpers/enter-app.mjs`.
 - **When a claim about behaviour is load-bearing, test the claim** — and check
   it fails with the bug reintroduced, or it may be pinning nothing.
+- **"Background engine: not receiving its heartbeat" is usually NOT a fault.**
+  GitHub delivers the 30-minute schedule every 3-5 hours (measured 2026-09-04:
+  five runs, every one HTTP 200 with all six jobs). Jobs are delayed, never
+  skipped — due-ness lives in the database. Only 8h+ of silence is worth
+  checking `CRON_KEY` over.
 - **A destructive DB action needs, in order:** check FK cascade rules, verify
   scope with counts, snapshot, explicit confirmation, verify after.
 
@@ -220,7 +249,8 @@ break on a naive move and several fail *silently*.
 
 ## Working rules
 
-`npm test` (**53 suites**, judged by **exit code**) ·
+`npm test` (**56 suites**, judged by **exit code** — and read the count, not
+just the exit code: `npm test | tail -3` in a pipeline masks a failure) ·
 `bash test/verify-frontend.sh` · build on the dev branch → test → screenshot/show
 → draft PR → **merge only on an explicit "merge it"** → apply a migration only on
 a fresh explicit go-ahead, right before merge, never on general feature
@@ -241,3 +271,14 @@ English.
   meter they can see.
 - **Re-run the suite against freshly merged `main` immediately before merging.**
   Two clean merges have now broken production between them.
+- **A test that pins WORDING is not a test that pins BEHAVIOUR.** #167 turned
+  `engine-card-smoke` red; its safety assertions passed untouched and only the
+  text had moved, because the old text was wrong. Read that distinction
+  correctly — it is the difference between fixing a test and weakening one.
+- **Do not wait on `npm test` with `pgrep -f run-all.mjs`** — the waiter matches
+  its own command line and never exits. Wait on the node process, or run the
+  suite in the foreground with a long timeout.
+- **A fallback that protects the user must never be invisible to the operator.**
+  Four rounds this session were one bug in four places: the product degraded
+  gracefully and told nobody. Graceful degradation without observability is
+  indistinguishable from being broken.
