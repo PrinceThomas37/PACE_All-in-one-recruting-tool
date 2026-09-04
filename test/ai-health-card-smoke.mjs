@@ -48,6 +48,7 @@ step('there is no branch that renders an empty string',
 
 // ── 3. a bad or missing response still says something ────────────────────────
 const runFn = page.slice(page.indexOf('window.runAiHealthTest'), page.indexOf('window.saveAiBudget'));
+const runFn2 = runFn;
 step('a response that is not an object becomes a visible error, not silence',
   /r&&typeof r==='object'/.test(runFn) && runFn.includes('replied with nothing usable'));
 step('a mid-deploy 404 is explained in words the owner can act on',
@@ -98,6 +99,70 @@ step("a valid key with a bad model reports the PROVIDER's own words",
 step('that case still shows the key as found — so it is not mistaken for "no key"',
   broken.providers.find(p => p.provider === 'groq').key_found === true);
 globalThis.fetch = realFetch;
+
+// ── 5. the answer must survive the browser losing it ─────────────────────────
+// A result that lives only in a promise is lost to a hung request, a reload, or
+// anything between the server and the screen. The server keeps the last test,
+// and the card falls back to it.
+step('a test result is stored server-side', typeof ai.recordTest === 'function' && typeof ai.getLastTest === 'function');
+const persisted = {};
+const rwStore = {
+  from() {
+    const q = { _key: null };
+    q.select = () => q; q.eq = (_c, v) => { q._key = v; return q; }; q.ilike = () => q;
+    q.maybeSingle = async () => ({ data: persisted[q._key] ? { value: persisted[q._key] } : null });
+    q.upsert = async (row) => { persisted[row.key] = row.value; return { error: null }; };
+    return q;
+  },
+};
+globalThis.fetch = async () => ({ ok: false, status: 401, text: async () => '{"error":{"message":"Invalid API Key"}}' });
+await ai.diagnose(rwStore.__proto__ === Object.prototype ? Object.assign({}, rwStore, {
+  from: (() => { const rows = { int_groq_api_key: 'gsk_x' }; return () => { const q = { _key: null };
+    q.select = () => q; q.eq = (_c, v) => { q._key = v; return q; }; q.ilike = () => q;
+    q.maybeSingle = async () => ({ data: rows[q._key] ? { value: rows[q._key] } : (persisted[q._key] ? { value: persisted[q._key] } : null) });
+    q.upsert = async (row) => { persisted[row.key] = row.value; return { error: null }; };
+    return q; }; })(),
+}) : rwStore);
+globalThis.fetch = realFetch;
+step('the stored result records what happened', !!persisted[ai.LAST_TEST_KEY], Object.keys(persisted).join(','));
+const storedTest = JSON.parse(persisted[ai.LAST_TEST_KEY] || '{}');
+step('the stored result carries a timestamp and the attempts',
+  !!storedTest.at && Array.isArray(storedTest.attempts) && storedTest.attempts.length === 1);
+step('the stored result keeps the provider\'s own error text',
+  /Invalid API Key/.test(JSON.stringify(storedTest)));
+step('the card renders a stored result when it has no live one',
+  cardFn.includes('b.last_test') && cardFn.includes('last tested '));
+
+// ── 6. a request that never settles still answers ────────────────────────────
+step('a hung request gives up and says so', /did not answer within 45 seconds/.test(runFn2));
+step('the give-up path explains the free-tier cold start',
+  /sleeps when idle/.test(runFn2));
+step('the give-up timer cannot fight a late real answer',
+  /var settled=false/.test(runFn2) && /clearTimeout\(giveUp\)/.test(runFn2));
+step('the pending state warns that waking up takes a minute',
+  cardFn.includes('idle and is waking up'));
+
+// ── 7. a failure tells you what to use instead ───────────────────────────────
+// "model decommissioned" is only half an answer; the other half is the list of
+// models that provider actually offers, ready to paste into the model box.
+step('a failed attempt asks the provider what it does offer',
+  typeof ai.listModels === 'function');
+let listed = 0;
+globalThis.fetch = async (url) => {
+  if (String(url).endsWith('/models')) { listed++; return { ok: true, status: 200, json: async () => ({ data: [{ id: 'llama-3.3-70b-versatile' }, { id: 'llama-3.1-8b-instant' }] }) }; }
+  return { ok: false, status: 400, text: async () => '{"error":{"message":"model_decommissioned"}}' };
+};
+const withList = await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
+step('the offered models come back with the failure',
+  (withList.attempts[0].available_models || []).includes('llama-3.3-70b-versatile'), JSON.stringify(withList.attempts[0].available_models));
+step('the model list is only fetched when something failed', listed === 1, `${listed} lookups`);
+globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ready' } }] }) });
+listed = 0;
+await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
+step('a success does not go asking for a model list', listed === 0);
+globalThis.fetch = realFetch;
+step('the card shows those models with instructions to paste one',
+  page.includes('This provider currently offers') && page.includes('Paste one of these into the model box'));
 
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

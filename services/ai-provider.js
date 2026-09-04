@@ -287,6 +287,38 @@ async function describeHttpError(response) {
   return `HTTP ${response.status}${detail ? ' — ' + detail : ''}`;
 }
 
+// When a generation fails, the next question is always "so what model SHOULD I
+// use?". The provider can answer that itself, and the admin can paste the
+// answer straight into the model box — so a decommissioned default costs one
+// copy-paste rather than a support round trip.
+const MODEL_LIST_URL = {
+  groq: 'https://api.groq.com/openai/v1/models',
+  openrouter: 'https://openrouter.ai/api/v1/models',
+  anthropic: 'https://api.anthropic.com/v1/models',
+};
+async function listModels(providerId, key, baseUrl) {
+  try {
+    const def = PROVIDERS[providerId];
+    let url = MODEL_LIST_URL[providerId];
+    let headers = {};
+    if (def.keyless) {
+      const root = String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1$/, '');
+      if (!root) return [];
+      url = `${root}/api/tags`;
+    } else if (providerId === 'anthropic') {
+      headers = { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+    } else {
+      headers = { Authorization: `Bearer ${key}` };
+    }
+    if (!url) return [];
+    const r = await fetchWithTimeout(url, { headers }, { timeoutMs: 8000 });
+    if (!r.ok) return [];
+    const d = await r.json();
+    const rows = d.data || d.models || [];
+    return rows.map(m => m.id || m.name).filter(Boolean).slice(0, 20);
+  } catch (_) { return []; }
+}
+
 // The last failure, kept where an admin can see it. One row, overwritten: this
 // answers "why is it not working right now", not "what has ever gone wrong".
 const LAST_ERROR_KEY = 'ai_last_error';
@@ -298,6 +330,24 @@ async function recordFailure(supabase, feature, failures) {
       updated_at: new Date(),
     }, { onConflict: 'key' });
   } catch (_) { /* diagnostics must never break the feature */ }
+}
+
+const LAST_TEST_KEY = 'ai_last_test';
+async function recordTest(supabase, result) {
+  try {
+    await supabase.from('app_settings').upsert({
+      key: LAST_TEST_KEY,
+      value: JSON.stringify({ at: new Date().toISOString(), ...result }),
+      updated_at: new Date(),
+    }, { onConflict: 'key' });
+  } catch (_) { /* the answer is still returned to the caller */ }
+}
+
+async function getLastTest(supabase) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', LAST_TEST_KEY).maybeSingle();
+    return data && data.value ? JSON.parse(data.value) : null;
+  } catch (_) { return null; }
 }
 
 async function getLastError(supabase) {
@@ -340,28 +390,35 @@ async function diagnose(supabase, opts = {}) {
   }
 
   const chain = await resolveChain(supabase);
-  if (!chain.length) return { configured: false, providers: seen, attempts: [] };
+  if (!chain.length) {
+    const result = { configured: false, providers: seen, attempts: [] };
+    await recordTest(supabase, result);
+    return result;
+  }
   const tier = opts.tier || 'fast';
-  const attempts = [];
-  for (const entry of chain) {
+  const attempts = await Promise.all(chain.map(async (entry) => {
     const model = modelFor(entry, tier);
     const started = Date.now();
     const req = buildRequest(entry.id, {
       key: entry.key, baseUrl: entry.baseUrl, model,
       prompt: 'Reply with the single word: ready', maxTokens: 16,
     });
-    if (!req) { attempts.push({ provider: entry.id, model, ok: false, error: 'could not build a request for this provider' }); continue; }
+    if (!req) return { provider: entry.id, model, ok: false, error: 'could not build a request for this provider' };
     try {
-      const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 20000 });
+      const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 12000 });
       if (!response.ok) throw new Error(await describeHttpError(response));
       const parsed = parseResponse(entry.id, await response.json());
       if (!parsed) throw new Error('the provider replied, but with no usable text in it');
-      attempts.push({ provider: entry.id, model, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) });
+      return { provider: entry.id, model, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) };
     } catch (err) {
-      attempts.push({ provider: entry.id, model, ok: false, ms: Date.now() - started, error: err.message });
+      // Only on failure, and only once: what CAN this provider run?
+      const available = await listModels(entry.id, entry.key, entry.baseUrl);
+      return { provider: entry.id, model, ok: false, ms: Date.now() - started, error: err.message, available_models: available };
     }
-  }
-  return { configured: true, providers: seen, attempts, working: attempts.some(a => a.ok) };
+  }));
+  const result = { configured: true, providers: seen, attempts, working: attempts.some(a => a.ok) };
+  await recordTest(supabase, result);
+  return result;
 }
 
 module.exports = {
@@ -369,5 +426,6 @@ module.exports = {
   buildRequest, parseResponse, endpointFor, modelFor,
   resolveChain, isAvailable, complete, diagnose,
   describeHttpError, getLastError, LAST_ERROR_KEY,
+  recordTest, getLastTest, LAST_TEST_KEY, listModels,
   budget,
 };

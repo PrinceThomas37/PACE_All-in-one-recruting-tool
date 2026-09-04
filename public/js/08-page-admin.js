@@ -220,6 +220,18 @@ function aiBudgetCard(){
 // use. A provider card's "Test" only lists models — it cannot tell you whether
 // the model we ASK for will answer, and that failure looks exactly like having
 // no key at all.
+// One line per provider attempt. On a failure it also lists what that provider
+// DOES offer, because "which model should I use instead" is the very next
+// question and the answer is a copy-paste into the model box above.
+function attemptLine(a){
+  var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span><br>'+
+    htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'));
+  if(!a.ok&&a.available_models&&a.available_models.length){
+    head+='<div style="color:var(--text2);margin-top:4px;font-size:11px">This provider currently offers: <span style="color:var(--text3)">'+
+      a.available_models.map(htmlEsc).join(', ')+'</span><br>Paste one of these into the model box on the provider\'s card above and Save.</div>';
+  }
+  return head+'</div>';
+}
 function aiHealthCard(){
   var d=STATE.aiHealth;
   var b=STATE.aiBudget;
@@ -229,11 +241,10 @@ function aiHealthCard(){
   };
   var body;
   if(d&&d.pending){
-    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word…');
+    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word… <span style="color:var(--text3)">This can take up to a minute if PACE has been idle and is waking up.</span>');
   }else if(d&&d.attempts&&d.attempts.length){
     var lines=d.attempts.map(function(a){
-      return '<div style="margin-bottom:4px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span><br>'+
-        htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'))+'</div>';
+      return attemptLine(a);
     }).join('');
     body=d.working
       ?panel('var(--green-l)','var(--green)','<b style="color:var(--green)">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
@@ -247,6 +258,12 @@ function aiHealthCard(){
         (p.key_hint?' <span style="color:var(--text3)">(key '+htmlEsc(p.key_hint)+')</span>':'')+'</div>';
     }).join('');
     body=panel('#fffbeb','var(--amber,#f59e0b)','<b>No provider is connected, so no AI ran.</b> Every feature is using its built-in version — that is a working state, not a crash. If you saved a key and it is not listed as ready below, the save did not stick and that is a bug worth reporting.<br><br>'+rows);
+  }else if(b&&b.last_test&&b.last_test.attempts&&b.last_test.attempts.length){
+    var t=b.last_test;
+    var tlines=t.attempts.map(attemptLine).join('');
+    body=panel(t.working?'var(--green-l)':'#fef2f2',t.working?'var(--green)':'var(--red)',
+      '<b style="color:'+(t.working?'var(--green)':'var(--red)')+'">'+(t.working?'AI IS WORKING.':'AI IS NOT WORKING.')+'</b> '+
+      '<span style="color:var(--text3)">(last tested '+htmlEsc(String(t.at||'').replace('T',' ').slice(0,16))+' UTC)</span><br><br>'+tlines);
   }else if(lastErr){
     body=panel('#fef2f2','var(--red)','<b>Not tested yet.</b> The last failure recorded was:<br>'+
       (lastErr.failures||[]).map(function(f){
@@ -263,20 +280,32 @@ function aiHealthCard(){
   '</div>';
 }
 window.runAiHealthTest=function(){
-  STATE.aiHealth={pending:true}; renderIntegrationsModal();
-  apiPost('/admin/integrations/ai-test',{}).then(function(r){
+  STATE.aiHealth={pending:true,since:Date.now()}; renderIntegrationsModal();
+  // A promise that never settles renders as a spinner forever, which reads as
+  // "the button does nothing" — the precise complaint this card exists to
+  // answer. After 45 seconds we stop waiting and say so.
+  var settled=false;
+  var giveUp=setTimeout(function(){
+    if(settled)return;
+    settled=true;
+    STATE.aiHealth={configured:true,working:false,attempts:[{provider:'request',model:'',ok:false,
+      error:'The server did not answer within 45 seconds. It may still be waking up (PACE sleeps when idle and takes ~a minute to start). Close this and reopen Admin → Integrations — the result is saved on the server, so it will appear here once it lands.'}]};
+    renderIntegrationsModal();
+  },45000);
+  var done=function(fn){return function(x){ if(settled)return; settled=true; clearTimeout(giveUp); return fn(x); };};
+  apiPost('/admin/integrations/ai-test',{}).then(done(function(r){
     // A response that is not the shape we expect must not silently become
     // "nothing happened" — the whole point of this card is that it always says
     // something.
     STATE.aiHealth=(r&&typeof r==='object')?r:{configured:true,attempts:[{provider:'server',model:'',ok:false,error:'The server replied with nothing usable.'}],working:false};
     renderIntegrationsModal();
     return apiGet('/admin/ai-budget').then(function(bb){ STATE.aiBudget=bb; renderIntegrationsModal(); }).catch(function(){});
-  }).catch(function(e){
+  })).catch(done(function(e){
     var msg=(e&&e.message)||String(e);
     if(/Unexpected token|JSON/i.test(msg))msg='The server did not answer this request — if PACE was just updated, wait a minute for the deploy to finish and try again. ('+msg+')';
     STATE.aiHealth={configured:true,attempts:[{provider:'request',model:'',ok:false,error:msg}],working:false};
     renderIntegrationsModal();
-  });
+  }));
 };
 window.saveAiBudget=function(){
   var t=document.getElementById('aib-tokens'), c=document.getElementById('aib-calls');
