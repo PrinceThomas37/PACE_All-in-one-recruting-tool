@@ -205,11 +205,14 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all 50 suites via `test/run-all.mjs` and reports one
-  summary. It judges by **exit code**, not by grepping stdout — the suites print
-  results in two different formats, so a stdout grep silently mis-reports whole
-  suites as failures. `bash test/verify-frontend.sh` checks syntax + index.html.
-  18 suites are Playwright: `playwright-core` is now a devDependency, Chromium at
+- **Tests: `npm test`** runs all **56** suites via `test/run-all.mjs` and reports
+  one summary. It judges by **exit code**, not by grepping stdout — the suites
+  print results in two different formats, so a stdout grep silently mis-reports
+  whole suites as failures. **Read the count, not just the exit code**: piping it
+  (`npm test | tail -3`) takes the exit status of `tail`, so a real failure can
+  come back as 0 — Session 18 nearly merged on a masked `55/56`.
+  `bash test/verify-frontend.sh` checks syntax + index.html.
+  **22** suites are Playwright: `playwright-core` is now a devDependency, Chromium at
   `$PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). If they fail at once with a
   module error, that is the missing dep, not 18 broken tests.
   - **Browser suites enter the app via `test/helpers/enter-app.mjs`**, which sets
