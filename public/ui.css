@@ -42,7 +42,6 @@ body.ui-kit #sidebar{
   transition:width .16s cubic-bezier(.4,0,.2,1);
   box-shadow:none;
 }
-body.ui-kit #sidebar:hover,
 body.ui-kit #sidebar.pinned{width:var(--rail-w-open);box-shadow:var(--sh2)}
 
 body.ui-kit #main{
@@ -67,8 +66,34 @@ body.ui-kit .rail-word{
   margin-left:10px;white-space:nowrap;
   opacity:0;transform:translateX(-6px);transition:opacity .14s,transform .16s;
 }
-body.ui-kit #sidebar:hover .rail-word,
 body.ui-kit #sidebar.pinned .rail-word{opacity:1;transform:none}
+
+
+/* HOVER-TO-EXPAND IS FOR A MOUSE, AND ONLY A MOUSE.
+   A touch browser fires :hover on tap and LEAVES IT THERE until you tap
+   something else. So tapping a nav item used to fade every label in — inside a
+   rail still 60px wide, because the old fix reset the width on small screens
+   and forgot the labels. The result was "WORK", "RECOR…", "OUTRE…" sliced down
+   the left edge with the nav text overlapping the icons: the exact mess in the
+   owner's phone screenshots.
+   Resetting width in a width media query cannot fix this — a 900px-wide tablet
+   is still a touch device, and a 500px-wide desktop window is still a mouse.
+   The right question is not "how wide is the screen" but "is there a pointer
+   that can hover", which is what this query asks. `.pinned` stays outside it:
+   that is an explicit choice, not a hover. */
+@media (hover:hover) and (pointer:fine){
+  body.ui-kit #sidebar:hover{width:var(--rail-w-open);box-shadow:var(--sh2)}
+  body.ui-kit #sidebar:hover .rail-word{opacity:1;transform:none}
+  body.ui-kit #sidebar:hover .sb-lbl{opacity:1}
+  body.ui-kit #sidebar:hover .nav-txt{opacity:1;transform:none}
+  body.ui-kit #sidebar:hover .user-meta{opacity:1;transform:none}
+  body.ui-kit #sidebar:hover .nav-badge{
+    position:static;margin-left:auto;margin-right:10px;
+    min-width:auto;height:auto;padding:1px 7px;border-radius:10px;
+    background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+    font-family:var(--mono);
+  }
+}
 
 /* Nav */
 body.ui-kit .sb-nav{padding:8px;flex:1;overflow-y:auto;overflow-x:hidden}
@@ -78,7 +103,6 @@ body.ui-kit .sb-lbl{
   text-transform:uppercase;padding:12px 10px 4px;white-space:nowrap;
   opacity:0;transition:opacity .14s;height:26px;
 }
-body.ui-kit #sidebar:hover .sb-lbl,
 body.ui-kit #sidebar.pinned .sb-lbl{opacity:1}
 
 body.ui-kit .nav-item{
@@ -99,7 +123,6 @@ body.ui-kit .nav-txt{
   margin-left:8px;opacity:0;transform:translateX(-6px);
   transition:opacity .14s,transform .16s;
 }
-body.ui-kit #sidebar:hover .nav-txt,
 body.ui-kit #sidebar.pinned .nav-txt{opacity:1;transform:none}
 
 /* Collapsed, a badge has nowhere to sit — it becomes a dot on the icon.
@@ -110,7 +133,6 @@ body.ui-kit .nav-badge{
   background:var(--gold);color:transparent;font-size:0;overflow:hidden;
   transition:none;
 }
-body.ui-kit #sidebar:hover .nav-badge,
 body.ui-kit #sidebar.pinned .nav-badge{
   position:static;margin-left:auto;margin-right:10px;
   min-width:auto;height:auto;padding:1px 7px;border-radius:10px;
@@ -130,7 +152,6 @@ body.ui-kit .user-meta{
   margin-left:9px;min-width:0;opacity:0;transform:translateX(-6px);
   transition:opacity .14s,transform .16s;
 }
-body.ui-kit #sidebar:hover .user-meta,
 body.ui-kit #sidebar.pinned .user-meta{opacity:1;transform:none}
 body.ui-kit .u-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
 body.ui-kit .u-role{font-size:11px;color:var(--ink3)}
@@ -410,7 +431,7 @@ table.dt .tight{white-space:nowrap}
 
 /* ── 7. RESPONSIVE ───────────────────────────────────────────────────────── */
 @media(max-width:900px){
-  body.ui-kit #sidebar:hover{width:var(--rail-w)}   /* no hover-expand on touch */
+  /* hover-expand is gated on (pointer:fine) above — not on width. */
   .dwr{width:100%;padding:0}
   .dwr-nav{display:none}
   .dwr-left{width:100%}
@@ -422,6 +443,16 @@ table.dt .tight{white-space:nowrap}
 /* SVGs in this kit are sized by their slot, never by a width attribute, so the
    same icon markup can be reused at any scale. */
 body.ui-kit .nav-icon svg{width:18px;height:18px}
+/* An icon dropped straight into a button — `'<button class="btn">'+UI.ic('plus')+'Add Lead'` —
+   is the one slot that had no size rule. UI.ic() returns a bare <svg> with a
+   viewBox and no width/height, so as a flex item with no basis it collapsed to
+   0×0 on a desktop (the icon was simply INVISIBLE, which is why nobody noticed)
+   and inflated to fill any spare width the moment a button was allowed to grow,
+   as it is on a phone: a 75px plus sign inside a 93px-tall "Add Lead".
+   Direct children only — the older ico(name,size) helper already wraps its svg
+   in a span sized by the caller, and must keep winning. */
+.btn>svg{width:15px;height:15px;flex-shrink:0}
+.btn-sm>svg,.btn-xs>svg{width:14px;height:14px}
 .tb-ico svg,.tbar-ico svg,.dwr-act svg,.kebab svg,.feed-ic svg,.notice-ic svg{width:17px;height:17px}
 .notice-ic svg{width:19px;height:19px}
 .dwr-nav svg{width:16px;height:16px}

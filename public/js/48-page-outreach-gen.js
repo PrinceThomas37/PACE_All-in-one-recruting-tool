@@ -410,14 +410,14 @@
       '<div class="fgrp"><label class="flbl">Outreach type</label>'+
         '<div style="display:flex;gap:16px">'+radio('first','First outreach')+radio('followup','Follow-up (no reply yet)')+'</div>'+
       '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+      '<div class="fpair">'+
         '<div class="fgrp"><label class="flbl">Contact first name</label>'+
           '<input class="inp" id="og-first" placeholder="Susan" value="'+esc(f.contact_first_name)+'" oninput="outreachGenField(\'contact_first_name\',this.value)"></div>'+
         '<div class="fgrp"><label class="flbl">Contact title (optional)</label>'+
           '<input class="inp" id="og-title" placeholder="Controller / HR Manager" value="'+esc(f.contact_title)+'" oninput="outreachGenField(\'contact_title\',this.value)">'+
           '<div style="font-size:11px;color:var(--text3);margin-top:3px">Shapes how the email is written. Never printed in it.</div></div>'+
       '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+      '<div class="fpair">'+
         '<div class="fgrp"><label class="flbl">Company (optional)</label>'+
           '<input class="inp" id="og-company" placeholder="read from the posting" value="'+esc(f.company)+'" oninput="outreachGenField(\'company\',this.value)"></div>'+
         '<div class="fgrp"><label class="flbl">Location (optional)</label>'+

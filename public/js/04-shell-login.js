@@ -70,7 +70,12 @@ function renderApp(){
   parts.content=renderPageContent();
   parts.modal=renderModal();
   parts.overlays=UI.renderOverlays();
+  // The nav scrim sits between the four patched regions on purpose: it has no
+  // state of its own (it is shown by `body.nav-open`, and hidden outright above
+  // 860px), so patchShell() never touches it and it survives every repaint.
+  // Anything with state belongs in a region; this has none.
   return parts.sidebar+
+    '<div id="nav-scrim" onclick="closeNav()"></div>'+
     '<div id="main">'+parts.topbar+'<div id="content">'+parts.content+'</div></div>'+
     renderToasts()+
     '<div id="layer">'+parts.modal+parts.overlays+'</div>';
@@ -206,7 +211,12 @@ function renderTopbar(){
   var viewingName=STATE.viewingUser&&STATE.viewingUser.id!==u.id
     ?'<span class="tb-crumb">· Viewing '+htmlEsc(STATE.viewingUser.name)+'</span>':'';
 
+  // The only way into the menu on a phone. The rail expands on hover, and a
+  // touch screen has no hover — so without this the whole nav was fourteen
+  // unlabelled icons in a 60px strip. Hidden by CSS above 860px, where the
+  // hover rail is back and a hamburger would be one click too many.
   return '<div id="topbar">'+
+      '<div class="tb-burger" onclick="toggleNav()" title="Menu" aria-label="Menu" role="button">'+UI.ic('menu')+'</div>'+
       '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
       '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?

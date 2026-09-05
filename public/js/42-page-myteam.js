@@ -53,7 +53,7 @@
     var interviews=(bs['Interview Scheduled']||0)+(bs['Interview Completed']||0);
     var loading=!d._at&&!d.empty;
     function tile(label,value,color){
-      return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center;min-width:105px;flex:1">'+
+      return '<div class="dash-tile">'+
         '<div style="font-size:24px;font-weight:700;color:'+(color||'var(--text)')+'">'+(value||0)+'</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap">'+esc(label)+'</div>'+
       '</div>';

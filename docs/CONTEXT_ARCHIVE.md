@@ -3147,3 +3147,183 @@ product degraded gracefully, and told nobody. Graceful degradation without
 observability is indistinguishable from being broken — and this session spent
 five rounds proving it, because the diagnostic itself kept degrading gracefully
 and telling nobody.
+
+---
+
+# Session 19 — the button that was never wired to anything, and the phone
+
+Two complaints from the owner, both of them the same shape underneath: the app
+was telling nobody the truth about itself.
+
+## Part 1 — "I got my Groq key, it's live, but the AI isn't working, and the test button doesn't work either"
+
+Session 18 spent four rounds building a card that would explain why AI was
+silently falling back to its rules writer. The owner pasted a valid Groq key,
+the provider card said "Key valid · 14 models available", the health card ran
+itself on open, and the answer was **still** a placeholder that read "Click
+Test AI generation after saving a key". Clicking it changed nothing.
+
+### The cause: the endpoint was never reachable
+
+`routes/integrations.js` registered, in this order:
+
+```
+POST /admin/integrations/:id          ← line 102, "save keys for one integration"
+POST /admin/integrations/:id/test
+POST /admin/integrations/ai-test      ← line 151, appended in a later PR
+POST /admin/integrations/email-verify ← line 208, appended later still
+```
+
+Express matches in registration order, so `POST /admin/integrations/ai-test`
+matched `:id` with `id="ai-test"`. That handler found no `values` and no
+`active` in the body, did nothing, and returned `await integrations.getAll()` —
+a **200 with a perfectly valid integrations payload.** The browser's check was
+`r && typeof r === 'object'`, which that passes, so the card stored the
+integrations list as its diagnosis, matched none of its branches, and fell
+through to the "never run" placeholder. No error, no log, nothing in the
+network tab that looked wrong. `aiProvider.diagnose()` was never once called,
+which is also why `ai_last_test` was always empty and the self-run-on-open had
+nothing to show.
+
+A scan of every router in the tree found **three** live instances of the same
+bug, not one:
+
+| Dead route | Swallowed by | What the user saw |
+|---|---|---|
+| `POST /admin/integrations/ai-test` | `POST /admin/integrations/:id` | "Test AI generation" does nothing |
+| `POST /admin/integrations/email-verify` | same | the verifier tester does nothing |
+| `GET /jobs/export` | `GET /jobs/:id` | the RA lead's CSV export fails |
+
+All three literals now sit above their `:id` routes, and
+`test/route-shadowing-smoke.mjs` scans all 270 routes in the repo and fails the
+build on any literal path registered behind a matching `:param` route. It also
+proves its own detector against the exact shape that was live, so it cannot
+become a test that always passes.
+
+**CLAUDE.md already carried this rule — for `routes/recruiting/*` only,** where
+it had been learned once before. It is not a recruiting quirk. It is now
+written as what it is: how Express works, everywhere.
+
+### Three hardening changes that came out of it
+
+1. **The card rejects a well-formed answer from the wrong endpoint.**
+   `isDiagnosis(r)` requires a diagnosis's own fields (`configured` boolean +
+   `providers` array), and a mismatch renders the wrong shape's keys on screen
+   with "that means the request reached a DIFFERENT endpoint than the one that
+   runs the test, which is a bug in PACE, not in your key."
+
+2. **`diagnose()` now tests every model tier a feature can ask for.** The
+   budget picks `fast` for extraction and `quality` for prose a prospect reads.
+   Probing only `fast` can report AI IS WORKING while the outreach generator —
+   the one feature whose text a customer sees — is still writing with its
+   rules, because the quality model is the one that was renamed. `working` now
+   means every tier answered; one up and one down is `partial`, drawn in amber,
+   and each line says which features ride on that tier. The model-list lookup
+   is memoised per provider so two failing tiers cost one request.
+
+3. **A synthetic ping never hides a real failure.** `ai_last_error` — what
+   happened the last time a *feature* asked for text — renders under the test
+   result, always. It used to be suppressed the moment any test result existed,
+   which meant the more truthful signal was hidden by the less truthful one.
+
+### What is still not known
+
+Whether Groq actually generates. This sandbox cannot reach `api.groq.com`, so
+the verdict still needs the owner to open Admin → Integrations. **The
+difference is that the card can now answer**, and if the answer is a model
+name it prints the models Groq does offer, ready to paste.
+
+## Part 2 — "the layout on mobile looks clustered and overlapped"
+
+Three phone screenshots, three separate faults, all reproduced exactly in
+Chromium at 390×844 with `isMobile`/`hasTouch` before anything was changed.
+
+### 1. The rail showed its labels inside a 60px slot
+
+A touch browser fires `:hover` on tap and **leaves it stuck there**. Tapping a
+nav item therefore faded in every label — while the rail stayed 60px wide,
+because the Session-15 fix reset the WIDTH under `@media(max-width:900px)` and
+forgot the opacity. Result: "WORK", "RECOR…", "OUTRE…", "INSIGH…" sliced down
+the left edge, nav text overlapping the icons. Exactly the owner's screenshot.
+
+Width was the wrong question. A 900px tablet is a touch device; a 500px desktop
+window is not. All the hover-expand rules moved into
+`@media (hover:hover) and (pointer:fine)` in `ui.css` — `.pinned` stays outside
+it, being an explicit choice rather than a hover.
+
+That fixes the mess but leaves the real problem: with no hover there was no way
+to read the menu at all — fourteen unlabelled icons. So below 860px the rail is
+now an **off-canvas drawer** at its full 232px behind a hamburger in the top
+bar, with a scrim, closing on the scrim, on Escape, on choosing a destination,
+and on crossing the breakpoint.
+
+**It is one class on `<body>`.** `openNav`/`closeNav`/`toggleNav` toggle
+`body.nav-open` and touch nothing else; the scrim is drawn once by `renderApp()`
+outside the four patched regions because it has no state. A menu that
+re-rendered the shell to open itself would throw away the page's scroll
+position and reload every iframe on it each time somebody looked at the nav —
+which is the exact flicker Session 16 spent itself removing.
+
+### 2. Pages scrolled sideways
+
+`#content` is `overflow-x:auto`, so a single element wider than the screen
+dragged the whole page. Measured before: Leads 572px of content in a 330px box,
+Candidates 500px, Admin 926px. Half a form off the right edge and the only way
+back was swiping the entire screen — the owner's third screenshot.
+
+`#content` is now `overflow-x:hidden` on a phone, **which is a trade, not a
+fix**: an overflow that no longer drags is an overflow that is clipped and
+unreachable. So the offenders were fixed rather than hidden — toolbars and page
+headers wrap their action groups onto their own row, the stat strip goes two-up,
+paired form fields stack, wide tables scroll inside `.dt-wrap`/`.tbl-wrap` with
+`overscroll-behavior-x:contain` — and `test/mobile-layout-smoke.mjs` walks every
+element of 16 pages × 5 roles at 390px and fails on anything reaching past the
+content box that is not inside its own scroller. **That test is what makes the
+hidden overflow safe.** 80 screens, all clean.
+
+### 3. The dashboard banner overlapped itself
+
+The clock was `position:absolute` over the greeting — inline-styled, three
+identical copies — so "Good morning" ran underneath the date on a narrow
+screen. It is now `.banner-clock`, back in the flow on a phone and above the
+greeting, which is also the order a recruiter reads it in.
+
+### The rule that kept recurring: an inline style cannot be responsive
+
+A width or a grid written into a `style=""` attribute cannot be re-laid-out by
+any stylesheet. Three separate mobile faults were that:
+
+- Six admin header buttons in an inline `display:flex` with no wrap → 460px off
+  the side. Fixed by `.ph>.flex>:last-child{flex-wrap:wrap}` — the action group
+  is always the last child, and `flex-wrap` on a non-flex element is inert, so
+  it is safe to apply blind.
+- A stat tile's inline `min-width:105px` put six tiles three-to-a-row and threw
+  "Awaiting approval" out of its own card. Extracted to `.dash-tile` (it was
+  three copies of the same blob in two files).
+- The compose form's inline `grid-template-columns:1fr 1fr` left two 150px
+  fields. Extracted to `.fpair`.
+
+### A latent desktop bug fell out of it
+
+`'<button class="btn">' + UI.ic('plus') + 'Add Lead'` — `UI.ic()` returns a bare
+`<svg>` with a viewBox and no width/height, and no rule sized `.btn > svg`. As a
+flex item with no basis it collapsed to **0×0 on a desktop**: the icon has
+simply been invisible, which is why nobody noticed. On a phone, where the button
+was allowed to grow, the same svg inflated to a 75px plus sign in a 93px-tall
+button. `.btn>svg{width:15px}` (direct children only, so the older
+`ico(name,size)` wrapper keeps winning) fixes both.
+
+## The lesson
+
+Both halves of this session were the same failure. The AI card degraded to a
+placeholder and told nobody the request had gone somewhere else entirely; the
+phone layout degraded to a sideways-scrolling page and told nobody either. In
+both cases the code "worked" — a 200, a rendered page — and the only way to
+find out otherwise was to measure what actually happened rather than read what
+was supposed to. The two new suites are both measurements: one asks the router
+which handler really answers, the other asks the browser where the pixels
+really are.
+
+**And a specific warning:** four sessions of work went into a diagnostic that
+was never once invoked. When a feature reports nothing, check that its request
+reaches its handler before improving what the handler says.

@@ -49,8 +49,18 @@ step('there is no branch that renders an empty string',
 // ── 3. a bad or missing response still says something ────────────────────────
 const runFn = page.slice(page.indexOf('window.runAiHealthTest'), page.indexOf('window.saveAiBudget'));
 const runFn2 = runFn;
-step('a response that is not an object becomes a visible error, not silence',
-  /r&&typeof r==='object'/.test(runFn) && runFn.includes('replied with nothing usable'));
+// "Is it an object?" was not enough. POST /admin/integrations/ai-test was
+// shadowed by POST /admin/integrations/:id for four sessions, so the button hit
+// the SAVE handler, got a valid 200 carrying the integrations list, stored that
+// as the diagnosis, matched no branch, and redrew the placeholder. From the
+// owner's side the button did nothing. The shape check has to be specific
+// enough to reject a well-formed answer from the wrong endpoint.
+step('a diagnosis is recognised by its own fields, not by being an object',
+  /isDiagnosis\(r\)/.test(runFn) && /typeof r\.configured==='boolean'/.test(page) && /Array\.isArray\(r\.providers\)/.test(page));
+step('a valid answer from the WRONG endpoint is called out as a PACE bug',
+  page.includes('not with a test result') && page.includes('a bug in PACE, not in your key'));
+step('the wrong answer is described by its keys, so it can be identified',
+  /function describeShape\(/.test(page) && page.includes('an object with: '));
 step('a mid-deploy 404 is explained in words the owner can act on',
   /Unexpected token\|JSON/.test(runFn) && runFn.includes('wait a minute for the deploy to finish'));
 step('a failed budget refresh cannot wipe the test result',
@@ -126,8 +136,16 @@ await ai.diagnose(rwStore.__proto__ === Object.prototype ? Object.assign({}, rwS
 globalThis.fetch = realFetch;
 step('the stored result records what happened', !!persisted[ai.LAST_TEST_KEY], Object.keys(persisted).join(','));
 const storedTest = JSON.parse(persisted[ai.LAST_TEST_KEY] || '{}');
-step('the stored result carries a timestamp and the attempts',
-  !!storedTest.at && Array.isArray(storedTest.attempts) && storedTest.attempts.length === 1);
+// Two attempts, not one: the card tests EVERY model the features will ask for.
+// The budget tiers per feature (`fast` for extraction, `quality` for prose a
+// prospect reads), so probing only one tier can report green while the other
+// model is decommissioned and the outreach generator is still writing with its
+// rules — same symptom, different fault.
+step('the stored result carries a timestamp and one attempt per model tier',
+  !!storedTest.at && Array.isArray(storedTest.attempts) && storedTest.attempts.length === 2,
+  JSON.stringify((storedTest.attempts || []).map(a => a.tier + ':' + a.model)));
+step('both tiers are named on the attempts',
+  ['fast', 'quality'].every(t => (storedTest.attempts || []).some(a => a.tier === t)));
 step('the stored result keeps the provider\'s own error text',
   /Invalid API Key/.test(JSON.stringify(storedTest)));
 step('the card renders a stored result when it has no live one',
@@ -163,6 +181,43 @@ step('a success does not go asking for a model list', listed === 0);
 globalThis.fetch = realFetch;
 step('the card shows those models with instructions to paste one',
   page.includes('This provider currently offers') && page.includes('Paste one of these into the model box'));
+
+// ── 7b. half-working is its own state ────────────────────────────────────────
+// The small model answering and the big one not is the failure that looks most
+// like success: extraction works, and the ONE feature whose text a customer's
+// prospect reads keeps writing with its rules. Green would be a lie here.
+{
+  const answersOn = (okModel) => async (url, opt) => {
+    if (String(url).endsWith('/models')) return { ok: true, status: 200, json: async () => ({ data: [{ id: 'llama-3.1-8b-instant' }] }) };
+    const body = JSON.parse(opt.body);
+    return body.model === okModel
+      ? { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ready' } }] }) }
+      : { ok: false, status: 404, text: async () => '{"error":{"message":"model_decommissioned"}}' };
+  };
+  globalThis.fetch = answersOn('llama-3.1-8b-instant');       // fast only
+  const half = await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
+  step('one tier up and one tier down is NOT reported as working', half.working === false);
+  step('…it is reported as partial', half.partial === true);
+  step('…and the failing tier is identifiable', (half.attempts.find(a => !a.ok) || {}).tier === 'quality');
+
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ready' } }] }) });
+  const all = await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
+  step('every tier answering IS working', all.working === true && all.partial === false);
+  globalThis.fetch = realFetch;
+}
+step('the card draws the half-working state in its own colour and words',
+  cardFn.includes('d.partial') && cardFn.includes('AI IS ONLY HALF WORKING'));
+step('a tier line says which features ride on it',
+  page.includes('AI_TIER_USE') && page.includes('the outreach generator'));
+
+// ── 7c. the synthetic ping never hides a real failure ────────────────────────
+// diagnose() asks for one word. `ai_last_error` is what happened the last time
+// a FEATURE asked for real text — the more truthful signal, and it used to be
+// suppressed the moment any test result existed.
+step('the last real feature failure is rendered alongside the test result',
+  cardFn.includes('Last time a feature actually asked for text'));
+step('…outside the branch chain, so a test result cannot suppress it',
+  cardFn.indexOf('Last time a feature actually asked for text') > cardFn.lastIndexOf('body=panel('));
 
 // ── 8. the card cannot be the thing that hides a fault ───────────────────────
 // The owner reported the modal "glitching and showing itself" — a redraw with
