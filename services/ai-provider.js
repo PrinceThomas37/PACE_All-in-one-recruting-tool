@@ -395,28 +395,66 @@ async function diagnose(supabase, opts = {}) {
     await recordTest(supabase, result);
     return result;
   }
-  const tier = opts.tier || 'fast';
-  const attempts = await Promise.all(chain.map(async (entry) => {
-    const model = modelFor(entry, tier);
+  // EVERY MODEL THE FEATURES WILL ACTUALLY ASK FOR, not just one of them.
+  // The budget tiers the model per feature: extraction runs on `fast`, prose a
+  // prospect reads runs on `quality`. Testing only `fast` can therefore report
+  // "AI IS WORKING" while the outreach generator — the one feature whose
+  // output a customer sees — is still falling back, because the quality model
+  // is the one that was renamed or decommissioned. Those two are different
+  // failures with the same symptom, which is exactly what this card exists to
+  // separate. Deduplicated per provider, since an admin's typed model override
+  // collapses both tiers into one name.
+  const tiers = opts.tier ? [opts.tier] : ['fast', 'quality'];
+  const probes = [];
+  for (const entry of chain) {
+    const models = [];
+    for (const tier of tiers) {
+      const model = modelFor(entry, tier);
+      if (!models.some(m => m.model === model)) models.push({ model, tier });
+    }
+    for (const m of models) probes.push({ entry, ...m });
+  }
+
+  // One model-list lookup per PROVIDER, not per attempt: both tiers failing on
+  // a decommissioned family is the common case, and asking twice for the same
+  // list spends a request to learn the same thing.
+  const modelListFor = (() => {
+    const cache = new Map();
+    return (entry) => {
+      if (!cache.has(entry.id)) cache.set(entry.id, listModels(entry.id, entry.key, entry.baseUrl));
+      return cache.get(entry.id);
+    };
+  })();
+
+  const attempts = await Promise.all(probes.map(async ({ entry, model, tier }) => {
     const started = Date.now();
     const req = buildRequest(entry.id, {
       key: entry.key, baseUrl: entry.baseUrl, model,
       prompt: 'Reply with the single word: ready', maxTokens: 16,
     });
-    if (!req) return { provider: entry.id, model, ok: false, error: 'could not build a request for this provider' };
+    if (!req) return { provider: entry.id, model, tier, ok: false, error: 'could not build a request for this provider' };
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 12000 });
       if (!response.ok) throw new Error(await describeHttpError(response));
       const parsed = parseResponse(entry.id, await response.json());
       if (!parsed) throw new Error('the provider replied, but with no usable text in it');
-      return { provider: entry.id, model, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) };
+      return { provider: entry.id, model, tier, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) };
     } catch (err) {
-      // Only on failure, and only once: what CAN this provider run?
-      const available = await listModels(entry.id, entry.key, entry.baseUrl);
-      return { provider: entry.id, model, ok: false, ms: Date.now() - started, error: err.message, available_models: available };
+      // Only on failure, and only once per provider: what CAN this provider run?
+      const available = await modelListFor(entry);
+      return { provider: entry.id, model, tier, ok: false, ms: Date.now() - started, error: err.message, available_models: available };
     }
   }));
-  const result = { configured: true, providers: seen, attempts, working: attempts.some(a => a.ok) };
+  const result = {
+    configured: true, providers: seen, attempts,
+    // "Working" means at least one provider answered on EVERY tier a feature
+    // can ask for. One tier answering is a partial state, and reporting it as
+    // green is how the generator kept writing with its rules under a card that
+    // said everything was fine.
+    working: tiers.every(t => attempts.some(a => a.ok && a.tier === t)),
+    partial: attempts.some(a => a.ok) && !tiers.every(t => attempts.some(a => a.ok && a.tier === t)),
+    tiers,
+  };
   await recordTest(supabase, result);
   return result;
 }

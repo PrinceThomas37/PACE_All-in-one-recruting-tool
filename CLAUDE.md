@@ -64,6 +64,18 @@ we never have to rewrite to grow (see "Growth bets" below).
     REGISTRATION ORDER IS LOAD-BEARING** (`/job-orders/browse` before
     `/job-orders/:id`; `/candidates/check-duplicate` before `/candidates/:id`).
     `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
+  - **REGISTRATION ORDER IS LOAD-BEARING IN EVERY ROUTER, not just those.** It is
+    how Express works, not a recruiting quirk: a literal path registered after a
+    matching `:param` route is DEAD, and it fails silently because the param
+    handler answers with a valid 200. Three were live at once until Session 19 —
+    `POST /admin/integrations/ai-test` (the "Test AI generation" button, dead for
+    four sessions: `POST /admin/integrations/:id` answered with the integrations
+    list, the card stored that as its diagnosis, matched no branch, and redrew
+    its placeholder — the button "did nothing"), `POST /admin/integrations/
+    email-verify`, and `GET /jobs/export` (matched as a job with id `"export"`).
+    **A new literal endpoint goes ABOVE the `:id` routes of its own prefix, never
+    appended to the bottom of the file.** `test/route-shadowing-smoke.mjs` scans
+    every router in the tree and fails the build on any shadowed literal.
 - **Data access: use `models/` — do NOT hand-write `supabase.from()` on tenant
   tables.** `db.forRequest(req).from('candidates')` scopes to the caller's org by
   construction; `db.global.from(…)` is for the 7 tables with no `org_id`;
@@ -188,6 +200,44 @@ we never have to rewrite to grow (see "Growth bets" below).
   - **The rail is grouped** Work / Records / Outreach / Insight and expands on
     hover as an overlay. Nav order is no longer a flat index; de-duplicate items
     by id.
+  - **THE PHONE IS A FIRST-CLASS SCREEN — `public/mobile.css` (Session 19).**
+    Loaded last, after `styles.css` and `ui.css`; every rule sits inside a
+    media query, so it only ever ADDS a narrow screen's behaviour. Below
+    **860px** the rail becomes an off-canvas drawer behind a hamburger
+    (`.tb-burger` → `toggleNav()`), `#main` loses its left margin, `#content`
+    stops scrolling sideways, dialogs become bottom sheets, and paired panels
+    stack. Four rules:
+    * **HOVER IS A MOUSE FEATURE, GATED ON `(hover:hover) and (pointer:fine)`
+      — NEVER ON WIDTH.** A touch browser fires `:hover` on tap and leaves it
+      stuck, so tapping a nav item faded every label in while the rail stayed
+      60px wide: "WORK", "RECOR…", "OUTRE…" sliced down the left edge with the
+      nav text over the icons. The old fix reset the WIDTH under `max-width:900px`
+      and forgot the opacity — and width is the wrong question anyway, since a
+      900px tablet is a touch device and a 500px desktop window is not.
+    * **THE MENU MUST BE A CLASS ON `<body>`, NEVER A RENDER.** `openNav()` /
+      `closeNav()` / `toggleNav()` toggle `body.nav-open` and touch nothing
+      else. The render engine's rule is that a repaint changing nothing writes
+      nothing; a menu that re-rendered the shell to open itself would take the
+      page's scroll position and reload every iframe each time somebody looked
+      at the nav. The scrim (`#nav-scrim`) is drawn once by `renderApp()`
+      OUTSIDE the four patched regions precisely because it has no state.
+    * **`#content` IS `overflow-x:hidden` ON A PHONE, SO NOTHING MAY OVERFLOW
+      IT.** That trade is what stops one wide toolbar dragging the whole page —
+      but it means anything that does overflow is now CLIPPED AND UNREACHABLE.
+      A wide thing must scroll in its own box (`.dt-wrap`, `.tbl-wrap`), never
+      move the page. `test/mobile-layout-smoke.mjs` walks every element of 16
+      pages × 5 roles at 390px and fails on anything past the content box that
+      is not inside its own scroller — that test is what makes hiding the
+      overflow safe, so do not weaken it.
+    * **AN INLINE STYLE CANNOT BE RESPONSIVE.** A width or a grid written into
+      a `style=""` attribute cannot be re-laid-out by any stylesheet, which is
+      how six admin buttons ran 460px off the side and a stat tile's
+      `min-width:105px` put "Awaiting approval" outside its own card. When a
+      block needs to reflow, give it a class (`.dash-tile`, `.fpair`,
+      `.banner-clock` all came out of inline copies this way).
+    Reflow, never shrink: touch targets get BIGGER (40-44px), inputs are 16px
+    so iOS does not zoom on focus and never zoom back, and text wraps rather
+    than being scaled down.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before
@@ -205,7 +255,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **56** suites via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **58** suites via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it
@@ -400,6 +450,21 @@ Session 9). What that means in practice:
     and have never been verified against a real response** — the dev sandbox
     cannot reach those hosts. If AI is silently falling back, check the model
     name FIRST.
+  * **`diagnose()` TESTS EVERY TIER A FEATURE CAN ASK FOR, not one (Session
+    19).** The budget picks `fast` for extraction and `quality` for prose a
+    prospect reads, so probing only `fast` can report "AI IS WORKING" while the
+    outreach generator — the one feature whose text a customer sees — is still
+    falling back on a renamed quality model. Same symptom, different fault. So
+    `working` means every tier answered; one tier up and one down is `partial`
+    and the card says so in amber.
+  * **THE CARD MUST REJECT A WELL-FORMED ANSWER FROM THE WRONG ENDPOINT.**
+    "is it an object" was the check, and the shadowed `ai-test` route (above)
+    handed it a perfectly valid integrations payload for four sessions. It now
+    requires a diagnosis's own fields (`configured` + `providers`) and names
+    the wrong shape on screen as a PACE bug.
+  * **A SYNTHETIC PING NEVER HIDES A REAL FAILURE.** `ai_last_error` — what
+    happened the last time a FEATURE asked for text — renders under the test
+    result, always, outside the branch chain that used to suppress it.
 
 - **"Background engine: not receiving its heartbeat" is usually a FALSE ALARM.**
   GitHub treats `schedule` as best-effort: measured 2026-09-04, the 30-minute

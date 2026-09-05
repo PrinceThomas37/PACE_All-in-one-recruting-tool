@@ -248,15 +248,15 @@ function renderRecruiterDashboard(u){
   }).join("");
 
   function tile(label,value,color){
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center;min-width:105px;flex:1">'+
-      '<div style="font-size:24px;font-weight:700;color:'+(color||'var(--text)')+'">'+value+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap">'+label+'</div>'+
+    return '<div class="dash-tile">'+
+      '<div class="dash-tile-v" style="color:'+(color||'var(--text)')+'">'+value+'</div>'+
+      '<div class="dash-tile-l">'+label+'</div>'+
     '</div>';
   }
 
   return '<div class="page">'+
     '<div class="banner">'+
-      '<div style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:var(--r2);padding:10px 16px;text-align:right">'+
+      '<div class="banner-clock">'+
         '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
         '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+
@@ -368,9 +368,9 @@ function renderManagerDashboard(u){
   }).join("");
 
   function tile(label,value,color){
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center;min-width:105px;flex:1">'+
-      '<div style="font-size:24px;font-weight:700;color:'+(color||'var(--text)')+'">'+value+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap">'+label+'</div>'+
+    return '<div class="dash-tile">'+
+      '<div class="dash-tile-v" style="color:'+(color||'var(--text)')+'">'+value+'</div>'+
+      '<div class="dash-tile-l">'+label+'</div>'+
     '</div>';
   }
 
@@ -378,7 +378,7 @@ function renderManagerDashboard(u){
 
   return '<div class="page">'+
     '<div class="banner">'+
-      '<div style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:var(--r2);padding:10px 16px;text-align:right">'+
+      '<div class="banner-clock">'+
         '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
         '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+
@@ -505,7 +505,7 @@ function renderIndividualDashboard(u){
 
   return '<div class="page">'+
     '<div class="banner">'+
-      '<div style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.18);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.3);border-radius:var(--r2);padding:10px 16px;text-align:right">'+
+      '<div class="banner-clock">'+
         '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
         '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+

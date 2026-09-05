@@ -96,6 +96,41 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // ── REGISTRATION ORDER IS LOAD-BEARING BELOW THIS LINE ──────────────────
+  // Express matches in registration order, so `POST /admin/integrations/:id`
+  // matches "/admin/integrations/ai-test" with id="ai-test". These two literal
+  // endpoints were appended below it in a later session and were therefore
+  // never reachable: the save handler answered instead, and because it returns
+  // a perfectly valid integrations payload with a 200, nothing anywhere said
+  // so. The symptom was a "Test AI generation" button that appeared to do
+  // nothing at all — the exact silence that whole card exists to eliminate.
+  // ANY new literal path under /admin/integrations/ goes ABOVE the `:id`
+  // routes. test/route-shadowing-smoke.mjs fails the build if one does not.
+
+  // Does an AI actually generate, right now, through the real path?
+  //
+  // A provider card's "Test" lists models — it proves the KEY is accepted and
+  // nothing more. A generation can still fail on the model name, a per-model
+  // permission, or a rate limit, and the symptom is identical to having no key
+  // at all: the feature quietly writes with its rules. This asks for one word
+  // from each configured provider and reports its own words back.
+  router.post('/admin/integrations/ai-test', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      res.json(await aiProvider.diagnose(supabase, { tier: (req.body && req.body.tier) || 'fast' }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Try the active email verifier against a real address (for the UI tester).
+  router.post('/admin/integrations/email-verify', auth, async (req, res) => {
+    try {
+      if (!admin(req, res)) return;
+      const address = (req.body && req.body.address) || '';
+      if (!address) return res.status(400).json({ error: 'address required' });
+      res.json(await verifyEmailAddress(supabase, address));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // Save keys for one integration. Body: { values:{api_key:'…'}, active?:true }.
   // Empty-string value clears that field. `active` (verifiers only) sets it as
   // the provider the send-time hook uses.
@@ -138,20 +173,6 @@ module.exports = (ctx) => {
       const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key');
       const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url');
       res.json(await testProvider(req.params.id, key, { base_url }));
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
-
-  // Does an AI actually generate, right now, through the real path?
-  //
-  // A provider card's "Test" lists models — it proves the KEY is accepted and
-  // nothing more. A generation can still fail on the model name, a per-model
-  // permission, or a rate limit, and the symptom is identical to having no key
-  // at all: the feature quietly writes with its rules. This asks for one word
-  // from each configured provider and reports its own words back.
-  router.post('/admin/integrations/ai-test', auth, async (req, res) => {
-    try {
-      if (!admin(req, res)) return;
-      res.json(await aiProvider.diagnose(supabase, { tier: (req.body && req.body.tier) || 'fast' }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -201,16 +222,6 @@ module.exports = (ctx) => {
       set(aiBudget.CAP_CALLS_KEY, b.calls);
       await Promise.all(writes);
       res.json({ caps: await aiBudget.getCaps(supabase) });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
-
-  // Try the active email verifier against a real address (for the UI tester).
-  router.post('/admin/integrations/email-verify', auth, async (req, res) => {
-    try {
-      if (!admin(req, res)) return;
-      const address = (req.body && req.body.address) || '';
-      if (!address) return res.status(400).json({ error: 'address required' });
-      res.json(await verifyEmailAddress(supabase, address));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

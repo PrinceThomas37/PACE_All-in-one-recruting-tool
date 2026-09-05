@@ -36,6 +36,33 @@ function startClock(){
   },1000);
 }
 
+// ── The phone menu ──────────────────────────────────────────────────────────
+// On a touch screen the rail cannot expand on hover, so below 860px it is an
+// off-canvas drawer opened from the top bar. Everything here is ONE CLASS on
+// <body>: no render, no region rewrite, nothing added to or removed from the
+// DOM. That is deliberate — the render engine's rule is that a repaint which
+// changes nothing must write nothing, and a menu that re-rendered the shell to
+// open itself would take the page's scroll position and any open iframe with
+// it every time somebody looked at the nav.
+function navOpen(){ return document.body.classList.contains('nav-open'); }
+window.openNav=function(){ document.body.classList.add('nav-open'); };
+// Called from the scrim, from every nav item (via goPage), and from Escape.
+// classList.remove on a class that is not there is a no-op, so it is safe to
+// call from all three without checking.
+window.closeNav=function(){ document.body.classList.remove('nav-open'); };
+window.toggleNav=function(){ navOpen()?closeNav():openNav(); };
+// Escape closes it, like every other overlay in the app. Registered once, on
+// the document, so it survives every rebuild of the shell.
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&navOpen())closeNav();
+});
+// A phone rotated into landscape, or a browser window dragged wider, crosses
+// the breakpoint with the class still set — and above 860px `nav-open` means a
+// locked body scroll with no visible drawer to explain it.
+window.addEventListener('resize',function(){
+  if(window.innerWidth>860&&navOpen())closeNav();
+});
+
 // ── Painting: write a region only when it actually changed ──────────────────
 // The app used to rebuild EVERYTHING for every change: `#app.innerHTML =
 // renderApp()`. A mailbox unread badge ticking 24 → 23 therefore destroyed and

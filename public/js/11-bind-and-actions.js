@@ -43,7 +43,7 @@ window.doLogin=function(){
   else{var e=document.getElementById("login-err");if(e){e.textContent="No account found. Use a @futeglobal.com email.";e.style.display="block";}}
 }
 window.signOut=function(){stopBackgroundPoll();stopProgressPoll();STATE.user=null;STATE.token=null;sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');STATE.page='login';STATE.modal=null;render();}
-window.goPage=function(p){if(p==='email'){STATE.composeContext=null;STATE.composeReminderId=null;}if(p==='workflows'){STATE.wf=undefined;STATE.wfRuns={};}STATE.page=p;STATE.detailLead=null;STATE.modal=null;if(p!=="dashboard")STATE.viewingUser=null;if(p!=='bdleadinsights')STATE.bdLeadSelectedBD=null;if(p!=='bdinsights')STATE.bdInsightsData=null;if(p==='email')loadEmailsForCurrentUser();render();}
+window.goPage=function(p){if(window.closeNav)closeNav();if(p==='email'){STATE.composeContext=null;STATE.composeReminderId=null;}if(p==='workflows'){STATE.wf=undefined;STATE.wfRuns={};}STATE.page=p;STATE.detailLead=null;STATE.modal=null;if(p!=="dashboard")STATE.viewingUser=null;if(p!=='bdleadinsights')STATE.bdLeadSelectedBD=null;if(p!=='bdinsights')STATE.bdInsightsData=null;if(p==='email')loadEmailsForCurrentUser();render();}
 window.setPeriod=function(p){STATE.period=p;render();}
 window.setSearch=function(v){STATE.leadsFilter.search=v;STATE.leadsPage=0;render();}
 window.setFilt=function(k,v){STATE.leadsFilter[k]=v;STATE.leadsPage=0;render();}

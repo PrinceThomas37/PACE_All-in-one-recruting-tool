@@ -148,6 +148,10 @@ a{color:inherit;text-decoration:none}
 .txta{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:8px 11px;color:var(--text);outline:none;width:100%;resize:vertical;font-size:13.5px;line-height:1.6}
 .txta:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,122,60,.12)}
 .flbl{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px}
+/* Two form fields side by side. A class, not an inline grid, so a narrow
+   screen can put them one above the other — an inline style cannot be
+   overridden without !important. */
+.fpair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .fgrp{display:flex;flex-direction:column;margin-bottom:12px}
 .ferr{font-size:11px;color:var(--red);margin-top:3px}
 
@@ -213,10 +217,32 @@ tr.sel-row td{background:var(--accent-l)}
 .banner-name{font-family:var(--display);font-size:19px;font-weight:700}
 .banner-sub{font-size:12.5px;opacity:.82;margin-top:3px}
 .banner-stats{display:flex;align-items:center;gap:20px;margin-top:16px;flex-wrap:wrap}
+/* The clock. Absolutely positioned so it sits in the banner's top-right corner
+   without pushing the greeting down — which is fine while there is room beside
+   the greeting, and is exactly why it landed ON TOP of it on a phone. The
+   mobile layer puts it back in the flow; this class exists so it can, and so
+   the same block is not inline-styled in three dashboards. */
+.banner-clock{
+  position:absolute;top:16px;right:20px;
+  background:rgba(255,255,255,.18);backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.3);border-radius:var(--r2);
+  padding:10px 16px;text-align:right;
+}
 .bstat-val{font-family:var(--display);font-size:24px;font-weight:700;line-height:1}
 .bstat-lbl{font-size:11px;opacity:.78;margin-top:4px}
 
 /* STAT CARD */
+/* The small dashboard/team stat tile. Was three identical inline-styled copies
+   whose `min-width:105px` could not be reached from a stylesheet — which is
+   how six of them ended up three-to-a-row on a 390px phone with "Awaiting
+   approval" running out of its own card. A class can be re-laid-out; an inline
+   style cannot. */
+.dash-tile{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;text-align:center;min-width:105px;flex:1;
+}
+.dash-tile-v{font-size:24px;font-weight:700}
+.dash-tile-l{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap}
 .stat-ico{width:36px;height:36px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
 .stat-val{font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1}
 .stat-lbl{font-size:12px;color:var(--text3);margin-top:4px}

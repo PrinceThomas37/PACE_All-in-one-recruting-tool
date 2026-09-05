@@ -1,0 +1,327 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PACE — THE PHONE LAYER
+
+   Loaded last, after styles.css and ui.css, and it only ever ADDS a narrow
+   screen's behaviour. Nothing here changes the desktop app: every rule is
+   inside a media query, and the two that are not are pointer/safe-area
+   concerns that a desktop browser simply never matches.
+
+   WHAT WAS ACTUALLY WRONG (from the owner's phone, Session 19)
+
+   1. THE RAIL SHOWED ITS LABELS INSIDE A 60px SLOT. A touch browser fires
+      :hover on tap and leaves it stuck there, so tapping a nav item faded in
+      every label — while the rail stayed collapsed, because the old fix reset
+      the WIDTH on small screens and forgot the opacity. "WORK", "RECOR…",
+      "OUTRE…", "INSIGH…" sliced down the left edge, nav text overlapping the
+      icons. That half is fixed at the source in ui.css, gated on
+      (hover:hover) and (pointer:fine). What is left is the real question:
+      with no hover, HOW DO YOU READ THE MENU ON A PHONE? You could not. So
+      below 860px the rail becomes a proper off-canvas drawer behind a
+      hamburger — the pattern every phone user already knows.
+
+   2. THE PAGE SCROLLED SIDEWAYS. #content is overflow-x:auto, so any element
+      wider than the screen dragged the WHOLE page with it — toolbars, tab
+      action groups, wide tables. Half a form off the right edge, and the
+      other half only reachable by swiping the entire screen. The fix is not
+      "make everything narrower": it is that a wide thing must scroll INSIDE
+      ITS OWN BOX and never move the page.
+
+   3. THE DASHBOARD BANNER OVERLAPPED ITSELF. The clock is absolutely
+      positioned over the greeting; on a phone "Good morning" ran straight
+      under it. Absolute positioning has no idea the text got taller.
+
+   THE RULE THIS FILE FOLLOWS
+   Reflow, never shrink. Making type and targets smaller to fit is what makes
+   an app feel cramped. Everything here stacks, wraps, or scrolls in its own
+   container, and touch targets get BIGGER (44px, Apple's and Google's shared
+   minimum), not smaller.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* One breakpoint, named once. 860px is where the two-pane screens (mailbox,
+   record drawer, compose + preview) stop having room for a second pane. */
+
+/* ── 0. GLOBAL SAFETY ─────────────────────────────────────────────────────── */
+/* An iOS input under 16px makes Safari zoom the whole page on focus, and it
+   never zooms back — the single most common way a mobile web app ends up
+   "broken" after typing one search term. */
+@media (max-width:860px){
+  /* The class list matters: a bare `input` selector loses to `.inp`, which is
+     what nearly every field in this app wears. Same specificity, loaded later,
+     so these win — and a test asserts the computed size rather than trusting
+     that the list is complete. */
+  input,select,textarea,
+  .inp,.sel,.fsel,.tbar-search input,.seq-in,.seq-ta,.seq-sel,.seq-delay input,
+  .cmp-fld select,.cmp-fld .cmp-static{font-size:16px}
+  /* …except where a control is decorative-sized on purpose and cannot hold
+     16px without breaking its own row. These are all non-text or numeric, so
+     they never trigger the zoom. */
+  input[type=checkbox],input[type=radio],input[type=range],input[type=color]{font-size:inherit}
+}
+
+/* ── 1. THE SHELL: OFF-CANVAS NAV ─────────────────────────────────────────── */
+@media (max-width:860px){
+  /* The rail slides in at its FULL width. A 60px icon-only strip on a phone is
+     the worst of both worlds: it costs 60px of a 390px screen and still tells
+     you nothing. Closed, it costs nothing at all. */
+  body.ui-kit #sidebar{
+    width:var(--rail-w-open);
+    transform:translateX(-100%);
+    transition:transform .2s cubic-bezier(.4,0,.2,1);
+    box-shadow:none;
+    /* Above the scrim, below nothing else. */
+    z-index:70;
+  }
+  body.ui-kit.nav-open #sidebar{transform:none;box-shadow:var(--sh3)}
+
+  /* Open, it IS expanded — labels are the point of opening it. These are the
+     same declarations the hover query makes on a desktop; here they are
+     unconditional, because there is no hover to key them off. */
+  body.ui-kit #sidebar .rail-word,
+  body.ui-kit #sidebar .sb-lbl,
+  body.ui-kit #sidebar .nav-txt,
+  body.ui-kit #sidebar .user-meta{opacity:1;transform:none}
+  body.ui-kit #sidebar .nav-badge{
+    position:static;margin-left:auto;margin-right:10px;
+    min-width:auto;height:auto;padding:2px 8px;border-radius:10px;
+    background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+    font-family:var(--mono);
+  }
+  /* Comfortable thumb targets — a 38px row with a 24px icon is a mouse target. */
+  body.ui-kit .nav-item{height:46px;padding-left:14px}
+  body.ui-kit .nav-icon{width:28px;min-width:28px}
+  body.ui-kit .sb-nav{padding:8px 10px 18px}
+
+  /* Nothing is reserved for the rail any more: the page gets the whole width. */
+  body.ui-kit #main{margin-left:0}
+
+  /* The scrim. It is a plain element in the shell rather than a ::after on the
+     body, so a tap on it is an ordinary click with a handler — no pointer-events
+     juggling, and it works the same in every browser. */
+  #nav-scrim{
+    position:fixed;inset:0;z-index:65;background:rgba(15,23,42,.45);
+    opacity:0;visibility:hidden;transition:opacity .2s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  body.nav-open #nav-scrim{opacity:1;visibility:visible}
+  /* The page must not scroll behind an open drawer. */
+  body.nav-open{overflow:hidden}
+}
+/* On a desktop the scrim and the hamburger do not exist as far as the layout
+   is concerned. Kept out of the media query so they are hidden even at a wide
+   viewport on a touch screen — there, the rail is a hover rail again. */
+@media (min-width:861px){
+  #nav-scrim{display:none}
+  .tb-burger{display:none}
+}
+
+/* ── 2. THE TOP BAR ───────────────────────────────────────────────────────── */
+.tb-burger{
+  width:40px;height:40px;margin-left:-8px;border-radius:10px;
+  display:none;align-items:center;justify-content:center;
+  color:var(--ink2,#475569);cursor:pointer;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;
+}
+.tb-burger:active{background:var(--hover,#F4F6F9)}
+.tb-burger svg{width:22px;height:22px}
+@media (max-width:860px){
+  .tb-burger{display:flex}
+  /* The title is the one thing that may shrink: it is a label, not content,
+     and a wrapped page title pushes everything below it down on every screen. */
+  body.ui-kit #topbar{padding:0 12px;gap:8px}
+  body.ui-kit .tb-title{
+    font-size:15px;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;
+  }
+  /* "· Viewing Someone" is a second sentence in a bar with no room for one. */
+  body.ui-kit .tb-crumb{display:none}
+  body.ui-kit .tb-right{gap:4px}
+}
+
+/* ── 3. NO PAGE SCROLLS SIDEWAYS ──────────────────────────────────────────── */
+@media (max-width:860px){
+  /* The page owns vertical scrolling only. Anything genuinely wider than the
+     screen has to say so itself, in its own scroller — see §4. */
+  body.ui-kit #content{overflow-x:hidden}
+  .page{padding:14px 12px}
+  .pg{min-width:0}
+
+  /* The page header: a title on the left, its actions hard right. The actions
+     are an inline-styled flex row on most pages — a class cannot reach them —
+     but they are ALWAYS the last child, and flex-wrap on something that is not
+     a flex container is inert. So this is safe to apply blind, and it is what
+     stops six admin buttons running 460px off the side of the screen. */
+  .ph>.flex{flex-wrap:wrap;gap:10px}
+  .ph>.flex>*{min-width:0;max-width:100%}
+  .ph>.flex>:last-child{flex-wrap:wrap}
+  .ptitle{font-size:18px}
+
+  /* Same shape one level down: a card header with a title and a control. */
+  .cp>.flex,.card>.flex{flex-wrap:wrap}
+
+  /* Toolbars: the right-hand action group stops being "hard right on the same
+     line" and becomes its own row. Two buttons and a search box do not fit on
+     390px, and the group had no wrap, so it simply left the screen. */
+  .tbar{padding:10px 12px;gap:8px}
+  /* The search box takes the row it is on, but not the whole row on its own:
+     a basis rather than 100% leaves the small icon actions (clear, refresh)
+     beside it instead of stranding a lone "×" on a line of its own. */
+  .tbar-search{flex:1 1 180px;min-width:0}
+  .tbar-search input{width:100%}
+  .tbar-right{margin-left:0;width:100%;flex-wrap:wrap;gap:8px}
+  .tbar-right .btn{flex:1 1 auto;justify-content:center}
+
+  /* Page tabs: the strip keeps scrolling horizontally (that is the right
+     gesture for tabs), but its ACTION group breaks onto its own full-width
+     row instead of being pushed off the end where nothing could reach it. */
+  .pgtabs{padding:0 12px;flex-wrap:wrap;overflow-x:auto}
+  .pgtabs-right{
+    margin-left:0;padding:0 0 10px;width:100%;
+    flex-wrap:wrap;gap:8px;
+  }
+  .pgtabs-right .btn{flex:1 1 auto;justify-content:center}
+  .pgtab{padding:12px 10px 11px}
+
+  /* The stat strip is a row of numbers; on a phone it is two columns of them. */
+  .strip{padding:8px;gap:4px}
+  .strip-i{min-width:0;flex:1 1 calc(50% - 4px);padding:8px 10px}
+  .strip-sep{display:none}
+
+  /* Grids collapse. .g4 to two columns rather than one: four small stat tiles
+     read better paired than stacked into a long column of near-empty cards. */
+  .g2,.g3{grid-template-columns:1fr}
+  .g4{grid-template-columns:1fr 1fr}
+  .span2,.span3{grid-column:span 1}
+  .g4 .span2{grid-column:span 2}
+  .cp{padding:16px 15px}
+}
+
+/* ── 4. WIDE THINGS SCROLL IN THEIR OWN BOX ───────────────────────────────── */
+@media (max-width:860px){
+  /* .dt-wrap already scrolls. The tables that predate the UI kit do not, and
+     those are what dragged the page sideways. -webkit-overflow-scrolling keeps
+     the momentum flick that makes a horizontal table usable at all on iOS. */
+  .tbl-wrap,.dt-wrap{
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
+    /* Contain the scroll: swiping to the end of a table must not then start
+       dragging the page behind it. */
+    overscroll-behavior-x:contain;
+  }
+  table.dt,.tbl-wrap table{min-width:640px}
+  table.dt thead th,table.dt tbody td{padding:10px}
+
+  /* A bare <table> that never got a wrapper: give the table itself a scroll
+     context by letting its block container scroll. Cheaper and safer than
+     rewriting nine pages' markup, and it removes the page-level drag. */
+  .card>table,.page>table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  /* Long unbroken strings — an email address, a tracking URL, a job title —
+     are the other way a phone layout blows out sideways. */
+  .kv-v,.cell-id,.feed-tx,.psub,.dwr-sub{overflow-wrap:anywhere}
+}
+
+/* ── 5. PANELS STACK INSTEAD OF SITTING SIDE BY SIDE ──────────────────────── */
+@media (max-width:860px){
+  /* Compose: the live preview goes UNDER the editor rather than beside it. It
+     is not decoration — it is where {{sender}} is resolved from the mailbox
+     that will actually send — so it must stay on screen, just not at 430px. */
+  .cmp{flex-direction:column;gap:12px}
+  .cmp-edit,.cmp-prev{width:100%;min-width:0}
+  .cmp-prev{position:static}
+  .cmp-mail{max-height:none}
+
+  /* The record drawer is already full-width below 900px; here it also loses
+     its rounded inset so it reads as a screen, not a floating card. */
+  .dwr{padding:0}
+  .dwr-pane{border-radius:0}
+  .dwr-scrim{padding:0}
+
+  /* The email preview panel is already display:none under 1380px. */
+  .og-grid{grid-template-columns:1fr!important}
+  /* Two fields side by side leaves ~150px each — enough to see a placeholder
+     and not enough to read what you typed. One per row. */
+  .fpair{grid-template-columns:1fr}
+}
+
+/* ── 6. MODALS BECOME SHEETS ──────────────────────────────────────────────── */
+@media (max-width:860px){
+  /* A 480px modal centred in a 390px viewport with 16px of padding is a modal
+     with 358px of usable width and its own scrollbar inside the page's. On a
+     phone a dialog IS the screen. */
+  .overlay{padding:0;align-items:flex-end}
+  .modal,.modal-w480,.modal-w640,.modal-w860,.seq-modal{
+    width:100%;max-width:100%;
+    max-height:92vh;border-radius:16px 16px 0 0;
+  }
+  .mh{padding:16px 16px 12px;position:sticky;top:0;background:var(--card);z-index:2}
+  .mb_{padding:0 16px 16px}
+  /* The action row is the reason a sheet works: it stays put while the body
+     scrolls, so "Save" is never something you have to go looking for. */
+  .mf{
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+    position:sticky;bottom:0;background:var(--card);
+    flex-wrap:wrap;gap:8px;
+  }
+  .mf .btn{flex:1 1 auto;justify-content:center;min-height:44px}
+}
+
+/* ── 7. TOUCH TARGETS ─────────────────────────────────────────────────────── */
+@media (max-width:860px){
+  .btn{min-height:40px;padding:9px 16px}
+  .btn-sm,.btn-xs{min-height:36px}
+  .btn-icon,.tb-ico,.tbar-ico,.kebab,.dwr-act{min-width:38px;min-height:38px}
+  .ck{width:18px;height:18px}
+  .tab{padding:12px 14px}
+  /* Grey text at 11px on a phone in daylight is not text. */
+  .f11,.u-role,.bstat-lbl{font-size:12px}
+  .toast-wrap{left:12px;right:12px;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+  .toast{min-width:0;max-width:none;width:100%}
+}
+
+/* ── 8. THE DASHBOARD BANNER ──────────────────────────────────────────────── */
+/* The clock used to be absolutely positioned over the greeting. It is now a
+   normal element in the flow (.banner-clock in styles.css), pinned top-right
+   only where there is room for it to be. Below 860px it goes back into the
+   flow and sits above the greeting, which is also the order you want it in:
+   the date is the first thing a recruiter checks. */
+@media (max-width:860px){
+  .banner{padding:16px 16px;border-radius:14px}
+  .banner-clock{
+    position:static;display:flex;align-items:baseline;gap:10px;
+    margin-bottom:12px;padding:8px 12px;text-align:left;
+  }
+  .banner-clock #dash-clock-date{font-size:16px;margin-top:0}
+  .banner-name{font-size:17px}
+  /* The clock is a chip, not a bar — it should not span the banner just because
+     it now sits in the flow. */
+  .banner-clock{width:max-content;max-width:100%}
+  /* Two columns of numbers instead of a wrapping row that leaves a dangling
+     1px divider on its own line. The dividers are class-less <div>s, so they
+     are identified by what they are NOT: a cell containing a value. Where
+     :has() is unsupported the whole rule drops and the old flex wrap stands —
+     tidier with, correct without. */
+  .banner-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px;margin-top:14px}
+  .banner-stats>div:not(:has(.bstat-val)){display:none}
+  .bstat-val{font-size:20px}
+
+  /* Six tiles, two to a row, and a label that wraps rather than running out of
+     its own card ("Awaiting approval" did, at 11px nowrap in a 115px tile). */
+  .dash-tile{flex:1 1 calc(50% - 5px);min-width:0}
+  .dash-tile-l{white-space:normal}
+  /* The decorative circle bleeds out of a small card and clips oddly. */
+  .banner::after{display:none}
+}
+
+/* ── 9. THE MAILBOX AND THE LOGIN SCREEN ──────────────────────────────────── */
+/* Both are already handled and are noted here so the next person does not add
+   a second, conflicting copy:
+     · The mailbox's two panes take turns below 960px — `.mb-panes.reading`
+       swaps the list for the reader, and the reader header already carries a
+       close (mbBack()). Those rules live in ui.css §"mailbox", next to the
+       markup they depend on. The body iframe keeps its fixed height and inner
+       scroll: it cannot be measured from the parent without allow-same-origin,
+       which is the grant that keeps a hostile email boxed in. Do not "fix" it.
+     · .login-card is already `width:100%; max-width:360px`, which is correct on
+       every phone. Its wrapper's 24px padding is the only thing worth easing. */
+@media (max-width:860px){
+  .login-wrap{padding:16px}
+}

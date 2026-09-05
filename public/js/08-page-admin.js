@@ -235,14 +235,37 @@ function aiBudgetCard(){
 // One line per provider attempt. On a failure it also lists what that provider
 // DOES offer, because "which model should I use instead" is the very next
 // question and the answer is a copy-paste into the model box above.
+// Which features ride on which tier — so a red line names the work that is
+// actually degraded rather than an abstract "quality model".
+var AI_TIER_USE={fast:'resume parsing, job-description cleanup, briefings',
+                 quality:'the outreach generator and cold emails'};
 function attemptLine(a){
-  var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span><br>'+
+  var tier=a.tier?'<span style="color:var(--text3)"> · '+htmlEsc(a.tier)+' model'+
+    (AI_TIER_USE[a.tier]?' ('+htmlEsc(AI_TIER_USE[a.tier])+')':'')+'</span>':'';
+  var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span>'+tier+'<br>'+
     htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'));
   if(!a.ok&&a.available_models&&a.available_models.length){
     head+='<div style="color:var(--text2);margin-top:4px;font-size:11px">This provider currently offers: <span style="color:var(--text3)">'+
       a.available_models.map(htmlEsc).join(', ')+'</span><br>Paste one of these into the model box on the provider\'s card above and Save.</div>';
   }
   return head+'</div>';
+}
+// Is this actually a diagnosis? A test result always says whether anything is
+// configured and always carries the per-provider list — an endpoint that is
+// not the diagnose endpoint has neither, however valid its own reply is.
+function isDiagnosis(r){
+  return !!r&&typeof r==='object'&&!Array.isArray(r)&&
+    typeof r.configured==='boolean'&&Array.isArray(r.providers);
+}
+// Enough of the wrong answer to recognise it, without dumping a payload into
+// the card. Names are what identify it: "categories, active_ai" is instantly
+// the integrations list.
+function describeShape(r){
+  if(r===null||r===undefined)return 'nothing';
+  if(typeof r!=='object')return typeof r;
+  if(Array.isArray(r))return 'a list of '+r.length;
+  var k=Object.keys(r).slice(0,4);
+  return k.length?'an object with: '+k.join(', '):'an empty object';
 }
 function aiHealthCard(){
   try{ return aiHealthCardInner(); }
@@ -273,6 +296,12 @@ function aiHealthCardInner(){
     }).join('');
     body=d.working
       ?panel('var(--green-l)','var(--green)','<b style="color:var(--green)">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
+      :d.partial
+      // One tier answering and the other not is the trap this card was blind
+      // to: the small model is fine, the bigger one has been renamed, and the
+      // only feature a customer's prospect sees keeps writing with its rules
+      // under a green tick. Amber, and it names which half is down.
+      ?panel('#fffbeb','var(--amber,#f59e0b)','<b>AI IS ONLY HALF WORKING.</b> One of the two models answered and the other did not, so the features on the failing one are still writing with their built-in version. The line marked ✗ names the model to change.<br><br>'+lines)
       :panel('#fef2f2','var(--red)','<b style="color:var(--red)">AI IS NOT WORKING.</b> Every feature is writing with its built-in version. Below is what each provider said — that text names the problem.<br><br>'+lines);
   }else if(d&&d.configured===false){
     // The important distinction: nothing saved, versus something saved that is
@@ -297,11 +326,24 @@ function aiHealthCardInner(){
   }else{
     body=panel('var(--bg3)','var(--border2)','Click <b>Test AI generation</b> after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back to its built-in version.');
   }
+  // The test is a synthetic ping. `last_error` is what happened the last time a
+  // REAL feature asked for text, which is the more truthful signal and used to
+  // be hidden the moment any test result existed. Shown underneath, always.
+  var realFail='';
+  if(lastErr&&lastErr.failures&&lastErr.failures.length){
+    realFail='<div style="margin-top:8px;font-size:11.5px;color:var(--text2);line-height:1.6">'+
+      '<b>Last time a feature actually asked for text</b> ('+htmlEsc(String(lastErr.feature||'a feature'))+
+      ', '+htmlEsc(String(lastErr.at||'').replace('T',' ').slice(0,16))+' UTC) it fell back to the built-in version:'+
+      lastErr.failures.map(function(f){
+        return '<div style="color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span> — '+htmlEsc(f.error||'')+'</div>';
+      }).join('')+
+    '</div>';
+  }
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
       '<div style="font-weight:600;font-size:13px">Is AI actually working?</div>'+
       '<button class="btn btn-sm btn-primary" onclick="runAiHealthTest()">Test AI generation</button>'+
-    '</div>'+body+
+    '</div>'+body+realFail+
   '</div>';
 }
 window.runAiHealthTest=function(){
@@ -329,8 +371,15 @@ function runAiHealthTestInner(){
   apiPost('/admin/integrations/ai-test',{}).then(done(function(r){
     // A response that is not the shape we expect must not silently become
     // "nothing happened" — the whole point of this card is that it always says
-    // something.
-    STATE.aiHealth=(r&&typeof r==='object')?r:{configured:true,attempts:[{provider:'server',model:'',ok:false,error:'The server replied with nothing usable.'}],working:false};
+    // something. "An object" is NOT the shape check: for four sessions this
+    // endpoint was shadowed by POST /admin/integrations/:id, which answered
+    // with a perfectly valid integrations payload and a 200. That object was
+    // stored as a diagnosis, matched none of the card's branches, and the card
+    // redrew its "click the button" placeholder — the button appeared dead.
+    // So: it is a diagnosis only if it carries the fields a diagnosis has.
+    STATE.aiHealth=isDiagnosis(r)?r:{configured:true,working:false,attempts:[{provider:'server',model:'',ok:false,
+      error:'The server answered, but not with a test result — it replied with '+describeShape(r)+'. '+
+        'That means the request reached a DIFFERENT endpoint than the one that runs the test, which is a bug in PACE, not in your key. Report this line.'}]};
     renderIntegrationsModal();
     return apiGet('/admin/ai-budget').then(function(bb){ STATE.aiBudget=bb; renderIntegrationsModal(); }).catch(function(){});
   })).catch(done(function(e){

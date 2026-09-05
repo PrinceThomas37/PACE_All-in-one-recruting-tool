@@ -158,6 +158,25 @@ router.get('/jobs/today-summary', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// REGISTRATION ORDER IS LOAD-BEARING: this literal path must stay ABOVE
+// `/jobs/:id`, or Express matches it as a job whose id is the string "export"
+// and the CSV export on the RA entry form silently fails. It sat below for
+// exactly that reason until Session 19. test/route-shadowing-smoke.mjs fails
+// the build if any literal route ends up behind a matching :param route.
+router.get('/jobs/export', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
+    const { from, to, stage } = req.query;
+    let query = withOrg(supabase.from('jobs').select('id,position,stage,location,industry,timezone,freshness,salary_range,job_created_date,job_opened_date,bdm_assigned_name,source,created_at,company:companies(name,website,industry,location),contacts(first_name,last_name,designation,email,phone,linkedin),creator:users!created_by(name)').is('deleted_at', null).order('created_at', { ascending: false }), req);
+    if (from) query = query.gte('created_at', from);
+    if (to) query = query.lte('created_at', to + 'T23:59:59Z');
+    if (stage) query = query.eq('stage', stage);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/jobs/:id', auth, async (req, res) => {
   try {
     const { data, error } = await supabase.from('jobs').select(JOB_SELECT).eq('id', req.params.id).is('deleted_at', null).single();
@@ -400,20 +419,6 @@ router.delete('/jobs/:id', auth, async (req, res) => {
     await supabase.from('jobs').update({ deleted_at: new Date() }).eq('id', req.params.id);
     await logActivity(req.params.id, null, req.user.id, 'job_deleted', `Job deleted: ${existing.position}`, null, null);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get('/jobs/export', auth, async (req, res) => {
-  try {
-    if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
-    const { from, to, stage } = req.query;
-    let query = withOrg(supabase.from('jobs').select('id,position,stage,location,industry,timezone,freshness,salary_range,job_created_date,job_opened_date,bdm_assigned_name,source,created_at,company:companies(name,website,industry,location),contacts(first_name,last_name,designation,email,phone,linkedin),creator:users!created_by(name)').is('deleted_at', null).order('created_at', { ascending: false }), req);
-    if (from) query = query.gte('created_at', from);
-    if (to) query = query.lte('created_at', to + 'T23:59:59Z');
-    if (stage) query = query.eq('stage', stage);
-    const { data, error } = await query;
-    if (error) throw error;
-    res.json(data || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
