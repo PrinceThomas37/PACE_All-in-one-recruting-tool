@@ -3327,3 +3327,71 @@ really are.
 **And a specific warning:** four sessions of work went into a diagnostic that
 was never once invoked. When a feature reports nothing, check that its request
 reaches its handler before improving what the handler says.
+
+## Session 19, part 2 — the model name really was the bug
+
+The health card, on its first working run, answered the question four sessions
+had failed to:
+
+```
+✗ groq  llama-3.1-8b-instant · fast model
+HTTP 404 — The model `llama-3.1-8b-instant` does not exist or you do not have access to it.
+This provider currently offers: openai/gpt-oss-20b, groq/compound, whisper-large-v3,
+whisper-large-v3-turbo, qwen/qwen3.6-27b, canopylabs/orpheus-arabic-saudi,
+openai/gpt-oss-120b, qwen/qwen3.8-27b, canopylabs/orpheus-v1-english, groq/compound-mini,
+meta-llama/llama-prompt-guard-2-86m, meta-llama/llama-prompt-guard-2-22m, allam-2-7b,
+openai/gpt-oss-safeguard-20b
+```
+
+`CLAUDE.md` had flagged the leading suspect correctly since Session 18 — "the
+Groq/OpenRouter model names were written from memory and have never been
+verified against a real response" — and it was right. Groq had retired the
+Llama 3.x line. Every AI feature had been writing with its rules for as long as
+the key had been installed, and nothing anywhere said so, because the one
+diagnostic that would have said it was behind a shadowed route.
+
+**Defaults are now `openai/gpt-oss-20b` (fast) / `openai/gpt-oss-120b`
+(quality)**, taken from that account's own `/models` response and pinned with
+their provenance and date. Three things came out of reading the list properly:
+
+**1. A provider's catalogue is not a list of writers.** Of the fourteen models
+offered, only four could draft an email. The rest were speech-to-text
+(whisper), text-to-speech (orpheus), safety classifiers (prompt-guard,
+safeguard) and an Arabic-first model — and the card's "paste one of these into
+the model box" pointed at all of them equally. That is an instruction that
+leads somewhere worse than where you started. The card now splits the list into
+what can write text and what cannot, and says plainly when a provider offers no
+writer at all.
+
+**2. A reasoning model bills its thinking against `max_tokens`.** gpt-oss
+thinks before it answers, out of the same ceiling as the answer. At this app's
+budgets — 700 tokens for a resume parse, 1000 for an email — an uncapped
+reasoning budget can consume the whole allowance and return an EMPTY message,
+which from outside is indistinguishable from a broken provider. So
+`PROVIDERS[id].reasoningModels` marks that family and `modelParams()` sends
+`reasoning_effort:'low'` **to it and nothing else** — an unknown parameter is a
+400 on some OpenAI-compatible endpoints, so the narrowness is the point. The
+same trap was already live in the health check itself: its ping asked for 16
+tokens, which a reasoning model would have spent entirely on thinking, and the
+card would have reported a working model as broken. It asks for 256 now.
+
+**3. "No usable text" was true and useless.** `describeEmptyReply()` separates
+the three ways a reply arrives empty — truncated at the ceiling, reasoning-only
+with no answer, or an error object — because each has a different fix.
+
+Three test files had pinned the old model names as literals, which is why the
+suite went red on a correct change. Two of the three were re-pointed at the
+registry (`ai.PROVIDERS.groq.models.fast`) so the literal lives in exactly one
+place: the block in `ai-provider-smoke.mjs` that also records where the name
+came from and when. A name verified against a real response is worth pinning; a
+name copied into four files is worth pinning once.
+
+### The lesson
+
+Part 1's lesson was "check the request reaches its handler before improving
+what the handler says". Part 2 is the other half: **the diagnostic was right
+all along, and nobody could see it.** The 404 had been sitting behind that
+button for four sessions. Everything built to explain the silence worked on its
+first real run — the provider's own error text, the model list, the fallback
+that kept the product working meanwhile. None of it was worth anything until
+the request could reach it.

@@ -61,8 +61,25 @@ const PROVIDERS = {
   groq: {
     id: 'groq', label: 'Groq', wire: 'openai',
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'llama-3.3-70b-versatile',
-    models: { fast: 'llama-3.1-8b-instant', quality: 'llama-3.3-70b-versatile' },
+    // VERIFIED AGAINST A REAL GROQ RESPONSE, 2026-09-05. The previous defaults
+    // (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) were written from
+    // memory, never checked, and 404'd: "The model does not exist or you do not
+    // have access to it." Groq had retired the Llama 3.x line. The account's
+    // own /models list, read back by diagnose(), offered exactly two general
+    // text models — these — alongside speech (whisper), text-to-speech
+    // (orpheus), safety classifiers (prompt-guard, safeguard), an
+    // Arabic-first model (allam) and the agentic `groq/compound` systems, none
+    // of which can write a cold email. Re-check here FIRST if AI ever goes
+    // quiet again; a hosted model name is not a stable constant.
+    model: 'openai/gpt-oss-120b',
+    models: { fast: 'openai/gpt-oss-20b', quality: 'openai/gpt-oss-120b' },
+    // gpt-oss models THINK before they answer, and that thinking is billed
+    // against the same `max_tokens` ceiling as the answer. At this app's
+    // ceilings (a 700-token resume extraction, a 1000-token email) a default
+    // reasoning budget can eat the entire allowance and return an EMPTY
+    // message — which looks exactly like a broken provider. 'low' keeps the
+    // reasoning short and leaves the budget for the text we actually want.
+    reasoningModels: /^openai\/gpt-oss/,
   },
   openrouter: {
     id: 'openrouter', label: 'OpenRouter', wire: 'openai',
@@ -97,6 +114,16 @@ function endpointFor(def, baseUrl) {
   if (!root) return null;
   return /\/v1(\/|$)/.test(root) ? `${root.replace(/\/v1$/, '')}/v1/chat/completions`
                                  : `${root}/v1/chat/completions`;
+}
+
+// PURE. Extra body parameters a specific MODEL needs, as opposed to a whole
+// provider. Kept separate and narrow — an unknown parameter is a 400 on some
+// OpenAI-compatible endpoints, so this must never fire on a model that did not
+// ask for it.
+function modelParams(providerId, model) {
+  const def = PROVIDERS[providerId];
+  if (!def || !def.reasoningModels || !def.reasoningModels.test(String(model || ''))) return {};
+  return { reasoning_effort: 'low' };
 }
 
 // PURE. Returns { url, options } ready for fetch, or null if the provider
@@ -138,8 +165,37 @@ function buildRequest(providerId, opts = {}) {
   if (providerId === 'openrouter') headers['X-Title'] = 'PACE';
   return {
     url,
-    options: { method: 'POST', headers, body: JSON.stringify({ model, max_tokens: maxTokens, messages }) },
+    options: {
+      method: 'POST', headers,
+      body: JSON.stringify({ model, max_tokens: maxTokens, messages, ...modelParams(providerId, model) }),
+    },
   };
+}
+
+// PURE. Why did a reply carry no text? "No usable text" is true but useless;
+// a reasoning model that spent its whole allowance thinking and a provider
+// that returned an error object are different problems, and the fix differs.
+// Returns a sentence, or null when the payload did have text.
+function describeEmptyReply(providerId, data) {
+  const def = PROVIDERS[providerId];
+  if (!def || !data || typeof data !== 'object') return 'the provider sent a reply this app could not read at all';
+  if (data.error) {
+    const e = data.error;
+    return 'the provider returned an error: ' + String((e && (e.message || e.code)) || JSON.stringify(e)).slice(0, 200);
+  }
+  if (def.wire !== 'anthropic') {
+    const choice = (data.choices || [])[0] || {};
+    if (choice.finish_reason === 'length') {
+      return 'the answer hit the token ceiling before any of it was written — '
+           + 'typical of a model that reasons first, so lower its reasoning or raise this feature\'s output limit';
+    }
+    if (choice.message && choice.message.reasoning && !choice.message.content) {
+      return 'the model returned only its private reasoning and no answer — its reasoning budget consumed the whole allowance';
+    }
+  } else if (data.stop_reason === 'max_tokens') {
+    return 'the answer hit the token ceiling before any of it was written';
+  }
+  return 'the provider replied, but with no usable text in it';
 }
 
 // PURE. Pulls the text out of either wire format. Returns { text, usage } or
@@ -250,8 +306,9 @@ async function complete(supabase, opts = {}) {
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
       if (!response.ok) throw new Error(await describeHttpError(response));
-      const parsed = parseResponse(entry.id, await response.json());
-      if (!parsed) throw new Error('the provider replied, but with no usable text in it');
+      const payload = await response.json();
+      const parsed = parseResponse(entry.id, payload);
+      if (!parsed) throw new Error(describeEmptyReply(entry.id, payload));
       // Charge the meter with what the provider actually billed, falling back
       // to the estimate when it reports nothing — never to zero, or a provider
       // that omits usage would be free forever.
@@ -430,14 +487,18 @@ async function diagnose(supabase, opts = {}) {
     const started = Date.now();
     const req = buildRequest(entry.id, {
       key: entry.key, baseUrl: entry.baseUrl, model,
-      prompt: 'Reply with the single word: ready', maxTokens: 16,
+      // 16 was enough for a plain chat model and NOT enough for one that
+      // reasons first: it would spend the whole ceiling thinking, return an
+      // empty message, and be reported as broken when it was merely boxed in.
+      prompt: 'Reply with the single word: ready', maxTokens: 256,
     });
     if (!req) return { provider: entry.id, model, tier, ok: false, error: 'could not build a request for this provider' };
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 12000 });
       if (!response.ok) throw new Error(await describeHttpError(response));
-      const parsed = parseResponse(entry.id, await response.json());
-      if (!parsed) throw new Error('the provider replied, but with no usable text in it');
+      const payload = await response.json();
+      const parsed = parseResponse(entry.id, payload);
+      if (!parsed) throw new Error(describeEmptyReply(entry.id, payload));
       return { provider: entry.id, model, tier, ok: true, ms: Date.now() - started, sample: parsed.text.slice(0, 60) };
     } catch (err) {
       // Only on failure, and only once per provider: what CAN this provider run?
@@ -461,7 +522,7 @@ async function diagnose(supabase, opts = {}) {
 
 module.exports = {
   PROVIDERS, PROVIDER_ORDER, AI_TIMEOUT_MS,
-  buildRequest, parseResponse, endpointFor, modelFor,
+  buildRequest, parseResponse, endpointFor, modelFor, modelParams, describeEmptyReply,
   resolveChain, isAvailable, complete, diagnose,
   describeHttpError, getLastError, LAST_ERROR_KEY,
   recordTest, getLastTest, LAST_TEST_KEY, listModels,

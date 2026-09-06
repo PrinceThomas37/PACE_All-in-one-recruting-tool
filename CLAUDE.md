@@ -446,10 +446,33 @@ Session 9). What that means in practice:
   the KEY is accepted — it lists models. It says nothing about whether a
   generation with the model we ask for works, and those two failures have
   identical symptoms.**
-  * **The Groq/OpenRouter model names in `PROVIDERS` were written from memory
-    and have never been verified against a real response** — the dev sandbox
-    cannot reach those hosts. If AI is silently falling back, check the model
-    name FIRST.
+  * **A HOSTED MODEL NAME IS NOT A STABLE CONSTANT, and a wrong one is silent.**
+    Confirmed the hard way (Session 19): Groq's defaults here were written from
+    memory, never verified, and answered `HTTP 404 — The model
+    'llama-3.1-8b-instant' does not exist or you do not have access to it`.
+    Groq had retired the Llama 3.x line; every AI feature had been writing with
+    its rules for as long as the key had been installed. **Groq's are now
+    verified against that account's own `/models` list (2026-09-05):
+    `openai/gpt-oss-20b` fast / `openai/gpt-oss-120b` quality.** OpenRouter's
+    are still unverified — no key is configured, and this sandbox cannot reach
+    either host. **If AI goes quiet, check the model name FIRST**, and use the
+    health card: it prints the models that account really offers.
+  * **A PROVIDER'S CATALOGUE IS NOT A LIST OF WRITERS.** Groq returned whisper
+    (speech-to-text), orpheus (text-to-speech), prompt-guard/safeguard (safety
+    classifiers) and an Arabic-first model alongside the two that can draft an
+    email — and the card's "paste one of these" pointed at all of them equally.
+    It now splits the list (`canWriteText()` in `08-page-admin.js`) and says so
+    plainly when a provider offers no writer at all.
+  * **A REASONING MODEL BILLS ITS THINKING AGAINST `max_tokens`.** gpt-oss
+    thinks before it answers, out of the same ceiling as the answer, so at this
+    app's budgets (700 tokens for a resume parse) it can spend the lot thinking
+    and return an EMPTY message — indistinguishable from a broken provider.
+    `PROVIDERS[id].reasoningModels` marks that family and `modelParams()` sends
+    `reasoning_effort:'low'` to it and **nothing else** (an unknown parameter is
+    a 400 on some OpenAI-compatible endpoints). `describeEmptyReply()` names
+    the three ways an empty reply happens rather than saying "no usable text".
+    The diagnose ping is 256 tokens, not 16, for the same reason — 16 reported
+    a working model as broken.
   * **`diagnose()` TESTS EVERY TIER A FEATURE CAN ASK FOR, not one (Session
     19).** The budget picks `fast` for extraction and `quality` for prose a
     prospect reads, so probing only `fast` can report "AI IS WORKING" while the

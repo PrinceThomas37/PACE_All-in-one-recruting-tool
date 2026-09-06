@@ -235,6 +235,14 @@ function aiBudgetCard(){
 // One line per provider attempt. On a failure it also lists what that provider
 // DOES offer, because "which model should I use instead" is the very next
 // question and the answer is a copy-paste into the model box above.
+// Can this model id write prose? A provider's catalogue mixes chat models with
+// speech, text-to-speech, embedding, reranking and safety-classifier models,
+// and only the first kind is any use to a feature that drafts an email. Matched
+// on the id because that is all a model list gives us — deliberately
+// conservative: an unrecognised id is assumed to be a writer, since a missing
+// suggestion is worse than an extra one.
+var AI_NOT_WRITERS=/whisper|orpheus|\btts\b|text-to-speech|embed|rerank|guard|moderat|vision-ocr/i;
+function canWriteText(id){ return !AI_NOT_WRITERS.test(String(id||'')); }
 // Which features ride on which tier — so a red line names the work that is
 // actually degraded rather than an abstract "quality model".
 var AI_TIER_USE={fast:'resume parsing, job-description cleanup, briefings',
@@ -245,8 +253,23 @@ function attemptLine(a){
   var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span>'+tier+'<br>'+
     htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'));
   if(!a.ok&&a.available_models&&a.available_models.length){
-    head+='<div style="color:var(--text2);margin-top:4px;font-size:11px">This provider currently offers: <span style="color:var(--text3)">'+
-      a.available_models.map(htmlEsc).join(', ')+'</span><br>Paste one of these into the model box on the provider\'s card above and Save.</div>';
+    // NOT every model a provider hosts can write an email. Groq's list came
+    // back with speech-to-text (whisper), text-to-speech (orpheus) and safety
+    // classifiers (prompt-guard, safeguard) sitting alongside the two that can,
+    // and "paste one of these" pointed straight at all of them. Splitting the
+    // list is the difference between an instruction and a trap.
+    var writers=a.available_models.filter(canWriteText);
+    var others=a.available_models.filter(function(m){return !canWriteText(m);});
+    head+='<div style="color:var(--text2);margin-top:6px;font-size:11px;line-height:1.6">';
+    head+=writers.length
+      ? 'Models on this account that can <b>write text</b>: <span style="color:var(--accent);font-weight:600">'+
+        writers.map(htmlEsc).join(', ')+'</span><br>Paste one into the model box on the provider\'s card above and Save.'
+      : 'This account has <b>no text-writing model</b> available — every model it offers is speech, text-to-speech or a safety classifier. A different provider is needed.';
+    if(others.length){
+      head+='<div style="color:var(--text3);margin-top:3px">Also offered, but not usable here (speech, text-to-speech or safety models): '+
+        others.map(htmlEsc).join(', ')+'</div>';
+    }
+    head+='</div>';
   }
   return head+'</div>';
 }

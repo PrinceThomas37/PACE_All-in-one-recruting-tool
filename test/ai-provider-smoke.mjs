@@ -40,7 +40,12 @@ step('groq authenticates with Bearer, not x-api-key',
 step('the system prompt becomes the FIRST MESSAGE, not a field',
   gBody.system === undefined && gBody.messages[0].role === 'system' && gBody.messages[0].content === 'SYS'
   && gBody.messages[1].role === 'user');
-step('groq defaults to a free-tier model', gBody.model === 'llama-3.3-70b-versatile', gBody.model);
+// The NAME is pinned once, with its provenance, further down. What this line
+// tests is that buildRequest falls back to the provider's own default when the
+// caller names no model — so the literal lives in one place and a verified
+// rename does not have to be applied twice.
+step('groq falls back to its own registered default',
+  gBody.model === ai.PROVIDERS.groq.model, gBody.model);
 
 const or = ai.buildRequest('openrouter', { key: 'sk-or-x', prompt: 'HI' });
 step('openrouter posts to its own host', or.url.startsWith('https://openrouter.ai/'), or.url);
@@ -139,7 +144,7 @@ step('choosing a provider whose key is gone falls back to the rest',
 const withModel = await ai.resolveChain(storeOf({ int_groq_api_key: 'gsk', int_groq_model: 'qwen-2.5-32b' }));
 step('a stored model override is carried into the chain', withModel[0].model === 'qwen-2.5-32b');
 step('with no override the provider default is used',
-  (await ai.resolveChain(storeOf({ int_groq_api_key: 'gsk' })))[0].model === 'llama-3.3-70b-versatile');
+  (await ai.resolveChain(storeOf({ int_groq_api_key: 'gsk' })))[0].model === ai.PROVIDERS.groq.model);
 
 // ── THE SEAM: complete() never throws, and null means "use the rules" ────────
 const nothing = await ai.complete(storeOf({}), { prompt: 'hi' });
@@ -187,6 +192,61 @@ const offenders = walk(root)
   .map(f => f.replace(root, ''));
 step('no feature calls a provider directly — everything goes through the seam',
   offenders.length === 0, offenders.join(', '));
+
+// ── GROQ'S MODEL NAMES ARE VERIFIED, NOT REMEMBERED ─────────────────────────
+// The old defaults (`llama-3.3-70b-versatile` / `llama-3.1-8b-instant`) were
+// written from memory and 404'd on the owner's real account: "The model does
+// not exist or you do not have access to it." Every AI feature had been
+// silently writing with its rules ever since. These two came back from that
+// account's own /models list on 2026-09-05.
+{
+  const g = ai.PROVIDERS.groq;
+  step('groq no longer asks for a retired Llama model',
+    !/llama-3\.[13]/.test(JSON.stringify(g)), g.models.fast + ' / ' + g.models.quality);
+  step('groq has a distinct fast and quality model',
+    g.models.fast === 'openai/gpt-oss-20b' && g.models.quality === 'openai/gpt-oss-120b',
+    `${g.models.fast} / ${g.models.quality}`);
+  step('the default model is one of the two tiers',
+    [g.models.fast, g.models.quality].includes(g.model));
+
+  // A reasoning model bills its thinking against the SAME ceiling as the
+  // answer, so at a 700-token resume extraction it can spend the lot thinking
+  // and return an empty message — which is indistinguishable from a broken
+  // provider. Capping the reasoning is what leaves room for the text.
+  const reason = JSON.parse(ai.buildRequest('groq', {
+    key: 'k', model: 'openai/gpt-oss-20b', prompt: 'hi', maxTokens: 700,
+  }).options.body);
+  step('a gpt-oss request caps its reasoning budget', reason.reasoning_effort === 'low');
+
+  // …and only that family. An unknown parameter is a 400 on some
+  // OpenAI-compatible endpoints, so this must never fire uninvited.
+  const plain = JSON.parse(ai.buildRequest('groq', {
+    key: 'k', model: 'qwen/qwen3.6-27b', prompt: 'hi', maxTokens: 700,
+  }).options.body);
+  step('a non-reasoning model is not sent the parameter', plain.reasoning_effort === undefined);
+  const anth = JSON.parse(ai.buildRequest('anthropic', { key: 'k', prompt: 'hi', maxTokens: 700 }).options.body);
+  step('another provider is not sent it either', anth.reasoning_effort === undefined);
+  step('modelParams is pure and reports the same for a bare call',
+    JSON.stringify(ai.modelParams('groq', 'openai/gpt-oss-120b')) === '{"reasoning_effort":"low"}' &&
+    JSON.stringify(ai.modelParams('groq', 'allam-2-7b')) === '{}');
+}
+
+// ── AN EMPTY REPLY MUST NAME ITS OWN CAUSE ──────────────────────────────────
+// "No usable text" is true and useless. A model that reasoned away its whole
+// allowance and a provider returning an error object need different fixes.
+step('a truncated answer says it was truncated',
+  /token ceiling/.test(ai.describeEmptyReply('groq', { choices: [{ finish_reason: 'length', message: { content: '' } }] })));
+step('reasoning-only output is named as such',
+  /private reasoning/.test(ai.describeEmptyReply('groq', { choices: [{ finish_reason: 'stop', message: { content: '', reasoning: 'thinking…' } }] })));
+step("a provider's error object is quoted back",
+  /model_decommissioned/.test(ai.describeEmptyReply('groq', { error: { message: 'model_decommissioned' } })));
+step('an ordinary empty reply still gets the plain sentence',
+  /no usable text/.test(ai.describeEmptyReply('groq', { choices: [{ finish_reason: 'stop', message: { content: '' } }] })));
+
+// The health-check ping must leave a reasoning model room to reach its answer.
+step('the diagnose ping is not capped below a reasoning model\'s needs',
+  /maxTokens: 256/.test(readFileSync(new URL('../services/ai-provider.js', import.meta.url), 'utf8')),
+  '16 was enough for a plain chat model and reported a working one as broken');
 
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
