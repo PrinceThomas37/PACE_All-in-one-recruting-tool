@@ -179,8 +179,8 @@ listed = 0;
 await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
 step('a success does not go asking for a model list', listed === 0);
 globalThis.fetch = realFetch;
-step('the card shows those models with instructions to paste one',
-  page.includes('This provider currently offers') && page.includes('Paste one of these into the model box'));
+step('the card shows the usable models with instructions to paste one',
+  page.includes('can <b>write text</b>') && page.includes('Paste one into the model box'));
 
 // ── 7b. half-working is its own state ────────────────────────────────────────
 // The small model answering and the big one not is the failure that looks most
@@ -194,7 +194,7 @@ step('the card shows those models with instructions to paste one',
       ? { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ready' } }] }) }
       : { ok: false, status: 404, text: async () => '{"error":{"message":"model_decommissioned"}}' };
   };
-  globalThis.fetch = answersOn('llama-3.1-8b-instant');       // fast only
+  globalThis.fetch = answersOn(ai.PROVIDERS.groq.models.fast);   // fast tier only
   const half = await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
   step('one tier up and one tier down is NOT reported as working', half.working === false);
   step('…it is reported as partial', half.partial === true);
@@ -218,6 +218,30 @@ step('the last real feature failure is rendered alongside the test result',
   cardFn.includes('Last time a feature actually asked for text'));
 step('…outside the branch chain, so a test result cannot suppress it',
   cardFn.indexOf('Last time a feature actually asked for text') > cardFn.lastIndexOf('body=panel('));
+
+// ── 7d. "paste one of these" must not point at a speech model ────────────────
+// Groq's real catalogue came back with whisper (speech-to-text), orpheus
+// (text-to-speech) and prompt-guard/safeguard (safety classifiers) sitting
+// alongside the two models that can actually write an email — and the card
+// offered all of them equally. That is an instruction that leads somewhere
+// worse than where you started.
+step('the card separates models that can write text from ones that cannot',
+  /function canWriteText\(/.test(page) && page.includes('can <b>write text</b>'));
+step('…and says so plainly when a provider offers no writer at all',
+  page.includes('no text-writing model'));
+{
+  // The exact list Groq returned for the owner's account, 2026-09-05.
+  const NOT = /whisper|orpheus|\btts\b|text-to-speech|embed|rerank|guard|moderat|vision-ocr/i;
+  const real = ['openai/gpt-oss-20b', 'groq/compound', 'whisper-large-v3', 'whisper-large-v3-turbo',
+    'qwen/qwen3.6-27b', 'canopylabs/orpheus-arabic-saudi', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b',
+    'canopylabs/orpheus-v1-english', 'groq/compound-mini', 'meta-llama/llama-prompt-guard-2-86m',
+    'meta-llama/llama-prompt-guard-2-22m', 'allam-2-7b', 'openai/gpt-oss-safeguard-20b'];
+  const writers = real.filter(m => !NOT.test(m));
+  step('the two models PACE now uses are on that account and pass the filter',
+    writers.includes('openai/gpt-oss-20b') && writers.includes('openai/gpt-oss-120b'));
+  step('every speech, TTS and safety model on it is filtered out',
+    !writers.some(m => /whisper|orpheus|guard/.test(m)), writers.join(', '));
+}
 
 // ── 8. the card cannot be the thing that hides a fault ───────────────────────
 // The owner reported the modal "glitching and showing itself" — a redraw with

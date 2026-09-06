@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-05 (end of Session 19) · **Repo**:
+**Updated**: 2026-09-06 (end of Session 19) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #169 (`688d278`); Session 19's work
-is on `claude/groq-ai-mobile-ui-tblkg9`, **not yet merged**
+to `main` IS the release · **Last merged**: #170 (`135821c`, the AI test button
++ the phone). The Groq model-name fix is on `claude/groq-ai-mobile-ui-tblkg9`.
 
 ---
 
@@ -123,14 +123,16 @@ every load of the Compose tab (#162 fixed it).
 
 ## ⏭ PICK THIS UP FIRST (Session 20)
 
-**1. Ask the owner to open Admin → Integrations and read the card.** It now
-actually runs — that is the change. The card self-runs on open, no click.
-- 🟢 green → AI is live; move to the comparison below.
-- 🟡 amber "half working" → one model name is wrong. The card prints the models
-  Groq DOES offer; the fix is one paste into that provider's model box.
-- 🔴 red → the provider's own message names the fix. Leading suspect is still
-  that the Groq/OpenRouter model names in `PROVIDERS` were written from memory
-  and have never met a real response (this sandbox cannot reach those hosts).
+**1. ANSWERED — the model name was the bug, and it is fixed.** The card's first
+working run said: `HTTP 404 — The model 'llama-3.1-8b-instant' does not exist
+or you do not have access to it.` Groq had retired the Llama 3.x line, so every
+AI feature had been writing with its rules for as long as the key had been
+installed. Defaults are now `openai/gpt-oss-20b` / `openai/gpt-oss-120b`,
+verified against that account's own `/models` list. **What is still unconfirmed
+is whether a generation now SUCCEEDS** — this sandbox cannot reach
+`api.groq.com`, so the card has to say so once more after the deploy. If it is
+still red, the message names the next fix; a 400 on `reasoning_effort` is the
+one thing added blind this session.
 
 **2. Then: free model vs the rules writer, side by side, on a real posting.**
 The six prompts were written for Claude; free open models follow tone

@@ -63,10 +63,16 @@ step('the defaults sit under a typical free daily allowance',
   budget.DEFAULT_DAILY_TOKENS <= 200000 && budget.DEFAULT_DAILY_CALLS <= 500);
 
 // ── model tiering per provider ───────────────────────────────────────────────
+// The model NAMES are pinned once, with their provenance, in
+// test/ai-provider-smoke.mjs. What matters HERE is the tiering itself: that
+// extraction and prose get genuinely different models, and that the cheap one
+// is the one doing the extraction.
+step('groq extraction and prose use different models',
+  ai.modelFor({ id: 'groq' }, 'fast') !== ai.modelFor({ id: 'groq' }, 'quality'));
 step('groq extraction uses the small fast model',
-  ai.modelFor({ id: 'groq' }, 'fast') === 'llama-3.1-8b-instant');
+  ai.modelFor({ id: 'groq' }, 'fast') === ai.PROVIDERS.groq.models.fast);
 step('groq prose uses the bigger model',
-  ai.modelFor({ id: 'groq' }, 'quality') === 'llama-3.3-70b-versatile');
+  ai.modelFor({ id: 'groq' }, 'quality') === ai.PROVIDERS.groq.models.quality);
 step('openrouter tiers stay on free models',
   ai.modelFor({ id: 'openrouter' }, 'fast').endsWith(':free') && ai.modelFor({ id: 'openrouter' }, 'quality').endsWith(':free'));
 step("an admin's typed model beats the tier — they meant it",
@@ -104,7 +110,11 @@ const r1 = await ai.complete(makeStore(rows1), { feature: 'resume_parse', prompt
 step('a huge input is trimmed before it leaves the building',
   budget.estimateTokens(sent.messages[0].content) <= budget.FEATURES.resume_parse.in + 20,
   budget.estimateTokens(sent.messages[0].content) + ' tokens sent');
-step('resume parsing goes to the small model', sent.model === 'llama-3.1-8b-instant', sent.model);
+step('resume parsing goes to the small model', sent.model === ai.PROVIDERS.groq.models.fast, sent.model);
+// A reasoning model bills its thinking against this same 700-token ceiling, so
+// leaving the reasoning uncapped here is how a resume parse comes back empty.
+step('…with its reasoning capped so the 700 tokens go on the answer',
+  sent.reasoning_effort === 'low' || !ai.PROVIDERS.groq.reasoningModels.test(sent.model));
 step('the answer length is capped at the feature ceiling', sent.max_tokens === 700, String(sent.max_tokens));
 step('the call reports which tier ran', r1 && r1.tier === 'fast');
 step('a request over the feature ceiling is clamped down, never up',
