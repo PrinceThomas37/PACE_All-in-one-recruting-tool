@@ -383,7 +383,10 @@
     if (f.size > 4.5*1024*1024){ showToast('File too large (max ~4.5 MB)','error'); return; }
     var r = new FileReader();
     r.onload = function(){
-      STATE.ats._resumeStash = { name:f.name, type:f.type||'application/octet-stream', data:String(r.result) };
+      // The size the BROWSER read, carried alongside the bytes. The server
+      // compares it with what arrived, so an upload that loses its tail says
+      // so in bytes instead of surfacing as pdf.js's "Invalid PDF structure".
+      STATE.ats._resumeStash = { name:f.name, size:f.size, type:f.type||'application/octet-stream', data:String(r.result) };
       atsDoParse(STATE.ats._resumeStash);
     };
     r.onerror = function(){ showToast('Could not read file','error'); };
@@ -391,7 +394,7 @@
   };
   function atsDoParse(stash){
     showToast('Parsing resume…','info');
-    apiPost('/candidates/parse-resume', { filename:stash.name, content_type:stash.type, data_base64:stash.data })
+    apiPost('/candidates/parse-resume', { filename:stash.name, size:stash.size, content_type:stash.type, data_base64:stash.data })
       .then(function(r){
         var flds = (r&&r.fields)||{};
         var form = STATE.ats.form;

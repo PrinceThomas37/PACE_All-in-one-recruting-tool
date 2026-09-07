@@ -79,7 +79,7 @@
     showToast('Formatting resume…','success');
     var reader = new FileReader();
     reader.onload = function(){
-      apiPost('/candidates/parse-resume', { filename: file.name, data_base64: String(reader.result) })
+      apiPost('/candidates/parse-resume', { filename: file.name, size: file.size, data_base64: String(reader.result) })
         .then(function(r){
           var flds = (r&&r.fields)||{};
           var html = docHtml(flds, (r&&r.resume_text)||'', file.name);

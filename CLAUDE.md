@@ -238,6 +238,31 @@ we never have to rewrite to grow (see "Growth bets" below).
     Reflow, never shrink: touch targets get BIGGER (40-44px), inputs are 16px
     so iOS does not zoom on focus and never zoom back, and text wraps rather
     than being scaled down.
+- **RESUME PARSING FAILS IN FIVE DIFFERENT WAYS AND MUST SAY WHICH
+  (Session 19).** `pdf-parse` bundles pdf.js v1.10 (2018), which throws
+  `Invalid PDF structure` **only from its RECOVERY pass** — the one that runs
+  after the normal read already failed, and that can only rescue a file
+  carrying an old-style `trailer` dictionary. A modern PDF (1.5+) keeps its
+  index in a compressed cross-reference STREAM, so the same damage a 2010-era
+  file shrugs off is fatal to a 2024 one: measured, losing **0.1%** of either
+  fixture in `test/fixtures/resumes/` reproduces it exactly, while a
+  classic-trailer resume survived. That is why two resumes failed and a third
+  went through, and why the error named neither cause nor cure.
+  * **`describePdfFailure()` (PURE, in `resume-parser.js`) separates the five
+    real cases** — empty, not-a-PDF-inside, cut short, password-protected,
+    and intact-but-unreadable — and never repeats pdf.js's jargon at a
+    recruiter. The library's own words survive on `err.cause` for the record.
+  * **THE UPLOAD CHECKS ITSELF.** The browser knows how many bytes it read and
+    now sends `size`; the server compares it with what arrived and reports a
+    shortfall **in bytes**. A declared size is a HINT, never a gate — an older
+    cached page sends none and must keep working.
+  * **A failure is recorded to `app_settings` under `resume_parse_last_error`**
+    (one row, overwritten; same shape and reasoning as `ai_last_error`), so a
+    fault nobody can reproduce is still readable from the database instead of
+    being transcribed by the owner. Best-effort: the record must never be the
+    reason an upload fails.
+  * **The data-URL strip is `/^data:[^,]*;base64,/`, not `.*`** — a greedy `.*`
+    is a silent corruption waiting for a payload that contains a comma.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before
@@ -255,7 +280,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **58** suites via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **59** suites via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it

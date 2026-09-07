@@ -21,13 +21,68 @@ function tryRequire(name) { try { return require(name); } catch (_) { return nul
 
 const MAX_TEXT_CHARS = 20000;   // plenty for any resume; caps AI cost
 
+// ── what actually went wrong with a PDF ─────────────────────────────────────
+// PURE (buffer + the library's error → one sentence a recruiter can act on).
+//
+// pdf.js speaks its own language: "Invalid PDF structure" is what it throws
+// after its RECOVERY pass fails, and that pass can only rescue a file carrying
+// an old-style `trailer` dictionary. A modern PDF (1.5+) stores its index as a
+// compressed cross-reference STREAM instead, so the same damage that a 2010-era
+// PDF shrugs off kills a 2024 one — which is exactly why two resumes failed
+// here and a third went through. The recruiter reading that sentence can do
+// nothing with it, and neither can anyone supporting them.
+//
+// So before repeating the library's words, look at the bytes and say which of
+// the five real situations this is.
+function describePdfFailure(buffer, err) {
+  const len = buffer ? buffer.length : 0;
+  const head = buffer ? buffer.subarray(0, 1024).toString('latin1') : '';
+  const tail = buffer ? buffer.subarray(Math.max(0, len - 2048)).toString('latin1') : '';
+  const raw = String((err && err.message) || err || '').trim();
+
+  if (!len) return 'The file arrived empty. Please choose it again and retry.';
+  if (!head.includes('%PDF-')) {
+    return 'This file is not a PDF inside, whatever its name says — it may be a '
+         + 'Word document or an image that was renamed. Re-save it as a PDF, or '
+         + 'upload the original .docx.';
+  }
+  // A PDF's index lives at the END of the file. No %%EOF means the last bytes
+  // never arrived, which is upload damage rather than anything wrong with the
+  // document — and it is the one cause the person can fix by trying again.
+  if (!tail.includes('%%EOF')) {
+    return 'The upload was cut short — the end of the file is missing, so there '
+         + 'is no index to read it by. Please try attaching it again.';
+  }
+  if (/\/Encrypt\b/.test(tail) || /\/Encrypt\b/.test(head)) {
+    return 'This PDF is password-protected, so its text cannot be read. Save an '
+         + 'unprotected copy and upload that.';
+  }
+  if (/invalid pdf structure|xref|startxref/i.test(raw)) {
+    return 'This PDF\'s internal index could not be read. That usually means the '
+         + 'file was damaged in transit — try attaching it again. If it still '
+         + 'fails, open it and re-save (or "Print to PDF") and upload that copy. '
+         + 'You can also just fill the form in by hand; the file still attaches.';
+  }
+  return 'This PDF could not be read (' + raw.slice(0, 120) + '). Re-saving it as '
+       + 'a fresh PDF usually fixes it, and you can always fill the form in by hand.';
+}
+
 // ── text extraction ─────────────────────────────────────────────────────────
 async function extractResumeText(buffer, filename) {
   const name = String(filename || '').toLowerCase();
   if (name.endsWith('.pdf')) {
     const pdfParse = tryRequire('pdf-parse');
     if (!pdfParse) throw new Error('PDF support not installed on the server.');
-    const out = await pdfParse(buffer);
+    let out;
+    try {
+      out = await pdfParse(buffer);
+    } catch (err) {
+      // Keep the library's own words on `cause` for the diagnostic record; the
+      // MESSAGE is the one the recruiter sees.
+      const friendly = new Error(describePdfFailure(buffer, err));
+      friendly.cause = err;
+      throw friendly;
+    }
     return String(out.text || '');
   }
   if (name.endsWith('.docx')) {
@@ -134,7 +189,14 @@ ${String(text || '').slice(0, MAX_TEXT_CHARS)}`;
 // ── entry point ─────────────────────────────────────────────────────────────
 async function parseResume(buffer, filename, store, orgId) {
   const text = (await extractResumeText(buffer, filename)).replace(/\r/g, '').trim();
-  if (!text || text.length < 40) throw new Error('Could not read any text from this file.');
+  // A PDF that opens fine and yields nothing is almost always a SCAN — a
+  // photograph of a document, with no text layer to read. "Could not read any
+  // text" reads like a bug; saying what it is turns it into a decision.
+  if (!text || text.length < 40) {
+    throw new Error('No text could be read from this file. If it is a scan or a '
+      + 'photo of a resume there is nothing to extract — ask for the original '
+      + 'document, or fill the form in by hand. The file still attaches either way.');
+  }
   const ai = await parseResumeAI(text, store, orgId);
   const rules = parseResumeRules(text);
   // AI wins where it answered; rules fill the gaps (and are the whole answer without a key)
@@ -142,4 +204,4 @@ async function parseResume(buffer, filename, store, orgId) {
   return { fields, used_ai: !!ai, text: text.slice(0, MAX_TEXT_CHARS) };
 }
 
-module.exports = { parseResume, parseResumeRules, extractResumeText };
+module.exports = { parseResume, parseResumeRules, extractResumeText, describePdfFailure };
