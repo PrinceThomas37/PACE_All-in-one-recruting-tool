@@ -117,7 +117,14 @@ module.exports = (ctx) => {
   router.post('/admin/integrations/ai-test', auth, async (req, res) => {
     try {
       if (!admin(req, res)) return;
-      res.json(await aiProvider.diagnose(supabase, { tier: (req.body && req.body.tier) || 'fast' }));
+      // NO DEFAULT TIER. diagnose() probes every model a feature can ask for
+      // when it is given none — and a `|| 'fast'` here silently collapsed that
+      // back to one, which is how the card reported "AI IS WORKING" on the
+      // strength of the small model alone while the QUALITY model, the one the
+      // outreach generator sends to a customer's prospects, had never once been
+      // called. A caller may still pin a single tier deliberately.
+      const tier = req.body && req.body.tier;
+      res.json(await aiProvider.diagnose(supabase, tier ? { tier } : {}));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

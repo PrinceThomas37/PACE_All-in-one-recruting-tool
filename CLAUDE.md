@@ -498,6 +498,15 @@ Session 9). What that means in practice:
     the three ways an empty reply happens rather than saying "no usable text".
     The diagnose ping is 256 tokens, not 16, for the same reason — 16 reported
     a working model as broken.
+  * **NOTHING MAY DEFAULT `diagnose()`'s TIER.** It probes every model a
+    feature can ask for when given none, and `routes/integrations.js` passed
+    `tier: req.body.tier || 'fast'` — so `opts.tier` was always set and the
+    two-tier probe never ran once in production. Caught from the live database,
+    which had stored `"tiers":["fast"]` and a single attempt under a green
+    "AI IS WORKING": the quality model, the one the outreach generator sends to
+    a customer's prospects, had never been called. **A default that silently
+    disables a check is worse than no check** — it reports success it did not
+    earn.
   * **`diagnose()` TESTS EVERY TIER A FEATURE CAN ASK FOR, not one (Session
     19).** The budget picks `fast` for extraction and `quality` for prose a
     prospect reads, so probing only `fast` can report "AI IS WORKING" while the
