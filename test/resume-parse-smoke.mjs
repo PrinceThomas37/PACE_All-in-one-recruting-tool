@@ -75,6 +75,40 @@ for (const [k, buf] of Object.entries(bytes)) {
     String(fields.skills || '').split(',').length >= 3, fields.skills);
 }
 
+// ── 2b. THE READER MUST BE ONE THAT WORKS ON THE NODE WE DEPLOY ─────────────
+// The whole fault was here. `pdf-parse` bundles pdf.js **v1.10.100 from 2018**;
+// Render runs **Node 26**. On Node 26 that build misreads a compressed
+// cross-reference stream — it hits plain text where it expects zlib
+// (`Unknown compression method in flate stream: 111, 32`, those bytes being
+// the characters "o "), falls into recovery, and recovery only rescues a PDF
+// with a classic `trailer`. Measured on these exact files:
+//
+//                          Node 22 (dev)   Node 26 (Render)
+//   both fixtures               ok              FAIL
+//   the classic-trailer resume  ok              ok
+//
+// That is why it looked intermittent and why the sandbox could never
+// reproduce it. So a maintained reader leads, and pdf-parse is only a
+// fallback.
+{
+  const src = readFileSync(join(ROOT, 'resume-parser.js'), 'utf8');
+  step('a maintained reader is tried FIRST', /pdfTextViaModernReader\(buffer\)/.test(src) &&
+    src.indexOf('pdfTextViaModernReader(buffer)') < src.indexOf("tryRequire('pdf-parse')"));
+  step('…and the 2018 one is kept only as a second chance',
+    /keep the first reason/.test(src));
+  step('the buffer is COPIED before being handed over', /new Uint8Array\(buffer\)/.test(src),
+    'pdf.js takes ownership, and a Node Buffer can be a window onto a shared pool');
+  step('the reader is imported lazily, off the boot path',
+    /await import\('unpdf'\)/.test(src));
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  step('the dependency is declared', !!pkg.dependencies.unpdf, pkg.dependencies.unpdf);
+  // 37MB of pdfjs-dist plus optional native canvas binaries buys only page
+  // RENDERING, which nothing here does — and every megabyte is paid for again
+  // on each free-tier cold start.
+  step('…and it is the light one, since this never renders a page to an image',
+    !pkg.dependencies['pdfjs-dist']);
+}
+
 // ── 3. THE SENTENCE A RECRUITER SEES ─────────────────────────────────────────
 const INVALID = new Error('Invalid PDF structure');
 
@@ -98,13 +132,19 @@ step('a password-protected PDF is named, not guessed at',
     Buffer.from('%PDF-1.7\n...\n/Encrypt 5 0 R\n%%EOF'), INVALID)));
 
 {
-  // Intact bytes, library still refused: do not blame the upload, and give the
-  // two ways out (re-save, or type it in).
+  // Intact bytes, library still refused. The FIRST version of this sentence
+  // said "damaged in transit" — and the failure record then proved the file
+  // arrived byte-perfect (14,241 declared, 14,241 received, %%EOF present) and
+  // the READER was at fault. A confident wrong diagnosis sends someone off
+  // re-uploading a good file, so this branch must never blame the upload.
   const msg = describePdfFailure(bytes.pm, INVALID);
-  step('an intact file that still fails suggests re-saving it', /re-save/i.test(msg), msg.slice(0, 60));
+  step('an intact file that still fails does NOT blame the upload',
+    !/damaged|transit|cut short|try attaching it again/i.test(msg), msg.slice(0, 70));
+  step('…it says the file itself is fine', /file itself is fine/i.test(msg));
+  step('…and suggests re-saving it', /re-sav/i.test(msg));
   step('…and says the form can still be filled in by hand', /by hand/i.test(msg));
   step('…and never repeats the library\'s own jargon at the user',
-    !/invalid pdf structure|xref|startxref/i.test(msg));
+    !/invalid pdf structure|xref|startxref|flate/i.test(msg));
 }
 
 step('an unrecognised library error still quotes it rather than swallowing it',

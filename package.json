@@ -23,7 +23,8 @@
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.8.0",
     "nodemailer": "^6.9.7",
-    "pdf-parse": "^1.1.1"
+    "pdf-parse": "^1.1.1",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1"

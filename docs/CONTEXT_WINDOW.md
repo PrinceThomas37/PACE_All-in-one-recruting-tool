@@ -4,11 +4,12 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-06 (end of Session 19) · **Repo**:
+**Updated**: 2026-09-07 (end of Session 19) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #170 (`135821c`, the AI test button
-+ the phone). The Groq model-name fix is on `claude/groq-ai-mobile-ui-tblkg9`.
+to `main` IS the release · **Last merged**: #173. **AI is confirmed live**
+(Groq, `openai/gpt-oss-20b`, 250ms). The PDF-reader and reasoning-headroom
+fixes are on `claude/groq-ai-mobile-ui-tblkg9`.
 
 ---
 
@@ -95,6 +96,27 @@ overflow that no longer drags is one that is clipped and gone.
 
 A latent DESKTOP bug fell out: `UI.ic()` inside a `.btn` had no size rule, so
 those icons were **0×0 and invisible on desktop** (75px tall on a phone).
+
+## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26. READ THIS BEFORE DEBUGGING.
+
+It cost most of a session. Resume parsing failed in production while every file
+parsed perfectly here — same library, same lockfile, same bytes (proven:
+14,241 declared, 14,241 received, `%%EOF` intact). The difference was the
+RUNTIME. `pdf-parse` bundles a 2018 pdf.js that misreads compressed PDFs on
+Node 26.
+
+**When something works here and fails there, get the server's Node and re-run
+before theorising.** `nodejs.org` IS reachable from this sandbox (unlike
+`*.onrender.com`):
+
+```
+curl -sS -o /tmp/n.tar.xz https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz
+mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
+```
+
+The suite passes on both today — **keep it that way**, and check both before
+merging anything that touches a parsing or binary path.
 
 ## ⚠ AI IS WIRED IN 6 PLACES BUT REACHABLE IN 4
 

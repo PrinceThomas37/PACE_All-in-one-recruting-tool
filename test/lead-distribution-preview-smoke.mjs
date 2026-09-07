@@ -68,6 +68,31 @@ step('execute is handed the same ratio object the preview rendered',
 step('the preview total comes from that same object',
   page.includes("Distribution preview \\u2014 '+ratio.total_to_send"));
 
+// ── "IT ANSWERED UNUSABLY" IS A THIRD STATE, NOT THE FIRST ──────────────────
+// The route's JSON.parse threw into the outer catch, which returned the rules
+// split — and the page then said "No AI provider answered" while the daily
+// meter showed the tokens spent on it. A contradiction the user was left to
+// resolve alone. gpt-oss reasons before answering out of the same token
+// ceiling, so at lead distribution's 400 the reply arrived truncated.
+{
+  const idx = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+  const handler = idx.slice(idx.indexOf("'/distribute/generate-ratio'"), idx.indexOf('graphMailRequest'));
+  step('an unusable answer is not silently treated as "no answer"',
+    /ai_unusable: true/.test(handler));
+  step('…and the reason is recorded where it can be read back',
+    /recordFailure\(supabase, 'lead_ratio'/.test(handler));
+  step('…keeping the tail of what the model actually said',
+    /String\(out\.text \|\| ''\)\.slice\(-120\)/.test(handler));
+  step('a genuinely absent provider still short-circuits first',
+    handler.indexOf('if (!out) return') < handler.indexOf('ai_unusable'));
+
+  const page = readFileSync(new URL('../public/js/19-distribution.js', import.meta.url), 'utf8');
+  step('the page tells the two apart', /ratio\.ai_unusable/.test(page));
+  step('…and says the truncation one in plain words',
+    /answered but its reply was cut short/.test(page));
+  step('…without claiming nothing answered', /nothing was lost/.test(page));
+}
+
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

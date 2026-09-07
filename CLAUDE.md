@@ -238,24 +238,52 @@ we never have to rewrite to grow (see "Growth bets" below).
     Reflow, never shrink: touch targets get BIGGER (40-44px), inputs are 16px
     so iOS does not zoom on focus and never zoom back, and text wraps rather
     than being scaled down.
+- **⚠ THE SANDBOX RUNS NODE 22. RENDER RUNS NODE 26. A WHOLE CLASS OF BUG IS
+  INVISIBLE HERE (Session 19).** This cost a session. Resume parsing failed in
+  production and every file parsed perfectly in the sandbox — same library,
+  same lockfile version, same bytes (proven: 14,241 declared, 14,241 received,
+  `%%EOF` intact). The difference was the RUNTIME, and the failure record only
+  became diagnosable because it stamps `process.version`.
+  **When something works here and fails there, get the server's Node and re-run
+  before theorising.** `curl -sS https://nodejs.org/dist/v<VER>/node-v<VER>-linux-x64.tar.xz`
+  is reachable from this sandbox; extract it and run `test/run-all.mjs` with it.
+  The whole suite passes on both today — keep it that way.
+- **RESUME PARSING USES A MAINTAINED READER, NOT `pdf-parse` (Session 19).**
+  `pdf-parse@1.1.1` bundles pdf.js **v1.10.100, built in 2018**. On **Node 26**
+  that build misreads a COMPRESSED cross-reference stream — it hits plain text
+  where it expects zlib (`Unknown compression method in flate stream: 111, 32`,
+  those bytes being the characters `"o "`), falls into its recovery pass, and
+  that pass only rescues a PDF carrying an old-style `trailer`. So a modern
+  resume failed and an older one went through, from the same upload path, on
+  the same server. Measured on three real files:
+
+  | | Node 22 (sandbox) | Node 26 (Render) |
+  |---|---|---|
+  | two xref-stream resumes | ok | **FAIL** |
+  | one classic-trailer resume | ok | ok |
+
+  It was never intermittent — it depends on which tool generated the PDF.
+  **`unpdf` now leads** (a current pdf.js packaged for servers) with `pdf-parse`
+  kept only as a second chance. `unpdf` was chosen over `pdfjs-dist` on
+  identical output: **2.6MB against 37MB plus optional native canvas binaries**,
+  and the extra 34MB buys only page RENDERING, which nothing here does — weight
+  that would be re-downloaded every build and paid for on every free-tier cold
+  start. Imported lazily, so it costs nothing until a PDF actually arrives.
 - **RESUME PARSING FAILS IN FIVE DIFFERENT WAYS AND MUST SAY WHICH
-  (Session 19).** `pdf-parse` bundles pdf.js v1.10 (2018), which throws
-  `Invalid PDF structure` **only from its RECOVERY pass** — the one that runs
-  after the normal read already failed, and that can only rescue a file
-  carrying an old-style `trailer` dictionary. A modern PDF (1.5+) keeps its
-  index in a compressed cross-reference STREAM, so the same damage a 2010-era
-  file shrugs off is fatal to a 2024 one: measured, losing **0.1%** of either
-  fixture in `test/fixtures/resumes/` reproduces it exactly, while a
-  classic-trailer resume survived. That is why two resumes failed and a third
-  went through, and why the error named neither cause nor cure.
+  (Session 19).** `Invalid PDF structure` names neither cause nor cure.
   * **`describePdfFailure()` (PURE, in `resume-parser.js`) separates the five
     real cases** — empty, not-a-PDF-inside, cut short, password-protected,
     and intact-but-unreadable — and never repeats pdf.js's jargon at a
     recruiter. The library's own words survive on `err.cause` for the record.
-  * **THE UPLOAD CHECKS ITSELF.** The browser knows how many bytes it read and
-    now sends `size`; the server compares it with what arrived and reports a
-    shortfall **in bytes**. A declared size is a HINT, never a gate — an older
-    cached page sends none and must keep working.
+  * **THE UPLOAD CHECKS ITSELF, AND IT PROVED THE UPLOAD WAS INNOCENT.** The
+    browser sends the byte count it read; the server compares. The first
+    version of the "intact but unreadable" sentence blamed the upload —
+    *"damaged in transit"* — and the very first record disproved it. **Never
+    let a diagnosis sound more certain than the evidence**: a confident wrong
+    message sends someone off re-uploading a perfectly good file. The `%%EOF`
+    check owns "cut short"; the other branch says "this reader could not open
+    it", which is a different fix. A declared size is a HINT, never a gate —
+    an older cached page sends none and must keep working.
   * **A failure is recorded to `app_settings` under `resume_parse_last_error`**
     (one row, overwritten; same shape and reasoning as `ai_last_error`), so a
     fault nobody can reproduce is still readable from the database instead of
@@ -488,6 +516,21 @@ Session 9). What that means in practice:
     email — and the card's "paste one of these" pointed at all of them equally.
     It now splits the list (`canWriteText()` in `08-page-admin.js`) and says so
     plainly when a provider offers no writer at all.
+  * **A REASONING MODEL NEEDS HEADROOM ON TOP OF THE FEATURE'S CEILING.**
+    `answerCeiling()` adds `REASONING_HEADROOM` (512) for a model matching
+    `PROVIDERS[id].reasoningModels`, and the budget estimates on what is
+    actually sent. Without it, lead distribution's 400-token ceiling produced
+    **truncated JSON**: billed (2,049 tokens on the meter), unparseable, and
+    reported to the user as "no AI provider answered". The FEATURE still
+    declares how long an ANSWER may be; the provider layer adds what the model
+    needs to reach one.
+  * **"IT ANSWERED UNUSABLY" IS A THIRD STATE, NOT "IT DID NOT ANSWER".**
+    `/distribute/generate-ratio`'s `JSON.parse` threw into the outer catch,
+    which returned the rules split under a banner reading "No AI provider
+    answered" — while the meter showed the tokens spent. A user should never
+    have to reconcile two screens of the app contradicting each other. The
+    route now returns `ai_unusable` and records the tail of what the model
+    really said.
   * **A REASONING MODEL BILLS ITS THINKING AGAINST `max_tokens`.** gpt-oss
     thinks before it answers, out of the same ceiling as the answer, so at this
     app's budgets (700 tokens for a resume parse) it can spend the lot thinking

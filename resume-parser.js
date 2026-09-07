@@ -57,33 +57,85 @@ function describePdfFailure(buffer, err) {
     return 'This PDF is password-protected, so its text cannot be read. Save an '
          + 'unprotected copy and upload that.';
   }
-  if (/invalid pdf structure|xref|startxref/i.test(raw)) {
-    return 'This PDF\'s internal index could not be read. That usually means the '
-         + 'file was damaged in transit — try attaching it again. If it still '
-         + 'fails, open it and re-save (or "Print to PDF") and upload that copy. '
-         + 'You can also just fill the form in by hand; the file still attaches.';
+  // DO NOT BLAME THE UPLOAD HERE. The first version of this sentence said
+  // "damaged in transit", and the failure record then proved the opposite:
+  // 14,241 bytes declared, 14,241 received, header and %%EOF both intact. The
+  // file was perfect and the READER was wrong (a 2018 pdf.js on Node 26). A
+  // confident wrong diagnosis sends someone off re-uploading a good file, so
+  // the tail check above owns "cut short" and this branch owns "we could not
+  // read it", which is a different sentence and a different fix.
+  if (/invalid pdf structure|xref|startxref|flate|compression/i.test(raw)) {
+    return 'This PDF is built in a way this reader could not open. The file '
+         + 'itself is fine — opening it and re-saving (or "Print to PDF") '
+         + 'produces a copy that reads. You can also just fill the form in by '
+         + 'hand; the resume still attaches either way.';
   }
   return 'This PDF could not be read (' + raw.slice(0, 120) + '). Re-saving it as '
        + 'a fresh PDF usually fixes it, and you can always fill the form in by hand.';
+}
+
+// ── PDF text, from a library that works on the Node we actually run ─────────
+//
+// WHY THIS IS NOT JUST pdf-parse ANY MORE (Session 19, reproduced exactly)
+// `pdf-parse@1.1.1` bundles pdf.js **v1.10.100, built in 2018**. Render runs
+// **Node 26**. On Node 26 that build misreads a COMPRESSED cross-reference
+// stream — it reads plain text where it expects zlib and dies with
+// `Unknown compression method in flate stream: 111, 32` (those bytes are the
+// characters "o "), falls into its recovery pass, and that pass can only
+// rescue a PDF with an old-style `trailer`. So a modern resume failed and an
+// older one went through, on the same server, from the same upload path.
+// Measured on the three real files the owner sent:
+//
+//                       Node 22 (dev)   Node 26 (Render)
+//   xref-stream resume       ok              FAIL
+//   xref-stream resume       ok              FAIL
+//   classic-trailer resume   ok              ok
+//
+// That is why it could never be reproduced in the sandbox, and why it looked
+// intermittent: it is not chance, it is which tool generated the PDF.
+//
+// `unpdf` is a current pdf.js packaged for servers — it reads all three files
+// on Node 26, character for character the same as pdfjs-dist does, in **2.6MB
+// instead of 37MB and with no optional native canvas binaries**. That matters
+// on a free tier where cold starts are already the tax we pay: the weight is
+// downloaded on every build and paid for on every wake, and nothing here ever
+// renders a page to an image, which is the only thing the extra 34MB buys.
+//
+// It leads; pdf-parse stays as a second chance, because resumes arrive from
+// everywhere and a file one reader rejects the other sometimes takes. ESM, so
+// the import is dynamic — which also keeps it off the boot path and out of
+// memory entirely until someone actually uploads a PDF.
+async function pdfTextViaModernReader(buffer) {
+  const { getDocumentProxy, extractText } = await import('unpdf');
+  // A COPY, not a view: pdf.js takes ownership of the array it is handed, and
+  // a Node Buffer can be a window onto a shared pool.
+  const doc = await getDocumentProxy(new Uint8Array(buffer));
+  const { text } = await extractText(doc, { mergePages: true });
+  return String(text || '');
 }
 
 // ── text extraction ─────────────────────────────────────────────────────────
 async function extractResumeText(buffer, filename) {
   const name = String(filename || '').toLowerCase();
   if (name.endsWith('.pdf')) {
-    const pdfParse = tryRequire('pdf-parse');
-    if (!pdfParse) throw new Error('PDF support not installed on the server.');
-    let out;
+    let firstError = null;
     try {
-      out = await pdfParse(buffer);
-    } catch (err) {
-      // Keep the library's own words on `cause` for the diagnostic record; the
-      // MESSAGE is the one the recruiter sees.
-      const friendly = new Error(describePdfFailure(buffer, err));
-      friendly.cause = err;
-      throw friendly;
+      const text = await pdfTextViaModernReader(buffer);
+      if (String(text || '').trim()) return String(text);
+      // No text is not an error here — it is probably a scan, and parseResume
+      // says so. Fall through anyway in case the older reader finds something.
+      firstError = new Error('no text layer found');
+    } catch (err) { firstError = err; }
+
+    const pdfParse = tryRequire('pdf-parse');
+    if (pdfParse) {
+      try { return String((await pdfParse(buffer)).text || ''); } catch (_) { /* keep the first reason */ }
     }
-    return String(out.text || '');
+    // Keep the library's own words on `cause` for the diagnostic record; the
+    // MESSAGE is the one the recruiter sees.
+    const friendly = new Error(describePdfFailure(buffer, firstError));
+    friendly.cause = firstError;
+    throw friendly;
   }
   if (name.endsWith('.docx')) {
     const mammoth = tryRequire('mammoth');

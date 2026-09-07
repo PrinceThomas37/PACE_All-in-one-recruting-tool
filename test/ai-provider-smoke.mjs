@@ -231,6 +231,34 @@ step('no feature calls a provider directly — everything goes through the seam'
     JSON.stringify(ai.modelParams('groq', 'allam-2-7b')) === '{}');
 }
 
+// ── A REASONING MODEL NEEDS ROOM TO REACH ITS ANSWER ────────────────────────
+// Its thinking is billed against the SAME max_tokens as the answer. At lead
+// distribution's 400-token ceiling that produced truncated JSON: billed (the
+// meter showed 2,049 tokens), unparseable, and reported to the user as "no AI
+// provider answered". The FEATURE still declares how long an answer may be;
+// the provider layer adds what the model needs to get there.
+step('a reasoning model is given headroom above the feature ceiling',
+  ai.answerCeiling('groq', 'openai/gpt-oss-20b', 400) === 400 + ai.REASONING_HEADROOM,
+  String(ai.answerCeiling('groq', 'openai/gpt-oss-20b', 400)));
+step('a non-reasoning model on the same provider gets exactly what was asked',
+  ai.answerCeiling('groq', 'qwen/qwen3.6-27b', 400) === 400);
+step('another provider is unaffected',
+  ai.answerCeiling('anthropic', 'claude-sonnet-4-20250514', 400) === 400);
+step('the headroom is enough to be worth having', ai.REASONING_HEADROOM >= 256);
+{
+  // …and it must reach the wire, not just exist as a function.
+  const realFetch2 = globalThis.fetch;
+  let sentMax = null;
+  globalThis.fetch = async (_u, o) => {
+    sentMax = JSON.parse(o.body).max_tokens;
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ok' } }] }) };
+  };
+  await ai.complete(storeOf({ int_groq_api_key: 'gsk' }), { feature: 'lead_ratio', prompt: 'hi', orgId: 'o' });
+  step('the ceiling actually sent covers thinking AND the answer',
+    sentMax === ai.budget.FEATURES.lead_ratio.out + ai.REASONING_HEADROOM, String(sentMax));
+  globalThis.fetch = realFetch2;
+}
+
 // ── AN EMPTY REPLY MUST NAME ITS OWN CAUSE ──────────────────────────────────
 // "No usable text" is true and useless. A model that reasoned away its whole
 // allowance and a provider returning an error object need different fixes.
