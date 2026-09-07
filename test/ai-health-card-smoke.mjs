@@ -210,6 +210,40 @@ step('the card draws the half-working state in its own colour and words',
 step('a tier line says which features ride on it',
   page.includes('AI_TIER_USE') && page.includes('the outreach generator'));
 
+// ── 7b-ii. THE ROUTE MUST NOT COLLAPSE THE PROBE TO ONE TIER ────────────────
+// Shipped and caught from the live database, which recorded `"tiers":["fast"]`
+// and a single attempt: the endpoint passed `tier: req.body.tier || 'fast'`,
+// so `opts.tier` was ALWAYS set and the two-tier probe above never ran once.
+// The card showed a green "AI IS WORKING" on the strength of the small model
+// while the quality model — the one the outreach generator sends to a
+// customer's prospects — had never been called. The half-working state that
+// section 7b exists to detect was unreachable in production.
+{
+  const routeSrc = readFileSync(new URL('../routes/integrations.js', import.meta.url), 'utf8');
+  const handler = routeSrc.slice(routeSrc.indexOf("'/admin/integrations/ai-test'"),
+                                 routeSrc.indexOf("'/admin/integrations/email-verify'"));
+  // Comments are stripped first: this file EXPLAINS the old `|| 'fast'`, and a
+  // test that matched its own prose would fail on a correct fix.
+  const code = handler.split('\n').filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  step('the ai-test route does not force a tier', !/\|\|\s*'fast'/.test(code),
+    'a default here silently disables probing the quality model');
+  step('…it passes a tier ONLY when one was explicitly asked for',
+    /tier \? \{ tier \} : \{\}/.test(handler));
+
+  // And the effect, not just the shape: with no tier, both models are tried.
+  let asked = [];
+  globalThis.fetch = async (url, opt) => {
+    if (String(url).endsWith('/models')) return { ok: true, status: 200, json: async () => ({ data: [] }) };
+    asked.push(JSON.parse(opt.body).model);
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'ready' } }] }) };
+  };
+  const both = await ai.diagnose(storeOf({ int_groq_api_key: 'gsk_x' }));
+  step('a diagnose with no tier really does call both models',
+    asked.length === 2 && new Set(asked).size === 2, asked.join(' + '));
+  step('…and only then reports working', both.working === true && both.tiers.length === 2);
+  globalThis.fetch = realFetch;
+}
+
 // ── 7c. the synthetic ping never hides a real failure ────────────────────────
 // diagnose() asks for one word. `ai_last_error` is what happened the last time
 // a FEATURE asked for real text — the more truthful signal, and it used to be
