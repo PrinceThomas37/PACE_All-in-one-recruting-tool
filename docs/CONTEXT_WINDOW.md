@@ -7,9 +7,8 @@
 **Updated**: 2026-09-07 (end of Session 19) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #173. **AI is confirmed live**
-(Groq, `openai/gpt-oss-20b`, 250ms). The PDF-reader and reasoning-headroom
-fixes are on `claude/groq-ai-mobile-ui-tblkg9`.
+to `main` IS the release · **Last merged**: #174 (`c9e0d5c`). Nothing of this
+session's is unmerged.
 
 ---
 
@@ -17,9 +16,7 @@ fixes are on `claude/groq-ai-mobile-ui-tblkg9`.
 
 **This file: current state only. REWRITE it each session, keep it under ~200
 lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
-that ever happened, **append-only — never edited, never summarised away.** At
-the end of a session, append the narrative to the archive, then rewrite this to
-describe the new present.
+that ever happened, **append-only — never edited, never summarised away.**
 
 If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
@@ -34,76 +31,34 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 ## What is live right now
 
 - The recruiting ATS + BD lead engine, multi-tenant by `org_id`
-- **Autonomous Recruiting Engine, all 5 steps** — scheduler, shared relevance
-  engine, lead sourcing, candidate outreach, conversation intelligence
-- **The in-app mailbox** (Session 13, restructured 15) — two panes, threaded
-  reader. Its four inviolable rules are in `CLAUDE.md` Growth bets §3.
-- **The shared UI kit** (Session 15) — one layout vocabulary for the whole app,
-  plus **`public/mobile.css` (Session 19)**: below 860px the rail is an
-  off-canvas drawer behind a hamburger, nothing scrolls sideways, dialogs are
-  bottom sheets. Desktop is untouched.
-- **The outreach generator + composer** (Sessions 17-18), and **any AI provider
-  behind a daily budget** (Session 18) — both below.
-- **Self-serve signup built but switched OFF** (`SELF_SERVE_SIGNUP`). Pricing is
-  deliberately `null`. No guest/demo bypass exists, so no product tour today.
-- Lead distribution across every connected mailbox (Microsoft + Gmail); leads
-  silent in `Assigned` 30+ days auto-recycle.
+- **Autonomous Recruiting Engine, all 5 steps** — scheduler, relevance engine,
+  lead sourcing, candidate outreach, conversation intelligence
+- **The in-app mailbox** — two panes, threaded reader (four inviolable rules in
+  `CLAUDE.md` Growth bets §3)
+- **The shared UI kit + `public/mobile.css`** — below 860px an off-canvas nav,
+  no sideways scroll, bottom-sheet dialogs. Desktop untouched.
+- **The outreach generator + composer**; **any AI provider behind a daily budget**
+- **AI IS CONFIRMED WORKING** — Groq `openai/gpt-oss-20b`, 250ms, with real
+  metered spend on `resume_parse` and `lead_ratio` (recorded only on success)
+- **Self-serve signup built, switched OFF**; pricing deliberately `null`; no
+  guest/demo bypass
+- Lead distribution across every connected mailbox; `Assigned` leads silent 30+
+  days auto-recycle
 - SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —
   **distinct from** per-user Gmail *sending*, which is live.
 
 ## Migrations — 041 is the latest APPLIED (2026-08-24)
 
-**The next migration number is 042. Never apply one to the live DB without a
-fresh, explicit go-ahead**, even when the feature itself was already agreed.
-042 is most likely the error column on `emails` — see "Parked by the owner".
-Sessions 14-19 added no migration; Session 18 avoided one deliberately (both new
-subsystems sit on `app_settings` and on `email_tracking.lead_id`, unused since
-024), and Session 19's work was routing and CSS.
-
-## ✅ Shipped (Session 19): the AI test button was never wired up, and the phone works now
-
-Both of the owner's complaints, and the same shape underneath: the app was
-telling nobody the truth about itself. Full write-up in the archive.
-
-**1. Three routes were DEAD, silently.** `POST /admin/integrations/ai-test` sat
-BELOW `POST /admin/integrations/:id`, so Express matched it as `id="ai-test"`;
-the save handler answered **200 with a valid integrations payload**, the card's
-check was only "is it an object", so it stored that as its diagnosis and redrew
-its placeholder. The button had done nothing for four sessions and
-`aiProvider.diagnose()` had never once run. Two more had it too:
-`/admin/integrations/email-verify` and `GET /jobs/export`. All fixed;
-**`test/route-shadowing-smoke.mjs` scans all 270 routes** and fails the build on
-any literal behind a matching `:param`.
-
-Hardened with it: the card rejects a well-formed answer from the wrong endpoint
-and names it as a PACE bug; **`diagnose()` tests every model tier a feature can
-ask for** (probing only `fast` could report green while the outreach generator
-fell back on a renamed `quality` model — one up and one down is now amber "half
-working"); and `ai_last_error`, a real feature's failure, always renders under
-the test result instead of being suppressed by it.
-
-**2. The phone — `public/mobile.css`.** All three of the owner's screenshots
-were reproduced in Chromium before anything changed. Causes: the rail's `:hover`
-sticks on touch (hover-expand is now gated on `(hover:hover) and (pointer:fine)`,
-never on width) with a real off-canvas drawer behind a hamburger below 860px;
-`#content` dragged the whole page sideways (Leads 572→390, Candidates 500→390,
-Admin 926→390); the dashboard clock was positioned over the greeting. Plus
-bottom-sheet dialogs, 40-44px targets, 16px inputs so iOS does not zoom.
-**Desktop is untouched** and the suite asserts it.
-`test/mobile-layout-smoke.mjs` walks every element of **16 pages × 5 roles at
-390px** — that is what makes `#content{overflow-x:hidden}` safe, since an
-overflow that no longer drags is one that is clipped and gone.
-
-A latent DESKTOP bug fell out: `UI.ic()` inside a `.btn` had no size rule, so
-those icons were **0×0 and invisible on desktop** (75px tall on a phone).
+**Next is 042. Never apply one to the live DB without a fresh, explicit
+go-ahead**, even when the feature itself was agreed. Sessions 14-19 added none;
+042 is most likely the error column on `emails` (see "Parked").
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26. READ THIS BEFORE DEBUGGING.
 
 It cost most of a session. Resume parsing failed in production while every file
 parsed perfectly here — same library, same lockfile, same bytes (proven:
-14,241 declared, 14,241 received, `%%EOF` intact). The difference was the
-RUNTIME. `pdf-parse` bundles a 2018 pdf.js that misreads compressed PDFs on
-Node 26.
+14,241 declared, 14,241 received, `%%EOF` intact). **The difference was the
+RUNTIME.**
 
 **When something works here and fails there, get the server's Node and re-run
 before theorising.** `nodejs.org` IS reachable from this sandbox (unlike
@@ -115,130 +70,116 @@ mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
 ```
 
-The suite passes on both today — **keep it that way**, and check both before
-merging anything that touches a parsing or binary path.
+**59/59 passes on both today — keep it that way**, and check both before
+merging anything touching a parsing or binary path.
+
+## ✅ Shipped (Session 19) — five PRs, all live
+
+**#170** the AI test button had been dead four sessions (a shadowed Express
+route — two more were dead the same way, including `GET /jobs/export`) + the
+phone layout. **#171** Groq was being asked for retired Llama models. **#172**
+resume failures now say which of five things went wrong, and the upload checks
+its own byte count. **#173** the health card's tier default meant it tested half
+the models it claimed. **#174** `unpdf` replaces a 2018 pdf.js that misreads
+modern PDFs on Node 26, plus reasoning headroom and the "AI answered unusably"
+state.
+
+Every one was something the product knew and did not say, and every one was
+found by **making the app record a fact and reading it**. Full narrative:
+archive, Session 19 parts 1-4.
 
 ## ⚠ AI IS WIRED IN 6 PLACES BUT REACHABLE IN 4
 
-Live and reachable: **resume parsing**, **job-description scrub**, **outreach
-generator**, **lead-distribution advice**. Dead: the **daily import briefing**
-(`/ai/generate-summary` — works, nothing in the frontend calls it; worth wiring
-to the dashboard) and **cold-email drafting** (`/ai/generate-email` — reachable
-only from the orphaned `12-manager-users.js`, never invoked even there;
-superseded by the generator, worth deleting). Do not repeat "six AI features"
-without re-checking the UI.
+Live: **resume parsing**, **job-description scrub**, **outreach generator**,
+**lead-distribution advice**. Dead: the **daily import briefing**
+(`/ai/generate-summary` — works, nothing calls it; worth wiring to the
+dashboard) and **cold-email drafting** (`/ai/generate-email` — reachable only
+from the orphaned `12-manager-users.js`; superseded, worth deleting). Do not
+repeat "six AI features" without re-checking the UI.
 
 ## ⚠ The merge trap — read before editing a shared file
 
-#159 deleted a local helper (`aiConfigured`); #160, written in another session
-against the same file, added a call to it elsewhere. Git saw a deletion in one
-region and a call in another, merged both cleanly, and `main` shipped a 500 on
-every load of the Compose tab (#162 fixed it).
+#159 deleted a helper; #160, written in another session against the same file,
+added a call to it elsewhere. Git merged both cleanly and `main` shipped a 500.
 
 - **A clean merge is not a correct merge when one side deletes a symbol and the
   other adds a use of it.** Merge `main` in and re-run the suite *immediately
   before* merging, not after.
-- The guard that works reads the **source** and asks whether every function a
-  file calls is defined in it (`test/outreach-generator-smoke.mjs`). The first
-  attempt awaited the database and timed out before reaching the bad line, so it
-  passed with the bug still in place. Extend it rather than re-inventing it.
+- The guard that works reads the **source** (`test/outreach-generator-smoke.mjs`).
+  A guard that reads source must read *source* — twice now such a test has
+  matched its own explanatory comment. Strip comments before asserting.
 
 ## ⏭ PICK THIS UP FIRST (Session 20)
 
-**1. ANSWERED — the model name was the bug, and it is fixed.** The card's first
-working run said: `HTTP 404 — The model 'llama-3.1-8b-instant' does not exist
-or you do not have access to it.` Groq had retired the Llama 3.x line, so every
-AI feature had been writing with its rules for as long as the key had been
-installed. Defaults are now `openai/gpt-oss-20b` / `openai/gpt-oss-120b`,
-verified against that account's own `/models` list. **What is still unconfirmed
-is whether a generation now SUCCEEDS** — this sandbox cannot reach
-`api.groq.com`, so the card has to say so once more after the deploy. If it is
-still red, the message names the next fix; a 400 on `reasoning_effort` is the
-one thing added blind this session.
+**1. Confirm the last two fixes with the owner.** Both shipped after their last
+report, so neither has been seen working: the two sample resumes should now
+parse, and lead distribution with "focus more on construction" should weight
+construction up rather than showing an even 4% split. If either misbehaves,
+**read the database, don't guess** — `resume_parse_last_error` and
+`ai_last_error` are written for exactly this.
 
-**2. Then: free model vs the rules writer, side by side, on a real posting.**
-The six prompts were written for Claude; free open models follow tone
-instructions less well. The honest verdict for the *email generator* may be
-"keep the rules version" while the free tier earns its place on resume parsing
-and JD cleanup. **This needs the owner's eyes on real output — do not decide it
-for them.**
+**2. The quality model has still never been exercised by a real feature.** The
+card will now test it, but `openai/gpt-oss-120b` writes the outreach emails and
+no prospect-facing text has come out of it yet. Worth one real generation.
 
-**3. Show the owner the phone build and take their reaction.** The layout is
-measured-clean, but "clean" and "right" are different questions and only they
-can answer the second. Obvious next candidates if they want more: a bottom tab
-bar for the 4 most-used destinations, and card-shaped rows instead of a
-side-scrolling table on the list pages.
+**3. Free model vs the rules writer, side by side, on a real posting.** The
+prompts were written for Claude; free open models follow tone instructions less
+well. The honest verdict for the *email generator* may be "keep the rules
+version" while the free tier earns its place on resume parsing and JD cleanup.
+**Needs the owner's eyes on real output — do not decide it for them.**
 
 **4. The two dead AI features** — wire the briefing to the dashboard, delete the
-cold-email drafter. See the audit above.
+cold-email drafter.
 
-**5. Finish the UI-kit rollout.** Every list-shaped page is converted. Still on
-their own markup: the dashboards (`05-page-dashboard.js`, `16-insights.js`),
-Admin (`08-page-admin.js`), the pipeline board (`28-page-pipeline.js`), My Team
-(`42-page-myteam.js`), Assign Leads (`21-assign-leads.js`), the orphaned Manager
-Users page. Card- and board-shaped, so each needs its own judgement.
-
-**6. Growth bets not offered recently.** `CLAUDE.md` still flags **CSV
+**5. Finish the UI-kit rollout** — every list-shaped page is converted; the
+card- and board-shaped ones are not (dashboards, Admin, pipeline, My Team,
+Assign Leads). **6. Three stale draft PRs** (#116, #126, #135, months behind
+`main`) — finish or close them. **7.** `CLAUDE.md` still flags **CSV
 import/export + a small public API** as the highest-leverage unstarted bet.
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 
 **The Gmail 7-day expiry.** On 2026-09-01 the owner said: *"We will work on this
-but not now."* That is a decision. Do not open a session by asking about it.
-Raise it only on a fresh visible incident, or if the owner asks what is open.
+but not now."* That is a decision. Raise it only on a fresh visible incident.
 
 - **Symptom:** a dead Gmail sign-in destroys queued emails — `failed` with no
-  retry, one every ~90s, reason never persisted (`emails` has no error column,
-  so `friendlySendError`'s sentence dies with the process). Eleven follow-ups
-  were lost this way on 31 Aug; they can still be re-queued.
+  retry, reason never persisted. Eleven follow-ups were lost on 31 Aug; they can
+  still be re-queued.
 - **Root cause is Google-side:** the consent screen is in **"Testing"**, where
-  refresh tokens expire after exactly 7 days. If `futeglobal.com` is on Google
-  Workspace, switching the app to "Internal" removes the limit with no code.
-- **Three code defects worth fixing whatever Google says:** release to `pending`
-  not `failed` on an auth failure (the thread-deferral path already does this);
-  stop a mailbox on the FIRST auth failure; add the error column (**migration
-  042**, still unclaimed).
+  refresh tokens expire after 7 days. If `futeglobal.com` is on Workspace,
+  switching to "Internal" removes the limit with no code.
+- **Three code defects worth fixing regardless:** release to `pending` not
+  `failed` on an auth failure; stop a mailbox on the FIRST auth failure; add the
+  error column (**migration 042**, unclaimed).
 
-## Rendering and the UI kit — read before touching any screen
+## Rendering, the UI kit and the phone — read before touching any screen
 
-Both rulesets are written out in `CLAUDE.md` (stack §Frontend). Do not work from
-a paraphrase. The ones broken most often: a page registers with
-`UI.registerPage()` and paints via `paintPageContent()`, **never**
-`content.innerHTML`; anything that must survive a repaint (iframes, media,
-internal scroll) needs its own region; **a repaint that changes nothing must
-write nothing — not even the same class back**; build with
-`UI.page({tabs, strip, toolbar, body})` rather than a twelfth hand-rolled table;
-a strip never fabricates a number. Pinned by `test/screen-stability-smoke.mjs`.
-
-Four more since Session 19: **hover-expand is gated on `(hover:hover) and
-(pointer:fine)`, never on width**; **the phone menu is one class on `<body>`,
-never a render** (`toggleNav()`); **`#content` is `overflow-x:hidden` below
-860px, so nothing may overflow it** — a wide thing scrolls in its own box, and
-`test/mobile-layout-smoke.mjs` is what makes that trade safe; **an inline style
-cannot be responsive** — a block that must reflow needs a class first
-(`.dash-tile`, `.fpair`, `.banner-clock` were all inline copies until they had
-to move).
+All of it is written out in `CLAUDE.md` (stack §Frontend). **Do not work from a
+paraphrase.** The four broken most often: a page registers with
+`UI.registerPage()` and paints via `paintPageContent()`, never
+`content.innerHTML`; anything that must survive a repaint needs its own region;
+a repaint that changes nothing must write nothing; build with `UI.page({…})`,
+not a twelfth hand-rolled table. Plus the four phone rules — hover gated on
+`(hover:hover)`, the menu is a body class not a render, `#content` is
+`overflow-x:hidden` below 860px, and an inline style cannot be responsive.
+Pinned by `screen-stability-smoke` and `mobile-layout-smoke`.
 
 ## Owner actions outstanding
 
-1. **Report what the Admin → Integrations card says.** It now actually runs —
-   the endpoint behind it was unreachable until Session 19. A free Groq key is
-   already saved (`••••10c6`, marked "use first") and the card self-runs on
-   open, no click. **That one line is the input Session 20 needs.**
+1. **Try the two things in "Pick this up first" §1** and report back.
 2. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
-   `GOOGLE_CLIENT_ID`/`SECRET` in Render if login-with-Google is wanted.
-3. **Verify one real Greenhouse/Lever board** via "Test it" — adapters have
+   `GOOGLE_CLIENT_ID`/`SECRET` in Render, if login-with-Google is wanted.
+3. **Verify one real Greenhouse/Lever board** via "Test it" — the adapters have
    never met a live feed (the sandbox blocks those hosts).
 4. **Set prices, decide on card payments** — `services/plans.js`, one line.
 5. **Turn on `SELF_SERVE_SIGNUP`** whenever strangers should be able to sign up.
 
 ## Traps that will bite you (learned the hard way)
 
-`CLAUDE.md` carries the durable ones — `models/` for tenant tables, the six-place
-stage vocabulary, the free-tier instance budget, `renderStoredEmail` on every
-reader of `emails.body`, safe-methods-only retries, the deliberate `orgIdFor()`
-fallback, route registration order, both AI blocks and the four mobile rules.
-**Read it; these are the ones it does not cover.**
+`CLAUDE.md` carries the durable ones — `models/` for tenant tables, the
+six-place stage vocabulary, the free-tier instance budget, `renderStoredEmail`,
+safe-methods-only retries, the `orgIdFor()` fallback, route registration order,
+and the PDF/AI/mobile blocks. **Read it; these are the ones it does not cover.**
 
 **Before moving ANY file** → archive § "DEPENDENCY MAP" (Session 8). Ten things
 break on a naive move and several fail *silently*.
@@ -246,25 +187,18 @@ break on a naive move and several fail *silently*.
 - **Any mailbox-selection path must check BOTH `microsoft_tokens` and
   `gmail_tokens`, exclude `refresh_failed`, and filter `is_active`.**
 - **A job whose sending mailbox goes inactive silently skips its pending emails
-  forever** — any path that deactivates/disconnects/deletes a `user_emails` row
-  must call `reassignJobsOffMailbox` first.
+  forever** — deactivating a `user_emails` row must call `reassignJobsOffMailbox`.
 - **`emails.sent_at` defaults to `CURRENT_DATE`** — an unsent draft already
   carries a send date, so "sent on X" reports count drafts.
 - **Graph's `/move` returns a NEW message id**; Gmail's never changes.
 - **Injectable clocks are not optional** in `conversation-intel.js`,
   `next-action.js`, and `lead-ingest.js`'s `ingestSource`.
-- **The rail is GROUPED**, so nav order is not a flat index; de-duplicate by id.
-- **An overlay's data must repaint the overlay, not `#content`** —
-  `41-page-clients.js`'s `paintDetail()` is the pattern.
 - **Browser tests never need a production bypass** — `test/helpers/enter-app.mjs`.
-- **When a claim about behaviour is load-bearing, test the claim** — and check
-  it fails with the bug reintroduced, or it may be pinning nothing.
-- **"Background engine: not receiving its heartbeat" is usually NOT a fault.**
-  GitHub delivers the 30-minute schedule every 3-5 hours (measured 2026-09-04).
-  Jobs are delayed, never skipped — due-ness lives in the database. Only 8h+ of
-  silence is worth checking `CRON_KEY` over.
-- **A destructive DB action needs, in order:** check FK cascade rules, verify
-  scope with counts, snapshot, explicit confirmation, verify after.
+- **"Engine not receiving its heartbeat" is usually NOT a fault.** GitHub
+  delivers the 30-min schedule every 3-5 hours; jobs are delayed, never skipped.
+  Only 8h+ of silence is worth checking `CRON_KEY` over.
+- **A destructive DB action needs, in order:** check FK cascades, verify scope
+  with counts, snapshot, explicit confirmation, verify after.
 
 ## Deliberately open, not forgotten
 
@@ -273,42 +207,35 @@ break on a naive move and several fail *silently*.
 - "Log In with your Organization" routes by domain; **not** full SAML.
 - `/bd-analytics/*` is legacy and un-org-scoped.
 - The orphaned "Manager Users" page + its `email_accounts` subsystem.
-- The card/board pages are not on the UI kit yet (see "Pick this up first" §2).
+- OpenRouter's model names are **still unverified** — no key configured, and the
+  sandbox cannot reach the host. Groq's are verified.
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API**, generalized audit trail, PWA polish.
-- In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker in the UI
-  (the API supports it), no shared/delegated mailboxes, unread badge is a 60s
-  cached poll not a live push.
+- In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker in the UI,
+  no shared mailboxes, unread badge is a 60s cached poll.
 - A per-call AI usage history (the meter is a daily counter, not an audit log).
 
 ## Working rules
 
-`npm test` (**58 suites**, judged by **exit code** — and read the count, not
-just the exit code: `npm test | tail -3` in a pipeline masks a failure) ·
-`bash test/verify-frontend.sh` · build on the dev branch → test → screenshot/show
-→ draft PR → **merge only on an explicit "merge it"** → apply a migration only on
-a fresh explicit go-ahead, right before merge, never on general feature
-agreement. **The owner does not read code**; show them the running app and plain
-English.
+`npm test` (**59 suites**, judged by **exit code** — read the count, not just
+the code: `npm test | tail -3` masks a failure) · **run it on Node 26 too** ·
+`bash test/verify-frontend.sh` · build on the dev branch → test → show the owner
+→ draft PR → **merge on their go-ahead** → apply a migration only on a fresh
+explicit go-ahead. **The owner does not read code**; show them the running app
+and plain English.
 
 **Habits these sessions paid for:**
 
-- **When a feature reports nothing, check that its request reaches its handler
-  BEFORE improving what the handler says.** Four sessions of work went into a
-  diagnostic that was never once invoked, because the route was shadowed and
-  answered 200.
-- **Reproduce a visual complaint in the browser before changing CSS.** All three
-  of the owner's phone faults were reproduced pixel-for-pixel first, which is
-  how the cause turned out to be a stuck `:hover` rather than the width rule
-  anyone would have reached for.
-- **A fallback that protects the user must never be invisible to the operator.**
-  Graceful degradation without observability is indistinguishable from broken.
-- **A test that pins WORDING is not a test that pins BEHAVIOUR.** Ask which one
-  a red test was pinning — that is the difference between fixing a test and
-  weakening one — and never relax a safety assertion to make a redesign pass.
-- **Re-run the suite against freshly merged `main` immediately before merging.**
-  Two clean merges have now broken production between them.
-- **Answer a cost question with measured numbers**, not reassurance.
-- **Do not wait on `npm test` with `pgrep -f run-all.mjs`** — the waiter matches
-  its own command line and never exits. Run it in the foreground with a long
-  timeout.
+- **Make the app record a fact, then read it.** Every fault this session was
+  found that way — `node: process.version` in a record nobody expected to need
+  is what turned "the PDF sometimes breaks" into "the runtime differs".
+- **Never let a diagnosis sound more certain than the evidence.** "Damaged in
+  transit" was confidently wrong and would have had the owner re-uploading good
+  files.
+- **When a feature reports nothing, check its request reaches its handler**
+  before improving what the handler says.
+- **A default that silently disables a check is worse than no check.**
+- **Reproduce a visual complaint in the browser before changing CSS**, and know
+  whether a red test pinned WORDING or BEHAVIOUR before "fixing" it.
+- **Re-run the suite against freshly merged `main` immediately before merging**,
+  and never wait on it with `pgrep -f run-all.mjs` (the waiter matches itself).

@@ -3490,3 +3490,77 @@ somewhere nobody had thought to look — the runtime.** Every one of these was
 found by making the app record a fact rather than by reading the code harder.
 The single most valuable line in this whole session is `node: process.version`
 in a failure record nobody expected to need.
+
+## Session 19, part 4 — the default that switched off its own check
+
+Between the model-name fix and the Node discovery, one more bug was found the
+same way: by reading the live database rather than the code. `ai_last_test`
+held
+
+```json
+{"attempts":[{"provider":"groq","model":"openai/gpt-oss-20b","tier":"fast","ok":true,"ms":250}],
+ "working":true,"partial":false,"tiers":["fast"]}
+```
+
+One attempt. One tier. Under a green **AI IS WORKING**.
+
+`diagnose()` probes every model a feature can ask for *when it is given no
+tier* — that was the entire point of the two-tier change, since the budget
+sends extraction to `fast` and prose a prospect reads to `quality`, and a green
+tick earned by one of them is a lie. But the route passed
+`tier: (req.body && req.body.tier) || 'fast'`, so `opts.tier` was always truthy,
+`tiers` was always `['fast']`, and the two-tier probe never ran once in
+production. `openai/gpt-oss-120b` — the model the outreach generator sends to a
+customer's prospects — had never been called at all.
+
+**A default that silently disables a check is worse than no check: it reports
+success it did not earn.** The route now passes a tier only when one is
+explicitly asked for, and it is pinned two ways — the handler must not carry
+the default, and a `diagnose()` with no tier must really put two different
+models on the wire (asserted on the request bodies, not on the shape of the
+result).
+
+One small process note worth keeping: that source-reading assertion first
+failed against **its own explanatory comment**, which quotes the old
+`|| 'fast'`. It now strips comments before matching. That is the second time
+this session a source guard had to be taught the difference between code and
+the story about the code — the first was `test/outreach-generator-smoke.mjs`
+in an earlier session. A guard that reads source must read *source*.
+
+## Session 19 — where it ended
+
+Five PRs, all merged and live: **#170** (the AI test button + the phone),
+**#171** (Groq's real model names), **#172** (resume diagnosis + the
+self-checking upload), **#173** (the tier default), **#174** (a PDF reader that
+works on Node 26 + reasoning headroom + the third AI state).
+
+**AI is confirmed working end to end** — Groq, `openai/gpt-oss-20b`, 250ms,
+and the meter shows real spend against `resume_parse` and `lead_ratio`, which
+only records on success. No migration was applied; 041 is still the latest.
+The suite is **59 suites, green on Node 22 and on Node 26**.
+
+### What this session was actually about
+
+Not one bug — the same bug in five costumes. Every single fault was something
+the product knew and did not say:
+
+| what was broken | what it looked like from outside |
+|---|---|
+| a shadowed route | a button that "did nothing", for four sessions |
+| a retired model name | AI "connected" and every feature writing with rules |
+| a defaulted tier | a green tick that had tested half of what it claimed |
+| a 2018 PDF reader on Node 26 | "sometimes it reads the PDF, sometimes it doesn't" |
+| a truncated AI reply | "no AI answered" beside a meter showing the tokens spent |
+
+And every one of them was found the same way: **by making the app record a fact
+and then reading it**, not by reading the code harder. The single most valuable
+line written all session was `node: process.version` in a failure record nobody
+expected to need — it is what turned "the PDF is sometimes broken" into "the
+runtime is different", which was not a hypothesis anyone had.
+
+The counterpart lesson is about confidence. The first version of the resume
+error said *"the file was damaged in transit"*. It was wrong, and the very
+first record disproved it — 14,241 bytes declared, 14,241 received. A
+confidently wrong message is worse than a vague one, because it sends someone
+off doing the wrong thing with conviction. **Never let a diagnosis sound more
+certain than the evidence behind it.**
