@@ -42,6 +42,10 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
   metered spend on `resume_parse` and `lead_ratio` (recorded only on success)
 - **Self-serve signup built, switched OFF**; pricing deliberately `null`; no
   guest/demo bypass
+- **Releasing a lead to the pool is one shared operation** (Session 20) —
+  `releaseToPoolUpdate()`; the cold-email guard is scoped to the lead's current
+  cycle, so an un-assigned lead is emailable again. A finished "Send complete"
+  card expires after 15 min instead of outliving its queue.
 - Lead distribution across every connected mailbox; `Assigned` leads silent 30+
   days auto-recycle
 - SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —

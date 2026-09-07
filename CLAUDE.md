@@ -107,6 +107,36 @@ we never have to rewrite to grow (see "Growth bets" below).
   session user would have rendered the correct name for the exact case above —
   hiding the bug rather than catching it. A variable that cannot be filled stays
   visible and highlighted; never blank it silently.
+- **RELEASING A LEAD TO THE POOL IS ONE OPERATION, AND IT MUST STAMP
+  `last_recycled_at` (Session 20).** Three paths return a lead to Unassigned —
+  `POST /jobs/bulk-stage`, `PUT /jobs/:id`, the recycle sweep — and all three
+  now go through `releaseToPoolUpdate()` in **`services/outreach-cycle.js`**
+  (pure), which clears `assigned_to_bd`/`assigned_at`/`sending_email_id` and
+  stamps `last_recycled_at`. Two failures came out of them disagreeing, and
+  BOTH were silent:
+  * `PUT /jobs/:id` changed the stage and left the assignment fields alone, so
+    the lead read "Unassigned" on screen while still holding an
+    `assigned_to_bd`. The distribution pool requires `assigned_to_bd IS NULL`,
+    so those leads were **invisible to distribution** — 11 of the 11 leads in
+    the live pool were in this state.
+  * The duplicate-cold-email guard (`fetchInitialOutreachedPairs`) blocked on
+    ANY prior non-failed initial email, for all of history. A lead that had
+    ever been emailed could be re-assigned, reported as assigned, and generate
+    **nothing**. The guard is now scoped to the lead's CURRENT cycle
+    (`cycleStartOf`/`blocksRegeneration`), which is what `last_recycled_at`
+    marks. Inside a cycle it is unchanged — regeneration still cannot duplicate
+    a cold email. **A path that clears `assigned_at` without stamping
+    `last_recycled_at` re-creates the second bug**, so add release logic to the
+    helper, never inline. `test/outreach-cycle-smoke.mjs` pins it.
+- **THE "SEND COMPLETE" CARD IS A SNAPSHOT, AND A SNAPSHOT EXPIRES
+  (Session 20).** It lives in `app_settings` so it survives a restart, and the
+  60s timer meant to clear it only fires while the process lives — on the free
+  tier the server sleeps, so the card returned hours later still asserting
+  "375 total · 164 waiting" above a pending panel reading 21. A FINISHED run
+  now expires 15 minutes after `completedAt` on read (`isStaleProgress` in
+  **`services/send-progress.js`**, pure); an ACTIVE run never expires. The
+  admin purge (`POST /admin/emails/purge-pending`) clears the card for every
+  sender whose queue it emptied — the run it describes no longer exists.
 - **Send-queue ORDER is a business decision, not an implementation detail.**
   The queue drains at one email per 75-105s inside an 8-hour window in each
   lead's timezone, so whatever is at the back may not go out at all.
