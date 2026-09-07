@@ -5,6 +5,7 @@
 // Route paths, handler logic and behaviour are unchanged from the original.
 // ============================================================================
 const express = require('express');
+const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -172,22 +173,24 @@ router.post('/jobs/bulk-stage', auth, async (req, res) => {
       return res.status(403).json({ error: 'BD users cannot set stage to ' + stage });
     }
 
-    const updates = { stage, updated_at: new Date() };
-    // If resetting to Unassigned, clear assignment fields so it re-enters the pool
-    if (stage === 'Unassigned') {
-      updates.assigned_to_bd = null;
-      updates.sending_email_id = null;
-      updates.assigned_at = null;
-    }
+    let updates = { stage, updated_at: new Date() };
+    // If resetting to Unassigned, clear assignment fields so it re-enters the
+    // pool — via the shared helper, which also stamps `last_recycled_at`. That
+    // stamp is what makes the lead EMAILABLE again: without it the duplicate-
+    // cold-email guard still sees the previous cycle's sent outreach and
+    // generation silently produces nothing for a freshly re-assigned lead.
+    if (stage === 'Unassigned') updates = releaseToPoolUpdate(new Date());
 
     const { error } = await supabase.from('jobs').update(updates).in('id', job_ids);
     if (error) throw error;
 
     for (const jid of job_ids) await logActivity(jid, null, req.user.id, 'stage_changed', `Stage changed to ${stage}`, null, { stage });
 
-    // If resetting to Unassigned, also delete any pending emails for these jobs
+    // If resetting to Unassigned, drop the queued outreach and the follow-up
+    // schedule with it — both belong to the assignment that just ended.
     if (stage === 'Unassigned') {
       await supabase.from('emails').delete().in('job_id', job_ids).eq('status', 'pending');
+      await supabase.from('follow_ups').update({ status: 'expired' }).in('job_id', job_ids).eq('status', 'active');
     }
 
     res.json({ success: true, updated: job_ids.length, stage });

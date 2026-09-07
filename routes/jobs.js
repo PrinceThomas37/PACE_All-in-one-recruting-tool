@@ -13,6 +13,7 @@
 // (Node caches them → same singletons index.js uses).
 // ============================================================================
 const express = require('express');
+const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, titleSimilarity } = require('../jd-parser');
 const { annotateContactEmailStatus } = require('../email-validation');
 const { getSetting } = require('../config/settings');
@@ -381,6 +382,10 @@ router.put('/jobs/:id', auth, async (req, res) => {
       const resolved = resolveLeadStageUpdate(hasRole, req, stage);
       if (resolved.error) return res.status(403).json({ error: resolved.error });
       updates.stage = resolved.stage;
+      // Returning a single lead to the pool must release it the same way the
+      // bulk action does — same fields, `last_recycled_at` included, or the
+      // lead is re-assignable but silently un-emailable.
+      if (resolved.stage === 'Unassigned') Object.assign(updates, releaseToPoolUpdate(new Date()));
     }
     if (notes !== undefined) updates.notes = notes;
     if (assigned_to !== undefined && hasRole(req, 'admin', 'ra_lead')) updates.assigned_to = assigned_to || null;
@@ -400,6 +405,10 @@ router.put('/jobs/:id', auth, async (req, res) => {
       await logActivity(data.id, null, req.user.id, 'stage_change', `Stage: ${existing.stage} → ${stage}`, { stage: existing.stage }, { stage });
       if (existing.stage === 'Assigned' && stage !== 'Assigned') {
         await supabase.from('follow_ups').update({ status: 'skipped' }).eq('job_id', req.params.id).eq('status', 'active');
+      }
+      // Queued outreach belongs to the assignment that just ended.
+      if (stage === 'Unassigned') {
+        await supabase.from('emails').delete().eq('job_id', req.params.id).eq('status', 'pending');
       }
     } else {
       await logActivity(data.id, null, req.user.id, 'job_updated', 'Job updated', null, null);

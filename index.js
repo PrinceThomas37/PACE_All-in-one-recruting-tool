@@ -148,6 +148,7 @@ let DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || null;
 // scope, and defaulting would hand it the first org's data — a real customer's.
 let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 const { isRecyclable } = require('./services/lead-recycle');
+const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
 // Ollama). Returns null when none is usable, and every caller has a rules
 // fallback behind that null.
@@ -703,24 +704,27 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
 // outreach email (sent, or pending/sending). Used to make initial-outreach
 // generation idempotent: a POC must never receive a second cold intro for the
 // same job just because that job was re-assigned / re-distributed / re-generated.
-async function fetchInitialOutreachedPairs(jobIds) {
+// Which (job, contact) pairs already have an initial outreach IN THE LEAD'S
+// CURRENT CYCLE? Takes job ROWS (not ids) because the answer depends on when
+// each lead was last assigned — see services/outreach-cycle.js for why a lead
+// returned to the pool and re-assigned must be emailable again.
+async function fetchInitialOutreachedPairs(jobs) {
   const pairs = new Set();
-  const ids = [...new Set((jobIds || []).filter(Boolean))];
-  if (!ids.length) return pairs;
+  const rows = (jobs || []).filter(j => j && j.id);
+  if (!rows.length) return pairs;
+  const cycleStart = {};
+  rows.forEach(j => { cycleStart[j.id] = cycleStartOf(j); });
+  const ids = [...new Set(rows.map(j => j.id))];
   const CHUNK = 100;
   for (let i = 0; i < ids.length; i += CHUNK) {
     const chunk = ids.slice(i, i + CHUNK);
     const { data, error } = await supabase.from('emails')
-      .select('job_id,contact_id,status,followup_type')
+      .select('job_id,contact_id,status,followup_type,created_at')
       .in('job_id', chunk)
       .or('followup_type.is.null,followup_type.eq.initial');
     if (error) { console.error('[GenerateEmails] outreach-dedup lookup failed:', error.message); continue; }
     (data || []).forEach(r => {
-      // A failed/cancelled prior attempt may legitimately be re-sent; anything
-      // that went out or is queued blocks a duplicate.
-      if (r.contact_id && r.status !== 'failed' && r.status !== 'cancelled') {
-        pairs.add(`${r.job_id}:${r.contact_id}`);
-      }
+      if (blocksRegeneration(r, cycleStart[r.job_id])) pairs.add(`${r.job_id}:${r.contact_id}`);
     });
   }
   return pairs;
@@ -809,7 +813,7 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   let jobs = [];
   for (let i = 0; i < job_ids.length; i += BATCH_SIZE) {
     const chunk = job_ids.slice(i, i + BATCH_SIZE);
-    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
+    const { data, error } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', chunk);
     if (error) {
       console.error(`[GenerateEmails] Failed to fetch jobs batch ${i}-${i + chunk.length}:`, error.message);
       throw error;
@@ -840,7 +844,7 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   const tmplSettings = {};
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
-  const alreadyOutreached = await fetchInitialOutreachedPairs(jobs.map(j => j.id));
+  const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
   const { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped } = buildPendingEmailsFromJobs(
     jobs, callerUserId, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
   );
@@ -867,7 +871,7 @@ app.post('/emails/generate', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'ra_lead', 'bd', 'bd_lead')) return res.status(403).json({ error: 'Not allowed' });
     const { job_ids } = req.body;
     if (!Array.isArray(job_ids) || !job_ids.length) return res.status(400).json({ error: 'job_ids required' });
-    const { data: jobs, error: jErr } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', job_ids);
+    const { data: jobs, error: jErr } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', job_ids);
     if (jErr) throw jErr;
     const bdIds = [...new Set(jobs.map(j => j.assigned_to_bd).filter(Boolean))];
     const { data: bdUsers } = bdIds.length ? await supabase.from('users').select('id,name,email').in('id', bdIds) : { data: [] };
@@ -897,7 +901,7 @@ app.post('/emails/generate', auth, async (req, res) => {
     const tmplSettings = {};
     (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
-    const alreadyOutreached = await fetchInitialOutreachedPairs(jobs.map(j => j.id));
+    const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
     const { emailsToInsert, alreadyOutreachedSkipped } = buildPendingEmailsFromJobs(
       jobs, req.user.id, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
     );
@@ -2139,10 +2143,12 @@ async function runLeadRecycleSweep() {
       if (!isRecyclable(job, job.contacts, now, thresholdDays)) continue;
       const nowTs = new Date();
       await supabase.from('jobs').update({
-        stage: 'Unassigned', assigned_to_bd: null, assigned_at: null, sending_email_id: null,
-        freshness: 'Old', recycled_count: (job.recycled_count || 0) + 1, last_recycled_at: nowTs, updated_at: nowTs,
+        ...releaseToPoolUpdate(nowTs),
+        freshness: 'Old', recycled_count: (job.recycled_count || 0) + 1,
       }).eq('id', job.id);
       await supabase.from('follow_ups').update({ status: 'expired' }).eq('job_id', job.id).eq('status', 'active');
+      // Anything still queued was addressed to the assignment that just ended.
+      await supabase.from('emails').delete().eq('job_id', job.id).eq('status', 'pending');
       await logActivity(job.id, null, null, 'lead_recycled', `Recycled to Unassigned pool after ${thresholdDays} days with no reply`);
       log.recycled++;
     }

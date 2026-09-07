@@ -16,6 +16,7 @@
 // ============================================================================
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
+const { isStaleProgress } = require('../services/send-progress');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -153,11 +154,23 @@ router.get('/emails/send-progress', auth, async (req, res) => {
     // Served from the in-memory mirror: this is the most frequently polled
     // endpoint (every 2-10s per BD), so it must not hit the DB on every call.
     // Fall back to the DB only until the mirror is warm after a restart.
-    const cached = sendProgressCache.get(req.user.id);
-    if (cached !== undefined) return res.json(cached || { active: false });
     const key = `send_progress_${req.user.id}`;
+    // A FINISHED run's card has a shelf life. The 60s timer that clears it only
+    // fires while the process lives, and on the free tier the server sleeps —
+    // so without this the card comes back hours later still asserting totals
+    // about a queue that has since changed (emails purged, a new assignment
+    // made) and contradicts the pending panel beside it.
+    const expire = async (p) => {
+      if (!isStaleProgress(p)) return p;
+      sendProgressCache.set(req.user.id, null);
+      try { await supabase.from('app_settings').delete().eq('key', key); } catch (_) {}
+      return null;
+    };
+    const cached = sendProgressCache.get(req.user.id);
+    if (cached !== undefined) return res.json((await expire(cached)) || { active: false });
     const { data } = await supabase.from('app_settings').select('value').eq('key', key).single();
-    const progress = data ? JSON.parse(data.value) : null;
+    let progress = data ? JSON.parse(data.value) : null;
+    progress = await expire(progress);
     sendProgressCache.set(req.user.id, progress);
     res.json(progress || { active: false });
   } catch { sendProgressCache.set(req.user.id, null); res.json({ active: false }); }
@@ -267,12 +280,23 @@ router.post('/admin/emails/purge-pending', auth, async (req, res) => {
     if (dry_run) return res.json({ count: matches.length, by_type });
 
     const ids = matches.map(e => e.id);
+    // The "Send complete" card is a snapshot of a run whose emails we are about
+    // to delete. Leaving it up is how the Email page ends up showing 375 total
+    // above a queue of 21 — clear it for everyone whose queue this touched.
+    const senders = all_managers
+      ? [...new Set((await supabase.from('emails').select('sent_by').in('id', ids.slice(0, 1000))).data?.map(r => r.sent_by).filter(Boolean) || [])]
+      : [manager_id];
+
     let deleted = 0;
     for (let i = 0; i < ids.length; i += 200) {
       const batch = ids.slice(i, i + 200);
       const { error: delErr } = await supabase.from('emails').delete().in('id', batch);
       if (delErr) throw delErr;
       deleted += batch.length;
+    }
+    for (const uid of senders) {
+      sendProgressCache.set(uid, null);
+      try { await supabase.from('app_settings').delete().eq('key', `send_progress_${uid}`); } catch (_) {}
     }
     res.json({ deleted, by_type });
   } catch (err) { res.status(500).json({ error: err.message }); }
