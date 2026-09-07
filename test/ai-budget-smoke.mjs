@@ -115,10 +115,21 @@ step('resume parsing goes to the small model', sent.model === ai.PROVIDERS.groq.
 // leaving the reasoning uncapped here is how a resume parse comes back empty.
 step('…with its reasoning capped so the 700 tokens go on the answer',
   sent.reasoning_effort === 'low' || !ai.PROVIDERS.groq.reasoningModels.test(sent.model));
-step('the answer length is capped at the feature ceiling', sent.max_tokens === 700, String(sent.max_tokens));
+// The FEATURE still owns how long an answer may be; the provider layer adds
+// what a reasoning model needs to reach one, because its thinking is billed
+// against the same ceiling. Asserted as the sum, so neither half can drift:
+// drop the headroom and gpt-oss returns empty; drop the feature ceiling and a
+// pasted job page becomes an uncapped bill.
+step('the wire ceiling is the feature answer ceiling plus thinking room',
+  sent.max_tokens === budget.FEATURES.resume_parse.out + ai.REASONING_HEADROOM, String(sent.max_tokens));
 step('the call reports which tier ran', r1 && r1.tier === 'fast');
-step('a request over the feature ceiling is clamped down, never up',
-  JSON.parse((await (async () => { await ai.complete(makeStore({ int_groq_api_key: 'gsk' }), { feature: 'cold_email', prompt: 'hi', maxTokens: 99999, orgId: 'o' }); return { body: JSON.stringify(sent) }; })()).body).max_tokens === 600);
+{
+  await ai.complete(makeStore({ int_groq_api_key: 'gsk' }), { feature: 'cold_email', prompt: 'hi', maxTokens: 99999, orgId: 'o' });
+  step('a request over the feature ceiling is clamped down, never up',
+    sent.max_tokens === budget.FEATURES.cold_email.out + ai.REASONING_HEADROOM, String(sent.max_tokens));
+  // The point of the clamp: a caller's number must not become the bill.
+  step('…nowhere near what the caller asked for', sent.max_tokens < 2000);
+}
 
 // The meter records what was actually billed, and the next call sees it.
 const rows2 = { int_groq_api_key: 'gsk' };
@@ -146,7 +157,10 @@ step('a refused call never reaches the provider', calls === 0, `${calls} request
 // Yesterday's spend must not count against today.
 const rows4 = {
   int_groq_api_key: 'gsk',
-  ai_daily_token_cap: '1000',
+  // Comfortably above ONE call's estimate (input + answer ceiling + thinking
+  // room) so this tests what it says it tests — yesterday's spend versus
+  // today's — and not the per-call ceiling.
+  ai_daily_token_cap: '5000',
   [budget.usageKey('org-5', '2020-01-01')]: JSON.stringify({ tokens: 999999, calls: 999, by_feature: {} }),
 };
 step("yesterday's spend does not eat into today", (await ai.complete(makeStore(rows4), { feature: 'cold_email', prompt: 'hi', orgId: 'org-5' })) !== null);

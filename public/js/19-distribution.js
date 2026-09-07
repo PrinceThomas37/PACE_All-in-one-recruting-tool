@@ -111,9 +111,19 @@ function showRatioPreview(ratio){
   // swallowed: an even split shown under "AI" reads as the AI disagreeing with
   // you, when in fact nothing read your sentence.
   var ignoredPriorities=(ratio.engine!=='ai')&&!!(STATE._assignPriorityText||'').trim();
-  var engineNote=ignoredPriorities
-    ?'<div style="font-size:11.5px;color:var(--amber);background:var(--amber-l,#fef3c7);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5"><b>Your priorities were not applied.</b> No AI provider answered, so this is the built-in balanced split. Connect a provider in Admin → Integrations to have instructions like this followed.</div>'
-    :'<div style="font-size:11px;color:var(--text3);margin-bottom:6px">'+(ratio.engine==='ai'?'Written by the AI'+(ratio.engine_model?' ('+htmlEsc(ratio.engine_model)+')':''):'Built-in balanced split — no AI provider is connected.')+'</div>';
+  // …and "it answered, but not with anything usable" is a THIRD thing, which
+  // used to be reported as the first. Saying "no AI provider answered" while
+  // the daily meter shows the tokens spent is a contradiction the user is left
+  // to resolve on their own.
+  var amber='font-size:11.5px;color:var(--amber);background:var(--amber-l,#fef3c7);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5';
+  var engineNote;
+  if(ratio.ai_unusable){
+    engineNote='<div style="'+amber+'"><b>Your priorities were not applied.</b> The AI answered but its reply was cut short, so this is the built-in balanced split. Try a shorter instruction, or try again — nothing was lost.</div>';
+  } else if(ignoredPriorities){
+    engineNote='<div style="'+amber+'"><b>Your priorities were not applied.</b> No AI provider answered, so this is the built-in balanced split. Connect a provider in Admin → Integrations to have instructions like this followed.</div>';
+  } else {
+    engineNote='<div style="font-size:11px;color:var(--text3);margin-bottom:6px">'+(ratio.engine==='ai'?'Written by the AI'+(ratio.engine_model?' ('+htmlEsc(ratio.engine_model)+')':''):'Built-in balanced split — no AI provider is connected.')+'</div>';
+  }
   prev.innerHTML='<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px">'+
     '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">Distribution preview \u2014 '+ratio.total_to_send+' leads</div>'+
     engineNote+

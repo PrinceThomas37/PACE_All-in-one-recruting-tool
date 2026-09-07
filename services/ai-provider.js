@@ -126,6 +126,19 @@ function modelParams(providerId, model) {
   return { reasoning_effort: 'low' };
 }
 
+// A reasoning model's THINKING is billed against the same `max_tokens` as its
+// answer, so a feature's answer ceiling is not the number to put on the wire.
+// At lead-distribution's 400 that is how a reply came back as truncated JSON:
+// billed (2,049 tokens on the meter), unparseable, and reported to the user as
+// "no AI provider answered". The feature still declares how long an ANSWER may
+// be; the provider layer adds what the model needs to reach one.
+const REASONING_HEADROOM = 512;
+function answerCeiling(providerId, model, answerTokens) {
+  const def = PROVIDERS[providerId];
+  const thinks = !!(def && def.reasoningModels && def.reasoningModels.test(String(model || '')));
+  return thinks ? answerTokens + REASONING_HEADROOM : answerTokens;
+}
+
 // PURE. Returns { url, options } ready for fetch, or null if the provider
 // cannot be reached with what it was given.
 function buildRequest(providerId, opts = {}) {
@@ -286,7 +299,10 @@ async function complete(supabase, opts = {}) {
 
   // 2. Would this call fit inside what is left of today? Estimated high, on
   //    purpose: input plus the longest answer the request permits.
-  const estimated = budget.estimateTokens(system) + budget.estimateTokens(prompt) + maxTokens;
+  // Estimated on the CEILING WE WILL ACTUALLY SEND — a meter that budgets for
+  // the answer and pays for the thinking too is under-counting by design.
+  const estimated = budget.estimateTokens(system) + budget.estimateTokens(prompt)
+                  + maxTokens + REASONING_HEADROOM;
   const spent = await budget.getSpend(supabase, opts.orgId);
   const verdict = budget.checkBudget(spent, estimated, await budget.getCaps(supabase));
   if (!verdict.allowed) {
@@ -300,7 +316,7 @@ async function complete(supabase, opts = {}) {
     const model = opts.model || modelFor(entry, limits.tier);
     const req = buildRequest(entry.id, {
       key: entry.key, baseUrl: entry.baseUrl, model,
-      system, prompt, maxTokens,
+      system, prompt, maxTokens: answerCeiling(entry.id, model, maxTokens),
     });
     if (!req) continue;
     try {
@@ -523,6 +539,7 @@ async function diagnose(supabase, opts = {}) {
 module.exports = {
   PROVIDERS, PROVIDER_ORDER, AI_TIMEOUT_MS,
   buildRequest, parseResponse, endpointFor, modelFor, modelParams, describeEmptyReply,
+  answerCeiling, REASONING_HEADROOM, recordFailure,
   resolveChain, isAvailable, complete, diagnose,
   describeHttpError, getLastError, LAST_ERROR_KEY,
   recordTest, getLastTest, LAST_TEST_KEY, listModels,

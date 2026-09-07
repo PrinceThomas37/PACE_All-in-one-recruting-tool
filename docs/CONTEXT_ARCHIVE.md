@@ -3395,3 +3395,98 @@ button for four sessions. Everything built to explain the silence worked on its
 first real run — the provider's own error text, the model list, the fallback
 that kept the product working meanwhile. None of it was worth anything until
 the request could reach it.
+
+## Session 19, part 3 — the sandbox runs Node 22, the server runs Node 26
+
+The resume failure was never in the file, the upload, or the transport. It was
+the **runtime**, and the only reason that became knowable is that the failure
+record built in part 2 stamps `process.version`.
+
+The very first record settled two things at once:
+
+```
+declared_size: 14241   received_size: 14241   ← every byte arrived
+head: "%PDF-1.7"       tail: "…startxref 14013 %%EOF"
+has_eof: true          reason: "Invalid PDF structure"
+node:  "v26.8.1"       ← the sandbox is on v22.22.2
+```
+
+**The file was byte-perfect.** Which also meant the sentence shipped hours
+earlier — *"the file was damaged in transit"* — was a confident, wrong
+diagnosis that would have sent the owner off re-uploading a good file. It was
+rewritten the same session, and the lesson written down: never let a message
+sound more certain than the evidence behind it.
+
+Node 26 was downloadable from the sandbox (`nodejs.org` is not blocked by the
+proxy, unlike `*.onrender.com`), so the bug was reproduced exactly:
+
+```
+########## Node 22 ##########        ########## Node 26.8.1 ##########
+PM      OK  chars=2610               PM      FAIL InvalidPDFException
+SWE     OK  chars=2630               SWE     FAIL InvalidPDFException
+PRINCE  OK  chars=6253               PRINCE  OK   chars=6253
+```
+
+…and Node 26 printed the cause the older runtime had hidden:
+`FormatError: Unknown compression method in flate stream: 111, 32`. Those bytes
+are the characters `"o "` — pdf.js was reading **plain text where it expected
+zlib**. `pdf-parse@1.1.1` bundles **pdf.js v1.10.100, built in 2018**; on Node
+26 it misreads a compressed cross-reference stream, falls into its recovery
+pass, and that pass only rescues a PDF carrying a classic `trailer`. Hence two
+modern resumes failing and one older one going through, on the same server,
+through the same upload path. **It was never intermittent — it depends on which
+tool generated the PDF.**
+
+`unpdf` leads now, with `pdf-parse` kept as a second chance. It was chosen over
+`pdfjs-dist` on identical output — same character counts on all three files —
+because it is **2.6MB against 37MB plus optional native canvas binaries**, and
+the extra 34MB buys only page *rendering*, which this app never does. On a free
+tier that weight is re-downloaded every build and paid for on every cold start.
+It is imported lazily, so it costs nothing until a PDF actually arrives.
+
+The suite now runs green on **both** Node 22 and Node 26, and CLAUDE.md carries
+the rule that produced this: when something works here and fails there, fetch
+the server's Node and re-run before theorising.
+
+## The other half: two screens of the app contradicting each other
+
+The owner also reported lead distribution saying **"No AI provider answered"**
+while the budget card showed **2,049 tokens spent on lead distribution**. Both
+were drawing from the truth; the code was wrong.
+
+`/distribute/generate-ratio` did `JSON.parse(out.text)` outside any local
+try/catch. gpt-oss **reasons before it answers, out of the same `max_tokens`
+ceiling**, and lead distribution's ceiling is 400 — so the reply arrived
+truncated, `JSON.parse` threw into the outer catch, and that catch returned the
+rules split. The tokens had been spent and the banner said nothing had
+answered.
+
+Two fixes, and they are different in kind:
+
+1. **`answerCeiling()`** adds `REASONING_HEADROOM` (512) for models matching
+   `PROVIDERS[id].reasoningModels`, and the budget estimates on what is
+   actually put on the wire. The FEATURE still declares how long an *answer*
+   may be; the provider layer adds what the model needs to reach one. Without
+   that separation the fix would have been "raise every ceiling", which spends
+   budget on features that never needed it.
+2. **"It answered unusably" is a third state.** The route returns
+   `ai_unusable`, records the tail of what the model actually said, and the
+   page says *"The AI answered but its reply was cut short"* instead of
+   claiming nothing answered.
+
+Three assertions in `ai-budget-smoke` failed on the ceiling change and were
+updated rather than relaxed: two now assert `feature ceiling + headroom` as a
+sum (so neither half can drift — drop the headroom and gpt-oss returns empty,
+drop the ceiling and a pasted job page becomes an uncapped bill), and the third
+had a 1,000-token daily cap that was simply too small for one call once the
+headroom existed, which made it test the per-call ceiling instead of the
+yesterday-versus-today thing it is named for.
+
+## The lesson
+
+Part 1: check the request reaches its handler. Part 2: the diagnostic was right
+and nobody could see it. Part 3: **the diagnostic was right, and it pointed
+somewhere nobody had thought to look — the runtime.** Every one of these was
+found by making the app record a fact rather than by reading the code harder.
+The single most valuable line in this whole session is `node: process.version`
+in a failure record nobody expected to need.

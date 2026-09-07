@@ -1061,7 +1061,22 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     // the user their 80/20 was not applied instead of showing an even split
     // under a heading that says AI.
     if (!out) return res.json(buildAutoRatio(pool_stats, capacity));
-    const ratio = JSON.parse(out.text.replace(/```json|```/g, '').trim());
+    // "The AI never answered" and "the AI answered something we could not use"
+    // are different facts and the user is owed the right one. This JSON.parse
+    // used to throw into the outer catch, which returned the rules split under
+    // a banner reading "No AI provider answered" — while the meter showed the
+    // tokens had been spent. It had answered; the answer was truncated.
+    let ratio = null;
+    try {
+      ratio = JSON.parse(out.text.replace(/```json|```/g, '').trim());
+    } catch (_) {
+      await aiProvider.recordFailure(supabase, 'lead_ratio', [{
+        provider: out.provider, model: out.model,
+        error: 'answered, but not with usable JSON — likely cut off at the token ceiling: '
+             + String(out.text || '').slice(-120),
+      }]);
+      return res.json({ ...buildAutoRatio(pool_stats, capacity), ai_unusable: true, engine_model: out.model });
+    }
     res.json({ ...ratio, engine: 'ai', engine_model: out.model });
   } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || 150)); }
 });
