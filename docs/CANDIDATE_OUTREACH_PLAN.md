@@ -248,16 +248,38 @@ opted out — before a human ever saw the message. The link therefore lands on a
 with two real buttons, and the click is what counts. This is the single most important
 detail in this section.
 
-Then:
-* **Interested** → `response='interested'`, `responded_at=now()`. It raises a
-  `next-action` item for the recruiter and, if a submission exists, *suggests* moving
-  to Screening. It never moves a stage on its own — stage vocabulary is owned by
-  `services/recruiting-core.js` and moving someone silently is how a board stops being
-  trustworthy.
-* **Not interested** → `response='not_interested'`, and **the address is added to
-  `suppression_list`** for this job at minimum. That is what makes the button a real
-  opt-out rather than a survey, and an opt-out is not optional on candidate mass mail.
-  Anything already queued for that person is marked `skipped`.
+Then — **three** answers, not two (settled while building):
+* **Interested** → `response='interested'`, `responded_at=now()`, and
+  `candidates.last_reply_at` stamped, because a tap IS an answer. It never moves
+  a stage on its own — stage vocabulary is owned by
+  `services/recruiting-core.js`, and a board that moves people by itself stops
+  being trustworthy.
+* **Not this one** → `response='not_interested'` and **nothing else**.
+  ⚠ **"Not interested in this job" is not "never contact me".** This section
+  originally said the button should write to `suppression_list`; that is wrong,
+  because `suppression_list` is global. One decline about one role — usually the
+  wrong city — would have destroyed a good candidate for every future search,
+  and it is not what they said or meant.
+* **Do not email me about any roles** → the quieter third choice, and the ONLY
+  branch that writes to `suppression_list`. It also marks every still-pending
+  row for that address `skipped`, because continuing to mail somebody who has
+  just asked us not to is the exact outcome an opt-out exists to prevent.
+
+Two more rules, both learned by running it:
+
+* **A PUBLIC PAGE MAY NEVER HANG ON THE DATABASE.** Measured against an
+  unreachable Supabase, `supabase-js` retried a refused connection for **seven
+  seconds** before giving up — a spinner on a candidate's phone, on the one
+  screen where we are asking them for a favour. Every query behind these routes
+  is now bounded at 4s and falls through to an honest page pointing at the reply
+  path.
+* **NEVER REPORT A WRITE THAT DID NOT HAPPEN.** If the update times out or
+  errors, the candidate is told so and given the route that still works, rather
+  than a cheerful "Thanks" over a database that recorded nothing.
+
+The token is written to the row **before** the send, not after: if the send
+succeeded and the update then failed, a candidate would tap a button whose token
+matched no row and be told the link was dead.
 
 A reply by email still works and still counts — the sweep stamps `replied_at`, and
 `conversation-intel` reads the intent. The buttons are the high-signal path; the reply
@@ -305,8 +327,8 @@ responsive at 390px.
 
 | Step | What ships | Migration | Why this order |
 |---|---|---|---|
-| **1** | The screen, the job brief, the rules writer, the checker, the queue, the drip, tracking. Sends real email. | 042 | This is the product. Everything after is signal on top of it. |
-| **2** | The two buttons + the public handler + suppression on "not interested". | (in 042) | Ship the columns with 042 so there is one migration, but wire the route second. |
+| **1** | ✅ **SHIPPED.** The screen, the job brief, the rules writer, the checker, the queue, the drip, tracking. Sends real email. | 042 | This is the product. Everything after is signal on top of it. |
+| **2** | ✅ **SHIPPED.** The answer buttons, the public page, and a real opt-out (see §6 — the suppression rule changed). | (in 042) | Shipped alongside step 1, in one release. |
 | **3** | The pipeline tick-box → `submissions` at Sourced, and the interested→Screening *suggestion*. | none | Depends on 1 and 2 being trustworthy. |
 | **4** | Candidate threads into `next-actions` / conversation intel. | none | Mostly wiring; the intel layer already reads candidate threads. |
 

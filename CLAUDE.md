@@ -906,6 +906,25 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        is the most load-bearing code in the app.
      * **EMAILING IS NOT WORKING THEM.** A submission at `Sourced` is created
        ONLY if the recruiter ticks the box (owner's call, default off).
+     * **THE ANSWER IS TWO BUTTONS IN THE EMAIL, AND THE LINK MUST NOT RECORD.**
+       `GET /i/:token` renders a page with real buttons; the POST from that page
+       is the answer. Corporate mail security (Outlook Safe Links, Mimecast,
+       Proofpoint) fetches every URL in an inbound message, so a recording GET
+       would mark candidates interested — or opted out — before a human opened
+       the email, and nothing would look wrong. Same token as the pixel, written
+       to the row BEFORE the send so a tap can never beat its own row. Unknown,
+       deleted and malformed tokens are answered identically.
+     * **"NOT THIS ONE" IS ABOUT THE JOB; ONLY THE EXPLICIT OPT-OUT SUPPRESSES.**
+       `suppression_list` is GLOBAL, so writing to it on a single decline throws
+       away a good candidate for every future role over a "wrong city". THREE
+       answers: interested, not-this-one, and a quieter "do not email me about
+       any roles" — the last is the only one that suppresses, and it also skips
+       everything still queued for that address.
+     * **A PUBLIC PAGE MAY NEVER HANG ON THE DATABASE.** Measured: `supabase-js`
+       retries a refused connection for **7 seconds**. Every query behind `/i/`
+       is bounded at 4s and falls through to an honest page. And a write that
+       timed out is NEVER reported as saved — the candidate is told, and pointed
+       at the reply path.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by
