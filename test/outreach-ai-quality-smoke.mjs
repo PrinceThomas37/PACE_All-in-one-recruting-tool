@@ -183,5 +183,103 @@ t('the page sends the job title and shows which engine wrote the draft', () => {
   assert.match(page, /Written by the AI/);
 });
 
+
+
+console.log('\nReader connection (rule 16/17)');
+t('the reader brief is in the payload, marked never to print', () => {
+  const out = gen.buildUserPayload({ ...BASE, contact_title: 'Controller' });
+  assert.match(out, /READER \(guidance for what to argue — never print any of this\)/);
+  assert.match(out, /finance decision-maker/i);
+});
+t('each audience gets a different brief', () => {
+  const seen = new Set(['Controller', 'HR Manager', 'Owner', 'Site Superintendent', '']
+    .map(x => gen.AUDIENCE_BRIEF[gen.audienceOf(x)]));
+  assert.equal(seen.size, 5);
+});
+t('the prompt tells it to connect the two jobs and never print the title', () => {
+  const p = gen.buildSystemPrompt('Acme', {});
+  assert.match(p, /CONNECT THE TWO JOBS/);
+  assert.match(p, /NEVER PRINT THEIR TITLE/);
+});
+t('addressing them by their own job is caught', () => {
+  const email = good.email.replace('The combination', 'As HR Manager you know the combination');
+  assert.ok(codes({ ...good, email }, BASE, { omitSignOff: true }).includes('names_reader_title'));
+});
+t('a combined title is caught on either half', () => {
+  const i = { ...BASE, contact_title: 'Controller / HR Manager' };
+  const email = good.email.replace('The combination', 'In your role as Controller the combination');
+  assert.ok(codes({ ...good, email }, i, { omitSignOff: true }).includes('names_reader_title'));
+});
+t('a job-title word that is the ROLE, not the reader, is fine', () => {
+  // Superintendent hiring a Superintendent: the word belongs in the email.
+  const i = { ...BASE, contact_title: 'Superintendent' };
+  assert.ok(!codes(good, i, { omitSignOff: true }).includes('names_reader_title'));
+});
+
+console.log('\nFour angles');
+t('every angle declares a different lead and its own length', () => {
+  const ids = Object.keys(gen.ANGLE_BRIEF);
+  assert.deepEqual(ids, ['direct', 'short', 'effort', 'researched']);
+  assert.equal(new Set(ids.map(id => gen.ANGLE_BRIEF[id].lead)).size, 4);
+  assert.equal(new Set(ids.map(id => gen.ANGLE_BRIEF[id].words.join('-'))).size, 4);
+});
+t('the angle brief reaches the prompt and overrides the general length rule', () => {
+  const p = gen.buildSystemPrompt('Acme', { angle: 'short' });
+  assert.match(p, /THIS DRAFT HAS ONE ANGLE/);
+  assert.match(p, /Lead with their time/);
+  assert.match(p, /35-65 words. This overrides rule 7/);
+});
+t('no angle means no angle block — the prompt still ends in the JSON shape', () => {
+  const p = gen.buildSystemPrompt('Acme', {});
+  assert.doesNotMatch(p, /THIS DRAFT HAS ONE ANGLE/);
+  assert.match(p, /Return ONLY valid JSON/);
+});
+t("an angle's own band is what the check enforces", () => {
+  const long = { ...good, email: 'Hi Susan,\n\nThis is P at F. ' + 'word '.repeat(130) + '\nCan I send resumes?\n\nThanks,' };
+  assert.ok(codes(long, BASE, { angle: 'short' }).includes('too_long'));
+  assert.ok(!codes(long, BASE, { angle: 'researched' }).includes('too_long'));
+});
+t('an unknown angle falls back to the outreach-type bands', () => {
+  assert.ok(codes(good, { ...BASE, no_agencies: true }, { angle: 'nope' }).includes('too_long'));
+});
+
+console.log('\nSequence enrolment');
+const wf = readFileSync(new URL('../workflow-engine.js', import.meta.url), 'utf8');
+t('enroll can start after the steps already sent by hand', () => {
+  assert.match(wf, /start_after_step/);
+  assert.match(wf, /const next = steps\[done\]/);
+});
+t('skipping every step is refused rather than enrolling a dead run', () => {
+  assert.match(wf, /has no steps left after the ones already sent/);
+});
+const rt = readFileSync(new URL('../routes/outreach-generator.js', import.meta.url), 'utf8');
+t('sending with a sequence enrols AFTER step 1 — the sent email is step 1', () => {
+  assert.match(rt, /start_after_step: 1/);
+});
+t('the lead is Assigned, never Connected — Connected means they replied', () => {
+  assert.match(rt, /createLeadFromOutreach\(req, \{[\s\S]*?\}, 'Assigned'\)/);
+  assert.match(rt, /\}, 'Connected'\)/);
+});
+t('no sequence chosen creates no lead', () => {
+  assert.match(rt, /const sequenceId = String\(b\.sequence_id \|\| ''\)\.trim\(\);\s*\n\s*if \(sequenceId\) \{/);
+});
+t('a sequence failure never reports the sent email as failed', () => {
+  assert.match(rt, /THE EMAIL HAS ALREADY GONE/);
+});
+t('one-step sequences are not offered — nothing would be left to run', () => {
+  assert.match(rt, /filter\(r => r\.steps > 1\)/);
+});
+t('angles are written one at a time, on demand', () => {
+  assert.match(rt, /router\.post\('\/outreach\/generate-angle'/);
+});
+const pg = readFileSync(new URL('../public/js/48-page-outreach-gen.js', import.meta.url), 'utf8');
+t('the page asks for an angle only when it is opened and not already AI', () => {
+  assert.match(pg, /if\(!v\|\|v\.mode==='ai'\|\|g\.angleLoading\[id\]\|\|g\.edits\[id\]\) return;/);
+});
+t('the page sends the sequence choice and the lead fields', () => {
+  assert.match(pg, /sequence_id:g\.sequenceId/);
+  assert.match(pg, /outreachSetSequence/);
+});
+
 console.log(`\nSUMMARY: ${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);

@@ -3084,6 +3084,9 @@ app.use(require('./routes/outreach-generator')({
   ...routeCtx, loadSuppressedSet, withOrg, orgStamp, logActivity,
   recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
   sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
+  // Sending with a sequence attached enrolls the new lead through the SAME
+  // engine the Sequence tab drives — there is no second enrollment path.
+  wfEngine,
 }));
 
 app.use(require('./routes/wf')({ supabase, auth, hasRole, engine: wfEngine, logActivity }));

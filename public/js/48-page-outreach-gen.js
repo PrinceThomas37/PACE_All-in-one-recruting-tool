@@ -43,7 +43,8 @@
       // Which framing is on screen, and the edits made to each one. Switching
       // between them must not throw away a sentence you just rewrote — that is
       // the difference between a picker and a regenerate button.
-      variantId:null, edits:{},
+      variantId:null, edits:{}, angleLoading:{}, angleInfo:{},
+      sequences:null, sequenceId:'',
       // Recipient search — the "someone already in PACE" half of the composer.
       recipMode:'new', recipQuery:'', recipResults:null, recipSearching:false,
       // What you have already sent from here, and what came back.
@@ -173,7 +174,8 @@
   window.outreachGenReset=function(){
     var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sentOk=null;
     g.recipQuery=''; g.recipResults=null;
-    g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={}; render();
+    g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={};
+    g.angleLoading={}; g.angleInfo={}; render();
   };
 
   // The variant currently on screen, with any edits applied over it.
@@ -193,6 +195,35 @@
     var g=collectDom();          // keep whatever is typed in the box we are leaving
     g.variantId=id;
     render();
+    // ON DEMAND, NOT UP FRONT. Four angles written at every Generate costs four
+    // AI calls — about six generations against the daily budget, after which
+    // every AI feature in the app silently drops to its rules. So an angle is
+    // written the first time you look at it, and only if the AI is available.
+    var d=g.draft;
+    if(!d||!d.ai_available) return;
+    var v=(d.variants||[]).filter(function(x){return x.id===id;})[0];
+    if(!v||v.mode==='ai'||g.angleLoading[id]||g.edits[id]) return;
+    g.angleLoading[id]=true; render();
+    var f=g.form;
+    apiPost('/outreach/generate-angle',{
+      angle:id, outreach_type:f.outreach_type,
+      contact_first_name:f.contact_first_name, contact_title:f.contact_title,
+      company:f.company, location:f.location,
+      no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
+      notes:f.notes, job_title:f.job_title, job_description:f.job_description,
+      sender:{title:f.sender_title}
+    }).then(function(r){
+      g.angleLoading[id]=false;
+      g.draft.variants=(g.draft.variants||[]).map(function(x){ return x.id===id?Object.assign({},x,r):x; });
+      // The engine line is per angle now, so remember what wrote this one.
+      g.angleInfo[id]={mode:r.mode,engine:r.engine,engine_model:r.engine_model,
+                       quality:r.quality,ai_error:r.ai_error,ai_error_detail:r.ai_error_detail};
+      render();
+    }).catch(function(e){
+      g.angleLoading[id]=false;
+      g.angleInfo[id]={mode:'rules',ai_error:'request_failed',ai_error_detail:e.message};
+      render();
+    });
   };
 
   function collectDom(){
@@ -249,7 +280,11 @@
       adjustment:useAdjustment?g.adjustment:''
     }).then(function(r){
       g.loading=false; g.draft=r; g.overCapAsked=false;
-      g.edits={};
+      g.edits={}; g.angleLoading={};
+      // The first angle is the one the server already wrote.
+      g.angleInfo={};
+      if(r.variants&&r.variants[0])g.angleInfo[r.variants[0].id]={mode:r.mode,engine:r.engine,
+        engine_model:r.engine_model,quality:r.quality,ai_error:r.ai_error,ai_error_detail:r.ai_error_detail};
       g.variantId=(r.variants&&r.variants.length)?r.variants[0].id:null;
       bumpUsage();
       render();
@@ -258,6 +293,16 @@
     });
   };
 
+  // The sequences this send can join. Loaded once, when the composer first has
+  // a draft — a picker nobody can see does not need a request behind it.
+  function loadOutreachSequences(){
+    var g=G();
+    if(g.sequences!==null) return;
+    g.sequences=[];
+    apiGet('/outreach/sequences').then(function(r){ g.sequences=r||[]; render(); }).catch(function(){});
+  }
+  window.outreachSetSequence=function(id){ G().sequenceId=id||''; render(); };
+
   window.outreachGenSend=function(){
     var g=collectDom();
     var cur=currentVariant();
@@ -265,11 +310,22 @@
     var to=String(g.form.to||'').trim();
     if(!to){ g.error='Enter the address this should go to.'; render(); return; }
     g.sending=true; g.error=null; render();
-    apiPost('/outreach/send',{to:to,subject:cur.subject,body:cur.email}).then(function(r){
-      g.sending=false; g.sentOk={to:to,mailbox:r.mailbox};
+    var f=g.form;
+    apiPost('/outreach/send',{
+      to:to, subject:cur.subject, body:cur.email,
+      // Choosing a sequence is what turns this into a lead — see the note on
+      // the picker below. Sending without one deliberately creates nothing.
+      sequence_id:g.sequenceId||'',
+      company:f.company, location:f.location, name:f.contact_first_name,
+      title:f.contact_title, position:f.job_title
+    }).then(function(r){
+      g.sending=false; g.sentOk={to:to,mailbox:r.mailbox,sequence:r.sequence};
       g.sent=null; loadOutreachSent(true);   // the list has a new row in it now
       pushHistory(cur.subject||'',g.form.company,true);
-      showToast('Sent to '+to,'success');
+      var seq=r.sequence;
+      if(seq&&seq.error)showToast('Sent, but the sequence could not be started: '+seq.error,'error');
+      else if(seq)showToast('Sent to '+to+' and added to the sequence','success');
+      else showToast('Sent to '+to,'success');
       render();
     }).catch(function(e){
       g.sending=false;
@@ -492,6 +548,8 @@
             'padding:6px 13px;cursor:pointer;font-family:inherit">'+
             esc(v.label||v.id)+
             '<span style="opacity:.65;font-weight:400"> · '+(v.words||0)+'w</span>'+
+            (g.angleLoading[v.id]?'<span style="opacity:.7"> ·&nbsp;writing…</span>'
+              :(v.mode==='ai'?'<span title="written by the AI for this angle" style="opacity:.8"> ·&nbsp;AI</span>':''))+
             (edited?'<span title="you have edited this one" style="opacity:.8"> ·&nbsp;edited</span>':'')+
             '</button>';
         }).join('')+
@@ -518,26 +576,58 @@
           '<div style="margin-top:6px;font-size:11.5px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
       '</div>':'';
 
-    // WHO WROTE THIS, AND IF NOT THE AI, WHY NOT. "The AI writer was
-    // unavailable" is not something anyone can act on; the provider's own
-    // sentence (a renamed model, a spent free tier) is.
+    // ── ADD IT TO A SEQUENCE ───────────────────────────────────────────────
+    // This email is the first outreach for a lead — the same thing the send loop
+    // produces when a lead is assigned. Picking a sequence is what makes that
+    // official: it creates the company, the lead and the contact, and enrolls
+    // them so the follow-ups run without anyone remembering. Sending WITHOUT one
+    // creates nothing, so a one-off draft never lands in somebody's pipeline.
+    function seqPicker(){
+      var gg=G(), seqs=gg.sequences||[];
+      if(!seqs.length) return '';
+      var opts='<option value="">Don\'t add to a sequence — just send it</option>'+
+        seqs.map(function(sq){
+          return '<option value="'+esc(sq.id)+'"'+(gg.sequenceId===sq.id?' selected':'')+'>'+
+            esc(sq.name)+(sq.domain?' ('+esc(sq.domain)+')':'')+' · '+sq.steps+' steps</option>';
+        }).join('');
+      var chosen=seqs.filter(function(sq){return sq.id===gg.sequenceId;})[0];
+      var note=chosen&&chosen.next_step
+        ? 'Creates the lead and enrols them. This email counts as step 1, so the next thing to run is <strong>'+
+          esc(chosen.next_step.name||chosen.next_step.channel)+'</strong> in '+
+          (chosen.next_step.delay_days||0)+' day'+((chosen.next_step.delay_days||0)===1?'':'s')+
+          ' — nobody gets two emails at once.'
+        : 'Sending on its own does not create a lead. Pick a sequence to track this one and run its follow-ups.';
+      return '<div class="fgrp"><label class="flbl">Add to a sequence</label>'+
+        '<select class="inp" onchange="outreachSetSequence(this.value)">'+opts+'</select>'+
+        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">'+note+'</div>'+
+      '</div>';
+    }
+
+    // WHO WROTE THIS ANGLE, AND IF NOT THE AI, WHY NOT. Per angle now, because
+    // each chip is written separately — a single line for the whole draft would
+    // be describing an email that is not on screen.
+    var info=g.angleInfo[cur.id]||{};
     var modeNote='';
-    if(cur.mode==='ai'){
-      var q=d.quality||{};
+    if(g.angleLoading[cur.id]){
+      modeNote='<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Writing this angle…</div>';
+    } else if(cur.mode==='ai'){
+      var q=info.quality||{};
       modeNote='<div style="font-size:11.5px;color:var(--green);margin-bottom:8px">Written by the AI'+
-        (d.engine?' ('+esc(d.engine)+(d.engine_model?' · '+esc(d.engine_model):'')+')':'')+
+        (info.engine?' ('+esc(info.engine)+(info.engine_model?' · '+esc(info.engine_model):'')+')':'')+
         ', checked against the house rules'+(q.repaired?' and corrected once':'')+'.</div>';
-    } else if(cur.mode==='rules'){
+    } else {
       var why='';
-      if(d.ai_error==='draft_rejected'){
-        var vs=(d.quality&&d.quality.violations)||[];
+      if(info.ai_error==='draft_rejected'){
+        var vs=(info.quality&&info.quality.violations)||[];
         why=' The AI\'s draft broke the house rules'+
           (vs.length?' ('+esc(vs.map(function(v){return v.code.replace(/_/g,' ');}).join(', '))+')':'')+
           ', so it was not used.';
-      } else if(d.ai_error){
-        why=' The AI writer did not answer'+(d.ai_error_detail?' — '+esc(d.ai_error_detail):'')+'.';
+      } else if(info.ai_error){
+        why=' The AI writer did not answer'+(info.ai_error_detail?' — '+esc(info.ai_error_detail):'')+'.';
+      } else if(d.ai_available){
+        why=' Click this angle again to have the AI write it.';
       }
-      modeNote='<div style="font-size:11.5px;color:'+(why?'#b45309':'var(--text3)')+';margin-bottom:8px">'+
+      modeNote='<div style="font-size:11.5px;color:'+(info.ai_error?'#b45309':'var(--text3)')+';margin-bottom:8px">'+
         'Written by the built-in rules writer.'+why+'</div>';
     }
     var sentBanner=g.sentOk
@@ -570,6 +660,7 @@
           '<div style="border:1px solid var(--border2);border-radius:var(--r);padding:12px;background:var(--bg);max-height:190px;overflow:auto">'+sigHtml(d)+'</div>'+
           (/\{\{/.test(sigHtml(d))?'<div style="font-size:11.5px;color:#b91c1c;margin-top:5px">This signature still has an unfilled variable in it — tell me before you send.</div>':'')+
         '</div>':'')+
+      seqPicker()+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
         '<button class="btn btn-primary" onclick="outreachGenSend()" '+(g.sending?'disabled style="opacity:.6"':'')+'>'+
           (g.sending?'Sending…':'Send from my outreach mailbox')+'</button>'+
@@ -639,6 +730,7 @@
   window.renderOutreachGenBody=function(){
     var g=G();
     if(!g.sender&&!g.senderLoading) setTimeout(loadOutreachSender,0);
+    if(g.sequences===null) setTimeout(loadOutreachSequences,0);
     var err=g.error?'<div style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+esc(g.error)+'</div>':'';
     return senderCard()+meterCard()+err+
       '<div class="og-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">'+

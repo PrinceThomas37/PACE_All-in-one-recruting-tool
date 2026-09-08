@@ -32,10 +32,52 @@ function possessive(name) {
   return /s$/i.test(n) ? n + "'" : n + "'s";
 }
 
+
+// ── WHO IS READING, AND WHY THEY CARE ──────────────────────────────────────
+// We know two facts that belong together and were never joined up: the title of
+// the person we are writing to, and the role they are hiring for. A Controller
+// hiring a Superintendent is not making a peer hire — they are covering a
+// process, and money is the language they think in. A superintendent hiring a
+// superintendent cares whether the person can run the job on Monday.
+//
+// This is guidance for the model about WHAT TO ARGUE. It is never something to
+// print: naming somebody's job back at them ("as Controller, you'll appreciate")
+// reads as "I read your profile", which is the exact failure Session 17 removed
+// from the rules writer. checkDraft enforces that.
+const AUDIENCE_BRIEF = {
+  finance: 'A finance decision-maker. The vacancy is a cost and a bad hire is a bigger one, so cost and risk are the language — a fee only on a successful placement is the point, not a footnote. They are not evaluating the craft.',
+  hr: 'HR / talent. The SEARCH is their workload: screening, scheduling, a pipeline that keeps stalling. The offer is work taken off their desk, not education about the role.',
+  exec: 'An owner or executive. The empty seat is blocking a project, a bid or revenue. Be brief and speak to the business consequence — they are deciding, not administering.',
+  manager: 'The hiring manager for this work, probably doing the job one level up. They care whether the person can run the work from day one. Least sales-like register of the four; be concrete about the work itself.',
+  unknown: 'Their role is unclear, so argue from the ROLE being filled rather than from what they personally care about, and stay neutral.',
+};
+
+// What separates the four angles once an AI writes all of them. Without this
+// they converge: the model finds the strongest material — usually the hard
+// constraint — and leads with it four times, and a picker whose options are
+// paraphrases of each other is not a picker.
+const ANGLE_BRIEF = {
+  direct: { lead: 'the ramp', words: [55, 90],
+    must: 'Name one specific requirement from the posting that the candidates already meet, and say the ramp would be short. Shortest path from "I saw the posting" to "we have these people".',
+    never: 'Do NOT explain why the role is hard to fill — that is another angle\'s job. Do NOT open with how long the role has been open or that it was re-posted. Do NOT recite the full requirement list; one requirement is the point, four is a brag.' },
+  short: { lead: 'their time', words: [35, 65],
+    must: 'Three sentences maximum after the greeting. Promise brevity and keep it: these people are available now and have not been shown to them yet. Name at most ONE credential.',
+    never: 'Do NOT list requirements — naming two is already too many. Do NOT explain why the role is hard or mention how long it has been open or that it was re-posted; that is another angle entirely. Do NOT explain the market. Omit the fee sentence unless the reader is finance-first. If you are weighing whether a sentence earns its place, it does not.' },
+  effort: { lead: 'the cost of searching', words: [60, 95],
+    must: 'The subject of this email is THE WORK OF SEARCHING, not the role and not our candidates. Talk about what the search itself costs them — the sifting, the screening calls, the scheduling, the weeks — and offer to take that off their desk with people who are already vetted.',
+    never: 'Do NOT lead with our candidates or their credentials; they are the relief at the end, not the opening. Do NOT restate the requirements as a list. Do NOT explain why the role is hard to fill — say what the SEARCH costs, which is a different sentence.' },
+  researched: { lead: 'the constraint', words: [75, 120],
+    must: 'Name the single hardest requirement in the posting and show you understand why it narrows the pool, using the posting\'s own specifics. This is the ONLY angle that explains why the role is hard, and it is the most researched of the four.',
+    never: 'Do NOT hedge it into a list of everything the posting asks for. One constraint, understood properly, beats four recited.' },
+};
+
+function angleBrief(id) { return ANGLE_BRIEF[id] || null; }
+
 // ── Rule 1-15, given to the model verbatim. Kept as an array of lines so a
 // diff shows which rule changed rather than one reflowed paragraph.
 function buildSystemPrompt(companyName, opts) {
   const co = String(companyName || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY;
+  const angle = (opts && opts.angle && ANGLE_BRIEF[opts.angle]) || null;
   const rule14 = (opts && opts.omitSignOff)
     ? '14. The sender\'s email signature is appended automatically after your text, so close with "Thanks," and NOTHING else — no name, no title, no company, no contact details. A second sign-off above the signature is a visible mistake.'
     : `14. Close with the sender's real name, title, and "${co}" — nothing more decorative. Do not add a phone or email signature line unless asked.`;
@@ -59,10 +101,21 @@ function buildSystemPrompt(companyName, opts) {
     "13. If the posting names a specific HR or recruiting contact with a formal application process, that signals a slightly more corporate register. If it's clearly a small owner-operator business, keep it plainer and more direct.",
     rule14,
     '15. If adjustment instructions are provided for a regeneration, apply them while keeping every rule above.',
+    '16. CONNECT THE TWO JOBS. You are given the reader\'s own job title and the role they are hiring for. Work out the relationship between them and let it decide what the email ARGUES — a finance reader is being asked to approve a cost, an HR reader wants the screening off their desk, an owner wants the seat filled because it is blocking work, a hiring manager wants somebody who can run the job on Monday. The READER note below tells you which. Do this every time, for any job.',
+    '17. NEVER PRINT THEIR TITLE OR DESCRIBE THEIR JOB BACK TO THEM. No "as Controller, you will appreciate", no "in your role as HR Manager". Rule 16 changes what you argue, never what you say about them. Naming somebody\'s job back at them reads as "I read your profile" rather than "I read your posting".',
+    '',
+  ].concat(angle ? [
+    '',
+    'THIS DRAFT HAS ONE ANGLE, AND IT IS NOT THE OTHERS:',
+    `Lead with ${angle.lead}. ${angle.must}`,
+    angle.never,
+    'The other three angles exist and are shown beside this one. If this draft could pass for any of them, it has failed.',
+    `Length for this angle: ${angle.words[0]}-${angle.words[1]} words. This overrides rule 7 and rule 12.`,
+  ] : []).concat([
     '',
     'Return ONLY valid JSON, no markdown fences, no prose outside the JSON, in exactly this shape:',
     '{"subject": "...", "diagnosis": "one or two sentences on the hiring-problem angle you used and why", "email": "the full email body including sign-off, no subject line inside it"}'
-  ].join('\n');
+  ]).join('\n');
 }
 
 function txt(v) { return String(v == null ? '' : v).trim(); }
@@ -88,6 +141,9 @@ function buildUserPayload(input) {
     ? 'Follow-up (already contacted once, no reply yet)' : 'First outreach'));
   lines.push('CONTACT: ' + txt(i.contact_first_name) +
     (txt(i.contact_title) ? ' — ' + txt(i.contact_title) : ''));
+  // Rule 16: the two job titles, joined up. Named as READER rather than folded
+  // into CONTACT so the model cannot mistake it for something to quote back.
+  lines.push('READER (guidance for what to argue — never print any of this): ' + AUDIENCE_BRIEF[audienceOf(i.contact_title)]);
   if (txt(i.job_title)) lines.push('ROLE BEING HIRED FOR: ' + txt(i.job_title) + ' (authoritative — use this, not a title scraped from the posting)');
   lines.push('COMPANY: ' + txt(i.company));
   if (txt(i.location)) lines.push('LOCATION: ' + txt(i.location));
@@ -926,7 +982,14 @@ function checkDraft(draft, input, opts) {
   }
 
   const words = wordCount(email);
-  if (i.no_agencies) {
+  const band = o.angle && ANGLE_BRIEF[o.angle] ? ANGLE_BRIEF[o.angle].words : null;
+  if (band) {
+    // An angle declares its own length, and the four differ on purpose — that is
+    // half of what makes them different emails. A little slack either side, so
+    // the check polices the shape rather than counting words at the model.
+    if (words > band[1] + 25) add('too_long', `This angle should run ${band[0]}-${band[1]} words. Yours is ${words}. Cut it back.`);
+    else if (words < band[0] - 15) add('too_short', `This angle should run ${band[0]}-${band[1]} words. Yours is ${words} — there is not enough there to earn a reply.`);
+  } else if (i.no_agencies) {
     if (words > 90) add('too_long', `The posting says no agencies, so the whole email must be under 90 words. Yours is ${words}. Cut it.`);
   } else if (i.outreach_type === 'followup') {
     if (words > 85) add('too_long', `This is a follow-up, so keep it under 85 words. Yours is ${words}. Ask one thing and stop.`);
@@ -990,6 +1053,24 @@ function checkDraft(draft, input, opts) {
     add('no_greeting', `Open with a greeting line addressing them by first name — "Hi ${first}," — before the first sentence.`);
   }
 
+  // Rule 17. The reader's job shapes the argument and never appears in the text.
+  // The failure mode is specific and easy to name: addressing them BY the role
+  // ("as Controller, ...", "in your role as HR Manager"). A bare word from the
+  // title is not enough to flag — a superintendent hiring a superintendent will
+  // legitimately see the word — so this looks for the addressing construction.
+  const title = txt(i.contact_title);
+  if (title) {
+    const parts = title.split(/[\/,;|]+| and /i).map(t => t.trim()).filter(t => t.length > 2);
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const part of parts) {
+      const re = new RegExp('\\b(?:as|being|in your role as|as the|as a|as an)\\s+(?:the\\s+|a\\s+|an\\s+)?' + esc(part) + '\\b', 'i');
+      if (re.test(email)) {
+        add('names_reader_title', `Remove "${part}" — never describe their own job back to them. Let it change what you argue, not what you say about them.`);
+        break;
+      }
+    }
+  }
+
   if (subject.length > 90) add('subject_long', 'Shorten the subject line to something that fits in an inbox list.');
 
   return { ok: v.length === 0, violations: v };
@@ -1015,7 +1096,7 @@ function buildRepairPrompt(previous, violations) {
 module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
-  checkDraft, buildRepairPrompt,
+  checkDraft, buildRepairPrompt, angleBrief, ANGLE_BRIEF, AUDIENCE_BRIEF,
   rulesDraft, rulesVariants, draftParts, contextSentence, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
   extractCompany, extractLocation, looksLikeJobTitle,
   contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
