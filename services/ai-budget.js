@@ -66,6 +66,11 @@ const FEATURES = {
   resume_parse:    { label: 'Resume parsing',        in: 4000, out: 700,  tier: 'fast' },
   jd_scrub:        { label: 'Job description clean', in: 3000, out: 2500, tier: 'fast' },
   outreach_draft:  { label: 'Outreach generator',    in: 3000, out: 1000, tier: 'quality' },
+  // ONE CALL PER JOB ORDER, NOT PER CANDIDATE — see services/candidate-outreach.js.
+  // 'quality' because this text is read by every candidate on the job and is the
+  // only AI-written part of a candidate email; the ceiling is low because the
+  // answer is two or three sentences and nothing more is wanted.
+  candidate_brief: { label: 'Candidate job brief',   in: 2500, out: 500,  tier: 'quality' },
   cold_email:      { label: 'Cold email drafting',   in: 1000, out: 600,  tier: 'quality' },
   import_briefing: { label: 'Daily import briefing', in: 1200, out: 400,  tier: 'fast' },
   lead_ratio:      { label: 'Lead distribution',     in: 1200, out: 400,  tier: 'fast' },

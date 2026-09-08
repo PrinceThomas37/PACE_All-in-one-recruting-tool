@@ -338,7 +338,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **59** suites via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **62** suites via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it
@@ -853,6 +853,78 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        sent IS step 1 and the standard sequence opens with `email(+0d)` — which
        would otherwise send the same prospect a second email on the next tick.
        A sequence failure never reports the already-sent email as failed.
+   - **CANDIDATE OUTREACH IS THE MIRROR OF THE GENERATOR, POINTED THE OTHER WAY
+     (Session 21).** Email → Compose now has a **Clients | Candidates** switch
+     (recruiters see Candidates, BD sees Clients, anyone leading both desks gets
+     the switch; one mode is never drawn as a picker). Clients starts from a
+     PASTED posting and finds one contact; candidates starts from a **job order
+     we already own** and finds MANY people. `services/candidate-outreach.js` is
+     PURE and holds the writer, the three angles and `checkCandidateDraft`;
+     `routes/candidate-outreach.js` is the database, the AI call, the queue and
+     the drip. See `docs/CANDIDATE_OUTREACH_PLAN.md`. Rules that hold:
+     * **THE AI IS CALLED ONCE PER JOB ORDER, NEVER PER CANDIDATE.** 25
+       candidates = 25 calls = a rate-limit on Groq's 8k tokens/minute and the
+       org's whole daily meter gone, after which EVERY AI feature in PACE falls
+       back to rules for the day. So the **job brief** is written once and
+       cached on `job_orders.outreach_brief` (migration 042); the per-candidate
+       sentence is assembled free from the **match engine's `reasons`**, which
+       are read off that person's own resume and are therefore true by
+       construction. 25 candidates cost the same as one.
+     * **THE BODY IS STORED WITH `{{sender}}` UNRENDERED** — these are QUEUED,
+       and the mailbox that sends is resolved at drain time. `checkDraft`'s
+       placeholder rule is therefore INVERTED here: `{{sender}}`/`{{senderemail}}`
+       are legal and anything else in braces is not. The preview resolves from
+       the **selected sending mailbox**, never the session.
+     * **THE CANDIDATE RULES ARE NOT THE CLIENT RULES RENAMED.** Fee language is
+       right on a client email and refused here. An opt-out is optional there
+       and **mandatory** here. Job title and location must appear — a candidate
+       cannot answer "are you interested" without them. And two checks exist
+       because getting them wrong is unrecoverable: **`invented_pay`** (any
+       money figure not on the job order; the first version only matched a
+       currency SUFFIX, so `USD 200,000` — the exact shape `jobFacts` emits —
+       sailed through, and a checker with a hole reports a clean draft) and
+       **`invented_experience`** (a years claim that contradicts the record).
+     * **A MINIMUM LENGTH IS AN INSTRUCTION TO INVENT WHEN THERE ARE NO FACTS.**
+       `too_short` is suppressed when `materialIn()` < 3. It rejected the rules
+       writer's own drafts on a job order carrying only a title — and demanding
+       more words there is asking for exactly what `invented_pay` forbids.
+     * **THE RULES WRITER MUST PASS ITS OWN CHECKER**, and the queue endpoint
+       enforces it: a candidate whose draft fails is skipped, so an angle that
+       fails silently never ships. Two real defects came out of this on the
+       first run (the short angle had no way out; nurture never asked a
+       question). Pinned by `test/candidate-outreach-smoke.mjs`.
+     * **`null` MEANS OMIT, `''` MEANS BLANK LINE** in `assemble()`. Filtering
+       both collapsed every email to single-spaced sentences — invisible to a
+       word count and to every check, visible instantly in a screenshot.
+     * **THE DRIP IS A COLUMN, NOT A TIMER.** The free tier spins down, so each
+       queued row carries its own `send_after` (now + i × 75-105s, jittered) and
+       the heartbeat drains what is due, applying the same gates as the lead
+       loop (window in the CANDIDATE's timezone, daily cap, warm-up ramp,
+       auto-pause, suppression). A late heartbeat delays and never skips.
+       Nothing sends inside a request. `candidate_outreach` is its own queue
+       deliberately — `emails` is welded to the leads engine and its send loop
+       is the most load-bearing code in the app.
+     * **EMAILING IS NOT WORKING THEM.** A submission at `Sourced` is created
+       ONLY if the recruiter ticks the box (owner's call, default off).
+     * **THE ANSWER IS TWO BUTTONS IN THE EMAIL, AND THE LINK MUST NOT RECORD.**
+       `GET /i/:token` renders a page with real buttons; the POST from that page
+       is the answer. Corporate mail security (Outlook Safe Links, Mimecast,
+       Proofpoint) fetches every URL in an inbound message, so a recording GET
+       would mark candidates interested — or opted out — before a human opened
+       the email, and nothing would look wrong. Same token as the pixel, written
+       to the row BEFORE the send so a tap can never beat its own row. Unknown,
+       deleted and malformed tokens are answered identically.
+     * **"NOT THIS ONE" IS ABOUT THE JOB; ONLY THE EXPLICIT OPT-OUT SUPPRESSES.**
+       `suppression_list` is GLOBAL, so writing to it on a single decline throws
+       away a good candidate for every future role over a "wrong city". THREE
+       answers: interested, not-this-one, and a quieter "do not email me about
+       any roles" — the last is the only one that suppresses, and it also skips
+       everything still queued for that address.
+     * **A PUBLIC PAGE MAY NEVER HANG ON THE DATABASE.** Measured: `supabase-js`
+       retries a refused connection for **7 seconds**. Every query behind `/i/`
+       is bounded at 4s and falls through to an honest page. And a write that
+       timed out is NEVER reported as saved — the candidate is told, and pointed
+       at the reply path.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by
