@@ -38,7 +38,7 @@ module.exports = (ctx) => {
   const {
     supabase, auth, today, buildHtmlEmailBody, getMailboxSignature,
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage,
-    withOrg, orgStamp, logActivity,
+    withOrg, orgStamp, logActivity, wfEngine,
   } = ctx;
 
   // The org's own name — this text goes out under the CUSTOMER's identity, so
@@ -50,6 +50,18 @@ module.exports = (ctx) => {
       const { data } = await supabase.from('organizations').select('name').eq('id', req.orgId).maybeSingle();
       return (data && data.name) || gen.DEFAULT_COMPANY;
     } catch (_) { return gen.DEFAULT_COMPANY; }
+  }
+
+  // Why the AI did not write this one. complete() records the provider's own
+  // sentence under ai_last_error; "the AI writer was unavailable" is not a
+  // diagnosis anybody can act on.
+  async function lastAiError(sb) {
+    try {
+      const { data } = await sb.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
+      const rec = data && JSON.parse(data.value);
+      const f = rec && rec.feature === 'outreach_draft' && (rec.failures || [])[0];
+      return f ? `${f.provider}/${f.model}: ${f.error}` : null;
+    } catch (_) { return null; }   // a diagnosis is a bonus, never the reason a draft fails
   }
 
   const txtOf = (v) => String(v == null ? '' : v).trim();
@@ -171,21 +183,28 @@ module.exports = (ctx) => {
         return res.json({ ...built.variants[0], ...base, ai_available: false });
       }
 
-      try {
-        // The posting is PASTED, so its length is whatever a job page happened
-        // to contain — the one genuinely uncapped input in the app. Trim it
-        // here rather than letting the budget trim the whole payload, so the
-        // fields after it (the regeneration adjustment especially) survive.
-        // The rules engine still reads the full text; only the AI's copy is cut.
+      // ── DRAFTING ONE ANGLE ────────────────────────────────────────────
+      // Four angles, written on demand: the one on screen now, and the others
+      // when their chip is clicked (POST /outreach/generate-angle). Writing all
+      // four up front costs four calls a Generate — about six generations
+      // against the daily budget, after which every feature in the app silently
+      // falls back to its rules. The picker is worth one call at a time.
+      const draftAngle = async (angleId) => {
+        const variant = built.variants.find(v => v.id === angleId) || built.variants[0];
         const forAi = {
           ...withSender,
+          // The posting is PASTED, so its length is whatever a job page happened
+          // to contain — the one genuinely uncapped input in the app. Trim it
+          // here rather than letting the budget trim the whole payload, so the
+          // fields after it (the regeneration adjustment especially) survive.
+          // The rules engine still reads the full text; only the AI's copy is cut.
           job_description: aiProvider.budget.trimToTokens(withSender.job_description, 2200),
-          // Show the model how this team writes instead of describing it. The
-          // rules draft for THIS posting is the house style, built from the
-          // openers that earned replies.
-          style_reference: built.variants[0] && built.variants[0].email,
+          // Show the model how this team writes instead of describing it — and
+          // show it THIS angle's rules draft, so the reference matches the brief.
+          style_reference: variant && variant.email,
         };
-        const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff });
+        const angle = gen.angleBrief(variant && variant.id) ? variant.id : null;
+        const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle });
         const askAi = (prompt) => aiProvider.complete(supabase, {
           model: AI_MODEL || undefined,
           maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId,
@@ -200,10 +219,11 @@ module.exports = (ctx) => {
         // A PROMPT RULE IS A REQUEST; A CHECK IS A GUARANTEE. The model is told
         // the house rules and then held to the ones a machine can actually
         // verify — a stated fee percentage, a "quick call?" ask, a leftover
-        // {{placeholder}}, a second sign-off above the signature. One repair
-        // turn, then the rules draft wins. Never ship a draft that broke a rule
-        // just because an AI wrote it.
-        const checkOpts = { omitSignOff: draftOpts.omitSignOff };
+        // {{placeholder}}, a second sign-off above the signature, this angle's
+        // own length, and never naming the reader's job back at them. One
+        // repair turn, then the rules draft wins. Never ship a draft that broke
+        // a rule just because an AI wrote it.
+        const checkOpts = { omitSignOff: draftOpts.omitSignOff, angle };
         let check = gen.checkDraft(parsed, withSender, checkOpts);
         let repaired = false;
         if (!check.ok) {
@@ -217,28 +237,32 @@ module.exports = (ctx) => {
             }
           }
         }
-        if (!check.ok) {
+        const usage = out.usage || {};
+        return { parsed, check, repaired, out, usage, variant };
+      };
+      try {
+        const first = built.variants[0];
+        const r = await draftAngle(first.id);
+        if (!r.check.ok) {
           // It still breaks a rule we can name. The rules draft is on screen
           // instead, and the page says exactly which rule and why.
           return res.json({
-            ...built.variants[0], ...base, ai_available: true,
+            ...first, ...base, ai_available: true,
             ai_error: 'draft_rejected',
-            quality: { ok: false, repaired, violations: check.violations },
-            rejected_draft: { subject: parsed.subject, email: parsed.email }
+            quality: { ok: false, repaired: r.repaired, violations: r.check.violations },
           });
         }
-
-        const usage = out.usage || {};
-        // The AI writes one email; the rules writer's framings stay alongside it
-        // so the choice is never lost when a key is configured.
+        // The AI rewrites the angle you are looking at; the other three keep
+        // their rules text until you click them.
+        const variants = built.variants.map(v => v.id === first.id
+          ? { ...v, subject: r.parsed.subject, diagnosis: r.parsed.diagnosis, email: r.parsed.email,
+              words: gen.wordCount(r.parsed.email), mode: 'ai' }
+          : v);
         return res.json({
-          ...parsed, mode: 'ai', ai_available: true, ...base,
-          engine: out.provider, engine_model: out.model,
-          quality: { ok: true, repaired, violations: [] },
-          variants: [{ id: 'ai', label: 'AI draft', blurb: 'Written by the AI writer for this posting.',
-                       subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
-                       words: gen.wordCount(parsed.email), mode: 'ai' }].concat(built.variants),
-          usage: { input_tokens: usage.input_tokens || 0, output_tokens: usage.output_tokens || 0 }
+          ...r.parsed, mode: 'ai', ai_available: true, ...base, variants,
+          engine: r.out.provider, engine_model: r.out.model,
+          quality: { ok: true, repaired: r.repaired, violations: [] },
+          usage: { input_tokens: r.usage.input_tokens || 0, output_tokens: r.usage.output_tokens || 0 }
         });
       } catch (aiErr) {
         // A drafting failure is not a dead end — the rules engine writes the
@@ -246,15 +270,80 @@ module.exports = (ctx) => {
         // from outside, a missing model, a spent free tier and a timeout look
         // identical. complete() already recorded WHY under ai_last_error, so
         // read it back and put the provider's own sentence on the page.
-        let why = null;
-        try {
-          const { data } = await supabase.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
-          const rec = data && JSON.parse(data.value);
-          const f = rec && rec.feature === 'outreach_draft' && (rec.failures || [])[0];
-          if (f) why = `${f.provider}/${f.model}: ${f.error}`;
-        } catch (_) { /* a diagnosis is a bonus, never the reason a draft fails */ }
-        return res.json({ ...built.variants[0], ...base, ai_available: true, ai_error: aiErr.message, ai_error_detail: why });
+        return res.json({ ...built.variants[0], ...base, ai_available: true,
+          ai_error: aiErr.message, ai_error_detail: await lastAiError(supabase) });
       }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── ONE MORE ANGLE, ON DEMAND ───────────────────────────────────────────
+  // Same inputs, same checks, one angle. Called when a chip that still holds
+  // its rules text is clicked.
+  router.post('/outreach/generate-angle', auth, async (req, res) => {
+    try {
+      const input = req.body || {};
+      const angleId = String(input.angle || '').trim();
+      if (!gen.angleBrief(angleId)) return res.status(400).json({ error: 'Unknown angle.' });
+      const check = gen.validateInput(input);
+      if (!check.ok) return res.status(400).json({ error: 'Fill in: ' + check.missing.join(', ') + '.' });
+      if (!(await aiProvider.isAvailable(supabase))) return res.status(409).json({ error: 'ai_unavailable' });
+
+      const [companyName, mailbox] = await Promise.all([
+        orgCompanyName(req), recruiterSendingMailbox(req.user.id)
+      ]);
+      const identity = await senderIdentity(req, mailbox);
+      const signatureHtml = await mailboxSignature(mailbox, req.user.id);
+      const draftOpts = { companyName, omitSignOff: !!signatureHtml.trim() };
+      const withSender = {
+        ...input,
+        sender: {
+          name: identity.name,
+          title: String((input.sender && input.sender.title) || identity.title || '').trim(),
+          email: identity.email
+        }
+      };
+      const built = gen.rulesVariants(withSender, draftOpts);
+      const variant = built.variants.find(v => v.id === angleId);
+      if (!variant) return res.status(400).json({ error: 'That angle does not apply to this email.' });
+
+      const forAi = {
+        ...withSender,
+        job_description: aiProvider.budget.trimToTokens(withSender.job_description, 2200),
+        style_reference: variant.email,
+      };
+      const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle: angleId });
+      const askAi = (prompt) => aiProvider.complete(supabase, {
+        model: AI_MODEL || undefined,
+        maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId, system, prompt,
+      });
+
+      const out = await askAi(gen.buildUserPayload(forAi));
+      if (!out) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unavailable', ai_error_detail: await lastAiError(supabase) });
+      let parsed = gen.parseAiDraft(out.text);
+      if (!parsed) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unparseable' });
+
+      const checkOpts = { omitSignOff: draftOpts.omitSignOff, angle: angleId };
+      let q = gen.checkDraft(parsed, withSender, checkOpts);
+      let repaired = false;
+      if (!q.ok) {
+        const fix = await askAi(gen.buildRepairPrompt(parsed, q.violations));
+        const fixed = fix && gen.parseAiDraft(fix.text);
+        if (fixed) {
+          const recheck = gen.checkDraft(fixed, withSender, checkOpts);
+          if (recheck.violations.length < q.violations.length) { parsed = fixed; q = recheck; repaired = true; }
+        }
+      }
+      if (!q.ok) {
+        return res.json({ ...variant, mode: 'rules', ai_error: 'draft_rejected',
+          quality: { ok: false, repaired, violations: q.violations } });
+      }
+      res.json({
+        id: variant.id, label: variant.label, blurb: variant.blurb,
+        subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
+        words: gen.wordCount(parsed.email), mode: 'ai',
+        engine: out.provider, engine_model: out.model,
+        quality: { ok: true, repaired, violations: [] }
+      });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -331,6 +420,70 @@ module.exports = (ctx) => {
   //
   // Nothing here needs a migration — email_tracking has carried an unused
   // lead_id column since 024, which is exactly what it was for.
+  // ── ONE OUTREACH BECOMES A LEAD ─────────────────────────────────────────
+  // Shared by the "they replied" conversion and by sending with a sequence
+  // attached. Returns { job_id, company_id, existing } — `existing` when the
+  // address is already somebody's lead, because silently creating a duplicate
+  // of a lead a colleague is working is worse than doing nothing.
+  //
+  // STAGE IS NOT A FREE CHOICE. `Connected` means THEY REPLIED — it drives the
+  // funnel, the reports and the 30-day recycler. A lead created because we sent
+  // an email is `Assigned`.
+  async function createLeadFromOutreach(req, b, stage) {
+    const toEmail = String(b.email || '').trim().toLowerCase();
+    if (!toEmail) return { error: 'No recipient address on that send.' };
+
+    const { data: existing } = await withOrg(supabase.from('contacts')
+      .select('id,job_id').ilike('email', toEmail).limit(1), req);
+    if (existing && existing.length && existing[0].job_id) {
+      return { job_id: existing[0].job_id, contact_id: existing[0].id, existing: true };
+    }
+
+    const org = orgStamp(req);
+    const companyName = String(b.company || '').trim();
+    let companyId = null;
+    if (companyName) {
+      const { data: found } = await withOrg(supabase.from('companies')
+        .select('id').ilike('name', companyName).limit(1), req);
+      companyId = (found && found[0] && found[0].id) || null;
+      if (!companyId) {
+        const { data: made, error: cErr } = await supabase.from('companies').insert(Object.assign({
+          name: companyName, location: String(b.location || '') || null, created_by: req.user.id
+        }, org)).select('id').single();
+        if (cErr) throw cErr;
+        companyId = made.id;
+      }
+    }
+
+    const { data: job, error: jErr } = await supabase.from('jobs').insert(Object.assign({
+      company_id: companyId,
+      position: String(b.position || b.subject || 'Outreach').slice(0, 200),
+      location: String(b.location || '') || null,
+      source: 'Outreach generator',
+      stage,
+      notes: String(b.notes || ''),
+      created_by: req.user.id,
+      assigned_to: req.user.id,
+      created_date: new Date().toISOString().split('T')[0]
+    }, org)).select('id').single();
+    if (jErr) throw jErr;
+
+    const name = String(b.name || '').trim();
+    const contactRow = Object.assign({
+      job_id: job.id,
+      first_name: name.split(/\s+/)[0] || '',
+      last_name: name.split(/\s+/).slice(1).join(' ') || '',
+      designation: String(b.title || '') || null,
+      email: toEmail,
+      is_primary: true,
+    }, org);
+    if (b.replied) contactRow.replied_at = new Date();
+    if (b.emailed) contactRow.email_sent_at = today();
+    const { data: contact } = await supabase.from('contacts').insert(contactRow).select('id').single();
+
+    return { job_id: job.id, company_id: companyId, contact_id: contact && contact.id, existing: false };
+  }
+
   router.post('/outreach/convert-lead', auth, async (req, res) => {
     try {
       const b = req.body || {};
@@ -349,62 +502,27 @@ module.exports = (ctx) => {
       const toEmail = (trk && trk.to_email) || email;
       if (!toEmail) return res.status(400).json({ error: 'No recipient address on that send.' });
 
-      // Already in the database? Then this is not a new lead, and saying so
-      // beats silently creating a duplicate of a lead somebody is working.
-      const { data: existing } = await withOrg(supabase.from('contacts')
-        .select('id,job_id').ilike('email', toEmail).limit(1), req);
-      if (existing && existing.length && existing[0].job_id) {
-        if (trk) await supabase.from('email_tracking').update({ lead_id: existing[0].job_id }).eq('id', trk.id);
-        return res.status(409).json({ error: 'contact_exists', job_id: existing[0].job_id });
+      // They replied, so this one is Connected — that is exactly what the stage
+      // means, and it is the only path that may set it.
+      const made = await createLeadFromOutreach(req, {
+        email: toEmail, company: b.company, location: b.location,
+        position: b.position || (trk && trk.subject), name: b.name, title: b.title,
+        notes: b.notes || 'Created from a reply to a generated outreach email.',
+        replied: true,
+      }, 'Connected');
+      if (made.error) return res.status(400).json({ error: made.error });
+      if (made.existing) {
+        if (trk) await supabase.from('email_tracking').update({ lead_id: made.job_id }).eq('id', trk.id);
+        return res.status(409).json({ error: 'contact_exists', job_id: made.job_id });
       }
 
-      const org = orgStamp(req);
-      const companyName = String(b.company || '').trim();
-      let companyId = null;
-      if (companyName) {
-        const { data: found } = await withOrg(supabase.from('companies')
-          .select('id').ilike('name', companyName).limit(1), req);
-        companyId = (found && found[0] && found[0].id) || null;
-        if (!companyId) {
-          const { data: made, error: cErr } = await supabase.from('companies').insert(Object.assign({
-            name: companyName, location: String(b.location || '') || null, created_by: req.user.id
-          }, org)).select('id').single();
-          if (cErr) throw cErr;
-          companyId = made.id;
-        }
-      }
-
-      const { data: job, error: jErr } = await supabase.from('jobs').insert(Object.assign({
-        company_id: companyId,
-        position: String(b.position || b.subject || 'Outreach reply').slice(0, 200),
-        location: String(b.location || '') || null,
-        source: 'Outreach generator',
-        stage: 'Connected',          // they replied — that is what Connected means
-        notes: String(b.notes || 'Created from a reply to a generated outreach email.'),
-        created_by: req.user.id,
-        assigned_to: req.user.id,
-        created_date: new Date().toISOString().split('T')[0]
-      }, org)).select('id').single();
-      if (jErr) throw jErr;
-
-      const name = String(b.name || '').trim();
-      await supabase.from('contacts').insert(Object.assign({
-        job_id: job.id,
-        first_name: name.split(/\s+/)[0] || '',
-        last_name: name.split(/\s+/).slice(1).join(' ') || '',
-        designation: String(b.title || '') || null,
-        email: toEmail,
-        is_primary: true,
-        replied_at: new Date()
-      }, org));
-
-      if (trk) await supabase.from('email_tracking').update({ lead_id: job.id }).eq('id', trk.id);
+      if (trk) await supabase.from('email_tracking').update({ lead_id: made.job_id }).eq('id', trk.id);
       try {
-        if (logActivity) await logActivity(job.id, null, req.user.id, 'lead_created',
+        if (logActivity) await logActivity(made.job_id, null, req.user.id, 'lead_created',
           `Converted from an outreach reply (${toEmail})`);
       } catch (_) { /* audit is best-effort */ }
 
-      res.status(201).json({ job_id: job.id, company_id: companyId });
+      res.status(201).json({ job_id: made.job_id, company_id: made.company_id });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -444,7 +562,76 @@ module.exports = (ctx) => {
         { onConflict: 'user_email_id,send_date' }
       );
 
-      res.json({ sent: true, mailbox: mailbox.email_address });
+      // ── ADD IT TO A SEQUENCE ────────────────────────────────────────────
+      // The email that just went out is the FIRST outreach for a lead — the same
+      // shape the send loop produces when a lead is assigned. Choosing a
+      // sequence is what makes that official: it creates the company, the lead
+      // and the contact, and enrolls them so the follow-ups run on their own.
+      // Sending WITHOUT choosing a sequence deliberately creates nothing, so a
+      // one-off draft does not land in somebody's pipeline.
+      //
+      // The enrollment starts AFTER step 1. This email is step 1; a sequence
+      // whose first step is `email(+0 days)` would otherwise be due today and
+      // send the same person a second email on the next tick.
+      let sequence = null;
+      const sequenceId = String(b.sequence_id || '').trim();
+      if (sequenceId) {
+        try {
+          const made = await createLeadFromOutreach(req, {
+            email: to, company: b.company, location: b.location,
+            position: b.position || b.job_title || subject, name: b.name, title: b.title,
+            notes: 'Created from the outreach generator when the first email was sent.',
+            emailed: true,
+          }, 'Assigned');
+          if (made.error) throw new Error(made.error);
+          await supabase.from('email_tracking').update({ lead_id: made.job_id }).eq('token', token);
+
+          const enrollment = await wfEngine.enroll({
+            workflow_id: sequenceId,
+            entity_type: 'contact',
+            entity_id: made.contact_id,
+            contact_id: made.contact_id,
+            job_id: made.job_id,
+            org_id: req.orgId || null,
+            enrolled_by: req.user.id,
+            start_after_step: 1,
+            metadata: { from_mailbox_id: mailbox.id, from_mailbox_email: mailbox.email_address, source: 'outreach_generator' },
+          });
+          try {
+            if (logActivity) await logActivity(made.job_id, made.contact_id, req.user.id, 'workflow_enrolled',
+              'Outreach sent and added to a sequence (first step already sent)');
+          } catch (_) { /* audit is best-effort */ }
+          sequence = { job_id: made.job_id, contact_id: made.contact_id, enrollment_id: enrollment.id,
+                       existing_lead: made.existing, next_due: enrollment.next_step_due_date };
+        } catch (seqErr) {
+          // THE EMAIL HAS ALREADY GONE. Failing the request now would tell the
+          // user their send failed when it did not, and they would send again.
+          sequence = { error: seqErr.message };
+        }
+      }
+
+      res.json({ sent: true, mailbox: mailbox.email_address, sequence });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // The sequences this send can be added to: active definitions for contacts,
+  // newest last. `first_step` is shown so it is obvious what happens next and
+  // when — a picker that just lists names hides the only thing that matters.
+  router.get('/outreach/sequences', auth, async (req, res) => {
+    try {
+      const { data } = await withOrg(supabase.from('workflow_definitions')
+        .select('id,name,domain,entity_type,status,workflow_steps(step_order,name,channel,delay_days)')
+        .eq('status', 'active').eq('entity_type', 'contact'), req);
+      const rows = (data || []).map(d => {
+        const steps = (d.workflow_steps || []).slice().sort((a, b) => a.step_order - b.step_order);
+        const next = steps[1] || null;   // step 1 is the email we just sent
+        return {
+          id: d.id, name: d.name, domain: d.domain || null, steps: steps.length,
+          next_step: next ? { name: next.name, channel: next.channel, delay_days: next.delay_days } : null,
+          shape: steps.map(x => x.channel + (x.delay_days ? ' +' + x.delay_days + 'd' : '')).join(' → '),
+        };
+      }).filter(r => r.steps > 1);   // a one-step sequence has nothing left to run
+      res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

@@ -53,7 +53,12 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
   }
 
   // ── Enroll an entity into an active workflow ───────────────────────────────
-  async function enroll({ workflow_id, entity_type, entity_id, job_id, contact_id, org_id, enrolled_by, metadata }) {
+  // `start_after_step` joins a sequence PART-WAY THROUGH: the caller has already
+  // done the work of steps 1..N by hand. The outreach generator is the reason it
+  // exists — its email IS step 1, and a sequence whose first step is
+  // `email(+0 days)` would otherwise be due immediately and send the same
+  // prospect a second email minutes later.
+  async function enroll({ workflow_id, entity_type, entity_id, job_id, contact_id, org_id, enrolled_by, metadata, start_after_step }) {
     const { data: wf, error: wfErr } = await supabase.from('workflow_definitions')
       .select('id,entity_type,status,org_id').eq('id', workflow_id).single();
     if (wfErr || !wf) throw new Error('Workflow not found');
@@ -63,6 +68,13 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
     const steps = await loadSteps(workflow_id);
     if (!steps.length) throw new Error('Workflow has no steps');
 
+    // Which step comes next, and when. Skipping every step leaves nothing to
+    // run, so that is refused rather than creating an enrollment that can only
+    // ever complete.
+    const done = Math.max(0, Math.min(Number(start_after_step) || 0, steps.length));
+    if (done >= steps.length) throw new Error('That sequence has no steps left after the ones already sent');
+    const next = steps[done];
+
     const row = {
       workflow_id,
       org_id: org_id || wf.org_id || null,
@@ -71,8 +83,8 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
       job_id: job_id || null,
       contact_id: contact_id || null,
       status: 'active',
-      current_step_order: 0,
-      next_step_due_date: addDays(todayStr(), steps[0].delay_days),
+      current_step_order: done ? steps[done - 1].step_order : 0,
+      next_step_due_date: addDays(todayStr(), next.delay_days),
       enrolled_by: enrolled_by || null,
       metadata: metadata || {}
     };
