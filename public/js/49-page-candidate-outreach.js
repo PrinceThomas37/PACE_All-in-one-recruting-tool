@@ -400,6 +400,13 @@
           '<div style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border2);font-size:12.5px">'+
             '<span style="color:var(--text3)">Subject: </span><strong>'+esc(v.preview_subject||v.subject)+'</strong></div>'+
           '<div style="padding:12px;font-size:13px;line-height:1.6;white-space:pre-wrap">'+esc(v.preview_email||v.email)+'</div>'+
+          // The buttons are part of the email, so they are part of the preview.
+          // Approving an email you have not fully seen is the failure this
+          // preview exists to prevent. The token in here is dead on purpose.
+          (s.preview.buttons_html
+            ? '<div style="padding:0 12px 4px">'+s.preview.buttons_html+
+              '<div style="font-size:11px;color:var(--text3);margin-top:2px">One tap answers — it opens a confirmation page rather than recording straight from the link, so a mail scanner cannot answer on their behalf.</div></div>'
+            : '')+
           (s.preview.signature_html
             ? '<div style="padding:0 12px 12px;border-top:1px dashed var(--border2);margin-top:4px;padding-top:10px">'+s.preview.signature_html+'</div>'
             : '')+
@@ -457,7 +464,9 @@
           (r.fail_reason?'<div style="font-size:11px;color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
         '</div>'+
         '<div style="text-align:right;white-space:nowrap">'+
-          '<div style="font-size:11px;font-weight:700;color:'+colour+'">'+esc(r.status)+(r.response?' · '+esc(r.response.replace('_',' ')):'')+'</div>'+
+          '<div style="font-size:11px;font-weight:700;color:'+(r.response==='interested'?'var(--green)':r.response?'var(--text3)':colour)+'">'+
+            (r.response==='interested'?'★ INTERESTED':r.response==='not_interested'?'not this one':r.response==='opted_out'?'opted out':esc(r.status))+
+          '</div>'+
           '<div style="font-size:10.5px;color:var(--text3)">'+esc(when)+'</div>'+
         '</div>'+
         (r.status==='pending'?'<button class="btn btn-outline btn-sm" onclick="candOutreachCancel(\''+r.id+'\')">Cancel</button>':'')+

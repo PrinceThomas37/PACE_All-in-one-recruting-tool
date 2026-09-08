@@ -31,7 +31,9 @@ const matchEngine = require('../match-engine');
 const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml } = require('../email-signature');
-const { renderStoredEmail, senderIdentityFor } = require('../email-vars');
+const { renderStoredEmail } = require('../email-vars');
+const { resolveBaseUrl } = require('../email-tracking');
+const { clientIp } = require('../middleware/rate-limit');
 
 // The drip. One email per candidate every 75-105 seconds, jittered, so a batch
 // of twenty does not arrive as twenty near-identical messages inside a minute —
@@ -53,6 +55,7 @@ module.exports = (ctx) => {
     loadMailboxDelivState, warmupLimit, settingsConfig,
     isSendingPaused, isManagerPaused, getSendWindowHours, isInLeadSendWindow,
     getTimezoneFromLocation, friendlySendError, logActivity,
+    addToSuppression, pixelLimiter,
   } = ctx;
 
   const txt = (v) => String(v == null ? '' : v).trim();
@@ -86,6 +89,235 @@ module.exports = (ctx) => {
       return f ? `${f.provider}/${f.model}: ${f.error}` : null;
     } catch (_) { return null; }
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // THE ANSWER — two links in the email, and the page they open
+  //
+  // Public: no session, because the person answering is a candidate who has
+  // never signed in to anything of ours and never will.
+  //
+  // ⚠ THE LINK MUST NOT RECORD THE ANSWER. Corporate mail security — Outlook
+  // Safe Links, Mimecast, Proofpoint — fetches every URL in an inbound message
+  // to check it is safe. A GET that recorded would mark candidates interested,
+  // or opted out, before a human ever opened the email, and we would never know
+  // it had happened. So GET renders a page with real buttons on it and writes
+  // nothing; the POST from that page is the answer.
+  //
+  // "NOT FOR ME" IS ABOUT THIS JOB, NOT ABOUT US. Turning one decline into a
+  // global suppression would throw away a good candidate for every future role
+  // over a single "wrong city", which is not what they said and not what they
+  // meant. A real, global opt-out exists — it is the quieter third choice on
+  // the page, and only that one writes to suppression_list.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const ANSWER_LABELS = {
+    interested: 'Interested',
+    not_interested: 'Not this one',
+    opted_out: 'Opted out of all roles',
+  };
+
+  // One page, one look, no external assets — this is opened from a mail client
+  // on a phone as often as not, and a stylesheet that fails to load must not be
+  // able to make it unreadable.
+  function answerPage({ title, lead, body, tone }) {
+    const bar = tone === 'good' ? '#166534' : tone === 'quiet' ? '#64748b' : '#0f172a';
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="robots" content="noindex,nofollow">' +
+      '<title>' + gen.escapeHtml(title) + '</title></head>' +
+      '<body style="margin:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#0f172a">' +
+      '<div style="max-width:520px;margin:0 auto;padding:32px 18px">' +
+      '<div style="background:#fff;border-radius:14px;padding:26px 24px;box-shadow:0 1px 3px rgba(15,23,42,.12)">' +
+        '<div style="height:4px;width:44px;border-radius:99px;background:' + bar + ';margin-bottom:18px"></div>' +
+        '<h1 style="margin:0 0 10px;font-size:20px;line-height:1.3">' + gen.escapeHtml(title) + '</h1>' +
+        (lead ? '<p style="margin:0 0 18px;font-size:15px;line-height:1.55;color:#475569">' + lead + '</p>' : '') +
+        body +
+      '</div>' +
+      '<p style="margin:16px 4px 0;font-size:12px;color:#94a3b8">You are seeing this because we emailed you about a role. Nothing here signs you up for anything.</p>' +
+      '</div></body></html>';
+  }
+
+  const sendPage = (res, status, html) => {
+    res.status(status);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    // This page is a private answer to one person; it must never be framed by
+    // somebody else's site or indexed.
+    res.set('X-Frame-Options', 'DENY');
+    res.set('Referrer-Policy', 'no-referrer');
+    res.end(html);
+  };
+
+  // Deliberately identical for an unknown token, a deleted row and a malformed
+  // one. A token is 32 random hex characters; someone guessing must learn
+  // nothing from the difference between "wrong" and "gone".
+  const gonePage = (res) => sendPage(res, 404, answerPage({
+    title: 'This link is no longer active',
+    lead: 'It may have expired, or the role may have been filled. If you were in the middle of replying, just reply to the email instead and it will reach us.',
+    body: '', tone: 'quiet',
+  }));
+
+  // A PUBLIC PAGE MAY NEVER HANG ON THE DATABASE. Measured with an unreachable
+  // Supabase: supabase-js retries a refused connection for SEVEN SECONDS before
+  // giving up. That is a spinner on a candidate's phone, on the one screen where
+  // we are asking them for a favour — and they will close it. So every database
+  // call behind these routes is bounded, and the timeout falls through to the
+  // same honest page as any other failure. `null` here means "we could not find
+  // out", which the callers already handle.
+  const DB_TIMEOUT_MS = 4000;
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      Promise.resolve(promise).catch(() => null),
+      new Promise(resolve => setTimeout(() => resolve(undefined), ms || DB_TIMEOUT_MS)),
+    ]);
+  }
+
+  // Not a success page and not an error page — the honest one. It never blames
+  // the candidate and it always leaves them a route that works.
+  const unsurePage = (res) => sendPage(res, 200, answerPage({
+    title: 'We could not save that just now',
+    lead: 'Our end is having a moment. Reply to the email instead — a recruiter reads those — or tap the button again in a minute.',
+    body: '', tone: 'quiet',
+  }));
+
+  async function loadAnswerRow(token) {
+    // A malformed token is rejected here, before any query — which also means a
+    // scanner walking the URL space costs us nothing.
+    if (!/^[a-f0-9]{8,64}$/i.test(String(token || ''))) return null;
+    const res = await withTimeout(supabase.from('candidate_outreach')
+      .select('id,candidate_id,job_order_id,to_email,response,responded_at,sent_by,org_id,status')
+      .eq('track_token', token).maybeSingle());
+    return (res && res.data) || null;
+  }
+
+  async function jobTitleFor(row) {
+    if (!row.job_order_id) return '';
+    try {
+      const res = await withTimeout(supabase.from('job_orders')
+        .select('job_title,client,city,state').eq('id', row.job_order_id).maybeSingle());
+      const data = res && res.data;
+      if (!data) return '';   // the page reads fine without the role line
+      const place = [data.city, data.state].filter(Boolean).join(', ');
+      return [data.job_title, data.client, place].filter(Boolean).join(' · ');
+    } catch (_) { return ''; }
+  }
+
+  router.get('/i/:token', async (req, res) => {
+    try {
+      // Rate limited so a token cannot be brute-forced by scanning. Unlike the
+      // pixel, a 429 here is fine: a person waits and taps again, and there is
+      // no broken image for them to see.
+      if (pixelLimiter && !pixelLimiter.consume(`answer:${clientIp(req)}`).allowed) {
+        return sendPage(res, 429, answerPage({
+          title: 'One moment', lead: 'Too many requests from this connection just now. Wait a few seconds and tap the button again.', body: '', tone: 'quiet',
+        }));
+      }
+      const token = String(req.params.token || '').trim();
+      const row = await loadAnswerRow(token);
+      if (!row) return gonePage(res);
+
+      const role = await jobTitleFor(row);
+      const t = gen.escapeHtml(token);
+      const pre = String(req.query.a || '') === 'no' ? 'no' : String(req.query.a || '') === 'yes' ? 'yes' : '';
+
+      // ALREADY ANSWERED: say what we recorded and let them change it. Somebody
+      // who tapped the wrong button on a phone must be able to fix it — the
+      // alternative is a good candidate written off by a mis-tap.
+      const answered = row.response
+        ? '<p style="margin:0 0 16px;padding:11px 14px;background:#f8fafc;border-radius:9px;font-size:14px;color:#334155">' +
+          'You already told us: <strong>' + gen.escapeHtml(ANSWER_LABELS[row.response] || row.response) + '</strong>. ' +
+          'You can change it below.</p>'
+        : '';
+
+      const form = (action, label, style) =>
+        '<form method="post" action="/i/' + t + '/' + action + '" style="display:inline-block;margin:0 8px 10px 0">' +
+          '<button type="submit" style="' + style + '">' + label + '</button></form>';
+
+      const primary = 'cursor:pointer;font-family:inherit;font-size:15px;font-weight:600;padding:13px 22px;border-radius:9px;border:1px solid #166534;background:#166534;color:#fff';
+      const secondary = 'cursor:pointer;font-family:inherit;font-size:15px;font-weight:600;padding:13px 22px;border-radius:9px;border:1px solid #cbd5e1;background:#fff;color:#334155';
+      const quiet = 'cursor:pointer;font-family:inherit;font-size:13px;padding:0;border:0;background:none;color:#64748b;text-decoration:underline';
+
+      sendPage(res, 200, answerPage({
+        title: pre === 'no' ? 'Not this one?' : 'Interested in this role?',
+        lead: role ? '<strong style="color:#0f172a">' + gen.escapeHtml(role) + '</strong>' : 'The role we emailed you about.',
+        tone: pre === 'no' ? 'quiet' : 'good',
+        body: answered +
+          // The tap in the email is a HINT, never the answer — it only decides
+          // which button is emphasised here.
+          '<p style="margin:0 0 14px;font-size:14px;color:#475569">One tap and a recruiter will pick it up from there.</p>' +
+          form('interested', 'Yes, I am interested', pre === 'no' ? secondary : primary) +
+          form('not-interested', 'Not this one', pre === 'no' ? primary : secondary) +
+          '<div style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0">' +
+            form('opt-out', 'Do not email me about any roles', quiet) +
+            '<div style="font-size:12px;color:#94a3b8;margin-top:2px">Saying no to this role does not remove you from our list — this does.</div>' +
+          '</div>',
+      }));
+    } catch (_) { gonePage(res); }
+  });
+
+  // Recording an answer must never fail loudly at the candidate. If the write
+  // breaks, they still see that we heard them — and the recruiter still has the
+  // reply path. A 500 here reads as "this company is broken".
+  async function recordAnswer(req, res, response, opts) {
+    const o = opts || {};
+    try {
+      const token = String(req.params.token || '').trim();
+      const row = await loadAnswerRow(token);
+      if (!row) return gonePage(res);
+
+      const wrote = await withTimeout(supabase.from('candidate_outreach')
+        .update({ response, responded_at: new Date() }).eq('id', row.id));
+      // NEVER SAY "DONE" FOR A WRITE THAT DID NOT HAPPEN. If the update timed
+      // out or errored, the candidate is told the truth and given the path that
+      // still works — replying to the email a human is already watching.
+      if (wrote === undefined || (wrote && wrote.error)) return unsurePage(res);
+
+      // A tap IS an answer, so the candidate record shows they came back.
+      await withTimeout(supabase.from('candidates')
+        .update({ last_reply_at: new Date() }).eq('id', row.candidate_id));
+
+      if (o.suppress && row.to_email) {
+        // The real opt-out, and the only branch that writes to suppression_list.
+        await withTimeout(addToSuppression(row.to_email, 'unsubscribe', 'candidate_outreach', row.sent_by, 'Opted out from a candidate outreach email'));
+        // Anything still queued for them stops. Leaving it would send more mail
+        // to somebody who just asked us not to, which is the one outcome an
+        // opt-out exists to prevent.
+        await withTimeout(supabase.from('candidate_outreach')
+          .update({ status: 'skipped', fail_reason: 'recipient opted out' })
+          .eq('status', 'pending').ilike('to_email', row.to_email));
+      }
+
+      if (logActivity && row.job_order_id) {
+        await withTimeout(logActivity(null, null, row.sent_by, 'candidate_answer',
+          `${row.to_email} answered: ${ANSWER_LABELS[response] || response}`));
+      }
+
+      sendPage(res, 200, answerPage({
+        title: o.title, lead: o.lead, tone: o.tone,
+        body: '<p style="margin:0;font-size:14px;color:#475569">You can close this page.</p>',
+      }));
+    } catch (_) {
+      unsurePage(res);
+    }
+  }
+
+  router.post('/i/:token/interested', (req, res) => recordAnswer(req, res, 'interested', {
+    title: 'Thanks — a recruiter will be in touch',
+    lead: 'We have passed this straight to the recruiter working the role. Expect to hear from them shortly.',
+    tone: 'good',
+  }));
+
+  router.post('/i/:token/not-interested', (req, res) => recordAnswer(req, res, 'not_interested', {
+    title: 'Understood — we will leave this one',
+    lead: 'We have noted that this role is not for you. We may still let you know about a different one; use the opt-out in any email if you would rather we did not.',
+    tone: 'quiet',
+  }));
+
+  router.post('/i/:token/opt-out', (req, res) => recordAnswer(req, res, 'opted_out', {
+    title: 'Done — you are off the list',
+    lead: 'We will not email you about roles again, and anything already queued for you has been stopped.',
+    tone: 'quiet',
+  }));
 
   // ── WHICH JOB ────────────────────────────────────────────────────────────
   // Literal path, registered before anything with a :param under the same
@@ -316,9 +548,12 @@ module.exports = (ctx) => {
       const check = gen.validateInput(input);
       if (!check.ok) return res.status(400).json({ error: 'Missing: ' + check.missing.join(', ') + '.' });
 
-      const opts = { companyName, omitSignOff: !!signatureHtml.trim() };
+      // hasButtons changes the closing line (the buttons carry the opt-out, so
+      // "just say so" would contradict them) and tells the checker that the way
+      // out is present even though it is not a sentence.
+      const opts = { companyName, omitSignOff: !!signatureHtml.trim(), hasButtons: true };
       const variants = gen.rulesVariants(input, opts).map(v => {
-        const q = gen.checkCandidateDraft(v, input, { angle: v.id, omitSignOff: opts.omitSignOff });
+        const q = gen.checkCandidateDraft(v, input, { angle: v.id, omitSignOff: opts.omitSignOff, hasButtons: true });
         const shown = renderStoredEmail({ subject: v.subject, body: v.email }, mailbox);
         return {
           ...v,
@@ -335,6 +570,11 @@ module.exports = (ctx) => {
         job_order: job ? { id: job.id, job_title: job.job_title, client: job.client || '' } : null,
         sends_as: mailbox ? mailbox.email_address : null,
         signature_html: signatureHtml,
+        // Previewed with a dead token: the page must show the buttons, because
+        // approving an email you have not fully seen is the failure this whole
+        // preview exists to prevent — but a live token in a preview is a link
+        // that answers on somebody's behalf.
+        buttons_html: gen.answerButtonsHtml(resolveBaseUrl(), 'preview', {}),
         variants,
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -371,7 +611,7 @@ module.exports = (ctx) => {
 
       const companyName = await orgCompanyName(req);
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
-      const opts = { companyName, omitSignOff: !!signatureHtml.trim() };
+      const opts = { companyName, omitSignOff: !!signatureHtml.trim(), hasButtons: true };
 
       // Cached brief, read once for the whole batch — the entire reason this
       // feature is affordable.
@@ -404,7 +644,7 @@ module.exports = (ctx) => {
         // The house check runs on every queued email, not just the previewed
         // one. A batch is where a bad draft does real damage, and the recruiter
         // only ever looked at one of them.
-        const q = gen.checkCandidateDraft(variant, input, { angle, omitSignOff: opts.omitSignOff });
+        const q = gen.checkCandidateDraft(variant, input, { angle, omitSignOff: opts.omitSignOff, hasButtons: true });
         if (!q.ok) { skipped.push({ candidate_id: c.id, name: c.full_name, reason: 'failed_check', detail: q.violations.map(x => x.code).join(', ') }); continue; }
 
         // Each row carries its own due time. Jittered rather than exactly 90s
@@ -571,7 +811,22 @@ module.exports = (ctx) => {
         const rendered = renderStoredEmail(row, mailbox);
         const signature = await mailboxSignature(mailbox, row.sent_by);
         const token = row.track_token || newTrackToken();
-        const htmlBody = injectTrackPixel(buildHtmlEmailBody(rendered.body, signature), token);
+        // The answer buttons carry the same token as the pixel — one token per
+        // send, so an open, a reply and a tap all describe the same message.
+        // They go ABOVE the signature: the ask is the email, the signature is
+        // the footer. The token has to exist before the HTML is built, which is
+        // why it is resolved a line earlier than it strictly needs to be.
+        const buttons = gen.answerButtonsHtml(resolveBaseUrl(), token, {});
+        const htmlBody = injectTrackPixel(
+          buildHtmlEmailBody(rendered.body, buttons + signature), token);
+
+        // The token is written BEFORE the send, not after. If the send succeeds
+        // and the update then fails, a candidate could tap a button whose token
+        // matches no row and be told the link is dead — so the row is ready for
+        // an answer before the email that carries it can possibly arrive.
+        if (!row.track_token) {
+          await supabase.from('candidate_outreach').update({ track_token: token }).eq('id', row.id);
+        }
 
         await sendMailboxNewMessage(mailbox, { to: row.to_email, subject: rendered.subject, htmlBody });
 

@@ -290,6 +290,87 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     /checkCandidateDraft\(variant, input/.test(route));
 }
 
+// ── THE ANSWER BUTTONS ─────────────────────────────────────────────────────
+{
+  const html = gen.answerButtonsHtml('https://pace.example.com/', 'abc123def456', {});
+  ok('both buttons are rendered', /a=yes/.test(html) && /a=no/.test(html), html.slice(0, 60));
+  ok('the links point at the answer page, not at a recording endpoint',
+    /\/i\/abc123def456\?a=(yes|no)/.test(html) && !/interested|not-interested|opt-out/.test(html), html.slice(0, 120));
+  ok('a trailing slash on the base url does not double up',
+    !/\/\/i\//.test(html.replace('https://', '')), html.slice(0, 80));
+  // Outlook has no flexbox and strips <style>; a div-and-class button is an
+  // unstyled link there, which looks broken next to a working one.
+  ok('the markup is table-and-inline-style, for mail clients',
+    /<table/.test(html) && /style="/.test(html) && !/class=/.test(html));
+  ok('a label with markup in it is escaped',
+    !/<b>/.test(gen.answerButtonsHtml('https://x.test', 't', { yesLabel: '<b>yes</b>' })));
+
+  ok('escapeHtml handles the five characters that matter',
+    gen.escapeHtml('<a href="x" \'y\'>&') === '&lt;a href=&quot;x&quot; &#39;y&#39;&gt;&amp;',
+    gen.escapeHtml('<a href="x" \'y\'>&'));
+}
+
+// With buttons present the closing line points at them rather than contradicting
+// them, and the checker accepts the buttons as the way out.
+{
+  const input = inputFor(JOB);
+  const withBtns = gen.rulesVariants(input, { ...OPTS, hasButtons: true });
+  for (const v of withBtns) {
+    ok(`"${v.id}" points at the button instead of "just say so"`,
+      !/just say so and I will leave it there/.test(v.email), v.email.slice(-80));
+    const q = gen.checkCandidateDraft(v, input, { angle: v.id, omitSignOff: true, hasButtons: true });
+    ok(`"${v.id}" still passes the check with buttons on`, q.ok, (q.violations || []).map(x => x.code).join(','));
+  }
+  // And the sentence comes back when there are no buttons to carry it.
+  const noBtns = gen.rulesVariants(input, OPTS);
+  ok('without buttons the opt-out sentence returns',
+    noBtns.some(v => /just say so/.test(v.email)), noBtns[0].email.slice(-60));
+  // hasButtons must not become a way to ship an email with NO way out at all.
+  const bare = { subject: 'Construction Superintendent — Dallas', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX.\n\nAre you interested?\n\nThanks,' };
+  ok('no_optout is waived only because the buttons are there',
+    gen.checkCandidateDraft(bare, input, { angle: 'direct', omitSignOff: true, hasButtons: true }).violations.every(v => v.code !== 'no_optout') &&
+    gen.checkCandidateDraft(bare, input, { angle: 'direct', omitSignOff: true }).violations.some(v => v.code === 'no_optout'));
+}
+
+// ── THE TRAP: A LINK MUST NOT RECORD ───────────────────────────────────────
+// Outlook Safe Links and friends fetch every URL in an inbound message. If GET
+// recorded, candidates would be marked interested — or opted out — before a
+// human ever opened the email, and nothing would look wrong.
+{
+  const route = readFileSync(path.join(ROOT, 'routes/candidate-outreach.js'), 'utf8');
+  const getHandler = route.split("router.get('/i/:token'")[1].split('async function recordAnswer')[0];
+  ok('the GET answer page writes nothing',
+    !/\.update\(|\.insert\(|addToSuppression/.test(getHandler), 'a write appears in the GET handler');
+  ok('the answers are recorded on POST only',
+    /router\.post\('\/i\/:token\/interested'/.test(route) &&
+    /router\.post\('\/i\/:token\/not-interested'/.test(route) &&
+    /router\.post\('\/i\/:token\/opt-out'/.test(route));
+
+  // "Not this one" must not delete a good candidate from the whole database.
+  const notInterested = route.split("router.post('/i/:token/not-interested'")[1].split('router.post')[0];
+  ok('"not this one" does not suppress the address globally',
+    !/suppress: true/.test(notInterested), notInterested.slice(0, 120));
+  ok('only the explicit opt-out writes to the suppression list',
+    (route.match(/addToSuppression\(/g) || []).length === 1 && /o\.suppress/.test(route),
+    String((route.match(/addToSuppression\(/g) || []).length));
+  // A public page may never hang on the database: measured at SEVEN SECONDS
+  // with an unreachable Supabase, which is a spinner on a candidate's phone.
+  ok('every database call behind the public page is time-bounded',
+    /function withTimeout/.test(route) &&
+    /withTimeout\(supabase\.from\('candidate_outreach'\)/.test(route) &&
+    /withTimeout\(supabase\.from\('job_orders'\)/.test(route));
+  ok('a write that did not happen is never reported as saved',
+    /if \(wrote === undefined \|\| \(wrote && wrote\.error\)\) return unsurePage\(res\);/.test(route));
+  ok('opting out also stops anything still queued for them',
+    /status: 'skipped', fail_reason: 'recipient opted out'/.test(route));
+  ok('the token is written before the send, not after',
+    route.indexOf("update({ track_token: token })") < route.indexOf('await sendMailboxNewMessage'));
+  ok('an unknown token is indistinguishable from a deleted one',
+    /Deliberately identical for an unknown token/.test(route));
+  ok('the preview shows the buttons with a dead token',
+    /answerButtonsHtml\(resolveBaseUrl\(\), 'preview'/.test(route));
+}
+
 // ── the routes are mounted and auth-gated ──────────────────────────────────
 const PORT = 20000 + Math.floor(Math.random() * 20000);
 const child = spawn('node', ['index.js'], {
@@ -304,9 +385,9 @@ const child = spawn('node', ['index.js'], {
 let stderr = '';
 child.stderr.on('data', d => { stderr += d.toString(); });
 
-function req(method, p) {
+function req(method, p, timeout = 5000) {
   return new Promise((resolve, reject) => {
-    const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method, timeout: 5000 },
+    const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method, timeout },
       res => { res.resume(); resolve(res.statusCode); });
     r.on('timeout', () => r.destroy(new Error('timeout')));
     r.on('error', reject);
@@ -338,6 +419,22 @@ try {
       const s = await req(m, p);
       ok(`${m} ${p} is mounted and requires a token`, s === 401, s);
     }
+    // The answer page is PUBLIC by design — a candidate has never signed in to
+    // anything of ours. It must not 401, and with an unreachable database it
+    // must still render a page rather than an error.
+    for (const [m, p] of [['GET', '/i/deadbeefdeadbeef'], ['POST', '/i/deadbeefdeadbeef/interested'],
+                          ['POST', '/i/deadbeefdeadbeef/not-interested'], ['POST', '/i/deadbeefdeadbeef/opt-out']]) {
+      // 12s, because the handler's own bound is 4s and this suite runs against
+      // an unreachable database on purpose — the point is that it ANSWERS.
+      const started = Date.now();
+      const s = await req(m, p, 12000);
+      const took = Date.now() - started;
+      ok(`${m} ${p} is public (never 401) and never 500`, s !== 401 && s !== 500, s);
+      ok(`${m} ${p} answers within seconds even with the database down`, took < 9000, took + 'ms');
+    }
+    // A malformed token gets the same page as an unknown one.
+    ok('a malformed token is answered with the same page as an unknown one',
+      (await req('GET', '/i/not-a-token')) === 404);
   }
 } catch (err) {
   ok('route harness completed', false, err && err.message);

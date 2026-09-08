@@ -301,11 +301,14 @@ function draftParts(input, options) {
     inPlace: f.place ? ` in ${f.place}` : '',
     payLine: f.pay ? `The range on it is ${f.pay}.` : '',
     termsLine: f.terms.length ? `It is ${joinList(f.terms)}.` : '',
-    // The opt-out. In step 1 it is a sentence; step 2 replaces it with the
-    // one-click Interested / Not interested buttons. Either way it is not
-    // optional — a mass email to candidates without a way out is not one we
-    // should be sending.
-    outLine: 'If the timing is not right, just say so and I will leave it there.',
+    // The opt-out. With the buttons underneath, "just say so" is redundant and
+    // slightly contradicts them, so the sentence gets out of their way and
+    // points at them instead. Without them it carries the opt-out alone. Either
+    // way it is NOT optional — a mass email to candidates with no way out is
+    // not one we should be sending.
+    outLine: o.hasButtons
+      ? 'If the timing is not right, just tap "Not for me" and I will leave it there.'
+      : 'If the timing is not right, just say so and I will leave it there.',
     signOff: o.omitSignOff
       ? '\n\nThanks,'
       : '\n\n' + ['Thanks,', SENDER_TOKEN].join('\n'),
@@ -595,6 +598,49 @@ function checkCandidateDraft(draft, input, opts) {
   return { ok: v.length === 0, violations: v };
 }
 
+// ── THE ANSWER BUTTONS ─────────────────────────────────────────────────────
+// Two links in the email. The whole point of this feature is one question, so
+// the cheapest possible way to answer it is not a nicety — a candidate between
+// jobs will tap a button and will not compose a reply.
+//
+// THE LINK MUST NOT RECORD. It opens a PAGE with real buttons on it, and the
+// POST from that page is what counts. Corporate mail security (Outlook Safe
+// Links, Mimecast, Proofpoint) fetches every URL in an inbound message to check
+// it is safe; a GET that recorded would mark candidates interested — or opted
+// out — before a human ever opened the email. This is the single most important
+// line in the file.
+//
+// Table layout and inline styles because this is EMAIL: Outlook's renderer has
+// no flexbox, no grid, and strips a <style> block. `bgcolor` and the nested
+// table are what make a coloured button survive it.
+function answerLinkUrl(baseUrl, token) {
+  return String(baseUrl || '').replace(/\/+$/, '') + '/i/' + encodeURIComponent(String(token || ''));
+}
+
+function answerButtonsHtml(baseUrl, token, opts) {
+  const o = opts || {};
+  const url = answerLinkUrl(baseUrl, token);
+  const yes = escapeHtml(o.yesLabel || 'Yes, tell me more');
+  const no = escapeHtml(o.noLabel || 'Not for me');
+  const btn = (href, label, bg, fg, border) =>
+    '<td style="padding:0 8px 0 0">' +
+      '<a href="' + escapeHtml(href) + '" style="display:inline-block;padding:11px 20px;' +
+        'font-family:Arial,sans-serif;font-size:14px;font-weight:bold;line-height:1;' +
+        'color:' + fg + ';background-color:' + bg + ';border:1px solid ' + border + ';' +
+        'border-radius:6px;text-decoration:none">' + label + '</a>' +
+    '</td>';
+  return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 4px"><tr>' +
+    btn(url + '?a=yes', yes, '#166534', '#ffffff', '#166534') +
+    btn(url + '?a=no', no, '#ffffff', '#334155', '#cbd5e1') +
+  '</tr></table>';
+}
+
+function escapeHtml(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function escapeRe(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 // How much there actually is to write about. Counts only facts a candidate
@@ -618,6 +664,7 @@ module.exports = {
   jobFacts, payFiguresIn, whyYouClause,
   rulesJobBrief, buildBriefSystemPrompt, buildBriefPayload, parseBrief, checkBrief,
   rulesVariants, draftParts, validateInput, checkCandidateDraft,
+  answerButtonsHtml, answerLinkUrl, escapeHtml,
   unsupportedMoney, MONEY_SHAPES, materialIn, firstNameOf, wordCount, joinList, indefinite,
   SENDER_TOKENS,
 };
