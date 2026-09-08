@@ -415,14 +415,25 @@ ok('only a REPLY offers it — an open is information, not a conversation',
 // The conversion reuses the columns that already exist. email_tracking has
 // carried an unused lead_id since migration 024, which is what it was for —
 // so none of this needs a migration against the live database.
+// Lead creation moved into the shared createLeadFromOutreach() when sending
+// with a sequence attached started needing it too, so these two assert the
+// BEHAVIOUR at its new address rather than the variable names it used to have.
 ok('the conversion stamps the tracking row rather than adding a column',
-  /lead_id: (job\.id|existing\[0\]\.job_id)/.test(routerSrc), 'convert-lead never records the lead it made');
+  /from\('email_tracking'\)\s*\.update\(\{ lead_id: made\.job_id \}\)/.test(routerSrc),
+  'convert-lead never records the lead it made');
 ok('an address already on a lead is refused, not duplicated',
   /contact_exists/.test(routerSrc));
 ok('a reply already converted is refused too',
   /already_converted/.test(routerSrc));
 ok('the new lead lands on the stage that means "they replied"',
-  /stage: 'Connected'/.test(routerSrc), 'a converted reply should not start at Unassigned');
+  /createLeadFromOutreach\(req, \{[\s\S]*?\}, 'Connected'\)/.test(routerSrc),
+  'a converted reply should not start at Unassigned');
+ok('a lead created because we SENT is Assigned, not Connected',
+  /createLeadFromOutreach\(req, \{[\s\S]*?\}, 'Assigned'\)/.test(routerSrc),
+  'Connected means they replied — it drives the funnel, the reports and the recycler');
+ok('whatever stage is asked for is the stage actually written',
+  /from\('jobs'\)\.insert\(Object\.assign\(\{[\s\S]*?\n\s*stage,\n/.test(routerSrc),
+  'the helper takes a stage and must use it');
 ok('the sent list only ever shows this user their own sends',
   /\.eq\('sent_by', req\.user\.id\)/.test(routerSrc));
 ok('every new read is org-scoped',
