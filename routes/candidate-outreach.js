@@ -81,6 +81,28 @@ module.exports = (ctx) => {
     } catch (_) { return ''; }
   }
 
+  // ⚠ THE PREVIEW AND THE QUEUE MUST READ THE BRIEF THE SAME WAY.
+  // They did not. The preview built its input without a `brief` at all, so
+  // draftParts fell back to the RULES brief, while the queue read the cached AI
+  // one — the screen showed one email and a different email went out. That is
+  // the exact failure a preview exists to prevent, and it hid the real reason
+  // three of four candidates were skipped in the first live batch (the AI brief
+  // said "2-3 years of field experience"; the rules brief did not).
+  // One loader, called by both. Do not inline this again.
+  function briefFor(job) {
+    if (!job) return null;
+    const raw = txt(job.outreach_brief);
+    if (raw) {
+      try {
+        const p = JSON.parse(raw);
+        if (p && txt(p.hook)) {
+          return { hook: p.hook, detail: p.detail, engine: job.outreach_brief_engine || 'rules' };
+        }
+      } catch (_) { /* fall through to the rules brief */ }
+    }
+    return gen.rulesJobBrief(job);
+  }
+
   async function lastAiError(feature) {
     try {
       const { data } = await supabase.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
@@ -542,6 +564,7 @@ module.exports = (ctx) => {
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
       const input = {
         candidate, job,
+        brief: briefFor(job),
         reasons: job ? (matchEngine.rankCandidates([candidate], job, {})[0] || {}).reasons || [] : [],
         outreach_type: job ? 'job' : 'nurture',
       };
@@ -614,14 +637,8 @@ module.exports = (ctx) => {
       const opts = { companyName, omitSignOff: !!signatureHtml.trim(), hasButtons: true };
 
       // Cached brief, read once for the whole batch — the entire reason this
-      // feature is affordable.
-      let brief = job ? gen.rulesJobBrief(job) : null;
-      if (job && txt(job.outreach_brief)) {
-        try {
-          const p = JSON.parse(job.outreach_brief);
-          if (p && txt(p.hook)) brief = { hook: p.hook, detail: p.detail, engine: job.outreach_brief_engine || 'rules' };
-        } catch (_) { /* keep the rules brief */ }
-      }
+      // feature is affordable. Same loader the preview uses.
+      const brief = briefFor(job);
 
       const suppressed = await loadSuppressedSet((candidates || []).map(c => c.email).filter(Boolean));
       const ranked = job ? matchEngine.rankCandidates(candidates || [], job, {}) : [];
@@ -645,7 +662,18 @@ module.exports = (ctx) => {
         // one. A batch is where a bad draft does real damage, and the recruiter
         // only ever looked at one of them.
         const q = gen.checkCandidateDraft(variant, input, { angle, omitSignOff: opts.omitSignOff, hasButtons: true });
-        if (!q.ok) { skipped.push({ candidate_id: c.id, name: c.full_name, reason: 'failed_check', detail: q.violations.map(x => x.code).join(', ') }); continue; }
+        if (!q.ok) {
+          // THE SENTENCE, NOT THE CODE. The first live batch skipped three of
+          // four people and told the recruiter only "failed check" — which is
+          // the app knowing exactly what is wrong and refusing to say. The
+          // instruction text is already written for a human; send that.
+          skipped.push({
+            candidate_id: c.id, name: c.full_name, reason: 'failed_check',
+            detail: q.violations.map(x => x.instruction).join(' '),
+            codes: q.violations.map(x => x.code).join(', '),
+          });
+          continue;
+        }
 
         // Each row carries its own due time. Jittered rather than exactly 90s
         // apart, because a perfectly regular cadence is itself a signature.

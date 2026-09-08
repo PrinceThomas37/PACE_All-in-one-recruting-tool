@@ -183,6 +183,12 @@
       angle:s.angle, add_to_pipeline:s.addToPipeline
     }).then(function(r){
       s.queuing=false; s.result=r; s.picked={}; s.pool=null; s.queue=null;
+      // BACK TO THE LIST, NOT STUCK ON THE COMPOSER. Clearing the picks while
+      // staying on step 3 drew "0 candidates" as the heading above the email
+      // that had just gone out — the screen contradicting itself. The list is
+      // also where the result belongs: it reloads showing everyone just queued
+      // as "already asked".
+      s.step=2; s.preview=null; s.previewFor=null;
       showToast(r.queued+' email'+(r.queued===1?'':'s')+' queued','success');
       candOutreachLoadPool(true); candOutreachLoadQueue(true); render();
     }).catch(function(e){
@@ -307,6 +313,39 @@
     return '<span style="font-size:10.5px;font-weight:700;color:'+c+'">'+esc(b||'—')+'</span>';
   }
 
+  // WHY SOMEBODY WAS SKIPPED, IN WORDS. The first live batch skipped three of
+  // four people and said only "failed check" — the app knew exactly what was
+  // wrong and would not say it. Each reason now gets a sentence, and a failed
+  // check gets the checker's own instruction.
+  var SKIP_TEXT={
+    no_valid_email:'no email address on file',
+    opted_out:'has opted out of our emails',
+    already_asked:'already asked about this job',
+    angle_not_applicable:'that wording does not apply to them'
+  };
+  function resultCard(){
+    var s=S();
+    if(!s.result) return '';
+    var r=s.result, sk=(r.skipped||[]);
+    var rows=sk.map(function(x){
+      var why=x.reason==='failed_check'
+        ? (x.detail||'the wording broke a house rule')
+        : (SKIP_TEXT[x.reason]||String(x.reason||'').replace(/_/g,' '));
+      return '<div style="padding:6px 0;border-top:1px solid var(--border2);font-size:11.5px;color:var(--text2)">'+
+        '<strong>'+esc(x.name||x.candidate_id)+'</strong> — '+esc(why)+'</div>';
+    }).join('');
+    return '<div class="card cp mb3">'+
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+        '<div style="font-size:13px;font-weight:600">'+r.queued+' email'+(r.queued===1?'':'s')+' queued</div>'+
+        '<button class="btn btn-outline btn-sm" onclick="candOutreachDismissResult()">Dismiss</button>'+
+      '</div>'+
+      (r.queued?'<div style="font-size:12px;color:var(--text2);margin-top:3px">Going out about one every 90 seconds from '+esc(r.mailbox)+', inside your send window and under your daily cap.</div>':'')+
+      (r.pipeline?'<div style="font-size:12px;color:var(--text2);margin-top:4px">Pipeline: '+r.pipeline.added+' added, '+r.pipeline.existing+' already there'+(r.pipeline.failed?', '+r.pipeline.failed+' failed':'')+'.</div>':'')+
+      (sk.length?'<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:var(--amber)">'+sk.length+' not sent</div>'+rows+'</div>':'')+
+    '</div>';
+  }
+  window.candOutreachDismissResult=function(){ S().result=null; render(); };
+
   function poolStep(){
     var s=S();
     var p=s.pool;
@@ -334,7 +373,7 @@
       '</tr>';
     }).join('');
 
-    return briefCard()+
+    return resultCard()+briefCard()+
     '<div class="card cp">'+
       '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
         '<input class="inp" style="flex:1;min-width:180px" placeholder="Narrow the pool by name, email or title" value="'+esc(s.poolQuery)+'" oninput="candOutreachPoolSearch(this.value)">'+
@@ -417,19 +456,7 @@
         '</div>';
     }
 
-    var res='';
-    if(s.result){
-      var sk=(s.result.skipped||[]);
-      res='<div class="card cp mb3" style="background:var(--green-l,rgba(16,185,129,.08))">'+
-        '<div style="font-size:13px;font-weight:600;margin-bottom:4px">'+s.result.queued+' email'+(s.result.queued===1?'':'s')+' queued</div>'+
-        '<div style="font-size:12px;color:var(--text2)">Going out about one every 90 seconds from '+esc(s.result.mailbox)+', inside your send window and under your daily cap.</div>'+
-        (s.result.pipeline?'<div style="font-size:12px;color:var(--text2);margin-top:4px">Pipeline: '+s.result.pipeline.added+' added, '+s.result.pipeline.existing+' already there'+(s.result.pipeline.failed?', '+s.result.pipeline.failed+' failed':'')+'.</div>':'')+
-        (sk.length?'<div style="font-size:11.5px;color:var(--amber);margin-top:6px">Skipped '+sk.length+': '+
-          esc(sk.slice(0,6).map(function(x){return (x.name||x.candidate_id)+' ('+String(x.reason||'').replace(/_/g,' ')+')';}).join(', '))+'</div>':'')+
-      '</div>';
-    }
-
-    return res+'<div class="card cp">'+
+    return '<div class="card cp">'+
       '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+
         '<strong style="color:var(--text)">'+ids.length+'</strong> candidate'+(ids.length===1?'':'s')+
         (s.job?(' · '+esc(s.job.job_title)+(s.job.client?' · '+esc(s.job.client):'')):'')+

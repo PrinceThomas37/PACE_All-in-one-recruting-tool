@@ -128,6 +128,89 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     !r3.violations.some(v => v.code === 'invented_experience'), r3.violations.map(v => v.code).join(','));
 }
 
+// ── THE FIRST LIVE BATCH, PINNED ───────────────────────────────────────────
+// Four real HVAC candidates, one real job order. Three of four were silently
+// skipped because the AI job brief said "2-3 years of field experience" — a
+// requirement of the VACANCY — and the check read it as a claim about each
+// PERSON. The one that got through only did so because his 4 years happened to
+// land within 1 of 3. Every assertion below is that batch.
+{
+  const HVAC_JOB = {
+    id: 'hvac', job_title: 'HVAC Service Technician', client: 'Griffith Energy Services, Inc.',
+    city: 'Westminster', state: 'Maryland', pay_min: '25', pay_max: '35', pay_cur: 'USD',
+    job_type: 'Full-time', remote: 'No', duration: '', primary_skills: 'hvac, epa, boilers, commercial',
+  };
+  // Verbatim from the job order's stored outreach_brief.
+  const AI_BRIEF = {
+    hook: 'We are looking for a full-time HVAC Service Technician in Westminster, MD to diagnose, maintain, and repair residential and commercial climate control systems.',
+    detail: 'The position requires a valid EPA Section 608 certification, 2-3 years of field experience, and involves field repairs, refrigerant handling, and customer communication using digital service software.',
+    engine: 'ai',
+  };
+  const BATCH = [
+    ['Curtis Grubbs', '11', 'Owner/Operator', 'HVAC, residential, commercial, EPA Universal, brazing'],
+    ['Clayton Smith', '35', 'HVAC Technician', 'HVAC installation, HVAC repair, commercial HVAC, refrigeration'],
+    ['Shaun Maher', '4', 'HVAC Service Technician', 'HVAC installation, oil boilers, heat pumps, ductwork'],
+    ['Brian Klevecz', '15', 'Foreman', 'HVAC, Installation, EPA certification, Ductwork'],
+  ];
+  for (const [name, years, title, skills] of BATCH) {
+    const cand = { id: name, full_name: name, email: 'x@example.com', current_title: title, experience_years: years, skills };
+    // The match engine's REAL output shape — grid shorthand, not prose.
+    const input = { candidate: cand, job: HVAC_JOB, brief: AI_BRIEF, reasons: ['3/4 skills', 'title 67%', 'diff state'], outreach_type: 'job' };
+    const v = gen.rulesVariants(input, { ...OPTS, hasButtons: true }).find(x => x.id === 'direct');
+    const q = gen.checkCandidateDraft(v, input, { angle: 'direct', omitSignOff: true, hasButtons: true });
+    ok(`${name} (${years} yrs) is not skipped over the JOB's stated experience requirement`,
+      q.ok, (q.violations || []).map(x => x.code).join(','));
+    ok(`${name}'s email never prints the matcher's grid shorthand`,
+      !/\d\/\d\s*skills|title \d+%|diff state/i.test(v.email), v.email);
+  }
+
+  // The rule the check is actually for still holds.
+  const cand = { id: 'x', full_name: 'Shaun Maher', email: 'x@example.com', current_title: 'HVAC Technician', experience_years: '4', skills: 'HVAC' };
+  const input = { candidate: cand, job: HVAC_JOB, brief: AI_BRIEF, reasons: [], outreach_type: 'job' };
+  const base = 'Hi Shaun,\n\nThis is {{sender}} at Acme. HVAC Service Technician in Westminster, Maryland. ';
+  const tail = '\n\nInterested? If not, just say so.\n\nThanks,';
+  ok('a SECOND-PERSON years claim that contradicts the record is still refused',
+    gen.checkCandidateDraft({ subject: 'HVAC Service Technician — Westminster', email: base + 'With your 22 years on commercial sites, this fits.' + tail },
+      input, { angle: 'direct', omitSignOff: true }).violations.some(v => v.code === 'invented_experience'));
+  ok('"you have N years" is caught too',
+    gen.checkCandidateDraft({ subject: 'HVAC Service Technician — Westminster', email: base + 'You have 22 years of it.' + tail },
+      input, { angle: 'direct', omitSignOff: true }).violations.some(v => v.code === 'invented_experience'));
+  ok('the JOB asking for N years is not a claim about the reader',
+    !gen.checkCandidateDraft({ subject: 'HVAC Service Technician — Westminster', email: base + 'The role asks for 2-3 years of field experience.' + tail },
+      input, { angle: 'direct', omitSignOff: true }).violations.some(v => v.code === 'invented_experience'));
+  ok('the reader\'s own correct number still passes',
+    !gen.checkCandidateDraft({ subject: 'HVAC Service Technician — Westminster', email: base + 'Your 4 years line up well.' + tail },
+      input, { angle: 'direct', omitSignOff: true }).violations.some(v => v.code === 'invented_experience'));
+
+  // "It is Full-time and No." — a yes/no field printed raw.
+  const f = gen.jobFacts(HVAC_JOB);
+  ok('a remote field of "No" becomes "on site", never the word No',
+    f.terms.includes('on site') && !f.terms.includes('No'), JSON.stringify(f.terms));
+  ok('"Yes" becomes remote and "Hybrid" stays hybrid',
+    gen.remoteTerm('Yes') === 'remote' && gen.remoteTerm('Hybrid') === 'hybrid');
+  ok('an unrecognised remote value is passed through as typed',
+    gen.remoteTerm('2 days in office') === '2 days in office');
+  ok('an empty remote field says nothing', gen.remoteTerm('') === '' && gen.remoteTerm(null) === '');
+
+  // A two-digit range is a rate; a five-digit one is a salary and we say nothing.
+  ok('a sub-1000 range is named as an hourly rate', f.payPeriod === ' an hour', JSON.stringify(f.payPeriod));
+  ok('a salary-sized range asserts no period',
+    gen.jobFacts({ ...HVAC_JOB, pay_min: '110000', pay_max: '130000' }).payPeriod === '');
+  ok('a mixed/unclear range asserts no period',
+    gen.jobFacts({ ...HVAC_JOB, pay_min: '25', pay_max: '65000' }).payPeriod === '');
+
+  // The skills the two records actually share, in the candidate's own spelling.
+  const shared = gen.sharedSkills({ skills: 'HVAC installation, oil boilers, ductwork' }, HVAC_JOB);
+  ok('shared skills are computed from the records, not parsed from a display string',
+    shared.length > 0 && shared.every(x => !/\d\/\d/.test(x)), JSON.stringify(shared));
+  ok('a lowercase acronym in the job field is uppercased', gen.prettySkill('hvac') === 'HVAC' && gen.prettySkill('epa') === 'EPA');
+  ok('an ordinary lowercase word is left alone', gen.prettySkill('boilers') === 'boilers');
+  ok('anything already capitalised is untouched',
+    gen.prettySkill('Procore') === 'Procore' && gen.prettySkill('OSHA 30') === 'OSHA 30');
+  ok('no overlap falls back to the record rather than inventing one',
+    /4 years/.test(gen.whyYouClause([], { experience_years: '4', current_title: 'Technician' }, HVAC_JOB)));
+}
+
 // ── THE CANDIDATE EMAIL IS NOT THE CLIENT EMAIL ────────────────────────────
 {
   const input = inputFor(JOB);
@@ -218,14 +301,20 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
 }
 
 // ── THE SKILL LIST READS AS ENGLISH ────────────────────────────────────────
-// "your background in procore, osha 30" tells the reader a machine wrote it.
+// The clause names the skills the two RECORDS share, computed here — it is
+// never parsed out of the match engine's grid shorthand, which is what put
+// "your background in 3/4 skills" into a real email.
 {
-  const clause = gen.whyYouClause(REASONS, CAND);
-  ok('proper nouns in the match reasons keep their capitals', /Procore/.test(clause), clause);
+  const withSkills = { ...CAND, skills: 'Procore, OSHA 30, commercial build-out' };
+  const clause = gen.whyYouClause(REASONS, withSkills, JOB);
+  ok('proper nouns keep their capitals', /Procore/.test(clause), clause);
   ok('the skill list is joined with "and", not left as raw CSV', / and /.test(clause), clause);
-  ok('with no reasons at all it falls back to the record', /9 years/.test(gen.whyYouClause([], CAND)), gen.whyYouClause([], CAND));
+  ok('the matcher\'s shorthand never reaches the reader',
+    !/\d\/\d|%/.test(clause), clause);
+  ok('with no shared skills it falls back to the record',
+    /9 years/.test(gen.whyYouClause([], CAND, JOB)), gen.whyYouClause([], CAND, JOB));
   ok('with nothing on either side it stays silent rather than guessing',
-    gen.whyYouClause([], { full_name: 'X' }) === '', gen.whyYouClause([], { full_name: 'X' }));
+    gen.whyYouClause([], { full_name: 'X' }, JOB) === '', gen.whyYouClause([], { full_name: 'X' }, JOB));
 }
 
 // ── NO ANGLE IS A PARAPHRASE OF ANOTHER ────────────────────────────────────
@@ -367,6 +456,15 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     route.indexOf("update({ track_token: token })") < route.indexOf('await sendMailboxNewMessage'));
   ok('an unknown token is indistinguishable from a deleted one',
     /Deliberately identical for an unknown token/.test(route));
+  // The preview showed the RULES brief while the queue sent the cached AI one,
+  // so the screen and the outbox disagreed — and that is what hid the real
+  // reason three of four candidates were skipped.
+  ok('the preview and the queue read the brief through ONE loader',
+    (route.match(/= briefFor\(job\)|brief: briefFor\(job\)/g) || []).length === 2 &&
+    !/let brief = job \? gen\.rulesJobBrief/.test(route),
+    String((route.match(/= briefFor\(job\)|brief: briefFor\(job\)/g) || []).length));
+  ok('a skipped candidate is given the reason in words, not a code',
+    /detail: q\.violations\.map\(x => x\.instruction\)/.test(route));
   ok('the preview shows the buttons with a dead token',
     /answerButtonsHtml\(resolveBaseUrl\(\), 'preview'/.test(route));
 }
