@@ -180,22 +180,61 @@ module.exports = (ctx) => {
         const forAi = {
           ...withSender,
           job_description: aiProvider.budget.trimToTokens(withSender.job_description, 2200),
+          // Show the model how this team writes instead of describing it. The
+          // rules draft for THIS posting is the house style, built from the
+          // openers that earned replies.
+          style_reference: built.variants[0] && built.variants[0].email,
         };
-        const out = await aiProvider.complete(supabase, {
+        const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff });
+        const askAi = (prompt) => aiProvider.complete(supabase, {
           model: AI_MODEL || undefined,
           maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId,
-          system: gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff }),
-          prompt: gen.buildUserPayload(forAi),
+          system, prompt,
         });
+
+        const out = await askAi(gen.buildUserPayload(forAi));
         if (!out) throw new Error('ai_unavailable');
-        const parsed = gen.parseAiDraft(out.text);
+        let parsed = gen.parseAiDraft(out.text);
         if (!parsed) throw new Error('ai_unparseable');
+
+        // A PROMPT RULE IS A REQUEST; A CHECK IS A GUARANTEE. The model is told
+        // the house rules and then held to the ones a machine can actually
+        // verify — a stated fee percentage, a "quick call?" ask, a leftover
+        // {{placeholder}}, a second sign-off above the signature. One repair
+        // turn, then the rules draft wins. Never ship a draft that broke a rule
+        // just because an AI wrote it.
+        const checkOpts = { omitSignOff: draftOpts.omitSignOff };
+        let check = gen.checkDraft(parsed, withSender, checkOpts);
+        let repaired = false;
+        if (!check.ok) {
+          const fix = await askAi(gen.buildRepairPrompt(parsed, check.violations));
+          const fixed = fix && gen.parseAiDraft(fix.text);
+          if (fixed) {
+            const recheck = gen.checkDraft(fixed, withSender, checkOpts);
+            // Take the repair when it is genuinely better, not merely different.
+            if (recheck.violations.length < check.violations.length) {
+              parsed = fixed; check = recheck; repaired = true;
+            }
+          }
+        }
+        if (!check.ok) {
+          // It still breaks a rule we can name. The rules draft is on screen
+          // instead, and the page says exactly which rule and why.
+          return res.json({
+            ...built.variants[0], ...base, ai_available: true,
+            ai_error: 'draft_rejected',
+            quality: { ok: false, repaired, violations: check.violations },
+            rejected_draft: { subject: parsed.subject, email: parsed.email }
+          });
+        }
+
         const usage = out.usage || {};
         // The AI writes one email; the rules writer's framings stay alongside it
         // so the choice is never lost when a key is configured.
         return res.json({
           ...parsed, mode: 'ai', ai_available: true, ...base,
           engine: out.provider, engine_model: out.model,
+          quality: { ok: true, repaired, violations: [] },
           variants: [{ id: 'ai', label: 'AI draft', blurb: 'Written by the AI writer for this posting.',
                        subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
                        words: gen.wordCount(parsed.email), mode: 'ai' }].concat(built.variants),
@@ -203,8 +242,18 @@ module.exports = (ctx) => {
         });
       } catch (aiErr) {
         // A drafting failure is not a dead end — the rules engine writes the
-        // same shape. The page says which engine produced what it is showing.
-        return res.json({ ...built.variants[0], ...base, ai_available: true, ai_error: aiErr.message });
+        // same shape. But "the AI writer was unavailable" is not a diagnosis:
+        // from outside, a missing model, a spent free tier and a timeout look
+        // identical. complete() already recorded WHY under ai_last_error, so
+        // read it back and put the provider's own sentence on the page.
+        let why = null;
+        try {
+          const { data } = await supabase.from('app_settings').select('value').eq('key', 'ai_last_error').maybeSingle();
+          const rec = data && JSON.parse(data.value);
+          const f = rec && rec.feature === 'outreach_draft' && (rec.failures || [])[0];
+          if (f) why = `${f.provider}/${f.model}: ${f.error}`;
+        } catch (_) { /* a diagnosis is a bonus, never the reason a draft fails */ }
+        return res.json({ ...built.variants[0], ...base, ai_available: true, ai_error: aiErr.message, ai_error_detail: why });
       }
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
