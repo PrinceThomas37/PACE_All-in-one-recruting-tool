@@ -91,8 +91,24 @@ t('marketing adjectives and exclamation marks are caught', () => {
 t('a second sign-off above the appended signature is caught', () => {
   const email = good.email.replace('Thanks,', 'Best regards,\nPrince Thomas\nAccount Manager');
   const c = codes({ ...good, email }, BASE, { omitSignOff: true });
-  assert.ok(c.includes('double_signoff'));
-  assert.ok(c.includes('double_signoff_name'));
+  assert.ok(c.includes('double_signoff'), c.join(','));
+  assert.ok(c.includes('double_signoff_name'), c.join(','));
+});
+t('REGRESSION: the required identity sentence is not a second sign-off', () => {
+  // Live gpt-oss-120b follow-up, rejected by the first version of this check:
+  // rule 1 REQUIRES "This is <sender> at <company>" in sentence one, and on a
+  // compact email a last-few-lines window swallows the whole body.
+  const email = ['Hi Susan,',
+    'This is Prince Thomas at Fute Global. I see the Construction Superintendent role has been open for over a month, and the mix of eight years on large commercial projects, OSHA 30 and Procore makes qualified candidates scarce.',
+    'Would you like me to send a few vetted resumes over?', 'Thanks,'].join('\n');
+  assert.deepEqual(codes({ ...good, email }, { ...BASE, outreach_type: 'followup' }, { omitSignOff: true }), []);
+});
+t('a missing greeting is caught — a cold email that opens "This is..." reads as a broadcast', () => {
+  const email = good.email.replace('Hi Susan,\n\n', '');
+  assert.ok(codes({ ...good, email }, BASE, { omitSignOff: true }).includes('no_greeting'));
+});
+t('the greeting rule is in the prompt, not only the check', () => {
+  assert.match(gen.buildSystemPrompt('Acme', {}), /Greet the contact by first name/);
 });
 t('the same sign-off is fine when no signature will be appended', () => {
   const email = good.email.replace('Thanks,', 'Best regards,\nPrince Thomas\nAccount Manager');

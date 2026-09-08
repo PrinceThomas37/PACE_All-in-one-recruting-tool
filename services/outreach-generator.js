@@ -43,7 +43,7 @@ function buildSystemPrompt(companyName, opts) {
     `You write cold outreach emails for a contingency recruiting team at ${co}. You are given a job posting and details about the hiring contact. You produce exactly one short, natural, non-pushy email plus a one-sentence diagnosis of the real hiring problem.`,
     '',
     'RULES:',
-    `1. Open with identity in sentence one — "This is {sender} at ${co}" or a close natural variant. No warm-up before it.`,
+    `1. Greet the contact by first name on its own line ("Hi Ed,"), then open the BODY with identity in sentence one — "This is {sender} at ${co}" or a close natural variant. No warm-up between the greeting and that sentence. The greeting is not optional: an email that starts straight into "This is..." reads like a broadcast.`,
     '2. Read the job posting like a recruiter, not a copywriter. Find the ONE real reason this specific role is hard to fill — a rare skill combination, a credential or clearance requirement, a narrow candidate pool, a re-posting or long-open signal, an unusual work environment. State it in one or two plain sentences. This paragraph is the point of the email — it is what makes it feel researched instead of templated. Never invent a fact not supported by the posting or the notes.',
     '3. The job posting may include site clutter (Quick Apply buttons, Continue, star ratings, nav links, unrelated postings). Ignore that noise and extract only the real content: title, responsibilities, qualifications, and any explicit application instructions such as named contacts or do-not-contact notices.',
     '4. Only reference skills or industries that actually appear in the posting or notes. Never fabricate specifics.',
@@ -961,10 +961,33 @@ function checkDraft(draft, input, opts) {
   // The mailbox signature is appended after this text. A second sign-off is
   // visible to the recipient, and this app has shipped one.
   if (o.omitSignOff) {
-    const tail = email.split(/\n/).slice(-4).join('\n');
-    if (OTHER_SIGNOFFS.test(tail)) add('double_signoff', 'Close with "Thanks," and nothing after it — no name, no title, no company. A signature is appended automatically.');
-    const senderName = txt((i.sender || {}).name);
-    if (senderName && tail.includes(senderName)) add('double_signoff_name', `Remove "${senderName}" from the sign-off — the signature already carries the name.`);
+    // ONLY WHAT FOLLOWS THE CLOSING COUNTS. The first version read the last few
+    // lines, which on a compact email is the whole email — and rule 1 REQUIRES
+    // the sender's name in sentence one ("This is Prince Thomas at ..."). A live
+    // follow-up draft was rejected for its own opening line. Find the closing,
+    // then look only after it.
+    const closing = /\n\s*(thanks|best regards|kind regards|warm regards|regards|sincerely|cheers)\s*,?\s*/gi;
+    let last = null, m;
+    while ((m = closing.exec(email)) !== null) last = m;
+    if (last) {
+      if (!/^thanks/i.test(last[1])) {
+        add('double_signoff', 'Close with "Thanks," and nothing else — a signature is appended automatically.');
+      }
+      const after = email.slice(last.index + last[0].length).trim();
+      if (after) {
+        add('double_signoff_name', `Delete everything after "Thanks," — the appended signature already carries the name, title and company. Remove: "${after.split(/\n/)[0].slice(0, 40)}"`);
+      }
+    }
+  }
+
+  // A COLD EMAIL WITH NO GREETING READS AS A BROADCAST. gpt-oss-120b took
+  // "identity in sentence one" literally on the first live run and opened with
+  // "This is Prince Thomas at ..." — the contact's name appeared nowhere in the
+  // email. The rules writer has always greeted by first name; the AI has to too.
+  const first = firstNameOf(i.contact_first_name);
+  const opening = email.split(/\n/).find(l => l.trim()) || '';
+  if (first && first !== 'there' && !new RegExp('\\b' + first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(opening)) {
+    add('no_greeting', `Open with a greeting line addressing them by first name — "Hi ${first}," — before the first sentence.`);
   }
 
   if (subject.length > 90) add('subject_long', 'Shorten the subject line to something that fits in an inbox list.');
