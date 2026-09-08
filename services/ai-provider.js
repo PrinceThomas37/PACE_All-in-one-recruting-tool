@@ -312,32 +312,48 @@ async function complete(supabase, opts = {}) {
     return null;
   }
 
+  // Which models this call may try, in order. A provider is not one model: the
+  // QUALITY model is the one nobody exercises (diagnose used to probe only the
+  // fast tier), and a hosted model name is not a stable constant — Groq retired
+  // a whole Llama line under us. So when the quality model is gone, fall back
+  // to the same provider's fast model before writing the feature off. A
+  // slightly smaller writer is a far better outcome than no writer, and the
+  // failure is still recorded so an operator can see the rename.
+  const modelsFor = (entry) => {
+    if (opts.model) return [opts.model];
+    const first = modelFor(entry, limits.tier);
+    const def = PROVIDERS[entry.id] || {};
+    const alt = !entry.model_override && limits.tier !== 'fast' && def.models ? def.models.fast : null;
+    return alt && alt !== first ? [first, alt] : [first];
+  };
+
   for (const entry of chain) {
-    const model = opts.model || modelFor(entry, limits.tier);
-    const req = buildRequest(entry.id, {
-      key: entry.key, baseUrl: entry.baseUrl, model,
-      system, prompt, maxTokens: answerCeiling(entry.id, model, maxTokens),
-    });
-    if (!req) continue;
-    try {
-      const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
-      if (!response.ok) throw new Error(await describeHttpError(response));
-      const payload = await response.json();
-      const parsed = parseResponse(entry.id, payload);
-      if (!parsed) throw new Error(describeEmptyReply(entry.id, payload));
-      // Charge the meter with what the provider actually billed, falling back
-      // to the estimate when it reports nothing — never to zero, or a provider
-      // that omits usage would be free forever.
-      const actual = (parsed.usage.input_tokens + parsed.usage.output_tokens) || estimated;
-      await budget.recordSpend(supabase, opts.orgId, opts.feature, actual);
-      return { ...parsed, provider: entry.id, model, tier: limits.tier, budget_remaining: verdict.remaining_tokens };
-    } catch (err) {
-      // Never fatal: the loop moves on, and an empty loop means rules output.
-      // But the reason is REMEMBERED — see recordFailure. A null that cannot be
-      // explained is the difference between "AI is off" and "AI is broken", and
-      // from the outside those two look identical.
-      console.warn(`[ai] ${entry.id} failed (${err.message}) — trying next provider`);
-      failures.push({ provider: entry.id, model, error: err.message });
+    for (const model of modelsFor(entry)) {
+      const req = buildRequest(entry.id, {
+        key: entry.key, baseUrl: entry.baseUrl, model,
+        system, prompt, maxTokens: answerCeiling(entry.id, model, maxTokens),
+      });
+      if (!req) continue;
+      try {
+        const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
+        if (!response.ok) throw new Error(await describeHttpError(response));
+        const payload = await response.json();
+        const parsed = parseResponse(entry.id, payload);
+        if (!parsed) throw new Error(describeEmptyReply(entry.id, payload));
+        // Charge the meter with what the provider actually billed, falling back
+        // to the estimate when it reports nothing — never to zero, or a provider
+        // that omits usage would be free forever.
+        const actual = (parsed.usage.input_tokens + parsed.usage.output_tokens) || estimated;
+        await budget.recordSpend(supabase, opts.orgId, opts.feature, actual);
+        return { ...parsed, provider: entry.id, model, tier: limits.tier, budget_remaining: verdict.remaining_tokens };
+      } catch (err) {
+        // Never fatal: the loop moves on, and an empty loop means rules output.
+        // But the reason is REMEMBERED — see recordFailure. A null that cannot be
+        // explained is the difference between "AI is off" and "AI is broken", and
+        // from the outside those two look identical.
+        console.warn(`[ai] ${entry.id}/${model} failed (${err.message}) — trying next`);
+        failures.push({ provider: entry.id, model, error: err.message });
+      }
     }
   }
   if (failures.length) await recordFailure(supabase, opts.feature, failures);

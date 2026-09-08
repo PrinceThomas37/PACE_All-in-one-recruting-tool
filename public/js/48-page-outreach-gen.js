@@ -29,7 +29,7 @@
   function blankForm(){
     return { outreach_type:'first', contact_first_name:'', contact_title:'', company:'',
              location:'', to:'', no_agencies:false, no_agencies_text:'', notes:'',
-             job_description:'', sender_title:'',
+             job_title:'', job_description:'', sender_title:'',
              // Where the recipient came from: a record already in PACE, or typed
              // in from scratch. Kept on the form because it decides what the
              // send is attached to, not just how the picker looks.
@@ -201,7 +201,8 @@
     var g=G(), ids={
       contact_first_name:'og-first', contact_title:'og-title', company:'og-company',
       location:'og-loc', to:'og-to', no_agencies_text:'og-natext',
-      notes:'og-notes', job_description:'og-jd', sender_title:'og-sendertitle'
+      notes:'og-notes', job_title:'og-jobtitle', job_description:'og-jd',
+      sender_title:'og-sendertitle'
     };
     Object.keys(ids).forEach(function(k){
       var el=document.getElementById(ids[k]); if(el) g.form[k]=el.value;
@@ -243,7 +244,7 @@
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
       company:f.company, location:f.location,
       no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
-      notes:f.notes, job_description:f.job_description,
+      notes:f.notes, job_title:f.job_title, job_description:f.job_description,
       sender:{title:f.sender_title},
       adjustment:useAdjustment?g.adjustment:''
     }).then(function(r){
@@ -437,6 +438,10 @@
         '<textarea class="txta w100" id="og-notes" rows="3" placeholder="e.g. mutual connection Christian, 14 years at the company, re-posted after 22 days..." oninput="outreachGenField(\'notes\',this.value)">'+esc(f.notes)+'</textarea>'+
         '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">One real detail from here gets worked into the email — never more than one.</div>'+
       '</div>'+
+      '<div class="fgrp"><label class="flbl">Job title</label>'+
+        '<input class="inp" id="og-jobtitle" placeholder="Construction Superintendent" value="'+esc(f.job_title)+'" oninput="outreachGenField(\'job_title\',this.value)">'+
+        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">Which opening this email is about. A pasted job page often lists other roles too — this settles it.</div>'+
+      '</div>'+
       '<div class="fgrp"><label class="flbl">Job posting</label>'+
         '<textarea class="txta w100" id="og-jd" style="min-height:180px" placeholder="Paste the full job description. Site clutter (Quick Apply, Continue, nav links) is fine — it gets ignored." oninput="outreachGenField(\'job_description\',this.value)">'+esc(f.job_description)+'</textarea>'+
       '</div>'+
@@ -513,10 +518,28 @@
           '<div style="margin-top:6px;font-size:11.5px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
       '</div>':'';
 
-    var modeNote=cur.mode==='rules'
-      ? '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Written by the built-in rules writer.'+
-        (d.ai_error?' The AI writer was unavailable for this one.':'')+'</div>'
-      : '';
+    // WHO WROTE THIS, AND IF NOT THE AI, WHY NOT. "The AI writer was
+    // unavailable" is not something anyone can act on; the provider's own
+    // sentence (a renamed model, a spent free tier) is.
+    var modeNote='';
+    if(cur.mode==='ai'){
+      var q=d.quality||{};
+      modeNote='<div style="font-size:11.5px;color:var(--green);margin-bottom:8px">Written by the AI'+
+        (d.engine?' ('+esc(d.engine)+(d.engine_model?' · '+esc(d.engine_model):'')+')':'')+
+        ', checked against the house rules'+(q.repaired?' and corrected once':'')+'.</div>';
+    } else if(cur.mode==='rules'){
+      var why='';
+      if(d.ai_error==='draft_rejected'){
+        var vs=(d.quality&&d.quality.violations)||[];
+        why=' The AI\'s draft broke the house rules'+
+          (vs.length?' ('+esc(vs.map(function(v){return v.code.replace(/_/g,' ');}).join(', '))+')':'')+
+          ', so it was not used.';
+      } else if(d.ai_error){
+        why=' The AI writer did not answer'+(d.ai_error_detail?' — '+esc(d.ai_error_detail):'')+'.';
+      }
+      modeNote='<div style="font-size:11.5px;color:'+(why?'#b45309':'var(--text3)')+';margin-bottom:8px">'+
+        'Written by the built-in rules writer.'+why+'</div>';
+    }
     var sentBanner=g.sentOk
       ? '<div style="background:var(--green-l);border-radius:var(--r);padding:9px 12px;font-size:12.5px;margin-bottom:10px">'+
         'Sent to <strong>'+esc(g.sentOk.to)+'</strong> from '+esc(g.sentOk.mailbox)+'.</div>'

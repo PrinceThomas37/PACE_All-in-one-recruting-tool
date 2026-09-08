@@ -43,10 +43,11 @@ function buildSystemPrompt(companyName, opts) {
     `You write cold outreach emails for a contingency recruiting team at ${co}. You are given a job posting and details about the hiring contact. You produce exactly one short, natural, non-pushy email plus a one-sentence diagnosis of the real hiring problem.`,
     '',
     'RULES:',
-    `1. Open with identity in sentence one — "This is {sender} at ${co}" or a close natural variant. No warm-up before it.`,
+    `1. Greet the contact by first name on its own line ("Hi Ed,"), then open the BODY with identity in sentence one — "This is {sender} at ${co}" or a close natural variant. No warm-up between the greeting and that sentence. The greeting is not optional: an email that starts straight into "This is..." reads like a broadcast.`,
     '2. Read the job posting like a recruiter, not a copywriter. Find the ONE real reason this specific role is hard to fill — a rare skill combination, a credential or clearance requirement, a narrow candidate pool, a re-posting or long-open signal, an unusual work environment. State it in one or two plain sentences. This paragraph is the point of the email — it is what makes it feel researched instead of templated. Never invent a fact not supported by the posting or the notes.',
     '3. The job posting may include site clutter (Quick Apply buttons, Continue, star ratings, nav links, unrelated postings). Ignore that noise and extract only the real content: title, responsibilities, qualifications, and any explicit application instructions such as named contacts or do-not-contact notices.',
     '4. Only reference skills or industries that actually appear in the posting or notes. Never fabricate specifics.',
+    '4b. If a ROLE BEING HIRED FOR is given, that is the role this email is about — use it verbatim and ignore any other job title in the pasted page. A pasted job page often carries a "similar roles" rail; writing about the wrong opening is the one mistake the reader cannot forgive.',
     "5. If the notes mention the contact's tenure, background, a mutual connection, or a prior interaction, you may work in ONE real detail from it, naturally and briefly. Never more than one. Never speculate about their state of mind or workload beyond what's stated.",
     '6. If a no-agencies / no-calls / placement-inquiry notice is flagged, acknowledge it directly in the first two sentences, keep the whole email under 90 words, and give an explicit low-friction way to opt out or say no. Do not use the standard longer structure in that case.',
     '7. Otherwise keep the email medium length, roughly 90-150 words.',
@@ -87,6 +88,7 @@ function buildUserPayload(input) {
     ? 'Follow-up (already contacted once, no reply yet)' : 'First outreach'));
   lines.push('CONTACT: ' + txt(i.contact_first_name) +
     (txt(i.contact_title) ? ' — ' + txt(i.contact_title) : ''));
+  if (txt(i.job_title)) lines.push('ROLE BEING HIRED FOR: ' + txt(i.job_title) + ' (authoritative — use this, not a title scraped from the posting)');
   lines.push('COMPANY: ' + txt(i.company));
   if (txt(i.location)) lines.push('LOCATION: ' + txt(i.location));
   if (i.no_agencies) {
@@ -96,6 +98,17 @@ function buildUserPayload(input) {
   if (txt(i.notes)) lines.push('CONTEXT ON THE CONTACT OR SITUATION:\n' + txt(i.notes));
   lines.push('JOB POSTING (may include site clutter — extract the real content):\n' + txt(i.job_description));
   if (txt(i.adjustment)) lines.push('ADJUSTMENT REQUESTED FOR THIS REGENERATION:\n' + txt(i.adjustment));
+  // HOUSE STYLE, SHOWN RATHER THAN DESCRIBED. This is the rules writer's draft
+  // for this same posting — built from the openers that actually earned replies
+  // in the owner's 30 replied threads. A model matches a register it can read
+  // far more reliably than one it is told about in adjectives, and this costs
+  // ~150 words. It is a REFERENCE, never a thing to copy: the whole reason to
+  // call an AI is the researched paragraph the rules cannot write.
+  if (txt(i.style_reference)) {
+    lines.push('HOUSE STYLE REFERENCE — this is how this team writes. Match its register, ' +
+      'directness and length. Do NOT copy its sentences; your job is a sharper, better-researched ' +
+      'version of the same email:\n' + txt(i.style_reference));
+  }
   return lines.join('\n\n');
 }
 
@@ -587,7 +600,11 @@ function draftParts(input, options) {
   const senderName = txt(sender.name) || 'me';
   const senderTitle = txt(sender.title);
 
-  const role = extractRoleTitle(i.job_description);
+  // A TYPED ROLE TITLE BEATS A SCRAPED ONE. `extractRoleTitle` reads the
+  // pasted page, and a pasted page can carry three other job titles in its
+  // "similar roles" rail. When the user has told us which role this email is
+  // about, that is the answer — no heuristic gets a vote.
+  const role = txt(i.job_title) || extractRoleTitle(i.job_description);
   const typedCompany = txt(i.company);
   const companyRejected = looksLikeJobTitle(typedCompany);
   const company = (companyRejected || !typedCompany) ? extractCompany(i.job_description) : typedCompany;
@@ -868,9 +885,137 @@ function firstNameOf(name) {
   return n.split(/\s+/)[0];
 }
 
+// ── THE HOUSE-STYLE CHECK ──────────────────────────────────────────────────
+// "Training" a hosted model, with no fine-tuning and no budget, is three
+// things: give it the facts, give it the rules, and THEN CHECK ITS WORK. The
+// first two are the prompt above. This is the third, and it is the only one
+// that makes quality repeatable — a prompt rule is a request, a check is a
+// guarantee.
+//
+// PURE, and deliberately mechanical: it only tests what can be tested without
+// judgement. It never scores prose. A model that writes a dull email passes;
+// one that invents a 20% fee, opens with "I'd love to hop on a quick call!!"
+// or leaves a {{placeholder}} in does not. Anything a human would argue about
+// is left to the human.
+//
+// Violations are phrased as instructions because they are handed straight back
+// to the model as a repair turn, and shown to the user as the reason a draft
+// was rejected.
+const MARKETING_WORDS = /\b(passionate|dynamic|exceptional|cutting[- ]edge|seamless|world[- ]class|rock ?star|synergy|best[- ]in[- ]class|unparalleled|game[- ]chang\w+)\b/i;
+const OTHER_SIGNOFFS = /\b(best regards|kind regards|warm regards|sincerely|cheers|regards)\b/i;
+
+function sentencesOf(body) {
+  return String(body || '').split(/(?<=[.?!])\s+|\n+/).map(t => t.trim()).filter(Boolean);
+}
+
+function checkDraft(draft, input, opts) {
+  const d = draft || {};
+  const i = input || {};
+  const o = opts || {};
+  const email = txt(d.email);
+  const subject = txt(d.subject);
+  const v = [];
+  const add = (code, instruction) => v.push({ code, instruction });
+
+  if (!email) { add('empty', 'Return the full email body in the "email" field.'); return { ok: false, violations: v }; }
+
+  // An unfilled placeholder is the one failure a recipient sees verbatim. It
+  // has reached a live prospect from this app before, from the signature side.
+  if (/\{\{\s*\w+/.test(email) || /\{\{\s*\w+/.test(subject)) {
+    add('placeholder', 'Remove the {{...}} placeholder and write the real word — a template token reaching a recipient is the worst possible outcome.');
+  }
+
+  const words = wordCount(email);
+  if (i.no_agencies) {
+    if (words > 90) add('too_long', `The posting says no agencies, so the whole email must be under 90 words. Yours is ${words}. Cut it.`);
+  } else if (i.outreach_type === 'followup') {
+    if (words > 85) add('too_long', `This is a follow-up, so keep it under 85 words. Yours is ${words}. Ask one thing and stop.`);
+  } else {
+    if (words > 170) add('too_long', `Keep the email to roughly 90-150 words. Yours is ${words}. Cut the weakest paragraph.`);
+    if (words < 60) add('too_short', `At ${words} words there is no researched paragraph. Say what makes this specific role hard to fill.`);
+  }
+
+  if (/!/.test(email)) add('exclamation', 'Remove every exclamation mark. Plain sentences only.');
+  if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(email)) add('emoji', 'Remove the emoji.');
+  const mk = email.match(MARKETING_WORDS);
+  if (mk) add('marketing_word', `Remove the word "${mk[0]}" and any other marketing adjective. Plain language only.`);
+  if (/\d+(\.\d+)?\s?%/.test(email)) add('fee_percentage', 'Never state a fee percentage. Say there is no charge to review resumes and a fee only on a successful placement.');
+
+  const questions = sentencesOf(email).filter(t => t.includes('?'));
+  if (!questions.length) {
+    add('no_ask', 'End with a plain yes/no question asking whether they want to see resumes.');
+  } else if (questions.some(q => /\b(call|chat|meeting|meet|zoom|teams|calendar|coffee|catch up)\b/i.test(q))) {
+    add('meeting_ask', 'The ask must be whether to send resumes — never a call, meeting or 15 minutes of their time. Rewrite the question.');
+  }
+
+  // Rule 9: cost is an objection to answer AFTER the ask, unless the reader is
+  // the person whose job is cost.
+  if (questions.length && audienceOf(i.contact_title) !== 'finance') {
+    const feeAt = email.search(/\b(no charge|no cost|fee|contingency|contingenc\w+)\b/i);
+    const askAt = email.indexOf(questions[0]);
+    if (feeAt >= 0 && askAt >= 0 && feeAt < askAt) {
+      add('fee_before_ask', 'Move the fee sentence to AFTER the question. Leading with price answers an objection they have not raised yet.');
+    }
+  }
+
+  // The mailbox signature is appended after this text. A second sign-off is
+  // visible to the recipient, and this app has shipped one.
+  if (o.omitSignOff) {
+    // ONLY WHAT FOLLOWS THE CLOSING COUNTS. The first version read the last few
+    // lines, which on a compact email is the whole email — and rule 1 REQUIRES
+    // the sender's name in sentence one ("This is Prince Thomas at ..."). A live
+    // follow-up draft was rejected for its own opening line. Find the closing,
+    // then look only after it.
+    const closing = /\n\s*(thanks|best regards|kind regards|warm regards|regards|sincerely|cheers)\s*,?\s*/gi;
+    let last = null, m;
+    while ((m = closing.exec(email)) !== null) last = m;
+    if (last) {
+      if (!/^thanks/i.test(last[1])) {
+        add('double_signoff', 'Close with "Thanks," and nothing else — a signature is appended automatically.');
+      }
+      const after = email.slice(last.index + last[0].length).trim();
+      if (after) {
+        add('double_signoff_name', `Delete everything after "Thanks," — the appended signature already carries the name, title and company. Remove: "${after.split(/\n/)[0].slice(0, 40)}"`);
+      }
+    }
+  }
+
+  // A COLD EMAIL WITH NO GREETING READS AS A BROADCAST. gpt-oss-120b took
+  // "identity in sentence one" literally on the first live run and opened with
+  // "This is Prince Thomas at ..." — the contact's name appeared nowhere in the
+  // email. The rules writer has always greeted by first name; the AI has to too.
+  const first = firstNameOf(i.contact_first_name);
+  const opening = email.split(/\n/).find(l => l.trim()) || '';
+  if (first && first !== 'there' && !new RegExp('\\b' + first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(opening)) {
+    add('no_greeting', `Open with a greeting line addressing them by first name — "Hi ${first}," — before the first sentence.`);
+  }
+
+  if (subject.length > 90) add('subject_long', 'Shorten the subject line to something that fits in an inbox list.');
+
+  return { ok: v.length === 0, violations: v };
+}
+
+// The repair turn. One retry, naming exactly what to fix and nothing else —
+// re-sending the whole brief invites a rewrite that breaks something different.
+function buildRepairPrompt(previous, violations) {
+  const list = (violations || []).map((x, n) => `${n + 1}. ${x.instruction}`).join('\n');
+  return [
+    'Your previous draft broke the house rules listed below. Fix ONLY these problems.',
+    'Keep everything else — the angle, the facts, the researched paragraph — exactly as it is.',
+    '',
+    'PROBLEMS:', list,
+    '',
+    'YOUR PREVIOUS DRAFT:',
+    JSON.stringify({ subject: txt(previous.subject), diagnosis: txt(previous.diagnosis), email: txt(previous.email) }),
+    '',
+    'Return the corrected draft as the same JSON shape and nothing else.'
+  ].join('\n');
+}
+
 module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
+  checkDraft, buildRepairPrompt,
   rulesDraft, rulesVariants, draftParts, contextSentence, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
   extractCompany, extractLocation, looksLikeJobTitle,
   contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
