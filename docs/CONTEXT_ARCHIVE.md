@@ -3564,3 +3564,159 @@ first record disproved it — 14,241 bytes declared, 14,241 received. A
 confidently wrong message is worse than a vague one, because it sends someone
 off doing the wrong thing with conviction. **Never let a diagnosis sound more
 certain than the evidence behind it.**
+
+---
+
+## Session 20 — the session where the sandbox finally reached the model
+
+Three merged PRs (#176, #177, #178), one live data repair, and one lesson that
+outranks all of them: **for most of this project's life we could not call the
+AI we ship, and everything we believed about it was inference.** The owner
+opened the network policy mid-session. The first real generation found two bugs
+inside ten minutes.
+
+### Part 1 — two silent failures behind one screenshot (#176)
+
+The owner sent a screenshot of the Email page with a complaint that the numbers
+did not add up: a green "Send complete" card reading **375 total · 164 waiting**
+directly above a pending panel reading **21**. And separately: *"if I change the
+stage of the leads from assigned to unassigned, it's not available again for
+assigning if the emails have been sent out from those."*
+
+Both were real, and both failed **silently** — the app reported success and did
+nothing.
+
+**The card.** It is a snapshot of one send run, stored in `app_settings` so it
+survives a restart. A 60-second timer was supposed to clear it — but that timer
+only fires while the process lives, and Render's free tier sleeps the service.
+So the card came back hours later still asserting totals about a queue that had
+since been purged. A finished run now expires 15 minutes after `completedAt` on
+read; an active run never expires; and the admin purge clears the card for every
+sender whose queue it emptied.
+
+**The un-assignable leads** were worse, and the database said so. The
+duplicate-cold-email guard (`fetchInitialOutreachedPairs`) blocked a new initial
+email on **any** prior non-failed one, for all of history. So a lead that had
+ever been emailed could be returned to the pool, redistributed, reported as
+assigned — and generate nothing. The guard is now scoped to the lead's CURRENT
+cycle, marked by `last_recycled_at`.
+
+Then the live data showed the bigger half. Three code paths returned a lead to
+the pool and **all three did it differently**; `PUT /jobs/:id` changed only the
+stage and left `assigned_to_bd` set. The distribution pool requires
+`assigned_to_bd IS NULL`, so those leads were invisible to it:
+
+| leads in the Unassigned pool | 11 |
+|---|---|
+| still holding an `assigned_to_bd` | **11** |
+
+Every lead in the pool was in a half-released state. All three paths now go
+through one `releaseToPoolUpdate()`. The 11 were repaired in the live database
+with the owner's go-ahead.
+
+### Part 2 — AI into the outreach generator, and the first real call (#177)
+
+The owner asked for the AI to write the emails and for a **Job title** field so
+it knows which role is meant (the scraper reads a pasted page and a pasted page
+carries a "similar roles" rail — on a real posting it returned "Superintendent"
+where the page said "Construction Superintendent").
+
+The AI seam already existed. What did not exist was any reason to trust its
+output, so `checkDraft()` was written: a pure, mechanical check of the rules a
+machine can verify — a leftover `{{placeholder}}`, a stated fee percentage, a
+call/meeting ask where the ask must be about resumes, fee language before that
+ask, marketing adjectives, the wrong length. One repair turn naming exactly what
+to fix, taken only if it comes back with fewer violations; otherwise the rules
+draft wins. **A prompt rule is a request; a check is a guarantee.**
+
+The usage meter also showed something worth noticing: spend recorded against
+`resume_parse`, `lead_ratio` and `jd_scrub`, and **never once** against
+`outreach_draft`. This is the only feature that asks for the *quality* model.
+Since a hosted model name is not a stable constant, `complete()` now falls back
+to the same provider's fast model before giving up on AI entirely.
+
+**Then the owner opened the network policy.** `api.groq.com` went on the
+allowlist, and the first real generation ran in 1.5 seconds. Two bugs surfaced
+immediately that no amount of code-reading would have found:
+
+1. **The AI dropped the greeting.** Rule 1 said "open with identity in sentence
+   one" and the model took it literally: *"This is Prince Thomas at Fute Global
+   LLC…"* with no "Hi Ed," and the contact's name nowhere in the email.
+2. **The new check rejected a good draft.** `double_signoff_name` read the last
+   four lines of the body — which on a compact email is the *whole* email — so
+   it flagged the identity sentence rule 1 *requires* as a duplicate sign-off.
+   Shipping that would have thrown the AI's follow-ups away silently, with a
+   wrong reason on screen.
+
+Both were fixed and pinned. Note the shape of the second one: **a check that
+samples "the last few lines" is a check that fires on short input.**
+
+### Part 3 — the reader, the four angles, and the sequence (#178)
+
+Three asks in one:
+
+**Connect the two job titles.** Both facts were already in the payload and
+nothing joined them: the contact's title only ever moved the fee sentence. Rule
+16 now makes the connection the model's job, with an `AUDIENCE_BRIEF` per
+reader; rule 17 forbids printing any of it, enforced by catching the addressing
+construction ("as Controller,") rather than a bare word, so a superintendent
+hiring a superintendent is unaffected. Verified live — same posting, same angle,
+only the reader swapped:
+
+| reader | what the email argued |
+|---|---|
+| Talent Acquisition Manager | "consuming your team's time with resume reviews, phone screens, and interview logistics" |
+| CFO | "consumes internal time and hiring budget … take that cost off your desk" |
+
+**Four AI angles, not one AI chip.** The owner wanted the AI inside the four
+existing framings. Predicted before building, and confirmed on the first live
+run: **left alone the four converge.** All four opened with "reposted after 34
+days" and recited the same requirement list, because the model finds the
+strongest material and uses it everywhere. The fix was giving each angle a
+`never` as well as a `must`. After that, on one posting: Direct 66w on Procore
+with no mention of the re-post; Short 47w of pure availability; Saves-them-work
+81w about screening and scheduling; The-hard-part 80w on the constraint.
+
+They are written **one at a time**, the first time each chip is opened — four up
+front costs four calls per Generate, about six generations against the daily
+budget before every AI feature in the app drops to its rules.
+
+**A send can join a sequence.** Choosing one creates the company, lead and
+contact and enrolls them; sending without one creates nothing. Two decisions
+that are not details: the lead is `Assigned`, never `Connected` (Connected means
+*they replied* and drives the funnel, the reports and the recycler), and the
+enrollment starts **after step 1**, because the email just sent *is* step 1 and
+the standard sequence opens with `email(+0d)` — which would have sent the same
+prospect a second email on the next tick.
+
+Measured on the live account: **Groq's free tier is 8,000 tokens per minute**
+and one angle costs ~2,100, so four in quick succession rate-limits. The
+quality→fast fallback absorbs it, because the limit is per model.
+
+### The test that broke for the wrong reason
+
+Two assertions in `outreach-generator-smoke` failed after the lead-creation
+refactor. Both were greps for **variable names** — `lead_id: job.id` and a
+literal `stage: 'Connected'` — not behaviour. The behaviour was intact. They
+were re-pointed at what matters and two more were added (a sent-created lead is
+`Assigned`; whatever stage is asked for is the stage written), 136 → 138.
+
+**A test that greps a variable name breaks on every refactor and passes on a
+genuine behaviour change.** That is exactly the wrong way round.
+
+### The lesson
+
+Session 19's lesson was *make the app record a fact and then read it*. Session
+20's is the next step out: **stop reasoning about a black box you are allowed to
+open.**
+
+Every belief about the AI writer had been inference — that the quality model
+might be broken (it was not), that the prompt produced good emails (it produced
+emails with no greeting), that the new check was safe (it rejected valid
+drafts). One network-policy change turned all of it into observation, and the
+first ten minutes of real output were worth more than the preceding hour of
+careful reasoning.
+
+The corollary is that **the cost of not being able to test is invisible until
+you can.** Nothing looked broken. The suite was green, the code was reviewed,
+the reasoning was sound. It was still wrong in two places.
