@@ -925,6 +925,41 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        is bounded at 4s and falls through to an honest page. And a write that
        timed out is NEVER reported as saved — the candidate is told, and pointed
        at the reply path.
+     * **THE FIRST LIVE BATCH BROKE FIVE WAYS, AND FOUR WERE INVISIBLE TO EVERY
+       TEST (Session 21, round 2).** One job, four HVAC technicians, three
+       silently skipped. Each of these is now pinned by the real records:
+       - **A JOB'S REQUIREMENT IS NOT A CLAIM ABOUT THE READER.** The AI brief
+         said *"2-3 years of field experience"* — a fact about the VACANCY — and
+         `invented_experience` matched any `N years` anywhere, so an 11-, a 35-
+         and a 15-year technician were all rejected. The one that got through
+         did so only because his 4 years sat within 1 of 3. The check now fires
+         only on a SECOND-PERSON attribution (`YEARS_ABOUT_READER`): "your 20
+         years" is a claim, "the role asks for 2-3 years" is the job talking.
+       - **THE PREVIEW AND THE QUEUE MUST READ THE BRIEF THROUGH ONE LOADER.**
+         The preview built its input with no `brief`, so it showed the RULES
+         text while the queue sent the cached AI text — the screen and the
+         outbox disagreed, which is the exact failure a preview exists to
+         prevent, and it is why the skip above was undiagnosable from the app.
+         `briefFor(job)` is now the only reader. Do not inline it again.
+       - **`match-engine`'s `reasons` ARE GRID SHORTHAND, NOT PROSE.** The real
+         values are `3/4 skills`, `title 100%`, `diff state`, and one went out
+         as *"your background in 3/4 skills"*. `sharedSkills()` now computes the
+         overlap from the two RECORDS; `reasons` only says whether there was
+         one. Never render a matcher string into customer-facing text.
+       - **A YES/NO FIELD PRINTED RAW SAYS "No".** `job_orders.remote` holds
+         `"No"`, which became *"It is Full-time and No."* `remoteTerm()` turns
+         it into "on site" / "remote" / "hybrid" and passes anything else
+         through as typed.
+       - **A SKILLS FIELD IS TYPED BY HAND AND ARRIVES LOWERCASE.** "The work
+         centres on hvac, epa and boilers." `prettySkill()` uppercases an
+         all-lowercase token of ≤4 chars (an acronym essentially every time)
+         and leaves everything else exactly as entered, so "boilers" stays
+         lower and "Procore"/"OSHA 30" are untouched.
+       Two more, smaller: a sub-1000 pay range is named as an hourly rate
+       (`payPeriod` — no full-time annual salary is a 3-digit number; above that
+       we assert nothing), and **a skipped candidate is given the checker's own
+       sentence, never the code** — the batch told the recruiter only "failed
+       check" while the app knew exactly what was wrong.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by

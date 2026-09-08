@@ -72,20 +72,44 @@ function jobFacts(jobOrder) {
   else if (min) pay = `${cur} ${min}+`;
   else if (max) pay = `up to ${cur} ${max}`;
 
+  // ⚠ `remote` IS A YES/NO FIELD AND MUST NOT BE PRINTED RAW. It came out of
+  // the first live batch as "It is Full-time and No." — the job order stores
+  // "No", and pushing it into a list of terms made the email say it. A field
+  // whose value is an ANSWER needs translating into the thing it answers.
   const terms = [];
   if (txt(j.job_type)) terms.push(txt(j.job_type));
-  if (txt(j.remote)) terms.push(txt(j.remote));
+  const rem = remoteTerm(j.remote);
+  if (rem) terms.push(rem);
   if (txt(j.duration)) terms.push(txt(j.duration));
 
   return {
     id: j.id || null,
     title: txt(j.job_title),
     company, place, pay, terms, skills,
+    // "USD 25-35" with no period is a shrug. There is no pay-type column on
+    // job_orders, so this is inferred — but ONLY from a bound small enough to
+    // be unambiguous: no full-time annual salary is a three-digit number, so
+    // under 1000 is a rate and nothing else. Above that we say nothing rather
+    // than guess, which is the same rule invented_pay enforces on the writer.
+    payPeriod: payFigures(min, max).every(n => n > 0 && n < 1000) ? ' an hour' : '',
     payFigures: payFiguresIn(pay),
     description: txt(j.job_description),
     workAuth: txt(j.work_auth),
     clearance: txt(j.clearance),
   };
+}
+
+// "No" -> "on site", "Yes" -> "remote", "Hybrid" -> "hybrid". Anything we do
+// not recognise is returned as typed (a recruiter writing "2 days in office"
+// means it), and an empty value says nothing at all rather than guessing.
+function remoteTerm(v) {
+  const t = txt(v);
+  if (!t) return '';
+  const l = t.toLowerCase();
+  if (/^(no|false|0|onsite|on-site|on site)$/.test(l)) return 'on site';
+  if (/^(yes|true|1|remote|fully remote|100% remote)$/.test(l)) return 'remote';
+  if (/^hybrid$/.test(l)) return 'hybrid';
+  return t;
 }
 
 // "110000" -> "110,000". A bare six-digit run reads as a reference number
@@ -99,6 +123,12 @@ function money(v) {
 
 // Every number that legitimately appears in a pay string, so the checker can
 // tell "the range from the job order" from "a number the model made up".
+// The numeric bounds, for deciding whether a range is a rate or a salary.
+function payFigures(min, max) {
+  return [min, max].map(v => Number(String(v || '').replace(/[^\d.]/g, '')))
+    .filter(n => Number.isFinite(n) && n > 0);
+}
+
 function payFiguresIn(pay) {
   return (String(pay || '').match(/\d[\d,.]*/g) || []).map(n => n.replace(/[,.]/g, ''));
 }
@@ -108,22 +138,42 @@ function payFiguresIn(pay) {
 // OSHA 30", "8 years experience fits the 5-10 asked for"). They are grounded in
 // the candidate's own record, so turning them into a clause costs nothing and
 // cannot hallucinate. This is the whole personalisation budget, and it is free.
-function whyYouClause(reasons, candidate) {
-  const list = (reasons || []).map(txt).filter(Boolean);
-  const c = candidate || {};
-
-  // The matcher's phrasing is written for a recruiter reading a grid ("Skills
-  // overlap: X, Y"). Said to the candidate it has to sound like a person.
-  const skillLine = list.find(r => /skill/i.test(r));
-  if (skillLine) {
-    // NEVER LOWERCASE THIS. The matcher's skills are proper nouns as often as
-    // not — "Procore", "OSHA 30", "AutoCAD" — and "your background in procore,
-    // osha 30" tells the reader immediately that a machine wrote it. Split and
-    // rejoin instead, so the list reads as English.
-    const after = skillLine.replace(/^[^:]*:\s*/, '').trim();
-    const parts = after.split(/[,;]+/).map(t => t.trim()).filter(Boolean).slice(0, 3);
-    if (parts.length) return `your background in ${joinList(parts)}`;
+// ⚠ THE MATCH ENGINE'S `reasons` ARE GRID SHORTHAND, NOT PROSE. They are
+// written for a recruiter scanning a table — the real values are "3/4 skills",
+// "title 100%", "diff state" — and the first live batch put one straight into an
+// email: "I came to you because of your background in 3/4 skills". Read like a
+// spreadsheet, because it was one.
+//
+// So the shared skills are computed HERE, from the two records, rather than
+// parsed out of a display string. Same facts, still true by construction, and
+// they can actually be named. `reasons` is now only consulted to know WHETHER
+// there was an overlap at all.
+function sharedSkills(candidate, job) {
+  const f = jobFacts(job);
+  const theirs = String((candidate || {}).skills || '')
+    .split(/[,;|\n]+/).map(t => t.trim()).filter(Boolean);
+  if (!f.skills.length || !theirs.length) return [];
+  const out = [];
+  for (const want of f.skills) {
+    const w = want.toLowerCase();
+    // A candidate listing "HVAC installation" matches a job asking for "hvac".
+    // Substring either way, because neither field is a controlled vocabulary.
+    const hit = theirs.find(t => {
+      const l = t.toLowerCase();
+      return l === w || l.includes(w) || w.includes(l);
+    });
+    // Print the CANDIDATE's spelling: it is their resume, and it is the one
+    // that is capitalised properly more often than a hand-typed job field.
+    if (hit) out.push(prettySkill(hit.length <= want.length ? hit : want));
   }
+  return out.slice(0, 3);
+}
+
+function whyYouClause(reasons, candidate, job) {
+  const c = candidate || {};
+  const shared = job ? sharedSkills(c, job) : [];
+  if (shared.length) return `your background in ${joinList(shared)}`;
+
   const yrs = Number(c.experience_years);
   if (Number.isFinite(yrs) && yrs > 0) {
     const title = txt(c.current_title);
@@ -132,9 +182,23 @@ function whyYouClause(reasons, candidate) {
       : `your ${yrs} years in the field`;
   }
   if (txt(c.current_title)) return `your work as ${indefinite(txt(c.current_title))}`;
-  const titleLine = list.find(r => /title|role/i.test(r));
-  if (titleLine) return 'what you are doing now';
+  // A matcher reason exists but names nothing we can print. Say the vague true
+  // thing rather than the precise false one.
+  if ((reasons || []).length) return 'what you are doing now';
   return '';
+}
+
+// A skills field is typed by hand and comes out as "hvac, epa, boilers".
+// "The work centres on hvac, epa and boilers" reads as though nobody looked at
+// it. An all-lowercase token of four characters or fewer in a skills list is
+// an acronym essentially every time (hvac, epa, sql, aws, css); longer ones are
+// ordinary words that are correct in lower case ("boilers", "commercial").
+// Anything already carrying a capital is left exactly as the person typed it,
+// so "Procore", "OSHA 30" and "AutoCAD" survive untouched.
+function prettySkill(token) {
+  const t = txt(token);
+  if (!t || /[A-Z]/.test(t)) return t;
+  return t.length <= 4 ? t.toUpperCase() : t;
 }
 
 function indefinite(word) {
@@ -295,11 +359,11 @@ function draftParts(input, options) {
     job: f,
     hook: txt(brief.hook),
     detail: txt(brief.detail),
-    why: whyYouClause(i.reasons, c),
+    why: whyYouClause(i.reasons, c, i.job),
     roleLabel: f.title || 'a role',
     at: f.company ? ` with ${f.company}` : '',
     inPlace: f.place ? ` in ${f.place}` : '',
-    payLine: f.pay ? `The range on it is ${f.pay}.` : '',
+    payLine: f.pay ? `The range on it is ${f.pay}${f.payPeriod}.` : '',
     termsLine: f.terms.length ? `It is ${joinList(f.terms)}.` : '',
     // The opt-out. With the buttons underneath, "just say so" is redundant and
     // slightly contradicts them, so the sentence gets out of their way and
@@ -442,6 +506,11 @@ const MARKETING_WORDS = /\b(exciting|passionate|dynamic|exceptional|fast[- ]pace
 const FEE_WORDS = /\b(placement fee|our fee|commission|contingency|no charge for reviewing|retainer)\b/i;
 const OPT_OUT = /\b(not right|no(?:t)? interested|say so|not the right time|timing is not|leave it|unsubscribe|opt out|let me know and I(?:'| wi)ll)\b/i;
 
+// "your 9 years", "you have 12 years", "with your 8+ years" — a statement about
+// the READER's career. Deliberately NOT "the role asks for 2-3 years", which is
+// a statement about the job and is exactly what broke the first live batch.
+const YEARS_ABOUT_READER = /\b(?:your|you(?:'ve| have| bring)?)\s+(?:[a-z]+\s+){0,2}?(\d{1,2})\+?\s*years?\b/i;
+
 function sentencesOf(body) {
   return String(body || '').split(/(?<=[.?!])\s+|\n+/).map(t => t.trim()).filter(Boolean);
 }
@@ -541,15 +610,28 @@ function checkCandidateDraft(draft, input, opts) {
       : `The job order carries no pay information, so remove "${money}" entirely. Never imply a figure we have not been given.`);
   }
 
-  // Claimed experience must match the record. The matcher's reasons come off
-  // the candidate's own resume, so anything else is the model filling a gap.
-  const claimed = email.match(/\b(\d{1,2})\+?\s*years?\b/i);
+  // Claimed experience must match the record — but ONLY where the sentence is
+  // about THEM.
+  //
+  // ⚠ THE JOB'S OWN REQUIREMENT IS NOT A CLAIM ABOUT THE READER. The first
+  // version matched any "N years" anywhere in the email, and the first real
+  // batch proved how wrong that is: the AI job brief said "2-3 years of field
+  // experience", which is a fact about the VACANCY, and the check read it as a
+  // statement about the person. Three of four candidates were silently skipped
+  // — an 11-year, a 35-year and a 15-year technician — and the one that got
+  // through only did so because his 4 years happened to sit within 1 of 3.
+  //
+  // The rule this check exists to enforce is "never tell someone about their
+  // own career". Only a SECOND-PERSON attribution does that, so only that is
+  // checked. "The role asks for 2-3 years" is the job talking, and is fine.
+  const claimed = email.match(YEARS_ABOUT_READER);
   if (claimed) {
+    const n = Number(claimed[1]);
     const yrs = Number(c.experience_years);
-    if (!Number.isFinite(yrs) || Math.abs(yrs - Number(claimed[1])) > 1) {
+    if (!Number.isFinite(yrs) || Math.abs(yrs - n) > 1) {
       add('invented_experience', Number.isFinite(yrs)
-        ? `The record says ${yrs} years, not ${claimed[1]}. Use the real number or drop the claim.`
-        : `We do not know how long they have been doing this, so remove "${claimed[0]}". Never tell someone about their own career.`);
+        ? `The record says ${yrs} years, not ${n}. Use the real number or drop the claim.`
+        : `We do not know how long they have been doing this, so do not say "${claimed[0].trim()}". Never tell someone about their own career.`);
     }
   }
 
@@ -655,13 +737,13 @@ function materialIn(input) {
   if (f.pay) n++;
   if (f.terms.length) n++;
   if (f.skills.length) n++;
-  if (whyYouClause(i.reasons, i.candidate)) n++;
+  if (whyYouClause(i.reasons, i.candidate, i.job)) n++;
   return n;
 }
 
 module.exports = {
   ANGLE_BRIEF, angleBrief,
-  jobFacts, payFiguresIn, whyYouClause,
+  jobFacts, payFiguresIn, payFigures, remoteTerm, whyYouClause, sharedSkills, prettySkill,
   rulesJobBrief, buildBriefSystemPrompt, buildBriefPayload, parseBrief, checkBrief,
   rulesVariants, draftParts, validateInput, checkCandidateDraft,
   answerButtonsHtml, answerLinkUrl, escapeHtml,
