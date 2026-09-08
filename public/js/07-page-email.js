@@ -132,6 +132,39 @@ function renderEmail(){
   var tabs=isBD?['pending','compose','sent','outreachplan','sequence']:['compose','sent','outreachplan'];
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
+  // ── WHO THIS ORGANISATION WRITES TO ──────────────────────────────────────
+  // Compose has two sides now. BD writes to CLIENTS (the outreach generator);
+  // recruiters write to CANDIDATES about the jobs we hold; anyone who leads
+  // both desks switches between them.
+  //
+  // One mode is not a choice, so the switch is only drawn when there really
+  // are two. Somebody with a single side is put on it and never sees a picker
+  // asking a question with one answer.
+  var canClients=userHasAnyRole(u,'bd','bd_lead','admin','director','associate_director');
+  var canCandidates=userHasAnyRole(u,'ra','ra_lead','recruiter','admin','director','associate_director','bd_lead');
+  if(!canClients&&!canCandidates)canClients=true;   // never leave Compose with nothing in it
+  if(STATE.composeSide!=='clients'&&STATE.composeSide!=='candidates'){
+    STATE.composeSide=canClients?'clients':'candidates';
+  }
+  if(STATE.composeSide==='clients'&&!canClients)STATE.composeSide='candidates';
+  if(STATE.composeSide==='candidates'&&!canCandidates)STATE.composeSide='clients';
+
+  var sideSwitch='';
+  if(canClients&&canCandidates){
+    var sideBtn=function(id,label,note){
+      var on=STATE.composeSide===id;
+      return '<button type="button" onclick="setComposeSide(\''+id+'\')" title="'+htmlEsc(note)+'" style="'+
+        'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
+        'background:'+(on?'var(--accent-l)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+';'+
+        'font-weight:'+(on?'600':'500')+';font-size:13px;border-radius:99px;padding:7px 16px;'+
+        'cursor:pointer;font-family:inherit">'+label+'</button>';
+    };
+    sideSwitch='<div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap">'+
+      sideBtn('clients','Clients','Cold outreach to companies that are hiring')+
+      sideBtn('candidates','Candidates','Ask candidates whether they want the jobs we hold')+
+    '</div>';
+  }
+
   // ── Sending paused banner — shown BEFORE the user tries to send, not just
   // as an error after the fact. Refreshed each time the Email page is viewed.
   if(STATE.mySendingPaused===undefined)loadMySendingStatus();
@@ -737,7 +770,9 @@ function renderEmail(){
       (STATE.emailTab==='compose'
         ? (STATE.composeContext==='reminder'
             ? composeHtml
-            : (typeof renderOutreachGenBody==='function'?renderOutreachGenBody():composeHtml))
+            : sideSwitch+(STATE.composeSide==='candidates'
+                ? (typeof renderCandidateOutreachBody==='function'?renderCandidateOutreachBody():composeHtml)
+                : (typeof renderOutreachGenBody==='function'?renderOutreachGenBody():composeHtml)))
         : '')+
       (STATE.emailTab==='sent'?sentHtml:'')+
       (STATE.emailTab==='outreachplan'?tmplHtml:'')+

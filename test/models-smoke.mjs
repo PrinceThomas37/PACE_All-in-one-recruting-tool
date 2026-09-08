@@ -168,9 +168,14 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   // (migration 037) and the two OAuth token tables that migration 039 gives an
   // org_id — all three registered ahead of being applied, because the registry
   // states what a table IS and the code that touches it degrades safely.
-  ok('the registry covers the live tenant tables plus those migrations 037/039 add',
-    TENANT_TABLES.size === 41, String(TENANT_TABLES.size));
+  ok('the registry covers the live tenant tables plus those migrations 037/039/042 add',
+    TENANT_TABLES.size === 42, String(TENANT_TABLES.size));
   ok('conversation_messages is registered as tenant data', TENANT_TABLES.has('conversation_messages'));
+  // Migration 042. It holds candidates' names and addresses alongside the text
+  // we wrote to them, so it is tenant data from the moment it exists — this
+  // count is pinned precisely so a new table cannot be added without someone
+  // deciding which list it belongs on.
+  ok('candidate_outreach is registered as tenant data', TENANT_TABLES.has('candidate_outreach'));
   // The token tables hold refresh tokens for customers' real mailboxes. They
   // were global only because they had no org_id, on the reasoning that
   // user_emails (which IS scoped) was the only way in. Migration 039 closes

@@ -1,0 +1,356 @@
+// Candidate outreach — the rules writer, the house check, and the mounted routes.
+//
+// The rules writer is what production actually ships: there is no funded key,
+// and even with one the AI writes only the per-JOB brief. Every candidate email
+// that leaves this app is assembled by these functions, so the assertions below
+// are the rules of §4 of docs/CANDIDATE_OUTREACH_PLAN.md checked as behaviour.
+//
+// Two of these exist because the first run of the writer broke them:
+//   • the rules writer failed its own checker (the short angle had no way out)
+//   • the money check had a hole exactly the shape of the string jobFacts emits
+//
+// Usage: node test/candidate-outreach-smoke.mjs
+import { spawn } from 'node:child_process';
+import http from 'node:http';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+const gen = require(path.join(ROOT, 'services/candidate-outreach.js'));
+
+const results = [];
+const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail: String(detail) });
+
+const CO = 'Acme Staffing LLC';
+const OPTS = { companyName: CO, omitSignOff: true };
+
+const JOB = {
+  id: 'job-1', job_title: 'Construction Superintendent', client: 'Berks Group',
+  city: 'Dallas', state: 'TX', pay_min: '110000', pay_max: '130000', pay_cur: 'USD',
+  job_type: 'Full-time', primary_skills: 'Procore, OSHA 30, commercial build-out',
+  job_description: 'Supervise commercial construction projects end to end.',
+};
+const THIN_JOB = { id: 'job-2', job_title: 'QA Analyst' };
+const CAND = {
+  id: 'c1', full_name: 'Maria Alvarez', email: 'maria@example.com',
+  current_title: 'Site Superintendent', experience_years: 9, current_location: 'Fort Worth, TX',
+};
+const REASONS = ['Skills overlap: Procore, OSHA 30', 'Title is a close match'];
+
+const inputFor = (job, cand = CAND, reasons = REASONS) => ({
+  candidate: cand, job, reasons, outreach_type: job ? 'job' : 'nurture',
+});
+
+// ── THE RULES WRITER MUST PASS ITS OWN CHECKER ─────────────────────────────
+// Not a tautology — it caught two real defects on the first run. If the writer
+// can fail the check, the angle it fails on silently never ships: the queue
+// endpoint skips any candidate whose draft does not pass.
+for (const [label, job] of [['a full job order', JOB], ['a job order with only a title', THIN_JOB], ['no job at all', null]]) {
+  const input = inputFor(job);
+  const variants = gen.rulesVariants(input, OPTS);
+  ok(`${label}: the writer produces at least one angle`, variants.length > 0, variants.length);
+  for (const v of variants) {
+    const q = gen.checkCandidateDraft(v, input, { angle: v.id, omitSignOff: true });
+    ok(`${label}: the "${v.id}" rules draft passes the house check`, q.ok,
+      (q.violations || []).map(x => x.code).join(', '));
+  }
+}
+
+// ── THE FACTS A CANDIDATE CANNOT ANSWER WITHOUT ────────────────────────────
+{
+  const input = inputFor(JOB);
+  for (const v of gen.rulesVariants(input, OPTS)) {
+    const all = v.subject + ' ' + v.email;
+    ok(`"${v.id}" names the role`, /Construction Superintendent/i.test(all), v.subject);
+    ok(`"${v.id}" says where the job is`, /Dallas/i.test(all), v.email.slice(0, 80));
+    ok(`"${v.id}" ends on a question`, /\?/.test(v.email), v.email.slice(-60));
+  }
+}
+
+// ── PAY: ONLY WHAT THE JOB ORDER CARRIES ───────────────────────────────────
+{
+  const f = gen.jobFacts(JOB);
+  ok('a plain integer is grouped into money', f.pay === 'USD 110,000-130,000', f.pay);
+  ok('a job order with no pay produces no pay string', gen.jobFacts(THIN_JOB).pay === '', gen.jobFacts(THIN_JOB).pay);
+
+  const allowed = f.payFigures;
+  // Every shape the checker must catch. The currency-PREFIX form is the one
+  // the first version missed — and it is the exact shape jobFacts itself emits,
+  // so an invented range would have looked identical to a real one.
+  for (const bad of ['We can pay USD 200,000.', 'Budget is $180,000.', 'Around 175,000 a year.',
+                     'They pay 95 per hour.', 'It is 240000 annually.', 'Roughly 200,000 EUR.']) {
+    ok(`invented pay is caught: ${bad}`, gen.unsupportedMoney(bad, allowed) !== null, bad);
+  }
+  ok('the range that IS on the order passes', gen.unsupportedMoney('The range on it is USD 110,000-130,000.', allowed) === null);
+  // The false positives that would make the check unusable.
+  for (const fine of ['OSHA 30 certified.', 'You have 9 years of it.', 'Ref 2026 build.']) {
+    ok(`not treated as money: ${fine}`, gen.unsupportedMoney(fine, allowed) === null, fine);
+  }
+
+  const input = inputFor(JOB);
+  const invented = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent — Dallas', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX, paying USD 200,000.\n\nInterested? If not, just say so.\n\nThanks,' },
+    input, { angle: 'direct', omitSignOff: true });
+  ok('a draft quoting a pay figure the order does not carry is refused',
+    invented.violations.some(v => v.code === 'invented_pay'),
+    invented.violations.map(v => v.code).join(','));
+
+  const noPayJob = { ...JOB, pay_min: '', pay_max: '' };
+  const r = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX, around $150,000.\n\nInterested? If not, say so.\n\nThanks,' },
+    inputFor(noPayJob), { angle: 'direct', omitSignOff: true });
+  ok('a figure on a job order with NO pay at all is refused',
+    r.violations.some(v => v.code === 'invented_pay'), r.violations.map(v => v.code).join(','));
+}
+
+// ── EXPERIENCE: NEVER TELL SOMEONE ABOUT THEIR OWN CAREER ──────────────────
+{
+  const body = 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX. Your 20 years on commercial sites stood out.\n\nInterested? If not, just say so.\n\nThanks,';
+  const r = gen.checkCandidateDraft({ subject: 'Construction Superintendent — Dallas', email: body },
+    inputFor(JOB), { angle: 'direct', omitSignOff: true });
+  ok('a years-of-experience claim that contradicts the record is refused',
+    r.violations.some(v => v.code === 'invented_experience'), r.violations.map(v => v.code).join(','));
+
+  const unknown = { ...CAND, experience_years: null };
+  const r2 = gen.checkCandidateDraft({ subject: 'Construction Superintendent — Dallas', email: body },
+    inputFor(JOB, unknown), { angle: 'direct', omitSignOff: true });
+  ok('any years claim is refused when the record does not say',
+    r2.violations.some(v => v.code === 'invented_experience'), r2.violations.map(v => v.code).join(','));
+
+  const right = body.replace('20 years', '9 years');
+  const r3 = gen.checkCandidateDraft({ subject: 'Construction Superintendent — Dallas', email: right },
+    inputFor(JOB), { angle: 'direct', omitSignOff: true });
+  ok('the number that IS on the record passes',
+    !r3.violations.some(v => v.code === 'invented_experience'), r3.violations.map(v => v.code).join(','));
+}
+
+// ── THE CANDIDATE EMAIL IS NOT THE CLIENT EMAIL ────────────────────────────
+{
+  const input = inputFor(JOB);
+  const fee = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent — Dallas', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX. We only charge a placement fee on success.\n\nInterested? If not, say so.\n\nThanks,' },
+    input, { angle: 'direct', omitSignOff: true });
+  ok('fee language is refused in a candidate email — it belongs to the client side',
+    fee.violations.some(v => v.code === 'fee_language'), fee.violations.map(v => v.code).join(','));
+
+  for (const v of gen.rulesVariants(input, OPTS)) {
+    ok(`"${v.id}" never mentions a fee`, !/\b(fee|commission|contingency|retainer)\b/i.test(v.email), v.email);
+  }
+}
+
+// ── A WAY OUT IS MANDATORY ─────────────────────────────────────────────────
+{
+  const r = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent — Dallas', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX.\n\nAre you interested?\n\nThanks,' },
+    inputFor(JOB), { angle: 'direct', omitSignOff: true });
+  ok('a candidate email with no way to say no is refused',
+    r.violations.some(v => v.code === 'no_optout'), r.violations.map(v => v.code).join(','));
+  for (const v of gen.rulesVariants(inputFor(JOB), OPTS)) {
+    ok(`"${v.id}" gives an explicit way out`, /just say so|not right|timing is not|if not/i.test(v.email), v.email.slice(-90));
+  }
+}
+
+// ── {{sender}} IS LOAD-BEARING HERE AND NOWHERE ELSE ───────────────────────
+{
+  const input = inputFor(JOB);
+  for (const v of gen.rulesVariants(input, OPTS)) {
+    ok(`"${v.id}" stores the sender as a token, not a baked-in name`,
+      /\{\{sender\}\}/.test(v.email), v.email.slice(0, 70));
+  }
+  const q = gen.checkCandidateDraft(gen.rulesVariants(input, OPTS)[0], input, { angle: 'direct', omitSignOff: true });
+  ok('{{sender}} does not trip the placeholder check', !q.violations.some(v => v.code === 'placeholder'),
+    q.violations.map(v => v.code).join(','));
+
+  const leak = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent — Dallas', email: 'Hi Maria,\n\nThis is {{sender}} at Acme, about the {{job_title}} in Dallas, TX. Construction Superintendent.\n\nInterested? If not, say so.\n\nThanks,' },
+    input, { angle: 'direct', omitSignOff: true });
+  ok('any OTHER {{token}} is still refused', leak.violations.some(v => v.code === 'placeholder'),
+    leak.violations.map(v => v.code).join(','));
+}
+
+// ── TONE ───────────────────────────────────────────────────────────────────
+{
+  const input = inputFor(JOB);
+  const base = 'Hi Maria,\n\nThis is {{sender}} at Acme. Construction Superintendent in Dallas, TX. ';
+  const tail = '\n\nInterested? If not, just say so.\n\nThanks,';
+  for (const [code, text] of [
+    ['exclamation', 'This one is great!'],
+    ['marketing_word', 'It is an exciting opportunity.'],
+    ['emoji', 'Worth a look 🚀'],
+  ]) {
+    const r = gen.checkCandidateDraft({ subject: 'Construction Superintendent — Dallas', email: base + text + tail },
+      input, { angle: 'direct', omitSignOff: true });
+    ok(`"${code}" is caught`, r.violations.some(v => v.code === code), r.violations.map(v => v.code).join(','));
+  }
+  const nogreet = gen.checkCandidateDraft(
+    { subject: 'Construction Superintendent — Dallas', email: 'This is {{sender}} at Acme. Construction Superintendent in Dallas, TX.\n\nInterested? If not, say so.\n\nThanks,' },
+    input, { angle: 'direct', omitSignOff: true });
+  ok('a missing greeting is caught', nogreet.violations.some(v => v.code === 'no_greeting'),
+    nogreet.violations.map(v => v.code).join(','));
+}
+
+// ── A MINIMUM LENGTH IS AN INSTRUCTION TO INVENT WHEN THERE ARE NO FACTS ───
+{
+  ok('a thin job order is recognised as thin', gen.materialIn(inputFor(THIN_JOB)) < 3, gen.materialIn(inputFor(THIN_JOB)));
+  ok('a full job order is not', gen.materialIn(inputFor(JOB)) >= 3, gen.materialIn(inputFor(JOB)));
+  const short = { subject: 'QA Analyst', email: 'Hi Maria,\n\nThis is {{sender}} at Acme. QA Analyst.\n\nInterested? If not, say so.\n\nThanks,' };
+  const thin = gen.checkCandidateDraft(short, inputFor(THIN_JOB), { angle: 'direct', omitSignOff: true });
+  ok('too_short is not raised when there is nothing to write about',
+    !thin.violations.some(v => v.code === 'too_short'), thin.violations.map(v => v.code).join(','));
+  const rich = gen.checkCandidateDraft(short, inputFor(JOB), { angle: 'direct', omitSignOff: true });
+  ok('too_short IS raised when the job order is full and the draft is lazy',
+    rich.violations.some(v => v.code === 'too_short'), rich.violations.map(v => v.code).join(','));
+}
+
+// ── THE NURTURE EMAIL MENTIONS NO JOB ──────────────────────────────────────
+{
+  const input = inputFor(null);
+  const vs = gen.rulesVariants(input, OPTS);
+  ok('with no job there is exactly one angle', vs.length === 1, vs.map(v => v.id).join(','));
+  ok('the nurture angle is the nurture angle', vs[0].id === 'nurture', vs[0].id);
+  ok('it names no role, client, place or figure',
+    !/Superintendent|Berks|Dallas|USD/i.test(vs[0].email), vs[0].email);
+  ok('it still asks a question', /\?/.test(vs[0].email), vs[0].email);
+}
+
+// ── THE SKILL LIST READS AS ENGLISH ────────────────────────────────────────
+// "your background in procore, osha 30" tells the reader a machine wrote it.
+{
+  const clause = gen.whyYouClause(REASONS, CAND);
+  ok('proper nouns in the match reasons keep their capitals', /Procore/.test(clause), clause);
+  ok('the skill list is joined with "and", not left as raw CSV', / and /.test(clause), clause);
+  ok('with no reasons at all it falls back to the record', /9 years/.test(gen.whyYouClause([], CAND)), gen.whyYouClause([], CAND));
+  ok('with nothing on either side it stays silent rather than guessing',
+    gen.whyYouClause([], { full_name: 'X' }) === '', gen.whyYouClause([], { full_name: 'X' }));
+}
+
+// ── NO ANGLE IS A PARAPHRASE OF ANOTHER ────────────────────────────────────
+{
+  const vs = gen.rulesVariants(inputFor(JOB), OPTS);
+  const bodies = vs.map(v => v.email);
+  ok('the angles differ from each other', new Set(bodies).size === bodies.length, bodies.length);
+  const words = vs.map(v => v.words);
+  ok('and they differ in length, not just wording', new Set(words).size > 1, words.join('/'));
+  // The one that must actually be short.
+  const short = vs.find(v => v.id === 'short');
+  ok('the "short" angle is the shortest', short && Math.min(...words) === short.words, words.join('/'));
+}
+
+// ── THE BRIEF ──────────────────────────────────────────────────────────────
+{
+  const b = gen.rulesJobBrief(JOB);
+  ok('the rules brief names the role and the client', /Construction Superintendent/.test(b.hook) && /Berks Group/.test(b.hook), b.hook);
+  ok('the brief does NOT carry the terms — termsLine prints those',
+    !/Full-time/i.test(b.hook + ' ' + b.detail), b.hook + ' | ' + b.detail);
+  ok('a thin job order still produces a usable brief', gen.rulesJobBrief(THIN_JOB).hook.length > 0);
+
+  ok('an AI brief inventing pay is rejected',
+    !gen.checkBrief({ hook: 'They are hiring a Superintendent paying USD 250,000.' }, JOB).ok);
+  ok('an AI brief with marketing language is rejected',
+    !gen.checkBrief({ hook: 'An exciting opportunity with a dynamic team.' }, JOB).ok);
+  ok('an AI brief that greets the reader is rejected',
+    !gen.checkBrief({ hook: 'Hi there, they are hiring a Superintendent in Dallas.' }, JOB).ok);
+  ok('a good AI brief passes',
+    gen.checkBrief({ hook: 'They are hiring a Superintendent to run commercial build-outs in Dallas.', detail: 'The work is Procore-heavy and site-based.' }, JOB).ok);
+  ok('parseBrief reads a fenced JSON answer',
+    (gen.parseBrief('```json\n{"hook":"A role.","detail":""}\n```') || {}).hook === 'A role.');
+  ok('parseBrief refuses an answer with no hook', gen.parseBrief('{"detail":"x"}') === null);
+}
+
+// ── validateInput ──────────────────────────────────────────────────────────
+{
+  ok('a candidate with no email cannot be written to',
+    !gen.validateInput({ candidate: { full_name: 'A' }, job: JOB }).ok);
+  ok('a job email with no job is refused',
+    !gen.validateInput({ candidate: CAND, outreach_type: 'job' }).ok);
+  ok('a nurture email needs no job',
+    gen.validateInput({ candidate: CAND, outreach_type: 'nurture' }).ok);
+}
+
+// ── THE STORED BODY IS RENDERED BEFORE IT IS READ ──────────────────────────
+// The same grep test/sender-identity-smoke.mjs runs over the leads engine.
+// candidate_outreach.body holds {{sender}}, so its reader must render.
+{
+  const route = readFileSync(path.join(ROOT, 'routes/candidate-outreach.js'), 'utf8');
+  ok('the drain renders the stored body before sending', /renderStoredEmail\(row, mailbox\)/.test(route));
+  ok('the preview renders from the sending mailbox, not the session',
+    /renderStoredEmail\(\{ subject: v\.subject, body: v\.email \}, mailbox\)/.test(route));
+  // Everything before the drain is request-handling. If a send call appears
+  // there, a recruiter clicking Queue would sit through 25 network round-trips
+  // and the drip would not exist.
+  ok('nothing sends inside the queue request',
+    !/await sendMailboxNewMessage/.test(route.split('async function drainDueOutreach')[0]));
+  ok('the drip is stored per row, not held in a timer',
+    /send_after: new Date\(Date\.now\(\) \+ offset\)/.test(route) && !/setInterval/.test(route));
+  ok('the queue checks every draft, not just the previewed one',
+    /checkCandidateDraft\(variant, input/.test(route));
+}
+
+// ── the routes are mounted and auth-gated ──────────────────────────────────
+const PORT = 20000 + Math.floor(Math.random() * 20000);
+const child = spawn('node', ['index.js'], {
+  cwd: ROOT,
+  env: {
+    ...process.env, PORT: String(PORT),
+    SUPABASE_URL: 'http://127.0.0.1:59999', SUPABASE_SERVICE_KEY: 'dummy-service-key',
+    JWT_SECRET: 'test-secret', NODE_ENV: 'test',
+  },
+  stdio: ['ignore', 'pipe', 'pipe'],
+});
+let stderr = '';
+child.stderr.on('data', d => { stderr += d.toString(); });
+
+function req(method, p) {
+  return new Promise((resolve, reject) => {
+    const r = http.request({ host: '127.0.0.1', port: PORT, path: p, method, timeout: 5000 },
+      res => { res.resume(); resolve(res.statusCode); });
+    r.on('timeout', () => r.destroy(new Error('timeout')));
+    r.on('error', reject);
+    r.end();
+  });
+}
+
+try {
+  const deadline = Date.now() + 20000;
+  let booted = false;
+  while (Date.now() < deadline && !booted) {
+    try { await req('GET', '/health'); booted = true; } catch (_) { await new Promise(r => setTimeout(r, 200)); }
+  }
+  ok('the server boots with candidate outreach mounted', booted, stderr.slice(-300));
+  if (booted) {
+    const unknown = await req('GET', '/definitely-not-a-route-xyz');
+    ok('an unknown path 404s (so 401 below means the route exists)', unknown === 404, unknown);
+    for (const [m, p] of [
+      ['GET', '/candidate-outreach/sender'],
+      ['GET', '/candidate-outreach/jobs'],
+      ['GET', '/candidate-outreach/queue'],
+      ['GET', '/candidate-outreach/jobs/x/brief'],
+      ['POST', '/candidate-outreach/jobs/x/brief'],
+      ['GET', '/candidate-outreach/jobs/x/candidates'],
+      ['POST', '/candidate-outreach/preview'],
+      ['POST', '/candidate-outreach/queue'],
+      ['POST', '/candidate-outreach/cancel/x'],
+    ]) {
+      const s = await req(m, p);
+      ok(`${m} ${p} is mounted and requires a token`, s === 401, s);
+    }
+  }
+} catch (err) {
+  ok('route harness completed', false, err && err.message);
+} finally {
+  child.kill('SIGKILL');
+}
+
+let failed = 0;
+console.log('\n=== CANDIDATE OUTREACH ===');
+for (const r of results) {
+  if (!r.ok) failed++;
+  console.log(`[${r.ok ? 'PASS' : 'FAIL'}] ${r.name}${r.ok ? '' : '  — ' + r.detail}`);
+}
+console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
+console.log(failed ? 'RESULT: FAIL' : 'RESULT: PASS');
+process.exit(failed ? 1 : 0);

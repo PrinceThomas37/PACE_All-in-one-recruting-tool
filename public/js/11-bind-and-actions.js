@@ -154,6 +154,14 @@ window.exportXL=function(){
   }catch(e){showToast("Export failed: "+e.message,"error");}
 }
 
+// Which side of Compose is on screen — Clients (the outreach generator) or
+// Candidates. Kept on STATE rather than in the module so the Email page can
+// decide, from the user's roles, whether the switch is drawn at all.
+window.setComposeSide=function(side){
+  if(STATE.composeSide===side)return;   // an idle repaint must write nothing
+  STATE.composeSide=side;render();
+};
+
 window.setEmailTab=function(t){if(t==='generator')t='compose';  // the two tabs merged
   STATE.emailTab=t;STATE.raLeadSelectedBD=null;STATE.genEmail=null;STATE.emailSearch=null;STATE.previewEmail=null;STATE.showEmailPreview=false;STATE.composeFromEmailId=null;STATE.pendingEmailPage=0;STATE.sentEmailPage=0;loadEmailsForCurrentUser();if(t==='pending'){loadPendingSummary();startPendingSummaryPoll();}else{stopPendingSummaryPoll();}render();}
 

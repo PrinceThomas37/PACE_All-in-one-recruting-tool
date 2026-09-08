@@ -22,6 +22,9 @@ const TENANT_TABLES = new Set([
   'assignment_requests',
   'candidate_documents',
   'candidate_notes',
+  // Added by migration 042 (candidate outreach) — the queue, record and answer
+  // for "are you interested in this job?".
+  'candidate_outreach',
   'candidate_pipeline',
   'candidates',
   'client_documents',

@@ -3089,6 +3089,32 @@ app.use(require('./routes/outreach-generator')({
   wfEngine,
 }));
 
+// ── Candidate outreach (the Email page's Compose → Candidates side) ────────
+// Mounted after the recruiting block for the same reason the generator above
+// is: it sends through that block's mailbox helpers rather than growing its
+// own. Returns its drain function, which the heartbeat calls — nothing here
+// sends inside a request.
+const candidateOutreach = require('./routes/candidate-outreach')({
+  ...routeCtx, withOrg, orgStamp, logActivity, loadSuppressedSet,
+  loadMailboxDelivState, settingsConfig, isSendingPaused, isManagerPaused,
+  friendlySendError,
+  recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
+  sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
+  connectedMailboxById: recruitingOutreach.connectedMailboxById,
+});
+app.use(candidateOutreach.router);
+
+// THE DRIP LIVES HERE, NOT IN A setInterval. The free tier spins the service
+// down after ~15 minutes of no traffic, so an in-process timer stops existing;
+// each queued row carries its own send_after and this drains whatever is due.
+// A late heartbeat therefore delays candidate emails and never skips them.
+engineRunner.register('candidate_outreach_drip', {
+  everyMs: 10 * 60 * 1000,
+  quiet: true,               // usually finds nothing due — don't log the no-ops
+  description: 'Send candidate outreach emails whose drip slot has come round',
+  run: () => candidateOutreach.drainDueOutreach()
+});
+
 app.use(require('./routes/wf')({ supabase, auth, hasRole, engine: wfEngine, logActivity }));
 
 // Advance due enrollments hourly.
