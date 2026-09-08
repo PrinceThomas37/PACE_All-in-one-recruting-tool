@@ -38,6 +38,10 @@ relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 - **The shared UI kit + `public/mobile.css`** — below 860px an off-canvas nav,
   no sideways scroll, bottom-sheet dialogs. Desktop untouched.
 - **The outreach generator + composer**; **any AI provider behind a daily budget**
+  — Session 20: a Job title field, all four angles AI-written on demand, every
+  draft held to a machine-checkable house-style check, the reader's own job
+  connected to the role being hired, and a send that can create the lead and
+  join a sequence (starting after step 1). Groq free tier = 8k tokens/minute.
 - **AI IS CONFIRMED WORKING** — Groq `openai/gpt-oss-20b`, 250ms, with real
   metered spend on `resume_parse` and `lead_ratio` (recorded only on success)
 - **Self-serve signup built, switched OFF**; pricing deliberately `null`; no

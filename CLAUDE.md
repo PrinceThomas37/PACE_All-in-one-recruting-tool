@@ -799,6 +799,60 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        conversation, something about the ROLE (re-posted, open N days). The
        contact's title still shapes register and fee placement via
        `audienceOf()`; it is never printed.
+
+     * **AN AI DRAFT IS CHECKED, NOT TRUSTED (Session 20).** A prompt rule is a
+       REQUEST; `checkDraft()` (pure) is the guarantee. It holds every AI draft
+       to the rules a machine can verify — a leftover `{{placeholder}}`, a
+       stated fee percentage, a call/meeting ask where the ask must be "want to
+       see resumes?", fee language before that ask for a non-finance reader,
+       exclamation marks, marketing adjectives, a missing greeting, a second
+       sign-off above the appended signature, and the angle's own length band.
+       One repair turn naming exactly what to fix, taken only if it comes back
+       with FEWER violations; then the rules draft wins. Never ship a draft that
+       broke a rule because an AI wrote it.
+       Two of these came out of the first live run and neither was findable by
+       reasoning: the model read "identity in sentence one" literally and
+       dropped the greeting entirely, and `double_signoff_name` read the last
+       four lines — which on a compact email is the WHOLE email — so it rejected
+       the identity sentence rule 1 REQUIRES. **A check that samples "the last
+       few lines" is a check that fires on short input.**
+     * **THE READER'S JOB AND THE HIRING JOB ARE ONE FACT (Session 20).** Rule
+       16 makes the model connect them (`AUDIENCE_BRIEF` per reader: finance is
+       approving a cost, HR wants the screening off their desk, an owner wants
+       the seat filled, a hiring manager wants somebody who can run the job on
+       Monday); rule 17 forbids printing any of it. Verified live — same
+       posting, same angle, reader swapped: a Talent Acquisition Manager got
+       "consuming your team's time with resume reviews, phone screens, and
+       interview logistics", a CFO got "consumes internal time and hiring
+       budget". The check catches the ADDRESSING construction ("as Controller,",
+       "in your role as HR Manager"), never a bare word — a superintendent
+       hiring a superintendent must be free to use the word.
+     * **THE FOUR ANGLES CONVERGE UNLESS EACH IS TOLD WHAT IT MAY NOT DO
+       (Session 20).** All four are AI-written now, one at a time, the first
+       time each chip is opened (`POST /outreach/generate-angle`) — four up
+       front costs four calls a Generate, about six generations against the
+       daily budget. The first live run produced four drafts that ALL opened
+       with "reposted after 34 days" and recited the same requirement list: the
+       model finds the strongest material and uses it everywhere. `ANGLE_BRIEF`
+       therefore carries `must`, **`never`** and a length band per angle, and
+       `checkDraft` enforces the band. A picker whose options are paraphrases of
+       each other is not a picker.
+     * **⚠ GROQ'S FREE TIER IS 8,000 TOKENS PER MINUTE** and one angle costs
+       ~2,100, so four in quick succession rate-limits (429). The
+       quality→fast model fallback in `complete()` absorbs it because the limit
+       is per model. Measured 2026-09-08 on the live account.
+     * **SENDING CAN CREATE THE LEAD AND JOIN A SEQUENCE (Session 20).** The
+       generated email is the first outreach for a lead — the same thing the
+       send loop produces on assignment. Picking a sequence creates the company,
+       lead and contact (via the shared `createLeadFromOutreach`) and enrolls
+       them; sending WITHOUT one creates nothing, so a one-off draft never lands
+       in somebody's pipeline. **The lead is `Assigned`, NEVER `Connected` —
+       Connected means THEY REPLIED and drives the funnel, the reports and the
+       30-day recycler.** And the enrollment starts AFTER step 1
+       (`workflow-engine.enroll({ start_after_step })`), because the email just
+       sent IS step 1 and the standard sequence opens with `email(+0d)` — which
+       would otherwise send the same prospect a second email on the next tick.
+       A sequence failure never reports the already-sent email as failed.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by
