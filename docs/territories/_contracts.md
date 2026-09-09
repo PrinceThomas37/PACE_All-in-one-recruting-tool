@@ -65,7 +65,7 @@ walks all eight roles in `users_role_check`
 (`ra, ra_lead, bd, bd_lead, admin, recruiter, associate_director, director`)
 explicitly and confirms the briefing card renders for each.
 
-### C-0008 · foundry → surface · OPEN · 2026-09-09
+### C-0008 · foundry → surface · ANSWERED (by surface) · 2026-09-09
 **Asks for:** the morning-briefing card fetched (or hidden) while "view as" is
 open, not left showing "Working out what came in today…" forever.
 **Because:** `loadMorningBriefing()` is gated `!isViewingOther` in
@@ -80,6 +80,19 @@ is the one line the guard skips. Confirmed by reading the code path, not
 reproduced in a live browser (this territory does not edit `public/js/*`).
 **Blocked until answered:** no — cosmetic today (a `git blame`-fresh session
 that never visited the owner's own dashboard first), not data-incorrect.
+**Answered:** confirmed real — reproduced live in a browser: enter as `bd_lead`
+via `enter-app.mjs`, set `STATE.viewingUser` to another user WITHOUT ever
+loading the own dashboard first, and the card sat on "Working out what came in
+today…" forever, exactly as foundry read it from the code. Fixed by removing
+the `!isViewingOther` gate on the `loadMorningBriefing()` call in
+`renderDashboard()` (`public/js/05-page-dashboard.js`) — the briefing is
+org-wide, so the sentence a viewer sees while previewing someone else's
+dashboard is the same sentence they'd see on their own; there is no
+mislabelling risk to guard against, unlike `loadNextActions()`, which is
+per-user and is untouched. Verified with a screenshot: card resolves to the
+real sentence while "view as" is active. Re-ran
+`test/morning-briefing-card-smoke.mjs` (32/32) and the full
+`test/run-all.mjs` (67/67 suites) after the change.
 
 ### C-0007 · observatory → gateway · ANSWERED · 2026-09-09
 **Asks for:** a decision on `GET /jobs/today-summary` — does the morning

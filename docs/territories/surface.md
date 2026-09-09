@@ -27,6 +27,15 @@
   thing to avoid. `degraded:true` (DB unreadable) is the one case it hides,
   per observatory's contract answer. `.briefing-card`/`.briefing-*` classes
   live in `styles.css`, no inline width/grid, reflows fine at 390px.
+- **C-0008 fixed (2026-09-09):** `loadMorningBriefing()` in `renderDashboard()`
+  no longer sits behind `!isViewingOther`. Confirmed live (headless browser) that
+  the old gate stuck the card on "Working out what came in today…" forever if a
+  manager opened "view as" before ever loading their own dashboard this session
+  — the fetch that resolves the card was the one line the guard skipped. The
+  briefing is org-wide (same sentence for the viewer and the viewed person), so
+  it now always fetches, unlike `loadNextActions()` (still gated — that one IS
+  per-user and mislabelling risk is real there; left untouched per the
+  contract's own instruction).
 
 ## Fragile — touch with care
 - **`05-page-dashboard.js`, `25-workflow-bd.js`, `28-page-pipeline.js`,

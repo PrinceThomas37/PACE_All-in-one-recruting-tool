@@ -37,7 +37,12 @@ function renderDashboard(){
   // "What needs you today" — loaded once per dashboard visit. A "view as"
   // preview must not fetch the viewer's own queue and label it someone else's.
   if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
-  if(!isViewingOther&&STATE.briefing===undefined)loadMorningBriefing();
+  // The morning briefing is ORG-WIDE, not per-user — unlike next-actions it
+  // reads the same for the viewer and the viewed person, so it must load even
+  // while "view as" is open. Gating it on isViewingOther left the card stuck
+  // on "Working out what came in today…" forever whenever a manager opened
+  // "view as" before ever loading their own dashboard this session (C-0008).
+  if(STATE.briefing===undefined)loadMorningBriefing();
 
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
