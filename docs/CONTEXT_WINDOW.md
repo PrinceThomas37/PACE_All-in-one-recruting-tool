@@ -7,7 +7,7 @@
 **Updated**: 2026-09-09 (end of Session 21) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #187 (`3d3736f`). Nothing of this
+to `main` IS the release · **Last merged**: #188 (`4038d81`). Nothing of this
 session's is unmerged.
 
 ---
@@ -94,7 +94,7 @@ mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
 ```
 
-## ✅ Shipped (Session 21) — one PR, live
+## ✅ Shipped (Session 21) — two code PRs, live (+ #186/#188 docs)
 
 **#185**, three owner reports in one branch:
 
