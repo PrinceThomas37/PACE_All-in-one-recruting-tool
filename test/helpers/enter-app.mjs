@@ -19,6 +19,13 @@ export const TEST_USERS = {
   ra:       { id: 'test-ra',   name: 'Test Analyst',   email: 'ra@example.test',   role: 'ra',       roles: ['ra'],       av: 'TR', avc: 'av-ra',    desig: 'Research Analyst' },
   ra_lead:  { id: 'test-ral',  name: 'Test RA Lead',   email: 'ral@example.test',  role: 'ra_lead',  roles: ['ra_lead'],  av: 'TL', avc: 'av-admin', desig: 'RA Team Lead' },
   recruiter:{ id: 'test-rec',  name: 'Test Recruiter', email: 'rec@example.test',  role: 'recruiter',roles: ['recruiter'],av: 'TC', avc: 'av-ra',    desig: 'Recruiter' },
+  // C-0006: these three have no entry here for four sessions, so every
+  // role-varying suite silently skipped them. bd_lead was one of the roles
+  // affected by the nav-icon collision that went unseen for exactly this
+  // reason — a TEST_USERS set is not the user set.
+  bd_lead:            { id: 'test-bdl', name: 'Test BD Lead',            email: 'bdl@example.test', role: 'bd_lead',            roles: ['bd_lead'],            av: 'TB', avc: 'av-bd',    desig: 'BD Team Lead' },
+  director:           { id: 'test-dir', name: 'Test Director',          email: 'dir@example.test', role: 'director',           roles: ['director'],           av: 'TD', avc: 'av-admin', desig: 'Director' },
+  associate_director: { id: 'test-ad',  name: 'Test Associate Director',email: 'ad@example.test',  role: 'associate_director', roles: ['associate_director'], av: 'TA', avc: 'av-admin', desig: 'Associate Director' },
 };
 
 /**

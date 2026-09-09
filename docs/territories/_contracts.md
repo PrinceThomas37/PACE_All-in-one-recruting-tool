@@ -49,13 +49,37 @@ hierarchy-aware, so a manager sees one scope on one screen and another elsewhere
 **Blocked until answered:** no. Guild does the endpoint half; Surface does the
 screen half. Neither is useful alone.
 
-### C-0006 · foundry → rampart · OPEN · 2026-09-09
+### C-0006 · foundry → rampart · CLOSED (by foundry) · 2026-09-09
 **Asks for:** `bd_lead`, `director` and `associate_director` added to
 `test/helpers/enter-app.mjs`.
 **Because:** a five-role sweep silently skips three roles real people hold. One
 nav-icon collision affected `bd_lead` and went unseen for exactly this reason.
 **Blocked until answered:** no — but every role-varying test is currently
 under-covering until it is.
+**Closed:** foundry added all three during the morning-briefing review
+(2026-09-09) — no need to wait on rampart for a `test/` file. Confirmed the
+fix actually widens coverage: `nav-icons-smoke.mjs`, which iterates
+`TEST_USERS`, went from 40/40 to 55/55 assertions on the very next run with no
+edit to that test itself. New suite `test/morning-briefing-card-smoke.mjs`
+walks all eight roles in `users_role_check`
+(`ra, ra_lead, bd, bd_lead, admin, recruiter, associate_director, director`)
+explicitly and confirms the briefing card renders for each.
+
+### C-0008 · foundry → surface · OPEN · 2026-09-09
+**Asks for:** the morning-briefing card fetched (or hidden) while "view as" is
+open, not left showing "Working out what came in today…" forever.
+**Because:** `loadMorningBriefing()` is gated `!isViewingOther` in
+`renderDashboard()` (`public/js/05-page-dashboard.js`), the same gate used for
+`loadNextActions()` — but that gate exists to stop the VIEWER's own
+per-user queue being mislabeled as the viewed person's. The briefing is
+org-wide, not per-user, so the same guard has a side effect nobody intended:
+if `STATE.briefing` is still `undefined` (a manager opens "view as" before
+ever loading their own dashboard this session), the card renders its loading
+state and nothing ever resolves it, because the fetch that would resolve it
+is the one line the guard skips. Confirmed by reading the code path, not
+reproduced in a live browser (this territory does not edit `public/js/*`).
+**Blocked until answered:** no — cosmetic today (a `git blame`-fresh session
+that never visited the owner's own dashboard first), not data-incorrect.
 
 ### C-0007 · observatory → gateway · ANSWERED · 2026-09-09
 **Asks for:** a decision on `GET /jobs/today-summary` — does the morning
