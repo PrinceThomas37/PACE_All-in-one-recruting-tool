@@ -243,6 +243,20 @@ tr.sel-row td{background:var(--accent-l)}
 }
 .dash-tile-v{font-size:24px;font-weight:700}
 .dash-tile-l{font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap}
+
+/* Morning briefing — the one-sentence card above the tiles on every dashboard.
+   No inline width/grid so it reflows on its own at any viewport. */
+.briefing-card{
+  background:var(--card);border:1px solid var(--border);border-radius:var(--r3);
+  padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px;
+}
+.briefing-card.is-quiet{background:var(--bg)}
+.briefing-card.is-error{border-color:var(--red-l);background:var(--red-l)}
+.briefing-ic{flex:none;font-size:18px;line-height:1;margin-top:1px}
+.briefing-body{flex:1;min-width:0}
+.briefing-text{font-size:14.5px;font-weight:600;line-height:1.4}
+.briefing-sub{font-size:11.5px;color:var(--text3);margin-top:3px}
+.briefing-error .briefing-text{color:var(--red);font-weight:500}
 .stat-ico{width:36px;height:36px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
 .stat-val{font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1}
 .stat-lbl{font-size:12px;color:var(--text3);margin-top:4px}

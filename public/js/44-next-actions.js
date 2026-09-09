@@ -1,3 +1,50 @@
+// ── MORNING BRIEFING — one sentence, above everything else ──────────────────
+// GET /ai/morning-briefing always returns 200 with a non-empty `summary` — no
+// "AI unavailable" state exists on the wire. The one thing this card must
+// never do is disappear silently on a failed fetch (that is exactly what
+// "Needs you today" used to do); a broken network still gets an honest
+// sentence on screen, not a blank space where a sentence should be.
+function loadMorningBriefing(force){
+  if(STATE._briefLoading)return;
+  if(STATE.briefing&&!force)return;
+  STATE._briefLoading=true;
+  apiGet('/ai/morning-briefing').then(function(r){
+    STATE.briefing=r||{_error:true};
+    STATE._briefLoading=false;
+    scheduleRender();
+  }).catch(function(){
+    STATE.briefing={_error:true};
+    STATE._briefLoading=false;
+    scheduleRender();
+  });
+}
+window.refreshMorningBriefing=function(){STATE.briefing=null;loadMorningBriefing(true);render();};
+
+function renderMorningBriefingCard(){
+  var b=STATE.briefing;
+  if(b===undefined||b===null){
+    return '<div class="briefing-card"><div class="briefing-ic">☀️</div>'+
+      '<div class="briefing-body"><div class="briefing-text">Working out what came in today…</div></div></div>';
+  }
+  if(b._error){
+    // Honest, not silent — this is the exact defect the owner watched happen
+    // with "Needs you today". A broken fetch still says so, on screen.
+    return '<div class="briefing-card is-error"><div class="briefing-ic">⚠️</div>'+
+      '<div class="briefing-body">'+
+        '<div class="briefing-text">Could not load this morning\'s summary.</div>'+
+        '<div class="briefing-sub">The numbers below are still live — <a href="#" onclick="refreshMorningBriefing();return false;">try again</a>.</div>'+
+      '</div></div>';
+  }
+  // degraded: the database itself could not be read — the one case the card
+  // may hide, since there is nothing true left to say about "today".
+  if(b.degraded)return '';
+  return '<div class="briefing-card'+(b.quiet?' is-quiet':'')+'"><div class="briefing-ic">'+(b.quiet?'🌙':'☀️')+'</div>'+
+    '<div class="briefing-body">'+
+      '<div class="briefing-text">'+htmlEsc(b.summary||'')+'</div>'+
+      (b.engine==='ai'?'<div class="briefing-sub">Written by AI from today\'s numbers</div>':'')+
+    '</div></div>';
+}
+
 // ── NEXT ACTIONS — "what to do today", ranked, with the reason attached ──────
 // Step 4. The app already knew a lead had replied six days ago and that a
 // reminder had come due; none of it reached the user, so the work sat in tables
@@ -52,10 +99,28 @@ var NA_KIND={
 
 function renderNextActionsCard(){
   var s=STATE.nextActions;
+  // Per-user queue: never fetched while previewing someone else's dashboard
+  // ("view as"), so it can never resolve on its own here (C-0009). A loading
+  // state with nothing that can end it is the same defect C-0008 fixed for
+  // the briefing card — say plainly this queue is not shown, not "working
+  // out…" forever.
+  var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
+  if(isViewingOther&&s===undefined){
+    return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">'+
+      'This is a personal to-do queue — not shown while previewing someone else\'s dashboard.</div>';
+  }
   if(s===undefined||s===null){
     return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">Working out what needs you…</div>';
   }
-  if(s._error)return '';                 // silent: the rest of the dashboard is still useful
+  if(s._error){
+    // Honest, not silent — same rule as the briefing card (C-0009): a failed
+    // fetch must say so on screen, never vanish and leave a blank space.
+    return '<div class="briefing-card is-error mb4"><div class="briefing-ic">⚠️</div>'+
+      '<div class="briefing-body">'+
+        '<div class="briefing-text">Could not load what needs you today.</div>'+
+        '<div class="briefing-sub"><a href="#" onclick="refreshNextActions();return false;">try again</a></div>'+
+      '</div></div>';
+  }
   var items=s.items||[];
   if(!items.length){
     return '<div class="card cp mb4" style="display:flex;align-items:center;gap:10px">'+
