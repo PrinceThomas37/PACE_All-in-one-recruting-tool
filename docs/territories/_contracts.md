@@ -222,7 +222,7 @@ lose `byFreshness`/`byTimezone`, which the briefing deliberately does not
 collect. My recommendation is **keep both**; they answer different questions
 and neither derives its number from the other.
 
-### C-0011 · observatory → surface · OPEN · 2026-09-09
+### C-0011 · observatory → surface · ANSWERED (by surface) · 2026-09-09
 **Asks for:** two sentences in `public/js/49-page-candidate-outreach.js` to stop
 promising a send window that is now off by default.
 **Because:** the owner reversed the candidate send window the same day it
@@ -238,6 +238,24 @@ that is true either way. Two places assemble their own prose AROUND
   clause only when `sender.window.enabled`; otherwise "starting straight away".
 **Blocked until answered:** no — the server no longer defers, so the emails go.
 The screen is merely over-promising a wait that no longer happens.
+**Answered:** both sentences in `public/js/49-page-candidate-outreach.js` now
+render the server's own strings instead of assembling one around
+`window.label`. The sender card renders `s.window.sentence` verbatim (and only
+shows "Change these hours" when `window.enabled`); the queued-result line
+shows `window.label` only when `window.enabled`, otherwise "starting straight
+away". Checked the queue rows too (`r.wait.reason==='window'`): the server's
+`waitFor()` cannot produce that reason while the flag is off (confirmed —
+`candidateWindowState` returns `open:true` unconditionally when disabled), so
+the branch is dead but harmless and was left alone rather than deleted
+speculatively. Verified live with a stubbed `GET /candidate-outreach/sender`
+built from the route's own payload shape: `window.enabled:false` shows "any
+hour... starting as soon as this batch is queued"; `window.enabled:true`
+shows the old promise-of-a-wait sentence unchanged. Verified:
+`verify-frontend.sh`, `screen-stability-smoke.mjs` (23/23),
+`mobile-layout-smoke.mjs` (32/32), `frontend-smoke.mjs` (14/14),
+`candidate-outreach-preview-smoke.mjs` (6/6), `run-all.mjs` (67/67,
+log-grepped, never piped to `tail`). Screenshots: `compose-window-off.png`,
+`compose-window-on.png`.
 
 ### C-0012 · observatory → foundry · OPEN · 2026-09-09
 **Asks for:** a behavioural drip-pacing case in

@@ -256,14 +256,14 @@
           (s.ai?'The role description is written once per job by the AI writer; each email is personalised from the match reasons.'
                :'No AI writer is configured, so the built-in writer does all of it — which costs nothing.')+
         '</div>'+
-        // SAY IT BEFORE THEY QUEUE, NOT AFTER. Candidates are emailed in their
-        // own free time, so a batch queued at 3am correctly sits still — which
-        // is only reassuring if it was said in advance.
-        // The control lives in the System Settings modal, which is reached from
-        // the Sequence page — a long way from where the question gets asked.
-        // Same modal, one click, no second settings surface.
-        (s.window?'<div style="font-size:11.5px;color:var(--text3);margin-top:3px">Candidates are emailed in their own local free time — <strong>'+esc(s.window.label)+'</strong> — so a batch queued now may wait.'+
-          (userHasRole(STATE.user,'admin')?' <button type="button" onclick="openSystemSettingsModal()" style="border:0;background:none;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer">Change these hours</button>':'')+
+        // SAY IT BEFORE THEY QUEUE, NOT AFTER. Render the SERVER's sentence
+        // verbatim (`window.sentence`) rather than assembling one around
+        // `window.label` — the server states the whole claim (window on vs
+        // off) so this screen and the queue can never disagree about it
+        // (C-0011: the window shipped off by default, and the old copy here
+        // kept promising a wait that no longer happens).
+        (s.window?'<div style="font-size:11.5px;color:var(--text3);margin-top:3px">'+esc(s.window.sentence)+
+          (s.window.enabled&&userHasRole(STATE.user,'admin')?' <button type="button" onclick="openSystemSettingsModal()" style="border:0;background:none;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer">Change these hours</button>':'')+
         '</div>':'')+
       '</div>'+
     '</div>';
@@ -368,7 +368,9 @@
         '<div style="font-size:13px;font-weight:600">'+r.queued+' email'+(r.queued===1?'':'s')+' queued</div>'+
         '<button class="btn btn-outline btn-sm" onclick="candOutreachDismissResult()">Dismiss</button>'+
       '</div>'+
-      (r.queued?'<div style="font-size:12px;color:var(--text2);margin-top:3px">Going out about one every 90 seconds from '+esc(r.mailbox)+', in each candidate\'s local free time'+((s.sender&&s.sender.window)?' ('+esc(s.sender.window.label)+')':'')+', under your daily cap.</div>':'')+
+      (r.queued?'<div style="font-size:12px;color:var(--text2);margin-top:3px">Going out about one every 90 seconds from '+esc(r.mailbox)+
+        ((s.sender&&s.sender.window&&s.sender.window.enabled)?', in each candidate\'s local free time ('+esc(s.sender.window.label)+')':', starting straight away')+
+        ', under your daily cap.</div>':'')+
       (r.pipeline?'<div style="font-size:12px;color:var(--text2);margin-top:4px">Pipeline: '+r.pipeline.added+' added, '+r.pipeline.existing+' already there'+(r.pipeline.failed?', '+r.pipeline.failed+' failed':'')+'.</div>':'')+
       (sk.length?'<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:var(--amber)">'+sk.length+' not sent</div>'+rows+'</div>':'')+
     '</div>';
