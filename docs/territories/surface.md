@@ -63,6 +63,21 @@
   per-user and mislabelling risk is real there; left untouched per the
   contract's own instruction).
 
+- **C-0011 fixed (2026-09-09):** the candidate Compose sender card and the
+  queued-result line no longer assemble their own prose around
+  `sender.window.label` — that is exactly the preview-vs-queue defect shape
+  from Session 21 (two screens disagreeing about the same fact). The sender
+  card now renders `s.window.sentence` verbatim (server-built, true either
+  way — "any hour... starting as soon as this batch is queued" when the
+  window flag is off, the old promise-of-a-wait sentence when it's on); the
+  "Change these hours" link only shows when `window.enabled`. The queued
+  banner shows the hours only when `window.enabled`, otherwise "starting
+  straight away". The queue-row `reason==='window'` branch is now
+  server-unreachable while the flag is off (`candidateWindowState` returns
+  `open:true` unconditionally when disabled) but was left in place rather
+  than deleted — it is data-driven and comes back correctly the moment the
+  flag is switched on.
+
 ## Fragile — touch with care
 - **`05-page-dashboard.js`, `25-workflow-bd.js`, `28-page-pipeline.js`,
   `30-page-candidate.js`, `33-stage-modal.js` each carry a copy of the ATS stage
@@ -87,6 +102,12 @@
   itself is still unwired, but is now a lower-priority, separate question.
 
 ## Log
+- **2026-09-09** — C-0011: candidate Compose no longer over-promises a send
+  window that's off by default. Verified: `verify-frontend.sh`,
+  `screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs` (32/32),
+  `frontend-smoke.mjs` (14/14), `candidate-outreach-preview-smoke.mjs` (6/6),
+  `run-all.mjs` (67/67, log-grepped). Screenshots: `compose-window-off.png`,
+  `compose-window-on.png`.
 - **2026-09-09** — C-0009: next-actions card no longer silent on error, no
   longer stuck loading forever during "view as". Verified: `verify-frontend.sh`,
   `screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs` (32/32),

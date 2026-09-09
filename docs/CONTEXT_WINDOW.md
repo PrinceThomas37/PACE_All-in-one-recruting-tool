@@ -235,7 +235,7 @@ because they bite in the moment:
 
 ## Working rules
 
-`npm test` (**67 suites**, judged by **exit code** — read the count, not just
+`npm test` (**68 suites**, judged by **exit code** — read the count, not just
 the code: `npm test | tail -3` masks a failure) · **run it on Node 26 too** ·
 `bash test/verify-frontend.sh` · build on the dev branch → test → show the owner
 → draft PR → **merge on their go-ahead** → apply a migration only on a fresh

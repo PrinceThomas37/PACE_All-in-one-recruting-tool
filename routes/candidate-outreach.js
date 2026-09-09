@@ -145,10 +145,28 @@ module.exports = (ctx) => {
   //
   // Cached briefly because the drain asks once per tick and the queue endpoint
   // once per request, and neither wants a settings round-trip per row.
+  //
+  // ⚠ AND THE WHOLE WINDOW IS A SWITCH THAT IS OFF BY DEFAULT (owner's call,
+  // 2026-09-09 evening, reversing their own call from that morning: "remove the
+  // barricade of timezone for candidate emails ... Only the outreach goes
+  // within the time zone"). Eight real emails sat pending because every one of
+  // those candidates was below the 17:00 opening in their own state.
+  // The hours are kept and still obeyed WHEN THE SWITCH IS ON, because a
+  // decision reversed within a day can be reversed again — and a setting that
+  // silently does nothing is worse than no setting, so the four hour entries in
+  // Admin → System settings are only consulted while `enabled` is true, and the
+  // sender payload says which of the two is in force.
   let windowCache = { at: 0, cfg: null };
   async function candidateWindow() {
     if (windowCache.cfg && Date.now() - windowCache.at < 60000) return windowCache.cfg;
-    let cfg = { weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
+    let enabled = false;
+    try {
+      const { data } = await supabase.from('app_settings').select('value')
+        .eq('key', gen.CANDIDATE_SEND_WINDOW_KEY).maybeSingle();
+      enabled = gen.windowEnabledFromSetting(data && data.value);
+    } catch (_) { enabled = false; }   // unreadable settings must not re-impose it
+    let cfg = { enabled, weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
+    if (!enabled) { windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) }; return windowCache.cfg; }
     try {
       const [wds, wde, wes, wee] = await Promise.all([
         settingsConfig.getSetting(supabase, 'candidate_window_weekday_start'),
@@ -156,7 +174,7 @@ module.exports = (ctx) => {
         settingsConfig.getSetting(supabase, 'candidate_window_weekend_start'),
         settingsConfig.getSetting(supabase, 'candidate_window_weekend_end'),
       ]);
-      cfg = { weekday: [wds, wde], weekend: [wes, wee] };
+      cfg = { enabled: true, weekday: [wds, wde], weekend: [wes, wee] };
     } catch (_) { /* the schema defaults are the answer if settings are unreadable */ }
     windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) };
     return windowCache.cfg;
@@ -492,10 +510,25 @@ module.exports = (ctx) => {
           display_name: mailbox.display_name || null, platform: mailbox.platform || 'Microsoft',
         } : null,
         signature_html: await mailboxSignature(mailbox, req.user.id),
+        // ⚠ WHEN THE WINDOW IS OFF THIS MUST STOP PROMISING ONE. The sentence
+        // on screen was "Candidates are emailed in their own local free time —
+        // 5:00 PM-9:00 PM on weekdays..." while nothing was waiting for any
+        // hour at all. `enabled` and `sentence` carry the whole claim so a page
+        // never has to assemble one around a half-truth.
         window: {
+          enabled: !!win.enabled,
           weekday: win.weekday, weekend: win.weekend,
-          label: `${gen.clockLabel(win.weekday[0] * 60)}–${gen.clockLabel(win.weekday[1] * 60)} on weekdays, ` +
-                 `${gen.clockLabel(win.weekend[0] * 60)}–${gen.clockLabel(win.weekend[1] * 60)} at weekends`,
+          label: win.enabled
+            ? `${gen.clockLabel(win.weekday[0] * 60)}–${gen.clockLabel(win.weekday[1] * 60)} on weekdays, ` +
+              `${gen.clockLabel(win.weekend[0] * 60)}–${gen.clockLabel(win.weekend[1] * 60)} at weekends`
+            : 'any time of day',
+          sentence: win.enabled
+            ? 'Candidates are emailed in their own local free time — ' +
+              `${gen.clockLabel(win.weekday[0] * 60)}–${gen.clockLabel(win.weekday[1] * 60)} on weekdays, ` +
+              `${gen.clockLabel(win.weekend[0] * 60)}–${gen.clockLabel(win.weekend[1] * 60)} at weekends, ` +
+              'in their own timezone — so a batch queued now may wait.'
+            : 'Candidates are emailed at any hour, about one every 90 seconds, ' +
+              'starting as soon as this batch is queued.',
         },
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -915,14 +948,21 @@ module.exports = (ctx) => {
         if (mailbox.is_active === false) { deferred++; continue; }
         if (delivState[mailbox.id] && delivState[mailbox.id].auto_paused_at) { deferred++; continue; }
 
-        // THE CANDIDATE'S OWN FREE TIME, NOT THE PROSPECT'S OFFICE HOURS. The
-        // leads engine sends 08:00-16:00 because a hiring manager is at their
-        // desk then; a candidate is AT WORK then. Evenings and weekends, in
-        // their timezone (owner's call, 2026-09-09).
-        const { data: cand } = await supabase.from('candidates')
-          .select('id,current_location,city,state').eq('id', row.candidate_id).maybeSingle();
-        const at = localPartsFor(placeOf(cand), new Date());
-        if (!gen.candidateWindowState(at.day, at.minutes, win).open) { deferred++; continue; }
+        // THE SEND WINDOW — OFF BY DEFAULT since 2026-09-09 (owner: "remove the
+        // barricade of timezone for candidate emails ... Only the outreach goes
+        // within the time zone"). `candidateWindowState` returns open for every
+        // hour while the switch is off, so this gate costs one comparison and
+        // nothing else; turn `candidate_send_window_enabled` on and the
+        // evenings-and-weekends behaviour comes back exactly as it was.
+        //
+        // The candidate lookup is skipped entirely when the window is off — no
+        // row-by-row query to answer a question nobody is asking.
+        if (win.enabled) {
+          const { data: cand } = await supabase.from('candidates')
+            .select('id,current_location,city,state').eq('id', row.candidate_id).maybeSingle();
+          const at = localPartsFor(placeOf(cand), new Date());
+          if (!gen.candidateWindowState(at.day, at.minutes, win).open) { deferred++; continue; }
+        }
 
         // Daily cap and warm-up ramp, counted per mailbox across this tick.
         if (sentToday[mailbox.id] === undefined) {
