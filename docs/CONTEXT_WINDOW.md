@@ -7,7 +7,7 @@
 **Updated**: 2026-09-09 (end of Session 21) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #185 (`431c780`). Nothing of this
+to `main` IS the release · **Last merged**: #187 (`3d3736f`). Nothing of this
 session's is unmerged.
 
 ---
@@ -56,7 +56,9 @@ missed — a dropped greeting, and a new check that rejected valid drafts.
 - **The outreach generator, genuinely AI-written** — Job title field, four
   angles drafted on demand each with its own `must`/`never`/length, every draft
   held to `checkDraft()`, the reader's job connected to the hiring job, and a
-  send that can create the lead and join a sequence. `openai/gpt-oss-120b`, ~1.5s.
+  send that can create the lead and join a sequence. **Owner-approved.** Any
+  angle can be rewritten for different wording, three times, capped server-side.
+  `openai/gpt-oss-120b`, ~1.5s.
 - **Candidate outreach as a drip** — each candidate emailed in their own local
   free time, with a ‹ › preview of every person's own email before it goes
 - **Every email PACE sends keeps its text** (042) across all six channels; both
@@ -106,20 +108,27 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
   returned (no migration). Clients + the older Email JD path: never stored at
   all → migration 042, all six send paths now record it, both screens open it.
 
+**#187** — the owner approved the four angles, and asked for the same intent
+worded differently. A **↻ Rewrite this one** button, three per angle, every
+earlier attempt sent back so the model cannot repeat itself. The cap is
+enforced **server-side** (429), because a page cannot protect a shared token
+budget. Verified live: four attempts, four distinct openings, all passing
+`checkDraft`.
+
 Session 20 (#176-#179) is in the archive: the lead-release helper, the AI
 writing the outreach, the reader connection, the four angles, sequences.
 
 ## ⏭ PICK THIS UP FIRST (Session 22)
 
-**1. The owner has still not reported back on the four outreach angles.** Ask.
-The failure mode to ask about is **convergence** — two chips reading the same on
-a real posting. The briefs were tuned against ONE construction role, and the
-first live run produced four near-identical drafts before each angle was given a
-`never` clause. Their real postings will vary more than that test did.
+**1. Nothing shipped since #185 has been seen working in the live app.** The
+rail icon, the ‹ › candidate stepper, opening a sent email, and now the Rewrite
+button. All pinned by tests; none confirmed by the owner. **The four angles ARE
+approved** — that question is closed.
 
-**2. Nothing verifies the three things #185 shipped, in the live app.** The rail
-icon, the ‹ › stepper, and opening a sent email. All three are pinned by tests
-and none has been seen by the owner working.
+**2. The rewrite cap is three PER ANGLE, and the history clears on a fresh
+Generate.** If the owner finds three too few, the number lives in TWO places
+that must move together: `REWRITE_LIMIT` in `services/outreach-generator.js` and
+the same constant in `48-page-outreach-gen.js`. A test asserts they match.
 
 **3. Client email history cannot be recovered, and they may ask.** 19 tracked
 sends predate 042 and read back null forever — that text only ever lived in the

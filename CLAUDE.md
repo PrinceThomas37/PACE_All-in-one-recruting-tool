@@ -391,6 +391,19 @@ we never have to rewrite to grow (see "Growth bets" below).
   swept five roles for duplicate ITEMS, found nothing, and nearly closed the
   case — because it tested a theory instead of the sentence. **Reproduce the
   sentence, not your hypothesis.**
+- **A SYNTAX CHECK PROVES A FILE PARSES, NOT THAT IT STILL DOES ANYTHING
+  (Session 21).** A bulk edit anchored on a START line and an END line silently
+  swallowed `collectDom()` and `window.outreachGenerate` out of
+  `48-page-outreach-gen.js` — the handler behind the Generate button. `node
+  --check` passed, `verify-frontend.sh` passed, and the full suite would have
+  passed: the file was valid JavaScript with two functions the page calls simply
+  gone. **Prefer an edit anchored on the exact text being replaced over one
+  anchored on a start and an end** — a slice is only as safe as your memory of
+  what sits between the anchors, and that memory is what is least reliable in a
+  file you did not write this sitting. When an edit removes a RANGE, verify that
+  everything the file is supposed to contain is still in it. The guard that
+  catches it: **every `onclick` a page emits must be defined in that page**
+  (`test/outreach-ai-quality-smoke.mjs`).
 - **A `TEST_USERS` SET IS NOT THE USER SET.** `bd_lead`, `director` and
   `associate_director` have no entry in `test/helpers/enter-app.mjs`, so a
   five-role sweep silently skips roles real people hold — `bd_lead` was one of
@@ -860,6 +873,18 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        therefore carries `must`, **`never`** and a length band per angle, and
        `checkDraft` enforces the band. A picker whose options are paraphrases of
        each other is not a picker.
+     * **A REWRITE RESENDS THE EARLIER ATTEMPTS, OR IT IS A RE-ROLL
+       (Session 21).** `buildRewritePrompt()` sends every previous draft back
+       with an instruction not to reuse those openings, and restates the angle's
+       own `lead`/`must` so the intent survives while the sentences change — a
+       model handed the same brief twice returns very nearly the same email, and
+       the button then looks broken. Verified live: four attempts, four distinct
+       openings, all passing `checkDraft`. **`REWRITE_LIMIT` is 3 and is
+       enforced SERVER-SIDE (429 `rewrite_limit`), not only in the button** —
+       the cap exists to protect a token budget shared with resume parsing, the
+       JD scrub and lead distribution, and a page cannot be what protects that.
+       The number lives in `services/outreach-generator.js` and in
+       `48-page-outreach-gen.js`; a test asserts they agree.
      * **⚠ GROQ'S FREE TIER IS 8,000 TOKENS PER MINUTE** and one angle costs
        ~2,100, so four in quick succession rate-limits (429). The
        quality→fast model fallback in `complete()` absorbs it because the limit

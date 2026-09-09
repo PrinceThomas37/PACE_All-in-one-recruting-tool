@@ -3824,3 +3824,78 @@ than it first appears.** "No repeats in full menu" was not a throwaway clause;
 it was the half of the report that ruled out the obvious explanation and pointed
 at the real one. The first probe found nothing because it tested the theory
 instead of the sentence.
+
+---
+
+## Session 21, part 2 — the rewrite button, and a bulk edit that ate two functions
+
+The owner's verdict on the four angles came back: **"the 4 outreach angle looks
+good."** The convergence worry from Session 20 was real and the `never` clauses
+had fixed it. What they wanted next was a way to see the same intent worded
+differently — *"so we can see different wording in a same intent"* — with a cap,
+*"maybe like 3 regenerate options"*, explicitly so tokens are not over-consumed.
+
+### Making a rewrite a rewrite, not a re-roll
+
+The naive version resends the same brief and hopes. It does not work: a model
+handed identical input returns very nearly the same email, and the button looks
+broken. `buildRewritePrompt()` therefore sends **every previous attempt back**
+with an instruction not to reuse those openings, and restates the angle's own
+`lead` and `must` so the intent survives while the sentences change.
+
+Measured live against `openai/gpt-oss-120b`, four attempts on one posting:
+
+| attempt | words | check | opening after the identity sentence |
+|---|---|---|---|
+| original | 65 | PASS | "Saw the Construction Superintendent opening… I see it's been reposted" |
+| rewrite 1 | 59 | PASS | "We have candidates who already have 8+ years…" |
+| rewrite 2 | 65 | PASS | "I saw the posting and noted the 8+ years… requirement" |
+| rewrite 3 | 59 | PASS | "Our candidates already have 8+ years… so the ramp would be short" |
+
+Four distinct openings out of four. All four still lead on the ramp, which is
+what the `direct` angle is for, and all four pass `checkDraft`.
+
+**The cap is enforced server-side (429 `rewrite_limit`), not only in the
+button.** The owner's stated reason for wanting a limit is the token budget, and
+a page cannot be the thing that protects a shared daily allowance — this feature
+spends the same meter as resume parsing, the JD scrub and lead distribution. The
+button shows "2 of 3 left" as a courtesy; the server refuses the fourth.
+
+`askForAngle(id, previous)` now serves both the first draft and a rewrite. They
+differed only in that argument, and two copies would have drifted the moment
+either changed.
+
+### The bulk edit that ate two functions
+
+Applying the page changes, a replacement anchored on a start line and an end
+line **silently swallowed everything between them** — including `collectDom()`
+and `window.outreachGenerate`, the handler behind the Generate button.
+
+What is worth recording is what did NOT catch it:
+
+- `node --check` passed. The file was valid JavaScript.
+- `bash test/verify-frontend.sh` passed. Syntax and index.html were fine.
+- The full suite would have passed too.
+
+Nothing was malformed. Two functions the page calls simply no longer existed.
+It surfaced only because an unrelated assertion grepped for a line that had gone
+with them, and the failure message pointed somewhere else entirely.
+
+The fix was to restore the file and redo the change as targeted replacements.
+The lasting part is the guard: **every `onclick` the page emits must be defined
+in that page.** Confirmed to earn its place by deleting `outreachGenerate` again
+— three assertions fail, two of them naming the missing function outright.
+
+### The lesson
+
+**A syntax check proves a file parses, not that it still does anything.** Every
+automated gate in this repo was green on a page whose main button had no
+handler. When an edit removes a RANGE rather than a known string, the thing to
+verify is not that the file still parses — it is that everything the file is
+supposed to contain is still in it.
+
+The general form, and the reason this one is worth keeping: prefer edits
+anchored on the exact text being replaced over edits anchored on a start and an
+end. A slice is only as safe as your memory of what sits between the anchors,
+and that memory is exactly what is unreliable in a file you did not write in
+this sitting.
