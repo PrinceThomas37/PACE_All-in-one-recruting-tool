@@ -4068,3 +4068,146 @@ service-role policy, and still **0 tables in `public` without RLS**.
 - **Reproduce from the live records before theorising.** The skip pattern was
   reproduced exactly — same three, same one — before a line was changed, which is
   what made the cause unambiguous rather than plausible.
+
+---
+
+# Session 22 — the codebase gets nine teams, and one job proves it
+
+**Merged as PR #191.** No migration. No owner action required.
+
+## What the owner actually asked for
+
+Not a feature. A different way of working. In their words: *"i use you like in chat
+to do things in the system, or maybe like finish up a feature in a couple of chats
+and then switch to a different chat for another thing and if i have to revisit to a
+previous workflow or feature i have to start a new chat and then make it read all
+the context and then start saying what is working or not."*
+
+They asked for AI agents living in a landscape — a 3D island, teams interacting,
+each owning a territory of the software, writing to memory when a job is done and
+then clearing their context so it never builds up.
+
+**The honest split, told to them plainly up front:** the island is a
+visualisation and does not do the work. The mechanism that fixes the stated pain
+— territory-scoped agents with their own persistent memory — is real, exists in
+Claude Code today, and costs nothing. Both got built; the difference was named
+rather than blurred.
+
+## The nine territories
+
+Every file in the repo belongs to exactly one: `surface` (public/, 52 files,
+20.5k lines) · `gateway` (index.js + routes/) · `deep` (models/, migrations/) ·
+`harbour` (everything that sends mail) · `observatory` (AI, scoring, parsers) ·
+`guild` (routes/recruiting/, the ATS vocabulary) · `rampart` (auth, tenancy) ·
+`foundry` (test/, release) · `ledger` (plans, consent, opt-outs). Plus
+`dispatch`, the front door.
+
+- `.claude/agents/<name>.md` — real Claude Code subagents. Each carries its
+  paths, its laws (drawn from CLAUDE.md — nearly every one written after a
+  production failure), its border, and the exact commands that verify its work.
+- `docs/territories/<name>.md` — living memory, read FIRST and rewritten LAST.
+  **The subagent's context dies when it finishes, so anything not written there
+  is lost.** That is the design, not a limitation.
+- `docs/territories/_contracts.md` — the border ledger. A territory needing a
+  change outside its paths opens a request rather than reaching across.
+- `docs/territories/INTAKE.md` — how to read the owner. Added after they pushed
+  back that the agents were written in an engineer's voice while what actually
+  arrives is *"the menu is repeating"* and a screenshot. Eight rules, a routing
+  table built from real past reports, and rule one is **reproduce the sentence,
+  not your hypothesis.**
+- `scripts/territory-map.mjs` — counts real files and lines, reads git for
+  last-touched dates, parses the ledger, rewrites the data block inside
+  `island.html`. **Fails loudly on any file owned by nobody** — found two
+  orphans (`engine-runs.js`, `lead-ingest.js`) on its first run.
+- `docs/territories/island.html` — the survey as a 3D island. The survey is
+  built BEFORE the 3D and the 3D is optional; a viewer without WebGL gets the
+  whole map. Published as an artifact.
+
+## The job that proved it: the morning briefing
+
+The owner asked for a real job to be run through the system. **The request
+itself was invented by Claude, in the owner's voice, and that was disclosed to
+them explicitly** rather than presented as something they had asked for.
+
+`dispatch` did not guess. It rendered all four dashboards in a browser and
+counted: **an admin reads ten numbers before a single word**, every complete
+sentence on screen is an empty-state message, and **none of the numbers is even
+about today**. Then it found the feature had been built TWICE and never
+connected — `GET /jobs/today-summary` produces exactly the object
+`POST /ai/generate-summary`'s prompt consumes, field for field, and nothing in
+`public/` called either.
+
+It also found that **`08-page-admin.js` promised customers the daily briefing
+had a non-AI version. It did not.** Three of the four features named there were
+honest; the briefing degraded to an apology.
+
+**observatory** wrote `services/morning-briefing.js` (pure) and
+`GET /ai/morning-briefing`. The rules writer is the product; the AI is the
+upgrade. `summary` is never empty, so there is no "unavailable" state for a card
+to draw. `checkBriefing()` rejects any integer the model was not handed, plus
+spelled-out numbers and vague quantities — **"around a dozen leads" passes every
+digit check and is still a lie.** No repair turn: two sentences do not earn a
+second call. C-0007 answered — the briefing does NOT absorb
+`/jobs/today-summary` (different question, different role gate).
+
+**surface** put the card under the greeting on all three dashboards.
+
+**foundry**, exercising standing review, ran the suite on Node 22 AND Node 26
+(67/67 both), wrote the two guards, and **closed C-0006: `bd_lead`, `director`
+and `associate_director` had no entry in `test/helpers/enter-app.mjs`, so every
+role sweep in the project silently covered five of the eight values
+`users.role` can hold.** That is why the Session 21 icon collision survived a
+five-role sweep. Then it found a bug in surface's brand-new card by reading the
+code path, and filed it back rather than fixing it (C-0008, outside its border).
+
+## Six things that went wrong, and what each taught
+
+1. **A screenshot showed a sentence the product would refuse to send.**
+   Surface's stub read *"Two replies are waiting on an answer"* when the writer
+   had been handed `3`. Run through `checkBriefing()` it comes back
+   `invented_number_word`. **A screenshot is the owner's only view of this
+   product; a fabricated one is worse than none.** Stubs are now GENERATED by
+   calling `rulesBriefing()`, and the rule is in surface's memory.
+2. **A claim in a commit message was not true.** The first surface commit said
+   the honest-failure fix had been applied to the next-actions card too. It had
+   not — `if(s._error)return ''` was still there. Claude repeated the agent's
+   report without checking. **An agent's report is a claim, not evidence** —
+   corrected in the following commit rather than quietly fixed.
+3. **The "view as" screenshot exposed two more live defects** — both predating
+   this work (c5cb602). The next-actions card vanished silently on error, and
+   stuck on "Working out what needs you…" forever during a preview because its
+   fetch is deliberately skipped there. **A card must never sit in a loading
+   state that nothing can resolve.**
+4. **A rate limit killed two territory jobs mid-flight.** Both left a clean tree
+   — but nothing in the protocol required that. Added: **stop cleanly, never
+   leave a half-written file.** This codebase has no build step, so
+   `node --check` passes on a file with a function missing from its middle.
+5. **`isQuiet` looked broken and was not.** A probe used flat keys against a
+   nested shape and reported a busy day as quiet. Checked the source before
+   reporting a bug that did not exist.
+6. **The territory agents were written in the wrong voice.** Caught by the
+   owner, not by Claude. `INTAKE.md` exists because of that push-back.
+
+## Rules now load-bearing
+
+- **Reproduce the sentence, not your hypothesis** (promoted from a Session 21
+  lesson into the intake method every agent reads).
+- **A territory never edits another territory's paths.** A shared file has one
+  owner; `index.js` is gateway's, the five frontend stage-vocabulary copies are
+  surface's.
+- **`foundry` and `rampart` review everything.**
+- **No territory applies a migration.**
+- **Read what was IN the run, not just the count** — verified independently that
+  both new guards were present in the 67/67, not counted from another branch.
+
+## Left open
+
+- **The AI path has never been called against a real provider.** The sandbox has
+  no Supabase credentials, so the stored Groq key is unreachable; that branch is
+  exercised only against hand-written model output. The rules path — what ships
+  daily — is properly tested. **This closes only in production.**
+- The territory agents have run four jobs. Whether the memory files are pitched
+  at the right level of detail is still genuinely unknown.
+- Nine teams may be too many for one person to talk to. If it reads as overhead,
+  merge `ledger` into `rampart` and `guild` into `gateway` — collapsing is
+  cheaper than splitting.

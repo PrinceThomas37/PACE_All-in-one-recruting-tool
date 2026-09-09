@@ -4,11 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-09 (end of Session 21) · **Repo**:
+**Updated**: 2026-09-09 (end of Session 22) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #189 (`867abda`). Nothing of this
-session's is unmerged.
+to `main` IS the release · **Last merged**: #191. Nothing is unmerged.
 
 ---
 
@@ -22,85 +21,88 @@ If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
 line here.
 
+## 🧭 READ `docs/territories/README.md` BEFORE STARTING ANY JOB
+
+Session 22 divided the repo into **nine territories**, each a Claude Code
+subagent with its own border, its own laws and **its own memory file** — so a
+session no longer re-reads `CLAUDE.md` end to end before it can touch anything.
+`surface` · `gateway` · `deep` · `harbour` · `observatory` · `guild` ·
+`rampart` · `foundry` · `ledger`, plus **`dispatch`**, the front door.
+
+- **Not sure which team owns something, or it arrived as a sentence and a
+  screenshot? → `dispatch`.** It reproduces the report, then routes.
+- **`docs/territories/INTAKE.md` is how to read the owner** — they do not read
+  code, and what arrives is a sentence or an image. **Reproduce the sentence,
+  not your hypothesis.**
+- A territory reads its memory FIRST and rewrites it LAST. **The subagent's
+  context dies when it finishes, so anything not written down is lost.**
+- A territory never edits another territory's paths — it opens a request in
+  `docs/territories/_contracts.md`. **C-0009 is the highest id used.**
+- **`node scripts/territory-map.mjs` after any restructure.** It fails loudly
+  on a file owned by nobody, and rewrites the island page's data block.
+
 ## What PACE is
 
 An **ATS + lead-management platform sold to other companies** (SaaS). Fute Global
 is a customer, not the owner of the product. Full product context and the owner
 relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
 
-## 🔑 THE SANDBOX CAN NOW CALL GROQ. USE IT.
+## 🔑 THE SANDBOX CAN CALL GROQ — USE IT
 
-The owner added `api.groq.com` to this environment's network allowlist on
-2026-09-08. **This changes how to work on anything AI.** The first real
-generation found two bugs in ten minutes that a careful hour of reading had
-missed — a dropped greeting, and a new check that rejected valid drafts.
+`api.groq.com` is on this environment's allowlist. **Get to the real thing
+rather than reasoning about output you are allowed to look at** — the first
+real generation once found two bugs in ten minutes that a careful hour of
+reading had missed.
 
-- The key is in `app_settings` under `int_groq_api_key`. **Write it to a file
-  and read it from there** — an inline credential in a shell command is refused,
-  and it lands in the transcript either way, so delete the file afterwards.
+- Key is in `app_settings` under `int_groq_api_key`. **Write it to a file and
+  read it from there** — an inline credential is refused, and delete the file
+  after. **This needs Supabase credentials, which a bare sandbox does not
+  have**; without them the key is unreachable and the AI path cannot be tested.
 - **Node's `fetch` does not use the proxy; `curl` does.** Build the request in
   Node, POST it with curl, parse the reply in Node.
-- **Free tier = 8,000 tokens/minute**, ~2,100 per outreach angle. Sleep ~20s
-  between calls or you will 429.
-- `*.onrender.com` is still blocked. The live app is still read through Supabase.
-
-**Stop reasoning about output you are allowed to look at.**
+- **Free tier = 8,000 tokens/minute**, ~2,100 per outreach angle. Sleep ~20s.
+- `*.onrender.com` is blocked. The live app is read through Supabase.
 
 ## What is live right now
 
-- The recruiting ATS + BD lead engine, multi-tenant by `org_id`
+Detail for every line is in `CLAUDE.md`. This is an index.
+
+- The recruiting ATS + BD lead engine, **multi-tenant by `org_id`**, RLS on all
+  48 tables. Self-serve signup built and **switched OFF**; pricing `null`; no
+  guest bypass.
 - **Autonomous Recruiting Engine, all 5 steps** — scheduler, relevance engine,
-  lead sourcing, candidate outreach, conversation intelligence
-- **The in-app mailbox** (four inviolable rules in `CLAUDE.md` Growth bets §3)
-- **The shared UI kit + `public/mobile.css`** — off-canvas nav below 860px
-- **The outreach generator, genuinely AI-written** — Job title field, four
-  angles drafted on demand each with its own `must`/`never`/length, every draft
-  held to `checkDraft()`, the reader's job connected to the hiring job, and a
-  send that can create the lead and join a sequence. **Owner-approved.** Any
-  angle can be rewritten for different wording, three times, capped server-side.
-  `openai/gpt-oss-120b`, ~1.5s.
-- **Candidate outreach as a drip** — pick a job order, see the pool ranked
-  against it, queue many. Each is emailed in their **own local free time**
-  (weekday evenings + weekends, their timezone, editable in Admin → System
-  Settings), max 6 per tick with a 75-105s pause between real sends. Two
-  **answer buttons** in the email; the link opens a page, the POST records, so a
-  mail scanner cannot answer for them. ‹ › previews every person's own email.
-- **Every email PACE sends keeps its text** (042) across all six channels; both
-  the client drawer and the candidate profile open it on click
-- **Any AI provider behind a daily budget**, quality→fast model fallback
-- **Lead release is one shared operation**; the cold-email guard is scoped to
-  the lead's current cycle; a finished "Send complete" card expires after 15 min
-- **Self-serve signup built, switched OFF**; pricing `null`; no guest bypass
-- Lead distribution across every connected mailbox; `Assigned` leads silent 30+
-  days auto-recycle
+  lead sourcing, candidate outreach, conversation intelligence.
+- **The in-app mailbox** (four inviolable rules — `CLAUDE.md` growth bet §3).
+- **The outreach generator**, genuinely AI-written and owner-approved — four
+  angles, every draft held to `checkDraft()`, rewritable 3× (capped
+  server-side). `openai/gpt-oss-120b`, ~1.5s.
+- **Candidate outreach as a drip** — emailed in the candidate's own local free
+  time, 6 per tick with a 75-105s pause, two answer buttons in the email.
+- **The morning briefing** on all three dashboards (Session 22).
+- **Any AI provider behind a daily budget**, quality→fast fallback. Every email
+  keeps its text across all six channels.
+- **The shared UI kit + `public/mobile.css`** — off-canvas nav below 860px.
 - SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —
   **distinct from** per-user Gmail *sending*, which is live.
 
-## Migrations — ⚠ TWO files are numbered 042, BOTH APPLIED (2026-09-09)
+## Migrations — next is **043**
 
-- `042_candidate_outreach` — the `candidate_outreach` queue + the three
-  `job_orders.outreach_brief*` columns.
-- `042_email_tracking_body` — a nullable `email_tracking.body`. Verified after:
-  column present, nullable, all 19 existing rows untouched and null.
+**Never apply one to the live DB without a fresh, explicit go-ahead**, even when
+the feature itself was agreed — and **apply it BEFORE merging the code that uses
+it.** An insert naming a column that does not exist fails *after* the email has
+already gone out.
 
-Both are live and verified (0 tables in `public` without RLS after either).
-**The number collision is a naming defect, not a data one** — they were written
-in different parts of the same session. Deliberately NOT renamed: the filename
-is the record of what was applied, and churning it buys nothing. Alphabetical
-order happens to be the correct replay order.
-
-**Next is 043. Never apply one to the live DB without a fresh, explicit
-go-ahead**, even when the feature itself was agreed — and **apply it BEFORE
-merging the code that uses it**. An insert naming a column that does not exist
-fails *after* the email has already gone out. **Check `ls migrations/` for the
-highest number before choosing one** — do not trust this heading alone, which is
-exactly how the collision above happened.
+**`ls migrations/` for the highest number before choosing one** — do not trust
+this heading. Two files are both numbered `042` (both applied and verified,
+2026-09-09) because someone trusted a heading. That is a naming defect, not a
+data one, and deliberately not renamed: the filename is the record of what was
+applied. `deep` owns this territory and **never applies a migration itself.**
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
 
 It cost most of Session 19: resume parsing failed in production and every file
-parsed perfectly here, same library, same bytes. **The difference was the
-RUNTIME.** Check both before merging anything touching a parsing or binary path:
+parsed perfectly here — same library, same bytes. **The difference was the
+RUNTIME.** Run both before merging anything touching a parsing or binary path:
 
 ```
 curl -sS -o /tmp/n.tar.xz https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz
@@ -108,66 +110,56 @@ mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
 ```
 
-## ✅ Shipped (Session 21) — seven code PRs, all live (+ #186/#188/#189 docs)
+## ✅ Shipped (Session 22) — PR #191, live
 
-**#180-#184 — candidate outreach, built and then repaired by real use.** The
-mirror of the generator: start from a job order we own, not a pasted posting.
-Migration `042_candidate_outreach`. The first live batch sent **one of four** —
-the AI job brief said "2-3 years of field experience" and `invented_experience`
-read a fact about the *vacancy* as a claim about each *person*; worse, the
-preview read a different brief than the queue, so the line that caused it never
-appeared on screen. Then their **own send window** exposed a latent burst: a
-backlog released by an opening window had no pause between sends. Full narrative
-and the seven lessons: archive, **Session 21 part 0**.
+**Nine territories** (above), the front door, `INTAKE.md`, the border ledger,
+`scripts/territory-map.mjs` (found two files owned by nobody on its first run)
+and `docs/territories/island.html` — the survey as a 3D island, published as an
+artifact. **The survey is built BEFORE the 3D and the 3D is optional.**
 
-**#185**, three owner reports in one branch:
+**The morning briefing** — the first job run through the system, by four
+territories. `dispatch` rendered all four dashboards in a browser and counted:
+**an admin reads ten numbers before a single word**, every complete sentence on
+screen is an empty-state message, and none of the numbers is even about today.
+The feature turned out to be **already built twice and never connected**.
 
-- **The "repeating" menu.** Nothing was drawn twice — `Insights` and `Reports`
-  sat adjacent with the SAME bar-chart icon, and the 60px rail is icon-only.
-  Four of six roles saw it. Reports now uses the document icon.
-- **Stepping through candidate emails.** The Compose → Candidates preview was
-  hardcoded to the first person picked, so a batch of thirty let you read one.
-  ‹ › arrows walk the picked list.
-- **Reading what was sent.** Candidates: the text was already stored and never
-  returned (no migration). Clients + the older Email JD path: never stored at
-  all → migration 042, all six send paths now record it, both screens open it.
+- `services/morning-briefing.js` is PURE; `GET /ai/morning-briefing` is the
+  route. **`summary` is never empty**, so there is no "unavailable" state to
+  draw. `checkBriefing()` rejects any integer the model was not handed, plus
+  spelled-out numbers and vague quantities — **"around a dozen leads" passes
+  every digit check and is still a lie.**
+- **This closed a lie in the product**: `08-page-admin.js` promises the customer
+  the daily briefing has a non-AI version. Until now it degraded to an apology.
+- **C-0006 closed: `bd_lead`, `director` and `associate_director` had no entry
+  in `test/helpers/enter-app.mjs`** — every role sweep covered five of the eight
+  values `users.role` can hold. That is why Session 21's icon collision survived
+  a five-role sweep.
+- C-0008/C-0009: the next-actions card vanished silently on error and stuck
+  loading forever during "view as". Both predate this work (c5cb602), both fixed.
 
-**#187** — the owner approved the four angles, and asked for the same intent
-worded differently. A **↻ Rewrite this one** button, three per angle, every
-earlier attempt sent back so the model cannot repeat itself. The cap is
-enforced **server-side** (429), because a page cannot protect a shared token
-budget. Verified live: four attempts, four distinct openings, all passing
-`checkDraft`.
+## ⏭ PICK THIS UP FIRST (Session 23)
 
-Session 20 (#176-#179) is in the archive: the lead-release helper, the AI
-writing the outreach, the reader connection, the four angles, sequences.
+**1. The morning briefing's AI path has NEVER been called against a real
+provider.** The sandbox has no Supabase credentials, so the stored Groq key is
+unreachable; that branch is exercised only against hand-written model output.
+The rules path — what ships every day — is properly tested. **Check the live
+app and `ai_last_error`; this closes only in production.**
 
-## ⏭ PICK THIS UP FIRST (Session 22)
+**2. Nothing shipped since #185 has been seen working live by the owner** — the
+rail icon, the ‹ › candidate stepper, opening a sent email, the Rewrite button,
+and now the briefing card. All pinned by tests; none confirmed by a human.
 
-**1. Nothing shipped since #185 has been seen working in the live app.** The
-rail icon, the ‹ › candidate stepper, opening a sent email, and now the Rewrite
-button. All pinned by tests; none confirmed by the owner. **The four angles ARE
-approved** — that question is closed.
+**3. The territory system has run four jobs.** Whether the memory files are
+pitched at the right level of detail is genuinely unknown. **If nine teams reads
+as overhead, collapse `ledger` into `rampart` and `guild` into `gateway`** —
+merging teams is far cheaper than splitting them later.
 
-**2. The rewrite cap is three PER ANGLE, and the history clears on a fresh
-Generate.** If the owner finds three too few, the number lives in TWO places
-that must move together: `REWRITE_LIMIT` in `services/outreach-generator.js` and
-the same constant in `48-page-outreach-gen.js`. A test asserts they match.
-
-**3. Client email history cannot be recovered, and they may ask.** 19 tracked
-sends predate 042 and read back null forever — that text only ever lived in the
-mailbox. The offered follow-up is a live lookup against the mailbox's Sent
-folder (`services/mail-provider.js` can already search), which would cover the
-history that storing cannot. Not started; the owner has not asked for it.
-
-**4. The two dead AI features** — wire the daily import briefing to the
-dashboard, delete the orphaned cold-email drafter.
-
-**5. Finish the UI-kit rollout** — every list-shaped page is converted; the card-
-and board-shaped ones are not (dashboards, Admin, pipeline, My Team, Assign
-Leads). **6. Three stale draft PRs** (#116, #126, #135, months behind `main`) —
-finish or close them. **7.** `CLAUDE.md` still flags **CSV import/export + a
-small public API** as the highest-leverage unstarted bet.
+**4.** `/ai/generate-email` is still dead — reachable only from the orphaned
+`12-manager-users.js`. Delete it or wire it. **5.** Finish the UI-kit rollout
+(dashboards, Admin, pipeline, My Team, Assign Leads). **6.** Three stale draft
+PRs (#116, #126, #135). **7.** CSV import/export + a small public API is the
+highest-leverage unstarted bet; `dispatch` has already mapped the six
+territories it touches (the island's route runner shows the order).
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 
@@ -193,65 +185,57 @@ rules. Pinned by `screen-stability-smoke` and `mobile-layout-smoke`.
 
 ## Owner actions outstanding
 
-1. **Report on the four angles and the sequence flow** (see "Pick this up
-   first" §2).
-2. **Consider rotating the Groq key** — it passed through Session 20's
-   transcript when it was read from the database to test the model.
+1. **Try the morning briefing live** and say whether that sentence is useful.
+2. **Consider rotating the Groq key** — it passed through a Session 20
+   transcript when it was read from the database.
 3. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
-   `GOOGLE_CLIENT_ID`/`SECRET` in Render, if login-with-Google is wanted.
+   `GOOGLE_CLIENT_ID`/`SECRET` in Render, if wanted.
 4. **Verify one real Greenhouse/Lever board** via "Test it" — the adapters have
-   never met a live feed (the sandbox blocks those hosts).
+   never met a live feed.
 5. **Set prices, decide on card payments** — `services/plans.js`, one line.
 6. **Turn on `SELF_SERVE_SIGNUP`** whenever strangers should be able to sign up.
 
 ## Traps that will bite you
 
-**`CLAUDE.md` carries all the durable ones and is the file to read** — `models/`
-for tenant tables, the six-place stage vocabulary, the free-tier instance
-budget, `renderStoredEmail`, safe-methods-only retries, the `orgIdFor()`
-fallback, route registration order, the lead-release helper, the
-PDF/AI/mobile/outreach blocks, and (added Session 21) how to read a bug report,
-why a `TEST_USERS` set is not the user set, why two green runs may not cover the
-same thing, and migration-before-merge.
+**`CLAUDE.md` carries all the durable ones**, and each territory's memory
+carries its own — read those two, not a paraphrase. Still worth repeating here
+because they bite in the moment:
 
-**Before moving ANY file** → archive § "DEPENDENCY MAP" (Session 8). Ten things
-break on a naive move and several fail *silently*.
-
-Still worth repeating here, because they bite in the moment:
-
-- **When one operation has several code paths, they diverge silently.** Three
-  paths released a lead to the pool; the odd one out made every lead in the live
-  pool invisible to distribution. One shared helper, always.
-- **A test that greps a VARIABLE NAME** breaks on every refactor and passes on a
-  real behaviour change. Assert behaviour.
+- **Reproduce the sentence, not your hypothesis.** The owner's throwaway clause
+  is usually the diagnosis.
+- **An agent's report is a claim, not evidence.** A Session 22 commit message
+  repeated one without checking and was wrong. Verify, then write it down.
+- **Read what was IN the run, not just the count.** Two green runs can cover
+  different things, and `npm test | tail -3` returns `tail`'s exit status.
+- **When one operation has several code paths, they diverge silently.**
+- **A test that greps a VARIABLE NAME** passes on a real behaviour change.
 - **A check that samples "the last few lines" fires on short input.**
+- **A card must never sit in a loading state that nothing can resolve.**
 - **`emails.sent_at` defaults to `CURRENT_DATE`** — an unsent draft already
   carries a send date, so "sent on X" reports count drafts.
 - **A destructive DB action needs, in order:** check FK cascades, verify scope
   with counts, snapshot, explicit confirmation, verify after.
 - **Never wait on the suite with `pgrep -f run-all.mjs`** — the waiter matches
-  itself. Write the log to a file and grep it for the summary line.
+  itself. Write to a log file and grep it.
+- **Before moving ANY file** → archive § "DEPENDENCY MAP" (Session 8).
 
 ## Deliberately open, not forgotten
 
 - Cold-email templates and the resume letterhead still say "Fute Global" — the
   **customer's** identity, must become per-org config.
-- "Log In with your Organization" routes by domain; **not** full SAML.
-- `/bd-analytics/*` is legacy and un-org-scoped. The orphaned "Manager Users"
-  page + its `email_accounts` subsystem still needs an audit-and-split.
-- OpenRouter's model names are **still unverified** (no key). Groq's are
-  verified and now directly testable from the sandbox.
+- `/bd-analytics/*` is legacy and **un-org-scoped** (C-0003). The orphaned
+  "Manager Users" page + its `email_accounts` subsystem needs an audit-and-split.
+- OpenRouter's model names are **still unverified** (no key).
 - Growth bets not started: per-role permissions, **CSV import/export + public
   API**, generalized audit trail, PWA polish.
 - In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker, no shared
   mailboxes, unread badge is a 60s cached poll.
-- A per-call AI usage history (the meter is a daily counter, not an audit log).
-- Follow-up variants are still rules-only — the four first-outreach angles are
-  AI-written, the three follow-up shapes are not.
+- Follow-up variants are still rules-only; a per-call AI usage history would be
+  its own table.
 
 ## Working rules
 
-`npm test` (**65 suites**, judged by **exit code** — read the count, not just
+`npm test` (**67 suites**, judged by **exit code** — read the count, not just
 the code: `npm test | tail -3` masks a failure) · **run it on Node 26 too** ·
 `bash test/verify-frontend.sh` · build on the dev branch → test → show the owner
 → draft PR → **merge on their go-ahead** → apply a migration only on a fresh
