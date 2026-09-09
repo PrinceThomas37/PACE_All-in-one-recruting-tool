@@ -81,6 +81,41 @@ const SETTINGS_SCHEMA = [
     description: 'Maximum number of due enrollments the workflow engine processes per tick.',
     default: 200, min: 10, max: 5000,
   },
+
+  // ── When candidates are emailed ──────────────────────────────────────────
+  // NOT the same hours as the leads engine, and that is the point: 08:00-16:00
+  // is right for a PROSPECT sitting at their desk and exactly wrong for a
+  // CANDIDATE, who is at work then. These are the hours somebody is off the
+  // clock and looking at their own phone, in THEIR timezone.
+  //
+  // A start that is not BEFORE its end closes that day rather than opening it
+  // for 24 hours — which is how "weekends only" is expressed without a separate
+  // switch. Both descriptions say so, because an admin typing 0 and 0 into a
+  // pair of hour boxes deserves to know what it will do.
+  {
+    key: 'candidate_window_weekday_start', label: 'Weekday evening starts', unit: "hour (candidate's local time)",
+    group: 'Candidate outreach',
+    description: 'Earliest hour a candidate is emailed Monday to Friday, in their own timezone. Default 17 (5pm) — before that they are usually at work. Set start and end the same to send no weekday emails at all.',
+    default: 17, min: 0, max: 23,
+  },
+  {
+    key: 'candidate_window_weekday_end', label: 'Weekday evening ends', unit: "hour (candidate's local time)",
+    group: 'Candidate outreach',
+    description: 'Latest hour a candidate is emailed Monday to Friday. Default 21 (9pm) — nobody wants a recruiter at bedtime.',
+    default: 21, min: 0, max: 24,
+  },
+  {
+    key: 'candidate_window_weekend_start', label: 'Weekend starts', unit: "hour (candidate's local time)",
+    group: 'Candidate outreach',
+    description: 'Earliest hour a candidate is emailed on Saturday or Sunday. Default 9 (9am) — they are not at work, so the whole day is fair. Set start and end the same to send no weekend emails at all.',
+    default: 9, min: 0, max: 23,
+  },
+  {
+    key: 'candidate_window_weekend_end', label: 'Weekend ends', unit: "hour (candidate's local time)",
+    group: 'Candidate outreach',
+    description: 'Latest hour a candidate is emailed on Saturday or Sunday. Default 20 (8pm).',
+    default: 20, min: 0, max: 24,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));

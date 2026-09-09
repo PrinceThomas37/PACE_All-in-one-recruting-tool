@@ -138,27 +138,26 @@ module.exports = (ctx) => {
     return { tz, day: Number.isFinite(day) ? day : 1, minutes: (hour * 60) + (minute || 0) };
   }
 
-  // The candidate window, from settings, with the evening/weekend defaults.
+  // The candidate window, read through config/settings.js — the SAME schema the
+  // Admin → System settings screen writes, so the hours an admin types and the
+  // hours the drain obeys cannot be two different numbers. That schema owns the
+  // defaults, the range and the validation; this only assembles the pair.
+  //
   // Cached briefly because the drain asks once per tick and the queue endpoint
-  // once per request — neither wants a settings round-trip per row.
+  // once per request, and neither wants a settings round-trip per row.
   let windowCache = { at: 0, cfg: null };
   async function candidateWindow() {
     if (windowCache.cfg && Date.now() - windowCache.at < 60000) return windowCache.cfg;
-    const cfg = { weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
+    let cfg = { weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
     try {
-      const { data } = await supabase.from('app_settings').select('key,value').in('key', [
-        'candidate_window_weekday_start', 'candidate_window_weekday_end',
-        'candidate_window_weekend_start', 'candidate_window_weekend_end',
+      const [wds, wde, wes, wee] = await Promise.all([
+        settingsConfig.getSetting(supabase, 'candidate_window_weekday_start'),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekday_end'),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekend_start'),
+        settingsConfig.getSetting(supabase, 'candidate_window_weekend_end'),
       ]);
-      (data || []).forEach(r => {
-        const n = parseInt(r.value, 10);
-        if (!Number.isFinite(n)) return;
-        if (r.key === 'candidate_window_weekday_start') cfg.weekday[0] = n;
-        if (r.key === 'candidate_window_weekday_end') cfg.weekday[1] = n;
-        if (r.key === 'candidate_window_weekend_start') cfg.weekend[0] = n;
-        if (r.key === 'candidate_window_weekend_end') cfg.weekend[1] = n;
-      });
-    } catch (_) { /* defaults are the answer if settings are unreadable */ }
+      cfg = { weekday: [wds, wde], weekend: [wes, wee] };
+    } catch (_) { /* the schema defaults are the answer if settings are unreadable */ }
     windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) };
     return windowCache.cfg;
   }
