@@ -41,11 +41,19 @@ const { clientIp } = require('../middleware/rate-limit');
 const DRIP_MIN_MS = 75 * 1000;
 const DRIP_MAX_MS = 105 * 1000;
 
-// How many due emails one heartbeat may send. The free tier's heartbeat is
-// delivered every 3-5 hours in practice rather than every 30 minutes, so a tick
-// can find a large backlog; this keeps one tick bounded rather than holding the
-// process open for an hour.
-const DRAIN_PER_TICK = 25;
+// ⚠ A BACKLOG MUST NOT BECOME A BURST. `send_after` spaces a batch at queue
+// time, but if the candidate window was shut when those slots came round, every
+// row is due the moment it opens — and a loop with no pause would then fire the
+// whole backlog back to back, which is exactly the pattern that gets a sending
+// domain flagged. The queue-time spacing states the intent; this enforces it.
+//
+// So the drain sends at most a handful per tick and SLEEPS between them, the
+// same way the leads engine's waitForMailboxSlot does. Six sends at 75-105s is
+// under eight minutes, which fits inside the ten-minute tick without one run
+// overlapping the next (engine-runs.js also guards that, but not overlapping in
+// the first place is better than being stopped).
+const DRAIN_PER_TICK = 6;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -53,8 +61,8 @@ module.exports = (ctx) => {
     supabase, auth, today, withOrg, orgStamp, buildHtmlEmailBody, getMailboxSignature,
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage, connectedMailboxById,
     loadMailboxDelivState, warmupLimit, settingsConfig,
-    isSendingPaused, isManagerPaused, getSendWindowHours, isInLeadSendWindow,
-    getTimezoneFromLocation, friendlySendError, logActivity,
+    isSendingPaused, isManagerPaused,
+    getTimezoneFromLocation, LEAD_TZ_IANA, friendlySendError, logActivity,
     addToSuppression, pixelLimiter,
   } = ctx;
 
@@ -111,6 +119,52 @@ module.exports = (ctx) => {
       return f ? `${f.provider}/${f.model}: ${f.error}` : null;
     } catch (_) { return null; }
   }
+
+  // ── WHAT TIME IS IT WHERE THE CANDIDATE IS ───────────────────────────────
+  // The window is judged in THEIR local day and hour, never the server's. A
+  // Texas candidate and a Connecticut one on the same list get different
+  // answers, which is the whole point.
+  function localPartsFor(place, when) {
+    const tz = getTimezoneFromLocation(place || '');
+    const iana = (LEAD_TZ_IANA && LEAD_TZ_IANA[tz]) || 'America/New_York';
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: iana, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(when || new Date());
+    const get = (t) => (parts.find(p => p.type === t) || {}).value;
+    const days = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const day = days[get('weekday')];
+    const hour = parseInt(get('hour'), 10) % 24;
+    const minute = parseInt(get('minute'), 10);
+    return { tz, day: Number.isFinite(day) ? day : 1, minutes: (hour * 60) + (minute || 0) };
+  }
+
+  // The candidate window, from settings, with the evening/weekend defaults.
+  // Cached briefly because the drain asks once per tick and the queue endpoint
+  // once per request — neither wants a settings round-trip per row.
+  let windowCache = { at: 0, cfg: null };
+  async function candidateWindow() {
+    if (windowCache.cfg && Date.now() - windowCache.at < 60000) return windowCache.cfg;
+    const cfg = { weekday: gen.CANDIDATE_WINDOW.weekday.slice(), weekend: gen.CANDIDATE_WINDOW.weekend.slice() };
+    try {
+      const { data } = await supabase.from('app_settings').select('key,value').in('key', [
+        'candidate_window_weekday_start', 'candidate_window_weekday_end',
+        'candidate_window_weekend_start', 'candidate_window_weekend_end',
+      ]);
+      (data || []).forEach(r => {
+        const n = parseInt(r.value, 10);
+        if (!Number.isFinite(n)) return;
+        if (r.key === 'candidate_window_weekday_start') cfg.weekday[0] = n;
+        if (r.key === 'candidate_window_weekday_end') cfg.weekday[1] = n;
+        if (r.key === 'candidate_window_weekend_start') cfg.weekend[0] = n;
+        if (r.key === 'candidate_window_weekend_end') cfg.weekend[1] = n;
+      });
+    } catch (_) { /* defaults are the answer if settings are unreadable */ }
+    windowCache = { at: Date.now(), cfg: gen.normalizeWindow(cfg) };
+    return windowCache.cfg;
+  }
+
+  const placeOf = (c) => txt((c || {}).current_location) ||
+    [(c || {}).city, (c || {}).state].filter(Boolean).join(', ');
 
   // ══════════════════════════════════════════════════════════════════════════
   // THE ANSWER — two links in the email, and the page they open
@@ -385,22 +439,22 @@ module.exports = (ctx) => {
       // those it was — the app knew and would not say, which is the same
       // failure as reporting a skip only as "failed check".
       const now = new Date();
-      const window = await getSendWindowHours();
+      const win = await candidateWindow();
       const paused = !!(isSendingPaused && isSendingPaused());
       const waitFor = (r) => {
         if (r.status !== 'pending') return null;
         if (paused) return { reason: 'paused', text: 'Sending is paused for your team.' };
         if (new Date(r.send_after) > now) return { reason: 'queued', text: 'Waiting for its turn in the drip.' };
-        const c = r.candidates || {};
-        const place = txt(c.current_location) || [c.city, c.state].filter(Boolean).join(', ');
-        const tz = getTimezoneFromLocation(place);
-        if (isInLeadSendWindow(tz, now, window)) {
-          return { reason: 'due', text: 'Due now — goes on the next pass.' };
-        }
-        const opens = formatWindowOpensLabel(tz, window, now);
+        const place = placeOf(r.candidates);
+        const at = localPartsFor(place, now);
+        const state = gen.candidateWindowState(at.day, at.minutes, win);
+        if (state.open) return { reason: 'due', text: 'Due now — goes on the next pass.' };
+        const opens = gen.describeWindowOpens(state, at.day);
         return {
           reason: 'window',
-          text: `Outside ${place || 'their'} working hours. Goes ${opens}.`,
+          // Their hours, not ours: "we are not emailing them at 9am on a
+          // Tuesday because they are at work" is the whole reason for the wait.
+          text: `${place || 'They'} — outside candidate sending hours. Goes ${opens}.`,
           opens_label: opens, place: place || null,
         };
       };
@@ -423,6 +477,11 @@ module.exports = (ctx) => {
       const [mailbox, companyName] = await Promise.all([
         recruiterSendingMailbox(req.user.id), orgCompanyName(req)
       ]);
+      // The page must be able to state the sending hours BEFORE anything is
+      // queued. The owner queued a batch at 3am and then had to ask why nothing
+      // moved; "they go out in the evening" belongs on screen beforehand, and
+      // it comes from the same config the drain obeys so the two cannot drift.
+      const win = await candidateWindow();
       res.json({
         company_name: companyName,
         ai: await aiProvider.isAvailable(supabase),
@@ -431,6 +490,11 @@ module.exports = (ctx) => {
           display_name: mailbox.display_name || null, platform: mailbox.platform || 'Microsoft',
         } : null,
         signature_html: await mailboxSignature(mailbox, req.user.id),
+        window: {
+          weekday: win.weekday, weekend: win.weekend,
+          label: `${gen.clockLabel(win.weekday[0] * 60)}–${gen.clockLabel(win.weekday[1] * 60)} on weekdays, ` +
+                 `${gen.clockLabel(win.weekend[0] * 60)}–${gen.clockLabel(win.weekend[1] * 60)} at weekends`,
+        },
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -819,7 +883,7 @@ module.exports = (ctx) => {
       .limit(limit);
     if (!due || !due.length) return { sent: 0, skipped: 0, failed: 0 };
 
-    const window = await getSendWindowHours();
+    const win = await candidateWindow();
     const suppressed = await loadSuppressedSet(due.map(r => r.to_email).filter(Boolean));
     const delivState = await loadMailboxDelivState([...new Set(due.map(r => r.mailbox_id).filter(Boolean))]);
     const [warmupStart, warmupStep] = await Promise.all([
@@ -832,6 +896,11 @@ module.exports = (ctx) => {
 
     for (const row of due) {
       try {
+        // Pace between real sends only. A row that is skipped, deferred or
+        // suppressed costs nothing and must not buy the next one a free slot —
+        // otherwise a queue full of opted-out addresses would let the few
+        // genuine sends through in a burst.
+        if (sent > 0) await sleep(DRIP_MIN_MS + Math.floor(Math.random() * (DRIP_MAX_MS - DRIP_MIN_MS)));
         if (isManagerPaused && isManagerPaused(row.sent_by)) { deferred++; continue; }
         if (suppressed.has(String(row.to_email || '').toLowerCase())) {
           await supabase.from('candidate_outreach')
@@ -844,14 +913,14 @@ module.exports = (ctx) => {
         if (mailbox.is_active === false) { deferred++; continue; }
         if (delivState[mailbox.id] && delivState[mailbox.id].auto_paused_at) { deferred++; continue; }
 
-        // The candidate's own working hours, not ours. Same treatment the lead
-        // engine gives a prospect — an email landing at 3am is a deleted email.
+        // THE CANDIDATE'S OWN FREE TIME, NOT THE PROSPECT'S OFFICE HOURS. The
+        // leads engine sends 08:00-16:00 because a hiring manager is at their
+        // desk then; a candidate is AT WORK then. Evenings and weekends, in
+        // their timezone (owner's call, 2026-09-09).
         const { data: cand } = await supabase.from('candidates')
           .select('id,current_location,city,state').eq('id', row.candidate_id).maybeSingle();
-        const tz = getTimezoneFromLocation(
-          (cand && (cand.current_location || [cand.city, cand.state].filter(Boolean).join(', '))) || ''
-        );
-        if (!isInLeadSendWindow(tz, new Date(), window)) { deferred++; continue; }
+        const at = localPartsFor(placeOf(cand), new Date());
+        if (!gen.candidateWindowState(at.day, at.minutes, win).open) { deferred++; continue; }
 
         // Daily cap and warm-up ramp, counted per mailbox across this tick.
         if (sentToday[mailbox.id] === undefined) {
