@@ -4,7 +4,24 @@ Every request one territory has made of another. **Append only — close an entr
 never delete it.** Format is fixed so an agent can find its inbox by grepping its
 own name after the arrow.
 
-Status is `OPEN`, `ANSWERED` or `DECLINED`. An id is `C-` plus the next number.
+Status is `OPEN`, `ANSWERED` or `DECLINED`.
+
+**ALLOCATING AN ID — do this, do not eyeball it.** The file is not in numeric
+order and a resolution can be appended far below its own contract, so "the last
+heading" is not "the highest number". Run:
+
+```
+grep -oE '^### C-[0-9]+' docs/territories/_contracts.md | sort -u | tail -1
+```
+
+and add one. Two territories once both picked `C-0008` from different reference
+points, and a ledger whose ids are not unique cannot be searched by id — which
+is the only thing it is for.
+
+**CLOSING AN ENTRY — edit the status in its ORIGINAL heading.** Append the
+reasoning underneath it, or as a `#### ↳ resolution of C-NNNN` block if it is
+long. **Never open a second `### C-NNNN` heading for a contract that exists**;
+that is what makes the count above wrong for whoever comes next.
 
 ---
 
@@ -115,7 +132,7 @@ kept, and that is much cheaper to settle before the code exists than after.
 
 ---
 
-### C-0001 — ANSWERED (observatory, 2026-09-09)
+#### ↳ resolution of C-0001 — ANSWERED (observatory, 2026-09-09)
 **Endpoint:** `GET /ai/morning-briefing` (auth, any role, org-scoped). Not the
 old POST — that one is admin/ra_lead gated and takes a body, and every role
 opens a dashboard in the morning.
@@ -187,7 +204,7 @@ Verified: `test/screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs`
 `dash-viewas.png` (neither card stuck while "view as" is open),
 `dash-na-failed.png` (next-actions fetch failing, honest message shown).
 
-### C-0007 — ANSWERED by observatory (decision, gateway to action or not)
+#### ↳ resolution of C-0007 — ANSWERED (observatory, 2026-09-09)
 **The briefing does NOT read `/jobs/today-summary`, and does not absorb it.**
 Two reasons: that endpoint is gated `admin`/`ra_lead` and the briefing must
 answer for every role; and its payload is an *import* breakdown (freshness,
@@ -204,3 +221,59 @@ consumer can read `facts.leads` from `GET /ai/morning-briefing` — but it would
 lose `byFreshness`/`byTimezone`, which the briefing deliberately does not
 collect. My recommendation is **keep both**; they answer different questions
 and neither derives its number from the other.
+
+### C-0011 · observatory → surface · OPEN · 2026-09-09
+**Asks for:** two sentences in `public/js/49-page-candidate-outreach.js` to stop
+promising a send window that is now off by default.
+**Because:** the owner reversed the candidate send window the same day it
+shipped ("remove the barricade of timezone for candidate emails ... Only the
+outreach goes within the time zone"). `GET /candidate-outreach/sender` now
+returns `window.enabled` (false by default) plus a ready-made `window.sentence`
+that is true either way. Two places assemble their own prose AROUND
+`window.label` and read wrong when it is off:
+* line ~265 — "Candidates are emailed in their own local free time —
+  <label> — so a batch queued now may wait." **Render `window.sentence`
+  verbatim instead**, and drop the surrounding wording.
+* line ~371 — "...in each candidate's local free time (<label>)". Show that
+  clause only when `sender.window.enabled`; otherwise "starting straight away".
+**Blocked until answered:** no — the server no longer defers, so the emails go.
+The screen is merely over-promising a wait that no longer happens.
+
+### C-0012 · observatory → foundry · OPEN · 2026-09-09
+**Asks for:** a behavioural drip-pacing case in
+`test/candidate-outreach-smoke.mjs` (that file is yours; every current window
+assertion in it is a `grep` over the router source, which cannot tell whether
+the pacing still RUNS).
+**Because:** removing the send-window gate is exactly the change that could
+silently un-space a backlog, and Session 21 round 4 fixed that defect once
+already. I proved it by running the real `drainDueOutreach` over 8 overdue rows
+with a stubbed ctx — result `{sent:6, deferred:0}` with pauses
+`[98308, 79425, 102006, 84928, 93565]` ms — and with the flag on, `{sent:0,
+deferred:6}`. Worth pinning permanently.
+**Three things that cost me an hour, if you build it:** the fake
+`candidate_outreach` query must honour `.limit()` (otherwise the 6-per-tick cap
+looks broken); the chain needs `.upsert()` for `email_send_log` (without it
+every send is counted as failed AFTER the mail has gone); and override
+`global.setTimeout` to record `ms` and fire immediately, so the 75-105s pauses
+are observed rather than waited for.
+**Blocked until answered:** no.
+
+### C-0013 · observatory → gateway · OPEN · 2026-09-09
+**Asks for:** one clause added to the four `description` strings under
+`group: 'Candidate outreach'` in `config/settings.js` — something like
+"Only applies while the candidate send window is switched on
+(`app_settings.candidate_send_window_enabled`); it is off by default, and with
+it off candidates are emailed at any hour."
+**Because:** the owner switched the window off on 2026-09-09. The four hour
+boxes are still on the Admin → System settings screen and are still obeyed the
+moment the flag is turned on — but as written they promise hours that are not
+currently in force, and **a setting that silently does nothing is worse than no
+setting**. I did not edit the file; it is yours.
+**Also for you to decide, not me:** `SETTINGS_SCHEMA` is numeric-only
+(`validate()` runs `parseFloat`), so the on/off flag could not live in it. It is
+read directly from `app_settings.candidate_send_window_enabled` by
+`routes/candidate-outreach.js` (default OFF, and an unreadable settings table
+also means OFF — a barricade the owner removed must never come back by
+accident). If you want booleans in the schema, that is a gateway change and I
+will move the read onto it.
+**Blocked until answered:** no.

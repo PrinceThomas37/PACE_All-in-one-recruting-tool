@@ -709,9 +709,33 @@ function normalizeWindow(cfg) {
     return [Math.max(0, Math.min(23, lo)), Math.max(0, Math.min(24, hi))];
   };
   return {
+    // THE WINDOW IS A SWITCH, AND IT IS OFF BY DEFAULT IN PRODUCTION
+    // (owner's call, 2026-09-09, reversing their own call from the same day:
+    // "remove the barricade of timezone for candidate emails ... Only the
+    // outreach goes within the time zone"). The hours below are kept, tested
+    // and re-usable — a decision reversed within a day can be reversed again,
+    // and throwing away pure logic to express "not today" is expensive.
+    //
+    // `enabled` defaults to TRUE **here** because this function's job is only
+    // "make sense of a window config"; whether a window exists at all is the
+    // CALLER's question, and `routes/candidate-outreach.js` answers it from
+    // `app_settings.candidate_send_window_enabled`, which defaults to off.
+    enabled: c.enabled === undefined || c.enabled === null ? true : !!c.enabled,
     weekday: pair(c.weekday, CANDIDATE_WINDOW.weekday),
     weekend: pair(c.weekend, CANDIDATE_WINDOW.weekend),
   };
+}
+
+// The app_settings key that turns the window on. One string, exported, so the
+// reader and anything that ever writes it cannot disagree about spelling.
+const CANDIDATE_SEND_WINDOW_KEY = 'candidate_send_window_enabled';
+
+// PURE. Off unless the stored value says on — an unreadable, missing or
+// garbled setting must NOT quietly re-impose a barricade the owner removed.
+function windowEnabledFromSetting(raw) {
+  if (raw === true) return true;
+  const s = String(raw === undefined || raw === null ? '' : raw).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'on' || s === 'yes';
 }
 
 const isWeekend = (day) => day === 0 || day === 6;
@@ -729,6 +753,12 @@ function candidateWindowState(localDay, localMinutes, cfg) {
   const c = normalizeWindow(cfg);
   const day = ((Number(localDay) % 7) + 7) % 7;
   const mins = Math.max(0, Math.min(24 * 60 - 1, Number(localMinutes) || 0));
+
+  // Window switched off: every hour is open, and it says so, so a caller can
+  // tell "open because it is 7pm there" from "open because there are no hours".
+  if (!c.enabled) {
+    return { open: true, disabled: true, opensInMinutes: 0, opensDay: day, opensMinutes: mins };
+  }
 
   const today = windowForDay(day, c);
   if (today && mins >= today[0] * 60 && mins < today[1] * 60) {
@@ -837,7 +867,8 @@ module.exports = {
   jobFacts, payFiguresIn, payFigures, remoteTerm, whyYouClause, sharedSkills, prettySkill,
   rulesJobBrief, buildBriefSystemPrompt, buildBriefPayload, parseBrief, checkBrief,
   rulesVariants, draftParts, validateInput, checkCandidateDraft,
-  CANDIDATE_WINDOW, normalizeWindow, candidateWindowState, describeWindowOpens, clockLabel,
+  CANDIDATE_WINDOW, CANDIDATE_SEND_WINDOW_KEY, windowEnabledFromSetting,
+  normalizeWindow, candidateWindowState, describeWindowOpens, clockLabel,
   answerButtonsHtml, answerLinkUrl, escapeHtml,
   unsupportedMoney, MONEY_SHAPES, materialIn, firstNameOf, wordCount, joinList, indefinite,
   SENDER_TOKENS,

@@ -1,5 +1,5 @@
 # Observatory — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-09 (evening) · seeded from `CLAUDE.md` and Session 21
 
 ## What is true here now
 - **Every AI call goes through `services/ai-provider.js`** — `complete(supabase,
@@ -50,6 +50,34 @@
   does. Write the key to a file, read it from there, delete it after.
 - Resume parsing leads with **`unpdf`**, `pdf-parse` kept as a second chance.
 
+- **THE CANDIDATE SEND WINDOW IS A SWITCH, AND IT IS OFF** (owner, 2026-09-09
+  evening, reversing their own call from that morning: *"remove the barricade of
+  timezone for candidate emails and individual emailing, Only the outreach goes
+  within the time zone"*). Eight real emails sat `pending` with `send_after` long
+  past because every candidate was below the 17:00 weekday opening in their own
+  state. The window was the only thing holding them.
+  * The pure hours logic is **kept, not deleted** — `candidateWindowState` /
+    `describeWindowOpens` / `normalizeWindow` are unchanged in behaviour and
+    still fully tested. `normalizeWindow` now carries `enabled`, which defaults
+    to **true** *in the service* (its job is only "make sense of a config") and
+    is decided **off** by the caller, `routes/candidate-outreach.js`, from
+    `app_settings.candidate_send_window_enabled`
+    (`gen.CANDIDATE_SEND_WINDOW_KEY`, parsed by `gen.windowEnabledFromSetting`).
+  * **Unset, unparseable or an unreadable settings table all mean OFF.** A
+    barricade the owner removed must never come back through a failed query.
+  * With it off, `candidateWindowState` returns `{open:true, disabled:true}` for
+    every hour, so the queue's `wait` reason resolves to `due` on its own, and
+    the drain skips the per-row `candidates` lookup entirely.
+  * `GET /candidate-outreach/sender` returns `window.enabled` and a ready-made
+    `window.sentence` — the page used to assemble prose around `window.label`
+    and would otherwise still promise a wait (C-0008, surface).
+  * **THE BD LEAD WINDOW IS UNTOUCHED.** Only candidate outreach lost its hours.
+    Nothing in this router may call `isInLeadSendWindow` /
+    `getSendWindowHours` / `formatWindowOpensLabel`; a test still fails if it does.
+  * **THE DRIP IS NOT THE WINDOW.** 6 per tick, 75-105s between REAL sends,
+    `send_after` spacing at queue time — all untouched, and that is what stops
+    the released backlog going out back to back.
+
 ## Fragile — touch with care
 - **Groq free tier is 8,000 tokens/minute; one outreach angle is ~2,100.** Four
   in quick succession rate-limits. The quality→fast fallback absorbs it because
@@ -66,6 +94,14 @@
   draft. **`invented_experience` read a fact about the vacancy as a claim about
   the person** and skipped 3 of 4 real candidates; it now requires a
   second-person attribution.
+- **Proving the drain behaves needs three stub tricks** (the window work): the
+  fake `candidate_outreach` query must honour `.limit()` or the 6-per-tick cap
+  looks broken; the chain needs `.upsert()` for `email_send_log`, without which
+  every send is counted **failed after the mail has already gone**; and
+  overriding `global.setTimeout` to record `ms` and fire immediately turns a
+  seven-minute drip into a millisecond assertion. Every window assertion
+  currently in `test/candidate-outreach-smoke.mjs` is a **grep over the router
+  source**, not a run — see C-0009.
 - `REWRITE_LIMIT` is 3, enforced server-side (429), duplicated in
   `48-page-outreach-gen.js`. A test asserts they match.
 
@@ -88,6 +124,13 @@
   territory), not a change to the writer.
 
 ## Log
+- **2026-09-09 (evening)** — switched the candidate send window OFF by default
+  behind `app_settings.candidate_send_window_enabled`, keeping the hours logic
+  intact. Proved with the real `drainDueOutreach` over 8 overdue rows: flag off
+  → `{sent:6, deferred:0}` with pauses `[98308, 79425, 102006, 84928, 93565]`ms;
+  flag on → `{sent:0, deferred:6}`. Full suite 67/67. Raised C-0008 (surface,
+  the on-screen promise), C-0009 (foundry, pin the pacing behaviourally),
+  C-0010 (gateway, the four hour descriptions).
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-09** — built the morning briefing (`services/morning-briefing.js`,
   `GET /ai/morning-briefing`), converted `/ai/generate-summary` off its apology,
