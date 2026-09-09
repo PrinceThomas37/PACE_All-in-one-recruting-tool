@@ -968,7 +968,7 @@ module.exports = (ctx) => {
           await supabase.from('email_tracking').insert({
             token, channel: 'candidate_outreach',
             candidate_id: row.candidate_id, job_order_id: row.job_order_id,
-            to_email: row.to_email, subject: rendered.subject,
+            to_email: row.to_email, subject: rendered.subject, body: rendered.body,
             sent_by: row.sent_by, mailbox_email: mailbox.email_address || null,
             ...(row.org_id ? { org_id: row.org_id } : {}),
           });

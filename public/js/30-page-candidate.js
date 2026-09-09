@@ -297,11 +297,26 @@
           : '<span style="font-size:11px;font-weight:700;color:var(--text3);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px">Sent · not opened yet</span>');
       var sub = 'to '+esc(e.to_email||'')+' · '+esc(fmtDT(e.sent_at))+
         (e.replied_at?' · replied '+esc(fmtDT(e.replied_at)):(e.opened_at?' · opened '+esc(fmtDT(e.opened_at)):''));
-      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
+      // READ WHAT THIS PERSON WAS SENT. The panel is always drawn and simply
+      // hidden, and cpToggleEmail flips `hidden` — the same idiom as cpTab.
+      // A render() here would rebuild the whole drawer and throw away a
+      // half-typed note, which is exactly what scheduleRender refuses to do.
+      // Anything from before migration 042 has no stored copy and says so.
+      var panel='<div data-cpmail="'+esc(e.id)+'" hidden '+
+        'style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
+          (e.body
+            ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(e.body)+'</div>'
+            : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>')+
+        '</div>';
+      return '<div style="border-bottom:1px solid var(--border)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" '+
+          'onclick="cpToggleEmail(\''+esc(e.id)+'\')" title="Read this email">'+
         '<div style="min-width:0">'+
-          '<div style="font-size:13px;font-weight:600">'+esc(e.subject||'(no subject)')+'</div>'+
+          '<div style="font-size:13px;font-weight:600">'+
+            '<span data-cpmailmark="'+esc(e.id)+'" style="color:var(--text3);font-weight:400">&#9656;</span> '+esc(e.subject||'(no subject)')+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'+
         '</div>'+badge+
+        '</div>'+panel+
       '</div>';
     }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No tracked emails yet. Use “Send tracked through futé” from a job’s Candidates tab.</div>';
     var emailCard = '<div class="card" style="padding:16px;margin-bottom:16px">'+
@@ -440,6 +455,17 @@
     Array.prototype.forEach.call(root.querySelectorAll('[data-cptab]'), function(el){
       el.classList.toggle('on', el.getAttribute('data-cptab') === id);
     });
+  };
+
+  // Open one sent email to read it. Toggles `hidden` rather than re-rendering,
+  // for the reason given where the panel is built.
+  window.cpToggleEmail = function(id){
+    var root = document.querySelector('.dwr-right') || document;
+    var panel = root.querySelector('[data-cpmail="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    var mark = root.querySelector('[data-cpmailmark="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+    if (mark) mark.innerHTML = panel.hidden ? '&#9656;' : '&#9662;';
   };
 
   // ── email the candidate, from their own profile ─────────────────────────────

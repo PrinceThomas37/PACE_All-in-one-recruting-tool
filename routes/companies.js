@@ -146,7 +146,7 @@ router.get('/companies/:id/email-activity', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
     const { data } = await withOrg(supabase.from('email_tracking')
-      .select('id,to_email,subject,sent_at,opened_at,open_count,replied_at')
+      .select('id,to_email,subject,body,sent_at,opened_at,open_count,replied_at')
       .eq('company_id', req.params.id).order('sent_at', { ascending: false }).limit(20), req);
     res.json(data || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
