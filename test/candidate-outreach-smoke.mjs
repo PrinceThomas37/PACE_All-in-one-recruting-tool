@@ -379,6 +379,65 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     /checkCandidateDraft\(variant, input/.test(route));
 }
 
+// ── WHEN A CANDIDATE IS ACTUALLY READING ───────────────────────────────────
+// The leads engine sends 08:00-16:00 because a prospect is at their desk then.
+// A candidate is AT WORK then. Owner's call (2026-09-09): weekday evenings and
+// most of the weekend, in the CANDIDATE's timezone.
+{
+  const st = (day, hour, min = 0) => gen.candidateWindowState(day, hour * 60 + min);
+  const opensAt = (day, hour, min = 0) => gen.describeWindowOpens(st(day, hour, min), day);
+
+  // Shut during the working day — the entire point.
+  for (const [label, day, hour] of [['Mon 9am', 1, 9], ['Wed 11am', 3, 11], ['Fri 2pm', 5, 14]]) {
+    ok(`${label} is shut — they are at work`, !st(day, hour).open);
+  }
+  // Open in the evening.
+  for (const [label, day, hour] of [['Mon 5pm', 1, 17], ['Tue 7pm', 2, 19], ['Thu 8:59pm', 4, 20]]) {
+    ok(`${label} is open`, st(day, hour).open);
+  }
+  ok('9pm on a weekday is shut — nobody wants a work email at bedtime', !st(1, 21).open);
+  ok('3am is shut', !st(1, 3).open);
+
+  // The weekend is the daytime, because they are not at work.
+  ok('Saturday 11am is open', st(6, 11).open);
+  ok('Sunday 7pm is open', st(0, 19).open);
+  ok('Saturday 8am is still too early', !st(6, 8).open);
+  ok('Sunday 9pm is shut', !st(0, 21).open);
+
+  // Where it goes next, said the way a person would.
+  ok('a weekday morning waits until that evening', opensAt(1, 9) === 'today, 5:00 PM', opensAt(1, 9));
+  ok('after 9pm it rolls to the next day', opensAt(1, 22) === 'tomorrow, 5:00 PM', opensAt(1, 22));
+  ok('Friday night rolls to Saturday MORNING, not Saturday evening',
+    opensAt(5, 22) === 'tomorrow, 9:00 AM', opensAt(5, 22));
+  ok('Sunday night rolls to Monday evening', opensAt(0, 22) === 'tomorrow, 5:00 PM', opensAt(0, 22));
+  ok('an open window says now', gen.describeWindowOpens(st(1, 18), 1) === 'now');
+
+  // Configurable, and a day can be switched off entirely.
+  const evenings = { weekday: [18, 22], weekend: [10, 18] };
+  ok('a configured weekday window is honoured',
+    !gen.candidateWindowState(1, 17 * 60, evenings).open && gen.candidateWindowState(1, 18 * 60, evenings).open);
+  const weekendOnly = { weekday: [0, 0], weekend: [9, 20] };
+  ok('start >= end closes that day rather than opening it for 24 hours',
+    !gen.candidateWindowState(1, 12 * 60, weekendOnly).open &&
+    !gen.candidateWindowState(1, 0, weekendOnly).open);
+  ok('with weekdays closed a Monday waits for Saturday',
+    gen.describeWindowOpens(gen.candidateWindowState(1, 12 * 60, weekendOnly), 1) === 'Saturday, 9:00 AM',
+    gen.describeWindowOpens(gen.candidateWindowState(1, 12 * 60, weekendOnly), 1));
+  ok('a config with every day closed returns never, and does not spin',
+    gen.candidateWindowState(1, 600, { weekday: [0, 0], weekend: [0, 0] }).opensInMinutes === null);
+
+  // Garbage in settings must not open the floodgates.
+  const bad = gen.normalizeWindow({ weekday: ['x', 99], weekend: null });
+  ok('a non-numeric hour falls back to the default', bad.weekday[0] === 17 || bad.weekday[0] === 0, JSON.stringify(bad));
+  ok('an out-of-range hour is clamped', bad.weekday[1] <= 24, JSON.stringify(bad));
+  ok('a missing half falls back to the default weekend',
+    bad.weekend[0] === 9 && bad.weekend[1] === 20, JSON.stringify(bad));
+
+  ok('the clock label reads like a clock',
+    gen.clockLabel(17 * 60) === '5:00 PM' && gen.clockLabel(9 * 60) === '9:00 AM' &&
+    gen.clockLabel(0) === '12:00 AM' && gen.clockLabel(12 * 60 + 30) === '12:30 PM');
+}
+
 // ── THE ANSWER BUTTONS ─────────────────────────────────────────────────────
 {
   const html = gen.answerButtonsHtml('https://pace.example.com/', 'abc123def456', {});
@@ -471,9 +530,17 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     /const waitFor = \(r\) =>/.test(route) && /reason: 'window'/.test(route) &&
     /reason: 'due'/.test(route) && /reason: 'paused'/.test(route) && /reason: 'queued'/.test(route));
   ok('the wait reason names the hour it will actually go',
-    /formatWindowOpensLabel\(tz, window, now\)/.test(route));
-  ok('the window is judged in the CANDIDATE\'s timezone, not the server\'s',
-    /getTimezoneFromLocation\(place\)/.test(route) && /isInLeadSendWindow\(tz, now, window\)/.test(route));
+    /gen\.describeWindowOpens\(state, at\.day\)/.test(route));
+  ok('the window is judged in the CANDIDATE\'s local day and hour',
+    /function localPartsFor/.test(route) && /gen\.candidateWindowState\(at\.day, at\.minutes, win\)/.test(route));
+  // The leads window is for prospects at their desks and must not leak back in.
+  ok('candidate sending does NOT use the leads engine window',
+    !/isInLeadSendWindow|getSendWindowHours|formatWindowOpensLabel/.test(route));
+  // A backlog released by an opening window would otherwise go out back to back.
+  ok('the drain sleeps between real sends, so a backlog cannot burst',
+    /if \(sent > 0\) await sleep\(DRIP_MIN_MS/.test(route));
+  ok('a skipped or deferred row does not buy the next one a free slot',
+    /if \(sent > 0\) await sleep/.test(route) && !/if \(true\) await sleep/.test(route));
 
   ok('the preview shows the buttons with a dead token',
     /answerButtonsHtml\(resolveBaseUrl\(\), 'preview'/.test(route));

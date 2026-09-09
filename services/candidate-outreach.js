@@ -680,6 +680,97 @@ function checkCandidateDraft(draft, input, opts) {
   return { ok: v.length === 0, violations: v };
 }
 
+// ── WHEN A CANDIDATE IS ACTUALLY READING ───────────────────────────────────
+// The leads engine sends 08:00-16:00 in the prospect's timezone, and that is
+// right for a prospect: a hiring manager is at their desk then. It is exactly
+// WRONG for a candidate, who is at work then. A technician on a roof at 11am is
+// not reading recruiter email; they read it at 7pm on the sofa.
+//
+// So candidate outreach gets its own window (owner's call, 2026-09-09):
+// weekday EVENINGS, and most of the WEEKEND — the hours somebody is off the
+// clock and looking at their own phone.
+//
+// PURE, and the clock is an argument: the caller works out what day and minute
+// it is where the CANDIDATE is, and this decides. That is what makes every hour
+// of the week testable without waiting for it.
+const CANDIDATE_WINDOW = {
+  weekday: [17, 21],   // 5pm - 9pm, after work and before bed
+  weekend: [9, 20],    // 9am - 8pm, they are not at work
+};
+
+// A day whose start is not before its end is CLOSED, which is how "no weekday
+// sends at all" is expressed without a separate flag.
+function normalizeWindow(cfg) {
+  const c = cfg || {};
+  const pair = (v, dflt) => {
+    const a = Array.isArray(v) ? v : dflt;
+    const lo = Number(a[0]), hi = Number(a[1]);
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return dflt;
+    return [Math.max(0, Math.min(23, lo)), Math.max(0, Math.min(24, hi))];
+  };
+  return {
+    weekday: pair(c.weekday, CANDIDATE_WINDOW.weekday),
+    weekend: pair(c.weekend, CANDIDATE_WINDOW.weekend),
+  };
+}
+
+const isWeekend = (day) => day === 0 || day === 6;
+function windowForDay(day, cfg) {
+  const w = isWeekend(day) ? cfg.weekend : cfg.weekday;
+  return (w[0] < w[1]) ? w : null;      // start >= end means the day is closed
+}
+
+/**
+ * @param localDay      0 = Sunday .. 6 = Saturday, WHERE THE CANDIDATE IS
+ * @param localMinutes  minutes since local midnight
+ * @returns { open, opensInMinutes, opensDay, opensMinutes }
+ */
+function candidateWindowState(localDay, localMinutes, cfg) {
+  const c = normalizeWindow(cfg);
+  const day = ((Number(localDay) % 7) + 7) % 7;
+  const mins = Math.max(0, Math.min(24 * 60 - 1, Number(localMinutes) || 0));
+
+  const today = windowForDay(day, c);
+  if (today && mins >= today[0] * 60 && mins < today[1] * 60) {
+    return { open: true, opensInMinutes: 0, opensDay: day, opensMinutes: mins };
+  }
+  // Still to come today.
+  if (today && mins < today[0] * 60) {
+    return { open: false, opensInMinutes: today[0] * 60 - mins, opensDay: day, opensMinutes: today[0] * 60 };
+  }
+  // Today is done (or closed) — walk forward to the next day that opens. The
+  // loop is bounded at 7 so a config with every day closed returns "never"
+  // rather than spinning.
+  let carried = 24 * 60 - mins;
+  for (let i = 1; i <= 7; i++) {
+    const d = (day + i) % 7;
+    const w = windowForDay(d, c);
+    if (w) return { open: false, opensInMinutes: carried + w[0] * 60, opensDay: d, opensMinutes: w[0] * 60 };
+    carried += 24 * 60;
+  }
+  return { open: false, opensInMinutes: null, opensDay: null, opensMinutes: null };
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function clockLabel(minutes) {
+  const h = Math.floor(minutes / 60), m = minutes % 60;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return h12 + ':' + String(m).padStart(2, '0') + ' ' + ampm;
+}
+
+/** "today, 5:00 PM" · "tomorrow, 9:00 AM" · "Saturday, 9:00 AM". */
+function describeWindowOpens(state, localDay) {
+  if (!state || state.open) return 'now';
+  if (state.opensDay === null || state.opensInMinutes === null) return 'when sending hours are set';
+  const day = ((Number(localDay) % 7) + 7) % 7;
+  const when = clockLabel(state.opensMinutes);
+  if (state.opensDay === day) return 'today, ' + when;
+  if (state.opensDay === (day + 1) % 7) return 'tomorrow, ' + when;
+  return DAY_NAMES[state.opensDay] + ', ' + when;
+}
+
 // ── THE ANSWER BUTTONS ─────────────────────────────────────────────────────
 // Two links in the email. The whole point of this feature is one question, so
 // the cheapest possible way to answer it is not a nicety — a candidate between
@@ -746,6 +837,7 @@ module.exports = {
   jobFacts, payFiguresIn, payFigures, remoteTerm, whyYouClause, sharedSkills, prettySkill,
   rulesJobBrief, buildBriefSystemPrompt, buildBriefPayload, parseBrief, checkBrief,
   rulesVariants, draftParts, validateInput, checkCandidateDraft,
+  CANDIDATE_WINDOW, normalizeWindow, candidateWindowState, describeWindowOpens, clockLabel,
   answerButtonsHtml, answerLinkUrl, escapeHtml,
   unsupportedMoney, MONEY_SHAPES, materialIn, firstNameOf, wordCount, joinList, indefinite,
   SENDER_TOKENS,

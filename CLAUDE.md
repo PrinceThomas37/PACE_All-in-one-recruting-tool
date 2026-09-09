@@ -971,11 +971,33 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        `formatWindowOpensLabel`, and the row reads "Outside New Britain, CT
        working hours. Goes Tomorrow, 8:00 AM." A due timestamp already in the
        past is never shown as if it were the answer.
-       **The window is shared with the leads engine and has no UI** — it is read
-       from `app_settings.send_window_start_hour`/`_end_hour`, default 8-16.
-       Worth knowing that 8-16 was chosen for BD prospects at their desks;
-       candidates are often AT WORK then, so a separate candidate window is an
-       open product question, not a bug.
+     * **CANDIDATES HAVE THEIR OWN SEND WINDOW, AND IT IS NOT THE LEADS ONE
+       (Session 21, round 4 — owner's call 2026-09-09).** The leads engine sends
+       08:00-16:00 because a PROSPECT is at their desk then. A CANDIDATE is at
+       work then — a technician on a roof at 11am is not reading recruiter mail.
+       So candidate outreach sends **weekday evenings (17:00-21:00) and most of
+       the weekend (09:00-20:00), in the CANDIDATE's timezone**.
+       `candidateWindowState(localDay, localMinutes, cfg)` and
+       `describeWindowOpens()` are PURE — the caller works out what day and hour
+       it is where the candidate is, so every hour of the week is testable
+       without waiting for it. Config lives in `app_settings`
+       (`candidate_window_weekday_start`/`_end`, `..._weekend_start`/`_end`);
+       **a day whose start is not before its end is CLOSED**, which is how
+       "weekends only" is expressed without another flag. Nothing here may call
+       `isInLeadSendWindow`/`getSendWindowHours` — a test fails if it does.
+     * **⚠ A BACKLOG RELEASED BY AN OPENING WINDOW WOULD HAVE BURST.**
+       `send_after` spaces a batch at QUEUE time, but if the window was shut
+       when those slots came round then every row is due the instant it opens,
+       and the drain's loop had no pause — the whole backlog back to back, the
+       exact pattern the drip exists to prevent. The drain now sends at most
+       **6 per tick and sleeps 75-105s between REAL sends** (a skipped,
+       deferred or suppressed row must not buy the next one a free slot), the
+       same shape as the leads engine's `waitForMailboxSlot`. Six sends is
+       under eight minutes, inside the ten-minute tick.
+       The queue-time spacing states the intent; the send-time pause enforces it.
+     * **THE SENDING HOURS ARE ON SCREEN BEFORE ANYTHING IS QUEUED**
+       (`GET /candidate-outreach/sender` returns `window.label`), because the
+       owner queued a batch at 3am and then had to ask why nothing moved.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by
