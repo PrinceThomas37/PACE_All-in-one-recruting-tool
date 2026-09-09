@@ -7,7 +7,7 @@
 **Updated**: 2026-09-09 (end of Session 21) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #188 (`4038d81`). Nothing of this
+to `main` IS the release · **Last merged**: #189 (`867abda`). Nothing of this
 session's is unmerged.
 
 ---
@@ -59,8 +59,12 @@ missed — a dropped greeting, and a new check that rejected valid drafts.
   send that can create the lead and join a sequence. **Owner-approved.** Any
   angle can be rewritten for different wording, three times, capped server-side.
   `openai/gpt-oss-120b`, ~1.5s.
-- **Candidate outreach as a drip** — each candidate emailed in their own local
-  free time, with a ‹ › preview of every person's own email before it goes
+- **Candidate outreach as a drip** — pick a job order, see the pool ranked
+  against it, queue many. Each is emailed in their **own local free time**
+  (weekday evenings + weekends, their timezone, editable in Admin → System
+  Settings), max 6 per tick with a 75-105s pause between real sends. Two
+  **answer buttons** in the email; the link opens a page, the POST records, so a
+  mail scanner cannot answer for them. ‹ › previews every person's own email.
 - **Every email PACE sends keeps its text** (042) across all six channels; both
   the client drawer and the candidate profile open it on click
 - **Any AI provider behind a daily budget**, quality→fast model fallback
@@ -72,15 +76,25 @@ missed — a dropped greeting, and a new check that rejected valid drafts.
 - SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —
   **distinct from** per-user Gmail *sending*, which is live.
 
-## Migrations — 042 is the latest APPLIED (2026-09-09)
+## Migrations — ⚠ TWO files are numbered 042, BOTH APPLIED (2026-09-09)
 
-`042_email_tracking_body` added a nullable `email_tracking.body`. Verified after:
-column present, nullable, all 19 existing rows untouched and null.
+- `042_candidate_outreach` — the `candidate_outreach` queue + the three
+  `job_orders.outreach_brief*` columns.
+- `042_email_tracking_body` — a nullable `email_tracking.body`. Verified after:
+  column present, nullable, all 19 existing rows untouched and null.
+
+Both are live and verified (0 tables in `public` without RLS after either).
+**The number collision is a naming defect, not a data one** — they were written
+in different parts of the same session. Deliberately NOT renamed: the filename
+is the record of what was applied, and churning it buys nothing. Alphabetical
+order happens to be the correct replay order.
 
 **Next is 043. Never apply one to the live DB without a fresh, explicit
 go-ahead**, even when the feature itself was agreed — and **apply it BEFORE
 merging the code that uses it**. An insert naming a column that does not exist
-fails *after* the email has already gone out.
+fails *after* the email has already gone out. **Check `ls migrations/` for the
+highest number before choosing one** — do not trust this heading alone, which is
+exactly how the collision above happened.
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
 
@@ -94,7 +108,17 @@ mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
 ```
 
-## ✅ Shipped (Session 21) — two code PRs, live (+ #186/#188 docs)
+## ✅ Shipped (Session 21) — seven code PRs, all live (+ #186/#188/#189 docs)
+
+**#180-#184 — candidate outreach, built and then repaired by real use.** The
+mirror of the generator: start from a job order we own, not a pasted posting.
+Migration `042_candidate_outreach`. The first live batch sent **one of four** —
+the AI job brief said "2-3 years of field experience" and `invented_experience`
+read a fact about the *vacancy* as a claim about each *person*; worse, the
+preview read a different brief than the queue, so the line that caused it never
+appeared on screen. Then their **own send window** exposed a latent burst: a
+backlog released by an opening window had no pause between sends. Full narrative
+and the seven lessons: archive, **Session 21 part 0**.
 
 **#185**, three owner reports in one branch:
 
