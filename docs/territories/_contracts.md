@@ -56,3 +56,21 @@ screen half. Neither is useful alone.
 nav-icon collision affected `bd_lead` and went unseen for exactly this reason.
 **Blocked until answered:** no — but every role-varying test is currently
 under-covering until it is.
+
+### C-0007 · observatory → gateway · OPEN · 2026-09-09
+**Asks for:** a decision on `GET /jobs/today-summary` — does the morning
+briefing read it as its lead-side source, or absorb its counting so gateway can
+retire it?
+**Because:** the owner has asked for a one-or-two-sentence "what came in today"
+on the dashboard, so the briefing is being built. `/jobs/today-summary` already
+returns **exactly** the object `/ai/generate-summary` consumes (`total`,
+`clean`, `duplicates`, `byIndustry`, `byFreshness`, `byTimezone`,
+`topPositions`, `poolSize`) — the two halves were built for each other and
+neither is called by any screen. If observatory writes its own "leads that came
+in today" count alongside it, there are immediately two counters that can
+disagree about the same morning, which is how the stage vocabulary ended up in
+six files. Note also that `/jobs/today-summary` is gated `admin`/`ra_lead`,
+and every role opens a dashboard in the morning.
+**Blocked until answered:** no — the sentence can be written against either
+source. But the answer decides whether one of the two counters is deleted or
+kept, and that is much cheaper to settle before the code exists than after.
