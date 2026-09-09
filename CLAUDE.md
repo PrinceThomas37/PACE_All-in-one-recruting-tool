@@ -440,6 +440,16 @@ end-to-end before it could touch anything.
   reads it FIRST and rewrites it LAST. **Anything not written there is lost**,
   because the subagent's context dies when it finishes. That is the point: the
   memory persists, the context does not.
+- **`docs/territories/DECISIONS.md`** — **what the OWNER decided, and when.**
+  The territory memories record what the code *does*; the archive records what
+  *happened*; this records **what they chose** — the only one of the three that
+  can make a good suggestion the wrong thing to say. **Written the moment a
+  decision is made, never at the end of a session**, because a decision that
+  exists only in a chat window is lost when that window closes. Every entry
+  carries a **Re-open when** condition, so a parked thing can be picked up for
+  the right reason and not re-raised for the wrong one. Never edited, never
+  deleted — a reversal is a new entry naming the old one (see D-0009 → D-0010,
+  reversed inside a day).
 - **`docs/territories/_contracts.md`** — the border ledger. A territory that
   needs a change outside its paths **opens a request; it does not reach across.**
   Append only; close an entry, never delete it.

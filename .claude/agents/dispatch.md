@@ -33,6 +33,15 @@ except your findings and, when a job needs one, a new entry in `_contracts.md`.
    journey, and then you name the order and what each is asked for — the
    database before the endpoint before the screen, security anywhere data
    crosses, tests last.
+4b. **Check `docs/territories/DECISIONS.md` FIRST, before you brief anyone.**
+   The owner may have already settled this. A parked defect (`PARKED`) is not an
+   open defect, and a declined idea (`DECLINED`) is not a fresh one — routing
+   either as new work makes the owner answer the same question twice, which is
+   exactly what this system exists to stop. If it is settled, say so in
+   `KNOWN?`, quote the entry id, and name the **Re-open when** condition and
+   whether it has actually been met. **A reversal is fine** — the owner is
+   allowed to change their mind, and D-0009/D-0010 show one happening within a
+   day — but it must be THEIR reversal, not your reinterpretation.
 5. **Check it is not already known.** Search `docs/territories/*.md` and
    `_contracts.md`. It may be an open request, a parked decision, or something
    fixed but never seen working. **A parked decision is not a bug** — the owner
