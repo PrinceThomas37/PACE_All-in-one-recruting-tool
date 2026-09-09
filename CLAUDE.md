@@ -383,6 +383,29 @@ we never have to rewrite to grow (see "Growth bets" below).
   At the end of a session: append the narrative to the archive, then rewrite the
   window to describe the new present. Nothing is lost; the read stays short.
   Keep **this file** current too — it is the durable memory.
+- **A BUG REPORT IS DATA, AND USUALLY MORE PRECISE THAN IT FIRST READS
+  (Session 21).** "I see a lot of time the menu is repeating, no repeats in full
+  menu" — the second clause was the diagnosis. Nothing was drawn twice;
+  `Insights` and `Reports` carried the SAME icon and the 60px rail is icon-only,
+  so expanding it (the "full menu") showed different labels. The first probe
+  swept five roles for duplicate ITEMS, found nothing, and nearly closed the
+  case — because it tested a theory instead of the sentence. **Reproduce the
+  sentence, not your hypothesis.**
+- **A `TEST_USERS` SET IS NOT THE USER SET.** `bd_lead`, `director` and
+  `associate_director` have no entry in `test/helpers/enter-app.mjs`, so a
+  five-role sweep silently skips roles real people hold — `bd_lead` was one of
+  the four affected by the icon collision above. When a bug can vary by role,
+  cover every value `users.role` can actually take, not every value the helper
+  happens to define.
+- **TWO GREEN RUNS ARE NOT TWO RUNS OF THE SAME THING.** Session 21 saw 63/63
+  twice — once on a branch carrying test A but not B, once on `main` with B and
+  not A. Neither run had exercised both changes, and the total looked identical
+  either way. **Read what was IN the run, not just the count.**
+- **APPLY A MIGRATION BEFORE MERGING THE CODE THAT USES IT.** An insert naming a
+  column that does not exist fails, and on a send path it fails *after the email
+  has already gone out*.
+- **Never pipe `git push` into `tail`** — it swallows a rejection, and a commit
+  made on the wrong branch then looks like a successful push.
 - **Before moving ANY file, read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
   (Session 8).** Ten things break on a naive move and several fail *silently* —
   notably `learned-skills.js` (`__dirname`-relative JSON, resets with no error),

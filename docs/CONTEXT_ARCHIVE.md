@@ -3720,3 +3720,107 @@ careful reasoning.
 The corollary is that **the cost of not being able to test is invisible until
 you can.** Nothing looked broken. The suite was green, the code was reviewed,
 the reasoning was sound. It was still wrong in two places.
+
+---
+
+## Session 21 — three reports, three different kinds of "missing"
+
+One merged PR (#185) covering three things the owner reported, plus migration
+042 applied live. What ties them together: none of them was the bug it looked
+like from the outside, and two of the three were solved by reading the owner's
+own sentence more carefully than the code.
+
+### "The menu is repeating, no repeats in full menu"
+
+The first probe walked five roles at several pages, through repaints, the hover
+overlay and the phone drawer, counting `#sidebar` elements and duplicate labels.
+**Zero problems.** The temptation at that point is to conclude there is no bug.
+
+The answer was in the second half of the sentence. Nothing was drawn twice —
+`Insights` and `Reports` sit next to each other in the Insight group and carried
+**the same bar-chart icon**. The rail is 60px and icon-only, so it showed the
+same picture twice; expanding it showed different labels, which is exactly why
+the *full* menu looked fine. The report was not a vague complaint; it was a
+precise description of an icon collision, and the first probe was measuring the
+wrong thing (labels, which were always fine).
+
+Live on four of six roles:
+
+| role | the pair that looked identical |
+|---|---|
+| BD, BD Lead | Lead Insights + Reports |
+| Admin, RA Lead | Insights + Reports |
+
+`reports` moved to the document icon. `test/nav-icons-smoke.mjs` boots the real
+shell for **seven** roles and asserts the rail is drawn once, no two items share
+a label, and **no two share an icon** — verified red on the old icon at 36/40,
+naming each pair, and green at 40/40 after.
+
+It covers `bd_lead`, `director` and `associate_director`, **none of which have a
+`TEST_USERS` entry**. The five-role sweep had missed a role two real people
+hold. A test-user set is not the same thing as the user set.
+
+### "I am not able to see the next emails created for other candidates"
+
+`candOutreachPreview()` was hardcoded to `ids[0]`. Queue thirty candidates and
+you could read exactly one of the thirty emails; the other twenty-nine went out
+unseen. `previewIdx` now walks the picked list behind ‹ › arrows, each showing
+that person's own merge fields — not a template with the variables showing,
+which is the whole reason the preview builds against a real person.
+
+### "I don't have the preview for the sent emails for nor clients for candidates"
+
+One sentence, two entirely different problems:
+
+- **Candidates (the drip queue).** `candidate_outreach.body` had stored the
+  exact text of every candidate email since the table existed. The queue
+  endpoint simply never selected it and the list had no way to open a row. So
+  the data was there the whole time and "what did we send them?" still meant
+  opening the mailbox's Sent folder. **No migration**, and it works for
+  everything already sent.
+- **Clients, and the older Email JD path.** `email_tracking` recorded who, what
+  subject, when, opened, replied — and never the body. There was nothing to
+  show. This one genuinely needed **migration 042** (a nullable
+  `email_tracking.body`), applied live with the owner's explicit go-ahead:
+  column present, nullable, all 19 existing rows untouched.
+
+The split matters because the same complaint had a free fix on one side and a
+schema change on the other, and only reading the data model told them apart.
+
+Pre-042 rows read back null and the UI says so — *"sent before PACE kept a copy,
+so the text is only in the mailbox it went from"* — rather than opening an empty
+box that looks like a bug. **Nothing backfills. That text no longer exists
+anywhere we can reach**, and saying so is better than a blank panel.
+
+Ordering was the real hazard: an insert naming a column that does not exist
+fails, and it fails **after the email has already gone out**. Migration first,
+then merge; the PR body says so and the migration file's header repeats it.
+
+### Two process notes worth keeping
+
+**A test that greps a variable name is the wrong way round.** Carried over from
+Session 20 and hit again: after pulling lead creation into a shared helper, two
+assertions failed because they matched `lead_id: job.id` and a literal
+`stage: 'Connected'`. The behaviour was intact. Re-pointed at behaviour and
+strengthened, 136 → 138.
+
+**Two green runs are not two runs of the same thing.** The suite passed 63/63
+twice — once on the branch (nav test present, candidate test absent) and once on
+`main` (the reverse). Neither run had exercised both changes. The number that
+meant anything was the third: 64/64 on the branch with both, and finally 65/65
+with all three new suites. *Read what was in the run, not just the total.*
+
+Also: committed to local `main` instead of the branch once. The push was
+correctly rejected, nothing was lost, and the fix was a cherry-pick plus a reset
+— but the failed push was invisible because the command piped its output to
+`tail -2`. **Do not swallow the output of a push.**
+
+### The lesson
+
+Session 19: make the app record a fact and read it. Session 20: stop reasoning
+about a black box you are allowed to open. Session 21 is the human version of
+the same idea — **the owner's sentence is data, and it is usually more precise
+than it first appears.** "No repeats in full menu" was not a throwaway clause;
+it was the half of the report that ruled out the obvious explanation and pointed
+at the real one. The first probe found nothing because it tested the theory
+instead of the sentence.
