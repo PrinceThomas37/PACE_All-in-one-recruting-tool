@@ -12,11 +12,36 @@
   the org's daily ceiling is hit. Meter is `app_settings`, keyed
   `ai_usage_<org>_<YYYY-MM-DD>`. Defaults 150k tokens / 250 requests.
 - **Blank cap means "use the default"; a typed 0 means "no AI today".**
-- **AI is wired in six places and reachable in four.** Live: resume parsing, the
-  JD scrub, the outreach generator, lead-distribution advice. **Dead:** the daily
-  import briefing (`/ai/generate-summary` — works, nothing calls it) and
-  cold-email drafting (`/ai/generate-email` — reachable only from the orphaned
-  `12-manager-users.js`). Do not repeat "six AI features" without re-checking.
+- **AI is wired in seven places.** Live: resume parsing, the JD scrub, the
+  outreach generator, lead-distribution advice, **the morning briefing**.
+  **Dead:** cold-email drafting (`/ai/generate-email` — reachable only from the
+  orphaned `12-manager-users.js`). Do not repeat a feature count without
+  re-checking the UI; the code count and the product count differ.
+- **THE MORNING BRIEFING — `services/morning-briefing.js` (PURE) +
+  `GET /ai/morning-briefing`.** One or two sentences at the top of the dashboard
+  saying what came in today. `rulesBriefing(facts)` is what ships; the AI is the
+  upgrade. Rules that hold:
+  * **A fact that is zero is not mentioned**, and an absent fact (a query that
+    errored) is silent too — a briefing missing a clause stays true; one saying
+    "0 leads" because a count failed does not.
+  * **`checkBriefing()` is the guarantee, the prompt is only a request.** The
+    load-bearing rule is `invented_number`: every integer in an AI draft must be
+    one we handed over (`allowedNumbers()` is computed from the facts, never
+    written twice). Also `invented_number_word` ("six"), and `vague_quantity` —
+    "around a dozen leads" passes every digit check and is still not what
+    happened.
+  * **No repair turn here**, deliberately: the answer is two sentences, a second
+    call costs as much as the first, and the rules draft is genuinely good.
+    Contrast the outreach generator, where a prospect reads the result.
+  * `/ai/generate-summary` (the old POST) now degrades to the SAME rules writer
+    instead of "AI summary unavailable" — Admin → Integrations promises the daily
+    briefing has a non-AI version, and until now that was untrue.
+  * **Response shape is contracted in `_contracts.md` C-0001** — always 200,
+    `summary` always a non-empty string, `engine: rules|ai`, `quiet`, `degraded`
+    (database, not AI), `facts`. Surface renders it; do not change the shape
+    without closing a new contract.
+  * Leads are counted with the same filter `/jobs/today-summary` uses, so the two
+    cannot disagree about a morning (C-0007).
 - **Groq's verified models (2026-09-05, from that account's own `/models`):**
   `openai/gpt-oss-20b` fast, `openai/gpt-oss-120b` quality. OpenRouter's are
   **still unverified** — no key is configured.
@@ -49,7 +74,24 @@
   AI-written, the three follow-up shapes are not.
 - A per-call AI usage history (today's meter is a daily counter, not an audit
   log) would be its own table.
-- The two dead features: wire the briefing, delete the orphaned drafter.
+- One dead feature left: delete the orphaned cold-email drafter (C-0002 is
+  gateway's).
+- **The briefing's AI path has NOT been exercised against live Groq.** This
+  sandbox had no `.env` and no Supabase credentials this session, so the key in
+  `app_settings.int_groq_api_key` was unreachable — `curl` to `api.groq.com`
+  needs a key I could not get. The rules path is verified end-to-end through the
+  real router; the AI path is verified only against hand-written model outputs
+  through `chooseBriefing()`. **Check `.env` exists before promising a live
+  model run.**
+- The briefing is org-wide for every role, not hierarchy-scoped. If a recruiter
+  should see only their own arrivals, that is guild's scoping question (C-0005
+  territory), not a change to the writer.
 
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
+- **2026-09-09** — built the morning briefing (`services/morning-briefing.js`,
+  `GET /ai/morning-briefing`), converted `/ai/generate-summary` off its apology,
+  answered C-0001 (response shape) and C-0007 (keep both counters). Verified the
+  no-AI path through the real router with a stubbed database: busy day, quiet
+  day and the legacy endpoint all return true sentences with no provider
+  configured. All six observatory suites green.

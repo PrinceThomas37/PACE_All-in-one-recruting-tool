@@ -8,7 +8,7 @@ Status is `OPEN`, `ANSWERED` or `DECLINED`. An id is `C-` plus the next number.
 
 ---
 
-### C-0001 · surface → observatory · OPEN · 2026-09-09
+### C-0001 · surface → observatory · ANSWERED · 2026-09-09
 **Asks for:** a decision on the daily import briefing (`/ai/generate-summary`).
 **Because:** the endpoint works and **nothing on any screen calls it.** Surface
 can build the dashboard card, but needs to know the shape it returns and whether
@@ -57,7 +57,7 @@ nav-icon collision affected `bd_lead` and went unseen for exactly this reason.
 **Blocked until answered:** no — but every role-varying test is currently
 under-covering until it is.
 
-### C-0007 · observatory → gateway · OPEN · 2026-09-09
+### C-0007 · observatory → gateway · ANSWERED · 2026-09-09
 **Asks for:** a decision on `GET /jobs/today-summary` — does the morning
 briefing read it as its lead-side source, or absorb its counting so gateway can
 retire it?
@@ -74,3 +74,60 @@ and every role opens a dashboard in the morning.
 **Blocked until answered:** no — the sentence can be written against either
 source. But the answer decides whether one of the two counters is deleted or
 kept, and that is much cheaper to settle before the code exists than after.
+
+
+---
+
+### C-0001 — ANSWERED (observatory, 2026-09-09)
+**Endpoint:** `GET /ai/morning-briefing` (auth, any role, org-scoped). Not the
+old POST — that one is admin/ra_lead gated and takes a body, and every role
+opens a dashboard in the morning.
+
+**It always returns 200 and `summary` is always a non-empty string.** There is
+no null, no error state and no "AI unavailable" for Surface to branch on.
+
+```json
+{
+  "date": "2026-09-09",
+  "summary": "6 new leads, 3 new candidates and 2 replies came in today. The replies are waiting on an answer.",
+  "engine": "rules",           // "rules" | "ai" — rules is the normal case
+  "quiet": false,              // true when nothing arrived at all
+  "degraded": false,           // true only when the DATABASE could not be read
+  "provider": null,            // "groq" etc. only when engine === "ai"
+  "ai_rejected": null,         // why an AI draft was refused, e.g. "invented_number"
+  "facts": { "date": "...", "leads": {...}, "candidates": {...},
+             "submissions": {...}, "replies": {...} },
+  "generated_at": "2026-09-09T16:36:03.013Z"
+}
+```
+
+- **Quiet day:** `quiet: true`, summary `"Nothing new has come in yet today."`
+  (plus the unassigned-pool sentence when the pool is not empty). Render it or
+  render it smaller — Surface's call — but it is a true sentence either way.
+- **AI off / spent / rate-limited:** identical shape, `engine: "rules"`. **Do
+  not draw an "AI unavailable" state; there is no such state.** The Admin screen
+  already promises the daily briefing has a built-in non-AI version — as of this
+  change that promise is true.
+- **Database unreadable:** `degraded: true`, summary `"Today's activity could
+  not be read just now."` — the one case where hiding the card is right.
+- `facts` is there so the card can show the numbers next to the sentence
+  without a second request. Every number in `summary` comes from `facts`; a
+  model that states any other number is rejected and the rules sentence ships.
+
+### C-0007 — ANSWERED by observatory (decision, gateway to action or not)
+**The briefing does NOT read `/jobs/today-summary`, and does not absorb it.**
+Two reasons: that endpoint is gated `admin`/`ra_lead` and the briefing must
+answer for every role; and its payload is an *import* breakdown (freshness,
+timezone spread, duplicate flags) — a different question from "what came in".
+
+**They cannot disagree**, because the briefing counts leads with the *same
+filter*: `jobs` where `created_at >= today()T00:00:00Z` and `deleted_at is
+null`, org-scoped. That filter is stated in the comment above `gatherFacts()`
+in `routes/ai.js` and must stay identical to the one in `/jobs/today-summary`
+if either is edited.
+
+**Gateway's call, not mine:** if you want `/jobs/today-summary` retired, its
+consumer can read `facts.leads` from `GET /ai/morning-briefing` — but it would
+lose `byFreshness`/`byTimezone`, which the briefing deliberately does not
+collect. My recommendation is **keep both**; they answer different questions
+and neither derives its number from the other.
