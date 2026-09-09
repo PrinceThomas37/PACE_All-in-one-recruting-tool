@@ -22,10 +22,10 @@
       jobQuery:'', jobs:null, jobsLoading:false, job:null,
       brief:null, briefLoading:false,
       pool:null, poolLoading:false, poolQuery:'', picked:{},
-      angle:'direct', preview:null, previewFor:null, previewLoading:false,
+      angle:'direct', preview:null, previewFor:null, previewLoading:false, previewIdx:0,
       sender:null, senderLoading:false,
       addToPipeline:false, queuing:false, result:null,
-      queue:null, queueLoading:false
+      queue:null, queueLoading:false, openQueue:null
     };
     return STATE.candOutreach;
   }
@@ -64,7 +64,7 @@
   window.candOutreachPickJob=function(id){
     var s=S();
     s.job=(s.jobs||[]).filter(function(j){return j.id===id;})[0]||null;
-    s.step=2; s.pool=null; s.picked={}; s.preview=null; s.previewFor=null; s.brief=null;
+    s.step=2; s.pool=null; s.picked={}; s.preview=null; s.previewFor=null; s.previewIdx=0; s.brief=null;
     render();
     candOutreachLoadPool(true);
     candOutreachLoadBrief();
@@ -72,7 +72,7 @@
 
   window.candOutreachBackTo=function(step){
     var s=S(); s.step=step;
-    if(step===1){ s.job=null; s.pool=null; s.picked={}; s.preview=null; s.result=null; }
+    if(step===1){ s.job=null; s.pool=null; s.picked={}; s.preview=null; s.previewIdx=0; s.result=null; }
     render();
   };
 
@@ -93,7 +93,7 @@
     if(!s.job||s.briefLoading) return;
     s.briefLoading=true; render();
     apiPost('/candidate-outreach/jobs/'+encodeURIComponent(s.job.id)+'/brief',{}).then(function(r){
-      s.brief=r; s.briefLoading=false; s.preview=null; s.previewFor=null;
+      s.brief=r; s.briefLoading=false; s.preview=null; s.previewFor=null; s.previewIdx=0;
       if(r&&r.ai_error) showToast(briefErrorText(r),'warning');
       render();
     }).catch(function(e){
@@ -153,25 +153,45 @@
     candOutreachPreview();
   };
 
-  // Preview is built for ONE real candidate — the first one picked — with that
-  // person's own merge fields filled in. A preview of a template with the
-  // variables still showing tells you nothing about what anybody receives.
+  // Preview is built for ONE real candidate, with that person's own merge fields
+  // filled in — a preview of a template with the variables still showing tells
+  // you nothing about what anybody receives.
+  //
+  // IT USED TO BE HARDCODED TO THE FIRST PERSON PICKED. Queue thirty candidates
+  // and you could read exactly one of the thirty emails; the other twenty-nine
+  // went out unseen. `previewIdx` walks the picked list, so every one of them
+  // can be read before anything sends.
   window.candOutreachPreview=function(){
     var s=S();
     var ids=pickedIds();
     if(!ids.length) return;
-    if(s.previewFor===ids[0]&&s.preview) return;
+    if(s.previewIdx>=ids.length) s.previewIdx=0;      // picks changed under us
+    var id=ids[s.previewIdx];
+    if(s.previewFor===id&&s.preview) return;
     s.previewLoading=true; render();
     apiPost('/candidate-outreach/preview',{
-      candidate_id:ids[0], job_order_id:s.job?s.job.id:null
+      candidate_id:id, job_order_id:s.job?s.job.id:null
     }).then(function(r){
-      s.preview=r; s.previewFor=ids[0]; s.previewLoading=false; render();
+      s.preview=r; s.previewFor=id; s.previewLoading=false; render();
     }).catch(function(e){
       s.previewLoading=false; showToast(e.message||'Could not build a preview.','warning'); render();
     });
   };
 
+  // Step to another picked candidate's copy of the email.
+  window.candOutreachPreviewStep=function(delta){
+    var s=S(), ids=pickedIds();
+    if(ids.length<2) return;
+    var n=ids.length;
+    s.previewIdx=((s.previewIdx+delta)%n+n)%n;        // wraps both ways
+    s.preview=null; s.previewFor=null;
+    candOutreachPreview();
+  };
+
   window.candOutreachSetPipeline=function(on){ S().addToPipeline=!!on; render(); };
+
+  // Open one sent email to read it; clicking it again closes it.
+  window.candOutreachToggleQueue=function(id){ var s=S(); s.openQueue=(s.openQueue===id?null:id); render(); };
 
   window.candOutreachQueue=function(){
     var s=S();
@@ -188,7 +208,7 @@
       // that had just gone out — the screen contradicting itself. The list is
       // also where the result belongs: it reloads showing everyone just queued
       // as "already asked".
-      s.step=2; s.preview=null; s.previewFor=null;
+      s.step=2; s.preview=null; s.previewFor=null; s.previewIdx=0;
       showToast(r.queued+' email'+(r.queued===1?'':'s')+' queued','success');
       candOutreachLoadPool(true); candOutreachLoadQueue(true); render();
     }).catch(function(e){
@@ -443,7 +463,25 @@
           '<strong>This wording breaks a house rule</strong> — '+esc((v.quality.violations||[]).map(function(x){return x.instruction;}).join(' '))+
           ' Anyone it would affect is skipped rather than sent.</div>'
         : '';
-      body=anglePicker()+warn+
+      // WALK THE PICKED LIST. Reading one email out of thirty and assuming the
+      // rest are fine is how a bad merge field reaches twenty-nine people.
+      var stepper='';
+      if(ids.length>1){
+        var nav=function(d,glyph,lbl){
+          return '<button type="button" onclick="candOutreachPreviewStep('+d+')" title="'+lbl+'" '+
+            'style="border:1px solid var(--border2);background:var(--card);color:var(--text2);'+
+            'border-radius:7px;width:28px;height:28px;line-height:1;cursor:pointer;font-family:inherit;font-size:14px">'+glyph+'</button>';
+        };
+        stepper='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+          nav(-1,'‹','Previous candidate')+
+          '<div style="font-size:12px;color:var(--text2)">'+
+            '<strong>'+(s.previewIdx+1)+'</strong> of '+ids.length+
+            '<span style="color:var(--text3)"> — each person’s own email</span>'+
+          '</div>'+
+          nav(1,'›','Next candidate')+
+        '</div>';
+      }
+      body=stepper+anglePicker()+warn+
         '<div style="border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">'+
           '<div style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border2);font-size:12.5px">'+
             '<span style="color:var(--text3)">Subject: </span><strong>'+esc(v.preview_subject||v.subject)+'</strong></div>'+
@@ -460,8 +498,8 @@
             : '')+
         '</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+
-          'Shown with <strong>'+esc((s.preview.candidate&&s.preview.candidate.name)||'the first person picked')+'</strong>’s details filled in — '+
-          'everyone else gets the same shape with their own. The name in the sign-off is resolved from the mailbox at the moment each one sends.'+
+          'Shown with <strong>'+esc((s.preview.candidate&&s.preview.candidate.name)||'this person')+'</strong>’s details filled in. '+
+          'The name in the sign-off is resolved from the mailbox at the moment each one sends.'+
         '</div>';
     }
 
@@ -503,9 +541,26 @@
       var waitLine=(r.status==='pending'&&r.wait&&r.wait.reason!=='queued')
         ? '<div style="font-size:11px;color:'+(r.wait.reason==='paused'?'#ef4444':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
         : '';
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-bottom:1px solid var(--border2)">'+
+      // READ WHAT THIS PERSON ACTUALLY GOT. The body has always been stored; it
+      // simply had no way out of the database, so "what did we send them?" meant
+      // opening the mailbox's Sent folder.
+      var open=S().openQueue===r.id;
+      var bodyPanel=open
+        ? '<div style="padding:10px 12px;background:var(--bg);border-top:1px solid var(--border2)">'+
+            '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">To '+esc(r.to_email||'')+
+              (r.angle?' · '+esc(r.angle):'')+(r.engine?' · written by '+esc(r.engine):'')+'</div>'+
+            '<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">'+esc(r.subject||'(no subject)')+'</div>'+
+            (r.body
+              ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(r.body)+'</div>'
+              : '<div style="font-size:12px;color:var(--text3)">The text of this one was not recorded.</div>')+
+          '</div>'
+        : '';
+      return '<div style="border-bottom:1px solid var(--border2)">'+
+        '<div style="display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer" '+
+          'onclick="candOutreachToggleQueue(\''+r.id+'\')" title="Read the email this person got">'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name||r.to_email)+'</div>'+
+          '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+            '<span style="color:var(--text3);font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(r.name||r.to_email)+'</div>'+
           '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
           (r.fail_reason?'<div style="font-size:11px;color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
           waitLine+
@@ -519,12 +574,15 @@
           '</div>'+
           '<div style="font-size:10.5px;color:var(--text3)">'+esc(when)+'</div>'+
         '</div>'+
-        (r.status==='pending'?'<button class="btn btn-outline btn-sm" onclick="candOutreachCancel(\''+r.id+'\')">Cancel</button>':'')+
+        (r.status==='pending'?'<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();candOutreachCancel(\''+r.id+'\')">Cancel</button>':'')+
+        '</div>'+
+        bodyPanel+
       '</div>';
     }).join('');
     if(!rows) return '';
     return '<div class="card cp" style="margin-top:16px;padding:0;overflow:hidden">'+
-      '<div style="padding:10px 12px;border-bottom:1px solid var(--border2);font-size:12px;font-weight:600">Your candidate outreach</div>'+
+      '<div style="padding:10px 12px;border-bottom:1px solid var(--border2);font-size:12px;font-weight:600">Your candidate outreach'+
+        '<span style="font-weight:400;color:var(--text3)"> — click anyone to read the email they got</span></div>'+
       rows+
     '</div>';
   }
