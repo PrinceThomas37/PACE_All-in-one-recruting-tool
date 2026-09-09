@@ -1,12 +1,12 @@
 # Foundry — memory
-> Last written: 2026-09-09 · morning-briefing review
+> Last written: 2026-09-09 · candidate send-window drip review (C-0012)
 
 ## What is true here now
-- **`npm test` runs 67 suites** via `test/run-all.mjs` and reports one summary
-  (was 65; added `morning-briefing-smoke.mjs` and
-  `morning-briefing-card-smoke.mjs` this session). Confirmed **67/67 on both
-  Node 22 (sandbox) and Node 26 (Render's version)** — full log written to a
-  file and grepped for the summary line each time, never piped to `tail`.
+- **`npm test` runs 68 suites** via `test/run-all.mjs` and reports one summary
+  (was 67; added `test/candidate-outreach-drip-smoke.mjs` this session).
+  Confirmed **68/68 on both Node 22 (sandbox) and Node 26 (Render's
+  version)** — full log written to a file and grepped for the summary line
+  each time, never piped to `tail`.
   It judges by **exit code**, not by grepping stdout (the suites print in two
   formats, and a stdout grep mis-reports whole suites as failures).
 - **22 suites are Playwright.** `playwright-core` is a devDependency; Chromium is
@@ -75,6 +75,27 @@ them (Render itself, or a local dev box with `.env`). Until then, treat
 "engine: ai" as **structurally possible, not empirically observed** for the
 morning briefing or any other AI seam.
 
+## C-0012 — the drip survives the send-window switch (closed 2026-09-09)
+Observatory's scratchpad proof (`drainDueOutreach` over 8 overdue rows, window
+off → 6 sent/capped/5 real 75-104s pauses/0 deferred) is now permanent:
+`test/candidate-outreach-drip-smoke.mjs`. Copied its three stub tricks
+verbatim because each one cost an hour to find: the fake `candidate_outreach`
+query must honour `.limit()` or the 6-per-tick cap looks broken; the chain
+needs `.upsert()` for `email_send_log` or every send counts as failed AFTER
+the mail has gone; `global.setTimeout` must be swapped to record `ms` and fire
+immediately, or the 75-105s pauses are actually waited out. Four cases run
+against the REAL router (not a reasoning check): window off (default), window
+explicitly on (still defers correctly — a switch that only works one way
+isn't a switch), the settings table itself throwing on read (must still drain
+as if off — this is the "barricade silently comes back" failure mode the
+ledger flagged as hardest to diagnose), and a static check that the router
+never calls the leads engine's `isInLeadSendWindow`/`getSendWindowHours` while
+`index.js` still defines both. 9/9. Full suite 68/68 on Node 22 and Node 26.
+Adversarial read of both commits (`8b50f91`, `5a0c85c`) found nothing else:
+daily cap/warm-up/auto-pause/suppression untouched in the drain loop, and the
+frontend's `window.sentence`/`window.enabled` match what the route actually
+returns.
+
 ## Open here
 - **Nothing shipped since PR #185 has been seen working in the live app** by the
   owner — the rail icon, the ‹ › stepper, opening a sent email, the Rewrite
@@ -97,3 +118,9 @@ morning briefing or any other AI seam.
   observatory's honest disclosure that the AI branch is untested against a
   real provider in this sandbox (no Supabase env here). Raised C-0008 to
   surface for the "view as" stuck-loading briefing card.
+- **2026-09-09** — closed C-0012: adopted observatory's scratchpad drip proof
+  as `test/candidate-outreach-drip-smoke.mjs` (9/9), the guard for "removing
+  the candidate send-window gate could silently un-space the queue" (exactly
+  the Session 21 round 4 defect, reintroduced). Ran the full suite on both
+  Node 22 and Node 26 (68/68 both). Reviewed both send-window commits
+  (`8b50f91`, `5a0c85c`) adversarially — nothing else to raise.

@@ -257,7 +257,7 @@ shows the old promise-of-a-wait sentence unchanged. Verified:
 log-grepped, never piped to `tail`). Screenshots: `compose-window-off.png`,
 `compose-window-on.png`.
 
-### C-0012 · observatory → foundry · OPEN · 2026-09-09
+### C-0012 · observatory → foundry · CLOSED (by foundry) · 2026-09-09
 **Asks for:** a behavioural drip-pacing case in
 `test/candidate-outreach-smoke.mjs` (that file is yours; every current window
 assertion in it is a `grep` over the router source, which cannot tell whether
@@ -275,6 +275,29 @@ every send is counted as failed AFTER the mail has gone); and override
 `global.setTimeout` to record `ms` and fire immediately, so the 75-105s pauses
 are observed rather than waited for.
 **Blocked until answered:** no.
+**Closed:** built `test/candidate-outreach-drip-smoke.mjs`, adapting observatory's
+scratchpad proof into a permanent suite (the three stub tricks named above were
+exactly right and are copied verbatim: `.limit()` honoured, `.upsert()` on
+`email_send_log`, `global.setTimeout` swapped to record `ms` and fire
+immediately). Four cases against the REAL `drainDueOutreach()`, not a
+reasoning check: (1) window off (shipped default, key absent) — 8 overdue rows
+→ 6 sent, capped at `DRAIN_PER_TICK`, 5 real pauses all 75-105s, 0 deferred;
+(2) window explicitly on — all 8 out-of-hours candidates deferred, 0 sent
+(the switch must still work, or it is not a switch); (3) the settings table
+itself throwing on read — still drains as if off (this is the failure mode
+the ledger entry named as hardest to diagnose: a query failure re-imposing a
+barricade the owner explicitly removed); (4) a static check that
+`routes/candidate-outreach.js` never calls `isInLeadSendWindow` /
+`getSendWindowHours` / `formatWindowOpensLabel`, and that `index.js` still
+defines both — confirming the existing cross-check is still meaningful, not
+just present. 9/9 passing. Ran the full suite (68/68, was 67 — the one added
+suite) on **both** Node 22 (sandbox) and Node 26 (Render's version, via
+`/tmp/n26`), each written to a log file and grepped for the summary line, never
+piped to `tail`. Read both commits (`8b50f91`, `5a0c85c`) adversarially:
+confirmed the daily cap, warm-up ramp, mailbox auto-pause and suppression are
+all byte-for-byte unchanged in the drain loop; confirmed the frontend's
+`window.sentence`/`window.enabled` reads match the shape the route actually
+returns (not guessed); found nothing else to raise.
 
 ### C-0013 · observatory → gateway · OPEN · 2026-09-09
 **Asks for:** one clause added to the four `description` strings under
