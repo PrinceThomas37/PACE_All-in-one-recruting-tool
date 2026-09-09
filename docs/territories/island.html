@@ -1,0 +1,855 @@
+<title>Nine Territories</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+/* ── A night survey of the island. One committed visual world: the page is a
+   chart table under a lamp, so it paints its own ground in every theme. ── */
+:root{
+  --ink:#0A1016; --ink-2:#111A22; --ink-3:#18242E;
+  --vellum:#EBE3D0; --vellum-2:#B9BEC0; --vellum-3:#7C878E;
+  --brass:#C08A3E; --rust:#C2604A; --verdigris:#4E8A7A;
+  --hair:rgba(192,138,62,.28); --hair-soft:rgba(235,227,208,.10);
+  --sheet:rgba(13,20,27,.86);
+  --fd:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --fu:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --fm:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --pad:18px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ink); color:var(--vellum);
+  font-family:var(--fu); font-size:14px; line-height:1.55;
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+canvas{display:block}
+#scene{position:fixed; inset:0; background:
+  radial-gradient(120% 90% at 50% 8%, #1B2B38 0%, #0F1922 42%, #070C11 100%);}
+#scene canvas{width:100%; height:100%}
+#scene.flat canvas{display:none}
+#flatnote{position:fixed; inset:0; display:none; place-items:center; padding:40px;
+  text-align:center; color:var(--vellum-3); font-size:12.5px; letter-spacing:.04em;
+  pointer-events:none}
+#scene.flat + #flatnote{display:grid}
+
+/* Panels are chart annotations: hairline rules, no radius, no drop shadows. */
+.panel{
+  position:fixed; background:var(--sheet);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  border:1px solid var(--hair-soft); border-top:1px solid var(--hair);
+}
+.eyebrow{
+  font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--brass); margin:0 0 6px;
+}
+.mono{font-family:var(--fm); font-variant-numeric:tabular-nums}
+
+/* ── masthead ───────────────────────────────────────────────────────────── */
+#rail{top:0; left:0; width:292px; height:100vh; overflow-y:auto;
+  border-left:none; border-top:none; display:flex; flex-direction:column}
+#hud{padding:var(--pad) 22px 14px; flex:none}
+#hud h1{
+  font-family:var(--fd); font-weight:400; font-size:34px; line-height:1;
+  margin:0; color:var(--vellum); letter-spacing:.01em;
+}
+#hud h1 em{font-style:italic; color:var(--brass)}
+#hud .sub{
+  font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+  color:var(--vellum-3); margin:8px 0 10px;
+}
+#hud .tot{font-family:var(--fm); font-size:11.5px; color:var(--vellum-3);
+  display:flex; flex-direction:column; gap:2px; margin:0}
+#hud .tot b{color:var(--vellum-2); font-weight:500}
+#hud .tot .flag{color:var(--rust)}
+
+/* ── the legend ─────────────────────────────────────────────────────────── */
+#legend{padding:4px 0 22px; flex:1 1 auto}
+#legend .eyebrow{padding:0 22px}
+.terr{
+  display:grid; grid-template-columns:10px minmax(0,1fr) auto; gap:5px 12px;
+  align-items:center; width:100%; text-align:left; background:none; border:0;
+  cursor:pointer; padding:9px 22px; color:inherit; font:inherit;
+  border-left:2px solid transparent;
+}
+.terr .who{min-width:0}
+.terr .nm,.terr .rl{display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.terr .bar{grid-column:2/4; height:2px; background:rgba(235,227,208,.08); display:block}
+.terr .bar i{display:block; height:100%; opacity:.8}
+.terr:hover{background:rgba(235,227,208,.045)}
+.terr:focus-visible{outline:2px solid var(--brass); outline-offset:-2px}
+.terr[aria-current="true"]{background:rgba(192,138,62,.10); border-left-color:var(--brass)}
+.terr .sw{width:10px; height:10px; border-radius:50%}
+.terr .nm{font-size:14px; font-weight:500; letter-spacing:.005em; line-height:1.25}
+.terr .rl{font-size:10.5px; color:var(--vellum-3); letter-spacing:.04em; line-height:1.4}
+.terr .ct{font-family:var(--fm); font-size:11.5px; color:var(--vellum-2);
+  font-variant-numeric:tabular-nums; display:flex; align-items:center; gap:6px}
+.terr .dot{width:5px; height:5px; border-radius:50%; background:var(--rust); flex:none}
+
+/* ── the dossier ────────────────────────────────────────────────────────── */
+#dossier{
+  top:0; right:0; width:392px; height:100vh; overflow-y:auto;
+  padding:var(--pad) 24px 40px; border-right:none; border-top:none;
+}
+#dossier h2{
+  font-family:var(--fd); font-weight:400; font-size:32px; line-height:1.05;
+  margin:0 0 4px; text-wrap:balance;
+}
+#dossier .role{font-size:12px; color:var(--vellum-2); letter-spacing:.06em;
+  text-transform:uppercase; margin:0 0 16px}
+.rule{height:1px; background:var(--hair-soft); margin:20px 0; border:0}
+.stats{display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+  background:var(--hair-soft); border-block:1px solid var(--hair-soft)}
+.stats div{background:var(--sheet); padding:10px 12px}
+.stats dt{font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--vellum-3); margin:0 0 3px}
+.stats dd{margin:0; font-family:var(--fm); font-size:15px; color:var(--vellum);
+  font-variant-numeric:tabular-nums}
+h3.sec{font-size:10px; font-weight:600; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--brass); margin:22px 0 9px}
+ul.plain{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:5px}
+ul.plain li{font-family:var(--fm); font-size:11.5px; color:var(--vellum-2);
+  word-break:break-word; font-variant-numeric:tabular-nums}
+ul.plain li span{color:var(--vellum-3); float:right; padding-left:10px}
+ul.laws{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:11px}
+ul.laws li{border-left:2px solid var(--rust); padding-left:12px; font-size:13px;
+  color:var(--vellum); line-height:1.5}
+.chips{display:flex; flex-wrap:wrap; gap:6px}
+.chip{background:none; border:1px solid var(--hair-soft); color:var(--vellum-2);
+  font:inherit; font-size:11.5px; padding:4px 10px; cursor:pointer; letter-spacing:.02em}
+.chip:hover{border-color:var(--brass); color:var(--vellum)}
+.chip:focus-visible{outline:2px solid var(--brass); outline-offset:1px}
+.chip i{width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px}
+.req{border-left:2px solid var(--brass); padding:2px 0 2px 12px; margin-bottom:12px}
+.req .hd{font-family:var(--fm); font-size:10.5px; color:var(--brass); letter-spacing:.04em}
+.req p{margin:3px 0 0; font-size:12.5px; color:var(--vellum-2); line-height:1.5}
+.cmd{
+  width:100%; text-align:left; font-family:var(--fm); font-size:11.5px; line-height:1.6;
+  background:#0A1319; border:1px solid var(--hair); color:var(--vellum);
+  padding:11px 13px; cursor:pointer; display:block; word-break:break-word;
+}
+.cmd:hover{border-color:var(--brass)}
+.cmd:focus-visible{outline:2px solid var(--brass); outline-offset:1px}
+.cmd b{color:var(--brass); font-weight:500}
+.cmd .hint{display:block; color:var(--vellum-3); font-size:10px; letter-spacing:.1em;
+  text-transform:uppercase; margin-top:7px; font-family:var(--fu)}
+p.lede{font-size:13.5px; color:var(--vellum-2); line-height:1.65; margin:0 0 14px}
+p.lede b{color:var(--vellum); font-weight:500}
+
+/* ── the route runner ───────────────────────────────────────────────────── */
+#routes{bottom:0; left:292px; right:392px; padding:12px 22px 14px;
+  border-bottom:none; border-left:none; border-right:none}
+#routes .row{display:flex; flex-wrap:wrap; gap:7px; align-items:center}
+.rbtn{background:none; border:1px solid var(--hair-soft); color:var(--vellum-2);
+  font:inherit; font-size:12px; padding:6px 13px; cursor:pointer; letter-spacing:.01em}
+.rbtn:hover{border-color:var(--brass); color:var(--vellum)}
+.rbtn[aria-pressed="true"]{border-color:var(--rust); color:var(--vellum);
+  background:rgba(194,96,74,.14)}
+.rbtn:focus-visible{outline:2px solid var(--brass); outline-offset:1px}
+.steps{list-style:none; margin:12px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:0}
+.steps li{display:flex; align-items:center; gap:8px; padding:0 14px 0 0; opacity:.34;
+  transition:opacity .25s}
+.steps li.on{opacity:1}
+.steps li i{width:8px; height:8px; border-radius:50%; flex:none}
+.steps li b{font-size:12px; font-weight:500}
+.steps li:after{content:"→"; color:var(--vellum-3); padding-left:14px; font-size:11px}
+.steps li:last-child:after{content:""}
+#stepnote{margin:9px 0 0; font-size:12.5px; color:var(--vellum-2); min-height:1.5em;
+  max-width:62ch; line-height:1.55}
+#stepnote b{color:var(--brass); font-weight:500}
+
+#hint{bottom:0; right:0; padding:9px 16px; font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--vellum-3); border:0; background:none;
+  position:fixed; pointer-events:none}
+
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-thumb{background:rgba(235,227,208,.14)}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ── phone: the island keeps the top, the panels become a sheet ─────────── */
+@media (max-width:900px){
+  :root{--pad:14px}
+  #rail{width:auto; right:0; height:auto; overflow:visible}
+  #hud{padding:12px 18px 8px; display:flex; align-items:baseline;
+    gap:14px; flex-wrap:wrap}
+  #hud h1{font-size:26px}
+  #hud .sub{display:none}
+  #hud .tot{font-size:10.5px}
+  #legend{display:flex; overflow-x:auto; overflow-y:hidden;
+    padding:0 12px 12px; border:0; background:none; gap:0}
+  #legend .eyebrow{display:none}
+  .terr{width:auto; flex:none; grid-template-columns:10px auto; gap:0 10px; padding:7px 13px;
+    border:1px solid var(--hair-soft); margin-right:6px; white-space:nowrap;
+    border-left:2px solid transparent}
+  .terr .ct, .terr .bar{display:none}
+  #dossier{top:auto; bottom:0; right:0; left:0; width:auto; height:46vh;
+    padding:14px 18px 28px; border-right:1px solid var(--hair-soft)}
+  #dossier h2{font-size:26px}
+  #routes{left:0; right:0; bottom:46vh; padding:9px 18px 10px}
+  #routes .steps, #routes #stepnote{display:none}
+  #hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important; transition-duration:.01ms !important}
+}
+</style>
+
+<div id="scene"><canvas id="c"></canvas></div>
+<p id="flatnote">The island needs WebGL, which this browser is not running.<br>
+Everything else on the page works — the survey is on the left.</p>
+
+<div class="panel" id="rail">
+<header id="hud">
+  <h1>Nine <em>Territories</em></h1>
+  <p class="sub">A survey of PACE</p>
+  <p class="tot" id="totals"></p>
+</header>
+
+<nav id="legend" aria-label="Territories">
+  <p class="eyebrow">The teams</p>
+  <div id="legend-rows"></div>
+</nav>
+</div>
+
+<aside class="panel" id="dossier" aria-live="polite"></aside>
+
+<footer class="panel" id="routes">
+  <p class="eyebrow">Run a feature across the island</p>
+  <div class="row" id="route-btns"></div>
+  <ol class="steps" id="route-steps"></ol>
+  <p id="stepnote"></p>
+</footer>
+
+<p id="hint">drag to orbit · scroll to zoom · click a beacon</p>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script type="application/json" id="map">
+/*MAP_START*/
+{"generated":"2026-09-09","repo":"PrinceThomas37/PACE_All-in-one-recruting-tool","totals":{"files":260,"lines":61505,"territories":9,"unclaimedFiles":0},"territories":[{"id":"surface","name":"Surface","role":"Frontend & UI","terrain":"the coastal city","hue":"#5FA8D3","pos":[30,8],"height":5.5,"spread":15,"own":["public/"],"files":52,"lines":20501,"largest":[{"f":"public/js/25-workflow-bd.js","n":1044},{"f":"public/js/47-page-mailbox.js","n":1027},{"f":"public/js/12-manager-users.js","n":1006},{"f":"public/js/09-page-workflows.js","n":883}],"lastTouched":"2026-09-09","openIn":1,"openOut":2},{"id":"gateway","name":"Gateway","role":"Server & API","terrain":"the citadel","hue":"#C08A3E","pos":[0,0],"height":15,"spread":12,"own":["index.js","routes/","middleware/rate-limit.js","http-client.js","events.js","subscribers.js","config/","engine-runs.js"],"files":20,"lines":6149,"largest":[{"f":"index.js","n":3176},{"f":"routes/jobs.js","n":483},{"f":"config/integrations.js","n":247},{"f":"routes/integrations.js","n":237}],"lastTouched":"2026-09-09","openIn":2,"openOut":0},{"id":"deep","name":"The Deep","role":"Data & Schema","terrain":"the mine workings","hue":"#7B6CA6","pos":[-26,-6],"height":3,"spread":13,"own":["models/","migrations/","schema.sql","scripts/"],"files":48,"lines":2755,"largest":[{"f":"scripts/territory-map.mjs","n":227},{"f":"migrations/011_ats_recruiting_baseline.sql","n":174},{"f":"schema.sql","n":174},{"f":"models/index.js","n":171}],"lastTouched":"2026-09-09","openIn":1,"openOut":0},{"id":"harbour","name":"Harbour","role":"Mail & Delivery","terrain":"the port","hue":"#4E8A7A","pos":[10,31],"height":2.5,"spread":15,"own":["email-vars.js","email-tracking.js","email-signature.js","email-validation.js","email-verify.js","gmail-provider.js","services/mail-provider.js","send-queue-order.js","services/outreach-cycle.js","services/send-progress.js","services/mailbox-reassign.js","services/lead-recycle.js","warmup-engine.js","deliverability.js","domain-health.js","mailbox-health.js","mailmerge","routes/mailbox.js","routes/emails.js","routes/warmup.js","routes/deliverability.js"],"files":20,"lines":4012,"largest":[{"f":"services/mail-provider.js","n":801},{"f":"routes/mailbox.js","n":472},{"f":"email-vars.js","n":436},{"f":"warmup-engine.js","n":378}],"lastTouched":"2026-09-07","openIn":0,"openOut":1},{"id":"observatory","name":"Observatory","role":"AI & Intelligence","terrain":"the high peak","hue":"#D8CFE8","pos":[-15,-27],"height":22,"spread":12,"own":["services/ai-provider.js","services/ai-budget.js","services/outreach-generator.js","services/candidate-outreach.js","match-engine.js","conversation-intel.js","next-action.js","resume-parser.js","jd-parser.js","why-hiring.js","company-classifier.js","enrichment.js","skill-dictionaries.js","learned-skills.js","routes/ai.js","routes/outreach-generator.js","routes/candidate-outreach.js","routes/next-actions.js"],"files":18,"lines":7713,"largest":[{"f":"jd-parser.js","n":1167},{"f":"services/outreach-generator.js","n":1137},{"f":"routes/candidate-outreach.js","n":1003},{"f":"services/candidate-outreach.js","n":845}],"lastTouched":"2026-09-09","openIn":1,"openOut":0},{"id":"guild","name":"The Guild","role":"Recruiting domain","terrain":"the township","hue":"#D98E5F","pos":[19,-21],"height":8,"spread":13,"own":["routes/recruiting/","services/recruiting-core.js","services/candidate-fields.js","bd_recruiter_routes.js","workflow-engine.js","routes/workflows.js","routes/wf.js","routes/lookups.js","hierarchy.js","lead-sources/","routes/lead-sources.js","lead-ingest.js"],"files":20,"lines":5001,"largest":[{"f":"routes/recruiting/outreach.js","n":610},{"f":"routes/recruiting/job-orders.js","n":563},{"f":"routes/recruiting/analytics.js","n":406},{"f":"routes/lead-sources.js","n":349}],"lastTouched":"2026-09-09","openIn":0,"openOut":1},{"id":"rampart","name":"The Rampart","role":"Security & Tenancy","terrain":"the sea wall","hue":"#B4553C","pos":[-3,-35],"height":11,"spread":11,"own":["middleware/authorize.js","routes/auth.js","routes/sso.js","services/sso.js","services/provisioning.js","services/org-domains.js","routes/org-domains.js","config/env.js"],"files":8,"lines":1532,"largest":[{"f":"routes/auth.js","n":369},{"f":"services/provisioning.js","n":347},{"f":"routes/sso.js","n":198},{"f":"routes/org-domains.js","n":176}],"lastTouched":"2026-09-04","openIn":1,"openOut":1},{"id":"foundry","name":"The Foundry","role":"Tests & Release","terrain":"the forge","hue":"#8C93A1","pos":[-33,12],"height":9,"spread":14,"own":["test/",".github/"],"files":69,"lines":13032,"largest":[{"f":"test/candidate-outreach-smoke.mjs","n":657},{"f":"test/mailbox-smoke.mjs","n":590},{"f":"test/outreach-generator-smoke.mjs","n":589},{"f":"test/mailbox-page-smoke.mjs","n":486}],"lastTouched":"2026-09-09","openIn":0,"openOut":1},{"id":"ledger","name":"The Ledger","role":"Commerce & Consent","terrain":"the counting house","hue":"#C9B458","pos":[-15,30],"height":4,"spread":12,"own":["services/plans.js","services/entitlements.js","services/billing.js","routes/plans.js","routes/tracking.js","routes/reminders.js"],"files":6,"lines":810,"largest":[{"f":"services/plans.js","n":218},{"f":"services/billing.js","n":201},{"f":"services/entitlements.js","n":155},{"f":"routes/plans.js","n":114}],"lastTouched":"2026-08-25","openIn":0,"openOut":0}],"edges":[["surface","gateway",2],["surface","guild",1],["surface","foundry",1],["gateway","deep",2],["gateway","rampart",2],["gateway","harbour",1],["gateway","guild",2],["gateway","observatory",1],["gateway","ledger",1],["deep","rampart",2],["deep","guild",1],["deep","harbour",1],["harbour","observatory",2],["harbour","ledger",2],["harbour","guild",1],["observatory","ledger",1],["observatory","guild",1],["foundry","gateway",1],["foundry","harbour",1],["foundry","rampart",1],["foundry","deep",1],["foundry","observatory",1],["foundry","ledger",1],["foundry","guild",1],["rampart","ledger",1],["rampart","surface",1]],"contracts":[{"id":"C-0001","from":"surface","to":"observatory","status":"OPEN","date":"2026-09-09","asks":"a decision on the daily import briefing (`/ai/generate-summary`)."},{"id":"C-0002","from":"surface","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/ai/generate-email` either wired to a real screen or deleted."},{"id":"C-0003","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."},{"id":"C-0004","from":"harbour","to":"deep","status":"OPEN","date":"2026-09-09","asks":"an error column on `emails` (migration 043) recording *why* a send failed."},{"id":"C-0005","from":"guild","to":"surface","status":"OPEN","date":"2026-09-09","asks":"`/recruiting-dashboard` widgets hierarchy-scoped the way `/reports/recruiting` already is, and the Reports page folded into the Dashboard."},{"id":"C-0006","from":"foundry","to":"rampart","status":"OPEN","date":"2026-09-09","asks":"`bd_lead`, `director` and `associate_director` added to `test/helpers/enter-app.mjs`."}],"unclaimed":[]}
+/*MAP_END*/
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   The island is only worth looking at if its numbers are true. Everything in
+   the #map block above is generated by `node scripts/territory-map.mjs`, which
+   counts real files, reads git for last-touched dates, and parses the border
+   ledger. Nothing below is hand-maintained except the laws and the journeys.
+
+   The survey is built BEFORE the island, and the island is optional. A viewer
+   whose browser will not run WebGL — or who cannot reach the CDN — still gets
+   the whole map. The 3D is the view, never the content.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const MAP = JSON.parse(document.getElementById('map').textContent
+  .replace('/*MAP_START*/','').replace('/*MAP_END*/',''));
+const T = MAP.territories;
+const byId = Object.fromEntries(T.map(t => [t.id, t]));
+
+/* The laws each territory enforces. Every one was written after something went
+   wrong in production — that is why they read as absolutes. */
+const LAWS = {
+  surface:["A page never writes <code>#content</code> itself. It registers with <code>UI.registerPage()</code>.",
+    "An idle repaint must write nothing — not even the same class back.",
+    "Hover is a mouse feature, gated on <code>(hover:hover)</code>. Never on width.",
+    "An inline style cannot be responsive."],
+  gateway:["A literal route registered below a <code>:param</code> route is dead — and it fails silently, with a valid 200.",
+    "All outbound HTTP goes through <code>http-client.js</code>. Retries on safe methods only.",
+    "Never hand-write <code>supabase.from()</code> on a tenant table.",
+    "A cross-org record is a 404, never a leak."],
+  deep:["You never apply a migration. The owner authorises each one, freshly.",
+    "Apply the migration <em>before</em> merging the code that uses it.",
+    "A new table with <code>org_id</code> must be added to <code>models/tables.js</code>.",
+    "Check <code>ls migrations/</code> for the real highest number. Next is 043."],
+  harbour:["The sender is resolved at send time, from the mailbox that actually sends.",
+    "Every reader of a stored body calls <code>renderStoredEmail()</code> first.",
+    "Nothing is mirrored into Postgres. Nothing destroys mail.",
+    "A backlog released by an opening window must not burst."],
+  observatory:["<code>complete()</code> returns null, never throws — and null means <em>write it with the rules</em>.",
+    "Over budget is not an error. The check runs before the call, on an estimate that rounds up.",
+    "An AI draft is checked, not trusted.",
+    "Called once per job order. Never once per candidate."],
+  guild:["Two vocabularies, never conflated: <code>submissions.stage</code> and the <code>jobs</code> stage.",
+    "The stage vocabulary lives in six files. Five of them belong to Surface.",
+    "Recruiters move a candidate only as far as <em>Submitted to BDM</em>.",
+    "<em>Connected</em> means they replied."],
+  rampart:["The only question: could a person from company A reach anything belonging to company B?",
+    "<code>orgIdFor()</code>'s default-org fallback is deliberate. Never make it return null.",
+    "Sharing a domain is not membership.",
+    "No guest or demo bypass. Ever — not even to make a test easier."],
+  foundry:["<code>npm test</code> is judged by exit code — and you must read the count.",
+    "The sandbox is Node 22. Render is Node 26. Run both.",
+    "A test that greps a variable name passes on a real behaviour change.",
+    "Merging to <code>main</code> is the release."],
+  ledger:["A limit that is not enforced is a claim. Refuse with 402.",
+    "Being over a limit never deletes anything.",
+    "The link must not record — a mail scanner would answer for the candidate.",
+    "Only the explicit opt-out suppresses."],
+};
+
+/* Four journeys, each taken from something genuinely unbuilt in PACE today.
+   A hop is what that team gets asked for — the conversation, not the code. */
+const JOURNEYS = [
+  { id:'csv', label:'Import candidates from a CSV', steps:[
+    ['deep','A staging table for a half-finished import, and a column recording which upload each candidate came from.'],
+    ['rampart','Every imported row stamped with the uploader&rsquo;s org. An import is the easiest way to write into the wrong tenant.'],
+    ['gateway','An upload endpoint that streams, rather than pushing a 40MB file at a 5MB body cap.'],
+    ['guild','Column mapping onto real candidate fields, and duplicate detection before anything is written.'],
+    ['surface','A drop zone, a mapping screen showing the first five rows, and a result that can be undone.'],
+    ['foundry','A fixture CSV per source ATS, and the same import run twice to prove it does not double.']]},
+  { id:'seats', label:'Charge for extra seats', steps:[
+    ['ledger','A price on the tier, a seat count, and the 402 wall when it is passed.'],
+    ['rampart','Only the signed webhook may change a plan. A success redirect is something anyone can type.'],
+    ['gateway','The checkout endpoint and the webhook receiver.'],
+    ['surface','A plan screen that says what will happen before it happens.'],
+    ['foundry','A test that a downgrade blocks the next create and deletes nothing.']]},
+  { id:'sms', label:'Text candidates, not just email', steps:[
+    ['ledger','Consent first. SMS consent is not email consent, and the opt-out is a legal one.'],
+    ['harbour','A second channel with its own queue, its own window and its own pause between sends.'],
+    ['deep','A phone column that survives being wrong, and a suppression list that knows about channels.'],
+    ['observatory','A shorter writer — 300 characters, one question, no fee language.'],
+    ['guild','Who is reachable this way, and what a reply does to their stage.'],
+    ['surface','A channel picker, and a preview that is not an email preview.'],
+    ['foundry','The whole thing on Node 26, and a test that consent gates the send.']]},
+  { id:'today', label:'Tell a recruiter what to do first', steps:[
+    ['observatory','<code>next-action.js</code> already ranks it. What is missing is the sentence a person acts on.'],
+    ['guild','Whose queue is it? Hierarchy scope, not org scope.'],
+    ['gateway','One endpoint, and it already exists: <code>GET /next-actions</code>.'],
+    ['surface','A dashboard card, not another page.'],
+    ['ledger','And it must never show an opted-out thread. That is the compliance rule, and a test pins it.']]},
+];
+
+const nf = n => n.toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ── the seams between the survey and the island ──────────────────────────
+   Three no-ops until the island builds. If it never does, the panels below
+   carry on driving nothing, and the page is still complete. */
+let focusOn = () => {}, highlight = () => {}, routePulse = () => {};
+
+/* ══════════════════════════════════════════════ the survey ════════════════ */
+const openReqs = MAP.contracts.filter(c => c.status === 'OPEN');
+document.getElementById('totals').innerHTML =
+  `<span><b>${nf(MAP.totals.files)}</b> files · <b>${nf(MAP.totals.lines)}</b> lines</span>` +
+  `<span><b>${MAP.totals.territories}</b> territories</span>` +
+  `<span class="flag">${openReqs.length} open border requests</span>` +
+  `<span>surveyed ${MAP.generated}</span>`;
+
+/* The bar is the territory's share of the codebase — size read as form, not
+   only as a number. The rust dot means somebody is WAITING on this team, which
+   is the only version of "open requests" that is actionable. */
+const maxLines = Math.max(...T.map(t => t.lines));
+document.getElementById('legend-rows').innerHTML = T.map(t => `
+  <button class="terr" data-t="${t.id}" aria-current="false" title="${t.files} files · ${nf(t.lines)} lines${
+    t.openIn ? ` · ${t.openIn} request${t.openIn > 1 ? 's' : ''} waiting on this team` : ''}">
+    <span class="sw" style="background:${t.hue}"></span>
+    <span class="who"><span class="nm">${esc(t.name)}</span>
+      <span class="rl">${esc(t.role)}</span></span>
+    <span class="ct">${t.openIn ? '<i class="dot"></i>' : ''}${nf(t.lines)}</span>
+    <span class="bar"><i style="width:${(t.lines / maxLines * 100).toFixed(1)}%;background:${t.hue}"></i></span>
+  </button>`).join('');
+
+document.getElementById('route-btns').innerHTML = JOURNEYS.map(j =>
+  `<button class="rbtn" data-j="${j.id}" aria-pressed="false">${esc(j.label)}</button>`
+).join('');
+
+const neighbours = id => MAP.edges
+  .filter(([a,b]) => a === id || b === id).map(([a,b]) => a === id ? b : a);
+
+const OVERVIEW = `
+  <p class="eyebrow">The survey</p>
+  <h2>Nine teams, one island</h2>
+  <p class="role">PACE · ${nf(MAP.totals.lines)} lines</p>
+  <p class="lede">Every file in this codebase belongs to exactly one territory.
+    A territory has a <b>border</b> it does not write past, a set of <b>laws</b>
+    it enforces, and a <b>memory of its own</b> — so you can come back to one six
+    weeks later and it already knows where things stand.</p>
+  <p class="lede">When a job needs something outside a team's border, that team
+    does not reach across. It files a <b>request</b>, and this is every one
+    currently standing open.</p>
+  <hr class="rule">
+  <h3 class="sec">Open border requests</h3>
+  ${openReqs.map(c => `<div class="req">
+    <div class="hd">${c.id} &nbsp;${esc(byId[c.from].name)} → ${esc(byId[c.to].name)}</div>
+    <p>${esc(c.asks)}</p></div>`).join('')}
+  <hr class="rule">
+  <p class="lede">Pick a beacon on the island, or a team on the left. Or run one
+    of the four features along the bottom and watch it cross the island.</p>`;
+
+const dossier = document.getElementById('dossier');
+let current = null;
+
+function dossierFor(t){
+  const mine = MAP.contracts.filter(c =>
+    c.status === 'OPEN' && (c.from === t.id || c.to === t.id));
+  return `
+  <p class="eyebrow">${esc(t.terrain)}</p>
+  <h2>${esc(t.name)}</h2>
+  <p class="role">${esc(t.role)}</p>
+  <dl class="stats">
+    <div><dt>Files</dt><dd>${t.files}</dd></div>
+    <div><dt>Lines</dt><dd>${nf(t.lines)}</dd></div>
+    <div><dt>Last touched</dt><dd style="font-size:12px">${t.lastTouched || '—'}</dd></div>
+  </dl>
+  <h3 class="sec">Its laws</h3>
+  <ul class="laws">${LAWS[t.id].map(l => `<li>${l}</li>`).join('')}</ul>
+  <h3 class="sec">What it owns</h3>
+  <ul class="plain">${t.own.slice(0,9).map(p => `<li>${esc(p)}</li>`).join('')}
+    ${t.own.length > 9 ? `<li style="color:var(--vellum-3)">+ ${t.own.length - 9} more</li>` : ''}</ul>
+  <h3 class="sec">Its heaviest files</h3>
+  <ul class="plain">${t.largest.map(f =>
+    `<li>${esc(f.f.split('/').pop())}<span>${nf(f.n)}</span></li>`).join('')}</ul>
+  <h3 class="sec">Who it talks to</h3>
+  <div class="chips">${neighbours(t.id).map(n =>
+    `<button class="chip" data-t="${n}"><i style="background:${byId[n].hue}"></i>${esc(byId[n].name)}</button>`
+  ).join('')}</div>
+  ${mine.length ? `<h3 class="sec">Open requests</h3>${mine.map(c => `<div class="req">
+    <div class="hd">${c.id} &nbsp;${esc(byId[c.from].name)} → ${esc(byId[c.to].name)}</div>
+    <p>${esc(c.asks)}</p></div>`).join('')}` : ''}
+  <h3 class="sec">Talk to this team</h3>
+  <button class="cmd" data-copy="Use the ${t.id} agent: ">&gt; Use the <b>${t.id}</b> agent: <span style="color:var(--vellum-3)">&lt;what you want changed&gt;</span>
+    <span class="hint">Click to copy · it reads docs/territories/${t.id}.md first</span></button>`;
+}
+
+function select(id, opts){
+  current = id;
+  document.querySelectorAll('.terr').forEach(b =>
+    b.setAttribute('aria-current', String(b.dataset.t === id)));
+  dossier.innerHTML = id ? dossierFor(byId[id]) : OVERVIEW;
+  dossier.scrollTop = 0;
+  highlight(id, !!routeOn);
+  focusOn(id, opts && opts.keepCam);
+}
+
+/* ── running a journey ──────────────────────────────────────────────────── */
+let routeOn = null, routeStep = 0, routeClock = 0;
+const stepsEl = document.getElementById('route-steps');
+const noteEl  = document.getElementById('stepnote');
+
+function runRoute(j){
+  if(routeOn && routeOn.id === j.id){ stopRoute(); return; }
+  routeOn = j; routeStep = 0; routeClock = 0;
+  document.querySelectorAll('.rbtn').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.j === j.id)));
+  stepsEl.innerHTML = j.steps.map(([id], i) =>
+    `<li data-i="${i}"><i style="background:${byId[id].hue}"></i><b>${esc(byId[id].name)}</b></li>`
+  ).join('');
+  showStep(0);
+}
+function stopRoute(){
+  routeOn = null;
+  document.querySelectorAll('.rbtn').forEach(b => b.setAttribute('aria-pressed','false'));
+  stepsEl.innerHTML = ''; noteEl.innerHTML = '';
+  select(null);
+}
+function showStep(i){
+  const [id, note] = routeOn.steps[i];
+  stepsEl.querySelectorAll('li').forEach(li =>
+    li.classList.toggle('on', +li.dataset.i <= i));
+  noteEl.innerHTML = `<b>${esc(byId[id].name)}</b> — ${note}`;
+  select(id, { keepCam:true });
+  if(i > 0) routePulse(routeOn.steps[i-1][0], id);
+}
+
+/* ── one delegated listener for every control on the page ───────────────── */
+document.addEventListener('click', e => {
+  const terr = e.target.closest('[data-t]');
+  if(terr){ if(routeOn) stopRoute(); select(terr.dataset.t); return; }
+  const rb = e.target.closest('[data-j]');
+  if(rb){ runRoute(JOURNEYS.find(j => j.id === rb.dataset.j)); return; }
+  const cp = e.target.closest('[data-copy]');
+  if(!cp) return;
+  const hint = cp.querySelector('.hint'), said = hint.textContent;
+  const done = msg => { hint.textContent = msg;
+    setTimeout(() => { hint.textContent = said; }, 2400); };
+  if(navigator.clipboard) navigator.clipboard
+    .writeText(cp.dataset.copy)
+    .then(() => done('Copied — paste it into Claude Code'), () => selectText(cp, done));
+  else selectText(cp, done);
+});
+function selectText(el, done){
+  const r = document.createRange(); r.selectNodeContents(el);
+  getSelection().removeAllRanges(); getSelection().addRange(r);
+  done('Selected — press ⌘C or Ctrl-C');
+}
+addEventListener('keydown', e => {
+  if(e.key === 'Escape'){ routeOn ? stopRoute() : select(null); return; }
+  if(e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  if(document.activeElement && document.activeElement.closest('#dossier')) return;
+  e.preventDefault();
+  const i = T.findIndex(t => t.id === current);
+  if(i < 0){ select(T[0].id); return; }
+  select(T[(i + (e.key === 'ArrowDown' ? 1 : -1) + T.length) % T.length].id);
+});
+
+select(null);
+
+/* ══════════════════════════════════════════════ the island ════════════════ */
+try { buildIsland(); }
+catch(err){
+  document.getElementById('scene').classList.add('flat');
+  document.getElementById('hint').hidden = true;
+  console.warn('Island not drawn:', err && err.message);
+}
+
+function buildIsland(){
+  if(typeof THREE === 'undefined') throw new Error('three.js did not load');
+
+  const cv = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({ canvas:cv, antialias:true, alpha:true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0B1520, 0.0034);
+  const camera = new THREE.PerspectiveCamera(42, 1, 1, 900);
+
+  scene.add(new THREE.HemisphereLight(0x9FC4DA, 0x1A2530, 0.85));
+  const moon = new THREE.DirectionalLight(0xE8DFC8, 0.78);
+  moon.position.set(-60, 90, 40); scene.add(moon);
+  const warm = new THREE.PointLight(0xC08A3E, 0.9, 130);
+  warm.position.set(0, 26, 0); scene.add(warm);
+
+  /* ── terrain ───────────────────────────────────────────────────────────
+     Height is an island falloff plus one gaussian bump per territory, so the
+     Observatory really is the high peak and the Harbour really is at the
+     water. Colour is the dominant territory's hue, sanded at the shore and
+     paled at altitude. Flat-shaded, so it reads as a surveyor's model. */
+  const SHORE = 62, SEG = 184, SPAN = 168;
+  const hash = (x,z) => { const s = Math.sin(x*127.1 + z*311.7)*43758.5453; return s - Math.floor(s); };
+  function vnoise(x,z){
+    const xi = Math.floor(x), zi = Math.floor(z), xf = x-xi, zf = z-zi;
+    const u = xf*xf*(3-2*xf), v = zf*zf*(3-2*zf);
+    return hash(xi,zi)*(1-u)*(1-v) + hash(xi+1,zi)*u*(1-v)
+         + hash(xi,zi+1)*(1-u)*v   + hash(xi+1,zi+1)*u*v;
+  }
+  function fbm(x,z){ let n=0,a=1,f=1,tot=0;
+    for(let i=0;i<4;i++){ n += vnoise(x*f,z*f)*a; tot += a; a *= 0.5; f *= 2; }
+    return n/tot; }
+  const clamp01 = v => v<0 ? 0 : v>1 ? 1 : v;
+  const smooth = (e0,e1,x) => { const t = clamp01((x-e0)/(e1-e0)); return t*t*(3-2*t); };
+
+  function heightAt(x,z){
+    const fall = 1 - smooth(SHORE*0.52, SHORE, Math.hypot(x,z));
+    let h = 1.4;
+    for(const t of T){
+      const dx = x-t.pos[0], dz = z-t.pos[1];
+      h += t.height * Math.exp(-(dx*dx + dz*dz)/(2*t.spread*t.spread));
+    }
+    h += (fbm(x*0.055+31, z*0.055+17) - 0.5) * 5.4;
+    return h*fall - (1-fall)*7;
+  }
+  function dominantAt(x,z){
+    let best = null, bw = -1, sw = 0;
+    for(const t of T){
+      const dx = x-t.pos[0], dz = z-t.pos[1], sp = t.spread*1.35;
+      const w = Math.exp(-(dx*dx + dz*dz)/(2*sp*sp));
+      sw += w; if(w > bw){ bw = w; best = t; }
+    }
+    return { t:best, purity: sw > 0 ? bw/sw : 0 };
+  }
+
+  const SAND = new THREE.Color('#B29A6E'), PALE = new THREE.Color('#CFD6D8');
+  const geo = new THREE.PlaneGeometry(SPAN, SPAN, SEG, SEG);
+  geo.rotateX(-Math.PI/2);
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count*3);
+  const tmp = new THREE.Color();
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i), h = heightAt(x,z);
+    pos.setY(i, h);
+    const { t, purity } = dominantAt(x,z);
+    tmp.set(t.hue).multiplyScalar(0.44 + purity*0.32);
+    if(h < 2.2) tmp.lerp(SAND, smooth(2.2, -0.6, h)*0.85);
+    if(h > 14)  tmp.lerp(PALE, smooth(14, 26, h)*0.8);
+    col[i*3] = tmp.r; col[i*3+1] = tmp.g; col[i*3+2] = tmp.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({
+    vertexColors:true, flatShading:true })));
+
+  const seaGeo = new THREE.PlaneGeometry(520, 520, 60, 60);
+  seaGeo.rotateX(-Math.PI/2);
+  const sea = new THREE.Mesh(seaGeo, new THREE.MeshLambertMaterial({
+    color:0x17414C, transparent:true, opacity:0.92, flatShading:true }));
+  sea.position.y = 0.2; scene.add(sea);
+  const seaBase = Float32Array.from(seaGeo.attributes.position.array);
+
+  /* ── beacons, labels, crews ────────────────────────────────────────────── */
+  function glowTexture(){
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    const g = x.createRadialGradient(64,64,0,64,64,64);
+    g.addColorStop(0,'rgba(255,255,255,.95)');
+    g.addColorStop(.35,'rgba(255,255,255,.30)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0,0,128,128);
+    return new THREE.CanvasTexture(c);
+  }
+  const GLOW = glowTexture();
+
+  function labelSprite(name, role){
+    const s = 3, c = document.createElement('canvas');
+    c.width = 420*s; c.height = 132*s;
+    const x = c.getContext('2d'); x.scale(s,s);
+    x.textAlign = 'center';
+    x.shadowColor = 'rgba(0,0,0,.9)'; x.shadowBlur = 16;
+    x.font = '600 34px Archivo, Helvetica, sans-serif';
+    x.fillStyle = '#F2ECDD'; x.fillText(name.toUpperCase(), 210, 48);
+    x.font = '400 22px Archivo, Helvetica, sans-serif';
+    x.fillStyle = '#A6B6BE'; x.fillText(role, 210, 84);
+    const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:tex, transparent:true, depthTest:false }));
+    sp.scale.set(21, 6.6, 1); sp.renderOrder = 5;
+    return sp;
+  }
+
+  const marks = {}, pickable = [];
+  for(const t of T){
+    const [x,z] = t.pos;
+    const ground = heightAt(x,z);
+    const c = new THREE.Color(t.hue);
+    const tall = 6 + Math.min(10, t.lines/2200);
+    const g = new THREE.Group(); g.position.set(x, 0, z);
+
+    const ring = new THREE.Mesh(new THREE.RingGeometry(3.0, 3.7, 56),
+      new THREE.MeshBasicMaterial({ color:c, transparent:true, opacity:.42,
+        side:THREE.DoubleSide, depthWrite:false }));
+    ring.rotation.x = -Math.PI/2; ring.position.y = ground + 0.35; g.add(ring);
+
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.62, tall, 8),
+      new THREE.MeshLambertMaterial({ color:c.clone().multiplyScalar(0.62) }));
+    mast.position.y = ground + tall/2; g.add(mast);
+
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.92, 18, 14),
+      new THREE.MeshBasicMaterial({ color:c }));
+    lamp.position.y = ground + tall + 0.5; g.add(lamp);
+
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:GLOW, color:c,
+      transparent:true, opacity:.72, blending:THREE.AdditiveBlending, depthWrite:false }));
+    halo.scale.set(9,9,1); halo.position.y = lamp.position.y; g.add(halo);
+
+    const label = labelSprite(t.name, t.role);
+    label.position.y = ground + tall + 5.8; g.add(label);
+
+    /* one invisible sphere per beacon — a 0.9-radius lamp is a cruel target
+       on a phone, and the ring is flat to the camera at a low angle */
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(7.5, 10, 8),
+      new THREE.MeshBasicMaterial({ transparent:true, opacity:0, depthWrite:false }));
+    hit.position.y = ground + tall*0.55; hit.userData.tid = t.id;
+    g.add(hit); pickable.push(hit);
+
+    /* the crew: one figure per ~12 files, drifting near their own beacon */
+    const crew = [];
+    const n = Math.max(2, Math.min(6, Math.round(t.files/12)));
+    for(let i=0;i<n;i++){
+      const p = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5,1.15,0.5),
+        new THREE.MeshLambertMaterial({ color:c.clone().multiplyScalar(0.95) }));
+      body.position.y = 0.58; p.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.33,10,8),
+        new THREE.MeshLambertMaterial({ color:0xEDE6D6 }));
+      head.position.y = 1.42; p.add(head);
+      p.userData = { r: 4.2 + Math.random()*4.6, a: Math.random()*Math.PI*2,
+                     sp: (0.10 + Math.random()*0.16) * (Math.random()<0.5 ? -1 : 1),
+                     bob: Math.random()*Math.PI*2 };
+      g.add(p); crew.push(p);
+    }
+    scene.add(g);
+    marks[t.id] = { ring, lamp, halo, label, crew, ground, color:c,
+                    top: ground + tall + 0.5 };
+  }
+
+  /* ── the trade routes ──────────────────────────────────────────────────── */
+  const arcs = MAP.edges.map(([a,b,w]) => {
+    const pa = new THREE.Vector3(byId[a].pos[0], marks[a].top, byId[a].pos[1]);
+    const pb = new THREE.Vector3(byId[b].pos[0], marks[b].top, byId[b].pos[1]);
+    const mid = pa.clone().add(pb).multiplyScalar(0.5);
+    mid.y = Math.max(pa.y, pb.y) + pa.distanceTo(pb)*0.30 + 6;
+    const curve = new THREE.QuadraticBezierCurve3(pa, mid, pb);
+    const mat = new THREE.MeshBasicMaterial({
+      color: marks[a].color.clone().lerp(marks[b].color, 0.5),
+      transparent:true, opacity: w === 2 ? 0.17 : 0.09, depthWrite:false });
+    scene.add(new THREE.Mesh(
+      new THREE.TubeGeometry(curve, 44, w === 2 ? 0.17 : 0.11, 5, false), mat));
+    return { a, b, curve, mat, base: mat.opacity };
+  });
+  const arcBetween = (a,b) => arcs.find(e =>
+    (e.a === a && e.b === b) || (e.a === b && e.b === a));
+
+  const pulses = [];
+  const pulseGeo = new THREE.SphereGeometry(0.46, 10, 8);
+  for(let i=0;i<44;i++){
+    const m = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({
+      color:0xEBE3D0, transparent:true, opacity:0, depthWrite:false }));
+    m.visible = false; scene.add(m);
+    pulses.push({ mesh:m, arc:null, t:0, sp:0, back:false });
+  }
+  function emit(arc, color, speed, back){
+    const p = pulses.find(q => !q.arc); if(!p) return;
+    p.arc = arc; p.t = 0;
+    p.sp = speed || (0.22 + Math.random()*0.16);
+    p.back = back === undefined ? Math.random() < 0.5 : back;
+    p.mesh.material.color.set(color || 0xEBE3D0);
+    p.mesh.material.opacity = 0.95; p.mesh.visible = true;
+  }
+
+  /* ── camera ────────────────────────────────────────────────────────────── */
+  const cam = { r:132, theta:0.62, phi:0.80, tr:132, tth:0.62, tph:0.80 };
+  const target = new THREE.Vector3(0,5,0), tTarget = new THREE.Vector3(0,5,0);
+  let idle = true;
+
+  function resize(){
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+    cam.tr = innerWidth < 900 ? 176 : 134;
+  }
+  addEventListener('resize', resize); resize();
+
+  const pts = new Map(); let downAt = null, moved = 0, pinch = 0;
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    downAt = true; moved = 0; idle = false;
+  });
+  cv.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if(!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    if(pts.size === 2){
+      const [a,b] = [...pts.values()];
+      const d = Math.hypot(a.x-b.x, a.y-b.y);
+      if(pinch) cam.tr = Math.min(240, Math.max(46, cam.tr * (pinch/d)));
+      pinch = d; return;
+    }
+    cam.tth -= dx*0.0052;
+    cam.tph = Math.min(1.36, Math.max(0.14, cam.tph - dy*0.0044));
+  });
+  function release(e){
+    pts.delete(e.pointerId); if(pts.size < 2) pinch = 0;
+    if(downAt && moved < 8) pick(e.clientX, e.clientY);
+    downAt = null;
+  }
+  cv.addEventListener('pointerup', release);
+  cv.addEventListener('pointercancel', release);
+  cv.addEventListener('wheel', e => {
+    e.preventDefault(); idle = false;
+    cam.tr = Math.min(240, Math.max(46, cam.tr * (1 + e.deltaY*0.0011)));
+  }, { passive:false });
+
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  function pick(cx, cy){
+    ndc.x = (cx/innerWidth)*2 - 1; ndc.y = -(cy/innerHeight)*2 + 1;
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(pickable, false)[0];
+    if(hit && routeOn) stopRoute();
+    select(hit ? hit.object.userData.tid : null);
+  }
+
+  /* ── hand the survey its three levers ──────────────────────────────────── */
+  highlight = (id, routeActive) => {
+    for(const t of T){
+      const m = marks[t.id], on = !id || t.id === id;
+      m.ring.material.opacity  = t.id === id ? 0.95 : 0.42;
+      m.halo.material.opacity  = on ? 0.72 : 0.20;
+      m.label.material.opacity = on ? 1 : 0.28;
+    }
+    for(const e of arcs){
+      e.mat.opacity = routeActive ? e.base*0.22
+        : !id ? e.base
+        : (e.a === id || e.b === id) ? Math.min(0.62, e.base*3.6) : e.base*0.34;
+    }
+  };
+  focusOn = (id, keepCam) => {
+    if(!id){ tTarget.set(0,5,0); return; }
+    tTarget.set(byId[id].pos[0]*0.55, marks[id].ground + 6, byId[id].pos[1]*0.55);
+    if(!keepCam) cam.tr = Math.max(80, Math.min(cam.tr, 110));
+    idle = false;
+  };
+  routePulse = (from, to) => {
+    const a = arcBetween(from, to); if(!a) return;
+    a.mat.opacity = 0.78;
+    emit(a, 0xC2604A, 0.55, a.a !== from);
+  };
+  highlight(current, false);
+
+  /* ── the clock ─────────────────────────────────────────────────────────── */
+  let last = performance.now(), spawn = 0;
+  requestAnimationFrame(function frame(now){
+    const dt = Math.min(0.05, (now - last)/1000); last = now;
+    const t = now/1000;
+
+    if(idle && !routeOn && !reduced) cam.tth += dt*0.026;
+    cam.r     += (cam.tr  - cam.r)     * 0.07;
+    cam.theta += (cam.tth - cam.theta) * 0.10;
+    cam.phi   += (cam.tph - cam.phi)   * 0.10;
+    target.lerp(tTarget, 0.045);
+    camera.position.set(
+      target.x + cam.r * Math.sin(cam.phi) * Math.sin(cam.theta),
+      target.y + cam.r * Math.cos(cam.phi),
+      target.z + cam.r * Math.sin(cam.phi) * Math.cos(cam.theta));
+    camera.lookAt(target);
+
+    if(!reduced){
+      const sp = seaGeo.attributes.position;
+      for(let i=0;i<sp.count;i++){
+        const x = seaBase[i*3], z = seaBase[i*3+2];
+        sp.setY(i, Math.sin(x*0.06 + t*0.7)*0.32 + Math.cos(z*0.05 - t*0.5)*0.28);
+      }
+      sp.needsUpdate = true;
+
+      for(const t2 of T){
+        const m = marks[t2.id];
+        for(const p of m.crew){
+          p.userData.a += p.userData.sp * dt;
+          const x = Math.cos(p.userData.a)*p.userData.r;
+          const z = Math.sin(p.userData.a)*p.userData.r;
+          p.position.set(x, heightAt(t2.pos[0]+x, t2.pos[1]+z)
+            + Math.abs(Math.sin(t*3.1 + p.userData.bob))*0.16, z);
+          p.rotation.y = -p.userData.a;
+        }
+        const beat = 0.94 + Math.sin(t*1.6 + t2.pos[0]*0.1)*0.07;
+        m.halo.scale.setScalar(9*beat);
+      }
+
+      spawn -= dt;
+      if(spawn <= 0){
+        spawn = routeOn ? 0.6 : 0.34;
+        if(routeOn){
+          if(routeStep > 0) routePulse(routeOn.steps[routeStep-1][0],
+                                       routeOn.steps[routeStep][0]);
+        } else {
+          const live = current
+            ? arcs.filter(e => e.a === current || e.b === current) : arcs;
+          const e = live[(Math.random()*live.length)|0];
+          if(e) emit(e, marks[e.a].color.getHex(), 0.20 + Math.random()*0.14);
+        }
+      }
+      for(const p of pulses){
+        if(!p.arc) continue;
+        p.t += p.sp * dt;
+        if(p.t >= 1){ p.arc = null; p.mesh.visible = false; continue; }
+        p.arc.curve.getPoint(p.back ? 1 - p.t : p.t, p.mesh.position);
+        p.mesh.material.opacity = 0.95 * Math.sin(Math.PI * p.t);
+      }
+
+      if(routeOn){
+        routeClock += dt;
+        if(routeClock > 3.8){
+          routeClock = 0;
+          routeStep = (routeStep + 1) % routeOn.steps.length;
+          showStep(routeStep);
+        }
+      }
+    }
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  });
+}
+</script>
