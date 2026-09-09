@@ -23,6 +23,10 @@
 (function(){
   "use strict";
 
+  // Kept in step with gen.REWRITE_LIMIT server-side; the server refuses past it
+  // either way, so the button is a courtesy and not the guard.
+  var REWRITE_LIMIT=3;
+
   var LS_USAGE='pace_outreach_gen_usage';
   var LS_HIST='pace_outreach_gen_history';
 
@@ -43,7 +47,7 @@
       // Which framing is on screen, and the edits made to each one. Switching
       // between them must not throw away a sentence you just rewrote — that is
       // the difference between a picker and a regenerate button.
-      variantId:null, edits:{}, angleLoading:{}, angleInfo:{},
+      variantId:null, edits:{}, angleLoading:{}, angleInfo:{}, rewrites:{},
       sequences:null, sequenceId:'',
       // Recipient search — the "someone already in PACE" half of the composer.
       recipMode:'new', recipQuery:'', recipResults:null, recipSearching:false,
@@ -175,7 +179,7 @@
     var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sentOk=null;
     g.recipQuery=''; g.recipResults=null;
     g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={};
-    g.angleLoading={}; g.angleInfo={}; render();
+    g.angleLoading={}; g.angleInfo={}; g.rewrites={}; render();
   };
 
   // The variant currently on screen, with any edits applied over it.
@@ -191,6 +195,63 @@
                 subject:e.subject,email:e.email} : v;
   }
 
+  // Ask the AI for one angle. `previous` non-empty makes it a REWRITE: the same
+  // brief with the earlier attempts attached and an instruction not to repeat
+  // them. One function for both, because they differ only in that argument.
+  function askForAngle(id, previous){
+    var g=G(), f=g.form;
+    g.angleLoading[id]=true; render();
+    return apiPost('/outreach/generate-angle',{
+      angle:id, outreach_type:f.outreach_type,
+      contact_first_name:f.contact_first_name, contact_title:f.contact_title,
+      company:f.company, location:f.location,
+      no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
+      notes:f.notes, job_title:f.job_title, job_description:f.job_description,
+      sender:{title:f.sender_title},
+      previous:previous||[]
+    }).then(function(r){
+      g.angleLoading[id]=false;
+      g.draft.variants=(g.draft.variants||[]).map(function(x){ return x.id===id?Object.assign({},x,r):x; });
+      g.angleInfo[id]={mode:r.mode,engine:r.engine,engine_model:r.engine_model,
+                       quality:r.quality,ai_error:r.ai_error,ai_error_detail:r.ai_error_detail};
+      render();
+      return r;
+    }).catch(function(e){
+      g.angleLoading[id]=false;
+      g.angleInfo[id]={mode:'rules',ai_error:'request_failed',ai_error_detail:e.message};
+      render();
+      throw e;
+    });
+  }
+
+  // ── ANOTHER WORDING OF THE SAME ANGLE ────────────────────────────────────
+  // Same intent, different sentences. Every attempt is kept and sent back so
+  // the model cannot hand back what it already wrote, and the count is capped
+  // because each press is a full AI call against the org's shared daily budget.
+  window.outreachRewriteAngle=function(){
+    var g=collectDom();
+    var cur=currentVariant();
+    if(!cur||!g.draft||!g.draft.ai_available) return;
+    var id=cur.id;
+    if(g.angleLoading[id]) return;
+    var seen=g.rewrites[id]||[];
+    if(seen.length>=REWRITE_LIMIT){
+      g.error='That is '+REWRITE_LIMIT+' rewrites of this angle. Edit it by hand, or try another angle.';
+      render(); return;
+    }
+    // An edit made by hand would be replaced by the new wording, so ask once
+    // rather than silently throwing away typing.
+    if(g.edits[id]&&!confirm('Rewriting replaces your edits to this angle. Continue?')) return;
+    var live=(g.draft.variants||[]).filter(function(x){return x.id===id;})[0];
+    g.rewrites[id]=seen.concat([ (g.edits[id]&&g.edits[id].email) || (live&&live.email) || '' ]);
+    delete g.edits[id];
+    g.error=null;
+    askForAngle(id, g.rewrites[id]).catch(function(e){
+      // The server enforces the same ceiling; if it refuses, stop offering it.
+      if(/rewrite_limit/.test(e.message||'')) g.rewrites[id]=new Array(REWRITE_LIMIT);
+    });
+  };
+
   window.outreachPickVariant=function(id){
     var g=collectDom();          // keep whatever is typed in the box we are leaving
     g.variantId=id;
@@ -203,27 +264,7 @@
     if(!d||!d.ai_available) return;
     var v=(d.variants||[]).filter(function(x){return x.id===id;})[0];
     if(!v||v.mode==='ai'||g.angleLoading[id]||g.edits[id]) return;
-    g.angleLoading[id]=true; render();
-    var f=g.form;
-    apiPost('/outreach/generate-angle',{
-      angle:id, outreach_type:f.outreach_type,
-      contact_first_name:f.contact_first_name, contact_title:f.contact_title,
-      company:f.company, location:f.location,
-      no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
-      notes:f.notes, job_title:f.job_title, job_description:f.job_description,
-      sender:{title:f.sender_title}
-    }).then(function(r){
-      g.angleLoading[id]=false;
-      g.draft.variants=(g.draft.variants||[]).map(function(x){ return x.id===id?Object.assign({},x,r):x; });
-      // The engine line is per angle now, so remember what wrote this one.
-      g.angleInfo[id]={mode:r.mode,engine:r.engine,engine_model:r.engine_model,
-                       quality:r.quality,ai_error:r.ai_error,ai_error_detail:r.ai_error_detail};
-      render();
-    }).catch(function(e){
-      g.angleLoading[id]=false;
-      g.angleInfo[id]={mode:'rules',ai_error:'request_failed',ai_error_detail:e.message};
-      render();
-    });
+    askForAngle(id, []).catch(function(){});
   };
 
   function collectDom(){
@@ -280,7 +321,7 @@
       adjustment:useAdjustment?g.adjustment:''
     }).then(function(r){
       g.loading=false; g.draft=r; g.overCapAsked=false;
-      g.edits={}; g.angleLoading={};
+      g.edits={}; g.angleLoading={}; g.rewrites={};
       // The first angle is the one the server already wrote.
       g.angleInfo={};
       if(r.variants&&r.variants[0])g.angleInfo[r.variants[0].id]={mode:r.mode,engine:r.engine,
@@ -527,6 +568,30 @@
     var cur=currentVariant();
     var list=(d.variants&&d.variants.length)?d.variants:[d];
 
+    // ── ANOTHER WORDING, SAME ANGLE ────────────────────────────────────────
+    // Capped because every press is a full AI call against the org's shared
+    // daily allowance. The count is shown rather than the button just going
+    // dead, so it is obvious why it stops.
+    function rewriteBtn(v){
+      if(!d.ai_available||!v) return '';
+      var used=(g.rewrites[v.id]||[]).length;
+      var left=REWRITE_LIMIT-used;
+      var busy=!!g.angleLoading[v.id];
+      var can=left>0&&!busy;
+      return '<div style="display:flex;align-items:center;gap:9px;margin:0 0 12px">'+
+        '<button type="button" '+(can?'onclick="outreachRewriteAngle()"':'disabled')+' style="'+
+          'border:1px solid var(--border2);background:var(--card);'+
+          'color:'+(can?'var(--text2)':'var(--text3)')+';font-size:12px;border-radius:99px;'+
+          'padding:5px 12px;font-family:inherit;cursor:'+(can?'pointer':'default')+';opacity:'+(can?'1':'.6')+'">'+
+          (busy?'Rewriting…':'\u21bb Rewrite this one')+'</button>'+
+        '<span style="font-size:11.5px;color:var(--text3)">'+
+          (left>0
+            ? left+' of '+REWRITE_LIMIT+' left \u2014 same angle, different wording'
+            : 'No rewrites left for this angle. Edit it by hand, or try another angle.')+
+        '</span>'+
+      '</div>';
+    }
+
     // ── THE PICKER, above the preview ──────────────────────────────────────
     // Four framings of the SAME researched facts, each an opener that earned
     // replies in the 30 threads this was built from. Picking beats regenerating:
@@ -638,6 +703,7 @@
       sentBanner+
       readCard+
       picker+
+      rewriteBtn(cur)+
       modeNote+
       (cur.diagnosis?'<div style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+
         '<strong>Why this angle:</strong> '+esc(cur.diagnosis)+'</div>':'')+

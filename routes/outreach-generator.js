@@ -286,6 +286,19 @@ module.exports = (ctx) => {
       if (!gen.angleBrief(angleId)) return res.status(400).json({ error: 'Unknown angle.' });
       const check = gen.validateInput(input);
       if (!check.ok) return res.status(400).json({ error: 'Fill in: ' + check.missing.join(', ') + '.' });
+
+      // A REWRITE IS A WHOLE EXTRA AI CALL, so the ceiling is enforced HERE and
+      // not only in the button. The page counts too, but a page cannot be the
+      // thing that protects a shared daily allowance — this feature spends the
+      // same budget as resume parsing, the JD scrub and lead distribution.
+      const previous = Array.isArray(input.previous) ? input.previous.filter(Boolean).slice(0, gen.REWRITE_LIMIT) : [];
+      if (previous.length >= gen.REWRITE_LIMIT) {
+        return res.status(429).json({
+          error: 'rewrite_limit',
+          message: `That is ${gen.REWRITE_LIMIT} rewrites of this angle. Edit the wording by hand, or pick another angle.`,
+          limit: gen.REWRITE_LIMIT,
+        });
+      }
       if (!(await aiProvider.isAvailable(supabase))) return res.status(409).json({ error: 'ai_unavailable' });
 
       const [companyName, mailbox] = await Promise.all([
@@ -317,7 +330,11 @@ module.exports = (ctx) => {
         maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId, system, prompt,
       });
 
-      const out = await askAi(gen.buildUserPayload(forAi));
+      // A rewrite sends the same brief back with the earlier attempts attached
+      // and an instruction not to repeat them — otherwise the same input returns
+      // very nearly the same email and the button looks broken.
+      const payload = gen.buildUserPayload(forAi);
+      const out = await askAi(previous.length ? gen.buildRewritePrompt(payload, previous, angleId) : payload);
       if (!out) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unavailable', ai_error_detail: await lastAiError(supabase) });
       let parsed = gen.parseAiDraft(out.text);
       if (!parsed) return res.json({ ...variant, mode: 'rules', ai_error: 'ai_unparseable' });
@@ -342,7 +359,8 @@ module.exports = (ctx) => {
         subject: parsed.subject, diagnosis: parsed.diagnosis, email: parsed.email,
         words: gen.wordCount(parsed.email), mode: 'ai',
         engine: out.provider, engine_model: out.model,
-        quality: { ok: true, repaired, violations: [] }
+        quality: { ok: true, repaired, violations: [] },
+        rewrites_used: previous.length, rewrites_left: gen.REWRITE_LIMIT - previous.length
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

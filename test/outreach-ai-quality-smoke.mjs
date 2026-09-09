@@ -281,5 +281,78 @@ t('the page sends the sequence choice and the lead fields', () => {
   assert.match(pg, /outreachSetSequence/);
 });
 
+console.log('\nRewrite — same angle, different wording');
+t('the limit is three and it is exported for both sides to agree on', () => {
+  assert.equal(gen.REWRITE_LIMIT, 3);
+});
+t('a rewrite keeps the angle and forbids repeating what it already wrote', () => {
+  const p = gen.buildRewritePrompt('THE BRIEF', ['Hi Ed,\nFirst version opener.'], 'short');
+  assert.match(p, /THE BRIEF/);                      // the original brief still goes
+  assert.match(p, /REWRITE/);
+  assert.match(p, /Keep the angle exactly as it is/);
+  assert.match(p, /Keep every fact the same/);
+  assert.match(p, /do not repeat these/i);
+  assert.match(p, /First version opener/);           // the earlier attempt is shown back
+});
+t('it names the angle it must stay inside', () => {
+  const p = gen.buildRewritePrompt('B', ['x'], 'effort');
+  assert.match(p, /the cost of searching/);
+  assert.doesNotMatch(p, /the constraint/);          // not another angle's brief
+});
+t('every earlier attempt is sent back, not just the last', () => {
+  const p = gen.buildRewritePrompt('B', ['alpha opener', 'beta opener'], 'direct');
+  assert.match(p, /alpha opener/);
+  assert.match(p, /beta opener/);
+  assert.match(p, /2 times/);
+});
+t('a first draft is not a rewrite — no rewrite text when nothing came before', () => {
+  assert.doesNotMatch(gen.buildUserPayload(BASE), /REWRITE/);
+});
+
+t('the server enforces the ceiling, not just the button', () => {
+  assert.match(route, /previous\.length >= gen\.REWRITE_LIMIT/);
+  assert.match(route, /rewrite_limit/);
+  assert.match(route, /429/);
+});
+t('the rewrite path reuses the same brief rather than rebuilding one', () => {
+  assert.match(route, /previous\.length \? gen\.buildRewritePrompt\(payload, previous, angleId\) : payload/);
+});
+t('the page and the server hold the same number', () => {
+  assert.match(pg, /var REWRITE_LIMIT=3;/);
+});
+t('the page keeps every attempt so the model cannot repeat itself', () => {
+  assert.match(pg, /g\.rewrites\[id\]=seen\.concat/);
+});
+t('a fresh Generate clears the rewrite history', () => {
+  assert.match(pg, /g\.edits=\{\}; g\.angleLoading=\{\}; g\.rewrites=\{\};/);
+});
+t('one function serves both the first draft and a rewrite', () => {
+  assert.match(pg, /function askForAngle\(id, previous\)/);
+  assert.match(pg, /askForAngle\(id, \[\]\)/);
+  assert.match(pg, /askForAngle\(id, g\.rewrites\[id\]\)/);
+});
+t('rewriting over a hand edit asks first rather than discarding it', () => {
+  assert.match(pg, /Rewriting replaces your edits/);
+});
+
+console.log('\nThe page still has all its handlers');
+// I DELETED collectDom() AND outreachGenerate() WITH A CARELESS BULK EDIT and
+// every syntax check passed — the file was still valid JavaScript, just missing
+// the Generate button's handler. Only a behaviour test caught it. This is the
+// cheap guard: every onclick the page emits must be defined somewhere in it.
+t('every handler this page calls is defined in it', () => {
+  const called = new Set([...pg.matchAll(/onclick="([a-zA-Z_$][\w$]*)\(/g)].map(m => m[1]));
+  const missing = [...called].filter(fn =>
+    !new RegExp(`(window\\.${fn}\\s*=|function\\s+${fn}\\s*\\()`).test(pg) &&
+    !/^(goPage|showToast|render|closeModal|event)$/.test(fn));
+  assert.deepEqual(missing, [], 'undefined handler(s): ' + missing.join(', '));
+});
+t('the entry points the Email page depends on are still here', () => {
+  for (const fn of ['outreachGenerate', 'outreachGenSend', 'outreachPickVariant', 'outreachRewriteAngle']) {
+    assert.match(pg, new RegExp(`window\\.${fn}\\s*=`), fn + ' is missing');
+  }
+  assert.match(pg, /function collectDom\(/);
+});
+
 console.log(`\nSUMMARY: ${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
