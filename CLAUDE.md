@@ -998,6 +998,19 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      * **THE SENDING HOURS ARE ON SCREEN BEFORE ANYTHING IS QUEUED**
        (`GET /candidate-outreach/sender` returns `window.label`), because the
        owner queued a batch at 3am and then had to ask why nothing moved.
+     * **THE HOURS ARE EDITED IN `config/settings.js`'s SCHEMA, NOT A NEW
+       SCREEN.** Admin → System Settings is fully schema-driven — it fetches
+       `/admin/settings/numbers`, groups by `group` and renders each row — so
+       four entries under `group: 'Candidate outreach'` bought the whole
+       control with NO frontend work, and with the range checking and the
+       validated write already there. `candidateWindow()` reads the same keys
+       through `settingsConfig.getSetting`, so the hours an admin types and the
+       hours the drain obeys cannot be two different numbers; a test fails if
+       that router queries `app_settings` for them directly. **Reach for this
+       schema before building any new numeric setting.** The modal opens from
+       the Sequence page toolbar, which is a long way from where the question
+       gets asked, so the candidate Compose screen links to the same modal
+       rather than growing a second settings surface.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by

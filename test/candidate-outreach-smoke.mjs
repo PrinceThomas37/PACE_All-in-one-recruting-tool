@@ -433,6 +433,29 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
   ok('a missing half falls back to the default weekend',
     bad.weekend[0] === 9 && bad.weekend[1] === 20, JSON.stringify(bad));
 
+  // The hours an admin types and the hours the drain obeys must be the same
+  // number. One schema, one screen, one reader — not a second settings surface.
+  const schema = require(path.join(ROOT, 'config/settings.js')).SETTINGS_SCHEMA;
+  const winKeys = ['candidate_window_weekday_start', 'candidate_window_weekday_end',
+                   'candidate_window_weekend_start', 'candidate_window_weekend_end'];
+  for (const k of winKeys) {
+    const def = schema.find(d => d.key === k);
+    ok(`${k} is in the admin settings schema`, !!def, 'missing');
+    if (def) {
+      ok(`${k} is grouped so the admin screen renders it`, def.group === 'Candidate outreach', def.group);
+      ok(`${k} is bounded to real hours`, def.min >= 0 && def.max <= 24, `${def.min}-${def.max}`);
+    }
+  }
+  // The schema's defaults ARE the shipped window — a mismatch would mean the
+  // screen showed one thing on a fresh install and the sender did another.
+  const dflt = (k) => (schema.find(d => d.key === k) || {}).default;
+  ok('the schema defaults match the shipped candidate window',
+    dflt('candidate_window_weekday_start') === gen.CANDIDATE_WINDOW.weekday[0] &&
+    dflt('candidate_window_weekday_end') === gen.CANDIDATE_WINDOW.weekday[1] &&
+    dflt('candidate_window_weekend_start') === gen.CANDIDATE_WINDOW.weekend[0] &&
+    dflt('candidate_window_weekend_end') === gen.CANDIDATE_WINDOW.weekend[1],
+    JSON.stringify(gen.CANDIDATE_WINDOW));
+
   ok('the clock label reads like a clock',
     gen.clockLabel(17 * 60) === '5:00 PM' && gen.clockLabel(9 * 60) === '9:00 AM' &&
     gen.clockLabel(0) === '12:00 AM' && gen.clockLabel(12 * 60 + 30) === '12:30 PM');
@@ -534,6 +557,11 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
   ok('the window is judged in the CANDIDATE\'s local day and hour',
     /function localPartsFor/.test(route) && /gen\.candidateWindowState\(at\.day, at\.minutes, win\)/.test(route));
   // The leads window is for prospects at their desks and must not leak back in.
+  // Read through config/settings.js, so the admin screen and the sender share
+  // one source rather than two hand-synced copies of four numbers.
+  ok('the window is read through the shared settings schema, not a private query',
+    /settingsConfig\.getSetting\(supabase, 'candidate_window_weekday_start'\)/.test(route) &&
+    !/from\('app_settings'\)[\s\S]{0,200}candidate_window_/.test(route));
   ok('candidate sending does NOT use the leads engine window',
     !/isInLeadSendWindow|getSendWindowHours|formatWindowOpensLabel/.test(route));
   // A backlog released by an opening window would otherwise go out back to back.
