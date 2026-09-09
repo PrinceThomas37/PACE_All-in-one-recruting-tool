@@ -150,7 +150,11 @@ function renderSidebar(){
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"chart",grp:G_INS});
   // BD / BD Lead (not admin): own lead-gen performance — "Lead Insights".
   if(userHasAnyRole(u,'bd','bd_lead')&&!isAdmin)navItems.push({id:"bdinsights",lbl:"Lead Insights",ic:"chart",grp:G_INS});
-  if(canReports&&!leadsAnyTeam)navItems.push({id:"reports",lbl:"Reports",ic:"chart",grp:G_INS});
+  // NOT "chart": Insights / Lead Insights already use it, and they sit in this
+  // same group. The collapsed rail is ICON-ONLY, so two items sharing an icon
+  // are indistinguishable there — which is what "the menu is repeating" was.
+  // Expanding it showed different labels, hence "no repeats in full menu".
+  if(canReports&&!leadsAnyTeam)navItems.push({id:"reports",lbl:"Reports",ic:"note",grp:G_INS});
   if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_INS});
 
   // De-duplicate: Insights can be pushed twice for an admin who is also an RA
