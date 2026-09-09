@@ -37,6 +37,7 @@ function renderDashboard(){
   // "What needs you today" — loaded once per dashboard visit. A "view as"
   // preview must not fetch the viewer's own queue and label it someone else's.
   if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
+  if(!isViewingOther&&STATE.briefing===undefined)loadMorningBriefing();
 
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
@@ -273,6 +274,8 @@ function renderRecruiterDashboard(u){
       '</div>'+
     '</div>'+
 
+    renderMorningBriefingCard()+
+
     renderNextActionsCard()+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your desk…</div>':'')+
@@ -394,6 +397,8 @@ function renderManagerDashboard(u){
         '<div><div class="bstat-val">'+(bs['Placement']||0)+'</div><div class="bstat-lbl">Placements</div></div>'+
       '</div>'+
     '</div>'+
+
+    renderMorningBriefingCard()+
 
     renderNextActionsCard()+
 
@@ -521,6 +526,8 @@ function renderIndividualDashboard(u){
         '<div><div class="bstat-val">'+dups+'</div><div class="bstat-lbl">Duplicates</div></div>'+
       '</div>'+
     '</div>'+
+
+    renderMorningBriefingCard()+
 
     renderNextActionsCard()+
 

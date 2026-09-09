@@ -1,3 +1,50 @@
+// ── MORNING BRIEFING — one sentence, above everything else ──────────────────
+// GET /ai/morning-briefing always returns 200 with a non-empty `summary` — no
+// "AI unavailable" state exists on the wire. The one thing this card must
+// never do is disappear silently on a failed fetch (that is exactly what
+// "Needs you today" used to do); a broken network still gets an honest
+// sentence on screen, not a blank space where a sentence should be.
+function loadMorningBriefing(force){
+  if(STATE._briefLoading)return;
+  if(STATE.briefing&&!force)return;
+  STATE._briefLoading=true;
+  apiGet('/ai/morning-briefing').then(function(r){
+    STATE.briefing=r||{_error:true};
+    STATE._briefLoading=false;
+    scheduleRender();
+  }).catch(function(){
+    STATE.briefing={_error:true};
+    STATE._briefLoading=false;
+    scheduleRender();
+  });
+}
+window.refreshMorningBriefing=function(){STATE.briefing=null;loadMorningBriefing(true);render();};
+
+function renderMorningBriefingCard(){
+  var b=STATE.briefing;
+  if(b===undefined||b===null){
+    return '<div class="briefing-card"><div class="briefing-ic">☀️</div>'+
+      '<div class="briefing-body"><div class="briefing-text">Working out what came in today…</div></div></div>';
+  }
+  if(b._error){
+    // Honest, not silent — this is the exact defect the owner watched happen
+    // with "Needs you today". A broken fetch still says so, on screen.
+    return '<div class="briefing-card is-error"><div class="briefing-ic">⚠️</div>'+
+      '<div class="briefing-body">'+
+        '<div class="briefing-text">Could not load this morning\'s summary.</div>'+
+        '<div class="briefing-sub">The numbers below are still live — <a href="#" onclick="refreshMorningBriefing();return false;">try again</a>.</div>'+
+      '</div></div>';
+  }
+  // degraded: the database itself could not be read — the one case the card
+  // may hide, since there is nothing true left to say about "today".
+  if(b.degraded)return '';
+  return '<div class="briefing-card'+(b.quiet?' is-quiet':'')+'"><div class="briefing-ic">'+(b.quiet?'🌙':'☀️')+'</div>'+
+    '<div class="briefing-body">'+
+      '<div class="briefing-text">'+htmlEsc(b.summary||'')+'</div>'+
+      (b.engine==='ai'?'<div class="briefing-sub">Written by AI from today\'s numbers</div>':'')+
+    '</div></div>';
+}
+
 // ── NEXT ACTIONS — "what to do today", ranked, with the reason attached ──────
 // Step 4. The app already knew a lead had replied six days ago and that a
 // reminder had come due; none of it reached the user, so the work sat in tables

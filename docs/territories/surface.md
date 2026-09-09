@@ -15,6 +15,18 @@
 - Email → **Generator** (clients) and Email → **Compose** (Clients | Candidates
   switch) are the two outreach screens. `49-page-candidate-outreach.js` has a
   ‹ › stepper that walks the picked list.
+- **The morning briefing card is live on all three dashboards** (recruiter,
+  manager, individual) — `renderMorningBriefingCard()` in `44-next-actions.js`,
+  fetched once via `loadMorningBriefing()` from `GET /ai/morning-briefing`
+  (observatory's, C-0001) and placed right after the banner, before
+  `renderNextActionsCard()` and the tiles, in all three `render*Dashboard()`
+  functions in `05-page-dashboard.js`. It is deliberately NOT the same pattern
+  as "Needs you today": that card returns `''` on a failed fetch (silent), this
+  one renders an honest amber "Could not load this morning's summary" instead
+  — the owner watched the silent-vanish defect happen and named it as the one
+  thing to avoid. `degraded:true` (DB unreadable) is the one case it hides,
+  per observatory's contract answer. `.briefing-card`/`.briefing-*` classes
+  live in `styles.css`, no inline width/grid, reflows fine at 390px.
 
 ## Fragile — touch with care
 - **`05-page-dashboard.js`, `25-workflow-bd.js`, `28-page-pipeline.js`,
@@ -32,9 +44,18 @@
 ## Open here
 - Finish the UI-kit rollout: dashboards, Admin, pipeline, My Team, Assign Leads.
 - Nothing shipped since PR #185 has been **seen working** by the owner: the rail
-  icon fix, the ‹ › candidate stepper, opening a sent email, the Rewrite button.
-- The daily import briefing (`/ai/generate-summary`) works server-side and
-  **nothing on any screen calls it**. A dashboard card is the missing half.
+  icon fix, the ‹ › candidate stepper, opening a sent email, the Rewrite button,
+  and now the morning-briefing card.
+- ~~The daily import briefing (`/ai/generate-summary`) works server-side and
+  nothing on any screen calls it.~~ CLOSED — superseded by the purpose-built
+  `GET /ai/morning-briefing` (observatory, C-0001). `/ai/generate-summary`
+  itself is still unwired, but is now a lower-priority, separate question.
 
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
+- **2026-09-09** — morning-briefing card built and wired into all three
+  dashboards (recruiter, manager, individual). `bash test/verify-frontend.sh`,
+  `screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs` (32/32),
+  `frontend-smoke.mjs` (14/14), `nav-icons-smoke.mjs` (40/40) all pass.
+  Screenshots taken with a stubbed endpoint (busy morning, quiet day, failed
+  fetch) across admin/recruiter/mobile — filenames in the report.
