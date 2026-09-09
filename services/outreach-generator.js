@@ -1076,6 +1076,37 @@ function checkDraft(draft, input, opts) {
   return { ok: v.length === 0, violations: v };
 }
 
+// ── ANOTHER WORDING OF THE SAME EMAIL ──────────────────────────────────────
+// "Regenerate" must not mean "roll the dice again". The angle earned its place
+// and the facts came off the posting; what the writer wants is different
+// SENTENCES. So the previous attempts are sent back with an explicit
+// instruction not to reuse their openings — without that, a model handed the
+// same brief twice returns very nearly the same email and the button looks
+// broken.
+//
+// REWRITE_LIMIT is a token guard, not a UX preference: each attempt is a full
+// call, and the org's daily AI allowance is shared with resume parsing, the JD
+// scrub and lead distribution. Three is the owner's number.
+const REWRITE_LIMIT = 3;
+
+function buildRewritePrompt(payload, previous, angleId) {
+  const seen = (previous || []).filter(Boolean);
+  const brief = ANGLE_BRIEF[angleId];
+  return [
+    payload,
+    '',
+    'REWRITE. You have already written this email ' + seen.length +
+      (seen.length === 1 ? ' time' : ' times') + '. Write it again, DIFFERENTLY.',
+    brief ? `Keep the angle exactly as it is — still lead with ${brief.lead}, still ${brief.must}` : '',
+    'Keep every fact the same. Change the sentences: a different opening line, a',
+    'different order, a different way into the same point. Do NOT reuse any',
+    'opening sentence below, and do not merely reorder the words of one.',
+    '',
+    'ALREADY WRITTEN (do not repeat these):',
+    seen.map((t, n) => `${n + 1}. ${String(t).split(/\n/).filter(Boolean).slice(0, 3).join(' ')}`).join('\n'),
+  ].filter(Boolean).join('\n');
+}
+
 // The repair turn. One retry, naming exactly what to fix and nothing else —
 // re-sending the whole brief invites a rewrite that breaks something different.
 function buildRepairPrompt(previous, violations) {
@@ -1096,7 +1127,8 @@ function buildRepairPrompt(previous, violations) {
 module.exports = {
   DEFAULT_COMPANY,
   buildSystemPrompt, buildUserPayload, parseAiDraft, validateInput,
-  checkDraft, buildRepairPrompt, angleBrief, ANGLE_BRIEF, AUDIENCE_BRIEF,
+  checkDraft, buildRepairPrompt, buildRewritePrompt, REWRITE_LIMIT,
+  angleBrief, ANGLE_BRIEF, AUDIENCE_BRIEF,
   rulesDraft, rulesVariants, draftParts, contextSentence, extractRoleTitle, extractSkills, extractRequirements, diagnoseSignal, possessive,
   extractCompany, extractLocation, looksLikeJobTitle,
   contentLines, normalizeText, sections, audienceOf, pickNoteDetail, pluralRole,
