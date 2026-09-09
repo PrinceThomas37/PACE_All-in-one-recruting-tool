@@ -3899,3 +3899,172 @@ anchored on the exact text being replaced over edits anchored on a start and an
 end. A slice is only as safe as your memory of what sits between the anchors,
 and that memory is exactly what is unreliable in a file you did not write in
 this sitting.
+
+---
+
+## Session 21, part 0 — candidate outreach: the build, and the batch that only sent one
+
+> **Out of order on purpose.** This covers **#180-#184**, which shipped BEFORE
+> the two Session 21 entries above (#185, #187) and were never written up. The
+> file is append-only, so it is added here rather than inserted where it belongs
+> chronologically.
+
+The owner asked for the mirror of the outreach generator: that one starts from a
+job posting **pasted** off the internet and finds one hiring contact; this one
+starts from a **job order we already own** and asks many candidates whether they
+want it. Planned first (`docs/CANDIDATE_OUTREACH_PLAN.md`), with three decisions
+put to the owner before any code:
+
+1. Emailing somebody does **not** put them on the job's board — a tick-box does,
+   default off.
+2. The answer is **buttons in the email**, not reply-reading alone.
+3. Sends go out as a **drip**, never a burst.
+
+### The two decisions that shaped everything (#180)
+
+**The AI is called once per JOB, never per candidate.** Twenty-five candidates
+written individually is twenty-five calls: a rate-limit on Groq's 8,000
+tokens/minute and the org's whole daily meter gone, after which every AI feature
+in PACE silently drops to its rules writer for the rest of the day. So the **job
+brief** is written once and cached on the job order; the per-candidate sentence
+is assembled for free from the match engine's `reasons`, which are read off that
+person's own resume and are therefore true by construction. Twenty-five
+candidates cost the same as one.
+
+**The drip is a column, not a timer.** The free tier spins the process down, so
+no `setInterval` survives. Each queued row carries its own `send_after` and the
+existing heartbeat drains what is due. `candidate_outreach` is its own queue
+rather than a widened `emails`: that table is welded to the leads engine and its
+send loop is the most load-bearing code in the app.
+
+The answer buttons carry their own trap. **A link must not record the answer** —
+Outlook Safe Links, Mimecast and Proofpoint fetch every URL in an inbound message
+to check it, so a recording `GET` would mark candidates interested, or opted out,
+before a human ever opened the email, and nothing would look wrong from our side.
+`GET /i/:token` renders a page with real buttons; the `POST` is the answer.
+
+### Five defects found before it shipped
+
+None was findable by reading:
+
+- **The money check matched a currency SUFFIX only**, so `USD 200,000` — the
+  exact shape `jobFacts()` itself emits — was invisible to it. *A checker with a
+  hole reports a clean draft, which is worse than no checker.*
+- **The rules writer failed its own checker, twice** (the short angle had no way
+  out; the nurture email never asked a question). The queue skips any candidate
+  whose draft fails, so an angle that fails silently never ships at all.
+- **`too_short` rejected honest drafts** written from a job order carrying only a
+  title. *A minimum length is an instruction to invent when there are no facts* —
+  precisely what the pay and experience checks forbid. Suppressed on thin input.
+- **`assemble()` filtered `''` along with `null`**, collapsing every email to
+  single-spaced sentences. Invisible to word counts and to every check; obvious
+  in the first screenshot.
+- **Match reasons were lowercased** into the email: "your background in procore,
+  osha 30".
+
+### The first live batch: four candidates, one email (#181)
+
+The owner queued four HVAC technicians. One went. Three were skipped with the
+message **"failed check"** and nothing else.
+
+Reproduced from the live records before changing anything — same three, same one:
+
+```
+Curtis Grubbs   exp=11 SKIPPED  invented_experience
+Clayton Smith   exp=35 SKIPPED  invented_experience
+Shaun Maher     exp=4  QUEUED
+Brian Klevecz   exp=15 SKIPPED  invented_experience
+```
+
+The AI job brief said **"2-3 years of field experience"** — a fact about the
+*vacancy*. `invented_experience` matched any `N years` anywhere in the email and
+compared it against the *candidate's* record, so an 11-, a 35- and a 15-year
+technician were rejected as though we had invented their careers. The one that
+went did so only because his 4 years happened to sit within 1 of 3.
+
+**A job's requirement is not a claim about the reader.** The rule the check
+exists to enforce is *never tell someone about their own career*, and only a
+second-person attribution does that. It now fires on "your 20 years", never on
+the job stating what it asks for.
+
+The second bug was worse and is why the first was undiagnosable from inside the
+app: **the preview built its input with no brief at all**, so it fell back to the
+rules text while the queue sent the cached AI text. The screen showed one email
+and a different one went out — the exact failure a preview exists to prevent, and
+the "2-3 years" line that caused the skips never appeared on screen. One
+`briefFor(job)` loader now, called by both, with a test that fails if either
+inlines its own.
+
+Three more from the same screenshot: the matcher's grid shorthand reached a live
+email as **"your background in 3/4 skills"** (its real values are `3/4 skills`,
+`title 100%`, `diff state` — written for a recruiter scanning a table, not for a
+human being); `job_orders.remote` holds `"No"`, so the email said **"It is
+Full-time and No."**; and a hand-typed skills field arrived lowercase — "the work
+centres on hvac, epa and boilers".
+
+### "Why are they still pending?" (#182)
+
+Four emails sat on **"pending · due 03:39 am"** for hours after that time passed,
+and the owner had to ask whether it was the send window or a fault.
+
+It was the window. Every candidate was in Connecticut or South Carolina, it was
+9:26 pm there, and the window was 08:00-16:00 in the candidate's timezone. The
+drain had run five minutes earlier, picked them up, checked, and deferred —
+exactly as designed. Nothing on screen said any of that.
+
+**Same failure as "failed check": the app knew precisely why and would not say.**
+A due timestamp already in the past is *worse* than no timestamp, because it
+reads as a missed deadline rather than a deliberate hold. Every pending row now
+carries a reason worked out in that candidate's own timezone.
+
+### Their free time, not the client's office hours (#183)
+
+Owner's call: 08:00-16:00 is right for a **prospect** at their desk and exactly
+wrong for a **candidate**, who is at work then. Candidate outreach now sends
+weekday evenings (17:00-21:00) and most of the weekend (09:00-20:00), in the
+candidate's timezone. `candidateWindowState()` is pure and takes the local day
+and minute as arguments, so every hour of the week is tested without waiting for
+it — including that Friday night rolls to Saturday *morning*, and that a day
+whose start is not before its end is closed rather than open for 24 hours.
+
+**Narrowing the window activated a dormant defect.** `send_after` spaces a batch
+at *queue* time, but when the window is shut while those slots come round, every
+row is due the instant it opens — and the drain's loop had no pause between
+sends. The whole backlog would have gone out back to back: the exact pattern the
+drip exists to prevent. Eight hours to four made it near certain rather than
+merely possible. The drain now sends at most six per tick and sleeps 75-105s
+between **real** sends (a skipped or suppressed row must not buy the next one a
+free slot), the same shape as the leads engine's `waitForMailboxSlot`.
+
+### The control, for free (#184)
+
+The hours shipped as a setting with nothing to set them from. Admin → System
+Settings is already fully schema-driven — it fetches `/admin/settings/numbers`,
+groups by `group`, and renders each row with its range and description — so this
+was **four entries in `config/settings.js`**. The control, the range checking and
+the validated write all already existed. `candidateWindow()` reads the same keys
+through `settingsConfig.getSetting`, so the hours an admin types and the hours
+the drain obeys cannot be two different numbers.
+
+Migration **042** was applied live with the owner's go-ahead: `candidate_outreach`
+plus the brief columns on `job_orders`. Verified after — RLS on with its
+service-role policy, and still **0 tables in `public` without RLS**.
+
+### The lessons
+
+- **A checker with a hole is worse than no checker**, because it reports success
+  it did not earn. The money check and the years check both shipped with one.
+- **A preview that reads different data than the sender is not a preview.** It
+  actively hid the bug it existed to catch.
+- **Never render an internal display string into customer-facing text.** The
+  matcher's `reasons` are a spreadsheet, and one went out as prose.
+- **A field whose value is an ANSWER needs translating into the thing it
+  answers.** `remote: "No"` is not a phrase.
+- **Twice in one feature the app knew exactly what was wrong and would not say
+  it** — "failed check", and a stale due time. Both are now sentences.
+- **A policy change can activate a defect that was dormant under the old
+  policy.** Narrowing the send window did not create the burst; it made it
+  certain.
+- **Reproduce from the live records before theorising.** The skip pattern was
+  reproduced exactly — same three, same one — before a line was changed, which is
+  what made the cause unambiguous rather than plausible.
