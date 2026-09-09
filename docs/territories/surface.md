@@ -27,6 +27,32 @@
   thing to avoid. `degraded:true` (DB unreadable) is the one case it hides,
   per observatory's contract answer. `.briefing-card`/`.briefing-*` classes
   live in `styles.css`, no inline width/grid, reflows fine at 390px.
+- **C-0009 fixed (2026-09-09):** two more defects on the SAME screen the
+  C-0008 screenshot showed, both in `44-next-actions.js`, neither a
+  regression (predate this work, commit c5cb602). (1) `renderNextActionsCard()`
+  used to `return ''` on `s._error` — silent, unlike the briefing card. It now
+  reuses the SAME `.briefing-card.is-error` markup/classes the briefing card
+  already had rather than writing a second version of the honest-failure
+  pattern. (2) The card sat on "Working out what needs you…" forever during
+  "view as", because `loadNextActions()` is correctly gated `!isViewingOther`
+  (per-user queue — must stay gated) but the render had no branch for
+  "gated, never fetched", so `STATE.nextActions===undefined` looked identical
+  to "still loading" and nothing could ever resolve it. Fixed by adding a
+  third render branch: when `isViewingOther` (computed the same way
+  `renderDashboard()` does: `STATE.viewingUser && STATE.viewingUser.id !==
+  STATE.user.id`) and `STATE.nextActions` is still `undefined`, render "This
+  is a personal to-do queue — not shown while previewing someone else's
+  dashboard." instead of the loading state. **Chose to say so plainly rather
+  than hide the card** — the owner has twice named silent disappearance as
+  the exact defect to avoid, and hiding it would have been indistinguishable
+  from that. The fetch gate itself is untouched.
+  **Rule for the next screenshot job:** never type a stubbed AI/rules-writer
+  sentence by hand for a screenshot. `require('../services/morning-briefing')`
+  and call `rulesBriefing(facts)` (or the matching pure function for whatever
+  is being stubbed) to generate the exact text the product would actually
+  produce — two screenshots in this job's own history shipped sentences the
+  real checker would have rejected (`invented_number_word`) or that didn't
+  match the rules writer's actual phrasing ("Six" vs "6").
 - **C-0008 fixed (2026-09-09):** `loadMorningBriefing()` in `renderDashboard()`
   no longer sits behind `!isViewingOther`. Confirmed live (headless browser) that
   the old gate stuck the card on "Working out what came in today…" forever if a
@@ -61,6 +87,12 @@
   itself is still unwired, but is now a lower-priority, separate question.
 
 ## Log
+- **2026-09-09** — C-0009: next-actions card no longer silent on error, no
+  longer stuck loading forever during "view as". Verified: `verify-frontend.sh`,
+  `screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs` (32/32),
+  `frontend-smoke.mjs` (14/14), `morning-briefing-card-smoke.mjs` (32/32),
+  `run-all.mjs` (67/67, log-grepped). Screenshots: `dash-viewas.png`,
+  `dash-na-failed.png`, both generated with `rulesBriefing()`-produced text.
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-09** — morning-briefing card built and wired into all three
   dashboards (recruiter, manager, individual). `bash test/verify-frontend.sh`,

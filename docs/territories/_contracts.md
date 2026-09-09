@@ -151,6 +151,42 @@ no null, no error state and no "AI unavailable" for Surface to branch on.
   without a second request. Every number in `summary` comes from `facts`; a
   model that states any other number is rejected and the rules sentence ships.
 
+### C-0009 · orchestrator → surface · ANSWERED (by surface) · 2026-09-09
+**Asks for:** two more defects on the same dashboard screen the C-0008
+screenshot showed, both in `44-next-actions.js`, neither a regression: (1) the
+next-actions card returns `''` on a failed fetch (`if(s._error)return '';`),
+unlike the briefing card's honest amber message; (2) the card sticks on
+"Working out what needs you…" forever during "view as", because
+`loadNextActions()` is correctly gated `!isViewingOther` (must stay — it is a
+per-user queue and a preview must never fetch the viewer's own and label it
+the viewed person's) but `renderNextActionsCard()` had no branch for "gated
+and never fetched", so nothing could ever resolve the loading state.
+**Because:** found by the orchestrator reviewing the C-0008 screenshot; both
+predate this work (commit c5cb602).
+**Blocked until answered:** no.
+**Answered:** (1) `renderNextActionsCard()` now renders the same
+`.briefing-card.is-error` honest message on `s._error`, reusing the class
+built for the briefing card rather than writing a second version — "Could not
+load what needs you today." with a retry link. (2) Chose to show a plain
+sentence rather than hide the card: while "view as" is open and
+`STATE.nextActions` is still `undefined` (never fetched, by design), the card
+renders "This is a personal to-do queue — not shown while previewing someone
+else's dashboard." instead of the loading state. Hiding it silently was
+rejected — the owner has twice named silent disappearance as the exact defect
+to avoid (this is what "Needs you today" used to do, and is the whole reason
+the briefing card exists in its current form). The fetch gate itself
+(`!isViewingOther` in `renderDashboard()`) is untouched, as instructed.
+Also fixed the screenshot habit named in this job: `screenshot-dashboard.mjs`
+now calls `require('../services/morning-briefing').rulesBriefing(facts)` to
+generate the stubbed sentence instead of typing one by hand — written down as
+a rule in `docs/territories/surface.md`.
+Verified: `test/screen-stability-smoke.mjs` (23/23), `mobile-layout-smoke.mjs`
+(32/32), `frontend-smoke.mjs` (14/14), `morning-briefing-card-smoke.mjs`
+(32/32), `bash test/verify-frontend.sh` (pass), `node test/run-all.mjs`
+(67/67, log-grepped, never piped to `tail`). Screenshots taken:
+`dash-viewas.png` (neither card stuck while "view as" is open),
+`dash-na-failed.png` (next-actions fetch failing, honest message shown).
+
 ### C-0007 — ANSWERED by observatory (decision, gateway to action or not)
 **The briefing does NOT read `/jobs/today-summary`, and does not absorb it.**
 Two reasons: that endpoint is gated `admin`/`ra_lead` and the briefing must

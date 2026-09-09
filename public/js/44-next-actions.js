@@ -99,10 +99,28 @@ var NA_KIND={
 
 function renderNextActionsCard(){
   var s=STATE.nextActions;
+  // Per-user queue: never fetched while previewing someone else's dashboard
+  // ("view as"), so it can never resolve on its own here (C-0009). A loading
+  // state with nothing that can end it is the same defect C-0008 fixed for
+  // the briefing card — say plainly this queue is not shown, not "working
+  // out…" forever.
+  var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
+  if(isViewingOther&&s===undefined){
+    return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">'+
+      'This is a personal to-do queue — not shown while previewing someone else\'s dashboard.</div>';
+  }
   if(s===undefined||s===null){
     return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">Working out what needs you…</div>';
   }
-  if(s._error)return '';                 // silent: the rest of the dashboard is still useful
+  if(s._error){
+    // Honest, not silent — same rule as the briefing card (C-0009): a failed
+    // fetch must say so on screen, never vanish and leave a blank space.
+    return '<div class="briefing-card is-error mb4"><div class="briefing-ic">⚠️</div>'+
+      '<div class="briefing-body">'+
+        '<div class="briefing-text">Could not load what needs you today.</div>'+
+        '<div class="briefing-sub"><a href="#" onclick="refreshNextActions();return false;">try again</a></div>'+
+      '</div></div>';
+  }
   var items=s.items||[];
   if(!items.length){
     return '<div class="card cp mb4" style="display:flex;align-items:center;gap:10px">'+

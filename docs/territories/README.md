@@ -58,6 +58,14 @@ Every territory agent runs the same five steps. This is the whole discipline.
 
    An id, a direction, a status, a date, what and why. Status is `OPEN`,
    `ANSWERED`, or `DECLINED` with a reason. Never delete an entry; close it.
+4b. **Stop cleanly if you are cut off.** A rate limit, an API error or a
+   cancelled run can end you mid-job. **Never leave a file half-written**:
+   finish the edit you are inside, or undo it, before you stop. Then report
+   what you actually completed and what you had not started. A clean stop with
+   three of five things done is recoverable; a half-written file in a codebase
+   with no build step is a silent breakage — `node --check` will pass on a file
+   with a function missing from the middle of it. Two territory jobs died this
+   way on 2026-09-09 and left nothing behind, which is the standard to hold.
 5. **Write your memory, then stop.** Update `docs/territories/<you>.md`: what is
    now true, what you learned that would have saved you an hour, what is still
    open. Then report back in the format below and **end**. Your context dies here
