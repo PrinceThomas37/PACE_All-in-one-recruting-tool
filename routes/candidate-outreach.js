@@ -371,17 +371,47 @@ module.exports = (ctx) => {
   router.get('/candidate-outreach/queue', auth, async (req, res) => {
     try {
       let q = withOrg(supabase.from('candidate_outreach')
-        .select('id,candidate_id,job_order_id,to_email,subject,status,send_after,sent_at,fail_reason,response,responded_at,angle,engine,track_token,candidates(full_name)')
+        .select('id,candidate_id,job_order_id,to_email,subject,status,send_after,sent_at,fail_reason,response,responded_at,angle,engine,track_token,candidates(full_name,current_location,city,state)')
         .eq('sent_by', req.user.id), req);
       const jobId = txt(req.query.job_order_id);
       if (jobId) q = q.eq('job_order_id', jobId);
       const { data } = await q.order('created_at', { ascending: false }).limit(100);
-      res.json((data || []).map(r => ({
+      const rows = data || [];
+
+      // ── WHY IT HAS NOT GONE YET ──────────────────────────────────────────
+      // A pending row whose due time has passed looks broken. It usually is not:
+      // the drip slot came round, the drain picked it up, and the CANDIDATE's
+      // local send window was shut, so it waits. The owner had to ask which of
+      // those it was — the app knew and would not say, which is the same
+      // failure as reporting a skip only as "failed check".
+      const now = new Date();
+      const window = await getSendWindowHours();
+      const paused = !!(isSendingPaused && isSendingPaused());
+      const waitFor = (r) => {
+        if (r.status !== 'pending') return null;
+        if (paused) return { reason: 'paused', text: 'Sending is paused for your team.' };
+        if (new Date(r.send_after) > now) return { reason: 'queued', text: 'Waiting for its turn in the drip.' };
+        const c = r.candidates || {};
+        const place = txt(c.current_location) || [c.city, c.state].filter(Boolean).join(', ');
+        const tz = getTimezoneFromLocation(place);
+        if (isInLeadSendWindow(tz, now, window)) {
+          return { reason: 'due', text: 'Due now — goes on the next pass.' };
+        }
+        const opens = formatWindowOpensLabel(tz, window, now);
+        return {
+          reason: 'window',
+          text: `Outside ${place || 'their'} working hours. Goes ${opens}.`,
+          opens_label: opens, place: place || null,
+        };
+      };
+
+      res.json(rows.map(r => ({
         id: r.id, candidate_id: r.candidate_id, job_order_id: r.job_order_id,
         name: (r.candidates && r.candidates.full_name) || '', to_email: r.to_email,
         subject: r.subject, status: r.status, send_after: r.send_after, sent_at: r.sent_at,
         fail_reason: r.fail_reason, response: r.response, responded_at: r.responded_at,
         angle: r.angle, engine: r.engine, track_token: r.track_token,
+        wait: waitFor(r),
       })));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

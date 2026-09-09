@@ -465,6 +465,16 @@ for (const [label, job] of [['a full job order', JOB], ['a job order with only a
     String((route.match(/= briefFor\(job\)|brief: briefFor\(job\)/g) || []).length));
   ok('a skipped candidate is given the reason in words, not a code',
     /detail: q\.violations\.map\(x => x\.instruction\)/.test(route));
+  // A pending row whose due time has passed looks broken, and the owner had to
+  // ask whether it was the send window or a fault. The server knows; it must say.
+  ok('a pending row carries WHY it has not gone yet',
+    /const waitFor = \(r\) =>/.test(route) && /reason: 'window'/.test(route) &&
+    /reason: 'due'/.test(route) && /reason: 'paused'/.test(route) && /reason: 'queued'/.test(route));
+  ok('the wait reason names the hour it will actually go',
+    /formatWindowOpensLabel\(tz, window, now\)/.test(route));
+  ok('the window is judged in the CANDIDATE\'s timezone, not the server\'s',
+    /getTimezoneFromLocation\(place\)/.test(route) && /isInLeadSendWindow\(tz, now, window\)/.test(route));
+
   ok('the preview shows the buttons with a dead token',
     /answerButtonsHtml\(resolveBaseUrl\(\), 'preview'/.test(route));
 }

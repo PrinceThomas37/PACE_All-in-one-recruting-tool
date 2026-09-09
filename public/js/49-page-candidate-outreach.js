@@ -481,18 +481,32 @@
     if(s.queue===null&&!s.queueLoading) candOutreachLoadQueue();
     var rows=(s.queue||[]).slice(0,25).map(function(r){
       var colour=r.status==='sent'?'var(--green)':r.status==='failed'?'#ef4444':r.status==='skipped'?'var(--text3)':'var(--amber)';
+      // A DUE TIME THAT HAS PASSED LOOKS BROKEN. It usually is not — the drip
+      // slot came round, the drain picked it up, and the CANDIDATE's local
+      // working hours were shut, so it waits. The owner had to ask which of
+      // those it was; the server now says, so show it instead of a stale
+      // timestamp.
       var when=r.status==='pending'
-        ? 'due '+new Date(r.send_after).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'})
+        ? (r.wait&&r.wait.reason==='queued'
+            ? 'due '+new Date(r.send_after).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'})
+            : '')
         : (r.sent_at?new Date(r.sent_at).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}):'');
+      var waitLine=(r.status==='pending'&&r.wait&&r.wait.reason!=='queued')
+        ? '<div style="font-size:11px;color:'+(r.wait.reason==='paused'?'#ef4444':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
+        : '';
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 11px;border-bottom:1px solid var(--border2)">'+
         '<div style="flex:1;min-width:0">'+
           '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name||r.to_email)+'</div>'+
           '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
           (r.fail_reason?'<div style="font-size:11px;color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
+          waitLine+
         '</div>'+
         '<div style="text-align:right;white-space:nowrap">'+
           '<div style="font-size:11px;font-weight:700;color:'+(r.response==='interested'?'var(--green)':r.response?'var(--text3)':colour)+'">'+
-            (r.response==='interested'?'★ INTERESTED':r.response==='not_interested'?'not this one':r.response==='opted_out'?'opted out':esc(r.status))+
+            (r.response==='interested'?'★ INTERESTED':r.response==='not_interested'?'not this one':r.response==='opted_out'?'opted out'
+              :(r.status==='pending'&&r.wait&&r.wait.reason==='window')?'waiting'
+              :(r.status==='pending'&&r.wait&&r.wait.reason==='due')?'sending soon'
+              :esc(r.status))+
           '</div>'+
           '<div style="font-size:10.5px;color:var(--text3)">'+esc(when)+'</div>'+
         '</div>'+

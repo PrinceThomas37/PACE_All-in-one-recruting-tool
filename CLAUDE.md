@@ -960,6 +960,22 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
        we assert nothing), and **a skipped candidate is given the checker's own
        sentence, never the code** — the batch told the recruiter only "failed
        check" while the app knew exactly what was wrong.
+     * **A QUEUE THAT IS WAITING MUST SAY WHAT IT IS WAITING FOR (Session 21,
+       round 3).** Four emails sat on "pending · due 03:39 am" hours after that
+       time passed, and the owner had to ask whether it was the send window or a
+       fault. It was the window: every candidate was in Connecticut or South
+       Carolina, it was 9:26 pm there, and the window is **08:00-16:00 in the
+       CANDIDATE's timezone** — nothing was broken and nothing said so. The
+       queue now returns a `wait` per pending row (`window` / `due` / `queued` /
+       `paused`) computed with `getTimezoneFromLocation` +
+       `formatWindowOpensLabel`, and the row reads "Outside New Britain, CT
+       working hours. Goes Tomorrow, 8:00 AM." A due timestamp already in the
+       past is never shown as if it were the answer.
+       **The window is shared with the leads engine and has no UI** — it is read
+       from `app_settings.send_window_start_hour`/`_end_hour`, default 8-16.
+       Worth knowing that 8-16 was chosen for BD prospects at their desks;
+       candidates are often AT WORK then, so a separate candidate window is an
+       open product question, not a bug.
      Rule-shaped behaviour (no-agencies short form, follow-up short form,
      finance-first fee placement, the one-detail-from-notes limit, never naming
      a skill absent from the posting) is pinned by
