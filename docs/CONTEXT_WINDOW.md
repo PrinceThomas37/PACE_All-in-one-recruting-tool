@@ -31,6 +31,9 @@ session no longer re-reads `CLAUDE.md` end to end before it can touch anything.
 
 - **Not sure which team owns something, or it arrived as a sentence and a
   screenshot? → `dispatch`.** It reproduces the report, then routes.
+- **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
+  it before proposing anything or calling anything a bug — a parked defect is
+  not an open one. 11 entries, each with a **Re-open when** condition.
 - **`docs/territories/INTAKE.md` is how to read the owner** — they do not read
   code, and what arrives is a sentence or an image. **Reproduce the sentence,
   not your hypothesis.**
