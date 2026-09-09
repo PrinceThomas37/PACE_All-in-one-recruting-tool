@@ -318,3 +318,52 @@ also means OFF — a barricade the owner removed must never come back by
 accident). If you want booleans in the schema, that is a gateway change and I
 will move the read onto it.
 **Blocked until answered:** no.
+
+### C-0014 · gateway → deep · OPEN · 2026-09-09
+**Asks for:** a backfill migration to recompute `jobs.timezone` for existing
+rows written before this session's fix to `getTimezoneFromLocation()`
+(`index.js`).
+**Because:** the old resolver matched a 2-letter US state code as a
+**substring anywhere** in the lowercased location text, first match wins in
+`Object.entries(US_TZ_MAP)` order — so `Denver, CO` matched "de" (Delaware) and
+resolved EST instead of MST, `Arizona, Arizona` matched "ri" (Rhode Island),
+`Moreno Valley, CA` matched "va" (Virginia), `Los Angeles, California` matched
+"ia" (Iowa). The fix (parses a trailing `, XX` code, then a full state name as
+a whole word, then a short list of known metro-area strings — never a bare
+substring scan) only corrects rows written or updated **from now on**
+(`routes/jobs.js:239,311,377` all call the same function on create/update).
+**Measured against the live database before the fix, not estimated:** of 309
+leads whose `location` carries a resolvable 2-letter state code, **81 (26.2%)
+have the wrong `jobs.timezone`** — every error in the same direction (stored
+EAST of reality, so those leads are emailed EARLIER than the 08:00-16:00
+window intends, in one case (Pacific-coast leads) from ~05:00 their local
+time):
+
+| should be | stored as | hours too early | leads |
+|---|---|---|---|
+| CST | EST | 1 | 34 |
+| PST | EST | 3 | 16 |
+| MST | EST | 2 | 13 |
+| PST | CST | 2 | 9 |
+| MST | CST | 1 | 7 |
+| AKST | PST | 1 | 1 |
+| MST | (empty) | — | 1 |
+
+**Blocked until answered:** no — the resolver fix is live for new/updated rows
+regardless; this is only about correcting the 81 already-wrong rows.
+**Important:** this is gateway naming the fix and handing over the evidence —
+**nothing is applied to the live database without a fresh, explicit go-ahead
+from the owner.** Whoever picks this up should recompute each affected row's
+timezone by re-running the new `getTimezoneFromLocation(location)` against its
+stored `location` text (not by hand-mapping the table above, which is a
+summary of the diffs actually observed, not an instruction set) and should
+re-verify the count against the live DB at execution time since it will have
+moved since 2026-09-09.
+**Also worth knowing (not urgent, no action asked):** `LEAD_TZ_IANA` has no
+`AKST`/`HST` entries and falls back to `America/New_York` for any key it
+doesn't recognize, so the new resolver deliberately keeps mapping Alaska/
+Hawaii locations to `PST` (the pre-existing, less-wrong approximation) rather
+than emitting a value that would silently reopen this bug from a different
+angle. Only 1 of the 309 rows measured was Alaska; a real fix needs
+`LEAD_TZ_IANA` extended and `US_TZ_MAP`'s `ak`/`hi` keys changed together, and
+is a separate, smaller piece of work if ever wanted.

@@ -1,10 +1,10 @@
 # Foundry — memory
-> Last written: 2026-09-09 · candidate send-window drip review (C-0012)
+> Last written: 2026-09-09 · timezone resolver review (C-0014 origin)
 
 ## What is true here now
-- **`npm test` runs 68 suites** via `test/run-all.mjs` and reports one summary
-  (was 67; added `test/candidate-outreach-drip-smoke.mjs` this session).
-  Confirmed **68/68 on both Node 22 (sandbox) and Node 26 (Render's
+- **`npm test` runs 69 suites** via `test/run-all.mjs` and reports one summary
+  (was 68; added `test/timezone-resolver-smoke.mjs` this session).
+  Confirmed **69/69 on both Node 22 (sandbox) and Node 26 (Render's
   version)** — full log written to a file and grepped for the summary line
   each time, never piped to `tail`.
   It judges by **exit code**, not by grepping stdout (the suites print in two
@@ -96,6 +96,88 @@ daily cap/warm-up/auto-pause/suppression untouched in the drain loop, and the
 frontend's `window.sentence`/`window.enabled` match what the route actually
 returns.
 
+## C-0014-adjacent — the timezone resolver fix, standing review (closed 2026-09-09)
+Gateway rewrote `getTimezoneFromLocation()` in `index.js` (2-letter state code
+substring scan -> a real parse: trailing `, XX`, then a full state name as a
+whole word, then a short metro-area list, then EST default). Measured live:
+81/309 leads (26.2%) had the wrong `jobs.timezone`, always stored EAST of
+reality (leads emailed earlier than intended, up to 3h early on the Pacific
+coast). Backfill of the 81 wrong rows is `deep`'s (C-0014), needs a fresh
+owner go-ahead, and is explicitly not foundry's to do.
+
+**Why `test/lead-location-parse-smoke.mjs` (14 assertions) passed both before
+and after this fix, despite a quarter of live rows being wrong — the pointed
+question this job asked.** It never calls `getTimezoneFromLocation()`. It
+drives the FRONTEND's `bdOpenNewJob()` prefill (`public/js/*`), a
+browser-side splitter of a lead's `location` string into `city`/`state` form
+fields when converting a Connected lead into a Job Order — a different
+function, a different file, a different concern, that happens to share the
+word "location" and the word "parse" in its test's name and comment. No test
+anywhere called the backend resolver with anything at all. The lesson
+applied: name a test for the exact function it exercises, and when a fix
+lands with zero adjacent test failures, that absence is itself a finding —
+check what the existing test actually calls before treating a green run as
+coverage.
+
+**Added `test/timezone-resolver-smoke.mjs` (28/28).** `index.js` boots a real
+HTTP server as a side effect of being required (same reason
+`backend-smoke.mjs` and `candidate-outreach-drip-smoke.mjs` spawn it as a
+child process rather than importing it), so a pure function living inline in
+that file cannot be `require()`d directly. Rather than hand-copy the logic
+into the test (a copy that could drift from the real function silently — the
+same failure class this whole review is about), the test reads the EXACT
+source text of `getTimezoneFromLocation` + `US_TZ_MAP` + `US_STATE_NAME_TO_CODE`
++ `US_METRO_AREA_TZ` out of `index.js` between two literal anchors and
+evaluates that text via `new Function(...)`. If gateway renames or
+restructures the anchors, the test fails loudly (anchor not found) rather
+than silently testing stale logic. Covers:
+- All 13 real strings named in this job's brief that were wrong before the
+  fix, all now correct: `Denver, CO`, `Arizona, Arizona`, `Moreno Valley, CA`,
+  `Los Angeles, California`, `Sacramento, CA`, `El Segundo, CA`,
+  `Chandler, AZ`, `Austin, TX`, `Milwaukee, WI`, `Eugene, OR`, `Ogden, UT`,
+  `Omaha, NE`, `Raleigh-Durham-Chapel Hill Area`.
+- The 6 regression strings named in the brief, still correct:
+  `Fort Worth, TX ·`, `Houston, TX`, `New Haven, Ct`, `Broomall, PA`,
+  `United States`, `NORWOOD, NORFOLK`.
+- Null/undefined/empty/whitespace/garbage input never throws.
+- **The class of bug, not just the instances**: for every 2-letter code in
+  `US_TZ_MAP`, builds a location embedding that code as a substring inside an
+  unrelated word (e.g. `"Videographer Ave, TX"` embeds `de`, `"Vacation Ave,
+  TX"` embeds `ca`) with a genuine, different trailing state code, and
+  asserts the resolver follows the real trailing code, never the embedded
+  substring — plus the same check with no trailing code at all (must fall
+  through to the EST default, never resolve via the embedded letters).
+  **Proved this actually catches the old bug**, not just exercises the new
+  code: temporarily reverted the function to the original bare
+  `Object.entries(US_TZ_MAP)` substring scan in a scratch copy and re-ran —
+  12/28 passed, with the exact fixed cases failing (`Denver, CO` -> EST,
+  `Los Angeles, California` -> CST, etc.) and both substring-class checks
+  failing with every embedded-code combination it found. Restored the real
+  file immediately after and re-verified with `node --check`.
+- **Downstream contract**: every value `getTimezoneFromLocation` can emit
+  (`EST`, `CST`, `MST`, `PST` — confirmed by enumerating `US_TZ_MAP`'s actual
+  values, not assumed) has a `LEAD_TZ_IANA` entry. Confirmed gateway's claim
+  about Alaska/Hawaii is correct: `LEAD_TZ_IANA` has no `AKST`/`HST` keys at
+  all, only `EST/EDT/CST/CDT/MST/MDT/PST/PDT/Unknown`, so mapping AK/HI to
+  `PST` (rather than a code `LEAD_TZ_IANA` can't resolve) is the right call,
+  verified rather than accepted on faith.
+
+**Did not touch `index.js`** (gateway's) — reviewed only. **One observation
+raised, not a contract** (edge case, not proven present in the 309 live
+rows measured, so not blocking): a location with a SECOND trailing segment
+after the state code (e.g. `"Austin, TX, USA"`) reads the LAST comma segment
+first, which would be `"usa"` here, not `"tx"` — falls through past the
+state-code check to the full-name/metro checks, finds nothing, returns the
+EST default. Not a regression (previous substring scan would also have
+missed this shape in some orderings), and gateway's own commit says it
+verified 53/53 on real strings including every previously-wrong live row, so
+this is a theoretical gap in an untested shape, not a live defect — noting
+it here in case a location field ever grows a third segment.
+
+Ran the full suite (69/69, was 68) on **both** Node 22 (sandbox) and Node 26
+(`/tmp/n26`, Render's version), each written to a log file and grepped for
+the summary line, never piped to `tail`. Zero `[FAIL]` lines in either log.
+
 ## Open here
 - **Nothing shipped since PR #185 has been seen working in the live app** by the
   owner — the rail icon, the ‹ › stepper, opening a sent email, the Rewrite
@@ -109,6 +191,25 @@ returns.
   edit `public/js/*`).
 
 ## Log
+- **2026-09-09** — reviewed gateway's timezone-resolver fix (C-0014 origin).
+  Answered the pointed question: `lead-location-parse-smoke.mjs` passed
+  through a 26.2%-of-live-rows defect because it tests an unrelated frontend
+  function (`bdOpenNewJob`'s city/state splitter), never the backend
+  resolver — same-sounding name, different file, different bug class. Added
+  `test/timezone-resolver-smoke.mjs` (28/28): extracts the real function's
+  source out of `index.js` at test time (cannot `require()` it directly — the
+  file boots a server as a side effect), pins the 13 previously-wrong and 6
+  regression strings from this job's brief, and asserts the CLASS of bug (no
+  bare 2-letter substring match, checked across every `US_TZ_MAP` code) —
+  proved the new test actually catches the old bug by reverting to the old
+  scan in a scratch copy (12/28) and restoring. Confirmed the
+  `LEAD_TZ_IANA` downstream-contract claim rather than accepting it (no
+  AKST/HST entries, matches gateway's stated reasoning). Ran the full suite
+  on both Node 22 and Node 26 (69/69 both, log-grepped, never piped to
+  `tail`). Did not touch `index.js`; raised one non-blocking observation
+  (a location with a second comma segment after the state code) rather than
+  a contract, since it is not proven present in the live data gateway
+  measured against.
 - **2026-09-09** — reviewed the morning-briefing feature (observatory +
   surface). Ran the full suite on Node 22 and Node 26 (67/67 both, after adding
   2 new suites). Added `test/morning-briefing-smoke.mjs` (pure

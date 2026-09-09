@@ -229,14 +229,76 @@ const LEAD_TZ_IANA = {
   PST: 'America/Los_Angeles', PDT: 'America/Los_Angeles',
   Unknown: 'America/New_York'
 };
+// Full state names -> the same 2-letter codes used as keys in US_TZ_MAP.
+// Multi-word names first so a scan can prefer the longer match (e.g. "west
+// virginia" before a bare "virginia" would ever be attempted).
+const US_STATE_NAME_TO_CODE = {
+  'north carolina': 'nc', 'south carolina': 'sc', 'north dakota': 'nd', 'south dakota': 'sd',
+  'new hampshire': 'nh', 'new jersey': 'nj', 'new mexico': 'nm', 'new york': 'ny',
+  'west virginia': 'wv', 'rhode island': 'ri', 'district of columbia': 'dc',
+  alabama: 'al', alaska: 'ak', arizona: 'az', arkansas: 'ar', california: 'ca', colorado: 'co',
+  connecticut: 'ct', delaware: 'de', florida: 'fl', georgia: 'ga', hawaii: 'hi', idaho: 'id',
+  illinois: 'il', indiana: 'in', iowa: 'ia', kansas: 'ks', kentucky: 'ky', louisiana: 'la',
+  maine: 'me', maryland: 'md', massachusetts: 'ma', michigan: 'mi', minnesota: 'mn',
+  mississippi: 'ms', missouri: 'mo', montana: 'mt', nebraska: 'ne', nevada: 'nv',
+  ohio: 'oh', oklahoma: 'ok', oregon: 'or', pennsylvania: 'pa', tennessee: 'tn', texas: 'tx',
+  utah: 'ut', vermont: 'vt', virginia: 'va', washington: 'wa', wisconsin: 'wi', wyoming: 'wy'
+};
+// Known multi-word metro areas that carry no state code/name at all. Cheap
+// to special-case because they're a handful of literal strings seen in the
+// live data, not a general geocoder.
+const US_METRO_AREA_TZ = {
+  'dallas-fort worth': 'CST',
+  'raleigh-durham-chapel hill area': 'EST',
+  'miami-fort lauderdale area': 'EST',
+  'omaha metropolitan area': 'CST',
+  'greater chattanooga': 'EST'
+};
 const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
 
+// Parses a lead's free-text "location" field into one of the four US lead
+// timezones. Deliberately a PARSE, not a scan: the old version matched any
+// two-letter state code as a SUBSTRING anywhere in the lowercased string,
+// which is how "Denver, CO" (contains "de" -> Delaware) resolved to EST
+// instead of MST. Order of attempts, cheapest/most-precise first:
+//   1. A trailing ", XX" state code (tolerating trailing punctuation/
+//      whitespace like "Fort Worth, TX ·").
+//   2. A full state name as a whole word anywhere in the string.
+//   3. A handful of known metro-area strings that carry no state at all.
+//   4. Unknown -> 'EST' (the pre-existing default; kept because most of the
+//      live lead volume is East-coast and an unresolvable location should
+//      not swing to a zone with less evidence behind it).
+// NOTE: Alaska/Hawaii map to PST here, not AKST/HST, because LEAD_TZ_IANA
+// (and both send-window checks that key off it) has no entry for those and
+// falls back to America/New_York if asked for one — mapping them to a code
+// LEAD_TZ_IANA can't resolve would silently reopen the same bug from a
+// different angle. This is a known approximation, not a fix; see the C-##
+// contract to `deep`/`observatory` opened alongside this change.
 function getTimezoneFromLocation(location) {
   if (!location) return 'EST';
-  const loc = String(location).toLowerCase();
-  for (const [state, tz] of Object.entries(US_TZ_MAP)) {
-    if (loc.includes(state)) return tz;
+  const raw = String(location);
+  const loc = raw.toLowerCase();
+
+  // 1. Trailing 2-letter state code after the last comma.
+  const parts = loc.split(',');
+  if (parts.length > 1) {
+    const tail = parts[parts.length - 1].replace(/[^a-z]/g, '');
+    if (tail.length === 2 && US_TZ_MAP[tail]) return US_TZ_MAP[tail];
   }
+
+  // 2. Full state name, matched as a whole word (longer/multi-word names
+  // are listed first in US_STATE_NAME_TO_CODE so e.g. "west virginia" wins
+  // over a bare "virginia" scan would never even attempt).
+  for (const [name, code] of Object.entries(US_STATE_NAME_TO_CODE)) {
+    const re = new RegExp('\\b' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+    if (re.test(loc) && US_TZ_MAP[code]) return US_TZ_MAP[code];
+  }
+
+  // 3. Known metro areas with no state code/name present at all.
+  for (const [metro, tz] of Object.entries(US_METRO_AREA_TZ)) {
+    if (loc.includes(metro)) return tz;
+  }
+
   return 'EST';
 }
 
