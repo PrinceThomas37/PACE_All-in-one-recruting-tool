@@ -551,7 +551,7 @@ module.exports = (ctx) => {
 
       const orgId = req.orgId || null;
       await supabase.from('email_tracking').insert({
-        token, channel: 'outreach', to_email: to, subject,
+        token, channel: 'outreach', to_email: to, subject, body: bodyText,
         sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
         ...(orgId ? { org_id: orgId } : {})
       });

@@ -423,8 +423,11 @@ module.exports = (ctx) => {
   // guessing. Literal, so it goes above /candidate-outreach/:id-shaped routes.
   router.get('/candidate-outreach/queue', auth, async (req, res) => {
     try {
+      // `body` comes back too: the exact text that went to this person. It has
+      // always been stored and was never returned, so the only way to know what
+      // a candidate actually received was to look in the mailbox's Sent folder.
       let q = withOrg(supabase.from('candidate_outreach')
-        .select('id,candidate_id,job_order_id,to_email,subject,status,send_after,sent_at,fail_reason,response,responded_at,angle,engine,track_token,candidates(full_name,current_location,city,state)')
+        .select('id,candidate_id,job_order_id,to_email,subject,body,status,send_after,sent_at,fail_reason,response,responded_at,angle,engine,track_token,candidates(full_name,current_location,city,state)')
         .eq('sent_by', req.user.id), req);
       const jobId = txt(req.query.job_order_id);
       if (jobId) q = q.eq('job_order_id', jobId);
@@ -461,7 +464,7 @@ module.exports = (ctx) => {
       res.json(rows.map(r => ({
         id: r.id, candidate_id: r.candidate_id, job_order_id: r.job_order_id,
         name: (r.candidates && r.candidates.full_name) || '', to_email: r.to_email,
-        subject: r.subject, status: r.status, send_after: r.send_after, sent_at: r.sent_at,
+        subject: r.subject, body: r.body || '', status: r.status, send_after: r.send_after, sent_at: r.sent_at,
         fail_reason: r.fail_reason, response: r.response, responded_at: r.responded_at,
         angle: r.angle, engine: r.engine, track_token: r.track_token,
         wait: waitFor(r),
@@ -965,7 +968,7 @@ module.exports = (ctx) => {
           await supabase.from('email_tracking').insert({
             token, channel: 'candidate_outreach',
             candidate_id: row.candidate_id, job_order_id: row.job_order_id,
-            to_email: row.to_email, subject: rendered.subject,
+            to_email: row.to_email, subject: rendered.subject, body: rendered.body,
             sent_by: row.sent_by, mailbox_email: mailbox.email_address || null,
             ...(row.org_id ? { org_id: row.org_id } : {}),
           });

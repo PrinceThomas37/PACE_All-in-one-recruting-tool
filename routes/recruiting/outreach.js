@@ -231,7 +231,7 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
       await supabase.from('email_tracking').insert({
         token, channel: 'candidate_sequence',
         candidate_id: candidate.id, job_order_id: job_order?.id || null,
-        to_email: candidate.email, subject,
+        to_email: candidate.email, subject, body: rendered,
         sent_by: recruiterId, mailbox_email: mailbox.email_address || null,
         ...(enrollment.org_id ? { org_id: enrollment.org_id } : {})
       });
@@ -282,7 +282,7 @@ app.post('/candidates/email', auth, async (req, res) => {
         await sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments });
         await supabase.from('email_tracking').insert({
           token, channel: 'candidate', candidate_id: r.candidate_id || null,
-          job_order_id: b.job_order_id || null, to_email: to, subject,
+          job_order_id: b.job_order_id || null, to_email: to, subject, body: bodyText,
           sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
           ...(orgId ? { org_id: orgId } : {})
         });
@@ -330,7 +330,7 @@ app.post('/companies/:id/email', auth, async (req, res) => {
     const orgId = req.orgId || null;
     await sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments });
     await supabase.from('email_tracking').insert({
-      token, channel: 'client', company_id: req.params.id, to_email: to, subject,
+      token, channel: 'client', company_id: req.params.id, to_email: to, subject, body: bodyText,
       sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
       ...(orgId ? { org_id: orgId } : {})
     });
@@ -414,12 +414,14 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
     for (const t of targets) {
       if (!emailSyntaxValid(t.email)) { results.push({ email: t.email, role: t.role, status: 'skipped', reason: 'invalid_email' }); continue; }
       const token = newTrackToken();
-      const htmlBody = injectTrackPixel(buildHtmlEmailBody(buildInterviewInviteText(sub, candidate, job, t.role), signature), token);
+      const inviteText = buildInterviewInviteText(sub, candidate, job, t.role);
+        const htmlBody = injectTrackPixel(buildHtmlEmailBody(inviteText, signature), token);
       try {
         await sendMicrosoftNewMessage(mailbox.id, { to: t.email, subject, htmlBody });
         await supabase.from('email_tracking').insert({
           token, channel: 'interview', candidate_id: t.candidate_id, job_order_id: sub.job_order_id,
-          to_email: t.email, subject, sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
+          to_email: t.email, subject, body: inviteText,
+          sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
           ...(orgId ? { org_id: orgId } : {})
         });
         results.push({ email: t.email, role: t.role, status: 'sent' });

@@ -11,7 +11,7 @@
   function isBDlike(u){ return userHasAnyRole(u,'admin','bd','bd_lead'); }
   function fmtDate(s){ if(!s)return '—'; try{ var d=new Date(s); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }catch(e){ return '—'; } }
 
-  STATE.clients = STATE.clients || { list:null, loading:false, q:'', selectedId:null, jobOrders:null, documents:null, docsLoading:false };
+  STATE.clients = STATE.clients || { list:null, loading:false, q:'', selectedId:null, jobOrders:null, documents:null, docsLoading:false, openEmail:null };
 
   // ── nav + routing ───────────────────────────────────────────────────────────
   // The shell draws this page itself now (UI.registerPage below), so there is
@@ -46,6 +46,7 @@
 
   function loadClientDetail(id){
     STATE.clients.jobOrders=null; STATE.clients.documents=null; STATE.clients.docsLoading=true;
+    STATE.clients.openEmail=null;
     STATE.clients.contacts=null; STATE.clients.emailActivity=null;
     apiGet('/companies/'+id+'/job-orders').then(function(d){ STATE.clients.jobOrders=d||[]; paintDetail(); }).catch(function(){ STATE.clients.jobOrders=[]; paintDetail(); });
     apiGet('/companies/'+id+'/documents').then(function(d){ STATE.clients.documents=d||[]; STATE.clients.docsLoading=false; paintDetail(); })
@@ -220,15 +221,35 @@
     if(acts===null) return '<div class="dt-empty">Loading email history…</div>';
     var rows=(acts||[]).map(function(a){
       var status=a.replied_at?'<span style="font-size:10.5px;font-weight:700;color:var(--green)">↩ Replied</span>':(a.opened_at?'<span style="font-size:10.5px;font-weight:700;color:var(--accent)">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span style="font-size:10.5px;color:var(--text3)">Sent</span>');
-      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
-        '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.subject||'(no subject)')+'</div>'+
+      // READ WHAT WE ACTUALLY SAID. Before migration 042 the body was never
+      // stored, so anything older reads back null and says so rather than
+      // showing an empty box that looks like a bug.
+      var open=STATE.clients.openEmail===a.id;
+      var panel=open
+        ? '<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
+            (a.body
+              ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(a.body)+'</div>'
+              : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>')+
+          '</div>'
+        : '';
+      return '<div style="border-bottom:1px solid var(--border)">'+
+        '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" '+
+          'onclick="clientsToggleEmail(\''+a.id+'\')" title="Read this email">'+
+        '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+
+          '<span style="color:var(--text3);font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(a.subject||'(no subject)')+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+esc(a.to_email||'')+' · '+fmtDate(a.sent_at)+'</div></div>'+
         status+
-        '<button class="btn btn-sm btn-outline" onclick="clientsReply(\''+c.id+'\',\''+escAttr(a.to_email||'')+'\',\''+escAttr(a.subject||'')+'\')">Reply</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();clientsReply(\''+c.id+'\',\''+escAttr(a.to_email||'')+'\',\''+escAttr(a.subject||'')+'\')">Reply</button>'+
+        '</div>'+panel+
       '</div>';
     }).join('') || '<div class="dt-empty">No emails sent to this client yet.</div>';
     return rows;
   }
+  // Open one sent email to read it; clicking it again closes it.
+  window.clientsToggleEmail=function(id){
+    var st=STATE.clients; st.openEmail=(st.openEmail===id?null:id); paintDetail();
+  };
+
   window.clientsReply=function(companyId,to,subject){
     var re=/^re:/i.test(subject)?subject:('Re: '+subject);
     clientsOpenEmail(companyId,false,{to:to,subject:re,body:'Hi,\n\n\n\nBest regards,'});
