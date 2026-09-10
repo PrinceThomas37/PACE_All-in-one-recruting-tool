@@ -140,6 +140,48 @@ The feature turned out to be **already built twice and never connected**.
 - C-0008/C-0009: the next-actions card vanished silently on error and stuck
   loading forever during "view as". Both predate this work (c5cb602), both fixed.
 
+## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY — READ THIS BEFORE TOUCHING SCOPING
+
+**The backend connects with `SUPABASE_SERVICE_KEY` (`index.js:73`), so RLS is
+bypassed on every request PACE makes.** "RLS + a service-role policy on all 48
+tables" (migration 039) defends against someone holding the **anon** key and is
+**no mitigation whatsoever** for application-code scoping. **Application code is
+the only tenant boundary that exists.** That fact lived in one code comment and
+no memory file, which is exactly why it kept being repeated as false comfort.
+
+**⚠ `SELF_SERVE_SIGNUP` MUST STAY OFF until C-0015/16/17 are closed.** That
+switch creates the second organisation, and these stop being theoretical the
+moment it does. Nothing is exposed today — there is one org.
+
+Closed in #195 (`rampart`): `guardUser()` across all 17 `routes/auth.js` routes
+(404 on a miss, never 403), `canTouchJob()` reading the row **with** the org
+filter before the admin bypass, and `MULTI_ORG` arming at workspace creation
+rather than at the next restart.
+
+**Still open, with the fix pattern written into each contract:**
+- **C-0015 → `harbour`** — `GET /emails` returns **every org's mail, full
+  bodies**, to `admin`/`ra_lead`; `purge-pending` with `all_managers` deletes
+  every org's queue.
+- **C-0016 → `gateway`** — `DELETE /auth/*/:userEmailId` kills another org's
+  mailbox and rewrites their leads.
+- **C-0017 → `guild`** — `bulk-stage`/`bulk-assign` take unvalidated `job_ids`
+  from the request body; `check-duplicates` is a working cross-org enumeration
+  oracle.
+- **And the longest tail:** a tenant INSERT that omits `org_id` **does not fail,
+  it misfiles** — migration 022 gave every tenant table a column DEFAULT of the
+  default org, so an unstamped insert writes company B's rows (**including
+  mailbox refresh tokens**) into company A's space, silently. Corruption, not
+  just leakage, and harder to undo.
+
+**Two lessons from finding these, both worth more than the fixes:** a bulk edit
+whose safety check **counts the replacements it made** cannot tell you what it
+did not replace — that is how 8 of 9 routes got guarded and the ninth (a
+cross-org WRITE onto outbound email signatures) was missed. And a test named for
+the thing it appears to cover may cover something else entirely: 
+`lead-location-parse-smoke` was green throughout the period a quarter of live
+leads carried the wrong timezone, because it tests a frontend form splitter, not
+the backend resolver.
+
 ## ⏭ PICK THIS UP FIRST (Session 23)
 
 **1. The morning briefing's AI path has NEVER been called against a real
