@@ -175,21 +175,48 @@ months apart). Borders make that MORE likely, not less: each territory reads
 only its own memory. `scripts/territory-map.mjs` now fails when a router
 composes mail and is named in no capability.
 
-## ⏳ IN FLIGHT, NOT MERGED — branch `claude/merge-candidate-email`
+## ⏳ OPEN DRAFT — PR #200, branch `claude/merge-candidate-email`
 
-**D-0012:** merge the two candidate-email workflows. Email → Compose →
-Candidates survives; **"Email JD to candidates" is removed**, and the job
-description moves INSIDE the email as a formatted block. **No attachments** —
-asked and answered, do not restore them as a missing feature.
+**D-0012, half done.** `observatory` shipped the job description as a bordered
+panel inside the candidate interest email. Text is canonical, the card is
+derived from it, so the preview cannot disagree with the outbox. **70/70 with
+both halves present together** — the first such run, and #199 is why that
+sentence needs saying.
 
-**⚠ `POST /candidates/email` MUST NOT BE DELETED with it.** Its second caller
-is `remSendMeeting` in `10-page-modals.js`, which sends **Teams meeting
-invitations**. Remove B's ENTRY POINTS, not the route.
+**Left for `surface`, and #200 must not merge until it is done:**
+1. Remove the old workflow's entry points — `plEmailJD` + its button in
+   `28-page-pipeline.js`, and the candidate profile's Email button in
+   `30-page-candidate.js`.
+   **⚠ Remove the ENTRY POINTS, not `POST /candidates/email`.** Its second
+   caller is `remSendMeeting` in `10-page-modals.js`, which sends **Teams
+   meeting invitations**. Deleting the route breaks those silently (C-0019,
+   and it is in capitals in `CAPABILITIES.md`).
+2. Render the panel as a card (C-0019). The route returns `preview_prose`,
+   `block_html`, `block_text`; draw order prose → block → buttons → signature.
+   Until then the preview shows it as dashed text — **the page keeps working
+   and keeps showing every fact**, it just is not a card yet.
+3. `foundry` — C-0020, a release hazard plus pinning the panel.
 
-`observatory` was mid-build on `services/candidate-outreach.js` when the
-session ended. **Check that file's state before continuing** — and `surface`
-still has to remove the old buttons in `28-page-pipeline.js` and
-`30-page-candidate.js`.
+## ⚠ WHAT WENT WRONG ON 2026-09-10 — read before your first commit
+
+**A docs-only commit shipped half a feature to `main`** (#198, reverted by
+#199). Cause: **`git add -A` in a working tree where an agent was mid-edit.** It
+carried 337 lines of an in-progress `services/candidate-outreach.js` — the half
+that APPENDS the job-description panel, without the half that splits it back
+out. A queued candidate email would have gone out with a raw
+`------------------` fence, to a real person, under the customer's name.
+
+**No email went out** — the queue was 8 sent / 4 skipped / **0 pending**. A near
+miss, and only because that morning's send-window work had already drained it.
+
+**Every check passed.** `node --check` clean, full suite green — the writer's own
+tests do not know the router exists yet.
+
+- **Never `git add -A` in a tree where an agent is working.** Stage the paths
+  the commit is actually about.
+- **A green suite proves what it covers, not what you accidentally added.**
+  The sibling of `CLAUDE.md`'s "a syntax check proves a file parses, not that it
+  still does anything".
 
 ## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY — READ THIS BEFORE TOUCHING SCOPING
 

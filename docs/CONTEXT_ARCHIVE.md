@@ -4211,3 +4211,106 @@ code path, and filed it back rather than fixing it (C-0008, outside its border).
 - Nine teams may be too many for one person to talk to. If it reads as overhead,
   merge `ledger` into `rampart` and `guild` into `gateway` — collapsing is
   cheaper than splitting.
+
+---
+
+# Session 22, part 2 — the day the system started catching things, and one it did not
+
+Continues the Session 22 entry above. **PRs #192-#200.** Read that entry first.
+
+## What shipped after the territories landed
+
+**#192 · The candidate send window comes off.** The owner: *"candidate emails
+that were created are still in pending, remove the barricade of timezone for
+candidate emails and individual emailing, Only the outreach goes within the time
+zone."* This **reversed their own call from that morning** (D-0009 → D-0010).
+Reproduced against the live database before touching anything: 8 pending, all
+overdue, sending not paused, every candidate below the 17:00 opening in their own
+state. Kept as a switch defaulting OFF rather than deleted, and **it fails off** —
+an unreadable settings table cannot re-impose a barricade the owner removed.
+
+**#193 · The timezone resolver.** The emails sent *before* the fix deployed, and
+chasing why the timestamps did not add up found the real fault:
+`getTimezoneFromLocation` matched two-letter state codes as **substrings** —
+"Den**ve**r" hit Delaware, "A**ri**zona" hit Rhode Island, "Californ**ia**" hit
+Iowa. **81 of 309 live leads (26.2%) had the wrong timezone, every error stored
+EAST of reality**, so 16 Pacific-coast leads were cold-emailed from **05:00 their
+local time**. The owner chose the code fix alone; the 81 rows were **not**
+backfilled (D-0011).
+**The existing test named `lead-location-parse-smoke` never covered this** — it
+drives an unrelated frontend form splitter. The suite was green throughout.
+
+**#194 · `DECISIONS.md`.** What the owner chose, written the moment they say it,
+each entry carrying a **Re-open when** condition.
+
+**#195/#196 · Tenancy.** `dispatch` noticed `GET /emails` had no `org_id`
+condition. `rampart` audited and confirmed the load-bearing fact: **the backend
+connects with `SUPABASE_SERVICE_KEY`, so RLS is bypassed on every request.**
+"RLS on all 48 tables" defends against the anon key and is **no mitigation at
+all** for application scoping. That fact lived in one code comment and no memory
+file, which is exactly why it kept being repeated as false comfort.
+Review of the audit caught it guarding **8 of 9** `/users/:id*` routes — the miss
+was `PUT .../signature`, a cross-org **write onto outbound email content**. Its
+root cause: a bulk replace anchored on a role-gate string that route words
+differently, with an assert **counting the four replacements it did make**.
+Replacing eyeballing with a per-route matrix then found a ninth.
+
+**#197 · `CAPABILITIES.md`.** The owner found **two live workflows for emailing a
+candidate about a job** (~2,900 lines, two territories, months apart). *"first it
+takes up lot of space second it's waste of effort."* `_map.json` guarantees every
+FILE has one owner; nothing guaranteed every CAPABILITY has one implementation.
+**Borders make this MORE likely, not less** — each territory reads only its own
+memory. A mechanical check now fails the map when a router composes mail and is
+named in no capability; it found four undeclared send paths on the first run,
+including `index.js`'s leads loop.
+
+## ⚠ THE INCIDENT: a docs commit shipped half a feature to `main` (#198 → #199)
+
+**Cause: `git add -A` in a working tree where an agent was mid-edit.** The commit
+for #198 — documentation only — swept up **337 lines of observatory's
+in-progress `services/candidate-outreach.js`**, and only half of it: the writer
+that APPENDS the fenced job-description panel to the stored body, **without the
+router half that splits it back out before sending**.
+
+**On `main`, a queued candidate email would have gone out with a raw
+`------------------` fence and the panel as unformatted text** — to a real
+candidate, under the customer's name, with nothing on screen to say so.
+
+**No email went out.** The queue at the moment of the revert: 8 sent, 4 skipped,
+**0 pending**. A near miss, and only because #192's own work had already drained
+the queue that morning. Six hours earlier, eight candidates would have had it.
+
+**Every check passed.** `node --check` clean. Full suite green — because the
+writer's own tests do not know the router exists yet.
+
+**The rule this earns, and it is a sibling of an existing one:**
+- `CLAUDE.md` already says *a syntax check proves a file parses, not that it
+  still does anything.*
+- This adds: **a green suite proves what it covers, not what you accidentally
+  added** — and **never `git add -A` in a tree where an agent is working. Stage
+  the paths the commit is actually about.**
+
+Recovery, without rewriting anyone's history: observatory backed its files up,
+forced back to its own branch and restored them; `main` was reverted
+byte-for-byte to the pre-#198 file (verified by `diff`), keeping #198's actual
+documentation. The feature continued on its own branch and is #200.
+
+## Where it ended
+
+**#200 is a DRAFT and must not be merged as-is.** It carries observatory's half
+of D-0012 — the job description as a bordered panel inside the interest email,
+text canonical and the card derived from it so the preview cannot disagree with
+the outbox. **70/70 with both halves present together, the first such run.**
+Left for `surface`: remove the old workflow's entry points (**not**
+`POST /candidates/email` — `remSendMeeting` sends Teams invitations through it),
+and render the panel as a card rather than dashed text.
+
+## What the owner said about the shape of the work
+
+Asked whether the agents cost more or fewer tokens, and how to switch chats.
+Measured honestly: **~15 agent jobs at ~100k each, about 1.5M tokens**, none of
+which entered the main conversation. **The system spends more tokens to protect
+the context window** — the right trade for a large job, the wrong one for a
+one-line fix, and it had been applied uniformly rather than proportionally.
+Their own summary of what to build next: *"maybe like take in more context while
+deciding something."* That is what `CAPABILITIES.md` is.
