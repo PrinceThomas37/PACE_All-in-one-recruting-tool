@@ -19,6 +19,7 @@
 const express = require('express');
 const { buildNextActions, summarize } = require('../next-action');
 const entitlements = require('../services/entitlements');
+const dismissals = require('../services/next-action-dismissals');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -225,28 +226,83 @@ module.exports = (ctx) => {
       if (!isAdmin && chain) remQ = remQ.in('user_id', chain);
       const { data: reminders } = await remQ.limit(200);
 
-      const items = buildNextActions({
+      const now = Date.now();
+      const built = buildNextActions({
         threads,
         reminders: reminders || [],
-        now: Date.now(),
+        now,
         limit: Number(req.query.limit) || 50,
       });
 
+      // What this user has snoozed. Best-effort: a dismissal store that cannot
+      // be read must never take down the queue it is meant to tidy — the user
+      // then sees a slightly noisier list, which is the safe direction.
+      let store = {};
+      try {
+        const { data } = await supabase.from('app_settings').select('value')
+          .eq('key', dismissals.settingsKey(req.user.id)).maybeSingle();
+        if (data && data.value) {
+          store = dismissals.prune(
+            typeof data.value === 'string' ? JSON.parse(data.value) : data.value, now);
+        }
+      } catch (_) { store = {}; }
+
+      const after = dismissals.applyDismissals(built, store, now);
+
       res.json({
-        items,
-        summary: summarize(items),
+        items: after.items,
+        summary: summarize(after.items),
         scope,
         conversation_storage: msgsByContact.size > 0,
+        // Everything held back, and why. A queue that hides things without
+        // saying how many is the disease, not the cure.
+        snoozed: after.snoozed,
+        stale_nudges: built.stale_nudges || 0,
+        overflow: built.overflow || 0,
+        nudge_max_age_days: require('../next-action').NUDGE_MAX_AGE_DAYS,
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Dismissing an item just resolves the reminder behind it, where there is one.
-  // Conversation-driven items are not dismissible on purpose: they disappear
-  // when the underlying fact changes (you reply, they opt out), which keeps the
-  // queue honest rather than something you can clear without doing the work.
+  // ── DISMISSING AN ITEM (Session 23) ────────────────────────────────────
+  // Previously ONLY this endpoint existed, and only reminders had a button, so
+  // reply_due / commitment_due / nudge / stage_suggested could not be cleared
+  // at all — which is why a 91-day-old lead sat under a heading reading
+  // "today". See services/next-action-dismissals.js for why the fix is a
+  // fingerprinted SNOOZE and not a delete: the original reasoning (a queue you
+  // can empty with a click tells you nothing) is still right.
+  router.post('/next-actions/dismiss', auth, async (req, res) => {
+    try {
+      const item = req.body && req.body.item;
+      const scope = (req.body && req.body.scope) || 'today';
+      if (!item || !dismissals.itemKey(item)) {
+        return res.status(400).json({ error: 'item required' });
+      }
+      if (!Object.prototype.hasOwnProperty.call(dismissals.SNOOZE_DAYS, scope) && scope !== 'drop') {
+        return res.status(400).json({ error: 'unknown scope' });
+      }
+      const key = dismissals.settingsKey(req.user.id);
+      const now = Date.now();
+      let store = {};
+      try {
+        const { data } = await supabase.from('app_settings').select('value')
+          .eq('key', key).maybeSingle();
+        if (data && data.value) {
+          store = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        }
+      } catch (_) { store = {}; }
+
+      const next = dismissals.recordDismissal(store, item, scope, now);
+      const { error } = await supabase.from('app_settings')
+        .upsert({ key, value: JSON.stringify(next) }, { onConflict: 'key' });
+      if (error) throw error;
+      res.json({ success: true, until: next[dismissals.itemKey(item)].until, scope });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // Resolving the REMINDER behind an item — a real state change, not a snooze.
   router.post('/next-actions/:reminderId/done', auth, async (req, res) => {
     try {
       const q = withOrg(

@@ -47,6 +47,42 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0013 · 2026-09-10 · STANDS · Every list gets a horizon and an exit
+**Their words:** *"I think what's also important is the stacking of information
+on the screen or the UI when aging, have we considered that while designing
+things, not just in this view but also for everything. Like if we design like
+that what changes would be carried out"* — then, after the seven-point answer:
+*"Convert this 1-7 into a proper concrete plan and work on it and solve this
+full issue then we will touch something else."*
+
+**Decided:** ageing is a first-class design constraint, applied app-wide rather
+than to the screen that prompted it. The law: **every list has a HORIZON (how
+far back it looks by default, 90 days) and an EXIT (how a finished item
+leaves).** Full plan and measurements in `docs/AGEING_UI_PLAN.md`.
+
+**Consequences that are not up for debate:**
+* A picker past `PICKER_CAP` (15) becomes a SEARCH FIELD, not a taller list of
+  chips. The interaction changes shape.
+* Finished things are EXCLUDED from working views, never deleted.
+* A list that hides rows must SAY how many and why. The horizon bar is not
+  decoration — a filtered list that does not admit it is filtered is a lie the
+  user cannot see.
+* Anything claiming to need you today must be dismissable.
+* `test/ageing-layout-smoke.mjs` fails the build on unbounded growth, and is
+  the reason this does not silently come back. Do not weaken it — it is the
+  sibling of `mobile-layout-smoke.mjs`, and the argument is the same: a buyer's
+  evaluation account is empty, and their THIRD YEAR is what decides renewal.
+
+**Also settled here:** PACE has **three** email pipelines (`emails`,
+`email_tracking`, `candidate_outreach`) and the owner correctly felt it. They
+stay three — merging them for SENDING would break the one that works — but they
+now have ONE read view (Email → All email). Do not "unify" the send paths.
+
+**Re-open when:** the owner finds a screen where the 90-day default or the
+15-item picker cap is wrong for their actual work. Both are single constants
+(`services/view-horizon.js` + the checked copy in `00-ui-kit.js`), deliberately
+easy to retune; the LAW is what stands, not the numbers.
+
 ### D-0012 · 2026-09-10 · STANDS · One candidate-email workflow, JD inside the email
 **Decided:** Merge the two ways of emailing a candidate about a job into one.
 **"Email JD to candidates"** (a job's Candidates tab, multi-select) is removed;

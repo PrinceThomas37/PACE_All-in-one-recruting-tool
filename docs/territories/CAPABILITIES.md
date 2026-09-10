@@ -51,6 +51,34 @@ off deliberately — check `DECISIONS.md` before touching it).
 
 ---
 
+### Reading back what we sent (any pipeline)
+**Status:** `LIVE` — Email → **All email** (Session 23).
+
+**One place, three sources.** PACE sends through three pipelines and each screen
+showed exactly one, so "did we email this company, and what did we say" was
+three questions in three places:
+
+| Pipeline | Table | Was visible in |
+|---|---|---|
+| Lead outreach (cold + follow-ups) | `emails` | Pending, then Sent |
+| One-off sends (client, candidate, interview invite) | `email_tracking` | **nowhere** |
+| Candidate batches | `candidate_outreach` | its own page only |
+
+**Code:** `routes/email-history.js`, `public/js/50-all-mail.js`, tab in
+`07-page-email.js`. **READ-ONLY** — it reads three tables and writes none.
+
+**Before adding any "show me what we sent" surface, use this one.** The
+per-record views that already exist and are NOT duplicates (they answer a
+narrower question about one record) are the candidate profile's Email-activity
+card and the client detail's email list. A THIRD general history view would be
+the duplication this file exists to prevent.
+
+**The bodies were always stored.** The owner's "I cannot see the email preview
+of the sent emails to clients" was a missing READ, not missing data — worth
+remembering before concluding something needs to be captured.
+
+---
+
 ### Emailing a candidate about a job
 **Status:** ⚠ **DUPLICATED — A survives, B is being removed** (owner's call,
 `DECISIONS.md` D-0012). The JD moves **inside** A's email as a formatted block.
