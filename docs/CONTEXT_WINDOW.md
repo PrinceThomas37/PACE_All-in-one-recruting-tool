@@ -140,6 +140,57 @@ The feature turned out to be **already built twice and never connected**.
 - C-0008/C-0009: the next-actions card vanished silently on error and stuck
   loading forever during "view as". Both predate this work (c5cb602), both fixed.
 
+## ✅ SHIPPED 2026-09-09/10 — seven PRs, all merged and live (#191-#197)
+
+**#191 · Nine territories.** `.claude/agents/*` + `docs/territories/*`. Read
+`docs/territories/README.md` before starting any job. The first feature built
+through them: the **morning briefing** on all three dashboards
+(`services/morning-briefing.js`, `GET /ai/morning-briefing`) — rules-written,
+AI as the upgrade, `summary` never empty.
+
+**#192 · Candidate outreach ignores the send window.** `app_settings.
+candidate_send_window_enabled`, **default OFF** (owner reversed their own
+morning call — `DECISIONS.md` D-0009 → D-0010). Absent, unparseable or an
+unreadable settings table all mean off, so a failed query cannot re-impose it.
+**The drip is NOT the window and is untouched** — 6 per tick, 75-105s between
+real sends, pinned by `test/candidate-outreach-drip-smoke.mjs`.
+
+**#193 · `getTimezoneFromLocation` parses instead of scanning.** It matched
+two-letter state codes as SUBSTRINGS — "Den**ve**r" hit Delaware, "A**ri**zona"
+hit Rhode Island, "Californ**ia**" hit Iowa. **81 of 309 live leads (26.2%) had
+the wrong `jobs.timezone`, every one stored EAST of reality**, so 16
+Pacific-coast leads were cold-emailed from 05:00 their time. **The 81 rows were
+NOT backfilled — owner's decision, D-0011.** New and edited leads self-correct.
+
+**#194 · `docs/territories/DECISIONS.md`** — what the owner chose, written the
+moment it is said. **12 entries.** Check it before proposing anything.
+
+**#195/#196 · Tenancy.** See the section below — the most important thing on
+this page.
+
+**#197 · `docs/territories/CAPABILITIES.md`** — what PACE can already do.
+**Grep it before building anything user-facing.** The owner found two live
+workflows for emailing a candidate about a job (~2,900 lines, two territories,
+months apart). Borders make that MORE likely, not less: each territory reads
+only its own memory. `scripts/territory-map.mjs` now fails when a router
+composes mail and is named in no capability.
+
+## ⏳ IN FLIGHT, NOT MERGED — branch `claude/merge-candidate-email`
+
+**D-0012:** merge the two candidate-email workflows. Email → Compose →
+Candidates survives; **"Email JD to candidates" is removed**, and the job
+description moves INSIDE the email as a formatted block. **No attachments** —
+asked and answered, do not restore them as a missing feature.
+
+**⚠ `POST /candidates/email` MUST NOT BE DELETED with it.** Its second caller
+is `remSendMeeting` in `10-page-modals.js`, which sends **Teams meeting
+invitations**. Remove B's ENTRY POINTS, not the route.
+
+`observatory` was mid-build on `services/candidate-outreach.js` when the
+session ended. **Check that file's state before continuing** — and `surface`
+still has to remove the old buttons in `28-page-pipeline.js` and
+`30-page-candidate.js`.
+
 ## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY — READ THIS BEFORE TOUCHING SCOPING
 
 **The backend connects with `SUPABASE_SERVICE_KEY` (`index.js:73`), so RLS is
