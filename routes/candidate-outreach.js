@@ -707,12 +707,23 @@ module.exports = (ctx) => {
       const variants = gen.rulesVariants(input, opts).map(v => {
         const q = gen.checkCandidateDraft(v, input, { angle: v.id, omitSignOff: opts.omitSignOff, hasButtons: true });
         const shown = renderStoredEmail({ subject: v.subject, body: v.email }, mailbox);
+        // THE PANEL IS SPLIT OUT OF THE SAME RENDERED TEXT THE DRAIN SPLITS, by
+        // the same function, so the screen and the outbox cannot disagree. The
+        // page draws `preview_prose` as text and `block_html` as markup, in that
+        // order, which is the order the email itself is assembled in.
+        // `preview_email` keeps the WHOLE thing, panel text included — it is
+        // what is stored and what a text-only client receives, and a page that
+        // has not been updated yet still shows every fact rather than losing it.
+        const split = gen.splitJobBlock(shown.body);
         return {
           ...v,
           // Stored form (tokens intact) and shown form (tokens resolved from the
           // sending mailbox) travel together. The page previews `preview_*` and
           // queues nothing — the server rebuilds the stored form at queue time.
           preview_subject: shown.subject, preview_email: shown.body,
+          preview_prose: split.prose,
+          block_text: split.block,
+          block_html: gen.jobBlockHtmlFromText(split.block),
           quality: { ok: q.ok, violations: q.violations },
         };
       });
@@ -986,8 +997,17 @@ module.exports = (ctx) => {
         // the footer. The token has to exist before the HTML is built, which is
         // why it is resolved a line earlier than it strictly needs to be.
         const buttons = gen.answerButtonsHtml(resolveBaseUrl(), token, {});
+        // THE JOB DESCRIPTION PANEL IS REBUILT FROM THE STORED TEXT, not from
+        // the job order (D-0012: the JD now travels inside the email instead of
+        // as the attachment the removed flow used). The body holds it as a
+        // fenced plain-text block, so a text-only client already has every fact;
+        // here it becomes the bordered card. Reading it back out of the row
+        // rather than re-querying job_orders is what guarantees the card says
+        // exactly what the recruiter previewed and approved, even if somebody
+        // edited the job order in between — and it costs no extra query.
+        const parts = gen.splitJobBlock(rendered.body);
         const htmlBody = injectTrackPixel(
-          buildHtmlEmailBody(rendered.body, buttons + signature), token);
+          buildHtmlEmailBody(parts.prose, gen.jobBlockHtmlFromText(parts.block) + buttons + signature), token);
 
         // The token is written BEFORE the send, not after. If the send succeeds
         // and the update then fails, a candidate could tap a button whose token

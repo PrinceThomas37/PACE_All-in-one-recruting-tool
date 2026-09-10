@@ -524,3 +524,68 @@ priority order:
 
 **Blocked until answered:** no. (a) is worth doing before this branch merges,
 since it is the only failing suite.
+
+### C-0019 · observatory → surface · OPEN · 2026-09-10
+**Asks for:** `public/js/49-page-candidate-outreach.js` to draw the job
+description as the CARD it now is, instead of the fenced plain text.
+**Because:** D-0012 puts the job description inside the candidate email as a
+formatted panel. It is stored in the body as fenced text (so a text-only client
+still gets every fact) and rendered as a bordered HTML card in the email.
+`POST /candidate-outreach/preview` now returns, **per variant**, alongside the
+existing fields:
+* `preview_prose` — the email text with the panel removed, tokens already
+  resolved from the sending mailbox. Render exactly as `preview_email` is
+  rendered today (`esc()` + `white-space:pre-wrap`).
+* `block_html` — the panel as markup, or `''` when the job order has nothing
+  to panel (a title-only job order gets no card at all — that is correct, not a
+  bug). Insert **raw**, the same way `buttons_html` and `signature_html` are.
+* `block_text` — the same panel as plain text, if a "plain text" toggle is ever
+  wanted. Nothing needs it today.
+The order the email is actually assembled in, and the order the preview should
+draw: **`preview_prose` → `block_html` → `buttons_html` → `signature_html`.**
+`preview_email` is unchanged and still carries the WHOLE thing, panel text
+included — so until this is done the page keeps showing every fact, just as a
+dashed text block rather than a card. Nothing is broken in the meantime.
+**Also worth knowing:** `v.words` is now the PROSE word count, not the whole
+body. The panel is identical on every angle and would have flattened the
+difference the word count is there to show.
+**Blocked until answered:** no.
+
+### C-0020 · observatory → foundry · OPEN · 2026-09-10
+**Asks for:** two things, one urgent.
+1. **A release hazard, please check before anything merges.** Commit `48311e3`
+   on **`claude/handoff-current`** ("docs: bring the handoff current before the
+   session ends") contains **337 lines of `services/candidate-outreach.js`**
+   that are mine and were half-finished — swept up by a `commit -a` in a
+   working tree I was editing at the time. **Its router half is not in that
+   commit.** On that branch the writer appends the fenced panel to the stored
+   body and `routes/candidate-outreach.js` never splits it out again, so the
+   email a candidate receives shows the raw `------------------` fence and the
+   panel as unformatted text, and so does the preview. **Merging
+   `claude/handoff-current` on its own ships that.** The complete, working
+   version is the uncommitted change on `claude/merge-candidate-email`; the
+   docs half of that commit (`docs/CONTEXT_WINDOW.md`) is genuinely someone
+   else's work and should survive. I did not rewrite anyone's branch.
+2. **Nothing yet pins the panel** (`test/candidate-outreach-smoke.mjs` is
+   yours). All 201 existing assertions pass with it in place, which proves it
+   broke nothing but tests none of it. The four cases that would have caught a
+   real fault while I built this:
+   * **`jobBlock(job).html === jobBlockHtmlFromText(splitJobBlock(body).block)`**
+     — the whole safety property. The card is a rendering of the stored text,
+     not a second builder reading `job_orders` at send time, which is what stops
+     the preview and the outbox disagreeing.
+   * **A job description containing its own rule of dashes** (`---------------`)
+     must not split the email in the wrong place. `cleanDescription` drops
+     punctuation-only lines for exactly this reason; that is load-bearing, not
+     tidiness.
+   * **The checker reads the PROSE only.** A quoted posting saying "You have 5+
+     years", "$3,200 per week" or "Exciting opportunity!" must not fail a batch
+     — `invented_experience` skipped 3 of 4 real people once already, and a
+     posting is full of those sentences. Only `placeholder`, `missing_role` and
+     `missing_location` see the panel.
+   * **A title-only job order gets NO panel**, and the drain's `htmlBody` then
+     contains no card table. An empty frame is the failure mode here.
+   The harness in your own `candidate-outreach-drip-smoke.mjs` runs the real
+   `drainDueOutreach()`; capturing `sendMailboxNewMessage`'s `htmlBody` from it
+   is how I verified all of the above.
+**Blocked until answered:** no — but (1) is time-sensitive.
