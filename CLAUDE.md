@@ -440,6 +440,16 @@ end-to-end before it could touch anything.
   reads it FIRST and rewrites it LAST. **Anything not written there is lost**,
   because the subagent's context dies when it finishes. That is the point: the
   memory persists, the context does not.
+- **`docs/territories/CAPABILITIES.md`** — **what PACE can already do.**
+  `_map.json` guarantees every FILE has one owner; this guarantees every
+  user-facing CAPABILITY has one implementation, and they are different
+  problems. **Grep it before building anything**, in the owner's terms rather
+  than by feature name. Session 22 shipped candidate outreach without noticing
+  that emailing candidates about a job had existed since Session 3 — two
+  workflows, ~2,900 lines, built by different territories, and **the owner
+  found it, not the system.** Borders make this MORE likely, not less: each
+  territory reads only its own memory. A replacement removes the old entry
+  points **in the same change**; two live paths to one outcome is the bug.
 - **`docs/territories/DECISIONS.md`** — **what the OWNER decided, and when.**
   The territory memories record what the code *does*; the archive records what
   *happened*; this records **what they chose** — the only one of the three that

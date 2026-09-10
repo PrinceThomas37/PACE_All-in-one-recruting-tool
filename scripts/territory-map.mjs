@@ -57,7 +57,7 @@ const TERRITORIES = [
   { id: 'observatory', name: 'Observatory', role: 'AI & Intelligence', terrain: 'the high peak',
     hue: '#D8CFE8', pos: [-15, -27], height: 22, spread: 12,
     own: ['services/ai-provider.js', 'services/ai-budget.js',
-          'services/outreach-generator.js', 'services/candidate-outreach.js',
+          'services/outreach-generator.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
           'match-engine.js', 'conversation-intel.js', 'next-action.js',
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
           'company-classifier.js', 'enrichment.js', 'skill-dictionaries.js',
@@ -181,6 +181,32 @@ for (const t of territories) {
 const unclaimed = all.filter(p => !claimed.has(p) &&
   !p.startsWith('test/') && !p.includes('package-lock'));
 
+/* ── Capability drift ──────────────────────────────────────────────────────
+ * A register nobody is forced to read is a register that goes stale, and a
+ * stale one is worse than none — it reports coverage it does not have.
+ * So: every router that COMPOSES MAIL must be named somewhere in
+ * CAPABILITIES.md. A new send path that nobody registered is exactly the shape
+ * of the duplication the owner found (two candidate-email workflows, ~2,900
+ * lines, built months apart by different territories).
+ * This cannot prove two capabilities are the same. It can prove a send path
+ * was added without anyone declaring what it is for, which is the moment the
+ * question should have been asked. */
+function capabilityDrift() {
+  let reg = '';
+  try { reg = readFileSync(join(ROOT, 'docs/territories/CAPABILITIES.md'), 'utf8'); }
+  catch { return { checked: 0, unregistered: ['CAPABILITIES.md is missing'] }; }
+
+  const COMPOSES = /sendMailboxNewMessage|sendMicrosoftNewMessage|gmailProvider\.sendNewMessage|deliverOutboundEmail|buildHtmlEmailBody/;
+  const senders = all.filter(p =>
+    (p.startsWith('routes/') || p === 'index.js') &&
+    p.endsWith('.js') &&
+    COMPOSES.test(readFileSync(join(ROOT, p), 'utf8')));
+
+  const unregistered = senders.filter(p => !reg.includes(p));
+  return { checked: senders.length, unregistered };
+}
+const drift = capabilityDrift();
+
 const map = {
   generated: new Date().toISOString().slice(0, 10),
   repo: 'PrinceThomas37/PACE_All-in-one-recruting-tool',
@@ -220,6 +246,15 @@ for (const t of territories) {
   console.log(`  ${t.id.padEnd(12)} ${String(t.files).padStart(3)} files  ` +
               `${String(t.lines).padStart(6)} lines  ${t.lastTouched || '—'}`);
 }
+console.log(`\n  capability register: ${drift.checked} mail-composing routers checked`);
+if (drift.unregistered.length) {
+  console.log(`  ⚠ ${drift.unregistered.length} compose mail but are named in NO capability:`);
+  drift.unregistered.forEach(f => console.log(`      ${f}`));
+  console.log('      → add them to docs/territories/CAPABILITIES.md, or say which');
+  console.log('        existing capability they belong to. A send path nobody');
+  console.log('        declared is how one job ends up with two workflows.');
+}
+
 if (unclaimed.length) {
   console.log(`\n  ⚠ ${unclaimed.length} files claimed by no territory:`);
   unclaimed.slice(0, 15).forEach(f => console.log(`      ${f}`));
