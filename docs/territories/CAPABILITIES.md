@@ -52,7 +52,10 @@ off deliberately — check `DECISIONS.md` before touching it).
 ---
 
 ### Emailing a candidate about a job
-**Status:** ⚠ **DUPLICATED — two live paths, being merged (owner's call, 2026-09-10)**
+**Status:** ⚠ **DUPLICATED — A survives, B is being removed** (owner's call,
+`DECISIONS.md` D-0012). The JD moves **inside** A's email as a formatted block.
+**No attachments** — asked and answered; B's document attachment is dropped
+deliberately, not overlooked.
 
 | | A · Compose → Candidates | B · "Email JD to candidates" |
 |---|---|---|

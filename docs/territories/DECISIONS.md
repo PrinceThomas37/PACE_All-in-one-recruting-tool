@@ -47,6 +47,27 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0012 · 2026-09-10 · STANDS · One candidate-email workflow, JD inside the email
+**Decided:** Merge the two ways of emailing a candidate about a job into one.
+**"Email JD to candidates"** (a job's Candidates tab, multi-select) is removed;
+**Email → Compose → Candidates** survives. The job description goes **inside**
+the email as a formatted block — title, location, pay, requirements — not as an
+attachment.
+**Their words:** *"these are 2 different workflow of a same thing, like
+duplication of workflows… remove the job description sending thing and attach
+the job description in a formatted window format when asking the candidates
+about their interest to jobs."*
+**And explicitly, asked and answered:** **no file attachments.** The old flow
+could attach documents and the new one cannot; the owner was shown that and
+chose the formatted block alone. **This is a decision, not an oversight** — do
+not "restore" attachments as a missing feature.
+**Why it matters beyond the feature:** this duplication is what caused
+`CAPABILITIES.md` to exist. ~2,900 lines, two territories, months apart, and the
+owner found it rather than the system.
+**Re-open when:** a recruiter actually needs to send a file with an interest
+email — evidence from real use, not a guess.
+
+
 ### D-0011 · 2026-09-09 · STANDS · No backfill of the 81 wrong lead timezones
 **Decided:** Fix `getTimezoneFromLocation()` in code only. The 81 existing
 `jobs.timezone` rows that are wrong stay wrong until something touches them.
