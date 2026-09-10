@@ -47,6 +47,57 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0014 · 2026-09-10 · STANDS · The UI is being revamped; the model is PROGRESSIVE DISCLOSURE
+**Their words:** *"Its not about limiting the number of things that gets
+accumulated on screen, you are not understanding the design, why not just
+minimilistically reduce elements on screen and shows things when clicked"* …
+*"those lead row or the job rows and all and not interactive they don't show
+anything, like earlier … we were able to change the email stage, to valid or
+invalid and all. Now those things and all are not there. So i feel the design
+that to revamped a bit."* … *"we are going to change the entire fucking UI of
+the product in sometime."*
+
+**The correction, recorded because it was MISREAD once already:** D-0013
+answered "things accumulate on screen" with **volume control** — horizons,
+caps, pagination. That was not the ask. The ask is **DENSITY AND DEPTH**:
+
+> **Show little by default. Reveal on click.**
+
+Both are true and they are not the same instruction. D-0013 stands (the 92x DOM
+growth was real and measured); it is simply not this. **Do not answer a density
+complaint with a filter again.**
+
+**What was investigated and is NOT broken** (probed in a real browser, both row
+types, Session 23): a lead row is clickable → opens the detail drawer; a job row
+is clickable → navigates to `bd_jodetail`; the valid / invalid / deactivated /
+out-of-office control still exists, still works, and is visible in the drawer
+(`changeEmailStatus` in `18-email-status-actions.js`, called from
+`renderJobDetailModal()` in `06-page-leads.js`). No regression was found and git
+shows no commit that moved it off a row.
+
+**What is ACTUALLY wrong, and is the brief for the revamp:**
+1. **The actions are not where the eye is.** Marking an email invalid takes a
+   row click, then finding a contact card inside a drawer. Nothing on the row
+   says it is possible, so a capability that exists reads as missing — which is
+   exactly what happened.
+2. **A row shows no state and offers no action.** A Jobs row carries a checkbox
+   and NOTHING else; a Leads row carries a checkbox and a stage dropdown. The
+   same gesture on two lists does two different things.
+3. **The same gesture has two different outcomes.** A lead row opens a DRAWER
+   over its list (keeping filters, selection, scroll — the deliberate rule in
+   `CLAUDE.md`); a job row LEAVES the page for `bd_jodetail`. One of those two
+   is wrong and it is the second.
+
+**Direction agreed for the revamp:** a row is quiet until asked, then reveals
+its state and its actions **in place** — not a wall of controls, and not a
+2-click trip into a drawer to change one field. The drawer stays for the full
+record.
+
+**Re-open when:** the revamp starts. This entry is the brief; it is not a
+mandate to start building it — the owner said "in sometime", and said it
+**after** telling me I had misread the last one. **Ask before building any of
+it.**
+
 ### D-0013 · 2026-09-10 · STANDS · Every list gets a horizon and an exit
 **Their words:** *"I think what's also important is the stacking of information
 on the screen or the UI when aging, have we considered that while designing
