@@ -417,6 +417,18 @@ we never have to rewrite to grow (see "Growth bets" below).
 - **APPLY A MIGRATION BEFORE MERGING THE CODE THAT USES IT.** An insert naming a
   column that does not exist fails, and on a send path it fails *after the email
   has already gone out*.
+- **NEVER `git add -A` IN A TREE WHERE AN AGENT IS WORKING (Session 22).** Stage
+  the paths the commit is actually about. A documentation-only commit for #198
+  swept up **337 lines of a territory's in-progress file** and put half a feature
+  on `main` — the half that APPENDS a job-description panel to a stored email
+  body, without the half that splits it back out before sending. A queued
+  candidate email would have gone out with a raw `------------------` fence to a
+  real person under the customer's name. Nothing on screen would have said so,
+  and **every check passed**: `node --check` clean, full suite green, because the
+  writer's own tests did not know the router existed yet. Reverted by #199; no
+  email went out, and only because the queue happened to be empty that hour.
+  **A green suite proves what it covers, not what you accidentally added** — the
+  sibling of the syntax-check rule above.
 - **Never pipe `git push` into `tail`** — it swallows a rejection, and a commit
   made on the wrong branch then looks like a successful push.
 - **Before moving ANY file, read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"
