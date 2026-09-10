@@ -147,6 +147,12 @@ let DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID || null;
 // legacy token and defaulting is right; with several it is a session we cannot
 // scope, and defaulting would hand it the first org's data — a real customer's.
 let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
+// resolveDefaultOrg() below counts organisations ONCE, at boot. Self-serve
+// signup creates them at runtime, so the gate must arm the moment a second one
+// appears rather than at the next restart — on the free tier that could be
+// hours, and every one of them a window in which an org-less session silently
+// resolves to the FIRST org's data.
+require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
 const { isRecyclable } = require('./services/lead-recycle');
 const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted

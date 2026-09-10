@@ -367,3 +367,160 @@ than emitting a value that would silently reopen this bug from a different
 angle. Only 1 of the 309 rows measured was Alaska; a real fix needs
 `LEAD_TZ_IANA` extended and `US_TZ_MAP`'s `ak`/`hi` keys changed together, and
 is a separate, smaller piece of work if ever wanted.
+
+### C-0015 · rampart → harbour · OPEN · 2026-09-09
+**Asks for:** org scoping on `routes/emails.js` and `routes/warmup.js`. These
+are yours; I did not touch them.
+
+**First, the fact that sets the severity — verify it yourself, it is one line:**
+`index.js:73` builds the Supabase client with `config.supabaseServiceKey`. The
+backend runs as **service role**, which **bypasses RLS entirely**. "RLS is on all
+48 tables" is a defence against someone holding the anon key; it is **no
+mitigation at all** for anything in this file. Application code is the only
+boundary. `middleware/authorize.js`'s own header has said so since it was split
+out — it just was not carried into these routers.
+
+**The exact fix pattern (do not re-derive it):**
+1. **Prefer `db.forRequest(req).from('emails')` over adding `.eq('org_id', …)`
+   by hand.** Scoping you have to remember is scoping that gets forgotten —
+   that is how four cross-org leaks got in. `emails`, `user_emails`,
+   `warmup_threads`, `warmup_send_log`, `microsoft_tokens` and `contacts` are
+   all in `TENANT_TABLES`. `app_settings` is GLOBAL — leave those five queries
+   alone, they are correct.
+2. **A cross-org record is a 404, never a 403 and never a leak.** A 403 confirms
+   the row exists and turns an id parameter into an oracle. Same shape as
+   `ownedMailbox()` in `routes/mailbox.js`, which already gets this right.
+3. **An INSERT must stamp `org_id` explicitly.** Migration 022 gave every tenant
+   table a column DEFAULT of the default org, so an un-stamped insert does not
+   fail — it files company B's row under **company A**, silently. This is the
+   quieter half of the problem and it is a data-corruption bug as much as a
+   leak.
+
+**The specific rows, ranked by what company A could do to company B:**
+
+| # | where | what a person in org B can do to org A | severity |
+|---|---|---|---|
+| 1 | `emails.js:35` `GET /emails` | Line 36 applies `.eq('sent_by', req.user.id)` **only for non-admins**. An `admin` or `ra_lead` gets the query with no `sent_by` and **no `org_id`** — i.e. **every email row in the deployment, full bodies and subjects included**, plus joined `contacts` (name, email, designation), `jobs`, `companies` (name, industry, location) and `users`. This is the single worst line found in the audit: a complete read of another customer's outbound book. | **critical (read)** |
+| 2 | `emails.js:241` `POST /admin/emails/purge-pending` | With `all_managers:true` the fetch at :259 is filtered only by `status='pending'`, and the delete at :293 is `.delete().in('id', batch)` with no org and no ownership condition on the rows. One admin of org B **empties every org's pending queue**. Unrecoverable — the rows are gone, and the emails were never sent. | **critical (destructive)** |
+| 3 | `emails.js:181-185` `DELETE /emails/:id` | `data.sent_by !== req.user.id && !hasRole(req,'admin')` — so an admin passes the check for **any** row in the table. Delete any email in any org by id. | **high (destructive)** |
+| 4 | `emails.js:83` `GET /emails/pending-summary` | Admin/`ra_lead` with no `manager_id` query param gets every pending row in every org. Volume + timezone distribution of another customer's send queue. | **medium (read)** |
+| 5 | `emails.js:144-146` `POST /emails` | Insert stamps no `org_id` → lands in the **default org**. The follow-up `contacts.update(...).eq('id', contact_id)` at :146 has no org filter either — a blind cross-org write to another customer's contact record (`email_sent_at`, `email_platform`). | **medium (write + misfiling)** |
+| 6 | `warmup.js:106` `loadMailbox(id)` | `user_emails` by id, no org. It backs `POST /warmup/:id/start|pause|resume|stop|opt-in|opt-out` — every one gated on `canManage(req)` (a **role** check, which an org-B admin passes) and nothing else. An admin in org B can start or stop warm-up on **org A's mailbox**, which changes what that customer's real mail domain does. | **high (write)** |
+| 7 | `warmup.js:162` `GET /warmup/:id/threads` | `warmup_threads` by `from_mailbox_id`, no org, `canView` only. Returns subjects and the joined `user_emails.email_address` of the receiving mailbox — reads out another customer's mailbox addresses. | **medium (read)** |
+| 8 | `warmup.js:54,66,46` | The mailbox list, `warmup_send_log` and the `microsoft_tokens` connected-set lookup are all unscoped. #46/#66 are keyed `.in('user_email_id', ids)` off the list at :54, so scoping :54 fixes all three. | **medium (read)** |
+
+**Note on `emails.js`:** lines 70, 219 and 224 are already scoped in practice by
+`.eq('sent_by', req.user.id)`. They are not leaks and do not need changing —
+I am naming them so you do not spend time on them.
+
+**Blocked until answered:** no — nothing of mine waits on this. But #1 and #2
+are the two highest-severity findings in the whole audit.
+
+### C-0016 · rampart → gateway · OPEN · 2026-09-09
+**Asks for:** an ownership check on the `userEmailId` path/query parameter in
+`routes/microsoft.js` and `routes/gmail.js`. Per `scripts/territory-map.mjs`
+these two are yours — they are in neither harbour's `own` list nor your `not`
+list.
+
+**Why this pair matters more than the others:** these are the OAuth token
+routers. Migration 039 exists because `microsoft_tokens` held customers'
+mailbox **refresh tokens** readable with the anon key. That hole was closed at
+the RLS layer — but the backend uses the **service-role key** (`index.js:73`),
+so RLS does not apply to these routes at all. The protection here is entirely
+application-side, and right now there is none.
+
+**The exact fix pattern:** before touching `microsoft_tokens` / `gmail_tokens` /
+`user_emails` for a `userEmailId`, load the `user_emails` row and confirm its
+`org_id` equals `orgIdFor(req)`. A miss is **404**, never 403 — a 403 tells the
+caller the mailbox slot exists. Then stamp `org_id` on the token INSERTs.
+
+| # | where | what a person in org B can do to org A | severity |
+|---|---|---|---|
+| 1 | `microsoft.js:158` / `gmail.js:128` `DELETE /auth/{microsoft,google}/:userEmailId` | Gated on `hasRole(req,'admin','bd_lead')` and **nothing else**. An admin or bd_lead in org B passes any `userEmailId`: it deletes org A's OAuth tokens, sets their `user_emails.is_active=false`, and then calls `reassignJobsOffMailbox()` — which **rewrites org A's leads onto a different sending mailbox**. Their outreach stops and their lead records are mutated, with no error anywhere. | **critical (destructive)** |
+| 2 | `microsoft.js:96` / `gmail.js:101` token INSERT | Neither stamps `org_id`, so every mailbox connected by any org after the first files its refresh token under the **default org** (column DEFAULT, migration 022). Once these rows are read back with an org filter, org B's tokens sit in org A's row space. | **critical (misfiling of secrets)** |
+| 3 | `microsoft.js:20` `/auth/microsoft/connect` (and the Google twin) | `userEmailId` comes straight from the query string into the OAuth `state`; nothing checks it belongs to the caller's org. The callback's email-match guard (`:86-92`) does limit the damage — you cannot attach a mailbox you do not control — but see #4. | **high** |
+| 4 | `microsoft.js:90` / `gmail.js:96` the mismatch message | *"you logged in as X but this slot is for **Y**"* — `Y` is `user_emails.email_address` read by id with no org filter. That is a **disclosure oracle**: point `connect` at any foreign slot id and the app reads out another customer's mailbox address. Keep the guard, make the message generic once the slot is known to be foreign (or better, 404 before reaching it). | **medium (read)** |
+| 5 | `microsoft.js:120` / `gmail.js:122` `/status/:userEmailId` | `auth` only, no role and no org. Returns `email_address` and token expiry for any slot id in the deployment. | **medium (read)** |
+| 6 | `microsoft.js:130,140,142,144` the schema-check/debug routes | These are keyed `.eq('user_id', req.user.id)` / `.eq('assigned_to_bd', req.user.id)`, so they are **scoped in practice** and are not leaks. Named so you do not spend time on them. | none |
+
+**Blocked until answered:** no.
+
+### C-0017 · rampart → guild · OPEN · 2026-09-09
+**Asks for:** org scoping on `routes/workflows.js` and `routes/lookups.js`.
+Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's
+`not` list and in your `own` list — I mention it because it was handed to me as
+gateway's, and the map says otherwise).
+
+**The fact that sets the severity:** `index.js:73` — the backend runs as
+**service role**, so RLS is bypassed and application code is the only boundary.
+
+**The exact fix pattern:** `db.forRequest(req).from('jobs')` rather than a
+hand-written `.eq('org_id', …)`; a cross-org miss is a **404**; and for the two
+bulk routes the ids come from the request body, so the org condition must be on
+the **UPDATE/DELETE statement itself** — checking the ids first and mutating
+after is a race, and it is twice the code.
+
+| # | where | what a person in org B can do to org A | severity |
+|---|---|---|---|
+| 1 | `workflows.js:184,192,193` `POST /jobs/bulk-stage` | Role-gated to `admin/bd/bd_lead/ra_lead`, then `.update(updates).in('id', job_ids)` — **`job_ids` is unvalidated request body with no org or ownership condition**. Any BD user in org B can rewrite the stage of any lead in org A, and on `stage:'Unassigned'` it also **deletes their pending emails** (:192) and expires their active follow-ups (:193). Silent, and it hits the exact fields `releaseToPoolUpdate()` exists to keep consistent. | **critical (destructive)** |
+| 2 | `workflows.js:220` `POST /jobs/bulk-assign` | Same shape: `.update(updatePayload).in('id', job_ids)`. Reassign another customer's leads to a user id of the caller's choosing, and re-point their sending mailbox (:210). | **critical (write)** |
+| 3 | `workflows.js:231` `POST /jobs/check-duplicates` | Takes a list of email addresses and returns matching `contacts` joined to `jobs.position` and `companies.name`, **across every org**. A working **enumeration oracle**: paste a prospect list, learn which of them another customer is working and at which company for which role. Any authenticated user. | **high (read)** |
+| 4 | `lookups.js:42` `POST /contacts/check-email` | The same oracle, one address at a time, and it returns more: `contact_name`, `company`, `position`, `days_ago`. Any authenticated user, no role gate. | **high (read)** |
+| 5 | `workflows.js:22,47,72` `GET /insights/{ra,bd}/:userId` | The role gate lets an `admin`/`bd_lead`/`ra_lead` pass **any** `userId`, and the queries key on `created_by`/`assigned_to_bd` with no org filter. An org-B lead passes an org-A user id and gets that person's leads, company names, industries and email counts. | **high (read)** |
+| 6 | `workflows.js:151` `GET /stats` | Unscoped aggregate over `jobs` — stage counts and contact activity for every org blended into one number. Not a record-level leak, but it is another customer's volume. | **medium (read)** |
+
+**Blocked until answered:** no.
+
+### C-0018 · rampart → foundry · OPEN · 2026-09-09
+**Asks for:** two things in `test/`, which is yours.
+
+**(a) One assertion in `test/authorize.mjs` is now wrong and is the only red
+suite on `claude/org-scoping-audit` (68/69).** Line 58:
+
+```js
+ok('canTouchJob: admin → true (no lookup)', (await ctjAdmin(admin, 'j1')) === true);
+```
+
+It is built with `mockSupabase(null)` — no job row — and pins the **old**
+behaviour: the admin bypass returned `true` before the row was ever read. That
+was the bug. `canTouchJob` gates contact create/update/delete and the follow-up
+routes, so it authorised an admin in org B to write to leads in org A by id.
+It now reads the row first (with `.eq('org_id', req.orgId)` when the request
+carries one) and only then applies the admin bypass. Please replace it with:
+
+```js
+ok('canTouchJob: admin, no such job → false', (await ctjAdmin(admin, 'j1')) === false);
+ok('canTouchJob: admin, job in own org → true',
+   (await mk({ created_by: 'x', assigned_to: 'y', assigned_to_bd: 'z' })(admin, 'j')) === true);
+```
+
+The second line is the one that matters — it proves the bypass still WORKS for
+a legitimate admin, so the fix is not just a denial.
+
+**(b) A new suite pinning what this audit found**, because none of it is
+currently covered and all of it fails silently. The assertions I want, in
+priority order:
+
+1. **`GET /emails` as an `admin` must carry an org condition.** The strongest
+   cheap form is a grep, in the spirit of `test/sender-identity-smoke.mjs`:
+   every `supabase.from('<tenant table>')` in `routes/` must be accompanied by
+   an org filter, an ownership filter (`.eq('sent_by'|'user_id'|'created_by',
+   req.user.id)`) or an explicit `db.crossOrg(` with a comment. `TENANT_TABLES`
+   and `GLOBAL_TABLES` are already exported from `models/tables.js`, so the
+   allow-list is free and stays correct as migrations land. **Please
+   allow-list, not deny-list** — a new router should fail the test by default.
+2. **`routes/auth.js`: `PUT /users/:id`, `PUT /users/:id/roles`,
+   `DELETE /users/:id`, `PUT /users/:id/manager` and all five
+   `/users/:id/emails*` routes answer 404 — not 403 — for a user in another
+   org.** I added a single `guardUser(req, res, id)` choke point for exactly
+   this; a test should pin the **404**, because a later "helpful" change to 403
+   re-opens the id oracle and nothing would look wrong.
+3. **`middleware/authorize.js`: `canTouchJob` is false for a job in another org
+   even when the caller is an admin**, and true for one in their own.
+4. **`services/provisioning.js` announces org creation**, and a listener
+   registered via `onOrgCreated` fires when `createWorkspace()` succeeds. This
+   is what arms `MULTI_ORG` — and therefore `auth()`'s org-less-session refusal
+   — without waiting for a process restart.
+
+**Blocked until answered:** no. (a) is worth doing before this branch merges,
+since it is the only failing suite.

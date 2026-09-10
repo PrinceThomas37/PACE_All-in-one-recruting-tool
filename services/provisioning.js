@@ -235,6 +235,22 @@ async function unusablePasswordHash() {
  * Create the organisation for a private workspace.
  * Returns the row, or throws (the caller turns that into a refusal).
  */
+// ── "A second organisation now exists" ──────────────────────────────────────
+// auth()'s org-less-session gate is armed by MULTI_ORG, which index.js resolves
+// ONCE at boot by counting organisations. Self-serve signup creates orgs while
+// the process is running, so between the first new workspace and the next
+// restart the gate stayed disarmed — exactly the window in which a stale,
+// org-less token would have silently defaulted to the FIRST org's data.
+//
+// So provisioning announces it. index.js subscribes at boot and arms the gate
+// immediately. Best-effort by construction: a listener that throws must never
+// be the reason a signup fails.
+const orgCreatedListeners = [];
+function onOrgCreated(fn) { if (typeof fn === 'function') orgCreatedListeners.push(fn); }
+function announceOrgCreated(org) {
+  for (const fn of orgCreatedListeners) { try { fn(org); } catch (_) { /* never break a signup */ } }
+}
+
 async function createWorkspace(supabase, { email, name }) {
   const { data, error } = await supabase.from('organizations').insert({
     name: workspaceNameFor(email, name),
@@ -244,6 +260,7 @@ async function createWorkspace(supabase, { email, name }) {
     status: 'active',
   }).select('*').single();
   if (error) throw error;
+  announceOrgCreated(data);
   return data;
 }
 
@@ -342,5 +359,6 @@ module.exports = {
   decide, provision, routeNewSignIn,
   verifiedClaimFor, loadOrg, seatsUsedIn,
   selfServeEnabled, displayNameFor, workspaceNameFor, workspaceSlug,
+  onOrgCreated,
   SELF_SERVE_ENV, ASSIGNABLE_JOIN_ROLES, DEFAULT_JOIN_ROLE,
 };

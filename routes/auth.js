@@ -57,6 +57,34 @@ router.post('/auth/change-password', auth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // USERS
 // ══════════════════════════════════════════════════════════════
+  // ── Cross-org guard for every /users/:id route ──────────────────────────────
+  // Every handler below is keyed on a user id taken straight from the URL, and
+  // none of them used to check that the id belonged to the CALLER'S org. With
+  // one organisation that is invisible; with two it is account takeover — an
+  // admin of company B could rename, re-role, re-point the manager of, add a
+  // mailbox to, or soft-delete any user in company A, and read that user's
+  // mailbox list, simply by pasting their id.
+  //
+  // A miss is a 404, never a 403: a 403 confirms the record exists, which turns
+  // this into an id oracle. Same reasoning as ownedMailbox() in routes/mailbox.js.
+  //
+  // This is a GATE, not a scoped query. The queries below stay as they are on
+  // purpose — one place to be right beats twelve places to remember.
+  async function sameOrgUser(req, userId) {
+    if (!userId) return null;
+    const org = orgIdFor(req);
+    let q = supabase.from('users').select('id,org_id').eq('id', userId);
+    if (org) q = q.eq('org_id', org);
+    const { data } = await q.maybeSingle();
+    return data || null;
+  }
+  // Returns true when the caller may proceed. Sends the 404 itself otherwise.
+  async function guardUser(req, res, userId) {
+    if (await sameOrgUser(req, userId)) return true;
+    res.status(404).json({ error: 'User not found' });
+    return false;
+  }
+
 const USER_COLS = 'id,name,email,role,roles,employee_id,designation,platform,is_active,created_at,manager_id';
 
 router.get('/users', auth, async (req, res) => {
@@ -89,8 +117,13 @@ router.put('/users/:id/manager', auth, async (req, res) => {
     const { id } = req.params;
     const managerId = req.body.manager_id || null;
     if (managerId === id) return res.status(400).json({ error: "A user can't report to themselves." });
+    if (!(await guardUser(req, res, id))) return;
+    // The manager must be in the same org too — otherwise the reporting tree,
+    // and everything scoped by it (/reports/recruiting, My Team, the dashboards),
+    // would span two customers.
+    if (managerId && !(await guardUser(req, res, managerId))) return;
     if (managerId) {
-      const { data: allUsers } = await supabase.from('users').select('id,manager_id').is('deleted_at', null);
+      const { data: allUsers } = await withOrg(supabase.from('users').select('id,manager_id').is('deleted_at', null), req);
       const byId = new Map((allUsers || []).map(u => [u.id, u.manager_id]));
       let walk = managerId, hops = 0;
       while (walk && hops < 100) {
@@ -152,6 +185,7 @@ router.put('/users/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
     if (!hasRole(req, 'admin') && req.user.id !== id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, id))) return;
     const { name, email, roles, role, employee_id, designation, platform } = req.body;
     const updates = { updated_at: new Date() };
     if (name) updates.name = name;
@@ -173,6 +207,7 @@ router.put('/users/:id/roles', auth, async (req, res) => {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
     const { roles } = req.body;
     if (!Array.isArray(roles) || !roles.length) return res.status(400).json({ error: 'roles array required' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { data, error } = await supabase.from('users')
       .update({ roles, role: roles[0], updated_at: new Date() })
       .eq('id', req.params.id).select(USER_COLS).single();
@@ -185,6 +220,7 @@ router.delete('/users/:id', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
     if (req.params.id === req.user.id) return res.status(400).json({ error: 'Cannot delete yourself' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     await supabase.from('users').update({ deleted_at: new Date(), is_active: false }).eq('id', req.params.id);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -195,6 +231,7 @@ router.delete('/users/:id', auth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 router.get('/users/:id/emails', auth, async (req, res) => {
   try {
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { data, error } = await supabase.from('user_emails')
       .select('*').eq('user_id', req.params.id).order('created_at');
     if (error) throw error;
@@ -221,6 +258,7 @@ router.get('/users/:id/emails', auth, async (req, res) => {
 router.post('/users/:id/emails', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { email_address, display_name, platform, daily_send_limit, is_primary } = req.body;
     if (!email_address) return res.status(400).json({ error: 'email_address required' });
     const mbGate = await entitlements.gate(supabase, req, 'mailboxes', { orgIdFor });
@@ -230,6 +268,7 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       await supabase.from('user_emails').update({ is_primary: false }).eq('user_id', req.params.id);
     }
     const { data, error } = await supabase.from('user_emails').insert({
+      ...(orgIdFor(req) ? { org_id: orgIdFor(req) } : {}),
       user_id: req.params.id,
       email_address: email_address.toLowerCase().trim(),
       display_name: display_name || email_address,
@@ -246,6 +285,7 @@ router.post('/users/:id/emails', auth, async (req, res) => {
 router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { is_active, is_primary, display_name, daily_send_limit, platform } = req.body;
     const updates = { updated_at: new Date() };
 
@@ -286,6 +326,7 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
 router.delete('/users/:id/emails/:eid', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     // Move any leads off this mailbox before it's gone entirely — otherwise
     // they either block the delete or lose their sending mailbox outright.
     const reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
@@ -297,6 +338,7 @@ router.delete('/users/:id/emails/:eid', auth, async (req, res) => {
 router.get('/users/:id/emails/:eid/signature', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { data: mailbox, error } = await supabase.from('user_emails').select('id,user_id,email_address,display_name').eq('id', req.params.eid).eq('user_id', req.params.id).single();
     if (error || !mailbox) return res.status(404).json({ error: 'Email ID not found' });
     const map = await loadMailboxSignatures([mailbox.id], mailbox.user_id);
@@ -316,6 +358,13 @@ router.get('/users/:id/emails/:eid/signature', auth, async (req, res) => {
 router.put('/users/:id/emails/:eid/signature', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead', 'bd') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    // The role gate above passes ANY bd / bd_lead / admin, so without this the
+    // ids in the URL are the only thing deciding whose mailbox gets written —
+    // and this writes the SIGNATURE, which goes out on that mailbox's live
+    // outbound mail. A cross-org write onto another customer's customer-facing
+    // content, which is why it is guarded like the rest and not treated as a
+    // minor settings endpoint.
+    if (!(await guardUser(req, res, req.params.id))) return;
     const { signature_html } = req.body;
     if (signature_html === undefined) return res.status(400).json({ error: 'signature_html required' });
     const { data: mailbox, error } = await supabase.from('user_emails').select('id,user_id').eq('id', req.params.eid).eq('user_id', req.params.id).single();
@@ -348,6 +397,13 @@ router.post('/team-assignments', auth, async (req, res) => {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
     const { member_id, manager_id, assignment_type } = req.body;
     if (!member_id || !manager_id || !assignment_type) return res.status(400).json({ error: 'member_id, manager_id, assignment_type required' });
+    // Both ids come straight from the request body. The row itself is stamped
+    // with the caller's org below, so this is not a read leak — but without
+    // these two checks an admin can build a team relationship pointing at a
+    // user in another org, and anything that later resolves those ids is
+    // reading across the boundary to do it.
+    if (!(await guardUser(req, res, member_id))) return;
+    if (!(await guardUser(req, res, manager_id))) return;
     const orgId = orgIdFor(req);
     const { data, error } = await supabase.from('team_assignments')
       .insert({ member_id, manager_id, assignment_type, ...(orgId ? { org_id: orgId } : {}) }).select().single();
@@ -359,7 +415,7 @@ router.post('/team-assignments', auth, async (req, res) => {
 router.delete('/team-assignments/:id', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-    await supabase.from('team_assignments').delete().eq('id', req.params.id);
+    await withOrg(supabase.from('team_assignments').delete().eq('id', req.params.id), req);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
