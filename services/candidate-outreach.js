@@ -201,269 +201,10 @@ function prettySkill(token) {
   return t.length <= 4 ? t.toUpperCase() : t;
 }
 
-// "a HVAC Service Technician" is what a vowel-LETTER test produces, and it is
-// wrong — the article follows the SOUND, and "aitch" starts with one. It was in
-// the first real draft this writer produced.
-//
-// A LIST, NOT A RULE, DELIBERATELY. The rule ("an all-caps run whose first
-// letter-name begins with a vowel") fires on ALL-CAPS ENGLISH: a recruiter
-// typing "SALES Manager" or "FIRE Marshal" would get "an SALES Manager", which
-// is a new kind of wrong. Missing an acronym only reproduces today's reading,
-// so the list is the safe direction to be incomplete in. These are the ones
-// this app's own job orders actually carry.
-const VOWEL_SOUND_ACRONYM = /^(?:HVAC|RN|LPN|LVN|CNA|MRI|MEP|EPA|EHS|HSE|NDT|HR|IT|SQL|ETL|API|SEO|XML|FAA|OSHA|LNG|RF)\b/;
 function indefinite(word) {
   const w = txt(word);
   if (!w) return w;
-  const vowelSound = /^[aeiou]/i.test(w) || VOWEL_SOUND_ACRONYM.test(w);
-  return (vowelSound ? 'an ' : 'a ') + w;
-}
-
-// ── THE JOB DESCRIPTION, AS A PANEL ────────────────────────────────────────
-// The owner, 2026-09-10 (DECISIONS.md D-0012): "remove the job description
-// sending thing and attach the job description in a formatted window format
-// when asking the candidates about their interest to jobs." PACE had two ways
-// to email a candidate about a job; the other one could attach the JD as a file
-// and is being removed, so this email has to carry it. **No attachments** —
-// asked and answered; the block is the whole of it.
-//
-// FOUR RULES, AND THE FIRST IS WHY THIS IS SHAPED THE WAY IT IS:
-//
-// 1. THE PLAIN TEXT IS THE ORIGINAL; THE CARD IS A RENDERING OF IT. The panel
-//    is written into the STORED body as a fenced text block, and the HTML card
-//    is built by reading that text back (`jobBlockHtmlFromText`). So the card
-//    cannot carry a fact the text does not, a text-only client loses only the
-//    border, and the drain — which holds the stored row and not the job order —
-//    needs no second query and cannot disagree with the preview. One renderer,
-//    fed from the thing that was actually stored: the same reasoning as
-//    `briefFor()` in the router, taken one step further.
-//
-// 2. A FIELD THAT IS ABSENT IS NOT A ROW. No dash, no "Not specified", no empty
-//    cell. A job order is filled in by hand and usually half-empty; a panel of
-//    blanks reads as a broken system. A panel that would carry nothing but the
-//    title is not printed at all — the subject line already says that much.
-//
-// 3. IT IS A FACT PANEL, NOT A SECOND PITCH. The prose above it persuades and
-//    `checkCandidateDraft` governs that prose. Every row here is a field off the
-//    job order, cleaned by the helpers the prose already uses: `remoteTerm` (a
-//    `remote` of "No" once shipped as "It is Full-time and No."), `prettySkill`
-//    (skills arrive hand-typed and lowercase), the sub-1000 pay-period rule.
-//    **Nothing in the panel is written by a model** — which is also why
-//    `checkCandidateDraft` does not police it for tone: the description is the
-//    client's own words, quoted, not our prose.
-//
-// 4. IT IS THE LAST THING IN THE BODY, after the sign-off, because
-//    `buildHtmlEmailBody(text, extraHtml)` can only append markup AFTER the
-//    text. Putting the block anywhere else would render in one order as text
-//    and another as HTML, and a preview that disagrees with the outbox is the
-//    one failure a preview exists to prevent.
-const BLOCK_FENCE = '------------------------------------------';
-const BLOCK_MAX_CHARS = 1200;   // ~200 words. The removed flow sent 1,600 raw.
-const BLOCK_MAX_LINES = 12;
-
-// Tolerant on purpose: we only ever parse text this file wrote, and a fence
-// whose length changes one day must not orphan every queued row.
-const isFenceLine = (line) => /^-{10,}$/.test(String(line || '').trim());
-
-const oneLine = (v) => txt(v).replace(/\s+/g, ' ');
-
-function decodeEntities(s) {
-  return String(s || '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"').replace(/&(?:#39|apos|rsquo|lsquo);/gi, "'")
-    .replace(/&(?:rdquo|ldquo);/gi, '"').replace(/&(?:ndash|mdash);/gi, '-')
-    .replace(/&bull;/gi, '•')
-    .replace(/&#(\d{2,5});/g, (m, n) => {
-      const c = Number(n);
-      return (c >= 32 && c <= 0x2122) ? String.fromCharCode(c) : ' ';
-    })
-    // &amp; LAST, or "&amp;lt;" decodes twice and turns into a tag.
-    .replace(/&amp;/gi, '&');
-}
-
-// The description as a candidate would read it: tags gone, bullets normalised,
-// blank runs collapsed, length capped on a boundary that is never mid-word.
-//
-// ⚠ A LINE OF DASHES IS DROPPED, AND THAT IS WHAT MAKES THE FENCE SAFE. A
-// pasted job description very often carries its own rule of dashes; one of
-// those inside the block would look exactly like the fence and split the email
-// in the wrong place. Dropping every punctuation-only line closes that for good
-// — and such a line carries no fact, so nothing is lost.
-function cleanDescription(raw) {
-  let s = String(raw || '');
-  if (!s.trim()) return [];
-  s = s.replace(/<\s*br\s*\/?\s*>/gi, '\n')
-       .replace(/<\s*\/\s*(?:p|div|li|tr|h[1-6]|ul|ol)\s*>/gi, '\n')
-       .replace(/<\s*li[^>]*>/gi, '\n• ')
-       .replace(/<[^>]*>/g, ' ');
-  s = decodeEntities(s);
-  const out = [];
-  const blank = () => { if (out.length && out[out.length - 1] !== '') out.push(''); };
-  for (const rawLine of s.split(/\r?\n/)) {
-    const line = rawLine.replace(/[ \t ]+/g, ' ').trim();
-    if (!line || /^[-_=*~#.•·‣▪●\s]+$/.test(line)) { blank(); continue; }
-    out.push(line.replace(/^(?:[-*•·‣▪●]|\d{1,2}[.)])\s+/, '• '));
-  }
-  while (out.length && out[out.length - 1] === '') out.pop();
-  return capLines(out);
-}
-
-function capLines(lines) {
-  const out = [];
-  let used = 0, kept = 0, dropped = false;
-  for (const line of lines) {
-    if (line === '') { if (out.length) out.push(''); continue; }
-    if (kept >= BLOCK_MAX_LINES) { dropped = true; break; }
-    const room = BLOCK_MAX_CHARS - used;
-    if (room < 40) { dropped = true; break; }
-    if (line.length > room) {
-      const cut = cutAt(line, room);
-      if (cut) { out.push(cut); kept++; }
-      dropped = true; break;
-    }
-    out.push(line); used += line.length + 1; kept++;
-  }
-  while (out.length && out[out.length - 1] === '') out.pop();
-  // Say that it was cut. A panel that stops mid-thought with no mark reads as
-  // a fault, and a candidate should know there is more to ask about.
-  if (dropped && out.length) {
-    const i = out.length - 1;
-    if (!/…$/.test(out[i])) out[i] = out[i].replace(/[,;:]$/, '') + ' …';
-  }
-  return out;
-}
-
-// Cut a long paragraph at the end of a sentence when one is close enough,
-// otherwise at a word boundary. Never mid-word — a half word reads as
-// corruption, and this app has already shipped one diagnosis that sounded more
-// certain than its evidence.
-function cutAt(line, room) {
-  const slice = String(line).slice(0, Math.max(0, room));
-  const sentence = slice.match(/^[\s\S]*[.!?](?=\s|$)/);
-  if (sentence && sentence[0].length > room * 0.5) return sentence[0].trim();
-  const sp = slice.lastIndexOf(' ');
-  return (sp > 20 ? slice.slice(0, sp) : slice).trim();
-}
-
-// "5-10 years" off exp_min/exp_max. A stored 0 is "not filled in", not a
-// requirement of zero years.
-function expRange(job) {
-  const n = (v) => { const x = txt(v).replace(/[^\d.]/g, ''); return Number(x) > 0 ? x : ''; };
-  const lo = n((job || {}).exp_min), hi = n((job || {}).exp_max);
-  if (lo && hi) return lo === hi ? `${lo} years` : `${lo}-${hi} years`;
-  if (lo) return `${lo}+ years`;
-  if (hi) return `up to ${hi} years`;
-  return '';
-}
-
-// The rows, in the order a candidate reads them: who, where, what shape, what
-// it pays, then what it asks for. Absent fields are simply not here.
-function jobBlockRows(job) {
-  const f = jobFacts(job);
-  const rows = [];
-  const add = (label, value) => { const v = oneLine(value); if (v) rows.push({ label, value: v }); };
-  add('Company', f.company);
-  add('Location', f.place);
-  add('Employment', f.terms.join(', '));
-  add('Pay', f.pay ? f.pay + f.payPeriod : '');
-  add('Experience', expRange(job));
-  add('Skills', f.skills.map(prettySkill).join(', '));
-  add('Work authorisation', f.workAuth);
-  add('Clearance', f.clearance);
-  return rows;
-}
-
-/**
- * The panel for one job order, or null when there is nothing to panel.
- * `text` is canonical and `html` is derived from it — never the other way
- * round, and never two separate builders (rule 1 above).
- */
-function jobBlock(job) {
-  if (!job) return null;
-  const title = oneLine(jobFacts(job).title);
-  if (!title) return null;
-  const rows = jobBlockRows(job);
-  const body = cleanDescription(jobFacts(job).description);
-  if (!rows.length && !body.length) return null;
-  const lines = [title, ...rows.map(r => r.label + ': ' + r.value)];
-  if (body.length) lines.push('', ...body);
-  const text = BLOCK_FENCE + '\n' + lines.join('\n') + '\n' + BLOCK_FENCE;
-  return { title, rows, body, text, html: jobBlockHtmlFromText(text) };
-}
-
-/**
- * Take a stored body apart: our prose, and the panel. Both the preview and the
- * send path call this — the panel is HTML in a mail client and text everywhere
- * else, and the checker reads only the prose.
- * A body with no panel comes back unchanged, so every existing caller and every
- * hand-written draft behaves exactly as before.
- */
-function splitJobBlock(body) {
-  const s = String(body == null ? '' : body);
-  const lines = s.split('\n');
-  let first = -1, last = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (isFenceLine(lines[i])) { if (first < 0) first = i; last = i; }
-  }
-  if (first < 0 || last <= first) return { prose: s, block: '' };
-  const prose = lines.slice(0, first).join('\n').replace(/\s+$/, '');
-  const block = lines.slice(first, last + 1).join('\n');
-  // Nothing should follow the closing fence, but text is never dropped on the
-  // floor just because it turned up in an unexpected place.
-  const after = lines.slice(last + 1).join('\n').trim();
-  return { prose: after ? prose + '\n\n' + after : prose, block };
-}
-
-function parseJobBlockText(text) {
-  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(l => !isFenceLine(l));
-  while (lines.length && lines[0] === '') lines.shift();
-  if (!lines.length) return null;
-  const title = lines.shift();
-  const rows = [];
-  let i = 0;
-  for (; i < lines.length; i++) {
-    if (lines[i] === '') { i++; break; }
-    const m = lines[i].match(/^([A-Z][A-Za-z ]{1,24}):\s+(.+)$/);
-    if (!m) break;
-    rows.push({ label: m[1], value: m[2] });
-  }
-  const body = lines.slice(i);
-  while (body.length && body[0] === '') body.shift();
-  while (body.length && body[body.length - 1] === '') body.pop();
-  return { title, rows, body };
-}
-
-/**
- * The bordered card, built from the block's own text. Tables and inline styles
- * because this is EMAIL: Outlook has no flexbox, no grid, and strips a <style>
- * block — the same constraint `answerButtonsHtml` is written to, and the reason
- * there is not a single `class=` in here.
- * Every word it prints comes out of the text; it adds no label of its own.
- */
-function jobBlockHtmlFromText(text) {
-  const p = parseJobBlockText(text);
-  if (!p) return '';
-  const FONT = 'font-family:Arial,sans-serif';
-  const lbl = FONT + ';font-size:12.5px;color:#475569;padding:0 14px 5px 0;white-space:nowrap;vertical-align:top';
-  const val = FONT + ';font-size:13.5px;color:#0F172A;padding:0 0 5px;vertical-align:top';
-  const rows = p.rows.map(r =>
-    '<tr><td style="' + lbl + '">' + escapeHtml(r.label) + '</td>' +
-    '<td style="' + val + '">' + escapeHtml(r.value) + '</td></tr>').join('');
-  const para = p.body.filter(Boolean).map(line =>
-    '<div style="' + FONT + ';font-size:13.5px;line-height:1.55;color:#0F172A;margin:6px 0 0' +
-      (/^•/.test(line) ? ';padding-left:14px;text-indent:-14px' : '') + '">' +
-      escapeHtml(line) + '</div>').join('');
-  return '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" ' +
-      'style="margin:18px 0 4px;border:1px solid #CBD5E1;border-radius:8px;background-color:#F8FAFC">' +
-      '<tr><td style="padding:15px 18px">' +
-        '<div style="' + FONT + ';font-size:16px;font-weight:bold;line-height:1.3;color:#0F172A;margin:0 0 11px">' +
-          escapeHtml(p.title) + '</div>' +
-        (rows ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0">' + rows + '</table>' : '') +
-        (para
-          ? (rows ? '<div style="border-top:1px solid #E2E8F0;margin:13px 0 2px"></div>' : '') + para
-          : '') +
-      '</td></tr></table>';
+  return (/^[aeiou]/i.test(w) ? 'an ' : 'a ') + w;
 }
 
 // ── THE ANGLES ─────────────────────────────────────────────────────────────
@@ -522,13 +263,7 @@ function rulesJobBrief(job) {
   // caught the first time this writer was run against a real job order.
   return {
     hook: bits.join(' ') || 'A role has come up that may be worth a look.',
-    // THROUGH `prettySkill`, NOT RAW. A hand-typed skills field arrives
-    // lowercase, and "The work centres on hvac, epa and boilers" is the exact
-    // sentence that cleaner was written for — it was applied to the why-you
-    // clause and missed here, so the defect was still live in the brief every
-    // candidate reads.
-    detail: f.skills.length
-      ? `The work centres on ${joinList(f.skills.slice(0, 3).map(prettySkill))}.` : '',
+    detail: f.skills.length ? `The work centres on ${joinList(f.skills.slice(0, 3))}.` : '',
     engine: 'rules',
   };
 }
@@ -617,7 +352,6 @@ function draftParts(input, options) {
   const c = i.candidate || {};
   const f = jobFacts(i.job);
   const brief = i.brief || (i.job ? rulesJobBrief(i.job) : { hook: '', detail: '' });
-  const block = (i.outreach_type === 'nurture' || !i.job) ? null : jobBlock(i.job);
 
   return {
     first: firstNameOf(c.full_name || c.first_name),
@@ -642,13 +376,6 @@ function draftParts(input, options) {
     signOff: o.omitSignOff
       ? '\n\nThanks,'
       : '\n\n' + ['Thanks,', SENDER_TOKEN].join('\n'),
-    // The job description panel, appended by `assemble` after the sign-off so
-    // the text and the HTML card appear in the SAME order (see rule 4 above).
-    // Empty when there is no job, when the job order has nothing to panel, and
-    // on the nurture angle — whose entire rule is that it names no job, so a
-    // panel there would be the worst possible contradiction of it.
-    blockText: block ? '\n\n' + block.text : '',
-    hasBlock: !!block,
   };
 }
 
@@ -665,12 +392,8 @@ function joinList(items) {
 // Filtering out '' as well collapsed every email to single-spaced sentences,
 // which is only visible in a screenshot, never in a word count or a check.
 function assemble(p, paras) {
-  return paras.filter(x => x !== null && x !== undefined).join('\n') + p.signOff + p.blockText;
+  return paras.filter(x => x !== null && x !== undefined).join('\n') + p.signOff;
 }
-
-// What `checkCandidateDraft` and the word bands read: our own writing, with the
-// quoted job-order panel taken off the end.
-const proseOf = (email) => splitJobBlock(email).prose;
 
 const VARIANTS = [
   {
@@ -684,13 +407,7 @@ const VARIANTS = [
       (p.why
         ? 'I came to you because of ' + p.why + ', which lines up with what they are asking for.'
         : 'Your profile lines up with what they are asking for.'),
-      // ⚠ THE PANEL OWNS THE TERMS ON THIS ANGLE. "The range on it is USD
-      // 110,000-130,000. It is Full-time." directly above a panel whose rows
-      // read Pay and Employment is the same fact printed twice in one email —
-      // the defect that produced "It is Full-time." twice the first time this
-      // writer met a real job order. `specifics` keeps the sentence, because
-      // there the terms ARE the argument rather than a tabulation.
-      (p.hasBlock ? null : ([p.payLine, p.termsLine].filter(Boolean).join(' ') || null)),
+      [p.payLine, p.termsLine].filter(Boolean).join(' ') || null,
       '',
       'Would you be interested in hearing more about it?',
       p.outLine,
@@ -757,11 +474,7 @@ function rulesVariants(input, options) {
     const brief = ANGLE_BRIEF[v.id] || {};
     return {
       id: v.id, label: brief.label || v.id, blurb: brief.blurb || '',
-      subject: v.subject(p), email,
-      // OUR words, not the quoted panel's. The bands exist to keep the four
-      // angles from converging; an identical job description appended to all of
-      // them would flatten the difference and make every angle read "too long".
-      words: wordCount(proseOf(email)), mode: 'rules',
+      subject: v.subject(p), email, words: wordCount(email), mode: 'rules',
     };
   });
 }
@@ -844,24 +557,7 @@ function checkCandidateDraft(draft, input, opts) {
   const o = opts || {};
   const c = i.candidate || {};
   const f = jobFacts(i.job);
-  const full = txt(d.email);
-  // ── WHAT THIS CHECKER IS FOR, AND WHAT IT IS NOT FOR ─────────────────────
-  // Everything below reads `email`, which is the PROSE — the job-description
-  // panel is taken off the end first. That split is the whole reason the panel
-  // is safe to add:
-  //   • the panel is a projection of the job_orders row, not a piece of
-  //     writing. Nobody invented it, so `invented_pay` has nothing to say about
-  //     it, and the client's own posting is allowed to contain a figure, an
-  //     exclamation mark or the word "exciting" without killing a batch.
-  //   • `invented_experience` read the JOB's stated requirement as a claim
-  //     about the reader once already and silently skipped three of four real
-  //     candidates. A quoted posting is full of those sentences.
-  //   • the word bands police OUR four angles. An identical panel appended to
-  //     every one of them would make all four "too long" at once.
-  // Three rules still read the whole thing, named at their own call sites
-  // below: a leaked {{token}} anywhere is a bug, and the role and the location
-  // count as present wherever the candidate can see them.
-  const email = proseOf(full);
+  const email = txt(d.email);
   const subject = txt(d.subject);
   const v = [];
   const add = (code, instruction) => v.push({ code, instruction });
@@ -873,12 +569,9 @@ function checkCandidateDraft(draft, input, opts) {
   // emails are queued and the sender is resolved at send time — the tokens are
   // load-bearing. Strip exactly those two, then anything still wrapped in
   // braces is a template leak that a candidate would read verbatim.
-  // WHOLE EMAIL, PANEL INCLUDED: a {{token}} reaching a candidate is read
-  // verbatim, and an imported job description can carry one.
-  const residue = full.replace(SENDER_TOKENS, '') + ' ' + subject.replace(SENDER_TOKENS, '');
+  const residue = email.replace(SENDER_TOKENS, '') + ' ' + subject.replace(SENDER_TOKENS, '');
   if (/\{\{/.test(residue)) {
-    add('placeholder', 'Remove the {{...}} placeholder and write the real word. Only {{sender}} and {{senderemail}} may remain.' +
-      (/\{\{/.test(splitJobBlock(full).block) ? ' It is in the job description on the job order, not in the email.' : ''));
+    add('placeholder', 'Remove the {{...}} placeholder and write the real word. Only {{sender}} and {{senderemail}} may remain.');
   }
 
   const angle = o.angle && ANGLE_BRIEF[o.angle] ? ANGLE_BRIEF[o.angle] : null;
@@ -944,14 +637,12 @@ function checkCandidateDraft(draft, input, opts) {
 
   if (i.outreach_type !== 'nurture') {
     // A candidate cannot answer "are you interested" without knowing what and
-    // where. Both are on the job order, so there is no excuse for either being
-    // missing — and both count as present wherever the candidate can READ them,
-    // which is why these two look at the panel as well as the prose.
-    const visible = full + ' ' + subject;
-    if (f.title && !new RegExp(escapeRe(f.title), 'i').test(visible)) {
+    // where. Both are on the job order, so there is no excuse for either
+    // being missing.
+    if (f.title && !new RegExp(escapeRe(f.title), 'i').test(email + ' ' + subject)) {
       add('missing_role', `Name the role — "${f.title}" — in the email or the subject. They cannot answer without it.`);
     }
-    if (f.place && !new RegExp(escapeRe(f.place.split(',')[0].trim()), 'i').test(visible)) {
+    if (f.place && !new RegExp(escapeRe(f.place.split(',')[0].trim()), 'i').test(email + ' ' + subject)) {
       add('missing_location', `Say where the job is (${f.place}). Location decides the answer more often than anything else.`);
     }
   }
@@ -1174,10 +865,6 @@ function materialIn(input) {
 module.exports = {
   ANGLE_BRIEF, angleBrief,
   jobFacts, payFiguresIn, payFigures, remoteTerm, whyYouClause, sharedSkills, prettySkill,
-  // The job description panel. `text` is canonical; the card is derived from it,
-  // which is what stops the preview and the outbox disagreeing.
-  jobBlock, jobBlockRows, splitJobBlock, parseJobBlockText, jobBlockHtmlFromText,
-  cleanDescription, proseOf, expRange, BLOCK_FENCE, BLOCK_MAX_CHARS, BLOCK_MAX_LINES,
   rulesJobBrief, buildBriefSystemPrompt, buildBriefPayload, parseBrief, checkBrief,
   rulesVariants, draftParts, validateInput, checkCandidateDraft,
   CANDIDATE_WINDOW, CANDIDATE_SEND_WINDOW_KEY, windowEnabledFromSetting,
