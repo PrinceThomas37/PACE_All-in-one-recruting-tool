@@ -68,6 +68,16 @@ deliberately, not overlooked.
 | Answering | three buttons in the email (interested / not this one / never) | reply only |
 | **Attachments** | **none** | **`document_ids` → real file attachments** |
 
+**⚠ `POST /candidates/email` DOES DOUBLE DUTY AND MUST NOT BE DELETED WITH B.**
+It has two frontend callers, and only one is the JD flow:
+`public/js/28-page-pipeline.js:369` (B, being removed) and
+**`public/js/10-page-modals.js:220` — `remSendMeeting`, which sends a Teams
+MEETING INVITE** and merely reuses this endpoint as a generic "email this
+person". Removing B means removing its **entry points**, not the endpoint.
+Deleting the route would silently break meeting invitations, and nothing on
+screen would say so. The `candidate_email` sequence channel is unaffected — it
+goes through `wfEngine.registerChannel`, not the endpoint.
+
 **A is the survivor. B's only unique capability is document attachment** — that
 is the thing a careless merge loses, and the reason this table exists rather
 than a one-line "duplicate, delete B".
