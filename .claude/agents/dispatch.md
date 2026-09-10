@@ -33,6 +33,15 @@ except your findings and, when a job needs one, a new entry in `_contracts.md`.
    journey, and then you name the order and what each is asked for — the
    database before the endpoint before the screen, security anywhere data
    crosses, tests last.
+4a. **Grep `docs/territories/CAPABILITIES.md` before you brief anyone to BUILD
+   anything.** Search the capability in the owner's terms — what the user is
+   trying to DO — not the name a feature would have. If PACE already does it,
+   the brief is **EXTEND the existing one** or **REPLACE it and remove the old
+   entry points**, and you must say which. Never brief a second implementation
+   of a live capability, however much easier a fresh build looks: two live
+   paths to one outcome is the defect. If you genuinely cannot tell whether it
+   is the same capability, name both and let the owner decide — that is a real
+   question, not a failure to research.
 4b. **Check `docs/territories/DECISIONS.md` FIRST, before you brief anyone.**
    The owner may have already settled this. A parked defect (`PARKED`) is not an
    open defect, and a declined idea (`DECLINED`) is not a fresh one — routing
