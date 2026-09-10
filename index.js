@@ -2030,9 +2030,23 @@ app.post('/follow-ups/run', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PURE. Is a follow-up due, counting from the day the initial cold email really
+// sent? `sentAt` is a date ('YYYY-MM-DD'), `dayGap` the configured fu1/fu2 offset,
+// `todayDate` today in the same form. Kept pure and exported so every hour of the
+// calendar is testable without waiting for it.
+function isFollowupDueFromSend(sentAt, dayGap, todayDate) {
+  if (!sentAt || !todayDate) return false;
+  const gap = Number.isFinite(dayGap) ? dayGap : parseInt(dayGap, 10);
+  if (!Number.isFinite(gap)) return false;
+  const start = new Date(`${String(sentAt).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return false;
+  start.setUTCDate(start.getUTCDate() + Math.max(0, gap));
+  return start.toISOString().slice(0, 10) <= String(todayDate).slice(0, 10);
+}
+
 async function runFollowupEngine() {
   const todayDate = today();
-  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0 };
+  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0, skipped_no_initial: 0, skipped_not_due_yet: 0 };
   // Apply any bounces that arrived since the last 30-min sweep BEFORE deciding
   // who to follow up — so a contact whose earlier email just bounced is already
   // marked invalid and gets skipped here instead of receiving another send.
@@ -2104,6 +2118,33 @@ async function runFollowupEngine() {
       (liveRows || []).forEach(r => { if (isLiveOutreachRow(r)) liveOutreachPairs.add(`${r.job_id}:${r.contact_id}`); });
     }
 
+    // A FOLLOW-UP IS ONLY LEGITIMATE IF THE INITIAL COLD EMAIL ACTUALLY SENT.
+    // `follow_ups` rows are created at ASSIGNMENT time (POST /distribute/execute)
+    // and stamped `outreach_sent_at: today` — a column name that asserts something
+    // that has not happened yet. The initial emails are queued asynchronously and
+    // drain at one per ~75-105s inside an 8-hour window, so a large assignment
+    // leaves most of them unsent for days. The fu1 clock, meanwhile, started for
+    // every one of them.
+    // On 2026-09-10 that queued 215 fu1 emails for leads whose cold email had
+    // NEVER been sent: "just following up on my note below", quoting nothing, to
+    // 214 real prospects under the customer's name. Nothing on screen said so —
+    // the only volume brake was the mailbox's 300/day cap, which is above the
+    // backlog size. So the pair must be proven sent, from the emails table.
+    const initialSentPairs = new Map();
+    if (dueContactIds.length) {
+      const { data: initialRows } = await supabase.from('emails')
+        .select('job_id, contact_id, sent_at')
+        .in('contact_id', dueContactIds)
+        .eq('status', 'sent')
+        .is('followup_type', null);
+      (initialRows || []).forEach(r => {
+        const key = `${r.job_id}:${r.contact_id}`;
+        const prev = initialSentPairs.get(key);
+        // Earliest real send is the anchor — that is the note being followed up on.
+        if (!prev || (r.sent_at && r.sent_at < prev)) initialSentPairs.set(key, r.sent_at || prev || null);
+      });
+    }
+
     for (const fuList of [fu1Due, fu2Due]) {
       const isFu2 = fuList === fu2Due;
       for (const fu of fuList) {
@@ -2130,6 +2171,19 @@ async function runFollowupEngine() {
         const dupKey = `${fu.job_id}:${fu.contact_id}`;
         if (liveOutreachPairs.has(dupKey)) { log.skipped_duplicate = (log.skipped_duplicate || 0) + 1; continue; }
         const bdId = job.assigned_to_bd;
+        // See the note above `initialSentPairs`. Left 'active' rather than
+        // 'skipped' deliberately: if the initial cold email does eventually send,
+        // this becomes a legitimate follow-up on the next run.
+        const initialSentAt = initialSentPairs.get(dupKey);
+        if (!initialSentAt) { log.skipped_no_initial++; continue; }
+        // And re-anchor the clock on the REAL send date, not on the assignment
+        // date the due column was computed from. Without this, an initial that
+        // sends five days late is followed up the same day it goes out, because
+        // its stored due date is already in the past.
+        const dayGap = isFu2
+          ? parseInt(settings[`u_${bdId}_fu2_day`] || '7', 10)
+          : parseInt(settings[`u_${bdId}_fu1_day`] || '3', 10);
+        if (!isFollowupDueFromSend(initialSentAt, dayGap, todayDate)) { log.skipped_not_due_yet++; continue; }
         // Deferred to send time so the name always matches the mailbox that
         // actually sends (and therefore the signature).
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
@@ -2182,7 +2236,7 @@ async function runFollowupEngine() {
     // Quota is charged on actual delivery (processPendingEmailSends), not at queue time.
     // Pre-charging the day's quota here marked it "used" before anything sent, which made the
     // auto-sender defer every just-queued follow-up on phantom quota — so they never left.
-    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}`);
+    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}, skipped_no_initial: ${log.skipped_no_initial}, skipped_not_due_yet: ${log.skipped_not_due_yet}`);
     return log;
   } catch (err) { console.error('[FollowupEngine] Error:', err.message); return { ...log, error: err.message }; }
 }
