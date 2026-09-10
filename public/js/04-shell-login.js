@@ -225,6 +225,16 @@ function renderTopbar(){
       '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
           '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
+        // BOTH ICONS ARE ALWAYS IN THE MARKUP; theme.css shows one and hides
+        // the other. That is deliberate: swapping them by re-rendering would
+        // make changing theme repaint the shell, reload every iframe and take
+        // the page's scroll position with it — the exact rule the render
+        // engine is built around (a repaint that changes nothing writes
+        // nothing). Toggling an attribute on <html> costs a repaint of colour
+        // and nothing else.
+        '<div class="tb-theme" onclick="toggleTheme()" title="Light / dark" aria-label="Toggle light or dark theme" role="button">'+
+          '<span class="ic-moon">'+UI.ic('moon')+'</span><span class="ic-sun">'+UI.ic('sun')+'</span>'+
+        '</div>'+
         '<div class="tb-icons">'+
           '<div class="tb-ico" title="What needs you today" onclick="goPage(\'dashboard\')">'+UI.ic('bolt')+'</div>'+
           '<div class="tb-ico" title="Reminders" onclick="goPage(\'reminders\')">'+UI.ic('bell')+
@@ -234,6 +244,31 @@ function renderTopbar(){
       '</div>'+
   '</div>';
 }
+
+// ── LIGHT / DARK ──────────────────────────────────────────────────────────
+// Three states, not two: 'light', 'dark', or NO attribute at all, which means
+// "follow the operating system". The toggle only ever moves between the two
+// explicit ones, because a user who reaches for it has stopped wanting the OS
+// to decide.
+//
+// Like openNav()/closeNav(), this touches ONE attribute and calls nothing
+// else. No render(), no scheduleRender(). Re-rendering to change a colour
+// would reload every sandboxed iframe on screen and lose the page's scroll —
+// and the whole point of the render engine is that a repaint changing nothing
+// writes nothing.
+function currentTheme(){
+  var set=document.documentElement.getAttribute('data-theme');
+  if(set==='dark'||set==='light')return set;
+  // No explicit choice: report what the OS is actually giving them, so the
+  // toggle flips to the opposite of what is ON SCREEN rather than to a
+  // default that may already be showing.
+  return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+}
+window.toggleTheme=function(){
+  var next=currentTheme()==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+};
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}
 

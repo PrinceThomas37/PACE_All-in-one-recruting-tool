@@ -263,8 +263,8 @@ function renderRecruiterDashboard(u){
   return '<div class="page">'+
     '<div class="banner">'+
       '<div class="banner-clock">'+
-        '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
-        '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
+        '<div id="dash-clock-time" class="bclock-time">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
+        '<div id="dash-clock-date" class="bclock-date">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub">'+roleLabel(u.role)+'</div>'+
@@ -382,13 +382,13 @@ function renderManagerDashboard(u){
     '</div>';
   }
 
-  var scopeBadge='<span style="font-size:11px;font-weight:600;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff;padding:3px 10px;border-radius:8px">'+(SCOPE_LABEL[scope]||'Your team')+(scope==='team'&&d.team_size?' · '+d.team_size+' people':'')+'</span>';
+  var scopeBadge='<span class="banner-chip">'+(SCOPE_LABEL[scope]||'Your team')+(scope==='team'&&d.team_size?' · '+d.team_size+' people':'')+'</span>';
 
   return '<div class="page">'+
     '<div class="banner">'+
       '<div class="banner-clock">'+
-        '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
-        '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
+        '<div id="dash-clock-time" class="bclock-time">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
+        '<div id="dash-clock-date" class="bclock-date">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+roleLabel(u.role)+scopeBadge+'</div>'+
@@ -516,8 +516,8 @@ function renderIndividualDashboard(u){
   return '<div class="page">'+
     '<div class="banner">'+
       '<div class="banner-clock">'+
-        '<div id="dash-clock-time" style="font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:rgba(255,255,255,.85)">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
-        '<div id="dash-clock-date" style="font-size:22px;font-weight:700;margin-top:5px;color:#fff;font-family:var(--display)">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
+        '<div id="dash-clock-time" class="bclock-time">'+new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})+'</div>'+
+        '<div id="dash-clock-date" class="bclock-date">'+new Date().toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"})+'</div>'+
       '</div>'+
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub">'+roleLabel(u.role)+'</div>'+

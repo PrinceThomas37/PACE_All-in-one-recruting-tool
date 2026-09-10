@@ -47,6 +47,61 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0015 · 2026-09-10 · STANDS · The new look, from the owner's Bolt design; light AND dark
+**Their words:** *"I was thinking of revamping the UI. and i worked on
+something in BOLT."* … *"keep toggle to dark and light. I am tired of how it
+looks right now. out system / visual reference given to you"* — with a Bolt
+export (ZIP) and two phone screenshots as the reference.
+
+**Decided:** PACE takes the visual language of the owner's Bolt design — glass
+panels on a soft ground, Apple-ish palette, generous radii, quiet rows — in
+**both** light and dark, with a toggle. `docs/UI_REVAMP.md` holds the detail.
+
+**The reference, described honestly:** 8 files, ~600 lines, React + Vite +
+Tailwind, ONE screen, four hard-coded jobs, no data layer (Supabase is in
+`package.json` and never imported). It is a DESIGN, not an app — which is the
+right thing for it to be.
+
+**NOT a React rewrite, and this is the load-bearing call.** The first read of
+this was "your Bolt work means porting the frontend to React". Reading the
+actual source changed that: the design is a sidebar, a header, three cards, a
+stepper and a list. None of it needs a component framework — the beauty is
+entirely in the CSS. And PACE's ~19,600-line frontend already draws everything
+from shared CSS variables, so the whole app re-skins from ONE stylesheet with
+no JavaScript touched. `public/theme.css`, loaded last. **Deleting that one
+`<link>` restores the old look exactly** — which is what makes a change this
+broad safe.
+
+**Consequences that are not up for debate:**
+* **Three theme states, not two:** `light`, `dark`, or no attribute at all,
+  which means "follow the OS". The toggle only moves between the two explicit
+  ones.
+* **The theme is applied INLINE IN `<head>`, before first paint.** Deferring it
+  by a tick paints light then snaps to dark.
+* **Toggling touches ONE attribute and calls nothing else** — no `render()`.
+  Re-rendering to change a colour would reload every sandboxed iframe and lose
+  the page's scroll, which the render engine exists to prevent.
+* **A colour is never defined ONLY inside a media query**, or the toggle cannot
+  beat the OS.
+* **A theme must reach EVERY palette in the app.** `ui.css` carries its own
+  (`--ink`/`--line`/`--hover`) separate from `styles.css`'s (`--text`/
+  `--border`); overriding only the second left the entire Leads table drawing
+  `#0F172A` ink on dark glass. Both are bridged now.
+* **An inline colour cannot be re-themed**, exactly as an inline width cannot
+  be re-laid-out. The dashboard clock and scope chip carried white inline (the
+  banner used to be a green slab) and went white-on-white. They are classes now.
+
+**`test/theme-contrast-smoke.mjs` is what keeps this true**: it composites every
+translucent ancestor to find what is REALLY behind each piece of text, across
+12 pages x 3 roles x 2 themes, and fails the build under 2.2:1. Verified by
+reintroducing the `--ink` bug and watching it fail. **Do not weaken it** — both
+faults above were invisible to every other test and were found by looking at a
+screenshot, which does not scale.
+
+**Re-open when:** the owner wants the accent moved off Apple blue (one line,
+`--accent`), or wants a screen restructured rather than re-skinned — this entry
+covers the LOOK. The row-level interaction brief is D-0014 and is still open.
+
 ### D-0014 · 2026-09-10 · STANDS · The UI is being revamped; the model is PROGRESSIVE DISCLOSURE
 **Their words:** *"Its not about limiting the number of things that gets
 accumulated on screen, you are not understanding the design, why not just

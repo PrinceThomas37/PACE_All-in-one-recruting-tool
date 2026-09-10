@@ -6,7 +6,8 @@
      is what keeps the sticky modal footer and the toast rail clear of the home
      indicator on a notched phone. Without it those insets are always 0. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<meta name="theme-color" content="#1E7A3C"/>
+<meta name="theme-color" content="#E8E8ED" media="(prefers-color-scheme: light)"/>
+<meta name="theme-color" content="#131322" media="(prefers-color-scheme: dark)"/>
 <title>PACE — All-in-one Recruiting Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/styles.css"/>
@@ -14,6 +15,20 @@
 <!-- Loaded last: every rule is inside a media query, so it only ever adds a
      narrow screen's behaviour on top of the two above. -->
 <link rel="stylesheet" href="/mobile.css"/>
+<link rel="stylesheet" href="/theme.css"/>
+<!-- THEME, BEFORE FIRST PAINT. This must stay inline and synchronous, here in
+     <head>, above <body>. Deferring it by even one tick paints the page light
+     and then snaps it to dark — the flash every themed app gets wrong. No
+     stored choice means no attribute at all, which is the "follow the OS"
+     state (see theme.css). -->
+<script>
+(function(){
+  try{
+    var t=localStorage.getItem('pace-theme');
+    if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);
+  }catch(e){/* private mode: fall through to the OS preference */}
+})();
+</script>
 </head>
 <body class="ui-kit">
 <div id="app"><div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#64748B">Loading PACE...</div></div>
