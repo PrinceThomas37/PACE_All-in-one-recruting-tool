@@ -702,3 +702,129 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   .mb-panes.reading .mb-list{display:none}
   .mb-panes.reading .mb-read{display:flex}
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AGE — the horizon bar, pager, count links and picker search (Session 23).
+   Classes, never inline styles: an inline width cannot be re-laid-out by any
+   stylesheet, which is how six admin buttons once ran 460px off a phone.
+   ══════════════════════════════════════════════════════════════════════════ */
+.hz-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:8px 12px;margin-bottom:12px}
+.hz-txt{font-size:12.5px;color:var(--text2)}
+.hz-txt b{color:var(--text)}
+.hz-btn{margin-left:auto;background:transparent;border:1px solid var(--border2);
+  color:var(--text2);border-radius:8px;padding:6px 12px;font-size:12px;
+  font-weight:600;cursor:pointer;min-height:34px}
+.hz-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+.hz-count{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:7px 12px;font-size:12.5px;color:var(--text2);cursor:pointer;min-height:34px}
+.hz-count b{color:var(--text);font-weight:700}
+.hz-count:hover{border-color:var(--accent);color:var(--accent)}
+
+.hz-pager{display:flex;align-items:center;justify-content:center;gap:14px;
+  padding:12px;flex-wrap:wrap}
+.hz-pg{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:7px 14px;font-size:12.5px;font-weight:600;color:var(--text2);
+  cursor:pointer;min-height:36px}
+.hz-pg:hover:not(.is-off){border-color:var(--accent);color:var(--accent)}
+.hz-pg.is-off{opacity:.4;cursor:not-allowed}
+.hz-pgn{font-size:12.5px;color:var(--text3)}
+
+/* 16px so iOS does not zoom the page on focus and never zoom back. */
+.hz-search{width:100%;max-width:340px;font-size:16px;padding:8px 12px;
+  border:1px solid var(--border);border-radius:8px;background:var(--card);
+  color:var(--text);min-height:38px}
+.hz-search:focus{outline:none;border-color:var(--accent)}
+
+@media (max-width:860px){
+  .hz-bar{padding:10px}
+  .hz-btn{margin-left:0;width:100%}
+  .hz-search{max-width:none}
+}
+
+/* The convert picker (25-workflow-bd.js). Classes rather than the inline
+   styles this markup used to carry, so it can actually reflow on a phone. */
+.lp-wrap{background:var(--accent-l);border:1px solid rgba(30,122,60,.22);
+  border-radius:10px;padding:10px 14px;margin:0 0 12px 0}
+.lp-head{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.lp-chips{display:flex;flex-wrap:wrap;gap:8px}
+.lp-chip{display:flex;align-items:center;gap:7px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;padding:6px 10px;
+  font-size:12px;cursor:pointer;min-height:36px}
+.lp-chip:hover{border-color:var(--accent)}
+.lp-pos{font-weight:600}
+.lp-co{color:var(--text3)}
+.lp-search{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+.lp-hint{font-size:11.5px;color:var(--text3)}
+.lp-stuck{margin-top:9px;padding-top:9px;border-top:1px dashed var(--border2);
+  display:flex;flex-direction:column;gap:6px}
+@media (max-width:860px){
+  .lp-chip{min-height:40px}
+  .lp-search{flex-direction:column;align-items:stretch}
+}
+.mj-top{display:flex;justify-content:flex-end;margin-bottom:12px}
+@media (max-width:860px){ .mj-top{justify-content:stretch} }
+
+/* "Needs you today" row actions + the line admitting what is hidden. */
+.na-acts{display:flex;align-items:center;gap:6px;flex:none}
+.na-act{padding:5px 10px;border:1px solid var(--border2);background:var(--card);
+  border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2);
+  min-height:32px;white-space:nowrap}
+.na-act:hover{border-color:var(--accent);color:var(--accent)}
+.na-act-quiet{color:var(--text3);font-size:11.5px;padding:5px 8px}
+.na-hidden{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 14px;border-top:1px solid var(--border);background:var(--bg);
+  font-size:11.5px;color:var(--text3)}
+.na-hidden button{margin-left:auto}
+@media (max-width:860px){
+  /* Touch targets get BIGGER, and the actions drop below the text rather than
+     squeezing it — never shrink to fit on a phone. */
+  .na-acts{flex-wrap:wrap;justify-content:flex-end}
+  .na-act{min-height:40px;padding:8px 12px}
+  .na-hidden button{margin-left:0;width:100%}
+}
+
+/* ── All email (50-all-mail.js) ───────────────────────────────────────────── */
+.am-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.am-srcs{display:flex;gap:6px;flex-wrap:wrap}
+.am-src{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:7px 12px;font-size:12.5px;color:var(--text2);cursor:pointer;min-height:36px}
+.am-src b{color:var(--text)}
+.am-src:hover{border-color:var(--accent)}
+.am-src.is-on{border-color:var(--accent);background:var(--accent-l);color:var(--accent)}
+.am-src.is-on b{color:var(--accent)}
+
+.am-list{padding:0;overflow:hidden}
+.am-row{border-top:1px solid var(--border)}
+.am-row:first-child{border-top:0}
+.am-head{display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer}
+.am-head:hover{background:var(--bg)}
+.am-tag{flex:none;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;white-space:nowrap}
+.am-main{flex:1;min-width:0}
+.am-subj{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-to{font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-dim{color:var(--text3)}
+.am-stat{flex:none;font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap}
+.am-pending{color:var(--amber)}
+.am-failed{color:var(--red)}
+.am-opened{color:var(--accent)}
+.am-replied{color:var(--green)}
+.am-when{flex:none;font-size:11.5px;color:var(--text3);white-space:nowrap;min-width:64px;text-align:right}
+.am-chev{flex:none;color:var(--text3);font-size:17px}
+.am-body{padding:0 14px 14px 14px;background:var(--bg)}
+.am-text{font-size:12.5px;line-height:1.65;white-space:pre-wrap;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;padding:12px;max-height:420px;overflow:auto}
+.am-meta{font-size:11.5px;color:var(--text3);margin-top:8px}
+.am-empty{padding:40px;text-align:center;color:var(--text3)}
+.am-warn{background:rgba(210,140,0,.09);border:1px solid rgba(210,140,0,.32);
+  border-radius:10px;padding:10px 12px;font-size:12.5px;color:var(--text2);margin-bottom:12px}
+
+@media (max-width:860px){
+  .am-top{flex-direction:column;align-items:stretch}
+  .am-head{flex-wrap:wrap;gap:8px;padding:12px}
+  .am-main{flex-basis:100%;order:2}
+  .am-when{margin-left:auto}
+  .am-text{max-height:300px}
+}

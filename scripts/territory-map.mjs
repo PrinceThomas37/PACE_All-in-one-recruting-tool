@@ -24,7 +24,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TERRITORIES = [
   { id: 'surface', name: 'Surface', role: 'Frontend & UI', terrain: 'the coastal city',
     hue: '#5FA8D3', pos: [30, 8], height: 5.5, spread: 15,
-    own: ['public/'], not: [] },
+    own: ['public/', 'services/view-horizon.js'], not: [] },
 
   { id: 'gateway', name: 'Gateway', role: 'Server & API', terrain: 'the citadel',
     hue: '#C08A3E', pos: [0, 0], height: 15, spread: 12,
@@ -62,7 +62,8 @@ const TERRITORIES = [
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
           'company-classifier.js', 'enrichment.js', 'skill-dictionaries.js',
           'learned-skills.js', 'routes/ai.js', 'routes/outreach-generator.js',
-          'routes/candidate-outreach.js', 'routes/next-actions.js'],
+          'routes/candidate-outreach.js', 'routes/next-actions.js',
+          'services/next-action-dismissals.js'],
     not: [] },
 
   { id: 'guild', name: 'The Guild', role: 'Recruiting domain', terrain: 'the township',

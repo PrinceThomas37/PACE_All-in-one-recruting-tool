@@ -2,8 +2,8 @@
   "generated": "2026-09-10",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 266,
-    "lines": 63234,
+    "files": 275,
+    "lines": 65190,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -21,14 +21,15 @@
       "height": 5.5,
       "spread": 15,
       "own": [
-        "public/"
+        "public/",
+        "services/view-horizon.js"
       ],
-      "files": 52,
-      "lines": 20594,
+      "files": 54,
+      "lines": 21412,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1044
+          "n": 1197
         },
         {
           "f": "public/js/47-page-mailbox.js",
@@ -69,12 +70,12 @@
         "config/",
         "engine-runs.js"
       ],
-      "files": 20,
-      "lines": 6217,
+      "files": 21,
+      "lines": 6471,
       "largest": [
         {
           "f": "index.js",
-          "n": 3244
+          "n": 3299
         },
         {
           "f": "routes/jobs.js",
@@ -112,11 +113,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2790,
+      "lines": 2791,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 262
+          "n": 263
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -225,10 +226,11 @@
         "routes/ai.js",
         "routes/outreach-generator.js",
         "routes/candidate-outreach.js",
-        "routes/next-actions.js"
+        "routes/next-actions.js",
+        "services/next-action-dismissals.js"
       ],
-      "files": 19,
-      "lines": 8222,
+      "files": 20,
+      "lines": 8444,
       "largest": [
         {
           "f": "jd-parser.js",
@@ -363,8 +365,8 @@
         "test/",
         ".github/"
       ],
-      "files": 74,
-      "lines": 13964,
+      "files": 79,
+      "lines": 14625,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -427,7 +429,7 @@
           "n": 114
         }
       ],
-      "lastTouched": "2026-08-25",
+      "lastTouched": "2026-09-02",
       "openIn": 0,
       "openOut": 0
     }

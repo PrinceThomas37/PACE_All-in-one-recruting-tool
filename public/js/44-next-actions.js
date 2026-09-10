@@ -81,6 +81,29 @@ window.naDone=function(reminderId,ev){
   }).catch(function(e){showToast('Could not update: '+(e&&e.message||e),'error');});
 };
 
+// Snooze one item. Reads the item off the row (see the payload note above),
+// so the request carries the exact fact being dismissed and the server can
+// fingerprint it.
+window.naSnooze=function(btn,scope,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var row=btn&&btn.closest?btn.closest('[data-na-item]'):null;
+  if(!row){showToast('Could not read that row','error');return;}
+  var item;
+  try{ item=JSON.parse(decodeURIComponent(row.getAttribute('data-na-item'))); }
+  catch(e){ showToast('Could not read that row','error'); return; }
+  // Hide it immediately — the row is going away and waiting on a round trip to
+  // do it makes the button feel broken. A failure puts it back and says so.
+  row.style.display='none';
+  apiPost('/next-actions/dismiss',{item:item,scope:scope}).then(function(){
+    showToast(scope==='drop'?'Dropped — comes back if they reply'
+      :scope==='week'?'Hidden for a week':'Hidden until tomorrow','success');
+    STATE.nextActions=null;loadNextActions(true);
+  }).catch(function(e){
+    row.style.display='';
+    showToast('Could not hide that: '+(e&&e.message||e),'error');
+  });
+};
+
 window.naOpen=function(kind,entityType,entityId,jobId){
   // Jump to the thing the action is about. Leads live behind the job, so a
   // contact action opens its job — that is where the reply is answered.
@@ -133,10 +156,35 @@ function renderNextActionsCard(){
   var show=STATE.naExpanded?items:items.slice(0,5);
   var rows=show.map(function(it){
     var k=NA_KIND[it.kind]||NA_KIND.nudge;
-    var done=it.reminder_id
-      ?'<button onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done" style="padding:4px 10px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Done</button>'
-      :'';
-    return '<div onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
+    // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
+    // Only reminders used to have a Done button, so reply_due, commitment_due,
+    // nudge and stage_suggested could not be dismissed AT ALL — which is how a
+    // lead last contacted 91 days ago sat here under a heading reading
+    // "today", with no way to remove it. That is what the owner reported as
+    // "the memory does not get cleared after an activity is finished".
+    //
+    // A reminder gets DONE — a real state change on a real record.
+    // Everything else gets SNOOZE — see services/next-action-dismissals.js for
+    // why it is a fingerprinted snooze and not a delete: a queue you can empty
+    // with a click tells you nothing, so the snooze is void the moment a new
+    // message lands on the thread.
+    var acts=it.reminder_id
+      ?'<button class="na-act" onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done">Done</button>'
+      :'<button class="na-act" onclick="naSnooze(this,\'today\',event)" title="Hide until tomorrow. Comes back if they reply.">Not today</button>'+
+       '<button class="na-act na-act-quiet" onclick="naSnooze(this,\'week\',event)" title="Hide for a week. Comes back if they reply.">1w</button>'+
+       '<button class="na-act na-act-quiet" onclick="naSnooze(this,\'drop\',event)" title="Stop asking about this. Still comes back if they reply.">Drop</button>';
+    // The whole item rides on the row as data. naSnooze() reads it back rather
+    // than being handed a dozen positional arguments through an onclick string,
+    // where a quote in a company name would break the attribute.
+    var payload=encodeURIComponent(JSON.stringify({
+      kind:it.kind, entity_type:it.entity_type, entity_id:it.entity_id,
+      job_id:it.job_id||null, reminder_id:it.reminder_id||null,
+      last_activity_at:it.last_activity_at||null,
+      overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
+      state:it.state||null, title:it.title||''
+    }));
+    return '<div data-na-item="'+payload+'" '+
+      'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
       '<span style="flex:none;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'">'+k.lbl+'</span>'+
       '<div style="flex:1;min-width:0">'+
@@ -144,7 +192,7 @@ function renderNextActionsCard(){
           (it.subtitle?' <span style="font-weight:400;color:var(--text3)">· '+htmlEsc(it.subtitle)+'</span>':'')+'</div>'+
         '<div style="font-size:12px;color:var(--text3)">'+htmlEsc(it.reason||'')+'</div>'+
       '</div>'+
-      done+
+      '<div class="na-acts">'+acts+'</div>'+
       '<div style="color:var(--text3);font-size:18px">›</div>'+
     '</div>';
   }).join('');
@@ -171,5 +219,25 @@ function renderNextActionsCard(){
       (items.length>5?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show less':'Show all '+items.length)+'</button>':'')+
     '</div>'+
     rows+
+    naHiddenLine(s)+
+  '</div>';
+}
+
+// WHAT IS NOT ON THIS LIST, AND WHY (Session 23).
+// The queue now holds things back — snoozed items, silences older than the
+// nudge age limit, anything past the display limit. A list that filters itself
+// and does not admit it is a lie the user cannot see, and it is exactly how
+// "Needs you today" came to be trusted less than it deserved. So the counts
+// are stated, and the stale ones are offered as ONE decision (chase or drop)
+// rather than ninety identical mornings.
+function naHiddenLine(s){
+  var bits=[];
+  if(s.stale_nudges)bits.push(s.stale_nudges+' gone quiet over '+(s.nudge_max_age_days||45)+' days');
+  if(s.snoozed)bits.push(s.snoozed+' hidden by you');
+  if(s.overflow)bits.push(s.overflow+' more');
+  if(!bits.length)return '';
+  return '<div class="na-hidden">'+
+    '<span>'+bits.join(' · ')+'</span>'+
+    (s.stale_nudges?'<button class="na-act na-act-quiet" onclick="goPage(\'leads\')" title="Review the quiet leads on the Leads page">Review quiet leads</button>':'')+
   '</div>';
 }

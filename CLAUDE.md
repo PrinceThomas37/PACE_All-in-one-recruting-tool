@@ -268,6 +268,65 @@ we never have to rewrite to grow (see "Growth bets" below).
     Reflow, never shrink: touch targets get BIGGER (40-44px), inputs are 16px
     so iOS does not zoom on focus and never zoom back, and text wraps rather
     than being scaled down.
+  - **EVERY LIST HAS A HORIZON AND AN EXIT (Session 23, D-0013).** Screens were
+    built to look right with the data that existed the day they were written.
+    Measured with two years of records, the Jobs page grew from 326 DOM nodes
+    to **30,026 (92x)** and My Jobs to 12,042 (74x), because both drew every
+    row they had. The vocabulary is `services/view-horizon.js` (pure) with a
+    checked copy in `00-ui-kit.js` — `UI.partition/horizonBar/pager/searchBox/
+    clampPage`, `HORIZON_DAYS` 90, `PICKER_CAP` 15. Four rules:
+    * **A HORIZON is the default, "show everything" is the choice** — never the
+      reverse. A typed SEARCH reaches all of history, because someone hunting a
+      specific record should not be silently capped at 90 days.
+    * **A list that hides rows must say how many and why.** `horizonBar()`
+      states it and returns `''` when nothing is hidden. A filtered list that
+      does not admit it is filtered is a lie the user cannot see. Note the
+      wording: the bar reports what passed the HORIZON (`counts.matching`) and
+      the pager reports the PAGE — saying "Showing 50" above 25 drawn rows made
+      two controls contradict each other about one number.
+    * **A picker past `PICKER_CAP` becomes a SEARCH FIELD, not a taller list.**
+      Ticking one of 400 chips is worse than typing three letters, so the
+      interaction changes SHAPE. Selected items stay pinned even when a search
+      excludes them, or typing silently hides what you already ticked.
+    * **Finished things leave, they are never deleted.** A converted lead is
+      gone from the convert picker (it used to sit there dimmed forever) and
+      still on the Leads page.
+    **`test/ageing-layout-smoke.mjs` renders 16 pages x 5 roles at two scales
+    and fails the build on >3x DOM growth.** Two ways to get that measurement
+    wrong, both of which gave a wrong answer first: hand-grepping for `.map()`
+    finds 32 false offenders (mostly state UPDATES and bounded lists), and **a
+    "young" account must be RECENT, not sparse** — spreading 20 records over the
+    same two years puts most of them outside the horizon, so a FIXED page still
+    reads as broken.
+  - **"NEEDS YOU TODAY" NEEDS AN EXIT ON EVERY ROW (Session 23).** Only
+    `reminder_due` had a Done button, so `reply_due`/`commitment_due`/`nudge`/
+    `stage_suggested` could not be dismissed AT ALL — which is how a lead last
+    contacted 91 days ago sat under a heading reading *today*, permanently. The
+    owner reported this as "the cache or the memory does not get cleared"; it
+    was never a cache. `services/next-action-dismissals.js` (pure) is the fix
+    and it is **a fingerprinted SNOOZE, not a delete** — the original reasoning
+    (a queue you can empty with a click tells you nothing) still holds, so a
+    snooze EXPIRES and is **void the moment a new message lands on the thread**,
+    however long it had left. Stored in `app_settings` under `na_dismiss_<user>`
+    (**no migration**, same reasoning as the AI meter) and pruned on every read
+    so the row cannot grow without bound either. Separately, a nudge older than
+    `NUDGE_MAX_AGE_DAYS` (45) leaves the daily list and is COUNTED — one
+    decision, not ninety identical mornings. **A reply WE owe never ages out.**
+  - **PACE HAS THREE EMAIL PIPELINES AND THEY STAY THREE (Session 23).**
+    `emails` (leads engine — queued, drip-sent, visible in Pending then Sent),
+    `email_tracking` (individual sends — client email, one-off candidate email,
+    interview invite; sends IMMEDIATELY so nothing pends, and the Sent tab reads
+    `emails` so it never appeared there either) and `candidate_outreach`
+    (batches, own queue, own window). The owner's report — "I cannot see the
+    email preview of the sent emails to clients… I feel the pipeline is
+    different" — was correct in every clause. **The bodies were being stored the
+    whole time; nothing read them back.** `routes/email-history.js` +
+    Email → **All email** is that read: merged, org-scoped per source, bounded
+    per source, horizoned, and **READ-ONLY**. Merging three pipelines for
+    DISPLAY is safe; merging them for SENDING is how you break the one that
+    works. It reads stored bodies, so it renders them —
+    `test/sender-identity-smoke.mjs` greps it and enforces that.
+
 - **⚠ THE SANDBOX RUNS NODE 22. RENDER RUNS NODE 26. A WHOLE CLASS OF BUG IS
   INVISIBLE HERE (Session 19).** This cost a session. Resume parsing failed in
   production and every file parsed perfectly in the sandbox — same library,
