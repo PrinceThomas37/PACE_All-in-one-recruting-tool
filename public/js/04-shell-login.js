@@ -5,10 +5,12 @@ function renderLogin(){
   var tab=STATE.loginTab||'login';
   function tabBtn(id,label,icon){
     var on=tab===id;
-    return '<button onclick="STATE.loginTab=\''+id+'\';STATE.loginErr=null;render()" '+
-      'style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 8px;border:0;cursor:pointer;font-family:inherit;'+
-      'font-size:13.5px;font-weight:600;border-radius:8px;'+
-      'background:'+(on?'var(--text)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+'">'+
+    // The selected tab used to paint `background: var(--text)` — an INVERSION.
+    // That reads as a near-black pill in light and a near-WHITE pill with white
+    // text in dark: 1.09:1, completely unreadable. Inversion is not a
+    // theme-safe colour; the accent is.
+    return '<button class="login-tab'+(on?' is-on':'')+'" '+
+      'onclick="STATE.loginTab=\''+id+'\';STATE.loginErr=null;render()">'+
       (icon||'')+label+'</button>';
   }
 
@@ -176,10 +178,27 @@ function renderSidebar(){
     return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
   }).join('');
 
-  return '<div id="sidebar">'+
-    '<div class="sb-brand">'+
+  // Restore the rail's pinned state. Read at build time so it is part of the
+  // region's html string — the render engine compares those strings, so a
+  // deterministic class here costs nothing and never causes a repaint.
+  var railPinned='';
+  try{ if(localStorage.getItem('pace-rail')==='pinned') railPinned=' class="pinned"'; }catch(e){}
+
+  return '<div id="sidebar"'+railPinned+'>'+
+    // THE BRAND MARK IS ALSO THE RAIL'S SWITCH ON A TOUCH DEVICE.
+    // The rail expands on hover, correctly gated on (hover:hover) — a mouse
+    // feature, never a width. But that leaves a TOUCH device at desktop width
+    // (a tablet, or a phone in "desktop site" mode) with a 60px icon-only rail
+    // and no way to read a single label. Reported from a real phone.
+    // `.pinned` already existed and already sits outside the hover query
+    // precisely because it is an explicit choice rather than a hover — it just
+    // had nothing to toggle it. Now the mark does, and CSS shows the affordance
+    // only where hover is unavailable.
+    '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
+      'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       '<div class="rail-mark">P</div>'+
       '<div class="rail-word"><span style="color:var(--accent)">PA</span><span style="color:#C99A18">CE</span></div>'+
+      '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
@@ -245,6 +264,15 @@ function renderTopbar(){
   '</div>';
 }
 
+// Expand or collapse the icon rail. Like the nav drawer and the theme switch,
+// this toggles ONE class and calls nothing else — a render() here would rebuild
+// the shell, reload every iframe and lose the page's scroll, to move a rail.
+window.toggleRail=function(){
+  var sb=document.getElementById('sidebar'); if(!sb)return;
+  var on=sb.classList.toggle('pinned');
+  try{ localStorage.setItem('pace-rail', on?'pinned':'collapsed'); }catch(e){}
+};
+
 // ── LIGHT / DARK ──────────────────────────────────────────────────────────
 // Three states, not two: 'light', 'dark', or NO attribute at all, which means
 // "follow the operating system". The toggle only ever moves between the two
@@ -268,6 +296,11 @@ window.toggleTheme=function(){
   var next=currentTheme()==='dark'?'light':'dark';
   document.documentElement.setAttribute('data-theme',next);
   try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+  // Anything that paints itself rather than being painted BY CSS has to be
+  // told. Right now that is the login backdrop (a <canvas>); an event keeps
+  // that knowledge with the thing that needs it instead of hard-wiring a call
+  // to a function that may not be on the page.
+  try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
 };
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}

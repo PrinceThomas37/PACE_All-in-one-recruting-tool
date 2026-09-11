@@ -313,7 +313,10 @@ table td,table th{border-color:var(--border)!important}
     backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     border-radius:var(--r2);
   }
-  body::before{background:radial-gradient(600px circle at 50% -10%,var(--glow1),transparent 60%)}
+  /* The glow was centred at the TOP on a phone — directly behind the
+     translucent topbar, which turned the whole bar blue. Move it below the
+     fold and let the bar be a bar. */
+  body::before{background:radial-gradient(680px circle at 50% 58%,var(--glow1),transparent 62%)}
 }
 
 /* Someone who asks for less motion gets less motion. */
@@ -430,3 +433,138 @@ table.dt thead th{background:transparent;color:var(--text3);border-bottom:1px so
 table.dt tbody tr{border-color:var(--border)}
 table.dt tbody tr:hover{background:var(--bg3)}
 .dt-empty{color:var(--text3)}
+
+/* ══ MERGE-FIELD CHIPS ═══════════════════════════════════════════════════
+   Were inline `background:#fff` with JS hover handlers that re-set #fff on
+   mouseout — white pills with white text in dark, and a stylesheet fix would
+   have been undone by the handler on the first mouse move. Hover belongs in
+   CSS; a colour belongs in a token. */
+.var-chip{
+  font-size:12px;padding:7px 13px;border-radius:999px;
+  border:1px solid var(--glass-brd);background:var(--bg3);color:var(--text);
+  cursor:pointer;white-space:nowrap;font-weight:500;min-height:34px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  transition:border-color .15s ease,background .15s ease,color .15s ease;
+}
+.var-chip:hover{border-color:var(--accent);background:var(--accent-l);color:var(--accent)}
+
+/* The amber warning panels, previously #fffbeb inline — a near-white slab in
+   dark, with dark text that survived. */
+.warn-panel{
+  background:var(--amber-l);border:1px solid var(--amber);
+  border-radius:var(--r2);padding:14px 18px;margin-bottom:14px;color:var(--text);
+}
+.warn-panel-sm{padding:12px;border-radius:var(--r)}
+
+/* ══ THE LOGIN SCREEN ════════════════════════════════════════════════════
+   It was never themed: a hard-coded pale-green ground and a green gradient
+   slab, so in dark mode the labels sat at 1.5:1 on mint. It is also the FIRST
+   thing anyone sees, and the contrast suite never rendered it once because it
+   signs in before testing. Both fixed. */
+.login-wrap{background:var(--bg)}
+.login-wrap::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(620px circle at 8% 0%, var(--glow1), transparent 60%),
+    radial-gradient(560px circle at 92% 100%, var(--glow2), transparent 60%);
+}
+.login-card{
+  background:var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.6);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r4);
+  box-shadow:var(--sh3);
+  position:relative;
+}
+/* The header keeps a coloured slab — it is the brand moment — but built from
+   the accent so it follows the theme instead of fighting it. White text on it
+   is correct and stays. */
+.login-top{
+  background:linear-gradient(135deg,var(--accent) 0%,var(--accent-m) 100%);
+  border-radius:var(--r4) var(--r4) 0 0;
+  color:#fff;
+}
+.login-top *{color:#fff}
+.google-btn{
+  background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text);
+  border-radius:var(--r2);min-height:44px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+.google-btn:hover{background:var(--accent-l);border-color:var(--accent);color:var(--accent)}
+.or-div{color:var(--text3)}
+.or-div::before,.or-div::after{background:var(--border)}
+.flbl{color:var(--text2)}
+
+/* Segmented buttons that used to hard-code #fff for the unselected half, and
+   the login tab pill that painted `background: var(--text)` — an INVERSION,
+   which is a near-black pill in light and a white pill with white text in
+   dark. The accent carries "selected"; it works in both. */
+.seg-btn{
+  padding:8px 16px;border-radius:var(--r2);font-size:12px;font-weight:600;
+  cursor:pointer;min-height:36px;
+  border:1.5px solid var(--glass-brd);background:var(--bg3);color:var(--text2);
+  transition:all .15s ease;
+}
+.seg-btn:hover{border-color:var(--accent);color:var(--accent)}
+.seg-btn.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.login-tab{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:12px 8px;border:0;cursor:pointer;font-family:inherit;
+  font-size:13.5px;font-weight:600;border-radius:var(--r2);min-height:46px;
+  background:transparent;color:var(--text2);transition:all .15s ease;
+}
+.login-tab:hover{color:var(--text)}
+.login-tab.is-on{background:var(--accent);color:#fff}
+
+
+/* ══ THE TOPBAR IS A BAR, NOT A LENS ═════════════════════════════════════
+   It is translucent glass and the first ambient glow sits right behind it, so
+   on a phone (glow centred at the top) the entire bar rendered as a solid blue
+   slab — reported from a real device, and something no contrast check would
+   ever flag because blue-on-blue-ish text still passes.
+
+   Fix: give the bar its OWN opaque-ish ground rather than borrowing whatever
+   is behind it. It keeps the blur for what SCROLLS under it, which is the part
+   that actually looks good. */
+#topbar, body.ui-kit #topbar{
+  background:var(--topbar-bg);
+  border-bottom:1px solid var(--glass-brd);
+}
+:root{--topbar-bg:rgba(247,247,250,.86)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--topbar-bg:rgba(20,20,34,.88)}
+}
+:root[data-theme="dark"]{--topbar-bg:rgba(20,20,34,.88)}
+
+/* Same reasoning for the rail: it is tall, so the glow crosses it. */
+#sidebar, body.ui-kit #sidebar{background:var(--rail-bg)}
+:root{--rail-bg:rgba(250,250,252,.82)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--rail-bg:rgba(18,18,31,.86)}
+}
+:root[data-theme="dark"]{--rail-bg:rgba(18,18,31,.86)}
+
+/* ══ THE RAIL ON A TOUCH DEVICE ══════════════════════════════════════════
+   Hover-to-expand is right for a mouse and useless on glass. A tablet — or a
+   phone in "desktop site" mode — is wide enough to get the desktop rail and
+   has no hover, so it showed 14 unlabelled icons with no way to read any of
+   them. The brand mark is now the switch; this shows the affordance only where
+   it is needed, so a mouse user never sees a control they do not want. */
+.sb-brand{cursor:default}
+.rail-pin{display:none}
+@media (hover:none), (pointer:coarse){
+  .sb-brand{cursor:pointer;position:relative}
+  .rail-pin{
+    display:flex;align-items:center;justify-content:center;
+    margin-left:auto;width:30px;height:30px;border-radius:var(--r);
+    color:var(--text3);flex:none;
+  }
+  .sb-brand:active .rail-pin{background:var(--bg3);color:var(--accent)}
+  /* Touch targets get bigger, never smaller. */
+  body.ui-kit #sidebar.pinned .nav-item{min-height:44px}
+}
+/* Below the mobile breakpoint the rail is already an off-canvas drawer behind
+   the hamburger, so the pin is noise there. */
+@media (max-width:860px){ .rail-pin{display:none} }

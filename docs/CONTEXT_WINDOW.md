@@ -68,25 +68,16 @@ reading had missed.
 
 ## What is live right now
 
-Detail for every line is in `CLAUDE.md`. This is an index.
+**`CLAUDE.md` is the detail; this is the one-line index.** The recruiting ATS +
+BD lead engine, multi-tenant by `org_id`, RLS on all 48 tables. The Autonomous
+Recruiting Engine, all 5 steps. The in-app mailbox. The outreach generator
+(AI-written, every draft held to `checkDraft()`). Candidate outreach as a drip
+in the candidate's own local free time. The morning briefing. Any AI provider
+behind a daily budget. The shared UI kit, `mobile.css`, and now `theme.css`.
+SSO with Microsoft.
 
-- The recruiting ATS + BD lead engine, **multi-tenant by `org_id`**, RLS on all
-  48 tables. Self-serve signup built and **switched OFF**; pricing `null`; no
-  guest bypass.
-- **Autonomous Recruiting Engine, all 5 steps** — scheduler, relevance engine,
-  lead sourcing, candidate outreach, conversation intelligence.
-- **The in-app mailbox** (four inviolable rules — `CLAUDE.md` growth bet §3).
-- **The outreach generator**, genuinely AI-written and owner-approved — four
-  angles, every draft held to `checkDraft()`, rewritable 3× (capped
-  server-side). `openai/gpt-oss-120b`, ~1.5s.
-- **Candidate outreach as a drip** — emailed in the candidate's own local free
-  time, 6 per tick with a 75-105s pause, two answer buttons in the email.
-- **The morning briefing** on all three dashboards (Session 22).
-- **Any AI provider behind a daily budget**, quality→fast fallback. Every email
-  keeps its text across all six channels.
-- **The shared UI kit + `public/mobile.css`** — off-canvas nav below 860px.
-- SSO with Microsoft. Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` —
-  **distinct from** per-user Gmail *sending*, which is live.
+**Switched OFF deliberately:** self-serve signup, card payments, pricing
+(`null`). **Gone deliberately:** the guest bypass.
 
 ## Migrations — next is **043**
 
@@ -105,268 +96,198 @@ applied. `deep` owns this territory and **never applies a migration itself.**
 
 It cost most of Session 19: resume parsing failed in production and every file
 parsed perfectly here — same library, same bytes. **The difference was the
-RUNTIME.** Run both before merging anything touching a parsing or binary path:
+RUNTIME.** Fetch the current v26 from `nodejs.org/dist/index.json`, extract it,
+and run `test/run-all.mjs` with it before merging anything touching a parsing or
+binary path. Session 23 ran both on every PR; all 76 suites pass on both.
 
-```
-curl -sS -o /tmp/n.tar.xz https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz
-mkdir -p /tmp/n26 && tar -xf /tmp/n.tar.xz -C /tmp/n26 --strip-components=1
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers /tmp/n26/bin/node test/run-all.mjs
-```
+## ✅ SHIPPED AND LIVE — Session 23 (PRs #202, #203, #204; #205 pending)
 
-## ✅ Shipped (Session 22) — PR #191, live
+**#202 — never follow up on a cold email that was never sent.** 215 `fu1`
+emails were queued from one mailbox in a single instant, to 214 real prospects,
+for leads whose cold email had NEVER been sent. Cause: `follow_ups` are created
+at ASSIGNMENT time and stamped `outreach_sent_at: today`, while the initial
+emails drain at one per ~75-105s inside an 8-hour window. The only brake was
+that mailbox's 300/day cap, which is above the backlog size. Now a follow-up
+requires the initial to be PROVEN sent, and the clock is re-anchored on the real
+send date. Live cleanup: 215 pending deleted (backup table
+`emails_purged_20260910`), **341** orphan schedules closed
+(`follow_ups_closed_20260910`) — including 215 that would have repeated the
+whole burst as fu2 on 14 Sep. **86 orphan follow-ups had already gone out since
+8 June.**
 
-**Nine territories** (above), the front door, `INTAKE.md`, the border ledger,
-`scripts/territory-map.mjs` (found two files owned by nobody on its first run)
-and `docs/territories/island.html` — the survey as a 3D island, published as an
-artifact. **The survey is built BEFORE the 3D and the 3D is optional.**
+**#203 — every list gets a horizon and an exit (D-0013).**
+`services/view-horizon.js` + a checked copy in `00-ui-kit.js`. 90-day default,
+`PICKER_CAP` 15, closed-state exits, counts before lists. The Jobs page went
+from **92x DOM growth to 1.25x**. Plus dismiss/snooze on every
+Needs-you-today row, and **Email → All email** over all three pipelines.
 
-**The morning briefing** — the first job run through the system, by four
-territories. `dispatch` rendered all four dashboards in a browser and counted:
-**an admin reads ten numbers before a single word**, every complete sentence on
-screen is an empty-state message, and none of the numbers is even about today.
-The feature turned out to be **already built twice and never connected**.
+**#204 — the new look, light and dark (D-0015).** The owner's Bolt design as
+one stylesheet, `public/theme.css` (~432 lines), loaded last. No JavaScript
+behaviour changed; deleting the one `<link>` restores the old look exactly.
+**NOT a React rewrite** — see D-0015 for why that call was reversed after
+reading the Bolt source.
 
-- `services/morning-briefing.js` is PURE; `GET /ai/morning-briefing` is the
-  route. **`summary` is never empty**, so there is no "unavailable" state to
-  draw. `checkBriefing()` rejects any integer the model was not handed, plus
-  spelled-out numbers and vague quantities — **"around a dozen leads" passes
-  every digit check and is still a lie.**
-- **This closed a lie in the product**: `08-page-admin.js` promises the customer
-  the daily briefing has a non-AI version. Until now it degraded to an apology.
-- **C-0006 closed: `bd_lead`, `director` and `associate_director` had no entry
-  in `test/helpers/enter-app.mjs`** — every role sweep covered five of the eight
-  values `users.role` can hold. That is why Session 21's icon collision survived
-  a five-role sweep.
-- C-0008/C-0009: the next-actions card vanished silently on error and stuck
-  loading forever during "view as". Both predate this work (c5cb602), both fixed.
+**#205 — five faults found on the owner's actual phone.** Open draft at time of
+writing. Merge-field chips white-on-white; the login screen never themed (its
+backdrop is a **`<canvas>`** — no stylesheet could ever have reached it); the
+login tab pill painting `background: var(--text)`, an inversion that becomes
+white-on-white in dark; the topbar rendering as a blue slab because the ambient
+glow sat behind it; and a touch device at desktop width unable to open the icon
+rail.
 
-## ✅ SHIPPED 2026-09-09/10 — seven PRs, all merged and live (#191-#197)
+## ⏭ PICK THIS UP FIRST (Session 24)
 
-**#191 · Nine territories.** `.claude/agents/*` + `docs/territories/*`. Read
-`docs/territories/README.md` before starting any job. The first feature built
-through them: the **morning briefing** on all three dashboards
-(`services/morning-briefing.js`, `GET /ai/morning-briefing`) — rules-written,
-AI as the upgrade, `summary` never empty.
+**D-0014 — the row-level interaction brief. This is the live piece of work.**
 
-**#192 · Candidate outreach ignores the send window.** `app_settings.
-candidate_send_window_enabled`, **default OFF** (owner reversed their own
-morning call — `DECISIONS.md` D-0009 → D-0010). Absent, unparseable or an
-unreadable settings table all mean off, so a failed query cannot re-impose it.
-**The drip is NOT the window and is untouched** — 6 per tick, 75-105s between
-real sends, pinned by `test/candidate-outreach-drip-smoke.mjs`.
+The owner's design ask was **progressive disclosure**, and Session 23 answered
+it with **volume control** (horizons, caps, pagination) before being corrected:
+*"Its not about limiting the number of things that gets accumulated on screen,
+you are not understanding the design, why not just minimilistically reduce
+elements on screen and shows things when clicked."* Both are true; they are not
+the same instruction. **Do not answer a density complaint with a filter again.**
 
-**#193 · `getTimezoneFromLocation` parses instead of scanning.** It matched
-two-letter state codes as SUBSTRINGS — "Den**ve**r" hit Delaware, "A**ri**zona"
-hit Rhode Island, "Californ**ia**" hit Iowa. **81 of 309 live leads (26.2%) had
-the wrong `jobs.timezone`, every one stored EAST of reality**, so 16
-Pacific-coast leads were cold-emailed from 05:00 their time. **The 81 rows were
-NOT backfilled — owner's decision, D-0011.** New and edited leads self-correct.
+What is actually wrong, established by probing a real browser (nothing is
+broken — the valid/invalid control exists, works, and is visible in the drawer;
+git shows nothing ever moved it off a row):
 
-**#194 · `docs/territories/DECISIONS.md`** — what the owner chose, written the
-moment it is said. **12 entries.** Check it before proposing anything.
+1. **The actions are not where the eye is.** Marking an email invalid takes a
+   row click, then finding a contact card inside a drawer. A feature you cannot
+   see is a feature you do not have — which is exactly what happened.
+2. **A row shows no state and offers no action.** A Jobs row carries a checkbox
+   and NOTHING else; a Leads row a checkbox and a stage dropdown.
+3. **The same gesture has two outcomes.** A lead row opens a DRAWER over its
+   list (keeping filters, selection, scroll — the deliberate rule in
+   `CLAUDE.md`); a job row LEAVES the page for `bd_jodetail`. The second is
+   wrong.
 
-**#195/#196 · Tenancy.** See the section below — the most important thing on
-this page.
+**Agreed approach: ONE screen first, then repeat.** The owner reacts to one
+rebuilt row rather than to thirty screens. **Ask before building any of it** —
+they said the revamp is coming *"in sometime"*, and said it immediately after
+correcting the previous brief.
 
-**#197 · `docs/territories/CAPABILITIES.md`** — what PACE can already do.
-**Grep it before building anything user-facing.** The owner found two live
-workflows for emailing a candidate about a job (~2,900 lines, two territories,
-months apart). Borders make that MORE likely, not less: each territory reads
-only its own memory. `scripts/territory-map.mjs` now fails when a router
-composes mail and is named in no capability.
+Also open and smaller: the **Specific / Random** toggle clips to "Randor" on a
+narrow phone (cosmetic, pre-existing, flagged to the owner and left).
 
-## ⏳ OPEN DRAFT — PR #200, branch `claude/merge-candidate-email`
+## 🧪 TESTS: 76 SUITES. THE FOUR NEWEST EXIST BECAUSE REASONING FAILED
 
-**D-0012, half done.** `observatory` shipped the job description as a bordered
-panel inside the candidate interest email. Text is canonical, the card is
-derived from it, so the preview cannot disagree with the outbox. **70/70 with
-both halves present together** — the first such run, and #199 is why that
-sentence needs saying.
+`npm test` — read the COUNT, not just the exit code, and **never pipe it into
+`tail`** (that takes `tail`'s exit status).
 
-**Left for `surface`, and #200 must not merge until it is done:**
-1. Remove the old workflow's entry points — `plEmailJD` + its button in
-   `28-page-pipeline.js`, and the candidate profile's Email button in
-   `30-page-candidate.js`.
-   **⚠ Remove the ENTRY POINTS, not `POST /candidates/email`.** Its second
-   caller is `remSendMeeting` in `10-page-modals.js`, which sends **Teams
-   meeting invitations**. Deleting the route breaks those silently (C-0019,
-   and it is in capitals in `CAPABILITIES.md`).
-2. Render the panel as a card (C-0019). The route returns `preview_prose`,
-   `block_html`, `block_text`; draw order prose → block → buttons → signature.
-   Until then the preview shows it as dashed text — **the page keeps working
-   and keeps showing every fact**, it just is not a card yet.
-3. `foundry` — C-0020, a release hazard plus pinning the panel.
+- **`ageing-layout-smoke`** — renders 16 pages x 5 roles at 20 records and at
+  2,000 over two years; fails over 3x DOM growth.
+- **`theme-contrast-smoke`** — composites every translucent ancestor to find
+  what is REALLY behind each piece of text; 51 screens x 3 roles x 2 themes plus
+  the logged-out screen, fails under 2.2:1.
+- **`next-action-dismiss-smoke`**, **`orphan-followup-guard`** — the two
+  incidents above, pinned by their real records.
 
-## ⚠ WHAT WENT WRONG ON 2026-09-10 — read before your first commit
+**TWO TESTS PASSED VACUOUSLY IN ONE SESSION. Assume yours can too.**
+* the ageing seeder spread 20 "young" records over the same two years, so the
+  young case fell outside the 90-day horizon and rendered almost nothing — an
+  ALREADY-FIXED page still measured as broken (5.4x). **Young means RECENT, not
+  sparse.**
+* the contrast probe reads `backgroundColor`, which is `rgba(0,0,0,0)` for a
+  **gradient** — so it walked past a slab to the page behind it and reported a
+  confident FALSE failure. It now declines to judge rather than judging wrongly.
 
-**A docs-only commit shipped half a feature to `main`** (#198, reverted by
-#199). Cause: **`git add -A` in a working tree where an agent was mid-edit.** It
-carried 337 lines of an in-progress `services/candidate-outreach.js` — the half
-that APPENDS the job-description panel, without the half that splits it back
-out. A queued candidate email would have gone out with a raw
-`------------------` fence, to a real person, under the customer's name.
+Both were caught **only** by deliberately reintroducing the bug and watching the
+test fail. Do that before trusting a new guard.
 
-**No email went out** — the queue was 8 sent / 4 skipped / **0 pending**. A near
-miss, and only because that morning's send-window work had already drained it.
+**And a suite only covers the screens it RENDERS.** The contrast suite set
+`STATE.page` only, so every multi-tab page drew its DEFAULT tab and Email's Sent
+and Outreach Plan were never tested; it called `enterApp()` first, so the login
+screen — the first thing anyone sees — was never tested at all. Both shipped
+broken.
 
-**Every check passed.** `node --check` clean, full suite green — the writer's own
-tests do not know the router exists yet.
+## 🎨 THEMING: FOUR RULES THAT COST REAL BUGS
 
-- **Never `git add -A` in a tree where an agent is working.** Stage the paths
-  the commit is actually about.
-- **A green suite proves what it covers, not what you accidentally added.**
-  The sibling of `CLAUDE.md`'s "a syntax check proves a file parses, not that it
-  still does anything".
+Full detail in `docs/UI_REVAMP.md` and `CLAUDE.md`. The four that bit:
 
-## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY — READ THIS BEFORE TOUCHING SCOPING
+1. **A theme must reach EVERY palette.** `ui.css` carries its own
+   (`--ink`/`--line`/`--hover`), separate from `styles.css`
+   (`--text`/`--border`). Bridging one left the Leads table drawing `#0F172A`
+   on dark glass.
+2. **An inline colour cannot be re-themed**, exactly as an inline width cannot
+   be re-laid-out. And watch for **JS hover handlers that re-set the colour** —
+   the merge chips had `onmouseout` restoring `#fff`, which would have undone
+   any stylesheet fix on the first mouse movement.
+3. **Inversion is not a theme-safe colour.** `background: var(--text)` is a
+   near-black pill in light and a white pill with white text in dark.
+4. **Anything that paints ITSELF must be told the palette.** The login backdrop
+   is a `<canvas>`; no stylesheet could ever have fixed it. It reads the live
+   custom properties and re-reads on a `pace-theme-change` event.
 
-**The backend connects with `SUPABASE_SERVICE_KEY` (`index.js:73`), so RLS is
-bypassed on every request PACE makes.** "RLS + a service-role policy on all 48
-tables" (migration 039) defends against someone holding the **anon** key and is
-**no mitigation whatsoever** for application-code scoping. **Application code is
-the only tenant boundary that exists.** That fact lived in one code comment and
-no memory file, which is exactly why it kept being repeated as false comfort.
+Plus: **never restate `position` in a rule whose job is `z-index`** — that
+collapsed `#nav-scrim` and made the phone menu impossible to close.
+`mobile-layout-smoke` caught it.
 
-**⚠ `SELF_SERVE_SIGNUP` MUST STAY OFF until C-0015/16/17 are closed.** That
-switch creates the second organisation, and these stop being theoretical the
-moment it does. Nothing is exposed today — there is one org.
+## 📱 HOVER IS A MOUSE FEATURE — AND THAT LEAVES A GAP
 
-Closed in #195 (`rampart`): `guardUser()` across all 17 `routes/auth.js` routes
-(404 on a miss, never 403), `canTouchJob()` reading the row **with** the org
-filter before the admin bypass, and `MULTI_ORG` arming at workspace creation
-rather than at the next restart.
+Hover-to-expand on the rail is gated on `(hover:hover) and (pointer:fine)`,
+**never on width** — a 900px tablet is touch, a 500px desktop window is not.
+Correct, and it left a real hole: a tablet, or a phone in **"desktop site"
+mode**, is above the 860px breakpoint and has no hover, so it got 14 unlabelled
+icons with no way to read one. `.pinned` already existed for this and nothing
+toggled it; the brand mark does now, and the affordance only renders where
+hover is unavailable. Pinned by a 1024px **touch** context in
+`mobile-layout-smoke`.
 
-**Still open, with the fix pattern written into each contract:**
-- **C-0015 → `harbour`** — `GET /emails` returns **every org's mail, full
-  bodies**, to `admin`/`ra_lead`; `purge-pending` with `all_managers` deletes
-  every org's queue.
-- **C-0016 → `gateway`** — `DELETE /auth/*/:userEmailId` kills another org's
-  mailbox and rewrites their leads.
-- **C-0017 → `guild`** — `bulk-stage`/`bulk-assign` take unvalidated `job_ids`
-  from the request body; `check-duplicates` is a working cross-org enumeration
-  oracle.
-- **And the longest tail:** a tenant INSERT that omits `org_id` **does not fail,
-  it misfiles** — migration 022 gave every tenant table a column DEFAULT of the
-  default org, so an unstamped insert writes company B's rows (**including
-  mailbox refresh tokens**) into company A's space, silently. Corruption, not
-  just leakage, and harder to undo.
+## ⚠ WHAT WENT WRONG EARLIER — read before your first commit
 
-**Two lessons from finding these, both worth more than the fixes:** a bulk edit
-whose safety check **counts the replacements it made** cannot tell you what it
-did not replace — that is how 8 of 9 routes got guarded and the ninth (a
-cross-org WRITE onto outbound email signatures) was missed. And a test named for
-the thing it appears to cover may cover something else entirely: 
-`lead-location-parse-smoke` was green throughout the period a quarter of live
-leads carried the wrong timezone, because it tests a frontend form splitter, not
-the backend resolver.
+**`git add -A` put half a feature on `main`** (2026-09-10, reverted by #199).
+A documentation-only commit swept up 337 lines of another territory's
+in-progress file — the half that appends a JD panel to a stored email body,
+without the half that splits it back out before sending. A queued candidate
+email would have gone out with a raw `------------------` fence to a real
+person. **Every check passed.** Stage the paths your commit is about, nothing
+else.
 
-## ⏭ PICK THIS UP FIRST (Session 23)
+**Never pipe `git push` into `tail`** — it swallows a rejection, and a commit
+made on the wrong branch then looks like a successful push.
 
-**1. The morning briefing's AI path has NEVER been called against a real
-provider.** The sandbox has no Supabase credentials, so the stored Groq key is
-unreachable; that branch is exercised only against hand-written model output.
-The rules path — what ships every day — is properly tested. **Check the live
-app and `ai_last_error`; this closes only in production.**
+**A squash-merged branch is only safe to force-push after you verify its
+commits are in `main` BY CONTENT.** Session 23 did this twice; both times
+checked `git show origin/main:<file>` first.
 
-**2. Nothing shipped since #185 has been seen working live by the owner** — the
-rail icon, the ‹ › candidate stepper, opening a sent email, the Rewrite button,
-and now the briefing card. All pinned by tests; none confirmed by a human.
+## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY
 
-**3. The territory system has run four jobs.** Whether the memory files are
-pitched at the right level of detail is genuinely unknown. **If nine teams reads
-as overhead, collapse `ledger` into `rampart` and `guild` into `gateway`** —
-merging teams is far cheaper than splitting them later.
-
-**4.** `/ai/generate-email` is still dead — reachable only from the orphaned
-`12-manager-users.js`. Delete it or wire it. **5.** Finish the UI-kit rollout
-(dashboards, Admin, pipeline, My Team, Assign Leads). **6.** Three stale draft
-PRs (#116, #126, #135). **7.** CSV import/export + a small public API is the
-highest-leverage unstarted bet; `dispatch` has already mapped the six
-territories it touches (the island's route runner shows the order).
-
-## ⏸ Parked by the owner — do NOT re-raise as blocking
-
-**The Gmail 7-day expiry.** On 2026-09-01 the owner said: *"We will work on this
-but not now."* That is a decision. Raise it only on a fresh visible incident.
-
-- **Symptom:** a dead Gmail sign-in destroys queued emails — `failed` with no
-  retry, reason never persisted. Eleven follow-ups were lost on 31 Aug.
-- **Root cause is Google-side:** the consent screen is in **"Testing"**, where
-  refresh tokens expire after 7 days.
-- **Three code defects worth fixing regardless:** release to `pending` not
-  `failed` on an auth failure; stop a mailbox on the FIRST auth failure; add the
-  error column (**migration 042**, unclaimed).
-
-## Rendering, the UI kit and the phone — read before touching any screen
-
-All of it is in `CLAUDE.md` (stack §Frontend). **Do not work from a paraphrase.**
-The four broken most often: register with `UI.registerPage()` and paint via
-`paintPageContent()`, never `content.innerHTML`; anything that must survive a
-repaint needs its own region; a repaint that changes nothing must write nothing;
-build with `UI.page({…})`, not a twelfth hand-rolled table. Plus the four phone
-rules. Pinned by `screen-stability-smoke` and `mobile-layout-smoke`.
+RLS is on all 48 tables, but the server holds the **service-role key**, which is
+exempt from RLS by design. So **org scoping is enforced by application code, not
+by the database.** Use `models/` — `db.forRequest(req).from('candidates')` —
+never a hand-written `supabase.from()` on a tenant table. `rampart` reviews
+anything touching scoping, and a breach here produces **no error message**.
 
 ## Owner actions outstanding
 
-1. **Try the morning briefing live** and say whether that sentence is useful.
-2. **Consider rotating the Groq key** — it passed through a Session 20
-   transcript when it was read from the database.
-3. **Google *sign-in*** (distinct from Gmail *sending*, which works) —
-   `GOOGLE_CLIENT_ID`/`SECRET` in Render, if wanted.
-4. **Verify one real Greenhouse/Lever board** via "Test it" — the adapters have
-   never met a live feed.
-5. **Set prices, decide on card payments** — `services/plans.js`, one line.
-6. **Turn on `SELF_SERVE_SIGNUP`** whenever strangers should be able to sign up.
+- **Say whether the 39 legitimate follow-up schedules should keep running.**
+  They are real — those prospects did receive a cold email. Left running.
+- **The accent is Apple blue (`#0071E3`), taken from the Bolt design.** PACE was
+  green. One line (`--accent` in `theme.css`) if they want it moved.
+- **`PICKER_CAP` is 15**, so 19 connected leads becomes a search box. Flagged as
+  possibly too eager; they have not said.
+- Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` on Render.
+
+## ⏸ Parked by the owner — do NOT re-raise as blocking
+
+`docs/territories/DECISIONS.md` is the authority; grep it before proposing
+anything. **D-0015 is the highest id used.** Notably: pricing stays `null`,
+self-serve signup stays off, no backfill of the 81 wrong lead timezones.
 
 ## Traps that will bite you
 
-**`CLAUDE.md` carries all the durable ones**, and each territory's memory
-carries its own — read those two, not a paraphrase. Still worth repeating here
-because they bite in the moment:
-
-- **Reproduce the sentence, not your hypothesis.** The owner's throwaway clause
-  is usually the diagnosis.
-- **An agent's report is a claim, not evidence.** A Session 22 commit message
-  repeated one without checking and was wrong. Verify, then write it down.
-- **Read what was IN the run, not just the count.** Two green runs can cover
-  different things, and `npm test | tail -3` returns `tail`'s exit status.
-- **When one operation has several code paths, they diverge silently.**
-- **A test that greps a VARIABLE NAME** passes on a real behaviour change.
-- **A check that samples "the last few lines" fires on short input.**
-- **A card must never sit in a loading state that nothing can resolve.**
-- **`emails.sent_at` defaults to `CURRENT_DATE`** — an unsent draft already
-  carries a send date, so "sent on X" reports count drafts.
-- **A destructive DB action needs, in order:** check FK cascades, verify scope
-  with counts, snapshot, explicit confirmation, verify after.
-- **Never wait on the suite with `pgrep -f run-all.mjs`** — the waiter matches
-  itself. Write to a log file and grep it.
-- **Before moving ANY file** → archive § "DEPENDENCY MAP" (Session 8).
-
-## Deliberately open, not forgotten
-
-- Cold-email templates and the resume letterhead still say "Fute Global" — the
-  **customer's** identity, must become per-org config.
-- `/bd-analytics/*` is legacy and **un-org-scoped** (C-0003). The orphaned
-  "Manager Users" page + its `email_accounts` subsystem needs an audit-and-split.
-- OpenRouter's model names are **still unverified** (no key).
-- Growth bets not started: per-role permissions, **CSV import/export + public
-  API**, generalized audit trail, PWA polish.
-- In-app mailbox v1 gaps: read-only drafts, no move-to-folder picker, no shared
-  mailboxes, unread badge is a 60s cached poll.
-- Follow-up variants are still rules-only; a per-call AI usage history would be
-  its own table.
-
-## Working rules
-
-`npm test` (**68 suites**, judged by **exit code** — read the count, not just
-the code: `npm test | tail -3` masks a failure) · **run it on Node 26 too** ·
-`bash test/verify-frontend.sh` · build on the dev branch → test → show the owner
-→ draft PR → **merge on their go-ahead** → apply a migration only on a fresh
-explicit go-ahead. **The owner does not read code**; show them the running app
-and plain English.
-
-**The habit that has paid for itself three sessions running:** get to the real
-thing. Session 19 made the app record a fact and read it; Session 20 opened the
-network and called the model; Session 21 read the owner's sentence literally.
-Each time, the answer was one observation away and no amount of further
-reasoning would have found it.
+- **`*.onrender.com` is blocked from this sandbox.** You cannot verify a deploy
+  by loading the app. Verify the code is on `main` by content, and check the
+  server is alive via `engine_runs` in Supabase. **Do not claim you watched it
+  come up.**
+- **Registration order is load-bearing in every router.** A literal path after
+  a matching `:param` route is DEAD and fails silently with a valid 200.
+  `route-shadowing-smoke` scans the tree.
+- **Every reader of a stored email body must call `renderStoredEmail`** —
+  `sender-identity-smoke` greps for new readers and fails if one forgets.
+- **A page module must not write `#content`** — register with
+  `UI.registerPage`.
+- **Prefer an edit anchored on the exact text being replaced** over one anchored
+  on a start and an end line. A range edit once silently swallowed two
+  functions; `node --check` passed and the suite passed.
+- **`TEST_USERS` is not the user set** — all eight roles now have entries, but
+  a five-role sweep still skips three.

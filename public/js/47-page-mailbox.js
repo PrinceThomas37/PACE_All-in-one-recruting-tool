@@ -1009,7 +1009,7 @@
       '</div>'+
 
       '<textarea id="mb-comp-body" class="sel" oninput="mbCompField(\'body\',this.value)" '+
-        'style="min-height:110px;resize:vertical;font-size:12.5px;line-height:1.55;background:#fff" '+
+        'style="min-height:110px;resize:vertical;font-size:12.5px;line-height:1.55" '+
         'placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'">'+esc(c.body||'')+'</textarea>'+
 
       renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+

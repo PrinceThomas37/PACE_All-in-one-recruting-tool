@@ -4314,3 +4314,171 @@ the context window** — the right trade for a large job, the wrong one for a
 one-line fix, and it had been applied uniformly rather than proportionally.
 Their own summary of what to build next: *"maybe like take in more context while
 deciding something."* That is what `CAPABILITIES.md` is.
+
+---
+
+# Session 23 — three incidents, a design law, and the app gets a new face
+
+Four pieces of work, each started by the owner noticing something. Every one of
+them ended somewhere different from where it started, which is the thread worth
+keeping.
+
+## Part 1 — 215 follow-ups to a cold email that was never sent (PR #202)
+
+The owner: *"All the emails have been triggered automatically, if you can check
+there ae around 200+ emails pending from one email ID. what caused it and
+remove all those pending emails and stop the sending."*
+
+215 `fu1` rows, one mailbox, 95 jobs, inserted in a **single instant**
+(06:31:30.217434 — identical to six decimal places). Not one of those
+job+contact pairs had **any** email row at all: verified with a LEFT JOIN
+returning `status: null` for all 215. Every one was "just following up on my
+note below", quoting nothing, addressed to a real prospect.
+
+**Cause.** `follow_ups` rows are created at ASSIGNMENT time by
+`POST /distribute/execute` and stamped `outreach_sent_at: today` — a column
+name asserting something that has not happened. The initial cold emails are
+queued asynchronously and drain at one per ~75-105s inside an 8-hour window, so
+a large assignment leaves most unsent for days. The fu1 clock, meanwhile, had
+started for all of them.
+
+* 7 Sep 10:00 — 215 `follow_ups` created on assignment, fu1 due +3 days
+* 7 Sep onward — only **21** initial cold emails actually sent from that mailbox
+* 10 Sep 06:31 — all 215 came due at once
+
+The only volume brake was that mailbox's `daily_send_limit` of **300**, which
+sits above the backlog size. Nothing stopped it and nothing on screen said so.
+
+**Fix, two halves, because either alone is insufficient.** A follow-up is
+queued only when the initial email is PROVEN sent (read from `emails`), and the
+fu1/fu2 clock is **re-anchored on that real send date** — without the second
+half, an initial that sends five days late is followed up the same day it goes
+out, because its stored due date is already past. `isFollowupDueFromSend` is
+pure. The schedule is left `active`, not `skipped`: if the initial does
+eventually send, the follow-up becomes legitimate.
+
+**Cleanup applied live.** 215 pending deleted (backed up to
+`emails_purged_20260910`); **341** orphan schedules closed — the 215 that would
+have repeated the whole burst as **fu2 on 14 Sep**, plus 126 more already armed
+and due that day. 39 legitimate schedules deliberately left alone.
+
+**Also found:** 86 follow-ups had ALREADY gone out since 8 June to pairs with no
+initial send. An initial count of 530 was **wrong and corrected**: 444 of those
+have `job_id` and `contact_id` both NULL, so the orphan test cannot judge them
+— a NULL join never matches. Say 86.
+
+## Part 2 — "have we considered ageing?" answered with the wrong thing (PR #203)
+
+The owner asked whether information stacking as an account ages had been
+designed for, *"not just in this view but also for everything"*. It had not.
+
+**The scan that preceded the test was useless.** Grepping for `.map()` over
+state collections found 32 "offenders" — nearly all state UPDATES (`.map` to
+replace one item) or bounded lists (roles, mailboxes, stages). Hand-reasoning
+about which lists grow does not work. So: `test/ageing-layout-smoke.mjs`
+renders 16 pages x 5 roles at two scales and fails on >3x DOM growth.
+
+| Screen | Before | After |
+|---|---|---|
+| Jobs (`bd_joborders`) | 326 → 30,026 nodes = **92.1x** | 327 → 410 = **1.25x** |
+| My Jobs | 162 → 12,042 = **74.3x** | within limit |
+
+**A "young" account must be RECENT, not sparse.** The first seeder spread 20
+records over the same two years, so most of the young case fell outside the
+90-day horizon and rendered almost nothing — which made an ALREADY-FIXED page
+still read as broken at 5.4x. If both scales share a span, the ratio measures
+the horizon instead of the growth.
+
+Shipped as the law **every list has a HORIZON and an EXIT**
+(`services/view-horizon.js` + a checked copy in the UI kit), the searchable
+convert picker, dismiss/snooze on every Needs-you-today row (a **fingerprinted**
+snooze — void the moment a new message lands, so the queue stays honest), and
+one **All email** view over the three pipelines whose bodies had been stored all
+along and never read back.
+
+**Then the owner said it was the wrong answer.** *"Its not about limiting the
+number of things that gets accumulated on screen, you are not understanding the
+design, why not just minimilistically reduce elements on screen and shows things
+when clicked."* Volume control vs. progressive disclosure — both true, not the
+same instruction. Recorded as **D-0014**; the row-level brief is still open.
+
+They also reported the email valid/invalid control as gone. Probed in a real
+browser: it exists, it works, it is visible in the drawer, and git shows no
+commit ever moved it off a row. **No regression** — but the instinct was right
+anyway, because a feature you cannot see is a feature you do not have. It sits
+two clicks deep with nothing on the row hinting at it.
+
+## Part 3 — the new look, from the owner's Bolt design (PR #204)
+
+*"keep toggle to dark and light. I am tired of how it looks right now."*
+
+The Bolt export: 8 files, ~600 lines, React + Vite + Tailwind, ONE screen, four
+hard-coded jobs, Supabase in `package.json` and never imported. A **design**,
+not an app.
+
+**The first read was "this means porting the frontend to React". Reading the
+source changed it.** The design is a sidebar, a header, three cards, a stepper
+and a list — none of it needs a component framework, and PACE's ~19,600-line
+frontend already draws from shared CSS variables. So: `public/theme.css`, loaded
+last, ~432 lines. Every screen changes appearance; none changes behaviour.
+Deleting one `<link>` restores the old look exactly.
+
+Three faults found by **looking at screenshots**, all invisible to every test:
+the dashboard clock and scope chip carried white INLINE (the banner used to be a
+green slab); `ui.css` carries its OWN palette (`--ink`/`--line`/`--hover`) so
+overriding only `--text` left the whole Leads table drawing `#0F172A` on dark
+glass; and the greeting banner was a hard-coded green gradient. Plus one the
+suite caught: a `z-index` rule that also restated `position` collapsed
+`#nav-scrim` and made the phone menu impossible to close.
+
+`test/theme-contrast-smoke.mjs` was written to stop this — it composites every
+translucent ancestor to find what is REALLY behind each piece of text.
+
+## Part 4 — five more faults, from the owner's actual phone (PR #205)
+
+The suite from Part 3 passed. The owner's phone did not.
+
+**Why it missed them, which is the more useful finding.** It set `STATE.page`
+only, so every multi-tab page rendered as its DEFAULT tab — Email's Sent and
+Outreach Plan were never drawn once. And it calls `enterApp()` first, so the
+**login screen** was never rendered at all. 36 screens per theme became 51,
+plus the logged-out one.
+
+**The probe also had a bug of its own**, found while fixing these: a GRADIENT
+reports `backgroundColor: rgba(0,0,0,0)`, so the ancestor walk sailed past the
+login header's slab to the page behind it and reported a confident FALSE
+failure. It now declines to judge text on a gradient rather than judging wrongly.
+
+1. **Merge-field chips: white pills, white text.** Inline `background:#fff` with
+   JS hover handlers that RE-SET `#fff` on mouseout — a stylesheet fix would
+   have been undone by the first mouse movement.
+2. **The login screen was never themed**, and its backdrop is a **`<canvas>`**,
+   so *no stylesheet could ever have fixed it*. A canvas has to be told the
+   palette; it now reads the live custom properties and re-reads on a
+   `pace-theme-change` event.
+3. **The login tab pill painted `background: var(--text)`** — an INVERSION.
+   Near-black pill in light; white pill with white text in dark, 1.09:1.
+   **Inversion is not a theme-safe colour.**
+4. **The topbar rendered as a solid blue slab in dark.** It is translucent glass
+   and the first ambient glow sat directly behind it — worst on a phone, where
+   the mobile override centred that glow at the top. **No contrast check would
+   ever flag this**, because blue-on-blue-ish text still passes.
+5. **A touch device at desktop width could not open the rail.** Hover-to-expand
+   is correctly gated on `(hover:hover)` — width is the wrong question — but
+   that leaves a tablet, or a phone in "desktop site" mode, with fourteen
+   unlabelled icons. `.pinned` already existed and already sat outside the hover
+   query FOR EXACTLY THIS; nothing toggled it. The brand mark does now.
+
+## The thread through all four
+
+Every single one of these was found by a **person looking at the thing**, and
+every fix that stuck was a **test that measures what the person saw**. The
+scan-by-grep found nothing real. The reasoning-about-which-lists-grow found
+nothing real. What worked: render it twice and compare, composite the actual
+pixels behind the actual text, emulate a real touch device at a real width.
+
+And twice in one session a test passed **vacuously** — the ageing seeder
+measuring its own horizon, the contrast probe declining to judge a gradient and
+being counted as a pass. **A green check is a claim about what was measured,
+not about what is true.** Both were caught only by deliberately reintroducing
+the bug and watching the test fail.
