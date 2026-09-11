@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-10",
+  "generated": "2026-09-11",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 275,
-    "lines": 65190,
+    "files": 277,
+    "lines": 66142,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 54,
-      "lines": 21412,
+      "files": 55,
+      "lines": 22114,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 883
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-11",
       "openIn": 1,
       "openOut": 1
     },
@@ -90,7 +90,7 @@
           "n": 237
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-11",
       "openIn": 4,
       "openOut": 1
     },
@@ -132,7 +132,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-11",
       "openIn": 2,
       "openOut": 0
     },
@@ -249,7 +249,7 @@
           "n": 876
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-11",
       "openIn": 0,
       "openOut": 1
     },
@@ -365,8 +365,8 @@
         "test/",
         ".github/"
       ],
-      "files": 79,
-      "lines": 14625,
+      "files": 80,
+      "lines": 14875,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -385,7 +385,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-11",
       "openIn": 1,
       "openOut": 0
     },

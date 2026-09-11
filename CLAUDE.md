@@ -327,6 +327,63 @@ we never have to rewrite to grow (see "Growth bets" below).
     works. It reads stored bodies, so it renders them —
     `test/sender-identity-smoke.mjs` greps it and enforces that.
 
+  - **A THEME MUST REACH EVERY PALETTE, AND SOME THINGS PAINT THEMSELVES
+    (Session 23, round 2 — five faults, all found on the owner's phone).**
+    `theme.css` re-skins the app by redefining tokens, which works for
+    everything that READS a token. Four ways that failed:
+    * **`ui.css` carries its OWN palette** (`--ink`/`--ink2`/`--line`/`--hover`)
+      separate from `styles.css`'s (`--text`/`--border`). Bridging one left the
+      whole Leads table drawing `#0F172A` ink on dark glass.
+    * **AN INLINE COLOUR CANNOT BE RE-THEMED**, exactly as an inline width
+      cannot be re-laid-out. And check for **JS hover handlers that re-set the
+      colour**: the merge-field chips had `onmouseout` restoring `#fff`, so a
+      stylesheet fix would have been undone on the first mouse movement. Hover
+      belongs in CSS.
+    * **INVERSION IS NOT A THEME-SAFE COLOUR.** The login tab pill painted
+      `background: var(--text)` — a near-black pill in light, and a white pill
+      with white text in dark at 1.09:1.
+    * **ANYTHING THAT PAINTS ITSELF MUST BE TOLD THE PALETTE.** The login
+      backdrop is a `<canvas>` filling `#e8f5ee` with green particles, so **no
+      stylesheet could ever have fixed it.** It now reads the live custom
+      properties (never a duplicated hex) and re-reads on a `pace-theme-change`
+      event, which `toggleTheme()` dispatches.
+    Also: **the topbar rendered as a solid blue slab in dark** because it is
+    translucent glass and the first ambient glow sat directly behind it — worst
+    on a phone, where the mobile override centred that glow at the top. **No
+    contrast check would ever flag that**, because blue-on-blue-ish text still
+    passes; the bar now has its own ground. And **never restate `position` in a
+    rule whose job is `z-index`** — that collapsed `#nav-scrim` and made the
+    phone menu impossible to close.
+    **`test/theme-contrast-smoke.mjs` composites every translucent ancestor** to
+    find what is REALLY behind each piece of text (a single `getComputedStyle`
+    cannot, which is how glass hides this), over 51 screens x 3 roles x 2 themes
+    **plus the logged-out screen**, failing under 2.2:1.
+  - **A SUITE ONLY COVERS THE SCREENS IT RENDERS (Session 23).** The contrast
+    suite set `STATE.page` only, so every multi-tab page drew its DEFAULT tab
+    and Email's **Sent** and **Outreach Plan** were never rendered once; and it
+    calls `enterApp()` first, so the **login screen — the first thing anyone
+    sees — was never rendered at all.** Both shipped broken and the owner found
+    them. A page is not one screen: drive the sub-state too, and test the
+    logged-out case.
+  - **TWO TESTS PASSED VACUOUSLY IN ONE SESSION — ASSUME YOURS CAN.** The
+    ageing seeder spread 20 "young" records over the same two years, so the
+    young case fell outside the 90-day horizon, rendered almost nothing, and
+    made an ALREADY-FIXED page still measure as broken. The contrast probe reads
+    `backgroundColor`, which is `rgba(0,0,0,0)` for a **gradient**, so it walked
+    past a slab to the page behind it and reported a confident FALSE failure —
+    it now declines to judge rather than judging wrongly. **Both were caught
+    only by deliberately reintroducing the bug and watching the test fail. Do
+    that before trusting a new guard.**
+  - **HOVER IS A MOUSE FEATURE, AND GATING IT CORRECTLY LEAVES A HOLE
+    (Session 23).** `(hover:hover) and (pointer:fine)` is the right question —
+    a 900px tablet is touch, a 500px desktop window is not. But that leaves a
+    **tablet, or a phone in "desktop site" mode**, above the 860px breakpoint
+    with no hover: fourteen unlabelled icons and no way to read one. `.pinned`
+    already existed and already sat outside the hover query FOR EXACTLY THIS —
+    nothing toggled it. The brand mark does now (`toggleRail()`), and the
+    affordance renders only under `(hover:none), (pointer:coarse)`. Pinned by a
+    1024px **touch** context in `mobile-layout-smoke.mjs`.
+
 - **⚠ THE SANDBOX RUNS NODE 22. RENDER RUNS NODE 26. A WHOLE CLASS OF BUG IS
   INVISIBLE HERE (Session 19).** This cost a session. Resume parsing failed in
   production and every file parsed perfectly in the sandbox — same library,
