@@ -49,7 +49,7 @@ function findChromium() {
 // 2.2 catches the breakage without arguing about deliberate hierarchy.
 const MIN_RATIO = 2.2;
 
-const CONTRAST_PROBE = (minRatio) => {
+const CONTRAST_PROBE = ({ minRatio, scope }) => {
   const parse = (c) => {
     const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null;
     const p = m[1].split(',').map(s => parseFloat(s.trim()));
@@ -63,10 +63,19 @@ const CONTRAST_PROBE = (minRatio) => {
   // which is exactly why glass hides the bug.
   const effectiveBg = (el) => {
     const stack = [];
+    let painted = null;                 // an ancestor we cannot measure
     for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
-      const c = parse(getComputedStyle(n).backgroundColor);
+      const cs = getComputedStyle(n);
+      // A GRADIENT (or image) reports backgroundColor rgba(0,0,0,0), so a naive
+      // walk sails straight past it to whatever is behind — which is how the
+      // login header's green slab read as the pale green page behind it and
+      // produced a false failure. We cannot resolve a gradient to one colour,
+      // so we decline to judge rather than judging wrongly.
+      if (cs.backgroundImage && cs.backgroundImage !== 'none') { painted = 'image'; break; }
+      const c = parse(cs.backgroundColor);
       if (c && c.a > 0) { stack.push(c); if (c.a === 1) break; }
     }
+    if (painted) return null;
     let base = parse(getComputedStyle(document.documentElement).backgroundColor) || { r:255,g:255,b:255,a:1 };
     if (base.a === 0) base = { r:255,g:255,b:255,a:1 };
     let acc = base;
@@ -75,7 +84,7 @@ const CONTRAST_PROBE = (minRatio) => {
   };
 
   const bad = [];
-  const els = document.querySelectorAll('#content *, #topbar *, #sidebar *');
+  const els = document.querySelectorAll(scope);
   for (const el of els) {
     if (el.children.length) continue;                     // leaf text only
     const txt = (el.textContent || '').trim();
@@ -86,6 +95,7 @@ const CONTRAST_PROBE = (minRatio) => {
     if (rect.width < 4 || rect.height < 4) continue;
     const fg = parse(cs.color); if (!fg || fg.a < 0.35) continue;
     const bg = effectiveBg(el);
+    if (!bg) continue;                  // sits on a gradient/image — not judged
     const composited = over(fg, bg);
     const l1 = lum(composited), l2 = lum(bg);
     const ratio = (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
@@ -98,8 +108,20 @@ const CONTRAST_PROBE = (minRatio) => {
   return bad.sort((a,b)=>a.ratio-b.ratio).slice(0,6);
 };
 
-const PAGES = ['dashboard','leads','applicants','email','reports','myteam',
-               'bd_joborders','clients','sourced','insights','reminders','admin'];
+// A page is not one screen. Setting STATE.page alone renders every multi-tab
+// page as its DEFAULT tab, so Email's Sent and Outreach Plan were never drawn
+// once — and both shipped with unreadable text the owner found on their phone.
+// Each entry is [page, subState] where subState is merged into STATE.
+const SCREENS = [
+  ['dashboard'], ['leads'], ['applicants'], ['reports'], ['myteam'],
+  ['bd_joborders'], ['clients'], ['sourced'], ['insights'], ['reminders'], ['admin'],
+  ['email', { emailTab:'pending' }],
+  ['email', { emailTab:'compose' }],
+  ['email', { emailTab:'sent' }],
+  ['email', { emailTab:'allmail' }],
+  ['email', { emailTab:'outreachplan' }],
+  ['email', { emailTab:'sequence' }],
+];
 const ROLES = ['admin','bd','recruiter'];
 
 let browser;
@@ -124,16 +146,34 @@ try {
     let screens = 0;
     for (const role of ROLES) {
       await switchRole(page, role);
-      for (const p of PAGES) {
-        await page.evaluate((pp)=>{ window.STATE.page = pp; window.render(); }, p);
-        await page.waitForTimeout(90);
+      for (const [p, sub] of SCREENS) {
+        await page.evaluate(({pp, ss})=>{
+          window.STATE.page = pp;
+          if (ss) Object.assign(window.STATE, ss);
+          window.render();
+        }, { pp:p, ss:sub || null });
+        await page.waitForTimeout(110);
         screens++;
-        const bad = await page.evaluate(CONTRAST_PROBE, MIN_RATIO);
-        for (const b of bad) offenders.push(`${theme}/${role}/${p}: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
+        const label = sub ? `${p}:${Object.values(sub).join('/')}` : p;
+        const bad = await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content *, #topbar *, #sidebar *' });
+        for (const b of bad) offenders.push(`${theme}/${role}/${label}: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
       }
     }
     step(`every screen is readable in ${theme} (${screens} screens)`,
       offenders.length === 0, offenders.slice(0,5).join(' | '));
+
+    // THE LOGGED-OUT SCREEN. enterApp() signs in, so this suite never rendered
+    // the login page once — and it shipped with invisible SSO buttons and
+    // invisible field labels. It is the FIRST thing anyone sees.
+    await page.evaluate(()=>{
+      window.STATE.user = null; window.STATE.token = null; window.render();
+    });
+    await page.waitForTimeout(250);
+    // The login screen lives outside the app shell, so it needs the whole body.
+    const loginBad = await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: 'body *' });
+    step(`the login screen is readable in ${theme}`, loginBad.length === 0,
+      loginBad.slice(0,4).map(b=>`"${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`).join(' | '));
+
     await ctx.close();
   }
 } finally {

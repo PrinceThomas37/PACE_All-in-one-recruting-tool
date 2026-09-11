@@ -604,11 +604,14 @@ function mergeVarFriendlyLabel(token){
   }
   return 'Field';
 }
+// The merge-field chips. These were inline-styled with `background:#fff` and a
+// pair of JS hover handlers that RE-SET it to #fff on mouseout — so in dark
+// mode they were white pills with white text on them, and the hover handler
+// would have undone any stylesheet fix anyway. An inline colour cannot be
+// re-themed; hover belongs in CSS.
 function renderVarChipBtn(token,label,hint,subjId,bodyId){
-  return '<button type="button" title="'+htmlEsc(hint||label)+'" onclick="insertVarChip(\''+token+'\',\''+subjId+'\',\''+bodyId+'\')" '+
-    'style="font-size:12px;padding:6px 12px;border-radius:20px;border:1px solid var(--border2);background:#fff;color:var(--text);cursor:pointer;white-space:nowrap;font-weight:500" '+
-    'onmouseover="this.style.borderColor=\'var(--accent)\';this.style.background=\'var(--accent-l)\';this.style.color=\'var(--accent)\'" '+
-    'onmouseout="this.style.borderColor=\'var(--border2)\';this.style.background=\'#fff\';this.style.color=\'var(--text)\'">'+htmlEsc(label)+'</button>';
+  return '<button type="button" class="var-chip" title="'+htmlEsc(hint||label)+'" '+
+    'onclick="insertVarChip(\''+token+'\',\''+subjId+'\',\''+bodyId+'\')">'+htmlEsc(label)+'</button>';
 }
 function renderVarChipBar(subjId,bodyId){
   var target=STATE.varInsertTarget||'body';
@@ -628,8 +631,8 @@ function renderVarChipBar(subjId,bodyId){
     '<div style="font-weight:600;font-size:13px;color:var(--text);margin-bottom:4px">Personalize your message</div>'+
     '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Step 1 — choose where to add &nbsp;·&nbsp; Step 2 — click a field below</div>'+
     '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
-      '<button type="button" onclick="setVarInsertTarget(\'subject\')" style="padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid '+(target==='subject'?'var(--accent)':'var(--border)')+';background:'+(target==='subject'?'var(--accent)':'#fff')+';color:'+(target==='subject'?'#fff':'var(--text2)')+'">① Subject line</button>'+
-      '<button type="button" onclick="setVarInsertTarget(\'body\')" style="padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid '+(target==='body'?'var(--accent)':'var(--border)')+';background:'+(target==='body'?'var(--accent)':'#fff')+';color:'+(target==='body'?'#fff':'var(--text2)')+'">② Email body</button>'+
+      '<button type="button" class="seg-btn'+(target==='subject'?' is-on':'')+'" onclick="setVarInsertTarget(\'subject\')">① Subject line</button>'+
+      '<button type="button" class="seg-btn'+(target==='body'?' is-on':'')+'" onclick="setVarInsertTarget(\'body\')">② Email body</button>'+
       '<span style="font-size:11px;color:var(--text3);align-self:center">Adding to: <strong style="color:var(--accent)">'+(target==='subject'?'Subject line':'Email body')+'</strong></span>'+
     '</div>'+
     groupHtml+moreHtml+
