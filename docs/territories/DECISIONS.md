@@ -47,6 +47,112 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0015 · 2026-09-10 · STANDS · The new look, from the owner's Bolt design; light AND dark
+**Their words:** *"I was thinking of revamping the UI. and i worked on
+something in BOLT."* … *"keep toggle to dark and light. I am tired of how it
+looks right now. out system / visual reference given to you"* — with a Bolt
+export (ZIP) and two phone screenshots as the reference.
+
+**Decided:** PACE takes the visual language of the owner's Bolt design — glass
+panels on a soft ground, Apple-ish palette, generous radii, quiet rows — in
+**both** light and dark, with a toggle. `docs/UI_REVAMP.md` holds the detail.
+
+**The reference, described honestly:** 8 files, ~600 lines, React + Vite +
+Tailwind, ONE screen, four hard-coded jobs, no data layer (Supabase is in
+`package.json` and never imported). It is a DESIGN, not an app — which is the
+right thing for it to be.
+
+**NOT a React rewrite, and this is the load-bearing call.** The first read of
+this was "your Bolt work means porting the frontend to React". Reading the
+actual source changed that: the design is a sidebar, a header, three cards, a
+stepper and a list. None of it needs a component framework — the beauty is
+entirely in the CSS. And PACE's ~19,600-line frontend already draws everything
+from shared CSS variables, so the whole app re-skins from ONE stylesheet with
+no JavaScript touched. `public/theme.css`, loaded last. **Deleting that one
+`<link>` restores the old look exactly** — which is what makes a change this
+broad safe.
+
+**Consequences that are not up for debate:**
+* **Three theme states, not two:** `light`, `dark`, or no attribute at all,
+  which means "follow the OS". The toggle only moves between the two explicit
+  ones.
+* **The theme is applied INLINE IN `<head>`, before first paint.** Deferring it
+  by a tick paints light then snaps to dark.
+* **Toggling touches ONE attribute and calls nothing else** — no `render()`.
+  Re-rendering to change a colour would reload every sandboxed iframe and lose
+  the page's scroll, which the render engine exists to prevent.
+* **A colour is never defined ONLY inside a media query**, or the toggle cannot
+  beat the OS.
+* **A theme must reach EVERY palette in the app.** `ui.css` carries its own
+  (`--ink`/`--line`/`--hover`) separate from `styles.css`'s (`--text`/
+  `--border`); overriding only the second left the entire Leads table drawing
+  `#0F172A` ink on dark glass. Both are bridged now.
+* **An inline colour cannot be re-themed**, exactly as an inline width cannot
+  be re-laid-out. The dashboard clock and scope chip carried white inline (the
+  banner used to be a green slab) and went white-on-white. They are classes now.
+
+**`test/theme-contrast-smoke.mjs` is what keeps this true**: it composites every
+translucent ancestor to find what is REALLY behind each piece of text, across
+12 pages x 3 roles x 2 themes, and fails the build under 2.2:1. Verified by
+reintroducing the `--ink` bug and watching it fail. **Do not weaken it** — both
+faults above were invisible to every other test and were found by looking at a
+screenshot, which does not scale.
+
+**Re-open when:** the owner wants the accent moved off Apple blue (one line,
+`--accent`), or wants a screen restructured rather than re-skinned — this entry
+covers the LOOK. The row-level interaction brief is D-0014 and is still open.
+
+### D-0014 · 2026-09-10 · STANDS · The UI is being revamped; the model is PROGRESSIVE DISCLOSURE
+**Their words:** *"Its not about limiting the number of things that gets
+accumulated on screen, you are not understanding the design, why not just
+minimilistically reduce elements on screen and shows things when clicked"* …
+*"those lead row or the job rows and all and not interactive they don't show
+anything, like earlier … we were able to change the email stage, to valid or
+invalid and all. Now those things and all are not there. So i feel the design
+that to revamped a bit."* … *"we are going to change the entire fucking UI of
+the product in sometime."*
+
+**The correction, recorded because it was MISREAD once already:** D-0013
+answered "things accumulate on screen" with **volume control** — horizons,
+caps, pagination. That was not the ask. The ask is **DENSITY AND DEPTH**:
+
+> **Show little by default. Reveal on click.**
+
+Both are true and they are not the same instruction. D-0013 stands (the 92x DOM
+growth was real and measured); it is simply not this. **Do not answer a density
+complaint with a filter again.**
+
+**What was investigated and is NOT broken** (probed in a real browser, both row
+types, Session 23): a lead row is clickable → opens the detail drawer; a job row
+is clickable → navigates to `bd_jodetail`; the valid / invalid / deactivated /
+out-of-office control still exists, still works, and is visible in the drawer
+(`changeEmailStatus` in `18-email-status-actions.js`, called from
+`renderJobDetailModal()` in `06-page-leads.js`). No regression was found and git
+shows no commit that moved it off a row.
+
+**What is ACTUALLY wrong, and is the brief for the revamp:**
+1. **The actions are not where the eye is.** Marking an email invalid takes a
+   row click, then finding a contact card inside a drawer. Nothing on the row
+   says it is possible, so a capability that exists reads as missing — which is
+   exactly what happened.
+2. **A row shows no state and offers no action.** A Jobs row carries a checkbox
+   and NOTHING else; a Leads row carries a checkbox and a stage dropdown. The
+   same gesture on two lists does two different things.
+3. **The same gesture has two different outcomes.** A lead row opens a DRAWER
+   over its list (keeping filters, selection, scroll — the deliberate rule in
+   `CLAUDE.md`); a job row LEAVES the page for `bd_jodetail`. One of those two
+   is wrong and it is the second.
+
+**Direction agreed for the revamp:** a row is quiet until asked, then reveals
+its state and its actions **in place** — not a wall of controls, and not a
+2-click trip into a drawer to change one field. The drawer stays for the full
+record.
+
+**Re-open when:** the revamp starts. This entry is the brief; it is not a
+mandate to start building it — the owner said "in sometime", and said it
+**after** telling me I had misread the last one. **Ask before building any of
+it.**
+
 ### D-0013 · 2026-09-10 · STANDS · Every list gets a horizon and an exit
 **Their words:** *"I think what's also important is the stacking of information
 on the screen or the UI when aging, have we considered that while designing
