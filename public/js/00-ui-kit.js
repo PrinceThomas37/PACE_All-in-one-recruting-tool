@@ -145,6 +145,12 @@ window.UI = (function () {
       ? o.rows.map(function(r){
           var tr = Array.isArray(r) ? r : r.cells;
           var at = (!Array.isArray(r) && r.onclick) ? ' onclick="'+r.onclick+'" style="cursor:pointer"' : '';
+          // `id` lets a page find its own row again and reveal a panel BESIDE
+          // it, in place, without re-rendering (see leadRowToggle). The panel
+          // is never part of this html: building one per row is how a list of
+          // 400 becomes 400 hidden panels, which is the growth the ageing test
+          // exists to catch.
+          if (!Array.isArray(r) && r.id) at += ' data-row-id="'+esc(r.id)+'"';
           return '<tr'+at+'>'+tr.map(function(c){
             if (c && typeof c === 'object') return '<td'+(c.cls?' class="'+c.cls+'"':'')+'>'+(c.html||'')+'</td>';
             return '<td>'+(c==null?'':c)+'</td>';
