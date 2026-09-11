@@ -299,3 +299,60 @@ minutes, not 5; cold starts are normal and are why outbound timeouts are
 generous; **before adding anything that polls on a schedule, ask what it does to
 instance hours.** "Not receiving its heartbeat" is usually GitHub delivering a
 scheduled workflow late — **do not fix it by pinging harder.**
+
+---
+
+## D-0016 — A palette has states, and a screenshot of one state is not the palette
+**When:** Session 23, round 3 (2026-09-11)
+**Who:** the owner, from their phone: *"this happening in dark mode. those details
+are not visible under selection. Also, 4th screenshot, that button do not work.
+Also, theres small glitche in the UI and the screens, like a lag or sometimes
+early animations and all. Its not smooth."*
+
+**What was decided:**
+
+1. **A literal colour in a base stylesheet is as un-themeable as an inline one.**
+   `tr:hover td{background:#FAFBFC}` (styles.css) set the hover tint on the CELL,
+   and a cell paints over its row — so the themed `tr:hover` and the `tr.is-open`
+   tint were both correct and both invisible, and an opened Leads row read
+   white-on-white at **1.05:1**. The theme layer now re-declares every hard-coded
+   light ground whose text comes from a token. Tinted chips (`.pill.*`, `.st-*`,
+   `.av-*`) stay as they are: each pairs its own dark text with its own pale
+   ground and is legible in both themes. `.mb-body` stays `#fff` deliberately —
+   that is an email's own page.
+
+2. **The contrast suite must drive interactive states.** It rendered 51 screens
+   at REST — it never hovered, never opened a row, and therefore never once saw
+   this colour. It now hovers a row and opens one, in both themes, with an
+   explicit "there was a row to drive" assertion so it cannot pass empty.
+
+3. **A modal panel is only a panel.** `renderModal()` wrapped every modal in
+   `.overlay` except three it special-cased — `jobDetail`, `addJob`,
+   `addContact` — which were returned raw and so landed in normal flow BELOW the
+   whole page. "Open full record" set the right state, rendered the right 6.7KB
+   of html, threw nothing, and was invisible. Everything entering `#layer` now
+   goes through one wrapper, and the guard asserts GEOMETRY (does it cover the
+   viewport) rather than state, because state was never the thing that was wrong.
+
+4. **Glass belongs to surfaces that float over content, not to controls.**
+   `backdrop-filter` had been written onto every input, select, textarea,
+   outline button and chip — **25 blur layers on one phone screen**. Removing it
+   changes Leads and Admin by at most **3/255** per channel and Email by at most
+   25/255 on 3% of pixels. The budget is now 12 layers per screen and a test
+   enforces it.
+
+5. **`transition: all` is banned.** Nine rules used it. `all` includes width,
+   height and padding, so a button whose label changes animates its own size and
+   nudges its neighbours — an animation nobody asked for, which is what "early
+   animations" describes. Every rule now names the paint-only properties it
+   wants, and a stylesheet grep fails the build on a new one.
+
+**Re-open when:** someone wants the frosted look back on controls (it is one
+token and five selectors), or a real device profile shows the blur budget is
+either too tight or still too loose.
+
+**What this did NOT decide:** whether the app now *feels* smooth on the owner's
+phone. This sandbox's Chromium composites in **software** — a scroll measures
+exactly 17ms/frame with 25 blur layers and with none — so no timing claim was
+made from it. Layer counts and pixel diffs are real and were used; frame times
+were measured, found vacuous, and discarded.

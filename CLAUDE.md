@@ -358,6 +358,56 @@ we never have to rewrite to grow (see "Growth bets" below).
     find what is REALLY behind each piece of text (a single `getComputedStyle`
     cannot, which is how glass hides this), over 51 screens x 3 roles x 2 themes
     **plus the logged-out screen**, failing under 2.2:1.
+  - **A PALETTE HAS STATES, AND A LITERAL COLOUR IS AS UN-THEMEABLE AS AN
+    INLINE ONE (Session 23, round 3).** `tr:hover td{background:#FAFBFC}` in
+    `styles.css` set the hover tint on the **CELL**, and a cell paints OVER its
+    row — so the themed `tr:hover` and the `tr.is-open` tint were both correct
+    and both invisible, and an opened Leads row read white-on-white at
+    **1.05:1** in dark. The theme layer now re-declares every hard-coded light
+    ground whose text comes from a token. Two deliberate exceptions:
+    `.mb-body` stays `#fff` (that is an EMAIL's own page, written expecting
+    white) and the tinted chips `.pill.*`/`.st-*`/`.av-*` stay (each pairs its
+    own dark text with its own pale ground, so both are legible in both
+    themes). **`theme-contrast-smoke.mjs` now HOVERS a row and OPENS one** —
+    51 screens at rest never saw this colour once, because a colour that only
+    exists under the pointer is invisible to a screenshot of a page at rest.
+    Same class: `--glass-brd` is a white highlight at 72% alpha, right on a
+    glass pane over the glow and **nothing at all on a white card** — the
+    email-status dropdown rendered in light as the bare word "Valid". A
+    control's edge is its own token (`--ctl-brd`), not `--border` (the hairline
+    BETWEEN things) and not the pane highlight.
+  - **A MODAL PANEL IS ONLY A PANEL — `.overlay` IS WHAT PUTS IT OVER THE PAGE
+    (Session 23).** `renderModal()` wrapped every modal in `.overlay`
+    (position:fixed, inset:0, z-index:100) **except three it special-cased** —
+    `jobDetail`, `addJob`, `addContact` — which were returned raw and therefore
+    landed in normal flow BELOW the whole page. "Open full record" set the
+    right state, put the right 6.7KB of html into `#layer`, threw nothing, and
+    was simply off-screen; nothing in the app said so, and only geometry told
+    the truth. Everything entering `#layer` now goes through one
+    `overlayWrap()`, and the test asserts **geometry, not state** — does the
+    child of `#layer` cover the viewport — because state was never wrong.
+  - **GLASS BELONGS TO SURFACES THAT FLOAT OVER CONTENT, NOT TO CONTROLS
+    (Session 23).** `backdrop-filter` had been copied onto every input, select,
+    textarea, outline button and chip: **25 compositing layers on one phone
+    screen**, each re-blurred whenever anything behind it moves. A button on a
+    card has nothing behind it worth seeing, and the pixels agree — removing it
+    changes Leads and Admin by at most **3/255** per channel and Email by at
+    most 25/255 on 3% of pixels. `test/ui-smoothness-smoke.mjs` caps it at
+    **12 layers per screen**, measured on a POPULATED list (an empty screen has
+    no controls to count).
+  - **NEVER WRITE `transition: all`.** Nine rules did. `all` includes width,
+    height and padding, so a button whose label changes ("Send" → "Sending…")
+    animates its own size and nudges its neighbours — the "early animations"
+    the owner reported, and a side effect of naming no properties rather than
+    anything anyone chose. Every rule now lists the paint-only properties it
+    wants, and a stylesheet grep fails the build on a new one.
+  - **⚠ THIS SANDBOX CANNOT MEASURE SMOOTHNESS — headless Chromium composites
+    in SOFTWARE.** A scroll over 25 blur layers and a scroll over none both
+    report exactly **17ms per frame**. A timing assertion here passes whatever
+    happens, and would be the most convincing vacuous guard of all because it
+    prints a real-looking number. Judge rendering cost by what IS countable
+    here — layer counts, node counts, pixel diffs — and say plainly that how it
+    FEELS on a real phone is the owner's call, not a number from this box.
   - **A SUITE ONLY COVERS THE SCREENS IT RENDERS (Session 23).** The contrast
     suite set `STATE.page` only, so every multi-tab page drew its DEFAULT tab
     and Email's **Sent** and **Outreach Plan** were never rendered once; and it

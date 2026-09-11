@@ -33,6 +33,7 @@
   --card:rgba(255,255,255,.62);
   --card-solid:#FFFFFF;
   --glass-brd:rgba(255,255,255,.72);
+  --ctl-brd:rgba(0,0,0,.16);
   --border:rgba(0,0,0,.07);
   --border2:rgba(0,0,0,.13);
 
@@ -90,6 +91,7 @@
     --card:rgba(255,255,255,.055);
     --card-solid:#1B1B2E;
     --glass-brd:rgba(255,255,255,.10);
+    --ctl-brd:rgba(255,255,255,.16);
     --border:rgba(255,255,255,.09);
     --border2:rgba(255,255,255,.16);
     --text:#F5F5F7;
@@ -120,6 +122,7 @@
   --card:rgba(255,255,255,.055);
   --card-solid:#1B1B2E;
   --glass-brd:rgba(255,255,255,.10);
+  --ctl-brd:rgba(255,255,255,.16);
   --border:rgba(255,255,255,.09);
   --border2:rgba(255,255,255,.16);
   --text:#F5F5F7;
@@ -208,7 +211,7 @@ body::before{
 .card{transition:background .18s ease,border-color .18s ease,transform .18s ease}
 
 /* ══ CONTROLS ════════════════════════════════════════════════════════════ */
-.btn{border-radius:var(--r2);font-weight:600;letter-spacing:-.01em;transition:all .16s ease}
+.btn{border-radius:var(--r2);font-weight:600;letter-spacing:-.01em;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease}
 .btn-primary{
   background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 4px 16px rgba(0,113,227,.26);
@@ -216,7 +219,6 @@ body::before{
 .btn-primary:hover{background:var(--accent-d);border-color:var(--accent-d)}
 .btn-outline{
   background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text2);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
 }
 .btn-outline:hover{border-color:var(--accent);color:var(--accent)}
 
@@ -226,7 +228,6 @@ input[type=number],input[type=password],textarea,select{
   border:1px solid var(--glass-brd);
   border-radius:var(--r2);
   color:var(--text);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   transition:border-color .16s ease,box-shadow .16s ease;
 }
 .inp:focus,.sel:focus,input:focus,textarea:focus,select:focus{
@@ -272,7 +273,6 @@ table td,table th{border-color:var(--border)!important}
 .hz-bar{background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2)}
 .hz-btn,.hz-count,.hz-pg,.na-act,.am-src{
   background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2);
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
 }
 .lp-wrap{background:var(--accent-l);border:1px solid var(--glass-brd);border-radius:var(--r3)}
 .lp-chip,.am-list{background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2)}
@@ -319,9 +319,15 @@ table td,table th{border-color:var(--border)!important}
   body::before{background:radial-gradient(680px circle at 50% 58%,var(--glow1),transparent 62%)}
 }
 
-/* Someone who asks for less motion gets less motion. */
+/* Someone who asks for less motion gets less motion. They asked their phone
+   once, for every app; answering it is not a preference we get a vote on.
+   `animation-iteration-count` and `scroll-behavior` belong here too: a
+   shortened duration does not stop a loop, and smooth scrolling is motion. */
 @media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}
+  *,*::before,*::after{
+    transition-duration:.01ms!important;animation-duration:.01ms!important;
+    animation-iteration-count:1!important;scroll-behavior:auto!important;
+  }
 }
 
 /* ══ THE GREETING BANNER ═════════════════════════════════════════════════
@@ -443,7 +449,6 @@ table.dt tbody tr:hover{background:var(--bg3)}
   font-size:12px;padding:7px 13px;border-radius:999px;
   border:1px solid var(--glass-brd);background:var(--bg3);color:var(--text);
   cursor:pointer;white-space:nowrap;font-weight:500;min-height:34px;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   transition:border-color .15s ease,background .15s ease,color .15s ease;
 }
 .var-chip:hover{border-color:var(--accent);background:var(--accent-l);color:var(--accent)}
@@ -489,7 +494,6 @@ table.dt tbody tr:hover{background:var(--bg3)}
 .google-btn{
   background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text);
   border-radius:var(--r2);min-height:44px;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
 }
 .google-btn:hover{background:var(--accent-l);border-color:var(--accent);color:var(--accent)}
 .or-div{color:var(--text3)}
@@ -504,7 +508,7 @@ table.dt tbody tr:hover{background:var(--bg3)}
   padding:8px 16px;border-radius:var(--r2);font-size:12px;font-weight:600;
   cursor:pointer;min-height:36px;
   border:1.5px solid var(--glass-brd);background:var(--bg3);color:var(--text2);
-  transition:all .15s ease;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease;
 }
 .seg-btn:hover{border-color:var(--accent);color:var(--accent)}
 .seg-btn.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -513,7 +517,7 @@ table.dt tbody tr:hover{background:var(--bg3)}
   flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
   padding:12px 8px;border:0;cursor:pointer;font-family:inherit;
   font-size:13.5px;font-weight:600;border-radius:var(--r2);min-height:46px;
-  background:transparent;color:var(--text2);transition:all .15s ease;
+  background:transparent;color:var(--text2);transition:background-color .15s ease,color .15s ease;
 }
 .login-tab:hover{color:var(--text)}
 .login-tab.is-on{background:var(--accent);color:#fff}
@@ -634,4 +638,87 @@ tr.lead-exp > td{padding:0;background:var(--bg3);border-top:0}
   .lx-contact{gap:10px}
   .lx-es{width:100%;justify-content:space-between}
   .lx-sel{flex:1;max-width:60%}
+}
+
+/* ══ HARD-CODED LIGHT GROUNDS ════════════════════════════════════════════
+   A hex written into styles.css or ui.css is not a token, so re-skinning the
+   palette leaves it exactly as it was — a pale panel carrying text that is now
+   near-white. This is the stylesheet twin of the inline-colour rule: an inline
+   colour cannot be re-themed, and neither can a literal one.
+
+   The one the owner found: `tr:hover td{background:#FAFBFC}` (styles.css).
+   The hover tint was set on the CELL, and a cell paints OVER its row — so the
+   themed `tr:hover` and the `tr.is-open` tint were both correct and both
+   invisible, and every detail in the row read as white-on-white. It survived
+   the contrast suite because that suite renders a screen at rest: it never
+   hovers, never opens a row, and therefore never once saw this colour.
+   A palette has states; a screenshot of one state is not the palette.
+
+   `.mb-body` stays #fff deliberately — that is an EMAIL's own page, and a
+   sender's HTML is written expecting white. Tinted chips (.pill.*, .st-*,
+   .av-*) also stay: each pairs its own dark text with its own pale ground, so
+   they are internally consistent and legible in both themes. */
+tr:hover td{background:transparent}
+table tbody tr:hover td{background:transparent}
+tr.is-open td,tr.dt-open td,tr.sel-row td{background:var(--accent-l)}
+.sel option,select option{background:var(--bg2);color:var(--text)}
+.notice{background:var(--accent-l);border:1px solid var(--glass-brd)}
+.seq-card-h,.cmp-foot{background:var(--bg3)}
+
+/* ══ SMOOTHNESS ══════════════════════════════════════════════════════════
+   The owner: "theres small glitche in the UI and the screens, like a lag or
+   sometimes early animations and all. Its not smooth."
+
+   Three things were measured, and one of them could NOT be:
+
+   1. BLUR WAS ON EVERY CONTROL, NOT JUST THE CHROME. `backdrop-filter` was
+      written onto .btn-outline, every input/select/textarea, the horizon
+      buttons, the merge chips and the Google button — 25 separate blur layers
+      on one phone screen, each one a compositing layer the browser re-blurs
+      whenever anything behind it moves. Glass belongs to surfaces that FLOAT
+      OVER content — the rail, the top bar, cards, drawers, scrims, the login
+      card. A button sitting on a card has nothing behind it worth seeing, and
+      the pixels agree: removing it changes Leads and Admin by at most 3/255
+      per channel (invisible) and the Email page by at most 25/255 on 3% of
+      pixels — a slight softening of large fields lying over the ambient glow.
+      25 compositing layers is a bad price for that.
+      HONEST LIMIT: this sandbox's Chromium composites in SOFTWARE, so a scroll
+      measures exactly 17ms/frame with the blur on and with it off. That number
+      proves nothing and was not used. What is cited above is a LAYER COUNT and
+      a PIXEL DIFF — both real, both measurable here. Whether the phone feels
+      smoother is the owner's call, not a number I can produce in this box.
+
+   2. `transition: all` ANIMATES LAYOUT, AND THAT IS THE "EARLY ANIMATION".
+      Nine rules used it. `all` includes width, height, padding and font-size,
+      so a button whose label changes ("Send" → "Sending…") animates its own
+      width, and a control that gains a border on hover nudges its neighbours
+      for the duration. Nothing asked for that; it is a side effect of naming
+      no properties. Every one now lists the paint-only properties it actually
+      wants. Never write `transition:all` in this codebase.
+
+   3. NOTHING REPLAYS ON A REPAINT. Measured: an idle render() and a
+      data-changed render() both leave zero animations running, on every page,
+      in 0-1ms. The Session 16 region engine holds. So the complaint was not
+      entry animations restarting, and no time was spent there.
+
+   (Reduced motion was already honoured, from the first theme commit — the
+   block above just grew the two declarations it was missing.) */
+
+/* ══ A CONTROL MUST LOOK LIKE A CONTROL ══════════════════════════════════
+   `--glass-brd` is a white highlight at 72% alpha. On a glass surface lying
+   over the ambient glow that reads as the lit edge of a pane — which is the
+   whole point — but a form control sits on a WHITE CARD, where a white edge is
+   nothing at all. In light mode the email-status dropdown inside an opened
+   Leads row rendered as the bare word "Valid": no box, no arrow well, no
+   affordance, indistinguishable from a label.
+
+   So a control's border is its own token. It is NOT --border either: --border
+   is the hairline BETWEEN things (table rules, card edges) and is deliberately
+   faint, while a control's edge has to survive on top of a surface and say
+   "you can type here". The glass highlight stays where it belongs, on the
+   panes. */
+.inp,.sel,input[type=text],input[type=email],input[type=date],input[type=search],
+input[type=number],input[type=password],textarea,select,
+.btn-outline,.hz-btn,.hz-count,.hz-pg,.na-act,.am-src,.google-btn,.lx-sel{
+  border-color:var(--ctl-brd);
 }

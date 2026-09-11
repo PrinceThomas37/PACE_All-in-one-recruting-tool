@@ -189,6 +189,40 @@ try{
   step('60 rows with one open costs the same as 12 with one open',
     growth.withOneOpen <= 3, `${growth.withOneOpen} panel nodes`);
 
+  // ── 7. THE PANEL'S EXIT ACTUALLY OPENS SOMETHING ───────────────────────
+  // "that button do not work" — and it didn't, but `openJob` was innocent: it
+  // set STATE.modal and re-rendered correctly every single time. What was
+  // missing was one wrapper. A modal PANEL is only a panel; `.overlay`
+  // (position:fixed, inset:0, z-index:100) is what puts it over the page, and
+  // renderModal() returned three renderers RAW — jobDetail, addJob and
+  // addContact — so all three landed in normal flow BELOW the entire page,
+  // out of sight, with the button reading as dead.
+  //
+  // Nothing in the app said so: STATE was right, #layer had 6.7KB of correct
+  // html in it, no error was thrown. Only geometry told the truth. So this
+  // asserts GEOMETRY, not state: whatever goes into #layer must cover the
+  // viewport's origin.
+  const overlaid = await page.evaluate(()=>{
+    const out = {};
+    for (const t of ['jobDetail','addJob','addContact']) {
+      window.STATE.modal = (t === 'jobDetail') ? { type:t, id:'j0' } : { type:t };
+      window.render();
+      const kid = document.querySelector('#layer > *');
+      if (!kid) { out[t] = { missing:true }; continue; }
+      const cs = getComputedStyle(kid), r = kid.getBoundingClientRect();
+      out[t] = { position: cs.position, top: Math.round(r.top), left: Math.round(r.left),
+                 coversOrigin: r.top <= 0 && r.left <= 0 && r.bottom >= window.innerHeight - 1 };
+    }
+    window.STATE.modal = null; window.render();
+    return out;
+  });
+  for (const t of ['jobDetail','addJob','addContact']) {
+    const o = overlaid[t] || { missing:true };
+    step(`the ${t} modal renders OVER the page, not below it`,
+      !o.missing && o.position === 'fixed' && o.coversOrigin,
+      o.missing ? '#layer was empty' : `position:${o.position} top:${o.top} left:${o.left}`);
+  }
+
   step('nothing threw', pageErrors.length===0, pageErrors.slice(0,2).join(' | '));
 } finally {
   if (browser) await browser.close();
