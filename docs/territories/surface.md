@@ -187,3 +187,41 @@ Verified: 76/76 on Node 22 and Node 26, `verify-frontend.sh`,
 `theme-contrast-smoke` 6/6, `mobile-layout-smoke` 39/39,
 `ageing-layout-smoke` 4/4, `screen-stability-smoke`, `nav-icons-smoke`.
 Screenshots in both themes: dashboard, leads, jobs, email, login, outreach plan.
+
+
+## 2026-09-11 — the Leads row reveals itself (D-0014, first screen)
+
+**The owner's complaint was about DISCOVERABILITY, not a missing feature.** The
+email valid/invalid control existed, worked, and was visible — behind a row
+click, a drawer, and a hunt for a contact card. Nothing on the row said so.
+
+`leadRowToggle(id, ev)` + `leadExpandHtml(j)` in `06-page-leads.js`. Clicking a
+Leads row opens a panel **beneath that row**, showing every contact with its
+email-status select (the same `changeEmailStatus` the drawer calls — one
+implementation, two doors) plus stage/industry/assignment and **Open full
+record**. `UI.table` now emits `data-row-id` when a row carries `id`.
+
+**Three rules this must keep, each protecting something already paid for:**
+1. **Built on demand, one at a time.** The panel is NEVER part of the table's
+   html. A hidden panel per row turns a 400-row list into 400 panels — the
+   growth `ageing-layout-smoke` exists to catch.
+2. **No `render()`.** It inserts and removes one `<tr>`, like `toggleNav()` /
+   `toggleRail()` / `toggleTheme()`.
+3. **`STATE.page` untouched.** Expanding is not navigation, and the drawer is
+   not opened.
+
+**A note on what the test can and cannot prove.** Adding a stray `render()` did
+NOT fail the suite — because the render engine rewrites a region only when its
+html string differs, and the panel is not in that html, so the call writes
+nothing. "No render called" and "render called, wrote nothing" are the same
+thing for the user, and node identity is what actually matters. The test asserts
+node identity (table, scroll container and first row all survive) and that IS
+the property worth holding. It does catch the break that matters: removing the
+close-the-previous-panel line fails it immediately.
+
+**And one assertion was vacuous before it was fixed** — `scrollTop` on a page
+that does not scroll (Leads paginates at 20), reported as "0 → 0" and passing.
+Replaced with node identity, which cannot pass emptily.
+
+Verified: `lead-row-expand-smoke.mjs` 20/20, full suite **77/77**. Screenshots
+in dark and light, desktop and phone.
