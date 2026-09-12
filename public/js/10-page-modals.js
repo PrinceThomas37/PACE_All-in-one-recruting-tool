@@ -494,13 +494,24 @@ function renderToasts(){
     return'<div class="toast" style="border-left:3px solid '+c+'"><div style="width:7px;height:7px;border-radius:50%;background:'+c+';flex-shrink:0"></div>'+htmlEsc(t.msg)+'</div>';
   }).join("")+'</div>';
 }
+// A modal panel is only a panel. What puts it OVER the page is `.overlay`
+// (position:fixed, inset:0, z-index:100) — so a renderer whose html goes into
+// #layer without that wrapper lands in normal flow, BELOW the whole page, and
+// the button that opened it reads as doing nothing. Three renderers were
+// returned raw here (jobDetail, addJob, addContact) and all three were
+// unreachable; `openJob` set STATE and re-rendered correctly every time.
+// Everything that goes into #layer goes through this one function.
+function overlayWrap(inner){
+  if(!inner)return"";                       // a renderer that found no record
+  return'<div class="overlay" onclick="overlayClick(event)">'+inner+'</div>';
+}
 function renderModal(){
-  if(STATE.modal&&STATE.modal.type==="jobDetail")return renderJobDetailModal();
-  if(STATE.modal&&STATE.modal.type==="addJob")return renderAddJobModal();
-  if(STATE.modal&&STATE.modal.type==="addContact")return renderAddContactModal();
+  if(STATE.modal&&STATE.modal.type==="jobDetail")return overlayWrap(renderJobDetailModal());
+  if(STATE.modal&&STATE.modal.type==="addJob")return overlayWrap(renderAddJobModal());
+  if(STATE.modal&&STATE.modal.type==="addContact")return overlayWrap(renderAddContactModal());
   if(STATE.mailMerge&&!STATE.modal)return'<div class="overlay">'+renderMailMergeModal()+'</div>';
   if(!STATE.modal)return"";
-  return'<div class="overlay" onclick="overlayClick(event)">'+STATE.modal+'</div>';
+  return overlayWrap(STATE.modal);
 }
 
 function normalizeIndustry(raw){

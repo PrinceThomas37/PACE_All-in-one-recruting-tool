@@ -401,7 +401,7 @@ table.dt .tight{white-space:nowrap}
 .dwr-acts{display:flex;gap:8px;margin-top:14px}
 .dwr-act{
   width:32px;height:32px;border-radius:99px;background:var(--hover);color:var(--ink2);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .12s;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .12s,border-color .12s,color .12s,box-shadow .12s;
 }
 .dwr-act:hover{background:var(--sel);color:var(--accent)}
 .dwr-stats{display:flex;border-bottom:1px solid var(--line)}

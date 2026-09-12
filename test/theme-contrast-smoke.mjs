@@ -162,6 +162,51 @@ try {
     step(`every screen is readable in ${theme} (${screens} screens)`,
       offenders.length === 0, offenders.slice(0,5).join(' | '));
 
+    // INTERACTIVE STATES. Everything above renders a screen AT REST, so the
+    // hover palette and the open-row palette were never drawn once — and
+    // `tr:hover td{background:#FAFBFC}` (a literal in styles.css, set on the
+    // CELL, which paints over its row) made every detail of a hovered or
+    // opened Leads row white-on-white in dark. The owner found it; six screens
+    // x three roles x two themes did not, because a colour that only exists
+    // under the pointer is invisible to a screenshot of the page at rest.
+    // A palette has states. Drive them.
+    await switchRole(page, 'bd');
+    const rows = await page.evaluate(()=>{
+      const t = new Date().toISOString();
+      window.STATE.companies = [{ id:'co0', name:'Contrast Co' }];
+      window.STATE.contacts  = [{ id:'ct0', job_id:'j0', company_id:'co0', first_name:'Ada',
+        last_name:'Byron', email:'ada@contrast.co', designation:'Head of Ops',
+        is_primary:true, email_status:'valid' }];
+      window.STATE.jobs = [{ id:'j0', position:'Payroll Specialist', pos:'Payroll Specialist',
+        company_id:'co0', company_name:'Contrast Co', company:{ name:'Contrast Co' },
+        location:'Oklahoma City, OK', loc:'Oklahoma City, OK', stage:'Assigned',
+        industry:'Truck Transportation', date:t.slice(0,10), created_at:t,
+        assigned_to_bd:'test-bd', assigned_bd_name:'BD Lead 2', assigned_at:t, contacts:[] }];
+      window.STATE.leads = window.STATE.jobs;
+      window.STATE.page = 'leads';
+      window.render();
+      return document.querySelectorAll('#content tr[data-row-id]').length;
+    });
+    await page.waitForTimeout(150);
+    // A state test with nothing to put in that state passes vacuously. Two
+    // guards died that way this session; this one says so out loud.
+    step(`the state pass has a row to drive in ${theme}`, rows > 0, `${rows} rows`);
+
+    const stateBad = [];
+    if (rows > 0) {
+      await page.hover('#content tr[data-row-id="j0"]');
+      await page.waitForTimeout(120);
+      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *' }))
+        stateBad.push(`hover: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
+      // ...and opened, which is both `.is-open` AND still hovered.
+      await page.click('#content tr[data-row-id="j0"]');
+      await page.waitForTimeout(220);
+      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *, #content .lead-expand *' }))
+        stateBad.push(`open: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
+    }
+    step(`a hovered and an opened row stay readable in ${theme}`,
+      stateBad.length === 0, stateBad.slice(0,5).join(' | '));
+
     // THE LOGGED-OUT SCREEN. enterApp() signs in, so this suite never rendered
     // the login page once — and it shipped with invisible SSO buttons and
     // invisible field labels. It is the FIRST thing anyone sees.
