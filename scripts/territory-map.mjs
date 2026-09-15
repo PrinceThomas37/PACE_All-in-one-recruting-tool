@@ -89,7 +89,12 @@ const TERRITORIES = [
   { id: 'ledger', name: 'The Ledger', role: 'Commerce & Consent', terrain: 'the counting house',
     hue: '#C9B458', pos: [-15, 30], height: 4, spread: 12,
     own: ['services/plans.js', 'services/entitlements.js', 'services/billing.js',
-          'routes/plans.js', 'routes/tracking.js', 'routes/reminders.js'],
+          'routes/plans.js', 'routes/tracking.js', 'routes/reminders.js',
+          // Sits with the route it serves: the sentence explaining why a
+          // reminder exists is read only by routes/reminders.js (the frontend
+          // mirror in 10-page-modals.js is surface's copy, as with the
+          // view-horizon pair).
+          'services/reminder-source.js'],
     not: [] },
 ];
 

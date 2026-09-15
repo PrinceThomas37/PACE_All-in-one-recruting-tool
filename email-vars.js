@@ -261,9 +261,110 @@ function normalizeSenderTitle(text) {
     .replace(/BD Manager \|/gi, `${SENDER_JOB_TITLE} |`);
 }
 
+// ── ONE TEMPLATE VOCABULARY ──────────────────────────────────────────────────
+// PACE grew two merge-variable vocabularies that fill from two different
+// builders: the sales side (`buildEmailVars` here — fn/pos/company/loc) and the
+// recruiting side (`buildCandidateVars` in routes/recruiting/outreach.js —
+// first_name/position/client). Both are filled by THIS function, and until now
+// a name from the wrong list was left on the page exactly as typed.
+//
+// That is not theoretical. The default sequence seeded by migration 007 carries
+// "Hi {{first_name}}, I emailed you about the {{position}} role at {{company}}"
+// on its BD-touch step, which runs through the SALES builder — so every task it
+// has ever created read "Hi {{first_name}}, I emailed you about the
+// {{position}} role at KB Home", with only the one name both lists share filled
+// in. The sequence builder's own hint text tells people to write
+// `{{first_name}} {{position}} {{client}}`, so the UI was actively teaching the
+// vocabulary that does not work here.
+//
+// Each row below is one fact under several names. A DIRECT hit always wins, so
+// a builder that defines both `company` and `client` as different things (the
+// recruiting one does) is unaffected — an alias is consulted only when the name
+// the template used is absent entirely.
+const VAR_SYNONYMS = [
+  ['fn', 'first_name', 'firstname'],
+  ['ln', 'last_name', 'lastname', 'surname'],
+  ['pos', 'position', 'job_title', 'jobtitle', 'role'],
+  ['company', 'client', 'company_name', 'companyname'],
+  ['loc', 'location', 'city_state'],
+  ['desig', 'designation', 'title'],
+  ['ind', 'industry'],
+  ['sender', 'sender_name', 'sendername', 'from_name'],
+  ['senderemail', 'sender_email', 'senderemailaddress', 'from_email']
+];
+
+// name → [every name for the same fact, canonical first]
+const VAR_GROUP = (() => {
+  const map = {};
+  VAR_SYNONYMS.forEach(group => group.forEach(name => { map[name] = group; }));
+  return map;
+})();
+
+// Tokens that are SUPPOSED to survive queueing — the sender identity is
+// resolved at send time, from the mailbox that actually sends (see
+// DEFER_SENDER below). Everything else still in braces is a hole.
+const SEND_TIME_VARS = new Set(['sender', 'senderemail']);
+
+/**
+ * Resolve one `{{token}}` against a variable map, trying the token itself and
+ * then every synonym of it.
+ *
+ * Returns `{ value }` when it resolved, `{ defer: canonicalName }` when the
+ * fact exists but is deliberately null — that is the DEFER_SENDER convention,
+ * and the canonical name matters: the send path fills `{{sender}}`, not
+ * `{{sender_name}}`, so an aliased deferred token is rewritten to the name the
+ * send path knows. Returns null when nothing matched.
+ */
+function resolveVar(vars, key) {
+  const names = VAR_GROUP[key] || [key];
+  // THE KEY THE TEMPLATE ACTUALLY USED IS TRIED FIRST, ALWAYS. Iterating the
+  // group in its own order instead made `{{client}}` resolve to `company`
+  // whenever both were defined — and on the recruiting side they are two
+  // different facts (the end client vs. the company on the record), so a
+  // template asking for one would have printed the other. An alias may only
+  // ever fill a name the variable map does not define.
+  const tried = [key, ...names.filter(n => n !== key)];
+  for (const name of tried) {
+    if (vars[name] === undefined) continue;
+    if (vars[name] === null) return { defer: names[0] };
+    return { value: vars[name] };
+  }
+  // Nothing defined it. If the fact is one the SEND path fills — the sender
+  // identity — the token still has a future, so normalise it to the name that
+  // path looks for. `{{sender_email}}` left as typed is a token nothing in PACE
+  // fills, i.e. one that ships raw.
+  if (SEND_TIME_VARS.has(names[0])) return { defer: names[0] };
+  return null;
+}
+
 function fillTemplate(tmpl, vars) {
-  const filled = (tmpl || '').replace(/{{(\w+)}}/g, (m, k) => (vars[k] !== undefined && vars[k] !== null ? vars[k] : m));
+  const map = vars || {};
+  const filled = String(tmpl == null ? '' : tmpl).replace(/{{(\w+)}}/g, (m, k) => {
+    const hit = resolveVar(map, k);
+    if (!hit) return m;                      // unknown variable — left visible, never silently blanked
+    if (hit.defer) return `{{${hit.defer}}}`; // send-time token, normalised to the name the send path fills
+    return hit.value;
+  });
   return normalizeSenderTitle(filled);
+}
+
+/**
+ * Which `{{tokens}}` are still unfilled in a piece of text, ignoring the two
+ * that are filled at send time.
+ *
+ * This is the check behind the reminder send path. A prompt rule is a request;
+ * a check is a guarantee — the same reasoning as checkDraft in the outreach
+ * generator. An email that went out reading "Hi {{fn}}, ... the {{pos}} opening
+ * at {{company}}" is not a formatting slip, it is a recruiter's name on a
+ * broken message in a prospect's inbox, and nothing in the app noticed.
+ */
+function unresolvedVars(text) {
+  const found = [];
+  String(text == null ? '' : text).replace(/{{(\w+)}}/g, (m, k) => {
+    if (!SEND_TIME_VARS.has(k) && !found.includes(k)) found.push(k);
+    return m;
+  });
+  return found;
 }
 
 /**
@@ -413,6 +514,9 @@ function renderStoredEmail(row, mailbox) {
 
 module.exports = {
   DEFAULT_TEMPLATES,
+  VAR_SYNONYMS,
+  unresolvedVars,
+  SEND_TIME_VARS,
   OUTREACH_VARIANTS,
   OUTREACH_O1_VARIANTS,
   getVariantById,

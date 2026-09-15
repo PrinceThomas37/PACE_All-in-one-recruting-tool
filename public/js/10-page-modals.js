@@ -1,4 +1,40 @@
 // ── REMINDERS ─────────────────────────────────
+//
+// WHY A REMINDER CARD SAYS WHERE IT CAME FROM (Session 24)
+// The owner opened this page on five tasks and asked what they were based on.
+// They were all step 3 of the "Standard Sales Outreach" sequence — the call +
+// LinkedIn touch that runs a day after follow-up 1 — and the screen said none
+// of it: same amber card, same note, no origin, no role, no date context. A row
+// that asks somebody to do something must say who asked, or it reads as the app
+// inventing work. `source` and `compose` come back from GET /reminders for
+// exactly this; see services/reminder-source.js.
+//
+// And "due today" is now only said about today. All five of those were dated
+// two days earlier — the list is deliberately `return_date <= today` so nothing
+// silently disappears on the day you miss it, but announcing an old task as
+// "due today" is a claim the user can see is false.
+function reminderDue(r){
+  var today=todayIST();
+  var d=String(r.return_date||'').slice(0,10);
+  if(!d)return{state:'unknown',days:0,label:'Due'};
+  if(d===today)return{state:'due_today',days:0,label:'Due today'};
+  function n(x){return Date.UTC(+x.slice(0,4),+x.slice(5,7)-1,+x.slice(8,10));}
+  var days=Math.round((n(today)-n(d))/86400000);
+  if(days>0)return{state:'overdue',days:days,label:days===1?'Overdue by 1 day':'Overdue by '+days+' days'};
+  days=-days;
+  return{state:'upcoming',days:days,label:days===1?'Due tomorrow':'Due in '+days+' days'};
+}
+function reminderWhy(r){
+  // The server explains it (it can see the sequence); this is the fallback for
+  // a row rendered before that response lands, and it never invents a source.
+  if(r.source&&r.source.why)return r.source;
+  var t=r.reminder_type||'manual';
+  if(t==='ooo_return')return{label:'Back from leave',why:'Their auto-reply said they were away until this date.'};
+  if(t==='bd_touch'||t==='reminder')return{label:'Sequence step',why:'An outreach sequence reached a step that asks you to do something.'};
+  if(t==='recruiter_task')return{label:'Sequence task',why:'A candidate sequence reached a recruiter task.'};
+  if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};
+  return{label:'Added by you',why:'You added this reminder yourself.'};
+}
 function renderReminders(){
   var u=STATE.user;
   var today=todayIST();
@@ -11,23 +47,34 @@ function renderReminders(){
   function daysUntil(d){return Math.ceil((new Date(d)-new Date(today))/86400000);}
 
   var dueCards=due.map(function(r){
-    var contactId=(r.contact&&r.contact.id)||null;
-    var isOOO=r.reminder_type==='ooo_return';
-    return '<div style="border:2px solid var(--amber);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px;background:var(--amber-l)">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-        '<div style="display:flex;align-items:center;gap:8px">'+
-          '<div style="width:8px;height:8px;border-radius:50%;background:var(--amber)"></div>'+
+    var cmp=r.compose||{};
+    var contactId=cmp.contact_id||(r.contact&&r.contact.id)||r.contact_id||null;
+    var toEmail=cmp.to_email||r.email||'';
+    var why=reminderWhy(r);
+    var d=reminderDue(r);
+    var pill=(d.state==='overdue')?'var(--red)':'var(--amber)';
+    var about=[cmp.position||(r.job&&r.job.position)||'',cmp.company||r.company_name||''].filter(Boolean).join(' · ');
+    return '<div style="border:2px solid '+(d.state==='overdue'?'var(--red)':'var(--amber)')+';border-radius:var(--r2);padding:14px 16px;margin-bottom:10px;background:var(--amber-l)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:10px;flex-wrap:wrap">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<div style="width:8px;height:8px;border-radius:50%;background:'+pill+'"></div>'+
           '<div style="font-weight:600;font-size:14px">'+htmlEsc(r.contact_name||'Reminder')+'</div>'+
-          '<span style="font-size:11px;padding:2px 7px;background:var(--amber);color:#fff;border-radius:10px">'+(isOOO?'OOO Return':'Due today')+'</span>'+
+          '<span style="font-size:11px;padding:2px 7px;background:'+pill+';color:#fff;border-radius:10px">'+htmlEsc(d.label)+'</span>'+
+          '<span style="font-size:11px;padding:2px 7px;background:rgba(0,0,0,.06);color:var(--text2);border-radius:10px">'+htmlEsc(why.label)+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:8px">'+
-          (contactId?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="composeReminderEmail(\''+r.id+'\',\''+contactId+'\')">'+ico('send',13)+' Compose email</button>':'')+
+          (toEmail?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+
       '</div>'+
-      '<div style="font-size:12px;color:var(--text2)">'+htmlEsc(r.company_name||'')+(r.email?' · '+htmlEsc(r.email):'')+'</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-top:3px">Return date: '+htmlEsc(r.return_date||'')+' · '+htmlEsc(r.reminder_time||'09:00')+' IST</div>'+
-      (r.note?'<div style="font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.04);border-radius:var(--r)">'+htmlEsc(r.note)+'</div>':'')+
+      // What it is about — the role and the client, not just a person's name.
+      (about?'<div style="font-size:12px;color:var(--text2);font-weight:600">'+htmlEsc(about)+'</div>':'')+
+      '<div style="font-size:12px;color:var(--text2)">'+(toEmail?htmlEsc(toEmail):'<span style="color:var(--red)">No email on record</span>')+'</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-top:3px">Scheduled for '+htmlEsc(r.return_date||'')+' · '+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+' IST</div>'+
+      // The "why" line. This is the whole point of the card.
+      '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;display:flex;gap:6px;align-items:flex-start">'+
+        '<span style="flex-shrink:0">'+ico('info',12)+'</span><span>'+htmlEsc(why.why)+'</span></div>'+
+      (r.note?'<div style="font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.04);border-radius:var(--r);white-space:pre-wrap">'+htmlEsc(r.note)+'</div>':'')+
     '</div>';
   }).join('');
 
@@ -38,10 +85,10 @@ function renderReminders(){
       '<td><div style="font-weight:500;font-size:13px">'+htmlEsc(r.contact_name||'—')+'</div>'+
         '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(r.company_name||'')+'</div></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.email||'—')+'</td>'+
-      '<td>'+(isOOO?'<span style="font-size:11px;padding:2px 7px;background:var(--amber-l);color:var(--amber);border-radius:8px;font-weight:600">OOO Return</span>':'<span style="font-size:11px;padding:2px 7px;background:var(--accent-l);color:var(--accent);border-radius:8px">Follow-up</span>')+'</td>'+
+      '<td><span title="'+escAttr(reminderWhy(r).why)+'" style="font-size:11px;padding:2px 7px;background:'+(isOOO?'var(--amber-l)':'var(--accent-l)')+';color:'+(isOOO?'var(--amber)':'var(--accent)')+';border-radius:8px;font-weight:600">'+htmlEsc(reminderWhy(r).label)+'</span></td>'+
       '<td><span style="font-size:11.5px;padding:2px 8px;background:'+(days<=3?'var(--red-l)':'var(--accent-l)')+';color:'+(days<=3?'var(--red)':'var(--accent)')+';border-radius:10px">'+days+' day'+(days!==1?'s':'')+'</span></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.return_date||'')+'</td>'+
-      '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.reminder_time||'09:00')+'</td>'+
+      '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+'</td>'+
       '<td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.note||'')+'</td>'+
       '<td><button class="btn btn-outline btn-xs" onclick="dismissReminder(\''+r.id+'\')">Remove</button></td>'+
     '</tr>';
@@ -66,12 +113,19 @@ function renderReminders(){
       '</div>'+
     '</div>'+
 
-    (due.length?
-      '<div style="background:var(--amber-l);border:1.5px solid var(--amber);border-radius:var(--r2);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">'+
+    (due.length?(function(){
+      // Count the two states separately. "5 reminders due today" over five
+      // two-day-old rows is the sentence that made this page look broken.
+      var states=due.map(reminderDue);
+      var nToday=states.filter(function(x){return x.state==='due_today';}).length;
+      var nOver=states.filter(function(x){return x.state==='overdue';}).length;
+      var bits=[];if(nToday)bits.push(nToday+' due today');if(nOver)bits.push(nOver+' overdue');
+      return '<div style="background:var(--amber-l);border:1.5px solid var(--amber);border-radius:var(--r2);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">'+
         '<div style="font-size:20px">\u23f0</div>'+
-        '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+due.length+' reminder'+(due.length>1?'s':'')+' due today</div>'+
-          '<div style="font-size:12px;color:var(--text3)">These contacts are expected back — send your follow-up now.</div></div>'+
-      '</div>'
+        '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+due.length+' reminder'+(due.length>1?'s':'')+' waiting'+(bits.length?' — '+htmlEsc(bits.join(', ')):'')+'</div>'+
+          '<div style="font-size:12px;color:var(--text3)">Each card below says what created it. Dismiss the ones you have already handled.</div></div>'+
+      '</div>';
+    })()
     :'')+
     dueCards+
 

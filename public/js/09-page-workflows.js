@@ -273,9 +273,14 @@ function refreshWfBuilder(){
     } else if(s.channel==='recruiter_task'){
       cfg='<input class="seq-in" style="flex:1 1 100%" placeholder="Task note (e.g. Call the candidate, collect docs)" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)">';
     } else {
+      // "variables ok" named none of them, and the seeded default for this very
+      // step was written in variables this side did not fill — so every task it
+      // created read "Hi {{first_name}}, ... the {{position}} role at KB Home".
+      // Both vocabularies fill now (email-vars.js VAR_SYNONYMS); the hint says
+      // which names exist so nobody has to guess a third time.
       cfg='<div class="seq-line">'+
         '<input class="seq-in" placeholder="Task note" value="'+htmlEsc(s.config&&s.config.note||'')+'" oninput="wfStepCfg('+i+',\'note\',this.value)">'+
-        '<input class="seq-in" placeholder="Suggested message (variables ok)" value="'+htmlEsc(s.config&&s.config.message||'')+'" oninput="wfStepCfg('+i+',\'message\',this.value)">'+
+        '<input class="seq-in" placeholder="Suggested message (vars: {{first_name}} {{position}} {{company}} {{location}})" value="'+htmlEsc(s.config&&s.config.message||'')+'" oninput="wfStepCfg('+i+',\'message\',this.value)">'+
       '</div>';
     }
 

@@ -612,13 +612,21 @@ function renderEmail(){
   // exactly that class of mistake rather than catch it.
   var composeHtml='';
   if(STATE.emailTab==='compose'){
-    var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail);
+    var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail||STATE.composeReminderTo);
 
     var composeEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
     var composeFromId=STATE.composeFromEmailId||(composeEmails.find(function(e){return e.is_primary;})||composeEmails[0]||{}).id;
     if(composeFromId&&!STATE.composeFromEmailId)STATE.composeFromEmailId=composeFromId;
 
-    // Who is this going to? Either a contact on a lead, or a typed address.
+    // Who is this going to? Either a contact on a lead, a typed address, or —
+    // when composing from a reminder — the address the reminder itself carries.
+    //
+    // That last branch is not a nicety. This block used to resolve the
+    // recipient ONLY out of STATE.contacts, which holds contacts from the jobs
+    // this user's GET /jobs returned. A reminder whose lead is not in that set
+    // left toEmail empty, so the To box and the preview both said "pick a
+    // recipient" while Send stayed enabled and sent anyway. A screen that
+    // cannot name the recipient must not be the screen that sends to them.
     var toName='', toEmail='', toCompany='', toJob=null, toContact=null;
     if(STATE.composeContactId){
       var parts=STATE.composeContactId.split('|');
@@ -631,6 +639,11 @@ function renderEmail(){
       }
     } else if(STATE.manualEmail){
       toEmail=STATE.manualEmail;
+    }
+    if(!toEmail&&STATE.composeReminderTo){
+      toName=STATE.composeReminderTo.name||toName;
+      toEmail=STATE.composeReminderTo.email||'';
+      toCompany=STATE.composeReminderTo.company||toCompany;
     }
 
     // Recipient badge (kept — it is how you confirm you picked the right person)
@@ -646,6 +659,14 @@ function renderEmail(){
       recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--green-l);border-radius:var(--r);margin-top:8px">'+
         '<div style="flex:1;font-size:13px"><strong>'+htmlEsc(STATE.manualEmail)+'</strong><div style="font-size:11px;color:var(--text3)">Manual entry</div></div>'+
         '<button class="btn-icon" onclick="STATE.manualEmail=null;STATE.genEmail=null;render()">'+ico('x',13)+'</button>'+
+      '</div>';
+    } else if(STATE.composeReminderTo&&STATE.composeReminderTo.email){
+      var rt=STATE.composeReminderTo;
+      recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:8px">'+
+        '<div style="flex:1;font-size:13px"><strong>'+escHtml(rt.name||rt.email)+'</strong>'+(rt.desig?' · '+escHtml(rt.desig):'')+
+          '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">'+escHtml(rt.email)+'</div>'+
+          '<div style="font-size:11px;color:var(--text3)">'+(rt.company?escHtml(rt.company)+' · ':'')+'From the reminder</div>'+
+        '</div>'+
       '</div>';
     }
 

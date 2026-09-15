@@ -142,6 +142,22 @@ reuses these provider calls.
 `POST /submissions/:id/interview-invite`, from the stage modal. Includes Teams
 meeting creation.
 
+### Reminding a user to do something on a date
+**Status:** LIVE · owner `surface` (page) + `ledger` (`routes/reminders.js`,
+`services/reminder-source.js`)
+The Reminders page, and the bell badge. **Four things write a reminder and they
+must all set `reminder_type`:** `wfReminderExecutor` in index.js (a sequence's
+`bd_touch`/`reminder` step), `routes/recruiting/outreach.js` (`recruiter_task`),
+`routes/contacts.js` (`ooo_return`, from an out-of-office auto-reply) and the
+page itself (`manual`/`meeting`). That column is the ONLY record of where a
+reminder came from, so a new writer that leaves it null produces a task nobody
+can explain — `services/reminder-source.js` turns it into the sentence on the
+card, and a type it does not know says so rather than claiming the user added
+it. `GET /reminders` also returns `compose` (address, role, company, read from
+the reminder's own contact + job rows) — **do not resolve a reminder's
+recipient out of `STATE.contacts`**, which only holds the leads this user's
+`GET /jobs` returned.
+
 ### Telling a user what to do next
 **Status:** LIVE · owner `observatory`
 `GET /next-actions`, on all three dashboards. **Opted-out threads never produce

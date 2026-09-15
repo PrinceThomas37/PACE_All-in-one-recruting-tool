@@ -131,6 +131,9 @@ var STATE = {
   composeBody: '',
   composeContext: null,
   composeReminderId: null,
+  // The recipient a reminder names, when the lead is not in STATE.contacts.
+  // {email,name,company,desig,pos,loc,ind} — see composeReminderEmail().
+  composeReminderTo: null,
   showAIPanel: false,
   signatureHtml: '',
   sigEmailId: null,
