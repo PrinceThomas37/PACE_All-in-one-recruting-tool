@@ -44,14 +44,14 @@ function reminderOutreachLine(r){
   var bits=[];
   if(o.sent_count)bits.push(o.sent_count+' email'+(o.sent_count===1?'':'s')+' already sent'+(o.last_sent_at?', last on '+o.last_sent_at:''));
   if(o.queued_count)bits.push(o.queued_count+' still in the send queue');
-  return '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;display:flex;gap:6px;align-items:flex-start">'+
-      '<span style="flex-shrink:0">'+ico('email',12)+'</span><span>'+htmlEsc(bits.join(' · '))+'</span></div>'+
+  return '<div class="rem-note-line">'+ico('email',12)+'<span>'+htmlEsc(bits.join(' · '))+'</span></div>'+
     (o.blocked&&o.block_sentence
-      ? '<div style="font-size:11.5px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.05);border-radius:var(--r);color:var(--text2)">'+
-          htmlEsc(o.block_sentence)+' Pick up the phone or wait until tomorrow.</div>'
+      ? '<div class="rem-panel">'+htmlEsc(o.block_sentence)+' Pick up the phone or wait until tomorrow.</div>'
       : '');
 }
 // A call task on a record with no phone and no LinkedIn.
+// Deliberately NOT red: this is a missing detail on a record, not a failure —
+// and it is common enough that colouring it would repaint the whole list.
 function reminderReachLine(r){
   var re=r.reach;
   if(!re)return '';
@@ -59,10 +59,9 @@ function reminderReachLine(r){
     var parts=[];
     if(re.phone)parts.push('📞 '+re.phone);
     if(re.linkedin)parts.push('in '+re.linkedin);
-    return parts.length?'<div style="font-size:12px;margin-top:6px;font-weight:600;color:var(--text2)">'+htmlEsc(parts.join('  ·  '))+'</div>':'';
+    return parts.length?'<div class="rem-reach">'+htmlEsc(parts.join('  ·  '))+'</div>':'';
   }
-  return '<div style="font-size:11.5px;margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:var(--r);color:var(--red)">'+
-    htmlEsc(re.sentence||'No phone number or LinkedIn on record.')+'</div>';
+  return '<div class="rem-panel rem-panel-warn">'+htmlEsc(re.sentence||'No phone number or LinkedIn on record.')+'</div>';
 }
 function renderReminders(){
   var u=STATE.user;
@@ -75,39 +74,50 @@ function renderReminders(){
 
   function daysUntil(d){return Math.ceil((new Date(d)-new Date(today))/86400000);}
 
+  // COLOUR IS A SCARCE RESOURCE ON A LIST (Session 24, owner's note).
+  // The first version gave every overdue card a 2px red border, a solid red
+  // pill and a red-tinted panel — which reads fine as ONE card and turns the
+  // whole screen red at five or six. The owner said so straight away: "too much
+  // red... after 5,6 reminders the screen will look reddish."
+  //
+  // Overdue is the ORDINARY state of a to-do list, not a fault, and red means
+  // something has gone wrong. So the list is calm by default: a neutral card on
+  // the normal surface, with state carried by a 3px left stripe and ONE tinted
+  // chip — roughly a tenth of the coloured ink. Red is not used here at all.
+  // If six rows all shout, none of them does.
   var dueCards=due.map(function(r){
     var cmp=r.compose||{};
     var contactId=cmp.contact_id||(r.contact&&r.contact.id)||r.contact_id||null;
     var toEmail=cmp.to_email||r.email||'';
     var why=reminderWhy(r);
     var d=reminderDue(r);
-    var pill=(d.state==='overdue')?'var(--red)':'var(--amber)';
+    // Amber for overdue, the brand accent for today. Both are normal states.
+    var hue=(d.state==='overdue')?'var(--amber)':'var(--accent)';
+    var hueBg=(d.state==='overdue')?'var(--amber-l)':'var(--accent-l)';
     var about=[cmp.position||(r.job&&r.job.position)||'',cmp.company||r.company_name||''].filter(Boolean).join(' · ');
-    return '<div style="border:2px solid '+(d.state==='overdue'?'var(--red)':'var(--amber)')+';border-radius:var(--r2);padding:14px 16px;margin-bottom:10px;background:var(--amber-l)">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:10px;flex-wrap:wrap">'+
-        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-          '<div style="width:8px;height:8px;border-radius:50%;background:'+pill+'"></div>'+
-          '<div style="font-weight:600;font-size:14px">'+htmlEsc(r.contact_name||'Reminder')+'</div>'+
-          '<span style="font-size:11px;padding:2px 7px;background:'+pill+';color:#fff;border-radius:10px">'+htmlEsc(d.label)+'</span>'+
-          '<span style="font-size:11px;padding:2px 7px;background:rgba(0,0,0,.06);color:var(--text2);border-radius:10px">'+htmlEsc(why.label)+'</span>'+
+    return '<div class="rem-card" style="border-left-color:'+hue+'">'+
+      '<div class="rem-head">'+
+        '<div class="rem-who">'+
+          '<div class="rem-name">'+htmlEsc(r.contact_name||'Reminder')+'</div>'+
+          '<span class="rem-pill" style="background:'+hueBg+';color:'+hue+'">'+htmlEsc(d.label)+'</span>'+
+          '<span class="rem-pill rem-pill-quiet">'+htmlEsc(why.label)+'</span>'+
         '</div>'+
-        '<div style="display:flex;gap:8px">'+
+        '<div class="rem-acts">'+
           // A SEND IS ONLY OFFERED WHEN THE SEND PATH WOULD ACCEPT IT.
           // `compose.can_send` already carries the double-send rule, so the
           // button disappears instead of composing a whole email and then being
           // refused at the last step. The reason is printed below, not hidden.
-          (toEmail&&cmp.can_send!==false?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
+          (toEmail&&cmp.can_send!==false?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+
       '</div>'+
       // What it is about — the role and the client, not just a person's name.
-      (about?'<div style="font-size:12px;color:var(--text2);font-weight:600">'+htmlEsc(about)+'</div>':'')+
-      '<div style="font-size:12px;color:var(--text2)">'+(toEmail?htmlEsc(toEmail):'<span style="color:var(--red)">No email on record</span>')+'</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-top:3px">Scheduled for '+htmlEsc(r.return_date||'')+' · '+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+' IST</div>'+
+      (about?'<div class="rem-about">'+htmlEsc(about)+'</div>':'')+
+      '<div class="rem-meta">'+(toEmail?htmlEsc(toEmail):'No email on record')+'</div>'+
+      '<div class="rem-meta">Scheduled for '+htmlEsc(r.return_date||'')+' · '+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+' IST</div>'+
       // The "why" line. This is the whole point of the card.
-      '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;display:flex;gap:6px;align-items:flex-start">'+
-        '<span style="flex-shrink:0">'+ico('info',12)+'</span><span>'+htmlEsc(why.why)+'</span></div>'+
-      (r.note?'<div style="font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.04);border-radius:var(--r);white-space:pre-wrap">'+htmlEsc(r.note)+'</div>':'')+
+      '<div class="rem-note-line">'+ico('info',12)+'<span>'+htmlEsc(why.why)+'</span></div>'+
+      (r.note?'<div class="rem-panel" style="white-space:pre-wrap">'+htmlEsc(r.note)+'</div>':'')+
       // WHAT THE SEQUENCE HAS ALREADY SENT THIS PERSON.
       // A task saying "call them" makes sense only next to the emails that went
       // unanswered — and when the same sequence has kept emailing since the task
@@ -127,7 +137,10 @@ function renderReminders(){
         '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(r.company_name||'')+'</div></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.email||'—')+'</td>'+
       '<td><span title="'+escAttr(reminderWhy(r).why)+'" style="font-size:11px;padding:2px 7px;background:'+(isOOO?'var(--amber-l)':'var(--accent-l)')+';color:'+(isOOO?'var(--amber)':'var(--accent)')+';border-radius:8px;font-weight:600">'+htmlEsc(reminderWhy(r).label)+'</span></td>'+
-      '<td><span style="font-size:11.5px;padding:2px 8px;background:'+(days<=3?'var(--red-l)':'var(--accent-l)')+';color:'+(days<=3?'var(--red)':'var(--accent)')+';border-radius:10px">'+days+' day'+(days!==1?'s':'')+'</span></td>'+
+      // Amber, not red: a reminder due in three days is "soon", not an
+      // emergency. Same reasoning as the cards above — if the list colours
+      // every near row, the colour stops carrying meaning.
+      '<td><span class="rem-pill" style="background:'+(days<=3?'var(--amber-l)':'var(--bg)')+';color:'+(days<=3?'var(--amber)':'var(--text3)')+'">'+days+' day'+(days!==1?'s':'')+'</span></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.return_date||'')+'</td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+'</td>'+
       '<td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.note||'')+'</td>'+
@@ -161,10 +174,12 @@ function renderReminders(){
       var nToday=states.filter(function(x){return x.state==='due_today';}).length;
       var nOver=states.filter(function(x){return x.state==='overdue';}).length;
       var bits=[];if(nToday)bits.push(nToday+' due today');if(nOver)bits.push(nOver+' overdue');
-      return '<div style="background:var(--amber-l);border:1.5px solid var(--amber);border-radius:var(--r2);padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px">'+
-        '<div style="font-size:20px">\u23f0</div>'+
-        '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+due.length+' reminder'+(due.length>1?'s':'')+' waiting'+(bits.length?' — '+htmlEsc(bits.join(', ')):'')+'</div>'+
-          '<div style="font-size:12px;color:var(--text3)">Each card below says what created it. Dismiss the ones you have already handled.</div></div>'+
+      // A quiet strip, not an alarm panel. It sits above a list of ordinary
+      // work; the old tinted slab with a 1.5px amber border set the tone for
+      // the whole screen before a single card was read.
+      return '<div class="rem-banner">'+
+        '<div class="rem-banner-t">'+due.length+' reminder'+(due.length>1?'s':'')+' waiting'+(bits.length?' — '+htmlEsc(bits.join(', ')):'')+'</div>'+
+        '<div class="rem-banner-s">Each card says what created it. Dismiss the ones you have already handled.</div>'+
       '</div>';
     })()
     :'')+

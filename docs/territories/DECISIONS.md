@@ -47,6 +47,38 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0019 · 2026-09-15 · STANDS · A list is calm; colour is a scarce resource
+**Their words:** *"can correct the colour, too much red. like after 5,6
+reminders the screen will look reddish."*
+
+**What was happening.** The reminder cards marked every overdue row with a 2px
+red border, a solid red pill and a red-tinted panel, on top of an amber-washed
+card ground. One card looked deliberate. Six looked like an alarm — and the
+owner spotted the scaling problem from a screenshot of two.
+
+**The decision, generalised past this one page.** **Overdue is the ordinary
+state of a to-do list, not a fault.** Red means something has gone wrong, so it
+is not used to mark the normal condition of a row. A list is calm by default:
+the card sits on `--card` with a 1px border, and state is carried by a **3px
+left stripe plus one tinted chip** — amber for overdue, the brand accent for
+today. Roughly a tenth of the coloured ink of the first version, and red does
+not appear on the page at all.
+
+**Why this is a decision and not a tweak.** It sets the default for every list
+PACE draws next. The temptation on each new screen is to colour the rows that
+need attention; the owner's point is that when most rows need attention, that
+colours everything and communicates nothing.
+
+**Pinned**, because a future session will reach for red again:
+`test/reminder-clarity-smoke.mjs` fails on any red token in the page, on a
+tinted card ground, and on the state colour being painted in more than three
+places. Verified by reintroducing both.
+
+**Re-open when:** a genuinely exceptional row appears that needs to outrank
+everything else on the page — a failed send, a bounced address, a compliance
+hold. Red is still available for that, which is the whole point of not spending
+it on "this is two days old".
+
 ### D-0018 · 2026-09-15 · STANDS · A task stays open when its sequence moves on
 **Their words:** *"Now i think the reminder was created inspite of follow up
 email being triggered."* Chosen from three options: **"Stays open, but shows
