@@ -2,8 +2,8 @@
   "generated": "2026-09-15",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 282,
-    "lines": 68142,
+    "files": 284,
+    "lines": 69126,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 55,
-      "lines": 22610,
+      "lines": 22817,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -71,7 +71,7 @@
         "engine-runs.js"
       ],
       "files": 21,
-      "lines": 6533,
+      "lines": 6598,
       "largest": [
         {
           "f": "index.js",
@@ -113,11 +113,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2799,
+      "lines": 2803,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 271
+          "n": 275
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -231,7 +231,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 20,
-      "lines": 8444,
+      "lines": 8657,
       "largest": [
         {
           "f": "jd-parser.js",
@@ -324,10 +324,11 @@
         "services/provisioning.js",
         "services/org-domains.js",
         "routes/org-domains.js",
-        "config/env.js"
+        "config/env.js",
+        "services/ownership.js"
       ],
-      "files": 8,
-      "lines": 1624,
+      "files": 9,
+      "lines": 1784,
       "largest": [
         {
           "f": "routes/auth.js",
@@ -366,8 +367,8 @@
         "test/",
         ".github/"
       ],
-      "files": 83,
-      "lines": 15746,
+      "files": 84,
+      "lines": 16073,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -412,7 +413,7 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1121,
+      "lines": 1129,
       "largest": [
         {
           "f": "routes/reminders.js",
@@ -427,8 +428,8 @@
           "n": 201
         },
         {
-          "f": "services/entitlements.js",
-          "n": 155
+          "f": "services/reminder-source.js",
+          "n": 159
         }
       ],
       "lastTouched": "2026-09-15",

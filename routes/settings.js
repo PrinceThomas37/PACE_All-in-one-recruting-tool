@@ -14,6 +14,71 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole } = ctx;
 
+// ── PER-USER PREFERENCES (Session 24, D-0022) ───────────────────────────────
+// The owner: "a change in the theme in one user is reflected to other users, it
+// should not happen like that."
+//
+// The light/dark choice lived ONLY in localStorage, which is per BROWSER. Two
+// people on two machines never shared it; two logins on the SAME machine did,
+// and whoever signed in next inherited the last person's choice. Now the
+// account is the authority, so the choice follows the person to any device and
+// never carries over to the next person at a shared desk.
+//
+// NO MIGRATION, deliberately. Stored in `app_settings` under `pref_<user_id>`,
+// the same pattern as the next-action dismissals and the AI usage meter, for
+// the same reason: a colour is not worth a schema change. If a third preference
+// shows up this becomes a real `user_preferences` row — that is D-0022's
+// "Re-open when".
+const PREF_KEY = (userId) => `pref_${userId}`;
+const ALLOWED_PREFS = { theme: ['light', 'dark', 'system'] };
+
+router.get('/me/preferences', auth, async (req, res) => {
+  try {
+    const { data } = await supabase.from('app_settings').select('value')
+      .eq('key', PREF_KEY(req.user.id)).maybeSingle();
+    let prefs = {};
+    if (data && data.value) {
+      prefs = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+    }
+    res.json(prefs || {});
+  } catch (err) {
+    // A preference that cannot be read is not a reason to fail the page — the
+    // browser's own copy is a perfectly good fallback for one session.
+    res.json({});
+  }
+});
+
+router.put('/me/preferences', auth, async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const next = {};
+    for (const [key, allowed] of Object.entries(ALLOWED_PREFS)) {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+      const val = body[key];
+      // An allow-list, not a passthrough: this row is written straight back to
+      // every one of that user's browsers, so it takes named values only.
+      if (!allowed.includes(val)) {
+        return res.status(400).json({ error: `${key} must be one of: ${allowed.join(', ')}` });
+      }
+      next[key] = val;
+    }
+    if (!Object.keys(next).length) return res.status(400).json({ error: 'No known preference supplied' });
+
+    const key = PREF_KEY(req.user.id);
+    const { data: existing } = await supabase.from('app_settings').select('value')
+      .eq('key', key).maybeSingle();
+    let current = {};
+    if (existing && existing.value) {
+      current = typeof existing.value === 'string' ? JSON.parse(existing.value) : existing.value;
+    }
+    const merged = Object.assign({}, current, next);
+    const { error } = await supabase.from('app_settings')
+      .upsert({ key, value: JSON.stringify(merged) }, { onConflict: 'key' });
+    if (error) throw error;
+    res.json(merged);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/app-settings', auth, async (req, res) => {
   try {
     const { data, error } = await supabase.from('app_settings').select('key,value');

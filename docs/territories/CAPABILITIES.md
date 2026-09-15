@@ -158,6 +158,19 @@ the reminder's own contact + job rows) — **do not resolve a reminder's
 recipient out of `STATE.contacts`**, which only holds the leads this user's
 `GET /jobs` returned.
 
+### Knowing whose work a record is
+**Status:** LIVE · owner `rampart` (the rule) · `services/ownership.js`
+**The definition, since Session 24 (D-0020):** a reminder belongs to its
+`user_id`, a lead to `jobs.assigned_to_bd`, a submission to
+`submissions.recruiter_id`, a contact to the owner of its job. **Anything that
+builds a per-user list scopes to the OWNER, never to the reporting chain** —
+chain scoping is for REPORTS (`/reports/recruiting`, My Team), which describe a
+team, not for work queues, which belong to a person. A manager gets a count and
+a review screen (`GET /next-actions/team`) where they can PROMPT the owner
+(`POST /next-actions/:id/prompt`); they cannot close somebody else's task. Before
+adding any "manager can also…" affordance, read D-0020 — the answer to holiday
+cover is reassignment, not acting on another person's behalf.
+
 ### Telling a user what to do next
 **Status:** LIVE · owner `observatory`
 `GET /next-actions`, on all three dashboards. **Opted-out threads never produce

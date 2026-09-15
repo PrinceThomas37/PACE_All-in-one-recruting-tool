@@ -47,6 +47,85 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0022 · 2026-09-15 · STANDS · The theme follows the person, not the browser
+**Their words:** *"a change in the theme in one user is reflected to other
+users, it should not happen like that."* Chosen: **"Follow the person."**
+
+**What was actually happening.** The light/dark choice is written to
+`localStorage` and never to the server, so it is per BROWSER. Two different
+people on two different machines never shared it; two logins on the SAME
+machine did, and the next person to sign in inherited the last one's choice.
+Told to the owner plainly before they chose.
+
+**The decision.** The choice is stored against the USER, so it follows them to
+any device and never carries over to whoever signs in next on a shared
+computer. `localStorage` stays as the instant-apply cache (the page must not
+flash the wrong theme while a fetch is in flight) but the account is the
+authority on load.
+
+**No migration.** Stored in `app_settings` under `theme_<user_id>`, the same
+pattern as the next-action dismissals and the AI meter, for the same reason:
+a per-user preference does not justify a schema change, and migration 043 is
+not something to spend on a colour.
+
+**Re-open when:** a second per-user preference appears (density, default
+landing page, notification settings). At two or three, this becomes a real
+`user_preferences` row rather than a key per setting.
+
+### D-0021 · 2026-09-15 · STANDS · The briefing line is about YOUR desk
+**Their words:** chosen — **"Yours — your replies, your leads."**
+
+**What was happening.** `gatherFacts` in `routes/ai.js` scopes by ORGANISATION
+only. Every user — recruiter, BD, lead, admin — was shown the same sentence:
+*"Two replies came in today, and the unassigned lead pool stands at 79."* The
+unassigned lead pool is a BD-side number a recruiter has no part in working,
+and it was presented as if it were their morning.
+
+**The decision.** The line reports the reader's own work. A recruiter is told
+about their candidates and their replies; a BD about their leads. **Admin is
+the exception and still sees the organisation**, because the whole company IS
+their desk — the same exception `/reports/recruiting` already makes.
+
+**Re-open when:** the owner wants a company-wide line back for leads as well as
+admin, or wants the team number alongside the personal one.
+
+### D-0020 · 2026-09-15 · STANDS · You own your list; a manager reviews and PROMPTS
+**Their words:** *"reminders information is not just for one user who is
+responsible for it, its been showed to everyone and every user as a manager can
+interact with it."* … *"Maybe we can define what ownership or responsibility
+means."* Chosen: own list plus a count, **"And the count where the manager can
+review it and initiate the other user to take action on it."**
+
+**THE DEFINITION OF OWNERSHIP, since the owner asked for one.** A record has ONE
+responsible person:
+* a **reminder / task** is owned by its `user_id` — the person it was created for;
+* a **lead** by `jobs.assigned_to_bd`;
+* a **candidate submission** by `submissions.recruiter_id`;
+* a **contact** by the owner of the job it hangs off.
+
+**What ownership buys you:** it appears on your daily list, and you can act on
+it. **What it costs everyone else:** nobody else's daily list carries your work,
+and nobody else can close it.
+
+**What a manager gets instead.** Their own list, plus a COUNT of what is open
+across their reporting chain, and a review screen behind it. On that screen they
+can see the item, see whose it is — and **PROMPT the owner to act**. They cannot
+do it for them. That is the whole shape of the decision: *review and initiate*,
+not reach in.
+
+**Why this is not a smaller change than it looks.** Today the daily queue is
+chain-scoped, so a manager's list already carries their reports' reminders — and
+carries a **Done button that silently does nothing**, because the endpoint
+behind it correctly refuses to close a reminder the caller does not own. The
+button reported success and the row came back on the next load. Under this
+decision that button is never drawn on someone else's work at all, which is the
+honest fix rather than making a manager able to close a task they did not do.
+
+**Re-open when:** a manager says prompting is not enough — the case to watch is
+somebody leaving or going on holiday, where the answer is probably REASSIGNMENT
+(changing who owns it) rather than acting on another person's behalf. Ownership
+transfer is the right shape for that, and is deliberately not built yet.
+
 ### D-0019 · 2026-09-15 · STANDS · A list is calm; colour is a scarce resource
 **Their words:** *"can correct the colour, too much red. like after 5,6
 reminders the screen will look reddish."*
