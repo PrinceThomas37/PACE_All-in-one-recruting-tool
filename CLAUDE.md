@@ -107,6 +107,128 @@ we never have to rewrite to grow (see "Growth bets" below).
   session user would have rendered the correct name for the exact case above —
   hiding the bug rather than catching it. A variable that cannot be filled stays
   visible and highlighted; never blank it silently.
+- **A MERGE FIELD IS FILLED BY THE SERVER AND THEN CHECKED, NEVER TRUSTED FROM
+  THE BROWSER (Session 24).** A reminder follow-up went out to a live prospect
+  reading *"Hi {{fn}}, ... the {{pos}} opening at {{company}}"* under a real
+  recruiter's From line and signature. `{{sender}}` rendered perfectly, because
+  the send path fills that one — nothing filled the rest. Three separate
+  mistakes stacked, and each is now a rule:
+  * **THE BROWSER'S CACHE IS NOT THE RECORD.** `applyReminderTemplate` filled
+    from `STATE.contacts`, which holds only the contacts on the leads this
+    user's `GET /jobs` returned. When the lead was not in it the template went
+    through VERBATIM — and the same miss blanked the composer's "To" box while
+    Send stayed enabled. `GET /reminders` now returns a `compose` block (address,
+    role, company) read from the reminder's own contact and job rows, and
+    `/emails/reminder-send` re-fills subject and body server-side from those
+    same rows before queueing. Re-filling filled text is a no-op, so the server
+    pass is free insurance rather than a second code path.
+  * **THEN IT IS CHECKED.** `unresolvedVars()` (pure, `email-vars.js`) lists
+    every `{{token}}` that is not `{{sender}}`/`{{senderemail}}`, and the route
+    refuses with a 400 naming them. **Refusing is the right answer; blanking is
+    not** — a blanked token sends "Hi ," and looks like nothing went wrong.
+  * **PACE HAD TWO MERGE VOCABULARIES AND ONE FILLER.** Sales publishes
+    `fn`/`pos`/`company`/`loc` (`buildEmailVars`); recruiting publishes
+    `first_name`/`position`/`client` (`buildCandidateVars`); `fillTemplate`
+    filled both and knew neither. The default sequence seeded by migration 007
+    writes its BD-touch task in the RECRUITING names and runs through the SALES
+    builder, so every reminder it has ever created read *"Hi {{first_name}}, I
+    emailed you about the {{position}} role at KB Home"* — and the sequence
+    builder's own hint text taught that vocabulary. `VAR_SYNONYMS` now maps one
+    fact to all its names, **a direct hit always beating an alias** (on the
+    recruiting side `company` and `client` are two different facts, and
+    resolving the group in its own order made `{{client}}` print the company —
+    caught only by a test, never by reading it). An alias resolving to a
+    DEFERRED value rewrites to the canonical token, because the send path fills
+    `{{sender}}` and would never have filled `{{sender_name}}`.
+  `test/reminder-clarity-smoke.mjs` pins all of it, and all three guards were
+  verified by reintroducing each bug and watching them fail.
+- **OWNERSHIP IS DEFINED ONCE, IN `services/ownership.js` (Session 24, D-0020).**
+  The owner asked for it by name — *"Maybe we can define what ownership or
+  responsibility means"* — after finding their daily list carrying their
+  reports' reminders. **A record has ONE responsible person:** a reminder its
+  `user_id`, a lead its `assigned_to_bd`, a submission its `recruiter_id`, a
+  contact the owner of its job. Ownership BUYS you a place on your daily list
+  and the right to act; it COSTS everyone else both of those.
+  * **A to-do list containing other people's to-dos is not a to-do list.**
+    `/next-actions` used to scope by the reporting CHAIN — the file's own
+    comment said putting one person's follow-ups on another's list would be
+    getting it wrong, while the code did exactly that. It now returns
+    `splitByOwner`'s `mine`, plus a `team` COUNT.
+  * **A manager REVIEWS AND PROMPTS; they never reach in.** `GET
+    /next-actions/team` is the review screen and `POST /next-actions/:id/prompt`
+    is the ask — it writes a dated `manager_prompt` reminder onto the OWNER's
+    list naming who asked, and never touches the task. Closing stays theirs.
+    Reassignment (changing who owns a record) is the right shape for holiday
+    cover and is deliberately not built — see D-0020's "Re-open when".
+  * **THE WORST OPTION WAS THE ONE THAT SHIPPED.** Every team row drew a Done
+    button; the endpoint scoped its UPDATE by `user_id` and answered
+    `{success:true}` regardless, so it matched zero rows, said "Marked done",
+    and the row returned on the next load. **A thing you can see, appear to act
+    on, and not actually change is worse than either showing it or hiding it.**
+    `closeRefusal()` is now a callable rule and the refusal names what you CAN
+    do instead.
+- **A BRIEFING IS ABOUT THE READER'S DESK (Session 24, D-0021).** `gatherFacts`
+  in `routes/ai.js` scoped by ORGANISATION only, so every user opened to the
+  same sentence — a recruiter was told *"the unassigned lead pool stands at
+  79"*, a BD-side number they have no part in working. It now narrows to what
+  the reader owns (`ownedJobIds`), **admin excepted because the whole company IS
+  their desk**, and the unassigned pool is reported only to the roles that
+  distribute it. **Owning no leads yields zero replies, never the org's total** —
+  falling back to everybody's number is the bug, not the safe default.
+- **A PER-USER PREFERENCE BELONGS TO THE USER, NOT THE BROWSER (Session 24,
+  D-0022).** The theme lived only in `localStorage`, so two logins on one
+  computer shared it and the next person inherited the last one's choice.
+  `PUT /me/preferences` stores it per user in `app_settings` under
+  `pref_<user_id>` (**no migration** — same reasoning as the dismissal store and
+  the AI meter), `localStorage` is demoted to the instant-apply cache so the
+  page never flashes the wrong theme, **sign-out clears it**, and all three ways
+  into the app (password, SSO, restored session) load the person's own. The
+  write takes an ALLOW-LIST of named values, because that row goes straight back
+  out to every one of that user's browsers.
+- **A RULE THAT DECIDES WHETHER AN ACTION IS ALLOWED BELONGS WHERE THE ACTION IS
+  OFFERED, NOT ONLY WHERE IT IS TAKEN (Session 24).** The double-send guard —
+  don't email a contact twice in one day — lived as two local functions in
+  `index.js` and fired only at the moment of sending. So the Reminders page drew
+  a Compose button, let the owner pick a template, edit it, and hit Send, and
+  only then said *"A follow-up to this contact is already queued or was sent
+  today."* The refusal was RIGHT (follow-up 2 had gone out that morning);
+  offering the action was not. The rule is now **`services/outreach-dedup.js`**
+  (pure), shared by the send path and by `GET /reminders`, which returns
+  `compose.can_send` + `blocked_sentence` so the page states the answer up
+  front. **Two block reasons read completely differently to a human and are kept
+  apart:** something is sitting in the QUEUE and will send itself, versus
+  something ALREADY WENT today. The initial outreach never blocks a follow-up —
+  the cold email is the thing a follow-up follows.
+- **A TASK PACE CANNOT CARRY OUT MUST NOT BE CREATED (Session 24, D-0017).**
+  Seven live reminders read *"Call the POC about this role and connect on
+  LinkedIn"* for contacts holding **no phone number and no LinkedIn** — work
+  nobody could do as written, and the sharpest reason the page read as invented.
+  A `bd_touch` step now skips when there is no way to reach the person,
+  recording `no_phone_or_linkedin` on the step run: **the owner accepted a
+  quieter list, not a silent one.** The generic `reminder` channel is NOT gated
+  — reachability is not its precondition. The decision is
+  `callTaskSkipReason(step, contact)` in `services/outreach-dedup.js`, and it is
+  a FUNCTION for a reason: the first version was pinned by grepping `index.js`
+  for the condition, and **that guard went on passing when the condition was
+  disabled with `if (false && …)`.** Measured, not assumed. A test that greps
+  for source text cannot tell a live rule from a dead one — if a rule matters,
+  make it callable.
+- **A ROW THAT ASKS SOMEONE TO DO SOMETHING MUST SAY WHO ASKED (Session 24).**
+  The owner opened Reminders on five tasks and asked what they were based on.
+  They were all step 3 of the "Standard Sales Outreach" sequence; the screen
+  said nothing — same card, same note, no origin, no role, no date context — so
+  they read as the app inventing work. `reminders` records WHY only as
+  `reminder_type` (a workflow CHANNEL name, never shown, meaningless to a
+  recruiter). **`services/reminder-source.js` (pure) is the sentence**, and
+  `GET /reminders` resolves the sequence name and step from
+  `workflow_enrollments` in ONE batched lookup for the page. That lookup is an
+  inference from (contact, job), so it may come back empty — **it degrades to
+  the generic sentence and never names a sequence it did not find.**
+  Same file, same session: **"due today" is now only said about today.** All
+  five were dated two days earlier and the banner announced them as due today.
+  The list is deliberately `return_date <= today` so nothing vanishes on the day
+  you miss it, but the label is per row (`Overdue by 2 days`) and the banner
+  counts the two states separately.
 - **RELEASING A LEAD TO THE POOL IS ONE OPERATION, AND IT MUST STAMP
   `last_recycled_at` (Session 20).** Three paths return a lead to Unassigned —
   `POST /jobs/bulk-stage`, `PUT /jobs/:id`, the recycle sweep — and all three
@@ -268,6 +390,185 @@ we never have to rewrite to grow (see "Growth bets" below).
     Reflow, never shrink: touch targets get BIGGER (40-44px), inputs are 16px
     so iOS does not zoom on focus and never zoom back, and text wraps rather
     than being scaled down.
+  - **EVERY LIST HAS A HORIZON AND AN EXIT (Session 23, D-0013).** Screens were
+    built to look right with the data that existed the day they were written.
+    Measured with two years of records, the Jobs page grew from 326 DOM nodes
+    to **30,026 (92x)** and My Jobs to 12,042 (74x), because both drew every
+    row they had. The vocabulary is `services/view-horizon.js` (pure) with a
+    checked copy in `00-ui-kit.js` — `UI.partition/horizonBar/pager/searchBox/
+    clampPage`, `HORIZON_DAYS` 90, `PICKER_CAP` 15. Four rules:
+    * **A HORIZON is the default, "show everything" is the choice** — never the
+      reverse. A typed SEARCH reaches all of history, because someone hunting a
+      specific record should not be silently capped at 90 days.
+    * **A list that hides rows must say how many and why.** `horizonBar()`
+      states it and returns `''` when nothing is hidden. A filtered list that
+      does not admit it is filtered is a lie the user cannot see. Note the
+      wording: the bar reports what passed the HORIZON (`counts.matching`) and
+      the pager reports the PAGE — saying "Showing 50" above 25 drawn rows made
+      two controls contradict each other about one number.
+    * **A picker past `PICKER_CAP` becomes a SEARCH FIELD, not a taller list.**
+      Ticking one of 400 chips is worse than typing three letters, so the
+      interaction changes SHAPE. Selected items stay pinned even when a search
+      excludes them, or typing silently hides what you already ticked.
+    * **Finished things leave, they are never deleted.** A converted lead is
+      gone from the convert picker (it used to sit there dimmed forever) and
+      still on the Leads page.
+    **`test/ageing-layout-smoke.mjs` renders 16 pages x 5 roles at two scales
+    and fails the build on >3x DOM growth.** Two ways to get that measurement
+    wrong, both of which gave a wrong answer first: hand-grepping for `.map()`
+    finds 32 false offenders (mostly state UPDATES and bounded lists), and **a
+    "young" account must be RECENT, not sparse** — spreading 20 records over the
+    same two years puts most of them outside the horizon, so a FIXED page still
+    reads as broken.
+  - **"NEEDS YOU TODAY" NEEDS AN EXIT ON EVERY ROW (Session 23).** Only
+    `reminder_due` had a Done button, so `reply_due`/`commitment_due`/`nudge`/
+    `stage_suggested` could not be dismissed AT ALL — which is how a lead last
+    contacted 91 days ago sat under a heading reading *today*, permanently. The
+    owner reported this as "the cache or the memory does not get cleared"; it
+    was never a cache. `services/next-action-dismissals.js` (pure) is the fix
+    and it is **a fingerprinted SNOOZE, not a delete** — the original reasoning
+    (a queue you can empty with a click tells you nothing) still holds, so a
+    snooze EXPIRES and is **void the moment a new message lands on the thread**,
+    however long it had left. Stored in `app_settings` under `na_dismiss_<user>`
+    (**no migration**, same reasoning as the AI meter) and pruned on every read
+    so the row cannot grow without bound either. Separately, a nudge older than
+    `NUDGE_MAX_AGE_DAYS` (45) leaves the daily list and is COUNTED — one
+    decision, not ninety identical mornings. **A reply WE owe never ages out.**
+  - **PACE HAS THREE EMAIL PIPELINES AND THEY STAY THREE (Session 23).**
+    `emails` (leads engine — queued, drip-sent, visible in Pending then Sent),
+    `email_tracking` (individual sends — client email, one-off candidate email,
+    interview invite; sends IMMEDIATELY so nothing pends, and the Sent tab reads
+    `emails` so it never appeared there either) and `candidate_outreach`
+    (batches, own queue, own window). The owner's report — "I cannot see the
+    email preview of the sent emails to clients… I feel the pipeline is
+    different" — was correct in every clause. **The bodies were being stored the
+    whole time; nothing read them back.** `routes/email-history.js` +
+    Email → **All email** is that read: merged, org-scoped per source, bounded
+    per source, horizoned, and **READ-ONLY**. Merging three pipelines for
+    DISPLAY is safe; merging them for SENDING is how you break the one that
+    works. It reads stored bodies, so it renders them —
+    `test/sender-identity-smoke.mjs` greps it and enforces that.
+
+  - **A THEME MUST REACH EVERY PALETTE, AND SOME THINGS PAINT THEMSELVES
+    (Session 23, round 2 — five faults, all found on the owner's phone).**
+    `theme.css` re-skins the app by redefining tokens, which works for
+    everything that READS a token. Four ways that failed:
+    * **`ui.css` carries its OWN palette** (`--ink`/`--ink2`/`--line`/`--hover`)
+      separate from `styles.css`'s (`--text`/`--border`). Bridging one left the
+      whole Leads table drawing `#0F172A` ink on dark glass.
+    * **AN INLINE COLOUR CANNOT BE RE-THEMED**, exactly as an inline width
+      cannot be re-laid-out. And check for **JS hover handlers that re-set the
+      colour**: the merge-field chips had `onmouseout` restoring `#fff`, so a
+      stylesheet fix would have been undone on the first mouse movement. Hover
+      belongs in CSS.
+    * **INVERSION IS NOT A THEME-SAFE COLOUR.** The login tab pill painted
+      `background: var(--text)` — a near-black pill in light, and a white pill
+      with white text in dark at 1.09:1.
+    * **ANYTHING THAT PAINTS ITSELF MUST BE TOLD THE PALETTE.** The login
+      backdrop is a `<canvas>` filling `#e8f5ee` with green particles, so **no
+      stylesheet could ever have fixed it.** It now reads the live custom
+      properties (never a duplicated hex) and re-reads on a `pace-theme-change`
+      event, which `toggleTheme()` dispatches.
+    Also: **the topbar rendered as a solid blue slab in dark** because it is
+    translucent glass and the first ambient glow sat directly behind it — worst
+    on a phone, where the mobile override centred that glow at the top. **No
+    contrast check would ever flag that**, because blue-on-blue-ish text still
+    passes; the bar now has its own ground. And **never restate `position` in a
+    rule whose job is `z-index`** — that collapsed `#nav-scrim` and made the
+    phone menu impossible to close.
+    **`test/theme-contrast-smoke.mjs` composites every translucent ancestor** to
+    find what is REALLY behind each piece of text (a single `getComputedStyle`
+    cannot, which is how glass hides this), over 51 screens x 3 roles x 2 themes
+    **plus the logged-out screen**, failing under 2.2:1.
+  - **A PALETTE HAS STATES, AND A LITERAL COLOUR IS AS UN-THEMEABLE AS AN
+    INLINE ONE (Session 23, round 3).** `tr:hover td{background:#FAFBFC}` in
+    `styles.css` set the hover tint on the **CELL**, and a cell paints OVER its
+    row — so the themed `tr:hover` and the `tr.is-open` tint were both correct
+    and both invisible, and an opened Leads row read white-on-white at
+    **1.05:1** in dark. The theme layer now re-declares every hard-coded light
+    ground whose text comes from a token. Two deliberate exceptions:
+    `.mb-body` stays `#fff` (that is an EMAIL's own page, written expecting
+    white) and the tinted chips `.pill.*`/`.st-*`/`.av-*` stay (each pairs its
+    own dark text with its own pale ground, so both are legible in both
+    themes). **`theme-contrast-smoke.mjs` now HOVERS a row and OPENS one** —
+    51 screens at rest never saw this colour once, because a colour that only
+    exists under the pointer is invisible to a screenshot of a page at rest.
+    Same class: `--glass-brd` is a white highlight at 72% alpha, right on a
+    glass pane over the glow and **nothing at all on a white card** — the
+    email-status dropdown rendered in light as the bare word "Valid". A
+    control's edge is its own token (`--ctl-brd`), not `--border` (the hairline
+    BETWEEN things) and not the pane highlight.
+  - **A MODAL PANEL IS ONLY A PANEL — `.overlay` IS WHAT PUTS IT OVER THE PAGE
+    (Session 23).** `renderModal()` wrapped every modal in `.overlay`
+    (position:fixed, inset:0, z-index:100) **except three it special-cased** —
+    `jobDetail`, `addJob`, `addContact` — which were returned raw and therefore
+    landed in normal flow BELOW the whole page. "Open full record" set the
+    right state, put the right 6.7KB of html into `#layer`, threw nothing, and
+    was simply off-screen; nothing in the app said so, and only geometry told
+    the truth. Everything entering `#layer` now goes through one
+    `overlayWrap()`, and the test asserts **geometry, not state** — does the
+    child of `#layer` cover the viewport — because state was never wrong.
+  - **GLASS BELONGS TO SURFACES THAT FLOAT OVER CONTENT, NOT TO CONTROLS
+    (Session 23).** `backdrop-filter` had been copied onto every input, select,
+    textarea, outline button and chip: **25 compositing layers on one phone
+    screen**, each re-blurred whenever anything behind it moves. A button on a
+    card has nothing behind it worth seeing, and the pixels agree — removing it
+    changes Leads and Admin by at most **3/255** per channel and Email by at
+    most 25/255 on 3% of pixels. `test/ui-smoothness-smoke.mjs` caps it at
+    **12 layers per screen**, measured on a POPULATED list (an empty screen has
+    no controls to count).
+  - **COLOUR IS A SCARCE RESOURCE ON A LIST (Session 24, owner's note).** The
+    first reminder cards gave every overdue row a 2px red border, a solid red
+    pill and a red-tinted panel. That reads fine as ONE card and turns the whole
+    screen red at five or six — *"too much red. like after 5,6 reminders the
+    screen will look reddish."* The rule underneath it: **overdue is the
+    ORDINARY state of a to-do list, not a fault**, and red should mean something
+    has gone wrong. A list is calm by default — a neutral card on `--card` — and
+    state is carried by a **3px left stripe plus ONE tinted chip**, roughly a
+    tenth of the coloured ink. If six of six rows shout, none of them does.
+    `test/reminder-clarity-smoke.mjs` fails on any `var(--red*)` in that page,
+    on a tinted card ground, and on the state colour being painted in more than
+    three places — **the measurable form of "calm"**, since "looks busy" is not
+    something a test can see. Both guards were verified by putting the red back.
+  - **NEVER WRITE `transition: all`.** Nine rules did. `all` includes width,
+    height and padding, so a button whose label changes ("Send" → "Sending…")
+    animates its own size and nudges its neighbours — the "early animations"
+    the owner reported, and a side effect of naming no properties rather than
+    anything anyone chose. Every rule now lists the paint-only properties it
+    wants, and a stylesheet grep fails the build on a new one.
+  - **⚠ THIS SANDBOX CANNOT MEASURE SMOOTHNESS — headless Chromium composites
+    in SOFTWARE.** A scroll over 25 blur layers and a scroll over none both
+    report exactly **17ms per frame**. A timing assertion here passes whatever
+    happens, and would be the most convincing vacuous guard of all because it
+    prints a real-looking number. Judge rendering cost by what IS countable
+    here — layer counts, node counts, pixel diffs — and say plainly that how it
+    FEELS on a real phone is the owner's call, not a number from this box.
+  - **A SUITE ONLY COVERS THE SCREENS IT RENDERS (Session 23).** The contrast
+    suite set `STATE.page` only, so every multi-tab page drew its DEFAULT tab
+    and Email's **Sent** and **Outreach Plan** were never rendered once; and it
+    calls `enterApp()` first, so the **login screen — the first thing anyone
+    sees — was never rendered at all.** Both shipped broken and the owner found
+    them. A page is not one screen: drive the sub-state too, and test the
+    logged-out case.
+  - **TWO TESTS PASSED VACUOUSLY IN ONE SESSION — ASSUME YOURS CAN.** The
+    ageing seeder spread 20 "young" records over the same two years, so the
+    young case fell outside the 90-day horizon, rendered almost nothing, and
+    made an ALREADY-FIXED page still measure as broken. The contrast probe reads
+    `backgroundColor`, which is `rgba(0,0,0,0)` for a **gradient**, so it walked
+    past a slab to the page behind it and reported a confident FALSE failure —
+    it now declines to judge rather than judging wrongly. **Both were caught
+    only by deliberately reintroducing the bug and watching the test fail. Do
+    that before trusting a new guard.**
+  - **HOVER IS A MOUSE FEATURE, AND GATING IT CORRECTLY LEAVES A HOLE
+    (Session 23).** `(hover:hover) and (pointer:fine)` is the right question —
+    a 900px tablet is touch, a 500px desktop window is not. But that leaves a
+    **tablet, or a phone in "desktop site" mode**, above the 860px breakpoint
+    with no hover: fourteen unlabelled icons and no way to read one. `.pinned`
+    already existed and already sat outside the hover query FOR EXACTLY THIS —
+    nothing toggled it. The brand mark does now (`toggleRail()`), and the
+    affordance renders only under `(hover:none), (pointer:coarse)`. Pinned by a
+    1024px **touch** context in `mobile-layout-smoke.mjs`.
+
 - **⚠ THE SANDBOX RUNS NODE 22. RENDER RUNS NODE 26. A WHOLE CLASS OF BUG IS
   INVISIBLE HERE (Session 19).** This cost a session. Resume parsing failed in
   production and every file parsed perfectly in the sandbox — same library,
@@ -417,6 +718,18 @@ we never have to rewrite to grow (see "Growth bets" below).
 - **APPLY A MIGRATION BEFORE MERGING THE CODE THAT USES IT.** An insert naming a
   column that does not exist fails, and on a send path it fails *after the email
   has already gone out*.
+- **NEVER `git add -A` IN A TREE WHERE AN AGENT IS WORKING (Session 22).** Stage
+  the paths the commit is actually about. A documentation-only commit for #198
+  swept up **337 lines of a territory's in-progress file** and put half a feature
+  on `main` — the half that APPENDS a job-description panel to a stored email
+  body, without the half that splits it back out before sending. A queued
+  candidate email would have gone out with a raw `------------------` fence to a
+  real person under the customer's name. Nothing on screen would have said so,
+  and **every check passed**: `node --check` clean, full suite green, because the
+  writer's own tests did not know the router existed yet. Reverted by #199; no
+  email went out, and only because the queue happened to be empty that hour.
+  **A green suite proves what it covers, not what you accidentally added** — the
+  sibling of the syntax-check rule above.
 - **Never pipe `git push` into `tail`** — it swallows a rejection, and a commit
   made on the wrong branch then looks like a successful push.
 - **Before moving ANY file, read `docs/CONTEXT_ARCHIVE.md` § "DEPENDENCY MAP"

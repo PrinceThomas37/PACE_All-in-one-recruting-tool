@@ -225,3 +225,45 @@ the summary line, never piped to `tail`. Zero `[FAIL]` lines in either log.
   the Session 21 round 4 defect, reintroduced). Ran the full suite on both
   Node 22 and Node 26 (68/68 both). Reviewed both send-window commits
   (`8b50f91`, `5a0c85c`) adversarially — nothing else to raise.
+
+## 2026-09-11 — 76 suites, and two of them were passing vacuously
+
+**Four new suites, every one written because reasoning had already failed:**
+`ageing-layout-smoke` (16 pages x 5 roles at two data scales, fails over 3x DOM
+growth), `theme-contrast-smoke` (51 screens x 3 roles x 2 themes plus the
+logged-out screen, fails under 2.2:1), `next-action-dismiss-smoke`,
+`orphan-followup-guard`.
+
+**THE LESSON OF THE SESSION: A GREEN CHECK IS A CLAIM ABOUT WHAT WAS MEASURED.**
+Two suites passed while measuring nothing, in the same session:
+
+* **the ageing seeder** spread 20 "young" records over the same two years as the
+  2,000 aged ones, so most of the young case fell outside the 90-day horizon and
+  rendered almost nothing — which made an **already-fixed page still measure as
+  broken** (5.4x). Young means RECENT, not sparse.
+* **the contrast probe** reads `backgroundColor`, which is `rgba(0,0,0,0)` for a
+  **gradient**. It walked past the login header's slab to the pale page behind
+  it and reported a confident FALSE failure. It now returns null for text on a
+  gradient and **declines to judge rather than judging wrongly**.
+
+Both were caught **only** by deliberately reintroducing the bug and watching the
+test go red. **Do that for every new guard before trusting it** — it is two
+minutes and it is the difference between a test and a decoration.
+
+**A SUITE ONLY COVERS THE SCREENS IT RENDERS.** `theme-contrast-smoke` set
+`STATE.page` only, so every multi-tab page drew its DEFAULT tab — Email's Sent
+and Outreach Plan were never rendered once. And it calls `enterApp()` first, so
+the **login screen was never rendered at all.** Three of the five faults the
+owner found on their phone were in those blind spots. `SCREENS` now carries
+`[page, subState]` pairs and the logged-out case is a separate assertion.
+
+**Measurement beats reasoning, repeatedly.** Hand-grepping for `.map()` over
+state collections produced 32 "offenders", nearly all state UPDATES or bounded
+lists — zero real. Rendering the same page at two data scales and comparing
+found the two real ones immediately, with numbers (92.1x, 74.3x).
+
+**`org-session-gate` flaked once** under parallel load: "server did not boot on
+39872", 5/5 in isolation. A port collision, not a regression — the diff was CSS.
+One re-run confirmed, per the flake rule. Do not chase it further.
+
+**Both Node versions, every PR.** 76/76 on 22 and 26 for #203, #204 and #205.

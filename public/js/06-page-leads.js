@@ -79,7 +79,12 @@ function renderJobs(){
     cells.push({ cls:'tight', html: '<span style="color:var(--ink3)">'+
       escHtml(j.created_date||(j.created_at?new Date(j.created_at).toISOString().slice(0,10):''))+'</span>' });
 
-    return { cells: cells, onclick: "openJob('"+j.id+"')" };
+    // D-0014: the row REVEALS, it does not navigate away. Clicking opens a
+    // panel beneath this row with the things you actually came to do — the
+    // email status per contact above all, which used to be a row click, a
+    // drawer, and then hunting for a contact card. The drawer is still there
+    // for the whole record; it is just no longer the only door.
+    return { id: j.id, cells: cells, onclick: "leadRowToggle('"+j.id+"',event)" };
   });
 
   // RA sees form at top + their leads below; others see search/filter + table
@@ -301,6 +306,114 @@ window.leadsCloseConnected=function(){STATE.leadsConnectedOpen=false;render();};
 // no-op because 05-page-dashboard.js calls it on every leads render; deleting
 // it there and here in one go is a separate, unrelated change.
 function bindJobsControls(){}
+
+// ══════════════════════════════════════════════════════════════════════════
+// THE ROW REVEALS ITSELF (D-0014)
+// --------------------------------------------------------------------------
+// The owner: "those lead row or the job rows and all and not interactive they
+// don't show anything, like earlier … we were able to change the email stage,
+// to valid or invalid and all. Now those things and all are not there."
+//
+// Nothing had been removed — probed in a real browser, the control existed,
+// worked, and was visible. It was just a row click, then a drawer, then
+// hunting for a contact card, with NOTHING on the row hinting it was possible.
+// A feature you cannot see is a feature you do not have.
+//
+// So: click a row and it opens IN PLACE, showing what the lead is and the two
+// or three things you actually do to it. The drawer stays for the whole
+// record — it is no longer the only door.
+//
+// THREE RULES THIS MUST KEEP:
+//
+//  1. ONE ROW OPEN AT A TIME, AND THE PANEL IS BUILT ON DEMAND. It is never
+//     part of the table's html. Rendering a hidden panel per row would turn a
+//     400-row list into 400 panels — precisely the unbounded growth
+//     ageing-layout-smoke exists to catch. Open one, the previous one is gone.
+//
+//  2. NO render(). This inserts and removes ONE <tr> directly, like
+//     toggleNav()/toggleRail()/toggleTheme(). Re-rendering #content to open a
+//     row would reset the page's scroll — so expanding a row halfway down a
+//     list would throw you back to the top, which is exactly the sort of thing
+//     that makes a screen feel broken.
+//
+//  3. STATE.page IS NOT TOUCHED. Expanding is not navigation.
+// ══════════════════════════════════════════════════════════════════════════
+var LEAD_ES_LABELS={valid:'Valid',invalid:'Invalid',deactivated:'Deactivated',out_of_office:'Out of office'};
+
+function leadExpandHtml(j){
+  var cs=(typeof jobContacts==='function'?jobContacts(j.id):[])||[];
+  var esOpts=function(sel){
+    return ['valid','invalid','deactivated','out_of_office'].map(function(k){
+      return '<option value="'+k+'"'+(sel===k?' selected':'')+'>'+LEAD_ES_LABELS[k]+'</option>';
+    }).join('');
+  };
+
+  var contactRows=cs.length?cs.map(function(c){
+    var nm=((c.first_name||'')+' '+(c.last_name||'')).trim()||'—';
+    var es=c.email_status||'valid';
+    return '<div class="lx-contact">'+
+      '<div class="lx-who">'+
+        '<div class="lx-nm">'+escHtml(nm)+(c.is_primary?'<span class="lx-primary">Primary</span>':'')+'</div>'+
+        '<div class="lx-sub">'+escHtml(c.designation||'—')+
+          (c.email?' · <span class="lx-mail">'+escHtml(c.email)+'</span>':'')+'</div>'+
+      '</div>'+
+      // THE CONTROL THE OWNER COULD NOT FIND. Same handler the drawer uses —
+      // one implementation, two places to reach it, never two copies.
+      (c.email
+        ? '<label class="lx-es"><span>Email</span>'+
+            '<select class="lx-sel" onchange="event.stopPropagation();changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml(nm)+'\')">'+
+              esOpts(es)+
+            '</select>'+
+          '</label>'
+        : '<span class="lx-noemail">No email</span>')+
+    '</div>';
+  }).join(''):'<div class="lx-empty">No contacts on this lead yet.</div>';
+
+  var when=j.assigned_at?new Date(j.assigned_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):null;
+  var facts=[
+    ['Stage', j.stage||'—'],
+    ['Industry', j.industry||j.company_ind||'—'],
+    ['Assigned to', j.assigned_bd_name||'Unassigned'],
+    ['Assigned', when||'—']
+  ].map(function(f){
+    return '<div class="lx-kv"><span>'+escHtml(f[0])+'</span><b>'+escHtml(f[1])+'</b></div>';
+  }).join('');
+
+  return '<div class="lx">'+
+    '<div class="lx-main">'+
+      '<div class="lx-head">Contacts</div>'+
+      contactRows+
+    '</div>'+
+    '<div class="lx-side">'+
+      '<div class="lx-facts">'+facts+'</div>'+
+      '<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();openJob(\''+j.id+'\')">Open full record</button>'+
+    '</div>'+
+  '</div>';
+}
+
+window.leadRowToggle=function(id,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var content=document.getElementById('content'); if(!content)return;
+  var tr=content.querySelector('tr[data-row-id="'+id+'"]'); if(!tr)return;
+
+  var open=content.querySelector('tr.lead-exp');
+  var wasThisOne=open&&open.previousElementSibling===tr;
+  if(open&&open.parentNode)open.parentNode.removeChild(open);
+  content.querySelectorAll('tr.is-open').forEach(function(r){r.classList.remove('is-open');});
+  if(wasThisOne)return;                       // second click closes
+
+  var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
+  if(!j)return;
+
+  var row=document.createElement('tr');
+  row.className='lead-exp';
+  var td=document.createElement('td');
+  td.colSpan=tr.children.length;              // span the real column count
+  td.innerHTML=leadExpandHtml(j);
+  row.appendChild(td);
+  tr.parentNode.insertBefore(row,tr.nextSibling);
+  tr.classList.add('is-open');
+};
 
 function openJob(id){ STATE.detailJob=id; STATE.jobSeqSel=[]; STATE.modal={type:"jobDetail",id:id}; render(); if(typeof loadJobEnrollments==='function')loadJobEnrollments(id); }
 window.jobToggleSeqSel=function(cid){ STATE.jobSeqSel=STATE.jobSeqSel||[]; var i=STATE.jobSeqSel.indexOf(cid); if(i>-1)STATE.jobSeqSel.splice(i,1); else STATE.jobSeqSel.push(cid); render(); };

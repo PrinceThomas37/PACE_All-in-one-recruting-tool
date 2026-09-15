@@ -4211,3 +4211,274 @@ code path, and filed it back rather than fixing it (C-0008, outside its border).
 - Nine teams may be too many for one person to talk to. If it reads as overhead,
   merge `ledger` into `rampart` and `guild` into `gateway` — collapsing is
   cheaper than splitting.
+
+---
+
+# Session 22, part 2 — the day the system started catching things, and one it did not
+
+Continues the Session 22 entry above. **PRs #192-#200.** Read that entry first.
+
+## What shipped after the territories landed
+
+**#192 · The candidate send window comes off.** The owner: *"candidate emails
+that were created are still in pending, remove the barricade of timezone for
+candidate emails and individual emailing, Only the outreach goes within the time
+zone."* This **reversed their own call from that morning** (D-0009 → D-0010).
+Reproduced against the live database before touching anything: 8 pending, all
+overdue, sending not paused, every candidate below the 17:00 opening in their own
+state. Kept as a switch defaulting OFF rather than deleted, and **it fails off** —
+an unreadable settings table cannot re-impose a barricade the owner removed.
+
+**#193 · The timezone resolver.** The emails sent *before* the fix deployed, and
+chasing why the timestamps did not add up found the real fault:
+`getTimezoneFromLocation` matched two-letter state codes as **substrings** —
+"Den**ve**r" hit Delaware, "A**ri**zona" hit Rhode Island, "Californ**ia**" hit
+Iowa. **81 of 309 live leads (26.2%) had the wrong timezone, every error stored
+EAST of reality**, so 16 Pacific-coast leads were cold-emailed from **05:00 their
+local time**. The owner chose the code fix alone; the 81 rows were **not**
+backfilled (D-0011).
+**The existing test named `lead-location-parse-smoke` never covered this** — it
+drives an unrelated frontend form splitter. The suite was green throughout.
+
+**#194 · `DECISIONS.md`.** What the owner chose, written the moment they say it,
+each entry carrying a **Re-open when** condition.
+
+**#195/#196 · Tenancy.** `dispatch` noticed `GET /emails` had no `org_id`
+condition. `rampart` audited and confirmed the load-bearing fact: **the backend
+connects with `SUPABASE_SERVICE_KEY`, so RLS is bypassed on every request.**
+"RLS on all 48 tables" defends against the anon key and is **no mitigation at
+all** for application scoping. That fact lived in one code comment and no memory
+file, which is exactly why it kept being repeated as false comfort.
+Review of the audit caught it guarding **8 of 9** `/users/:id*` routes — the miss
+was `PUT .../signature`, a cross-org **write onto outbound email content**. Its
+root cause: a bulk replace anchored on a role-gate string that route words
+differently, with an assert **counting the four replacements it did make**.
+Replacing eyeballing with a per-route matrix then found a ninth.
+
+**#197 · `CAPABILITIES.md`.** The owner found **two live workflows for emailing a
+candidate about a job** (~2,900 lines, two territories, months apart). *"first it
+takes up lot of space second it's waste of effort."* `_map.json` guarantees every
+FILE has one owner; nothing guaranteed every CAPABILITY has one implementation.
+**Borders make this MORE likely, not less** — each territory reads only its own
+memory. A mechanical check now fails the map when a router composes mail and is
+named in no capability; it found four undeclared send paths on the first run,
+including `index.js`'s leads loop.
+
+## ⚠ THE INCIDENT: a docs commit shipped half a feature to `main` (#198 → #199)
+
+**Cause: `git add -A` in a working tree where an agent was mid-edit.** The commit
+for #198 — documentation only — swept up **337 lines of observatory's
+in-progress `services/candidate-outreach.js`**, and only half of it: the writer
+that APPENDS the fenced job-description panel to the stored body, **without the
+router half that splits it back out before sending**.
+
+**On `main`, a queued candidate email would have gone out with a raw
+`------------------` fence and the panel as unformatted text** — to a real
+candidate, under the customer's name, with nothing on screen to say so.
+
+**No email went out.** The queue at the moment of the revert: 8 sent, 4 skipped,
+**0 pending**. A near miss, and only because #192's own work had already drained
+the queue that morning. Six hours earlier, eight candidates would have had it.
+
+**Every check passed.** `node --check` clean. Full suite green — because the
+writer's own tests do not know the router exists yet.
+
+**The rule this earns, and it is a sibling of an existing one:**
+- `CLAUDE.md` already says *a syntax check proves a file parses, not that it
+  still does anything.*
+- This adds: **a green suite proves what it covers, not what you accidentally
+  added** — and **never `git add -A` in a tree where an agent is working. Stage
+  the paths the commit is actually about.**
+
+Recovery, without rewriting anyone's history: observatory backed its files up,
+forced back to its own branch and restored them; `main` was reverted
+byte-for-byte to the pre-#198 file (verified by `diff`), keeping #198's actual
+documentation. The feature continued on its own branch and is #200.
+
+## Where it ended
+
+**#200 is a DRAFT and must not be merged as-is.** It carries observatory's half
+of D-0012 — the job description as a bordered panel inside the interest email,
+text canonical and the card derived from it so the preview cannot disagree with
+the outbox. **70/70 with both halves present together, the first such run.**
+Left for `surface`: remove the old workflow's entry points (**not**
+`POST /candidates/email` — `remSendMeeting` sends Teams invitations through it),
+and render the panel as a card rather than dashed text.
+
+## What the owner said about the shape of the work
+
+Asked whether the agents cost more or fewer tokens, and how to switch chats.
+Measured honestly: **~15 agent jobs at ~100k each, about 1.5M tokens**, none of
+which entered the main conversation. **The system spends more tokens to protect
+the context window** — the right trade for a large job, the wrong one for a
+one-line fix, and it had been applied uniformly rather than proportionally.
+Their own summary of what to build next: *"maybe like take in more context while
+deciding something."* That is what `CAPABILITIES.md` is.
+
+---
+
+# Session 23 — three incidents, a design law, and the app gets a new face
+
+Four pieces of work, each started by the owner noticing something. Every one of
+them ended somewhere different from where it started, which is the thread worth
+keeping.
+
+## Part 1 — 215 follow-ups to a cold email that was never sent (PR #202)
+
+The owner: *"All the emails have been triggered automatically, if you can check
+there ae around 200+ emails pending from one email ID. what caused it and
+remove all those pending emails and stop the sending."*
+
+215 `fu1` rows, one mailbox, 95 jobs, inserted in a **single instant**
+(06:31:30.217434 — identical to six decimal places). Not one of those
+job+contact pairs had **any** email row at all: verified with a LEFT JOIN
+returning `status: null` for all 215. Every one was "just following up on my
+note below", quoting nothing, addressed to a real prospect.
+
+**Cause.** `follow_ups` rows are created at ASSIGNMENT time by
+`POST /distribute/execute` and stamped `outreach_sent_at: today` — a column
+name asserting something that has not happened. The initial cold emails are
+queued asynchronously and drain at one per ~75-105s inside an 8-hour window, so
+a large assignment leaves most unsent for days. The fu1 clock, meanwhile, had
+started for all of them.
+
+* 7 Sep 10:00 — 215 `follow_ups` created on assignment, fu1 due +3 days
+* 7 Sep onward — only **21** initial cold emails actually sent from that mailbox
+* 10 Sep 06:31 — all 215 came due at once
+
+The only volume brake was that mailbox's `daily_send_limit` of **300**, which
+sits above the backlog size. Nothing stopped it and nothing on screen said so.
+
+**Fix, two halves, because either alone is insufficient.** A follow-up is
+queued only when the initial email is PROVEN sent (read from `emails`), and the
+fu1/fu2 clock is **re-anchored on that real send date** — without the second
+half, an initial that sends five days late is followed up the same day it goes
+out, because its stored due date is already past. `isFollowupDueFromSend` is
+pure. The schedule is left `active`, not `skipped`: if the initial does
+eventually send, the follow-up becomes legitimate.
+
+**Cleanup applied live.** 215 pending deleted (backed up to
+`emails_purged_20260910`); **341** orphan schedules closed — the 215 that would
+have repeated the whole burst as **fu2 on 14 Sep**, plus 126 more already armed
+and due that day. 39 legitimate schedules deliberately left alone.
+
+**Also found:** 86 follow-ups had ALREADY gone out since 8 June to pairs with no
+initial send. An initial count of 530 was **wrong and corrected**: 444 of those
+have `job_id` and `contact_id` both NULL, so the orphan test cannot judge them
+— a NULL join never matches. Say 86.
+
+## Part 2 — "have we considered ageing?" answered with the wrong thing (PR #203)
+
+The owner asked whether information stacking as an account ages had been
+designed for, *"not just in this view but also for everything"*. It had not.
+
+**The scan that preceded the test was useless.** Grepping for `.map()` over
+state collections found 32 "offenders" — nearly all state UPDATES (`.map` to
+replace one item) or bounded lists (roles, mailboxes, stages). Hand-reasoning
+about which lists grow does not work. So: `test/ageing-layout-smoke.mjs`
+renders 16 pages x 5 roles at two scales and fails on >3x DOM growth.
+
+| Screen | Before | After |
+|---|---|---|
+| Jobs (`bd_joborders`) | 326 → 30,026 nodes = **92.1x** | 327 → 410 = **1.25x** |
+| My Jobs | 162 → 12,042 = **74.3x** | within limit |
+
+**A "young" account must be RECENT, not sparse.** The first seeder spread 20
+records over the same two years, so most of the young case fell outside the
+90-day horizon and rendered almost nothing — which made an ALREADY-FIXED page
+still read as broken at 5.4x. If both scales share a span, the ratio measures
+the horizon instead of the growth.
+
+Shipped as the law **every list has a HORIZON and an EXIT**
+(`services/view-horizon.js` + a checked copy in the UI kit), the searchable
+convert picker, dismiss/snooze on every Needs-you-today row (a **fingerprinted**
+snooze — void the moment a new message lands, so the queue stays honest), and
+one **All email** view over the three pipelines whose bodies had been stored all
+along and never read back.
+
+**Then the owner said it was the wrong answer.** *"Its not about limiting the
+number of things that gets accumulated on screen, you are not understanding the
+design, why not just minimilistically reduce elements on screen and shows things
+when clicked."* Volume control vs. progressive disclosure — both true, not the
+same instruction. Recorded as **D-0014**; the row-level brief is still open.
+
+They also reported the email valid/invalid control as gone. Probed in a real
+browser: it exists, it works, it is visible in the drawer, and git shows no
+commit ever moved it off a row. **No regression** — but the instinct was right
+anyway, because a feature you cannot see is a feature you do not have. It sits
+two clicks deep with nothing on the row hinting at it.
+
+## Part 3 — the new look, from the owner's Bolt design (PR #204)
+
+*"keep toggle to dark and light. I am tired of how it looks right now."*
+
+The Bolt export: 8 files, ~600 lines, React + Vite + Tailwind, ONE screen, four
+hard-coded jobs, Supabase in `package.json` and never imported. A **design**,
+not an app.
+
+**The first read was "this means porting the frontend to React". Reading the
+source changed it.** The design is a sidebar, a header, three cards, a stepper
+and a list — none of it needs a component framework, and PACE's ~19,600-line
+frontend already draws from shared CSS variables. So: `public/theme.css`, loaded
+last, ~432 lines. Every screen changes appearance; none changes behaviour.
+Deleting one `<link>` restores the old look exactly.
+
+Three faults found by **looking at screenshots**, all invisible to every test:
+the dashboard clock and scope chip carried white INLINE (the banner used to be a
+green slab); `ui.css` carries its OWN palette (`--ink`/`--line`/`--hover`) so
+overriding only `--text` left the whole Leads table drawing `#0F172A` on dark
+glass; and the greeting banner was a hard-coded green gradient. Plus one the
+suite caught: a `z-index` rule that also restated `position` collapsed
+`#nav-scrim` and made the phone menu impossible to close.
+
+`test/theme-contrast-smoke.mjs` was written to stop this — it composites every
+translucent ancestor to find what is REALLY behind each piece of text.
+
+## Part 4 — five more faults, from the owner's actual phone (PR #205)
+
+The suite from Part 3 passed. The owner's phone did not.
+
+**Why it missed them, which is the more useful finding.** It set `STATE.page`
+only, so every multi-tab page rendered as its DEFAULT tab — Email's Sent and
+Outreach Plan were never drawn once. And it calls `enterApp()` first, so the
+**login screen** was never rendered at all. 36 screens per theme became 51,
+plus the logged-out one.
+
+**The probe also had a bug of its own**, found while fixing these: a GRADIENT
+reports `backgroundColor: rgba(0,0,0,0)`, so the ancestor walk sailed past the
+login header's slab to the page behind it and reported a confident FALSE
+failure. It now declines to judge text on a gradient rather than judging wrongly.
+
+1. **Merge-field chips: white pills, white text.** Inline `background:#fff` with
+   JS hover handlers that RE-SET `#fff` on mouseout — a stylesheet fix would
+   have been undone by the first mouse movement.
+2. **The login screen was never themed**, and its backdrop is a **`<canvas>`**,
+   so *no stylesheet could ever have fixed it*. A canvas has to be told the
+   palette; it now reads the live custom properties and re-reads on a
+   `pace-theme-change` event.
+3. **The login tab pill painted `background: var(--text)`** — an INVERSION.
+   Near-black pill in light; white pill with white text in dark, 1.09:1.
+   **Inversion is not a theme-safe colour.**
+4. **The topbar rendered as a solid blue slab in dark.** It is translucent glass
+   and the first ambient glow sat directly behind it — worst on a phone, where
+   the mobile override centred that glow at the top. **No contrast check would
+   ever flag this**, because blue-on-blue-ish text still passes.
+5. **A touch device at desktop width could not open the rail.** Hover-to-expand
+   is correctly gated on `(hover:hover)` — width is the wrong question — but
+   that leaves a tablet, or a phone in "desktop site" mode, with fourteen
+   unlabelled icons. `.pinned` already existed and already sat outside the hover
+   query FOR EXACTLY THIS; nothing toggled it. The brand mark does now.
+
+## The thread through all four
+
+Every single one of these was found by a **person looking at the thing**, and
+every fix that stuck was a **test that measures what the person saw**. The
+scan-by-grep found nothing real. The reasoning-about-which-lists-grow found
+nothing real. What worked: render it twice and compare, composite the actual
+pixels behind the actual text, emulate a real touch device at a real width.
+
+And twice in one session a test passed **vacuously** — the ageing seeder
+measuring its own horizon, the contrast probe declining to judge a gradient and
+being counted as a pass. **A green check is a claim about what was measured,
+not about what is true.** Both were caught only by deliberately reintroducing
+the bug and watching the test fail.

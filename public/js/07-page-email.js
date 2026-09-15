@@ -129,7 +129,10 @@ function renderEmail(){
   // sends for real from the assigned mailbox and records it, so the merge went
   // that way round. Nothing is lost: a real send from a connected mailbox still
   // lands in that mailbox's own Sent folder.
-  var tabs=isBD?['pending','compose','sent','outreachplan','sequence']:['compose','sent','outreachplan'];
+  // 'allmail' — one window onto all THREE email pipelines (Session 23). The
+  // Sent tab reads only `emails` (the leads engine), which is why a client
+  // email or a candidate batch never appeared in it however hard you looked.
+  var tabs=isBD?['pending','compose','sent','allmail','outreachplan','sequence']:['compose','sent','allmail','outreachplan'];
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
   // ── WHO THIS ORGANISATION WRITES TO ──────────────────────────────────────
@@ -234,7 +237,7 @@ function renderEmail(){
   // Tabs on the shared kit. The Pending count is the number of emails actually
   // waiting; the "N now / M waiting" split stays in the sub-line under the tab
   // rather than being crammed into the label.
-  var TAB_LABELS={pending:'Pending',compose:'Compose',sent:'Sent',outreachplan:'Outreach Plan',sequence:'Sequence'};
+  var TAB_LABELS={pending:'Pending',compose:'Compose',sent:'Sent',allmail:'All email',outreachplan:'Outreach Plan',sequence:'Sequence'};
   var ps=STATE.pendingSummary;
   var tabBar=UI.tabs(tabs.map(function(t){
     var n=null;
@@ -609,13 +612,21 @@ function renderEmail(){
   // exactly that class of mistake rather than catch it.
   var composeHtml='';
   if(STATE.emailTab==='compose'){
-    var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail);
+    var hasRecipient=!!(STATE.composeContactId||STATE.manualEmail||STATE.composeReminderTo);
 
     var composeEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
     var composeFromId=STATE.composeFromEmailId||(composeEmails.find(function(e){return e.is_primary;})||composeEmails[0]||{}).id;
     if(composeFromId&&!STATE.composeFromEmailId)STATE.composeFromEmailId=composeFromId;
 
-    // Who is this going to? Either a contact on a lead, or a typed address.
+    // Who is this going to? Either a contact on a lead, a typed address, or —
+    // when composing from a reminder — the address the reminder itself carries.
+    //
+    // That last branch is not a nicety. This block used to resolve the
+    // recipient ONLY out of STATE.contacts, which holds contacts from the jobs
+    // this user's GET /jobs returned. A reminder whose lead is not in that set
+    // left toEmail empty, so the To box and the preview both said "pick a
+    // recipient" while Send stayed enabled and sent anyway. A screen that
+    // cannot name the recipient must not be the screen that sends to them.
     var toName='', toEmail='', toCompany='', toJob=null, toContact=null;
     if(STATE.composeContactId){
       var parts=STATE.composeContactId.split('|');
@@ -628,6 +639,11 @@ function renderEmail(){
       }
     } else if(STATE.manualEmail){
       toEmail=STATE.manualEmail;
+    }
+    if(!toEmail&&STATE.composeReminderTo){
+      toName=STATE.composeReminderTo.name||toName;
+      toEmail=STATE.composeReminderTo.email||'';
+      toCompany=STATE.composeReminderTo.company||toCompany;
     }
 
     // Recipient badge (kept — it is how you confirm you picked the right person)
@@ -643,6 +659,14 @@ function renderEmail(){
       recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--green-l);border-radius:var(--r);margin-top:8px">'+
         '<div style="flex:1;font-size:13px"><strong>'+htmlEsc(STATE.manualEmail)+'</strong><div style="font-size:11px;color:var(--text3)">Manual entry</div></div>'+
         '<button class="btn-icon" onclick="STATE.manualEmail=null;STATE.genEmail=null;render()">'+ico('x',13)+'</button>'+
+      '</div>';
+    } else if(STATE.composeReminderTo&&STATE.composeReminderTo.email){
+      var rt=STATE.composeReminderTo;
+      recipientBadge='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:8px">'+
+        '<div style="flex:1;font-size:13px"><strong>'+escHtml(rt.name||rt.email)+'</strong>'+(rt.desig?' · '+escHtml(rt.desig):'')+
+          '<div style="font-size:12px;color:var(--accent);font-weight:600;margin-top:2px">'+escHtml(rt.email)+'</div>'+
+          '<div style="font-size:11px;color:var(--text3)">'+(rt.company?escHtml(rt.company)+' · ':'')+'From the reminder</div>'+
+        '</div>'+
       '</div>';
     }
 
@@ -775,6 +799,7 @@ function renderEmail(){
                 : (typeof renderOutreachGenBody==='function'?renderOutreachGenBody():composeHtml)))
         : '')+
       (STATE.emailTab==='sent'?sentHtml:'')+
+      (STATE.emailTab==='allmail'?renderAllMailBody():'')+
       (STATE.emailTab==='outreachplan'?tmplHtml:'')+
       (STATE.emailTab==='sequence'?renderSequenceBody():'')
   });

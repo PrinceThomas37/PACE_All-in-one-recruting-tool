@@ -9,11 +9,54 @@ function bindLogin(){
   try{initLoginCanvas();}catch(e){}
 }
 
+// THE LOGIN BACKDROP IS A CANVAS, SO CSS CANNOT THEME IT (Session 23).
+// It painted a hard-coded mint (#e8f5ee) with green and gold particles, which
+// meant the login page stayed pale green in dark mode however much CSS was
+// thrown at it — and no stylesheet fix would ever have worked, because nothing
+// here is a stylesheet. A canvas has to be told the palette.
+//
+// Read from the LIVE custom properties rather than duplicating hexes, so the
+// backdrop follows --bg/--accent and there is no second palette to keep in
+// sync. Re-read on every theme change (see below).
+function loginPalette(){
+  var cs=getComputedStyle(document.documentElement);
+  var v=function(n,f){ return (cs.getPropertyValue(n)||'').trim()||f; };
+  var dark=document.documentElement.getAttribute('data-theme')==='dark'
+    || (!document.documentElement.getAttribute('data-theme')
+        && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  var base=v('--bg', dark?'#0F0F1C':'#E4E4EA');
+  // The trail is the base at low alpha — it is what fades the previous frame.
+  // Keeping it in sync with the base is what stops old particles smearing.
+  var rgb=function(hex){
+    var h=String(hex).replace('#','');
+    if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var n=parseInt(h,16);
+    return isFinite(n)?[(n>>16)&255,(n>>8)&255,n&255]:(dark?[15,15,28]:[228,228,234]);
+  };
+  var b=rgb(base);
+  return {
+    base:base,
+    trail:'rgba('+b[0]+','+b[1]+','+b[2]+',0.2)',
+    link:function(a){ return dark?'rgba(90,170,255,'+a+')':'rgba(0,113,227,'+a+')'; },
+    streak:function(a){ return dark?'rgba(191,90,242,'+a+')':'rgba(90,200,250,'+a+')'; },
+    dotA:function(a){ return dark?'rgba(120,180,255,'+a+')':'rgba(0,113,227,'+a+')'; },
+    dotB:function(a){ return dark?'rgba(191,90,242,'+a+')':'rgba(140,90,200,'+a+')'; }
+  };
+}
+
 function initLoginCanvas(){
   var c=document.getElementById("login-canvas");
   if(!c||c._running)return;
   c._running=true;
   var ctx=c.getContext("2d");
+  var PAL=loginPalette();
+  // The theme can change while this page is open (the toggle, or the OS
+  // switching at sunset), and a canvas does not repaint itself for either.
+  window.addEventListener('pace-theme-change',function(){ PAL=loginPalette(); });
+  if(window.matchMedia){
+    try{ window.matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change',function(){ PAL=loginPalette(); }); }catch(e){}
+  }
   var W,H,pts=[],streams=[];
   function resize(){W=c.width=window.innerWidth;H=c.height=window.innerHeight;}
   window.addEventListener("resize",resize);resize();
@@ -21,13 +64,13 @@ function initLoginCanvas(){
   for(var s=0;s<12;s++)streams.push({x:Math.random()*W,y:Math.random()*H,angle:Math.random()*Math.PI*2,speed:.7+Math.random()*.5,len:60+Math.random()*80,t:Math.random()*100});
   function draw(){
     if(!document.getElementById('login-canvas')){return;} // stop if logged in
-    ctx.fillStyle="rgba(232,245,238,0.2)";ctx.fillRect(0,0,W,H);
-    for(var i=0;i<pts.length;i++){for(var j=i+1;j<pts.length;j++){var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<120){ctx.strokeStyle="rgba(30,122,60,"+((1-d/120)*.2)+")";ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.stroke();}}}
-    streams.forEach(function(s){s.t+=.018;var a=Math.sin(s.t)*.5+.5,ex=s.x+Math.cos(s.angle)*s.len,ey=s.y+Math.sin(s.angle)*s.len,g=ctx.createLinearGradient(s.x,s.y,ex,ey);g.addColorStop(0,"rgba(210,140,0,0)");g.addColorStop(.5,"rgba(210,140,0,"+(a*.6)+")");g.addColorStop(1,"rgba(210,140,0,0)");ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(ex,ey);ctx.stroke();s.x+=Math.cos(s.angle)*s.speed;s.y+=Math.sin(s.angle)*s.speed;if(s.x<-100||s.x>W+100||s.y<-100||s.y>H+100){s.x=Math.random()*W;s.y=Math.random()*H;s.angle=Math.random()*Math.PI*2;}});
-    pts.forEach(function(p){p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;p.a+=.008;var pulse=.4+Math.sin(p.a)*.3;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.green?"rgba(22,101,52,"+pulse+")":"rgba(180,110,0,"+(pulse*.85)+")";ctx.fill();});
+    ctx.fillStyle=PAL.trail;ctx.fillRect(0,0,W,H);
+    for(var i=0;i<pts.length;i++){for(var j=i+1;j<pts.length;j++){var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<120){ctx.strokeStyle=PAL.link((1-d/120)*.2);ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.stroke();}}}
+    streams.forEach(function(s){s.t+=.018;var a=Math.sin(s.t)*.5+.5,ex=s.x+Math.cos(s.angle)*s.len,ey=s.y+Math.sin(s.angle)*s.len,g=ctx.createLinearGradient(s.x,s.y,ex,ey);g.addColorStop(0,PAL.streak(0));g.addColorStop(.5,PAL.streak(a*.6));g.addColorStop(1,PAL.streak(0));ctx.strokeStyle=g;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(ex,ey);ctx.stroke();s.x+=Math.cos(s.angle)*s.speed;s.y+=Math.sin(s.angle)*s.speed;if(s.x<-100||s.x>W+100||s.y<-100||s.y>H+100){s.x=Math.random()*W;s.y=Math.random()*H;s.angle=Math.random()*Math.PI*2;}});
+    pts.forEach(function(p){p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;p.a+=.008;var pulse=.4+Math.sin(p.a)*.3;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=p.green?PAL.dotA(pulse):PAL.dotB(pulse*.85);ctx.fill();});
     requestAnimationFrame(draw);
   }
-  ctx.fillStyle="#e8f5ee";ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=PAL.base;ctx.fillRect(0,0,W,H);
   draw();
 }
 function bindApp(){}
@@ -199,7 +242,7 @@ function renderPendingScheduleBanner(){
   if(wait>0&&!userHasRole(STATE.user,'ra_lead')){
     retryBtn='<button onclick="retryPendingWindowNow()" style="margin-top:10px;background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Send in-window emails now</button>';
   }
-  return '<div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:var(--r2);padding:14px 18px;margin-bottom:14px">'+
+  return '<div class="warn-panel">'+
     '<div style="font-weight:700;font-size:14px;color:#92400e;margin-bottom:8px">Pending send schedule (US lead timezones)</div>'+
     '<div style="font-size:13px;color:#78350f;line-height:1.5;margin-bottom:10px">'+
       '<strong>'+ps.total_pending+'</strong> pending total · '+

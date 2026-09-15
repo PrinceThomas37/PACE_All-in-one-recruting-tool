@@ -569,6 +569,18 @@ function resolveComposeRecipient(){
   if(STATE.manualEmail&&STATE.manualEmail.includes('@')){
     return{to:STATE.manualEmail,email:STATE.manualEmail,lid:null,lead:null,co:null};
   }
+  // Composing from a reminder whose lead is not in this browser's cache: the
+  // reminder carries the address and the role, so the composer is not blind
+  // just because GET /jobs did not return that lead to this user.
+  if(STATE.composeReminderTo&&STATE.composeReminderTo.email){
+    var rt=STATE.composeReminderTo;
+    var rid=(STATE.composeContactId||'').split('|')[1]||null;
+    return{
+      to:rt.name||rt.email,email:rt.email,lid:rid,
+      lead:{fn:String(rt.name||'').split(' ')[0]||'',ln:String(rt.name||'').split(' ').slice(1).join(' '),email:rt.email,desig:rt.desig||'',pos:rt.pos||''},
+      co:{name:rt.company||'',ind:rt.ind||'',loc:rt.loc||''}
+    };
+  }
   return null;
 }
 window.sendEmail=function(){

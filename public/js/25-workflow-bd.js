@@ -119,30 +119,111 @@
     addLeadCheckboxes();
   }
 
+  // ── THE CONVERT PICKER — item 4 of docs/AGEING_UI_PLAN.md ─────────────────
+  // This drew EVERY lead ever marked Connected as a chip: no date bound, no
+  // cap, and the ones already converted stayed forever, greyed out with a tick.
+  // 19 chips in the owner's screenshot. ~400 in two years, stacked above the
+  // table they exist to help you use.
+  //
+  // Two rules from the plan, applied here:
+  //   * a picker you SCAN does not survive its own success — past PICKER_CAP it
+  //     becomes a field you TYPE in, because ticking one of 400 is worse than
+  //     typing three letters. The interaction changes shape, it does not just
+  //     get taller;
+  //   * finished things leave — a converted lead is done and is gone from the
+  //     picker entirely, not dimmed in place. It is still on the Leads page and
+  //     still in the database; it is simply no longer a thing you can pick.
   function addLeadCheckboxes(){
     var content=document.getElementById('content'); if(!content)return;
     if(content.querySelector('[data-bd-leadpick]'))return;
-    var connected=(STATE.jobs||[]).filter(function(j){return j.stage==='Connected';});
-    if(!connected.length)return;
     var already=STATE.bd.jobOrders.map(function(o){return o.source_lead_id;});
+    var connected=(STATE.jobs||[]).filter(function(j){
+      return j.stage==='Connected' && already.indexOf(j.id)<0;
+    });
+    if(!connected.length)return;
+
+    // Newest first: the lead you just connected is the one you came to convert.
+    connected.sort(function(a,b){
+      return String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||''));
+    });
+
+    var q=(STATE.bd.leadPickSearch||'').trim().toLowerCase();
+    var mode=UI.pickerMode(connected.length);
+    var pool=connected;
+    if(q){
+      pool=connected.filter(function(j){
+        return [j.position,j.pos,j.company_name].some(function(v){
+          return String(v||'').toLowerCase().indexOf(q)>-1;
+        });
+      });
+    }
+    // In search mode an untyped picker shows only the most recent few — the
+    // rest are reachable by typing, and the count says how many that is.
+    var shown = (mode==='search'&&!q) ? pool.slice(0,UI.PICKER_RECENT) : pool.slice(0,50);
+
+    function chip(j){
+      var on=STATE.bd.leadSel[j.id]?'checked':'';
+      return '<label class="lp-chip">'+
+        '<input type="checkbox" '+on+' onchange="bdToggleLead(\''+j.id+'\',this.checked)">'+
+        '<span class="lp-pos">'+esc(j.position||j.pos||'')+'</span>'+
+        '<span class="lp-co">'+esc(j.company_name||'')+'</span>'+
+      '</label>';
+    }
+
+    // Selected leads always stay visible, even when a search excludes them —
+    // otherwise typing silently hides what you already ticked and the Convert
+    // button acts on records that are no longer on screen.
+    var shownIds=shown.map(function(j){return j.id;});
+    var stuck=connected.filter(function(j){
+      return STATE.bd.leadSel[j.id] && shownIds.indexOf(j.id)<0;
+    });
+
+    var head='Connected leads ('+connected.length+')'+
+      (mode==='search'?'':' — tick to convert');
+
+    var body;
+    if(mode==='search'){
+      body=
+        '<div class="lp-search">'+
+          UI.searchBox(STATE.bd.leadPickSearch,'bdLeadPickSearch(this.value)',
+            'Type to find a connected lead…')+
+          (q
+            ? '<span class="lp-hint">'+pool.length+' match'+(pool.length===1?'':'es')+'</span>'
+            : '<span class="lp-hint">Showing the '+shown.length+' most recent. Type to reach the other '+
+              Math.max(0,connected.length-shown.length)+'.</span>')+
+        '</div>'+
+        '<div class="lp-chips">'+shown.map(chip).join('')+'</div>'+
+        (q&&!pool.length?'<div class="lp-hint">Nothing matches “'+esc(q)+'”.</div>':'');
+    } else {
+      body='<div class="lp-chips">'+shown.map(chip).join('')+'</div>';
+    }
+    if(stuck.length){
+      body+='<div class="lp-stuck"><span class="lp-hint">Still selected:</span>'+
+        '<div class="lp-chips">'+stuck.map(chip).join('')+'</div></div>';
+    }
+
     var wrap=document.createElement('div');
     wrap.setAttribute('data-bd-leadpick','1');
-    wrap.style.cssText='background:var(--accent-l);border:1px solid rgba(30,122,60,.22);border-radius:10px;padding:10px 14px;margin:0 0 12px 0';
-    wrap.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">Connected leads ('+connected.length+') — tick to convert</div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:8px">'+
-      connected.map(function(j){
-        var on=STATE.bd.leadSel[j.id]?'checked':'';
-        var done=already.indexOf(j.id)>-1;
-        return '<label style="display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;'+(done?'opacity:.5':'')+'">'+
-          '<input type="checkbox" '+on+' '+(done?'disabled':'')+' onchange="bdToggleLead(\''+j.id+'\',this.checked)">'+
-          '<span style="font-weight:600">'+esc(j.position||j.pos||'')+'</span>'+
-          '<span style="color:var(--text3)">'+esc(j.company_name||'')+'</span>'+
-          (done?'<span style="color:var(--green);font-weight:700">✓ converted</span>':'')+
-        '</label>';
-      }).join("")+'</div>';
+    wrap.className='lp-wrap';
+    wrap.innerHTML='<div class="lp-head">'+head+'</div>'+body;
     var taskbar=content.querySelector('[data-bd-taskbar]');
     if(taskbar&&taskbar.parentNode)taskbar.parentNode.insertBefore(wrap,taskbar.nextSibling);
   }
+  window.bdLeadPickSearch=function(v){
+    STATE.bd.leadPickSearch=v;
+    // Repaint the picker in place. A full render() would rebuild the shell and
+    // take the caret with it — you cannot type into a box that is re-created
+    // on every keystroke.
+    var content=document.getElementById('content'); if(!content)return;
+    var old=content.querySelector('[data-bd-leadpick]');
+    var focused=document.activeElement;
+    var caret=focused&&focused.classList&&focused.classList.contains('hz-search')
+      ? {start:focused.selectionStart,end:focused.selectionEnd} : null;
+    if(old&&old.parentNode)old.parentNode.removeChild(old);
+    addLeadCheckboxes();
+    var box=content.querySelector('[data-bd-leadpick] .hz-search');
+    if(box){ box.focus(); if(caret){ try{box.setSelectionRange(caret.start,caret.end);}catch(e){} } }
+  };
 
   window.bdToggleLead=function(id,on){STATE.bd.leadSel[id]=on;render();};
   window.bdClearLeadSel=function(){STATE.bd.leadSel={};render();};
@@ -223,6 +304,30 @@
       if(f.remote&&(j.remote||'')!==f.remote)return false;
       return true;
     });
+    // ── AGE (Session 23) ────────────────────────────────────────────────────
+    // This table used to draw every row it had. Measured with two years of
+    // records it went from 326 DOM nodes to 30,026 — 92x — and the browser
+    // does that work on every repaint. Search first (a typed query means the
+    // user is looking for something specific, so it must reach the whole
+    // history, not just the window), then the horizon, then one page.
+    var jq=(STATE.bd.jobSearch||'').trim().toLowerCase();
+    if(jq){
+      rows=rows.filter(function(j){
+        return [j.job_title,j.client,j.job_code,j.lead_code,j.city,j.state]
+          .some(function(v){return String(v||'').toLowerCase().indexOf(jq)>-1;});
+      });
+    }
+    // A search reaches all of history; an unsearched list gets the horizon.
+    var part=UI.partition(rows,{
+      showAll:!!jq||!!STATE.bd.jobShowAll,
+      closedOf:function(j){return !jq&&(j.status==='Closed'||j.status==='Filled'||j.status==='Cancelled');}
+    });
+    rows=part.visible;
+    var jPg=UI.clampPage(STATE.bd.jobPage,rows.length);
+    STATE.bd.jobPage=jPg;
+    var jobsHorizon=UI.horizonBar(part.counts,{onShowAll:"bdJobShowAll()",noun:"jobs"});
+    var jobsPager=UI.pager(rows.length,jPg,"bdJobGoPage(%d)");
+    var rowsPaged=rows.slice(jPg*UI.PAGE_SIZE,(jPg+1)*UI.PAGE_SIZE);
     var activeCount=['state','status','job_type','priority','remote'].filter(function(k){return f[k];}).length;
     var jobTabs=[['mine','My Jobs',mine.length]];
     if(teamIds.length)jobTabs.push(['team',"Team's Jobs",team.length]);
@@ -235,9 +340,12 @@
     '</div>';
     // Multi-select (item 24): checkbox column + bulk status change.
     var jsel=STATE.bd.jobSel||(STATE.bd.jobSel={});
-    STATE.bd._jobRowIds=rows.map(function(j){return j.id;}); // shown rows, for select-all
-    var selIds=rows.filter(function(j){return jsel[j.id];}).map(function(j){return j.id;});
-    var allChecked=rows.length&&rows.every(function(j){return jsel[j.id];});
+    // "Select all shown" must mean the rows on screen, not the rows that exist.
+    // With a horizon and a pager those are different sets, and a bulk status
+    // change against 2,000 invisible jobs is not what anyone ticked a box for.
+    STATE.bd._jobRowIds=rowsPaged.map(function(j){return j.id;});
+    var selIds=rowsPaged.filter(function(j){return jsel[j.id];}).map(function(j){return j.id;});
+    var allChecked=rowsPaged.length&&rowsPaged.every(function(j){return jsel[j.id];});
     var bulkBar=selIds.length?'<div style="display:flex;align-items:center;gap:12px;background:var(--accent-l);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap">'+
       '<span style="font-size:13px;font-weight:700;color:var(--accent)">'+selIds.length+' job'+(selIds.length>1?'s':'')+' selected</span>'+
       '<span style="font-size:12.5px;color:var(--text2)">Set status:</span>'+
@@ -245,7 +353,7 @@
       '<button onclick="bdJobClearSel()" style="margin-left:auto;background:transparent;color:var(--text2);border:1px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer">Clear</button>'+
     '</div>':'';
     function fopt(key,all,list){return '<select class="sel" onchange="bdSetJobFilter(\''+key+'\',this.value)"><option value="">'+all+'</option>'+list.map(function(s){return '<option value="'+esc(s)+'"'+(f[key]===s?' selected':'')+'>'+esc(s)+'</option>';}).join("")+'</select>';}
-    var body=rows.map(function(j){
+    var body=rowsPaged.map(function(j){
       var recs=j.recruiters||[];
       var recNames=recs.length?recs.map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).join(', '):'<span style="color:var(--text3)">Unassigned</span>';
       var loc=[j.city,j.state].filter(Boolean).join(', ');
@@ -272,6 +380,7 @@
               'Filters'+(activeCount?' ('+activeCount+')':'')+
             '</span>'+
           '</button>'+
+          UI.searchBox(STATE.bd.jobSearch,'bdJobSearch(this.value)','Search jobs, clients, codes…')+
           '<button class="btn btn-primary" onclick="bdOpenNewJob(null)">+ New Job</button>'+
           (STATE.bd.jobFilterOpen?
             '<div onclick="event.stopPropagation()" style="position:absolute;top:40px;right:0;z-index:30;width:260px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh3);padding:14px">'+
@@ -285,17 +394,25 @@
         '</div>'+
       '</div>'+
       bulkBar+
+      jobsHorizon+
       '<div class="card" style="overflow:auto">'+
         '<table style="width:100%;border-collapse:collapse;font-size:13px;min-width:860px">'+
           '<thead><tr style="background:var(--bg);text-align:left">'+
             '<th style="padding:10px 12px;width:34px"><input type="checkbox" '+(allChecked?'checked':'')+' onclick="bdJobToggleSelAll()" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)" title="Select all shown"/></th>'+
             ['JOB CODE','JOB TITLE','CLIENT','LOCATION','STATUS','PAY RATE','RECRUITER'].map(function(h){return '<th style="padding:10px 12px;font-size:11px;color:var(--text3);font-weight:600">'+h+'</th>';}).join("")+
           '</tr></thead>'+
-          '<tbody>'+(body||'<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text3)">No jobs yet. Convert a connected lead or create one.</td></tr>')+'</tbody>'+
+          '<tbody>'+(body||'<tr><td colspan="8" style="padding:40px;text-align:center;color:var(--text3)">'+
+            (jq?'No jobs match “'+esc(jq)+'”.':'No jobs yet. Convert a connected lead or create one.')+'</td></tr>')+'</tbody>'+
         '</table>'+
+        jobsPager+
       '</div>'+
     '</div>';
   };
+  // Typing resets to page 1 — staying on page 7 of a search that has 2 pages
+  // is how a filter appears to return nothing.
+  window.bdJobSearch=function(v){STATE.bd.jobSearch=v;STATE.bd.jobPage=0;render();};
+  window.bdJobGoPage=function(i){STATE.bd.jobPage=i;render();};
+  window.bdJobShowAll=function(){STATE.bd.jobShowAll=true;STATE.bd.jobPage=0;render();};
   window.bdSetJobsView=function(v){STATE.bd.jobsView=v;render();};
   window.bdToggleJD=function(){STATE.bd.jdExpanded=!STATE.bd.jdExpanded;render();};
   window.bdTogglePrevJD=function(){STATE.bd.jdShowPrev=!STATE.bd.jdShowPrev;STATE.bd.jdExpanded=false;render();};
@@ -569,8 +686,31 @@
     if(STATE.bd.loading)return '<div class="page"><div style="text-align:center;padding:60px;color:var(--text3)">Loading…</div></div>';
     var jobs=myJobOrders();
     if(!jobs.length)return '<div class="page"><div class="card" style="padding:40px;text-align:center;color:var(--text3)">No jobs assigned to you yet.</div></div>';
-    if(!STATE.bd._jobStageCounts&&!STATE.bd._jobCountsLoading)loadJobStageCounts(jobs);
-    var cards=jobs.map(function(j){
+    // ── AGE (Session 23) ────────────────────────────────────────────────────
+    // A card grid is the worst offender shape there is: every record is a
+    // multi-node card, so growth is steeper than a table's. Measured at 162 →
+    // 12,042 nodes (74x) across two years. Same treatment as the Jobs table —
+    // search reaches all of history, an unsearched grid gets the horizon, and
+    // only one page is drawn.
+    var mjq=(STATE.bd.myJobSearch||'').trim().toLowerCase();
+    if(mjq){
+      jobs=jobs.filter(function(j){
+        return [j.job_title,j.client,j.job_code,j.city,j.state]
+          .some(function(v){return String(v||'').toLowerCase().indexOf(mjq)>-1;});
+      });
+    }
+    var mjPart=UI.partition(jobs,{
+      showAll:!!mjq||!!STATE.bd.myJobShowAll,
+      closedOf:function(j){return !mjq&&(j.status==='Closed'||j.status==='Filled'||j.status==='Cancelled');}
+    });
+    jobs=mjPart.visible;
+    var mjPg=UI.clampPage(STATE.bd.myJobPage,jobs.length);
+    STATE.bd.myJobPage=mjPg;
+    var mjShown=jobs.slice(mjPg*UI.PAGE_SIZE,(mjPg+1)*UI.PAGE_SIZE);
+    // Stage counts are fetched per job, so ask only for the page on screen —
+    // this was requesting counts for every job the user has ever had.
+    if(!STATE.bd._jobStageCounts&&!STATE.bd._jobCountsLoading)loadJobStageCounts(mjShown);
+    var cards=mjShown.map(function(j){
       var loc=[j.city,j.state].filter(Boolean).join(', ');
       var jc=(STATE.bd._jobStageCounts||{})[j.id];
       var chips=jc?BD_STAGES.filter(function(st){return jc.counts[st];}).map(function(st){
@@ -583,8 +723,21 @@
         (jc?'<div style="display:flex;flex-wrap:wrap;gap:4px">'+(chips||'<span style="font-size:10.5px;color:var(--text3)">No candidates yet</span>')+'</div>':'')+
       '</div>';
     }).join("");
-    return '<div class="page"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">'+cards+'</div></div>';
+    return '<div class="page">'+
+      '<div class="mj-top">'+
+        UI.searchBox(STATE.bd.myJobSearch,'bdMyJobSearch(this.value)','Search your jobs…')+
+      '</div>'+
+      UI.horizonBar(mjPart.counts,{onShowAll:"bdMyJobShowAll()",noun:"jobs"})+
+      (mjShown.length
+        ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">'+cards+'</div>'
+        : '<div class="card" style="padding:40px;text-align:center;color:var(--text3)">'+
+            (mjq?'No jobs match “'+esc(mjq)+'”.':'Nothing in the last '+UI.HORIZON_DAYS+' days.')+'</div>')+
+      UI.pager(jobs.length,mjPg,"bdMyJobGoPage(%d)")+
+    '</div>';
   };
+  window.bdMyJobSearch=function(v){STATE.bd.myJobSearch=v;STATE.bd.myJobPage=0;render();};
+  window.bdMyJobGoPage=function(i){STATE.bd.myJobPage=i;STATE.bd._jobStageCounts=null;render();};
+  window.bdMyJobShowAll=function(){STATE.bd.myJobShowAll=true;STATE.bd.myJobPage=0;render();};
 
   // ════════════════════════════════════════════════════════════════════════════
   // PAGE: Job detail (BD)

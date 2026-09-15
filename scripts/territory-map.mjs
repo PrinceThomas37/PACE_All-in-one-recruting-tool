@@ -24,7 +24,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TERRITORIES = [
   { id: 'surface', name: 'Surface', role: 'Frontend & UI', terrain: 'the coastal city',
     hue: '#5FA8D3', pos: [30, 8], height: 5.5, spread: 15,
-    own: ['public/'], not: [] },
+    own: ['public/', 'services/view-horizon.js'], not: [] },
 
   { id: 'gateway', name: 'Gateway', role: 'Server & API', terrain: 'the citadel',
     hue: '#C08A3E', pos: [0, 0], height: 15, spread: 12,
@@ -48,6 +48,9 @@ const TERRITORIES = [
           'email-validation.js', 'email-verify.js', 'gmail-provider.js',
           'services/mail-provider.js', 'send-queue-order.js',
           'services/outreach-cycle.js', 'services/send-progress.js',
+          // The double-send rule. Sits with the send loop that enforces it —
+          // routes/reminders.js only READS it to decide what to offer.
+          'services/outreach-dedup.js',
           'services/mailbox-reassign.js', 'services/lead-recycle.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
@@ -62,7 +65,8 @@ const TERRITORIES = [
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
           'company-classifier.js', 'enrichment.js', 'skill-dictionaries.js',
           'learned-skills.js', 'routes/ai.js', 'routes/outreach-generator.js',
-          'routes/candidate-outreach.js', 'routes/next-actions.js'],
+          'routes/candidate-outreach.js', 'routes/next-actions.js',
+          'services/next-action-dismissals.js'],
     not: [] },
 
   { id: 'guild', name: 'The Guild', role: 'Recruiting domain', terrain: 'the township',
@@ -78,7 +82,11 @@ const TERRITORIES = [
     hue: '#B4553C', pos: [-3, -35], height: 11, spread: 11,
     own: ['middleware/authorize.js', 'routes/auth.js', 'routes/sso.js',
           'services/sso.js', 'services/provisioning.js', 'services/org-domains.js',
-          'routes/org-domains.js', 'config/env.js'],
+          'routes/org-domains.js', 'config/env.js',
+          // Who owns a record, and what somebody else may do about it (D-0020).
+          // Sits with tenant isolation: both answer "who may see and change
+          // this", and both fail silently when wrong.
+          'services/ownership.js'],
     not: [] },
 
   { id: 'foundry', name: 'The Foundry', role: 'Tests & Release', terrain: 'the forge',
@@ -88,7 +96,12 @@ const TERRITORIES = [
   { id: 'ledger', name: 'The Ledger', role: 'Commerce & Consent', terrain: 'the counting house',
     hue: '#C9B458', pos: [-15, 30], height: 4, spread: 12,
     own: ['services/plans.js', 'services/entitlements.js', 'services/billing.js',
-          'routes/plans.js', 'routes/tracking.js', 'routes/reminders.js'],
+          'routes/plans.js', 'routes/tracking.js', 'routes/reminders.js',
+          // Sits with the route it serves: the sentence explaining why a
+          // reminder exists is read only by routes/reminders.js (the frontend
+          // mirror in 10-page-modals.js is surface's copy, as with the
+          // view-horizon pair).
+          'services/reminder-source.js'],
     not: [] },
 ];
 

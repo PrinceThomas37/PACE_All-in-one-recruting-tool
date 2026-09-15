@@ -51,6 +51,34 @@ off deliberately — check `DECISIONS.md` before touching it).
 
 ---
 
+### Reading back what we sent (any pipeline)
+**Status:** `LIVE` — Email → **All email** (Session 23).
+
+**One place, three sources.** PACE sends through three pipelines and each screen
+showed exactly one, so "did we email this company, and what did we say" was
+three questions in three places:
+
+| Pipeline | Table | Was visible in |
+|---|---|---|
+| Lead outreach (cold + follow-ups) | `emails` | Pending, then Sent |
+| One-off sends (client, candidate, interview invite) | `email_tracking` | **nowhere** |
+| Candidate batches | `candidate_outreach` | its own page only |
+
+**Code:** `routes/email-history.js`, `public/js/50-all-mail.js`, tab in
+`07-page-email.js`. **READ-ONLY** — it reads three tables and writes none.
+
+**Before adding any "show me what we sent" surface, use this one.** The
+per-record views that already exist and are NOT duplicates (they answer a
+narrower question about one record) are the candidate profile's Email-activity
+card and the client detail's email list. A THIRD general history view would be
+the duplication this file exists to prevent.
+
+**The bodies were always stored.** The owner's "I cannot see the email preview
+of the sent emails to clients" was a missing READ, not missing data — worth
+remembering before concluding something needs to be captured.
+
+---
+
 ### Emailing a candidate about a job
 **Status:** ⚠ **DUPLICATED — A survives, B is being removed** (owner's call,
 `DECISIONS.md` D-0012). The JD moves **inside** A's email as a formatted block.
@@ -123,6 +151,35 @@ reuses these provider calls.
 **Status:** LIVE · owner `guild`
 `POST /submissions/:id/interview-invite`, from the stage modal. Includes Teams
 meeting creation.
+
+### Reminding a user to do something on a date
+**Status:** LIVE · owner `surface` (page) + `ledger` (`routes/reminders.js`,
+`services/reminder-source.js`)
+The Reminders page, and the bell badge. **Four things write a reminder and they
+must all set `reminder_type`:** `wfReminderExecutor` in index.js (a sequence's
+`bd_touch`/`reminder` step), `routes/recruiting/outreach.js` (`recruiter_task`),
+`routes/contacts.js` (`ooo_return`, from an out-of-office auto-reply) and the
+page itself (`manual`/`meeting`). That column is the ONLY record of where a
+reminder came from, so a new writer that leaves it null produces a task nobody
+can explain — `services/reminder-source.js` turns it into the sentence on the
+card, and a type it does not know says so rather than claiming the user added
+it. `GET /reminders` also returns `compose` (address, role, company, read from
+the reminder's own contact + job rows) — **do not resolve a reminder's
+recipient out of `STATE.contacts`**, which only holds the leads this user's
+`GET /jobs` returned.
+
+### Knowing whose work a record is
+**Status:** LIVE · owner `rampart` (the rule) · `services/ownership.js`
+**The definition, since Session 24 (D-0020):** a reminder belongs to its
+`user_id`, a lead to `jobs.assigned_to_bd`, a submission to
+`submissions.recruiter_id`, a contact to the owner of its job. **Anything that
+builds a per-user list scopes to the OWNER, never to the reporting chain** —
+chain scoping is for REPORTS (`/reports/recruiting`, My Team), which describe a
+team, not for work queues, which belong to a person. A manager gets a count and
+a review screen (`GET /next-actions/team`) where they can PROMPT the owner
+(`POST /next-actions/:id/prompt`); they cannot close somebody else's task. Before
+adding any "manager can also…" affordance, read D-0020 — the answer to holiday
+cover is reassignment, not acting on another person's behalf.
 
 ### Telling a user what to do next
 **Status:** LIVE · owner `observatory`

@@ -5,10 +5,12 @@ function renderLogin(){
   var tab=STATE.loginTab||'login';
   function tabBtn(id,label,icon){
     var on=tab===id;
-    return '<button onclick="STATE.loginTab=\''+id+'\';STATE.loginErr=null;render()" '+
-      'style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 8px;border:0;cursor:pointer;font-family:inherit;'+
-      'font-size:13.5px;font-weight:600;border-radius:8px;'+
-      'background:'+(on?'var(--text)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+'">'+
+    // The selected tab used to paint `background: var(--text)` — an INVERSION.
+    // That reads as a near-black pill in light and a near-WHITE pill with white
+    // text in dark: 1.09:1, completely unreadable. Inversion is not a
+    // theme-safe colour; the accent is.
+    return '<button class="login-tab'+(on?' is-on':'')+'" '+
+      'onclick="STATE.loginTab=\''+id+'\';STATE.loginErr=null;render()">'+
       (icon||'')+label+'</button>';
   }
 
@@ -176,10 +178,27 @@ function renderSidebar(){
     return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
   }).join('');
 
-  return '<div id="sidebar">'+
-    '<div class="sb-brand">'+
+  // Restore the rail's pinned state. Read at build time so it is part of the
+  // region's html string — the render engine compares those strings, so a
+  // deterministic class here costs nothing and never causes a repaint.
+  var railPinned='';
+  try{ if(localStorage.getItem('pace-rail')==='pinned') railPinned=' class="pinned"'; }catch(e){}
+
+  return '<div id="sidebar"'+railPinned+'>'+
+    // THE BRAND MARK IS ALSO THE RAIL'S SWITCH ON A TOUCH DEVICE.
+    // The rail expands on hover, correctly gated on (hover:hover) — a mouse
+    // feature, never a width. But that leaves a TOUCH device at desktop width
+    // (a tablet, or a phone in "desktop site" mode) with a 60px icon-only rail
+    // and no way to read a single label. Reported from a real phone.
+    // `.pinned` already existed and already sits outside the hover query
+    // precisely because it is an explicit choice rather than a hover — it just
+    // had nothing to toggle it. Now the mark does, and CSS shows the affordance
+    // only where hover is unavailable.
+    '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
+      'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       '<div class="rail-mark">P</div>'+
       '<div class="rail-word"><span style="color:var(--accent)">PA</span><span style="color:#C99A18">CE</span></div>'+
+      '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
@@ -225,6 +244,16 @@ function renderTopbar(){
       '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
           '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
+        // BOTH ICONS ARE ALWAYS IN THE MARKUP; theme.css shows one and hides
+        // the other. That is deliberate: swapping them by re-rendering would
+        // make changing theme repaint the shell, reload every iframe and take
+        // the page's scroll position with it — the exact rule the render
+        // engine is built around (a repaint that changes nothing writes
+        // nothing). Toggling an attribute on <html> costs a repaint of colour
+        // and nothing else.
+        '<div class="tb-theme" onclick="toggleTheme()" title="Light / dark" aria-label="Toggle light or dark theme" role="button">'+
+          '<span class="ic-moon">'+UI.ic('moon')+'</span><span class="ic-sun">'+UI.ic('sun')+'</span>'+
+        '</div>'+
         '<div class="tb-icons">'+
           '<div class="tb-ico" title="What needs you today" onclick="goPage(\'dashboard\')">'+UI.ic('bolt')+'</div>'+
           '<div class="tb-ico" title="Reminders" onclick="goPage(\'reminders\')">'+UI.ic('bell')+
@@ -234,6 +263,81 @@ function renderTopbar(){
       '</div>'+
   '</div>';
 }
+
+// Expand or collapse the icon rail. Like the nav drawer and the theme switch,
+// this toggles ONE class and calls nothing else — a render() here would rebuild
+// the shell, reload every iframe and lose the page's scroll, to move a rail.
+window.toggleRail=function(){
+  var sb=document.getElementById('sidebar'); if(!sb)return;
+  var on=sb.classList.toggle('pinned');
+  try{ localStorage.setItem('pace-rail', on?'pinned':'collapsed'); }catch(e){}
+};
+
+// ── LIGHT / DARK ──────────────────────────────────────────────────────────
+// Three states, not two: 'light', 'dark', or NO attribute at all, which means
+// "follow the operating system". The toggle only ever moves between the two
+// explicit ones, because a user who reaches for it has stopped wanting the OS
+// to decide.
+//
+// Like openNav()/closeNav(), this touches ONE attribute and calls nothing
+// else. No render(), no scheduleRender(). Re-rendering to change a colour
+// would reload every sandboxed iframe on screen and lose the page's scroll —
+// and the whole point of the render engine is that a repaint changing nothing
+// writes nothing.
+function currentTheme(){
+  var set=document.documentElement.getAttribute('data-theme');
+  if(set==='dark'||set==='light')return set;
+  // No explicit choice: report what the OS is actually giving them, so the
+  // toggle flips to the opposite of what is ON SCREEN rather than to a
+  // default that may already be showing.
+  return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+}
+// APPLY A THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
+// account-preference load, so there is one place that knows how to put a theme
+// on screen.
+function applyTheme(next){
+  document.documentElement.setAttribute('data-theme',next);
+  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
+  // the account preference arrives so the page never flashes the wrong theme
+  // while a fetch is in flight. The account is the authority (D-0022).
+  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+  // Anything that paints itself rather than being painted BY CSS has to be
+  // told. Right now that is the login backdrop (a <canvas>); an event keeps
+  // that knowledge with the thing that needs it instead of hard-wiring a call
+  // to a function that may not be on the page.
+  try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
+}
+window.applyTheme=applyTheme;
+
+window.toggleTheme=function(){
+  var next=currentTheme()==='dark'?'light':'dark';
+  applyTheme(next);
+  // THE CHOICE FOLLOWS THE PERSON, NOT THE BROWSER (D-0022). Saved against the
+  // account so it reaches their other devices and does NOT carry over to
+  // whoever signs in next on a shared computer. Best-effort: a preference that
+  // fails to save still applied on screen, and localStorage keeps it for this
+  // browser, so the failure costs a sync and never the interaction.
+  if(STATE&&STATE.token&&typeof apiFetch==='function'){
+    apiFetch('PUT','/me/preferences',{theme:next}).catch(function(){});
+  }
+};
+
+// Read the signed-in user's saved theme and apply it. Called after login.
+// If they have never chosen one, the browser's cached choice stands — we do not
+// overwrite a local preference with a default nobody set.
+window.loadThemePreference=function(){
+  if(!(STATE&&STATE.token)||typeof apiGet!=='function')return;
+  apiGet('/me/preferences').then(function(p){
+    if(!p||!p.theme)return;
+    if(p.theme==='system'){
+      document.documentElement.removeAttribute('data-theme');
+      try{ localStorage.removeItem('pace-theme'); }catch(e){}
+      try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
+      return;
+    }
+    if(p.theme!==currentTheme())applyTheme(p.theme);
+  }).catch(function(){});
+};
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}
 
@@ -312,7 +416,9 @@ function consumeSsoToken(){
       sessionStorage.setItem('fg_user',JSON.stringify(STATE.user));
       STATE.page='dashboard';
       // Same tail as the password path (23-auth.js) so an SSO session and
-      // a password session are indistinguishable from here on.
+      // a password session are indistinguishable from here on — including the
+      // person's own theme (D-0022).
+      if(window.loadThemePreference)loadThemePreference();
       loadAppData();
     })
     .catch(function(){

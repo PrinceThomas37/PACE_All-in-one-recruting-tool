@@ -28,6 +28,8 @@ window.UI = (function () {
   var ICONS = {
     grid:      S+'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>',
     send:      S+'<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/></svg>',
+    sun:       S+'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>',
+    moon:      S+'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>',
     check:     S+'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
     inbox:     S+'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/></svg>',
     search:    S+'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
@@ -143,6 +145,12 @@ window.UI = (function () {
       ? o.rows.map(function(r){
           var tr = Array.isArray(r) ? r : r.cells;
           var at = (!Array.isArray(r) && r.onclick) ? ' onclick="'+r.onclick+'" style="cursor:pointer"' : '';
+          // `id` lets a page find its own row again and reveal a panel BESIDE
+          // it, in place, without re-rendering (see leadRowToggle). The panel
+          // is never part of this html: building one per row is how a list of
+          // 400 becomes 400 hidden panels, which is the growth the ageing test
+          // exists to catch.
+          if (!Array.isArray(r) && r.id) at += ' data-row-id="'+esc(r.id)+'"';
           return '<tr'+at+'>'+tr.map(function(c){
             if (c && typeof c === 'object') return '<td'+(c.cls?' class="'+c.cls+'"':'')+'>'+(c.html||'')+'</td>';
             return '<td>'+(c==null?'':c)+'</td>';
@@ -331,8 +339,135 @@ window.UI = (function () {
     p.paint(); return true;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // AGE — every list has a HORIZON and an EXIT (Session 23).
+  // --------------------------------------------------------------------------
+  // The browser half of services/view-horizon.js. Same numbers, same meanings,
+  // and test/ageing-layout-smoke.mjs fails the build if the two ever disagree
+  // — the same arrangement REWRITE_LIMIT already has, because a constant
+  // duplicated without a test is a constant that drifts.
+  //
+  // Why any of this exists: screens were built to look right with the data
+  // that existed the day they were written. Measured with two years of records
+  // (test/ageing-layout-smoke.mjs), the Jobs page grew from 326 DOM nodes to
+  // 30,026 — 92x — because its table drew every row it had. A horizon is what
+  // makes a list cost the same in year three as on day one.
+  // ══════════════════════════════════════════════════════════════════════════
+  var HORIZON_DAYS = 90;   // must equal DEFAULT_HORIZON_DAYS in view-horizon.js
+  var PICKER_CAP   = 15;   // must equal PICKER_CAP
+  var PICKER_RECENT= 6;    // must equal PICKER_RECENT
+  var PAGE_SIZE    = 25;   // rows a table draws before it paginates
+
+  function ageDays(when, now){
+    if(when==null||when==='') return null;
+    var t=(when instanceof Date)?when.getTime():new Date(when).getTime();
+    if(!isFinite(t)) return null;
+    return ((now==null?Date.now():now)-t)/86400000;
+  }
+  // days<=0 (or not a number) means NO horizon — the explicit "show all" case.
+  // A row with no date is NOT inside a real window: it cannot be claimed recent.
+  function withinHorizon(when, days, now){
+    var d=Number(days==null?HORIZON_DAYS:days);
+    if(!isFinite(d)||d<=0) return true;
+    var a=ageDays(when, now);
+    if(a===null) return false;
+    return a<=d;
+  }
+  function pickerMode(count, cap){
+    return (Number(count)||0) > (cap==null?PICKER_CAP:cap) ? 'search' : 'chips';
+  }
+
+  // Split rows into what a working view draws and what it only counts.
+  // Mirrors partitionForView() on the server, including the ORDER of the two
+  // tests — closed before aged — so a row is never counted in both buckets.
+  function partition(rows, o){
+    o=o||{};
+    var all=Array.isArray(rows)?rows:[];
+    var days=o.showAll?0:(o.horizonDays==null?HORIZON_DAYS:o.horizonDays);
+    var dateOf=o.dateOf||function(r){return r&&(r.created_at||r.sent_at||r.updated_at);};
+    var closedOf=o.closedOf||function(){return false;};
+    var closed=0, aged=0, visible=[];
+    for(var i=0;i<all.length;i++){
+      var r=all[i];
+      if(!o.showClosed&&closedOf(r)){closed++;continue;}
+      if(!withinHorizon(dateOf(r),days,o.now)){aged++;continue;}
+      visible.push(r);
+    }
+    return {visible:visible, counts:{
+      total:all.length,
+      matching:visible.length,  // passed the horizon; a pager may show fewer
+      showing:visible.length,   // alias, kept for existing callers
+      closed:closed, aged:aged, hidden:closed+aged
+    }};
+  }
+
+  // The bar that admits what is NOT on screen. A filtered list which does not
+  // say it is filtered is a lie the user cannot see — so this is not optional
+  // decoration, it is the other half of having a horizon at all.
+  // Returns '' when nothing is hidden: no bar, no noise.
+  function horizonBar(counts, opts){
+    if(!counts||!counts.hidden) return '';
+    opts=opts||{};
+    var days=opts.horizonDays==null?HORIZON_DAYS:opts.horizonDays;
+    var bits=[];
+    if(counts.aged) bits.push(counts.aged+' older than '+days+' days');
+    if(counts.closed) bits.push(counts.closed+' finished');
+    // Deliberately NOT "showing N": this bar reports what passed the HORIZON,
+    // and the table below may then paginate that down further. Two controls
+    // stating different counts of the same thing is exactly the confusion the
+    // bar is here to remove.
+    return '<div class="hz-bar">'+
+      '<span class="hz-txt"><b>'+counts.matching+'</b> of '+counts.total+
+        ' '+(opts.noun||'records')+' — '+bits.join(', ')+' hidden.</span>'+
+      (opts.onShowAll?'<button class="hz-btn" onclick="'+attr(opts.onShowAll)+'">Show everything</button>':'')+
+    '</div>';
+  }
+
+  // "312 connected leads →" beats 312 chips. A count is O(1) to read and O(1)
+  // to comprehend; a list is neither.
+  function countLink(n, label, onclick){
+    return '<button class="hz-count" onclick="'+attr(onclick||'')+'">'+
+      '<b>'+n+'</b> '+esc(label)+'</button>';
+  }
+
+  // Pager. Draws nothing at all for a single page — a control that cannot do
+  // anything is noise.
+  function pager(total, pageIdx, onGo, size){
+    var per=size||PAGE_SIZE;
+    var pages=Math.max(1,Math.ceil(total/per));
+    if(pages<2) return '';
+    var cur=Math.min(Math.max(0,pageIdx||0),pages-1);
+    function b(i,lbl,dis){
+      return '<button class="hz-pg'+(dis?' is-off':'')+'"'+
+        (dis?' disabled':' onclick="'+attr(onGo.replace('%d',i))+'"')+'>'+esc(lbl)+'</button>';
+    }
+    return '<div class="hz-pager">'+
+      b(cur-1,'‹ Prev',cur<=0)+
+      '<span class="hz-pgn">Page '+(cur+1)+' of '+pages+'</span>'+
+      b(cur+1,'Next ›',cur>=pages-1)+
+    '</div>';
+  }
+
+  // Clamp a page index to what actually exists. A filter that shrinks a list
+  // must not leave the viewer stranded on an empty page 9.
+  function clampPage(pageIdx, total, size){
+    var per=size||PAGE_SIZE;
+    return Math.min(Math.max(0,pageIdx||0), Math.max(0,Math.ceil(total/per)-1));
+  }
+
+  function searchBox(value, onInput, placeholder){
+    return '<input class="hz-search" type="search" value="'+esc(value||'')+'"'+
+      ' placeholder="'+esc(placeholder||'Search…')+'"'+
+      ' oninput="'+attr(onInput)+'" />';
+  }
+
   return {
     esc:esc, attr:attr, ic:ic, ICONS:ICONS,
+    HORIZON_DAYS:HORIZON_DAYS, PICKER_CAP:PICKER_CAP, PICKER_RECENT:PICKER_RECENT,
+    PAGE_SIZE:PAGE_SIZE,
+    ageDays:ageDays, withinHorizon:withinHorizon, pickerMode:pickerMode,
+    partition:partition, horizonBar:horizonBar, countLink:countLink,
+    pager:pager, clampPage:clampPage, searchBox:searchBox,
     registerOverlay:registerOverlay, renderOverlays:renderOverlays, anyOverlayOpen:anyOverlayOpen,
     registerPage:registerPage, hasPage:hasPage, hasPagePaint:hasPagePaint,
     pageHtml:pageHtml, paintPage:paintPage,

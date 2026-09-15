@@ -45,11 +45,28 @@ const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
  * Returns items: { kind, entity_type, entity_id, title, subtitle, reason,
  *                  priority, due_at, overdue_days, state, intent }
  */
-function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50 } = {}) {
+// A SILENCE THAT OLD IS A DECISION, NOT A CHORE (Session 23).
+// "Needs you today" was showing a lead last contacted 91 days ago. Re-presenting
+// that every morning for three months is not a queue, it is wallpaper — and the
+// items you scroll past daily are what teach you to ignore the ones that matter.
+// Past this age a nudge leaves the daily list and is COUNTED instead (see
+// `stale_nudges`), so it becomes one decision — chase them or drop them —
+// rather than 90 identical mornings.
+// Only NUDGES age out. Someone actually waiting on a reply never does: that is
+// a debt we owe, and it does not expire because we ignored it for a quarter.
+const NUDGE_MAX_AGE_DAYS = 45;
+
+function buildNextActions({ threads = [], reminders = [], now = Date.now(), limit = 50, nudgeMaxAgeDays = NUDGE_MAX_AGE_DAYS } = {}) {
   const items = [];
+  let staleNudges = 0;
 
   for (const t of threads) {
     const a = analyzeThread(t.messages, { now });
+    // The newest message on the thread — the fact a snooze is taken against.
+    const lastAt = (t.messages || []).reduce((mx, m) => {
+      const v = m && m.sent_at ? String(m.sent_at) : '';
+      return v > mx ? v : mx;
+    }, '') || null;
 
     // An opt-out or a clear no is not an action — it is a closed door, and
     // surfacing it as "to do" is how automated outreach becomes obnoxious.
@@ -58,6 +75,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     if (a.needs_reply) {
       items.push({
         kind: KIND.REPLY_DUE,
+        last_activity_at: lastAt,
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
@@ -84,9 +102,15 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
       // alive. Candidate threads (ATS stage vocabulary, unrelated) are not
       // gated by this — ATS stages don't map to "engaged vs not yet".
       const bdLeadNotEngagedYet = t.entity_type === 'contact' && !['Connected', 'In Discussion'].includes(t.stage);
-      if (!bdLeadNotEngagedYet) {
+      // See NUDGE_MAX_AGE_DAYS. A 0/negative limit disables the age gate.
+      const tooOldToNag = nudgeMaxAgeDays > 0
+        && Number.isFinite(a.days_since_outbound)
+        && a.days_since_outbound > nudgeMaxAgeDays;
+      if (!bdLeadNotEngagedYet && tooOldToNag) staleNudges++;
+      if (!bdLeadNotEngagedYet && !tooOldToNag) {
         items.push({
           kind: KIND.NUDGE,
+          last_activity_at: lastAt,
           entity_type: t.entity_type, entity_id: t.entity_id,
           title: t.name || t.email || 'Unknown',
           subtitle: t.company || null,
@@ -188,7 +212,18 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     String(a.title).localeCompare(String(b.title))
   );
 
-  return items.slice(0, limit);
+  // `last_activity_at` is what services/next-action-dismissals.js fingerprints
+  // a snooze against: when it changes, the snooze is void and the item returns.
+  for (const it of items) {
+    if (it.last_activity_at === undefined) it.last_activity_at = null;
+  }
+
+  const shown = items.slice(0, limit);
+  // The overflow is reported, never silently dropped — a queue that truncates
+  // without saying so is how "needs you today" starts lying.
+  shown.overflow = Math.max(0, items.length - shown.length);
+  shown.stale_nudges = staleNudges;
+  return shown;
 }
 
 /** Small headline counts for the dashboard card. */
@@ -198,4 +233,4 @@ function summarize(items) {
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
 
-module.exports = { buildNextActions, summarize, KIND, DAY_MS };
+module.exports = { buildNextActions, summarize, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS };

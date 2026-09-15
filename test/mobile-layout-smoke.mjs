@@ -321,6 +321,69 @@ try {
   step('a real pointer still expands the rail on hover', hovered.width > 180, hovered.width + 'px');
   step('…and its labels fit inside it', hovered.label === '1' && hovered.txtInside);
 
+  // ── 6. A TOUCH DEVICE AT DESKTOP WIDTH ───────────────────────────────────
+  // The rail expands on hover, gated on (hover:hover) — correct, because width
+  // is the wrong question. But that leaves a TABLET, or a phone in "desktop
+  // site" mode, above the mobile breakpoint with a 60px icon-only rail and no
+  // hover: fourteen unlabelled icons and no way to read one. Reported from a
+  // real phone (Session 23). `.pinned` always existed for this; nothing
+  // toggled it.
+  const tablet = await browser.newContext({
+    viewport: { width: 1024, height: 1366 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2,
+  });
+  await tablet.route('**', r => r.request().url().startsWith(BASE) ? r.continue() : r.abort());
+  const tp = await tablet.newPage();
+  await tp.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await waitForLogin(tp);
+  await enterApp(tp, 'bd');
+  await tp.waitForTimeout(200);
+
+  const tReports = await tp.evaluate(() => ({
+    coarse: matchMedia('(pointer:coarse)').matches,
+    noHover: matchMedia('(hover:none)').matches,
+    wide: window.innerWidth >= 860,
+  }));
+  step('the emulated tablet is wide AND touch — the case that was broken',
+    tReports.coarse && tReports.noHover && tReports.wide, JSON.stringify(tReports));
+
+  const before = await tp.evaluate(() => {
+    const sb = document.getElementById('sidebar');
+    const pin = document.querySelector('.rail-pin');
+    const lbl = document.querySelector('#sidebar .nav-txt');
+    return {
+      width: Math.round(sb.getBoundingClientRect().width),
+      pinVisible: !!pin && getComputedStyle(pin).display !== 'none',
+      labelVisible: !!lbl && parseFloat(getComputedStyle(lbl).opacity) > 0.5,
+      hasToggle: typeof window.toggleRail === 'function',
+    };
+  });
+  step('there IS a visible way to expand the rail on touch', before.pinVisible);
+  step('the toggle exists', before.hasToggle);
+  step('labels start hidden (the rail is collapsed)', !before.labelVisible);
+
+  await tp.click('.sb-brand');
+  await tp.waitForTimeout(320);
+  const after = await tp.evaluate(() => {
+    const sb = document.getElementById('sidebar');
+    const lbl = document.querySelector('#sidebar .nav-txt');
+    return {
+      width: Math.round(sb.getBoundingClientRect().width),
+      labelVisible: !!lbl && parseFloat(getComputedStyle(lbl).opacity) > 0.5,
+      pinned: sb.classList.contains('pinned'),
+    };
+  });
+  step('tapping the brand expands the rail', after.pinned && after.width > before.width + 60,
+    `${before.width}px → ${after.width}px`);
+  step('…and the labels are actually readable — the original symptom',
+    after.labelVisible);
+
+  // It must also close again, or it is a trap rather than a control.
+  await tp.click('.sb-brand');
+  await tp.waitForTimeout(320);
+  const railClosed = await tp.evaluate(() => document.getElementById('sidebar').classList.contains('pinned'));
+  step('tapping again collapses it', !railClosed);
+  await tablet.close();
+
   step('nothing threw on the desktop either', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
   await desk.close();
 } catch (err) {

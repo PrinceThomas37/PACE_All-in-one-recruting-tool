@@ -1,0 +1,724 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THEME — the visual language, light and dark (Session 23, D-0015).
+   --------------------------------------------------------------------------
+   The owner designed this in Bolt and gave it as the reference:
+   glass panels on a soft ground, an Apple-ish palette, generous radii, quiet
+   rows that light up when chosen. Their words: "I am tired of how it looks
+   right now."
+
+   WHY THIS IS ONE STYLESHEET AND NOT A REWRITE.
+   Every page in PACE already draws with the same CSS variables — --bg, --card,
+   --text, --border, --accent — and the same handful of classes (.card, .btn,
+   .inp, .bdg). So the whole app can be re-skinned by REDEFINING those tokens
+   in one place, with no JavaScript touched and no page file edited. 19,648
+   lines of frontend change appearance; none of them change behaviour.
+
+   Loaded LAST, after styles.css / ui.css / mobile.css, so it only ever
+   overrides. Removing this one <link> restores the old look exactly — which is
+   what makes a change this broad safe to ship.
+
+   THEME SELECTION has three states, matching the artifact convention:
+     :root                      → light (the complete palette lives here)
+     :root:not([data-theme=light]) under prefers-color-scheme:dark → dark
+     :root[data-theme=dark]     → dark, chosen explicitly, wins either way
+   A colour is never defined ONLY inside a media query, or the toggle cannot
+   beat the OS.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* ── ground and glass ─────────────────────────────────────────────────── */
+  --bg:#E8E8ED;
+  --bg2:#DFDFE6;
+  --bg3:rgba(255,255,255,.34);
+  --card:rgba(255,255,255,.62);
+  --card-solid:#FFFFFF;
+  --glass-brd:rgba(255,255,255,.72);
+  --ctl-brd:rgba(0,0,0,.16);
+  --border:rgba(0,0,0,.07);
+  --border2:rgba(0,0,0,.13);
+
+  /* ── ink ──────────────────────────────────────────────────────────────── */
+  --text:#1D1D1F;
+  --text2:#424245;
+  --text3:#86868B;
+
+  /* ── accent. The reference is Apple blue; PACE was green. One line. ───── */
+  --accent:#0071E3;
+  --accent-m:#3B9BFF;
+  --accent-d:#0055B0;
+  --accent-l:rgba(0,113,227,.09);
+
+  --green:#248A3D;      --green-l:rgba(52,199,89,.12);
+  --amber:#B25000;      --amber-l:rgba(255,159,10,.13);
+  --red:#D22B2B;        --red-l:rgba(255,69,58,.11);
+  --purple:#8944AB;     --purple-l:rgba(191,90,242,.12);
+  --teal:#0D9488;       --teal-l:rgba(90,200,250,.13);
+  --gold:#B25000;       --gold-l:rgba(255,159,10,.13);
+
+  /* ── shape. The reference is much rounder than PACE was. ──────────────── */
+  --r:10px;
+  --r2:16px;
+  --r3:22px;
+  --r4:28px;
+
+  --sh:0 1px 2px rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.04);
+  --sh2:0 8px 32px rgba(0,0,0,.07);
+  --sh3:0 24px 60px rgba(0,0,0,.13);
+  --blur:22px;
+
+  /* The reference reads as Apple because it uses the system face. Keeping
+     DM Sans as the fallback so nothing loses its metrics if system-ui is odd. */
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,'DM Sans',sans-serif;
+  --display:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,'Sora',sans-serif;
+
+  /* Ambient glows behind the glass — the thing that stops a flat grey page
+     reading as flat grey. Three of them, deliberately low opacity. */
+  --glow1:rgba(0,113,227,.13);
+  --glow2:rgba(90,200,250,.13);
+  --glow3:rgba(191,90,242,.09);
+}
+
+/* ── DARK ─────────────────────────────────────────────────────────────────
+   Defined twice on purpose: once for "the OS says dark and the user has not
+   overridden it", once for "the user picked dark". Same block, so they cannot
+   drift apart. */
+:root:not([data-theme="light"]) { }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#131322;
+    --bg2:#0E0E1A;
+    --bg3:rgba(255,255,255,.035);
+    --card:rgba(255,255,255,.055);
+    --card-solid:#1B1B2E;
+    --glass-brd:rgba(255,255,255,.10);
+    --ctl-brd:rgba(255,255,255,.16);
+    --border:rgba(255,255,255,.09);
+    --border2:rgba(255,255,255,.16);
+    --text:#F5F5F7;
+    --text2:#C7C7CC;
+    --text3:#8E8E93;
+    --accent:#0A84FF;
+    --accent-m:#4DA6FF;
+    --accent-d:#0060DF;
+    --accent-l:rgba(10,132,255,.16);
+    --green:#34C759;      --green-l:rgba(52,199,89,.16);
+    --amber:#FF9F0A;      --amber-l:rgba(255,159,10,.16);
+    --red:#FF453A;        --red-l:rgba(255,69,58,.16);
+    --purple:#BF5AF2;     --purple-l:rgba(191,90,242,.16);
+    --teal:#5AC8FA;       --teal-l:rgba(90,200,250,.16);
+    --gold:#FF9F0A;       --gold-l:rgba(255,159,10,.16);
+    --sh:0 1px 2px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.22);
+    --sh2:0 8px 32px rgba(0,0,0,.34);
+    --sh3:0 24px 60px rgba(0,0,0,.5);
+    --glow1:rgba(10,132,255,.20);
+    --glow2:rgba(94,92,230,.16);
+    --glow3:rgba(191,90,242,.11);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#131322;
+  --bg2:#0E0E1A;
+  --bg3:rgba(255,255,255,.035);
+  --card:rgba(255,255,255,.055);
+  --card-solid:#1B1B2E;
+  --glass-brd:rgba(255,255,255,.10);
+  --ctl-brd:rgba(255,255,255,.16);
+  --border:rgba(255,255,255,.09);
+  --border2:rgba(255,255,255,.16);
+  --text:#F5F5F7;
+  --text2:#C7C7CC;
+  --text3:#8E8E93;
+  --accent:#0A84FF;
+  --accent-m:#4DA6FF;
+  --accent-d:#0060DF;
+  --accent-l:rgba(10,132,255,.16);
+  --green:#34C759;      --green-l:rgba(52,199,89,.16);
+  --amber:#FF9F0A;      --amber-l:rgba(255,159,10,.16);
+  --red:#FF453A;        --red-l:rgba(255,69,58,.16);
+  --purple:#BF5AF2;     --purple-l:rgba(191,90,242,.16);
+  --teal:#5AC8FA;       --teal-l:rgba(90,200,250,.16);
+  --gold:#FF9F0A;       --gold-l:rgba(255,159,10,.16);
+  --sh:0 1px 2px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.22);
+  --sh2:0 8px 32px rgba(0,0,0,.34);
+  --sh3:0 24px 60px rgba(0,0,0,.5);
+  --glow1:rgba(10,132,255,.20);
+  --glow2:rgba(94,92,230,.16);
+  --glow3:rgba(191,90,242,.11);
+}
+
+/* Tell the browser which way we are going, so form controls, scrollbars and
+   the space behind a rubber-band scroll all follow. */
+:root{color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark}}
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
+
+/* ══ THE GROUND ══════════════════════════════════════════════════════════ */
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  letter-spacing:-.01em;
+}
+
+/* The three ambient glows. One fixed pseudo-element on <body>, painted behind
+   everything and never hit-tested — no element, no layout cost, nothing for
+   the render engine to diff. */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(620px circle at 4% -6%,  var(--glow1), transparent 62%),
+    radial-gradient(720px circle at 98% 104%, var(--glow2), transparent 62%),
+    radial-gradient(420px circle at 76% 26%, var(--glow3), transparent 66%);
+}
+/* Lift the shell above the glow layer. #nav-scrim is deliberately NOT in this
+   list: it is position:fixed at z-index 65 (mobile.css), and forcing it to
+   position:relative collapsed it to nothing — the menu scrim stopped being
+   clickable and mobile-layout-smoke caught it. Never restate `position` in a
+   rule whose only job is `z-index`. */
+#app,#sidebar,#main,#topbar,#content,#layer{position:relative;z-index:1}
+
+/* ══ THE SHELL AS GLASS ══════════════════════════════════════════════════ */
+#sidebar{
+  background:var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.7);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.7);
+  border-right:1px solid var(--glass-brd);
+  box-shadow:var(--sh2);
+}
+#topbar{
+  background:var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.7);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.7);
+  border-bottom:1px solid var(--glass-brd);
+  box-shadow:var(--sh);
+}
+#content{background:transparent}
+
+/* ══ CARDS ═══════════════════════════════════════════════════════════════
+   .card is the single most-used class in the app, so this one rule is what
+   makes every screen change at once. */
+.card,.pg-body>.card,.dt-wrap,.tbl-wrap{
+  background:var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.6);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r3);
+  box-shadow:var(--sh2);
+}
+.card{transition:background .18s ease,border-color .18s ease,transform .18s ease}
+
+/* ══ CONTROLS ════════════════════════════════════════════════════════════ */
+.btn{border-radius:var(--r2);font-weight:600;letter-spacing:-.01em;transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease}
+.btn-primary{
+  background:var(--accent);border-color:var(--accent);color:#fff;
+  box-shadow:0 4px 16px rgba(0,113,227,.26);
+}
+.btn-primary:hover{background:var(--accent-d);border-color:var(--accent-d)}
+.btn-outline{
+  background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text2);
+}
+.btn-outline:hover{border-color:var(--accent);color:var(--accent)}
+
+.inp,.sel,input[type=text],input[type=email],input[type=date],input[type=search],
+input[type=number],input[type=password],textarea,select{
+  background:var(--bg3);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r2);
+  color:var(--text);
+  transition:border-color .16s ease,box-shadow .16s ease;
+}
+.inp:focus,.sel:focus,input:focus,textarea:focus,select:focus{
+  outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3.5px var(--accent-l);
+}
+::placeholder{color:var(--text3)}
+
+.bdg,.pill{border-radius:999px;font-weight:600;letter-spacing:0}
+
+/* ══ TABLES — quiet until you point at them ═════════════════════════════ */
+table thead tr,thead tr{background:transparent!important}
+table th,thead th{
+  color:var(--text3);font-weight:600;text-transform:uppercase;
+  font-size:10.5px;letter-spacing:.055em;
+  border-bottom:1px solid var(--border);
+}
+table tbody tr{transition:background .14s ease}
+table tbody tr:hover{background:var(--bg3)}
+table td,table th{border-color:var(--border)!important}
+
+/* ══ THE RAIL ════════════════════════════════════════════════════════════ */
+.nav-item{border-radius:var(--r2);transition:background .16s ease,color .16s ease}
+.nav-item:hover{background:var(--bg3)}
+.nav-item.active,.nav-item.on{
+  background:var(--bg3);
+  border:1px solid var(--glass-brd);
+  color:var(--text);font-weight:600;
+  box-shadow:var(--sh);
+}
+.nav-group,.nav-grp{color:var(--text3);font-weight:600;letter-spacing:.02em}
+
+/* ══ OVERLAYS ════════════════════════════════════════════════════════════ */
+.modal,.drawer,.dw{
+  background:var(--card-solid);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r4);
+  box-shadow:var(--sh3);
+}
+#nav-scrim,.scrim{backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+
+/* The Session-23 horizon parts, restated in the new language. */
+.hz-bar{background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2)}
+.hz-btn,.hz-count,.hz-pg,.na-act,.am-src{
+  background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2);
+}
+.lp-wrap{background:var(--accent-l);border:1px solid var(--glass-brd);border-radius:var(--r3)}
+.lp-chip,.am-list{background:var(--bg3);border:1px solid var(--glass-brd);border-radius:var(--r2)}
+.am-list{border-radius:var(--r3)}
+.am-row{border-top:1px solid var(--border)}
+.am-head:hover{background:var(--bg3)}
+
+/* ══ THE TOGGLE ══════════════════════════════════════════════════════════ */
+.tb-theme{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:var(--r2);cursor:pointer;
+  color:var(--text3);background:transparent;border:1px solid transparent;
+  transition:background .16s ease,color .16s ease,border-color .16s ease;
+}
+.tb-theme:hover{background:var(--bg3);border-color:var(--glass-brd);color:var(--text)}
+.tb-theme svg{width:17px;height:17px}
+/* Only one of the two icons is ever in the DOM's flow. Swapped by CSS rather
+   than by a re-render, so changing theme never repaints the app. */
+.tb-theme .ic-sun{display:none}
+:root[data-theme="dark"] .tb-theme .ic-sun{display:block}
+:root[data-theme="dark"] .tb-theme .ic-moon{display:none}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .tb-theme .ic-sun{display:block}
+  :root:not([data-theme="light"]) .tb-theme .ic-moon{display:none}
+}
+
+/* ══ PHONE ═══════════════════════════════════════════════════════════════
+   Backdrop blur on a large moving surface is expensive on a phone, and the
+   rail is a moving surface. Drop to a solid ground there and keep the frame
+   rate; the look survives, the jank does not. */
+@media (max-width:860px){
+  #sidebar{
+    background:var(--card-solid);
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    border-radius:0 var(--r4) var(--r4) 0;
+  }
+  .card,.dt-wrap,.tbl-wrap{
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border-radius:var(--r2);
+  }
+  /* The glow was centred at the TOP on a phone — directly behind the
+     translucent topbar, which turned the whole bar blue. Move it below the
+     fold and let the bar be a bar. */
+  body::before{background:radial-gradient(680px circle at 50% 58%,var(--glow1),transparent 62%)}
+}
+
+/* Someone who asks for less motion gets less motion. They asked their phone
+   once, for every app; answering it is not a preference we get a vote on.
+   `animation-iteration-count` and `scroll-behavior` belong here too: a
+   shortened duration does not stop a loop, and smooth scrolling is motion. */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    transition-duration:.01ms!important;animation-duration:.01ms!important;
+    animation-iteration-count:1!important;scroll-behavior:auto!important;
+  }
+}
+
+/* ══ THE GREETING BANNER ═════════════════════════════════════════════════
+   It was a hard-coded green gradient — the one element on the dashboard that
+   ignored the palette entirely, so it fought both themes at once. Now it is
+   made of the same glass as everything else, with the accent carrying the
+   colour instead of a slab of brand green. */
+.banner{
+  background:
+    linear-gradient(135deg,var(--accent-l) 0%,transparent 58%),
+    var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.6);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r4);
+  box-shadow:var(--sh2);
+  color:var(--text);
+  padding:24px 28px;
+}
+/* The decorative circle read as a smudge once the slab was gone. */
+.banner::after{
+  background:radial-gradient(circle,var(--accent-l),transparent 70%);
+  width:260px;height:260px;right:-60px;top:-70px;opacity:.75;
+}
+.banner-name{color:var(--text);letter-spacing:-.02em}
+.banner-sub{color:var(--text2);opacity:1}
+.banner-stats .bs-v,.banner-stats b,.banner-stats strong{color:var(--text)}
+.banner-stats{color:var(--text2)}
+.banner-clock{
+  background:var(--bg3);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r2);
+  color:var(--text);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+}
+.banner .bdg,.banner .pill{
+  background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text2);
+}
+
+/* ══ DEPTH ═══════════════════════════════════════════════════════════════
+   First pass read as flat: cards nearly the same value as the ground, so the
+   glass never separated from what was behind it. The fix is contrast between
+   the two, not more blur — blur with nothing behind it just looks grey. */
+:root{
+  --bg:#E4E4EA;          /* ground a shade deeper … */
+  --card:rgba(255,255,255,.78);  /* … and the glass a shade brighter */
+  --bg3:rgba(255,255,255,.55);
+  --glass-brd:rgba(255,255,255,.9);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F0F1C;
+    --card:rgba(255,255,255,.055);
+    --bg3:rgba(255,255,255,.045);
+    --glass-brd:rgba(255,255,255,.09);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F0F1C;
+  --card:rgba(255,255,255,.055);
+  --bg3:rgba(255,255,255,.045);
+  --glass-brd:rgba(255,255,255,.09);
+}
+/* The glows carry the colour, so they have to actually be visible. */
+:root{--glow1:rgba(0,113,227,.20);--glow2:rgba(90,200,250,.18);--glow3:rgba(191,90,242,.13)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --glow1:rgba(10,132,255,.26);--glow2:rgba(94,92,230,.22);--glow3:rgba(191,90,242,.15)}}
+:root[data-theme="dark"]{
+  --glow1:rgba(10,132,255,.26);--glow2:rgba(94,92,230,.22);--glow3:rgba(191,90,242,.15)}
+
+/* A stat tile should read as one of a set, not as six loose boxes. */
+.dash-tile{border-radius:var(--r3)}
+.dash-tile:hover{background:var(--bg3)}
+
+/* The banner's children carried WHITE baked into inline styles, because the
+   banner used to be a dark green slab. An inline colour cannot be re-themed
+   any more than an inline width can be re-laid-out — the same law that moved
+   six admin buttons into classes. So they are classes now. */
+.bclock-time{font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:var(--text3)}
+.bclock-date{font-family:var(--display);font-size:22px;font-weight:700;margin-top:5px;color:var(--text)}
+.banner-chip{
+  font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;
+  background:var(--accent-l);border:1px solid var(--glass-brd);color:var(--accent);
+}
+
+
+/* ══ THE UI KIT'S PRIVATE PALETTE ════════════════════════════════════════
+   ui.css carries its OWN tokens — --ink / --ink2 / --ink3 / --line / --line2
+   / --hover / --sel — separate from styles.css's --text / --border. Every
+   screen built with the kit (the tables above all, via .dt) reads those, so
+   overriding only --text left the Leads table drawing #0F172A ink on a dark
+   glass ground: unreadable, and invisible to anything but looking at it.
+   A theme has to reach EVERY palette in the app, not the one it found first. */
+:root{
+  --ink:var(--text);
+  --ink2:var(--text2);
+  --ink3:var(--text3);
+  --line:var(--border);
+  --line2:var(--border2);
+  --hover:var(--bg3);
+  --sel:var(--accent-l);
+}
+/* The kit paints the rail and cards from --card/--line, which now resolve to
+   glass, so the kit's own surfaces come along without further edits. */
+body.ui-kit #sidebar{background:var(--card);border-right:1px solid var(--glass-brd)}
+body.ui-kit #topbar{background:var(--card);border-bottom:1px solid var(--glass-brd)}
+.dt-wrap{background:var(--card);border:1px solid var(--glass-brd);border-radius:var(--r3)}
+table.dt thead th{background:transparent;color:var(--text3);border-bottom:1px solid var(--border)}
+table.dt tbody tr{border-color:var(--border)}
+table.dt tbody tr:hover{background:var(--bg3)}
+.dt-empty{color:var(--text3)}
+
+/* ══ MERGE-FIELD CHIPS ═══════════════════════════════════════════════════
+   Were inline `background:#fff` with JS hover handlers that re-set #fff on
+   mouseout — white pills with white text in dark, and a stylesheet fix would
+   have been undone by the handler on the first mouse move. Hover belongs in
+   CSS; a colour belongs in a token. */
+.var-chip{
+  font-size:12px;padding:7px 13px;border-radius:999px;
+  border:1px solid var(--glass-brd);background:var(--bg3);color:var(--text);
+  cursor:pointer;white-space:nowrap;font-weight:500;min-height:34px;
+  transition:border-color .15s ease,background .15s ease,color .15s ease;
+}
+.var-chip:hover{border-color:var(--accent);background:var(--accent-l);color:var(--accent)}
+
+/* The amber warning panels, previously #fffbeb inline — a near-white slab in
+   dark, with dark text that survived. */
+.warn-panel{
+  background:var(--amber-l);border:1px solid var(--amber);
+  border-radius:var(--r2);padding:14px 18px;margin-bottom:14px;color:var(--text);
+}
+.warn-panel-sm{padding:12px;border-radius:var(--r)}
+
+/* ══ THE LOGIN SCREEN ════════════════════════════════════════════════════
+   It was never themed: a hard-coded pale-green ground and a green gradient
+   slab, so in dark mode the labels sat at 1.5:1 on mint. It is also the FIRST
+   thing anyone sees, and the contrast suite never rendered it once because it
+   signs in before testing. Both fixed. */
+.login-wrap{background:var(--bg)}
+.login-wrap::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(620px circle at 8% 0%, var(--glow1), transparent 60%),
+    radial-gradient(560px circle at 92% 100%, var(--glow2), transparent 60%);
+}
+.login-card{
+  background:var(--card);
+  backdrop-filter:blur(var(--blur)) saturate(1.6);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(1.6);
+  border:1px solid var(--glass-brd);
+  border-radius:var(--r4);
+  box-shadow:var(--sh3);
+  position:relative;
+}
+/* The header keeps a coloured slab — it is the brand moment — but built from
+   the accent so it follows the theme instead of fighting it. White text on it
+   is correct and stays. */
+.login-top{
+  background:linear-gradient(135deg,var(--accent) 0%,var(--accent-m) 100%);
+  border-radius:var(--r4) var(--r4) 0 0;
+  color:#fff;
+}
+.login-top *{color:#fff}
+.google-btn{
+  background:var(--bg3);border:1px solid var(--glass-brd);color:var(--text);
+  border-radius:var(--r2);min-height:44px;
+}
+.google-btn:hover{background:var(--accent-l);border-color:var(--accent);color:var(--accent)}
+.or-div{color:var(--text3)}
+.or-div::before,.or-div::after{background:var(--border)}
+.flbl{color:var(--text2)}
+
+/* Segmented buttons that used to hard-code #fff for the unselected half, and
+   the login tab pill that painted `background: var(--text)` — an INVERSION,
+   which is a near-black pill in light and a white pill with white text in
+   dark. The accent carries "selected"; it works in both. */
+.seg-btn{
+  padding:8px 16px;border-radius:var(--r2);font-size:12px;font-weight:600;
+  cursor:pointer;min-height:36px;
+  border:1.5px solid var(--glass-brd);background:var(--bg3);color:var(--text2);
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease;
+}
+.seg-btn:hover{border-color:var(--accent);color:var(--accent)}
+.seg-btn.is-on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.login-tab{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+  padding:12px 8px;border:0;cursor:pointer;font-family:inherit;
+  font-size:13.5px;font-weight:600;border-radius:var(--r2);min-height:46px;
+  background:transparent;color:var(--text2);transition:background-color .15s ease,color .15s ease;
+}
+.login-tab:hover{color:var(--text)}
+.login-tab.is-on{background:var(--accent);color:#fff}
+
+
+/* ══ THE TOPBAR IS A BAR, NOT A LENS ═════════════════════════════════════
+   It is translucent glass and the first ambient glow sits right behind it, so
+   on a phone (glow centred at the top) the entire bar rendered as a solid blue
+   slab — reported from a real device, and something no contrast check would
+   ever flag because blue-on-blue-ish text still passes.
+
+   Fix: give the bar its OWN opaque-ish ground rather than borrowing whatever
+   is behind it. It keeps the blur for what SCROLLS under it, which is the part
+   that actually looks good. */
+#topbar, body.ui-kit #topbar{
+  background:var(--topbar-bg);
+  border-bottom:1px solid var(--glass-brd);
+}
+:root{--topbar-bg:rgba(247,247,250,.86)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--topbar-bg:rgba(20,20,34,.88)}
+}
+:root[data-theme="dark"]{--topbar-bg:rgba(20,20,34,.88)}
+
+/* Same reasoning for the rail: it is tall, so the glow crosses it. */
+#sidebar, body.ui-kit #sidebar{background:var(--rail-bg)}
+:root{--rail-bg:rgba(250,250,252,.82)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--rail-bg:rgba(18,18,31,.86)}
+}
+:root[data-theme="dark"]{--rail-bg:rgba(18,18,31,.86)}
+
+/* ══ THE RAIL ON A TOUCH DEVICE ══════════════════════════════════════════
+   Hover-to-expand is right for a mouse and useless on glass. A tablet — or a
+   phone in "desktop site" mode — is wide enough to get the desktop rail and
+   has no hover, so it showed 14 unlabelled icons with no way to read any of
+   them. The brand mark is now the switch; this shows the affordance only where
+   it is needed, so a mouse user never sees a control they do not want. */
+.sb-brand{cursor:default}
+.rail-pin{display:none}
+@media (hover:none), (pointer:coarse){
+  .sb-brand{cursor:pointer;position:relative}
+  .rail-pin{
+    display:flex;align-items:center;justify-content:center;
+    margin-left:auto;width:30px;height:30px;border-radius:var(--r);
+    color:var(--text3);flex:none;
+  }
+  .sb-brand:active .rail-pin{background:var(--bg3);color:var(--accent)}
+  /* Touch targets get bigger, never smaller. */
+  body.ui-kit #sidebar.pinned .nav-item{min-height:44px}
+}
+/* Below the mobile breakpoint the rail is already an off-canvas drawer behind
+   the hamburger, so the pin is noise there. */
+@media (max-width:860px){ .rail-pin{display:none} }
+
+/* ══ THE EXPANDING LEAD ROW (D-0014) ═════════════════════════════════════
+   Quiet until asked, then it shows what the lead IS and the two or three
+   things you actually do to it — the email status above all, which used to be
+   a row click, a drawer, and a hunt for a contact card. */
+tr.dt-open, tr.is-open{background:var(--accent-l)!important}
+tr.is-open td{border-bottom-color:transparent}
+
+tr.lead-exp > td{padding:0;background:var(--bg3);border-top:0}
+.lx{
+  display:flex;gap:18px;align-items:flex-start;
+  padding:14px 16px 16px;
+  border-left:3px solid var(--accent);
+  background:var(--bg3);
+}
+.lx-main{flex:1;min-width:0}
+.lx-side{flex:none;width:230px;display:flex;flex-direction:column;gap:10px}
+.lx-head{
+  font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:8px;
+}
+
+.lx-contact{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--glass-brd);
+  border-radius:var(--r2);padding:10px 12px;margin-bottom:7px;
+}
+.lx-who{flex:1;min-width:180px}
+.lx-nm{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:7px}
+.lx-primary{
+  font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-l);
+  border-radius:999px;padding:2px 7px;
+}
+.lx-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
+.lx-mail{color:var(--text2)}
+
+.lx-es{display:flex;align-items:center;gap:7px;flex:none}
+.lx-es>span{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+/* 16px so iOS does not zoom the page on focus and never zoom back. */
+.lx-sel{
+  font-size:16px;padding:6px 10px;min-height:36px;
+  border:1px solid var(--glass-brd);border-radius:var(--r);
+  background:var(--card);color:var(--text);cursor:pointer;
+}
+.lx-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-l)}
+.lx-noemail{font-size:11.5px;color:var(--text3)}
+.lx-empty{font-size:12.5px;color:var(--text3);padding:6px 2px}
+
+.lx-facts{
+  background:var(--card);border:1px solid var(--glass-brd);
+  border-radius:var(--r2);padding:10px 12px;
+}
+.lx-kv{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0}
+.lx-kv span{color:var(--text3)}
+.lx-kv b{color:var(--text);font-weight:600;text-align:right}
+.lx-open{width:100%;justify-content:center;min-height:38px}
+
+@media (max-width:860px){
+  /* Stack, never shrink. The panel lives inside .dt-wrap, which is the
+     horizontal scroller — so it must not force that scroller any wider. */
+  .lx{flex-direction:column;gap:12px;padding:12px}
+  .lx-side{width:100%}
+  .lx-contact{gap:10px}
+  .lx-es{width:100%;justify-content:space-between}
+  .lx-sel{flex:1;max-width:60%}
+}
+
+/* ══ HARD-CODED LIGHT GROUNDS ════════════════════════════════════════════
+   A hex written into styles.css or ui.css is not a token, so re-skinning the
+   palette leaves it exactly as it was — a pale panel carrying text that is now
+   near-white. This is the stylesheet twin of the inline-colour rule: an inline
+   colour cannot be re-themed, and neither can a literal one.
+
+   The one the owner found: `tr:hover td{background:#FAFBFC}` (styles.css).
+   The hover tint was set on the CELL, and a cell paints OVER its row — so the
+   themed `tr:hover` and the `tr.is-open` tint were both correct and both
+   invisible, and every detail in the row read as white-on-white. It survived
+   the contrast suite because that suite renders a screen at rest: it never
+   hovers, never opens a row, and therefore never once saw this colour.
+   A palette has states; a screenshot of one state is not the palette.
+
+   `.mb-body` stays #fff deliberately — that is an EMAIL's own page, and a
+   sender's HTML is written expecting white. Tinted chips (.pill.*, .st-*,
+   .av-*) also stay: each pairs its own dark text with its own pale ground, so
+   they are internally consistent and legible in both themes. */
+tr:hover td{background:transparent}
+table tbody tr:hover td{background:transparent}
+tr.is-open td,tr.dt-open td,tr.sel-row td{background:var(--accent-l)}
+.sel option,select option{background:var(--bg2);color:var(--text)}
+.notice{background:var(--accent-l);border:1px solid var(--glass-brd)}
+.seq-card-h,.cmp-foot{background:var(--bg3)}
+
+/* ══ SMOOTHNESS ══════════════════════════════════════════════════════════
+   The owner: "theres small glitche in the UI and the screens, like a lag or
+   sometimes early animations and all. Its not smooth."
+
+   Three things were measured, and one of them could NOT be:
+
+   1. BLUR WAS ON EVERY CONTROL, NOT JUST THE CHROME. `backdrop-filter` was
+      written onto .btn-outline, every input/select/textarea, the horizon
+      buttons, the merge chips and the Google button — 25 separate blur layers
+      on one phone screen, each one a compositing layer the browser re-blurs
+      whenever anything behind it moves. Glass belongs to surfaces that FLOAT
+      OVER content — the rail, the top bar, cards, drawers, scrims, the login
+      card. A button sitting on a card has nothing behind it worth seeing, and
+      the pixels agree: removing it changes Leads and Admin by at most 3/255
+      per channel (invisible) and the Email page by at most 25/255 on 3% of
+      pixels — a slight softening of large fields lying over the ambient glow.
+      25 compositing layers is a bad price for that.
+      HONEST LIMIT: this sandbox's Chromium composites in SOFTWARE, so a scroll
+      measures exactly 17ms/frame with the blur on and with it off. That number
+      proves nothing and was not used. What is cited above is a LAYER COUNT and
+      a PIXEL DIFF — both real, both measurable here. Whether the phone feels
+      smoother is the owner's call, not a number I can produce in this box.
+
+   2. `transition: all` ANIMATES LAYOUT, AND THAT IS THE "EARLY ANIMATION".
+      Nine rules used it. `all` includes width, height, padding and font-size,
+      so a button whose label changes ("Send" → "Sending…") animates its own
+      width, and a control that gains a border on hover nudges its neighbours
+      for the duration. Nothing asked for that; it is a side effect of naming
+      no properties. Every one now lists the paint-only properties it actually
+      wants. Never write `transition:all` in this codebase.
+
+   3. NOTHING REPLAYS ON A REPAINT. Measured: an idle render() and a
+      data-changed render() both leave zero animations running, on every page,
+      in 0-1ms. The Session 16 region engine holds. So the complaint was not
+      entry animations restarting, and no time was spent there.
+
+   (Reduced motion was already honoured, from the first theme commit — the
+   block above just grew the two declarations it was missing.) */
+
+/* ══ A CONTROL MUST LOOK LIKE A CONTROL ══════════════════════════════════
+   `--glass-brd` is a white highlight at 72% alpha. On a glass surface lying
+   over the ambient glow that reads as the lit edge of a pane — which is the
+   whole point — but a form control sits on a WHITE CARD, where a white edge is
+   nothing at all. In light mode the email-status dropdown inside an opened
+   Leads row rendered as the bare word "Valid": no box, no arrow well, no
+   affordance, indistinguishable from a label.
+
+   So a control's border is its own token. It is NOT --border either: --border
+   is the hairline BETWEEN things (table rules, card edges) and is deliberately
+   faint, while a control's edge has to survive on top of a surface and say
+   "you can type here". The glass highlight stays where it belongs, on the
+   panes. */
+.inp,.sel,input[type=text],input[type=email],input[type=date],input[type=search],
+input[type=number],input[type=password],textarea,select,
+.btn-outline,.hz-btn,.hz-count,.hz-pg,.na-act,.am-src,.google-btn,.lx-sel{
+  border-color:var(--ctl-brd);
+}

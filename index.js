@@ -36,7 +36,8 @@ const {
   renderStoredEmail,
   buildRotatingTemplateDeck,
   isRandomTemplateMode,
-  getVariantById
+  getVariantById,
+  unresolvedVars
 } = require('./email-vars');
 const {
   DEFAULT_SIGNATURE_HTML,
@@ -732,10 +733,55 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     if (!job_id) return res.status(400).json({ error: 'Reminder must be linked to a job to send through the engine' });
 
     // The engine resolves the sending mailbox from the job, so make sure it has one.
+    // The company/industry/location come along too because this row is also the
+    // authority on what {{pos}}, {{company}} and {{loc}} mean for this message —
+    // see the merge-field pass below.
     const { data: job } = await supabase
       .from('jobs')
-      .select('sending_email_id, sending_email:user_emails!sending_email_id(email_address)')
+      .select('id, position, location, industry, timezone, company_id, company:companies(name,industry,location), research, salary_range, sending_email_id, sending_email:user_emails!sending_email_id(email_address)')
       .eq('id', job_id).single();
+
+    // ── MERGE FIELDS ARE FILLED HERE, AND THEN CHECKED ──────────────────────
+    // A reminder template is picked in the browser and filled there from the
+    // browser's own cache of leads. When that cache does not hold the lead —
+    // the reminder is older than the session, the lead was reassigned, the job
+    // list is scoped differently for this user — the browser had nothing to
+    // fill from and sent the template through verbatim. It went out reading
+    // "Hi {{fn}}, ... the {{pos}} opening at {{company}}" over a real
+    // recruiter's name and signature, to a real prospect (2026-09-15).
+    //
+    // So the SERVER fills them, from the job and contact this reminder is
+    // actually attached to, which is the only copy of those facts that cannot
+    // be stale. Re-filling text that is already filled is a no-op: there are no
+    // tokens left to match.
+    //
+    // {{sender}} / {{senderemail}} are deliberately NOT filled — they are
+    // resolved at send time from the mailbox that actually sends, which is the
+    // one rule the outbound path has (see email-vars.js DEFER_SENDER).
+    let filledSubject = subject, filledBody = body;
+    const { data: reminderContact } = contact_id
+      ? await supabase.from('contacts').select('id,first_name,last_name,email,designation').eq('id', contact_id).single()
+      : { data: null };
+    if (job) {
+      const vars = buildEmailVars({ job, contact: reminderContact, senderDisplayName: DEFER_SENDER });
+      filledSubject = fillTemplate(subject, vars);
+      filledBody = fillTemplate(body, vars);
+    }
+
+    // And then it is CHECKED, because filling can still leave a hole: a
+    // variable nobody defines ({{name}}, a typo, a field from another
+    // vocabulary) survives the pass and would ship. A prompt rule is a request;
+    // this is the guarantee. Refusing is right — the alternative is blanking
+    // the token, which sends "Hi ," and looks like nothing went wrong.
+    const holes = [...new Set([...unresolvedVars(filledSubject), ...unresolvedVars(filledBody)])];
+    if (holes.length) {
+      return res.status(400).json({
+        error: `This email still has merge fields PACE could not fill: ${holes.map(h => `{{${h}}}`).join(', ')}. `
+             + 'Either the lead is missing that detail, or the field name is not one PACE knows. '
+             + 'Edit the message to remove or replace them, then send.',
+        unresolved: holes
+      });
+    }
     let sendingAddr = job?.sending_email?.email_address || null;
     if (!job?.sending_email_id) {
       const { data: ue } = await supabase.from('user_emails')
@@ -754,14 +800,15 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
 
     // Queue as a fresh send (followup_type 'reminder' is not a thread reply) so the engine delivers it.
     const { data: row, error } = await supabase.from('emails').insert({
-      contact_id: contact_id || null, job_id, to_email, subject, body,
+      contact_id: contact_id || null, job_id, to_email,
+      subject: filledSubject, body: filledBody,
       platform: 'Outlook', sent_by: req.user.id, from_email: sendingAddr,
       status: 'pending', followup_type: 'reminder'
     }).select().single();
     if (error) throw error;
 
     if (reminder_id) await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder_id).eq('user_id', req.user.id);
-    await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${subject}`, null, null);
+    await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${filledSubject}`, null, null);
 
     res.status(201).json({ success: true, email_id: row.id });
     emit(EVENTS.OUTREACH_QUEUED, { managerId: req.user.id });
@@ -2030,9 +2077,23 @@ app.post('/follow-ups/run', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// PURE. Is a follow-up due, counting from the day the initial cold email really
+// sent? `sentAt` is a date ('YYYY-MM-DD'), `dayGap` the configured fu1/fu2 offset,
+// `todayDate` today in the same form. Kept pure and exported so every hour of the
+// calendar is testable without waiting for it.
+function isFollowupDueFromSend(sentAt, dayGap, todayDate) {
+  if (!sentAt || !todayDate) return false;
+  const gap = Number.isFinite(dayGap) ? dayGap : parseInt(dayGap, 10);
+  if (!Number.isFinite(gap)) return false;
+  const start = new Date(`${String(sentAt).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return false;
+  start.setUTCDate(start.getUTCDate() + Math.max(0, gap));
+  return start.toISOString().slice(0, 10) <= String(todayDate).slice(0, 10);
+}
+
 async function runFollowupEngine() {
   const todayDate = today();
-  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0 };
+  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0, skipped_no_initial: 0, skipped_not_due_yet: 0 };
   // Apply any bounces that arrived since the last 30-min sweep BEFORE deciding
   // who to follow up — so a contact whose earlier email just bounced is already
   // marked invalid and gets skipped here instead of receiving another send.
@@ -2104,6 +2165,33 @@ async function runFollowupEngine() {
       (liveRows || []).forEach(r => { if (isLiveOutreachRow(r)) liveOutreachPairs.add(`${r.job_id}:${r.contact_id}`); });
     }
 
+    // A FOLLOW-UP IS ONLY LEGITIMATE IF THE INITIAL COLD EMAIL ACTUALLY SENT.
+    // `follow_ups` rows are created at ASSIGNMENT time (POST /distribute/execute)
+    // and stamped `outreach_sent_at: today` — a column name that asserts something
+    // that has not happened yet. The initial emails are queued asynchronously and
+    // drain at one per ~75-105s inside an 8-hour window, so a large assignment
+    // leaves most of them unsent for days. The fu1 clock, meanwhile, started for
+    // every one of them.
+    // On 2026-09-10 that queued 215 fu1 emails for leads whose cold email had
+    // NEVER been sent: "just following up on my note below", quoting nothing, to
+    // 214 real prospects under the customer's name. Nothing on screen said so —
+    // the only volume brake was the mailbox's 300/day cap, which is above the
+    // backlog size. So the pair must be proven sent, from the emails table.
+    const initialSentPairs = new Map();
+    if (dueContactIds.length) {
+      const { data: initialRows } = await supabase.from('emails')
+        .select('job_id, contact_id, sent_at')
+        .in('contact_id', dueContactIds)
+        .eq('status', 'sent')
+        .is('followup_type', null);
+      (initialRows || []).forEach(r => {
+        const key = `${r.job_id}:${r.contact_id}`;
+        const prev = initialSentPairs.get(key);
+        // Earliest real send is the anchor — that is the note being followed up on.
+        if (!prev || (r.sent_at && r.sent_at < prev)) initialSentPairs.set(key, r.sent_at || prev || null);
+      });
+    }
+
     for (const fuList of [fu1Due, fu2Due]) {
       const isFu2 = fuList === fu2Due;
       for (const fu of fuList) {
@@ -2130,6 +2218,19 @@ async function runFollowupEngine() {
         const dupKey = `${fu.job_id}:${fu.contact_id}`;
         if (liveOutreachPairs.has(dupKey)) { log.skipped_duplicate = (log.skipped_duplicate || 0) + 1; continue; }
         const bdId = job.assigned_to_bd;
+        // See the note above `initialSentPairs`. Left 'active' rather than
+        // 'skipped' deliberately: if the initial cold email does eventually send,
+        // this becomes a legitimate follow-up on the next run.
+        const initialSentAt = initialSentPairs.get(dupKey);
+        if (!initialSentAt) { log.skipped_no_initial++; continue; }
+        // And re-anchor the clock on the REAL send date, not on the assignment
+        // date the due column was computed from. Without this, an initial that
+        // sends five days late is followed up the same day it goes out, because
+        // its stored due date is already in the past.
+        const dayGap = isFu2
+          ? parseInt(settings[`u_${bdId}_fu2_day`] || '7', 10)
+          : parseInt(settings[`u_${bdId}_fu1_day`] || '3', 10);
+        if (!isFollowupDueFromSend(initialSentAt, dayGap, todayDate)) { log.skipped_not_due_yet++; continue; }
         // Deferred to send time so the name always matches the mailbox that
         // actually sends (and therefore the signature).
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
@@ -2182,7 +2283,7 @@ async function runFollowupEngine() {
     // Quota is charged on actual delivery (processPendingEmailSends), not at queue time.
     // Pre-charging the day's quota here marked it "used" before anything sent, which made the
     // auto-sender defer every just-queued follow-up on phantom quota — so they never left.
-    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}`);
+    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}, skipped_no_initial: ${log.skipped_no_initial}, skipped_not_due_yet: ${log.skipped_not_due_yet}`);
     return log;
   } catch (err) { console.error('[FollowupEngine] Error:', err.message); return { ...log, error: err.message }; }
 }
@@ -2800,16 +2901,13 @@ function isPermanentFollowupBlock(status) {
   return s === 'invalid' || s === 'deactivated';
 }
 
-// Outreach-class email types (the initial outreach is intentionally excluded).
-// Used by the double-send guard below.
-const FOLLOWUP_EMAIL_TYPES = ['fu1', 'fu2', 'reminder'];
+// The double-send rule moved to services/outreach-dedup.js (PURE) so the
+// Reminders page can apply the SAME rule when it decides whether to OFFER a
+// send. It used to live only here, at the moment of sending, which is why the
+// page let someone compose a whole email and then refused it — see that file.
+const { FOLLOWUP_EMAIL_TYPES, isLiveOutreachRow: isLiveOutreachRowPure, callTaskSkipReason } = require('./services/outreach-dedup');
 
-// A follow-up/reminder email row is "live" if it is still queued (pending) or
-// was already delivered today — either way, sending another one now would be a
-// same-day duplicate to that contact.
-function isLiveOutreachRow(r) {
-  return !!r && (r.status === 'pending' || (r.sent_at && String(r.sent_at).slice(0, 10) === today()));
-}
+function isLiveOutreachRow(r) { return isLiveOutreachRowPure(r, today()); }
 
 // True if a reminder or follow-up to this contact (optionally scoped to a job)
 // is already queued or was sent today — used to prevent the scheduled follow-up
@@ -2961,6 +3059,7 @@ app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
+app.use(require('./routes/email-history')(routeCtx));
 app.use(require('./routes/mailbox')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which
 // providers are actually configured; the callbacks live in the microsoft/gmail
@@ -3098,6 +3197,24 @@ async function wfReminderExecutor({ step, enrollment, context }) {
   const cfg = step.config || {};
   const assignee = cfg.assignee_user_id || job?.assigned_to_bd || enrollment.enrolled_by;
   if (!assignee) return { outcome: 'skipped', detail: { reason: 'no_assignee' } };
+
+  // A bd_touch step is a CALL + LinkedIn task — it asks a human to reach the
+  // contact by a route that is not email. If the record holds no phone number
+  // and no LinkedIn, there is no such route, and the task it would write is one
+  // nobody can carry out. Seven of these were live at once, every one reading
+  // "Call the POC about this role and connect on LinkedIn" for a contact with
+  // neither field set, which is what made the Reminders page read as invented
+  // work (owner's decision D-0017, 2026-09-15: do not create it).
+  //
+  // SKIPPED, NOT FAILED, AND NEVER SILENT: the step run records the reason, so
+  // a lead that stops being chased for this is answerable from the data rather
+  // than just quietly dropping off somebody's list. The `reminder` channel is a
+  // GENERIC task and is deliberately not gated — only the call step is.
+  const skipReason = callTaskSkipReason(step, contact);
+  if (skipReason) {
+    return { outcome: 'skipped', detail: { reason: skipReason, contact_id: contact?.id || null } };
+  }
+
   const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || 'POC';
   const vars = job ? buildEmailVars({ job, contact, senderDisplayName: '' }) : {};
   const parts = [cfg.note || step.name];

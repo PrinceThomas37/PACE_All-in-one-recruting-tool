@@ -470,7 +470,7 @@
     }
 
     var dup = STATE.ats.dupMatches.length ? (
-      '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:14px">'+
+      '<div class="warn-panel warn-panel-sm">'+
         '<div style="font-weight:700;font-size:12.5px;color:#b45309;margin-bottom:8px">⚠ Possible existing candidate'+(STATE.ats.dupMatches.length>1?'s':'')+' — matched by name + email/phone</div>'+
         STATE.ats.dupMatches.map(function(m){
           return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px">'+

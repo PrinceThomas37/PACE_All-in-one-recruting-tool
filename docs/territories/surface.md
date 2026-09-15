@@ -121,3 +121,107 @@
   `frontend-smoke.mjs` (14/14), `nav-icons-smoke.mjs` (40/40) all pass.
   Screenshots taken with a stubbed endpoint (busy morning, quiet day, failed
   fetch) across admin/recruiter/mobile — filenames in the report.
+
+## 2026-09-11 — the app got a new face, and four ways a theme leaks
+
+**`public/theme.css` (~432 lines) re-skins every screen by redefining tokens.**
+Loaded last. No JS behaviour changed; deleting the one `<link>` in
+`index.html` restores the old look exactly. That reversibility is what made a
+change this broad safe — keep it true.
+
+**Three theme states, not two:** `light`, `dark`, or **no `data-theme`
+attribute at all**, which means follow the OS. The complete light palette is on
+bare `:root`; dark is defined under BOTH `prefers-color-scheme` and
+`[data-theme]`, so an explicit choice always wins. Never define a colour only
+inside a media query.
+
+**Applied inline in `<head>`, before first paint.** Deferring by one tick paints
+light and snaps to dark. **`toggleTheme()` sets ONE attribute and calls nothing
+else** — no `render()`; the render engine's whole point is that a repaint
+changing nothing writes nothing, and re-rendering to change a colour would
+reload every sandboxed iframe.
+
+**Four ways the theme leaked, all found by the owner looking at their phone:**
+1. **`ui.css` has its own palette** — `--ink`/`--ink2`/`--ink3`/`--line`/
+   `--line2`/`--hover`/`--sel` — separate from `styles.css`'s `--text`/
+   `--border`. Bridging one left the entire Leads table drawing `#0F172A` on
+   dark glass. **Both are bridged at the top of `theme.css`; do not remove it.**
+2. **Inline colours cannot be re-themed.** Swept: the dashboard clock and scope
+   chip (`.bclock-time`/`.bclock-date`/`.banner-chip`), the merge-field chips
+   (`.var-chip`), the Subject/Body toggle (`.seg-btn`), the login tab
+   (`.login-tab`), two `#fffbeb` panels (`.warn-panel`). **And check for JS
+   hover handlers that re-set the colour** — the chips had `onmouseout`
+   restoring `#fff`, which would have undone any CSS fix instantly.
+3. **Inversion is not theme-safe.** `background: var(--text)` = near-black pill
+   in light, white pill with white text in dark.
+4. **A `<canvas>` paints itself.** The login backdrop filled `#e8f5ee` with
+   green particles in JS — no stylesheet could ever have reached it.
+   `loginPalette()` in `11-bind-and-actions.js` reads the LIVE custom
+   properties (never a duplicated hex) and re-reads on `pace-theme-change`.
+
+**The topbar and rail have their OWN ground**, not borrowed glass. They are
+translucent and the first ambient glow sat directly behind them — on a phone the
+mobile glow is centred at the top, so the whole topbar rendered as a blue slab.
+No contrast check flags that, because blue-on-blue-ish text still passes.
+
+**`#nav-scrim` must never be given `position`.** It is `position:fixed`
+z-index 65 in `mobile.css`; a `z-index` rule that also restated `position`
+collapsed it and made the phone menu impossible to close. Never restate
+`position` in a rule whose job is `z-index`.
+
+**The rail is tappable now.** Hover-expand stays gated on `(hover:hover) and
+(pointer:fine)` — width is the wrong question — but a tablet or a phone in
+"desktop site" mode is wide AND touch, and got 14 unlabelled icons.
+`toggleRail()` on the brand mark toggles the pre-existing `.pinned`, persisted
+to `pace-rail`, and `.rail-pin` only renders under `(hover:none),
+(pointer:coarse)`.
+
+**Also this session (PR #203):** `UI.partition/horizonBar/pager/clampPage/
+searchBox/countLink` + `HORIZON_DAYS` 90 / `PICKER_CAP` 15 / `PAGE_SIZE` 25,
+mirroring `services/view-horizon.js` (a test fails if the constants drift). The
+Jobs page went from 92x DOM growth to 1.25x. The convert picker becomes a
+SEARCH past the cap, and selected items stay pinned even when a search excludes
+them. `public/js/50-all-mail.js` is the All-email view.
+
+Verified: 76/76 on Node 22 and Node 26, `verify-frontend.sh`,
+`theme-contrast-smoke` 6/6, `mobile-layout-smoke` 39/39,
+`ageing-layout-smoke` 4/4, `screen-stability-smoke`, `nav-icons-smoke`.
+Screenshots in both themes: dashboard, leads, jobs, email, login, outreach plan.
+
+
+## 2026-09-11 — the Leads row reveals itself (D-0014, first screen)
+
+**The owner's complaint was about DISCOVERABILITY, not a missing feature.** The
+email valid/invalid control existed, worked, and was visible — behind a row
+click, a drawer, and a hunt for a contact card. Nothing on the row said so.
+
+`leadRowToggle(id, ev)` + `leadExpandHtml(j)` in `06-page-leads.js`. Clicking a
+Leads row opens a panel **beneath that row**, showing every contact with its
+email-status select (the same `changeEmailStatus` the drawer calls — one
+implementation, two doors) plus stage/industry/assignment and **Open full
+record**. `UI.table` now emits `data-row-id` when a row carries `id`.
+
+**Three rules this must keep, each protecting something already paid for:**
+1. **Built on demand, one at a time.** The panel is NEVER part of the table's
+   html. A hidden panel per row turns a 400-row list into 400 panels — the
+   growth `ageing-layout-smoke` exists to catch.
+2. **No `render()`.** It inserts and removes one `<tr>`, like `toggleNav()` /
+   `toggleRail()` / `toggleTheme()`.
+3. **`STATE.page` untouched.** Expanding is not navigation, and the drawer is
+   not opened.
+
+**A note on what the test can and cannot prove.** Adding a stray `render()` did
+NOT fail the suite — because the render engine rewrites a region only when its
+html string differs, and the panel is not in that html, so the call writes
+nothing. "No render called" and "render called, wrote nothing" are the same
+thing for the user, and node identity is what actually matters. The test asserts
+node identity (table, scroll container and first row all survive) and that IS
+the property worth holding. It does catch the break that matters: removing the
+close-the-previous-panel line fails it immediately.
+
+**And one assertion was vacuous before it was fixed** — `scrollTop` on a page
+that does not scroll (Leads paginates at 20), reported as "0 → 0" and passing.
+Replaced with node identity, which cannot pass emptily.
+
+Verified: `lead-row-expand-smoke.mjs` 20/20, full suite **77/77**. Screenshots
+in dark and light, desktop and phone.

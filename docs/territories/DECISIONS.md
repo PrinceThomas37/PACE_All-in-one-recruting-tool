@@ -47,6 +47,322 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0022 · 2026-09-15 · STANDS · The theme follows the person, not the browser
+**Their words:** *"a change in the theme in one user is reflected to other
+users, it should not happen like that."* Chosen: **"Follow the person."**
+
+**What was actually happening.** The light/dark choice is written to
+`localStorage` and never to the server, so it is per BROWSER. Two different
+people on two different machines never shared it; two logins on the SAME
+machine did, and the next person to sign in inherited the last one's choice.
+Told to the owner plainly before they chose.
+
+**The decision.** The choice is stored against the USER, so it follows them to
+any device and never carries over to whoever signs in next on a shared
+computer. `localStorage` stays as the instant-apply cache (the page must not
+flash the wrong theme while a fetch is in flight) but the account is the
+authority on load.
+
+**No migration.** Stored in `app_settings` under `theme_<user_id>`, the same
+pattern as the next-action dismissals and the AI meter, for the same reason:
+a per-user preference does not justify a schema change, and migration 043 is
+not something to spend on a colour.
+
+**Re-open when:** a second per-user preference appears (density, default
+landing page, notification settings). At two or three, this becomes a real
+`user_preferences` row rather than a key per setting.
+
+### D-0021 · 2026-09-15 · STANDS · The briefing line is about YOUR desk
+**Their words:** chosen — **"Yours — your replies, your leads."**
+
+**What was happening.** `gatherFacts` in `routes/ai.js` scopes by ORGANISATION
+only. Every user — recruiter, BD, lead, admin — was shown the same sentence:
+*"Two replies came in today, and the unassigned lead pool stands at 79."* The
+unassigned lead pool is a BD-side number a recruiter has no part in working,
+and it was presented as if it were their morning.
+
+**The decision.** The line reports the reader's own work. A recruiter is told
+about their candidates and their replies; a BD about their leads. **Admin is
+the exception and still sees the organisation**, because the whole company IS
+their desk — the same exception `/reports/recruiting` already makes.
+
+**Re-open when:** the owner wants a company-wide line back for leads as well as
+admin, or wants the team number alongside the personal one.
+
+### D-0020 · 2026-09-15 · STANDS · You own your list; a manager reviews and PROMPTS
+**Their words:** *"reminders information is not just for one user who is
+responsible for it, its been showed to everyone and every user as a manager can
+interact with it."* … *"Maybe we can define what ownership or responsibility
+means."* Chosen: own list plus a count, **"And the count where the manager can
+review it and initiate the other user to take action on it."**
+
+**THE DEFINITION OF OWNERSHIP, since the owner asked for one.** A record has ONE
+responsible person:
+* a **reminder / task** is owned by its `user_id` — the person it was created for;
+* a **lead** by `jobs.assigned_to_bd`;
+* a **candidate submission** by `submissions.recruiter_id`;
+* a **contact** by the owner of the job it hangs off.
+
+**What ownership buys you:** it appears on your daily list, and you can act on
+it. **What it costs everyone else:** nobody else's daily list carries your work,
+and nobody else can close it.
+
+**What a manager gets instead.** Their own list, plus a COUNT of what is open
+across their reporting chain, and a review screen behind it. On that screen they
+can see the item, see whose it is — and **PROMPT the owner to act**. They cannot
+do it for them. That is the whole shape of the decision: *review and initiate*,
+not reach in.
+
+**Why this is not a smaller change than it looks.** Today the daily queue is
+chain-scoped, so a manager's list already carries their reports' reminders — and
+carries a **Done button that silently does nothing**, because the endpoint
+behind it correctly refuses to close a reminder the caller does not own. The
+button reported success and the row came back on the next load. Under this
+decision that button is never drawn on someone else's work at all, which is the
+honest fix rather than making a manager able to close a task they did not do.
+
+**Re-open when:** a manager says prompting is not enough — the case to watch is
+somebody leaving or going on holiday, where the answer is probably REASSIGNMENT
+(changing who owns it) rather than acting on another person's behalf. Ownership
+transfer is the right shape for that, and is deliberately not built yet.
+
+### D-0019 · 2026-09-15 · STANDS · A list is calm; colour is a scarce resource
+**Their words:** *"can correct the colour, too much red. like after 5,6
+reminders the screen will look reddish."*
+
+**What was happening.** The reminder cards marked every overdue row with a 2px
+red border, a solid red pill and a red-tinted panel, on top of an amber-washed
+card ground. One card looked deliberate. Six looked like an alarm — and the
+owner spotted the scaling problem from a screenshot of two.
+
+**The decision, generalised past this one page.** **Overdue is the ordinary
+state of a to-do list, not a fault.** Red means something has gone wrong, so it
+is not used to mark the normal condition of a row. A list is calm by default:
+the card sits on `--card` with a 1px border, and state is carried by a **3px
+left stripe plus one tinted chip** — amber for overdue, the brand accent for
+today. Roughly a tenth of the coloured ink of the first version, and red does
+not appear on the page at all.
+
+**Why this is a decision and not a tweak.** It sets the default for every list
+PACE draws next. The temptation on each new screen is to colour the rows that
+need attention; the owner's point is that when most rows need attention, that
+colours everything and communicates nothing.
+
+**Pinned**, because a future session will reach for red again:
+`test/reminder-clarity-smoke.mjs` fails on any red token in the page, on a
+tinted card ground, and on the state colour being painted in more than three
+places. Verified by reintroducing both.
+
+**Re-open when:** a genuinely exceptional row appears that needs to outrank
+everything else on the page — a failed send, a bounced address, a compliance
+hold. Red is still available for that, which is the whole point of not spending
+it on "this is two days old".
+
+### D-0018 · 2026-09-15 · STANDS · A task stays open when its sequence moves on
+**Their words:** *"Now i think the reminder was created inspite of follow up
+email being triggered."* Chosen from three options: **"Stays open, but shows
+what's happened since."**
+
+**What was happening.** Step 3 of Standard Sales Outreach created a call task on
+13 Sep. Step 4 sent follow-up 2 on 15 Sep and the enrollment completed. The task
+sat there untouched, with a "Compose email" button, and the send path refused
+the click:
+
+> Send failed: A follow-up to this contact is already queued or was sent today —
+> skipped to avoid a duplicate email.
+
+The refusal was CORRECT. What was wrong is that the screen offered the action at
+all, and only admitted the problem after the email had been composed.
+
+**The decision.** A sequence finishing does not close the human task it created.
+Two unanswered emails is precisely when a call is worth making, so the task
+survives — it just stops pretending nothing has happened since. The card now
+carries the email trail ("2 emails already sent, last on 2026-09-15") and, when
+another send would be refused, says so **before** offering it rather than after.
+
+**Why not the alternatives.** "Close it when the sequence finishes" loses the
+call on exactly the leads that never replied. "Close it as soon as a later email
+goes out" makes the automated email cancel the human step, which is the opposite
+of what step 3 exists for.
+
+**The rule this creates:** a rule that decides whether an action is ALLOWED
+belongs where the action is OFFERED, not only where it is taken.
+`services/outreach-dedup.js` is that rule, now shared by the send path and the
+page instead of living only inside index.js.
+
+**Re-open when:** the owner finds the open tasks pile up faster than they get
+worked, or asks for a way to clear a batch of them at once.
+
+### D-0017 · 2026-09-15 · STANDS · No call task when there is nobody to call
+**Their words:** chosen from three options, in response to being shown that all
+five contacts on the live call tasks had no phone number and no LinkedIn:
+**"Don't create it at all."** Offered with the trade-off stated — *"a lead
+quietly stops being chased and nobody is told"* — and taken anyway.
+
+**What was happening.** Seven live tasks read *"Call the POC about this role and
+connect on LinkedIn."* Every contact named held **neither a phone number nor a
+LinkedIn URL**. The task was not merely unhelpful, it was impossible as written,
+and it is the single biggest reason the Reminders page read as the app inventing
+work.
+
+**The decision.** A `bd_touch` step does not create its task when the contact has
+no phone and no LinkedIn. It records `skipped` with reason
+`no_phone_or_linkedin` on the step run, so a lead that stops being chased for
+this reason is answerable from the data — **the owner accepted a quieter list,
+not a silent one.** The generic `reminder` channel is deliberately NOT gated: it
+can be any task at all, and reachability is not its precondition.
+
+**Not applied retroactively.** The seven tasks already in the database stay
+(that is D-0018). They now say plainly that there is no phone or LinkedIn on the
+record, rather than asking for a call that cannot be made.
+
+**Re-open when:** contact records start carrying phone numbers routinely — at
+which point the skip should become rare on its own and is worth re-measuring —
+or if the owner notices leads going quiet and wants the skipped ones surfaced as
+a "find a number for these" list rather than only in the step-run record.
+
+### D-0015 · 2026-09-10 · STANDS · The new look, from the owner's Bolt design; light AND dark
+**Their words:** *"I was thinking of revamping the UI. and i worked on
+something in BOLT."* … *"keep toggle to dark and light. I am tired of how it
+looks right now. out system / visual reference given to you"* — with a Bolt
+export (ZIP) and two phone screenshots as the reference.
+
+**Decided:** PACE takes the visual language of the owner's Bolt design — glass
+panels on a soft ground, Apple-ish palette, generous radii, quiet rows — in
+**both** light and dark, with a toggle. `docs/UI_REVAMP.md` holds the detail.
+
+**The reference, described honestly:** 8 files, ~600 lines, React + Vite +
+Tailwind, ONE screen, four hard-coded jobs, no data layer (Supabase is in
+`package.json` and never imported). It is a DESIGN, not an app — which is the
+right thing for it to be.
+
+**NOT a React rewrite, and this is the load-bearing call.** The first read of
+this was "your Bolt work means porting the frontend to React". Reading the
+actual source changed that: the design is a sidebar, a header, three cards, a
+stepper and a list. None of it needs a component framework — the beauty is
+entirely in the CSS. And PACE's ~19,600-line frontend already draws everything
+from shared CSS variables, so the whole app re-skins from ONE stylesheet with
+no JavaScript touched. `public/theme.css`, loaded last. **Deleting that one
+`<link>` restores the old look exactly** — which is what makes a change this
+broad safe.
+
+**Consequences that are not up for debate:**
+* **Three theme states, not two:** `light`, `dark`, or no attribute at all,
+  which means "follow the OS". The toggle only moves between the two explicit
+  ones.
+* **The theme is applied INLINE IN `<head>`, before first paint.** Deferring it
+  by a tick paints light then snaps to dark.
+* **Toggling touches ONE attribute and calls nothing else** — no `render()`.
+  Re-rendering to change a colour would reload every sandboxed iframe and lose
+  the page's scroll, which the render engine exists to prevent.
+* **A colour is never defined ONLY inside a media query**, or the toggle cannot
+  beat the OS.
+* **A theme must reach EVERY palette in the app.** `ui.css` carries its own
+  (`--ink`/`--line`/`--hover`) separate from `styles.css`'s (`--text`/
+  `--border`); overriding only the second left the entire Leads table drawing
+  `#0F172A` ink on dark glass. Both are bridged now.
+* **An inline colour cannot be re-themed**, exactly as an inline width cannot
+  be re-laid-out. The dashboard clock and scope chip carried white inline (the
+  banner used to be a green slab) and went white-on-white. They are classes now.
+
+**`test/theme-contrast-smoke.mjs` is what keeps this true**: it composites every
+translucent ancestor to find what is REALLY behind each piece of text, across
+12 pages x 3 roles x 2 themes, and fails the build under 2.2:1. Verified by
+reintroducing the `--ink` bug and watching it fail. **Do not weaken it** — both
+faults above were invisible to every other test and were found by looking at a
+screenshot, which does not scale.
+
+**Re-open when:** the owner wants the accent moved off Apple blue (one line,
+`--accent`), or wants a screen restructured rather than re-skinned — this entry
+covers the LOOK. The row-level interaction brief is D-0014 and is still open.
+
+### D-0014 · 2026-09-10 · STANDS · The UI is being revamped; the model is PROGRESSIVE DISCLOSURE
+**Their words:** *"Its not about limiting the number of things that gets
+accumulated on screen, you are not understanding the design, why not just
+minimilistically reduce elements on screen and shows things when clicked"* …
+*"those lead row or the job rows and all and not interactive they don't show
+anything, like earlier … we were able to change the email stage, to valid or
+invalid and all. Now those things and all are not there. So i feel the design
+that to revamped a bit."* … *"we are going to change the entire fucking UI of
+the product in sometime."*
+
+**The correction, recorded because it was MISREAD once already:** D-0013
+answered "things accumulate on screen" with **volume control** — horizons,
+caps, pagination. That was not the ask. The ask is **DENSITY AND DEPTH**:
+
+> **Show little by default. Reveal on click.**
+
+Both are true and they are not the same instruction. D-0013 stands (the 92x DOM
+growth was real and measured); it is simply not this. **Do not answer a density
+complaint with a filter again.**
+
+**What was investigated and is NOT broken** (probed in a real browser, both row
+types, Session 23): a lead row is clickable → opens the detail drawer; a job row
+is clickable → navigates to `bd_jodetail`; the valid / invalid / deactivated /
+out-of-office control still exists, still works, and is visible in the drawer
+(`changeEmailStatus` in `18-email-status-actions.js`, called from
+`renderJobDetailModal()` in `06-page-leads.js`). No regression was found and git
+shows no commit that moved it off a row.
+
+**What is ACTUALLY wrong, and is the brief for the revamp:**
+1. **The actions are not where the eye is.** Marking an email invalid takes a
+   row click, then finding a contact card inside a drawer. Nothing on the row
+   says it is possible, so a capability that exists reads as missing — which is
+   exactly what happened.
+2. **A row shows no state and offers no action.** A Jobs row carries a checkbox
+   and NOTHING else; a Leads row carries a checkbox and a stage dropdown. The
+   same gesture on two lists does two different things.
+3. **The same gesture has two different outcomes.** A lead row opens a DRAWER
+   over its list (keeping filters, selection, scroll — the deliberate rule in
+   `CLAUDE.md`); a job row LEAVES the page for `bd_jodetail`. One of those two
+   is wrong and it is the second.
+
+**Direction agreed for the revamp:** a row is quiet until asked, then reveals
+its state and its actions **in place** — not a wall of controls, and not a
+2-click trip into a drawer to change one field. The drawer stays for the full
+record.
+
+**Re-open when:** the revamp starts. This entry is the brief; it is not a
+mandate to start building it — the owner said "in sometime", and said it
+**after** telling me I had misread the last one. **Ask before building any of
+it.**
+
+### D-0013 · 2026-09-10 · STANDS · Every list gets a horizon and an exit
+**Their words:** *"I think what's also important is the stacking of information
+on the screen or the UI when aging, have we considered that while designing
+things, not just in this view but also for everything. Like if we design like
+that what changes would be carried out"* — then, after the seven-point answer:
+*"Convert this 1-7 into a proper concrete plan and work on it and solve this
+full issue then we will touch something else."*
+
+**Decided:** ageing is a first-class design constraint, applied app-wide rather
+than to the screen that prompted it. The law: **every list has a HORIZON (how
+far back it looks by default, 90 days) and an EXIT (how a finished item
+leaves).** Full plan and measurements in `docs/AGEING_UI_PLAN.md`.
+
+**Consequences that are not up for debate:**
+* A picker past `PICKER_CAP` (15) becomes a SEARCH FIELD, not a taller list of
+  chips. The interaction changes shape.
+* Finished things are EXCLUDED from working views, never deleted.
+* A list that hides rows must SAY how many and why. The horizon bar is not
+  decoration — a filtered list that does not admit it is filtered is a lie the
+  user cannot see.
+* Anything claiming to need you today must be dismissable.
+* `test/ageing-layout-smoke.mjs` fails the build on unbounded growth, and is
+  the reason this does not silently come back. Do not weaken it — it is the
+  sibling of `mobile-layout-smoke.mjs`, and the argument is the same: a buyer's
+  evaluation account is empty, and their THIRD YEAR is what decides renewal.
+
+**Also settled here:** PACE has **three** email pipelines (`emails`,
+`email_tracking`, `candidate_outreach`) and the owner correctly felt it. They
+stay three — merging them for SENDING would break the one that works — but they
+now have ONE read view (Email → All email). Do not "unify" the send paths.
+
+**Re-open when:** the owner finds a screen where the 90-day default or the
+15-item picker cap is wrong for their actual work. Both are single constants
+(`services/view-horizon.js` + the checked copy in `00-ui-kit.js`), deliberately
+easy to retune; the LAW is what stands, not the numbers.
+
 ### D-0012 · 2026-09-10 · STANDS · One candidate-email workflow, JD inside the email
 **Decided:** Merge the two ways of emailing a candidate about a job into one.
 **"Email JD to candidates"** (a job's Candidates tab, multi-select) is removed;
@@ -157,3 +473,60 @@ minutes, not 5; cold starts are normal and are why outbound timeouts are
 generous; **before adding anything that polls on a schedule, ask what it does to
 instance hours.** "Not receiving its heartbeat" is usually GitHub delivering a
 scheduled workflow late — **do not fix it by pinging harder.**
+
+---
+
+## D-0016 — A palette has states, and a screenshot of one state is not the palette
+**When:** Session 23, round 3 (2026-09-11)
+**Who:** the owner, from their phone: *"this happening in dark mode. those details
+are not visible under selection. Also, 4th screenshot, that button do not work.
+Also, theres small glitche in the UI and the screens, like a lag or sometimes
+early animations and all. Its not smooth."*
+
+**What was decided:**
+
+1. **A literal colour in a base stylesheet is as un-themeable as an inline one.**
+   `tr:hover td{background:#FAFBFC}` (styles.css) set the hover tint on the CELL,
+   and a cell paints over its row — so the themed `tr:hover` and the `tr.is-open`
+   tint were both correct and both invisible, and an opened Leads row read
+   white-on-white at **1.05:1**. The theme layer now re-declares every hard-coded
+   light ground whose text comes from a token. Tinted chips (`.pill.*`, `.st-*`,
+   `.av-*`) stay as they are: each pairs its own dark text with its own pale
+   ground and is legible in both themes. `.mb-body` stays `#fff` deliberately —
+   that is an email's own page.
+
+2. **The contrast suite must drive interactive states.** It rendered 51 screens
+   at REST — it never hovered, never opened a row, and therefore never once saw
+   this colour. It now hovers a row and opens one, in both themes, with an
+   explicit "there was a row to drive" assertion so it cannot pass empty.
+
+3. **A modal panel is only a panel.** `renderModal()` wrapped every modal in
+   `.overlay` except three it special-cased — `jobDetail`, `addJob`,
+   `addContact` — which were returned raw and so landed in normal flow BELOW the
+   whole page. "Open full record" set the right state, rendered the right 6.7KB
+   of html, threw nothing, and was invisible. Everything entering `#layer` now
+   goes through one wrapper, and the guard asserts GEOMETRY (does it cover the
+   viewport) rather than state, because state was never the thing that was wrong.
+
+4. **Glass belongs to surfaces that float over content, not to controls.**
+   `backdrop-filter` had been written onto every input, select, textarea,
+   outline button and chip — **25 blur layers on one phone screen**. Removing it
+   changes Leads and Admin by at most **3/255** per channel and Email by at most
+   25/255 on 3% of pixels. The budget is now 12 layers per screen and a test
+   enforces it.
+
+5. **`transition: all` is banned.** Nine rules used it. `all` includes width,
+   height and padding, so a button whose label changes animates its own size and
+   nudges its neighbours — an animation nobody asked for, which is what "early
+   animations" describes. Every rule now names the paint-only properties it
+   wants, and a stylesheet grep fails the build on a new one.
+
+**Re-open when:** someone wants the frosted look back on controls (it is one
+token and five selectors), or a real device profile shows the blur budget is
+either too tight or still too loose.
+
+**What this did NOT decide:** whether the app now *feels* smooth on the owner's
+phone. This sandbox's Chromium composites in **software** — a scroll measures
+exactly 17ms/frame with 25 blur layers and with none — so no timing claim was
+made from it. Layer counts and pixel diffs are real and were used; frame times
+were measured, found vacuous, and discarded.
