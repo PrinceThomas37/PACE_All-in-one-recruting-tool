@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-11",
+  "generated": "2026-09-15",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 277,
-    "lines": 66142,
+    "files": 281,
+    "lines": 67749,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 55,
-      "lines": 22114,
+      "lines": 22564,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -37,14 +37,14 @@
         },
         {
           "f": "public/js/12-manager-users.js",
-          "n": 1006
+          "n": 1018
         },
         {
           "f": "public/js/09-page-workflows.js",
-          "n": 883
+          "n": 888
         }
       ],
-      "lastTouched": "2026-09-11",
+      "lastTouched": "2026-09-12",
       "openIn": 1,
       "openOut": 1
     },
@@ -71,11 +71,11 @@
         "engine-runs.js"
       ],
       "files": 21,
-      "lines": 6471,
+      "lines": 6518,
       "largest": [
         {
           "f": "index.js",
-          "n": 3299
+          "n": 3346
         },
         {
           "f": "routes/jobs.js",
@@ -113,11 +113,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2791,
+      "lines": 2796,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 263
+          "n": 268
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -172,19 +172,19 @@
         "routes/deliverability.js"
       ],
       "files": 20,
-      "lines": 4012,
+      "lines": 4116,
       "largest": [
         {
           "f": "services/mail-provider.js",
           "n": 801
         },
         {
-          "f": "routes/mailbox.js",
-          "n": 472
+          "f": "email-vars.js",
+          "n": 540
         },
         {
-          "f": "email-vars.js",
-          "n": 436
+          "f": "routes/mailbox.js",
+          "n": 472
         },
         {
           "f": "warmup-engine.js",
@@ -365,8 +365,8 @@
         "test/",
         ".github/"
       ],
-      "files": 80,
-      "lines": 14875,
+      "files": 83,
+      "lines": 15613,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -385,7 +385,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-09-11",
+      "lastTouched": "2026-09-12",
       "openIn": 1,
       "openOut": 0
     },
@@ -407,10 +407,11 @@
         "services/billing.js",
         "routes/plans.js",
         "routes/tracking.js",
-        "routes/reminders.js"
+        "routes/reminders.js",
+        "services/reminder-source.js"
       ],
-      "files": 6,
-      "lines": 810,
+      "files": 7,
+      "lines": 1073,
       "largest": [
         {
           "f": "services/plans.js",
@@ -421,15 +422,15 @@
           "n": 201
         },
         {
-          "f": "services/entitlements.js",
-          "n": 155
+          "f": "routes/reminders.js",
+          "n": 174
         },
         {
-          "f": "routes/plans.js",
-          "n": 114
+          "f": "services/entitlements.js",
+          "n": 155
         }
       ],
-      "lastTouched": "2026-09-02",
+      "lastTouched": "2026-09-04",
       "openIn": 0,
       "openOut": 0
     }

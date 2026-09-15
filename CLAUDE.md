@@ -107,6 +107,57 @@ we never have to rewrite to grow (see "Growth bets" below).
   session user would have rendered the correct name for the exact case above —
   hiding the bug rather than catching it. A variable that cannot be filled stays
   visible and highlighted; never blank it silently.
+- **A MERGE FIELD IS FILLED BY THE SERVER AND THEN CHECKED, NEVER TRUSTED FROM
+  THE BROWSER (Session 24).** A reminder follow-up went out to a live prospect
+  reading *"Hi {{fn}}, ... the {{pos}} opening at {{company}}"* under a real
+  recruiter's From line and signature. `{{sender}}` rendered perfectly, because
+  the send path fills that one — nothing filled the rest. Three separate
+  mistakes stacked, and each is now a rule:
+  * **THE BROWSER'S CACHE IS NOT THE RECORD.** `applyReminderTemplate` filled
+    from `STATE.contacts`, which holds only the contacts on the leads this
+    user's `GET /jobs` returned. When the lead was not in it the template went
+    through VERBATIM — and the same miss blanked the composer's "To" box while
+    Send stayed enabled. `GET /reminders` now returns a `compose` block (address,
+    role, company) read from the reminder's own contact and job rows, and
+    `/emails/reminder-send` re-fills subject and body server-side from those
+    same rows before queueing. Re-filling filled text is a no-op, so the server
+    pass is free insurance rather than a second code path.
+  * **THEN IT IS CHECKED.** `unresolvedVars()` (pure, `email-vars.js`) lists
+    every `{{token}}` that is not `{{sender}}`/`{{senderemail}}`, and the route
+    refuses with a 400 naming them. **Refusing is the right answer; blanking is
+    not** — a blanked token sends "Hi ," and looks like nothing went wrong.
+  * **PACE HAD TWO MERGE VOCABULARIES AND ONE FILLER.** Sales publishes
+    `fn`/`pos`/`company`/`loc` (`buildEmailVars`); recruiting publishes
+    `first_name`/`position`/`client` (`buildCandidateVars`); `fillTemplate`
+    filled both and knew neither. The default sequence seeded by migration 007
+    writes its BD-touch task in the RECRUITING names and runs through the SALES
+    builder, so every reminder it has ever created read *"Hi {{first_name}}, I
+    emailed you about the {{position}} role at KB Home"* — and the sequence
+    builder's own hint text taught that vocabulary. `VAR_SYNONYMS` now maps one
+    fact to all its names, **a direct hit always beating an alias** (on the
+    recruiting side `company` and `client` are two different facts, and
+    resolving the group in its own order made `{{client}}` print the company —
+    caught only by a test, never by reading it). An alias resolving to a
+    DEFERRED value rewrites to the canonical token, because the send path fills
+    `{{sender}}` and would never have filled `{{sender_name}}`.
+  `test/reminder-clarity-smoke.mjs` pins all of it, and all three guards were
+  verified by reintroducing each bug and watching them fail.
+- **A ROW THAT ASKS SOMEONE TO DO SOMETHING MUST SAY WHO ASKED (Session 24).**
+  The owner opened Reminders on five tasks and asked what they were based on.
+  They were all step 3 of the "Standard Sales Outreach" sequence; the screen
+  said nothing — same card, same note, no origin, no role, no date context — so
+  they read as the app inventing work. `reminders` records WHY only as
+  `reminder_type` (a workflow CHANNEL name, never shown, meaningless to a
+  recruiter). **`services/reminder-source.js` (pure) is the sentence**, and
+  `GET /reminders` resolves the sequence name and step from
+  `workflow_enrollments` in ONE batched lookup for the page. That lookup is an
+  inference from (contact, job), so it may come back empty — **it degrades to
+  the generic sentence and never names a sequence it did not find.**
+  Same file, same session: **"due today" is now only said about today.** All
+  five were dated two days earlier and the banner announced them as due today.
+  The list is deliberately `return_date <= today` so nothing vanishes on the day
+  you miss it, but the label is per row (`Overdue by 2 days`) and the banner
+  counts the two states separately.
 - **RELEASING A LEAD TO THE POOL IS ONE OPERATION, AND IT MUST STAMP
   `last_recycled_at` (Session 20).** Three paths return a lead to Unassigned —
   `POST /jobs/bulk-stage`, `PUT /jobs/:id`, the recycle sweep — and all three

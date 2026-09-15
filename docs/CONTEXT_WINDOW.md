@@ -135,6 +135,42 @@ white-on-white in dark; the topbar rendering as a blue slab because the ambient
 glow sat behind it; and a touch device at desktop width unable to open the icon
 rail.
 
+## ✅ SHIPPED — Session 24 (branch `claude/fervent-maxwell-owmq9w`)
+
+**Reminders: why a task exists, who it is to, and no merge field ever shipping
+again.** The owner opened Reminders on five tasks and reported three things at
+once, all correct: *"no clarity why those reminders are created"*, *"relevant
+email ID is not mentioned in the 'to' section"*, *"the email went out wrong, no
+variables are being added"*. One page, three independent faults.
+
+1. **The provenance.** All five were step 3 of the "Standard Sales Outreach"
+   sequence (call + LinkedIn, one day after follow-up 1). `reminders` records
+   the origin only as `reminder_type` — a workflow channel name that is never
+   shown. `services/reminder-source.js` (pure) turns it into a sentence; the
+   route resolves the sequence name and step from `workflow_enrollments` in one
+   batched lookup and **degrades to the generic sentence rather than naming a
+   sequence it did not find**. Also: the banner said "5 reminders due today"
+   about rows dated two days earlier — each row now carries its own honest
+   label and the banner counts due/overdue separately.
+2. **The recipient.** Compose resolved it out of `STATE.contacts`, i.e. only the
+   leads this user's `GET /jobs` returned. A miss drew an empty "To" box, said
+   "Pick a recipient" in the preview, and left Send enabled. `GET /reminders`
+   now returns a `compose` block from the reminder's own contact + job rows.
+3. **The merge fields.** An email went to a live prospect reading *"Hi {{fn}},
+   ... the {{pos}} opening at {{company}}"* under a real recruiter's signature —
+   `{{sender}}` rendered because the send path fills that one and nothing filled
+   the rest. Root cause underneath it: **PACE has two merge vocabularies and one
+   filler**, and migration 007's seeded BD-touch step is written in the wrong
+   one, so every reminder it ever made read "Hi {{first_name}}". `VAR_SYNONYMS`
+   in `email-vars.js` maps one fact to all its names (direct hit always beats an
+   alias); `/emails/reminder-send` re-fills server-side from the record and then
+   **refuses** anything still holding a token (`unresolvedVars`). No migration
+   and no data fix were needed — the note renders on read.
+
+`test/reminder-clarity-smoke.mjs` (31 checks). **All three guards verified by
+reintroducing each bug and watching them fail** — the alias test's failure
+message reproduces the owner's screenshot verbatim. Suite: **79/79**.
+
 ## ⏭ PICK THIS UP FIRST (Session 24)
 
 **D-0014 — the row-level interaction brief. This is the live piece of work.**
@@ -168,7 +204,7 @@ correcting the previous brief.
 Also open and smaller: the **Specific / Random** toggle clips to "Randor" on a
 narrow phone (cosmetic, pre-existing, flagged to the owner and left).
 
-## 🧪 TESTS: 76 SUITES. THE FOUR NEWEST EXIST BECAUSE REASONING FAILED
+## 🧪 TESTS: 79 SUITES. THE FOUR NEWEST EXIST BECAUSE REASONING FAILED
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status).

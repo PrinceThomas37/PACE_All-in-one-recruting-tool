@@ -237,6 +237,7 @@ function icon(name){
     google:'<svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>',
     star:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    info:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
     reports:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
     copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
   };
@@ -461,29 +462,93 @@ var REMINDER_TEMPLATES=[
   {name:'Quick check-in',subject:"Re-connecting on {{pos}} at {{company}}",body:"Hi {{fn}},\n\nWelcome back! I wanted to pick up where we left off on your {{pos}} search. Happy to share a few profiles that fit the key requirements.\n\nShould I send them over?\n\nThanks,\n{{sender}}"},
   {name:'Candidates ready',subject:"Candidates ready for your {{pos}} role",body:"Hi {{fn}},\n\nNow that you're back in the office, I'd love to help move your {{pos}} search forward at {{company}}. We've shortlisted strong candidates experienced in {{ind}}.\n\nOpen to a 15-minute call?\n\nWarm regards,\n{{sender}}"}
 ];
+// THE REMINDER IS THE SOURCE OF TRUTH FOR WHO THIS IS GOING TO.
+//
+// This used to look the recipient up in STATE.contacts — the browser's cache of
+// contacts, built only from the jobs GET /jobs returns for this user. Whenever
+// the lead was not in that cache (reassigned since, scoped away by role, simply
+// not loaded yet) three things happened at once and none of them said anything:
+// the "To" box drew empty, the preview read "Pick a recipient", and the
+// template filled from nothing — so Send queued an email that still had
+// {{fn}}, {{pos}} and {{company}} in it, and that is what the prospect
+// received (2026-09-15).
+//
+// GET /reminders returns `compose` for exactly this reason: the email address,
+// the role and the company, read from the reminder's own contact and job rows.
+// Those cannot be stale. `reminderCompose()` prefers them and falls back to the
+// cache, never the other way round.
+function reminderCompose(rem){
+  var c=(rem&&rem.compose)||{};
+  var contact=(rem&&rem.contact)||null;
+  var job=(rem&&rem.job)||null;
+  var cached=c.contact_id?STATE.contacts.find(function(x){return x.id===c.contact_id;}):null;
+  var cachedJob=c.job_id?jobById(c.job_id):null;
+  return{
+    contactId:c.contact_id||(rem&&rem.contact_id)||(cached&&cached.id)||null,
+    jobId:c.job_id||(rem&&rem.job_id)||(cached&&cached.job_id)||null,
+    companyId:(job&&job.company_id)||(cachedJob&&cachedJob.company_id)||null,
+    email:c.to_email||(contact&&contact.email)||(rem&&rem.email)||(cached&&cached.email)||'',
+    name:c.to_name||(rem&&rem.contact_name)||'',
+    fn:(contact&&contact.first_name)||(cached&&cached.first_name)||String(c.to_name||(rem&&rem.contact_name)||'').split(' ')[0]||'',
+    ln:(contact&&contact.last_name)||(cached&&cached.last_name)||'',
+    desig:c.designation||(contact&&contact.designation)||(cached&&cached.designation)||'',
+    company:c.company||(job&&job.company&&job.company.name)||(rem&&rem.company_name)||(cachedJob&&cachedJob.company_name)||'',
+    pos:c.position||(job&&job.position)||(cachedJob&&cachedJob.position)||'',
+    loc:c.location||(job&&job.location)||(cachedJob&&cachedJob.location)||'',
+    ind:c.industry||(job&&job.industry)||(cachedJob&&cachedJob.industry)||''
+  };
+}
+window.reminderCompose=reminderCompose;
+
 window.composeReminderEmail=function(reminderId,cid){
   var rem=(STATE.reminders||[]).find(function(r){return r.id===reminderId;});
+  var rc=reminderCompose(rem);
   STATE.composeContext='reminder';
   STATE.composeReminderId=reminderId;
   STATE.manualEmail=null;STATE.genEmail=null;STATE.emailTab='compose';STATE.showAIPanel=false;
   STATE.composeSubj='';STATE.composeBody='';
-  var c=cid?STATE.contacts.find(function(x){return x.id===cid;}):null;
-  var contactId=cid||(rem&&rem.contact_id)||'';
-  var jobId=(c&&c.job_id)||(rem&&(rem.job_id||(rem.job&&rem.job.id)))||'';
+  var contactId=cid||rc.contactId||'';
+  var jobId=rc.jobId||'';
   STATE.composeContactId=contactId?(contactId+'|'+jobId):null;
-  STATE.composeCompanyId=(c?(jobById(c.job_id)||{}).company_id:null)||null;
+  STATE.composeCompanyId=rc.companyId||null;
+  // The composer reads this when the contact is not in the local cache, so the
+  // "To" line shows a real address instead of an empty box. A recipient the
+  // screen cannot name is a recipient the user cannot check.
+  STATE.composeReminderTo=rc.email?{email:rc.email,name:rc.name,company:rc.company,desig:rc.desig,pos:rc.pos,loc:rc.loc,ind:rc.ind}:null;
   STATE.page='email';STATE.modal=null;
-  showToast('Pick a reminder template, then Send','info');render();
+  if(!rc.email)showToast('This reminder has no email address on record','warning');
+  else showToast('Pick a reminder template, then Send','info');
+  render();
 };
 window.applyReminderTemplate=function(i){
   var t=REMINDER_TEMPLATES[i];if(!t)return;
+  var rem=STATE.composeReminderId?((STATE.reminders||[]).find(function(r){return r.id===STATE.composeReminderId;})):null;
+  var rc=rem?reminderCompose(rem):null;
   var recip=resolveComposeRecipient();
-  var lead=recip&&recip.lead,co=recip&&recip.co;
   var fromEm=STATE.composeFromEmailId?((STATE.userEmailsCache[STATE.user.id]||[]).find(function(e){return e.id===STATE.composeFromEmailId;})):null;
   var senderName=(fromEm&&fromEm.display_name)||STATE.user.name||'';
+  // Reminder facts first, the cached lead only to fill what the reminder does
+  // not carry (skills lines and the like). Never the bare template: an unfilled
+  // variable is a variable the recipient reads.
+  var lead=rc?{fn:rc.fn,ln:rc.ln,email:rc.email,desig:rc.desig,pos:rc.pos}:(recip&&recip.lead);
+  var co=rc?{name:rc.company,ind:rc.ind,loc:rc.loc}:(recip&&recip.co);
+  if(!lead&&recip){lead=recip.lead;co=recip.co;}
   STATE.composeSubj=lead?fillEmail(t.subject,lead,co,senderName):t.subject;
   STATE.composeBody=lead?fillEmail(t.body,lead,co,senderName):t.body;
   render();
+};
+// Merge fields still unfilled in a draft, ignoring the two the SEND path fills
+// from the mailbox that actually sends ({{sender}}/{{senderemail}} — see
+// email-vars.js). Mirrors unresolvedVars() on the server, which is the real
+// guard; this one exists so the answer arrives before the click, in the editor,
+// rather than as a rejected send.
+window.unresolvedComposeVars=function(text){
+  var out=[],re=/{{(\w+)}}/g,m;
+  while((m=re.exec(String(text||'')))){
+    if(m[1]==='sender'||m[1]==='senderemail')continue;
+    if(out.indexOf(m[1])===-1)out.push(m[1]);
+  }
+  return out;
 };
 window.sendReminderViaEngine=function(){
   var subjEl=document.getElementById('email-subj'),bodyEl=document.getElementById('email-body');
@@ -491,19 +556,25 @@ window.sendReminderViaEngine=function(){
   var body=(bodyEl&&bodyEl.value)||STATE.composeBody||'';
   if(!subject.trim()){showToast('Add a subject line','warning');return;}
   if(!body.trim()){showToast('Write a message','warning');return;}
+  var holes=unresolvedComposeVars(subject).concat(unresolvedComposeVars(body).filter(function(v){return unresolvedComposeVars(subject).indexOf(v)===-1;}));
+  if(holes.length){
+    showToast('Not sent — this email still has '+holes.map(function(h){return '{{'+h+'}}';}).join(', ')+' in it. Pick a template again or edit them out.','error');
+    return;
+  }
   var rem=STATE.composeReminderId?((STATE.reminders||[]).find(function(r){return r.id===STATE.composeReminderId;})):null;
+  var rc=rem?reminderCompose(rem):null;
   var parts=(STATE.composeContactId||'').split('|');
-  var contactId=parts[0]||(rem&&rem.contact_id)||null;
-  var jobId=parts[1]||(rem&&(rem.job_id||(rem.job&&rem.job.id)))||null;
+  var contactId=parts[0]||(rc&&rc.contactId)||null;
+  var jobId=parts[1]||(rc&&rc.jobId)||null;
   var c=contactId?STATE.contacts.find(function(x){return x.id===contactId;}):null;
-  var to=(c&&c.email)||(rem&&rem.email)||null;
+  var to=(rc&&rc.email)||(c&&c.email)||(rem&&rem.email)||null;
   if(!to){showToast('No recipient email on record','warning');return;}
   if(!jobId){showToast('This reminder is not linked to a job, so it cannot send through the engine','warning');return;}
   apiPost('/emails/reminder-send',{reminder_id:STATE.composeReminderId,contact_id:contactId,job_id:jobId,to_email:to,subject:subject,body:body}).then(function(){
     showToast('Reminder queued — the engine will send it shortly','success');
     var rid=STATE.composeReminderId;
     if(rid)STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent'}):r;});
-    STATE.composeContext=null;STATE.composeReminderId=null;STATE.composeSubj='';STATE.composeBody='';STATE.composeContactId=null;STATE.composeCompanyId=null;STATE.genEmail=null;
+    STATE.composeContext=null;STATE.composeReminderId=null;STATE.composeSubj='';STATE.composeBody='';STATE.composeContactId=null;STATE.composeCompanyId=null;STATE.composeReminderTo=null;STATE.genEmail=null;
     STATE.page='reminders';render();
   }).catch(function(e){showToast('Send failed: '+(e&&e.message||e),'error');});
 };

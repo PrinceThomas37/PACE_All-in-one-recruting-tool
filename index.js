@@ -36,7 +36,8 @@ const {
   renderStoredEmail,
   buildRotatingTemplateDeck,
   isRandomTemplateMode,
-  getVariantById
+  getVariantById,
+  unresolvedVars
 } = require('./email-vars');
 const {
   DEFAULT_SIGNATURE_HTML,
@@ -732,10 +733,55 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     if (!job_id) return res.status(400).json({ error: 'Reminder must be linked to a job to send through the engine' });
 
     // The engine resolves the sending mailbox from the job, so make sure it has one.
+    // The company/industry/location come along too because this row is also the
+    // authority on what {{pos}}, {{company}} and {{loc}} mean for this message —
+    // see the merge-field pass below.
     const { data: job } = await supabase
       .from('jobs')
-      .select('sending_email_id, sending_email:user_emails!sending_email_id(email_address)')
+      .select('id, position, location, industry, timezone, company_id, company:companies(name,industry,location), research, salary_range, sending_email_id, sending_email:user_emails!sending_email_id(email_address)')
       .eq('id', job_id).single();
+
+    // ── MERGE FIELDS ARE FILLED HERE, AND THEN CHECKED ──────────────────────
+    // A reminder template is picked in the browser and filled there from the
+    // browser's own cache of leads. When that cache does not hold the lead —
+    // the reminder is older than the session, the lead was reassigned, the job
+    // list is scoped differently for this user — the browser had nothing to
+    // fill from and sent the template through verbatim. It went out reading
+    // "Hi {{fn}}, ... the {{pos}} opening at {{company}}" over a real
+    // recruiter's name and signature, to a real prospect (2026-09-15).
+    //
+    // So the SERVER fills them, from the job and contact this reminder is
+    // actually attached to, which is the only copy of those facts that cannot
+    // be stale. Re-filling text that is already filled is a no-op: there are no
+    // tokens left to match.
+    //
+    // {{sender}} / {{senderemail}} are deliberately NOT filled — they are
+    // resolved at send time from the mailbox that actually sends, which is the
+    // one rule the outbound path has (see email-vars.js DEFER_SENDER).
+    let filledSubject = subject, filledBody = body;
+    const { data: reminderContact } = contact_id
+      ? await supabase.from('contacts').select('id,first_name,last_name,email,designation').eq('id', contact_id).single()
+      : { data: null };
+    if (job) {
+      const vars = buildEmailVars({ job, contact: reminderContact, senderDisplayName: DEFER_SENDER });
+      filledSubject = fillTemplate(subject, vars);
+      filledBody = fillTemplate(body, vars);
+    }
+
+    // And then it is CHECKED, because filling can still leave a hole: a
+    // variable nobody defines ({{name}}, a typo, a field from another
+    // vocabulary) survives the pass and would ship. A prompt rule is a request;
+    // this is the guarantee. Refusing is right — the alternative is blanking
+    // the token, which sends "Hi ," and looks like nothing went wrong.
+    const holes = [...new Set([...unresolvedVars(filledSubject), ...unresolvedVars(filledBody)])];
+    if (holes.length) {
+      return res.status(400).json({
+        error: `This email still has merge fields PACE could not fill: ${holes.map(h => `{{${h}}}`).join(', ')}. `
+             + 'Either the lead is missing that detail, or the field name is not one PACE knows. '
+             + 'Edit the message to remove or replace them, then send.',
+        unresolved: holes
+      });
+    }
     let sendingAddr = job?.sending_email?.email_address || null;
     if (!job?.sending_email_id) {
       const { data: ue } = await supabase.from('user_emails')
@@ -754,14 +800,15 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
 
     // Queue as a fresh send (followup_type 'reminder' is not a thread reply) so the engine delivers it.
     const { data: row, error } = await supabase.from('emails').insert({
-      contact_id: contact_id || null, job_id, to_email, subject, body,
+      contact_id: contact_id || null, job_id, to_email,
+      subject: filledSubject, body: filledBody,
       platform: 'Outlook', sent_by: req.user.id, from_email: sendingAddr,
       status: 'pending', followup_type: 'reminder'
     }).select().single();
     if (error) throw error;
 
     if (reminder_id) await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder_id).eq('user_id', req.user.id);
-    await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${subject}`, null, null);
+    await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${filledSubject}`, null, null);
 
     res.status(201).json({ success: true, email_id: row.id });
     emit(EVENTS.OUTREACH_QUEUED, { managerId: req.user.id });
