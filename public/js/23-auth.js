@@ -22,7 +22,11 @@ window.doLogin=function(){
   apiPost('/auth/login',{email:em,password:pw}).then(function(d){
     STATE.token=d.token;STATE.user=normaliseUser(d.user);
     sessionStorage.setItem('fg_token',d.token);sessionStorage.setItem('fg_user',JSON.stringify(STATE.user));
-    STATE.page='dashboard';loadAppData();
+    STATE.page='dashboard';
+    // The theme belongs to the PERSON (D-0022) — pull theirs now so a shared
+    // computer does not leave them with the last user's choice.
+    if(window.loadThemePreference)loadThemePreference();
+    loadAppData();
   }).catch(function(err){
     STATE.loading=false;render();
     var e=document.getElementById('login-err');if(e){e.textContent=err.message||'Invalid credentials';e.style.display='block';}
@@ -32,6 +36,9 @@ window.doLogin=function(){
 window.loginAs=function(){showToast('Use email + password to log in','warning');};
 
 window.doLogout=function(){
+  // Drop the cached theme with the session. It is the previous PERSON's choice,
+  // and the next one to sign in at this desk gets their own (D-0022).
+  try{ localStorage.removeItem('pace-theme'); }catch(e){}
   STATE.user=null;STATE.token=null;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');
   STATE.jobs=[];STATE.contacts=[];STATE.page='login';render();

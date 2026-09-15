@@ -142,6 +142,49 @@ we never have to rewrite to grow (see "Growth bets" below).
     `{{sender}}` and would never have filled `{{sender_name}}`.
   `test/reminder-clarity-smoke.mjs` pins all of it, and all three guards were
   verified by reintroducing each bug and watching them fail.
+- **OWNERSHIP IS DEFINED ONCE, IN `services/ownership.js` (Session 24, D-0020).**
+  The owner asked for it by name — *"Maybe we can define what ownership or
+  responsibility means"* — after finding their daily list carrying their
+  reports' reminders. **A record has ONE responsible person:** a reminder its
+  `user_id`, a lead its `assigned_to_bd`, a submission its `recruiter_id`, a
+  contact the owner of its job. Ownership BUYS you a place on your daily list
+  and the right to act; it COSTS everyone else both of those.
+  * **A to-do list containing other people's to-dos is not a to-do list.**
+    `/next-actions` used to scope by the reporting CHAIN — the file's own
+    comment said putting one person's follow-ups on another's list would be
+    getting it wrong, while the code did exactly that. It now returns
+    `splitByOwner`'s `mine`, plus a `team` COUNT.
+  * **A manager REVIEWS AND PROMPTS; they never reach in.** `GET
+    /next-actions/team` is the review screen and `POST /next-actions/:id/prompt`
+    is the ask — it writes a dated `manager_prompt` reminder onto the OWNER's
+    list naming who asked, and never touches the task. Closing stays theirs.
+    Reassignment (changing who owns a record) is the right shape for holiday
+    cover and is deliberately not built — see D-0020's "Re-open when".
+  * **THE WORST OPTION WAS THE ONE THAT SHIPPED.** Every team row drew a Done
+    button; the endpoint scoped its UPDATE by `user_id` and answered
+    `{success:true}` regardless, so it matched zero rows, said "Marked done",
+    and the row returned on the next load. **A thing you can see, appear to act
+    on, and not actually change is worse than either showing it or hiding it.**
+    `closeRefusal()` is now a callable rule and the refusal names what you CAN
+    do instead.
+- **A BRIEFING IS ABOUT THE READER'S DESK (Session 24, D-0021).** `gatherFacts`
+  in `routes/ai.js` scoped by ORGANISATION only, so every user opened to the
+  same sentence — a recruiter was told *"the unassigned lead pool stands at
+  79"*, a BD-side number they have no part in working. It now narrows to what
+  the reader owns (`ownedJobIds`), **admin excepted because the whole company IS
+  their desk**, and the unassigned pool is reported only to the roles that
+  distribute it. **Owning no leads yields zero replies, never the org's total** —
+  falling back to everybody's number is the bug, not the safe default.
+- **A PER-USER PREFERENCE BELONGS TO THE USER, NOT THE BROWSER (Session 24,
+  D-0022).** The theme lived only in `localStorage`, so two logins on one
+  computer shared it and the next person inherited the last one's choice.
+  `PUT /me/preferences` stores it per user in `app_settings` under
+  `pref_<user_id>` (**no migration** — same reasoning as the dismissal store and
+  the AI meter), `localStorage` is demoted to the instant-apply cache so the
+  page never flashes the wrong theme, **sign-out clears it**, and all three ways
+  into the app (password, SSO, restored session) load the person's own. The
+  write takes an ALLOW-LIST of named values, because that row goes straight back
+  out to every one of that user's browsers.
 - **A RULE THAT DECIDES WHETHER AN ACTION IS ALLOWED BELONGS WHERE THE ACTION IS
   OFFERED, NOT ONLY WHERE IT IS TAKEN (Session 24).** The double-send guard —
   don't email a contact twice in one day — lived as two local functions in

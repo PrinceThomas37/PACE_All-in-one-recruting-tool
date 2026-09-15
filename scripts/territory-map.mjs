@@ -82,7 +82,11 @@ const TERRITORIES = [
     hue: '#B4553C', pos: [-3, -35], height: 11, spread: 11,
     own: ['middleware/authorize.js', 'routes/auth.js', 'routes/sso.js',
           'services/sso.js', 'services/provisioning.js', 'services/org-domains.js',
-          'routes/org-domains.js', 'config/env.js'],
+          'routes/org-domains.js', 'config/env.js',
+          // Who owns a record, and what somebody else may do about it (D-0020).
+          // Sits with tenant isolation: both answer "who may see and change
+          // this", and both fail silently when wrong.
+          'services/ownership.js'],
     not: [] },
 
   { id: 'foundry', name: 'The Foundry', role: 'Tests & Release', terrain: 'the forge',

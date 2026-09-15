@@ -292,15 +292,51 @@ function currentTheme(){
   // default that may already be showing.
   return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
 }
-window.toggleTheme=function(){
-  var next=currentTheme()==='dark'?'light':'dark';
+// APPLY A THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
+// account-preference load, so there is one place that knows how to put a theme
+// on screen.
+function applyTheme(next){
   document.documentElement.setAttribute('data-theme',next);
+  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
+  // the account preference arrives so the page never flashes the wrong theme
+  // while a fetch is in flight. The account is the authority (D-0022).
   try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
   // Anything that paints itself rather than being painted BY CSS has to be
   // told. Right now that is the login backdrop (a <canvas>); an event keeps
   // that knowledge with the thing that needs it instead of hard-wiring a call
   // to a function that may not be on the page.
   try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
+}
+window.applyTheme=applyTheme;
+
+window.toggleTheme=function(){
+  var next=currentTheme()==='dark'?'light':'dark';
+  applyTheme(next);
+  // THE CHOICE FOLLOWS THE PERSON, NOT THE BROWSER (D-0022). Saved against the
+  // account so it reaches their other devices and does NOT carry over to
+  // whoever signs in next on a shared computer. Best-effort: a preference that
+  // fails to save still applied on screen, and localStorage keeps it for this
+  // browser, so the failure costs a sync and never the interaction.
+  if(STATE&&STATE.token&&typeof apiFetch==='function'){
+    apiFetch('PUT','/me/preferences',{theme:next}).catch(function(){});
+  }
+};
+
+// Read the signed-in user's saved theme and apply it. Called after login.
+// If they have never chosen one, the browser's cached choice stands — we do not
+// overwrite a local preference with a default nobody set.
+window.loadThemePreference=function(){
+  if(!(STATE&&STATE.token)||typeof apiGet!=='function')return;
+  apiGet('/me/preferences').then(function(p){
+    if(!p||!p.theme)return;
+    if(p.theme==='system'){
+      document.documentElement.removeAttribute('data-theme');
+      try{ localStorage.removeItem('pace-theme'); }catch(e){}
+      try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
+      return;
+    }
+    if(p.theme!==currentTheme())applyTheme(p.theme);
+  }).catch(function(){});
 };
 
 function roleLabel(r){return{ra:"Research Analyst",bd:"BD Manager",admin:"Admin",ra_lead:"RA Team Lead",bd_lead:"BD Team Lead",recruiter:"Recruiter",associate_director:"Associate Director",director:"Director"}[r]||r;}
@@ -380,7 +416,9 @@ function consumeSsoToken(){
       sessionStorage.setItem('fg_user',JSON.stringify(STATE.user));
       STATE.page='dashboard';
       // Same tail as the password path (23-auth.js) so an SSO session and
-      // a password session are indistinguishable from here on.
+      // a password session are indistinguishable from here on — including the
+      // person's own theme (D-0022).
+      if(window.loadThemePreference)loadThemePreference();
       loadAppData();
     })
     .catch(function(){

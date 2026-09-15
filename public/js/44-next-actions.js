@@ -219,9 +219,90 @@ function renderNextActionsCard(){
       (items.length>5?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show less':'Show all '+items.length)+'</button>':'')+
     '</div>'+
     rows+
+    naTeamLine(s)+
     naHiddenLine(s)+
   '</div>';
 }
+
+// ── WHAT IS OPEN BENEATH YOU (Session 24, D-0020) ───────────────────────────
+// A manager's daily list is their OWN work. Their team's open items are a COUNT
+// with a way in, never rows mixed into the same list — the owner's decision,
+// and the reason the list above can be trusted as a to-do list again.
+//
+// The review screen behind this is where they can PROMPT the owner. They cannot
+// close somebody else's task: that used to be offered as a Done button which
+// reported success and changed nothing.
+function naTeamLine(s){
+  var t=s&&s.team;
+  if(!t||!t.total)return '';
+  return '<div class="na-hidden">'+
+    '<span title="'+escAttr(t.sentence||'')+'">'+htmlEsc(t.label||'')+'</span>'+
+    '<button class="na-act na-act-quiet" onclick="naOpenTeam()" title="See what your team has open, and ask someone to pick one up">Review</button>'+
+  '</div>';
+}
+
+// The review list. A drawer over the dashboard, so closing it returns the
+// manager to exactly where they were (the app's standing rule for record
+// detail — STATE.page is never touched).
+window.naOpenTeam=function(){
+  STATE.naTeam={loading:true,items:[]};
+  render();
+  apiGet('/next-actions/team').then(function(d){
+    STATE.naTeam={loading:false,items:(d&&d.items)||[],total:(d&&d.total)||0,people:(d&&d.people)||[]};
+    render();
+  }).catch(function(e){
+    STATE.naTeam={loading:false,error:(e&&e.message)||'Could not load your team\'s open work',items:[]};
+    render();
+  });
+};
+window.naCloseTeam=function(){ STATE.naTeam=null;render(); };
+
+// Ask the OWNER to pick one up. This writes a dated note onto THEIR list naming
+// who asked — it does not touch the task, and it never closes it.
+window.naPrompt=function(id,btn){
+  if(btn){btn.disabled=true;btn.textContent='Asking…';}
+  apiPost('/next-actions/'+encodeURIComponent(id)+'/prompt',{}).then(function(){
+    showToast('Asked them to pick it up — it is on their list now','success');
+    if(btn){btn.textContent='Asked';}
+  }).catch(function(e){
+    if(btn){btn.disabled=false;btn.textContent='Ask them';}
+    showToast('Could not ask: '+((e&&e.message)||e),'error');
+  });
+};
+
+function renderTeamReview(){
+  var t=STATE.naTeam;if(!t)return '';
+  var body;
+  if(t.loading)body='<div class="na-team-empty">Loading…</div>';
+  else if(t.error)body='<div class="na-team-empty">'+htmlEsc(t.error)+'</div>';
+  else if(!t.items.length)body='<div class="na-team-empty">Nothing open across your team right now.</div>';
+  else body=t.items.map(function(i){
+    return '<div class="na-team-row">'+
+      '<div class="na-team-main">'+
+        '<div class="na-team-t">'+htmlEsc(i.title||'')+
+          (i.subtitle?' <span class="na-team-sub">· '+htmlEsc(i.subtitle)+'</span>':'')+'</div>'+
+        // Whose it is, said plainly. The whole complaint was a list that did
+        // not say this.
+        '<div class="na-team-who">'+htmlEsc(i.owner_name||'Someone')+
+          (i.due?' · due '+htmlEsc(String(i.due).slice(0,10)):'')+'</div>'+
+        (i.note?'<div class="na-team-note">'+htmlEsc(i.note)+'</div>':'')+
+      '</div>'+
+      '<button class="na-act" onclick="naPrompt(\''+i.id+'\',this)" title="Put this on their list with your name on it">Ask them</button>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="overlay" onclick="naCloseTeam()">'+
+    '<div class="modal na-team" onclick="event.stopPropagation()">'+
+      '<div class="na-team-h">'+
+        '<div><div class="na-team-title">Open across your team</div>'+
+          '<div class="na-team-hint">You can ask the owner to pick something up. Closing it is theirs to do.</div></div>'+
+        '<button class="btn btn-outline btn-sm" onclick="naCloseTeam()">Close</button>'+
+      '</div>'+
+      '<div class="na-team-body">'+body+'</div>'+
+    '</div>'+
+  '</div>';
+}
+UI.registerOverlay('naTeam',function(){ return STATE.naTeam?renderTeamReview():''; });
 
 // WHAT IS NOT ON THIS LIST, AND WHY (Session 23).
 // The queue now holds things back — snoozed items, silences older than the

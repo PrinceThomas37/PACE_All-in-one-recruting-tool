@@ -38,6 +38,7 @@
 //   routes/recruiting/outreach.js        → 'recruiter_task'
 //   routes/contacts.js (OOO auto-reply)  → 'ooo_return'
 //   public/js/10-page-modals.js          → 'manual' | 'meeting'
+//   routes/next-actions.js (D-0020)      → 'manager_prompt'
 const SOURCES = {
   bd_touch: {
     label: 'Sequence step',
@@ -62,6 +63,13 @@ const SOURCES = {
   manual: {
     label: 'Added by you',
     why: 'You added this reminder yourself.'
+  },
+  manager_prompt: {
+    label: 'Asked by your manager',
+    // D-0020: a manager cannot close somebody else's task, but they can ask for
+    // it to be picked up. The ask lands here, on the OWNER's own list, and the
+    // note itself names who sent it (services/ownership.js promptNote).
+    why: 'Somebody you report to reviewed the open work on your desk and asked you to pick this one up.'
   }
 };
 
