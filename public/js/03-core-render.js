@@ -503,6 +503,11 @@ window.reminderCompose=reminderCompose;
 window.composeReminderEmail=function(reminderId,cid){
   var rem=(STATE.reminders||[]).find(function(r){return r.id===reminderId;});
   var rc=reminderCompose(rem);
+  // The double-send rule is decided by the server and carried on the row. Say so
+  // here rather than letting somebody compose an email the send path refuses —
+  // the whole reason that guard moved into services/outreach-dedup.js.
+  var blocked=rem&&rem.compose&&rem.compose.blocked_sentence;
+  if(blocked){showToast(blocked,'warning');return;}
   STATE.composeContext='reminder';
   STATE.composeReminderId=reminderId;
   STATE.manualEmail=null;STATE.genEmail=null;STATE.emailTab='compose';STATE.showAIPanel=false;

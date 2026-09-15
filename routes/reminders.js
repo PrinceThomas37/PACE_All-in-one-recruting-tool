@@ -36,6 +36,7 @@
 const express = require('express');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
 const { describeReminder, dueState, dueLabel } = require('../services/reminder-source');
+const { describeOutreach, canBeContactedDirectly } = require('../services/outreach-dedup');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -86,15 +87,39 @@ module.exports = (ctx) => {
     return out;
   }
 
+  // What has already been emailed to these contacts?
+  //
+  // One query for the page, keyed by "contactId:jobId". This is what lets a card
+  // say "three emails already went, the last one today" BEFORE offering a fourth
+  // — the guard that refuses the send has always existed, it was simply invisible
+  // until the moment of sending (see services/outreach-dedup.js).
+  async function outreachContext(req, rows) {
+    const withContact = rows.filter(r => r.contact_id);
+    if (!withContact.length) return {};
+    const contactIds = [...new Set(withContact.map(r => r.contact_id))];
+    const { data: emails } = await db.forRequest(req).from('emails')
+      .select('contact_id,job_id,status,sent_at,followup_type')
+      .in('contact_id', contactIds);
+    const byPair = {};
+    (emails || []).forEach(e => {
+      const key = `${e.contact_id}:${e.job_id || ''}`;
+      (byPair[key] = byPair[key] || []).push(e);
+    });
+    return byPair;
+  }
+
 router.get('/reminders', auth, async (req, res) => {
   try {
     const { data, error } = await db.forRequest(req).from('reminders')
-      .select(`*, job:jobs(id,position,location,industry,stage,company_id,company:companies(name,industry,location)), contact:contacts(id,first_name,last_name,email,designation,linkedin)`)
+      .select(`*, job:jobs(id,position,location,industry,stage,company_id,company:companies(name,industry,location)), contact:contacts(id,first_name,last_name,email,designation,linkedin,phone)`)
       .eq('user_id', req.user.id).order('return_date');
     if (error) throw error;
 
     const rows = data || [];
-    const seqByPair = await sequenceContext(req, rows);
+    const [seqByPair, mailByPair] = await Promise.all([
+      sequenceContext(req, rows),
+      outreachContext(req, rows)
+    ]);
     const t = today();
 
     const enriched = rows.map(r => {
@@ -108,8 +133,15 @@ router.get('/reminders', auth, async (req, res) => {
       const vars = job
         ? { ...buildEmailVars({ job, contact, senderDisplayName: req.user.name || '' }) }
         : { fn: (contact?.first_name) || '', company: r.company_name || '', sender: req.user.name || '' };
-      const seq = seqByPair[`${r.contact_id}:${r.job_id || ''}`] || null;
+      const pairKey = `${r.contact_id}:${r.job_id || ''}`;
+      const seq = seqByPair[pairKey] || null;
+      const outreach = describeOutreach(mailByPair[pairKey] || [], t);
       const due = dueState(r.return_date, t);
+      // A bd_touch step asks for a CALL. Whether that is even possible is a
+      // property of the record, and the card must say so rather than offering a
+      // phone icon with nothing behind it.
+      const isCallTask = r.reminder_type === 'bd_touch';
+      const reachable = canBeContactedDirectly(contact);
       return {
         ...r,
         note_raw: r.note,
@@ -118,6 +150,19 @@ router.get('/reminders', auth, async (req, res) => {
         due_state: due.state,
         due_days: due.days,
         due_label: dueLabel(r.return_date, t),
+        // What the sequence has already sent this contact, and whether another
+        // email may go out right now. The page reads `blocked` to decide whether
+        // to OFFER a send at all.
+        outreach,
+        // How this person can actually be reached, for a task that asks for a
+        // call. `null` on a task that is not a call task.
+        reach: isCallTask ? {
+          phone: contact?.phone || null,
+          linkedin: contact?.linkedin || null,
+          reachable,
+          sentence: reachable ? null
+            : 'No phone number or LinkedIn is on this contact record, so there is no way to make this call yet. PACE no longer creates these — this one predates that.'
+        } : null,
         // Everything the composer needs, from the record rather than from
         // whatever the browser happens to have cached.
         compose: {
@@ -130,7 +175,10 @@ router.get('/reminders', auth, async (req, res) => {
           industry: job?.company?.industry || job?.industry || '',
           job_id: r.job_id || job?.id || null,
           contact_id: r.contact_id || contact?.id || null,
-          can_send: !!((contact?.email || r.email) && (r.job_id || job?.id))
+          can_send: !!((contact?.email || r.email) && (r.job_id || job?.id)) && !outreach.blocked,
+          // Why a send is not on offer — stated here so the page can say it
+          // BEFORE somebody composes an email the send path will refuse.
+          blocked_sentence: outreach.blocked ? outreach.block_sentence : null
         }
       };
     });

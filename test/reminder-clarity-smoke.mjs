@@ -239,7 +239,9 @@ t('a reminder with an email but no cached contact still offers Compose', () => {
   // carrying a perfectly good address had no way to act on it.
   const page = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
   const cards = page.slice(page.indexOf('var dueCards=due.map'), page.indexOf('var upcomingRows='));
-  assert.ok(/toEmail\?'<button class="btn btn-sm"/.test(cards), 'Compose must be gated on an address, not on a cache hit');
+  // Gated on an address (and, since D-0018, on the send being allowed) — never
+  // on whether the browser happened to have the contact cached.
+  assert.ok(/toEmail&&cmp\.can_send!==false\?'<button class="btn btn-sm"/.test(cards), 'Compose must be gated on an address, not on a cache hit');
   assert.ok(/No email on record/.test(cards), 'a reminder with no address must say so');
 });
 
@@ -248,6 +250,137 @@ t('the due card states why it exists', () => {
   const cards = page.slice(page.indexOf('var dueCards=due.map'), page.indexOf('var upcomingRows='));
   assert.ok(/reminderWhy\(r\)/.test(cards), 'the card must render its source');
   assert.ok(/reminderDue\(r\)/.test(cards), 'the card must render its real due state');
+});
+
+// ── 6. A TASK NOBODY CAN DO, AND A SEND THAT WILL BE REFUSED ────────────────
+// Owner's decisions, 2026-09-15 (DECISIONS.md D-0017 / D-0018), from seven live
+// tasks that all read "Call the POC about this role and connect on LinkedIn"
+// for contacts holding no phone and no LinkedIn — while the same sequence went
+// on to send follow-up 2 that morning and complete.
+console.log('\nA call task must be doable, and a blocked send must not be offered');
+
+const { describeOutreach, sendIsBlocked, canBeContactedDirectly, callTaskSkipReason } = require('../services/outreach-dedup.js');
+const TODAY = '2026-09-15';
+
+t('D-0017: no phone and no LinkedIn means the call cannot be made', () => {
+  assert.equal(canBeContactedDirectly({ phone: null, linkedin: null }), false);
+  assert.equal(canBeContactedDirectly({ phone: '', linkedin: '   ' }), false);
+  assert.equal(canBeContactedDirectly({ phone: '+1 555 0100' }), true);
+  assert.equal(canBeContactedDirectly({ linkedin: 'https://linkedin.com/in/x' }), true);
+});
+
+t('D-0017: THE BUG — a call task is not created when there is no way to call', () => {
+  // The seven live rows, exactly: a bd_touch step against a contact with
+  // neither field set.
+  assert.equal(callTaskSkipReason({ channel: 'bd_touch' }, { phone: null, linkedin: null }), 'no_phone_or_linkedin');
+});
+
+t('D-0017: a contact who CAN be reached still gets the task', () => {
+  assert.equal(callTaskSkipReason({ channel: 'bd_touch' }, { phone: '+1 555 0100' }), null);
+  assert.equal(callTaskSkipReason({ channel: 'bd_touch' }, { linkedin: 'https://linkedin.com/in/x' }), null);
+});
+
+t('the generic `reminder` channel is NOT gated — only the call step is', () => {
+  // A bare reachability check would silently kill every generic task too.
+  assert.equal(callTaskSkipReason({ channel: 'reminder' }, { phone: null, linkedin: null }), null);
+  assert.equal(callTaskSkipReason({}, { phone: null, linkedin: null }), null);
+});
+
+// WHAT THIS PAIR DOES AND DOES NOT PROVE. The rule itself is exercised for real
+// above. The call site can only be GREPPED, because wfReminderExecutor is a
+// closure inside index.js that needs a live Supabase to run — so a call site
+// left in place but neutered (`false && callTaskSkipReason(...)`) would still
+// pass. That was measured, not assumed. It is accepted because the realistic
+// regressions — changing the rule, dropping the call, renaming the reason — are
+// all caught; a deliberately dead call site is not a shape anybody writes by
+// accident. If the executor ever becomes reachable from a test, close this gap.
+t('the executor calls that function and records the reason as SKIPPED', () => {
+  const src = readFileSync(join(root, 'index.js'), 'utf8');
+  const fn = src.slice(src.indexOf('async function wfReminderExecutor'), src.indexOf('wfEngine.registerChannel(\'bd_touch\''));
+  assert.ok(/callTaskSkipReason\(step, contact\)/.test(fn), 'the executor must use the shared decision');
+  assert.ok(/outcome: 'skipped', detail: \{ reason: skipReason/.test(fn), 'skipped with the reason, never failed and never silent');
+});
+
+t('THE BUG: fu2 sent today blocks another send, and says which reason', () => {
+  // Jesus Montes, Iron Horse: fu1 sent 12 Sep, fu2 sent 15 Sep. Composing on the
+  // 15th got "Send failed" only AFTER the email was written.
+  const rows = [
+    { followup_type: 'fu1', status: 'sent', sent_at: '2026-09-12' },
+    { followup_type: 'fu2', status: 'sent', sent_at: '2026-09-15' }
+  ];
+  const o = describeOutreach(rows, TODAY);
+  assert.equal(o.blocked, true);
+  assert.equal(o.block_reason, 'sent_today');
+  assert.match(o.block_sentence, /already went to this contact today/);
+  assert.equal(o.sent_count, 2);
+  assert.equal(o.last_sent_at, '2026-09-15');
+});
+
+t('a queued follow-up blocks for a DIFFERENT, separately-worded reason', () => {
+  const o = describeOutreach([{ followup_type: 'fu2', status: 'pending', sent_at: null }], TODAY);
+  assert.equal(o.blocked, true);
+  assert.equal(o.block_reason, 'queued');
+  assert.match(o.block_sentence, /waiting in the send queue/);
+});
+
+t('yesterday\'s send does not block — one touch per day, not one ever', () => {
+  const o = describeOutreach([{ followup_type: 'fu2', status: 'sent', sent_at: '2026-09-14' }], TODAY);
+  assert.equal(o.blocked, false);
+  assert.equal(o.sent_count, 1);
+});
+
+t('the INITIAL outreach never blocks a follow-up', () => {
+  // The cold email is the thing a follow-up follows.
+  const rows = [{ followup_type: null, status: 'sent', sent_at: TODAY }];
+  assert.equal(sendIsBlocked(rows, TODAY), false);
+  assert.equal(describeOutreach(rows, TODAY).sent_count, 1, 'but it still counts in the trail');
+});
+
+t('the trail is ordered oldest first and dated', () => {
+  const o = describeOutreach([
+    { followup_type: 'fu2', status: 'sent', sent_at: '2026-09-15' },
+    { followup_type: null, status: 'sent', sent_at: '2026-09-10' },
+    { followup_type: 'fu1', status: 'sent', sent_at: '2026-09-12' }
+  ], TODAY);
+  assert.deepEqual(o.trail.map(x => x.type), ['initial', 'fu1', 'fu2']);
+  assert.deepEqual(o.trail.map(x => x.sent_at), ['2026-09-10', '2026-09-12', '2026-09-15']);
+});
+
+t('index.js and the page share ONE copy of the rule', () => {
+  const src = readFileSync(join(root, 'index.js'), 'utf8');
+  assert.ok(/require\('\.\/services\/outreach-dedup'\)/.test(src), 'index.js must import the shared rule');
+  // The old local definition must be gone, not shadowed by a second copy.
+  assert.ok(!/^const FOLLOWUP_EMAIL_TYPES = \['fu1'/m.test(src), 'a second copy of the type list is how these drift apart');
+});
+
+t('D-0018: GET /reminders reports the trail and refuses the send up front', () => {
+  const route = readFileSync(join(root, 'routes/reminders.js'), 'utf8');
+  assert.ok(/describeOutreach\(mailByPair\[pairKey\] \|\| \[\], t\)/.test(route), 'the read must describe the outreach');
+  assert.ok(/can_send: [^\n]*&& !outreach\.blocked/.test(route), 'can_send must honour the block');
+  assert.ok(/blocked_sentence: outreach\.blocked/.test(route), 'and must carry the reason to the page');
+});
+
+t('D-0018: the task survives the sequence finishing', () => {
+  // The owner chose "stays open, shows what has happened since". Nothing may
+  // close a reminder because its sequence completed.
+  const route = readFileSync(join(root, 'routes/reminders.js'), 'utf8');
+  assert.ok(!/status: 'sent'[\s\S]{0,200}completed/.test(route), 'the read must not close tasks');
+  const page = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
+  assert.ok(/reminderOutreachLine\(r\)/.test(page), 'the card must show what has happened since');
+});
+
+t('the card hides the Send it cannot make, and the composer refuses early', () => {
+  const page = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
+  const cards = page.slice(page.indexOf('var dueCards=due.map'), page.indexOf('var upcomingRows='));
+  assert.ok(/cmp\.can_send!==false\?'<button/.test(cards), 'a blocked send must not be offered as a button');
+  const core = readFileSync(join(root, 'public/js/03-core-render.js'), 'utf8');
+  assert.ok(/blocked_sentence[\s\S]{0,160}showToast\(blocked/.test(core), 'composing must refuse with the server\'s own sentence');
+});
+
+t('a call task with contact details shows them; without, it says so', () => {
+  const page = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
+  assert.ok(/function reminderReachLine\(r\)/.test(page));
+  assert.ok(/re\.reachable/.test(page), 'must branch on whether the call can be made');
 });
 
 console.log(`\nSUMMARY: ${pass}/${pass + fail} passed`);

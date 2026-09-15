@@ -35,6 +35,35 @@ function reminderWhy(r){
   if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};
   return{label:'Added by you',why:'You added this reminder yourself.'};
 }
+// The email trail behind a task, and why a send may not be on offer.
+// `outreach` comes from GET /reminders (services/outreach-dedup.js) — the page
+// never recomputes the rule, it reports it.
+function reminderOutreachLine(r){
+  var o=r.outreach;
+  if(!o||(!o.sent_count&&!o.queued_count))return '';
+  var bits=[];
+  if(o.sent_count)bits.push(o.sent_count+' email'+(o.sent_count===1?'':'s')+' already sent'+(o.last_sent_at?', last on '+o.last_sent_at:''));
+  if(o.queued_count)bits.push(o.queued_count+' still in the send queue');
+  return '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;display:flex;gap:6px;align-items:flex-start">'+
+      '<span style="flex-shrink:0">'+ico('email',12)+'</span><span>'+htmlEsc(bits.join(' · '))+'</span></div>'+
+    (o.blocked&&o.block_sentence
+      ? '<div style="font-size:11.5px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.05);border-radius:var(--r);color:var(--text2)">'+
+          htmlEsc(o.block_sentence)+' Pick up the phone or wait until tomorrow.</div>'
+      : '');
+}
+// A call task on a record with no phone and no LinkedIn.
+function reminderReachLine(r){
+  var re=r.reach;
+  if(!re)return '';
+  if(re.reachable){
+    var parts=[];
+    if(re.phone)parts.push('📞 '+re.phone);
+    if(re.linkedin)parts.push('in '+re.linkedin);
+    return parts.length?'<div style="font-size:12px;margin-top:6px;font-weight:600;color:var(--text2)">'+htmlEsc(parts.join('  ·  '))+'</div>':'';
+  }
+  return '<div style="font-size:11.5px;margin-top:6px;padding:6px 8px;background:var(--red-l);border-radius:var(--r);color:var(--red)">'+
+    htmlEsc(re.sentence||'No phone number or LinkedIn on record.')+'</div>';
+}
 function renderReminders(){
   var u=STATE.user;
   var today=todayIST();
@@ -63,7 +92,11 @@ function renderReminders(){
           '<span style="font-size:11px;padding:2px 7px;background:rgba(0,0,0,.06);color:var(--text2);border-radius:10px">'+htmlEsc(why.label)+'</span>'+
         '</div>'+
         '<div style="display:flex;gap:8px">'+
-          (toEmail?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
+          // A SEND IS ONLY OFFERED WHEN THE SEND PATH WOULD ACCEPT IT.
+          // `compose.can_send` already carries the double-send rule, so the
+          // button disappears instead of composing a whole email and then being
+          // refused at the last step. The reason is printed below, not hidden.
+          (toEmail&&cmp.can_send!==false?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+
       '</div>'+
@@ -75,6 +108,14 @@ function renderReminders(){
       '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;display:flex;gap:6px;align-items:flex-start">'+
         '<span style="flex-shrink:0">'+ico('info',12)+'</span><span>'+htmlEsc(why.why)+'</span></div>'+
       (r.note?'<div style="font-size:12px;margin-top:6px;padding:6px 8px;background:rgba(0,0,0,.04);border-radius:var(--r);white-space:pre-wrap">'+htmlEsc(r.note)+'</div>':'')+
+      // WHAT THE SEQUENCE HAS ALREADY SENT THIS PERSON.
+      // A task saying "call them" makes sense only next to the emails that went
+      // unanswered — and when the same sequence has kept emailing since the task
+      // was created, that is the single most useful fact on the card.
+      reminderOutreachLine(r)+
+      // Whether this call can actually be made. A task asking for a phone call
+      // to a record holding no phone number is work nobody can do.
+      reminderReachLine(r)+
     '</div>';
   }).join('');
 

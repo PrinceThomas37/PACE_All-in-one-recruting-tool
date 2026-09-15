@@ -142,6 +142,34 @@ we never have to rewrite to grow (see "Growth bets" below).
     `{{sender}}` and would never have filled `{{sender_name}}`.
   `test/reminder-clarity-smoke.mjs` pins all of it, and all three guards were
   verified by reintroducing each bug and watching them fail.
+- **A RULE THAT DECIDES WHETHER AN ACTION IS ALLOWED BELONGS WHERE THE ACTION IS
+  OFFERED, NOT ONLY WHERE IT IS TAKEN (Session 24).** The double-send guard —
+  don't email a contact twice in one day — lived as two local functions in
+  `index.js` and fired only at the moment of sending. So the Reminders page drew
+  a Compose button, let the owner pick a template, edit it, and hit Send, and
+  only then said *"A follow-up to this contact is already queued or was sent
+  today."* The refusal was RIGHT (follow-up 2 had gone out that morning);
+  offering the action was not. The rule is now **`services/outreach-dedup.js`**
+  (pure), shared by the send path and by `GET /reminders`, which returns
+  `compose.can_send` + `blocked_sentence` so the page states the answer up
+  front. **Two block reasons read completely differently to a human and are kept
+  apart:** something is sitting in the QUEUE and will send itself, versus
+  something ALREADY WENT today. The initial outreach never blocks a follow-up —
+  the cold email is the thing a follow-up follows.
+- **A TASK PACE CANNOT CARRY OUT MUST NOT BE CREATED (Session 24, D-0017).**
+  Seven live reminders read *"Call the POC about this role and connect on
+  LinkedIn"* for contacts holding **no phone number and no LinkedIn** — work
+  nobody could do as written, and the sharpest reason the page read as invented.
+  A `bd_touch` step now skips when there is no way to reach the person,
+  recording `no_phone_or_linkedin` on the step run: **the owner accepted a
+  quieter list, not a silent one.** The generic `reminder` channel is NOT gated
+  — reachability is not its precondition. The decision is
+  `callTaskSkipReason(step, contact)` in `services/outreach-dedup.js`, and it is
+  a FUNCTION for a reason: the first version was pinned by grepping `index.js`
+  for the condition, and **that guard went on passing when the condition was
+  disabled with `if (false && …)`.** Measured, not assumed. A test that greps
+  for source text cannot tell a live rule from a dead one — if a rule matters,
+  make it callable.
 - **A ROW THAT ASKS SOMEONE TO DO SOMETHING MUST SAY WHO ASKED (Session 24).**
   The owner opened Reminders on five tasks and asked what they were based on.
   They were all step 3 of the "Standard Sales Outreach" sequence; the screen
