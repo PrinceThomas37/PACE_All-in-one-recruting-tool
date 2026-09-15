@@ -241,7 +241,7 @@ t('a reminder with an email but no cached contact still offers Compose', () => {
   const cards = page.slice(page.indexOf('var dueCards=due.map'), page.indexOf('var upcomingRows='));
   // Gated on an address (and, since D-0018, on the send being allowed) — never
   // on whether the browser happened to have the contact cached.
-  assert.ok(/toEmail&&cmp\.can_send!==false\?'<button class="btn btn-sm"/.test(cards), 'Compose must be gated on an address, not on a cache hit');
+  assert.ok(/toEmail&&cmp\.can_send!==false\?'<button class="btn btn-primary btn-sm"/.test(cards), 'Compose must be gated on an address, not on a cache hit');
   assert.ok(/No email on record/.test(cards), 'a reminder with no address must say so');
 });
 
@@ -381,6 +381,57 @@ t('a call task with contact details shows them; without, it says so', () => {
   const page = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
   assert.ok(/function reminderReachLine\(r\)/.test(page));
   assert.ok(/re\.reachable/.test(page), 'must branch on whether the call can be made');
+});
+
+// ── 7. COLOUR IS A SCARCE RESOURCE ON A LIST ────────────────────────────────
+// The owner, on seeing the first version: "can correct the colour, too much
+// red. like after 5,6 reminders the screen will look reddish." They are right,
+// and it is a rule rather than a tweak: OVERDUE IS THE ORDINARY STATE OF A
+// TO-DO LIST, not a fault. Red means something has gone wrong; if six of six
+// rows shout, none of them does.
+console.log('\nThe list stays calm');
+
+const remPage = readFileSync(join(root, 'public/js/10-page-modals.js'), 'utf8');
+const remCards = remPage.slice(remPage.indexOf('var dueCards=due.map'), remPage.indexOf('return \'<div class="page">\''));
+const remHelpers = remPage.slice(remPage.indexOf('function reminderOutreachLine'), remPage.indexOf('function renderReminders'));
+
+t('THE BUG: no red anywhere in the reminder list', () => {
+  // Cards, the banner, the upcoming table and both helper renderers.
+  for (const [name, src] of [['cards+banner+table', remCards], ['helpers', remHelpers]]) {
+    const hits = (src.match(/var\(--red[^)]*\)/g) || []);
+    assert.deepEqual(hits, [], `${name} still paints with red: ${hits.join(', ')}`);
+  }
+});
+
+t('a card is a neutral surface, not a tinted slab', () => {
+  const css = readFileSync(join(root, 'public/styles.css'), 'utf8');
+  const rule = css.slice(css.indexOf('.rem-card{'), css.indexOf('}', css.indexOf('.rem-card{')));
+  assert.match(rule, /background:var\(--card\)/, 'the card must sit on the normal surface');
+  assert.match(rule, /border-left:3px/, 'state is carried by a thin stripe, not a full border');
+  assert.ok(!/--amber-l|--red-l|--accent-l/.test(rule), 'the card body must not be tinted');
+});
+
+t('state is one chip plus one stripe — not a dot, a border AND a fill', () => {
+  // Counting where the state colour is actually PAINTED is the measurable form
+  // of "calm": the stripe, and the chip's ground and text. Three. The earlier
+  // design also filled the card, bordered it 2px and drew a dot.
+  const painted = (remCards.match(/\+\s*hue(Bg)?\s*\+/g) || []).length;
+  assert.ok(painted <= 3, `state colour is painted in ${painted} places; 3 is the budget`);
+  assert.ok(painted >= 2, 'state must still be visible at a glance');
+});
+
+t('the palette is tokens only, so both themes reach it', () => {
+  const css = readFileSync(join(root, 'public/styles.css'), 'utf8');
+  const block = css.slice(css.indexOf('/* ── REMINDERS ─'));
+  // A hex literal here would be as un-themeable as an inline colour.
+  const hexes = (block.match(/#[0-9a-fA-F]{3,8}\b/g) || []);
+  assert.deepEqual(hexes, [], `hard-coded colours cannot be re-themed: ${hexes.join(', ')}`);
+});
+
+t('the card styles are CLASSES, not inline layout', () => {
+  // An inline width cannot be re-laid-out on a phone (mobile.css rule).
+  assert.match(remCards, /class="rem-card"/, 'the card must use its class');
+  assert.ok(!/style="[^"]*display:flex[^"]*"/.test(remCards), 'layout belongs in the stylesheet');
 });
 
 console.log(`\nSUMMARY: ${pass}/${pass + fail} passed`);

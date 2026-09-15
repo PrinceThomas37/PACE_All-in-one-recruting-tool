@@ -474,6 +474,19 @@ we never have to rewrite to grow (see "Growth bets" below).
     most 25/255 on 3% of pixels. `test/ui-smoothness-smoke.mjs` caps it at
     **12 layers per screen**, measured on a POPULATED list (an empty screen has
     no controls to count).
+  - **COLOUR IS A SCARCE RESOURCE ON A LIST (Session 24, owner's note).** The
+    first reminder cards gave every overdue row a 2px red border, a solid red
+    pill and a red-tinted panel. That reads fine as ONE card and turns the whole
+    screen red at five or six — *"too much red. like after 5,6 reminders the
+    screen will look reddish."* The rule underneath it: **overdue is the
+    ORDINARY state of a to-do list, not a fault**, and red should mean something
+    has gone wrong. A list is calm by default — a neutral card on `--card` — and
+    state is carried by a **3px left stripe plus ONE tinted chip**, roughly a
+    tenth of the coloured ink. If six of six rows shout, none of them does.
+    `test/reminder-clarity-smoke.mjs` fails on any `var(--red*)` in that page,
+    on a tinted card ground, and on the state colour being painted in more than
+    three places — **the measurable form of "calm"**, since "looks busy" is not
+    something a test can see. Both guards were verified by putting the red back.
   - **NEVER WRITE `transition: all`.** Nine rules did. `all` includes width,
     height and padding, so a button whose label changes ("Send" → "Sending…")
     animates its own size and nudges its neighbours — the "early animations"
