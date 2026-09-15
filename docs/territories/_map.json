@@ -2,8 +2,8 @@
   "generated": "2026-09-15",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 281,
-    "lines": 67749,
+    "files": 282,
+    "lines": 68142,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 55,
-      "lines": 22564,
+      "lines": 22610,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 888
         }
       ],
-      "lastTouched": "2026-09-12",
+      "lastTouched": "2026-09-15",
       "openIn": 1,
       "openOut": 1
     },
@@ -71,11 +71,11 @@
         "engine-runs.js"
       ],
       "files": 21,
-      "lines": 6518,
+      "lines": 6533,
       "largest": [
         {
           "f": "index.js",
-          "n": 3346
+          "n": 3361
         },
         {
           "f": "routes/jobs.js",
@@ -90,7 +90,7 @@
           "n": 237
         }
       ],
-      "lastTouched": "2026-09-11",
+      "lastTouched": "2026-09-15",
       "openIn": 4,
       "openOut": 1
     },
@@ -113,11 +113,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2796,
+      "lines": 2799,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 268
+          "n": 271
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -132,7 +132,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-11",
+      "lastTouched": "2026-09-15",
       "openIn": 2,
       "openOut": 0
     },
@@ -159,6 +159,7 @@
         "send-queue-order.js",
         "services/outreach-cycle.js",
         "services/send-progress.js",
+        "services/outreach-dedup.js",
         "services/mailbox-reassign.js",
         "services/lead-recycle.js",
         "warmup-engine.js",
@@ -171,8 +172,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 20,
-      "lines": 4116,
+      "files": 21,
+      "lines": 4264,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -191,7 +192,7 @@
           "n": 378
         }
       ],
-      "lastTouched": "2026-09-07",
+      "lastTouched": "2026-09-15",
       "openIn": 1,
       "openOut": 1
     },
@@ -366,7 +367,7 @@
         ".github/"
       ],
       "files": 83,
-      "lines": 15613,
+      "lines": 15746,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -385,7 +386,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-09-12",
+      "lastTouched": "2026-09-15",
       "openIn": 1,
       "openOut": 0
     },
@@ -411,8 +412,12 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1073,
+      "lines": 1121,
       "largest": [
+        {
+          "f": "routes/reminders.js",
+          "n": 222
+        },
         {
           "f": "services/plans.js",
           "n": 218
@@ -422,15 +427,11 @@
           "n": 201
         },
         {
-          "f": "routes/reminders.js",
-          "n": 174
-        },
-        {
           "f": "services/entitlements.js",
           "n": 155
         }
       ],
-      "lastTouched": "2026-09-04",
+      "lastTouched": "2026-09-15",
       "openIn": 0,
       "openOut": 0
     }

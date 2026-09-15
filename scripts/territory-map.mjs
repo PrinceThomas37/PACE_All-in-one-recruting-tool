@@ -48,6 +48,9 @@ const TERRITORIES = [
           'email-validation.js', 'email-verify.js', 'gmail-provider.js',
           'services/mail-provider.js', 'send-queue-order.js',
           'services/outreach-cycle.js', 'services/send-progress.js',
+          // The double-send rule. Sits with the send loop that enforces it —
+          // routes/reminders.js only READS it to decide what to offer.
+          'services/outreach-dedup.js',
           'services/mailbox-reassign.js', 'services/lead-recycle.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',

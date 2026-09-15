@@ -47,6 +47,69 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0018 · 2026-09-15 · STANDS · A task stays open when its sequence moves on
+**Their words:** *"Now i think the reminder was created inspite of follow up
+email being triggered."* Chosen from three options: **"Stays open, but shows
+what's happened since."**
+
+**What was happening.** Step 3 of Standard Sales Outreach created a call task on
+13 Sep. Step 4 sent follow-up 2 on 15 Sep and the enrollment completed. The task
+sat there untouched, with a "Compose email" button, and the send path refused
+the click:
+
+> Send failed: A follow-up to this contact is already queued or was sent today —
+> skipped to avoid a duplicate email.
+
+The refusal was CORRECT. What was wrong is that the screen offered the action at
+all, and only admitted the problem after the email had been composed.
+
+**The decision.** A sequence finishing does not close the human task it created.
+Two unanswered emails is precisely when a call is worth making, so the task
+survives — it just stops pretending nothing has happened since. The card now
+carries the email trail ("2 emails already sent, last on 2026-09-15") and, when
+another send would be refused, says so **before** offering it rather than after.
+
+**Why not the alternatives.** "Close it when the sequence finishes" loses the
+call on exactly the leads that never replied. "Close it as soon as a later email
+goes out" makes the automated email cancel the human step, which is the opposite
+of what step 3 exists for.
+
+**The rule this creates:** a rule that decides whether an action is ALLOWED
+belongs where the action is OFFERED, not only where it is taken.
+`services/outreach-dedup.js` is that rule, now shared by the send path and the
+page instead of living only inside index.js.
+
+**Re-open when:** the owner finds the open tasks pile up faster than they get
+worked, or asks for a way to clear a batch of them at once.
+
+### D-0017 · 2026-09-15 · STANDS · No call task when there is nobody to call
+**Their words:** chosen from three options, in response to being shown that all
+five contacts on the live call tasks had no phone number and no LinkedIn:
+**"Don't create it at all."** Offered with the trade-off stated — *"a lead
+quietly stops being chased and nobody is told"* — and taken anyway.
+
+**What was happening.** Seven live tasks read *"Call the POC about this role and
+connect on LinkedIn."* Every contact named held **neither a phone number nor a
+LinkedIn URL**. The task was not merely unhelpful, it was impossible as written,
+and it is the single biggest reason the Reminders page read as the app inventing
+work.
+
+**The decision.** A `bd_touch` step does not create its task when the contact has
+no phone and no LinkedIn. It records `skipped` with reason
+`no_phone_or_linkedin` on the step run, so a lead that stops being chased for
+this reason is answerable from the data — **the owner accepted a quieter list,
+not a silent one.** The generic `reminder` channel is deliberately NOT gated: it
+can be any task at all, and reachability is not its precondition.
+
+**Not applied retroactively.** The seven tasks already in the database stay
+(that is D-0018). They now say plainly that there is no phone or LinkedIn on the
+record, rather than asking for a call that cannot be made.
+
+**Re-open when:** contact records start carrying phone numbers routinely — at
+which point the skip should become rare on its own and is worth re-measuring —
+or if the owner notices leads going quiet and wants the skipped ones surfaced as
+a "find a number for these" list rather than only in the step-run record.
+
 ### D-0015 · 2026-09-10 · STANDS · The new look, from the owner's Bolt design; light AND dark
 **Their words:** *"I was thinking of revamping the UI. and i worked on
 something in BOLT."* … *"keep toggle to dark and light. I am tired of how it

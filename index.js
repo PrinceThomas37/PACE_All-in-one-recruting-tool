@@ -2901,16 +2901,13 @@ function isPermanentFollowupBlock(status) {
   return s === 'invalid' || s === 'deactivated';
 }
 
-// Outreach-class email types (the initial outreach is intentionally excluded).
-// Used by the double-send guard below.
-const FOLLOWUP_EMAIL_TYPES = ['fu1', 'fu2', 'reminder'];
+// The double-send rule moved to services/outreach-dedup.js (PURE) so the
+// Reminders page can apply the SAME rule when it decides whether to OFFER a
+// send. It used to live only here, at the moment of sending, which is why the
+// page let someone compose a whole email and then refused it — see that file.
+const { FOLLOWUP_EMAIL_TYPES, isLiveOutreachRow: isLiveOutreachRowPure, callTaskSkipReason } = require('./services/outreach-dedup');
 
-// A follow-up/reminder email row is "live" if it is still queued (pending) or
-// was already delivered today — either way, sending another one now would be a
-// same-day duplicate to that contact.
-function isLiveOutreachRow(r) {
-  return !!r && (r.status === 'pending' || (r.sent_at && String(r.sent_at).slice(0, 10) === today()));
-}
+function isLiveOutreachRow(r) { return isLiveOutreachRowPure(r, today()); }
 
 // True if a reminder or follow-up to this contact (optionally scoped to a job)
 // is already queued or was sent today — used to prevent the scheduled follow-up
@@ -3200,6 +3197,24 @@ async function wfReminderExecutor({ step, enrollment, context }) {
   const cfg = step.config || {};
   const assignee = cfg.assignee_user_id || job?.assigned_to_bd || enrollment.enrolled_by;
   if (!assignee) return { outcome: 'skipped', detail: { reason: 'no_assignee' } };
+
+  // A bd_touch step is a CALL + LinkedIn task — it asks a human to reach the
+  // contact by a route that is not email. If the record holds no phone number
+  // and no LinkedIn, there is no such route, and the task it would write is one
+  // nobody can carry out. Seven of these were live at once, every one reading
+  // "Call the POC about this role and connect on LinkedIn" for a contact with
+  // neither field set, which is what made the Reminders page read as invented
+  // work (owner's decision D-0017, 2026-09-15: do not create it).
+  //
+  // SKIPPED, NOT FAILED, AND NEVER SILENT: the step run records the reason, so
+  // a lead that stops being chased for this is answerable from the data rather
+  // than just quietly dropping off somebody's list. The `reminder` channel is a
+  // GENERIC task and is deliberately not gated — only the call step is.
+  const skipReason = callTaskSkipReason(step, contact);
+  if (skipReason) {
+    return { outcome: 'skipped', detail: { reason: skipReason, contact_id: contact?.id || null } };
+  }
+
   const contactName = [contact?.first_name, contact?.last_name].filter(Boolean).join(' ') || 'POC';
   const vars = job ? buildEmailVars({ job, contact, senderDisplayName: '' }) : {};
   const parts = [cfg.note || step.name];
