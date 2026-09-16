@@ -80,15 +80,16 @@ remembering before concluding something needs to be captured.
 ---
 
 ### Emailing a candidate about a job
-**Status:** ⚠ **DUPLICATED — A survives, B is being removed** (owner's call,
-`DECISIONS.md` D-0012). The JD moves **inside** A's email as a formatted block.
+**Status:** ✅ **RESOLVED 2026-09-16 — A is the only one left** (owner's call,
+`DECISIONS.md` D-0012). B's entry points are deleted and the JD now travels
+**inside** A's email as a formatted panel.
 **No attachments** — asked and answered; B's document attachment is dropped
 deliberately, not overlooked.
 
 | | A · Compose → Candidates | B · "Email JD to candidates" |
 |---|---|---|
 | Owner | `observatory` (writer), `harbour` (send) | `guild` |
-| Entry | Email → Compose → Candidates | a job's Candidates tab, multi-select; also the candidate profile's Email button |
+| Entry | Email → Compose → Candidates | ~~a job's Candidates tab, multi-select; also the candidate profile's Email button~~ **removed** |
 | Code | `services/candidate-outreach.js`, `routes/candidate-outreach.js`, `public/js/49-page-candidate-outreach.js` | `public/js/28-page-pipeline.js` (`plEmailJD`), `POST /candidates/email` in `routes/recruiting/outreach.js` |
 | Picks people | ranked against the job order by the match engine | manual multi-select |
 | Writes | AI brief once per job + per-candidate sentence, held to `checkCandidateDraft` | one JD body, BCC'd to everyone |
@@ -96,9 +97,29 @@ deliberately, not overlooked.
 | Answering | three buttons in the email (interested / not this one / never) | reply only |
 | **Attachments** | **none** | **`document_ids` → real file attachments** |
 
-**A is the survivor. B's only unique capability is document attachment** — that
-is the thing a careless merge loses, and the reason this table exists rather
-than a one-line "duplicate, delete B".
+**⚠ `POST /candidates/email` DOES DOUBLE DUTY AND MUST NOT BE DELETED WITH B.**
+It has two frontend callers, and only one is the JD flow:
+`public/js/28-page-pipeline.js:369` (B, being removed) and
+**`public/js/10-page-modals.js:220` — `remSendMeeting`, which sends a Teams
+MEETING INVITE** and merely reuses this endpoint as a generic "email this
+person". Removing B means removing its **entry points**, not the endpoint.
+Deleting the route would silently break meeting invitations, and nothing on
+screen would say so. The `candidate_email` sequence channel is unaffected — it
+goes through `wfEngine.registerChannel`, not the endpoint.
+
+**A is the survivor.** What went with B, both deliberately:
+* **File attachments** — D-0012 is explicit, asked and answered. Do not restore
+  them as a missing feature; re-open the decision instead.
+* **The one-off "email this person" path** from a candidate's profile. The
+  in-app mailbox (Email → Mailbox) is a full mail client and is where that lives.
+
+The Documents card's tick-boxes went too: they existed only to pick attachments
+for the removed button, and a selection with nothing left to act on is a dead
+affordance.
+
+`test/email-tracking-send-smoke.mjs` now asserts B stays gone — a capability the
+owner asked to have removed needs a guard, for the same reason the duplication
+survived unnoticed for months.
 
 ---
 

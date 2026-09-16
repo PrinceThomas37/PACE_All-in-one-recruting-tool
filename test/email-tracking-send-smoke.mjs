@@ -1,8 +1,16 @@
 // Verifies email-tracking slice 2 (the visible payoff):
-//  - the "Email JD" modal offers a "Send tracked through PACE" action
-//  - plSendTracked posts recipients (with candidate_id) + subject/body/job to
-//    POST /candidates/email
 //  - the candidate profile shows an Email activity card with "Opened" / "not opened"
+//  - and, since D-0012, that the REMOVED "Email JD to candidates" flow stays removed
+//
+// This file used to drive plEmailJD → plSendTracked and assert the modal's
+// tracked-send button. That whole flow was the duplicate half of "email a
+// candidate about a job" and is gone (CAPABILITIES.md). The assertions were
+// inverted rather than deleted: a capability the owner asked to have removed
+// needs a guard that it does not quietly come back, which is the same reason
+// the duplication went unnoticed for months in the first place.
+//
+// What must NOT be asserted away: POST /candidates/email is still live and
+// still used by remSendMeeting for Teams interview invitations.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,8 +51,8 @@ try {
   await enterApp(page);
   await page.waitForSelector('#sidebar', { timeout: 15000 });
 
-  // ── Email JD modal → tracked send ───────────────────────────────────────────
-  const send = await page.evaluate(async () => {
+  // ── D-0012: the "Email JD to candidates" flow is gone ───────────────────────
+  const gone = await page.evaluate(async () => {
     STATE.user.role = 'bd'; STATE.user.roles = ['bd'];
     STATE.bd = STATE.bd || {};
     STATE.bd.jobOrders = [{ id: 'j1', job_code: 'JO-1', job_title: 'Estimator', client: 'Acme', city: 'Dallas', state: 'TX', job_description: 'JD' }];
@@ -54,21 +62,30 @@ try {
       { id: 'p2', job_order_id: 'j1', pipeline_code: 'PL-2', candidate: { id: 'c2', full_name: 'B', email: 'b@x.com' } }
     ];
     STATE.bd.plSel = { p1: true, p2: true };
-    window.plEmailJD();
-    const modal = STATE.modal || '';
-    // stub apiPost to capture the tracked-send payload
-    let captured = null;
-    window.apiPost = function (url, body) { captured = { url, body }; return Promise.resolve({ sent: 2, mailbox: 'me@futeglobal.com' }); };
-    window.plSendTracked();
-    await new Promise(r => setTimeout(r, 50));
-    return { modal, captured };
+    const pipeline = window.renderBdPipeline ? window.renderBdPipeline() : '';
+    return {
+      fns: ['plEmailJD', 'plShowEmailJDModal', 'plSendTracked', 'plCopyEmailJD', 'plSendEmailJD', 'cpOpenEmail']
+        .filter(n => typeof window[n] === 'function'),
+      pipelineOffersIt: /Email JD to candidates/.test(pipeline),
+      // The endpoint's OTHER caller must survive — Teams meeting invitations.
+      meetingSenderAlive: typeof window.remSendMeeting === 'function'
+    };
   });
-  step('Email JD modal offers "Send tracked through PACE"', /Send tracked through PACE/.test(send.modal));
-  step('Modal still offers the mail-app fallback', /Open in mail app/.test(send.modal));
-  step('plSendTracked posts to /candidates/email', send.captured && send.captured.url === '/candidates/email', send.captured && send.captured.url);
-  step('payload carries the job id', send.captured && send.captured.body.job_order_id === 'j1');
-  step('payload recipients include candidate_id + email', !!(send.captured && send.captured.body.recipients.length === 2 &&
-    send.captured.body.recipients[0].candidate_id && send.captured.body.recipients[0].email));
+  step('No Email-JD function is still defined', gone.fns.length === 0, gone.fns.join(', '));
+  step('Pipeline no longer offers "Email JD to candidates"', !gone.pipelineOffersIt);
+  step('remSendMeeting survives (Teams invites use the same endpoint)', gone.meetingSenderAlive);
+
+  const profileGone = await page.evaluate(() => {
+    STATE.bd.profile = { id: 'c1', candidate: { id: 'c1', full_name: 'A Candidate', candidate_code: 'CN-1', email: 'a@x.com' },
+      history: { pipeline: [], submissions: [], activity: [] }, notes: [],
+      documents: [{ id: 'd1', filename: 'cv.pdf', doc_type: 'Resume', uploaded_at: '2026-07-21T10:00:00Z' }],
+      selJob: null, noteTab: 'applicant_reference', emailActivity: [] };
+    const html = window.renderCandidateProfile();
+    return { html, hasCheckbox: /type="checkbox"[^>]*cpDocToggle/.test(html) };
+  });
+  step('Profile has no "Email this candidate" action', !/Email this candidate/.test(profileGone.html));
+  step('Documents card has no "Email selected" button', !/Email selected/.test(profileGone.html));
+  step('Documents card has no orphaned tick-boxes', !profileGone.hasCheckbox);
 
   // ── candidate profile: Email activity card ──────────────────────────────────
   const prof = await page.evaluate(() => {
