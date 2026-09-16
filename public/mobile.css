@@ -58,6 +58,38 @@
   input[type=checkbox],input[type=radio],input[type=range],input[type=color]{font-size:inherit}
 }
 
+/* ── 0b. THE 16px INPUT IS THE FLOOR, SO THE SCALE MUST COME UP TO MEET IT ──
+   Raising inputs to 16px on a phone fixes the zoom and breaks the hierarchy:
+   measured in the Edit Job modal at 390px, the value you TYPE was 16px while
+   its own label was 11.5px, the tabs 13px and the buttons 13.5px. The thing
+   you type became the largest body text on the screen — larger than the
+   section headings organising it — and the owner read that, correctly, as
+   "the fonts are not uniform". On desktop the same modal spans 11.5→13.5px
+   and looks right, because the input sits WITH its neighbours instead of
+   towering over them.
+
+   ⚠ AN INLINE font-size CANNOT BE RE-SCALED, exactly as an inline colour
+   cannot be re-themed and an inline width cannot be re-laid-out. There are
+   ~1,600 inline font sizes in public/js, and the labels in every modal are
+   among them, so no ordinary stylesheet rule can reach one. `!important` is
+   the only thing that outranks an inline declaration — used here deliberately
+   and confined to the phone, where the alternative is that this cannot be
+   fixed at all short of rewriting every modal.
+
+   It is scoped to overlays (`.modal`, `.drawer`, `.dw`) rather than the whole
+   app: those are the dense form surfaces where a label sits directly against
+   a field, which is where the mismatch is actually legible. */
+@media (max-width:860px){
+  .modal label,.drawer label,.dw label{font-size:13px !important;line-height:1.45}
+  .modal .tab,.drawer .tab,.dw .tab{font-size:15px}
+  .modal .btn,.drawer .btn,.dw .btn{font-size:15px}
+  /* The title has to clear 16px body text or it stops reading as a title. */
+  .modal .mtab,.drawer .mtab,.dw .mtab{font-size:15px}
+  /* The title has to clear 16px body text or it stops reading as a title. */
+  .modal .mt,.drawer .mt,.dw .mt,
+  .modal .mhd,.drawer .mhd,.dw .mhd{font-size:19px}
+}
+
 /* ── 1. THE SHELL: OFF-CANVAS NAV ─────────────────────────────────────────── */
 @media (max-width:860px){
   /* The rail slides in at its FULL width. A 60px icon-only strip on a phone is

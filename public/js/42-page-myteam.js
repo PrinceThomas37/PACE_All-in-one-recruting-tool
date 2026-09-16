@@ -133,7 +133,7 @@
           '</div>';
         }).join('');
     return '<div onclick="closeTeamActivity()" style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100"></div>'+
-      '<div style="position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--card);border-left:1px solid var(--border);z-index:101;box-shadow:-8px 0 24px rgba(0,0,0,.14);display:flex;flex-direction:column">'+
+      '<div style="position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--card-solid);border-left:1px solid var(--border);z-index:101;box-shadow:-8px 0 24px rgba(0,0,0,.14);display:flex;flex-direction:column">'+
         '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
           '<div><div style="font-weight:700;font-size:15px">'+esc(user?user.name:'Activity')+'</div><div style="font-size:12px;color:var(--text3)">Recent activity</div></div>'+
           '<button onclick="closeTeamActivity()" style="border:0;background:none;font-size:24px;cursor:pointer;color:var(--text3);line-height:1">×</button>'+
