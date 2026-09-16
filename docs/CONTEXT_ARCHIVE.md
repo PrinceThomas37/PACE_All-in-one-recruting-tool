@@ -4482,3 +4482,260 @@ measuring its own horizon, the contrast probe declining to judge a gradient and
 being counted as a pass. **A green check is a claim about what was measured,
 not about what is true.** Both were caught only by deliberately reintroducing
 the bug and watching the test fail.
+
+---
+
+# Session 24 — the Reminders page, and the day ownership got defined
+
+**PRs #208, #209, #210, #211.** Four rounds, each one the owner looking at their
+own screen and saying what was wrong with it. The last round produced the
+largest structural change: **what "ownership" means was written down for the
+first time**, because until then it had only ever been implied by whichever
+query a screen happened to run.
+
+## Round 1 — "no clarity why those reminders are created" (#208)
+
+Three faults in one screenshot set.
+
+1. **A task with no provenance is indistinguishable from a bug**, and the owner
+   reported it as one. All five reminders were step 3 of "Standard Sales
+   Outreach", created the day the sequence reached it. The row recorded WHY only
+   as `reminder_type: 'bd_touch'` — a workflow CHANNEL name, never displayed,
+   meaningless to a recruiter. `services/reminder-source.js` (pure) is the
+   sentence now, and `GET /reminders` resolves the sequence and step in one
+   batched lookup. That lookup is an INFERENCE from (contact, job), so it can
+   come back empty — **it degrades to the generic sentence and never names a
+   sequence it did not find.**
+
+2. **The composer's "To" box was empty and Send stayed enabled.**
+   `applyReminderTemplate` filled from `STATE.contacts`, which is a browser cache
+   of whatever `GET /jobs` returned for that user. Lead not in it → no address,
+   and the template went through VERBATIM.
+
+3. **The email went out reading "Hi {{fn}}, ... the {{pos}} opening at
+   {{company}}"** under a real recruiter's From line, to a live prospect.
+   `{{sender}}` rendered perfectly — because the send path fills that one and
+   nothing filled the rest.
+
+   Root cause: **PACE had two merge vocabularies and one filler.** Sales
+   publishes `fn`/`pos`/`company`; recruiting publishes
+   `first_name`/`position`/`client`; `fillTemplate` filled both and knew
+   neither. The default sequence seeded by migration 007 writes its task in the
+   RECRUITING names and runs through the SALES builder, so **every reminder it
+   has ever created carried unfilled tokens**, and the sequence builder's own
+   hint text taught that vocabulary.
+
+   Fixed with `VAR_SYNONYMS` (one fact, many names), **a direct hit always
+   beating an alias** — on the recruiting side `company` and `client` are two
+   different facts, and resolving the group in its own order made `{{client}}`
+   print the company. That was caught only by a test, never by reading it.
+
+   And then **checked**: `unresolvedVars()` lists every unfilled token and the
+   route refuses with a 400 naming them. **Refusing is right; blanking is not** —
+   a blanked token sends "Hi ," and looks like nothing went wrong.
+
+## Round 2 — the send that was correctly refused (#209)
+
+*"Send failed: A follow-up to this contact is already queued or was sent today."*
+
+The refusal was CORRECT — follow-up 2 had gone out that morning. What was wrong
+is that the screen **offered the action at all**, and only admitted the problem
+after the work of composing was done. **A rule that decides whether an action is
+allowed belongs where the action is OFFERED, not only where it is taken.** The
+guard moved into `services/outreach-dedup.js` (pure) and `GET /reminders` now
+returns `compose.can_send` up front. Two block reasons are kept apart because
+they read completely differently to a human: something is SITTING IN THE QUEUE
+versus something ALREADY WENT today.
+
+Same round, a sharper finding: **seven live reminders said "Call the POC about
+this role and connect on LinkedIn" for contacts holding no phone number and no
+LinkedIn.** Work nobody could do as written — the single best reason the page
+read as invented. The owner chose (D-0017) that such a task is **not created at
+all**: a quieter list, not a silent one, since the skip is recorded on the step
+run.
+
+**The first version of that guard was vacuous.** It grepped `index.js` for the
+condition, and went on passing when the condition was disabled with
+`if (false && …)`. It became `callTaskSkipReason(step, contact)` — a callable
+function — for exactly that reason. **A test that greps for source text cannot
+tell a live rule from a dead one.**
+
+## Round 3 — "too much red" (#210)
+
+> *"can correct the colour, too much red. like after 5,6 reminders the screen
+> will look reddish."*
+
+The first cards gave every overdue row a 2px red border, a solid red pill and a
+red-tinted panel. Fine as ONE card; the whole screen turns red at six. The rule
+underneath: **overdue is the ORDINARY state of a to-do list, not a fault.** Red
+should mean something has gone wrong. **If six of six rows shout, none of them
+does.**
+
+Calm is now measurable: the test fails on any `var(--red*)` in that page, on a
+tinted card ground, and on the state colour appearing in more than three places.
+Both guards verified by putting the red back.
+
+## Round 4 — ownership (#211)
+
+> *"reminders information is not just for one user who is responsible for it,
+> its been showed to everyone and every user as a manager can interact with
+> it… Maybe we can define what ownership or responsibility means."*
+
+It had never been defined. `/next-actions` scoped by the reporting CHAIN — and
+**the file's own comment said that putting one person's follow-ups on another's
+list would be getting it wrong, while the code did exactly that.**
+
+`services/ownership.js` (pure) is the definition: a reminder's owner is its
+`user_id`, a lead's its `assigned_to_bd`, a submission's its `recruiter_id`, a
+contact's the owner of its job. Ownership BUYS a place on your daily list and
+the right to act; it COSTS everyone else both.
+
+**The worst option was the one that shipped.** Every team row drew a Done
+button. The endpoint scoped its UPDATE by `user_id` and returned
+`{success:true}` regardless — zero rows matched, the toast said "Marked done",
+and the row came back on the next load. **A thing you can see, appear to act on,
+and not actually change is worse than either showing it or hiding it.**
+
+The owner's own framing decided the shape: *"the count where the manager can
+review it and initiate the other user to take action on it."* Review and
+initiate — not reach in. A prompt writes a dated `manager_prompt` reminder onto
+the OWNER's list naming who asked, and never touches the task.
+
+Two more came out of the same question. **A briefing is about the reader's
+desk** (D-0021) — `gatherFacts` scoped by ORGANISATION only, so a recruiter was
+told *"the unassigned lead pool stands at 79"*, a BD-side number they have no
+part in working; admin still sees the org, because the whole company IS their
+desk. And **a per-user preference belongs to the user, not the browser**
+(D-0022) — the theme lived only in `localStorage`, so two logins on one computer
+shared it.
+
+**The same vacuous-guard mistake was made twice in one session.** The Done
+refusal was also first pinned by grepping the route, and also went on passing
+under `if (false && …)`. It became `closeRefusal(record, viewerId)`. The
+remaining grep-only coverage of the call site is written into the suite as a
+**known limit** rather than left looking like proof.
+
+## Not reproduced, and said so
+
+The owner's point 3 — a recruiter seeing a BD Lead's reminders — could not be
+reproduced. `reportingChainIds` is downward-only, so a recruiter's chain is
+`[self]`, and the screenshot lacked Session 23 UI. **Stated plainly as
+unreproduced rather than quietly "fixed".**
+
+---
+
+# Session 25 — finishing a draft somebody left labelled, and two faults on a phone
+
+**PRs #200 (reopened and completed) and #212.**
+
+## The draft that said "do not merge"
+
+The owner found **#200 sitting open for five days** and asked what it was. It
+was half of D-0012 — the candidate interest email carrying the job description
+as a panel — and its author had written the missing half onto the label rather
+than merging and hoping. **That label is the reason nothing broke**: merging it
+alone would have shipped the new email *plus* the old duplicate workflow it was
+meant to replace, which is the exact duplication the owner had asked to remove.
+
+Completing it meant three things:
+
+1. **Removing the old entry points** — `plEmailJD` and its bulk-bar button,
+   `plShowEmailJDModal`, `plSendTracked`, `plCopyEmailJD`, `plSendEmailJD`, and
+   the candidate profile's "Email this candidate" / "Email selected".
+   `POST /candidates/email` stayed, deliberately: its other caller is
+   `remSendMeeting`, which sends **Teams interview invitations**, and deleting
+   the route would have broken those silently.
+   The Documents card's tick-boxes went too — they existed only to pick
+   attachments for the removed button, so leaving them would have left a
+   selection you can see, that counts itself, and that does nothing.
+2. **Drawing the panel as a card in the preview** (C-0019), on an explicit white
+   ground: it is EMAIL markup with its own inline light palette and cannot be
+   re-themed, the same exception `.mb-body` has.
+3. **Pinning it** (C-0020) — `test/candidate-jd-panel-smoke.mjs`, pure, no
+   browser. The safety property is the one that matters:
+   `jobBlock(job).html === jobBlockHtmlFromText(splitJobBlock(stored).block)`.
+   The drain rebuilds the card from the STORED ROW, never by re-reading
+   `job_orders`, which is what stops the preview and the outbox disagreeing.
+
+### The defect 26 passing assertions did not find
+
+A sample email was rendered purely to screenshot it for the owner — and there at
+the bottom of the panel sat **"Apply at acme.example.com/jobs"**, copied out of
+the client's posting. `APPLY_INSTRUCTION` required `https://`, `www.` or an email
+address, and postings usually write the host bare.
+
+**A staffing firm that forwards the client's own careers link has given away the
+placement it is being paid for.** Widened to match a bare host by TLD, still
+requiring the apply verb in the same sentence, so "we use Procore.com
+internally" is untouched and the fact beside the instruction is kept rather than
+the whole line dropped.
+
+**Looking at the artefact found what the tests did not.** Every case written
+from memory had politely used `https://`.
+
+## Two faults on the owner's phone
+
+### See-through overlays
+
+`--card` is **glass** in the themed skin: 62% in light, **5.5% in dark**.
+`theme.css` repaints `.modal,.drawer,.dw` with `--card-solid` for exactly this
+reason — but **twelve hand-rolled panels carried an inline
+`background:var(--card)` and no class**, so that rule never reached them. The
+Connected-leads drawer, both leads filter dropdowns and every zip/company
+autocomplete were transparent: the page behind showed through and the two sets
+of text overlapped.
+
+`CLAUDE.md` already said an inline colour cannot be re-themed. This is the
+sharper version: **a TOKEN can be inline and still be the wrong token.**
+`var(--card)` looks theme-aware and is; it is simply glass, and a float needs
+ground.
+
+### "The fonts are not uniform" — which was never about fonts
+
+Measured across every element of the Edit Job modal: **one family, no
+exceptions.** It was a **scale**.
+
+`mobile.css` raises inputs to 16px so iOS does not zoom on focus — correct,
+load-bearing, untouched. But it was applied to **inputs alone**:
+
+| Edit Job modal | phone 390px | desktop 1280px |
+|---|---|---|
+| heading | 16px | 16px |
+| **input** | **16px** | 13.5px |
+| tabs | 13px | 13px |
+| buttons | 13.5px | 13.5px |
+| **label** | **11.5px** | 11.5px |
+
+On a phone the value you *type* tied the modal title for the largest text on
+screen — larger than the headings organising it, and 39% larger than its own
+label. On desktop the same modal spans 11.5→13.5px and reads correctly.
+
+**An inline `font-size` cannot be re-scaled**, exactly as an inline colour
+cannot be re-themed and an inline width cannot be re-laid-out — and there are
+**~1,600 inline font sizes** in `public/js`. `!important`, scoped to overlays and
+to the phone, is the only thing that outranks an inline declaration. Where a
+size was worth controlling properly it got a class: `.mhd` and `.mtab`,
+**declared at their existing desktop sizes so no wide screen moved**.
+
+Phone now reads 19 → 16 → 15 → 13px, and the suite asserts desktop is still
+exactly 13.5 / 11.5 / 16px.
+
+### A guard that turned out to be vacuous, and was labelled rather than quietly kept
+
+Four guards were tested by reintroducing their bug. Three failed correctly. The
+fourth — `styles.css` declaring its own `--card-solid` — **passed**, because
+`theme.css` always loads with an unscoped `:root` and defines it anyway.
+Deleting that line fails nothing. It stays as defence in depth, and the suite
+says so in a "known limit" note rather than letting its presence read as
+coverage.
+
+## The thread through this session
+
+`theme-contrast-smoke` renders **51 screens in both themes** checking exactly
+the class of fault those twelve panels were — and passed clean the whole time,
+because it never opened one of them. `candidate-jd-panel-smoke` had 26 green
+assertions about a panel that was quietly forwarding a competitor's apply link.
+
+**A suite only covers the screens it renders, and a green check is a claim about
+what was measured, not about what is true.** Both faults were found the same
+way: by producing the artefact and looking at it.
