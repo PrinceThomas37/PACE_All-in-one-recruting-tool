@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-15",
+  "generated": "2026-09-16",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 284,
-    "lines": 69126,
+    "files": 285,
+    "lines": 69616,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 55,
-      "lines": 22817,
+      "lines": 22750,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 888
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 1,
       "openOut": 1
     },
@@ -90,7 +90,7 @@
           "n": 237
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 4,
       "openOut": 1
     },
@@ -132,7 +132,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 2,
       "openOut": 0
     },
@@ -231,8 +231,12 @@
         "services/next-action-dismissals.js"
       ],
       "files": 20,
-      "lines": 8657,
+      "lines": 9043,
       "largest": [
+        {
+          "f": "services/candidate-outreach.js",
+          "n": 1242
+        },
         {
           "f": "jd-parser.js",
           "n": 1167
@@ -243,14 +247,10 @@
         },
         {
           "f": "routes/candidate-outreach.js",
-          "n": 1043
-        },
-        {
-          "f": "services/candidate-outreach.js",
-          "n": 876
+          "n": 1063
         }
       ],
-      "lastTouched": "2026-09-11",
+      "lastTouched": "2026-09-15",
       "openIn": 0,
       "openOut": 1
     },
@@ -347,7 +347,7 @@
           "n": 176
         }
       ],
-      "lastTouched": "2026-09-10",
+      "lastTouched": "2026-09-16",
       "openIn": 0,
       "openOut": 5
     },
@@ -367,8 +367,8 @@
         "test/",
         ".github/"
       ],
-      "files": 84,
-      "lines": 16073,
+      "files": 85,
+      "lines": 16244,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -387,7 +387,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 1,
       "openOut": 0
     },
@@ -432,7 +432,7 @@
           "n": 159
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 0,
       "openOut": 0
     }

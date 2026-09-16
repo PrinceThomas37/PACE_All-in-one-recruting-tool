@@ -66,20 +66,13 @@ try {
 
   // bulk bar appears once rows are selected
   const barHtml = await page.evaluate(() => { STATE.bd.plSel = { plPro: true, plUn: true }; return window.renderPipelinePage(); });
-  step('Bulk bar shows on selection (sequence + Email JD)', barHtml.includes('Start sequence') && barHtml.includes('Email JD') && barHtml.includes('2</b> selected'));
+  step('Bulk bar shows on selection (sequence + count)',
+    barHtml.includes('Start sequence') && barHtml.includes('2</b> selected'));
+  // D-0012: "Email JD to candidates" was the second half of one capability.
+  step('Bulk bar no longer offers "Email JD"', !barHtml.includes('Email JD'));
 
-  // Email JD → compose modal → mailto BCC with the selected candidate emails
-  const emailJD = await page.evaluate(() => {
-    plEmailJD();
-    const modalOpened = /Email the job to/.test(STATE.modal || '');
-    let opened = '';
-    const _open = window.open; window.open = (u) => { opened = u; };
-    plSendEmailJD();
-    window.open = _open;
-    return { modalOpened, opened };
-  });
-  step('Email JD opens a compose/review modal', emailJD.modalOpened);
-  step('Sending builds a mailto BCC with selected candidate emails', emailJD.opened.startsWith('mailto:') && /bcc=/.test(emailJD.opened) && /tag%40x.com|pro%40x.com/.test(emailJD.opened));
+  // (The "Email JD" compose/mailto flow that was asserted here is gone — D-0012.
+  //  test/email-tracking-send-smoke.mjs now guards that it stays gone.)
 
   // The old bdOpenSubmissions entry point now routes to the Candidates view.
   const routes = await page.evaluate(() => {

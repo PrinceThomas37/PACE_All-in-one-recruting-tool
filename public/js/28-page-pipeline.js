@@ -275,7 +275,11 @@
     return '<div class="card" style="padding:9px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="font-size:12.5px;color:var(--text2)"><b>'+count+'</b> selected</span>'+
       '<button class="btn btn-sm btn-primary" onclick="plSequenceSelected()">▶ Start sequence</button>'+
-      '<button class="btn btn-sm btn-outline" onclick="plEmailJD()">✉ Email JD to candidates</button>'+
+      // D-0012: "✉ Email JD to candidates" lived here. It was the second way to
+      // do one thing — Email → Compose → Candidates is the survivor, and the job
+      // description now travels inside that email as a formatted panel instead
+      // of the attachment this flow sent. The owner found the duplication, not
+      // the system; see CAPABILITIES.md "Emailing a candidate about a job".
       '<button class="btn btn-sm btn-outline" onclick="plClearSel()">Clear</button>'+
     '</div>';
   }
@@ -306,92 +310,17 @@
     var items = promoted.map(function(p){ var c=p.candidate||{}; return { entity_id:p.submission_id, label:c.full_name||'Candidate' }; });
     wfStartSequence('submission', items, { anyStage:true });
   };
-  // Email the job description to the SELECTED candidates as a one-shot invitation
-  // (separate from the automated sequence). Opens a compose modal so the BD can
-  // review/edit the subject + message before sending.
-  window.plEmailJD = function(){
-    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
-    var j = joById(jid) || {};
-    var recips = plSelectedRows().map(function(p){ var c=p.candidate||{}; return { name:c.full_name||'Candidate', email:(c.email||'').trim(), candidate_id:c.id }; });
-    if(!recips.length){ showToast('Select at least one candidate first','error'); return; }
-    if(!recips.some(function(r){ return r.email; })){ showToast('None of the selected candidates have an email address on file','error'); return; }
-    var subject = 'Job opportunity: '+(j.job_title||'')+(j.client?' — '+j.client:'');
-    var body = 'Hi,\n\nI wanted to share an opportunity that may be a good fit for you:\n\n'+
-      (j.job_title||'')+(j.client?' — '+j.client:'')+'\n'+
-      ([j.city,j.state].filter(Boolean).join(', '))+'\n\n'+
-      String(j.job_description||'').slice(0,1600)+
-      '\n\nIf this looks interesting, reply and we can set up a quick call to discuss the details.\n\nBest regards,';
-    STATE.bd._emailJD = { jid:jid, subject:subject, body:body, recips:recips };
-    plShowEmailJDModal();
-  };
-  // Exposed so any page can open the same compose/tracked-send modal by
-  // pre-seeding STATE.bd._emailJD (e.g. the candidate profile's "Email" button).
-  window.plShowEmailJDModal = function plShowEmailJDModal(){
-    var d = STATE.bd._emailJD; if(!d) return;
-    var withEmail = d.recips.filter(function(r){ return r.email; });
-    var noEmail = d.recips.filter(function(r){ return !r.email; });
-    var chips = withEmail.map(function(r){ return '<span style="background:var(--accent-l,rgba(30,122,60,.1));border:1px solid var(--border);border-radius:12px;padding:2px 9px;font-size:11.5px">'+esc(r.name)+' · '+esc(r.email)+'</span>'; }).join(' ');
-    var warn = noEmail.length ? '<div style="font-size:11.5px;color:var(--amber);margin-top:8px">⚠ '+noEmail.length+' selected candidate'+(noEmail.length>1?'s have':' has')+' no email on file and will be skipped: '+esc(noEmail.map(function(r){return r.name;}).join(', '))+'</div>' : '';
-    var docCount = (d.documentIds||[]).length;
-    STATE.modal =
-      '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
-          '<div style="font-weight:700;font-size:16px">Email the job to '+withEmail.length+' candidate'+(withEmail.length>1?'s':'')+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Review the invitation, then open it in your mail app. Candidates are BCC\'d so they can\'t see each other.'+(docCount?' '+docCount+' document'+(docCount>1?'s':'')+' will be attached (tracked send only).':'')+'</div>'+
-        '</div>'+
-        '<div style="padding:16px 20px">'+
-          '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:6px">RECIPIENTS</div>'+
-          '<div style="display:flex;flex-wrap:wrap;gap:5px">'+(chips||'<span style="color:var(--text3);font-size:12px">None</span>')+'</div>'+warn+
-          '<div style="margin-top:14px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
-            '<input id="pl-jd-subject" class="sel" value="'+esc(d.subject)+'"></div>'+
-          '<div style="margin-top:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+
-            '<textarea id="pl-jd-body" class="sel" style="min-height:220px;resize:vertical;font-size:12.5px;line-height:1.5">'+esc(d.body)+'</textarea></div>'+
-        '</div>'+
-        '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-          '<div style="font-size:11px;color:var(--text3)">Tracked send emails from your connected mailbox and reports opens.</div>'+
-          '<div style="display:flex;gap:8px">'+
-            '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
-            '<button class="btn btn-outline" onclick="plCopyEmailJD()">Copy</button>'+
-            '<button class="btn btn-outline" onclick="plSendEmailJD()">Open in mail app</button>'+
-            '<button class="btn btn-primary" onclick="plSendTracked()">✉ Send tracked through PACE</button>'+
-          '</div>'+
-        '</div>'+
-      '</div>';
-    render();
-  }
-  window.plSendTracked = function(){
-    var d = STATE.bd._emailJD; if(!d) return;
-    var subject=(document.getElementById('pl-jd-subject')||{}).value||d.subject;
-    var body=(document.getElementById('pl-jd-body')||{}).value||d.body;
-    var recipients = d.recips.filter(function(r){ return r.email; }).map(function(r){ return { candidate_id:r.candidate_id||null, email:r.email, name:r.name }; });
-    if(!recipients.length){ showToast('No valid recipient emails','error'); return; }
-    showToast('Sending…','info');
-    apiPost('/candidates/email', { recipients:recipients, subject:subject, body:body, job_order_id:d.jid, document_ids:d.documentIds||[] })
-      .then(function(r){
-        var sent=r.sent||0;
-        showToast(sent+' email'+(sent!==1?'s':'')+' sent & tracked'+(r.mailbox?' from '+r.mailbox:''),'success');
-        closeModal();
-      })
-      .catch(function(e){
-        if(/no_connected_mailbox/.test(e.message)) showToast('No connected mailbox — connect one under Email, or use "Open in mail app".','error');
-        else showToast('Send failed: '+e.message,'error');
-      });
-  };
-  window.plCopyEmailJD = function(){
-    var b=document.getElementById('pl-jd-body'); if(!b)return;
-    (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(b.value):Promise.reject())
-      .then(function(){ showToast('Message copied','success'); })
-      .catch(function(){ b.select(); document.execCommand('copy'); showToast('Copied','success'); });
-  };
-  window.plSendEmailJD = function(){
-    var d=STATE.bd._emailJD; if(!d) return;
-    var subject=(document.getElementById('pl-jd-subject')||{}).value||d.subject;
-    var body=(document.getElementById('pl-jd-body')||{}).value||d.body;
-    var emails=d.recips.map(function(r){return r.email;}).filter(Boolean);
-    if(!emails.length){ showToast('No valid recipient emails','error'); return; }
-    window.open('mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body), '_self');
-    closeModal();
-  };
+  // D-0012 — the "Email JD to candidates" compose/send flow was removed from
+  // here: plEmailJD, plShowEmailJDModal, plSendTracked, plCopyEmailJD and
+  // plSendEmailJD. It was the duplicate half of one capability; Email →
+  // Compose → Candidates survives and now carries the job description inside
+  // the email as a formatted panel.
+  //
+  // ⚠ POST /candidates/email IS STILL LIVE AND MUST STAY. Its other caller is
+  // remSendMeeting (10-page-modals.js), which sends Teams MEETING INVITES and
+  // merely reuses it as a generic "email this person". Deleting the route with
+  // this flow would break interview invitations silently — nothing on screen
+  // would say so. See CAPABILITIES.md "Emailing a candidate about a job".
 
   window.plRemove = function(id){
     if (!confirm('Remove this candidate from the pipeline?')) return;

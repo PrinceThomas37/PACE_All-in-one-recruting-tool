@@ -233,14 +233,14 @@
         noteRows+
       '</div>';
 
-    // Documents — selectable so they can be attached to the "Email" button
-    // above (send a résumé, offer letter, etc. straight to the candidate).
+    // Documents — upload, open, delete.
+    // The tick-boxes went with D-0012. They existed only to choose attachments
+    // for the removed "Email selected" button, and a selection with nothing left
+    // to act on is the dead affordance this app has already been bitten by: you
+    // can see it, you can appear to act on it, and nothing happens.
     var docs = pr.documents || [];
-    var docSel = pr.docSel || {};
-    var docSelIds = Object.keys(docSel).filter(function(k){ return docSel[k]; });
     var docRows = docs.map(function(d){
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
-        '<input type="checkbox" '+(docSel[d.id]?'checked':'')+' onclick="cpDocToggle(\''+d.id+'\')"/>'+
         '<div style="flex:1;min-width:0">'+
           '<div style="font-size:13px;font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+esc(fmtDT(d.uploaded_at))+'</div>'+
@@ -251,9 +251,8 @@
     var docsCard =
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-          '<div style="font-weight:600;font-size:14px">Documents'+(docSelIds.length?' · '+docSelIds.length+' selected':'')+'</div>'+
+          '<div style="font-weight:600;font-size:14px">Documents</div>'+
           '<div style="display:flex;gap:8px">'+
-            (docSelIds.length?'<button class="btn btn-sm btn-outline" onclick="cpOpenEmail(true)">Email selected</button>':'')+
             '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">+ Upload<input type="file" id="cp-doc-file" style="display:none" onchange="cpUploadDoc(this)"></label>'+
           '</div>'+
         '</div>'+
@@ -376,7 +375,6 @@
       { icon:'note',  title:'Notes',            onclick:"cpTab('notes')" },
       { icon:'phone', title:c.phone?('Call '+c.phone):'No phone on file',
         onclick: c.phone ? "window.location.href='tel:"+UI.attr(String(c.phone).replace(/[^0-9+]/g,''))+"'" : "showToast('No phone number on file','info')" },
-      { icon:'mail',  title:'Email this candidate', onclick:'cpOpenEmail()' },
       { icon:'check', title:'Add to a job',      onclick:"atsAddToJob('"+c.id+"')" },
       { icon:'doc',   title:'Résumé',            onclick:"cpTab('resume')" },
       { icon:'cog',   title:'Edit details',      onclick:"atsOpenEdit('"+c.id+"')" }
@@ -468,34 +466,18 @@
     if (mark) mark.innerHTML = panel.hidden ? '&#9656;' : '&#9662;';
   };
 
-  // ── email the candidate, from their own profile ─────────────────────────────
-  // Every candidate profile gets this, for both BD and recruiters — previously
-  // the only way to email a candidate was the bulk "Email JD" flow on a job's
-  // Candidates tab. Reuses that same compose/tracked-send modal (28-page-
-  // pipeline.js), just pre-seeded with this one candidate.
-  window.cpOpenEmail = function(withSelectedDocs){
-    var pr = STATE.bd.profile; if(!pr) return;
-    var c = pr.candidate || {};
-    if (!c.email){ showToast('This candidate has no email on file','error'); return; }
-    var first = String(c.full_name||'').trim().split(/\s+/)[0] || 'there';
-    var docSel = pr.docSel || {};
-    var documentIds = withSelectedDocs ? Object.keys(docSel).filter(function(k){ return docSel[k]; }) : [];
-    STATE.bd._emailJD = {
-      jid: pr.selJob || null,
-      subject: 'Opportunity: ' + (c.headline || c.current_title || ''),
-      body: 'Hi ' + first + ',\n\nI wanted to reach out about an opportunity that may be a good fit for you. Would you be open to a quick chat?\n\nBest regards,',
-      recips: [{ name: c.full_name || 'Candidate', email: c.email, candidate_id: c.id }],
-      documentIds: documentIds
-    };
-    if (window.plShowEmailJDModal) plShowEmailJDModal();
-    else showToast('Email module not loaded','error');
-  };
-  window.cpDocToggle = function(id){
-    var pr = STATE.bd.profile; if(!pr) return;
-    pr.docSel = pr.docSel || {};
-    pr.docSel[id] = !pr.docSel[id];
-    render();
-  };
+  // D-0012 — "Email this candidate" and the Documents card's "Email selected"
+  // were removed with the rest of the "Email JD to candidates" flow (cpOpenEmail
+  // seeded the very same modal in 28-page-pipeline.js). Emailing a candidate
+  // about a job is ONE workflow now: Email → Compose → Candidates, which ranks
+  // people against the job order, drips the sends and gives the candidate real
+  // answer buttons — none of which this modal did.
+  //
+  // TWO THINGS GENUINELY GO WITH IT, both chosen rather than overlooked:
+  //   • FILE ATTACHMENTS. D-0012 is explicit — asked and answered. Do not
+  //     "restore" them as a missing feature; re-open the decision instead.
+  //   • the one-off "just drop this person a line" path. The in-app mailbox
+  //     (Email → Mailbox) is a full mail client and is where that now lives.
 
   // ── notes & documents handlers ───────────────────────────────────────────
   window.cpNoteTab = function(t){ if(STATE.bd.profile) STATE.bd.profile.noteTab=t; render(); };

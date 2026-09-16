@@ -98,11 +98,9 @@ try {
   });
   step('Ticking a candidate does NOT trigger a full render()', repaint.renderCalls === 0, 'render calls: ' + repaint.renderCalls);
   step('Bulk bar updates in place with the selection', repaint.barHasSelected);
-  // 4. Email JD compose modal
-  step('Bulk bar exposes "Email JD to candidates"', repaint.barHasEmail);
-  const emailModal = await page.evaluate(() => { STATE.bd.plSel = { plSub: true }; window.plEmailJD(); return STATE.modal || ''; });
-  step('Email JD opens a compose modal with a Subject field', /Email the job to/.test(emailModal) && emailModal.includes('pl-jd-subject'));
-  step('Compose modal BCCs candidates (privacy)', /BCC/i.test(emailModal));
+  // 4. D-0012 removed the "Email JD to candidates" flow from this bulk bar.
+  //    Inverted rather than deleted — see test/email-tracking-send-smoke.mjs.
+  step('Bulk bar no longer exposes "Email JD to candidates"', !repaint.barHasEmail);
 
   // 5. Unified Add-Candidate window
   const addModal = await page.evaluate(() => { window.plOpenAdd('job1'); return STATE.modal || ''; });

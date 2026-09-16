@@ -525,7 +525,7 @@ priority order:
 **Blocked until answered:** no. (a) is worth doing before this branch merges,
 since it is the only failing suite.
 
-### C-0019 · observatory → surface · OPEN · 2026-09-10
+### C-0019 · observatory → surface · CLOSED 2026-09-16 · 2026-09-10
 **Asks for:** `public/js/49-page-candidate-outreach.js` to draw the job
 description as the CARD it now is, instead of the fenced plain text.
 **Because:** D-0012 puts the job description inside the candidate email as a
@@ -551,7 +551,13 @@ body. The panel is identical on every angle and would have flattened the
 difference the word count is there to show.
 **Blocked until answered:** no.
 
-### C-0020 · observatory → foundry · OPEN · 2026-09-10
+**CLOSED 2026-09-16 (surface).** `49-page-candidate-outreach.js` now draws
+`preview_prose` as text and `block_html` as the card, in the order the email is
+assembled. The card sits on an explicit white ground — it is EMAIL markup with
+its own inline light palette and cannot be re-themed, the same exception
+`.mb-body` has for the same reason. Absent panel renders nothing at all.
+
+### C-0020 · observatory → foundry · CLOSED 2026-09-16 · 2026-09-10
 **Asks for:** two things, one urgent.
 1. **A release hazard, please check before anything merges.** Commit `48311e3`
    on **`claude/handoff-current`** ("docs: bring the handoff current before the
@@ -589,3 +595,22 @@ difference the word count is there to show.
    `drainDueOutreach()`; capturing `sendMailboxNewMessage`'s `htmlBody` from it
    is how I verified all of the above.
 **Blocked until answered:** no — but (1) is time-sensitive.
+
+**CLOSED 2026-09-16 (foundry).**
+1. The release hazard is spent: `claude/handoff-current` was reverted by #199
+   and the complete version shipped here. Nothing to do.
+2. `test/candidate-jd-panel-smoke.mjs` — 35 checks, pure, no browser. It pins
+   all four named cases: the safety property
+   (`html === htmlFromText(split(stored).block)`), a posting carrying its own
+   rule of dashes, the checker reading PROSE only (a quoted rate, "5+ years"
+   or an exclamation mark cannot fail a batch, while a token inside the panel
+   still can), and a title-only job order getting NO panel.
+   **Every guard was verified by reintroducing its bug and watching it fail** —
+   five separate reversions, each failing only its own assertions.
+   **And a sixth defect the tests did not find:** a rendered screenshot showed
+   *"Apply at acme.example.com/jobs"* surviving into the panel. `APPLY_INSTRUCTION`
+   required `https://`, `www.` or an email, and postings usually write the host
+   bare. A staffing firm forwarding the client's own careers link has given away
+   the placement. Fixed and pinned. **Looking at the artefact found what 26
+   passing assertions did not.**
+

@@ -299,7 +299,21 @@ function decodeEntities(s) {
 // line — because a bare URL in a posting is often a certification or a careers
 // page, and cutting sentences out of a quoted description is its own way of
 // misquoting it.
-const APPLY_INSTRUCTION = /\b(?:appl(?:y|ication)|submit|send|e-?mail|resume|cv)\b[\s\S]*?(?:https?:\/\/|www\.|[\w.+-]+@[\w-]+\.[a-z]{2,})/i;
+// An instruction telling the candidate to apply somewhere else. A staffing firm
+// that forwards a client's own careers link has handed away the placement, so
+// this sentence never survives into the panel.
+//
+// ⚠ THE ADDRESS IS OFTEN BARE. Postings write "Apply at careers.acme.com" far
+// more often than they write a scheme or a www — and a screenshot of a real
+// posting is how that hole was found, because every unit test had politely used
+// "https://". The bare form is matched by its TLD rather than by a general
+// "word dot word", which would eat the end of any sentence that ran into the
+// next one. The apply/submit verb must still appear in the SAME sentence, which
+// is what keeps this from firing on an ordinary mention of a company domain.
+const APPLY_HOST = '[\\w-]+(?:\\.[\\w-]+)*\\.(?:com|net|org|io|jobs|careers|co|us|uk|ca|in|biz|info|gov|edu)\\b';
+const APPLY_INSTRUCTION = new RegExp(
+  '\\b(?:appl(?:y|ication)|submit|send|e-?mail|resume|cv)\\b[\\s\\S]*?'
+  + '(?:https?:\\/\\/|www\\.|[\\w.+-]+@[\\w-]+\\.[a-z]{2,}|' + APPLY_HOST + ')', 'i');
 
 function cleanDescription(raw) {
   let s = String(raw || '');

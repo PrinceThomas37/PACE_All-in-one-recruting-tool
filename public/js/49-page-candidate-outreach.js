@@ -487,7 +487,29 @@
         '<div style="border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">'+
           '<div style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border2);font-size:12.5px">'+
             '<span style="color:var(--text3)">Subject: </span><strong>'+esc(v.preview_subject||v.subject)+'</strong></div>'+
-          '<div style="padding:12px;font-size:13px;line-height:1.6;white-space:pre-wrap">'+esc(v.preview_email||v.email)+'</div>'+
+          '<div style="padding:12px;font-size:13px;line-height:1.6;white-space:pre-wrap">'+
+            esc(v.preview_prose||v.preview_email||v.email)+'</div>'+
+          // C-0019 / D-0012: the job description travels INSIDE the email as a
+          // bordered panel, so the preview draws it as that panel and not as the
+          // fenced text it is stored as. `block_html` is built by the server from
+          // the same stored text the drain splits, with the same function — the
+          // screen and the outbox cannot disagree about it, which is the whole
+          // point (the preview-vs-queue defect of Session 21).
+          //
+          // Empty string when the job order has nothing to panel. A title-only
+          // job order draws NO card, deliberately: an empty frame reads as a
+          // broken system, and the subject line already said the title.
+          //
+          // It carries its own light palette because it is EMAIL markup — tables
+          // and inline colours, the only thing Outlook renders reliably. So it
+          // sits on an explicit white ground rather than the themed card, for
+          // exactly the reason `.mb-body` stays `#fff`: this is a picture of
+          // somebody else's document, not a surface of ours, and its ink cannot
+          // be re-themed. Anything else puts #0F172A text on dark glass.
+          (v.block_html
+            ? '<div style="padding:0 12px 4px"><div style="background:#fff;border-radius:6px;padding:1px 10px">'+
+              v.block_html+'</div></div>'
+            : '')+
           // The buttons are part of the email, so they are part of the preview.
           // Approving an email you have not fully seen is the failure this
           // preview exists to prevent. The token in here is dead on purpose.
