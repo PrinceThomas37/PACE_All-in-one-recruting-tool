@@ -343,7 +343,7 @@ function renderOrgNodeH(userId,depth,seen){
       '<div style="text-align:center"><div style="font-weight:700;font-size:14px;color:var(--green)">'+st.placements+'</div><div style="font-size:9.5px;color:var(--text3)">placed</div></div>'+
     '</div>'
     :'<div style="margin-top:6px;font-size:10.5px;color:var(--text3)">No recruiting activity</div>';
-  var popup='<div class="ochover" style="display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:60;margin-top:6px;width:200px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:12px;text-align:left">'+
+  var popup='<div class="ochover" style="display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:60;margin-top:6px;width:200px;background:var(--card-solid);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:12px;text-align:left">'+
     '<div style="display:flex;align-items:center;gap:9px">'+av(user,'32')+'<div style="min-width:0"><div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(user.name||'')+'</div>'+
       '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(roleLabel(user.role))+(user.empId?' · '+htmlEsc(user.empId):'')+'</div></div></div>'+
     statLine+

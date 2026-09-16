@@ -63,7 +63,7 @@
     STATE.modal =
       '<div class="modal modal-w640" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-          '<div style="font-weight:700;font-size:16px">Manage ATS Lists</div><span style="cursor:pointer;color:var(--text3)" onclick="closeModal()">✕</span>'+
+          '<div class="mhd">Manage ATS Lists</div><span style="cursor:pointer;color:var(--text3)" onclick="closeModal()">✕</span>'+
         '</div>'+
         '<div style="padding:18px 20px;max-height:64vh;overflow-y:auto">'+
           '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">These populate the dropdowns on the applicant form and filters. Inactive values are hidden from new entries but kept on existing records.</div>'+

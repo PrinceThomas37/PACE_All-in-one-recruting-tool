@@ -119,7 +119,7 @@ function renderRALeadForm(){
   // Zip suggestions dropdown
   var zipSuggestions='';
   if(STATE.raFormZipSuggestions&&STATE.raFormZipSuggestions.length){
-    zipSuggestions='<div style="position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px" id="zip-suggestions">'+
+    zipSuggestions='<div style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px" id="zip-suggestions">'+
       STATE.raFormZipSuggestions.map(function(z,i){
         return '<div class="_zip-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+
           htmlEsc(z.display)+'</div>';
@@ -171,7 +171,7 @@ function renderRALeadForm(){
         '<div style="position:relative">'+
           '<input class="inp" id="ra-co-name" placeholder="Company name *" value="'+htmlEsc(f.coName||'')+'" autocomplete="off" oninput="raFormCoSearch(this.value)" onblur="raFormCoBlur()" style="'+(companyCooldownCheck(f.coName)?'border-color:#f59e0b':'')+'"/>'+
           (STATE.raFormCoSuggestions&&STATE.raFormCoSuggestions.length?
-            '<div style="position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px" id="co-suggestions">'+
+            '<div style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px" id="co-suggestions">'+
               STATE.raFormCoSuggestions.map(function(co,i){
                 var cool=companyCooldownCheck(co.name);
                 return '<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+
@@ -415,7 +415,7 @@ function _patchZipSuggestions(){
   var existing=document.getElementById('zip-suggestions');
   var sugs=STATE.raFormZipSuggestions||[];
   if(!sugs.length){if(existing)existing.remove();return;}
-  var html='<div id="zip-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px">'+
+  var html='<div id="zip-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px">'+
     sugs.map(function(z,i){return'<div class="_zip-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+htmlEsc(z.display)+'</div>';}).join('')+'</div>';
   if(existing){existing.outerHTML=html;}else{var d=document.createElement('div');d.innerHTML=html;wrap.appendChild(d.firstChild);}
   Array.prototype.forEach.call(document.querySelectorAll('._zip-sug'),function(el){
@@ -439,7 +439,7 @@ function _patchCoSuggestions(){
   var existing=document.getElementById('co-suggestions');
   var sugs=STATE.raFormCoSuggestions||[];
   if(!sugs.length){if(existing)existing.remove();return;}
-  var html='<div id="co-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px">'+
+  var html='<div id="co-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px">'+
     sugs.map(function(co,i){
       var cool=companyCooldownCheck(co.name);
       return'<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+

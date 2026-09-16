@@ -487,7 +487,7 @@
     STATE.modal =
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-          '<div style="font-weight:700;font-size:16px">'+modalTitle+'</div>'+
+          '<div class="mhd">'+modalTitle+'</div>'+
           '<span style="cursor:pointer;color:var(--text3)" onclick="closeModal()">✕</span>'+
         '</div>'+
         '<div style="padding:18px 20px;max-height:66vh;overflow-y:auto">'+

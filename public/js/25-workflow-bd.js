@@ -383,7 +383,7 @@
           UI.searchBox(STATE.bd.jobSearch,'bdJobSearch(this.value)','Search jobs, clients, codes…')+
           '<button class="btn btn-primary" onclick="bdOpenNewJob(null)">+ New Job</button>'+
           (STATE.bd.jobFilterOpen?
-            '<div onclick="event.stopPropagation()" style="position:absolute;top:40px;right:0;z-index:30;width:260px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh3);padding:14px">'+
+            '<div onclick="event.stopPropagation()" style="position:absolute;top:40px;right:0;z-index:30;width:260px;background:var(--card-solid);border:1px solid var(--border);border-radius:12px;box-shadow:var(--sh3);padding:14px">'+
               '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:700;font-size:13px">Filters</div>'+(activeCount?'<button onclick="bdClearJobFilter()" style="font-size:11.5px;color:var(--red);background:none;border:none;cursor:pointer">Clear all</button>':'')+'</div>'+
               '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--text3)">State</label>'+fopt('state','All states',US_STATES)+'</div>'+
               '<div style="margin-bottom:10px"><label style="font-size:11px;color:var(--text3)">Status</label>'+fopt('status','All statuses',JOB_STATUSES)+'</div>'+
@@ -497,7 +497,7 @@
 
   function renderNewJobModal(){
     var f=STATE.bd.form;
-    var tabBtn=function(id,lbl){var on=f.tab===id;return '<button onclick="bdFormTab(\''+id+'\')" style="padding:8px 14px;border:0;border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';background:none;cursor:pointer;font-size:13px;font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+lbl+'</button>';};
+    var tabBtn=function(id,lbl){var on=f.tab===id;return '<button class="mtab" onclick="bdFormTab(\''+id+'\')" style="border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+lbl+'</button>';};
     var body='';
     if(f.tab==='details'){
       body='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+
@@ -565,7 +565,7 @@
     var queueNote=STATE.bd._convertQueue&&STATE.bd._convertQueue.length?STATE.bd._convertQueue.length+' more lead(s) queued after this':'';
     STATE.modal='<div class="modal modal-w860" onclick="event.stopPropagation()" style="width:min(900px,95vw)">'+
       '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-        '<div style="font-weight:700;font-size:16px">'+(f._editId?'Edit Job':'New Job')+(f._editId?'':(f.source_lead_id?' — from lead '+esc(f.lead_code):''))+'</div>'+
+        '<div class="mhd">'+(f._editId?'Edit Job':'New Job')+(f._editId?'':(f.source_lead_id?' — from lead '+esc(f.lead_code):''))+'</div>'+
       '</div>'+
       '<div style="padding:0 20px;border-bottom:1px solid var(--border);display:flex;gap:4px">'+tabBtn('details','Job Details')+tabBtn('skills','Skills')+tabBtn('org','Organizational')+'</div>'+
       '<div style="padding:18px 20px;max-height:62vh;overflow-y:auto">'+body+'</div>'+
@@ -587,7 +587,7 @@
     var matches=(STATE.users||[]).filter(function(u){
       return isRec(u)&&u.name.toLowerCase().indexOf(q)>-1&&(STATE.bd.form.recruiter_ids||[]).indexOf(u.id)<0;
     });
-    box.innerHTML='<div style="position:absolute;top:2px;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:var(--sh);z-index:5;max-height:160px;overflow-y:auto">'+
+    box.innerHTML='<div style="position:absolute;top:2px;left:0;right:0;background:var(--card-solid);border:1px solid var(--border);border-radius:8px;box-shadow:var(--sh);z-index:5;max-height:160px;overflow-y:auto">'+
       (matches.length?matches.map(function(u){
         return '<div onclick="bdFormAddRec(\''+u.id+'\')" style="padding:8px 11px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
           av(u,"22")+'<div><div style="font-weight:600">'+esc(u.name)+'</div><div style="font-size:11px;color:var(--text3)">'+esc(u.desig||u.role||'')+'</div></div></div>';
@@ -942,7 +942,7 @@
     return '<div class="page">'+
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="bdBackFromKanban()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Back</span></div>')+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span style="font-weight:700;font-size:16px">'+esc(j.job_title||'')+'</span></div>'+
+        '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span class="mhd">'+esc(j.job_title||'')+'</span></div>'+
         '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+' · Job white-board</div></div>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+

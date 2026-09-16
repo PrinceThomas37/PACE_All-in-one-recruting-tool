@@ -467,7 +467,7 @@
     STATE.modal=
       '<div class="modal modal-w640" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
-          '<div style="font-weight:700;font-size:16px">New message</div>'+
+          '<div class="mhd">New message</div>'+
           '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+

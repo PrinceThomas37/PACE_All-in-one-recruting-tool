@@ -498,6 +498,37 @@ we never have to rewrite to grow (see "Growth bets" below).
     email-status dropdown rendered in light as the bare word "Valid". A
     control's edge is its own token (`--ctl-brd`), not `--border` (the hairline
     BETWEEN things) and not the pane highlight.
+  - **A FLOAT MUST BE OPAQUE, AND `--card` IS GLASS (Session 25).** `--card` is
+    `rgba(255,255,255,.62)` in light and **`.055` in dark**. `theme.css`
+    repaints `.modal,.drawer,.dw` with **`--card-solid`** — but twelve
+    hand-rolled panels carried an inline `background:var(--card)` and no class,
+    so that rule never reached them. The Connected-leads drawer, the leads
+    filter dropdowns and every zip/company autocomplete were **see-through on a
+    phone**: the page behind showed through and the two sets of text overlapped
+    into an unreadable mess. **An inline colour cannot be re-themed — and a
+    TOKEN can be inline and still be the wrong token**, which is the sharper
+    version of the rule. Anything with `position:fixed`/`absolute` that floats
+    over content paints on `--card-solid`.
+  - **THE 16px INPUT IS A FLOOR, SO THE WHOLE PHONE SCALE MUST COME UP TO MEET
+    IT (Session 25).** `mobile.css` raises inputs to 16px so iOS does not zoom
+    on focus — correct, load-bearing, never weaken it. But it was applied to
+    **inputs alone**: measured in the Edit Job modal at 390px, the value you
+    TYPE was 16px while its own label was 11.5px, the tabs 13px and the buttons
+    13.5px. The thing you type became the largest body text on the screen,
+    larger than the headings organising it, and the owner read that — correctly
+    — as *"the fonts are not uniform"*. The family was identical throughout;
+    **it was never a font, it was a scale.** The same modal on desktop spans
+    11.5→13.5px and looks right.
+    **⚠ AN INLINE `font-size` CANNOT BE RE-SCALED**, exactly as an inline colour
+    cannot be re-themed and an inline width cannot be re-laid-out. There are
+    **~1,600 inline font sizes** in `public/js`, so no ordinary rule reaches
+    one: `!important`, scoped to overlays and to the phone, is the only thing
+    that outranks an inline declaration. Where a size is worth controlling it
+    gets a class instead — `.mhd` (modal heading) and `.mtab` (modal tab row)
+    were extracted for exactly this, declared at their existing desktop sizes so
+    **no wide screen moved**. Phone now reads 19 → 16 → 15 → 13px.
+    `test/overlay-opacity-smoke.mjs` measures both faults in a real browser at
+    both widths; a grep can see neither.
   - **A MODAL PANEL IS ONLY A PANEL — `.overlay` IS WHAT PUTS IT OVER THE PAGE
     (Session 23).** `renderModal()` wrapped every modal in `.overlay`
     (position:fixed, inset:0, z-index:100) **except three it special-cased** —

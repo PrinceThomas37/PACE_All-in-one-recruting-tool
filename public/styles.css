@@ -1,6 +1,14 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
---bg:#F5F7FA;--card:#FFFFFF;--border:#E2E8F0;--border2:#CBD5E1;
+--bg:#F5F7FA;--card:#FFFFFF;--border:#E2E8F0;--border2:#CBD5E1
+/* An OPAQUE ground for anything that floats OVER content. In the themed skin
+   --card is glass (62% in light, 5.5% in dark) and a popover painted with it is
+   see-through: the page behind shows through and the two sets of text overlap.
+   Here the two are the same colour; the token exists so a float can ask for the
+   right one. NOTE: theme.css also declares it and always loads, so this line
+   is defence in depth rather than the one that decides — see
+   test/overlay-opacity-smoke.mjs's "known limit". */
+--card-solid:#FFFFFF;
 --text:#0F172A;--text2:#475569;--text3:#94A3B8;
 --accent:#1E7A3C;--accent-l:#F0FDF4;--accent-m:#3AAE57;--accent-d:#165F2E;--gold:#F5C23B;--gold-l:#FEF6E0;
 --teal:#0D9488;--teal-l:#F0FDFA;
@@ -140,6 +148,13 @@ a{color:inherit;text-decoration:none}
 .st-Referred{background:#FDF4FF;color:#9333EA}
 
 /* INPUTS */
+/* A modal's own heading and tab row. These carried their sizes inline, which is
+   why the phone could not re-scale them against its 16px inputs — an inline
+   font-size is as unreachable to a stylesheet as an inline colour or width.
+   Declared here at exactly the sizes they already had, so desktop is unchanged;
+   mobile.css lifts them. */
+.mhd{font-weight:700;font-size:16px}
+.mtab{padding:8px 14px;border:0;background:none;cursor:pointer;font-size:13px}
 .inp{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:8px 11px;color:var(--text);outline:none;width:100%;transition:border-color .12s,box-shadow .12s;font-size:13.5px}
 .inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,122,60,.12)}
 .sel{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:7px 11px;color:var(--text);outline:none;cursor:pointer;width:100%;transition:border-color .12s;font-size:13.5px}
