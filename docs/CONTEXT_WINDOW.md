@@ -4,10 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-16 (end of Session 25) · **Repo**:
+**Updated**: 2026-09-17 (end of Session 26) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #212. **Nothing is unmerged.**
+to `main` IS the release · **Last merged**: #214 (`8dba19f`). **Nothing is
+unmerged.** **D-0024 is the highest decision id.**
 
 ---
 
@@ -16,6 +17,12 @@ to `main` IS the release · **Last merged**: #212. **Nothing is unmerged.**
 **This file: current state only. REWRITE it each session, keep it under ~200
 lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
 that ever happened, **append-only — never edited, never summarised away.**
+
+**⚠ THE ARCHIVE IS WRITTEN AS THE WORK LANDS, NOT AT THE END (D-0024).** "End of
+session" is a moment that never announces itself — a rate limit or a closed
+window ends the session instead, and anything not in a file is gone. Append a
+section per round as it completes; only the closing synthesis waits, and it is
+additive, so a session that dies loses the summary and not the facts.
 
 If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
@@ -30,8 +37,9 @@ Nine territories, each a Claude Code subagent with its own border, laws and
 - **Arrived as a sentence and a screenshot? → `dispatch`.** It reproduces the
   report, then routes.
 - **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
-  it before proposing anything or calling anything a bug. **D-0022 is the
-  highest id used.**
+  it before proposing anything or calling anything a bug. **D-0024 is the
+  highest id used.** D-0023 in particular: TWO of its three calls went against
+  my advice, so read it before "improving" any of them.
 - **`docs/territories/CAPABILITIES.md` is what PACE can already DO.** Grep it in
   the owner's words before building. Two live paths to one outcome is the bug.
 - **`docs/territories/INTAKE.md` is how to read the owner.** **Reproduce the
@@ -64,13 +72,17 @@ sweep → recycle) and the **ATS** (job orders, candidates, pipeline, submission
 11 stages). **Outreach generator** (client) and **candidate outreach** (own
 queue, own send window, answer buttons in the email). **In-app mailbox** over
 Graph and Gmail, plus read-only **All email** across all three pipelines.
-**Reminders + "needs you today"**, owner-scoped since Session 24. Billing and
+**Reminders + "needs you today"**, owner-scoped since Session 24. **Creating a
+job order** — from a Connected lead, or directly from "+ New Job", which now
+resolves the client, captures its address and requires a POC. Billing and
 self-serve signup are built and **off**.
 
-## Migrations — next is **044** · 043 WRITTEN, NOT APPLIED
+## Migrations — next is **044** · 043 APPLIED 2026-09-17
 
 **Never apply one to the live DB without an explicit, fresh go-ahead.** A
 migration adding a table with `org_id` must also add it to `models/tables.js`.
+043 added six postal-address columns to `companies`; verified after by a content
+fingerprint identical before and after, 0 rows touched.
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
 
@@ -78,97 +90,41 @@ A whole class of bug is invisible here — it cost a session once. When somethin
 works here and fails there, **get the server's Node and re-run before
 theorising**; `nodejs.org/dist` is reachable from this sandbox.
 
-## ✅ SHIPPED — Session 24 (PRs #208-#211): the Reminders page, and ownership
+## ✅ RECENTLY SHIPPED — full narratives in `CONTEXT_ARCHIVE.md`
 
-Four rounds, all from the owner looking at their own screen. **Full narrative in
-the archive; every rule below is also in `CLAUDE.md`.** What is now true:
+**Session 24 (#208-#211) — the Reminders page and ownership.** A reminder says
+who asked and why; "due today" is only said about today; `services/ownership.js`
+defines ownership once (**a to-do list containing other people's to-dos is not a
+to-do list**); a manager reviews and PROMPTS, never reaches in; merge fields are
+filled by the server and then CHECKED; a list is calm and colour is scarce
+(D-0019). Theme follows the person, not the browser (D-0022).
 
-- **Every reminder says who asked**, and **"due today" is only said about
-  today** (`services/reminder-source.js`, pure).
-- **Merge fields are filled by the SERVER and then CHECKED.** PACE had two merge
-  vocabularies and one filler; `VAR_SYNONYMS` maps one fact to all its names and
-  `unresolvedVars()` refuses with a 400. **Blanking sends "Hi ,".**
-- **The double-send rule lives where the action is OFFERED**
-  (`services/outreach-dedup.js`), not only where it is taken.
-- **A task PACE cannot carry out is not created** (D-0017).
-- **Ownership is defined once** (`services/ownership.js`, D-0020): a reminder's
-  owner is its `user_id`, a lead's `assigned_to_bd`, a submission's
-  `recruiter_id`. Your list is yours; a manager gets a COUNT, a review screen,
-  and a **prompt** onto the owner's own list. They never reach in.
-- **The briefing is about the reader's desk** (D-0021), admin excepted, and
-  **the theme follows the person, not the browser** (D-0022).
-- **Colour is scarce on a list**: overdue is the ORDINARY state of a to-do list.
+**Session 25 (#200, #212).** D-0012 completed — one way to email a candidate
+about a job. A float must be OPAQUE (`--card` is glass), and the phone's type
+scale must include its own inputs.
 
-## ✅ SHIPPED — Session 25 (PRs #200, #212)
+**Session 26 (#214) — the button that had never worked.** `+ New Job` sent
+`company_id: null`, hard-coded, so **every direct create had always been
+refused**; the convert-from-lead path worked and masked it. The Client box is
+now a typeahead and the SERVER resolves the name
+(`services/client-resolve.js`). Nobody makes a lead first —
+`POST /job-orders` creates it. Also: that route's `jobs`/`contacts` inserts
+carried **no `orgStamp`**, and the modal's inline grid put its whole right
+column 72px off a phone screen.
 
-- **#200 finished and merged.** D-0012 is complete: **one** way to email a
-  candidate about a job (Email → Compose → Candidates), with the job description
-  as a panel INSIDE the email. The old "Email JD to candidates" flow and the
-  candidate profile's Email button are gone.
-  **⚠ `POST /candidates/email` is still live and must stay** — `remSendMeeting`
-  sends Teams interview invites through it.
-  Two things went with the removal, both chosen: **file attachments** (D-0012,
-  asked and answered) and the one-off "email this person" path (the in-app
-  mailbox covers it).
-- **#212 — two faults off the owner's phone.** A float must be opaque
-  (`--card` is glass; twelve hand-rolled panels were see-through), and the
-  phone's type scale must include its own inputs (labels 11.5px against 16px
-  fields read as "the fonts are not uniform"; the family was identical). Both
-  rules are written up in `CLAUDE.md`.
+Then, at the owner's request, **a job order carries its client (D-0023 — READ
+IT, two of its three calls went against advice)**: a POC is required (name +
+email; phone optional), the address gets real columns (043), and **the 21-day
+company cooldown applies here**. `services/company-cooldown.js` is now the one
+definition of that rule, replacing three that disagreed — the server's was
+gated to RAs only, the browser's hard-coded 21 while the number is
+admin-editable. `public/js/52-poc-block.js` is the shared POC block; **the RA
+form's older copy is to be retired into it, not joined by a third.**
 
-## ✅ SHIPPED — Session 26: "+ New Job" works without a lead
-
-The owner filled in the New Job form and got *"lead.company_id and
-lead.position are required (lead info must be filled first)."* Three faults:
-
-- **`25-workflow-bd.js` sent `company_id: null` — hard-coded.** The Client box
-  was free text that was never resolved to a `companies` row, so the direct
-  "+ New Job" path could not succeed for anybody, ever. The convert-from-lead
-  path was fine, which is why nobody noticed. It is now a **typeahead**
-  (`51-company-autocomplete.js`, shared, same idiom as the zip one) and the
-  **SERVER** resolves the name — `services/client-resolve.js`, pure — by exact
-  normalised match inside the org, else find-or-create. **Nobody has to make a
-  lead first: `POST /job-orders` creates it for them.** A refusal naming a JSON
-  field is a refusal nobody can act on.
-- **That route's `jobs` and `contacts` inserts carried no `orgStamp`.** The
-  column has a DEFAULT, so a second org's job order would have landed silently
-  in the DEFAULT org's leads. Fixed and pinned.
-- **The modal drew three columns on a phone.** Its grid was inline, and an
-  inline style cannot be re-laid-out — the whole right column (Client, Work
-  Authorization, City, End Date) sat 72px off-screen, unreachable behind
-  `overflow-x:hidden`. `.g3`/`.g2` already existed and already collapse.
-  **Other modals almost certainly have the same fault; nothing has checked.**
-
-## ✅ SHIPPED — Session 26, round 2: a job order now carries its client (D-0023)
-
-The owner asked that a directly-created job capture the client properly — POC
-name, email, phone, and the company address. Most of it was wiring: `POST
-/job-orders` already accepted a contacts list and nothing ever sent one.
-
-**Three decisions were theirs, and TWO WENT AGAINST MY RECOMMENDATION.** Read
-D-0023 before touching any of it:
-- **POC name + email required**, phone and LinkedIn optional. (Agreed. The live
-  data: 328 of 328 leads have a POC, 708 of 709 contacts have an email, but 163
-  of 709 have no phone — requiring one would buy invented numbers, per D-0017.)
-- **Structured address columns**, not the existing free-text `location`.
-  **Migration 043 — WRITTEN, NOT YET APPLIED.** Additive; `location` stays as
-  the short display form and is derived. The address write is deliberately
-  non-fatal so an unapplied migration costs an address, never the job order.
-- **The 21-day company cooldown applies here**, same as the RA form. They took
-  the stated trade ("it will refuse genuine job orders"). **⚠ The cooldown
-  counts leads and a job order creates one, so a client's SECOND requirement
-  inside the window is blocked.** Do not quietly soften it; D-0023 holds the
-  two fixes for when a BD actually reports it.
-
-Also: `services/company-cooldown.js` is now the ONE definition of that rule,
-replacing three that disagreed (the server's was gated to RAs only; the
-browser's hard-coded 21 while the real number is admin-editable).
-`public/js/52-poc-block.js` is the shared POC block — **the RA form's older copy
-is the thing to retire into it, not a second one to keep.**
-
-Found by screenshot, not by a test: the duplicate-email check redrew the whole
-POC block when its answer arrived, replacing the box the person had moved on to
-and eating what they had typed. It patches one note now.
+⚠ **The cooldown counts leads and a job order creates one, so a client's SECOND
+requirement inside the window is blocked.** The owner chose this knowing it
+would refuse genuine job orders. Do not quietly soften it; D-0023 holds the two
+fixes for when a BD actually reports it.
 
 ## ⏭ PICK THIS UP FIRST
 
@@ -211,22 +167,16 @@ it** — they said the revamp is coming *"in sometime"*.
 
 The newest exist because reasoning failed, and each measures what a person saw:
 
-- **`client-intake-smoke`** (new) — the POC rule, the address, the cooldown at
-  its boundaries, the route on a stub database, and the form in a real browser.
-  Includes the guard that the browser's copy of the POC rule and the server's
-  still agree, case for case.
-- **`new-job-client-smoke`** — the pure client rule, the route driven with
-  a **stub database** (so the company really is found-or-created and the rows
-  really are org-stamped), and the real form in a real browser at 1500px and
-  390px. Every guard was verified by reintroducing its own bug and watching it
-  fail.
-- **`overlay-opacity-smoke`** — panel opacity in both themes, and the
-  modal type scale at 390px AND 1280px.
-- **`candidate-jd-panel-smoke`** (new) — the JD panel, including that the card
-  is always a rendering of the stored text.
+- **`client-intake-smoke`**, **`new-job-client-smoke`** (new) — the client and
+  POC rules, the routes driven with a **stub database** (so the company really
+  is found-or-created and the rows really are org-stamped), and the real form
+  at 1500px and 390px. Includes the guard that the browser's copy of the POC
+  rule and the server's **still agree, case for case** — a drift there means
+  the form accepts what the server refuses.
 - **`theme-contrast-smoke`** — composites every translucent ancestor; 51 screens
   x 3 roles x 2 themes, plus logged-out, hovering and opening a row.
 - **`ageing-layout-smoke`** — 16 pages x 5 roles at 20 records and at 2,000.
+- **`overlay-opacity-smoke`** — panel opacity and modal type scale, both widths.
 - **`reminder-clarity-smoke`**, **`ownership-smoke`** — the Session 24 rules.
 
 **⚠ ASSUME YOUR NEW GUARD IS VACUOUS UNTIL YOU HAVE SEEN IT FAIL.** Four have
@@ -236,8 +186,11 @@ test fail**, every time. When one turns out to be vacuous and you keep it
 anyway, label it in the suite as a known limit (there is one such note in
 `overlay-opacity-smoke`) rather than letting its presence read as coverage.
 
-**And a suite only covers the screens it renders.** `theme-contrast-smoke`
+**And a suite only covers the screens it renders** — `theme-contrast-smoke`
 passed clean through twelve transparent panels because it never opened one.
+**Nor does it cover what nobody thought to assert:** Session 26's caret-eating
+redraw was found in a screenshot with 38 green checks on screen. Produce the
+artefact and look at it.
 
 ## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY
 
@@ -255,6 +208,9 @@ anything touching scoping, and **a breach here produces no error message.**
 - **`PICKER_CAP` is 15**, so 19 connected leads becomes a search box. Flagged as
   possibly too eager.
 - Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` on Render.
+- **Session 26's deploy was never confirmed from the sandbox** — the agent proxy
+  refuses the Render host (403 on CONNECT). The merge landed; whether the
+  service came up clean is unverified from here. Ask, or check Render.
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 

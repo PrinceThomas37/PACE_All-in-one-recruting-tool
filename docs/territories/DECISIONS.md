@@ -47,6 +47,51 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0024 · 2026-09-17 · STANDS · The archive is written as the work lands
+**Their words:** *"Like I have a question, does this updation happens only when
+I ask you to do or does it happen automatically whenever you make a change in
+the system"* — then **"Yes"** to making write-as-you-go the standing rule.
+
+**What prompted it.** The owner asked me to update the context files and, in the
+same breath, asked how that upkeep actually works. The honest answer was
+*partly*: `DECISIONS.md`, the territory memories and `CAPABILITIES.md` were
+being written in the same commit as the code, and `CONTEXT_WINDOW.md` per
+commit — but `CONTEXT_ARCHIVE.md` was defined as an **end-of-session** job and
+was, at that exact moment, **still unwritten for the session in progress.** The
+question found the one thing that was genuinely outstanding.
+
+**Why "end of session" is the wrong trigger.** It is a moment that never
+announces itself. A rate limit, a closed browser or a cancelled run ends a
+session instead, and anything not yet in a file is gone with it. `DECISIONS.md`
+already carried the right discipline for precisely this reason — *a decision
+that exists only in a chat window is lost when that window closes* — and the
+archive has the same exposure with none of the protection.
+
+**Decided.** The archive is appended **when a piece of work lands**, alongside
+the territory memory and the commit. Open the session heading the first time
+there is something real to say; add a section per round. Append-only still
+holds — add sections, never rewrite one.
+
+**The one part that stays at the end, and why that is honest.** The closing
+synthesis — *the thread through this session* — genuinely requires the whole
+session; you cannot know the lesson before doing the work. So it is appended
+last and it is **additive**. If a session dies before it, the facts are already
+safe and only the summary is missing. **An archive of accurate fragments beats
+an eloquent one that was never written.**
+
+**What was considered and rejected: making it automatic.** Claude Code supports
+hooks, and a hook can run a script — it cannot write a narrative about what
+happened and why. The judgement of what is worth recording is the whole value,
+and it cannot be automated. So this rule depends on a session reading
+`CLAUDE.md`, which is a real dependency and is now stated in `CLAUDE.md` rather
+than assumed.
+
+**Re-open when:** a session is lost mid-way and the archive still turns out to
+have a gap — which would mean the append points are too coarse and should move
+closer to each commit. Or if the archive starts reading as disconnected
+fragments, which would mean the closing synthesis is doing more work than this
+rule assumes.
+
 ### D-0023 · 2026-09-17 · STANDS · A job order carries its client: POC required, address structured, cooldown applies
 **Their words:** *"its better to take in the client information like POC contact
 name, email ID, phone number and address of the company to create the lead and
