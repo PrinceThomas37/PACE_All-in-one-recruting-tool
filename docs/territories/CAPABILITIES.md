@@ -212,6 +212,19 @@ the lead comes from:
   creates the underlying lead (`jobs` row, stage `Connected`, LD- code) ITSELF.
   **Nobody has to make a lead first** — the refusal that said so was wrong.
 
+**A direct create also captures the client** (Session 26, D-0023): the company's
+postal address (migration 043) and **at least one POC — name and email
+required**, phone and LinkedIn optional. The POC block is
+`public/js/52-poc-block.js`, **shared**, and is the one implementation: the RA
+lead form's older copy is the thing to retire into it, not a second one to keep.
+`GET /companies/:id/intake` answers everything about a picked client in one
+call — cooldown, the POCs it already has, the address on file.
+
+**The company re-add cooldown applies here**, same as the RA form (D-0023,
+owner's call, against advice). One definition, `services/company-cooldown.js`
+(pure), replacing three that disagreed. It is shown when a client is PICKED, not
+at Save.
+
 **A job order must belong to a `companies` row.** The Client box is a NAME, and
 the SERVER resolves it (`services/client-resolve.js`, pure): exact match on the
 normalised name within the caller's org, else find-or-create. The form's

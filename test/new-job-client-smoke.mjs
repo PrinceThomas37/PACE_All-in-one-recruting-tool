@@ -37,6 +37,17 @@ const t = (name, fn) => { try { fn(); pass++; console.log('  ✓ ' + name); } ca
 // A save closes the modal and re-renders. Let that finish before the next
 // case opens a fresh one, or its suggestion box is detached mid-click.
 const settle = (page) => page.waitForTimeout(300);
+// A POC is required since Session 26, so a create test has to supply one.
+// Written through the real tab, not by poking STATE, so this keeps proving the
+// form can actually be filled in.
+async function fillPoc(page) {
+  await page.evaluate(() => bdFormTab('client'));
+  await page.waitForSelector('#poc-bd', { timeout: 5000 });
+  await page.fill('#poc-bd input[placeholder="First name *"]', 'Dana');
+  await page.fill('#poc-bd input[placeholder="Email address *"]', 'dana@treplar.com');
+  await page.evaluate(() => bdFormTab('details'));
+  await page.waitForSelector('#bd-client', { timeout: 5000 });
+}
 const ta = async (name, fn) => { try { await fn(); pass++; console.log('  ✓ ' + name); } catch (e) { fail++; console.log('  ✗ ' + name + ' — ' + e.message); } };
 
 // ── 1. The pure rule ────────────────────────────────────────────────────────
@@ -60,6 +71,11 @@ t('no job title is refused separately', () => {
 t('whitespace is not a client name', () => {
   assert.notEqual(cr.clientInputError({ position: 'X', company_name: '   ' }), null);
 });
+
+// Session 26: a POC is REQUIRED on a directly-created job order, so every
+// create fixture below carries one. Shared rather than repeated, because the
+// last rule change had to be applied in five places.
+const POC = [{ first_name: 'Dana', last_name: 'Reyes', email: 'dana@treplar.com' }];
 
 const ROWS = [{ id: 'co-1', name: 'Treplar Inc' }, { id: 'co-2', name: 'Acme Facilities' }];
 t('an existing client is matched regardless of case and spacing', () => {
@@ -147,7 +163,7 @@ async function callCreate(body, { companies = [], orgId = 'org-A' } = {}) {
 
 await ta('a typed client name creates the client, the lead and the job order', async () => {
   const r = await callCreate({
-    lead: { position: 'Industrial Electrician', company_name: 'Treplar Inc', location: 'Martinsburg West Virginia' },
+    lead: { position: 'Industrial Electrician', company_name: 'Treplar Inc', location: 'Martinsburg West Virginia', contacts: POC },
     job: { job_title: 'Industrial Electrician', client: 'Treplar Inc' },
   });
   assert.equal(r.status, 201, 'refused: ' + JSON.stringify(r.payload));
@@ -160,7 +176,7 @@ await ta('a typed client name creates the client, the lead and the job order', a
 
 await ta('an EXISTING client is reused, not duplicated', async () => {
   const r = await callCreate(
-    { lead: { position: 'Industrial Electrician', company_name: '  treplar inc  ' }, job: {} },
+    { lead: { position: 'Industrial Electrician', company_name: '  treplar inc  ', contacts: POC }, job: {} },
     { companies: [{ id: 'co-1', name: 'Treplar Inc' }] });
   assert.equal(r.status, 201, 'refused: ' + JSON.stringify(r.payload));
   assert.equal(r.writes.filter(w => w.table === 'companies').length, 0, 'a duplicate client was created');
@@ -173,8 +189,7 @@ await ta('the lead and its contacts are stamped with the caller org', async () =
   // second org's job order would have silently landed in the DEFAULT org's
   // leads list with no error anywhere.
   const r = await callCreate({
-    lead: { position: 'Industrial Electrician', company_name: 'Treplar Inc',
-      contacts: [{ first_name: 'Dana', email: 'dana@treplar.com' }] },
+    lead: { position: 'Industrial Electrician', company_name: 'Treplar Inc', contacts: POC },
     job: {},
   }, { orgId: 'org-B' });
   assert.equal(r.status, 201, 'refused: ' + JSON.stringify(r.payload));
@@ -189,7 +204,7 @@ await ta('the lead and its contacts are stamped with the caller org', async () =
 await ta('a client id belonging to another org is refused, not used', async () => {
   // withOrg scopes the ownership check, so a foreign id simply is not found.
   const r = await callCreate(
-    { lead: { position: 'X', company_id: 'co-other' }, job: {} },
+    { lead: { position: 'X', company_id: 'co-other', contacts: POC }, job: {} },
     { companies: [] });
   assert.equal(r.status, 404, 'a foreign company id was accepted');
   assert.equal(r.writes.filter(w => w.table === 'job_orders').length, 0);
@@ -241,7 +256,11 @@ try {
   await page.evaluate(() => {
     STATE.user.role = 'bd_manager'; STATE.user.roles = ['bd_manager'];
     window.__sent = null;
+    window.__toasts = [];
+    const rt = window.showToast;
+    window.showToast = function (m, k) { window.__toasts.push(String(m)); if (rt) try { rt(m, k); } catch (e) {} };
     window.apiGet = function (p) {
+      if (p.indexOf('/intake') > -1) return Promise.resolve({ id: 'co-1', name: 'Treplar Inc', address: {}, lead_count: 0, contacts: [], cooldown: { blocked: false } });
       if (p.indexOf('/companies/search') === 0) {
         return Promise.resolve([{ id: 'co-1', name: 'Treplar Inc', industry: 'Manufacturing', location: 'WV', job_count: 3 }]);
       }
@@ -249,6 +268,7 @@ try {
     };
     window.apiPost = function (p, body) {
       if (p === '/job-orders') { window.__sent = body; return Promise.resolve({ id: 'jo-1', job_code: 'JOB-001' }); }
+      if (p === '/contacts/check-email') return Promise.resolve({ duplicate: false });
       return Promise.resolve({});
     };
     window.loadJobOrders = function () {};
@@ -269,10 +289,11 @@ try {
     });
     await page.waitForSelector('#bd-client', { timeout: 5000 });
     await page.fill('#bd-client', 'Treplar Inc');
+    await fillPoc(page);
     await page.evaluate(() => bdSaveNewJob());
     await settle(page);
     const sent = await page.evaluate(() => window.__sent && JSON.parse(JSON.stringify(window.__sent)));
-    assert.ok(sent, 'Save Job sent nothing');
+    assert.ok(sent, 'Save Job sent nothing: ' + JSON.stringify(await page.evaluate(() => window.__toasts || [])));
     assert.equal(sent.lead.company_name, 'Treplar Inc', 'the typed client name was not sent');
     // The measure that matters: put the payload that actually goes on the wire
     // through the SERVER's own rule. Before the fix it carried a hard-coded
@@ -292,6 +313,7 @@ try {
     await page.locator('._co-ac-sug').first().dispatchEvent('mousedown');
     const hint = await page.$eval('#bd-client-hint', el => el.textContent);
     assert.match(hint, /existing client/i, 'the form does not say it matched an existing client');
+    await fillPoc(page);
     await page.evaluate(() => bdSaveNewJob());
     await settle(page);
     const sent = await page.evaluate(() => window.__sent);

@@ -10,6 +10,16 @@
   are unaffected but unprotected.
 - All outbound HTTP goes through `http-client.js`.
 
+- **`GET /companies/:id/intake`** answers everything the "+ New Job" form needs
+  about a picked client in ONE call — re-add cooldown, the POCs already known
+  there, the address on file. One endpoint because all three are wanted at the
+  same instant, and because the cooldown has to be shown THEN rather than at
+  Save.
+- **The company cooldown is `services/company-cooldown.js` now.** `routes/jobs.js`
+  had the only server-side copy and it was gated on `hasRole(req,'ra')`; the
+  browser had a third that hard-coded 21 while the real number is admin-editable
+  (`company_cooldown_days`). See D-0023.
+
 ## Fragile — touch with care
 - **Registration order.** `routes/recruiting/*` register on `app` directly, not
   as mounted Routers. Three literals were dead at once until Session 19:

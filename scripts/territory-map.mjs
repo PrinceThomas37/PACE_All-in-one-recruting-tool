@@ -73,6 +73,7 @@ const TERRITORIES = [
     hue: '#D98E5F', pos: [19, -21], height: 8, spread: 13,
     own: ['routes/recruiting/', 'services/recruiting-core.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
+          'services/company-cooldown.js',
           'bd_recruiter_routes.js',
           'workflow-engine.js', 'routes/workflows.js', 'routes/wf.js',
           'routes/lookups.js', 'hierarchy.js', 'lead-sources/',

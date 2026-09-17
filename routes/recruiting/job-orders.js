@@ -9,6 +9,8 @@ const entitlements = require('../../services/entitlements');
 const aiProvider = require('../../services/ai-provider');
 const createCandidateFields = require('../../services/candidate-fields');
 const clientResolve = require('../../services/client-resolve');
+const companyCooldown = require('../../services/company-cooldown');
+const { getSetting } = require('../../config/settings');
 
 
 module.exports = function (app, core) {
@@ -102,7 +104,17 @@ module.exports = function (app, core) {
       const inputError = clientResolve.clientInputError(lead);
       if (inputError) return res.status(400).json({ error: inputError });
 
+      // A lead with nobody on it cannot be emailed, followed up or sequenced.
+      // Name + email required, phone and LinkedIn optional — the owner's call
+      // (Session 26), and the live data agrees: every lead has a POC and all
+      // but one contact has an email, while nearly a quarter have no phone.
+      const poc = clientResolve.readContacts(lead.contacts);
+      if (poc.error) return res.status(400).json({ error: poc.error });
+
+      const address = clientResolve.readAddress(lead.address);
+
       let companyId = lead.company_id || null;
+      let isNewCompany = false;
       if (companyId) {
         // An id chosen by the client is a record chosen by the client: confirm
         // it is this org's company before anything is hung off it.
@@ -127,7 +139,54 @@ module.exports = function (app, core) {
             }, orgStamp(req))).select('id').single();
           if (coErr) throw coErr;
           companyId = created.id;
+          isNewCompany = true;
         }
+      }
+
+      // THE COMPANY RE-ADD COOLDOWN, extended to BD job-order creation by the
+      // owner (Session 26) so one rule covers every way a company enters the
+      // system. A company created a moment ago has no history, so it is skipped
+      // rather than blocked by the lead this very request is about to make.
+      if (!isNewCompany) {
+        const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
+        const { data: recent } = await withOrg(supabase.from('jobs')
+          .select('position,created_at,created_by,users:users!created_by(name)')
+          .eq('company_id', companyId).is('deleted_at', null), req)
+          .order('created_at', { ascending: false }).limit(1);
+        const last = recent && recent[0];
+        const state = companyCooldown.cooldownState({
+          lastLeadAt: last && last.created_at, now: new Date(), days: cooldownDays,
+        });
+        if (state) {
+          return res.status(409).json({
+            error: companyCooldown.cooldownSentence(state, {
+              company: lead.company_name || 'This client',
+              position: last.position,
+              addedBy: last.users && last.users.name,
+            }),
+            reason: 'company_cooldown',
+            days_left: state.daysLeft,
+          });
+        }
+      }
+
+      // The postal address (migration 043). Only non-empty fields are written,
+      // so a blank box never wipes an address the client record already has —
+      // clearing one belongs on the Clients page, where you can see what you
+      // are removing. `location` is the short display form every other screen
+      // reads, and is derived rather than typed twice.
+      if (Object.keys(address).length) {
+        const patch = Object.assign({}, address, { updated_at: new Date() });
+        const shortForm = clientResolve.displayLocation(address);
+        if (shortForm) patch.location = shortForm;
+        const { error: addrErr } = await supabase.from('companies').update(patch).eq('id', companyId);
+        // DELIBERATELY NOT FATAL. Migration 043 adds these columns, and
+        // CLAUDE.md's rule is to apply a migration before merging the code that
+        // uses it — but if the two ever land out of order, losing an address is
+        // an annoyance while losing the job order is an outage. It is logged
+        // rather than swallowed, so "the address did not save" is diagnosable
+        // instead of being a mystery.
+        if (addrErr) console.warn('[job-orders] client address not saved (is migration 043 applied?):', addrErr.message);
       }
 
       // 1) create the underlying lead (jobs row), pre-stamped Connected since it
@@ -147,15 +206,18 @@ module.exports = function (app, core) {
         }, orgStamp(req))).select().single();
       if (leadErr) throw leadErr;
 
-      // optional contacts on the lead, reusing the existing contacts table shape
-      if (Array.isArray(lead.contacts) && lead.contacts.length) {
-        const rows = lead.contacts.map((c, i) => Object.assign({
-          job_id: leadRow.id, first_name: c.first_name || '', last_name: c.last_name || '',
-          designation: c.designation || null, email: c.email || null, phone: c.phone || null,
-          linkedin: c.linkedin || null, is_primary: i === 0
-        }, orgStamp(req)));
-        await supabase.from('contacts').insert(rows);
-      }
+      // The POCs, already trimmed, casefolded and checked above. The first is
+      // primary — that is what the send path and every "who do we talk to"
+      // screen reads. This insert is NOT best-effort: a lead that silently
+      // ended up with no contact is exactly what the check above exists to
+      // prevent, so a failure here must not be swallowed.
+      const contactRows = poc.contacts.map((c, i) => Object.assign({
+        job_id: leadRow.id, first_name: c.first_name, last_name: c.last_name,
+        designation: c.designation, email: c.email, phone: c.phone,
+        linkedin: c.linkedin, is_primary: i === 0
+      }, orgStamp(req)));
+      const { error: contactErr } = await supabase.from('contacts').insert(contactRows);
+      if (contactErr) throw contactErr;
 
       // 2) create the job order from that lead
       const jobCode = await nextId('JOB');

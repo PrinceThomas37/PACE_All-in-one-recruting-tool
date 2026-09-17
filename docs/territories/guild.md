@@ -18,6 +18,12 @@
   Response carries `scope` (`own`/`team`/`org`).
 - `routes/recruiting/outreach.js` **returns** its send helpers so the outreach
   generator did not have to grow a second send path.
+- **A directly-created job order REQUIRES a POC** (name + email; phone and
+  LinkedIn optional — D-0023). `clientResolve.readContacts` is the rule, the
+  contacts insert is no longer best-effort, and the first POC is primary.
+- **The company re-add cooldown applies to `POST /job-orders`** (D-0023).
+  `services/company-cooldown.js` is the one definition; a brand-new company is
+  skipped so it is never blocked by the lead this request is about to create.
 - **A job order's client is resolved by the SERVER, from a name.**
   `POST /job-orders` takes `lead.company_name` (or `lead.company_id` when the
   form's typeahead matched one) and find-or-creates inside the caller's org.
@@ -25,6 +31,11 @@
   `clientInputError` / `matchCompany` / `companySearchPattern`.
 
 ## Fragile — touch with care
+- **THE COOLDOWN COUNTS LEADS, AND A JOB ORDER CREATES ONE.** So a client's
+  SECOND requirement inside the window is blocked — hardest on the best
+  clients. The owner chose this knowing genuine job orders would be refused
+  (D-0023); do not quietly soften it, and do not act surprised by it. The fix
+  is written down in D-0023's "Re-open when", for when a BD actually reports it.
 - **`POST /job-orders` CREATES THE LEAD ITSELF.** It is lead-first by design:
   `jobs` row (stage `Connected`, LD- code) → then the job order. So a refusal
   telling the user to "fill lead info first" describes a step that does not
@@ -60,6 +71,8 @@
 - Three stale draft PRs (#116, #126, #135) are months behind `main`.
 
 ## Log
+- **2026-09-17** — Session 26, round 2. Client intake on a direct create: POC
+  required, structured address (migration 043), cooldown applied. D-0023.
 - **2026-09-17** — Session 26. Fixed "+ New Job" refusing every direct create
   (owner report). Added `services/client-resolve.js` (pure, mine). Org-stamped
   the lead + contacts inserts. `test/new-job-client-smoke.mjs` drives the route
