@@ -185,7 +185,8 @@
       acts:[
         { icon:'mail',     title:'Email this client', onclick:"clientsOpenEmail('"+c.id+"')" },
         { icon:'mailopen', title:'Email history',     onclick:"clientsTab('emails')" },
-        { icon:'doc',      title:'Documents',         onclick:"clientsTab('docs')" }
+        { icon:'doc',      title:'Documents',         onclick:"clientsTab('docs')" },
+        { icon:'building', title:'Merge a duplicate in', onclick:"clientsOpenMerge('"+c.id+"')" }
       ],
       stats:[
         { v:(c.open_job_order_count||0), label:'Open',      icon:'flame' },
@@ -317,6 +318,88 @@
       '</div>';
     render();
   };
+  // ── MERGING A DUPLICATE CLIENT IN ──────────────────────────────────────────
+  // A BD can create a client by typing its name, so near duplicates accumulate.
+  // The survivor is the record you are already looking at — "this is the real
+  // Treplar Inc, fold the other one into it" — which is the way a person
+  // actually thinks about it, and it means the drawer you came from is still
+  // the right place afterwards.
+  window.clientsOpenMerge = function(targetId){
+    var c=(STATE.clients.list||[]).find(function(x){ return x.id===targetId; }); if(!c) return;
+    STATE.clients._merge = { targetId:targetId, targetName:c.name, sourceId:null, sourceName:'', preview:null, busy:false };
+    clientsRenderMerge();
+  };
+
+  function clientsRenderMerge(){
+    var m=STATE.clients._merge; if(!m) return;
+    var p=m.preview;
+    // The plan, in full, BEFORE the button is pressed. A merge is hard to undo,
+    // so "what is about to happen" is the whole point of this panel — and the
+    // button stays disabled until there is a plan to agree to.
+    var plan = m.busy
+      ? '<div style="font-size:12.5px;color:var(--text3)">Checking what would move…</div>'
+      : p
+        ? '<div style="border-left:3px solid var(--accent);background:var(--bg);border-radius:6px;padding:11px 13px;font-size:12.5px;color:var(--text2);line-height:1.55">'+esc(p.sentence)+'</div>'
+        : '<div style="font-size:12.5px;color:var(--text3)">Pick the duplicate above and its records will be listed here before anything moves.</div>';
+    STATE.modal =
+      '<div class="modal modal-w480" onclick="event.stopPropagation()">'+
+        '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
+          '<div class="mhd">Merge a duplicate into '+esc(m.targetName)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:3px">Everything attached to the duplicate moves here. Nothing is deleted.</div>'+
+        '</div>'+
+        '<div style="padding:16px 20px">'+
+          '<div style="margin-bottom:12px">'+
+            '<label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">The duplicate to merge in</label>'+
+            companyAcHTML('client-merge-src', m.sourceName, 'clientsMergePick', 'clientsMergeType', 'Start typing the duplicate\'s name…')+
+          '</div>'+
+          '<div id="client-merge-plan">'+plan+'</div>'+
+        '</div>'+
+        '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
+          '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn btn-primary" id="client-merge-go"'+(p?'':' disabled style="opacity:.5;cursor:not-allowed"')+
+            ' onclick="clientsMergeConfirm()">Merge</button>'+
+        '</div>'+
+      '</div>';
+    render();
+  }
+
+  // Typing invalidates the plan: a plan describing a different company is worse
+  // than no plan at all.
+  window.clientsMergeType = function(val){
+    var m=STATE.clients._merge; if(!m) return;
+    m.sourceName=val; m.sourceId=null; m.preview=null; m.busy=false;
+    var el=document.getElementById('client-merge-plan');
+    if(el) el.innerHTML='<div style="font-size:12.5px;color:var(--text3)">Pick the duplicate above and its records will be listed here before anything moves.</div>';
+    var go=document.getElementById('client-merge-go');
+    if(go){ go.disabled=true; go.style.opacity='.5'; go.style.cursor='not-allowed'; }
+  };
+
+  window.clientsMergePick = function(co){
+    var m=STATE.clients._merge; if(!m) return;
+    if(co.id===m.targetId){ showToast('That is the same client — pick a different one.','warning'); return; }
+    m.sourceId=co.id; m.sourceName=co.name; m.preview=null; m.busy=true;
+    clientsRenderMerge();
+    apiGet('/companies/'+m.targetId+'/merge-preview?from='+encodeURIComponent(co.id)).then(function(p){
+      var cur=STATE.clients._merge;
+      if(!cur||cur.sourceId!==co.id) return;      // they changed their mind
+      cur.preview=p; cur.busy=false; clientsRenderMerge();
+    }).catch(function(e){
+      var cur=STATE.clients._merge; if(cur){ cur.busy=false; clientsRenderMerge(); }
+      showToast('Could not check: '+(e&&e.message||e),'error');
+    });
+  };
+
+  window.clientsMergeConfirm = function(){
+    var m=STATE.clients._merge;
+    if(!m||!m.sourceId||!m.preview) return;      // no plan agreed to, nothing to do
+    showToast('Merging…','info');
+    apiPost('/companies/'+m.targetId+'/merge', { from:m.sourceId }).then(function(r){
+      showToast(r.message||'Merged','success');
+      STATE.clients._merge=null; closeModal();
+      loadClients(); if(STATE.clients.selectedId) loadClientDetail(STATE.clients.selectedId);
+    }).catch(function(e){ showToast('Merge failed: '+(e&&e.message||e),'error'); });
+  };
+
   window.clientsSendEmail = function(){
     var d=STATE.clients._emailDraft; if(!d) return;
     var to=(document.getElementById('client-em-to')||{}).value||'';

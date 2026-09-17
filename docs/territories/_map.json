@@ -2,8 +2,8 @@
   "generated": "2026-09-17",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 293,
-    "lines": 71681,
+    "files": 297,
+    "lines": 72697,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 57,
-      "lines": 23277,
+      "lines": 23356,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -71,7 +71,7 @@
         "engine-runs.js"
       ],
       "files": 21,
-      "lines": 6679,
+      "lines": 6771,
       "largest": [
         {
           "f": "index.js",
@@ -83,14 +83,14 @@
         },
         {
           "f": "routes/companies.js",
-          "n": 307
+          "n": 399
         },
         {
           "f": "config/integrations.js",
           "n": 247
         }
       ],
-      "lastTouched": "2026-09-16",
+      "lastTouched": "2026-09-17",
       "openIn": 4,
       "openOut": 1
     },
@@ -113,11 +113,11 @@
         "scripts/"
       ],
       "files": 49,
-      "lines": 2848,
+      "lines": 2849,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 277
+          "n": 278
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -272,6 +272,7 @@
         "services/candidate-fields.js",
         "services/client-resolve.js",
         "services/company-cooldown.js",
+        "services/company-merge.js",
         "bd_recruiter_routes.js",
         "workflow-engine.js",
         "routes/workflows.js",
@@ -282,8 +283,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 22,
-      "lines": 5329,
+      "files": 23,
+      "lines": 5402,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -369,8 +370,8 @@
         "test/",
         ".github/"
       ],
-      "files": 88,
-      "lines": 17328,
+      "files": 91,
+      "lines": 18099,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",

@@ -74,6 +74,7 @@ const TERRITORIES = [
     own: ['routes/recruiting/', 'services/recruiting-core.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
+          'services/company-merge.js',
           'bd_recruiter_routes.js',
           'workflow-engine.js', 'routes/workflows.js', 'routes/wf.js',
           'routes/lookups.js', 'hierarchy.js', 'lead-sources/',
