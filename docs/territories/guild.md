@@ -24,6 +24,12 @@
 - **The company re-add cooldown applies to `POST /job-orders`** (D-0023).
   `services/company-cooldown.js` is the one definition; a brand-new company is
   skipped so it is never blocked by the lead this request is about to create.
+- **`services/company-merge.js` folds a duplicate client into a real one.**
+  Four tables carry a `company_id`; `contacts` hangs off `jobs.job_id` and
+  follows its leads. A merge RE-POINTS and SOFT-DELETES — never destroys — and
+  records what moved before the delete so a half-done merge is readable. A
+  fifth table with a `company_id` must be added to `MERGE_TABLES`, and the test
+  reads the migrations to make sure it was.
 - **A job order's client is resolved by the SERVER, from a name.**
   `POST /job-orders` takes `lead.company_name` (or `lead.company_id` when the
   form's typeahead matched one) and find-or-creates inside the caller's org.

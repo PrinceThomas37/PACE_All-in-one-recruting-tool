@@ -233,6 +233,24 @@ duplicate defence — it shows what already exists while you type. A near-match 
 never merged: folding "Treplar Industries" into "Treplar Inc" puts a job on the
 wrong client and nothing on screen would say so.
 
+### Merging two client records into one
+**Status:** LIVE · owner `gateway` (routes) + `guild` (rule) · Session 26
+Clients drawer → **Merge a duplicate in**. `POST /companies/:id/merge` re-points
+the four tables carrying a `company_id` (`jobs`, `job_orders`,
+`client_documents`, `email_tracking`) and **soft-deletes** the duplicate —
+nothing is destroyed, and what moved is recorded in `app_settings` under
+`company_merge_<id>`. `GET /companies/:id/merge-preview` is the same path to the
+same counts, so the plan on screen and what the button does cannot differ.
+`services/company-merge.js` is the rule. **`contacts` is deliberately not in the
+list** — it hangs off `jobs.job_id` and follows its leads.
+
+### Capturing the people at a client (POC rows)
+**Status:** LIVE · owner `surface` · `public/js/52-poc-block.js`
+**ONE implementation**, used by the BD New Job form and the RA lead form. The RA
+form's older copy was retired into it in Session 26. Do not write a third.
+`pocRegister(name, {get, changed})` keeps state with the caller; `changed`
+receives an event so a keystroke never re-renders and a shape change does.
+
 ### Scoring a candidate against a job
 **Status:** LIVE · owner `observatory`
 `match-engine.js`. Its `reasons` are grid shorthand — **never render one into
