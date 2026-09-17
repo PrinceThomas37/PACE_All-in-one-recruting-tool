@@ -4739,3 +4739,193 @@ assertions about a panel that was quietly forwarding a competitor's apply link.
 **A suite only covers the screens it renders, and a green check is a claim about
 what was measured, not about what is true.** Both faults were found the same
 way: by producing the artefact and looking at it.
+
+---
+
+# Session 26 — the button that had never worked, and the client it now carries
+
+**PR #214 (two rounds, squashed as `8dba19f`). Migration 043 applied live.**
+
+## Round 1 — "I tried opening a job without adding a lead"
+
+The owner sent a screenshot of the New Job form, fully filled in, under a toast
+reading:
+
+> Failed to create job: `lead.company_id` and `lead.position` are required
+> (lead info must be filled first).
+
+Three faults were stacked behind that one sentence, and the first one is the
+kind that only gets found by a user.
+
+**`25-workflow-bd.js` sent `company_id: null` — hard-coded.**
+
+```js
+var lead={position:f.job_title,company_id:null,location:f.city+' '+f.state,source:'BD Direct'};
+```
+
+The Client box was free text and was never resolved to a `companies` row. A job
+order must belong to one, so `POST /job-orders` refused **every direct create**.
+Not intermittently, not under some condition — **the "+ New Job" button had
+never once worked.** The convert-from-lead path builds its body differently and
+was unaffected, which is exactly why nobody had noticed: the path people used
+worked, and the path they didn't use was dead.
+
+**The refusal named JSON fields and described a step that does not exist.** It
+told the reader to go and fill in lead info first. `POST /job-orders` creates the
+lead *itself* — that is its design, stated in its own comment. And the form let
+twenty fields be filled before saying anything. This is the shape `CLAUDE.md`
+already names in the Reminders write-up: *a rule that decides whether an action
+is ALLOWED belongs where the action is OFFERED, not only where it is taken.*
+Session 24 found it on a Compose button; here it was on the create path itself.
+
+**Found while fixing it: that route's `jobs` and `contacts` inserts carried no
+`orgStamp`.** `org_id` has a column DEFAULT, so a second org's job order would
+have landed silently in the **default org's** leads list, with no error anywhere
+and nothing on screen to say so. Nobody had hit it because there is one org.
+
+The fix put the resolution on the server — `services/client-resolve.js`, pure —
+with a **typeahead** in the form (`51-company-autocomplete.js`, shared, the same
+discipline as the zip widget: patch only your own suggestions box, never
+`render()`). A typed name alone is enough; find-or-create runs inside the
+caller's org. A near-match is **never** merged: folding "Treplar Industries"
+into "Treplar Inc" puts a job order on the wrong client and nothing on screen
+would say so. The `ilike` pattern is deliberately a superset and `matchCompany`
+makes the decision — widening it costs a few rows read, narrowing it creates a
+duplicate client.
+
+The picker is drawn **only** on a direct create. Edit ignores the company
+(`pickJobFields` drops `company_id`) and convert-from-lead inherits the lead's,
+so a picker in either place would be a control that appears to act and does not.
+
+## The phone, found by measuring rather than by the report
+
+The owner's screenshot was a desktop one. Measuring the same modal at 390px
+showed its columns were written into a `style=""` attribute — and **an inline
+style cannot be re-laid-out by any stylesheet**, the same rule as an inline
+colour and an inline font-size. It drew three columns on a phone and pushed its
+whole right column — **Client, Work Authorization, City, End Date** — **72px
+off-screen**, unreachable behind `#content: overflow-x:hidden`.
+
+So the field this session was fixing was the field a phone could not reach.
+`.g3`/`.g2` already existed in `styles.css` and already collapse below 860px;
+they were simply not used. Desktop moved by nothing.
+
+**Other modals across the app carry inline grids too. Nothing has checked them.**
+
+## Round 2 — "its better to take in the client information"
+
+The owner asked that a directly-created job capture the client properly: POC
+name, email, phone, and the company's address.
+
+Most of it was **wiring, not plumbing**: `POST /job-orders` had always accepted
+a `lead.contacts` array and written it. Nothing had ever sent one.
+
+Three sub-decisions were put to them with live numbers pulled from the database
+rather than from intuition, and **two came back against the recommendation.**
+That is recorded as **D-0023**, and the numbers are why the first one was easy:
+
+| | |
+|---|---|
+| Leads with a POC | **328 of 328** |
+| POCs with an email | **708 of 709** |
+| POCs with a phone | **546 of 709** |
+| Companies with a location | **1,565 of 1,567** |
+
+**1. POC name + email required; phone and LinkedIn optional.** Agreed. Every
+lead already has a POC, so requiring one costs nobody anything — while 163 of
+709 contacts have *no phone*, so requiring one would buy invented phone numbers.
+That is precisely what D-0017 exists to prevent. The contacts insert stopped
+being best-effort: a lead that silently ends up with nobody on it is the thing
+the check exists to stop.
+
+**2. Structured address columns, not the existing free-text `location`.**
+Against the recommendation, which was: free text now, split later, no migration,
+and 1,565 rows already use it. The owner wanted real columns. **Migration 043**,
+additive; `location` is kept as the short display form and **derived** from the
+new fields rather than typed twice. Nothing is backfilled, because splitting an
+existing free-text line by guessing where the street ends turns good data into
+confidently wrong data.
+
+**3. The 21-day company re-add cooldown applies to BD job creation.** Against
+the recommendation. The option they chose said, in its own words, *"it will
+refuse genuine job orders, and people will find a way around it."* They took
+that trade for one consistent rule.
+
+It was built as asked, with **no override**, because none was requested. What
+was done instead was to give the wall a door: the refusal **names who added the
+company and when**, and it is shown **the moment a client is picked** rather
+than discovered at Save — the same lesson as round 1, applied before it could
+bite.
+
+**The consequence, written down and not designed around:** the cooldown counts
+leads on the company, and creating a job order *creates* one. So a client's
+**second requirement inside the window is blocked** — which lands hardest on the
+best clients. D-0023 carries the two ready fixes and the condition to re-open on.
+
+## One rule that existed three times and disagreed with itself
+
+The cooldown turned out to be written three ways:
+
+1. `routes/jobs.js` `POST /jobs` — server-side, read the real admin setting, but
+   gated on `hasRole(req,'ra')`, **so a BD was never checked at all**;
+2. `routes/jobs.js` `GET` — the same idea again, filtering an RA's company list;
+3. `15-ra-entry-form.js` — **hard-coded 21**, scanning `STATE.jobs`, which is
+   only the leads that user's own `/jobs` call returned.
+
+The number is admin-editable (`company_cooldown_days`). Set it to 30 and the
+form happily offered a company on day 25 that the server then refused — the
+offered-versus-taken failure again, inside the very rule this round was
+extending. `services/company-cooldown.js` (pure) is now the one definition, and
+extending the rule to a fourth create path is what made that necessary rather
+than merely tidy.
+
+## The duplication that was NOT written
+
+`15-ra-entry-form.js` has had a POC block since it was built — company,
+location, position, repeating contacts with a duplicate-email check. Writing a
+second one for the BD form was the obvious move and is the exact failure the
+owner caught themselves with the two candidate-email workflows (D-0012).
+
+So `52-poc-block.js` is a **shared** block, with state kept by the caller
+(`pocRegister(name, {get, changed})`) — which is what lets two forms with
+completely different state shapes use one implementation. **The RA form's older
+copy still exists; retiring it into this is the follow-up, and the thing not to
+do is write a third.**
+
+`pocFirstError` there is a **checked copy** of `readContacts` on the server,
+because a browser cannot require a Node module — the `view-horizon.js` idiom.
+A test runs thirteen cases through both and fails if they ever drift, which
+matters because a drift means the form accepts what the server refuses.
+
+## The bug no assertion was looking for
+
+The duplicate-email check redrew the **whole POC block** when its answer came
+back — roughly a third of a second *after* the person had tabbed on to the phone
+box. So it replaced the field under their hands and lost what they had typed.
+
+It was found because a phone number that had definitely been filled in **was not
+in a screenshot**. Thirty-eight assertions were green at the time. It now patches
+one `.poc-email-note`; same family as the render engine's own rule, *write only
+what changed*.
+
+## The thread through this session
+
+Round 1's fault was a button that had never worked, in an app in daily use,
+because the one path people took worked and masked the one they didn't. Round
+2's sharpest fault was a keystroke being eaten, found in a picture.
+
+**Both were found by producing the artefact and looking at it** — the same
+sentence Session 25 ended on. What is new here is the other half: **the report
+was more precise than it first read.** "I tried opening a job without adding a
+lead" named the exact condition — *without adding a lead* — and the code had a
+hard-coded null on exactly that branch.
+
+Two guards were verified the only way that means anything: every one of them was
+checked by putting its own bug back and watching it fail — the hard-coded null,
+the missing org stamps, the old refusal, the inline grid, the POC requirement,
+the cooldown, the rule drift, and the caret-eating redraw.
+
+**Migration 043 was applied live before the merge**, on explicit go-ahead, and
+verified after by a content fingerprint of `name|location` across all 1,567
+companies that was **identical before and after** — 10 columns to 16, zero rows
+touched, RLS and the service-role policy still in place.
