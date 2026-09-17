@@ -221,6 +221,10 @@
   /* Grids collapse. .g4 to two columns rather than one: four small stat tiles
      read better paired than stacked into a long column of near-empty cards. */
   .g2,.g3{grid-template-columns:1fr}
+  /* Column-only grids stack too. A modal's inline 2-column grid inside an
+     already-narrow bordered box gave 48px selects on the stage modal — on
+     screen, and far too small to use. Reflow, never shrink. */
+  .gc2,.gc3,.gc4{grid-template-columns:1fr}
   .g4{grid-template-columns:1fr 1fr}
   .span2,.span3{grid-column:span 1}
   .g4 .span2{grid-column:span 2}

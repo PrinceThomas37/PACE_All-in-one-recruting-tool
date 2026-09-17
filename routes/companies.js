@@ -7,6 +7,7 @@
 const express = require('express');
 const clientResolve = require('../services/client-resolve');
 const companyCooldown = require('../services/company-cooldown');
+const companyMerge = require('../services/company-merge');
 const { getSetting } = require('../config/settings');
 
 module.exports = (ctx) => {
@@ -133,6 +134,97 @@ router.get('/companies/:id/job-orders', auth, async (req, res) => {
 // was blocked, after twenty fields are filled, is the failure CLAUDE.md names:
 // a rule that decides whether an action is allowed belongs where the action is
 // offered, not only where it is taken.
+// ── MERGING A DUPLICATE CLIENT INTO THIS ONE ────────────────────────────────
+// Since Session 26 a BD can create a client by typing its name, so near
+// duplicates accumulate. The resolver never merges two names by itself — a job
+// order silently filed under the wrong client shows no error anywhere — so the
+// judgement is a person's and these two endpoints are how they make it.
+//
+// The PREVIEW and the MERGE take the same path to the same counts, so what the
+// screen promised and what the button does cannot be two different things.
+async function mergeContext(req, sourceId, targetId) {
+  const load = async (id) => {
+    const { data } = await withOrg(supabase.from('companies')
+      .select('id,name').eq('id', id).is('deleted_at', null), req).limit(1);
+    return (data && data[0]) || null;
+  };
+  const [source, target] = await Promise.all([load(sourceId), load(targetId)]);
+  if (!source || !target) return { error: 'Client not found.', status: 404 };
+  const counts = {};
+  for (const t of companyMerge.MERGE_TABLES) {
+    // head:true counts without pulling the rows. withOrg is what stops this
+    // counting — or later moving — another org's records.
+    const { count } = await withOrg(supabase.from(t.table)
+      .select('id', { count: 'exact', head: true }).eq('company_id', source.id), req);
+    counts[t.table] = count || 0;
+  }
+  return { source, target, counts };
+}
+
+router.get('/companies/:id/merge-preview', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    const sourceId = req.query.from;
+    const inputError = companyMerge.mergeInputError({ sourceId, targetId: req.params.id });
+    if (inputError) return res.status(400).json({ error: inputError });
+    const ctx = await mergeContext(req, sourceId, req.params.id);
+    if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+    res.json({
+      source: ctx.source, target: ctx.target, counts: ctx.counts,
+      total: companyMerge.totalMoving(ctx.counts),
+      sentence: companyMerge.describePlan(ctx.counts, { sourceName: ctx.source.name, targetName: ctx.target.name }),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/companies/:id/merge', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    const sourceId = (req.body || {}).from;
+    const inputError = companyMerge.mergeInputError({ sourceId, targetId: req.params.id });
+    if (inputError) return res.status(400).json({ error: inputError });
+    const ctx = await mergeContext(req, sourceId, req.params.id);
+    if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
+
+    // ORDER MATTERS. Re-point everything FIRST, soft-delete the duplicate LAST.
+    // If a move fails half way, the duplicate still exists and still owns what
+    // did not move — recoverable. Deleting first and then failing to move would
+    // orphan rows against a record the app no longer shows.
+    const moved = {};
+    for (const t of companyMerge.MERGE_TABLES) {
+      if (!ctx.counts[t.table]) { moved[t.table] = 0; continue; }
+      const { error } = await withOrg(supabase.from(t.table)
+        .update({ company_id: ctx.target.id }).eq('company_id', ctx.source.id), req);
+      if (error) throw new Error(`moving ${t.plural} failed: ${error.message}`);
+      moved[t.table] = ctx.counts[t.table];
+    }
+
+    // The record of what happened, BEFORE the soft delete, so it exists even if
+    // that write fails. `app_settings` rather than a new table — the same
+    // reasoning as the AI meter and the dismissal store. A merge is hard to
+    // undo from the UI, so what moved has to be readable from the database.
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'company_merge_' + ctx.source.id,
+        value: JSON.stringify({
+          merged_at: new Date().toISOString(), by: req.user.id,
+          source: ctx.source, target_id: ctx.target.id, target_name: ctx.target.name, moved,
+        }),
+      }, { onConflict: 'key' });
+    } catch (e) { console.warn('[companies] merge record not written:', e.message); }
+
+    const { error: delErr } = await withOrg(supabase.from('companies')
+      .update({ deleted_at: new Date(), updated_at: new Date() }).eq('id', ctx.source.id), req);
+    if (delErr) throw delErr;
+
+    res.json({
+      merged: true, moved, total: companyMerge.totalMoving(moved),
+      source: ctx.source, target: ctx.target,
+      message: `“${ctx.source.name}” was merged into “${ctx.target.name}”.`,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/companies/:id/intake', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });

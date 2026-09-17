@@ -21,6 +21,15 @@
 - The GitHub heartbeat is **every 30 minutes**; `.github/workflows/heartbeat.yml`
   carries the reasoning. Free tier is ~750 instance hours/month.
 
+- **`modal-mobile-smoke.mjs` opens 18 pop-ups at 390px in both themes.**
+  `mobile-layout-smoke.mjs` walks PAGES and never opens a modal — that gap let
+  a 48px field ship on the stage modal. It measures three things, and the first
+  two versions were VACUOUS: measuring only "past the viewport" misses a grid
+  that CRUSHES its columns instead of overflowing, and asking CSS for
+  `overflow-x` is useless because `overflow-y:auto` makes it compute to `auto`
+  too. It now asks whether a box actually scrolls sideways. **An opener that
+  renders nothing is a FAILURE, not a skip** — nothing has no overflow.
+
 ## Fragile — touch with care
 - **⚠ SANDBOX IS NODE 22, RENDER IS NODE 26.** This cost a whole session: resume
   parsing failed in production and every file parsed perfectly here — same

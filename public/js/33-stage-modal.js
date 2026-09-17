@@ -121,7 +121,7 @@
           (showInterview?
             '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">'+
               '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">INTERVIEW DETAILS</div>'+
-              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+              '<div class="gc2" style="gap:10px">'+
                 '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Date &amp; time</label>'+
                   '<input id="stg-iv-at" type="datetime-local" class="sel" value="'+esc(ivAt0)+'"></div>'+
                 '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Format</label>'+
@@ -129,7 +129,7 @@
                     ['in_person|In person','virtual|Virtual','phone|Phone'].map(function(o){ var kv=o.split('|'); return '<option value="'+kv[0]+'"'+(ivType0===kv[0]?' selected':'')+'>'+kv[1]+'</option>'; }).join('')+
                   '</select></div>'+
               '</div>'+
-              '<div id="stg-iv-virtual" style="display:'+(ivType0==='virtual'?'grid':'none')+';grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">'+
+              '<div id="stg-iv-virtual" class="gc2" style="display:'+(ivType0==='virtual'?'grid':'none')+';gap:10px;margin-top:10px">'+
                 '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Platform</label>'+
                   '<select id="stg-iv-platform" class="sel">'+
                     ['Microsoft Teams','Google Meet','Zoom','Other'].map(function(p){ return '<option'+(ivPlatform0===p?' selected':'')+'>'+esc(p)+'</option>'; }).join('')+
@@ -310,7 +310,7 @@
             '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+esc(c.full_name||'Candidate')+' — these details go to the BDM with the profile</div>'+
           '</div>'+
           '<div style="padding:16px 20px;max-height:62vh;overflow:auto">'+
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+            '<div class="gc2" style="gap:10px;margin-bottom:10px">'+
               fld('sbdm-first','Applicant First Name',first,'',true)+
               fld('sbdm-last','Applicant Last Name',last,'',true)+
               fld('sbdm-email','Applicant Email Address',c.email,'',true)+

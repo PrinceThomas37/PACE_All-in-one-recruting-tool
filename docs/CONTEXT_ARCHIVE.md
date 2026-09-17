@@ -4971,3 +4971,121 @@ assumed.
 was made rather than held for an ending. It also sits *after* this session's
 "thread through" paragraph, which is its own small evidence for the change: the
 session did not end where the summary said it did.
+
+## Round 4 — the three follow-ups, taken together
+
+The owner picked all three suggestions from the end of round 3. Each was
+offered as small; two of them turned up a live bug that nothing had been
+looking for.
+
+### The RA form's contact block retired into the shared one
+
+`15-ra-entry-form.js` had had its own contact rows since it was built, and
+round 2 added a second, shared one for the BD form. Two live paths to one
+outcome, which is the duplication the owner caught themselves with the two
+candidate-email workflows (D-0012).
+
+The migration itself was mechanical — field names to the API's own, four
+bespoke handlers deleted, ~3,200 characters of duplicated rendering gone. Two
+things made it worth care:
+
+* **`changed` now carries an EVENT.** A keystroke and a shape change need
+  opposite treatment. The RA form redraws wholesale, so re-rendering on a
+  keystroke takes the caret out of the box; but its per-contact **Intel** rows
+  are POSITIONAL against the contact list, so a removal that does not splice
+  both silently attaches one person's seniority and notes to another — a wrong
+  fact about a real human with nothing on screen to say so.
+* **The form was in daily use with NO test coverage at all.** What
+  `poc-block-shared-smoke.mjs` pins is therefore the form working, not the
+  refactor.
+
+**And a real bug fell out of testing it, in the shared block, affecting both
+forms.** The duplicate-email check answers about a third of a second after the
+person leaves the email box — by which time they may be reaching for "+ Add
+another contact". Its result line appeared at that moment, moved the button
+~20px, and the click landed on nothing: no row, no error, nothing to see.
+
+Measured rather than reasoned about: a click fired straight after typing left
+the list at one contact; the same click after the answer had landed gave two.
+**Two attempts at the fix were wrong and both are worth keeping.** Reserving
+18px left a 3px shift, because the note's own top margin COLLAPSES out of an
+empty wrapper — padding does not collapse, margin does. Reserving a measured
+19.5px is a magic number a font change would quietly invalidate. The empty state
+now renders a placeholder line of the same shape, so it is as tall as the
+answered one **by construction**.
+
+### Every pop-up measured at 390px
+
+Round 1 fixed the New Job modal's inline grid. This opened all 18 reachable
+pop-ups in both themes and measured. `mobile-layout-smoke.mjs` walks 16 PAGES
+and had always passed, because it never opens a modal.
+
+**Found: the candidate STAGE modal** — the one recruiters use constantly to move
+people through the pipeline — squeezed a field to **48px** on a phone. Two inline
+2-column grids inside an already-narrow bordered box. Now 322px.
+
+Everything else was already clean, which is worth saying plainly rather than
+implying a wider problem: the phone fault was confined to those two modals.
+
+`.gc2`/`.gc3`/`.gc4` are the tool that made the fix safe. `.g2`/`.g3` also set a
+gap, so converting an inline grid to one of them changes spacing on every
+screen; these set columns and nothing else, so the caller keeps its inline gap
+and **no wide screen moves**. Verified both ways: two 201px columns with a 10px
+gap on desktop before and after, one 322px column on a phone.
+
+**THE TEST WAS VACUOUS TWICE, and both versions looked completely reasonable:**
+
+1. It measured only whether an element's right edge passed the viewport. A
+   3-column grid at 390px pushes nothing off-screen — it CRUSHES the columns
+   (measured: `55px 174px 174px`) and clips the modal body, 451px of content in
+   a 369px box. Nothing off-screen, 82px unreachable.
+2. The fix for that — skip anything inside its own horizontal scroller — asked
+   CSS for `overflow-x`. **Setting `overflow-y:auto` alone makes the computed
+   `overflow-x` ALSO `auto`**, and every modal body sets overflow-y for its own
+   height, so the check excluded the entire contents of every modal. It now asks
+   whether the box actually scrolls sideways, which is a measurement rather than
+   a declaration.
+
+Both were caught only by putting the original bug back and watching the suite
+stay green. A third trap was designed out from the start: six cases initially
+drew nothing because they needed state the stub had not provided, and **nothing
+has no overflow** — so an opener that fails to open is a FAILURE, not a skip.
+
+### Merging a duplicate client
+
+The tool for the mess the client typeahead makes possible. The survivor is the
+client already on screen; the duplicate is picked with the shared typeahead
+rather than a fourth hand-rolled search.
+
+**A merge never deletes anything** — four tables carrying `company_id` are
+re-pointed and the duplicate is soft-deleted. `contacts` is deliberately absent
+because it hangs off `jobs.job_id` and follows its leads untouched. Order
+matters twice: re-point before deleting (a half-done move leaves the duplicate
+still owning what did not move, which is recoverable), and record what moved
+before the delete (so a half-done merge is still readable).
+
+The plan is stated in full before the button is pressed, and **Merge stays
+disabled until there is a plan to agree to**; retyping withdraws it, because a
+plan describing a different company is worse than no plan.
+
+Two clients with unlike names are deliberately allowed — "Treplar Inc" and
+"T.I. Construction" can be the same company and only the person merging knows.
+The guard against a mis-click is the stated plan, not a name comparison the app
+cannot make.
+
+The guard that will matter in a year reads `schema.sql` and every migration for
+tables carrying a `company_id` and fails if one is missing from the merge list,
+because the failure mode is somebody adding a fifth table and not looking here.
+
+### The thread through round 4
+
+Three changes offered as tidy-ups; two of them contained a live defect that no
+assertion was looking for — a click silently lost, and a 48px field on the
+screen recruiters use most. Neither was in the thing being changed. Both were
+found by **building the measurement first and letting it tell me**, rather than
+fixing what I already believed was wrong.
+
+And the measurement lied twice before it worked. The overflow test passed clean
+with the original bug reintroduced, in two different ways, each for a reason
+that reads as correct until you check it. **Assume your new guard is vacuous
+until you have watched it fail** is the rule this session earned twice over.

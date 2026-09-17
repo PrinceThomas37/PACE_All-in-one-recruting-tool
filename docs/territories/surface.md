@@ -106,6 +106,18 @@
   typed. **Found in a screenshot**, where a filled phone number simply was not
   there; no assertion in the suite was looking for it. It now writes one
   `.poc-email-note`. Same family as the render engine's own rule.
+- **`.gc2`/`.gc3`/`.gc4` are the tool for converting an inline grid.** `.g2`/
+  `.g3` also set a gap, so swapping to one of those changes spacing on every
+  screen; the `.gc*` classes set columns only, so the caller keeps its inline
+  gap and no wide screen moves. Use them, not `.g2`, when fixing an existing
+  inline grid.
+- **ANYTHING ARRIVING FROM THE NETWORK MUST NOT MOVE A CONTROL.** The POC
+  block's duplicate-email answer lands ~300ms after the person has left the
+  box, pushed "+ Add another contact" 20px down, and the click was silently
+  lost. The empty state now reserves the line with a placeholder of the same
+  shape — **by construction, not by a measured pixel count**, and note that a
+  child's top margin COLLAPSES out of an empty wrapper, so padding is what
+  reserves space, never margin.
 - **A MODAL'S COLUMNS MUST BE A CLASS.** The New Job / Edit Job modal wrote
   `grid-template-columns:1fr 1fr 1fr` into a `style=""`, and an inline style
   cannot be re-laid-out by any stylesheet. At 390px it drew three columns and

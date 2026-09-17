@@ -71,7 +71,7 @@ function renderRaFormContactIntel(f){
   var r=raFormEnsureResearch();
   return f.contacts.map(function(c,idx){
     var ci=(r.contacts[idx])||{};
-    var cName=htmlEsc(((c.firstName||'')+' '+(c.lastName||'')).trim())||('Contact '+(idx+1));
+    var cName=htmlEsc(((c.first_name||'')+' '+(c.last_name||'')).trim())||('Contact '+(idx+1));
     var senOpts=['','Junior','Mid','Senior','Director','VP','C-Level'].map(function(v){
       return '<option value="'+v+'"'+(ci.seniority===v?' selected':'')+'>'+(v||'— Select —')+'</option>';
     }).join('');
@@ -128,38 +128,24 @@ function renderRALeadForm(){
   }
 
   // Contact rows
-  var contactRows=(f.contacts||[]).map(function(c,idx){
-    var dupWarning='';
-    if(c.emailDupInfo&&c.emailDupInfo.duplicate){
-      var d=c.emailDupInfo;
-      dupWarning='<div style="margin-top:4px;padding:6px 10px;background:var(--red-l);border-radius:var(--r);font-size:11.5px;color:var(--red)">'+
-        '\u26a0 Added '+d.days_ago+' day'+(d.days_ago!==1?'s':'')+' ago'+(d.added_by?' by <strong>'+htmlEsc(d.added_by)+'</strong>':'')+
-        (d.company?' at <strong>'+htmlEsc(d.company)+'</strong>':'')+'. Will be flagged duplicate.</div>';
-    } else if(c.emailStatus==='ok'){
-      dupWarning='<div style="margin-top:3px;font-size:11px;color:var(--green)">\u2713 Email looks good</div>';
+  // The contact rows used to be hand-rolled here. They are now the SHARED
+  // block (52-poc-block.js) — the same one the BD "+ New Job" form uses. Two
+  // copies of "who do we talk to at this client" is the duplication the owner
+  // caught with the two candidate-email workflows (D-0012), and this form's
+  // copy was the older of the two.
+  //
+  // The intel rows below are POSITIONAL against this list, so `changed` redraws
+  // on a shape change — and deliberately does NOT on a keystroke.
+  pocRegister('ra', {
+    get: function () { return STATE.raForm.contacts; },
+    changed: function (ev) {
+      if (!ev || ev.type === 'set') return;      // typing must never re-render
+      var r = raFormEnsureResearch();
+      if (ev.type === 'add') r.contacts.push({});
+      else if (ev.type === 'remove') r.contacts.splice(ev.index, 1);
+      render();
     }
-    return '<div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;margin-bottom:10px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-weight:600;font-size:12px;color:var(--text2)">Contact '+(idx+1)+(idx===0?' <span style="font-size:10px;color:var(--green);background:var(--green-l);padding:1px 6px;border-radius:5px;margin-left:4px">PRIMARY</span>':'')+'</div>'+
-        (idx>0?'<button onclick="raFormRemoveContact('+idx+')" style="background:transparent;border:0;color:var(--red);font-size:12px;cursor:pointer">\u2715 Remove</button>':'')+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'+
-        '<input class="inp" placeholder="First name *" value="'+htmlEsc(c.firstName||'')+'" oninput="raFormUpdateContact('+idx+',\'firstName\',this.value)"/>'+
-        '<input class="inp" placeholder="Last name" value="'+htmlEsc(c.lastName||'')+'" oninput="raFormUpdateContact('+idx+',\'lastName\',this.value)"/>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'+
-        '<input class="inp" placeholder="Designation" value="'+htmlEsc(c.designation||'')+'" oninput="raFormUpdateContact('+idx+',\'designation\',this.value)"/>'+
-        '<div>'+
-          '<input class="inp" placeholder="Email ID *" value="'+htmlEsc(c.email||'')+'" oninput="raFormUpdateContact('+idx+',\'email\',this.value)" onblur="raFormCheckEmail('+idx+',this.value)"/>'+
-          dupWarning+
-        '</div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
-        '<input class="inp" placeholder="Phone" value="'+htmlEsc(c.phone||'')+'" oninput="raFormUpdateContact('+idx+',\'phone\',this.value)"/>'+
-        '<input class="inp" placeholder="LinkedIn URL (POC\'s profile)" value="'+htmlEsc(c.linkedin||'')+'" oninput="raFormUpdateContact('+idx+',\'linkedin\',this.value)"/>'+
-      '</div>'+
-    '</div>';
-  }).join('');
+  });
 
   return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:8px">'+
     '<div style="font-weight:700;font-size:14px;margin-bottom:16px;color:var(--text)">'+(isEditing?'\u270f\ufe0f Edit Lead':'Add New Lead')+'</div>'+
@@ -219,8 +205,8 @@ function renderRALeadForm(){
 
     // ── Contacts ──
     '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Contacts / POCs</div>'+
-    contactRows+
-    '<button onclick="raFormAddContact()" style="background:transparent;border:1.5px dashed var(--border2);color:var(--text3);padding:8px 16px;border-radius:8px;font-size:12px;cursor:pointer;width:100%;margin-bottom:16px">+ Add another contact</button>'+
+    pocBlockHTML('ra')+
+    '<div style="margin-bottom:16px"></div>'+
 
     // ── Job Description (requirements) ──
     '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Job Description</div>'+
@@ -395,9 +381,9 @@ window.raFormEdit=function(jobId){
     salaryRange:j.salary_range||'',source:j.source||'',
     jobCreatedDate:j.job_created_date||'',
     contacts:cs.length?cs.map(function(c){
-      return{firstName:c.first_name,lastName:c.last_name,designation:c.designation,
-             email:c.email,phone:c.phone,linkedin:c.linkedin,emailStatus:'',emailDupInfo:null};
-    }):[{firstName:'',lastName:'',designation:'',email:'',phone:'',linkedin:'',emailStatus:'',emailDupInfo:null}],
+      return{first_name:c.first_name||'',last_name:c.last_name||'',designation:c.designation||'',
+             email:c.email||'',phone:c.phone||'',linkedin:c.linkedin||'',_emailState:'',_emailDup:null};
+    }):[pocNewContact()],
     research:JSON.parse(JSON.stringify(savedResearch))
   };
   STATE.raFormCoSuggestions=[];
@@ -510,37 +496,12 @@ window.raFormCoBlur=function(){
   setTimeout(function(){STATE.raFormCoSuggestions=[];_patchCoSuggestions();},200);
 };
 
-window.raFormCheckEmail=function(idx,email){
-  if(!email||email.indexOf('@')<0)return;
-  var contacts=STATE.raForm.contacts;
-  apiPost('/contacts/check-email',{email:email}).then(function(res){
-    contacts[idx].emailStatus=res.duplicate?'dup':'ok';
-    contacts[idx].emailDupInfo=res;
-    scheduleRender();
-  }).catch(function(){});
-};
 
-window.raFormUpdateContact=function(idx,field,val){
-  STATE.raForm.contacts[idx][field]=val;
-  if(field==='email')STATE.raForm.contacts[idx].emailStatus='';
-  STATE.raFormTouchedAt=Date.now();
-};
 
-window.raFormAddContact=function(){
-  STATE.raForm.contacts.push({firstName:'',lastName:'',designation:'',email:'',phone:'',linkedin:'',emailStatus:'',emailDupInfo:null});
-  raFormEnsureResearch().contacts.push({});
-  render();
-};
 
-window.raFormRemoveContact=function(idx){
-  STATE.raForm.contacts.splice(idx,1);
-  var r=raFormEnsureResearch();
-  if(r.contacts)r.contacts.splice(idx,1);
-  render();
-};
 
 window.raFormClear=function(){
-  STATE.raForm={coName:'',coId:null,coInfo:null,website:'',industry:'',location:'',zipCode:'',position:'',jobUrl:'',jobCreatedDate:'',salaryRange:'',source:'',editJobId:null,contacts:[{firstName:'',lastName:'',designation:'',email:'',phone:'',linkedin:'',emailStatus:'',emailDupInfo:null}],research:defaultRaFormResearch()};
+  STATE.raForm={coName:'',coId:null,coInfo:null,website:'',industry:'',location:'',zipCode:'',position:'',jobUrl:'',jobCreatedDate:'',salaryRange:'',source:'',editJobId:null,contacts:[pocNewContact()],research:defaultRaFormResearch()};
   STATE.raFormCoSuggestions=[];
   STATE.raFormZipSuggestions=[];
   STATE.raFormTouchedAt=null;
@@ -552,7 +513,7 @@ window.raFormSubmit=function(){
   if(!f.coName){showToast('Company name is required','warning');return;}
   if(!f.location){showToast('Location is required','warning');return;}
   if(!f.position){showToast('Job title is required','warning');return;}
-  var validContacts=f.contacts.filter(function(c){return c.firstName||c.email;});
+  var validContacts=f.contacts.filter(function(c){return c.first_name||c.email;});
   if(!validContacts.length){showToast('At least one contact is required','warning');return;}
   // 21-day company cooldown check
   var cooldown=companyCooldownCheck(f.coName);
@@ -561,7 +522,7 @@ window.raFormSubmit=function(){
   STATE.raFormSubmitting=true;render();
 
   function doSave(coId){
-    var hasDup=validContacts.some(function(c){return c.emailDupInfo&&c.emailDupInfo.duplicate;});
+    var hasDup=validContacts.some(function(c){return c._emailDup&&c._emailDup.duplicate;});
     var researchPayload=buildRaFormResearchPayload();
     var salaryFromReq=researchPayload&&researchPayload.requirements&&researchPayload.requirements.salary_display;
     var payload={
@@ -577,7 +538,7 @@ window.raFormSubmit=function(){
       is_duplicate:hasDup,
       research:researchPayload||undefined,
       contacts:validContacts.map(function(c){
-        return{first_name:c.firstName,last_name:c.lastName,designation:c.designation,email:c.email,phone:c.phone,linkedin:c.linkedin};
+        return{first_name:c.first_name,last_name:c.last_name,designation:c.designation,email:c.email,phone:c.phone,linkedin:c.linkedin};
       })
     };
     var isEdit=!!f.editJobId;

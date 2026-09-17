@@ -200,6 +200,15 @@ tr.sel-row td{background:var(--accent-l)}
 @keyframes tIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* GRID */
+/* COLUMN-ONLY GRIDS. `.g2`/`.g3` also set a gap, so converting an existing
+   inline grid to one of them changes its spacing on every screen. These set
+   columns and nothing else, so the caller keeps its own inline gap and NO WIDE
+   SCREEN MOVES — the same discipline as `.mhd`/`.mtab` in Session 25. They
+   collapse to one column on a phone (mobile.css), which an inline
+   `grid-template-columns` can never do. */
+.gc2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.gc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.gc4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:13px}
 .g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}

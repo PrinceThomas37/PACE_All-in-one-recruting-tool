@@ -7,8 +7,8 @@
 **Updated**: 2026-09-17 (end of Session 26) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #214 (`8dba19f`). **Nothing is
-unmerged.** **D-0024 is the highest decision id.**
+to `main` IS the release · **Last merged**: #215 (`192a3cb`); #216 in flight. **Nothing is
+unmerged once it lands.** **D-0024 is the highest decision id.**
 
 ---
 
@@ -126,6 +126,39 @@ requirement inside the window is blocked.** The owner chose this knowing it
 would refuse genuine job orders. Do not quietly soften it; D-0023 holds the two
 fixes for when a BD actually reports it.
 
+### Session 26, round 4 — the three follow-ups
+
+All three offered at the end of round 3, taken together. **Two of the three
+turned up a live bug that nothing was looking for**, and neither was in the
+thing being changed.
+
+- **One contact block, not two.** `15-ra-entry-form.js` is migrated onto
+  `52-poc-block.js`. `changed` now carries an EVENT: a keystroke must not
+  re-render (the RA form redraws wholesale and would take the caret), a shape
+  change must (its Intel rows are POSITIONAL — a removal that splices only one
+  list attaches one person's notes to another). That form had **no test
+  coverage at all** before this.
+  **⚠ Found while testing it, in the shared block, affecting BOTH forms:** the
+  duplicate-email answer arrives ~300ms after you leave the box, moved
+  "+ Add another contact" 20px, and the click was silently lost. Reserved by a
+  placeholder of the same shape — **a child's top margin COLLAPSES out of an
+  empty wrapper**, so padding reserves space, never margin.
+- **Every pop-up measured at 390px** — `test/modal-mobile-smoke.mjs`, 18 of them
+  in both themes. **Found: the candidate STAGE modal had a 48px field**, the
+  screen recruiters use most. Now 322px. Everything else was already clean.
+  `.gc2/.gc3/.gc4` are column-only grids — use these, not `.g2`, to convert an
+  inline grid, because `.g2` also sets a gap and would move every screen.
+- **Merge a duplicate client** — Clients drawer → *Merge a duplicate in*.
+  Re-points four tables, soft-deletes the duplicate, records what moved BEFORE
+  the delete. The plan is stated in full and Merge stays disabled until there
+  is one.
+
+**⚠ THE MODAL SWEEP WAS VACUOUS TWICE**, both times for a reason that reads as
+correct: measuring only "past the viewport" misses a grid that CRUSHES its
+columns instead of overflowing, and asking CSS for `overflow-x` is useless
+because `overflow-y:auto` makes it compute to `auto` too. Caught only by
+reintroducing the original bug and watching the suite stay green.
+
 ## ⏭ PICK THIS UP FIRST
 
 **D-0014 — the row-level interaction brief. Still the live piece of work.**
@@ -160,14 +193,20 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 84 SUITES
+## 🧪 TESTS: 87 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
 
 The newest exist because reasoning failed, and each measures what a person saw:
 
-- **`client-intake-smoke`**, **`new-job-client-smoke`** (new) — the client and
+- **`modal-mobile-smoke`** (new) — 18 pop-ups at 390px in both themes,
+  measuring content past the viewport, content CLIPPED inside the pop-up, and
+  any field squeezed under 90px. An opener that draws nothing is a FAILURE.
+- **`poc-block-shared-smoke`**, **`company-merge-smoke`** (new) — the one
+  contact block in both forms, and the client merge (including a guard that
+  reads the migrations for any table with a `company_id`).
+- **`client-intake-smoke`**, **`new-job-client-smoke`** — the client and
   POC rules, the routes driven with a **stub database** (so the company really
   is found-or-created and the rows really are org-stamped), and the real form
   at 1500px and 390px. Includes the guard that the browser's copy of the POC

@@ -37,7 +37,15 @@ function _pocList(name) {
   if (!list.length) list.push(window.pocNewContact());
   return list;
 }
-function _pocChanged(name) { var a = _pocReg[name]; if (a && a.changed) a.changed(); }
+// `changed` receives an EVENT, because the two kinds of change need opposite
+// treatment. A 'set' is a keystroke and must never trigger a re-render — that
+// takes the caret out of the box being typed in. An 'add', 'remove' or 'fill'
+// changes the SHAPE of the list, and a caller with anything positional
+// alongside it (the RA form's per-contact intel rows) has to redraw.
+function _pocChanged(name, type, index) {
+  var a = _pocReg[name];
+  if (a && a.changed) a.changed({ type: type, index: index });
+}
 
 // One row. `.g2` is the app's own grid class, so the pairs collapse to a single
 // column on a phone instead of being squeezed — an inline grid could not.
@@ -62,7 +70,17 @@ function _pocRow(name, c, idx, total) {
       '<div>' +
         '<input class="sel" placeholder="Email address *" value="' + htmlEsc(c.email || '') + '" ' + set('email') +
           ' onblur="pocCheckEmail(\'' + name + '\',' + idx + ',this.value)"/>' +
-        '<div class="poc-email-note" data-idx="' + idx + '">' + note + '</div>' +
+        // THE SPACE FOR THE ANSWER IS RESERVED BEFORE IT ARRIVES. The duplicate
+        // check answers about a third of a second after the person has left the
+        // email box — by which time they may already be reaching for "+ Add
+        // another contact". Letting the result line appear at that moment moves
+        // that button ~20px out from under the cursor and the click lands on
+        // nothing, so it silently does not add a row. Measured, not guessed: a
+        // click fired immediately after typing an email left the list at one
+        // contact, and the same click after the answer landed gave two.
+        // One reserved line costs 18px a row; a control that moves under a
+        // thumb costs a mis-tap on every phone.
+        '<div class="poc-email-note" data-idx="' + idx + '" style="padding-top:3px">' + note + '</div>' +
       '</div>' +
     '</div>' +
     '<div class="g2">' +
@@ -93,19 +111,20 @@ window.pocSet = function (name, idx, field, val) {
   var list = _pocList(name); if (!list[idx]) return;
   list[idx][field] = val;
   if (field === 'email') { list[idx]._emailState = ''; list[idx]._emailDup = null; }
-  _pocChanged(name);
+  _pocChanged(name, 'set', idx);
 };
 
 window.pocAdd = function (name) {
-  _pocList(name).push(window.pocNewContact());
-  _pocPatch(name); _pocChanged(name);
+  var list = _pocList(name);
+  list.push(window.pocNewContact());
+  _pocPatch(name); _pocChanged(name, 'add', list.length - 1);
 };
 
 window.pocRemove = function (name, idx) {
   var list = _pocList(name);
   if (list.length <= 1) return;           // the last row is the required one
   list.splice(idx, 1);
-  _pocPatch(name); _pocChanged(name);
+  _pocPatch(name); _pocChanged(name, 'remove', idx);
 };
 
 // The note under one email box. Rendered on its own because the answer arrives
@@ -113,13 +132,16 @@ window.pocRemove = function (name, idx) {
 function _pocNoteHTML(c) {
   if (c._emailDup && c._emailDup.duplicate) {
     var d = c._emailDup;
-    return '<div style="margin-top:4px;padding:6px 10px;background:var(--red-l);border-radius:var(--r);font-size:11.5px;color:var(--red)">' +
+    return '<div style="padding:6px 10px;background:var(--red-l);border-radius:var(--r);font-size:11.5px;color:var(--red)">' +
       'Already in PACE — added ' + d.days_ago + ' day' + (d.days_ago !== 1 ? 's' : '') + ' ago' +
       (d.added_by ? ' by <strong>' + htmlEsc(d.added_by) + '</strong>' : '') +
       (d.company ? ' at <strong>' + htmlEsc(d.company) + '</strong>' : '') + '.</div>';
   }
-  if (c._emailState === 'ok') return '<div style="margin-top:3px;font-size:11px;color:var(--text3)">Not seen before.</div>';
-  return '';
+  if (c._emailState === 'ok') return '<div style="font-size:11px;color:var(--text3)">Not seen before.</div>';
+  // A placeholder line of the SAME shape, so the empty state is exactly as tall
+  // as the answered one BY CONSTRUCTION rather than by a measured magic number
+  // that a font change would quietly invalidate.
+  return '<div style="font-size:11px" aria-hidden="true">&nbsp;</div>';
 }
 
 // "Have we met this person already?" — the same check the RA form runs. It is
@@ -164,7 +186,7 @@ window.pocUse = function (name, person) {
   row.phone = person.phone || '';
   row.linkedin = person.linkedin || '';
   row._emailState = ''; row._emailDup = null;
-  _pocPatch(name); _pocChanged(name);
+  _pocPatch(name); _pocChanged(name, 'fill', list.indexOf(row));
 };
 
 // ── The same rule the server enforces, checked here ──────────────────────────
