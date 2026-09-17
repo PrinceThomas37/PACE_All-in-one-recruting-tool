@@ -18,8 +18,30 @@
   Response carries `scope` (`own`/`team`/`org`).
 - `routes/recruiting/outreach.js` **returns** its send helpers so the outreach
   generator did not have to grow a second send path.
+- **A job order's client is resolved by the SERVER, from a name.**
+  `POST /job-orders` takes `lead.company_name` (or `lead.company_id` when the
+  form's typeahead matched one) and find-or-creates inside the caller's org.
+  The decision is `services/client-resolve.js` — **pure**, mine, and callable:
+  `clientInputError` / `matchCompany` / `companySearchPattern`.
 
 ## Fragile — touch with care
+- **`POST /job-orders` CREATES THE LEAD ITSELF.** It is lead-first by design:
+  `jobs` row (stage `Connected`, LD- code) → then the job order. So a refusal
+  telling the user to "fill lead info first" describes a step that does not
+  exist for them. It said exactly that for four sessions, because the browser
+  sent `company_id: null` hard-coded — the Client box was free text that was
+  never resolved. **Nobody could create a job from scratch, ever**, and the
+  from-lead path masked it. A refusal that names a JSON field is a refusal
+  nobody can act on.
+- **The name match is EXACT on the normalised name, deliberately.** `Treplar
+  Industries` must not fold into `Treplar Inc`: a job order silently on the
+  wrong client shows no error anywhere. The SQL `ilike` pattern is a superset
+  and `matchCompany` makes the decision — widening the pattern costs a few rows
+  read, narrowing it creates a duplicate client.
+- **That route's `jobs` and `contacts` inserts had NO `orgStamp`.** The column
+  has a DEFAULT, so a second org's job order would have landed in the DEFAULT
+  org's leads with no error at all. Fixed and pinned. Check every insert in this
+  territory for the same thing.
 - **The stage vocabulary lives in six files.** Five are `surface`'s. A rename is
   a contract, not an edit by me.
 - **Registration order** — `/job-orders/browse` before `/job-orders/:id`;
@@ -38,4 +60,8 @@
 - Three stale draft PRs (#116, #126, #135) are months behind `main`.
 
 ## Log
+- **2026-09-17** — Session 26. Fixed "+ New Job" refusing every direct create
+  (owner report). Added `services/client-resolve.js` (pure, mine). Org-stamped
+  the lead + contacts inserts. `test/new-job-client-smoke.mjs` drives the route
+  with a stub database; each guard was verified by reintroducing its own bug.
 - **2026-09-09** — seeded. No work done by an agent yet.

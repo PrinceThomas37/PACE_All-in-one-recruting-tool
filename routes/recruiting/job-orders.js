@@ -8,6 +8,7 @@ const matchEngine = require('../../match-engine');
 const entitlements = require('../../services/entitlements');
 const aiProvider = require('../../services/ai-provider');
 const createCandidateFields = require('../../services/candidate-fields');
+const clientResolve = require('../../services/client-resolve');
 
 
 module.exports = function (app, core) {
@@ -94,33 +95,65 @@ module.exports = function (app, core) {
       const lead = b.lead || {};
       const job = b.job || {};
 
-      if (!lead.company_id || !lead.position) {
-        return res.status(400).json({ error: 'lead.company_id and lead.position are required (lead info must be filled first).' });
+      // The form's Client box is a NAME. Resolving it to a companies row is the
+      // server's job, not the browser's — the browser used to send
+      // `company_id: null` on every direct create, so this route refused every
+      // one of them. The refusal now names what a person can see and fix.
+      const inputError = clientResolve.clientInputError(lead);
+      if (inputError) return res.status(400).json({ error: inputError });
+
+      let companyId = lead.company_id || null;
+      if (companyId) {
+        // An id chosen by the client is a record chosen by the client: confirm
+        // it is this org's company before anything is hung off it.
+        const { data: owned } = await withOrg(supabase.from('companies')
+          .select('id').eq('id', companyId).is('deleted_at', null), req).limit(1);
+        if (!owned || !owned.length) {
+          return res.status(404).json({ error: 'That client company was not found.' });
+        }
+      } else {
+        // Find-or-create by name, inside this org only.
+        const typed = lead.company_name;
+        const { data: existing } = await withOrg(supabase.from('companies')
+          .select('id,name').ilike('name', clientResolve.companySearchPattern(typed))
+          .is('deleted_at', null), req).limit(20);
+        const hit = clientResolve.matchCompany(typed, existing);
+        if (hit) {
+          companyId = hit.id;
+        } else {
+          const { data: created, error: coErr } = await supabase.from('companies')
+            .insert(Object.assign({
+              name: typed.trim(), created_by: req.user.id
+            }, orgStamp(req))).select('id').single();
+          if (coErr) throw coErr;
+          companyId = created.id;
+        }
       }
 
       // 1) create the underlying lead (jobs row), pre-stamped Connected since it
       //    is a real, client-confirmed opening originating from the BD directly.
       const leadCode = await nextId('LD');
-      const { data: leadRow, error: leadErr } = await supabase.from('jobs').insert({
-        company_id: lead.company_id,
-        position: lead.position,
-        location: lead.location || null,
-        source: lead.source || 'BD Direct',
-        stage: 'Connected',
-        notes: lead.notes || '',
-        created_by: req.user.id,
-        assigned_to_bd: req.user.id,
-        lead_code: leadCode
-      }).select().single();
+      const { data: leadRow, error: leadErr } = await supabase.from('jobs')
+        .insert(Object.assign({
+          company_id: companyId,
+          position: lead.position,
+          location: lead.location || null,
+          source: lead.source || 'BD Direct',
+          stage: 'Connected',
+          notes: lead.notes || '',
+          created_by: req.user.id,
+          assigned_to_bd: req.user.id,
+          lead_code: leadCode
+        }, orgStamp(req))).select().single();
       if (leadErr) throw leadErr;
 
       // optional contacts on the lead, reusing the existing contacts table shape
       if (Array.isArray(lead.contacts) && lead.contacts.length) {
-        const rows = lead.contacts.map((c, i) => ({
+        const rows = lead.contacts.map((c, i) => Object.assign({
           job_id: leadRow.id, first_name: c.first_name || '', last_name: c.last_name || '',
           designation: c.designation || null, email: c.email || null, phone: c.phone || null,
           linkedin: c.linkedin || null, is_primary: i === 0
-        }));
+        }, orgStamp(req)));
         await supabase.from('contacts').insert(rows);
       }
 

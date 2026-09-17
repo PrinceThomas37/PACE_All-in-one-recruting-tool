@@ -116,6 +116,29 @@ the archive; every rule below is also in `CLAUDE.md`.** What is now true:
   fields read as "the fonts are not uniform"; the family was identical). Both
   rules are written up in `CLAUDE.md`.
 
+## ✅ SHIPPED — Session 26: "+ New Job" works without a lead
+
+The owner filled in the New Job form and got *"lead.company_id and
+lead.position are required (lead info must be filled first)."* Three faults:
+
+- **`25-workflow-bd.js` sent `company_id: null` — hard-coded.** The Client box
+  was free text that was never resolved to a `companies` row, so the direct
+  "+ New Job" path could not succeed for anybody, ever. The convert-from-lead
+  path was fine, which is why nobody noticed. It is now a **typeahead**
+  (`51-company-autocomplete.js`, shared, same idiom as the zip one) and the
+  **SERVER** resolves the name — `services/client-resolve.js`, pure — by exact
+  normalised match inside the org, else find-or-create. **Nobody has to make a
+  lead first: `POST /job-orders` creates it for them.** A refusal naming a JSON
+  field is a refusal nobody can act on.
+- **That route's `jobs` and `contacts` inserts carried no `orgStamp`.** The
+  column has a DEFAULT, so a second org's job order would have landed silently
+  in the DEFAULT org's leads. Fixed and pinned.
+- **The modal drew three columns on a phone.** Its grid was inline, and an
+  inline style cannot be re-laid-out — the whole right column (Client, Work
+  Authorization, City, End Date) sat 72px off-screen, unreachable behind
+  `overflow-x:hidden`. `.g3`/`.g2` already existed and already collapse.
+  **Other modals almost certainly have the same fault; nothing has checked.**
+
 ## ⏭ PICK THIS UP FIRST
 
 **D-0014 — the row-level interaction brief. Still the live piece of work.**
@@ -150,14 +173,19 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 82 SUITES
+## 🧪 TESTS: 83 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
 
 The newest exist because reasoning failed, and each measures what a person saw:
 
-- **`overlay-opacity-smoke`** (new) — panel opacity in both themes, and the
+- **`new-job-client-smoke`** (new) — the pure client rule, the route driven with
+  a **stub database** (so the company really is found-or-created and the rows
+  really are org-stamped), and the real form in a real browser at 1500px and
+  390px. Every guard was verified by reintroducing its own bug and watching it
+  fail.
+- **`overlay-opacity-smoke`** — panel opacity in both themes, and the
   modal type scale at 390px AND 1280px.
 - **`candidate-jd-panel-smoke`** (new) — the JD panel, including that the card
   is always a rendering of the stored text.

@@ -436,7 +436,11 @@
       req_docs:'',placement_fee:'',primary_skills:'',secondary_skills:'',
       exp_min:'',exp_max:'',industry:'',domain:'',degree:'',languages:'',job_category:'',
       positions:'1',job_description:'',comments:'',recruiter_ids:[],
-      source_lead_id:null,lead_code:null};
+      source_lead_id:null,lead_code:null,
+      // The Client box is a NAME; company_id is that name resolved to a real
+      // `companies` row. Null just means "not picked from the list yet" — the
+      // server find-or-creates from the typed name, so a new client is fine.
+      company_id:null};
     if(leadId){
       var lead=(STATE.jobs||[]).find(function(j){return j.id===leadId;});
       if(lead){
@@ -444,6 +448,7 @@
         f.lead_code=lead.lead_code||lead.lead_code||'';
         f.job_title=lead.position||lead.pos||'';
         f.client=lead.company_name||'';
+        f.company_id=lead.company_id||null;
         var loc=parseLeadLocation(lead.location);
         f.city=loc.city; f.state=loc.state;
       }
@@ -489,6 +494,48 @@
 
   window.bdFormSet=function(k,v){STATE.bd.form[k]=v;};
   window.bdFormTab=function(t){STATE.bd.form.tab=t;renderNewJobModal();};
+  // What the Client box will DO when Save is pressed, said before it is pressed.
+  // A client that does not exist yet is created — that is not an error, and the
+  // form should not leave the person guessing which of the two is happening.
+  // The picker is shown ONLY where it does something: a direct create, which is
+  // the one path that resolves a client from what was typed.
+  //   · EDIT — PUT /job-orders/:id never changes the company (pickJobFields
+  //     drops company_id), so offering to pick one would be a lie on screen.
+  //   · FROM A LEAD — /job-orders/from-lead/:id inherits the lead's company;
+  //     retyping the name here would change nothing.
+  // Both keep the plain text box they have always had, which writes the
+  // job_orders.client label and nothing else.
+  function clientField(f){
+    if(f._editId||f.source_lead_id) return inp('client','Client company');
+    return companyAcHTML('bd-client',f.client,'bdClientPick','bdClientType','Start typing a client name…')+
+      '<div id="bd-client-hint" style="font-size:11px;color:var(--text3);margin-top:3px">'+bdClientHint(f)+'</div>';
+  }
+  function bdClientHint(f){
+    var typed=(f.client||'').trim();
+    if(!typed) return 'Pick an existing client, or type a new one.';
+    if(f.company_id) return 'Existing client.';
+    return 'New client — “'+esc(typed)+'” will be added to your clients.';
+  }
+  function bdPatchClientHint(){
+    var el=document.getElementById('bd-client-hint');
+    if(el) el.innerHTML=bdClientHint(STATE.bd.form);
+  }
+  // Typing invalidates any previously picked client. Leaving a stale
+  // company_id under freshly typed text is how a job lands on the wrong client.
+  window.bdClientType=function(val){
+    var f=STATE.bd.form; if(!f) return;
+    f.client=val; f.company_id=null;
+    bdPatchClientHint();
+  };
+  // Picking patches the input and the hint DIRECTLY rather than re-rendering —
+  // a re-render here would rebuild the modal and take the focus out of the box.
+  window.bdClientPick=function(co,inputId){
+    var f=STATE.bd.form; if(!f) return;
+    f.client=co.name; f.company_id=co.id;
+    var el=document.getElementById(inputId||'bd-client');
+    if(el) el.value=co.name;
+    bdPatchClientHint();
+  };
   window.bdZipPick=function(place){
     var f=STATE.bd.form;
     f.zip=place.zip||f.zip; f.city=place.city||f.city; f.state=place.state||f.state;
@@ -500,10 +547,10 @@
     var tabBtn=function(id,lbl){var on=f.tab===id;return '<button class="mtab" onclick="bdFormTab(\''+id+'\')" style="border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+lbl+'</button>';};
     var body='';
     if(f.tab==='details'){
-      body='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+
+      body='<div class="g3">'+
         fld('Job Title',inp('job_title','Required'),true)+
         fld('Job Status',selF('status',JOB_STATUSES),true)+
-        fld('Client',inp('client','Client company'),true)+
+        fld('Client',clientField(f),true)+
         fld('Client Job ID',inp('client_job_id'))+
         fld('Client Manager',inp('client_manager'))+
         fld('End Client',inp('end_client'))+
@@ -524,12 +571,12 @@
         fld('Required Documents',inp('req_docs','e.g. Resume'))+
       '</div>'+
       '<div style="margin-top:6px">'+fld('Pay Rate (Min–Max)',
-        '<div style="display:flex;gap:8px"><select class="sel" style="max-width:90px" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="sel" style="max-width:90px;flex:0 0 auto" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
         '<input class="sel" placeholder="Min" value="'+esc(f.pay_min)+'" oninput="bdFormSet(\'pay_min\',this.value)">'+
         '<input class="sel" placeholder="Max" value="'+esc(f.pay_max)+'" oninput="bdFormSet(\'pay_max\',this.value)"></div>')+
       '</div>';
     } else if(f.tab==='skills'){
-      body='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+      body='<div class="g2">'+
         fld('Primary Skills',inp('primary_skills','Required'),true)+
         fld('Secondary Skills',inp('secondary_skills'))+
         fld('Industry',inp('industry'))+
@@ -551,7 +598,7 @@
         return '<span style="background:var(--accent-l);border:1px solid rgba(30,122,60,.25);border-radius:14px;padding:3px 8px 3px 4px;font-size:12px;display:inline-flex;align-items:center;gap:5px">'+esc(u.name||rid)+'<span onclick="bdFormRemoveRec(\''+rid+'\')" style="cursor:pointer;color:var(--text3);font-weight:700">×</span></span>';
       }).join(' ');
       body=
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+        '<div class="g2">'+
           fld('Number of Positions',inp('positions'),true)+
           fld('Comments',inp('comments'))+
         '</div>'+
@@ -612,7 +659,13 @@
       }).catch(function(e){showToast('Failed to create job: '+e.message,'error');});
     } else {
       // direct create: { lead:{...}, job:{...} }
-      var lead={position:f.job_title,company_id:null,location:f.city+' '+f.state,source:'BD Direct'};
+      // company_name is always sent; company_id only when an existing client was
+      // picked from the list. The SERVER resolves the name to a companies row
+      // (find-or-create, org-scoped) — this used to send a hard-coded null, so
+      // every direct create was refused.
+      var loc=((f.city||'')+' '+(f.state||'')).trim();
+      var lead={position:f.job_title,company_id:f.company_id||undefined,
+        company_name:(f.client||'').trim(),location:loc||undefined,source:'BD Direct'};
       var job=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined});
       apiPost('/job-orders',{lead:lead,job:job}).then(function(jo){
         bdAfterSave(jo,f);

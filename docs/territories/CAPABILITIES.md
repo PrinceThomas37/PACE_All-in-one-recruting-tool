@@ -202,6 +202,24 @@ an action** — compliance rule, pinned by a test.
 `GET /ai/morning-briefing`, on all three dashboards. Rules-written, AI as the
 upgrade.
 
+### Creating a job order (a "job")
+**Status:** LIVE · owner `guild` (route) + `surface` (form) · Session 26
+Two ways in, ONE route each, and they are not duplicates — they differ in where
+the lead comes from:
+* **From a CONNECTED lead** — `POST /job-orders/from-lead/:jobId`. The lead
+  already exists; the job order inherits its company and position.
+* **Direct, from the "+ New Job" button** — `POST /job-orders`. The server
+  creates the underlying lead (`jobs` row, stage `Connected`, LD- code) ITSELF.
+  **Nobody has to make a lead first** — the refusal that said so was wrong.
+
+**A job order must belong to a `companies` row.** The Client box is a NAME, and
+the SERVER resolves it (`services/client-resolve.js`, pure): exact match on the
+normalised name within the caller's org, else find-or-create. The form's
+typeahead (`companyAcHTML`, `public/js/51-company-autocomplete.js`) is the
+duplicate defence — it shows what already exists while you type. A near-match is
+never merged: folding "Treplar Industries" into "Treplar Inc" puts a job on the
+wrong client and nothing on screen would say so.
+
 ### Scoring a candidate against a job
 **Status:** LIVE · owner `observatory`
 `match-engine.js`. Its `reasons` are grid shorthand — **never render one into

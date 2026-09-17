@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-16",
+  "generated": "2026-09-17",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 285,
-    "lines": 69616,
+    "files": 289,
+    "lines": 70418,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,12 +24,12 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 55,
-      "lines": 22750,
+      "files": 56,
+      "lines": 22916,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1197
+          "n": 1239
         },
         {
           "f": "public/js/47-page-mailbox.js",
@@ -113,11 +113,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2803,
+      "lines": 2804,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 275
+          "n": 276
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -250,7 +250,7 @@
           "n": 1063
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-16",
       "openIn": 0,
       "openOut": 1
     },
@@ -270,6 +270,7 @@
         "routes/recruiting/",
         "services/recruiting-core.js",
         "services/candidate-fields.js",
+        "services/client-resolve.js",
         "bd_recruiter_routes.js",
         "workflow-engine.js",
         "routes/workflows.js",
@@ -280,8 +281,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 20,
-      "lines": 5001,
+      "files": 21,
+      "lines": 5102,
       "largest": [
         {
           "f": "routes/recruiting/outreach.js",
@@ -289,7 +290,7 @@
         },
         {
           "f": "routes/recruiting/job-orders.js",
-          "n": 563
+          "n": 596
         },
         {
           "f": "routes/recruiting/analytics.js",
@@ -367,8 +368,8 @@
         "test/",
         ".github/"
       ],
-      "files": 85,
-      "lines": 16244,
+      "files": 87,
+      "lines": 16778,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
