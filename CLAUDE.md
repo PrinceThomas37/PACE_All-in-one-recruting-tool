@@ -712,9 +712,33 @@ we never have to rewrite to grow (see "Growth bets" below).
     **REWRITTEN** each session. This is what a new session reads.
   - `docs/CONTEXT_ARCHIVE.md` = the full history, **APPEND-ONLY**. Never edited,
     never deleted, never summarised away.
-  At the end of a session: append the narrative to the archive, then rewrite the
-  window to describe the new present. Nothing is lost; the read stays short.
   Keep **this file** current too — it is the durable memory.
+- **THE ARCHIVE IS WRITTEN AS THE WORK LANDS, NOT AT THE END OF A SESSION
+  (Session 26, D-0024 — the owner asked how this gets kept up to date).** The
+  old rule said "at the end of a session", which is a moment that never
+  announces itself: a rate limit, a closed window or a cancelled run ends the
+  session instead, and everything not yet in a file is gone. `DECISIONS.md`
+  already had the right discipline for exactly this reason — *a decision that
+  exists only in a chat window is lost when that window closes* — and the
+  archive has the same exposure. **The same session that produced this rule had
+  its archive entry still unwritten when the owner asked about it.**
+  * **Append when a piece of work lands**, in the same breath as updating the
+    territory memory and committing — not later, not "once it is all done".
+    Open the `# Session N — …` heading the first time there is something real
+    to say, and add a section per round under it.
+  * **Append-only still holds**: add sections, never go back and rewrite one.
+  * **The synthesis is the ONE end-of-session part, and it is additive.** The
+    closing "the thread through this session" paragraph genuinely needs the
+    whole session to write — you cannot know the lesson before the work. So it
+    is appended last, and if a session dies before it, **the facts are already
+    safe and only the summary is missing.** That is the trade: an archive of
+    accurate fragments beats an eloquent one that was never written.
+  * The **window** is refreshed the same way, per commit, and gets its trim and
+    rewrite when the session does end cleanly.
+  * **None of this is automatic** — there is no hook and no script, because the
+    judgement of what is worth recording cannot be one. It happens only because
+    a session reads this file. That is a real dependency, and worth saying out
+    loud rather than assuming.
 - **A BUG REPORT IS DATA, AND USUALLY MORE PRECISE THAN IT FIRST READS
   (Session 21).** "I see a lot of time the menu is repeating, no repeats in full
   menu" — the second clause was the diagnosis. Nothing was drawn twice;

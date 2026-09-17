@@ -8,7 +8,7 @@
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #214 (`8dba19f`). **Nothing is
-unmerged.** **D-0023 is the highest decision id.**
+unmerged.** **D-0024 is the highest decision id.**
 
 ---
 
@@ -17,6 +17,12 @@ unmerged.** **D-0023 is the highest decision id.**
 **This file: current state only. REWRITE it each session, keep it under ~200
 lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
 that ever happened, **append-only — never edited, never summarised away.**
+
+**⚠ THE ARCHIVE IS WRITTEN AS THE WORK LANDS, NOT AT THE END (D-0024).** "End of
+session" is a moment that never announces itself — a rate limit or a closed
+window ends the session instead, and anything not in a file is gone. Append a
+section per round as it completes; only the closing synthesis waits, and it is
+additive, so a session that dies loses the summary and not the facts.
 
 If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
@@ -31,9 +37,9 @@ Nine territories, each a Claude Code subagent with its own border, laws and
 - **Arrived as a sentence and a screenshot? → `dispatch`.** It reproduces the
   report, then routes.
 - **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
-  it before proposing anything or calling anything a bug. **D-0023 is the
-  highest id used — and TWO of its three calls went against my advice, so read
-  it before "improving" any of them.**
+  it before proposing anything or calling anything a bug. **D-0024 is the
+  highest id used.** D-0023 in particular: TWO of its three calls went against
+  my advice, so read it before "improving" any of them.
 - **`docs/territories/CAPABILITIES.md` is what PACE can already DO.** Grep it in
   the owner's words before building. Two live paths to one outcome is the bug.
 - **`docs/territories/INTAKE.md` is how to read the owner.** **Reproduce the

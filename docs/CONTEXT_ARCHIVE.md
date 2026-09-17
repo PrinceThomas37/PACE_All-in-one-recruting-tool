@@ -4929,3 +4929,45 @@ the cooldown, the rule drift, and the caret-eating redraw.
 verified after by a content fingerprint of `name|location` across all 1,567
 companies that was **identical before and after** — 10 columns to 16, zero rows
 touched, RLS and the service-role policy still in place.
+
+## Round 3 — the question about the notes themselves (D-0024)
+
+The owner asked for the context files to be updated, and in the same message
+asked something sharper: *"does this updation happens only when I ask you to do
+or does it happen automatically whenever you make a change in the system"*.
+
+The honest answer was **partly**, and the question landed on the one piece that
+was genuinely outstanding:
+
+| | when it was written | state when asked |
+|---|---|---|
+| `DECISIONS.md` | the moment the owner decides | ✅ D-0023, written immediately |
+| territory memories, `CAPABILITIES.md` | same commit as the code | ✅ both commits |
+| `CONTEXT_WINDOW.md` | per commit | ✅ but drifted to 283 lines |
+| `CONTEXT_ARCHIVE.md` | **"end of session"** | ❌ **still unwritten** |
+
+**"End of session" is a trigger that never fires on purpose.** A rate limit, a
+closed window or a cancelled run ends a session instead, and anything not yet in
+a file goes with it. `DECISIONS.md` already had the right discipline for exactly
+this reason — *a decision that exists only in a chat window is lost when that
+window closes* — and the archive carried the same exposure with none of the
+protection. It took the owner asking to notice that the two files had different
+rules for the same risk.
+
+So the rule changed (**D-0024**): the archive is appended **when a piece of work
+lands**, alongside the territory memory and the commit. Append-only still holds.
+The closing synthesis is the one part that waits, because you cannot know the
+lesson before doing the work — and it is **additive**, so a session that dies
+loses the summary and not the facts. *An archive of accurate fragments beats an
+eloquent one that was never written.*
+
+**Making it automatic was considered and rejected.** A hook can run a script; it
+cannot write a narrative about what happened and why. The judgement of what is
+worth recording is the entire value and cannot be automated. So this depends on
+a session reading `CLAUDE.md` — a real dependency, now stated there rather than
+assumed.
+
+**This section is the rule applied to itself**, appended the moment the decision
+was made rather than held for an ending. It also sits *after* this session's
+"thread through" paragraph, which is its own small evidence for the change: the
+session did not end where the summary said it did.
