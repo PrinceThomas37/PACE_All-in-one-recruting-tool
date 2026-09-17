@@ -12,6 +12,19 @@
 - `public/mobile.css` loads last; every rule sits inside a media query. Below
   860px the rail becomes an off-canvas drawer behind `.tb-burger` → `toggleNav()`.
 - The Inbox reading pane has ONE scroller for a solo message (`.mb-thread.solo`).
+- **`52-poc-block.js` is the shared POC block** — the repeating contact rows,
+  the duplicate-email check and "+ add another". State stays with the caller
+  (`pocRegister(name, {get, changed})`), which is what lets two forms with
+  different state shapes share it. **`15-ra-entry-form.js` still has its own
+  older copy — retiring it into this is the follow-up**, not writing a third.
+  `pocFirstError` here is a CHECKED COPY of `readContacts` in
+  `services/client-resolve.js`; `test/client-intake-smoke.mjs` runs 13 cases
+  through both and fails if they drift.
+- **`51-company-autocomplete.js` is the shared client picker** — same shape and
+  same discipline as `40-zip-autocomplete.js`: it patches only its own
+  suggestions box, never `render()`, so the caret survives typing.
+  `companyAcHTML(inputId, value, onPick, onType, placeholder)`. The BD New Job
+  form uses it; `15-ra-entry-form.js` still has its own older copy.
 - Email → **Generator** (clients) and Email → **Compose** (Clients | Candidates
   switch) are the two outreach screens. `49-page-candidate-outreach.js` has a
   ‹ › stepper that walks the picked list.
@@ -86,6 +99,22 @@
 - **`48-page-outreach-gen.js`** lost `collectDom()` and `window.outreachGenerate`
   to a range-anchored edit once; `node --check` passed and the Generate button
   silently did nothing. Anchor edits on the exact text being replaced.
+- **AN ANSWER THAT ARRIVES FROM THE NETWORK PATCHES ITS OWN ELEMENT, NEVER ITS
+  BLOCK.** `pocCheckEmail` redrew the whole POC block when the duplicate check
+  came back — about a third of a second AFTER the person had tabbed on to the
+  phone box, so it replaced the field under their hands and lost what they had
+  typed. **Found in a screenshot**, where a filled phone number simply was not
+  there; no assertion in the suite was looking for it. It now writes one
+  `.poc-email-note`. Same family as the render engine's own rule.
+- **A MODAL'S COLUMNS MUST BE A CLASS.** The New Job / Edit Job modal wrote
+  `grid-template-columns:1fr 1fr 1fr` into a `style=""`, and an inline style
+  cannot be re-laid-out by any stylesheet. At 390px it drew three columns and
+  pushed its whole right column — **Client, Work Authorization, City, End
+  Date** — past the viewport, where `#content: overflow-x:hidden` made it
+  unreachable. Measured 72px off-screen. `.g3`/`.g2` already exist in
+  `styles.css` and already collapse below 860px; they were simply not used.
+  **Grep the other modals for inline grids before assuming this was the only
+  one.** Pinned at 390px in both themes by `test/new-job-client-smoke.mjs`.
 - `REWRITE_LIMIT` is duplicated here and in `services/outreach-generator.js`.
   A test asserts they match.
 - `12-manager-users.js` is **orphaned** — unreachable via nav, but shares live

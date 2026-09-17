@@ -67,7 +67,7 @@ Graph and Gmail, plus read-only **All email** across all three pipelines.
 **Reminders + "needs you today"**, owner-scoped since Session 24. Billing and
 self-serve signup are built and **off**.
 
-## Migrations — next is **043**
+## Migrations — next is **044** · 043 WRITTEN, NOT APPLIED
 
 **Never apply one to the live DB without an explicit, fresh go-ahead.** A
 migration adding a table with `org_id` must also add it to `models/tables.js`.
@@ -116,6 +116,60 @@ the archive; every rule below is also in `CLAUDE.md`.** What is now true:
   fields read as "the fonts are not uniform"; the family was identical). Both
   rules are written up in `CLAUDE.md`.
 
+## ✅ SHIPPED — Session 26: "+ New Job" works without a lead
+
+The owner filled in the New Job form and got *"lead.company_id and
+lead.position are required (lead info must be filled first)."* Three faults:
+
+- **`25-workflow-bd.js` sent `company_id: null` — hard-coded.** The Client box
+  was free text that was never resolved to a `companies` row, so the direct
+  "+ New Job" path could not succeed for anybody, ever. The convert-from-lead
+  path was fine, which is why nobody noticed. It is now a **typeahead**
+  (`51-company-autocomplete.js`, shared, same idiom as the zip one) and the
+  **SERVER** resolves the name — `services/client-resolve.js`, pure — by exact
+  normalised match inside the org, else find-or-create. **Nobody has to make a
+  lead first: `POST /job-orders` creates it for them.** A refusal naming a JSON
+  field is a refusal nobody can act on.
+- **That route's `jobs` and `contacts` inserts carried no `orgStamp`.** The
+  column has a DEFAULT, so a second org's job order would have landed silently
+  in the DEFAULT org's leads. Fixed and pinned.
+- **The modal drew three columns on a phone.** Its grid was inline, and an
+  inline style cannot be re-laid-out — the whole right column (Client, Work
+  Authorization, City, End Date) sat 72px off-screen, unreachable behind
+  `overflow-x:hidden`. `.g3`/`.g2` already existed and already collapse.
+  **Other modals almost certainly have the same fault; nothing has checked.**
+
+## ✅ SHIPPED — Session 26, round 2: a job order now carries its client (D-0023)
+
+The owner asked that a directly-created job capture the client properly — POC
+name, email, phone, and the company address. Most of it was wiring: `POST
+/job-orders` already accepted a contacts list and nothing ever sent one.
+
+**Three decisions were theirs, and TWO WENT AGAINST MY RECOMMENDATION.** Read
+D-0023 before touching any of it:
+- **POC name + email required**, phone and LinkedIn optional. (Agreed. The live
+  data: 328 of 328 leads have a POC, 708 of 709 contacts have an email, but 163
+  of 709 have no phone — requiring one would buy invented numbers, per D-0017.)
+- **Structured address columns**, not the existing free-text `location`.
+  **Migration 043 — WRITTEN, NOT YET APPLIED.** Additive; `location` stays as
+  the short display form and is derived. The address write is deliberately
+  non-fatal so an unapplied migration costs an address, never the job order.
+- **The 21-day company cooldown applies here**, same as the RA form. They took
+  the stated trade ("it will refuse genuine job orders"). **⚠ The cooldown
+  counts leads and a job order creates one, so a client's SECOND requirement
+  inside the window is blocked.** Do not quietly soften it; D-0023 holds the
+  two fixes for when a BD actually reports it.
+
+Also: `services/company-cooldown.js` is now the ONE definition of that rule,
+replacing three that disagreed (the server's was gated to RAs only; the
+browser's hard-coded 21 while the real number is admin-editable).
+`public/js/52-poc-block.js` is the shared POC block — **the RA form's older copy
+is the thing to retire into it, not a second one to keep.**
+
+Found by screenshot, not by a test: the duplicate-email check redrew the whole
+POC block when its answer arrived, replacing the box the person had moved on to
+and eating what they had typed. It patches one note now.
+
 ## ⏭ PICK THIS UP FIRST
 
 **D-0014 — the row-level interaction brief. Still the live piece of work.**
@@ -150,14 +204,23 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 82 SUITES
+## 🧪 TESTS: 84 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
 
 The newest exist because reasoning failed, and each measures what a person saw:
 
-- **`overlay-opacity-smoke`** (new) — panel opacity in both themes, and the
+- **`client-intake-smoke`** (new) — the POC rule, the address, the cooldown at
+  its boundaries, the route on a stub database, and the form in a real browser.
+  Includes the guard that the browser's copy of the POC rule and the server's
+  still agree, case for case.
+- **`new-job-client-smoke`** — the pure client rule, the route driven with
+  a **stub database** (so the company really is found-or-created and the rows
+  really are org-stamped), and the real form in a real browser at 1500px and
+  390px. Every guard was verified by reintroducing its own bug and watching it
+  fail.
+- **`overlay-opacity-smoke`** — panel opacity in both themes, and the
   modal type scale at 390px AND 1280px.
 - **`candidate-jd-panel-smoke`** (new) — the JD panel, including that the card
   is always a rendering of the stored text.

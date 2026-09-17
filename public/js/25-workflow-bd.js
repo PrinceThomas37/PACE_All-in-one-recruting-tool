@@ -436,7 +436,18 @@
       req_docs:'',placement_fee:'',primary_skills:'',secondary_skills:'',
       exp_min:'',exp_max:'',industry:'',domain:'',degree:'',languages:'',job_category:'',
       positions:'1',job_description:'',comments:'',recruiter_ids:[],
-      source_lead_id:null,lead_code:null};
+      source_lead_id:null,lead_code:null,
+      // The Client box is a NAME; company_id is that name resolved to a real
+      // `companies` row. Null just means "not picked from the list yet" — the
+      // server find-or-creates from the typed name, so a new client is fine.
+      company_id:null,
+      // The client's postal address (migration 043) and its POCs. A job order
+      // with nobody on it cannot be emailed or followed up, so at least one
+      // contact with a name and an email is required (owner's call, Session 26).
+      address:{},contacts:[pocNewContact()],
+      // What the server knows about a picked client: its cooldown state, the
+      // POCs it already has, the address on file. Fetched on pick, not on save.
+      intake:null,intakeLoading:false};
     if(leadId){
       var lead=(STATE.jobs||[]).find(function(j){return j.id===leadId;});
       if(lead){
@@ -444,11 +455,14 @@
         f.lead_code=lead.lead_code||lead.lead_code||'';
         f.job_title=lead.position||lead.pos||'';
         f.client=lead.company_name||'';
+        f.company_id=lead.company_id||null;
         var loc=parseLeadLocation(lead.location);
         f.city=loc.city; f.state=loc.state;
       }
     }
     STATE.bd.form=f;
+    pocRegister('bd',{get:function(){return (STATE.bd.form||{}).contacts;}});
+    if(f.company_id) bdLoadIntake(f.company_id);
     renderNewJobModal();
   };
 
@@ -488,7 +502,112 @@
   function selBlank(key,opts){return selF(key,[''].concat(opts));}
 
   window.bdFormSet=function(k,v){STATE.bd.form[k]=v;};
+  // Address boxes, like every other box here: record, never re-render. A
+  // re-render on a keystroke takes the caret out of the field being typed in.
+  window.bdAddrSet=function(k,v){
+    var f=STATE.bd.form; if(!f) return;
+    f.address=f.address||{}; f.address[k]=v;
+  };
+  window.bdUseKnownPoc=function(i){
+    var f=STATE.bd.form; if(!f||!f.intake) return;
+    var p=(f.intake.contacts||[])[i]; if(!p) return;
+    pocUse('bd',p);
+  };
   window.bdFormTab=function(t){STATE.bd.form.tab=t;renderNewJobModal();};
+  // What the Client box will DO when Save is pressed, said before it is pressed.
+  // A client that does not exist yet is created — that is not an error, and the
+  // form should not leave the person guessing which of the two is happening.
+  // A direct create is the one path that resolves a client, collects POCs and
+  // creates the underlying lead. Edit and convert-from-lead do none of that.
+  function isDirectCreate(f){ return !f._editId && !f.source_lead_id; }
+
+  // Ask the server what it knows about a picked client — cooldown, the POCs it
+  // already holds, the address on file — in ONE call, at the moment of picking.
+  // The cooldown especially: learning at Save that a client is blocked, after
+  // twenty fields are filled, is the failure this whole session is about.
+  function bdLoadIntake(companyId){
+    var f=STATE.bd.form; if(!f) return;
+    f.intakeLoading=true; f.intake=null;
+    apiGet('/companies/'+companyId+'/intake').then(function(d){
+      var cur=STATE.bd.form;
+      if(!cur||cur.company_id!==companyId) return;   // they changed their mind
+      cur.intake=d; cur.intakeLoading=false;
+      // Pre-fill the address we already hold, so it is EDITED rather than
+      // retyped — and so a blank box is never mistaken for "remove this".
+      if(d.address&&Object.keys(d.address).length&&!Object.keys(cur.address||{}).length){
+        cur.address=Object.assign({},d.address);
+      }
+      bdPatchClientHint(); renderNewJobModal();
+    }).catch(function(){
+      var cur=STATE.bd.form; if(cur){cur.intakeLoading=false;bdPatchClientHint();}
+    });
+  }
+
+  // The cooldown is a BLOCK (the owner's call, Session 26), so it gets weight —
+  // but exactly one tinted panel, not a red form. A list is calm; colour is a
+  // scarce resource (D-0019).
+  function bdCooldownBanner(f){
+    var cd=f.intake&&f.intake.cooldown;
+    if(!cd||!cd.blocked) return '';
+    return '<div id="bd-cooldown" style="margin-top:8px;padding:10px 12px;border-left:3px solid var(--amber,#f59e0b);background:var(--bg);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.5">'+
+      '<strong style="color:var(--text)">On cooldown — this job cannot be saved yet.</strong><br>'+esc(cd.sentence)+'</div>';
+  }
+  function bdCooldownBlocked(f){
+    return !!(isDirectCreate(f)&&f.intake&&f.intake.cooldown&&f.intake.cooldown.blocked);
+  }
+
+  // The picker is shown ONLY where it does something: a direct create, which is
+  // the one path that resolves a client from what was typed.
+  //   · EDIT — PUT /job-orders/:id never changes the company (pickJobFields
+  //     drops company_id), so offering to pick one would be a lie on screen.
+  //   · FROM A LEAD — /job-orders/from-lead/:id inherits the lead's company;
+  //     retyping the name here would change nothing.
+  // Both keep the plain text box they have always had, which writes the
+  // job_orders.client label and nothing else.
+  function clientField(f){
+    if(f._editId||f.source_lead_id) return inp('client','Client company');
+    return companyAcHTML('bd-client',f.client,'bdClientPick','bdClientType','Start typing a client name…')+
+      '<div id="bd-client-hint" style="font-size:11px;color:var(--text3);margin-top:3px">'+bdClientHint(f)+'</div>'+
+      '<div id="bd-client-block">'+bdCooldownBanner(f)+'</div>';
+  }
+  function bdClientHint(f){
+    var typed=(f.client||'').trim();
+    if(!typed) return 'Pick an existing client, or type a new one.';
+    if(f.company_id){
+      if(f.intakeLoading) return 'Existing client — checking…';
+      var n=f.intake&&f.intake.contacts?f.intake.contacts.length:0;
+      return 'Existing client.'+(n?' PACE already has '+n+' contact'+(n===1?'':'s')+' here — see the Client &amp; POC tab.':'');
+    }
+    return 'New client — “'+esc(typed)+'” will be added to your clients.';
+  }
+  function bdPatchClientHint(){
+    var f=STATE.bd.form; if(!f) return;
+    var el=document.getElementById('bd-client-hint');
+    if(el) el.innerHTML=bdClientHint(f);
+    var b=document.getElementById('bd-client-block');
+    if(b) b.innerHTML=bdCooldownBanner(f);
+  }
+  // Typing invalidates any previously picked client. Leaving a stale
+  // company_id under freshly typed text is how a job lands on the wrong client.
+  window.bdClientType=function(val){
+    var f=STATE.bd.form; if(!f) return;
+    f.client=val; f.company_id=null;
+    // A typed name is a DIFFERENT client until proven otherwise, so everything
+    // the server told us about the last one stops applying — including its
+    // cooldown. Leaving a stale block up would refuse a company that is free.
+    f.intake=null; f.intakeLoading=false;
+    bdPatchClientHint();
+  };
+  // Picking patches the input and the hint DIRECTLY rather than re-rendering —
+  // a re-render here would rebuild the modal and take the focus out of the box.
+  window.bdClientPick=function(co,inputId){
+    var f=STATE.bd.form; if(!f) return;
+    f.client=co.name; f.company_id=co.id;
+    var el=document.getElementById(inputId||'bd-client');
+    if(el) el.value=co.name;
+    bdPatchClientHint();
+    bdLoadIntake(co.id);
+  };
   window.bdZipPick=function(place){
     var f=STATE.bd.form;
     f.zip=place.zip||f.zip; f.city=place.city||f.city; f.state=place.state||f.state;
@@ -500,10 +619,10 @@
     var tabBtn=function(id,lbl){var on=f.tab===id;return '<button class="mtab" onclick="bdFormTab(\''+id+'\')" style="border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+lbl+'</button>';};
     var body='';
     if(f.tab==='details'){
-      body='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+
+      body='<div class="g3">'+
         fld('Job Title',inp('job_title','Required'),true)+
         fld('Job Status',selF('status',JOB_STATUSES),true)+
-        fld('Client',inp('client','Client company'),true)+
+        fld('Client',clientField(f),true)+
         fld('Client Job ID',inp('client_job_id'))+
         fld('Client Manager',inp('client_manager'))+
         fld('End Client',inp('end_client'))+
@@ -524,12 +643,47 @@
         fld('Required Documents',inp('req_docs','e.g. Resume'))+
       '</div>'+
       '<div style="margin-top:6px">'+fld('Pay Rate (Min–Max)',
-        '<div style="display:flex;gap:8px"><select class="sel" style="max-width:90px" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="sel" style="max-width:90px;flex:0 0 auto" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
         '<input class="sel" placeholder="Min" value="'+esc(f.pay_min)+'" oninput="bdFormSet(\'pay_min\',this.value)">'+
         '<input class="sel" placeholder="Max" value="'+esc(f.pay_max)+'" oninput="bdFormSet(\'pay_max\',this.value)"></div>')+
       '</div>';
+    } else if(f.tab==='client'){
+      var known=(f.intake&&f.intake.contacts)||[];
+      // POCs PACE already holds at this client, offered as a click. Nobody
+      // should retype a name the app can already see.
+      var knownChips=known.length?
+        '<div style="margin-bottom:12px">'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-bottom:6px">Already known at '+esc(f.client)+' — click to use:</div>'+
+          '<div style="display:flex;flex-wrap:wrap;gap:6px">'+known.map(function(p,i){
+            return '<button type="button" class="poc-known" onclick="bdUseKnownPoc('+i+')" style="background:var(--bg);border:1px solid var(--border2);border-radius:14px;padding:5px 11px;font-size:12px;cursor:pointer;color:var(--text)">'+
+              esc((p.first_name+' '+p.last_name).trim()||p.email)+
+              (p.designation?'<span style="color:var(--text3)"> · '+esc(p.designation)+'</span>':'')+'</button>';
+          }).join('')+'</div>'+
+        '</div>':'';
+
+      var a=f.address||{};
+      var addr=function(key,ph){
+        return '<input class="sel" placeholder="'+ph+'" value="'+esc(a[key]||'')+'" oninput="bdAddrSet(\''+key+'\',this.value)">';
+      };
+      body=
+        bdCooldownBanner(f)+
+        '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:'+(bdCooldownBlocked(f)?'14px':'0')+' 0 10px">Client address</div>'+
+        (f.company_id?'':'<div style="font-size:11.5px;color:var(--text3);margin-bottom:10px">'+
+          (f.client?'New client — this is the address '+esc(f.client)+' will be created with.':'Pick or type a client on the Job Details tab first.')+'</div>')+
+        fld('Street address',addr('address_line1','e.g. 1400 Edwin Miller Blvd'))+
+        fld('Suite / floor / unit',addr('address_line2','Optional'))+
+        '<div class="g3">'+
+          fld('City',addr('city',''))+
+          fld('State / region',addr('state',''))+
+          fld('Zip / postal code',addr('postal_code',''))+
+        '</div>'+
+        fld('Country',addr('country','e.g. United States'))+
+        '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 10px">Point of contact <span style="color:var(--red)">*</span></div>'+
+        '<div style="font-size:11.5px;color:var(--text3);margin-bottom:10px">At least one contact with a name and an email. This is who the lead gets worked through — without it the job cannot be emailed or followed up. Phone and LinkedIn are optional.</div>'+
+        knownChips+
+        pocBlockHTML('bd');
     } else if(f.tab==='skills'){
-      body='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+      body='<div class="g2">'+
         fld('Primary Skills',inp('primary_skills','Required'),true)+
         fld('Secondary Skills',inp('secondary_skills'))+
         fld('Industry',inp('industry'))+
@@ -551,7 +705,7 @@
         return '<span style="background:var(--accent-l);border:1px solid rgba(30,122,60,.25);border-radius:14px;padding:3px 8px 3px 4px;font-size:12px;display:inline-flex;align-items:center;gap:5px">'+esc(u.name||rid)+'<span onclick="bdFormRemoveRec(\''+rid+'\')" style="cursor:pointer;color:var(--text3);font-weight:700">×</span></span>';
       }).join(' ');
       body=
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
+        '<div class="g2">'+
           fld('Number of Positions',inp('positions'),true)+
           fld('Comments',inp('comments'))+
         '</div>'+
@@ -567,7 +721,10 @@
       '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
         '<div class="mhd">'+(f._editId?'Edit Job':'New Job')+(f._editId?'':(f.source_lead_id?' — from lead '+esc(f.lead_code):''))+'</div>'+
       '</div>'+
-      '<div style="padding:0 20px;border-bottom:1px solid var(--border);display:flex;gap:4px">'+tabBtn('details','Job Details')+tabBtn('skills','Skills')+tabBtn('org','Organizational')+'</div>'+
+      '<div style="padding:0 20px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">'+
+        tabBtn('details','Job Details')+
+        (isDirectCreate(f)?tabBtn('client','Client & POC'):'')+
+        tabBtn('skills','Skills')+tabBtn('org','Organizational')+'</div>'+
       '<div style="padding:18px 20px;max-height:62vh;overflow-y:auto">'+body+'</div>'+
       '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-size:11.5px;color:var(--text3)">'+queueNote+'</div>'+
@@ -603,6 +760,20 @@
     if(!(f.job_title||'').trim()){showToast('Job Title is required','error');STATE.bd.form.tab='details';renderNewJobModal();return;}
     if(!(f.client||'').trim()){showToast('Client is required','error');STATE.bd.form.tab='details';renderNewJobModal();return;}
     if(f._editId){ bdSaveEditJob(f); return; }
+    if(isDirectCreate(f)){
+      // The same two rules the server enforces, checked here so the answer
+      // arrives on the tab that can fix it rather than as a toast over a form
+      // the person then has to go hunting through.
+      if(bdCooldownBlocked(f)){
+        showToast(f.intake.cooldown.sentence,'warning');
+        STATE.bd.form.tab='client'; renderNewJobModal(); return;
+      }
+      var pocErr=pocFirstError(pocPayload('bd'));
+      if(pocErr){
+        showToast(pocErr,'error');
+        STATE.bd.form.tab='client'; renderNewJobModal(); return;
+      }
+    }
     var body;
     if(f.source_lead_id){
       // convert-from-lead: flat body with job fields
@@ -612,11 +783,26 @@
       }).catch(function(e){showToast('Failed to create job: '+e.message,'error');});
     } else {
       // direct create: { lead:{...}, job:{...} }
-      var lead={position:f.job_title,company_id:null,location:f.city+' '+f.state,source:'BD Direct'};
+      // company_name is always sent; company_id only when an existing client was
+      // picked from the list. The SERVER resolves the name to a companies row
+      // (find-or-create, org-scoped) — this used to send a hard-coded null, so
+      // every direct create was refused.
+      var loc=((f.city||'')+' '+(f.state||'')).trim();
+      var lead={position:f.job_title,company_id:f.company_id||undefined,
+        company_name:(f.client||'').trim(),location:loc||undefined,source:'BD Direct',
+        address:f.address||{},contacts:pocPayload('bd')};
       var job=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined});
       apiPost('/job-orders',{lead:lead,job:job}).then(function(jo){
         bdAfterSave(jo,f);
-      }).catch(function(e){showToast('Failed to create job: '+e.message,'error');});
+      }).catch(function(e){
+        var msg=(e&&e.message)||String(e);
+        showToast(msg,'error');
+        // The server is the authority on both of these, and its answer names
+        // the tab to open: a cooldown or a POC problem is fixed on Client & POC.
+        if(/cooldown|contact|email address/i.test(msg)&&STATE.bd.form){
+          STATE.bd.form.tab='client'; renderNewJobModal();
+        }
+      });
     }
   };
 

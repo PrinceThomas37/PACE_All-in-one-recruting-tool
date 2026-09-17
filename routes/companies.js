@@ -5,6 +5,9 @@
 // Route paths, handler logic and behaviour are unchanged from the original.
 // ============================================================================
 const express = require('express');
+const clientResolve = require('../services/client-resolve');
+const companyCooldown = require('../services/company-cooldown');
+const { getSetting } = require('../config/settings');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -120,6 +123,84 @@ router.get('/companies/:id/job-orders', auth, async (req, res) => {
 // Points of contact for a client — the contacts on this company's leads,
 // deduped by email (primaries first). Powers the "To" dropdown on the client
 // email compose.
+// Everything the "+ New Job" form needs to know about a client the moment one
+// is picked, in ONE round trip: is this company inside its re-add cooldown, who
+// do we already talk to there, and what address do we hold.
+//
+// It exists as one endpoint rather than three because all three answers are
+// wanted at the same instant — when a name is chosen from the picker — and
+// because the cooldown has to be shown THEN. Learning at Save that the company
+// was blocked, after twenty fields are filled, is the failure CLAUDE.md names:
+// a rule that decides whether an action is allowed belongs where the action is
+// offered, not only where it is taken.
+router.get('/companies/:id/intake', auth, async (req, res) => {
+  try {
+    if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    // withOrg is what keeps this from being a probe for another org's clients.
+    const { data: co } = await withOrg(supabase.from('companies')
+      .select('id,name,location,' + clientResolve.ADDRESS_FIELDS.join(','))
+      .eq('id', req.params.id).is('deleted_at', null), req).limit(1);
+    if (!co || !co.length) return res.status(404).json({ error: 'Client not found.' });
+    const company = co[0];
+
+    const { data: leads } = await withOrg(supabase.from('jobs')
+      .select('id,position,created_at,users:users!created_by(name)')
+      .eq('company_id', company.id).is('deleted_at', null), req)
+      .order('created_at', { ascending: false });
+    const rows = leads || [];
+    const last = rows[0];
+
+    const days = await getSetting(supabase, 'company_cooldown_days');
+    const state = companyCooldown.cooldownState({
+      lastLeadAt: last && last.created_at, now: new Date(), days,
+    });
+
+    // The POCs already known at this client, across all of its leads, newest
+    // first and de-duplicated by address — so a BD picks a name instead of
+    // retyping one PACE already holds.
+    let contacts = [];
+    if (rows.length) {
+      const { data: cs } = await supabase.from('contacts')
+        .select('first_name,last_name,email,designation,phone,linkedin,is_primary,created_at')
+        .in('job_id', rows.map(r => r.id)).order('created_at', { ascending: false });
+      const seen = {};
+      (cs || []).forEach(c => {
+        const em = (c.email || '').toLowerCase().trim();
+        if (!em || seen[em]) return;
+        seen[em] = true;
+        contacts.push({
+          first_name: c.first_name || '', last_name: c.last_name || '',
+          email: c.email, designation: c.designation || null,
+          phone: c.phone || null, linkedin: c.linkedin || null, is_primary: !!c.is_primary,
+        });
+      });
+      contacts.sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+    }
+
+    const address = {};
+    clientResolve.ADDRESS_FIELDS.forEach(k => { if (company[k]) address[k] = company[k]; });
+
+    res.json({
+      id: company.id,
+      name: company.name,
+      location: company.location || null,
+      address,
+      lead_count: rows.length,
+      contacts,
+      // `blocked` is the answer the form acts on; the sentence is what it shows.
+      cooldown: state
+        ? {
+            blocked: true, days_left: state.daysLeft, days_ago: state.daysAgo,
+            sentence: companyCooldown.cooldownSentence(state, {
+              company: company.name, position: last.position,
+              addedBy: last.users && last.users.name,
+            }),
+          }
+        : { blocked: false },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/companies/:id/contacts', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });

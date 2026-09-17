@@ -47,6 +47,64 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0023 · 2026-09-17 · STANDS · A job order carries its client: POC required, address structured, cooldown applies
+**Their words:** *"its better to take in the client information like POC contact
+name, email ID, phone number and address of the company to create the lead and
+then the job in that. How does that sound?"*
+
+**Context.** Session 26 had just fixed "+ New Job", which could never create a
+job at all. With it working, the owner asked that it capture the client
+properly. Three sub-decisions were put to them with live numbers from the
+database, and **they went against my recommendation on two of the three.** That
+is recorded here so neither is re-litigated by a future session reading only the
+code.
+
+**1. A POC is REQUIRED — name and email. Phone and LinkedIn stay optional.**
+Chosen: *"Require name + email (Recommended)."* Agreed with my recommendation.
+The evidence put to them: all **328** live leads already have a POC and **708 of
+709** contacts have an email, so requiring it costs nobody anything — while
+**163 of 709 have no phone**, so requiring a phone would buy invented phone
+numbers. That is the same failure D-0017 exists to prevent.
+
+**2. The company address gets PROPER FIELDS, not one free-text line.**
+Chosen: *"Proper address fields."* **Against my recommendation**, which was the
+existing free-text `companies.location` (filled on 1,565 of 1,567 rows, no
+migration, splittable later). The owner wanted street / city / state / zip /
+country as real columns. **Migration 043**, additive; `location` is kept as the
+short display form and derived from the new fields so nothing types it twice.
+My stated reason for preferring free text — that structured address earns its
+keep at invoicing time and the retrofit is cheap — was heard and overruled.
+
+**3. The 21-day company re-add cooldown DOES apply to BD job creation.**
+Chosen: *"Yes — block it, same as the RA form."* **Against my recommendation.**
+The option they picked said so in as many words: *"it will refuse genuine job
+orders, and people will find a way around it."* They took that trade for one
+consistent rule with no exceptions to remember.
+
+**What I did to make the block survivable, without softening it.** The refusal
+names **who** added the company and **when**, so there is somebody to go and
+talk to — `closeRefusal()`'s rule, that a refusal names what you CAN do instead.
+And it is shown **the moment a client is picked**, not discovered at Save: the
+whole of Session 26 is about rules that are enforced where an action is taken
+but not where it is offered. There is deliberately **no override**, because the
+owner did not ask for one.
+
+**The consequence to watch, stated plainly and not designed around.** The
+cooldown counts leads on the company, and creating a job order creates a lead.
+So a client who sends a **second requirement inside the window will be blocked**
+— which lands hardest on the best clients. I did not soften this, because they
+chose it knowing genuine job orders would be refused.
+
+**Re-open when:** a BD reports being blocked from entering a second, real
+requirement from a client that is already theirs. The two fixes ready to go, in
+order of preference: exempt a company that already has a **job order** (won
+business is not cold outreach), or add a recorded override with a reason. Also
+re-open if the owner wants the cooldown's number editable per role rather than
+one org-wide setting.
+
+**Pinned by** `test/client-intake-smoke.mjs`, including the boundary day, a
+cooldown of 0 meaning *no* cooldown, and the refusal naming a person.
+
 ### D-0022 · 2026-09-15 · STANDS · The theme follows the person, not the browser
 **Their words:** *"a change in the theme in one user is reflected to other
 users, it should not happen like that."* Chosen: **"Follow the person."**

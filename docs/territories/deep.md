@@ -15,6 +15,15 @@
 - RLS: **0 of 48 tables without RLS, 0 without a service-role policy** (verified
   after migration 039).
 
+- **Migration 043 adds a structured postal address to `companies`**
+  (`address_line1`, `address_line2`, `city`, `state`, `postal_code`, `country`)
+  — the owner's call over my recommendation of the existing free-text
+  `location` (D-0023). **Additive: `location` stays** as the short display form,
+  holds the only address 1,565 of 1,567 rows have, and is now DERIVED from the
+  new fields rather than typed twice. Nothing is backfilled — splitting an
+  existing free-text line by guessing where the street ends turns good data
+  into confidently wrong data.
+
 ## Fragile — touch with care
 - `emails.sent_at` defaults to `CURRENT_DATE`, so an unsent draft already carries
   a send date. Any "sent on X" report counts drafts unless it filters.
