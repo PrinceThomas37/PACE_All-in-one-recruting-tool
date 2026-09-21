@@ -47,6 +47,36 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0026 · 2026-09-21 · PARKED · Hunter.io waits on a company email address
+
+**Who:** the owner, in session.
+
+**Their words:** *"lets pause on the hunter thing as i dont have a company
+email and hunter gets register on company domains."*
+
+**What was decided.** Hunter.io is not being signed up for. It was offered as
+the one remaining free, genuinely-wired integration worth having (~25 lookups a
+month; it finds a work email from a name plus a company domain, used on the BD
+side to reach a POC). Parked, not declined — the tool is still the right one,
+the owner just cannot open an account yet.
+
+**Why — and this is bigger than Hunter.** B2B data vendors gate signup on a
+**business domain** and reject free consumer addresses. The owner is on a
+personal address today, so this blocks not just Hunter but most of that whole
+category. **Treat "needs a company email" as a standing precondition, not a
+Hunter quirk** — check it before proposing any vendor in this class, so the
+owner is not sent off to sign up for something that will refuse them at the
+form. Nothing in PACE depends on Hunter: `enrichment.js` infers an address
+from the company's pattern and verifies the domain by DNS, free and unlimited,
+and that is what runs today.
+
+**Re-open when:** the owner has a mailbox on a domain they control. That is
+likely to arrive on its own — PACE's own self-serve signup design assumes an
+organisation registers its email domain — so this may resolve as a side effect
+of the product rather than as a separate task.
+
+---
+
 ### D-0025 · 2026-09-21 · STANDS · Candidate sourcing starts with the free front door, not a paid resume database
 
 **Who:** the owner, in session.
