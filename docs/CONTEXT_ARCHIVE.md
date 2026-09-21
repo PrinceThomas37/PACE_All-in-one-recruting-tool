@@ -5089,3 +5089,145 @@ And the measurement lied twice before it worked. The overflow test passed clean
 with the original bug reintroduced, in two different ways, each for a reason
 that reads as correct until you check it. **Assume your new guard is vacuous
 until you have watched it fail** is the rule this session earned twice over.
+
+---
+
+# Session 27 — the front door, and a model that had been dead for two months
+
+## The question that started it
+
+The owner asked three things: what APIs do we actually have, how do we add
+CareerBuilder / Resume-Library US / "LinkedIn search by job title and
+location", and what are the steps to finish candidate sourcing.
+
+The inventory was worth doing carefully, because the owner's mental model
+("we have integrated 3 outside applications") and the code disagreed in both
+directions. Live and free: Microsoft/Outlook, Google/Gmail, Groq, **six
+employer job-board feeds** (Greenhouse, Lever, Ashby, Workable,
+SmartRecruiters, Recruitee — running nightly, finding LEADS) and free
+DNS/pattern email inference. Key slots with real code behind them but no key:
+Anthropic, OpenRouter, Ollama, ZeroBounce, NeverBounce, Hunter. And one slot
+that is **not** an integration at all: **Apollo saves and tests a key and
+nothing in PACE calls it.**
+
+The sharper finding was structural. **PACE has two sourcing engines in
+completely different states.** Finding companies to sell to: done, free,
+running. Finding people to place: **CSV upload only** — every other card on
+that page (Apollo, Indeed, Monster, CareerBuilder, Dice, LinkedIn) is a name
+with `POST /sourcing/search` answering 501 behind it. They have looked like
+features since the plan was written.
+
+## Eight of nine steps were already built
+
+Mapping the candidate journey end to end: job order → **find people** → review
+queue → import → resume parsed → match-scored → emailed on a drip → they
+answer interested/not/stop → pipeline. Only step 2 was missing. That reframed
+the whole request: candidate sourcing was not a big build, it was **one
+missing front door on a machine that was otherwise finished.**
+
+## What the owner was told, and chose (D-0025, D-0026)
+
+Every real resume database is paid — selling resume access *is* their business,
+which is why there is no free tier and no open-source equivalent. Specifically:
+CareerBuilder needs a paid employer account **and** partner approval;
+Resume-Library needs a paid recruiter account; and **there is no LinkedIn API
+that searches people by job title and location, for us or anyone** — Recruiter
+System Connect surfaces data for candidates an ATS already holds, partner
+approval runs 3–6 months at under 10% acceptance, and scraping is both against
+their terms and a due-diligence problem for a product we intend to sell.
+
+**A correction inside the same session:** an earlier answer told the owner
+Apollo had a free tier worth trying. Checked, and it does not — Apollo's free
+plan dropped API access in late 2025 (~100 credits, no API; API starts at the
+Organization plan, 3 users minimum). Said plainly rather than quietly dropped,
+because the owner would have spent an afternoon on it.
+
+The owner asked the right question — *"Do i have to put in money to build this
+integration?"* — and chose the free front door first, with quotes gathered in
+parallel so the number is ready when it is wanted (D-0025). Hunter was then
+parked for a reason worth generalising: **B2B data vendors gate signup on a
+company domain** and the owner is on a personal address, which blocks most of
+that category, not just Hunter (D-0026).
+
+## The apply page
+
+`routes/apply.js`. Publishing a job order mints a random token and opens
+`/apply/<token>`; the applicant lands in `sourcing_candidates`, inert, like a
+CSV row. It reuses the staging table (017), the resume parser, the duplicate
+check and the existing review queue — **no second import path.** Five rules,
+each asserted rather than commented: identical answers for unknown /
+malformed / unpublished / filled; a malformed token never reaches the
+database; an applicant never lands in `candidates`; a failed write is never
+reported as saved; every query bounded at 4s. Publishing is possible only
+through `POST /job-orders/:id/apply-link` — `apply_enabled` is deliberately
+absent from `JOB_FIELDS`, so a plain `PUT` cannot put a customer's job on the
+internet.
+
+## Three faults, and what found each one
+
+None was found by reading the code, and that is the point.
+
+**A TEST FOUND THE LEAK, BECAUSE IT ASSERTED ON RENDERED BYTES.** The client's
+name was not in any field the page renders — it was in the middle of the job
+description, and the page published it. The fix is `services/jd-scrub.js`,
+extracted from `job-orders.js` so the "re-write job description" button and the
+apply page **share one definition of "safe to publish"** — the apply page
+publishes with nobody reading the result first, so the automatic path must not
+be the weaker of the two.
+
+**A SCREENSHOT FOUND THE SECOND, WITH THE SUITE GREEN.** Stripping only the
+address out of *"Questions? Email careers@x.com or call 860-555-0142."* left
+*"Questions? Email or call ."* in front of a stranger. A contact detail is now
+removed by the **sentence**. No test was looking for it; the page simply read
+as broken.
+
+**ORDER WAS LOAD-BEARING AND SILENT.** A client's name is usually also its mail
+domain, so replacing names *before* masking contacts rewrote
+`careers@northwind.com` into `careers@our client.com` — which no longer matched
+the contact pattern, so the address stayed on the page **looking scrubbed**.
+Contacts are masked first now. Both guards verified by reintroducing each bug
+and watching six assertions flip.
+
+## The model that had been dead for two months
+
+The owner got an OpenRouter key, which prompted a re-check — and found the
+Session 19 Groq fault repeated on the other provider. `meta-llama/
+llama-3.2-3b-instruct:free` was PACE's OpenRouter fast tier, written from
+memory and never verified **because no OpenRouter key had ever existed to
+verify it against**. OpenRouter removed that free variant on **2026-07-19**,
+two months before the owner had a key.
+
+It would have been completely invisible: a retired name is a 404, `complete()`
+turns a 404 into null, and null means "write it with the rules" — with a green
+*Key valid* tick sitting beside it the whole time, because that test only
+proves the KEY is accepted. Both tiers now point at the one variant confirmed
+live. Deliberately **not** replaced with a smaller model picked from memory,
+since guessing is what caused this twice.
+
+## Shipped
+
+Migration 044 applied live with the owner's explicit go-ahead and verified
+before merge: 4 columns, 2 indexes, and **0 of 6 job orders published**, so
+nothing went public as a side effect. `test/apply-page-smoke.mjs` is 67
+assertions; the suite is **88/88**. Merged as #217 and deployed.
+
+## The thread through this session
+
+**Every fault here was invisible to the thing that should have caught it.** The
+suite was green while the page read as broken. The AI health card was green
+while the model behind it had been deleted. Six sourcing cards looked like
+features with 501s behind them. An Apollo key saved, tested, and called by
+nothing.
+
+What actually found them was cheap and unglamorous: rendering the bytes and
+asserting on them, taking a screenshot and *looking*, and re-checking a
+constant because a new fact (a key arriving) made it checkable. The
+counterpart rule is the one this session kept earning — **a guard is vacuous
+until you have watched it fail** — and both new guards were verified that way
+before being trusted.
+
+And the largest finding was not a bug at all. Eight of the nine steps in
+candidate sourcing were already built; the work was one missing front door.
+**Knowing what already exists was worth more than any code written here** —
+which is precisely what `CAPABILITIES.md` is for, and why the inventory came
+before the build.

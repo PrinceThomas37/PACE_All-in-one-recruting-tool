@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-17 (end of Session 26) · **Repo**:
+**Updated**: 2026-09-21 (Session 27) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #215 (`192a3cb`); #216 in flight. **Nothing is
-unmerged once it lands.** **D-0024 is the highest decision id.**
+to `main` IS the release · **Last merged**: #217 (`ba372cf`). **Nothing is
+unmerged once it lands.** **D-0026 is the highest decision id.**
 
 ---
 
@@ -37,7 +37,7 @@ Nine territories, each a Claude Code subagent with its own border, laws and
 - **Arrived as a sentence and a screenshot? → `dispatch`.** It reproduces the
   report, then routes.
 - **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
-  it before proposing anything or calling anything a bug. **D-0024 is the
+  it before proposing anything or calling anything a bug. **D-0026 is the
   highest id used.** D-0023 in particular: TWO of its three calls went against
   my advice, so read it before "improving" any of them.
 - **`docs/territories/CAPABILITIES.md` is what PACE can already DO.** Grep it in
@@ -72,17 +72,22 @@ sweep → recycle) and the **ATS** (job orders, candidates, pipeline, submission
 11 stages). **Outreach generator** (client) and **candidate outreach** (own
 queue, own send window, answer buttons in the email). **In-app mailbox** over
 Graph and Gmail, plus read-only **All email** across all three pipelines.
-**Reminders + "needs you today"**, owner-scoped since Session 24. **Creating a
+**Reminders + "needs you today"**, owner-scoped since Session 24. **The public
+apply page** — publish a job order, get a link, applicants land parsed and
+deduped in the Sourcing review queue (Session 27). **Creating a
 job order** — from a Connected lead, or directly from "+ New Job", which now
 resolves the client, captures its address and requires a POC. Billing and
 self-serve signup are built and **off**.
 
-## Migrations — next is **044** · 043 APPLIED 2026-09-17
+## Migrations — next is **045** · 044 APPLIED 2026-09-21
 
 **Never apply one to the live DB without an explicit, fresh go-ahead.** A
 migration adding a table with `org_id` must also add it to `models/tables.js`.
-043 added six postal-address columns to `companies`; verified after by a content
-fingerprint identical before and after, 0 rows touched.
+044 added `apply_token` / `apply_enabled` / `apply_published_at` / `apply_count`
+to `job_orders` plus two indexes, for the public apply page. Verified after:
+4 columns with the right defaults, both indexes present, and **0 of 6 job
+orders published** — publishing a customer's job to the open internet is never
+a migration's side effect.
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
 
@@ -92,16 +97,29 @@ theorising**; `nodejs.org/dist` is reachable from this sandbox.
 
 ## ✅ RECENTLY SHIPPED — full narratives in `CONTEXT_ARCHIVE.md`
 
-**Session 24 (#208-#211) — the Reminders page and ownership.** A reminder says
-who asked and why; "due today" is only said about today; `services/ownership.js`
-defines ownership once (**a to-do list containing other people's to-dos is not a
-to-do list**); a manager reviews and PROMPTS, never reaches in; merge fields are
-filled by the server and then CHECKED; a list is calm and colour is scarce
-(D-0019). Theme follows the person, not the browser (D-0022).
+**Session 27 (#217) — the front door.** Candidate sourcing was **CSV-only**;
+eight of the nine steps in the candidate journey were already built, so the gap
+was one missing front door, not a feature. `routes/apply.js` publishes a job
+order at `/apply/<token>`; applicants land parsed and deduped in
+`sourcing_candidates`, inert, **no second import path**. `services/jd-scrub.js`
+was extracted so the "re-write job description" button and the apply page share
+ONE definition of "safe to publish" — the apply page publishes with nobody
+reading the result first. Three faults, each invisible to the thing that should
+have caught it: a test on rendered bytes found the client's name leaking out of
+the DESCRIPTION (no field rendered it); a **screenshot** found *"Questions?
+Email or call ."* with the suite green; and masking contacts AFTER replacing
+names rewrote `careers@northwind.com` into `careers@our client.com`, which then
+no longer matched the contact pattern and stayed on the page **looking
+scrubbed**. Also **OpenRouter's fast model had been dead since 2026-07-19** —
+see the AI trap below. D-0025 (paid resume databases wait on a measurement) and
+D-0026 (Hunter parked: B2B vendors gate signup on a company domain).
 
-**Session 25 (#200, #212).** D-0012 completed — one way to email a candidate
-about a job. A float must be OPAQUE (`--card` is glass), and the phone's type
-scale must include its own inputs.
+**Sessions 24-25 (#200, #208-#212).** Ownership defined once
+(`services/ownership.js`); a reminder says who asked and why; merge fields are
+filled by the server and then CHECKED; a list is calm and colour is scarce
+(D-0019); theme follows the person (D-0022); D-0012 completed — one way to
+email a candidate. A float must be OPAQUE (`--card` is glass) and the phone's
+type scale must include its own inputs. **Full narratives in the archive.**
 
 **Session 26 (#214) — the button that had never worked.** `+ New Job` sent
 `company_id: null`, hard-coded, so **every direct create had always been
@@ -161,7 +179,20 @@ reintroducing the original bug and watching the suite stay green.
 
 ## ⏭ PICK THIS UP FIRST
 
-**D-0014 — the row-level interaction brief. Still the live piece of work.**
+**1. The apply page is live but unproven.** Nothing has been published yet and
+no application has ever been submitted through it in production. The owner was
+asked to publish one job and post the link. **When they report back, the first
+question is whether an applicant actually reached the Sourcing queue** — the
+whole point is step 2 of the candidate journey, and it has only been exercised
+against a stubbed database.
+
+**2. The six dead sourcing cards.** `config/sourcing.js` advertises Apollo,
+Indeed, Monster, CareerBuilder, Dice and LinkedIn; `POST /sourcing/search`
+answers **501** for every one. They read as working features. Relabelling them
+was offered and not yet answered — small change, removes a standing lie on a
+screen the owner uses.
+
+**3. D-0014 — the row-level interaction brief. Still the live design work.**
 
 The owner's design ask was **progressive disclosure**, and Session 23 answered
 it with **volume control** (horizons, caps, pagination) before being corrected:
@@ -193,7 +224,7 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 87 SUITES
+## 🧪 TESTS: 88 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
@@ -247,9 +278,18 @@ anything touching scoping, and **a breach here produces no error message.**
 - **`PICKER_CAP` is 15**, so 19 connected leads becomes a search box. Flagged as
   possibly too eager.
 - Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` on Render.
-- **Session 26's deploy was never confirmed from the sandbox** — the agent proxy
-  refuses the Render host (403 on CONNECT). The merge landed; whether the
-  service came up clean is unverified from here. Ask, or check Render.
+- **Deploys cannot be confirmed from this sandbox** — the agent proxy refuses
+  the Render host (403 on CONNECT), and this was true again in Session 27. The
+  merge lands; whether the service came up clean is **unverified from here**.
+  Say so plainly rather than reporting a deploy as confirmed. Ask the owner, or
+  check Render.
+- **Publish one job order's apply page and post the link somewhere** — the
+  apply page has never been exercised in production (Session 27).
+- **Run the AI health check now that an OpenRouter key exists** (Admin →
+  Integrations). It reads the account's real `/models` list, which is the only
+  way to set a genuinely fast OpenRouter model rather than guessing one — and
+  guessing is what killed this twice. Both tiers currently point at the same
+  quality model deliberately.
 
 ## ⏸ Parked by the owner — do NOT re-raise as blocking
 
