@@ -268,3 +268,54 @@ D-0010 (switch off by default). One resolver, `getTimezoneFromLocation`.
 ### Charging for a plan
 **Status:** DORMANT · owner `ledger` · see `DECISIONS.md` D-0003
 Built, prices `null`, payments off.
+
+---
+
+## Candidates apply to us — the public apply page
+
+**Status:** LIVE (migration 044 pending) · owner `gateway` (route) + `surface`
+(the control) · `routes/apply.js`, `services/jd-scrub.js`,
+`POST|DELETE /job-orders/:id/apply-link`, the Apply-link block in
+`public/js/25-workflow-bd.js`.
+
+**What it is.** A job order can be **published**, which mints a random token and
+opens `/apply/<token>` to the open internet. Anyone with the link fills in a
+short form, attaches a resume, and lands in `sourcing_candidates` — the same
+inert staging table the CSV import uses. A recruiter reviews and imports.
+
+**Why it matters more than it looks.** Before this, every candidate in PACE was
+one somebody typed in or exported from a board. That makes the candidate
+database cost money or labour to grow, permanently. This is the only source that
+costs neither, and it is the reason a paid resume database is a *later*,
+measured purchase rather than a prerequisite (D-0025).
+
+**Grep before building anything near this.** It reuses, and must keep reusing:
+the staging table (017), the resume parser, the duplicate check, the match
+engine and the candidate outreach reply loop. It adds **no** second import path.
+
+**The five rules it holds, each with a reason that cost something:**
+| Rule | Why |
+|---|---|
+| Unknown / malformed / unpublished / filled answer **byte-identically** | the token is what stops a stranger enumerating a customer's whole req list |
+| A malformed token **never reaches the database** | otherwise the page is a free way to make us do work |
+| The **client's name is never published** | it is the asset a staffing desk is paid for; asserted on rendered bytes, not promised in a comment |
+| A write that did not happen is **never reported as saved** | an applicant thanked for a dropped application does not apply twice |
+| An applicant **never lands in `candidates`** | a public form writing into the ATS is a spam vector aimed at the most valuable table in the product |
+
+**The description is scrubbed, and `posting_description` beats the scrubber.**
+`services/jd-scrub.js` is shared with the recruiter's "re-write job description"
+button — one definition of "safe to publish", because the apply page publishes
+with **nobody reading the result first**, so the automatic path must not be the
+weaker one. Two faults found by writing it down, both invisible to reasoning and
+both now pinned:
+* **Contacts are masked BEFORE names are replaced.** A client's name is usually
+  also its mail domain, so scrubbing names first rewrote `careers@northwind.com`
+  into `careers@our client.com` — which no longer matches the contact pattern,
+  so the address stayed on the page *looking* scrubbed.
+* **A contact goes by the SENTENCE, not the character.** Deleting just the
+  address left *"Questions? Email or call ."* on a page a stranger reads. Found
+  in a screenshot; no test was looking for it.
+
+**What it deliberately does NOT do (yet):** no careers page listing every open
+role (one link per job), no email to the recruiter on each application (the
+Sourcing queue is the surface), no auto-submission to a pipeline.

@@ -138,6 +138,12 @@ app.use('/auth/sso/for-domain', createRateLimiter({ name: 'sso-domain', windowMs
 // used to skip the DB write instead.
 const pixelLimiter = createRateLimiter({ name: 'pixel', windowMs: 60 * 1000, max: 120 });
 
+// The public apply page. Generous enough that a real applicant never sees it —
+// loading the page, then posting once, is two requests — and tight enough that
+// the form cannot be used to spray the staging table or to burn the resume
+// parser, which is the most expensive thing an anonymous request can reach.
+const applyLimiter = createRateLimiter({ name: 'apply', windowMs: 10 * 60 * 1000, max: 40 });
+
 // ── Multi-tenant context ───────────────────────────────────────
 // Every request carries an org context (req.orgId). Until every user record and
 // token carries an org_id, we fall back to the platform's default (first) org so
@@ -3025,6 +3031,7 @@ function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
 // Shared helpers/middleware stay defined above; routers receive them via ctx so
 // their closures and behaviour are identical to the original inline routes.
 const routeCtx = {
+  applyLimiter,
   supabase, db, auth, hasRole, today, orgIdFor, withOrg, orgStamp,
   loadMailboxSignatures, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody,
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
@@ -3057,6 +3064,8 @@ app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
+// Public, unauthenticated — the candidate-facing apply page.
+app.use(require('./routes/apply')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));

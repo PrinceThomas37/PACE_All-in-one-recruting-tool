@@ -496,25 +496,10 @@ module.exports = function (app, core) {
   // can be published on job boards. AI rewrite when a key is configured;
   // otherwise a rule-based scrub (replace client names with "our client",
   // strip emails/phones/URLs). Returns the text — saving is a separate PUT.
-  function scrubJobDescription(jd, names) {
-    let out = String(jd || '');
-    names.filter(Boolean).forEach(n => {
-      const safe = String(n).trim();
-      if (safe.length < 3) return;
-      out = out.replace(new RegExp(safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), 'our client');
-      // also scrub without common suffixes (Acme Corp → Acme)
-      const base = safe.replace(/[,.]?\s+(inc|llc|llp|ltd|corp|co|company|group|pllc|pc)\.?$/i, '').trim();
-      if (base.length >= 4 && base.toLowerCase() !== safe.toLowerCase()) {
-        out = out.replace(new RegExp(base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), 'our client');
-      }
-    });
-    out = out.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '')     // emails
-             .replace(/https?:\/\/\S+|www\.\S+/gi, '')                           // urls
-             .replace(/(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/g, '')  // phones
-             .replace(/(our client)(\s+\1)+/gi, 'our client')
-             .replace(/[ \t]{2,}/g, ' ').trim();
-    return out;
-  }
+  // The scrubber now lives in services/jd-scrub.js, because the public apply
+  // page publishes a description with no human reading it first and the two
+  // paths must not disagree about what "safe to publish" means.
+  const { scrubJobDescription } = require('../../services/jd-scrub');
 
   app.post('/job-orders/:id/posting-jd', auth, async (req, res) => {
     try {
@@ -546,6 +531,92 @@ ${String(j.job_description).slice(0, 12000)}`;
       }
       res.json({ posting: scrubJobDescription(j.job_description, names), used_ai: false });
     } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ==========================================================================
+  // THE PUBLIC APPLY LINK
+  //
+  // Publishing a job mints a random token and opens /apply/<token> to the
+  // world. The token is random rather than derived from job_code because a
+  // guessable link would let anyone walk a customer's whole req list —
+  // including roles they never published. Turning it off keeps the token, so
+  // re-publishing restores the SAME link: a URL that has been posted to a job
+  // board, a WhatsApp group or somebody's LinkedIn feed cannot be quietly
+  // rotated without breaking every copy of it already out there.
+  //
+  // Degrades honestly until migration 044 is applied: the columns simply are
+  // not there yet, and a 503 that names the reason beats a 500 that does not.
+  // ==========================================================================
+
+  const applyColumnsMissing = (err) =>
+    /column .*apply_(token|enabled|published_at|count).* does not exist|could not find the .*apply_/i
+      .test(String(err && err.message));
+
+  // 32 hex characters, from the platform's CSPRNG. Matches the shape
+  // routes/apply.js validates before it will touch the database.
+  const mintApplyToken = () => require('crypto').randomBytes(16).toString('hex');
+
+  function applyUrlFor(token) {
+    const base = String(process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL ||
+      process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+    return base ? base + '/apply/' + token : '/apply/' + token;
+  }
+
+  app.post('/job-orders/:id/apply-link', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      if (!(await recruiterCanTouchJob(req, req.params.id))) {
+        return res.status(403).json({ error: 'Not assigned to this job order.' });
+      }
+      const { data: job, error: e0 } = await withOrg(
+        supabase.from('job_orders').select('id,apply_token,apply_enabled').eq('id', req.params.id), req
+      ).maybeSingle();
+      if (e0) throw e0;
+      if (!job) return res.status(404).json({ error: 'Job order not found' });
+
+      // Reuse the existing token — see the note above about links already in
+      // the wild. Only a job that has never been published gets a new one.
+      const token = job.apply_token || mintApplyToken();
+      const { data, error } = await withOrg(
+        supabase.from('job_orders').update({
+          apply_token: token, apply_enabled: true, apply_published_at: new Date(),
+        }).eq('id', req.params.id), req
+      ).select('id,apply_token,apply_enabled,apply_published_at,apply_count').maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Job order not found' });
+
+      res.json({ enabled: true, token: data.apply_token, url: applyUrlFor(data.apply_token),
+                 published_at: data.apply_published_at, applicants: data.apply_count || 0 });
+    } catch (err) {
+      if (applyColumnsMissing(err)) {
+        return res.status(503).json({ error: 'The apply page is not set up yet (migration 044 pending).' });
+      }
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/job-orders/:id/apply-link', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      if (!(await recruiterCanTouchJob(req, req.params.id))) {
+        return res.status(403).json({ error: 'Not assigned to this job order.' });
+      }
+      // The token is KEPT. Unpublishing closes the page (routes/apply.js checks
+      // apply_enabled and answers exactly as it would for a link that never
+      // existed); it does not throw away the address.
+      const { data, error } = await withOrg(
+        supabase.from('job_orders').update({ apply_enabled: false }).eq('id', req.params.id), req
+      ).select('id,apply_token,apply_enabled,apply_count').maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Job order not found' });
+      res.json({ enabled: false, token: data.apply_token, url: applyUrlFor(data.apply_token),
+                 applicants: data.apply_count || 0 });
+    } catch (err) {
+      if (applyColumnsMissing(err)) {
+        return res.status(503).json({ error: 'The apply page is not set up yet (migration 044 pending).' });
+      }
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // ==========================================================================

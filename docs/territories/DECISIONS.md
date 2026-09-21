@@ -47,6 +47,51 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0025 · 2026-09-21 · STANDS · Candidate sourcing starts with the free front door, not a paid resume database
+
+**Who:** the owner, in session.
+
+**Their words:** *"Do i have to put in money to build this integration?"* — then,
+on being shown that the three boards they named (CareerBuilder, Resume-Library
+US, LinkedIn) are all paid and that the apply page is free: *"Yes"*, to building
+the apply page first.
+
+**What was decided.** PACE gets a **public apply page** — free to build, free to
+run — before any paid candidate source is bought. The paid boards are not
+declined; they are **sequenced behind a measurement**. The owner gets quotes in
+the meantime so the number is ready when it is wanted.
+
+**Why this and not the boards.** Eight of the nine steps in the candidate
+journey were already built (job order → find people → review queue → import →
+resume parsed → matched → emailed → answered → pipeline). Only step 2, *finding
+people*, was CSV-only. Buying a resume database before knowing how many
+candidates the desk is actually short of is buying a tool for an unmeasured job,
+and it contradicts the project's standing free-tier-first rule.
+
+**What the owner was told plainly, and accepted:**
+* Every real resume database is paid. There is no free CareerBuilder,
+  Resume-Library or LinkedIn — selling resume access *is* their business.
+* **There is no LinkedIn API that searches people by job title and location**,
+  for us or for anyone. Recruiter System Connect is not a search; it surfaces
+  LinkedIn data for candidates an ATS *already has*. Partner approval runs
+  3–6 months at under a 10% acceptance rate and wants an existing large user
+  base. The legitimate path today is a Recruiter seat plus CSV export.
+* **Apollo's free tier no longer includes API access** (it changed in late
+  2025 — the free plan is ~100 credits and no API; API starts at the
+  Organization plan, 3 users minimum). An earlier answer in this same session
+  said Apollo was free to try; that was corrected the moment it was checked.
+  The Apollo key slot on the Integrations page is therefore **still dead**, and
+  saying "we have integrated Apollo" is wrong — it can be saved and tested,
+  and nothing calls it.
+
+**Re-open when:** the apply page has been live for roughly a month and the
+Sourcing queue shows either (a) too few applicants to staff the open reqs, or
+(b) applicants in the wrong skills or geographies. Either is the measurement
+that makes a paid board the right purchase. Re-open sooner if a client demands
+a volume the inbound flow plainly cannot meet.
+
+---
+
 ### D-0024 · 2026-09-17 · STANDS · The archive is written as the work lands
 **Their words:** *"Like I have a question, does this updation happens only when
 I ask you to do or does it happen automatically whenever you make a change in
