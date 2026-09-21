@@ -84,8 +84,24 @@ const PROVIDERS = {
   openrouter: {
     id: 'openrouter', label: 'OpenRouter', wire: 'openai',
     url: 'https://openrouter.ai/api/v1/chat/completions',
+    // ⚠ THE SAME FAULT AS GROQ'S, CAUGHT BEFORE IT COULD BITE (2026-09-21).
+    // The fast tier was `meta-llama/llama-3.2-3b-instruct:free`, written from
+    // memory and never verified because no OpenRouter key had ever been
+    // configured. OpenRouter REMOVED that free variant on 2026-07-19 — two
+    // months before anyone here had a key to notice with. A retired model name
+    // is a 404, a 404 is a null, and a null is "write it with the rules": every
+    // fast-tier call (resume extraction, the JD scrub) would have fallen back
+    // silently, and the only visible symptom would have been AI quietly never
+    // seeming to work.
+    //
+    // BOTH TIERS NOW POINT AT THE ONE MODEL CONFIRMED STILL LIVE. That costs
+    // some speed on extraction and it is the right trade: a slower model that
+    // answers beats a faster one that 404s. Do NOT "fix" this by guessing a
+    // smaller model name — guessing is what caused it twice. Use the health
+    // card (Admin → Integrations), which reads the account's OWN /models list,
+    // and set the fast tier from what it actually reports.
     model: 'meta-llama/llama-3.3-70b-instruct:free',
-    models: { fast: 'meta-llama/llama-3.2-3b-instruct:free', quality: 'meta-llama/llama-3.3-70b-instruct:free' },
+    models: { fast: 'meta-llama/llama-3.3-70b-instruct:free', quality: 'meta-llama/llama-3.3-70b-instruct:free' },
   },
   ollama: {
     id: 'ollama', label: 'Ollama (self-hosted)', wire: 'openai',

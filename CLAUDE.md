@@ -1050,10 +1050,21 @@ Session 9). What that means in practice:
     Groq had retired the Llama 3.x line; every AI feature had been writing with
     its rules for as long as the key had been installed. **Groq's are now
     verified against that account's own `/models` list (2026-09-05):
-    `openai/gpt-oss-20b` fast / `openai/gpt-oss-120b` quality.** OpenRouter's
-    are still unverified — no key is configured, and this sandbox cannot reach
-    either host. **If AI goes quiet, check the model name FIRST**, and use the
-    health card: it prints the models that account really offers.
+    `openai/gpt-oss-20b` fast / `openai/gpt-oss-120b` quality.** 
+    **AND IT HAPPENED AGAIN, ON THE OTHER PROVIDER (Session 27).** OpenRouter's
+    fast tier was `meta-llama/llama-3.2-3b-instruct:free`, written from memory
+    and never checked because no OpenRouter key had ever been configured —
+    **OpenRouter removed that free variant on 2026-07-19**, two months before
+    the owner first had a key. Caught only because getting a key prompted a
+    re-check; nothing in the app would ever have said so, because a retired
+    name is a 404 → a null → "write it with the rules". **Both OpenRouter
+    tiers now point at `meta-llama/llama-3.3-70b-instruct:free`, the one
+    variant confirmed live** — a slower model that answers beats a faster one
+    that 404s, and picking a smaller name from memory is the exact mistake
+    being fixed. **If AI goes quiet, check the model name FIRST**, and use the
+    health card: it prints the models that account really offers. **Two
+    providers, same bug, twice — treat every hardcoded model name here as
+    expiring stock, never as a constant.**
   * **A PROVIDER'S CATALOGUE IS NOT A LIST OF WRITERS.** Groq returned whisper
     (speech-to-text), orpheus (text-to-speech), prompt-guard/safeguard (safety
     classifiers) and an Arabic-first model alongside the two that can draft an
