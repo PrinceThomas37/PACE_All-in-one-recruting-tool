@@ -653,6 +653,58 @@ we never have to rewrite to grow (see "Growth bets" below).
     reason an upload fails.
   * **The data-URL strip is `/^data:[^,]*;base64,/`, not `.*`** — a greedy `.*`
     is a silent corruption waiting for a payload that contains a comma.
+- **CANDIDATES CAN NOW APPLY TO US — `routes/apply.js` (Session 27).** A job
+  order is PUBLISHED, which mints a random token and opens `/apply/<token>` to
+  the open internet; the applicant lands in `sourcing_candidates`, inert, like
+  a CSV row. It is the only candidate source that costs nothing to grow, which
+  is why a paid resume database is a later, measured purchase (D-0025). Rules:
+  * **THE TOKEN IS THE SECRET, SO EVERY MISS ANSWERS IDENTICALLY.** Unknown,
+    malformed, unpublished and filled return the same bytes — a scanner must
+    learn nothing from the difference — and a **malformed token never reaches
+    the database** at all.
+  * **AN APPLICANT NEVER LANDS IN `candidates`.** A public form writing into
+    the ATS is a spam vector pointed at the most valuable table in the product.
+    Staging, review, import — the path every other source already uses. Do not
+    add a second one.
+  * **A WRITE THAT DID NOT HAPPEN IS NEVER REPORTED AS SAVED**, same rule as
+    `/i/:token`, and every query is bounded at 4s because supabase-js retries a
+    refused connection for SEVEN SECONDS.
+  * **THE CLIENT'S NAME IS NEVER ON A PUBLIC PAGE.** It is the asset a staffing
+    desk is paid for. `posting_description` (human-written) wins; otherwise the
+    internal JD goes through **`services/jd-scrub.js`**, shared with the
+    "re-write job description" button so the two paths cannot disagree — the
+    automatic one faces the public with nobody checking it, so it must not be
+    the weaker. **Publishing turns on ONLY via `POST /job-orders/:id/apply-link`;
+    `apply_enabled` is deliberately absent from `JOB_FIELDS`, so a plain `PUT`
+    cannot publish a customer's job to the internet.**
+  * **MASK CONTACTS BEFORE REPLACING NAMES, AND REMOVE A CONTACT BY THE
+    SENTENCE.** A client's name is usually also its mail domain, so scrubbing
+    names first rewrote `careers@northwind.com` to `careers@our client.com`,
+    which then no longer matched the contact pattern — the address stayed on
+    the page *looking* scrubbed. And deleting only the address left
+    *"Questions? Email or call ."* in front of a stranger. **The second was
+    found in a screenshot, not a test** — the suite was green and the page read
+    as broken.
+  * **A "FIRST WORD" SCRUB NEEDS A STOPLIST.** "Northwind Construction LLC" is
+    written in the body as plain "Northwind", so the suffix strip alone leaks
+    it; but scrubbing the first word of "Precision Systems" would turn every
+    "precision" in the description into "our client". Distinctive words only
+    (≥6 chars, not in `GENERIC_WORDS`). It is not exhaustive and is not meant
+    to be — that is why a human-written `posting_description` always wins.
+- **⚠ APOLLO IS NOT AN INTEGRATION, IT IS A KEY SLOT (re-checked Session 27).**
+  The Integrations page saves and TESTS an Apollo key and **nothing in PACE
+  calls it** — `enrichment.js` names it only in a comment. Worse, **Apollo's
+  free tier no longer includes API access** (changed late 2025: ~100 credits,
+  no API; the API starts at the Organization plan, 3 users minimum). The same
+  is true of every `kind:'api'` row in `config/sourcing.js` — Apollo, Indeed,
+  Monster, CareerBuilder, Dice, LinkedIn are **names on cards**, and
+  `POST /sourcing/search` answers 501 for all of them. Do not describe any of
+  them as integrated, and do not quote a vendor's free tier from memory.
+  **There is no LinkedIn API that searches people by job title and location**,
+  for us or anyone; Recruiter System Connect surfaces data for candidates an
+  ATS already holds, partner approval runs 3-6 months at <10% acceptance, and
+  scraping is both against their terms and a due-diligence problem for a
+  product we intend to sell.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before
@@ -998,10 +1050,21 @@ Session 9). What that means in practice:
     Groq had retired the Llama 3.x line; every AI feature had been writing with
     its rules for as long as the key had been installed. **Groq's are now
     verified against that account's own `/models` list (2026-09-05):
-    `openai/gpt-oss-20b` fast / `openai/gpt-oss-120b` quality.** OpenRouter's
-    are still unverified — no key is configured, and this sandbox cannot reach
-    either host. **If AI goes quiet, check the model name FIRST**, and use the
-    health card: it prints the models that account really offers.
+    `openai/gpt-oss-20b` fast / `openai/gpt-oss-120b` quality.** 
+    **AND IT HAPPENED AGAIN, ON THE OTHER PROVIDER (Session 27).** OpenRouter's
+    fast tier was `meta-llama/llama-3.2-3b-instruct:free`, written from memory
+    and never checked because no OpenRouter key had ever been configured —
+    **OpenRouter removed that free variant on 2026-07-19**, two months before
+    the owner first had a key. Caught only because getting a key prompted a
+    re-check; nothing in the app would ever have said so, because a retired
+    name is a 404 → a null → "write it with the rules". **Both OpenRouter
+    tiers now point at `meta-llama/llama-3.3-70b-instruct:free`, the one
+    variant confirmed live** — a slower model that answers beats a faster one
+    that 404s, and picking a smaller name from memory is the exact mistake
+    being fixed. **If AI goes quiet, check the model name FIRST**, and use the
+    health card: it prints the models that account really offers. **Two
+    providers, same bug, twice — treat every hardcoded model name here as
+    expiring stock, never as a constant.**
   * **A PROVIDER'S CATALOGUE IS NOT A LIST OF WRITERS.** Groq returned whisper
     (speech-to-text), orpheus (text-to-speech), prompt-guard/safeguard (safety
     classifiers) and an Arabic-first model alongside the two that can draft an
