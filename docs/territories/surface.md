@@ -338,3 +338,38 @@ in dark and light, desktop and phone.
     and silently fails for the other.
   * Every onclick these screens emit is defined in this file (Session 21 rule),
     and `test/applicants-ui-smoke.mjs` asserts it by scanning the rendered html.
+
+- **2026-09-22 (Session 28, round 3)** — **A GUARDED CALL TO A FUNCTION THAT
+  DOES NOT EXIST IS DEAD CODE, NOT SAFETY.** The Applicants import handler
+  called `loadApplicants()` and `loadSubmissions()` after a successful import so
+  the candidate pool and the job's own list would refresh. **Both are
+  module-local** — neither is on `window` — and both calls were wrapped in
+  `if (window.x)`. So they threw nothing, did nothing, and the lists silently
+  never refreshed, which is a large part of why the owner reported the import
+  as having done nothing at all.
+
+  Two named hooks now exist for exactly this: **`window.atsReloadCandidates`**
+  (27-page-applicants) and **`window.bdReloadSubmissions(joId)`**
+  (25-workflow-bd). `applicants-ui-smoke` asserts both are real functions —
+  the sibling of the onclick rule, for calls JS makes rather than markup.
+
+  * **THE TOAST NAMES WHAT ACTUALLY HAPPENED**, including the half that did
+    not: "Saved to candidates, but not added to the job: …" when the server
+    reports `job_link_failed`.
+  * **A MATCH SCORE SHOWS "—" WHEN IT CANNOT BE COMPUTED, NEVER 0.** "We could
+    not tell" and "a bad fit" are different answers, and a zero sorts a good
+    person to the bottom of a shortlist. On a JOB's page applicants sort
+    best-fit-first (everyone there applied for the same role, so the score is
+    the only thing separating them) with unscoreable last; the Candidates-tab
+    list stays newest-first.
+
+- **2026-09-22 (Session 28, round 4)** — **A TILE READING "SUBS" WAS AMBIGUOUS
+  AND THE NUMBER BEHIND IT WAS WRONG (D-0029).** Dashboard and My Team said
+  *"Subs this week"* over a count of every pipeline row; Reports had one
+  **Submissions** tile computed a third way. Labels now name what they are:
+  **"To BDM this week/month"** on the dashboards, and Reports shows **two**
+  tiles — **Sent to BDM** and **Sent to client**. Hot jobs reads
+  *"N to client · N to BDM · N intv"* instead of a bare "subs".
+
+  **The label is half the fix.** Two tiles that say what they count cannot
+  quietly disagree the way two tiles both saying "Submissions" did.

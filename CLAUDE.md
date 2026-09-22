@@ -805,6 +805,91 @@ we never have to rewrite to grow (see "Growth bets" below).
   and the assertion passed **without the applicants block ever rendering**. It
   now uses a real job and asserts that job's own title is on screen first.
   Fourth vacuous guard found in this repo, and the second in two sessions.
+- **"ON A JOB" MEANS A `submissions` ROW — `candidate_pipeline` IS NOT
+  MEMBERSHIP (Session 28, round 3).** Importing an applicant with a
+  `job_order_id` wrote only the `candidate_pipeline` tag row, and the job
+  order's Candidates list, the pipeline board, the funnel and every report read
+  **`submissions.stage`** — so a person the owner had explicitly accepted onto
+  a job was in the database, counted nowhere, and the job page kept reading
+  "Candidates (0)". **Verified on the live record before fixing**: candidate
+  created, pipeline row created, zero submissions. Import now writes BOTH, at
+  **`Sourced`** (the same stage a manual add uses — the existing kind of
+  membership, not a new one), via `applicants.submissionRowFor()` so the stage
+  is pinned by a test. A `23505` is "already on this job", not an error. **A
+  partial success is reported** (`job_link_failed`), never swallowed.
+- **A GUARDED CALL TO A FUNCTION THAT DOES NOT EXIST IS DEAD CODE, NOT SAFETY
+  (Session 28, round 3).** The applicant import refreshed the candidate pool
+  with `if (window.loadApplicants) loadApplicants()` — and `loadApplicants` is
+  module-local, never on `window`. It threw nothing, did nothing, and the list
+  silently never refreshed. This is the onclick rule (Session 21) for calls JS
+  makes rather than markup: **a cross-module call goes to a NAMED global**
+  (`window.atsReloadCandidates`, `window.bdReloadSubmissions`) and a test
+  asserts those globals are real functions. An `if (window.x)` guard around a
+  call that is supposed to happen converts a crash into a silence.
+- **`candidates.source` HOLDS A WORD A RECRUITER READS, NOT A PROVIDER ID
+  (Session 28).** It stored the raw token, so someone who applied through a job
+  link had a Source reading **"apply"** on their record.
+  `applicants.sourceLabel()` maps it to **"Applicant"**; an unmapped id passes
+  through, because losing provenance is worse than showing a token. It is
+  deliberately NOT `config/sourcing.js`'s label — "Apply page" names the SCREEN
+  a recruiter publishes from, this names what the PERSON is.
+- **AN APPLICATION PRODUCES TWO EMAILS, AND THEY ARE NOT THE SAME MESSAGE
+  (Session 28) — `services/applicant-notify.js`, pure.** A receipt to the
+  applicant and a nudge to the job owner, both sent from `routes/apply.js`
+  **best-effort, never awaited, and only after the row is saved** — an email
+  saying "we have your application" when we do not is the same lie as a success
+  page over a failed write. **The sending mailbox is the JOB OWNER's or
+  nobody**: a public page may never choose a From address, and no connected
+  mailbox means no email, quietly. Two rules are asserted in BOTH directions:
+  * **THE END CLIENT'S NAME IS NEVER IN THE APPLICANT'S EMAIL** (same rule as
+    the apply page itself) and **MAY** appear in the recruiter's, which is
+    internal and more useful for it.
+  * **NOTHING IS PROMISED THAT PACE CANNOT KEEP** — no "within 48 hours". It
+    says what is true: it arrived, and somebody will look. **No tracking pixel
+    on a receipt**; measuring whether a candidate opened their own confirmation
+    is not a thing to do.
+  `routeCtx` is completed with the send helpers AFTER the router mounts — it is
+  handed out by reference and read at request time, so adding a key is the
+  cheap change and re-ordering a mount is the expensive one.
+- **AN APPLICANT IS SCORED AGAINST THE JOB THEY CHOSE THEMSELVES (Session
+  28).** `GET /sourcing/staged` attaches `match` from `match-engine`, one fetch
+  for the distinct jobs applied to rather than a query per applicant. The
+  number means more here than anywhere else in PACE — not "who might suit this
+  role" but "how well does the person who put their hand up fit the thing they
+  put it up for". **An unscoreable applicant shows "—", never 0**: "we could
+  not tell" and "a bad fit" are different answers, and a zero sorts a good
+  person to the bottom of a shortlist. A job's own page sorts best-fit-first
+  with unscoreable last; the Candidates tab stays newest-first.
+- **⚠ A SUBMISSION IS A CANDIDATE SENT TO THE CLIENT — ADDING SOMEBODY TO A JOB
+  IS NOT ONE (Session 28, D-0029, the owner's correction).**
+  `services/submission-stages.js` is the ONE definition; read it, not the table
+  name. **The `submissions` TABLE IS MISNAMED** — it holds all eleven ATS
+  stages and is really the candidate-on-job pipeline record. That name had
+  quietly become a business metric: the word was counted **three different ways
+  at once** — the Reports headline used a local stage list, while the Dashboard's
+  "Subs this week" and Hot jobs counted **every row**, so sourcing ten people on
+  Monday reported ten submissions.
+  * **TWO NUMBERS ARE PUBLISHED, DELIBERATELY:** `submissions` (`Submitted to
+    BDM` onward — recruiter output, an INTERNAL handoff) and
+    `client_submissions` (`Submitted to Client` onward — the real thing), plus
+    **`stalled_at_bdm`**. The GAP is why two beat one: candidates stuck between
+    recruiter and BD approval are invisible under a single figure.
+  * **THE LADDER IS ORDERED, NOT A LIST OF NAMES.** "Submitted" means "at or
+    past this point"; two hand-maintained lists is exactly how this drifted.
+  * **`Not Accepted` and `On Hold` sit OFF the ladder** — neither says how far
+    somebody got — and an **unrecognised stage counts as NOTHING**, never as a
+    submission: a renamed stage must under-count loudly rather than inflate
+    silently.
+  * **A row created by adding somebody to a job carries NO `submitted_at`.**
+    Stamping a submission date on a `Sourced` row is the same mistake as
+    counting it, written into the record.
+  * **KNOWN LIMIT (D-0029 "Re-open when"):** the count reads the stage a
+    candidate is at NOW, so somebody submitted to a client and later marked
+    `Not Accepted` stops counting — an UNDER-report. The fix is
+    `submission_activity`'s stage history or a `client_submitted_at` column.
+  * **A BUSINESS TERM IS A RULE, SO IT IS DEFINED ONCE AND MADE CALLABLE** —
+    the same discipline as a pure function. No test can catch three screens
+    meaning three things until a definition exists to test against.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before

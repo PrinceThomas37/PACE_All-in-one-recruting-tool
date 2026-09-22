@@ -1174,6 +1174,15 @@
   };
 
   // ── job order navigation ───────────────────────────────────────────────────
+  // Exposed for the Applicants screen: importing an applicant onto this job
+  // creates a submission server-side, and the job page must show it without a
+  // reload. Module-local loadSubmissions is not reachable from another file —
+  // guarding a call to a function that does not exist is dead code, not safety.
+  window.bdReloadSubmissions=function(joId){
+    if(!joId) return;
+    loadSubmissions(joId).then(function(subs){ STATE.bd.submissions=subs; render(); }).catch(function(){});
+  };
+
   window.bdOpenJobOrder=function(id){
     STATE.bd.view.joId=id;
     // Applicants are fetched alongside the submissions, and deliberately NOT

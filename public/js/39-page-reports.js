@@ -154,11 +154,11 @@
         '<div style="width:190px;flex-shrink:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
           '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
         '<div style="flex:1;background:var(--bg);border-radius:6px;height:18px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:linear-gradient(90deg,var(--accent),#2563eb);border-radius:6px"></div></div>'+
-        '<div style="width:130px;text-align:right;font-size:11.5px;color:var(--text2);flex-shrink:0"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
+        '<div style="width:200px;text-align:right;font-size:11.5px;color:var(--text2);flex-shrink:0"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
       '</div>';
     }).join('');
     return '<div class="card" style="padding:16px;margin-bottom:14px"><div style="font-weight:600;font-size:14px;margin-bottom:2px">🔥 Hot jobs</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Active reqs with the most submissions + interviews this period</div>'+body+'</div>';
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
   }
 
   function miniFunnel(f, stages){
@@ -236,7 +236,11 @@
 
     var strip = UI.strip([
       { v:(t.candidates_added||0), label:'Candidates added', icon:'user' },
-      { v:(t.submissions||0),      label:'Submissions',      icon:'send' },
+      // TWO NUMBERS, NAMED FOR WHAT THEY ARE (D-0029). One tile reading
+      // "Submissions" was ambiguous between recruiter output and what actually
+      // reached a client — and the gap between them is the useful part.
+      { v:(t.submissions||0),          label:'Sent to BDM',    icon:'send' },
+      { v:(t.client_submissions||0),   label:'Sent to client', icon:'send' },
       { v:(t.interviews||0),       label:'Interviews',       icon:'cal' },
       { v:(t.placements||0),       label:'Placements',       icon:'check' },
       { sep:true },

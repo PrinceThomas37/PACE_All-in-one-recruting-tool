@@ -47,6 +47,54 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0029 · 2026-09-22 · STANDS · A submission is a candidate sent to the CLIENT, and PACE counts two numbers
+
+**Their words:** *"define submission, ie job submission. adding a candidate to a
+job is not submission."*
+
+**They are right, and PACE had it wrong in two places.** A submission is the
+moment a candidate's profile, CV and rate go **to the client** for a hire/no-hire
+decision. It is the unit a staffing desk measures itself on. **Adding a candidate
+to a job is not that** — it says only "this person is in the running", nothing has
+left the building, and usually they have not even been screened.
+
+**The table is misnamed and the name leaked into the numbers.** PACE stores all
+eleven ATS stages, from `Sourced` to `Placement`, in a table called
+`submissions`. That is a storage name, not a meaning. But two screens counted
+**every row** as a submission:
+* **Dashboard → "Submissions this week / this month"** — source ten candidates
+  on Monday and it reported ten submissions.
+* **Reports → "Active reqs with the most submissions"**.
+
+Meanwhile the Reports **headline** "Submissions" counted only `Submitted to BDM`
+and beyond. **Two numbers in one product, the same label, different maths** —
+and the wrong one inflates the metric a buyer asks about first.
+
+**What was decided — count BOTH, shown separately.** Offered three options
+(client-only, BDM-onward, or both); the owner chose both:
+* **Sent to BDM** (`Submitted to BDM` onward) — recruiter output, an internal
+  handoff.
+* **Sent to client** (`Submitted to Client` onward) — the real submission.
+
+The reason this is the better answer and not the fence-sitting one: the GAP
+between the two is the interesting number. Candidates stalling between recruiter
+and BD approval are invisible if you only ever publish one figure.
+
+**What this does NOT change:** adding a candidate to a job still creates the
+pipeline row at `Sourced` (D-0028's applicant import included) — that is
+membership, and it is correct. It simply is not a submission and is no longer
+counted as one. A row created that way must **not** stamp `submitted_at`.
+
+**Re-open when:** the count needs to be "EVER reached this stage" rather than
+"is at or past it now". Today a candidate who was submitted to the client and
+then marked `Not Accepted` **stops being counted**, which under-reports real
+submissions — the honest limitation of keying off the current stage. The fix is
+to read stage history from `submission_activity` (which already records
+`old_stage`/`new_stage`), or to add a `client_submitted_at` column. Deferred
+because it is a bigger query on a metric that is now at least consistently
+defined, and consistency was the bug being fixed.
+
+
 ### D-0028 · 2026-09-22 · STANDS · Applicants are a VIEW of the sourcing queue, not a second pool
 
 **Their words:** *"when the candidate clicks on apply, where does that candidate

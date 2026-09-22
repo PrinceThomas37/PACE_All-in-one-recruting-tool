@@ -3298,6 +3298,16 @@ const candidateOutreach = require('./routes/candidate-outreach')({
 });
 app.use(candidateOutreach.router);
 
+// THE APPLY PAGE NEEDS THE SEND HELPERS, AND IT IS MOUNTED BEFORE THEY EXIST.
+// `routeCtx` is built near the top and handed to every router BY REFERENCE;
+// routers read it inside their handlers, at request time. Completing it here —
+// once the recruiting outreach helpers really exist — is what lets the public
+// apply page send its two emails (the applicant's receipt, the recruiter's
+// nudge) without moving a mount. Registration order is load-bearing in this
+// app, so adding a key is the cheap change and re-ordering is the expensive one.
+routeCtx.recruiterSendingMailbox = recruitingOutreach.recruiterSendingMailbox;
+routeCtx.sendMailboxNewMessage = recruitingOutreach.sendMailboxNewMessage;
+
 // THE DRIP LIVES HERE, NOT IN A setInterval. The free tier spins the service
 // down after ~15 minutes of no traffic, so an in-process timer stops existing;
 // each queued row carries its own send_after and this drains whatever is due.

@@ -79,7 +79,11 @@ try {
   const sidebar = await page.evaluate(() => document.getElementById('sidebar').innerText);
 
   // Recruiting widgets present
-  step('Banner shows recruiting stats', content.includes('Subs this week') && content.includes('Subs this month'));
+  // The label changed with D-0029: "Subs" was ambiguous between recruiter
+  // output and what actually reached a client, AND the number behind it was
+  // counting sourced candidates. It now says which one it is.
+  step('Banner shows recruiting stats', content.includes('To BDM this week') && content.includes('To BDM this month'));
+  step('the banner does NOT call sourced candidates submissions', !/\bSubs this (week|month)\b/.test(content));
   step('Tiles: My Jobs / Offers / Placements', content.includes('My Jobs') && content.includes('Offers') && content.includes('Placements'));
   step('Candidate pipeline card renders stages', content.includes('My candidate pipeline') && content.includes('Sourced') && content.includes('Interview Scheduled'));
   step('Upcoming interviews shows candidate', content.includes('Upcoming interviews') && content.includes('Jane Doe') && content.includes('Zoom'));

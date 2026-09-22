@@ -114,6 +114,11 @@
     return _prevGoPage.apply(this, arguments);
   };
 
+  // Exposed so another screen can refresh the candidate pool after it creates
+  // somebody — the Applicants tab imports, and the person must really be in
+  // All Candidates when the owner switches to it, not after a hard reload.
+  window.atsReloadCandidates = function(){ try { loadApplicants(); loadStatusCounts(); } catch (_) {} };
+
   function paintATSPage(){ if (STATE.page !== 'applicants') return; paintPageContent(); }
   UI.registerPage('applicants', function(){
     if (STATE.ats.view === 'sourcing' && window.renderSourcing) return renderSourcing();

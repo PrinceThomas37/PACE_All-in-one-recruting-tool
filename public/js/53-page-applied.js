@@ -75,7 +75,26 @@
     if (s.busy[id]) return;
     s.busy[id] = true; render();
     apiPost('/sourcing/staged/' + id + '/import', { job_order_id: jobId || undefined })
-      .then(function(){ showToast('Added to candidates', 'success'); s.busy[id] = false; load(s.jobId); })
+      .then(function(r){
+        s.busy[id] = false;
+        // SAY WHAT ACTUALLY HAPPENED, INCLUDING THE HALF THAT DID NOT.
+        // The candidate is saved either way; adding them to the job is a
+        // second write that can fail on its own, and reporting a partial
+        // success as a clean one is how "Added" appeared over a job that
+        // still read Candidates (0).
+        if (r && r.job_link_failed) {
+          showToast('Saved to candidates, but not added to the job: ' + r.job_link_failed, 'error');
+        } else if (jobId) {
+          showToast('Added to candidates and to this job', 'success');
+        } else {
+          showToast('Added to candidates', 'success');
+        }
+        // Refresh the candidate pool too, so the person is really there when
+        // the owner switches tabs rather than appearing after a hard reload.
+        if (window.atsReloadCandidates) atsReloadCandidates();
+        if (window.bdReloadSubmissions && jobId) bdReloadSubmissions(jobId);
+        load(s.jobId);
+      })
       .catch(function(e){
         s.busy[id] = false;
         // A duplicate is not a failure, it is a decision — say who it clashes
@@ -91,6 +110,16 @@
   };
 
   window.appliedRefresh = function(){ load(st().jobId); };
+
+  // THE SCORE IS AGAINST THE JOB THEY CHOSE. An unscoreable applicant shows a
+  // dash, never a zero — "we could not tell" and "a bad fit" are different
+  // answers and a 0 would sort a good person to the bottom of a shortlist.
+  function matchCell(m){
+    if (!m || m.score == null) return '<span style="color:var(--text3);font-size:12px" title="Not enough detail on the CV or the job order to score">—</span>';
+    var tone = m.band === 'strong' ? 'ok' : (m.band === 'weak' ? 'mute' : 'info');
+    var why = (m.reasons || []).join(' · ');
+    return '<span title="' + esc(why) + '">' + UI.pill(m.score + '%', tone) + '</span>';
+  }
 
   // ── rows ──────────────────────────────────────────────────────────────────
   function rowsFor(list, opts){
@@ -126,6 +155,7 @@
       if (jobCell !== null) cells.push({ html: jobCell });
       cells.push({ cls:'tight', html:'<span style="font-size:12.5px">' + esc(whenLabel(aj.applied_at || r.created_at)) + '</span>' });
       cells.push({ cls:'tight', html:'<span style="font-size:12.5px">' + esc(r.location || '—') + '</span>' });
+      cells.push({ cls:'tight', html: matchCell(r.match) });
       cells.push({ cls:'tight', html: statusCell });
       cells.push({ cls:'tight', html: resumeBtn + ' ' + actionBtn });
       return { id: r.id, cells: cells };
@@ -135,7 +165,7 @@
   function cols(hideJob){
     var c = [{ label:'Applicant' }];
     if (!hideJob) c.push({ label:'Applied for' });
-    c.push({ label:'When' }, { label:'Location' }, { label:'Status' }, { label:'' });
+    c.push({ label:'When' }, { label:'Location' }, { label:'Match' }, { label:'Status' }, { label:'' });
     return c;
   }
 
@@ -176,6 +206,13 @@
     var s = st();
     var list = (s.rows || []).filter(function(r){
       return r.applied_job && String(r.applied_job.id) === String(jobId);
+    }).slice().sort(function(a,b){
+      // ON A JOB'S OWN PAGE, BEST FIT FIRST — everyone here applied for this
+      // one role, so the score is the only thing that distinguishes them.
+      // Unscoreable sorts last rather than being treated as zero.
+      var as = (a.match && a.match.score != null) ? a.match.score : -1;
+      var bs = (b.match && b.match.score != null) ? b.match.score : -1;
+      return bs - as;
     });
     var nNew = list.filter(function(r){ return r.status === 'new'; }).length;
 

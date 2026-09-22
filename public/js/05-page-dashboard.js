@@ -269,9 +269,9 @@ function renderRecruiterDashboard(u){
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub">'+roleLabel(u.role)+'</div>'+
       '<div class="banner-stats">'+
-        '<div><div class="bstat-val">'+(d.submissions_week||0)+'</div><div class="bstat-lbl">Subs this week</div></div>'+
+        '<div><div class="bstat-val">'+(d.submissions_week||0)+'</div><div class="bstat-lbl">To BDM this week</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+(d.submissions_month||0)+'</div><div class="bstat-lbl">Subs this month</div></div>'+
+        '<div><div class="bstat-val">'+(d.submissions_month||0)+'</div><div class="bstat-lbl">To BDM this month</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
         '<div><div class="bstat-val">'+interviews+'</div><div class="bstat-lbl">In interview</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
@@ -393,9 +393,9 @@ function renderManagerDashboard(u){
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+roleLabel(u.role)+scopeBadge+'</div>'+
       '<div class="banner-stats">'+
-        '<div><div class="bstat-val">'+(d.submissions_week||0)+'</div><div class="bstat-lbl">Subs this week</div></div>'+
+        '<div><div class="bstat-val">'+(d.submissions_week||0)+'</div><div class="bstat-lbl">To BDM this week</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+(d.submissions_month||0)+'</div><div class="bstat-lbl">Subs this month</div></div>'+
+        '<div><div class="bstat-val">'+(d.submissions_month||0)+'</div><div class="bstat-lbl">To BDM this month</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
         '<div><div class="bstat-val">'+interviews+'</div><div class="bstat-lbl">In interview</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+

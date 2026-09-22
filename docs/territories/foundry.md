@@ -376,3 +376,41 @@ One re-run confirmed, per the flake rule. Do not chase it further.
 
   Both guards verified by reintroduction: removing the job filter fails 4 of 13;
   making `forJob` pass through fails 2 of 23.
+
+- **2026-09-22 (Session 28, round 3)** — **94 suites.** One new
+  (`applicant-notify-smoke`, 24 assertions) plus 13 more across the applicants
+  suites.
+
+  **The emails needed pinning more than most code in this repo:** one of them
+  goes to a STRANGER, under the CUSTOMER's name, with nobody reviewing it
+  first. So `services/applicant-notify.js` is pure and its exact words are
+  asserted — in particular that **the end client's name never appears in the
+  applicant's email** (verified by reintroducing the leak: 23/24) and that **no
+  timeframe is promised**, because PACE cannot keep one. The recruiter's alert
+  is internal and MAY name the client; that asymmetry is asserted both ways.
+
+  **Three guards verified by reintroduction this round:** the client leak
+  (1 fail), the submission stage changed to "Tagged" (1 fail), and the source
+  label reverted to the raw id (1 fail). Each was restored and re-run green.
+
+  **A live record is evidence and was used as such.** Before writing any fix,
+  the claim "it is not added to the job" was checked against the production
+  database: candidate present, pipeline row present, submissions empty. That
+  turned a vague report into a precise one in a single query, and it is the
+  reason the fix was the right one rather than a guess at the UI.
+
+- **2026-09-22 (Session 28, round 4)** — **95 suites.**
+  `submission-stages-smoke` (34 assertions) pins the business definition the
+  owner gave: Sourced and Screening are NOT submissions, `Submitted to BDM` is
+  recruiter output, `Submitted to Client` onward is the real thing, and the
+  parts always account for every row.
+
+  **Verified both ways by reintroduction**, which matters because this metric
+  can be wrong in two opposite directions: counting every row fails **16**
+  assertions, and treating `Submitted to BDM` as a client submission fails
+  **3**. A guard that only catches over-counting would have missed the second.
+
+  **A real test failure caught a real relabel.** `recruiter-dashboard-smoke`
+  asserted the string "Subs this week", which the fix renamed. The assertion
+  was updated AND given a companion that fails if the old ambiguous wording
+  ever returns — a renamed label should not be able to quietly revert.

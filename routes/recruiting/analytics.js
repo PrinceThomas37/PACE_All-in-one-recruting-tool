@@ -7,6 +7,8 @@
 // ============================================================================
 
 
+const subStages = require('../../services/submission-stages');
+
 module.exports = function (app, core) {
   const {
     supabase, db, auth, hasRole, today,
@@ -66,14 +68,21 @@ module.exports = function (app, core) {
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const byStage = {};
       STAGES.forEach(s => { byStage[s] = 0; });
-      let week = 0, month = 0;
+      let week = 0, month = 0, weekClient = 0, monthClient = 0;
       const upcoming = [];
       (subs || []).forEach(s => {
         const ns = normalizeStage(s.stage);
         if (byStage[ns] !== undefined) byStage[ns]++;
+        // ADDING A CANDIDATE TO A JOB IS NOT A SUBMISSION (D-0029).
+        // This counted EVERY row whatever its stage, so sourcing ten people on
+        // Monday reported ten submissions — the metric a buyer asks about
+        // first, inflated by doing the work rather than finishing it. Two
+        // numbers now, per the owner's call: handed to BD, and sent to client.
         const t = new Date(s.submitted_at || s.created_at);
-        if (t >= weekAgo) week++;
-        if (t >= monthStart) month++;
+        const toBdm = subStages.isSentToBdm(ns);
+        const toClient = subStages.isSentToClient(ns);
+        if (t >= weekAgo) { if (toBdm) week++; if (toClient) weekClient++; }
+        if (t >= monthStart) { if (toBdm) month++; if (toClient) monthClient++; }
         if (s.interview_at && new Date(s.interview_at) >= now) {
           upcoming.push({ submission_id: s.id, candidate: (s.candidate && s.candidate.full_name) || '', job_order_id: s.job_order_id, interview_at: s.interview_at, interview_location: s.interview_location || null });
         }
@@ -149,6 +158,8 @@ module.exports = function (app, core) {
         by_stage: byStage,
         submissions_week: week,
         submissions_month: month,
+        client_submissions_week: weekClient,
+        client_submissions_month: monthClient,
         upcoming_interviews: upcoming.slice(0, 8),
         awaiting_approval: byStage['Submitted to BDM'] || 0
       });
@@ -247,8 +258,17 @@ module.exports = function (app, core) {
       // Hot jobs — active reqs ranked by (submissions + interviews) in the window.
       const closedish = st => { st = String(st || '').toLowerCase(); return st === 'closed' || st === 'filled' || st === 'cancelled'; };
       const jobAgg = {};
-      S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, interviews: 0 }); a.submissions++; if (INTERVIEWED.includes(normalizeStage(s.stage))) a.interviews++; });
-      const hot_jobs = J.filter(j => !closedish(j.status)).map(j => { const a = jobAgg[j.id] || { submissions: 0, interviews: 0 }; return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions: a.submissions, interviews: a.interviews, score: a.submissions + a.interviews }; })
+      // Same correction: a job is "hot" because candidates have been SENT, not
+      // because somebody sourced into it. `pipeline` keeps the fuller count so
+      // the screen can say both without conflating them.
+      S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 });
+        const ns2 = normalizeStage(s.stage);
+        a.pipeline++;
+        if (subStages.isSentToBdm(ns2)) a.submissions++;
+        if (subStages.isSentToClient(ns2)) a.client_submissions++;
+        if (INTERVIEWED.includes(ns2)) a.interviews++; });
+      const subCounts = subStages.countSubmissions(S.map(x => ({ stage: normalizeStage(x.stage) })));
+      const hot_jobs = J.filter(j => !closedish(j.status)).map(j => { const a = jobAgg[j.id] || { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 }; return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions: a.submissions, client_submissions: a.client_submissions, pipeline: a.pipeline, interviews: a.interviews, score: a.submissions + a.interviews }; })
         .filter(j => j.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
 
       const now = Date.now();
@@ -275,7 +295,11 @@ module.exports = function (app, core) {
 
       const totals = {
         candidates_added: P.length,
-        submissions: S.filter(s => SUBMITTED.includes(normalizeStage(s.stage))).length,
+        // ONE DEFINITION, SHARED (D-0029) — this used a local SUBMITTED list
+        // while two other counts in the same file used none at all.
+        submissions: subCounts.toBdm,
+        client_submissions: subCounts.toClient,
+        stalled_at_bdm: subCounts.stalled,
         interviews: funnel['Interview Scheduled'] + funnel['Interview Completed'],
         placements: funnel['Placement'],
         open_jobs: J.filter(j => !closedish(j.status)).length,

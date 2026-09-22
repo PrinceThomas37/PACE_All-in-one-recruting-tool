@@ -53,6 +53,7 @@ const DOC_BUCKET = 'candidate-docs';
 const MAX_RESUME_BYTES = 3 * 1024 * 1024;
 
 const DB_TIMEOUT_MS = 4000;
+const notify = require('../services/applicant-notify');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -67,6 +68,60 @@ module.exports = (ctx) => {
   }
 
   const txt = (v) => String(v == null ? '' : v).trim();
+
+  // Sends the two messages an application should produce. Fire-and-forget:
+  // every await inside is bounded and every failure is swallowed, because the
+  // caller has already answered the applicant.
+  //
+  // THE SENDING MAILBOX IS THE JOB OWNER'S. A public page cannot be allowed to
+  // choose a From address, and there is no logged-in user here — so it is the
+  // person who owns the job, or nobody. No mailbox means no email, quietly.
+  async function notifyOnApplication(job, staged, applicantEmail) {
+    const resolveMailbox = ctx.recruiterSendingMailbox;
+    const send = ctx.sendMailboxNewMessage;
+    if (typeof resolveMailbox !== 'function' || typeof send !== 'function') return;
+
+    const ownerId = job.owner_id || job.created_by;
+    if (!ownerId) return;
+
+    let mailbox = null;
+    try { mailbox = await withTimeout(resolveMailbox(ownerId), DB_TIMEOUT_MS); } catch (_) { return; }
+    if (!mailbox) return;
+
+    // The CUSTOMER's own name, never the end client's — this goes to a stranger.
+    let orgName = '';
+    try {
+      const o = await withTimeout(supabase.from('organizations')
+        .select('name').eq('id', job.org_id).maybeSingle(), DB_TIMEOUT_MS);
+      orgName = (o && o.data && o.data.name) || '';
+    } catch (_) { /* a missing name costs a sign-off, not the email */ }
+
+    // 1. the receipt
+    if (applicantEmail) {
+      const msg = notify.applicantReceipt({
+        applicantName: staged.full_name, jobTitle: job.job_title, company: orgName,
+      });
+      try { await send(mailbox, applicantEmail, msg.subject, msg.html); } catch (_) { /* silent */ }
+    }
+
+    // 2. the nudge
+    let ownerEmail = '';
+    try {
+      const u = await withTimeout(supabase.from('users')
+        .select('email').eq('id', ownerId).maybeSingle(), DB_TIMEOUT_MS);
+      ownerEmail = (u && u.data && u.data.email) || '';
+    } catch (_) { /* no address, no nudge */ }
+    if (!ownerEmail) return;
+
+    const alert = notify.recruiterAlert({
+      applicantName: staged.full_name, jobTitle: job.job_title, jobCode: job.job_code,
+      client: job.client, email: staged.email, phone: staged.phone, location: staged.location,
+      appUrl: process.env.APP_URL || '',
+    });
+    try { await send(mailbox, ownerEmail, alert.subject, alert.html); } catch (_) { /* silent */ }
+  }
+
+
 
   // ── the page shell ────────────────────────────────────────────────────────
   // No external stylesheet, no external font, no framework. This is opened on a
@@ -125,7 +180,7 @@ module.exports = (ctx) => {
       .select('id,org_id,job_code,job_title,city,state,country,remote,job_type,' +
               'job_description,posting_description,client,end_client,client_manager,' +
               'primary_skills,secondary_skills,exp_min,exp_max,' +
-              'pay_cur,pay_min,pay_max,status,apply_enabled,apply_token')
+              'pay_cur,pay_min,pay_max,status,apply_enabled,apply_token,owner_id,created_by')
       .eq('apply_token', token).maybeSingle());
     const job = r && r.data;
     if (!job) return null;
@@ -405,6 +460,17 @@ module.exports = (ctx) => {
       } catch (_) { /* a wrong badge is not worth a failed application */ }
 
       const who = await orgName(job.org_id);
+      // ── tell the applicant, and tell the recruiter ────────────────────
+      // BEST-EFFORT AND NEVER AWAITED. A stranger's application must not be
+      // held open — or worse, reported as failed — because a mailbox is
+      // disconnected or a provider is slow. The row is already saved; this is
+      // courtesy on top of it, and it is allowed to fail silently.
+      //
+      // It runs AFTER the insert succeeded, deliberately: an email saying "we
+      // have your application" when we do not is the same lie as a success
+      // page over a failed write.
+      try { notifyOnApplication(job, row, txt(b.email)); } catch (_) { /* never blocks */ }
+
       return res.status(201).json({
         received: true,
         html: '<div style="max-width:620px;margin:0 auto;padding:32px 18px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif">' +

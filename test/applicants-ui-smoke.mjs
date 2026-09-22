@@ -146,6 +146,17 @@ try {
   });
   step('every onclick these screens emit is a real function', undefinedHandlers.length === 0, undefinedHandlers.join(', '));
 
+  // A CROSS-MODULE CALL MUST BE TO A REAL GLOBAL (Session 28, round 3).
+  // The first version of the import handler called `loadApplicants()` and
+  // `loadSubmissions()` — both module-local, neither on window. Guarded with
+  // `if (window.x)`, so it threw nothing and did nothing: the candidate pool
+  // silently never refreshed. **Guarding a call to a function that does not
+  // exist is dead code, not safety.** These two are what the Applicants screen
+  // reaches for after an import, so they are asserted to exist.
+  const hooks = await page.evaluate(() => ['atsReloadCandidates', 'bdReloadSubmissions']
+    .filter(n => typeof window[n] !== 'function'));
+  step('the refresh hooks the import calls really exist', hooks.length === 0, hooks.join(', '));
+
   step('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
 } catch (e) {
   step('suite ran', false, String(e && e.stack || e));
