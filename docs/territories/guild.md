@@ -109,3 +109,34 @@
   with a stub database; each guard was verified by reintroducing its own bug.
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-22** — apply-page staging (`provider='apply'`); rewrote `config/sourcing.js` around `built` vs `available`; extracted the JD scrubber to `services/jd-scrub.js`.
+
+- **2026-09-22 (Session 28)** — **APPLICANTS ARE A VIEW, NOT A POOL (D-0028).**
+  The first real application landed through a published apply link and nothing
+  in the product showed it. Rather than a new store, `GET /sourcing/staged`
+  grew two things: **`status=all`** (so an imported applicant still appears,
+  marked, instead of vanishing from the list the moment you action them) and
+  **`job_order_id`**, which filters to one job's applications. Import still
+  goes through `POST /sourcing/staged/:id/import` — one path, pre-tagged with
+  the job the applicant chose.
+
+  **THE JOB FILTER IS DONE IN NODE, DELIBERATELY.** The obvious implementation
+  is a PostgREST jsonb filter (`raw->>applied_to_job_order_id`). It was written
+  and then removed: it **cannot be exercised from this sandbox** (no
+  credentials), and its failure mode is an **empty list, not an error** — the
+  screen would have read "no applicants yet" forever and looked correct. The
+  match now lives in **`services/applicants.js`**, pure, and is pinned by
+  `test/applicants-smoke.mjs`. **An untestable filter whose failure looks like
+  an empty state is the worst shape available; prefer the testable one.**
+
+  * **`forJob` with no job id returns NOTHING, never everything.** A
+    pass-through would show one job's page every other job's applicants — the
+    screen's purpose exactly inverted. Pinned, and verified by reintroducing.
+  * **`raw` is jsonb, so every shape is defended** — null, a string, an array,
+    an older blob. A reader that throws on one takes the page down.
+  * **A missing job title is left null, never guessed.** Naming the wrong role
+    to a recruiter deciding whether to phone somebody is worse than naming none.
+  * **`GET /sourcing/staged/:id/resume`** signs the CV for 10 minutes. An
+    application's resume is in the PRIVATE bucket; a CSV row's `resume_url` is
+    a public URL somebody typed. One column, two meanings — the endpoint passes
+    a URL through untouched and signs a path. Org-scoped, role-gated, **404
+    (not 403) for another org's row** so ids cannot be probed.

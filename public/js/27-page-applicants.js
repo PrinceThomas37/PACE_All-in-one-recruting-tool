@@ -116,7 +116,9 @@
 
   function paintATSPage(){ if (STATE.page !== 'applicants') return; paintPageContent(); }
   UI.registerPage('applicants', function(){
-    return (STATE.ats.view === 'sourcing' && window.renderSourcing) ? renderSourcing() : renderApplicants();
+    if (STATE.ats.view === 'sourcing' && window.renderSourcing) return renderSourcing();
+    if (STATE.ats.view === 'applied' && window.renderApplied) return renderApplied();
+    return renderApplicants();
   });
 
   // Candidates / Sourcing sub-tabs — Sourcing used to be its own top-level nav
@@ -124,6 +126,9 @@
   window.atsSetView = function(v){
     STATE.ats.view = v;
     if (v === 'sourcing' && window.srcLoadForCandidatesTab) srcLoadForCandidatesTab();
+    // Applicants loads on first switch and on every return, because somebody
+    // may have applied since — a stale "0 new" is worse than a spinner.
+    if (v === 'applied' && window.appliedLoad) appliedLoad(null);
     render();
   };
   // The same tab bar the grid draws, exported for the Sourcing view so the two
@@ -131,6 +136,8 @@
   window.atsTabBar = function(){
     return UI.tabs([
       { id:'grid',     label:'All Candidates', n:poolTotal(STATE.ats), onclick:"atsSetView('grid')" },
+      { id:'applied',  label:'Applicants', n:(window.appliedNewCount ? appliedNewCount() : 0),
+                                                     onclick:"atsSetView('applied')" },
       { id:'sourcing', label:'Sourcing',                               onclick:"atsSetView('sourcing')" }
     ], STATE.ats.view || 'grid');
   };

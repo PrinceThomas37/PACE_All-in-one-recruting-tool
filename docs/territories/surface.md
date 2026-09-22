@@ -309,3 +309,32 @@ in dark and light, desktop and phone.
   parses, and a file can parse perfectly while a variable it names does not
   exist at the point it is read. **A scope error is a RUNTIME error, so only
   running the code can find it.**
+
+- **2026-09-22 (Session 28)** — **THE APPLICANTS SCREENS**
+  (`public/js/53-page-applied.js`). Candidates gains a third tab beside All
+  Candidates and Sourcing, and a job order's page carries the same list scoped
+  to itself, directly under the apply link that produced it.
+
+  **ONE LIST IN STATE, RENDERED TWICE.** `renderApplied()` and
+  `renderJobApplicants(jobId)` read the same `STATE.applied.rows`; the job page
+  filters that array rather than fetching its own. Two fetches would drift, and
+  a preview disagreeing with the real thing is a failure this repo has already
+  paid for (Session 21, the brief the queue sent vs the one the preview showed).
+
+  * **An imported applicant stays on the list, marked `Imported`.** A list that
+    drops the person you just actioned reads as though the application was lost.
+  * **The tab count and the job block count NEW only** — the number is "how many
+    need me", not "how many exist".
+  * **Applicants are fetched WITHOUT being awaited** when a job opens. Somebody
+    applying through a public link must never be able to delay a recruiter
+    opening their own job; the block renders "Loading…" and fills in.
+  * **`UI.toolbar` HAS NO `left` — passing one is dropped SILENTLY.** It takes
+    `search`, `icons` and `right`. The first version put the applicant count in
+    `left` and it simply never rendered, with no error. **Check a kit builder's
+    real signature before passing it a key.**
+  * **A private CV is never a plain `href`.** `appliedOpenResume` asks the
+    server for a signed URL. `resume_url` holds a public URL for a CSV row and a
+    private storage PATH for an application — linking it directly works for one
+    and silently fails for the other.
+  * Every onclick these screens emit is defined in this file (Session 21 rule),
+    and `test/applicants-ui-smoke.mjs` asserts it by scanning the rendered html.

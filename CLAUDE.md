@@ -758,6 +758,53 @@ we never have to rewrite to grow (see "Growth bets" below).
   apply feature was never once reachable after it shipped. `node --check`
   passes on all of it: **a scope error is a RUNTIME error, so only running the
   code finds it.**
+- **APPLICANTS ARE A VIEW OF THE SOURCING QUEUE, NOT A SECOND POOL (Session
+  28, D-0028).** Candidates → **Applicants** and the **Applicants** block on a
+  job order both read `GET /sourcing/staged?provider=apply&status=all` and
+  import through `POST /sourcing/staged/:id/import` — the same two endpoints
+  the Sourcing review queue uses. **Do not add a third list or a second import
+  path.** `status=all` exists so an imported applicant stays on the list,
+  marked: a list that drops the person you just actioned reads as though the
+  application was lost. Importing pre-tags the job they applied to.
+  * **`services/applicants.js` is the ONLY reader of `raw`.** Which job somebody
+    applied to lives in the staged row's `raw` blob, not a column; the router
+    attaches a normalised `applied_job` so **no page parses `raw`**. `raw` is
+    jsonb, so every shape (null, a string, an array, an older blob) is defended
+    — a reader that throws takes the page down. A missing title stays null,
+    never guessed: naming the wrong role to a recruiter about to phone somebody
+    is worse than naming none.
+  * **`forJob` WITH NO JOB ID RETURNS NOTHING, NEVER EVERYTHING.** A
+    pass-through would show one job's page every other job's applicants — the
+    screen's purpose exactly inverted. Pinned, and verified by reintroduction.
+  * **`resume_url` MEANS TWO DIFFERENT THINGS.** A CSV row carries a public URL
+    somebody typed; an APPLICATION carries a storage path in the **private**
+    `candidate-docs` bucket. A plain `href` works for the first and silently
+    fails for the second, so nothing links it directly —
+    `GET /sourcing/staged/:id/resume` signs it for 10 minutes, org-scoped and
+    role-gated, answering **404 (not 403)** for another org's row.
+- **⚠ PREFER THE MECHANISM YOU CAN TEST HERE OVER THE ONE YOU CANNOT
+  (Session 28).** The job filter above was first written as a PostgREST jsonb
+  filter (`raw->>applied_to_job_order_id`) — the idiomatic implementation — and
+  removed before it ever ran. **This sandbox has no Supabase credentials, so it
+  could not be exercised at all, and its failure mode is an EMPTY LIST rather
+  than an error.** A broken filter renders "No applications yet", which is a
+  completely plausible sentence on a page with applicants behind it; nobody
+  would have doubted it. The match moved into a pure function instead. When one
+  option is prettier and the other is verifiable, and the prettier one fails
+  SILENTLY and PLAUSIBLY, take the verifiable one.
+- **A PAGE IS NOT ONE SCREEN, AND THE RENDER GUARD NOW KNOWS IT (Session 28).**
+  `test/page-renders-smoke.mjs` drove `STATE.page` only, which draws every
+  multi-tab page's DEFAULT tab — the same hole that shipped Email's Sent and
+  Outreach Plan tabs broken in Session 23. Screens are now `[page, sub]` pairs
+  shallow-merged into STATE (**190 screens**), and the Candidates page is
+  covered as three. **When a page grows a tab, add the pair** — otherwise the
+  tab is invisible to the one suite whose job is noticing a page is not there.
+- **AN EMPTY-STATE TEST MUST PROVE THE THING RENDERED BEFORE JUDGING WHAT IT
+  SAYS (Session 28).** "A job with no applicants says so" was pointed at a job
+  id that did not exist, so the page drew *"Job not found or still loading"*
+  and the assertion passed **without the applicants block ever rendering**. It
+  now uses a real job and asserts that job's own title is on screen first.
+  Fourth vacuous guard found in this repo, and the second in two sessions.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before

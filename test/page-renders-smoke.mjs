@@ -52,10 +52,28 @@ function findChromium() {
 // them rather than by any internal flag.
 const BROKEN = ['Could not draw this page', 'Page not found'];
 
-const PAGES = ['dashboard', 'leads', 'applicants', 'email', 'reports', 'myteam',
-               'bd_joborders', 'bd_myjobs', 'bd_jodetail', 'bd_pipeline', 'clients',
-               'sourced', 'insights', 'reminders', 'job_board', 'admin', 'assign'];
+// A PAGE IS NOT ONE SCREEN (the Session 23 rule, applied here).
+//
+// Setting STATE.page alone draws every multi-tab page's DEFAULT tab, so a
+// sub-tab can be broken for as long as nobody opens it. Session 27 shipped the
+// apply page that way; Session 28 added an Applicants sub-tab that STATE.page
+// would never have reached. A screen is therefore a page PLUS the state that
+// selects what the page draws.
+//
+// `sub` is applied to STATE as a shallow merge per key, so a tab living at
+// STATE.ats.view is driven as surely as one living at STATE.page.
+const SCREENS = [
+  ['dashboard'], ['leads'], ['email'], ['reports'], ['myteam'],
+  ['bd_joborders'], ['bd_myjobs'], ['bd_jodetail'], ['bd_pipeline'],
+  ['clients'], ['sourced'], ['insights'], ['reminders'], ['job_board'],
+  ['admin'], ['assign'],
+  // The Candidates page is three screens, not one.
+  ['applicants', { ats: { view: 'grid' } }],
+  ['applicants', { ats: { view: 'applied' } }],
+  ['applicants', { ats: { view: 'sourcing' } }],
+];
 const ROLES = ['admin', 'bd', 'bd_lead', 'recruiter', 'ra_lead'];
+const nameOf = ([p, sub]) => p + (sub ? ' [' + JSON.stringify(sub).replace(/[{}"]/g, '') + ']' : '');
 
 // One job order, one lead, with the apply columns present — the detail page
 // needs a record to open, and the apply block reads three fields that only
@@ -116,14 +134,20 @@ try {
     // Two passes: a populated account, and one where the apply columns are
     // absent entirely (an org whose rows predate migration 044).
     for (const seed of [{ apply: true }, { apply: false }]) {
-      for (const p of PAGES) {
+      for (const screen of SCREENS) {
         await page.evaluate(SEED, seed);
-        await page.evaluate((pp) => { window.STATE.page = pp; window.render(); }, p);
+        await page.evaluate(([pp, sub]) => {
+          window.STATE.page = pp;
+          for (const k of Object.keys(sub || {})) {
+            window.STATE[k] = Object.assign({}, window.STATE[k], sub[k]);
+          }
+          window.render();
+        }, screen);
         await page.waitForTimeout(40);
         const got = await page.evaluate(DREW);
         checked++;
         const hit = BROKEN.find(b => got.text.includes(b));
-        if (hit) broken.push(`${p} / ${role} / apply=${seed.apply}: ${got.text.split('\n').filter(Boolean)[0] || hit}`);
+        if (hit) broken.push(`${nameOf(screen)} / ${role} / apply=${seed.apply}: ${got.text.split('\n').filter(Boolean)[0] || hit}`);
       }
     }
   }

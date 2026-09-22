@@ -347,3 +347,32 @@ One re-run confirmed, per the flake rule. Do not chase it further.
   **Verified by reintroducing the bug**: 3/7, naming both faults including the
   `applyBlock is not defined` one nobody had seen. Restored: 7/7.
   Full suite **91/91**, `verify-frontend.sh` PASS.
+
+- **2026-09-22 (Session 28, round 2)** — **A PAGE IS NOT ONE SCREEN, SO THE
+  RENDER GUARD NOW DRIVES SUB-STATE.** `page-renders-smoke.mjs` set
+  `STATE.page` only, which draws every multi-tab page's DEFAULT tab — so the
+  new Applicants tab (`STATE.ats.view`) would never have been rendered by it,
+  the same hole that let Email's Sent and Outreach Plan tabs ship broken in
+  Session 23. Screens are now `[page, sub]` pairs, shallow-merged into STATE,
+  and the Candidates page is covered as **three** screens rather than one.
+  **190 screens** (was 170). When a page grows a tab, add the pair.
+
+  **Two new suites, 93 total:**
+  * `applicants-smoke.mjs` (23 assertions, pure) — the applicant→job contract.
+    Written precisely because the alternative implementation was a PostgREST
+    filter that **cannot be run from this sandbox**, whose failure mode is an
+    empty list. Given a choice between an untestable mechanism and a testable
+    one, take the testable one — the guard is the point.
+  * `applicants-ui-smoke.mjs` (13 assertions, browser) — both screens, and the
+    one that matters: **a job page must not show another job's applicant.**
+
+  **A vacuous pass was caught and fixed inside this suite.** "A job with no
+  applicants says so" was pointed at a job id that did not exist, so the page
+  drew *"Job not found or still loading"* and the assertion passed **without
+  ever rendering the applicants block**. It now uses a REAL job with no
+  applicants and asserts that job's own title is on screen first — proof the
+  page rendered — before asserting the empty sentence. **An empty-state test
+  must prove the thing rendered before it judges what it says.**
+
+  Both guards verified by reintroduction: removing the job filter fails 4 of 13;
+  making `forJob` pass through fails 2 of 23.
