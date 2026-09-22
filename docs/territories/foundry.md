@@ -376,3 +376,25 @@ One re-run confirmed, per the flake rule. Do not chase it further.
 
   Both guards verified by reintroduction: removing the job filter fails 4 of 13;
   making `forJob` pass through fails 2 of 23.
+
+- **2026-09-22 (Session 28, round 3)** — **94 suites.** One new
+  (`applicant-notify-smoke`, 24 assertions) plus 13 more across the applicants
+  suites.
+
+  **The emails needed pinning more than most code in this repo:** one of them
+  goes to a STRANGER, under the CUSTOMER's name, with nobody reviewing it
+  first. So `services/applicant-notify.js` is pure and its exact words are
+  asserted — in particular that **the end client's name never appears in the
+  applicant's email** (verified by reintroducing the leak: 23/24) and that **no
+  timeframe is promised**, because PACE cannot keep one. The recruiter's alert
+  is internal and MAY name the client; that asymmetry is asserted both ways.
+
+  **Three guards verified by reintroduction this round:** the client leak
+  (1 fail), the submission stage changed to "Tagged" (1 fail), and the source
+  label reverted to the raw id (1 fail). Each was restored and re-run green.
+
+  **A live record is evidence and was used as such.** Before writing any fix,
+  the claim "it is not added to the job" was checked against the production
+  database: candidate present, pipeline row present, submissions empty. That
+  turned a vague report into a precise one in a single query, and it is the
+  reason the fix was the right one rather than a guess at the UI.

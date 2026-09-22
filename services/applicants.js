@@ -69,4 +69,57 @@ function forJob(rows, jobOrderId) {
   return (rows || []).filter(r => isApplication(r) && appliedJobId(r) === want);
 }
 
-module.exports = { appliedJobId, appliedJob, isApplication, forJob };
+
+// WHAT A CANDIDATE'S `source` SHOULD READ (Session 28, round 3).
+//
+// The import stored the raw provider id, so a candidate who applied through a
+// job's own link had a Source column reading **"apply"** — an internal token,
+// in front of a recruiter, on the record of a real person. The owner's words:
+// *"the applicant tag name should be used"*.
+//
+// This is the one place that turns a provider id into the word a human reads.
+// It is NOT `config/sourcing.js`'s label ("Apply page"), because that label
+// names the SCREEN a recruiter publishes from; this names what the PERSON is.
+const SOURCE_LABELS = {
+  apply: 'Applicant',
+  csv: 'CSV import',
+};
+
+/** The human word for where a candidate came from. Unknown ids pass through. */
+function sourceLabel(provider) {
+  const id = str(provider);
+  if (!id) return null;
+  return SOURCE_LABELS[id] || id;
+}
+
+
+// PUTTING SOMEBODY ON A JOB MEANS A SUBMISSION (Session 28, round 3).
+//
+// Importing an applicant with a job used to write only a `candidate_pipeline`
+// row. But the job order's Candidates list, the pipeline board, the funnel and
+// every report read `submissions.stage` — so an applicant the owner had
+// explicitly added to a job counted nowhere and the job page kept saying
+// "Candidates (0)". Verified against the live record before fixing it.
+//
+// The row is built HERE so the shape is pinned by a test rather than trusted:
+// the stage in particular, because `Sourced` is the first ATS stage and using
+// anything else would put an applicant somewhere no board draws.
+function submissionRowFor(cand, jobOrderId, userId) {
+  if (!cand || !cand.id || !str(jobOrderId)) return null;
+  const c = cand || {};
+  return {
+    candidate_id: c.id,
+    job_order_id: str(jobOrderId),
+    recruiter_id: userId || null,
+    stage: 'Sourced',
+    revision_status: 'N/A',
+    employer_name: c.current_employer || null,
+    bill_rate: c.bill_rate || null,
+    pay_rate: c.pay_rate || null,
+    availability: c.availability || null,
+    notice_period: c.notice_period || null,
+    submitted_by: userId || null,
+  };
+}
+
+module.exports = { appliedJobId, appliedJob, isApplication, forJob, sourceLabel, SOURCE_LABELS, submissionRowFor };

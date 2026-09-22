@@ -90,3 +90,24 @@
 - **2026-09-09** — fixed `getTimezoneFromLocation` state-code substring bug;
   opened C-0014 to deep for the backfill.
 - **2026-09-22** — added `routes/apply.js` (public apply page) + `applyLimiter`; publish/unpublish endpoints on job orders. Migration 044 applied live with owner go-ahead.
+
+- **2026-09-22 (Session 28, round 3)** — **THE APPLY PAGE NOW SENDS TWO EMAILS,
+  AND `routeCtx` IS COMPLETED AFTER THE MOUNT TO ALLOW IT.**
+
+  `routes/apply.js` is mounted long before `recruitingOutreach` exists, so its
+  ctx could not carry the send helpers. **`routeCtx` is handed to every router
+  BY REFERENCE and read inside handlers at request time**, so the two keys are
+  attached to it *after* `app.use(candidateOutreach.router)` rather than moving
+  a mount. **Registration order is load-bearing in this app** — adding a key is
+  the cheap change, re-ordering is the expensive one.
+
+  * **BEST-EFFORT, NEVER AWAITED, ALWAYS AFTER THE INSERT.** A stranger's
+    application must not be held open — or reported as failed — because a
+    mailbox is disconnected. It runs only once the row is saved, because an
+    email saying "we have your application" when we do not is the same lie as a
+    success page over a failed write.
+  * **THE SENDING MAILBOX IS THE JOB OWNER'S, OR NOBODY.** There is no
+    logged-in user on a public page and a public page may never choose a From
+    address. No connected mailbox means no email, quietly.
+  * Every await inside is bounded by the same 4s `withTimeout` the rest of the
+    route uses, and every failure is swallowed.

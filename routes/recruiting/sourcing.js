@@ -8,6 +8,7 @@ const { parseResume } = require('../../resume-parser');
 const createCandidateFields = require('../../services/candidate-fields');
 
 const applicants = require('../../services/applicants');
+const matchEngine = require('../../match-engine');
 // Same bucket routes/apply.js writes into.
 const APPLY_DOC_BUCKET = 'candidate-docs';
 
@@ -118,8 +119,33 @@ module.exports = function (app, core) {
       // "no applicants yet" forever, which is the worst way for this to break.
       // `services/applicants.js` is pure, so the rule is pinned by a test.
       if (req.query.job_order_id) rows = applicants.forJob(rows, req.query.job_order_id);
+      // AN APPLICANT IS SCORED AGAINST THE JOB THEY CHOSE THEMSELVES, which
+      // makes the number unusually meaningful — this is not "who might suit
+      // this role", it is "how well does the person who put their hand up
+      // actually fit the thing they put it up for". With forty applicants that
+      // is the difference between a list and a shortlist.
+      //
+      // One fetch for the whole page: the distinct jobs applied to, not one
+      // query per applicant.
+      const jobIds = [...new Set(rows.map(r => applicants.appliedJobId(r)).filter(Boolean))];
+      const jobsById = {};
+      if (jobIds.length) {
+        const { data: jobs } = await withOrg(supabase.from('job_orders')
+          .select('id,job_title,primary_skills,secondary_skills,exp_min,exp_max,city,state,country,job_description')
+          .in('id', jobIds), req);
+        for (const j of (jobs || [])) jobsById[j.id] = j;
+      }
       // The page never parses `raw`. One reader, one shape.
-      res.json(rows.map(r => Object.assign({}, r, { applied_job: applicants.appliedJob(r) })));
+      res.json(rows.map(r => {
+        const aj = applicants.appliedJob(r);
+        let match = null;
+        if (aj && jobsById[aj.id]) {
+          // Scoring must never take the list down — a malformed staged row is
+          // a missing number, not a 500.
+          try { match = matchEngine.scoreCandidate(r, jobsById[aj.id]); } catch (_) { match = null; }
+        }
+        return Object.assign({}, r, { applied_job: aj, match });
+      }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -197,7 +223,11 @@ module.exports = function (app, core) {
       if (dups.length) return { duplicate: true, matches: dups };
     }
     const row = Object.assign(payload, {
-      candidate_code: await nextId('CN'), applicant_status: 'New lead', owner_id: userId, created_by: userId
+      candidate_code: await nextId('CN'), applicant_status: 'New lead', owner_id: userId, created_by: userId,
+      // A RECRUITER READS THIS COLUMN, SO IT HOLDS A WORD, NOT AN ID. It used
+      // to store the raw provider token, so somebody who applied through a job
+      // link had a Source reading "apply". One mapping, in services/applicants.
+      source: applicants.sourceLabel(provider) || provider,
     }, orgStamp(req));
     if (await hasProvenanceColumns()) {
       row.profile_url = profileUrl;
@@ -214,6 +244,34 @@ module.exports = function (app, core) {
           pipeline_status: 'Tagged', work_auth_snap: cand.work_authorization || null, source: provider, tagged_by: userId
         });
       } catch (_) { /* already tagged / non-fatal */ }
+
+      // AND A SUBMISSION, BECAUSE THAT IS WHAT "ON THE JOB" MEANS EVERYWHERE
+      // ELSE (Session 28, round 3).
+      //
+      // Importing with a job used to write ONLY the `candidate_pipeline` row
+      // above. But the job order's own Candidates list, the pipeline board, the
+      // funnel and every report read `submissions.stage` — so an applicant the
+      // owner had explicitly added to a job landed in the database, counted
+      // nowhere, and the job page kept reading "Candidates (0)". Verified on the
+      // live record: candidate created, pipeline row created, **zero
+      // submissions**. The owner reported it as "its not added as candidate to
+      // the job", which was exactly right.
+      //
+      // `Sourced` is the first ATS stage and the same one a manual add uses —
+      // this is not a new kind of membership, it is the existing one.
+      try {
+        const subRow = applicants.submissionRowFor(cand, opts.job_order_id, userId);
+        const { error: subErr } = await supabase.from('submissions').insert(Object.assign(subRow, {
+          submission_code: await nextId('SB'), submitted_at: new Date(),
+        }, orgStamp(req)));
+        // 23505 is "already on this job" — a second import of the same person
+        // is not an error, and must never undo the import that just succeeded.
+        if (subErr && subErr.code !== '23505') throw subErr;
+      } catch (e) {
+        // A submission that did not land must be VISIBLE, not swallowed. The
+        // candidate is already saved, so this is reported and never rolled back.
+        return { candidate: cand, job_link_failed: (e && e.message) || 'could not add to the job' };
+      }
     }
     return { candidate: cand };
   }

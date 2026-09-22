@@ -13,7 +13,7 @@
 //
 // Usage: node test/applicants-smoke.mjs
 
-import { appliedJobId, appliedJob, isApplication, forJob } from '../services/applicants.js';
+import { appliedJobId, appliedJob, isApplication, forJob, sourceLabel, submissionRowFor } from '../services/applicants.js';
 
 const results = [];
 const step = (name, ok, detail = '') => { results.push({ name, ok }); console.log((ok ? '[PASS] ' : '[FAIL] ') + name + (detail ? ' — ' + detail : '')); };
@@ -90,6 +90,39 @@ eq('an undefined list is handled', forJob(undefined, JOB).length, 0);
 
 // A job nobody applied to is empty, and that is a real answer.
 eq('a job with no applicants is empty', forJob(rows, 'nobody-applied').length, 0);
+
+
+// ── the word a recruiter reads in the Source column ───────────────────────
+// It stored the raw provider id, so a person who applied through a job link
+// had a Source reading "apply" on their record. The owner asked for the
+// applicant tag name instead.
+eq('an applicant\'s source reads as a word, not an id', sourceLabel('apply'), 'Applicant');
+eq('a CSV row says so too', sourceLabel('csv'), 'CSV import');
+// An id with no mapping PASSES THROUGH rather than becoming blank — losing
+// provenance is worse than showing a token.
+eq('an unmapped provider passes through', sourceLabel('linkedin'), 'linkedin');
+eq('no provider yields null, never a made-up word', sourceLabel(''), null);
+
+// ── putting somebody on a job means a SUBMISSION ──────────────────────────
+// The bug the owner hit: importing with a job wrote only a candidate_pipeline
+// row, so the job page kept reading "Candidates (0)" for a person it had just
+// accepted. Confirmed on the live record — candidate created, pipeline row
+// created, ZERO submissions.
+const sub = submissionRowFor(
+  { id: 'cand-1', current_employer: 'Northwind', bill_rate: 80, availability: '2 weeks' },
+  'job-1', 'user-1');
+eq('the submission is at the first ATS stage', sub.stage, 'Sourced');
+eq('it links the candidate', sub.candidate_id, 'cand-1');
+eq('it links the job', sub.job_order_id, 'job-1');
+eq('it records who added them', sub.submitted_by, 'user-1');
+eq('it snapshots the employer', sub.employer_name, 'Northwind');
+step('it snapshots rate and availability', sub.bill_rate === 80 && sub.availability === '2 weeks');
+
+// NO JOB MEANS NO SUBMISSION — importing without a job must not invent one,
+// or every applicant lands on whatever job happened to be open.
+eq('no job id builds no submission', submissionRowFor({ id: 'c' }, '', 'u'), null);
+eq('no candidate builds no submission', submissionRowFor(null, 'job-1', 'u'), null);
+eq('a whitespace job id builds no submission', submissionRowFor({ id: 'c' }, '   ', 'u'), null);
 
 // ── isApplication ─────────────────────────────────────────────────────────
 step('only provider "apply" is an application',

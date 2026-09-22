@@ -5522,3 +5522,60 @@ testable one**, even when the untestable one is the more idiomatic code. The
 PostgREST filter was the better-looking implementation and the worse
 engineering decision, because its failure would have been silent, plausible,
 and indistinguishable from the truth.
+
+
+## Session 28, round 3 — the accept button that half-worked
+
+The owner accepted the first real applicant onto a job and reported three
+things: they stayed in the applicant list, they were not added to the job, and
+they could not be found under Candidates. Two of the three were real, one was
+my design, and the sharpest one was invisible from the screen.
+
+**Checked against the live database before touching any code.** The candidate
+HAD been created (CN-00037). A `candidate_pipeline` row HAD been created. And
+there were **zero submissions** — which is what the job order's Candidates
+list, the pipeline board, the funnel and every report actually read. So the
+import wrote membership into a table nothing counts, and the job page went on
+saying "Candidates (0)" over a person it had just accepted. One query turned a
+vague report into a precise one.
+
+**PACE had two ways to be "on a job" and only one of them meant anything.**
+`candidate_pipeline` is a tagging layer; `submissions.stage` is membership.
+Importing now writes both, at `Sourced` — the same stage a manual add uses,
+because this is the existing kind of membership rather than a new one.
+
+**The second fault was mine and was invisible.** The import handler refreshed
+the candidate pool and the job's list by calling `loadApplicants()` and
+`loadSubmissions()` — both module-local, neither on `window`, both wrapped in
+`if (window.x)`. They threw nothing and did nothing. **A guarded call to a
+function that does not exist is dead code, not safety**, and it is a sibling of
+the onclick rule from Session 21: the guard made the absence silent. Two named
+hooks now exist and a test asserts they are real functions.
+
+**The third was a word.** `candidates.source` stored the raw provider token, so
+a real person's record read "apply". The owner asked for the applicant tag name
+and was right to: an internal id in a column a recruiter reads is a small,
+constant reminder that the product is leaking its plumbing.
+
+**Then the three things that had been offered and asked for.** A receipt to the
+applicant (a careers page that swallows a CV in silence is the commonest
+complaint candidates have about applying anywhere), a nudge to the recruiter
+(otherwise the only way to learn is to go and look, and nobody goes and looks),
+and a match score — which is worth more here than anywhere else in PACE,
+because an applicant is scored against the job **they chose themselves**.
+
+The emails are pure functions with their exact words pinned, because one of
+them goes to a stranger under the customer's name with nobody reviewing it. Two
+rules are asserted in both directions: the end client's name is never in the
+applicant's email and may appear in the recruiter's, and nothing is promised
+that PACE cannot keep — no "within 48 hours", because nothing here can keep
+that.
+
+**The thread through this round.** Rounds 1 and 2 were about tests that could
+not see an absence. This one was about the same blindness in the product: a
+button that reported success, wrote a row, and left the thing the user actually
+asked for undone — and three separate mechanisms (the pipeline table nothing
+counts, the guarded call to a missing function, the id shown as a word) each of
+which failed **silently and plausibly**. None of them threw. The screen looked
+fine. The owner found all three by trying to use the feature, which remains the
+only test that covers everything.

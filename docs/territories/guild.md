@@ -140,3 +140,41 @@
     a public URL somebody typed. One column, two meanings — the endpoint passes
     a URL through untouched and signs a path. Org-scoped, role-gated, **404
     (not 403) for another org's row** so ids cannot be probed.
+
+- **2026-09-22 (Session 28, round 3)** — **"ADD TO JOB" MEANT NOTHING, AND THE
+  LIVE RECORD PROVED IT.** The owner imported the first real applicant onto a
+  job and reported *"its not added as candidate to the job"*. Checked against
+  the live database rather than reasoned about: candidate **created**
+  (CN-00037), `candidate_pipeline` row **created** ("Tagged"), **zero
+  submissions**. `importStagedCandidate` wrote only the pipeline row — but the
+  job order's Candidates list, the pipeline board, the funnel and every report
+  read **`submissions.stage`**, so the person was in the database, counted
+  nowhere, and the job page kept saying "Candidates (0)".
+
+  **A SECOND MEMBERSHIP TABLE IS NOT MEMBERSHIP.** `candidate_pipeline` is a
+  tagging layer; `submissions` is what the product means by "on this job".
+  Importing with a `job_order_id` now writes BOTH, at stage **`Sourced`** — the
+  same first stage a manual add uses, because this is the existing kind of
+  membership, not a new one. `applicants.submissionRowFor()` builds the row so
+  the stage is pinned by a test rather than trusted; a `23505` is "already on
+  this job" and is not an error.
+
+  * **A PARTIAL SUCCESS IS REPORTED, NEVER SWALLOWED.** The candidate is saved
+    before the submission is attempted, so a failure there returns
+    `job_link_failed` and the page says "Saved to candidates, but not added to
+    the job". Reporting a half-success as a clean one is exactly how "Added"
+    came to appear over a job reading Candidates (0).
+  * **`candidates.source` HOLDS A WORD, NOT AN ID.** It stored the raw provider
+    token, so someone who applied through a job link had a Source column
+    reading **"apply"** on the record of a real person. `applicants.sourceLabel`
+    maps it to **"Applicant"**; an unmapped id passes through, because losing
+    provenance is worse than showing a token. This is NOT
+    `config/sourcing.js`'s label ("Apply page") — that names the screen a
+    recruiter publishes from, this names what the person is.
+  * **AN APPLICANT IS SCORED AGAINST THE JOB THEY CHOSE.** `GET
+    /sourcing/staged` attaches `match` from `match-engine`, one fetch for the
+    distinct jobs applied to rather than a query per applicant. The number
+    means more here than anywhere else in PACE: not "who might suit this role"
+    but "how well does the person who put their hand up fit the thing they put
+    it up for". Scoring is wrapped — a malformed staged row is a missing
+    number, never a 500.
