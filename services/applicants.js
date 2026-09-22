@@ -104,6 +104,11 @@ function sourceLabel(provider) {
 // The row is built HERE so the shape is pinned by a test rather than trusted:
 // the stage in particular, because `Sourced` is the first ATS stage and using
 // anything else would put an applicant somewhere no board draws.
+//
+// ⚠ THIS IS NOT A SUBMISSION (D-0029). The table is misnamed — it holds the
+// whole candidate-on-job pipeline. A submission is a candidate sent to the
+// CLIENT, and nothing here has been sent anywhere, so the row carries NO
+// `submitted_at` and is not counted as a submission by anything.
 function submissionRowFor(cand, jobOrderId, userId) {
   if (!cand || !cand.id || !str(jobOrderId)) return null;
   const c = cand || {};

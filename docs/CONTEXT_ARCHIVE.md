@@ -5579,3 +5579,56 @@ counts, the guarded call to a missing function, the id shown as a word) each of
 which failed **silently and plausibly**. None of them threw. The screen looked
 fine. The owner found all three by trying to use the feature, which remains the
 only test that covers everything.
+
+
+## Session 28, round 4 — the word that meant three things
+
+Before merging the applicant work, the owner stopped it with a definition:
+*"define submission, ie job submission. adding a candidate to a job is not
+submission."*
+
+They were right, and the correction was worth more than the feature. **A
+submission is a candidate sent to the CLIENT** — profile, CV and rate, for a
+hire/no-hire decision. It is what a staffing desk measures itself on. Adding
+somebody to a job says only that they are in the running; nothing has left the
+building.
+
+**PACE counted the word three different ways at once.** The Reports headline
+used a local list of stages. The Dashboard's "Subs this week" counted every row
+in the table. Hot jobs did the same. So sourcing ten candidates on a Monday
+reported ten submissions — on the first metric a buyer would ask about.
+
+The root cause is a name. The `submissions` table holds all eleven ATS stages,
+from Sourced to Placement; it is really the candidate-on-job pipeline record.
+**A storage name had quietly become a business metric**, and nothing in the code
+said otherwise, so each screen invented its own reading.
+
+**Offered three definitions; the owner chose to publish two numbers** — to BDM
+(recruiter output, internal) and to client (the real submission) — and that is
+the better answer rather than a fence-sit, because **the gap between them is
+the interesting figure**. Candidates stalling between recruiter and BD approval
+are invisible if only one number is ever shown, so `stalled_at_bdm` is now
+published too.
+
+`services/submission-stages.js` is the single definition, and the ladder is
+ORDERED rather than a list of names: "submitted" means "at or past this point",
+and two hand-maintained lists is precisely how this drifted in the first place.
+`Not Accepted` and `On Hold` sit off the ladder because neither says how far
+somebody got, and an unrecognised stage counts as nothing — a renamed stage
+should under-count loudly, never inflate silently.
+
+**One honest limit, recorded with its re-open condition:** the count reads the
+stage a candidate is at NOW, so somebody submitted to a client and later marked
+Not Accepted stops being counted. That under-reports. Fixing it needs the stage
+history that `submission_activity` already stores, or a `client_submitted_at`
+column — deferred, because the bug being fixed was three screens disagreeing,
+and consistency had to come first.
+
+**The thread through this round.** Every previous round this session was about
+a mechanism failing silently. This one was about a WORD failing silently. The
+code was correct in the sense that every line did what it said; what was wrong
+was that three places used one term for three different things, and no test
+could catch it because no definition existed to test against. **Naming a
+business term precisely, once, in a callable place, is the same kind of fix as
+extracting a rule into a pure function** — and it came from the owner, who does
+not read code, noticing that a sentence in a PR description was wrong.

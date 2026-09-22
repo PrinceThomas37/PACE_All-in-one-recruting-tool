@@ -362,3 +362,14 @@ in dark and light, desktop and phone.
     best-fit-first (everyone there applied for the same role, so the score is
     the only thing separating them) with unscoreable last; the Candidates-tab
     list stays newest-first.
+
+- **2026-09-22 (Session 28, round 4)** — **A TILE READING "SUBS" WAS AMBIGUOUS
+  AND THE NUMBER BEHIND IT WAS WRONG (D-0029).** Dashboard and My Team said
+  *"Subs this week"* over a count of every pipeline row; Reports had one
+  **Submissions** tile computed a third way. Labels now name what they are:
+  **"To BDM this week/month"** on the dashboards, and Reports shows **two**
+  tiles — **Sent to BDM** and **Sent to client**. Hot jobs reads
+  *"N to client · N to BDM · N intv"* instead of a bare "subs".
+
+  **The label is half the fix.** Two tiles that say what they count cannot
+  quietly disagree the way two tiles both saying "Submissions" did.

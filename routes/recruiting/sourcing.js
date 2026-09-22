@@ -261,8 +261,11 @@ module.exports = function (app, core) {
       // this is not a new kind of membership, it is the existing one.
       try {
         const subRow = applicants.submissionRowFor(cand, opts.job_order_id, userId);
+        // NO `submitted_at` (D-0029). Adding somebody to a job is membership,
+        // not a submission — stamping a submission date on a `Sourced` row is
+        // the same mistake as counting it, written into the record itself.
         const { error: subErr } = await supabase.from('submissions').insert(Object.assign(subRow, {
-          submission_code: await nextId('SB'), submitted_at: new Date(),
+          submission_code: await nextId('SB'),
         }, orgStamp(req)));
         // 23505 is "already on this job" — a second import of the same person
         // is not an error, and must never undo the import that just succeeded.

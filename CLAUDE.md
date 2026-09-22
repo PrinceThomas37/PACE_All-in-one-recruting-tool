@@ -860,6 +860,36 @@ we never have to rewrite to grow (see "Growth bets" below).
   not tell" and "a bad fit" are different answers, and a zero sorts a good
   person to the bottom of a shortlist. A job's own page sorts best-fit-first
   with unscoreable last; the Candidates tab stays newest-first.
+- **⚠ A SUBMISSION IS A CANDIDATE SENT TO THE CLIENT — ADDING SOMEBODY TO A JOB
+  IS NOT ONE (Session 28, D-0029, the owner's correction).**
+  `services/submission-stages.js` is the ONE definition; read it, not the table
+  name. **The `submissions` TABLE IS MISNAMED** — it holds all eleven ATS
+  stages and is really the candidate-on-job pipeline record. That name had
+  quietly become a business metric: the word was counted **three different ways
+  at once** — the Reports headline used a local stage list, while the Dashboard's
+  "Subs this week" and Hot jobs counted **every row**, so sourcing ten people on
+  Monday reported ten submissions.
+  * **TWO NUMBERS ARE PUBLISHED, DELIBERATELY:** `submissions` (`Submitted to
+    BDM` onward — recruiter output, an INTERNAL handoff) and
+    `client_submissions` (`Submitted to Client` onward — the real thing), plus
+    **`stalled_at_bdm`**. The GAP is why two beat one: candidates stuck between
+    recruiter and BD approval are invisible under a single figure.
+  * **THE LADDER IS ORDERED, NOT A LIST OF NAMES.** "Submitted" means "at or
+    past this point"; two hand-maintained lists is exactly how this drifted.
+  * **`Not Accepted` and `On Hold` sit OFF the ladder** — neither says how far
+    somebody got — and an **unrecognised stage counts as NOTHING**, never as a
+    submission: a renamed stage must under-count loudly rather than inflate
+    silently.
+  * **A row created by adding somebody to a job carries NO `submitted_at`.**
+    Stamping a submission date on a `Sourced` row is the same mistake as
+    counting it, written into the record.
+  * **KNOWN LIMIT (D-0029 "Re-open when"):** the count reads the stage a
+    candidate is at NOW, so somebody submitted to a client and later marked
+    `Not Accepted` stops counting — an UNDER-report. The fix is
+    `submission_activity`'s stage history or a `client_submitted_at` column.
+  * **A BUSINESS TERM IS A RULE, SO IT IS DEFINED ONCE AND MADE CALLABLE** —
+    the same discipline as a pure function. No test can catch three screens
+    meaning three things until a definition exists to test against.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before

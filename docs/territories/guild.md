@@ -178,3 +178,40 @@
     but "how well does the person who put their hand up fit the thing they put
     it up for". Scoring is wrapped — a malformed staged row is a missing
     number, never a 500.
+
+- **2026-09-22 (Session 28, round 4)** — **"SUBMISSION" MEANT THREE DIFFERENT
+  THINGS IN ONE PRODUCT (D-0029).** The owner: *"define submission, ie job
+  submission. adding a candidate to a job is not submission."* Correct, and the
+  audit found the word counted three ways at once:
+  * Reports **headline** — a LOCAL list of stages (`Submitted to BDM` onward).
+  * Dashboard **"Subs this week/month"** — **every row**, any stage.
+  * Reports **Hot jobs** — **every row**, any stage.
+
+  So sourcing ten candidates on Monday reported ten submissions on the metric a
+  buyer asks about first. **The `submissions` table is MISNAMED** — it holds all
+  eleven ATS stages and is really the candidate-on-job pipeline record. A
+  storage name had become a business metric.
+
+  **`services/submission-stages.js` is now the one definition** (pure, ordered
+  ladder, `isSentToBdm` / `isSentToClient` / `isInPipelineOnly` /
+  `countSubmissions`). All three call sites read it. The ladder is ORDERED
+  rather than a list of names, because "submitted" means "at or past this
+  point" and two hand-maintained lists is exactly how this drifted.
+
+  **Two numbers are published, not one (the owner's call):** `submissions`
+  (to BDM — recruiter output, internal) and `client_submissions` (the real
+  thing), plus **`stalled_at_bdm`**, which is the gap between them and the
+  reason two numbers beat one.
+
+  * **`Not Accepted` and `On Hold` sit OFF the ladder** — neither says how far
+    somebody got. They are counted as `offLadder` and reported, never hidden.
+  * **An unrecognised stage counts as NOTHING**, never as a submission: a
+    renamed stage must under-count loudly rather than inflate silently.
+  * **A row created by adding somebody to a job carries no `submitted_at`** —
+    stamping a submission date on a `Sourced` row is the same mistake as
+    counting it, written into the record.
+  * **KNOWN LIMIT (D-0029 re-open):** this keys off the stage a candidate is AT
+    NOW. Somebody submitted to a client and later marked `Not Accepted` stops
+    being counted, which under-reports. The fix is `submission_activity`'s
+    stage history or a `client_submitted_at` column; deferred because the bug
+    being fixed was three screens disagreeing.

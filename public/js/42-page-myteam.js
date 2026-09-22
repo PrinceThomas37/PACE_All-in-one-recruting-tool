@@ -72,8 +72,8 @@
         '<button class="btn btn-outline btn-sm" onclick="myteamTab(\'reports\')">Full reports →</button></div>'+
       (loading?'<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0">Loading…</div>':
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
-          tile('Subs this week',d.submissions_week,'var(--accent)')+
-          tile('Subs this month',d.submissions_month,'var(--accent)')+
+          tile('To BDM this week',d.submissions_week,'var(--accent)')+
+          tile('To BDM this month',d.submissions_month,'var(--accent)')+
           tile('In interview',interviews,'#2563eb')+
           tile('Awaiting approval',d.awaiting_approval,'var(--amber)')+
           tile('Placements',bs['Placement'],'var(--green)')+

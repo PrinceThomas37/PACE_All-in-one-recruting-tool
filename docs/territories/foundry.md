@@ -398,3 +398,19 @@ One re-run confirmed, per the flake rule. Do not chase it further.
   database: candidate present, pipeline row present, submissions empty. That
   turned a vague report into a precise one in a single query, and it is the
   reason the fix was the right one rather than a guess at the UI.
+
+- **2026-09-22 (Session 28, round 4)** — **95 suites.**
+  `submission-stages-smoke` (34 assertions) pins the business definition the
+  owner gave: Sourced and Screening are NOT submissions, `Submitted to BDM` is
+  recruiter output, `Submitted to Client` onward is the real thing, and the
+  parts always account for every row.
+
+  **Verified both ways by reintroduction**, which matters because this metric
+  can be wrong in two opposite directions: counting every row fails **16**
+  assertions, and treating `Submitted to BDM` as a client submission fails
+  **3**. A guard that only catches over-counting would have missed the second.
+
+  **A real test failure caught a real relabel.** `recruiter-dashboard-smoke`
+  asserted the string "Subs this week", which the fix renamed. The assertion
+  was updated AND given a companion that fails if the old ambiguous wording
+  ever returns — a renamed label should not be able to quietly revert.
