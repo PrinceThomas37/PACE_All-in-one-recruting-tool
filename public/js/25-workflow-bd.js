@@ -369,31 +369,6 @@
         '<td style="padding:11px 12px;font-size:12.5px">'+recNames+'</td>'+
       '</tr>';
     }).join("");
-    // ── the public apply link ────────────────────────────────────────────
-    // Published is a STATE, so the block says which one it is in and offers
-    // only the action that state allows. A single toggle would leave the
-    // recruiter guessing whether the link is live right now, which is the one
-    // thing they need to be sure of before pasting it anywhere.
-    var applyOn=!!j.apply_enabled, applyTok=j.apply_token||'', applyN=j.apply_count||0;
-    var applyUrl=applyTok?(location.origin+'/apply/'+applyTok):'';
-    var applyBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
-        '<div style="font-weight:600;font-size:13px">Apply link'+
-          (applyOn?' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· live</span>':'')+
-          (applyN?' <span style="font-size:11px;color:var(--text3);font-weight:500">· '+applyN+' applicant'+(applyN===1?'':'s')+'</span>':'')+
-        '</div>'+
-        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
-          (applyOn
-            ? '<button class="btn btn-sm btn-outline" onclick="bdCopyApplyLink()" style="font-size:11.5px">Copy link</button>'+
-              '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',false)" style="font-size:11.5px">Turn off</button>'
-            : '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',true)" style="font-size:11.5px">Publish apply page</button>')+
-        '</div>'+
-      '</div>'+
-      (applyOn
-        ? '<input id="bd-apply-url" readonly value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>'
-        : '<div style="font-size:12.5px;color:var(--text3)">Publish a page anyone can apply on, then post the link wherever you like — a job board, LinkedIn, WhatsApp, your website. Applicants arrive already parsed and scored, in the Sourcing review queue.</div>')+
-    '</div>';
 
     return '<div class="page">'+
       jobsTabBar+
@@ -1003,6 +978,31 @@
         '</div>'+
       '</div>'+
       (jdDisplay?'<div style="font-size:13px;white-space:pre-wrap;overflow:hidden;'+((jdLong&&!jdExpanded)?'max-height:110px;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)':'')+'">'+esc(jdDisplay)+'</div>':'<div style="font-size:12.5px;color:var(--text3)">No job description yet.</div>')+
+    '</div>';
+    // ── the public apply link ────────────────────────────────────────────
+    // Published is a STATE, so the block says which one it is in and offers
+    // only the action that state allows. A single toggle would leave the
+    // recruiter guessing whether the link is live right now, which is the one
+    // thing they need to be sure of before pasting it anywhere.
+    var applyOn=!!j.apply_enabled, applyTok=j.apply_token||'', applyN=j.apply_count||0;
+    var applyUrl=applyTok?(location.origin+'/apply/'+applyTok):'';
+    var applyBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
+        '<div style="font-weight:600;font-size:13px">Apply link'+
+          (applyOn?' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· live</span>':'')+
+          (applyN?' <span style="font-size:11px;color:var(--text3);font-weight:500">· '+applyN+' applicant'+(applyN===1?'':'s')+'</span>':'')+
+        '</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+          (applyOn
+            ? '<button class="btn btn-sm btn-outline" onclick="bdCopyApplyLink()" style="font-size:11.5px">Copy link</button>'+
+              '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',false)" style="font-size:11.5px">Turn off</button>'
+            : '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',true)" style="font-size:11.5px">Publish apply page</button>')+
+        '</div>'+
+      '</div>'+
+      (applyOn
+        ? '<input id="bd-apply-url" readonly value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>'
+        : '<div style="font-size:12.5px;color:var(--text3)">Publish a page anyone can apply on, then post the link wherever you like — a job board, LinkedIn, WhatsApp, your website. Applicants arrive already parsed and scored, in the Sourcing review queue.</div>')+
     '</div>';
 
     return '<div class="page">'+

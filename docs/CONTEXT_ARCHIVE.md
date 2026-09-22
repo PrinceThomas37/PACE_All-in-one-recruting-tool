@@ -5413,3 +5413,50 @@ system could see the gap. What closed it was making the rule executable, even
 though only the shallowest part of it *can* be executable. The narrative still
 depends on judgement. But "did anyone write anything at all" no longer depends
 on anyone remembering to ask.
+
+
+## Session 28 — the Jobs page was dead, and every test said it was fine
+
+The owner opened the Jobs tab and got a red sentence: *"Could not draw this
+page: j is not defined"*. Reported as one broken tab. It was two.
+
+**The fault.** Session 27's apply-link block had been written into the wrong
+function. It landed in `renderJobOrders` — the LIST — directly after the row
+`.map(function(j){...}).join("")` closed, so the `j` it reads was already out
+of scope; and the string it built was consumed in `renderJobOrderDetail`, a
+different function 650 lines down. The list threw `j is not defined`; the
+detail threw `applyBlock is not defined`. The second was invisible because the
+only route to it ran through the first. One misplaced edit, two dead pages, and
+the feature shipped the session before had never once been reachable.
+
+**Why nothing caught it, which is the part worth keeping.** Five browser suites
+render `bd_joborders`. All five passed. That is not an accident of coverage —
+it is what they measure. `UI.registerPage` catches a render error and writes a
+short red sentence into `#content`, and *that* page has excellent contrast,
+three DOM nodes, no overflow, no compositing layers and perfect repaint
+stability. It outperforms the real page on every axis those suites collect. The
+`pageerror` listener misses it too, because the error is caught by design.
+
+**Five suites measuring how good a screen looks, and not one asking whether the
+screen is there.** Those are different questions. The app's own error handling
+— which is correct, and should stay — converts a crash into something that
+looks, to every metric in the suite, like an unusually clean page.
+
+**The guard.** `test/page-renders-smoke.mjs`: every registered page x five
+roles x two data shapes, 170 screens, asserting only that `#content` does not
+carry "Could not draw this page" or "Page not found". No layout judgement, no
+per-page knowledge, plus a cannot-measure assertion so it fails rather than
+passes when it cannot see the app. Reintroducing the bug drops it to 3/7 and
+names both faults, including the one no human had seen. Full suite 91/91.
+
+**The thread through this session.** Session 27 ended by making the memory
+protocol executable, on the argument that *a script cannot write the narrative
+but can check that one was written*. This session is the same shape one layer
+down: **a test cannot tell you a screen is good, but it can tell you the screen
+exists** — and five tests measuring goodness all agreed about a page that was
+not there. The cheap, dumb, presence-level check is the one that was missing
+both times. It is worth asking of any guard: does this fail when the thing is
+absent, or only when the thing is ugly?
+
+And the gate held. After the fix, `memory-check` named foundry, surface and
+this archive as owed — and this entry exists because it did.

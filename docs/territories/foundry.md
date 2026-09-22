@@ -319,3 +319,31 @@ One re-run confirmed, per the flake rule. Do not chase it further.
 **Both Node versions, every PR.** 76/76 on 22 and 26 for #203, #204 and #205.
 - **2026-09-22** — added `apply-page-smoke` and `sourcing-honesty-smoke` (89 suites total); caught and fixed a vacuous guard that passed 30/30 with its bug reintroduced.
 - **2026-09-22** — added `memory-discipline-smoke` (90 suites); reviewed the Stop gate for satisfiability and fail-open behaviour.
+
+- **2026-09-22 (round 2)** — **A CRASHED PAGE IS THE BEST-BEHAVED PAGE IN THE
+  APP, AND THAT IS WHY NOTHING CAUGHT IT.** `bd_joborders` threw on every
+  render. Five browser suites render that page —
+  `theme-contrast`, `screen-stability`, `ui-smoothness`, `ageing-layout`,
+  `mobile-layout` — and all five passed on it.
+
+  Not luck. `UI.registerPage` catches a render error and writes one short red
+  sentence into `#content`. That page has **excellent contrast** (dark red on
+  a plain ground), **three DOM nodes** (so it cannot fail a 3x growth cap),
+  **no overflow** (nothing to clip), **no compositing layers** and **perfect
+  repaint stability** (nothing to repaint). It scores better than a working
+  page on every axis those suites measure. `page.on('pageerror')` does not see
+  it either — the error is *caught*, which is the whole point of the handler.
+
+  **A suite measuring the QUALITY of a screen cannot tell you the screen
+  exists.** Those are different questions and they need different tests.
+
+  **`test/page-renders-smoke.mjs` (new, 91 suites)** is that second question
+  and nothing more: every registered page x five roles x two data shapes —
+  **170 screens** — asserting only that `#content` does not contain
+  "Could not draw this page" or "Page not found". Deliberately dumb, no layout
+  judgement, no per-page knowledge. It also carries a **cannot-measure guard**
+  (the modules really loaded), per the vacuous-guard rule.
+
+  **Verified by reintroducing the bug**: 3/7, naming both faults including the
+  `applyBlock is not defined` one nobody had seen. Restored: 7/7.
+  Full suite **91/91**, `verify-frontend.sh` PASS.

@@ -287,3 +287,25 @@ Replaced with node identity, which cannot pass emptily.
 Verified: `lead-row-expand-smoke.mjs` 20/20, full suite **77/77**. Screenshots
 in dark and light, desktop and phone.
 - **2026-09-22** — Apply-link block on the job-order detail; rebuilt the Sourcing provider list so unbuilt sources render no action.
+
+- **2026-09-22 (round 2)** — **THE JOBS PAGE WAS DEAD ON ARRIVAL, AND FIVE
+  BROWSER SUITES CALLED IT FINE.** The owner opened Jobs and got
+  `Could not draw this page: j is not defined`.
+
+  **A BLOCK THAT READS A ROW VARIABLE MUST LIVE INSIDE THE ROW LOOP — AND A
+  BLOCK CONSUMED BY ONE FUNCTION MUST BE BUILT IN THAT FUNCTION.** The
+  apply-link block was written into `renderJobOrders` (the LIST) immediately
+  after the row `.map(function(j){...}).join("")` closed, so the `j` it reads
+  had already gone out of scope; and the `applyBlock` string it produced was
+  consumed 650 lines away in `renderJobOrderDetail`, which is a different
+  function. **One misplaced edit, two dead pages** — the list threw `j is not
+  defined`, the detail threw `applyBlock is not defined`, and only the first
+  was ever reported because nobody could reach the second. Both now sit in
+  `renderJobOrderDetail`, defined directly after `jdBlock` and used ten lines
+  below it.
+
+  **`node --check` passed, and so did every existing suite.** This is the
+  Session 21 rule restated with a new edge: a syntax check proves a file
+  parses, and a file can parse perfectly while a variable it names does not
+  exist at the point it is read. **A scope error is a RUNTIME error, so only
+  running the code can find it.**

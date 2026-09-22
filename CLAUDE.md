@@ -734,6 +734,30 @@ we never have to rewrite to grow (see "Growth bets" below).
     `closest('.card')` asks the question the rule is actually about. **Never
     anchor a DOM assertion on a specific nesting depth.**
   Both failure modes were re-verified by reintroducing each bug separately.
+- **⚠ A CRASHED PAGE OUTSCORES A WORKING ONE ON EVERY METRIC THE SUITES
+  COLLECT (Session 28).** The Jobs page threw `j is not defined` on every
+  render and **five browser suites rendered it and passed** — theme-contrast,
+  screen-stability, ui-smoothness, ageing-layout, mobile-layout. Not a coverage
+  gap: `UI.registerPage` catches a render error and writes one short red
+  sentence into `#content`, and that page has excellent contrast, **three DOM
+  nodes** (cannot fail a 3x growth cap), no overflow, no compositing layers and
+  perfect repaint stability. `page.on('pageerror')` misses it too, because the
+  error is *caught* — as it should be. **A suite measuring the QUALITY of a
+  screen cannot tell you the screen exists**; that is a separate, dumber
+  question and it needs its own test. `test/page-renders-smoke.mjs` asks only
+  it: every registered page x 5 roles x 2 data shapes, 170 screens, asserting
+  `#content` carries neither "Could not draw this page" nor "Page not found".
+  Ask it of any new guard: **does this fail when the thing is ABSENT, or only
+  when the thing is ugly?**
+- **A BLOCK THAT READS A ROW VARIABLE LIVES INSIDE THE ROW LOOP, AND A BLOCK
+  CONSUMED BY ONE FUNCTION IS BUILT IN THAT FUNCTION (Session 28).** The
+  apply-link block was written into `renderJobOrders` just after its row
+  `.map(function(j){…})` closed — `j` gone — and consumed 650 lines away in
+  `renderJobOrderDetail`. **One misplaced edit, two dead pages**, and the
+  second (`applyBlock is not defined`) was unreachable behind the first, so the
+  apply feature was never once reachable after it shipped. `node --check`
+  passes on all of it: **a scope error is a RUNTIME error, so only running the
+  code finds it.**
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before
