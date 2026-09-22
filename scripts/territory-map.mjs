@@ -207,6 +207,98 @@ function capabilityDrift() {
 }
 const drift = capabilityDrift();
 
+/* ── the flight log ────────────────────────────────────────────────────────
+ * The island used to move for the sake of moving: a light picked a random arc
+ * every third of a second and flew down it. It looked like data and was not,
+ * which is the one thing a survey of a codebase must never be.
+ *
+ * So every moving thing on the island is now a real event out of this
+ * repository, and hovering it says what it was. Two kinds:
+ *
+ *   commit   — a real commit. The files it touched are attributed to their
+ *              territories, so a commit spanning two of them flies the arc
+ *              between them. One that stays home flares at its own beacon.
+ *   contract — a real border request out of _contracts.md, flying from the
+ *              territory that asked to the one it asked of.
+ *
+ * A file belonging to no territory (docs, CLAUDE.md) is counted but does not
+ * fly — it has nowhere to fly from. Those commits stay in the feed, because
+ * "the session was written up" is a true thing that happened.
+ */
+function flightLog(territories, contracts) {
+  const own = territories.map(t => ({
+    id: t.id,
+    own: TERRITORIES.find(x => x.id === t.id).own,
+    not: TERRITORIES.find(x => x.id === t.id).not,
+  }));
+  const terrOf = path => {
+    const hit = own.find(t => matches(path, t.own) && !matches(path, t.not));
+    return hit ? hit.id : null;
+  };
+
+  let raw = '';
+  try {
+    raw = execFileSync('git',
+      ['log', '--no-merges', '--date-order', '--format=%x00%h|%cs|%s', '--numstat'],
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  } catch { return { events: [], observed: [] }; }
+
+  const commits = [];
+  for (const chunk of raw.split('\0')) {
+    if (!chunk.trim()) continue;
+    const [head, ...rest] = chunk.split('\n');
+    const [sha, date, ...msgParts] = head.split('|');
+    const byTerr = new Map();
+    let files = 0, lines = 0, other = 0, top = null;
+    for (const row of rest) {
+      const m = row.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
+      if (!m) continue;
+      const n = (m[1] === '-' ? 0 : +m[1]) + (m[2] === '-' ? 0 : +m[2]);
+      const path = m[3].includes('=>') ? m[3].replace(/.*=>\s*/, '').replace(/[{}]/g, '') : m[3];
+      files++; lines += n;
+      if (!top || n > top[1]) top = [path, n];
+      const id = terrOf(path);
+      if (id) byTerr.set(id, (byTerr.get(id) || 0) + n);
+      else other++;
+    }
+    if (!files) continue;
+    commits.push({
+      k: 'commit', sha, date,
+      msg: msgParts.join('|').replace(/\s*\(#(\d+)\)\s*$/, ''),
+      pr: (msgParts.join('|').match(/\(#(\d+)\)\s*$/) || [])[1] || null,
+      t: [...byTerr.entries()].sort((a, b) => b[1] - a[1]),
+      files, lines, other,
+      top: top ? { f: top[0], n: top[1] } : null,
+    });
+  }
+
+  const events = [...commits, ...contracts.map(c => ({
+    k: 'contract', id: c.id, from: c.from, to: c.to,
+    status: c.status, date: c.date, asks: c.asks,
+  }))].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  /* Every pair two territories were changed together in, whether or not the
+   * dependency map declares an edge between them. An undeclared pair that
+   * keeps appearing is a real coupling nobody has written down — worth
+   * drawing, in its own weight, rather than dropping the event. */
+  const seen = new Map();
+  for (const e of events) {
+    const ids = e.k === 'commit' ? e.t.map(x => x[0]) : [e.from, e.to];
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = [ids[i], ids[j]].sort().join('|');
+        seen.set(key, (seen.get(key) || 0) + 1);
+      }
+  }
+  const declared = new Set(EDGES.map(([a, b]) => [a, b].sort().join('|')));
+  const observed = [...seen.entries()]
+    .filter(([k]) => !declared.has(k))
+    .map(([k, n]) => [...k.split('|'), n]);
+
+  return { events, observed };
+}
+const flight = flightLog(territories, contracts);
+
 const map = {
   generated: new Date().toISOString().slice(0, 10),
   repo: 'PrinceThomas37/PACE_All-in-one-recruting-tool',
@@ -217,6 +309,7 @@ const map = {
     unclaimedFiles: unclaimed.length,
   },
   territories, edges: EDGES, contracts, unclaimed: unclaimed.slice(0, 40),
+  events: flight.events, observed: flight.observed,
 };
 
 writeFileSync(join(ROOT, 'docs/territories/_map.json'),

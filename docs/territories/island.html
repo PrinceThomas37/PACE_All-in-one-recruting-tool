@@ -137,7 +137,7 @@ p.lede{font-size:13.5px; color:var(--vellum-2); line-height:1.65; margin:0 0 14p
 p.lede b{color:var(--vellum); font-weight:500}
 
 /* ── the route runner ───────────────────────────────────────────────────── */
-#routes{bottom:0; left:292px; right:392px; padding:12px 22px 14px;
+#routes{padding:12px 22px 14px;
   border-bottom:none; border-left:none; border-right:none}
 #routes .row{display:flex; flex-wrap:wrap; gap:7px; align-items:center}
 .rbtn{background:none; border:1px solid var(--hair-soft); color:var(--vellum-2);
@@ -158,7 +158,33 @@ p.lede b{color:var(--vellum); font-weight:500}
   max-width:62ch; line-height:1.55}
 #stepnote b{color:var(--brass); font-weight:500}
 
-#hint{bottom:0; right:0; padding:9px 16px; font-size:10px; letter-spacing:.12em;
+/* ── the flight log ─────────────────────────────────────────────────────── */
+#stack{position:fixed; bottom:0; left:292px; right:392px;
+  display:flex; flex-direction:column; pointer-events:none}
+#stack > *{position:static; pointer-events:auto}
+#flight{padding:10px 22px 12px; border-left:none; border-right:none}
+#flight.held{border-color:var(--rust); background:rgba(19,14,13,.9)}
+#fl-head{display:flex; align-items:center; gap:12px; margin-bottom:6px}
+#fl-head .mono{font-family:var(--fm); font-size:10.5px; color:var(--vellum-3);
+  letter-spacing:.06em; font-variant-numeric:tabular-nums}
+#fl-head #fl-date{color:var(--brass)}
+#fl-head .kind{font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+  border:1px solid var(--hair-soft); padding:2px 7px; color:var(--vellum-3)}
+#fl-head .kind.contract{border-color:var(--rust); color:var(--rust)}
+#fl-play{padding:3px 9px; font-size:11px; line-height:1.4; flex:none}
+#fl-what{margin:0; font-size:13.5px; color:var(--vellum); line-height:1.45;
+  max-width:74ch; text-wrap:balance}
+#fl-detail{margin:5px 0 0; font-family:var(--fm); font-size:11px; color:var(--vellum-2);
+  line-height:1.6; font-variant-numeric:tabular-nums}
+#fl-detail i{width:7px; height:7px; border-radius:50%; display:inline-block;
+  margin-right:5px; vertical-align:baseline}
+#fl-detail .sep{color:var(--vellum-3); padding:0 7px}
+#fl-detail .obs{color:var(--brass)}
+#fl-hold{margin:5px 0 0; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--rust); min-height:1.2em}
+
+/* over the water, not over the dossier it used to print itself across */
+#hint{top:0; right:392px; padding:9px 16px; font-size:10px; letter-spacing:.12em;
   text-transform:uppercase; color:var(--vellum-3); border:0; background:none;
   position:fixed; pointer-events:none}
 
@@ -185,7 +211,11 @@ p.lede b{color:var(--vellum); font-weight:500}
   #dossier{top:auto; bottom:0; right:0; left:0; width:auto; height:46vh;
     padding:14px 18px 28px; border-right:1px solid var(--hair-soft)}
   #dossier h2{font-size:26px}
-  #routes{left:0; right:0; bottom:46vh; padding:9px 18px 10px}
+  #stack{left:0; right:0; bottom:46vh}
+  #routes{padding:9px 18px 10px}
+  #flight{padding:8px 18px 10px}
+  #flight #fl-detail, #flight #fl-hold{display:none}
+  #flight #fl-what{font-size:12.5px}
   #routes .steps, #routes #stepnote{display:none}
   #hint{display:none}
 }
@@ -213,21 +243,36 @@ Everything else on the page works — the survey is on the left.</p>
 
 <aside class="panel" id="dossier" aria-live="polite"></aside>
 
+<div id="stack">
+<section class="panel" id="flight" aria-live="polite" aria-label="Flight log">
+  <div id="fl-head">
+    <button id="fl-play" class="rbtn" aria-label="Pause the flight log">&#10073;&#10073;</button>
+    <span class="mono" id="fl-date"></span>
+    <span class="kind" id="fl-kind"></span>
+    <span class="mono" id="fl-count"></span>
+  </div>
+  <p id="fl-what"></p>
+  <p id="fl-detail"></p>
+  <p id="fl-hold"></p>
+</section>
 <footer class="panel" id="routes">
   <p class="eyebrow">Run a feature across the island</p>
   <div class="row" id="route-btns"></div>
   <ol class="steps" id="route-steps"></ol>
   <p id="stepnote"></p>
 </footer>
+</div>
 
-<p id="hint">drag to orbit · scroll to zoom · click a beacon</p>
+
+
+<p id="hint">drag to orbit · click a beacon · hover a light in flight</p>
 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script type="application/json" id="map">
 /*MAP_START*/
-{"generated":"2026-09-10","repo":"PrinceThomas37/PACE_All-in-one-recruting-tool","totals":{"files":266,"lines":63234,"territories":9,"unclaimedFiles":0},"territories":[{"id":"surface","name":"Surface","role":"Frontend & UI","terrain":"the coastal city","hue":"#5FA8D3","pos":[30,8],"height":5.5,"spread":15,"own":["public/"],"files":52,"lines":20594,"largest":[{"f":"public/js/25-workflow-bd.js","n":1044},{"f":"public/js/47-page-mailbox.js","n":1027},{"f":"public/js/12-manager-users.js","n":1006},{"f":"public/js/09-page-workflows.js","n":883}],"lastTouched":"2026-09-10","openIn":1,"openOut":1},{"id":"gateway","name":"Gateway","role":"Server & API","terrain":"the citadel","hue":"#C08A3E","pos":[0,0],"height":15,"spread":12,"own":["index.js","routes/","middleware/rate-limit.js","http-client.js","events.js","subscribers.js","config/","engine-runs.js"],"files":20,"lines":6217,"largest":[{"f":"index.js","n":3244},{"f":"routes/jobs.js","n":483},{"f":"config/integrations.js","n":247},{"f":"routes/integrations.js","n":237}],"lastTouched":"2026-09-10","openIn":4,"openOut":1},{"id":"deep","name":"The Deep","role":"Data & Schema","terrain":"the mine workings","hue":"#7B6CA6","pos":[-26,-6],"height":3,"spread":13,"own":["models/","migrations/","schema.sql","scripts/"],"files":48,"lines":2790,"largest":[{"f":"scripts/territory-map.mjs","n":262},{"f":"migrations/011_ats_recruiting_baseline.sql","n":174},{"f":"schema.sql","n":174},{"f":"models/index.js","n":171}],"lastTouched":"2026-09-10","openIn":2,"openOut":0},{"id":"harbour","name":"Harbour","role":"Mail & Delivery","terrain":"the port","hue":"#4E8A7A","pos":[10,31],"height":2.5,"spread":15,"own":["email-vars.js","email-tracking.js","email-signature.js","email-validation.js","email-verify.js","gmail-provider.js","services/mail-provider.js","send-queue-order.js","services/outreach-cycle.js","services/send-progress.js","services/mailbox-reassign.js","services/lead-recycle.js","warmup-engine.js","deliverability.js","domain-health.js","mailbox-health.js","mailmerge","routes/mailbox.js","routes/emails.js","routes/warmup.js","routes/deliverability.js"],"files":20,"lines":4012,"largest":[{"f":"services/mail-provider.js","n":801},{"f":"routes/mailbox.js","n":472},{"f":"email-vars.js","n":436},{"f":"warmup-engine.js","n":378}],"lastTouched":"2026-09-07","openIn":1,"openOut":1},{"id":"observatory","name":"Observatory","role":"AI & Intelligence","terrain":"the high peak","hue":"#D8CFE8","pos":[-15,-27],"height":22,"spread":12,"own":["services/ai-provider.js","services/ai-budget.js","services/outreach-generator.js","services/candidate-outreach.js","services/morning-briefing.js","match-engine.js","conversation-intel.js","next-action.js","resume-parser.js","jd-parser.js","why-hiring.js","company-classifier.js","enrichment.js","skill-dictionaries.js","learned-skills.js","routes/ai.js","routes/outreach-generator.js","routes/candidate-outreach.js","routes/next-actions.js"],"files":19,"lines":8222,"largest":[{"f":"jd-parser.js","n":1167},{"f":"services/outreach-generator.js","n":1137},{"f":"routes/candidate-outreach.js","n":1043},{"f":"services/candidate-outreach.js","n":876}],"lastTouched":"2026-09-10","openIn":0,"openOut":1},{"id":"guild","name":"The Guild","role":"Recruiting domain","terrain":"the township","hue":"#D98E5F","pos":[19,-21],"height":8,"spread":13,"own":["routes/recruiting/","services/recruiting-core.js","services/candidate-fields.js","bd_recruiter_routes.js","workflow-engine.js","routes/workflows.js","routes/wf.js","routes/lookups.js","hierarchy.js","lead-sources/","routes/lead-sources.js","lead-ingest.js"],"files":20,"lines":5001,"largest":[{"f":"routes/recruiting/outreach.js","n":610},{"f":"routes/recruiting/job-orders.js","n":563},{"f":"routes/recruiting/analytics.js","n":406},{"f":"routes/lead-sources.js","n":349}],"lastTouched":"2026-09-09","openIn":1,"openOut":1},{"id":"rampart","name":"The Rampart","role":"Security & Tenancy","terrain":"the sea wall","hue":"#B4553C","pos":[-3,-35],"height":11,"spread":11,"own":["middleware/authorize.js","routes/auth.js","routes/sso.js","services/sso.js","services/provisioning.js","services/org-domains.js","routes/org-domains.js","config/env.js"],"files":8,"lines":1624,"largest":[{"f":"routes/auth.js","n":425},{"f":"services/provisioning.js","n":365},{"f":"routes/sso.js","n":198},{"f":"routes/org-domains.js","n":176}],"lastTouched":"2026-09-10","openIn":0,"openOut":5},{"id":"foundry","name":"The Foundry","role":"Tests & Release","terrain":"the forge","hue":"#8C93A1","pos":[-33,12],"height":9,"spread":14,"own":["test/",".github/"],"files":74,"lines":13964,"largest":[{"f":"test/candidate-outreach-smoke.mjs","n":657},{"f":"test/mailbox-smoke.mjs","n":590},{"f":"test/outreach-generator-smoke.mjs","n":589},{"f":"test/mailbox-page-smoke.mjs","n":486}],"lastTouched":"2026-09-10","openIn":1,"openOut":0},{"id":"ledger","name":"The Ledger","role":"Commerce & Consent","terrain":"the counting house","hue":"#C9B458","pos":[-15,30],"height":4,"spread":12,"own":["services/plans.js","services/entitlements.js","services/billing.js","routes/plans.js","routes/tracking.js","routes/reminders.js"],"files":6,"lines":810,"largest":[{"f":"services/plans.js","n":218},{"f":"services/billing.js","n":201},{"f":"services/entitlements.js","n":155},{"f":"routes/plans.js","n":114}],"lastTouched":"2026-08-25","openIn":0,"openOut":0}],"edges":[["surface","gateway",2],["surface","guild",1],["surface","foundry",1],["gateway","deep",2],["gateway","rampart",2],["gateway","harbour",1],["gateway","guild",2],["gateway","observatory",1],["gateway","ledger",1],["deep","rampart",2],["deep","guild",1],["deep","harbour",1],["harbour","observatory",2],["harbour","ledger",2],["harbour","guild",1],["observatory","ledger",1],["observatory","guild",1],["foundry","gateway",1],["foundry","harbour",1],["foundry","rampart",1],["foundry","deep",1],["foundry","observatory",1],["foundry","ledger",1],["foundry","guild",1],["rampart","ledger",1],["rampart","surface",1]],"contracts":[{"id":"C-0001","from":"surface","to":"observatory","status":"ANSWERED","date":"2026-09-09","asks":"a decision on the daily import briefing (`/ai/generate-summary`)."},{"id":"C-0002","from":"surface","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/ai/generate-email` either wired to a real screen or deleted."},{"id":"C-0003","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."},{"id":"C-0004","from":"harbour","to":"deep","status":"OPEN","date":"2026-09-09","asks":"an error column on `emails` (migration 043) recording *why* a send failed."},{"id":"C-0005","from":"guild","to":"surface","status":"OPEN","date":"2026-09-09","asks":"`/recruiting-dashboard` widgets hierarchy-scoped the way `/reports/recruiting` already is, and the Reports page folded into the Dashboard."},{"id":"C-0007","from":"observatory","to":"gateway","status":"ANSWERED","date":"2026-09-09","asks":"a decision on `GET /jobs/today-summary` — does the morning briefing read it as its lead-side source, or absorb its counting so gateway can retire it?"},{"id":"C-0013","from":"observatory","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"one clause added to the four `description` strings under `group: 'Candidate outreach'` in `config/settings.js` — something like \"Only applies while the candidate send window is switched on (`app_settings.candidate_send_window_enabled`); it is off by default, and with it off candidates are emailed at any hour.\""},{"id":"C-0014","from":"gateway","to":"deep","status":"OPEN","date":"2026-09-09","asks":"a backfill migration to recompute `jobs.timezone` for existing rows written before this session's fix to `getTimezoneFromLocation()` (`index.js`)."},{"id":"C-0015","from":"rampart","to":"harbour","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/emails.js` and `routes/warmup.js`. These are yours; I did not touch them."},{"id":"C-0016","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"an ownership check on the `userEmailId` path/query parameter in `routes/microsoft.js` and `routes/gmail.js`. Per `scripts/territory-map.mjs` these two are yours — they are in neither harbour's `own` list nor your `not` list."},{"id":"C-0017","from":"rampart","to":"guild","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/workflows.js` and `routes/lookups.js`. Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's `not` list and in your `own` list — I mention it because it was handed to me as gateway's, and the map says otherwise)."},{"id":"C-0018","from":"rampart","to":"foundry","status":"OPEN","date":"2026-09-09","asks":"two things in `test/`, which is yours."}],"unclaimed":[]}
+{"generated":"2026-09-22","repo":"PrinceThomas37/PACE_All-in-one-recruting-tool","totals":{"files":267,"lines":63428,"territories":9,"unclaimedFiles":0},"territories":[{"id":"surface","name":"Surface","role":"Frontend & UI","terrain":"the coastal city","hue":"#5FA8D3","pos":[30,8],"height":5.5,"spread":15,"own":["public/"],"files":52,"lines":20594,"largest":[{"f":"public/js/25-workflow-bd.js","n":1044},{"f":"public/js/47-page-mailbox.js","n":1027},{"f":"public/js/12-manager-users.js","n":1006},{"f":"public/js/09-page-workflows.js","n":883}],"lastTouched":"2026-09-10","openIn":1,"openOut":1},{"id":"gateway","name":"Gateway","role":"Server & API","terrain":"the citadel","hue":"#C08A3E","pos":[0,0],"height":15,"spread":12,"own":["index.js","routes/","middleware/rate-limit.js","http-client.js","events.js","subscribers.js","config/","engine-runs.js"],"files":20,"lines":6217,"largest":[{"f":"index.js","n":3244},{"f":"routes/jobs.js","n":483},{"f":"config/integrations.js","n":247},{"f":"routes/integrations.js","n":237}],"lastTouched":"2026-09-10","openIn":4,"openOut":1},{"id":"deep","name":"The Deep","role":"Data & Schema","terrain":"the mine workings","hue":"#7B6CA6","pos":[-26,-6],"height":3,"spread":13,"own":["models/","migrations/","schema.sql","scripts/"],"files":48,"lines":2883,"largest":[{"f":"scripts/territory-map.mjs","n":355},{"f":"migrations/011_ats_recruiting_baseline.sql","n":174},{"f":"schema.sql","n":174},{"f":"models/index.js","n":171}],"lastTouched":"2026-09-10","openIn":2,"openOut":0},{"id":"harbour","name":"Harbour","role":"Mail & Delivery","terrain":"the port","hue":"#4E8A7A","pos":[10,31],"height":2.5,"spread":15,"own":["email-vars.js","email-tracking.js","email-signature.js","email-validation.js","email-verify.js","gmail-provider.js","services/mail-provider.js","send-queue-order.js","services/outreach-cycle.js","services/send-progress.js","services/mailbox-reassign.js","services/lead-recycle.js","warmup-engine.js","deliverability.js","domain-health.js","mailbox-health.js","mailmerge","routes/mailbox.js","routes/emails.js","routes/warmup.js","routes/deliverability.js"],"files":20,"lines":4012,"largest":[{"f":"services/mail-provider.js","n":801},{"f":"routes/mailbox.js","n":472},{"f":"email-vars.js","n":436},{"f":"warmup-engine.js","n":378}],"lastTouched":"2026-09-07","openIn":1,"openOut":1},{"id":"observatory","name":"Observatory","role":"AI & Intelligence","terrain":"the high peak","hue":"#D8CFE8","pos":[-15,-27],"height":22,"spread":12,"own":["services/ai-provider.js","services/ai-budget.js","services/outreach-generator.js","services/candidate-outreach.js","services/morning-briefing.js","match-engine.js","conversation-intel.js","next-action.js","resume-parser.js","jd-parser.js","why-hiring.js","company-classifier.js","enrichment.js","skill-dictionaries.js","learned-skills.js","routes/ai.js","routes/outreach-generator.js","routes/candidate-outreach.js","routes/next-actions.js"],"files":19,"lines":8222,"largest":[{"f":"jd-parser.js","n":1167},{"f":"services/outreach-generator.js","n":1137},{"f":"routes/candidate-outreach.js","n":1043},{"f":"services/candidate-outreach.js","n":876}],"lastTouched":"2026-09-10","openIn":0,"openOut":1},{"id":"guild","name":"The Guild","role":"Recruiting domain","terrain":"the township","hue":"#D98E5F","pos":[19,-21],"height":8,"spread":13,"own":["routes/recruiting/","services/recruiting-core.js","services/candidate-fields.js","bd_recruiter_routes.js","workflow-engine.js","routes/workflows.js","routes/wf.js","routes/lookups.js","hierarchy.js","lead-sources/","routes/lead-sources.js","lead-ingest.js"],"files":20,"lines":5001,"largest":[{"f":"routes/recruiting/outreach.js","n":610},{"f":"routes/recruiting/job-orders.js","n":563},{"f":"routes/recruiting/analytics.js","n":406},{"f":"routes/lead-sources.js","n":349}],"lastTouched":"2026-09-09","openIn":1,"openOut":1},{"id":"rampart","name":"The Rampart","role":"Security & Tenancy","terrain":"the sea wall","hue":"#B4553C","pos":[-3,-35],"height":11,"spread":11,"own":["middleware/authorize.js","routes/auth.js","routes/sso.js","services/sso.js","services/provisioning.js","services/org-domains.js","routes/org-domains.js","config/env.js"],"files":8,"lines":1624,"largest":[{"f":"routes/auth.js","n":425},{"f":"services/provisioning.js","n":365},{"f":"routes/sso.js","n":198},{"f":"routes/org-domains.js","n":176}],"lastTouched":"2026-09-10","openIn":0,"openOut":5},{"id":"foundry","name":"The Foundry","role":"Tests & Release","terrain":"the forge","hue":"#8C93A1","pos":[-33,12],"height":9,"spread":14,"own":["test/",".github/"],"files":75,"lines":14065,"largest":[{"f":"test/candidate-outreach-smoke.mjs","n":657},{"f":"test/mailbox-smoke.mjs","n":590},{"f":"test/outreach-generator-smoke.mjs","n":589},{"f":"test/mailbox-page-smoke.mjs","n":486}],"lastTouched":"2026-09-10","openIn":1,"openOut":0},{"id":"ledger","name":"The Ledger","role":"Commerce & Consent","terrain":"the counting house","hue":"#C9B458","pos":[-15,30],"height":4,"spread":12,"own":["services/plans.js","services/entitlements.js","services/billing.js","routes/plans.js","routes/tracking.js","routes/reminders.js"],"files":6,"lines":810,"largest":[{"f":"services/plans.js","n":218},{"f":"services/billing.js","n":201},{"f":"services/entitlements.js","n":155},{"f":"routes/plans.js","n":114}],"lastTouched":"2026-08-25","openIn":0,"openOut":0}],"edges":[["surface","gateway",2],["surface","guild",1],["surface","foundry",1],["gateway","deep",2],["gateway","rampart",2],["gateway","harbour",1],["gateway","guild",2],["gateway","observatory",1],["gateway","ledger",1],["deep","rampart",2],["deep","guild",1],["deep","harbour",1],["harbour","observatory",2],["harbour","ledger",2],["harbour","guild",1],["observatory","ledger",1],["observatory","guild",1],["foundry","gateway",1],["foundry","harbour",1],["foundry","rampart",1],["foundry","deep",1],["foundry","observatory",1],["foundry","ledger",1],["foundry","guild",1],["rampart","ledger",1],["rampart","surface",1]],"contracts":[{"id":"C-0001","from":"surface","to":"observatory","status":"ANSWERED","date":"2026-09-09","asks":"a decision on the daily import briefing (`/ai/generate-summary`)."},{"id":"C-0002","from":"surface","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/ai/generate-email` either wired to a real screen or deleted."},{"id":"C-0003","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."},{"id":"C-0004","from":"harbour","to":"deep","status":"OPEN","date":"2026-09-09","asks":"an error column on `emails` (migration 043) recording *why* a send failed."},{"id":"C-0005","from":"guild","to":"surface","status":"OPEN","date":"2026-09-09","asks":"`/recruiting-dashboard` widgets hierarchy-scoped the way `/reports/recruiting` already is, and the Reports page folded into the Dashboard."},{"id":"C-0007","from":"observatory","to":"gateway","status":"ANSWERED","date":"2026-09-09","asks":"a decision on `GET /jobs/today-summary` — does the morning briefing read it as its lead-side source, or absorb its counting so gateway can retire it?"},{"id":"C-0013","from":"observatory","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"one clause added to the four `description` strings under `group: 'Candidate outreach'` in `config/settings.js` — something like \"Only applies while the candidate send window is switched on (`app_settings.candidate_send_window_enabled`); it is off by default, and with it off candidates are emailed at any hour.\""},{"id":"C-0014","from":"gateway","to":"deep","status":"OPEN","date":"2026-09-09","asks":"a backfill migration to recompute `jobs.timezone` for existing rows written before this session's fix to `getTimezoneFromLocation()` (`index.js`)."},{"id":"C-0015","from":"rampart","to":"harbour","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/emails.js` and `routes/warmup.js`. These are yours; I did not touch them."},{"id":"C-0016","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"an ownership check on the `userEmailId` path/query parameter in `routes/microsoft.js` and `routes/gmail.js`. Per `scripts/territory-map.mjs` these two are yours — they are in neither harbour's `own` list nor your `not` list."},{"id":"C-0017","from":"rampart","to":"guild","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/workflows.js` and `routes/lookups.js`. Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's `not` list and in your `own` list — I mention it because it was handed to me as gateway's, and the map says otherwise)."},{"id":"C-0018","from":"rampart","to":"foundry","status":"OPEN","date":"2026-09-09","asks":"two things in `test/`, which is yours."}],"unclaimed":[],"events":[{"k":"commit","sha":"6070a3c","date":"2026-08-25","msg":"Render the sender name server-side, for every reader of a queued email","pr":"143","t":[["foundry",305],["harbour",93],["surface",25],["gateway",21]],"files":9,"lines":444,"other":0,"top":{"f":"test/emails-route-render-smoke.mjs","n":145}},{"k":"commit","sha":"c5cb602","date":"2026-08-25","msg":"Fix outbound emails naming two different people","pr":"142","t":[["surface",16304],["foundry",8615],["gateway",5767],["guild",4846],["harbour",3754],["observatory",3212],["deep",2953],["rampart",1432],["ledger",804]],"files":244,"lines":54651,"other":16,"top":{"f":"index.js","n":3123}},{"k":"commit","sha":"491ae36","date":"2026-08-31","msg":"Record Session 15: the app got a structure","pr":null,"t":[],"files":3,"lines":508,"other":3,"top":{"f":"docs/CONTEXT_WINDOW.md","n":272}},{"k":"commit","sha":"a6024ec","date":"2026-09-01","msg":"Stop the screen blinking: render only what changed","pr":null,"t":[["surface",502],["foundry",240]],"files":16,"lines":1014,"other":3,"top":{"f":"test/screen-stability-smoke.mjs","n":240}},{"k":"commit","sha":"0ea4992","date":"2026-09-01","msg":"Record the rollout, and park the Gmail expiry on the owner's instruction","pr":null,"t":[],"files":2,"lines":320,"other":2,"top":{"f":"docs/CONTEXT_WINDOW.md","n":225}},{"k":"commit","sha":"093cd7d","date":"2026-09-01","msg":"The four screens: record drawer, sequence timeline, live email preview, threaded inbox","pr":"148","t":[["surface",1195],["foundry",14]],"files":9,"lines":1209,"other":0,"top":{"f":"public/js/47-page-mailbox.js","n":270}},{"k":"commit","sha":"5bff9d6","date":"2026-09-01","msg":"Rebuild the app structure on one shared UI kit","pr":"147","t":[["surface",1094],["guild",31],["foundry",14]],"files":9,"lines":1139,"other":0,"top":{"f":"public/ui.css","n":428}},{"k":"commit","sha":"0c0885d","date":"2026-09-01","msg":"Rank two openings of one job above a long-open role, and record Session 14","pr":"146","t":[["foundry",42],["observatory",18]],"files":5,"lines":513,"other":3,"top":{"f":"docs/CONTEXT_ARCHIVE.md","n":220}},{"k":"commit","sha":"db2987d","date":"2026-09-01","msg":"Give lead ingest an injectable clock so its test stops rotting","pr":"145","t":[["foundry",31],["guild",8]],"files":2,"lines":39,"other":0,"top":{"f":"test/lead-sourcing-smoke.mjs","n":31}},{"k":"commit","sha":"8784c38","date":"2026-09-01","msg":"Send fresh leads before follow-ups; measure the heartbeat by the ping","pr":"144","t":[["foundry",181],["gateway",77],["harbour",60],["surface",7]],"files":7,"lines":325,"other":0,"top":{"f":"test/send-queue-order-smoke.mjs","n":95}},{"k":"commit","sha":"3254782","date":"2026-09-02","msg":"Stop the reading pane re-rastering: write nothing when nothing changed","pr":null,"t":[["foundry",93],["surface",62]],"files":7,"lines":280,"other":3,"top":{"f":"test/screen-stability-smoke.mjs","n":93}},{"k":"commit","sha":"1a3a511","date":"2026-09-02","msg":"Roll the shared layout across every list page","pr":"150","t":[["surface",687],["foundry",7]],"files":8,"lines":713,"other":1,"top":{"f":"public/js/06-page-leads.js","n":276}},{"k":"commit","sha":"1fb4856","date":"2026-09-03","msg":"Read the employer and the city from the posting, not the form","pr":null,"t":[["observatory",80],["foundry",41],["surface",27]],"files":3,"lines":148,"other":0,"top":{"f":"services/outreach-generator.js","n":80}},{"k":"commit","sha":"2780ea3","date":"2026-09-03","msg":"Fill the mailbox signature, and stop the body signing itself","pr":"156","t":[["observatory",60],["foundry",48],["guild",30],["surface",17]],"files":6,"lines":166,"other":1,"top":{"f":"test/outreach-generator-smoke.mjs","n":48}},{"k":"commit","sha":"0899d5a","date":"2026-09-03","msg":"Rebuild how the generator reads a posting, and sign it from the mailbox","pr":"155","t":[["observatory",582],["foundry",149],["surface",3]],"files":8,"lines":734,"other":0,"top":{"f":"services/outreach-generator.js","n":524}},{"k":"commit","sha":"0d8f3f0","date":"2026-09-03","msg":"Add the outreach generator as an Email tab","pr":"154","t":[["observatory",539],["surface",356],["foundry",186],["gateway",11],["guild",7]],"files":10,"lines":1125,"other":1,"top":{"f":"services/outreach-generator.js","n":348}},{"k":"commit","sha":"e9e4de2","date":"2026-09-04","msg":"Make the AI test say something, whatever happens","pr":"165","t":[["foundry",104],["surface",62],["observatory",27]],"files":3,"lines":193,"other":0,"top":{"f":"test/ai-health-card-smoke.mjs","n":104}},{"k":"commit","sha":"eaa2b17","date":"2026-09-04","msg":"Say why the AI did not answer, and stop the preview promising 10 while assigning 162","pr":"164","t":[["observatory",83],["foundry",73],["surface",70],["gateway",33]],"files":7,"lines":259,"other":0,"top":{"f":"services/ai-provider.js","n":83}},{"k":"commit","sha":"db096af","date":"2026-09-04","msg":"Write up Session 18, and rebuild the window around it","pr":"163","t":[],"files":2,"lines":655,"other":2,"top":{"f":"docs/CONTEXT_WINDOW.md","n":439}},{"k":"commit","sha":"2c7fb35","date":"2026-09-04","msg":"Decide what an AI call may cost before making it","pr":"161","t":[["observatory",263],["foundry",153],["gateway",45],["surface",43],["guild",4]],"files":12,"lines":536,"other":1,"top":{"f":"services/ai-budget.js","n":164}},{"k":"commit","sha":"8577640","date":"2026-09-04","msg":"Restore a helper two clean merges deleted out from under a live call","pr":"162","t":[["foundry",90],["observatory",9]],"files":2,"lines":99,"other":0,"top":{"f":"test/outreach-generator-smoke.mjs","n":90}},{"k":"commit","sha":"24e8cc5","date":"2026-09-04","msg":"Merge Compose into the composer that actually sends, and turn a reply into a lead","pr":"160","t":[["surface",229],["observatory",151],["foundry",45],["gateway",2]],"files":6,"lines":427,"other":0,"top":{"f":"public/js/48-page-outreach-gen.js","n":200}},{"k":"commit","sha":"694babc","date":"2026-09-04","msg":"Let any AI provider power the six AI features, free ones included","pr":"159","t":[["observatory",332],["foundry",193],["gateway",150],["surface",39],["guild",20]],"files":13,"lines":762,"other":1,"top":{"f":"services/ai-provider.js","n":211}},{"k":"commit","sha":"bab43ce","date":"2026-09-04","msg":"Offer four framings of the email, and stop writing about the contact's CV","pr":"158","t":[["observatory",494],["surface",94],["foundry",88]],"files":5,"lines":688,"other":1,"top":{"f":"services/outreach-generator.js","n":458}},{"k":"commit","sha":"135821c","date":"2026-09-05","msg":"Wire up the AI test button, and make the app work on a phone","pr":"170","t":[["foundry",535],["surface",528],["gateway",92],["observatory",56]],"files":21,"lines":1708,"other":3,"top":{"f":"test/mobile-layout-smoke.mjs","n":335}},{"k":"commit","sha":"688d278","date":"2026-09-05","msg":"Correct the test counts, and record how a failure hid behind a pipe","pr":"169","t":[],"files":1,"lines":13,"other":1,"top":{"f":"CLAUDE.md","n":13}},{"k":"commit","sha":"5e13b54","date":"2026-09-05","msg":"Write up part 2, and hand the next session the one open question","pr":"168","t":[],"files":3,"lines":347,"other":3,"top":{"f":"docs/CONTEXT_WINDOW.md","n":175}},{"k":"commit","sha":"b5b227e","date":"2026-09-05","msg":"Answer the AI question without being asked, and stop crying wolf about the engine","pr":"167","t":[["foundry",129],["surface",68],["gateway",22]],"files":6,"lines":219,"other":0,"top":{"f":"public/js/08-page-admin.js","n":68}},{"k":"commit","sha":"b180cf2","date":"2026-09-05","msg":"Keep the answer on the server, and name the models that would work","pr":"166","t":[["observatory",76],["foundry",65],["surface",43],["gateway",4]],"files":4,"lines":188,"other":0,"top":{"f":"services/ai-provider.js","n":76}},{"k":"commit","sha":"ae54a79","date":"2026-09-06","msg":"Point Groq at models it actually has","pr":"171","t":[["foundry",110],["observatory",79],["surface",27]],"files":8,"lines":339,"other":3,"top":{"f":"services/ai-provider.js","n":79}},{"k":"commit","sha":"f0f819c","date":"2026-09-07","msg":"docs: record the lead-release rule and the send-card snapshot rule","pr":null,"t":[],"files":2,"lines":34,"other":2,"top":{"f":"CLAUDE.md","n":30}},{"k":"commit","sha":"49d734a","date":"2026-09-07","msg":"Let an unassigned lead be emailed again, and stop a finished send card outliving its queue","pr":"176","t":[["harbour",119],["foundry",80],["gateway",45],["guild",19]],"files":7,"lines":263,"other":0,"top":{"f":"test/outreach-cycle-smoke.mjs","n":80}},{"k":"commit","sha":"a9b29e1","date":"2026-09-07","msg":"docs: close Session 19 — archive the narrative, rewrite the window","pr":"175","t":[],"files":2,"lines":399,"other":2,"top":{"f":"docs/CONTEXT_WINDOW.md","n":325}},{"k":"commit","sha":"c9e0d5c","date":"2026-09-07","msg":"Read PDFs with a library that works on the Node we deploy","pr":"174","t":[["foundry",123],["observatory",105],["gateway",17],["surface",16]],"files":13,"lines":476,"other":5,"top":{"f":"docs/CONTEXT_ARCHIVE.md","n":95}},{"k":"commit","sha":"ae0764d","date":"2026-09-07","msg":"Stop the ai-test route collapsing the probe to a single tier","pr":"173","t":[["foundry",34],["gateway",9]],"files":3,"lines":52,"other":1,"top":{"f":"test/ai-health-card-smoke.mjs","n":34}},{"k":"commit","sha":"cdde813","date":"2026-09-07","msg":"Say what actually went wrong with a resume, and check the upload","pr":"172","t":[["foundry",158],["observatory",68],["guild",66],["surface",9]],"files":8,"lines":328,"other":1,"top":{"f":"test/resume-parse-smoke.mjs","n":158}},{"k":"commit","sha":"e70f4f0","date":"2026-09-08","msg":"Connect the two job titles, write all four angles with AI, and let a send join a sequence","pr":"178","t":[["observatory",454],["surface",128],["foundry",113],["guild",18],["gateway",3]],"files":9,"lines":774,"other":2,"top":{"f":"routes/outreach-generator.js","n":367}},{"k":"commit","sha":"95df7cb","date":"2026-09-08","msg":"Hold the AI's outreach draft to the house rules, and let it be told which role","pr":"177","t":[["observatory",276],["foundry",187],["surface",37]],"files":5,"lines":500,"other":0,"top":{"f":"test/outreach-ai-quality-smoke.mjs","n":187}},{"k":"commit","sha":"5197721","date":"2026-09-09","msg":"docs: archive the candidate outreach build, and record the 042 collision","pr":"190","t":[],"files":2,"lines":209,"other":2,"top":{"f":"docs/CONTEXT_ARCHIVE.md","n":169}},{"k":"commit","sha":"867abda","date":"2026-09-09","msg":"docs: correct the window's last-merged line","pr":"189","t":[],"files":1,"lines":4,"other":1,"top":{"f":"docs/CONTEXT_WINDOW.md","n":4}},{"k":"commit","sha":"4038d81","date":"2026-09-09","msg":"docs: record the rewrite button and the bulk-edit lesson","pr":"188","t":[],"files":3,"lines":129,"other":3,"top":{"f":"docs/CONTEXT_ARCHIVE.md","n":75}},{"k":"commit","sha":"3d3736f","date":"2026-09-09","msg":"Rewrite an angle for different wording, capped at three","pr":"187","t":[["surface",104],["foundry",73],["observatory",56]],"files":4,"lines":233,"other":0,"top":{"f":"public/js/48-page-outreach-gen.js","n":104}},{"k":"commit","sha":"4cfc486","date":"2026-09-09","msg":"docs: close Session 21 — archive the narrative, rewrite the window","pr":"186","t":[],"files":3,"lines":324,"other":3,"top":{"f":"docs/CONTEXT_WINDOW.md","n":197}},{"k":"commit","sha":"431c780","date":"2026-09-09","msg":"The repeating menu, stepping through candidate emails, and keeping what we sent","pr":"185","t":[["foundry",343],["surface",161],["deep",26],["guild",12],["observatory",11],["gateway",2]],"files":12,"lines":555,"other":0,"top":{"f":"test/sent-email-preview-smoke.mjs","n":126}},{"k":"commit","sha":"48429f1","date":"2026-09-09","msg":"Let an admin change the candidate sending hours","pr":"184","t":[["gateway",35],["observatory",29],["foundry",28],["surface",7]],"files":5,"lines":112,"other":1,"top":{"f":"config/settings.js","n":35}},{"k":"commit","sha":"aa712e4","date":"2026-09-09","msg":"Email candidates in their own free time, not the client's office hours","pr":"183","t":[["observatory",207],["foundry",73],["surface",6],["gateway",2]],"files":6,"lines":320,"other":1,"top":{"f":"routes/candidate-outreach.js","n":115}},{"k":"commit","sha":"0269d5d","date":"2026-09-09","msg":"Say what a queued candidate email is waiting for","pr":"182","t":[["observatory",34],["surface",18],["foundry",10]],"files":4,"lines":78,"other":1,"top":{"f":"routes/candidate-outreach.js","n":34}},{"k":"commit","sha":"fd41ea9","date":"2026-09-09","msg":"Stop skipping candidates over the job's own experience requirement","pr":"181","t":[["observatory",182],["foundry",108],["surface",55]],"files":5,"lines":380,"other":1,"top":{"f":"services/candidate-outreach.js","n":136}},{"k":"commit","sha":"e72b406","date":"2026-09-09","msg":"Ask candidates whether they want the jobs we hold","pr":"180","t":[["observatory",1548],["surface",536],["foundry",462],["deep",128],["gateway",26]],"files":14,"lines":3127,"other":2,"top":{"f":"routes/candidate-outreach.js","n":873}},{"k":"commit","sha":"5a98168","date":"2026-09-09","msg":"docs: close Session 20 — archive the narrative, rewrite the window","pr":"179","t":[],"files":2,"lines":404,"other":2,"top":{"f":"docs/CONTEXT_WINDOW.md","n":248}},{"k":"contract","id":"C-0001","from":"surface","to":"observatory","status":"ANSWERED","date":"2026-09-09","asks":"a decision on the daily import briefing (`/ai/generate-summary`)."},{"k":"contract","id":"C-0002","from":"surface","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/ai/generate-email` either wired to a real screen or deleted."},{"k":"contract","id":"C-0003","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."},{"k":"contract","id":"C-0004","from":"harbour","to":"deep","status":"OPEN","date":"2026-09-09","asks":"an error column on `emails` (migration 043) recording *why* a send failed."},{"k":"contract","id":"C-0005","from":"guild","to":"surface","status":"OPEN","date":"2026-09-09","asks":"`/recruiting-dashboard` widgets hierarchy-scoped the way `/reports/recruiting` already is, and the Reports page folded into the Dashboard."},{"k":"contract","id":"C-0007","from":"observatory","to":"gateway","status":"ANSWERED","date":"2026-09-09","asks":"a decision on `GET /jobs/today-summary` — does the morning briefing read it as its lead-side source, or absorb its counting so gateway can retire it?"},{"k":"contract","id":"C-0013","from":"observatory","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"one clause added to the four `description` strings under `group: 'Candidate outreach'` in `config/settings.js` — something like \"Only applies while the candidate send window is switched on (`app_settings.candidate_send_window_enabled`); it is off by default, and with it off candidates are emailed at any hour.\""},{"k":"contract","id":"C-0014","from":"gateway","to":"deep","status":"OPEN","date":"2026-09-09","asks":"a backfill migration to recompute `jobs.timezone` for existing rows written before this session's fix to `getTimezoneFromLocation()` (`index.js`)."},{"k":"contract","id":"C-0015","from":"rampart","to":"harbour","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/emails.js` and `routes/warmup.js`. These are yours; I did not touch them."},{"k":"contract","id":"C-0016","from":"rampart","to":"gateway","status":"OPEN","date":"2026-09-09","asks":"an ownership check on the `userEmailId` path/query parameter in `routes/microsoft.js` and `routes/gmail.js`. Per `scripts/territory-map.mjs` these two are yours — they are in neither harbour's `own` list nor your `not` list."},{"k":"contract","id":"C-0017","from":"rampart","to":"guild","status":"OPEN","date":"2026-09-09","asks":"org scoping on `routes/workflows.js` and `routes/lookups.js`. Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's `not` list and in your `own` list — I mention it because it was handed to me as gateway's, and the map says otherwise)."},{"k":"contract","id":"C-0018","from":"rampart","to":"foundry","status":"OPEN","date":"2026-09-09","asks":"two things in `test/`, which is yours."},{"k":"commit","sha":"d83ee6a","date":"2026-09-10","msg":"Close the session: the archive, the handoff, and the rule the incident earned","pr":"201","t":[],"files":3,"lines":172,"other":3,"top":{"f":"docs/CONTEXT_ARCHIVE.md","n":103}},{"k":"commit","sha":"3af3c75","date":"2026-09-10","msg":"Revert the half-written job-description panel that #198 shipped by accident","pr":"199","t":[["observatory",337]],"files":1,"lines":337,"other":0,"top":{"f":"services/candidate-outreach.js","n":337}},{"k":"commit","sha":"c0a811c","date":"2026-09-10","msg":"Bring the handoff current before the session ends","pr":"198","t":[["observatory",337]],"files":2,"lines":388,"other":1,"top":{"f":"services/candidate-outreach.js","n":337}},{"k":"commit","sha":"3a6eba1","date":"2026-09-10","msg":"A capability register, because borders make duplicate workflows more likely","pr":"197","t":[["deep",37]],"files":8,"lines":360,"other":7,"top":{"f":"docs/territories/CAPABILITIES.md","n":143}},{"k":"commit","sha":"4f636ac","date":"2026-09-10","msg":"Carry the service-role finding into what a new session reads first","pr":"196","t":[],"files":1,"lines":42,"other":1,"top":{"f":"docs/CONTEXT_WINDOW.md","n":42}},{"k":"commit","sha":"0622dba","date":"2026-09-10","msg":"Close the cross-org holes that RLS was never covering","pr":"195","t":[["foundry",399],["rampart",102],["gateway",6]],"files":8,"lines":763,"other":2,"top":{"f":"test/org-scoping-guard-smoke.mjs","n":329}},{"k":"commit","sha":"ac82ff7","date":"2026-09-10","msg":"A decisions log, so switching chat windows stops losing what the owner chose","pr":"194","t":[],"files":5,"lines":166,"other":5,"top":{"f":"docs/territories/DECISIONS.md","n":138}},{"k":"commit","sha":"a8e92af","date":"2026-09-10","msg":"Resolve a location's timezone by parsing it, not by scanning for two letters","pr":"193","t":[["foundry",151],["gateway",68]],"files":5,"lines":405,"other":3,"top":{"f":"test/timezone-resolver-smoke.mjs","n":151}},{"k":"commit","sha":"095f17c","date":"2026-09-10","msg":"Candidate outreach sends when due, not when the candidate's evening opens","pr":"192","t":[["foundry",173],["observatory",97],["surface",20]],"files":9,"lines":517,"other":5,"top":{"f":"test/candidate-outreach-drip-smoke.mjs","n":173}},{"k":"commit","sha":"37f9f40","date":"2026-09-10","msg":"Nine territories, and the first feature built through them","pr":"191","t":[["observatory",485],["deep",226],["foundry",220],["surface",93]],"files":36,"lines":4517,"other":27,"top":{"f":"docs/territories/island.html","n":855}}],"observed":[["harbour","surface",3],["observatory","surface",28],["deep","surface",4],["ledger","surface",1],["guild","rampart",2],["guild","ledger",1],["harbour","rampart",2],["deep","observatory",4],["observatory","rampart",1],["deep","ledger",1]]}
 /*MAP_END*/
 </script>
 
@@ -486,6 +531,122 @@ addEventListener('keydown', e => {
 
 select(null);
 
+
+/* ══════════════════════════════════════════ the flight log ════════════════
+   Every light that moves on this island is a real event out of this
+   repository. There is no decorative motion left, which matters more than it
+   sounds: a survey whose lights are random is a survey that looks like it
+   knows something it does not.
+
+   Two kinds fly, both generated by `scripts/territory-map.mjs`:
+     · a COMMIT, with the files it touched attributed to their territories —
+       so one that changed two of them flies the route between them, and the
+       brightness is how many lines moved.
+     · a BORDER REQUEST out of _contracts.md, flying from the territory that
+       asked to the one it asked of.
+
+   A commit that touched only documentation has no territory to fly from. It
+   still appears in the log, because it still happened; it simply has nothing
+   to draw. Saying so is the honest version.
+
+   The clock lives HERE and not inside the island, so the log still runs —
+   as text, in order, with its dates — for a viewer with no WebGL. The island
+   subscribes to it. That is the same rule the rest of the page obeys: the
+   survey is the content, the island is the view.
+   ═══════════════════════════════════════════════════════════════════════ */
+const EV = MAP.events || [];
+const flight = { i: -1, playing: true, held: null };
+let flyEvent = () => {};                    /* the island's seam, a no-op until it builds */
+
+const MONTH = ['Jan','Feb','Mar','Apr','May','Jun',
+               'Jul','Aug','Sep','Oct','Nov','Dec'];
+const prettyDate = d => {
+  const [y, m, day] = d.split('-');
+  return `${+day} ${MONTH[+m - 1]} ${y}`;
+};
+const shortPath = f => f.length > 46 ? '…' + f.slice(-45) : f;
+
+/* What the log says about one event. The same writer serves the ticker and
+   the hover card, so what a light says in flight and what it says when you
+   catch it can never drift apart. */
+function describe(e) {
+  if (e.k === 'contract') {
+    const from = byId[e.from], to = byId[e.to];
+    return {
+      kind: 'border request', contract: true,
+      what: `<b>${from.name}</b> asked <b>${to.name}</b> for ${esc(e.asks).replace(/^./, c => c.toLowerCase())}`,
+      detail:
+        `<i style="background:${from.hue}"></i>${from.name}` +
+        `<span class="sep">→</span>` +
+        `<i style="background:${to.hue}"></i>${to.name}` +
+        `<span class="sep">·</span>${e.id}` +
+        `<span class="sep">·</span>${e.status.toLowerCase()}`,
+    };
+  }
+  const parts = e.t.map(([id, n]) =>
+    `<i style="background:${byId[id].hue}"></i>${byId[id].name} <span style="color:var(--vellum-3)">${nf(n)}</span>`);
+  if (e.other) parts.push(`<span style="color:var(--vellum-3)">${e.other} file${e.other > 1 ? 's' : ''} in no territory</span>`);
+  return {
+    kind: e.t.length > 1 ? `${e.t.length} territories` : e.t.length ? 'one territory' : 'the record',
+    contract: false,
+    what: esc(e.msg) + (e.pr ? ` <span style="color:var(--vellum-3)">#${e.pr}</span>` : ''),
+    detail: parts.join('<span class="sep">·</span>') +
+      (e.top ? `<span class="sep">·</span>${esc(shortPath(e.top.f))}` : ''),
+  };
+}
+
+const flEl = {
+  box: document.getElementById('flight'),
+  date: document.getElementById('fl-date'),
+  kind: document.getElementById('fl-kind'),
+  count: document.getElementById('fl-count'),
+  what: document.getElementById('fl-what'),
+  detail: document.getElementById('fl-detail'),
+  hold: document.getElementById('fl-hold'),
+  play: document.getElementById('fl-play'),
+};
+
+function showEvent(e, held) {
+  if (!e) return;
+  const d = describe(e);
+  flEl.date.textContent = prettyDate(e.date);
+  flEl.kind.textContent = d.kind;
+  flEl.kind.className = 'kind' + (d.contract ? ' contract' : '');
+  flEl.what.innerHTML = d.what;
+  flEl.detail.innerHTML = d.detail;
+  flEl.hold.textContent = held ? 'held — this is the light you are pointing at' : '';
+  flEl.box.classList.toggle('held', !!held);
+}
+
+function step() {
+  if (!flight.playing || flight.held || routeOn) return;
+  flight.i = (flight.i + 1) % EV.length;
+  const e = EV[flight.i];
+  flEl.count.textContent = `${flight.i + 1} / ${EV.length}`;
+  showEvent(e, false);
+  flyEvent(e);
+}
+
+flEl.play.addEventListener('click', () => {
+  flight.playing = !flight.playing;
+  flEl.play.innerHTML = flight.playing ? '&#10073;&#10073;' : '&#9654;';
+  flEl.play.setAttribute('aria-label',
+    flight.playing ? 'Pause the flight log' : 'Play the flight log');
+});
+
+/* Held by a hover: the log stops advancing and the island freezes what is in
+   the air. A light you cannot hold still is a light you cannot read. */
+function holdEvent(e) {
+  flight.held = e || null;
+  showEvent(e || EV[flight.i], !!e);
+}
+
+function startFlight() {
+  if (!EV.length) { flEl.box.style.display = 'none'; return; }
+  step();
+  setInterval(step, 1600);
+}
+
 /* ══════════════════════════════════════════════ the island ════════════════ */
 try { buildIsland(); }
 catch(err){
@@ -493,6 +654,7 @@ catch(err){
   document.getElementById('hint').hidden = true;
   console.warn('Island not drawn:', err && err.message);
 }
+startFlight();
 
 function buildIsland(){
   if(typeof THREE === 'undefined') throw new Error('three.js did not load');
@@ -608,6 +770,12 @@ function buildIsland(){
     return sp;
   }
 
+  /* Recency is measured against the repo's most recent work, not against
+     today. Otherwise the whole island reads as idle a fortnight after the
+     last commit, which says something true about the calendar and nothing
+     at all about which territories are busy. */
+  const NEWEST = T.map(t => t.lastTouched).filter(Boolean).sort().pop() || MAP.generated;
+
   const marks = {}, pickable = [];
   for(const t of T){
     const [x,z] = t.pos;
@@ -643,8 +811,14 @@ function buildIsland(){
     hit.position.y = ground + tall*0.55; hit.userData.tid = t.id;
     g.add(hit); pickable.push(hit);
 
-    /* the crew: one figure per ~12 files, drifting near their own beacon */
+    /* The crew: one figure per ~12 files. How fast they move is how recently
+       the territory was worked — a place untouched for a fortnight stands
+       still. The count was already true; now the motion is too. */
     const crew = [];
+    const days = t.lastTouched
+      ? Math.max(0, (Date.parse(NEWEST) - Date.parse(t.lastTouched)) / 864e5)
+      : 99;
+    const busy = Math.max(0, 1 - days/14);
     const n = Math.max(2, Math.min(6, Math.round(t.files/12)));
     for(let i=0;i<n;i++){
       const p = new THREE.Group();
@@ -655,17 +829,23 @@ function buildIsland(){
         new THREE.MeshLambertMaterial({ color:0xEDE6D6 }));
       head.position.y = 1.42; p.add(head);
       p.userData = { r: 4.2 + Math.random()*4.6, a: Math.random()*Math.PI*2,
-                     sp: (0.10 + Math.random()*0.16) * (Math.random()<0.5 ? -1 : 1),
+                     sp: (0.10 + Math.random()*0.16) * busy * (Math.random()<0.5 ? -1 : 1),
                      bob: Math.random()*Math.PI*2 };
       g.add(p); crew.push(p);
     }
     scene.add(g);
-    marks[t.id] = { ring, lamp, halo, label, crew, ground, color:c,
+    marks[t.id] = { ring, lamp, halo, label, crew, busy, ground, color:c,
                     top: ground + tall + 0.5 };
   }
 
   /* ── the trade routes ──────────────────────────────────────────────────── */
-  const arcs = MAP.edges.map(([a,b,w]) => {
+  /* The dependency map says who SHOULD talk to whom. The flight log says who
+     actually changed together. Both are drawn: a declared edge in its own
+     weight, an undeclared pair — a coupling nobody has written down — as a
+     thin observed route, so a real event always has a real path to fly. */
+  const ROUTES = [...MAP.edges.map(([a,b,w]) => [a,b,w,false]),
+                  ...(MAP.observed||[]).map(([a,b,n]) => [a,b,0,true])];
+  const arcs = ROUTES.map(([a,b,w,obs]) => {
     const pa = new THREE.Vector3(byId[a].pos[0], marks[a].top, byId[a].pos[1]);
     const pb = new THREE.Vector3(byId[b].pos[0], marks[b].top, byId[b].pos[1]);
     const mid = pa.clone().add(pb).multiplyScalar(0.5);
@@ -673,29 +853,40 @@ function buildIsland(){
     const curve = new THREE.QuadraticBezierCurve3(pa, mid, pb);
     const mat = new THREE.MeshBasicMaterial({
       color: marks[a].color.clone().lerp(marks[b].color, 0.5),
-      transparent:true, opacity: w === 2 ? 0.17 : 0.09, depthWrite:false });
+      transparent:true, opacity: obs ? 0.05 : (w === 2 ? 0.17 : 0.09),
+      depthWrite:false });
     scene.add(new THREE.Mesh(
-      new THREE.TubeGeometry(curve, 44, w === 2 ? 0.17 : 0.11, 5, false), mat));
-    return { a, b, curve, mat, base: mat.opacity };
+      new THREE.TubeGeometry(curve, 44, obs ? 0.06 : (w === 2 ? 0.17 : 0.11), 5, false), mat));
+    return { a, b, curve, mat, base: mat.opacity, observed: obs };
   });
   const arcBetween = (a,b) => arcs.find(e =>
     (e.a === a && e.b === b) || (e.a === b && e.b === a));
 
-  const pulses = [];
+  const pulses = [], pulseHits = [];
   const pulseGeo = new THREE.SphereGeometry(0.46, 10, 8);
+  /* A moving 0.46-radius sphere is unpointable, so each light carries an
+     invisible sphere you can actually hit — the same trick the beacons use,
+     and for the same reason. */
+  const hitGeo  = new THREE.SphereGeometry(3.0, 8, 6);
   for(let i=0;i<44;i++){
     const m = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({
       color:0xEBE3D0, transparent:true, opacity:0, depthWrite:false }));
     m.visible = false; scene.add(m);
-    pulses.push({ mesh:m, arc:null, t:0, sp:0, back:false });
+    const p = { mesh:m, arc:null, t:0, sp:0, back:false, ev:null };
+    const hit = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({
+      transparent:true, opacity:0, depthWrite:false }));
+    hit.userData.p = p; m.add(hit); pulseHits.push(hit);
+    pulses.push(p);
   }
-  function emit(arc, color, speed, back){
-    const p = pulses.find(q => !q.arc); if(!p) return;
-    p.arc = arc; p.t = 0;
+  function emit(arc, color, speed, back, ev, size){
+    const p = pulses.find(q => !q.arc); if(!p) return null;
+    p.arc = arc; p.t = 0; p.ev = ev || null;
     p.sp = speed || (0.22 + Math.random()*0.16);
     p.back = back === undefined ? Math.random() < 0.5 : back;
-    p.mesh.material.color.set(color || 0xEBE3D0);
+    p.mesh.material.color.set(color === undefined ? 0xEBE3D0 : color);
     p.mesh.material.opacity = 0.95; p.mesh.visible = true;
+    p.mesh.scale.setScalar(size || 1);
+    return p;
   }
 
   /* ── camera ────────────────────────────────────────────────────────────── */
@@ -743,13 +934,53 @@ function buildIsland(){
   }, { passive:false });
 
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-  function pick(cx, cy){
+  function castAt(cx, cy, objs){
     ndc.x = (cx/innerWidth)*2 - 1; ndc.y = -(cy/innerHeight)*2 + 1;
     ray.setFromCamera(ndc, camera);
-    const hit = ray.intersectObjects(pickable, false)[0];
+    return ray.intersectObjects(objs, false)[0];
+  }
+  function pick(cx, cy){
+    const light = castAt(cx, cy, pulseHits);
+    if(light){ holdPulse(light.object.userData.p); return; }
+    const hit = castAt(cx, cy, pickable);
     if(hit && routeOn) stopRoute();
     select(hit ? hit.object.userData.tid : null);
   }
+
+  /* ── catching a light ───────────────────────────────────────────────────
+     A light is only readable if it holds still, so pointing at one freezes
+     every light in the air and stops the log advancing. The lights are tried
+     BEFORE the beacons: a beacon's hit sphere is 7.5 units wide and would
+     otherwise swallow anything flying over it. */
+  let heldPulse = null;
+  function holdPulse(p){
+    if(heldPulse === p) return;
+    if(heldPulse) heldPulse.mesh.scale.multiplyScalar(1/1.9);
+    heldPulse = p && p.arc ? p : null;
+    if(heldPulse){
+      heldPulse.mesh.scale.multiplyScalar(1.9);
+      heldPulse.arc.mat.opacity = 0.7;
+    }
+    holdEvent(heldPulse ? heldPulse.ev : null);
+    cv.style.cursor = heldPulse ? 'pointer' : '';
+  }
+  /* Hover is a mouse feature — the same law the Surface enforces. A touch
+     device taps, and `pick` handles that. */
+  if(matchMedia('(hover:hover) and (pointer:fine)').matches){
+    cv.addEventListener('pointermove', e => {
+      if(pts.size) return;                    /* mid-drag: the camera has it */
+      const light = castAt(e.clientX, e.clientY, pulseHits);
+      holdPulse(light ? light.object.userData.p : null);
+    });
+    cv.addEventListener('pointerleave', () => holdPulse(null));
+  }
+
+  /* A handle on the island, so the flight log can be exercised without a GPU
+     — this sandbox cannot reach the CDN, and code that has never run is code
+     nobody has checked. It exposes nothing the page does not already do: the
+     hold is what hovering does, and the rest is read-only. */
+  window.island = { pulses, arcs, marks, holdPulse, fly: ev => flyEvent(ev),
+                    inAir: () => pulses.filter(q => q.arc).length };
 
   /* ── hand the survey its three levers ──────────────────────────────────── */
   highlight = (id, routeActive) => {
@@ -760,9 +991,10 @@ function buildIsland(){
       m.label.material.opacity = on ? 1 : 0.28;
     }
     for(const e of arcs){
-      e.mat.opacity = routeActive ? e.base*0.22
+      e.rest = routeActive ? e.base*0.22
         : !id ? e.base
         : (e.a === id || e.b === id) ? Math.min(0.62, e.base*3.6) : e.base*0.34;
+      e.mat.opacity = e.rest;
     }
   };
   focusOn = (id, keepCam) => {
@@ -771,6 +1003,39 @@ function buildIsland(){
     if(!keepCam) cam.tr = Math.max(80, Math.min(cam.tr, 110));
     idle = false;
   };
+  /* ── an event becomes light ──────────────────────────────────────────────
+     A commit spanning territories flies from the one that changed most to
+     each of the others, because that is the shape of the work: somebody was
+     working HERE and had to touch THERE. A commit that stayed home flares at
+     its own beacon. A border request flies in the ledger's own rust, slowly,
+     and lights its route while it travels. */
+  const sizeOf = lines => Math.max(0.7, Math.min(2.4, Math.sqrt(lines) / 9));
+  flyEvent = (ev) => {
+    if(routeOn || reduced) return;
+    if(ev.k === 'contract'){
+      const a = arcBetween(ev.from, ev.to); if(!a) return;
+      a.mat.opacity = Math.max(a.mat.opacity, 0.62);
+      emit(a, 0xC2604A, 0.30, a.a !== ev.from, ev, 1.7);
+      return;
+    }
+    if(!ev.t.length) return;                 /* nothing to fly: the record */
+    const [home] = ev.t[0];
+    const col = marks[home].color.getHex();
+    if(ev.t.length === 1){
+      /* a flare: straight up off its own beacon, and hoverable like any other */
+      const m = marks[home];
+      const p = emit(null, col, 0, false, ev, sizeOf(ev.t[0][1]));
+      if(p){ p.arc = 'flare'; p.t = 0; p.sp = 0.34;
+             p.flare = { x: byId[home].pos[0], z: byId[home].pos[1], y: m.top }; }
+      return;
+    }
+    for(let i = 1; i < ev.t.length; i++){
+      const a = arcBetween(home, ev.t[i][0]); if(!a) continue;
+      a.mat.opacity = Math.max(a.mat.opacity, a.observed ? 0.30 : 0.42);
+      emit(a, col, 0.26 + i*0.03, a.a !== home, ev, sizeOf(ev.t[i][1]));
+    }
+  };
+
   routePulse = (from, to) => {
     const a = arcBetween(from, to); if(!a) return;
     a.mat.opacity = 0.78;
@@ -817,24 +1082,39 @@ function buildIsland(){
         m.halo.scale.setScalar(9*beat);
       }
 
-      spawn -= dt;
-      if(spawn <= 0){
-        spawn = routeOn ? 0.6 : 0.34;
-        if(routeOn){
+      /* A caught light holds still, and so does everything around it —
+         otherwise the thing you are reading has already flown off. */
+      const pdt = heldPulse ? 0 : dt;
+
+      if(routeOn){
+        spawn -= dt;
+        if(spawn <= 0){
+          spawn = 0.6;
           if(routeStep > 0) routePulse(routeOn.steps[routeStep-1][0],
                                        routeOn.steps[routeStep][0]);
-        } else {
-          const live = current
-            ? arcs.filter(e => e.a === current || e.b === current) : arcs;
-          const e = live[(Math.random()*live.length)|0];
-          if(e) emit(e, marks[e.a].color.getHex(), 0.20 + Math.random()*0.14);
         }
       }
+
+      /* A route lit by an event fades back to what it was, rather than
+         staying bright and reporting traffic that has already landed. */
+      for(const e of arcs){
+        const rest = e.rest === undefined ? e.base : e.rest;
+        if(e.mat.opacity !== rest)
+          e.mat.opacity += (rest - e.mat.opacity) * Math.min(1, pdt*1.6);
+      }
+
       for(const p of pulses){
         if(!p.arc) continue;
-        p.t += p.sp * dt;
-        if(p.t >= 1){ p.arc = null; p.mesh.visible = false; continue; }
-        p.arc.curve.getPoint(p.back ? 1 - p.t : p.t, p.mesh.position);
+        p.t += p.sp * pdt;
+        if(p.t >= 1){
+          if(heldPulse === p) holdPulse(null);
+          p.arc = null; p.ev = null; p.mesh.visible = false; continue;
+        }
+        if(p.arc === 'flare'){
+          p.mesh.position.set(p.flare.x, p.flare.y + p.t*11, p.flare.z);
+        } else {
+          p.arc.curve.getPoint(p.back ? 1 - p.t : p.t, p.mesh.position);
+        }
         p.mesh.material.opacity = 0.95 * Math.sin(Math.PI * p.t);
       }
 

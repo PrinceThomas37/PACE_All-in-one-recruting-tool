@@ -338,7 +338,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **62** suites via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **71** suites via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it

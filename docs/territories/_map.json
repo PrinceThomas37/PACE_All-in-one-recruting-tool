@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-10",
+  "generated": "2026-09-22",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 266,
-    "lines": 63234,
+    "files": 267,
+    "lines": 63428,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -112,11 +112,11 @@
         "scripts/"
       ],
       "files": 48,
-      "lines": 2790,
+      "lines": 2883,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 262
+          "n": 355
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -363,8 +363,8 @@
         "test/",
         ".github/"
       ],
-      "files": 74,
-      "lines": 13964,
+      "files": 75,
+      "lines": 14065,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -662,5 +662,1720 @@
       "asks": "two things in `test/`, which is yours."
     }
   ],
-  "unclaimed": []
+  "unclaimed": [],
+  "events": [
+    {
+      "k": "commit",
+      "sha": "6070a3c",
+      "date": "2026-08-25",
+      "msg": "Render the sender name server-side, for every reader of a queued email",
+      "pr": "143",
+      "t": [
+        [
+          "foundry",
+          305
+        ],
+        [
+          "harbour",
+          93
+        ],
+        [
+          "surface",
+          25
+        ],
+        [
+          "gateway",
+          21
+        ]
+      ],
+      "files": 9,
+      "lines": 444,
+      "other": 0,
+      "top": {
+        "f": "test/emails-route-render-smoke.mjs",
+        "n": 145
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "c5cb602",
+      "date": "2026-08-25",
+      "msg": "Fix outbound emails naming two different people",
+      "pr": "142",
+      "t": [
+        [
+          "surface",
+          16304
+        ],
+        [
+          "foundry",
+          8615
+        ],
+        [
+          "gateway",
+          5767
+        ],
+        [
+          "guild",
+          4846
+        ],
+        [
+          "harbour",
+          3754
+        ],
+        [
+          "observatory",
+          3212
+        ],
+        [
+          "deep",
+          2953
+        ],
+        [
+          "rampart",
+          1432
+        ],
+        [
+          "ledger",
+          804
+        ]
+      ],
+      "files": 244,
+      "lines": 54651,
+      "other": 16,
+      "top": {
+        "f": "index.js",
+        "n": 3123
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "491ae36",
+      "date": "2026-08-31",
+      "msg": "Record Session 15: the app got a structure",
+      "pr": null,
+      "t": [],
+      "files": 3,
+      "lines": 508,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 272
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "a6024ec",
+      "date": "2026-09-01",
+      "msg": "Stop the screen blinking: render only what changed",
+      "pr": null,
+      "t": [
+        [
+          "surface",
+          502
+        ],
+        [
+          "foundry",
+          240
+        ]
+      ],
+      "files": 16,
+      "lines": 1014,
+      "other": 3,
+      "top": {
+        "f": "test/screen-stability-smoke.mjs",
+        "n": 240
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0ea4992",
+      "date": "2026-09-01",
+      "msg": "Record the rollout, and park the Gmail expiry on the owner's instruction",
+      "pr": null,
+      "t": [],
+      "files": 2,
+      "lines": 320,
+      "other": 2,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 225
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "093cd7d",
+      "date": "2026-09-01",
+      "msg": "The four screens: record drawer, sequence timeline, live email preview, threaded inbox",
+      "pr": "148",
+      "t": [
+        [
+          "surface",
+          1195
+        ],
+        [
+          "foundry",
+          14
+        ]
+      ],
+      "files": 9,
+      "lines": 1209,
+      "other": 0,
+      "top": {
+        "f": "public/js/47-page-mailbox.js",
+        "n": 270
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "5bff9d6",
+      "date": "2026-09-01",
+      "msg": "Rebuild the app structure on one shared UI kit",
+      "pr": "147",
+      "t": [
+        [
+          "surface",
+          1094
+        ],
+        [
+          "guild",
+          31
+        ],
+        [
+          "foundry",
+          14
+        ]
+      ],
+      "files": 9,
+      "lines": 1139,
+      "other": 0,
+      "top": {
+        "f": "public/ui.css",
+        "n": 428
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0c0885d",
+      "date": "2026-09-01",
+      "msg": "Rank two openings of one job above a long-open role, and record Session 14",
+      "pr": "146",
+      "t": [
+        [
+          "foundry",
+          42
+        ],
+        [
+          "observatory",
+          18
+        ]
+      ],
+      "files": 5,
+      "lines": 513,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_ARCHIVE.md",
+        "n": 220
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "db2987d",
+      "date": "2026-09-01",
+      "msg": "Give lead ingest an injectable clock so its test stops rotting",
+      "pr": "145",
+      "t": [
+        [
+          "foundry",
+          31
+        ],
+        [
+          "guild",
+          8
+        ]
+      ],
+      "files": 2,
+      "lines": 39,
+      "other": 0,
+      "top": {
+        "f": "test/lead-sourcing-smoke.mjs",
+        "n": 31
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "8784c38",
+      "date": "2026-09-01",
+      "msg": "Send fresh leads before follow-ups; measure the heartbeat by the ping",
+      "pr": "144",
+      "t": [
+        [
+          "foundry",
+          181
+        ],
+        [
+          "gateway",
+          77
+        ],
+        [
+          "harbour",
+          60
+        ],
+        [
+          "surface",
+          7
+        ]
+      ],
+      "files": 7,
+      "lines": 325,
+      "other": 0,
+      "top": {
+        "f": "test/send-queue-order-smoke.mjs",
+        "n": 95
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "3254782",
+      "date": "2026-09-02",
+      "msg": "Stop the reading pane re-rastering: write nothing when nothing changed",
+      "pr": null,
+      "t": [
+        [
+          "foundry",
+          93
+        ],
+        [
+          "surface",
+          62
+        ]
+      ],
+      "files": 7,
+      "lines": 280,
+      "other": 3,
+      "top": {
+        "f": "test/screen-stability-smoke.mjs",
+        "n": 93
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "1a3a511",
+      "date": "2026-09-02",
+      "msg": "Roll the shared layout across every list page",
+      "pr": "150",
+      "t": [
+        [
+          "surface",
+          687
+        ],
+        [
+          "foundry",
+          7
+        ]
+      ],
+      "files": 8,
+      "lines": 713,
+      "other": 1,
+      "top": {
+        "f": "public/js/06-page-leads.js",
+        "n": 276
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "1fb4856",
+      "date": "2026-09-03",
+      "msg": "Read the employer and the city from the posting, not the form",
+      "pr": null,
+      "t": [
+        [
+          "observatory",
+          80
+        ],
+        [
+          "foundry",
+          41
+        ],
+        [
+          "surface",
+          27
+        ]
+      ],
+      "files": 3,
+      "lines": 148,
+      "other": 0,
+      "top": {
+        "f": "services/outreach-generator.js",
+        "n": 80
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "2780ea3",
+      "date": "2026-09-03",
+      "msg": "Fill the mailbox signature, and stop the body signing itself",
+      "pr": "156",
+      "t": [
+        [
+          "observatory",
+          60
+        ],
+        [
+          "foundry",
+          48
+        ],
+        [
+          "guild",
+          30
+        ],
+        [
+          "surface",
+          17
+        ]
+      ],
+      "files": 6,
+      "lines": 166,
+      "other": 1,
+      "top": {
+        "f": "test/outreach-generator-smoke.mjs",
+        "n": 48
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0899d5a",
+      "date": "2026-09-03",
+      "msg": "Rebuild how the generator reads a posting, and sign it from the mailbox",
+      "pr": "155",
+      "t": [
+        [
+          "observatory",
+          582
+        ],
+        [
+          "foundry",
+          149
+        ],
+        [
+          "surface",
+          3
+        ]
+      ],
+      "files": 8,
+      "lines": 734,
+      "other": 0,
+      "top": {
+        "f": "services/outreach-generator.js",
+        "n": 524
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0d8f3f0",
+      "date": "2026-09-03",
+      "msg": "Add the outreach generator as an Email tab",
+      "pr": "154",
+      "t": [
+        [
+          "observatory",
+          539
+        ],
+        [
+          "surface",
+          356
+        ],
+        [
+          "foundry",
+          186
+        ],
+        [
+          "gateway",
+          11
+        ],
+        [
+          "guild",
+          7
+        ]
+      ],
+      "files": 10,
+      "lines": 1125,
+      "other": 1,
+      "top": {
+        "f": "services/outreach-generator.js",
+        "n": 348
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "e9e4de2",
+      "date": "2026-09-04",
+      "msg": "Make the AI test say something, whatever happens",
+      "pr": "165",
+      "t": [
+        [
+          "foundry",
+          104
+        ],
+        [
+          "surface",
+          62
+        ],
+        [
+          "observatory",
+          27
+        ]
+      ],
+      "files": 3,
+      "lines": 193,
+      "other": 0,
+      "top": {
+        "f": "test/ai-health-card-smoke.mjs",
+        "n": 104
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "eaa2b17",
+      "date": "2026-09-04",
+      "msg": "Say why the AI did not answer, and stop the preview promising 10 while assigning 162",
+      "pr": "164",
+      "t": [
+        [
+          "observatory",
+          83
+        ],
+        [
+          "foundry",
+          73
+        ],
+        [
+          "surface",
+          70
+        ],
+        [
+          "gateway",
+          33
+        ]
+      ],
+      "files": 7,
+      "lines": 259,
+      "other": 0,
+      "top": {
+        "f": "services/ai-provider.js",
+        "n": 83
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "db096af",
+      "date": "2026-09-04",
+      "msg": "Write up Session 18, and rebuild the window around it",
+      "pr": "163",
+      "t": [],
+      "files": 2,
+      "lines": 655,
+      "other": 2,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 439
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "2c7fb35",
+      "date": "2026-09-04",
+      "msg": "Decide what an AI call may cost before making it",
+      "pr": "161",
+      "t": [
+        [
+          "observatory",
+          263
+        ],
+        [
+          "foundry",
+          153
+        ],
+        [
+          "gateway",
+          45
+        ],
+        [
+          "surface",
+          43
+        ],
+        [
+          "guild",
+          4
+        ]
+      ],
+      "files": 12,
+      "lines": 536,
+      "other": 1,
+      "top": {
+        "f": "services/ai-budget.js",
+        "n": 164
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "8577640",
+      "date": "2026-09-04",
+      "msg": "Restore a helper two clean merges deleted out from under a live call",
+      "pr": "162",
+      "t": [
+        [
+          "foundry",
+          90
+        ],
+        [
+          "observatory",
+          9
+        ]
+      ],
+      "files": 2,
+      "lines": 99,
+      "other": 0,
+      "top": {
+        "f": "test/outreach-generator-smoke.mjs",
+        "n": 90
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "24e8cc5",
+      "date": "2026-09-04",
+      "msg": "Merge Compose into the composer that actually sends, and turn a reply into a lead",
+      "pr": "160",
+      "t": [
+        [
+          "surface",
+          229
+        ],
+        [
+          "observatory",
+          151
+        ],
+        [
+          "foundry",
+          45
+        ],
+        [
+          "gateway",
+          2
+        ]
+      ],
+      "files": 6,
+      "lines": 427,
+      "other": 0,
+      "top": {
+        "f": "public/js/48-page-outreach-gen.js",
+        "n": 200
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "694babc",
+      "date": "2026-09-04",
+      "msg": "Let any AI provider power the six AI features, free ones included",
+      "pr": "159",
+      "t": [
+        [
+          "observatory",
+          332
+        ],
+        [
+          "foundry",
+          193
+        ],
+        [
+          "gateway",
+          150
+        ],
+        [
+          "surface",
+          39
+        ],
+        [
+          "guild",
+          20
+        ]
+      ],
+      "files": 13,
+      "lines": 762,
+      "other": 1,
+      "top": {
+        "f": "services/ai-provider.js",
+        "n": 211
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "bab43ce",
+      "date": "2026-09-04",
+      "msg": "Offer four framings of the email, and stop writing about the contact's CV",
+      "pr": "158",
+      "t": [
+        [
+          "observatory",
+          494
+        ],
+        [
+          "surface",
+          94
+        ],
+        [
+          "foundry",
+          88
+        ]
+      ],
+      "files": 5,
+      "lines": 688,
+      "other": 1,
+      "top": {
+        "f": "services/outreach-generator.js",
+        "n": 458
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "135821c",
+      "date": "2026-09-05",
+      "msg": "Wire up the AI test button, and make the app work on a phone",
+      "pr": "170",
+      "t": [
+        [
+          "foundry",
+          535
+        ],
+        [
+          "surface",
+          528
+        ],
+        [
+          "gateway",
+          92
+        ],
+        [
+          "observatory",
+          56
+        ]
+      ],
+      "files": 21,
+      "lines": 1708,
+      "other": 3,
+      "top": {
+        "f": "test/mobile-layout-smoke.mjs",
+        "n": 335
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "688d278",
+      "date": "2026-09-05",
+      "msg": "Correct the test counts, and record how a failure hid behind a pipe",
+      "pr": "169",
+      "t": [],
+      "files": 1,
+      "lines": 13,
+      "other": 1,
+      "top": {
+        "f": "CLAUDE.md",
+        "n": 13
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "5e13b54",
+      "date": "2026-09-05",
+      "msg": "Write up part 2, and hand the next session the one open question",
+      "pr": "168",
+      "t": [],
+      "files": 3,
+      "lines": 347,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 175
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "b5b227e",
+      "date": "2026-09-05",
+      "msg": "Answer the AI question without being asked, and stop crying wolf about the engine",
+      "pr": "167",
+      "t": [
+        [
+          "foundry",
+          129
+        ],
+        [
+          "surface",
+          68
+        ],
+        [
+          "gateway",
+          22
+        ]
+      ],
+      "files": 6,
+      "lines": 219,
+      "other": 0,
+      "top": {
+        "f": "public/js/08-page-admin.js",
+        "n": 68
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "b180cf2",
+      "date": "2026-09-05",
+      "msg": "Keep the answer on the server, and name the models that would work",
+      "pr": "166",
+      "t": [
+        [
+          "observatory",
+          76
+        ],
+        [
+          "foundry",
+          65
+        ],
+        [
+          "surface",
+          43
+        ],
+        [
+          "gateway",
+          4
+        ]
+      ],
+      "files": 4,
+      "lines": 188,
+      "other": 0,
+      "top": {
+        "f": "services/ai-provider.js",
+        "n": 76
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "ae54a79",
+      "date": "2026-09-06",
+      "msg": "Point Groq at models it actually has",
+      "pr": "171",
+      "t": [
+        [
+          "foundry",
+          110
+        ],
+        [
+          "observatory",
+          79
+        ],
+        [
+          "surface",
+          27
+        ]
+      ],
+      "files": 8,
+      "lines": 339,
+      "other": 3,
+      "top": {
+        "f": "services/ai-provider.js",
+        "n": 79
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "f0f819c",
+      "date": "2026-09-07",
+      "msg": "docs: record the lead-release rule and the send-card snapshot rule",
+      "pr": null,
+      "t": [],
+      "files": 2,
+      "lines": 34,
+      "other": 2,
+      "top": {
+        "f": "CLAUDE.md",
+        "n": 30
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "49d734a",
+      "date": "2026-09-07",
+      "msg": "Let an unassigned lead be emailed again, and stop a finished send card outliving its queue",
+      "pr": "176",
+      "t": [
+        [
+          "harbour",
+          119
+        ],
+        [
+          "foundry",
+          80
+        ],
+        [
+          "gateway",
+          45
+        ],
+        [
+          "guild",
+          19
+        ]
+      ],
+      "files": 7,
+      "lines": 263,
+      "other": 0,
+      "top": {
+        "f": "test/outreach-cycle-smoke.mjs",
+        "n": 80
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "a9b29e1",
+      "date": "2026-09-07",
+      "msg": "docs: close Session 19 — archive the narrative, rewrite the window",
+      "pr": "175",
+      "t": [],
+      "files": 2,
+      "lines": 399,
+      "other": 2,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 325
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "c9e0d5c",
+      "date": "2026-09-07",
+      "msg": "Read PDFs with a library that works on the Node we deploy",
+      "pr": "174",
+      "t": [
+        [
+          "foundry",
+          123
+        ],
+        [
+          "observatory",
+          105
+        ],
+        [
+          "gateway",
+          17
+        ],
+        [
+          "surface",
+          16
+        ]
+      ],
+      "files": 13,
+      "lines": 476,
+      "other": 5,
+      "top": {
+        "f": "docs/CONTEXT_ARCHIVE.md",
+        "n": 95
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "ae0764d",
+      "date": "2026-09-07",
+      "msg": "Stop the ai-test route collapsing the probe to a single tier",
+      "pr": "173",
+      "t": [
+        [
+          "foundry",
+          34
+        ],
+        [
+          "gateway",
+          9
+        ]
+      ],
+      "files": 3,
+      "lines": 52,
+      "other": 1,
+      "top": {
+        "f": "test/ai-health-card-smoke.mjs",
+        "n": 34
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "cdde813",
+      "date": "2026-09-07",
+      "msg": "Say what actually went wrong with a resume, and check the upload",
+      "pr": "172",
+      "t": [
+        [
+          "foundry",
+          158
+        ],
+        [
+          "observatory",
+          68
+        ],
+        [
+          "guild",
+          66
+        ],
+        [
+          "surface",
+          9
+        ]
+      ],
+      "files": 8,
+      "lines": 328,
+      "other": 1,
+      "top": {
+        "f": "test/resume-parse-smoke.mjs",
+        "n": 158
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "e70f4f0",
+      "date": "2026-09-08",
+      "msg": "Connect the two job titles, write all four angles with AI, and let a send join a sequence",
+      "pr": "178",
+      "t": [
+        [
+          "observatory",
+          454
+        ],
+        [
+          "surface",
+          128
+        ],
+        [
+          "foundry",
+          113
+        ],
+        [
+          "guild",
+          18
+        ],
+        [
+          "gateway",
+          3
+        ]
+      ],
+      "files": 9,
+      "lines": 774,
+      "other": 2,
+      "top": {
+        "f": "routes/outreach-generator.js",
+        "n": 367
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "95df7cb",
+      "date": "2026-09-08",
+      "msg": "Hold the AI's outreach draft to the house rules, and let it be told which role",
+      "pr": "177",
+      "t": [
+        [
+          "observatory",
+          276
+        ],
+        [
+          "foundry",
+          187
+        ],
+        [
+          "surface",
+          37
+        ]
+      ],
+      "files": 5,
+      "lines": 500,
+      "other": 0,
+      "top": {
+        "f": "test/outreach-ai-quality-smoke.mjs",
+        "n": 187
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "5197721",
+      "date": "2026-09-09",
+      "msg": "docs: archive the candidate outreach build, and record the 042 collision",
+      "pr": "190",
+      "t": [],
+      "files": 2,
+      "lines": 209,
+      "other": 2,
+      "top": {
+        "f": "docs/CONTEXT_ARCHIVE.md",
+        "n": 169
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "867abda",
+      "date": "2026-09-09",
+      "msg": "docs: correct the window's last-merged line",
+      "pr": "189",
+      "t": [],
+      "files": 1,
+      "lines": 4,
+      "other": 1,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 4
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "4038d81",
+      "date": "2026-09-09",
+      "msg": "docs: record the rewrite button and the bulk-edit lesson",
+      "pr": "188",
+      "t": [],
+      "files": 3,
+      "lines": 129,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_ARCHIVE.md",
+        "n": 75
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "3d3736f",
+      "date": "2026-09-09",
+      "msg": "Rewrite an angle for different wording, capped at three",
+      "pr": "187",
+      "t": [
+        [
+          "surface",
+          104
+        ],
+        [
+          "foundry",
+          73
+        ],
+        [
+          "observatory",
+          56
+        ]
+      ],
+      "files": 4,
+      "lines": 233,
+      "other": 0,
+      "top": {
+        "f": "public/js/48-page-outreach-gen.js",
+        "n": 104
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "4cfc486",
+      "date": "2026-09-09",
+      "msg": "docs: close Session 21 — archive the narrative, rewrite the window",
+      "pr": "186",
+      "t": [],
+      "files": 3,
+      "lines": 324,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 197
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "431c780",
+      "date": "2026-09-09",
+      "msg": "The repeating menu, stepping through candidate emails, and keeping what we sent",
+      "pr": "185",
+      "t": [
+        [
+          "foundry",
+          343
+        ],
+        [
+          "surface",
+          161
+        ],
+        [
+          "deep",
+          26
+        ],
+        [
+          "guild",
+          12
+        ],
+        [
+          "observatory",
+          11
+        ],
+        [
+          "gateway",
+          2
+        ]
+      ],
+      "files": 12,
+      "lines": 555,
+      "other": 0,
+      "top": {
+        "f": "test/sent-email-preview-smoke.mjs",
+        "n": 126
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "48429f1",
+      "date": "2026-09-09",
+      "msg": "Let an admin change the candidate sending hours",
+      "pr": "184",
+      "t": [
+        [
+          "gateway",
+          35
+        ],
+        [
+          "observatory",
+          29
+        ],
+        [
+          "foundry",
+          28
+        ],
+        [
+          "surface",
+          7
+        ]
+      ],
+      "files": 5,
+      "lines": 112,
+      "other": 1,
+      "top": {
+        "f": "config/settings.js",
+        "n": 35
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "aa712e4",
+      "date": "2026-09-09",
+      "msg": "Email candidates in their own free time, not the client's office hours",
+      "pr": "183",
+      "t": [
+        [
+          "observatory",
+          207
+        ],
+        [
+          "foundry",
+          73
+        ],
+        [
+          "surface",
+          6
+        ],
+        [
+          "gateway",
+          2
+        ]
+      ],
+      "files": 6,
+      "lines": 320,
+      "other": 1,
+      "top": {
+        "f": "routes/candidate-outreach.js",
+        "n": 115
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0269d5d",
+      "date": "2026-09-09",
+      "msg": "Say what a queued candidate email is waiting for",
+      "pr": "182",
+      "t": [
+        [
+          "observatory",
+          34
+        ],
+        [
+          "surface",
+          18
+        ],
+        [
+          "foundry",
+          10
+        ]
+      ],
+      "files": 4,
+      "lines": 78,
+      "other": 1,
+      "top": {
+        "f": "routes/candidate-outreach.js",
+        "n": 34
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "fd41ea9",
+      "date": "2026-09-09",
+      "msg": "Stop skipping candidates over the job's own experience requirement",
+      "pr": "181",
+      "t": [
+        [
+          "observatory",
+          182
+        ],
+        [
+          "foundry",
+          108
+        ],
+        [
+          "surface",
+          55
+        ]
+      ],
+      "files": 5,
+      "lines": 380,
+      "other": 1,
+      "top": {
+        "f": "services/candidate-outreach.js",
+        "n": 136
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "e72b406",
+      "date": "2026-09-09",
+      "msg": "Ask candidates whether they want the jobs we hold",
+      "pr": "180",
+      "t": [
+        [
+          "observatory",
+          1548
+        ],
+        [
+          "surface",
+          536
+        ],
+        [
+          "foundry",
+          462
+        ],
+        [
+          "deep",
+          128
+        ],
+        [
+          "gateway",
+          26
+        ]
+      ],
+      "files": 14,
+      "lines": 3127,
+      "other": 2,
+      "top": {
+        "f": "routes/candidate-outreach.js",
+        "n": 873
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "5a98168",
+      "date": "2026-09-09",
+      "msg": "docs: close Session 20 — archive the narrative, rewrite the window",
+      "pr": "179",
+      "t": [],
+      "files": 2,
+      "lines": 404,
+      "other": 2,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 248
+      }
+    },
+    {
+      "k": "contract",
+      "id": "C-0001",
+      "from": "surface",
+      "to": "observatory",
+      "status": "ANSWERED",
+      "date": "2026-09-09",
+      "asks": "a decision on the daily import briefing (`/ai/generate-summary`)."
+    },
+    {
+      "k": "contract",
+      "id": "C-0002",
+      "from": "surface",
+      "to": "gateway",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "`/ai/generate-email` either wired to a real screen or deleted."
+    },
+    {
+      "k": "contract",
+      "id": "C-0003",
+      "from": "rampart",
+      "to": "gateway",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."
+    },
+    {
+      "k": "contract",
+      "id": "C-0004",
+      "from": "harbour",
+      "to": "deep",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "an error column on `emails` (migration 043) recording *why* a send failed."
+    },
+    {
+      "k": "contract",
+      "id": "C-0005",
+      "from": "guild",
+      "to": "surface",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "`/recruiting-dashboard` widgets hierarchy-scoped the way `/reports/recruiting` already is, and the Reports page folded into the Dashboard."
+    },
+    {
+      "k": "contract",
+      "id": "C-0007",
+      "from": "observatory",
+      "to": "gateway",
+      "status": "ANSWERED",
+      "date": "2026-09-09",
+      "asks": "a decision on `GET /jobs/today-summary` — does the morning briefing read it as its lead-side source, or absorb its counting so gateway can retire it?"
+    },
+    {
+      "k": "contract",
+      "id": "C-0013",
+      "from": "observatory",
+      "to": "gateway",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "one clause added to the four `description` strings under `group: 'Candidate outreach'` in `config/settings.js` — something like \"Only applies while the candidate send window is switched on (`app_settings.candidate_send_window_enabled`); it is off by default, and with it off candidates are emailed at any hour.\""
+    },
+    {
+      "k": "contract",
+      "id": "C-0014",
+      "from": "gateway",
+      "to": "deep",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "a backfill migration to recompute `jobs.timezone` for existing rows written before this session's fix to `getTimezoneFromLocation()` (`index.js`)."
+    },
+    {
+      "k": "contract",
+      "id": "C-0015",
+      "from": "rampart",
+      "to": "harbour",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "org scoping on `routes/emails.js` and `routes/warmup.js`. These are yours; I did not touch them."
+    },
+    {
+      "k": "contract",
+      "id": "C-0016",
+      "from": "rampart",
+      "to": "gateway",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "an ownership check on the `userEmailId` path/query parameter in `routes/microsoft.js` and `routes/gmail.js`. Per `scripts/territory-map.mjs` these two are yours — they are in neither harbour's `own` list nor your `not` list."
+    },
+    {
+      "k": "contract",
+      "id": "C-0017",
+      "from": "rampart",
+      "to": "guild",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "org scoping on `routes/workflows.js` and `routes/lookups.js`. Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's `not` list and in your `own` list — I mention it because it was handed to me as gateway's, and the map says otherwise)."
+    },
+    {
+      "k": "contract",
+      "id": "C-0018",
+      "from": "rampart",
+      "to": "foundry",
+      "status": "OPEN",
+      "date": "2026-09-09",
+      "asks": "two things in `test/`, which is yours."
+    },
+    {
+      "k": "commit",
+      "sha": "d83ee6a",
+      "date": "2026-09-10",
+      "msg": "Close the session: the archive, the handoff, and the rule the incident earned",
+      "pr": "201",
+      "t": [],
+      "files": 3,
+      "lines": 172,
+      "other": 3,
+      "top": {
+        "f": "docs/CONTEXT_ARCHIVE.md",
+        "n": 103
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "3af3c75",
+      "date": "2026-09-10",
+      "msg": "Revert the half-written job-description panel that #198 shipped by accident",
+      "pr": "199",
+      "t": [
+        [
+          "observatory",
+          337
+        ]
+      ],
+      "files": 1,
+      "lines": 337,
+      "other": 0,
+      "top": {
+        "f": "services/candidate-outreach.js",
+        "n": 337
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "c0a811c",
+      "date": "2026-09-10",
+      "msg": "Bring the handoff current before the session ends",
+      "pr": "198",
+      "t": [
+        [
+          "observatory",
+          337
+        ]
+      ],
+      "files": 2,
+      "lines": 388,
+      "other": 1,
+      "top": {
+        "f": "services/candidate-outreach.js",
+        "n": 337
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "3a6eba1",
+      "date": "2026-09-10",
+      "msg": "A capability register, because borders make duplicate workflows more likely",
+      "pr": "197",
+      "t": [
+        [
+          "deep",
+          37
+        ]
+      ],
+      "files": 8,
+      "lines": 360,
+      "other": 7,
+      "top": {
+        "f": "docs/territories/CAPABILITIES.md",
+        "n": 143
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "4f636ac",
+      "date": "2026-09-10",
+      "msg": "Carry the service-role finding into what a new session reads first",
+      "pr": "196",
+      "t": [],
+      "files": 1,
+      "lines": 42,
+      "other": 1,
+      "top": {
+        "f": "docs/CONTEXT_WINDOW.md",
+        "n": 42
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "0622dba",
+      "date": "2026-09-10",
+      "msg": "Close the cross-org holes that RLS was never covering",
+      "pr": "195",
+      "t": [
+        [
+          "foundry",
+          399
+        ],
+        [
+          "rampart",
+          102
+        ],
+        [
+          "gateway",
+          6
+        ]
+      ],
+      "files": 8,
+      "lines": 763,
+      "other": 2,
+      "top": {
+        "f": "test/org-scoping-guard-smoke.mjs",
+        "n": 329
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "ac82ff7",
+      "date": "2026-09-10",
+      "msg": "A decisions log, so switching chat windows stops losing what the owner chose",
+      "pr": "194",
+      "t": [],
+      "files": 5,
+      "lines": 166,
+      "other": 5,
+      "top": {
+        "f": "docs/territories/DECISIONS.md",
+        "n": 138
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "a8e92af",
+      "date": "2026-09-10",
+      "msg": "Resolve a location's timezone by parsing it, not by scanning for two letters",
+      "pr": "193",
+      "t": [
+        [
+          "foundry",
+          151
+        ],
+        [
+          "gateway",
+          68
+        ]
+      ],
+      "files": 5,
+      "lines": 405,
+      "other": 3,
+      "top": {
+        "f": "test/timezone-resolver-smoke.mjs",
+        "n": 151
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "095f17c",
+      "date": "2026-09-10",
+      "msg": "Candidate outreach sends when due, not when the candidate's evening opens",
+      "pr": "192",
+      "t": [
+        [
+          "foundry",
+          173
+        ],
+        [
+          "observatory",
+          97
+        ],
+        [
+          "surface",
+          20
+        ]
+      ],
+      "files": 9,
+      "lines": 517,
+      "other": 5,
+      "top": {
+        "f": "test/candidate-outreach-drip-smoke.mjs",
+        "n": 173
+      }
+    },
+    {
+      "k": "commit",
+      "sha": "37f9f40",
+      "date": "2026-09-10",
+      "msg": "Nine territories, and the first feature built through them",
+      "pr": "191",
+      "t": [
+        [
+          "observatory",
+          485
+        ],
+        [
+          "deep",
+          226
+        ],
+        [
+          "foundry",
+          220
+        ],
+        [
+          "surface",
+          93
+        ]
+      ],
+      "files": 36,
+      "lines": 4517,
+      "other": 27,
+      "top": {
+        "f": "docs/territories/island.html",
+        "n": 855
+      }
+    }
+  ],
+  "observed": [
+    [
+      "harbour",
+      "surface",
+      3
+    ],
+    [
+      "observatory",
+      "surface",
+      28
+    ],
+    [
+      "deep",
+      "surface",
+      4
+    ],
+    [
+      "ledger",
+      "surface",
+      1
+    ],
+    [
+      "guild",
+      "rampart",
+      2
+    ],
+    [
+      "guild",
+      "ledger",
+      1
+    ],
+    [
+      "harbour",
+      "rampart",
+      2
+    ],
+    [
+      "deep",
+      "observatory",
+      4
+    ],
+    [
+      "observatory",
+      "rampart",
+      1
+    ],
+    [
+      "deep",
+      "ledger",
+      1
+    ]
+  ]
 }
