@@ -42,5 +42,20 @@
 - 19 `email_tracking` rows predate `042_email_tracking_body` and read back null
   forever. That text only ever lived in the mailbox.
 
+## Session 27 — migration 044
+
+- **044 APPLIED LIVE 2026-09-22 with the owner's explicit go-ahead.** Adds
+  `apply_token` / `apply_enabled` / `apply_published_at` / `apply_count` to
+  `job_orders`, a partial unique index on `apply_token`, and
+  `sourcing_candidates (org_id, provider, status)`.
+- **Verified after applying:** 4 columns with the right defaults, both indexes
+  present, and **0 of 6 job orders published**. `apply_enabled` defaults false —
+  publishing a customer's job to the open internet is never a migration's side
+  effect.
+- No new table, so `models/tables.js` is unchanged.
+- **Next migration is 045.** Never apply one without a fresh, explicit
+  go-ahead.
+
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
+- **2026-09-22** — applied migration 044 (apply-page columns on `job_orders`) after owner go-ahead; verified column defaults, indexes and that nothing was published.

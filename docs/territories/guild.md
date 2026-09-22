@@ -76,6 +76,30 @@
   `director` are hierarchy/reporting only, no new capabilities.
 - Three stale draft PRs (#116, #126, #135) are months behind `main`.
 
+## Session 27 — the apply page's staging path, and an honest provider list
+
+- **Applicants land in `sourcing_candidates` with `provider='apply'`** — the
+  same inert staging table CSV import uses, reviewed and imported by a
+  recruiter. **There is no second import path and must not be.** A public form
+  writing into `candidates` is a spam vector aimed at the most valuable table
+  in the product.
+- **`config/sourcing.js` was rewritten to stop lying.** It now separates
+  **`built`** (does code exist) from **`available`** (can it run today); only
+  `apply` and `csv` are built. Every unbuilt provider carries a **`blocker`**
+  naming its real precondition — a paid account, not an API key. Full reasoning
+  in `CLAUDE.md`; the short version is that six providers rendered as working
+  cards for five sessions and the owner found it.
+- **`POST /sourcing/search` refuses with `not_built`**, never
+  `needs_credentials`, and names what it would take plus the CSV route that
+  works today.
+- **⚠ KEEP THE HISTORIC PROVIDER IDS** (`apollo`, `indeed`, `monster`,
+  `careerbuilder`, `dice`, `linkedin`). Staged rows carry a provider string, so
+  dropping one orphans those rows with a blank Source column.
+  `test/sourcing-honesty-smoke.mjs` pins each id.
+- **`scrubJobDescription` left `job-orders.js`** for `services/jd-scrub.js`, so
+  the "re-write job description" button and the public apply page cannot
+  disagree about what is safe to publish.
+
 ## Log
 - **2026-09-17** — Session 26, round 2. Client intake on a direct create: POC
   required, structured address (migration 043), cooldown applied. D-0023.
@@ -84,3 +108,4 @@
   the lead + contacts inserts. `test/new-job-client-smoke.mjs` drives the route
   with a stub database; each guard was verified by reintroducing its own bug.
 - **2026-09-09** — seeded. No work done by an agent yet.
+- **2026-09-22** — apply-page staging (`provider='apply'`); rewrote `config/sourcing.js` around `built` vs `available`; extracted the JD scrubber to `services/jd-scrub.js`.

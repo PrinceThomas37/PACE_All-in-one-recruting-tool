@@ -225,6 +225,24 @@
   was exercised against the real cached brief off the live HVAC job order — but
   a fresh Groq call was not made. Check `.env` exists before promising one.
 
+## Session 27 — OpenRouter's model had been dead for two months
+
+- **`meta-llama/llama-3.2-3b-instruct:free` was the OpenRouter FAST tier and
+  OpenRouter removed that free variant on 2026-07-19.** Written from memory and
+  never verified, because no OpenRouter key had ever been configured to verify
+  it against. The owner obtaining a key is what prompted the re-check.
+- **It would have been completely silent**: a retired name is a 404,
+  `complete()` turns that into `null`, and null means "write it with the
+  rules" — under a green *Key valid* tick, which only ever proved the KEY was
+  accepted.
+- **Both tiers now point at `meta-llama/llama-3.3-70b-instruct:free`**, the one
+  variant confirmed live. **Deliberately NOT replaced with a smaller model name
+  picked from memory** — guessing is the mistake being fixed, twice over now
+  (Groq did this in Session 19). Use the health card, which reads the account's
+  own `/models` list, to set a genuinely fast one.
+- **Treat every hardcoded model name in `services/ai-provider.js` as expiring
+  stock, never a constant.** Two providers, same bug, two sessions apart.
+
 ## Log
 - **2026-09-10** — put the job description INSIDE the candidate email as a
   formatted panel (D-0012), so nothing is lost when "Email JD to candidates" is
@@ -263,3 +281,4 @@
   no-AI path through the real router with a stubbed database: busy day, quiet
   day and the legacy endpoint all return true sentences with no provider
   configured. All six observatory suites green.
+- **2026-09-22** — found and fixed OpenRouter's retired fast model; both tiers now on the one variant confirmed live.

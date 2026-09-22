@@ -67,7 +67,26 @@
   unchanged. Opened `C-0014` to `deep` for the backfill of the 81 already-wrong
   rows, with the measured breakdown; explicitly did not touch the live DB.
 
+## Session 27 — the public apply page
+
+- **`routes/apply.js` is new and it is the second UNAUTHENTICATED surface in
+  the product — the first one that WRITES.** `GET|POST /apply/:token`, mounted
+  in `index.js` next to `routes/tracking`. Rules are in `CLAUDE.md`; the ones
+  that bite here: every miss (unknown / malformed / unpublished / filled)
+  answers **byte-identically**, a malformed token **never reaches the
+  database**, every query is bounded at **4s**, and a write that did not happen
+  is never reported as saved.
+- **`applyLimiter`** (`index.js`, 40 requests / 10 min) is new and passed
+  through `routeCtx`. A real applicant costs two requests.
+- **Publishing is `POST|DELETE /job-orders/:id/apply-link` ONLY.**
+  `apply_enabled` is deliberately absent from `JOB_FIELDS`, so a plain
+  `PUT /job-orders/:id` cannot put a customer's job on the open internet. Do
+  not "tidy" it into the field list.
+- Unpublishing KEEPS the token, so re-publishing restores the same URL. A link
+  already posted to a job board must not silently rotate.
+
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-09** — fixed `getTimezoneFromLocation` state-code substring bug;
   opened C-0014 to deep for the backfill.
+- **2026-09-22** — added `routes/apply.js` (public apply page) + `applyLimiter`; publish/unpublish endpoints on job orders. Migration 044 applied live with owner go-ahead.

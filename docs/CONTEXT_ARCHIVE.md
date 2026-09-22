@@ -5290,3 +5290,47 @@ could do six things it could not. Nobody wrote that lie deliberately — it
 accumulated, one placeholder at a time, from a plan file where those names were
 future work. **A roadmap rendered in the same component as a feature becomes a
 claim.**
+
+## Session 27 — closing synthesis
+
+*(Append-only, so the two per-round "thread" sections above stand as written.
+The one at the end of round 1 is round 1's, despite its heading — round 2 was
+appended after it. This is the synthesis for the session as a whole.)*
+
+**Nothing this session was found by the thing built to find it.**
+
+- A green 88-suite run, while the apply page published a client's name pulled
+  out of the middle of a job description.
+- A green **AI IS WORKING** card, while the model behind OpenRouter's fast tier
+  had been deleted two months earlier.
+- Six Sourcing cards badged "NEEDS CREDS", advertising integrations that had
+  never existed, for five sessions.
+- And then a brand-new guard written against that last one, passing **30/30
+  with its bug fully reintroduced**.
+
+What actually found them was cheap and slightly undignified: rendering the
+bytes and asserting on those rather than on state, taking a screenshot and
+looking at it, re-checking a constant because a new fact made it checkable, and
+deliberately breaking each new guard before trusting it. Not one required
+cleverness. Every one required not accepting a green number as the answer.
+
+So the durable rule from this session is about **evidence, not code**: a
+passing check is evidence about the checker as much as about the thing checked,
+and the only way to tell which is to break it on purpose. That is now stated
+three times in `CLAUDE.md` with three different origins, which is the point at
+which it stops being an anecdote and becomes the default assumption.
+
+**The product thread is separate and simpler.** The session opened with the
+owner asking how to integrate CareerBuilder, Resume-Library and LinkedIn. The
+useful answer turned out not to be any of those: eight of the nine steps in
+candidate sourcing were already built, all three named boards cost real money,
+and LinkedIn sells no such API to anyone. What was missing was a front door —
+free to build, free to run, and the only candidate source that gets cheaper as
+it grows. **Knowing what already existed was worth more than anything written
+here**, which is exactly what `CAPABILITIES.md` is for and why the inventory
+came before the build.
+
+Two things the owner settled, both recorded with re-open conditions: paid
+resume databases wait on a measurement rather than a guess (D-0025), and
+Hunter — along with most of its category — waits on a company email address
+(D-0026).

@@ -199,6 +199,28 @@ the summary line, never piped to `tail`. Zero `[FAIL]` lines in either log.
   found by reading the code path, not reproduced live (this territory doesn't
   edit `public/js/*`).
 
+## Session 27 — two new suites, and a THIRD vacuous guard
+
+- **`test/apply-page-smoke.mjs`** (67 assertions) — token secrecy, the
+  client-name leak, the shared JD scrubber, refusals, the failed-write path,
+  rate limiting. **`test/sourcing-honesty-smoke.mjs`** (31) — registry
+  truthfulness, the endpoint's refusal, and a real-browser check that no
+  unbuilt provider sits in a panel offering an action. Suite total is now
+  **89**.
+- **⚠ THE SOURCING GUARD PASSED 30/30 WITH THE BUG FULLY REINTRODUCED.** Third
+  vacuous test in this repo's recorded history — treat it as the norm. Two
+  independent causes, both worth carrying into every future probe:
+  * **`if (!node) continue`.** A probe that CANNOT TAKE ITS MEASUREMENT must
+    FAIL, never pass. Deleting the whole list under test made the assertion
+    trivially true. `missing` is now its own assertion.
+  * **It read `node.parentElement` only**, and the control sat one level
+    higher. **Never anchor a DOM assertion on a nesting depth** — ask the
+    question the rule is about (`closest('.card')`).
+- **A screenshot found what the green suite could not** (a gutted sentence
+  reading "Questions? Email or call ." on a public page). Render it and LOOK.
+- Every guard added this session was verified by reintroducing its bug and
+  watching the right assertions fail. Do that before trusting a new one.
+
 ## Log
 - **2026-09-09** — reviewed gateway's timezone-resolver fix (C-0014 origin).
   Answered the pointed question: `lead-location-parse-smoke.mjs` passed
@@ -276,3 +298,4 @@ found the two real ones immediately, with numbers (92.1x, 74.3x).
 One re-run confirmed, per the flake rule. Do not chase it further.
 
 **Both Node versions, every PR.** 76/76 on 22 and 26 for #203, #204 and #205.
+- **2026-09-22** — added `apply-page-smoke` and `sourcing-honesty-smoke` (89 suites total); caught and fixed a vacuous guard that passed 30/30 with its bug reintroduced.

@@ -97,85 +97,41 @@ theorising**; `nodejs.org/dist` is reachable from this sandbox.
 
 ## ✅ RECENTLY SHIPPED — full narratives in `CONTEXT_ARCHIVE.md`
 
-**Session 27 (#217) — the front door.** Candidate sourcing was **CSV-only**;
-eight of the nine steps in the candidate journey were already built, so the gap
-was one missing front door, not a feature. `routes/apply.js` publishes a job
-order at `/apply/<token>`; applicants land parsed and deduped in
+**Session 27 (#217, #218) — the front door, and an honest Sourcing page.**
+Candidate sourcing was CSV-only; eight of the nine steps were already built, so
+the gap was a front door, not a feature. `routes/apply.js` publishes a job order
+at `/apply/<token>`; applicants land parsed and deduped in
 `sourcing_candidates`, inert, **no second import path**. `services/jd-scrub.js`
-was extracted so the "re-write job description" button and the apply page share
-ONE definition of "safe to publish" — the apply page publishes with nobody
-reading the result first. Three faults, each invisible to the thing that should
-have caught it: a test on rendered bytes found the client's name leaking out of
-the DESCRIPTION (no field rendered it); a **screenshot** found *"Questions?
-Email or call ."* with the suite green; and masking contacts AFTER replacing
-names rewrote `careers@northwind.com` into `careers@our client.com`, which then
-no longer matched the contact pattern and stayed on the page **looking
-scrubbed**. Also **OpenRouter's fast model had been dead since 2026-07-19** —
-see the AI trap below. D-0025 (paid resume databases wait on a measurement) and
-D-0026 (Hunter parked: B2B vendors gate signup on a company domain).
+was extracted so the JD-rewrite button and the apply page share ONE definition
+of "safe to publish". Then `config/sourcing.js` was rewritten to separate
+**`built`** from **`available`** — six providers had rendered as working cards
+for five sessions with 501s behind them. Also: **OpenRouter's fast model had
+been dead since 2026-07-19** (see the AI trap below). D-0025, D-0026.
+
+**Session 26 (#214, #216) — the button that had never worked.** `+ New Job`
+sent `company_id: null`, hard-coded, so **every direct create had always been
+refused**; the convert-from-lead path masked it. The Client box is a typeahead
+and the SERVER resolves the name (`services/client-resolve.js`).
+Then **a job order carries its client (D-0023 — READ IT, two of its three calls
+went against advice)**: a POC is required, the address gets real columns (043),
+and the **21-day company cooldown applies here**.
+⚠ **The cooldown counts leads and a job order creates one, so a client's SECOND
+requirement inside the window is blocked.** The owner chose this knowing it
+would refuse genuine job orders. Do not soften it; D-0023 holds the two fixes.
+`services/company-cooldown.js` is the one definition, replacing three that
+disagreed. `public/js/52-poc-block.js` is the shared POC block — **the RA
+form's older copy is retired into it, never joined by a third.**
+⚠ **A child's top margin COLLAPSES out of an empty wrapper**, so reserve space
+with padding, never margin (a late duplicate-email answer was moving a button
+20px and eating the click).
+**`.gc2/.gc3/.gc4` are column-only grids** — use these, not `.g2`, to convert an
+inline grid; `.g2` also sets a gap and would move every screen.
 
 **Sessions 24-25 (#200, #208-#212).** Ownership defined once
 (`services/ownership.js`); a reminder says who asked and why; merge fields are
-filled by the server and then CHECKED; a list is calm and colour is scarce
-(D-0019); theme follows the person (D-0022); D-0012 completed — one way to
-email a candidate. A float must be OPAQUE (`--card` is glass) and the phone's
-type scale must include its own inputs. **Full narratives in the archive.**
-
-**Session 26 (#214) — the button that had never worked.** `+ New Job` sent
-`company_id: null`, hard-coded, so **every direct create had always been
-refused**; the convert-from-lead path worked and masked it. The Client box is
-now a typeahead and the SERVER resolves the name
-(`services/client-resolve.js`). Nobody makes a lead first —
-`POST /job-orders` creates it. Also: that route's `jobs`/`contacts` inserts
-carried **no `orgStamp`**, and the modal's inline grid put its whole right
-column 72px off a phone screen.
-
-Then, at the owner's request, **a job order carries its client (D-0023 — READ
-IT, two of its three calls went against advice)**: a POC is required (name +
-email; phone optional), the address gets real columns (043), and **the 21-day
-company cooldown applies here**. `services/company-cooldown.js` is now the one
-definition of that rule, replacing three that disagreed — the server's was
-gated to RAs only, the browser's hard-coded 21 while the number is
-admin-editable. `public/js/52-poc-block.js` is the shared POC block; **the RA
-form's older copy is to be retired into it, not joined by a third.**
-
-⚠ **The cooldown counts leads and a job order creates one, so a client's SECOND
-requirement inside the window is blocked.** The owner chose this knowing it
-would refuse genuine job orders. Do not quietly soften it; D-0023 holds the two
-fixes for when a BD actually reports it.
-
-### Session 26, round 4 — the three follow-ups
-
-All three offered at the end of round 3, taken together. **Two of the three
-turned up a live bug that nothing was looking for**, and neither was in the
-thing being changed.
-
-- **One contact block, not two.** `15-ra-entry-form.js` is migrated onto
-  `52-poc-block.js`. `changed` now carries an EVENT: a keystroke must not
-  re-render (the RA form redraws wholesale and would take the caret), a shape
-  change must (its Intel rows are POSITIONAL — a removal that splices only one
-  list attaches one person's notes to another). That form had **no test
-  coverage at all** before this.
-  **⚠ Found while testing it, in the shared block, affecting BOTH forms:** the
-  duplicate-email answer arrives ~300ms after you leave the box, moved
-  "+ Add another contact" 20px, and the click was silently lost. Reserved by a
-  placeholder of the same shape — **a child's top margin COLLAPSES out of an
-  empty wrapper**, so padding reserves space, never margin.
-- **Every pop-up measured at 390px** — `test/modal-mobile-smoke.mjs`, 18 of them
-  in both themes. **Found: the candidate STAGE modal had a 48px field**, the
-  screen recruiters use most. Now 322px. Everything else was already clean.
-  `.gc2/.gc3/.gc4` are column-only grids — use these, not `.g2`, to convert an
-  inline grid, because `.g2` also sets a gap and would move every screen.
-- **Merge a duplicate client** — Clients drawer → *Merge a duplicate in*.
-  Re-points four tables, soft-deletes the duplicate, records what moved BEFORE
-  the delete. The plan is stated in full and Merge stays disabled until there
-  is one.
-
-**⚠ THE MODAL SWEEP WAS VACUOUS TWICE**, both times for a reason that reads as
-correct: measuring only "past the viewport" misses a grid that CRUSHES its
-columns instead of overflowing, and asking CSS for `overflow-x` is useless
-because `overflow-y:auto` makes it compute to `auto` too. Caught only by
-reintroducing the original bug and watching the suite stay green.
+filled by the server then CHECKED; a list is calm and colour is scarce (D-0019);
+theme follows the person (D-0022); D-0012 completed. A float must be OPAQUE
+(`--card` is glass), and the phone's type scale must include its own inputs.
 
 ## ⏭ PICK THIS UP FIRST
 
@@ -186,16 +142,7 @@ question is whether an applicant actually reached the Sourcing queue** — the
 whole point is step 2 of the candidate journey, and it has only been exercised
 against a stubbed database.
 
-**2. ✅ DONE (#218) — the sourcing cards now tell the truth.** `built` is
-separated from `available`, the seven unbuilt sources are a quiet "Not
-connected" list with no controls, and `test/sourcing-honesty-smoke.mjs` pins it.
-**The lesson to carry, not the task:** that guard passed 30/30 with the bug
-fully reintroduced — it counted a label it could not find as fine, and checked
-only `node.parentElement` when the button sat a level higher. **A probe that
-cannot take its measurement must FAIL, never pass**, and never anchor a DOM
-assertion on a nesting depth.
-
-**3. D-0014 — the row-level interaction brief. Still the live design work.**
+**2. D-0014 — the row-level interaction brief. Still the live design work.**
 
 The owner's design ask was **progressive disclosure**, and Session 23 answered
 it with **volume control** (horizons, caps, pagination) before being corrected:
@@ -234,10 +181,18 @@ it** — they said the revamp is coming *"in sometime"*.
 
 The newest exist because reasoning failed, and each measures what a person saw:
 
-- **`modal-mobile-smoke`** (new) — 18 pop-ups at 390px in both themes,
+- **`apply-page-smoke`** (new, 67) — the public apply page: unknown /
+  malformed / unpublished / filled tokens answering byte-identically, a
+  malformed token never reaching the database, the client's name never
+  published, a failed write never reported as saved, and that an applicant
+  never lands in `candidates`.
+- **`sourcing-honesty-smoke`** (new, 31) — `built` vs `available`, the
+  endpoint's `not_built` refusal, and a real-browser check that **no unbuilt
+  provider sits in a panel offering an action**.
+- **`modal-mobile-smoke`** — 18 pop-ups at 390px in both themes,
   measuring content past the viewport, content CLIPPED inside the pop-up, and
   any field squeezed under 90px. An opener that draws nothing is a FAILURE.
-- **`poc-block-shared-smoke`**, **`company-merge-smoke`** (new) — the one
+- **`poc-block-shared-smoke`**, **`company-merge-smoke`** — the one
   contact block in both forms, and the client merge (including a guard that
   reads the migrations for any table with a `company_id`).
 - **`client-intake-smoke`**, **`new-job-client-smoke`** — the client and
@@ -252,10 +207,12 @@ The newest exist because reasoning failed, and each measures what a person saw:
 - **`overlay-opacity-smoke`** — panel opacity and modal type scale, both widths.
 - **`reminder-clarity-smoke`**, **`ownership-smoke`** — the Session 24 rules.
 
-**⚠ ASSUME YOUR NEW GUARD IS VACUOUS UNTIL YOU HAVE SEEN IT FAIL.** Four have
-been caught passing while the thing they guarded was broken or switched off —
-twice in Session 23, twice in Session 24. **Reintroduce the bug and watch the
-test fail**, every time. When one turns out to be vacuous and you keep it
+**⚠ ASSUME YOUR NEW GUARD IS VACUOUS UNTIL YOU HAVE SEEN IT FAIL.** **Seven**
+have now been caught passing while the thing they guarded was broken or
+switched off — two in Session 23, two in Session 24, two in Session 26, one in
+Session 27 (which passed **30/30** with its bug fully reintroduced). That is
+frequent enough to be the default assumption, not a caveat. **Reintroduce the
+bug and watch the test fail**, every time. When one turns out to be vacuous and you keep it
 anyway, label it in the suite as a known limit (there is one such note in
 `overlay-opacity-smoke`) rather than letting its presence read as coverage.
 
@@ -302,6 +259,18 @@ file attachments on candidate email** (D-0012), and **reassignment of ownership
 is deliberately not built** (D-0020).
 
 ## Traps that will bite you
+
+- **A GUARD IS VACUOUS UNTIL YOU HAVE WATCHED IT FAIL — now three times over.**
+  Session 27's newest test passed **30/30 with its bug fully reintroduced**. Two
+  causes worth carrying into every probe: **`if (!node) continue`** silently
+  counted an unmeasurable case as a pass (**a probe that cannot take its
+  measurement must FAIL**), and it read `node.parentElement` when the control
+  sat one level higher (**never anchor a DOM assertion on a nesting depth**).
+  Before trusting any new guard, put the bug back and watch the right
+  assertions break.
+- **A screenshot sees what a green suite cannot.** A public page reading
+  *"Questions? Email or call ."* shipped past 88 passing suites. Render it and
+  look at it.
 
 - **`*.onrender.com` is blocked from this sandbox.** You cannot verify a deploy
   by loading the app. Verify the code is on `main` by content, and check

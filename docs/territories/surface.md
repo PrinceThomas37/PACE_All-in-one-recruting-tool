@@ -142,6 +142,26 @@
   `GET /ai/morning-briefing` (observatory, C-0001). `/ai/generate-summary`
   itself is still unwired, but is now a lower-priority, separate question.
 
+## Session 27 — the apply-link control and an honest Sourcing screen
+
+- **`25-workflow-bd.js` gained the Apply-link block** on the job-order detail,
+  under the job description. Published is a STATE, so it offers only the action
+  that state allows (Publish / Copy + Turn off) — a single toggle would leave
+  the recruiter guessing whether the link is live, which is the one thing they
+  must be sure of before pasting it anywhere. Handlers `bdSetApplyLink` and
+  `bdCopyApplyLink` are defined in that page, per the onclick rule.
+- **`32-page-sourcing.js` no longer draws unbuilt providers as cards.** Two
+  built sources get cards with real actions; the other seven are one quiet
+  "Not connected" list with **no controls at all**. `srcProviderInfo` was
+  removed with its only caller.
+- **The rule this enforces, measured:** no unbuilt provider may sit inside a
+  `.card` that contains a control. See `CLAUDE.md` — same shape as the
+  team-Done button.
+- The apply page itself (`routes/apply.js`) renders its own standalone HTML and
+  is **not** part of this territory's render engine. It has no stylesheet, no
+  framework and no `STATE` — deliberately, because it loads on a stranger's
+  phone over a bad connection.
+
 ## Log
 - **2026-09-09** — C-0011: candidate Compose no longer over-promises a send
   window that's off by default. Verified: `verify-frontend.sh`,
@@ -266,3 +286,4 @@ Replaced with node identity, which cannot pass emptily.
 
 Verified: `lead-row-expand-smoke.mjs` 20/20, full suite **77/77**. Screenshots
 in dark and light, desktop and phone.
+- **2026-09-22** — Apply-link block on the job-order detail; rebuilt the Sourcing provider list so unbuilt sources render no action.
