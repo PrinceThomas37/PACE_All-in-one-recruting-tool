@@ -4,10 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-21 (Session 27) · **Repo**:
+**Updated**: 2026-09-22 (Session 27) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #217 (`ba372cf`). **Nothing is
+to `main` IS the release · **Last merged**: #218 (`e77275b`). **Nothing is
 unmerged once it lands.** **D-0026 is the highest decision id.**
 
 ---
@@ -186,11 +186,14 @@ question is whether an applicant actually reached the Sourcing queue** — the
 whole point is step 2 of the candidate journey, and it has only been exercised
 against a stubbed database.
 
-**2. The six dead sourcing cards.** `config/sourcing.js` advertises Apollo,
-Indeed, Monster, CareerBuilder, Dice and LinkedIn; `POST /sourcing/search`
-answers **501** for every one. They read as working features. Relabelling them
-was offered and not yet answered — small change, removes a standing lie on a
-screen the owner uses.
+**2. ✅ DONE (#218) — the sourcing cards now tell the truth.** `built` is
+separated from `available`, the seven unbuilt sources are a quiet "Not
+connected" list with no controls, and `test/sourcing-honesty-smoke.mjs` pins it.
+**The lesson to carry, not the task:** that guard passed 30/30 with the bug
+fully reintroduced — it counted a label it could not find as fine, and checked
+only `node.parentElement` when the button sat a level higher. **A probe that
+cannot take its measurement must FAIL, never pass**, and never anchor a DOM
+assertion on a nesting depth.
 
 **3. D-0014 — the row-level interaction brief. Still the live design work.**
 
@@ -224,7 +227,7 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 88 SUITES
+## 🧪 TESTS: 89 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
