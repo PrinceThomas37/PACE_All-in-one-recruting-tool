@@ -221,6 +221,25 @@ the summary line, never piped to `tail`. Zero `[FAIL]` lines in either log.
 - Every guard added this session was verified by reintroducing its bug and
   watching the right assertions fail. Do that before trusting a new one.
 
+## Session 27, round 3 — a guard for the guards
+
+- **`test/memory-discipline-smoke.mjs`** (25 assertions) pins
+  `scripts/memory-check.mjs`, the checker behind the new Stop hook. Suite total
+  is now **90**.
+- **It is driven by SYNTHETIC file lists**, not a real repository, because a
+  checker tested only against the current tree passes for whatever the tree
+  happens to contain. The decisive case replays **Session 27's actual
+  apply-page commit** and asserts the checker names the six territory memories
+  that were really missed that day.
+- **The gate this protects is deliberately dumb and must stay that way.** It
+  checks that memory was WRITTEN, never that it is any good. Do not add
+  quality heuristics — that judgement cannot be automated, and a checker that
+  pretends otherwise becomes the most convincing vacuous guard in the repo.
+- **A hook that blocks must be SATISFIABLE.** `stop-gate.mjs` offers two exits
+  (write it properly, or an honest mid-flight placeholder) and never blocks on
+  its own failure — if the checker cannot run, the gate stays silent rather
+  than walling off the work. Keep both properties.
+
 ## Log
 - **2026-09-09** — reviewed gateway's timezone-resolver fix (C-0014 origin).
   Answered the pointed question: `lead-location-parse-smoke.mjs` passed
@@ -299,3 +318,4 @@ One re-run confirmed, per the flake rule. Do not chase it further.
 
 **Both Node versions, every PR.** 76/76 on 22 and 26 for #203, #204 and #205.
 - **2026-09-22** — added `apply-page-smoke` and `sourcing-honesty-smoke` (89 suites total); caught and fixed a vacuous guard that passed 30/30 with its bug reintroduced.
+- **2026-09-22** — added `memory-discipline-smoke` (90 suites); reviewed the Stop gate for satisfiability and fail-open behaviour.

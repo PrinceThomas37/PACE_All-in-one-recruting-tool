@@ -5334,3 +5334,82 @@ Two things the owner settled, both recorded with re-open conditions: paid
 resume databases wait on a measurement rather than a guess (D-0025), and
 Hunter — along with most of its category — waits on a company email address
 (D-0026).
+
+## Session 27, round 3 — the rule the owner had already made twice
+
+The owner asked for a strict standing rule: work through the territory agents,
+memory updated in real time, *"so that no progress or deletion or addition is
+missed and i dont have to explain eveytime."* And then the sentence that turned
+the request into evidence: *"Like last time i think i did, but it got missed in
+the last edit window and i dont know how many before this too."*
+
+They were right, and the repository proved it in under a minute. **D-0008**
+(2026-09-09, STANDS): build PACE through its nine territories, each writing its
+own memory. **D-0024** (2026-09-17, STANDS): memory is written as the work
+lands, not at the end. Both recorded. Both in force. **Both broken in this very
+session** — two features shipped, six territory memories left stale, and the
+owner had to ask whether the context was up to date.
+
+So the answer to *can we do that* was not to write the rule a third time. **The
+rule was never the problem. The mechanism was**, and D-0024 had said so out
+loud: *"this rule depends on a session reading `CLAUDE.md`, which is a real
+dependency and is now stated rather than assumed."* Stating a dependency is not
+removing it.
+
+### The distinction that had been missed
+
+D-0024 considered automating this and rejected it:
+
+> *a hook can run a script — it cannot write a narrative about what happened
+> and why. The judgement of what is worth recording is the whole value, and it
+> cannot be automated.*
+
+The first half is correct. The conclusion does not follow. **A script cannot
+write the narrative. It can absolutely check that one was written.** That is
+the entire fix, and missing it cost three sessions of the rule quietly not
+holding.
+
+### What was built
+
+`scripts/memory-check.mjs` maps changed files to their owning territory through
+`_map.json` and reports which memories the change owes. Two hooks in
+`.claude/settings.json` — which run whether or not anybody remembers they
+exist:
+
+- **SessionStart** injects the protocol, plus anything already owed in the
+  working tree, into **every chat in this repo** before the owner types a word.
+- **Stop** blocks a session trying to finish with memory unwritten, naming the
+  exact files, and emits a `systemMessage` so the owner sees it too. They
+  should not be the last line of defence — and certainly not unknowingly.
+
+Three properties were designed in deliberately, and each is a rule for anyone
+touching this later. **The gate is dumb**: it checks presence, never quality,
+because quality is judgement and a checker pretending otherwise would become
+the most convincing vacuous guard in the repo. **A blocking hook must be
+satisfiable**: two exits are offered (write it properly, or an honest
+mid-flight placeholder), so it corrects a session instead of trapping one.
+**It fails open**: if the checker itself breaks, the gate stays silent rather
+than walling off the work.
+
+The proof it is not vacuous came from history rather than invention: run
+against this session's real apply-page commit, it names exactly the six
+territory memories that were missed that day. `test/memory-discipline-smoke.mjs`
+pins that case with 25 assertions on synthetic file lists — a checker tested
+only against the current tree passes for whatever the tree happens to hold.
+
+### The thread through round 3
+
+Rounds 1 and 2 found faults invisible to the tests meant to catch them. Round 3
+found a fault in something further upstream: **a governance rule that had been
+correctly decided, correctly recorded, and still did not happen.** Three
+sessions of drift, and the only reason it surfaced is that the owner noticed
+and said so.
+
+The generalisation is uncomfortable and worth keeping: **writing a rule down is
+not the same as making it true, and a file cannot tell you which of the two you
+have.** DECISIONS.md faithfully recorded a decision that was not being
+followed — the record was accurate and the reality was not, and nothing in the
+system could see the gap. What closed it was making the rule executable, even
+though only the shallowest part of it *can* be executable. The narrative still
+depends on judgement. But "did anyone write anything at all" no longer depends
+on anyone remembering to ask.

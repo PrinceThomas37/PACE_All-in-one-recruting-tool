@@ -56,6 +56,24 @@
 - **Next migration is 045.** Never apply one without a fresh, explicit
   go-ahead.
 
+## Session 27, round 3 — the memory gate lives in scripts/
+
+- **`scripts/memory-check.mjs`** maps changed files to their owning territory
+  through `docs/territories/_map.json` and reports which memories that change
+  owes. **`whatIsOwed(files)` is PURE**, which is the only way its own test can
+  prove it FAILS when it should rather than passing because nothing ran.
+- **`scripts/session-brief.mjs`** (SessionStart hook) and
+  **`scripts/stop-gate.mjs`** (Stop hook) sit beside it. See D-0027.
+- **⚠ `_map.json` IS THIS TERRITORY'S CONTRACT WITH THE GATE.** `ownerOf()`
+  resolves by **longest prefix**, so `services/view-horizon.js` (surface) is
+  not swallowed by a territory owning `services/`. **A restructure that moves
+  paths between territories changes what the gate demands** — regenerate the
+  map (`node scripts/territory-map.mjs`) and re-run
+  `test/memory-discipline-smoke.mjs`.
+- **`.claude/` and `docs/` are deliberately unowned** — territory-map skips
+  both. A change confined to them owes the archive but no territory memory.
+
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-22** — applied migration 044 (apply-page columns on `job_orders`) after owner go-ahead; verified column defaults, indexes and that nothing was published.
+- **2026-09-22** — added the memory gate (`memory-check`, `session-brief`, `stop-gate`) under `scripts/`; D-0027.

@@ -875,6 +875,38 @@ we never have to rewrite to grow (see "Growth bets" below).
   require in `match-engine.js`. A restructure without it will break production
   quietly.
 
+## ⚠ THE PROTOCOL IS ENFORCED BY HOOKS NOW — `.claude/settings.json` (D-0027)
+
+**Read this before `docs/territories/README.md`.** The owner decided how PACE
+is worked **twice** — D-0008 (work through the territories) and D-0024 (memory
+written as the work lands) — and **both were broken in Session 27 anyway**,
+which shipped two features and left six territory memories stale until the
+owner asked, again, whether the context had been updated. A rule in a file only
+works if a session reads it *and* remembers it at the right moment. So:
+
+- **A SessionStart hook injects the protocol into EVERY chat in this repo**
+  (`scripts/session-brief.mjs`), along with any memory already owed in the
+  working tree. The owner never restates a settled decision again.
+- **A Stop hook BLOCKS a session finishing with memory unwritten**
+  (`scripts/stop-gate.mjs`), naming the exact files, and tells the owner too.
+- **`node scripts/memory-check.mjs`** is the mechanism: changed files →
+  owning territory (via `_map.json`) → did that memory change too? Run it
+  yourself at any point; `test/memory-discipline-smoke.mjs` keeps it honest.
+
+**D-0024 rejected automating this** on the grounds that *"a hook can run a
+script — it cannot write a narrative about what happened and why."* The first
+half is true; the conclusion did not follow. **A script cannot write the
+narrative. It can absolutely check that one was written** — and that
+distinction is the entire fix. The gate is therefore **deliberately dumb**: it
+never rates quality, only presence. What is worth recording is still judgement
+and still yours.
+
+**The gate is satisfiable two ways, both legitimate:** write the memory
+properly, or — if work is genuinely mid-flight — append an honest one-line
+placeholder to the archive. Never clear it by writing nothing. `.claude/` and
+`docs/` are deliberately unowned (territory-map skips both), so a change there
+owes the archive but no territory memory.
+
 ## How this codebase is worked: NINE TERRITORIES → `docs/territories/README.md`
 
 **Read that protocol before starting any job.** Session 22 divided PACE into nine

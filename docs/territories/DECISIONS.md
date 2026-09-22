@@ -47,6 +47,65 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0027 · 2026-09-22 · STANDS · The working protocol is enforced by hooks, not by remembering it
+
+**Their words:** *"make a very strict rule while working on this project in any
+chat that i start in the PACE. it has to be completed by the agents we have
+build earlier and should be updated real time, so that no progress or deletion
+or addition is missed and i dont have to explain eveytime to update the
+context. Can we do that."* — and, crucially: *"Like last time i think i did,
+but it got missed in the last edit window and i dont know how many before this
+too."*
+
+**They were right, and the record proves it.** They had decided this TWICE —
+**D-0008** (PACE is worked through its nine territories) and **D-0024** (memory
+is written as the work lands). Both were recorded, both say STANDS, and both
+were broken in Session 27: the work was done directly rather than through the
+territories, and six territory memories were left stale until the owner asked,
+again, whether the context had been updated. **The rule was never the problem.
+The mechanism was.**
+
+**What changes.** Two hooks in `.claude/settings.json`, which run whether or
+not anybody remembers they exist:
+* **SessionStart** injects `scripts/session-brief.mjs` — the protocol, plus any
+  memory already owed in the working tree — into **every chat in this repo**,
+  before the owner types anything. They never restate a settled decision again.
+* **Stop** runs `scripts/stop-gate.mjs`, which **blocks** a session trying to
+  finish with memory unwritten, naming the exact files. It also emits a
+  `systemMessage`, so the owner sees it too — they should not be the last line
+  of defence, and should certainly not be it unknowingly.
+
+`scripts/memory-check.mjs` is the mechanism: it maps changed files to their
+owning territory through `_map.json` and asks whether those memories changed in
+the same breath. `test/memory-discipline-smoke.mjs` (25 assertions) keeps the
+checker honest, and it was verified against Session 27's real apply-page
+commit — it names exactly the six memories that were missed.
+
+**This reverses one judgement inside D-0024, and only one.** That entry
+rejected automation because *"a hook can run a script — it cannot write a
+narrative about what happened and why."* The first half is right; the
+conclusion did not follow. **A script cannot write the narrative. It can
+absolutely check that one was written.** Missing that distinction is why the
+rule depended on memory for three more sessions. D-0024 otherwise stands
+unchanged — including its judgement that *what* to record cannot be automated,
+which is why the gate is deliberately dumb and never rates quality.
+
+**The honest limits, stated so nobody mistakes the gate for more than it is:**
+* It cannot tell a real memory entry from one blank line.
+* It cannot force a session to USE the territory subagents (D-0008) — it only
+  notices, afterwards, that a territory's paths moved without its memory.
+* Hooks live in the repo, so they bind any Claude Code session working in this
+  checkout. They do not reach a chat that never touches these files.
+
+**Re-open when:** the gate blocks work it should not — a session genuinely
+mid-flight finding the placeholder escape more obstruction than help — in which
+case soften Stop from `block` to a `systemMessage` warning and keep the
+SessionStart brief. Or if memory starts being written to satisfy the checker
+rather than to be read, which would mean the gate is measuring the wrong thing
+and the answer is review, not more automation.
+
+---
+
 ### D-0026 · 2026-09-21 · PARKED · Hunter.io waits on a company email address
 
 **Who:** the owner, in session.
