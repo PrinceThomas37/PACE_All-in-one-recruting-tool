@@ -360,3 +360,29 @@ pins each id.
 
 **Apollo is NOT wired anywhere** — see `CLAUDE.md`. The Integrations page saves
 and tests an Apollo key and nothing calls it. Adding a key changes nothing.
+
+
+## Seeing who applied to us — **Candidates → Applicants**, and a block on each job order
+
+**Grep here before building anything that lists applicants.** Added Session 28,
+after the first real application arrived through a published apply link and
+nothing in the product showed it.
+
+* **Candidates → Applicants** (`public/js/53-page-applied.js`, `renderApplied`)
+  — everyone who applied, any job, newest first.
+* **The job order page** (`renderJobApplicants`, embedded by
+  `25-workflow-bd.js` under the apply-link block) — that job's applicants only.
+
+**Both are VIEWS of the sourcing queue (D-0028), not a second pool.** They read
+`GET /sourcing/staged?provider=apply&status=all` and import through
+`POST /sourcing/staged/:id/import` — the same two endpoints the Sourcing review
+queue uses. **Do not add a third list of applicants or a second import path.**
+If a new screen needs applicants, call those endpoints and render them.
+
+* **`services/applicants.js` is the ONLY reader of `raw`.** Which job somebody
+  applied to is recorded in the staged row's `raw` blob, not a column; the
+  router attaches a normalised `applied_job` so no page parses it.
+* **A CV needs signing** — `GET /sourcing/staged/:id/resume` returns a 10-minute
+  signed URL, because an application's resume sits in the PRIVATE
+  `candidate-docs` bucket. A plain link works for a CSV row's public URL and
+  silently fails for an application. Never link `resume_url` directly.

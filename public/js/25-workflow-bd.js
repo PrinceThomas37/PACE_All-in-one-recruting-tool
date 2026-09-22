@@ -1030,6 +1030,7 @@
         jdBlock+
         applyBlock+
       '</div>'+
+      (window.renderJobApplicants?renderJobApplicants(j.id):'')+
       approval+
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
@@ -1175,6 +1176,11 @@
   // ── job order navigation ───────────────────────────────────────────────────
   window.bdOpenJobOrder=function(id){
     STATE.bd.view.joId=id;
+    // Applicants are fetched alongside the submissions, and deliberately NOT
+    // waited for: somebody applying through the public link must never be able
+    // to delay a recruiter opening their own job. The block renders "Loading…"
+    // and fills in.
+    if (window.appliedLoad) { try { appliedLoad(id); } catch (_) {} }
     // load submissions for this job before opening detail
     loadSubmissions(id).then(function(subs){
       STATE.bd.submissions=subs;

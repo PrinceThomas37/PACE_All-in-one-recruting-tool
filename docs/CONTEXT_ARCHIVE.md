@@ -5460,3 +5460,65 @@ absent, or only when the thing is ugly?
 
 And the gate held. After the fix, `memory-check` named foundry, surface and
 this archive as owed — and this entry exists because it did.
+
+
+## Session 28, round 2 — the first real applicant, and nowhere to see them
+
+The owner published an apply link and asked the obvious question: *"when the
+candidate clicks on apply, where does that candidate end up in our system and
+where can we see them."*
+
+**The honest answer was: in the database, correctly, and nowhere on screen.**
+Checked against the live project rather than reasoned about — one real
+application, 19:24 UTC, a real person with a real CV, staged in
+`sourcing_candidates` with `provider='apply'` exactly as designed. The
+end-to-end path worked on its first contact with a member of the public. It was
+also completely invisible: the Sourcing review queue defaults to every provider
+and says nothing about which job anybody applied to, because that fact lives
+inside the staged row's `raw` blob.
+
+**What was built (D-0028).** Candidates → **Applicants**, and an **Applicants**
+block on each job order under the apply link that produced it. Both are VIEWS
+of the sourcing queue: same read endpoint, same import endpoint, no second
+pool and no second import path. The one thing importing does differently is
+pre-tag the job the person applied to — they already told us, and asking a
+recruiter to re-pick it is asking for a fact the system holds.
+
+**The decision worth keeping is one that was made and then UNMADE.** The job
+filter was first written as a PostgREST jsonb filter,
+`raw->>applied_to_job_order_id`. It was removed before it ran, for two reasons
+that compound: this sandbox has no Supabase credentials, so the syntax could
+not be exercised at all; and its failure mode is an **empty list, not an
+error**. A broken filter would have rendered "No applications yet" — a
+completely plausible sentence — on a page with applicants sitting behind it.
+The owner would have believed it, and so would I.
+
+So the match moved into `services/applicants.js`: pure, the only reader of that
+blob, and pinned by 23 assertions including the one that matters — **`forJob`
+with no job id returns nothing, never everything**, because a pass-through
+would show one job's page every other job's applicants.
+
+**Three defects were found by building the tests rather than the feature.**
+`UI.toolbar` has no `left` key and drops one silently, so the applicant count
+never rendered. `resume_url` means two different things — a public URL for a
+CSV row, a private storage path for an application — so linking it directly
+works for one and silently fails for the other; it needs signing. And the
+empty-state assertion in the new browser suite **passed vacuously**: it pointed
+at a job id that did not exist, so the page drew "Job not found" and the test
+was satisfied without the applicants block ever rendering.
+
+**The guard from round 1 was widened by exactly the hole this work exposed.**
+`page-renders-smoke` drove `STATE.page` only, so a sub-tab was invisible to it —
+the same hole that shipped Email's Sent tab broken in Session 23, and it would
+have been blind to the Applicants tab built this round. Screens are now
+`[page, sub]` pairs: 190 instead of 170.
+
+**The thread through this round.** Round 1's lesson was *a test can tell you a
+screen exists even when it cannot tell you the screen is good.* This round
+extended it twice. Once in scope — a page is not one screen, so "does it exist"
+has to be asked of every tab, not every page. And once in kind: given a choice
+between a mechanism that cannot be tested here and one that can, **take the
+testable one**, even when the untestable one is the more idiomatic code. The
+PostgREST filter was the better-looking implementation and the worse
+engineering decision, because its failure would have been silent, plausible,
+and indistinguishable from the truth.

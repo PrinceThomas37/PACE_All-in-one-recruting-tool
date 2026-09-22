@@ -47,6 +47,46 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0028 · 2026-09-22 · STANDS · Applicants are a VIEW of the sourcing queue, not a second pool
+
+**Their words:** *"when the candidate clicks on apply, where does that candidate
+end up in our system and where can we see them. can we create an applicant part
+in candidate section and inside job section where we can find those applied
+candidates."*
+
+**The question was asked with a real applicant already in the system.** The
+first application through a published link arrived at 19:24 UTC — a real
+person, resume stored, staged correctly — and there was nowhere in the product
+that said so. The path worked end to end and was invisible.
+
+**What was decided.** Two places show applicants, and they are the two the
+owner named:
+* **Candidates → Applicants** — everyone who applied, across all jobs, newest
+  first, with the job each person applied for.
+* **A block on the job order's own page** — just that job's applicants, under
+  the apply link that produced them.
+
+**What was deliberately NOT decided: a new pool.** An applicant stays in
+`sourcing_candidates`, inert, and both screens read the SAME endpoint and
+import through the SAME endpoint as the Sourcing review queue. The rule from
+CLAUDE.md holds — a public form never writes into `candidates` — and a second
+import path is how two screens come to disagree about what "imported" means
+(Session 22 shipped candidate outreach twice for exactly that reason). This is
+a new QUESTION asked of existing data, not a new store.
+
+**One thing importing does differently:** it pre-tags the job the person
+applied to, because they already told us. Making a recruiter re-pick it is
+asking for a fact the system holds.
+
+**Re-open when:** applications are numerous enough that reading them costs
+something measurable. Which job somebody applied to currently lives inside the
+staged row's `raw` blob, so filtering is done in Node over the provider-filtered
+set. That is free at tens and wrong at tens of thousands. The upgrade is a real
+`job_order_id` column plus a backfill — deliberately deferred, because a column
+worth backfilling is one the numbers have asked for, and the reader is already
+isolated in `services/applicants.js` so the swap touches one file.
+
+
 ### D-0027 · 2026-09-22 · STANDS · The working protocol is enforced by hooks, not by remembering it
 
 **Their words:** *"make a very strict rule while working on this project in any

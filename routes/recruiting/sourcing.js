@@ -7,6 +7,10 @@ const { PROVIDER_IDS, providerList, PROVIDERS } = require('../../config/sourcing
 const { parseResume } = require('../../resume-parser');
 const createCandidateFields = require('../../services/candidate-fields');
 
+const applicants = require('../../services/applicants');
+// Same bucket routes/apply.js writes into.
+const APPLY_DOC_BUCKET = 'candidate-docs';
+
 module.exports = function (app, core) {
   const {
     supabase, db, auth, hasRole, today,
@@ -92,11 +96,61 @@ module.exports = function (app, core) {
       let q = withOrg(supabase.from('sourcing_candidates')
         .select('*, dup:candidates!dup_candidate_id(id,candidate_code,full_name), imported:candidates!imported_candidate_id(id,candidate_code,full_name)')
         .order('created_at', { ascending: false }).limit(500), req);
-      q = q.eq('status', req.query.status || 'new');
+      // `status=all` is how the Applicants view shows someone who has already
+      // been imported. The review queue still defaults to 'new', so nothing
+      // else changes shape.
+      const st = String(req.query.status || 'new');
+      if (st !== 'all') q = q.eq('status', st);
       if (req.query.provider) q = q.eq('provider', req.query.provider);
+      // WHICH JOB SOMEONE APPLIED TO LIVES IN `raw`, NOT IN A COLUMN. The apply
+      // route records it there (`raw.applied_to_job_order_id`) and this is the
+      // only reader, so the filter is expressed once, here, rather than in the
+      // page. It is deliberately NOT a migration yet: at this volume a jsonb
+      // filter is free, and a column that has to be backfilled is worth adding
+      // when the number of applicants makes it measurable, not before.
+      if (req.query.job_order_id) q = q.eq('provider', 'apply');
       const { data, error } = await q;
       if (error) throw error;
-      res.json(data || []);
+      let rows = data || [];
+      // The job match is done HERE, in Node, not as a PostgREST jsonb filter.
+      // A `raw->>key` filter cannot be verified from the sandbox, and its
+      // failure mode is an EMPTY list rather than an error — it would read as
+      // "no applicants yet" forever, which is the worst way for this to break.
+      // `services/applicants.js` is pure, so the rule is pinned by a test.
+      if (req.query.job_order_id) rows = applicants.forJob(rows, req.query.job_order_id);
+      // The page never parses `raw`. One reader, one shape.
+      res.json(rows.map(r => Object.assign({}, r, { applied_job: applicants.appliedJob(r) })));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // THE APPLICANT'S CV LIVES IN A PRIVATE BUCKET, SO IT NEEDS SIGNING.
+  //
+  // `sourcing_candidates.resume_url` holds two different things depending on
+  // where the row came from: a CSV row carries a public URL somebody typed,
+  // and an APPLICATION carries a storage PATH inside the private
+  // `candidate-docs` bucket. Rendering either one as a plain link works for the
+  // first and silently 400s for the second — so the page never links straight
+  // to it, it asks here and gets a short-lived signed URL.
+  //
+  // Org-scoped and role-gated exactly like /sourcing/staged: this is a real
+  // person's CV. A row belonging to another org answers 404, not 403, so an id
+  // cannot be probed for existence.
+  app.get('/sourcing/staged/:id/resume', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const { data: row, error } = await withOrg(
+        supabase.from('sourcing_candidates').select('id,resume_url').eq('id', req.params.id).limit(1), req);
+      if (error) throw error;
+      const rec = (row || [])[0];
+      if (!rec) return res.status(404).json({ error: 'Not found.' });
+      const stored = String(rec.resume_url || '');
+      if (!stored) return res.status(404).json({ error: 'No resume on this application.' });
+      // Already a URL (a CSV row) — hand it back untouched rather than trying
+      // to sign something that was never in our bucket.
+      if (/^https?:\/\//i.test(stored)) return res.json({ url: stored, signed: false });
+      const { data: sig, error: e2 } = await supabase.storage.from(APPLY_DOC_BUCKET).createSignedUrl(stored, 600);
+      if (e2 || !sig || !sig.signedUrl) return res.status(404).json({ error: 'That file is no longer available.' });
+      res.json({ url: sig.signedUrl, signed: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
