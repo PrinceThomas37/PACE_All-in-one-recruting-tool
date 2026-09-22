@@ -5231,3 +5231,62 @@ candidate sourcing were already built; the work was one missing front door.
 **Knowing what already exists was worth more than any code written here** —
 which is precisely what `CAPABILITIES.md` is for, and why the inventory came
 before the build.
+
+## Session 27, round 2 — the six cards that were never features
+
+The owner agreed to relabel the Sourcing page. What was there: Apollo, Indeed,
+Monster, CareerBuilder, Dice and LinkedIn rendered as cards **identical to the
+one working source**, each badged `NEEDS CREDS` with a Details button, above a
+subtitle reading *"API boards activate when credentials are added."* Every word
+of that was false — `POST /sourcing/search` answered **501** for all six and no
+adapter existed. They had read as features for five sessions, and it was the
+owner who found it, by asking which were free and where to get the keys.
+
+The fix separates two facts the old registry had conflated: **`built`** (does
+code exist) from **`available`** (can it run today). Every unbuilt provider now
+carries a `blocker` naming its real precondition, and for all of them that is a
+**paid account, not an API key**. The screen draws the two built sources —
+the apply page and CSV import — as cards with real actions, and the other seven
+as one quiet "Not connected" list containing **no controls at all**. The
+endpoint's refusal changed from `needs_credentials` to `not_built`, and names
+what it would take plus the route that works today.
+
+Resume-Library was added (the owner asked for it and it had never been listed),
+and the historic ids were all kept deliberately: staged rows carry a provider
+string, so dropping `apollo` or `dice` would orphan those rows with a blank
+Source column. A test pins each id.
+
+### The guard was vacuous, and this is the third time
+
+`test/sourcing-honesty-smoke.mjs` passed **30/30 with the bug fully
+reintroduced** — every provider drawing a card with a button, exactly the
+original defect. Two independent causes, both of which generalise well beyond
+this page:
+
+- **`if (!node) continue`.** A label the probe could not find was silently
+  counted as fine. Deleting the whole roadmap list therefore made "no unbuilt
+  provider renders an action" trivially true. **A probe that cannot take its
+  measurement must FAIL, never pass** — `missing` is now its own assertion, and
+  deleting the list now fails four checks instead of passing all of them.
+- **It checked `node.parentElement` only**, and the button sat one level
+  further up. Anchoring on a hand-picked nesting depth is a guess about layout;
+  `closest('.card')` asks the question the rule is actually about.
+
+Both were re-verified by reintroducing each bug separately and watching the
+right assertions fail. **Three vacuous tests in this repo's recorded history
+now — that is the norm, not the exception.** The habit that catches it is
+cheap and the habit that misses it is just trusting a green number.
+
+### The thread through round 2
+
+Round 1 found faults the suite could not see. Round 2 found a fault **in the
+suite itself**, and only because the reintroduce-the-bug ritual was performed
+rather than assumed. The two rounds are the same lesson pointed at different
+targets: **a green check is evidence about the checker as much as the code**,
+and the only way to tell which is to break the thing on purpose.
+
+The product lesson is smaller and sharper: PACE had been telling its owner it
+could do six things it could not. Nobody wrote that lie deliberately — it
+accumulated, one placeholder at a time, from a plan file where those names were
+future work. **A roadmap rendered in the same component as a feature becomes a
+claim.**

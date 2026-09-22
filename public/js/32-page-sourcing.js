@@ -75,20 +75,54 @@
   // ── page ──────────────────────────────────────────────────────────────────
   window.renderSourcing = function(){
     var s = STATE.sourcing;
-    var providerCards = (s.providers||[]).map(function(p){
-      var ready = p.available;
-      return '<div class="card" style="padding:12px 14px;opacity:'+(ready?'1':'.7')+'">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+    // TWO GROUPS, AND THE SECOND IS NOT CARDS.
+    //
+    // Every provider used to draw the same card with a READY or NEEDS CREDS
+    // badge. "Needs creds" reads as "add a key and it works" — but there is no
+    // code behind any of them, so the page was advertising six integrations
+    // that do not exist. A thing you can see and appear to act on, that cannot
+    // actually do anything, is worse than not showing it (the same rule the
+    // team-Done button earned in Session 24).
+    //
+    // So: what you can USE draws a card with a real action. What is not built
+    // is a quiet roadmap list that states, in plain words, what it would take.
+    var built = (s.providers||[]).filter(function(p){ return p.built; });
+    var notBuilt = (s.providers||[]).filter(function(p){ return !p.built; });
+
+    var providerCards = built.map(function(p){
+      var action = p.id==='csv'
+        ? '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin-top:8px">Import file<input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="srcImportFile(this)"></label>'
+        : p.id==='apply'
+          ? '<button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="goPage(\'bd_joborders\')">Open job orders</button>'
+          : '';
+      return '<div class="card" style="padding:12px 14px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
           '<div style="font-weight:700;font-size:13px">'+esc(p.label)+'</div>'+
-          (ready?'<span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(0,0,0,.04);padding:2px 7px;border-radius:9px">READY</span>'
-                :'<span style="font-size:10px;font-weight:700;color:var(--amber);background:rgba(0,0,0,.04);padding:2px 7px;border-radius:9px">NEEDS CREDS</span>')+
+          '<span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(0,0,0,.04);padding:2px 7px;border-radius:9px">READY</span>'+
         '</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:5px;min-height:30px">'+esc(p.note||'')+'</div>'+
-        (p.id==='csv'
-          ? '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin-top:6px">Import file<input type="file" accept=".csv,.xlsx,.xls" style="display:none" onchange="srcImportFile(this)"></label>'
-          : '<button class="btn btn-sm btn-outline" style="margin-top:6px" onclick="srcProviderInfo(\''+p.id+'\')">Details</button>')+
+        '<div style="font-size:11.5px;color:var(--text3);margin-top:5px;line-height:1.5">'+esc(p.note||'')+'</div>'+
+        action+
       '</div>';
     }).join('');
+
+    var notBuiltBlock = !notBuilt.length ? '' :
+      '<div class="card" style="padding:12px 14px;margin-top:10px">'+
+        '<div style="font-weight:700;font-size:12.5px">Not connected'+
+          '<span style="font-weight:500;color:var(--text3)"> \u00b7 '+notBuilt.length+' source'+(notBuilt.length===1?'':'s')+'</span></div>'+
+        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px;line-height:1.5">'+
+          'PACE cannot search these yet. Each one needs a paid account with the provider before a connection can be built \u2014 '+
+          '<strong>an API key on its own is not enough, and none of them is free.</strong> '+
+          'You can still use any of them today by exporting your search results and importing the file above.</div>'+
+        '<div style="margin-top:10px">'+
+          notBuilt.map(function(p){
+            return '<div style="padding:9px 0;border-top:1px solid var(--border)">'+
+              '<div style="font-size:12.5px;font-weight:600">'+esc(p.label)+'</div>'+
+              (p.note?'<div style="font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.5">'+esc(p.note)+'</div>':'')+
+              (p.blocker?'<div style="font-size:11.5px;color:var(--text3);margin-top:3px;line-height:1.5"><strong>Needs:</strong> '+esc(p.blocker)+'</div>':'')+
+            '</div>';
+          }).join('')+
+        '</div>'+
+      '</div>';
 
     var staged = s.staged||[];
     var selIds = Object.keys(s.sel).filter(function(k){ return s.sel[k]; });
@@ -125,8 +159,10 @@
       tabs: (window.atsTabBar?atsTabBar():''),
       body:
       '<div style="font-size:18px;font-weight:700;margin-bottom:2px">Sourcing</div>'+
-      '<div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Bring candidates from any job board into your database. CSV/Excel works today; API boards activate when credentials are added.</div>'+
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:18px">'+providerCards+'</div>'+
+      '<div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Where candidates come from. Everyone here lands in the review list below \u2014 nothing reaches your candidate database until you import it.</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">'+providerCards+'</div>'+
+      notBuiltBlock+
+      '<div style="height:18px"></div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
         '<div style="font-weight:600;font-size:14px">Review &amp; import ('+staged.length+')</div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
@@ -168,11 +204,6 @@
       rt.readAsText(file);
     }
   };
-  window.srcProviderInfo = function(id){
-    var p = (STATE.sourcing.providers||[]).find(function(x){ return x.id===id; })||{};
-    showToast(p.label+': '+(p.note||'Scaffolded — add credentials to enable.'),'info');
-  };
-
   // ── review actions ──────────────────────────────────────────────────────────
   window.srcToggle = function(id){ STATE.sourcing.sel[id]=!STATE.sourcing.sel[id]; render(); };
   window.srcToggleForce = function(){ STATE.sourcing.force=!STATE.sourcing.force; render(); };

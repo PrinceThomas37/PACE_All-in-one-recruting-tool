@@ -705,6 +705,35 @@ we never have to rewrite to grow (see "Growth bets" below).
   ATS already holds, partner approval runs 3-6 months at <10% acceptance, and
   scraping is both against their terms and a due-diligence problem for a
   product we intend to sell.
+- **A SCREEN MUST NOT ADVERTISE WHAT DOES NOT EXIST (Session 27).** The
+  Sourcing page drew Apollo, Indeed, Monster, CareerBuilder, Dice and LinkedIn
+  as cards identical to the working one, badged **"NEEDS CREDS"** with a
+  Details button — which says *add a key and this works*, and was false for all
+  six. **`POST /sourcing/search` answered 501 for every one**, and they had
+  looked like features for five sessions. The owner found it by asking which
+  were free and where to get the keys. Same shape as the team-Done button
+  (Session 24): **a thing you can see, appear to act on, and not actually
+  change is worse than either showing it plainly or not showing it.**
+  `config/sourcing.js` now separates **`built`** (does code exist) from
+  **`available`** (can it run today), and every unbuilt provider carries a
+  `blocker` naming the real precondition — for all of them **a paid account,
+  not a key**. The page draws the two built sources as cards with real actions
+  and the rest as one quiet "Not connected" list with no controls at all.
+  **Historic provider ids are kept** — staged rows carry a provider string, and
+  dropping an id orphans them with a blank Source column.
+- **⚠ THE GUARD FOR THAT WAS VACUOUS AND PASSED 30/30 WITH THE BUG FULLY
+  REINTRODUCED (Session 27).** Third vacuous test in this repo's history, so
+  treat it as the norm rather than the exception. Two independent causes, both
+  general:
+  * **`if (!node) continue` — a probe that CANNOT MEASURE must FAIL, never
+    pass.** A deleted list made every label unfindable, so "no unbuilt provider
+    renders an action" was trivially true and the suite went green on a screen
+    that had lost the whole section. `missing` is now its own assertion.
+  * **It checked `node.parentElement` only, and the button sat one level
+    further up.** Picking a hand-chosen ancestor is a guess about layout;
+    `closest('.card')` asks the question the rule is actually about. **Never
+    anchor a DOM assertion on a specific nesting depth.**
+  Both failure modes were re-verified by reintroducing each bug separately.
 - **No guest / demo mode, deliberately (Session 11).** `Bearer guest` granted
   read-only access to the DEFAULT org — a real customer's live data — and
   `01-seed-demo.js` generated a fake world that a real user briefly saw before

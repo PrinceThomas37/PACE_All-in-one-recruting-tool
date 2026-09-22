@@ -3,7 +3,7 @@
 // Split out of bd_recruiter_routes.js; logic unchanged.
 // ============================================================================
 
-const { PROVIDER_IDS, providerList } = require('../../config/sourcing');
+const { PROVIDER_IDS, providerList, PROVIDERS } = require('../../config/sourcing');
 const { parseResume } = require('../../resume-parser');
 const createCandidateFields = require('../../services/candidate-fields');
 
@@ -205,15 +205,27 @@ module.exports = function (app, core) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // people-search for API providers — scaffolded; honest not-configured response
+  // People-search against an outside board.
+  //
+  // NOTHING IS BUILT BEHIND THIS YET, and the refusal says so in those words.
+  // It used to answer `needs_credentials` — "add a key and this works" — which
+  // was false for every provider and is what made six placeholder cards read
+  // as working features for five sessions. The honest answer names what would
+  // actually be needed, which for all of them is a commercial account rather
+  // than a key. See config/sourcing.js and D-0025.
   app.post('/sourcing/search', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const provider = (req.body && req.body.provider) || '';
-      if (!PROVIDER_IDS.includes(provider)) return res.status(400).json({ error: 'Unknown provider.' });
+      const def = PROVIDERS.find(p => p.id === provider);
+      if (!def) return res.status(400).json({ error: 'Unknown provider.' });
       if (provider === 'csv') return res.status(400).json({ error: 'Use file import for CSV.' });
-      return res.status(501).json({ error: 'needs_credentials', provider,
-        message: 'This provider is scaffolded. Add credentials and enable its connector to search.' });
+      if (provider === 'apply') return res.status(400).json({ error: 'Applicants arrive on their own — publish a job order\u2019s apply page and share the link.' });
+      return res.status(501).json({
+        error: 'not_built', provider,
+        message: (def.blocker || 'No connector exists for this source yet.') +
+                 ' Until then, export from that board and use the CSV import.',
+      });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 };

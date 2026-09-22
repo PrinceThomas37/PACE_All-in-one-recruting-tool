@@ -319,3 +319,44 @@ both now pinned:
 **What it deliberately does NOT do (yet):** no careers page listing every open
 role (one link per job), no email to the recruiter on each application (the
 Sourcing queue is the surface), no auto-submission to a pipeline.
+
+---
+
+## Where candidates come from — the Sourcing screen
+
+**Status:** LIVE · owner `guild` (registry + route) + `surface` (the screen) ·
+`config/sourcing.js`, `routes/recruiting/sourcing.js`,
+`public/js/32-page-sourcing.js`. Candidates → **Sourcing** tab.
+
+**Two sources are built and nothing else is:** the **apply page** (inbound,
+Session 27) and **CSV / Excel import**. Both land in `sourcing_candidates`,
+inert, reviewed and imported by a recruiter.
+
+**⚠ THE OTHER SEVEN ARE ROADMAP, NOT INTEGRATIONS.** CareerBuilder,
+Resume-Library (US), Dice, Monster, Indeed, Apollo and LinkedIn have **no
+adapter** — `POST /sourcing/search` answers **501 `not_built`** for every one.
+They are listed so the roadmap is visible, and each states what it would really
+take, which for all of them is **a paid account, not an API key**.
+
+**How this went wrong, and the rule that came out of it.** They used to render
+as cards identical to the working one, badged **"NEEDS CREDS"** with a Details
+button. That badge says *add a key and this works*. It was false for all seven,
+they looked like features for five sessions, and **the owner found it** — by
+asking which were free and where to get the keys. Same shape as the team-Done
+button (Session 24): **a thing you can see, appear to act on, and not actually
+change is worse than either showing it plainly or not showing it.**
+
+So the registry separates two facts that had been conflated:
+`built` (does code exist) from `available` (can it run today). `blocker` is the
+sentence naming the real precondition. `test/sourcing-honesty-smoke.mjs` pins
+it — including, measured in a real browser, that **no unbuilt provider sits in
+a panel offering an action**, and that nothing anywhere claims
+`needs_credentials`.
+
+**⚠ The historic provider ids are kept** (`apollo`, `indeed`, `monster`,
+`careerbuilder`, `dice`, `linkedin`) because staged rows carry a provider
+string; dropping one orphans those rows with a blank Source column. A test
+pins each id.
+
+**Apollo is NOT wired anywhere** — see `CLAUDE.md`. The Integrations page saves
+and tests an Apollo key and nothing calls it. Adding a key changes nothing.
