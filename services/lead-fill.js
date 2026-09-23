@@ -67,6 +67,9 @@ function fillPatch(existing, incoming) {
       // A LinkedIn field holding an email address is the misfile #228 fixed —
       // never write one back.
       if (f === 'linkedin' && txt(ic[f]).includes('@')) continue;
+      // Nor a job posting: only a person's profile belongs in a contact's
+      // LinkedIn (the "LinkedIn URL" column that held job links, 2026-09-23).
+      if (f === 'linkedin' && !/linkedin\.com\/(in|pub)\//i.test(txt(ic[f]))) continue;
       patch[f] = txt(ic[f]).slice(0, 500);
     }
     if (Object.keys(patch).length) { out.contacts.push({ id: c.id, patch }); out.filled.push(...Object.keys(patch).map(k => 'contact:' + k)); }

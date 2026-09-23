@@ -242,3 +242,7 @@ job fields (`job_url`, salary, location, industry, posted date), the company
 website, new `import_extra` keys, and blank contact fields matched by EMAIL
 (never by name; never an `@` value into LinkedIn). Owned here beside
 `company-cooldown`/`client-resolve` as lead-data vocabulary.
+
+`fillPatch` also refuses a non-profile LinkedIn value (a job posting) for a
+contact — only `linkedin.com/in|pub/` is a person (2026-09-23, the
+"LinkedIn URL" column that held job links).
