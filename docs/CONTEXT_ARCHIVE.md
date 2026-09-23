@@ -5964,3 +5964,8 @@ Five fixing territories dispatched in parallel (gateway, guild, harbour, observa
 
 ### Round 13b — owner answered D1–D5 (2026-09-23)
 Recorded as D-0035: candidates shared (ownership is per candidate-on-a-job); every BD sees every client but only its owner acts on it; every job order visible company-wide but client POC details only to the owner, interaction owner-only; duplicate check marks duplicate and names whose lead it is + since when (the owner asked what the alternative meant — explained). Also: drop the spreadsheet's own serial-number column ("S,no", on all 49 imported leads) — PACE numbers records itself. Guild and gateway re-briefed mid-flight; surface dispatched for the serial column + Ledger's candidate-card note. Live cleanup of the 49 rows' "S,no" key waits until surface lands.
+
+- IN FLIGHT: gateway, guild, harbour, observatory, surface editing; memories carry in-flight lines until each reports.
+
+### Round 13c — D4 confirmed, ownership requests wanted (2026-09-23)
+Owner confirmed the RA Lead scope and asked for "request to take over" approved by the asker's manager (admin if none). Recorded D-0036; roadmap R-047 (after R-046).

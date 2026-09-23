@@ -47,6 +47,25 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0036 · 2026-09-23 · STANDS · RA Lead scope confirmed; ownership changes by request, approved by the requester's manager
+**Their words:** on the RA Lead (rampart's D4): *"YEs thats fine"*. On a
+"request to take over this client" step: *"yes to the person to which the user
+is assigned to , if the no one is assigned, to the admin"*.
+
+**Chosen:**
+* **RA Lead (D4) — confirmed:** sees the Unassigned pool, the leads their own
+  RAs researched, and each BD's email COUNTS — never the text of BDs' emails.
+* **Ownership changes by REQUEST.** A user asks to take over a lead/client/job
+  order; the request goes to **the person that user reports to**
+  (`users.manager_id`); if nobody is assigned as their manager, it goes to the
+  **admin**. Approving it reassigns the record (through the existing release /
+  assignment paths, never an inline field write). Built after R-046, as
+  **R-047**. Interpretation recorded: "the user" = the one making the request.
+
+**Re-open when:** a cross-team request (the record belongs to another manager's
+report) needs that owner's manager to agree too — not asked yet, raise it when
+R-047 is designed rather than assume.
+
 ### D-0035 · 2026-09-23 · STANDS · Shared to SEE, owned to TOUCH: candidates, clients, job orders
 **Their words** (answering rampart's D1–D5): *"do the fixing, only people
 responsible of the data based on our design shuld be seeing and interacting with
