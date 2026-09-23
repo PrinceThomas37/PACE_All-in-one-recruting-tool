@@ -5882,3 +5882,5 @@ Ownership: `services/send-retry.js` assigned to harbour in the territory map aft
 
 ## Round 3 — merge (2026-09-23)
 Owner: *"yes and then merge it"* — R-037 (dashboard warning for a failing mailbox sign-in) added as PENDING; PR #225 merged as the release.
+
+Merged as #225 (`4a29427`) — live on Render once the deploy finishes. A check-in is scheduled ~19:51 UTC to confirm the 4 re-queued emails went out and that new failures carry a reason.
