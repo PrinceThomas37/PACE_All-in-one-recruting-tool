@@ -5946,3 +5946,5 @@ Merged #229 (`6dce720`).
 
 ## Round 12 — the job link was in the "LinkedIn URL" column (2026-09-23)
 Owner, with a screenshot of the sheet: the lead said "Job link: Not in the import", yet column M held the job posting. The column was headed **"LinkedIn URL"** and held Indeed / Glassdoor / linkedin.com/jobs links. Live DB: 0 of 119 contacts from that import hold any LinkedIn value, 49 jobs with no job_url — at import time the old matcher filed "Email ID" as LinkedIn first (first column wins), so column M was dropped, and the email-as-LinkedIn values were cleared in round 9. Even the NEW matcher would have sent column M to the contact's LinkedIn, so the R-045 re-import would not have recovered it. Fix: the import now judges a LinkedIn column by its VALUES — only a `/in/` or `/pub/` profile is a person; any other web address is the job link. `fillPatch` refuses a non-profile LinkedIn too. Guard verified by reverting it. 102/102.
+
+Merged #230 (`8341d63`).
