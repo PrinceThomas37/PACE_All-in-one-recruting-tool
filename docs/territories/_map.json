@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-17",
+  "generated": "2026-09-23",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 297,
-    "lines": 72697,
+    "files": 315,
+    "lines": 76114,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,12 +24,12 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 57,
-      "lines": 23356,
+      "files": 58,
+      "lines": 23712,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1383
+          "n": 1454
         },
         {
           "f": "public/js/47-page-mailbox.js",
@@ -44,7 +44,7 @@
           "n": 888
         }
       ],
-      "lastTouched": "2026-09-17",
+      "lastTouched": "2026-09-22",
       "openIn": 1,
       "openOut": 1
     },
@@ -70,12 +70,16 @@
         "config/",
         "engine-runs.js"
       ],
-      "files": 21,
-      "lines": 6771,
+      "files": 22,
+      "lines": 7351,
       "largest": [
         {
           "f": "index.js",
-          "n": 3361
+          "n": 3380
+        },
+        {
+          "f": "routes/apply.js",
+          "n": 493
         },
         {
           "f": "routes/jobs.js",
@@ -84,13 +88,9 @@
         {
           "f": "routes/companies.js",
           "n": 399
-        },
-        {
-          "f": "config/integrations.js",
-          "n": 247
         }
       ],
-      "lastTouched": "2026-09-17",
+      "lastTouched": "2026-09-22",
       "openIn": 4,
       "openOut": 1
     },
@@ -112,12 +112,12 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 49,
-      "lines": 2849,
+      "files": 53,
+      "lines": 3180,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 278
+          "n": 288
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -132,7 +132,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-17",
+      "lastTouched": "2026-09-22",
       "openIn": 2,
       "openOut": 0
     },
@@ -157,6 +157,7 @@
         "gmail-provider.js",
         "services/mail-provider.js",
         "send-queue-order.js",
+        "services/applicant-notify.js",
         "services/outreach-cycle.js",
         "services/send-progress.js",
         "services/outreach-dedup.js",
@@ -172,8 +173,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 21,
-      "lines": 4264,
+      "files": 22,
+      "lines": 4397,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -192,7 +193,7 @@
           "n": 378
         }
       ],
-      "lastTouched": "2026-09-15",
+      "lastTouched": "2026-09-22",
       "openIn": 1,
       "openOut": 1
     },
@@ -220,6 +221,7 @@
         "resume-parser.js",
         "jd-parser.js",
         "why-hiring.js",
+        "services/jd-scrub.js",
         "company-classifier.js",
         "enrichment.js",
         "skill-dictionaries.js",
@@ -230,8 +232,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 20,
-      "lines": 9043,
+      "files": 21,
+      "lines": 9230,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -250,7 +252,7 @@
           "n": 1063
         }
       ],
-      "lastTouched": "2026-09-16",
+      "lastTouched": "2026-09-22",
       "openIn": 0,
       "openOut": 1
     },
@@ -269,6 +271,8 @@
       "own": [
         "routes/recruiting/",
         "services/recruiting-core.js",
+        "services/submission-stages.js",
+        "services/applicants.js",
         "services/candidate-fields.js",
         "services/client-resolve.js",
         "services/company-cooldown.js",
@@ -283,12 +287,12 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 23,
-      "lines": 5402,
+      "files": 25,
+      "lines": 5859,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
-          "n": 658
+          "n": 729
         },
         {
           "f": "routes/recruiting/outreach.js",
@@ -296,14 +300,14 @@
         },
         {
           "f": "routes/recruiting/analytics.js",
-          "n": 406
+          "n": 430
         },
         {
           "f": "routes/lead-sources.js",
           "n": 349
         }
       ],
-      "lastTouched": "2026-09-17",
+      "lastTouched": "2026-09-22",
       "openIn": 1,
       "openOut": 1
     },
@@ -370,8 +374,8 @@
         "test/",
         ".github/"
       ],
-      "files": 91,
-      "lines": 18099,
+      "files": 99,
+      "lines": 19472,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -390,7 +394,7 @@
           "n": 503
         }
       ],
-      "lastTouched": "2026-09-17",
+      "lastTouched": "2026-09-22",
       "openIn": 1,
       "openOut": 0
     },

@@ -47,6 +47,9 @@ const TERRITORIES = [
     own: ['email-vars.js', 'email-tracking.js', 'email-signature.js',
           'email-validation.js', 'email-verify.js', 'gmail-provider.js',
           'services/mail-provider.js', 'send-queue-order.js',
+          // Builds the applicant receipt and the recruiter nudge. It writes mail,
+          // so the rules about what may be in one are enforced here.
+          'services/applicant-notify.js',
           'services/outreach-cycle.js', 'services/send-progress.js',
           // The double-send rule. Sits with the send loop that enforces it —
           // routes/reminders.js only READS it to decide what to offer.
@@ -63,6 +66,9 @@ const TERRITORIES = [
           'services/outreach-generator.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
           'match-engine.js', 'conversation-intel.js', 'next-action.js',
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
+          // Shared by the public apply page and the "re-write job description"
+          // button, so the two cannot disagree about what is safe to publish.
+          'services/jd-scrub.js',
           'company-classifier.js', 'enrichment.js', 'skill-dictionaries.js',
           'learned-skills.js', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
@@ -72,6 +78,10 @@ const TERRITORIES = [
   { id: 'guild', name: 'The Guild', role: 'Recruiting domain', terrain: 'the township',
     hue: '#D98E5F', pos: [19, -21], height: 8, spread: 13,
     own: ['routes/recruiting/', 'services/recruiting-core.js',
+          // The ONE definition of a submission (D-0029) and the ONE reader of a
+          // staged applicant's `raw` blob (D-0028). Both are domain vocabulary,
+          // so they sit with the stages they describe.
+          'services/submission-stages.js', 'services/applicants.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
           'services/company-merge.js',

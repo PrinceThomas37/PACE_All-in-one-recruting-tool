@@ -77,3 +77,26 @@
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-22** — applied migration 044 (apply-page columns on `job_orders`) after owner go-ahead; verified column defaults, indexes and that nothing was published.
 - **2026-09-22** — added the memory gate (`memory-check`, `session-brief`, `stop-gate`) under `scripts/`; D-0027.
+
+## Session 28 — four services owned nothing, and the survey said so
+
+`scripts/territory-map.mjs` failed loudly with **four files claimed by no
+territory** — everything Session 28 added:
+
+| file | owner | why that one |
+|---|---|---|
+| `services/submission-stages.js` | **guild** | The ONE definition of a submission (D-0029). It is domain vocabulary, so it sits with the stages it orders. |
+| `services/applicants.js` | **guild** | The ONE reader of a staged applicant's `raw` blob (D-0028). Same reason. |
+| `services/applicant-notify.js` | **harbour** | It composes two outbound messages. The rules about what may appear in one (never the end client's name) are enforced where mail is written. |
+| `services/jd-scrub.js` | **observatory** | Sits beside `jd-parser.js`, and is shared by the public apply page and the "re-write job description" button so the two cannot disagree about what is safe to publish. |
+
+**The map is the only thing that catches this**, and it catches it by failing
+rather than by warning — which is why it is worth running after any session that
+adds a file. Four orphans accumulated across three rounds of one session without
+anything else noticing, exactly as the two orphans found the day the script was
+written.
+
+**The lesson to keep: a new `services/*.js` file does not inherit an owner.**
+`_map.json` guarantees every file has exactly one territory, and that guarantee
+is maintained by hand in this script's `own` arrays. Add the entry in the same
+change as the file, or the next session's survey is the one that finds it.

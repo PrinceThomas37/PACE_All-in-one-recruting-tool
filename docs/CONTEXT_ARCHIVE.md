@@ -5415,6 +5415,11 @@ depends on judgement. But "did anyone write anything at all" no longer depends
 on anyone remembering to ask.
 
 
+# Session 28 — the page that was dead, the applicant who arrived, and the word that meant three things
+
+> *(Heading added 2026-09-23: this session's rounds were appended under Session
+> 27's heading. No prose was changed — only the missing `#` heading inserted.)*
+
 ## Session 28 — the Jobs page was dead, and every test said it was fine
 
 The owner opened the Jobs tab and got a red sentence: *"Could not draw this
@@ -5632,3 +5637,96 @@ could catch it because no definition existed to test against. **Naming a
 business term precisely, once, in a callable place, is the same kind of fix as
 extracting a rule into a pure function** — and it came from the owner, who does
 not read code, noticing that a sentence in a PR description was wrong.
+
+## Session 28, round 5 — the memory that had no place to put a suggestion
+
+The owner's ask was three things in one message, and the third named a real
+structural gap rather than a bug:
+
+> *"keep a list of things that you have suggested me doing and start marking them
+> completed and pending, take from a week ago too… strike off the things that are
+> completed, keep updating those things when they are being edited or changed in
+> a different way than the proposed. And then bring it up when asked for like
+> whats left and how we can do it… I want to make sure that no matter when I open
+> any new chat and work upon, I am working on a real engine that's running live."*
+
+### PACE had three memories and a suggestion fitted none of them
+
+`DECISIONS.md` records **what the owner chose**. `CONTEXT_ARCHIVE.md` records
+**what happened**. The territory files record **what the code does**. A
+suggestion is none of the three: nobody decided it, it never happened, and no
+code exists for it. So every "here is what I would build next" lived in a chat
+window and died there.
+
+The cost was already visible and had simply never been named. **The AI health
+check has now been asked for across four consecutive turns** with no record that
+it was ever asked once, so each turn re-offered it as though it were new. The
+inline-font-sizes proposal, the phone-numbers question and the Reports-into-the
+Dashboard ask have all been raised, dropped and re-raised the same way. The
+window's "Raised this session, not yet decided" section was an attempt at this,
+but it is rewritten every session by design, so anything not re-typed vanished.
+
+`docs/ROADMAP.md` is the fix, with **D-0030** stating it. 29 rows, backfilled to
+2026-09-16. Four rules, and the third is the one that would be easy to skip:
+
+1. A suggestion becomes a row **in the same turn it is made** — D-0024's
+   reasoning exactly, because "end of session" is a moment that never announces
+   itself.
+2. Five states: `PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`.
+3. **⚠ `CHANGED` IS NOT `DONE`, and the owner asked for this explicitly.** A row
+   that shipped differently from the proposal keeps **what was proposed, what
+   shipped, and why it moved**. Rewriting it to match the outcome produces a
+   tidy list that has quietly erased the fact that the plan was wrong — and the
+   plan being wrong is the most useful thing on the page. `R-018` is the first:
+   one submission count was proposed, **two plus the gap** shipped, because the
+   owner corrected the domain mid-build.
+4. **Nothing is deleted.** A reversal is a new state, as in `DECISIONS.md`.
+
+And the instruction that makes it load-bearing rather than decorative: **when the
+owner asks "what's left", READ THE FILE.** Neither memory nor `git log` holds a
+suggestion that was never built — reconstructing from either produces a list of
+things that already shipped, which is the opposite of the question.
+
+### The artifact, and what "live" can honestly mean
+
+The owner also reported the **Nine Territories** artifact would not open, and
+asked for it to be "the live engine… I should be able to see in live what's
+being changed in code and system".
+
+Measured rather than assumed: the page was rendered in a real Chromium from the
+saved copy. **It renders correctly** — nine legend rows, a full dossier, four
+route buttons, the flight log running. Its only failures in this sandbox were the
+CDN and the font host, both proxy artefacts of this box, and the page degrades
+cleanly past them (`#scene.flat`, "The island needs WebGL"). So the report could
+not be reproduced as a broken render, and was not claimed as fixed.
+
+What IS true, and is the more useful answer, is that **that page can never be
+live**: it is a static survey stamped `"generated":"2026-09-22"`, regenerated
+only when somebody runs `scripts/territory-map.mjs` and republishes. Describing
+it as an engine was always going to disappoint.
+
+`PACE Live` (`NQ4HUuMfAWJk34g9Vs5EdQ`) is the honest version. It declares the
+`db` capability and reads its rows from the artifact's own store, so **any future
+chat updates it with a single-document write** rather than a republish — which is
+what makes "I can say multiple things at once in a new chat and it just does
+them" actually hold. Three details worth keeping:
+
+- **The page renders at rest from a snapshot baked into it, then upgrades to the
+  store when it loads**, and the header says which of the two you are looking at.
+  A page that is blank until a capability resolves fails every thumbnail, every
+  share preview and every viewer whose grant is refused; a page that shows stale
+  data *labelled as live* is worse than either.
+- **One document per row**, `doc_id` = the row id, so "mark R-009 done" is one
+  write. An array in a single document would have made every edit a
+  read-modify-write over the whole list.
+- **The file wins any disagreement with the artifact.** The owner does not read
+  the repo, so a file alone is invisible to them; a cold session does not open
+  the gallery, so an artifact alone is invisible to it. Each covers the other's
+  blind spot, and naming which one is authoritative is what stops them drifting.
+
+One real bug was caught in the one pre-publish look, and it is the same class as
+the `.overlay` fault from Session 23: the `CHANGED` card is an `li` inside the
+shipped list, so it inherited `.ship li`'s two-column grid, collapsed its own
+`<dd>`s to zero width and pushed the page **120px sideways at 390px**. A grid
+declared on a tag selector reaches every descendant that happens to be that tag.
+Scoped to `.ship li:not(.row)` and re-measured: 390/390 and 1180/1180.
