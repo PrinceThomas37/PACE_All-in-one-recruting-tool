@@ -5887,3 +5887,12 @@ Merged as #225 (`4a29427`) — live on Render once the deploy finishes. A check-
 
 ## Round 4 — are the emails AI-written? deliverability by channel (2026-09-23)
 Answered, no code. Measured: the leads engine sends TEMPLATES, not AI — 119 queued emails in the last day, 56 from 5 rotating variants and 63 from the single default, merge-filled; AI writes only in the Generator. Deliverability explained: the engine sends through the same Microsoft/Google mailbox as Outlook, so the CHANNEL is not a factor recipients can see; volume, sameness, pacing, links/pixels and domain authentication are. Lead emails carry no tracking pixel and no links. DNS could not be checked from here (proxy blocks dns.google). Suggestions R-038 (AI per lead) and R-039 (check SPF/DKIM/DMARC) recorded.
+
+## Round 5 — AI-written engine emails: approved, costed, two questions open (2026-09-23)
+Owner said yes (D-0032) and asked about per-email vs batch and cost. Sized from
+the real prompt (~1,690 tokens in, ~230 out, plus reasoning) and the app's own
+meter (the Generator has run ~2,100 tokens per draft). A live probe against Groq
+was refused by the sandbox's permission layer (using the stored key), and Groq's
+pricing/limits pages are blocked here, so no vendor price was quoted as fact.
+Found: all 49 leads in the day's import are title-only. The 4 re-queued emails and
+all 119 from the import were confirmed sent, zero failures.
