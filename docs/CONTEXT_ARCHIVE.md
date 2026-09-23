@@ -5936,3 +5936,5 @@ LinkedIn. Fixed both, repaired the 119 live rows, kept unrecognised columns.
 Existing leads still have no job link: it was never stored, so re-importing
 that file is the only way to recover it. Same message: OpenRouter's hard-coded
 free model 404'd on connect — now looked up at runtime. 101/101.
+
+Merged #228 (`bf08f0e`).
