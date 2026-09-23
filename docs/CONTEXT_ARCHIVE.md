@@ -5884,3 +5884,6 @@ Ownership: `services/send-retry.js` assigned to harbour in the territory map aft
 Owner: *"yes and then merge it"* — R-037 (dashboard warning for a failing mailbox sign-in) added as PENDING; PR #225 merged as the release.
 
 Merged as #225 (`4a29427`) — live on Render once the deploy finishes. A check-in is scheduled ~19:51 UTC to confirm the 4 re-queued emails went out and that new failures carry a reason.
+
+## Round 4 — are the emails AI-written? deliverability by channel (2026-09-23)
+Answered, no code. Measured: the leads engine sends TEMPLATES, not AI — 119 queued emails in the last day, 56 from 5 rotating variants and 63 from the single default, merge-filled; AI writes only in the Generator. Deliverability explained: the engine sends through the same Microsoft/Google mailbox as Outlook, so the CHANNEL is not a factor recipients can see; volume, sameness, pacing, links/pixels and domain authentication are. Lead emails carry no tracking pixel and no links. DNS could not be checked from here (proxy blocks dns.google). Suggestions R-038 (AI per lead) and R-039 (check SPF/DKIM/DMARC) recorded.
