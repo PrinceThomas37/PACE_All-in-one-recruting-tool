@@ -47,6 +47,42 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0034 · 2026-09-23 · STANDS · You SEE only what you are responsible for (plus your team's, if you manage one)
+**Their words** (with screenshots of the Leads page and Email → All email as
+BD Lead 1): *"in leads or in outreach all emails, full information is shown to
+all users. Like earlier we did designed what information to be show to each
+user, only the ones that they are responsible for or given to, like the
+particular set of lead assigned to a particular user, a particular set of
+emails being generated from the email assigned to particular user, like that,
+but here its complete opposite. whys that? … can this be prevalent all across
+the system, look into that and work on it. Use agents we built."*
+
+**The rule.** D-0020 defined who OWNS a record (a lead → `assigned_to_bd`, a
+submission → `recruiter_id`, a reminder → `user_id`, a contact → its job's
+owner). This extends it from *acting* to *seeing*:
+* **You see what you own**, and what was given to you (an email is visible to
+  the owner of the lead or record it was sent about, and to whoever sent it).
+* **A manager also sees what their reporting chain owns** — review, per
+  D-0020, using the one chain helper (`hierarchy.js` `reportingChainIds`).
+* **Admin sees the whole organisation.**
+* A record nobody owns yet (the Unassigned pool) is seen by the roles that
+  distribute it, not by everyone.
+
+**Measured when decided:** BD Lead 1 owns 25 leads and saw 49 (`GET /jobs`
+gave every `bd_lead` all ASSIGNED leads org-wide — written before the
+hierarchy existed); Email → All email (`routes/email-history.js`) was scoped
+by organisation only, so every user saw all 119 outreach emails.
+
+**Not decided here, and must be asked rather than assumed:** whether a
+genuinely SHARED resource — the candidate talent pool, the client list —
+stays shared. Most ATS products share the candidate database across
+recruiters; hiding it would break duplicate checks and sourcing. Those are
+listed for the owner, never silently narrowed.
+
+**Re-open when:** the owner wants a role to see more than its chain (e.g. a
+BD Lead covering another team), which is reassignment/cover — D-0020's
+re-open condition — not a visibility leak.
+
 ### D-0029 · 2026-09-22 · STANDS · A submission is a candidate sent to the CLIENT, and PACE counts two numbers
 
 **Their words:** *"define submission, ie job submission. adding a candidate to a
