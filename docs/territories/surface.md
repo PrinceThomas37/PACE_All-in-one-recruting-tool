@@ -440,3 +440,5 @@ final text); Sent shows "AI-written" when `ai_written`.
   job-link field at all. Now: exact names first, partial matches only on
   distinctive words, `jobUrl` is a field, and unrecognised columns are kept in
   `_extra`. `mapCol` delegates to it; `COL_MAP` is the fallback only.
+
+- **R-045** — the import no longer drops existing leads: it sends them to `/jobs/fill-missing` and says so in the preview ("won't be added again, but anything they are missing will be filled in"). The column-mapping preview reads `ImportColumns.fieldFor` and says "kept as an extra detail" instead of "not mapped".

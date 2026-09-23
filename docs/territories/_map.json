@@ -2,8 +2,8 @@
   "generated": "2026-09-23",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 330,
-    "lines": 78657,
+    "files": 332,
+    "lines": 78878,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 60,
-      "lines": 24312,
+      "lines": 24337,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -73,7 +73,7 @@
         "services/record-history-writer.js"
       ],
       "files": 25,
-      "lines": 8008,
+      "lines": 8049,
       "largest": [
         {
           "f": "index.js",
@@ -81,7 +81,7 @@
         },
         {
           "f": "routes/jobs.js",
-          "n": 497
+          "n": 538
         },
         {
           "f": "routes/apply.js",
@@ -281,6 +281,7 @@
         "services/client-resolve.js",
         "services/company-cooldown.js",
         "services/company-merge.js",
+        "services/lead-fill.js",
         "bd_recruiter_routes.js",
         "workflow-engine.js",
         "routes/workflows.js",
@@ -291,8 +292,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 25,
-      "lines": 5885,
+      "files": 26,
+      "lines": 5963,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -378,8 +379,8 @@
         "test/",
         ".github/"
       ],
-      "files": 105,
-      "lines": 20225,
+      "files": 106,
+      "lines": 20302,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",

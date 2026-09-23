@@ -7,7 +7,7 @@
 **Updated**: 2026-09-23 (Session 28) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #227 (`36849a0`) — #225 failed-email retry, #226 AI-written first emails, #227 AI provider limits on the budget card. **Nothing is
+to `main` IS the release · **Last merged**: #228 (`bf08f0e`) — #225 failed-email retry, #226 AI first emails, #227 AI limits card, #228 lead details + import columns + OpenRouter free-model lookup. **Nothing is
 unmerged once it lands.** **D-0033 is the highest decision id** (Session 29: D-0031 retry, D-0032/33 AI first emails).
 
 ---

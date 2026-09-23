@@ -370,10 +370,11 @@ function renderImportModal(rows, sheetName){
 
   var colRows=cols.map(function(c){
     var kl=c.toLowerCase().replace(/[\s_\-\.]/g,"");
-    var match=COL_MAP.find(function(pair){return pair[0].some(function(v){return kl===v||kl.includes(v);});});
-    var status=match?
-      '<span style="color:var(--green);font-weight:500">\u2192 '+match[1]+'</span>':
-      '<span style="color:var(--text3)">\u2014 not mapped</span>';
+    var field=window.ImportColumns?window.ImportColumns.fieldFor(c):null;
+    if(!window.ImportColumns){var match=COL_MAP.find(function(pair){return pair[0].some(function(v){return kl===v||kl.includes(v);});});field=match?match[1]:null;}
+    var status=field?
+      '<span style="color:var(--green);font-weight:500">\u2192 '+field+'</span>':
+      '<span style="color:var(--text3)">kept as an extra detail</span>';
     return '<tr><td style="padding:5px 10px;font-size:12.5px">'+htmlEsc(c)+'</td><td style="padding:5px 10px">'+status+'</td></tr>';
   }).join("");
 
@@ -393,7 +394,7 @@ function renderImportModal(rows, sheetName){
         '<div><div style="font-size:22px;font-weight:700;color:var(--teal)">'+totalContacts+'</div><div style="color:var(--text2);font-size:11px;margin-top:2px">CONTACTS</div></div>'+
         '<div><div style="font-size:22px;font-weight:700;color:var(--purple)">'+newCoCnt+'</div><div style="color:var(--text2);font-size:11px;margin-top:2px">NEW COMPANIES</div></div>'+
       '</div>'+
-      (dupeCnt?'<div style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--amber)">\u26a0 '+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist and will be skipped.</div>':'')+
+      (dupeCnt?'<div style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--amber)">'+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist. They won\'t be added again, but anything they are missing (job link, website, salary, extra columns) will be filled in from this file. Nothing already on them is changed.</div>':'')+
       (skippedRows?'<div style="padding:8px 12px;background:var(--bg);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--text3)">'+skippedRows+' row'+(skippedRows>1?'s':'')+' skipped (no company/name).</div>':'')+
       '<div class="fw5 f13 mb2">Column mapping</div>'+
       '<div class="tbl-wrap mb4" style="max-height:180px;overflow-y:auto">'+
@@ -417,7 +418,7 @@ function renderImportModal(rows, sheetName){
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
       (newJobs>0
         ?'<button class="btn btn-primary" onclick="confirmImport()">'+ico("plus",13)+' Import '+newJobs+' job'+(newJobs>1?'s':'')+'</button>'
-        :'<button class="btn btn-primary" disabled style="opacity:.5;cursor:not-allowed">Nothing new to import</button>')+
+        :(dupeCnt?'<button class="btn btn-primary" onclick="confirmImport()">Fill in missing details</button>':'<button class="btn btn-primary" disabled style="opacity:.5;cursor:not-allowed">Nothing new to import</button>'))+
     '</div>'+
   '</div>';
 }
@@ -506,13 +507,37 @@ window.confirmImport=function(){
   var groups=groupImportRows(mapped);
   STATE.importPreview=null;
 
-  var toProcess=groups.filter(function(g){
-    return !STATE.jobs.find(function(j){
+  var existingOf=function(g){
+    return STATE.jobs.find(function(j){
       return j.company_name.toLowerCase()===g.coName.toLowerCase()&&
              j.position.toLowerCase()===g.position.toLowerCase();
     });
-  });
-  if(!toProcess.length){closeModal();showToast('All jobs already exist \u2014 nothing to import.','warning');return;}
+  };
+  var toProcess=groups.filter(function(g){return !existingOf(g);});
+  // R-045: a lead that already exists is not skipped any more — whatever it is
+  // MISSING (job link, website, salary, extra columns, a contact's phone) is
+  // filled in from the sheet. The server writes empty fields only; nothing on
+  // the lead is ever overwritten by a spreadsheet.
+  var fills=groups.map(function(g){
+    var j=existingOf(g); if(!j)return null;
+    return {id:j.id,job_url:g.jobUrl||'',salary_range:g.salaryRange||'',location:g.location||'',industry:g.industry||'',
+      job_created_date:g.jobCreatedDate?parseExcelDateToISO(g.jobCreatedDate):'',website:g.website||'',
+      import_extra:g.extra||{},contacts:g.contacts||[]};
+  }).filter(Boolean);
+  var fillDone=fills.length?apiPost('/jobs/fill-missing',{leads:fills}).catch(function(){return null;}):Promise.resolve(null);
+  var fillToast=function(r){
+    if(!r||!r.leads_updated)return;
+    showToast('Filled in missing details on '+r.leads_updated+' existing lead'+(r.leads_updated>1?'s':'')+' ('+r.fields_filled+' field'+(r.fields_filled>1?'s':'')+'). Nothing was overwritten.','success');
+  };
+  if(!toProcess.length){
+    closeModal();
+    fillDone.then(function(r){
+      if(r&&r.leads_updated){fillToast(r);refreshJobs();}
+      else showToast('All jobs already exist and had nothing missing \u2014 nothing to import.','warning');
+    });
+    return;
+  }
+  fillDone.then(fillToast);
 
   var allEmails=[];
   toProcess.forEach(function(g){
