@@ -5959,3 +5959,8 @@ Owner decisions raised, not assumed: D1 candidate pool shared?, D2 client list s
 Five fixing territories dispatched in parallel (gateway, guild, harbour, observatory, ledger); surface after gateway+harbour; then foundry pins; then rampart reviews.
 
 - IN FLIGHT (2026-09-23): Ledger C-0025 landed (34f90bc). Gateway C-0021, Guild C-0022, Harbour C-0023, Observatory C-0024 are editing in the working tree now; their territory memories are written by each agent when it finishes. Surface C-0026 (+ the candidate card's body_note), Foundry C-0027 and Rampart review follow. Nothing merged.
+
+- IN FLIGHT (still, 2026-09-23): guild and observatory code edits uncommitted in the tree; their memories carry an in-flight line until each agent reports.
+
+### Round 13b — owner answered D1–D5 (2026-09-23)
+Recorded as D-0035: candidates shared (ownership is per candidate-on-a-job); every BD sees every client but only its owner acts on it; every job order visible company-wide but client POC details only to the owner, interaction owner-only; duplicate check marks duplicate and names whose lead it is + since when (the owner asked what the alternative meant — explained). Also: drop the spreadsheet's own serial-number column ("S,no", on all 49 imported leads) — PACE numbers records itself. Guild and gateway re-briefed mid-flight; surface dispatched for the serial column + Ledger's candidate-card note. Live cleanup of the 49 rows' "S,no" key waits until surface lands.

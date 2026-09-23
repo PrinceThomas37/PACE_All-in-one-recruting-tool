@@ -47,6 +47,48 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0035 · 2026-09-23 · STANDS · Shared to SEE, owned to TOUCH: candidates, clients, job orders
+**Their words** (answering rampart's D1–D5): *"do the fixing, only people
+responsible of the data based on our design shuld be seeing and interacting with
+it, no one else.*
+*1. Should every recruiter see every candidate? - Yes, the wonership of a
+candidate in a job is defined, not in the system. which means, that same
+candidate can be added to a different job too by a different recruiter.*
+*2. Yes, every BD can see every client, but interaction is limited to only owner
+of the lead or the client until ownership is changed by permission of the
+manager.*
+*3. Yes, full job list shows all jobs in the company, but interaction is
+limited. just to candidate infomation, JD, job location, website and all. No POC
+details shown other than to owner*
+*4. mark as duplicate. what does how it to other BD contact details means?"*
+
+**Chosen:**
+* **Candidates (D1):** the candidate database is SHARED across the company — every
+  recruiter sees every candidate. Ownership exists only per candidate-on-a-JOB
+  (`submissions.recruiter_id`): the same person can be added to a different job
+  by a different recruiter, and each such submission is its recruiter's.
+* **Clients (D2):** every BD SEES every client. Only the OWNER of the lead / client
+  may ACT on it (edit, documents, email it, contacts). Ownership changes only
+  with the manager's permission — a reassignment, not a free-for-all.
+* **Job orders (D3):** every job in the company is visible to everyone, but a
+  non-owner sees the candidate-facing parts only — JD, title, location, website,
+  pay, requirements. **Client POC details (name, email, phone) are shown to the
+  owner only.** Interaction (edit, delete, workflow actions) is the owner's (and
+  the recruiters assigned to it, for adding their candidates).
+* **D5 duplicate check:** a new lead whose contact is already on someone else's
+  lead is MARKED DUPLICATE. The owner asked what "show the other BD's contact
+  details" meant — explained in chat; pending their reply, the default is the
+  recommendation: say whose lead it is and since when, not that lead's details.
+* **D4 (RA Lead)** was not answered; rampart's default stands until they do.
+
+**Also (same message):** the import must not keep a spreadsheet's own serial
+number column ("S,no") as a lead detail — PACE gives every record its own id.
+
+**Re-open when:** the owner wants a manager able to ACT on a report's client or
+job order (today: review and prompt, D-0020), or wants a formal "request
+ownership change" flow built — the words "until ownership is changed by
+permission of the manager" describe one; today reassignment is done by an admin.
+
 ### D-0034 · 2026-09-23 · STANDS · You SEE only what you are responsible for (plus your team's, if you manage one)
 **Their words** (with screenshots of the Leads page and Email → All email as
 BD Lead 1): *"in leads or in outreach all emails, full information is shown to
