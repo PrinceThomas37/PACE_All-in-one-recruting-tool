@@ -423,3 +423,5 @@ Activity tab (that record's submissions only, inline) and Email → All email
 
 - **See a lead's own details (job link, company website, industry, salary, posted date, other imported columns)** — the lead window's "Lead details" block; job link and website also on the Connected panel. (Session 29)
 - **Import keeps a job link column and every unrecognised column** — `public/js/55-import-columns.js`. (Session 29)
+
+- **Re-import a file to fill in missing lead details** — Leads → Import Excel; existing leads get their blanks filled (job link, website, salary, extra columns, contact phone/LinkedIn), nothing overwritten. `services/lead-fill.js`, `POST /jobs/fill-missing`. (Session 29, R-045)

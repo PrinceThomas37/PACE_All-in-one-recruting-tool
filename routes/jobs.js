@@ -17,6 +17,7 @@ const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, titleSimilarity } = require('../jd-parser');
 const { annotateContactEmailStatus } = require('../email-validation');
 const { getSetting } = require('../config/settings');
+const { fillPatch } = require('../services/lead-fill');
 
 // Lead stage permission matrix for PUT /jobs/:id — pulled out to a pure
 // function (no supabase/Express dependency) so it's directly unit-testable.
@@ -303,6 +304,46 @@ router.post('/jobs/bulk', auth, async (req, res) => {
     }
     const invalidContacts = contactRows.filter(c => c.email_status === 'invalid').length;
     res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── RE-IMPORT FILLS IN WHAT A LEAD IS MISSING (Session 29, R-045) ────────
+// The importer sends one entry per lead it recognised as already existing.
+// services/lead-fill.js decides; the rule is that only EMPTY fields are
+// written, so a re-import can add a job link but never overwrite anything a
+// person or PACE already put on the lead. Org-scoped, and the same ownership
+// check as GET /jobs/:id — a lead you cannot open is a lead you cannot fill.
+router.post('/jobs/fill-missing', auth, async (req, res) => {
+  try {
+    const leads = Array.isArray(req.body && req.body.leads) ? req.body.leads.slice(0, 1000) : [];
+    const ids = [...new Set(leads.map(l => l && l.id).filter(id => typeof id === 'string'))];
+    if (!ids.length) return res.json({ leads_updated: 0, fields_filled: 0 });
+    const { data: rows, error } = await withOrg(supabase.from('jobs')
+      .select('id, org_id, company_id, created_by, assigned_to, assigned_to_bd, job_url, salary_range, location, industry, job_created_date, research, company:companies(id, website), contacts(id, email, phone, linkedin, designation, last_name)')
+      .in('id', ids).is('deleted_at', null), req);
+    if (error) throw error;
+    const seeAll = hasRole(req, 'admin', 'ra_lead', 'bd_lead');
+    const byId = {};
+    for (const r of rows || []) {
+      if (seeAll || r.created_by === req.user.id || r.assigned_to === req.user.id || r.assigned_to_bd === req.user.id) byId[r.id] = r;
+    }
+    let leadsUpdated = 0, fieldsFilled = 0;
+    for (const inc of leads) {
+      const row = inc && byId[inc.id];
+      if (!row) continue;
+      const p = fillPatch({ job: row, company: row.company, contacts: row.contacts }, inc);
+      if (!p.filled.length) continue;
+      if (Object.keys(p.job).length) {
+        const { error: e1 } = await withOrg(supabase.from('jobs').update({ ...p.job, updated_at: new Date().toISOString() }).eq('id', row.id), req);
+        if (e1) continue;
+      }
+      if (Object.keys(p.company).length && row.company && row.company.id) {
+        await withOrg(supabase.from('companies').update(p.company).eq('id', row.company.id), req);
+      }
+      for (const c of p.contacts) await withOrg(supabase.from('contacts').update(c.patch).eq('id', c.id), req);
+      leadsUpdated++; fieldsFilled += p.filled.length;
+    }
+    res.json({ leads_updated: leadsUpdated, fields_filled: fieldsFilled });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

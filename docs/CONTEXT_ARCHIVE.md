@@ -5938,3 +5938,6 @@ that file is the only way to recover it. Same message: OpenRouter's hard-coded
 free model 404'd on connect — now looked up at runtime. 101/101.
 
 Merged #228 (`bf08f0e`).
+
+## Round 11 — re-import fills missing details (2026-09-24)
+Owner: *"okay merge it"*, read as the go-ahead for R-045 (everything else was already merged; stated plainly to the owner). Existing leads are no longer skipped on import: their EMPTY fields are filled, nothing is overwritten. 102/102.

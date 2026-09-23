@@ -463,3 +463,6 @@ Verified non-vacuous by removing one of the two `recordLimits` calls. Suite 99/9
 OpenRouter catalogue lookup is a fetch but not an attempt at the answer, so the
 mock now counts generation requests only. The assertion's intent (2 providers
 tried) is unchanged. Suite 101/101.
+
+## Session 29 — `lead-fill-smoke.mjs` (10)
+Verified non-vacuous: letting the fill overwrite a non-empty field turned two assertions red. Suite 102/102.

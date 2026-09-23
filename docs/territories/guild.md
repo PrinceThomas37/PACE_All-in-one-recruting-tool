@@ -235,3 +235,10 @@ who did it or when. Leads (`activity_log`) and submissions
   not lose a race with the next edit of the same record — but it swallows its
   own errors, exactly as `logActivity` and `logSubmissionActivity` already do.
   Losing one trail entry is strictly better than losing the save it describes.
+
+## Session 29 — `services/lead-fill.js` (R-045)
+A re-imported sheet fills what an existing lead is MISSING, never overwrites:
+job fields (`job_url`, salary, location, industry, posted date), the company
+website, new `import_extra` keys, and blank contact fields matched by EMAIL
+(never by name; never an `@` value into LinkedIn). Owned here beside
+`company-cooldown`/`client-resolve` as lead-data vocabulary.

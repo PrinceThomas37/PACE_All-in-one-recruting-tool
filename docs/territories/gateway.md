@@ -162,3 +162,5 @@ sent. The loop variable is now `let email` — the draft replaces it.
 - **2026-09-23 (R-040)** — `GET /admin/ai-budget` returns `provider_limits`.
 
 - **2026-09-23** — `POST /jobs/bulk` stores `import_extra` into `research.import_extra` via `cleanImportExtra` (≤40 columns, ≤500 chars each). `job_url` was already accepted; the importer simply never sent it.
+
+- **2026-09-24 (R-045)** — `POST /jobs/fill-missing`: org-scoped (`withOrg` on every read and write), same ownership check as `GET /jobs/:id`, applies `lead-fill.fillPatch`. Jobs cache refresh is the existing write middleware.
