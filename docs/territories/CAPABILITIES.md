@@ -418,3 +418,5 @@ Activity tab (that record's submissions only, inline) and Email → All email
   one call per lead; template as fallback; switch in Admin → System Settings.
   `services/engine-draft.js` + `aiWriteFirstEmail()` in index.js. (Session 29,
   D-0032/D-0033). The hand-driven equivalent is Email → Compose → Generator.
+
+- **See each AI account's own reported limits** — Admin → Integrations → AI → Daily budget card, "What your AI accounts report". (Session 29, R-040)

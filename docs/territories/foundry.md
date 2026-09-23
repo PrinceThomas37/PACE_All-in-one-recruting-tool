@@ -453,3 +453,6 @@ the sample email was long enough to pass either floor; the test now asserts the
 sample sits between the two floors before judging.
 
 - **2026-09-23** — engine-draft-smoke now 16 (R-041 tier assertion).
+
+## Session 29 — `ai-limits-smoke.mjs` (9 assertions)
+Verified non-vacuous by removing one of the two `recordLimits` calls. Suite 99/99.

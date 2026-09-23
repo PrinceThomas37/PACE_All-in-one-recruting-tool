@@ -158,3 +158,5 @@ sent. The loop variable is now `let email` — the draft replaces it.
 `GET /emails` attaches `ai_written` / `ai_will_write`.
 
 - **2026-09-23 (R-041)** — `aiWriteFirstEmail` picks `engine_first_email_thin` when `input.thin_posting`.
+
+- **2026-09-23 (R-040)** — `GET /admin/ai-budget` returns `provider_limits`.
