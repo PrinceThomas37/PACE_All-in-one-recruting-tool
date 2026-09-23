@@ -5877,3 +5877,5 @@ by SQL after checking each: address valid, not suppressed, no twin already
 sent, mailbox present. Caught by me before shipping: MAX_ATTEMPTS=3 meant the
 approved 4-hour step never happened; now first send + 3 retries. Tests 97/97;
 the new suite was proven non-vacuous by re-introducing the bug.
+
+Ownership: `services/send-retry.js` assigned to harbour in the territory map after the survey flagged it as unowned.

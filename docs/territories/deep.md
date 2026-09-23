@@ -133,3 +133,5 @@ Applied 2026-09-23 with the owner's go-ahead (D-0031). Four columns on `emails`:
 `fail_kind` (text), `fail_reason` (text), plus a partial index on `sent_by`
 where `status='failed'`. No new table, so `models/tables.js` is unchanged.
 Closes C-0004. **Next migration is 047.**
+
+- **2026-09-23 (Session 29)** — `services/send-retry.js` added to harbour's list in `scripts/territory-map.mjs` (the survey flagged it as owned by nobody); map regenerated.
