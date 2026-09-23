@@ -413,3 +413,6 @@ tr.sel-row td{background:var(--accent-l)}
 .failed-note{font-size:11.5px;color:var(--text3);margin-top:2px}
 .retry-chip{font-size:10px;padding:2px 7px;background:var(--amber-l);color:var(--amber);border-radius:6px;font-weight:600;margin-left:6px;white-space:nowrap}
 @media (max-width:860px){.failed-row{flex-wrap:wrap}.failed-row .btn{min-height:40px}}
+
+/* AI-written / will-be-written marker on Email rows (D-0032). One quiet chip. */
+.ai-chip{font-size:10px;padding:2px 7px;background:var(--accent-l);color:var(--accent);border-radius:6px;font-weight:600;margin-left:6px;white-space:nowrap}

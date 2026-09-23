@@ -61,6 +61,8 @@ const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
+const engineDraft = require('./services/engine-draft');
+const outreachGen = require('./services/outreach-generator');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -268,7 +270,7 @@ const US_METRO_AREA_TZ = {
   'omaha metropolitan area': 'CST',
   'greater chattanooga': 'EST'
 };
-const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
+const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, org_id, template_variant, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
 
 // Parses a lead's free-text "location" field into one of the four US lead
 // timezones. Deliberately a PARSE, not a scan: the old version matched any
@@ -1671,6 +1673,63 @@ async function recordSendFailure(email, rawMsg, reason) {
   return upd;
 }
 
+// ── AI WRITES THE FIRST EMAIL (D-0032) ──────────────────────────────────
+// Called for a lead's first email, after the row is claimed and before it is
+// sent. Returns the email to send: the AI draft when one passed the house
+// rules and was STORED, otherwise the queued template untouched. It never
+// throws and never blocks a send — see services/engine-draft.js for why this
+// happens at send time and one lead at a time.
+const orgNameCache = new Map();
+async function orgNameFor(orgId) {
+  if (!orgId) return outreachGen.DEFAULT_COMPANY;
+  if (orgNameCache.has(orgId)) return orgNameCache.get(orgId);
+  let name = outreachGen.DEFAULT_COMPANY;
+  try {
+    const { data } = await supabase.from('organizations').select('name').eq('id', orgId).maybeSingle();
+    if (data && data.name) name = data.name;
+  } catch (_) {}
+  orgNameCache.set(orgId, name);
+  return name;
+}
+
+async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
+  try {
+    const [jobRes, contactRes, companyName] = await Promise.all([
+      supabase.from('jobs').select('position,location,research,company:companies(name,location)').eq('id', email.job_id).maybeSingle(),
+      email.contact_id
+        ? supabase.from('contacts').select('first_name,designation').eq('id', email.contact_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      orgNameFor(email.org_id),
+    ]);
+    const who = senderIdentityFor(sendingEmail, email.from_email);
+    const input = engineDraft.engineInput({
+      job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
+      sender: { name: who.displayName, email: who.emailAddress },
+    });
+    const res = await engineDraft.draftFirstEmail({
+      gen: outreachGen, input, companyName,
+      omitSignOff: !!String(sigTemplate || '').trim(),
+      complete: (system, prompt) => aiProvider.complete(supabase, {
+        system, prompt, maxTokens: 800, feature: 'engine_first_email', orgId: email.org_id,
+      }),
+    });
+    if (!res.body) {
+      console.log(`[EngineAI] template kept for ${email.to_email}: ${res.skipped}${res.violations ? ' ' + res.violations.join(',') : ''}`);
+      return email;
+    }
+    // Store BEFORE sending: what goes out must be what the Sent tab, the
+    // follow-up's quoted chain and a retry all read back. Text that could not
+    // be stored is never sent.
+    const upd = { subject: res.subject, body: res.body, template_variant: 'ai' };
+    const { error } = await supabase.from('emails').update(upd).eq('id', email.id);
+    if (error) return email;
+    return { ...email, ...upd };
+  } catch (e) {
+    console.log(`[EngineAI] template kept for ${email.to_email}: ${e.message}`);
+    return email;
+  }
+}
+
 function retryNote(upd) {
   if (upd.status !== 'pending' || !upd.next_attempt_at) return '';
   const mins = Math.round((new Date(upd.next_attempt_at).getTime() - Date.now()) / 60000);
@@ -1736,6 +1795,12 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
   ]);
   const { limits, sentToday, delays, settings } = quotaState;
+  // Checked once per run: is the owner's switch on, and is any AI provider set up?
+  let aiFirstEmailOn = false;
+  try {
+    aiFirstEmailOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1
+      && await aiProvider.isAvailable(supabase);
+  } catch (_) { aiFirstEmailOn = false; }
   const lastSendAtByMailbox = {};
   const domainTimestamps = {};
   let sendAttempts = 0;
@@ -1749,7 +1814,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   }
   const ordered = orderPendingForSend(inWindow).concat(orderPendingForSend(outWindow));
 
-  for (const email of ordered) {
+  for (let email of ordered) {
     if (isSendingPaused() || isManagerPaused(userId)) {
       console.log(`[EmergencyStop] Sending paused (global or manager ${userId}) mid-run — halting; remaining emails stay pending`);
       break;
@@ -1901,6 +1966,11 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         continue;
       }
       const sigTemplate = resolveSignatureHtml(email._sigHtml || mailboxSignatures[userEmailId]);
+      // A retry of an email the AI already wrote re-sends that text; it never
+      // pays for a second draft.
+      if (aiFirstEmailOn && engineDraft.isFirstEmail(email) && email.template_variant !== 'ai') {
+        email = await aiWriteFirstEmail(email, sendingEmail, sigTemplate);
+      }
       const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingEmail);
       await supabase.from('emails').update({ status: 'sent', sent_at: today() }).eq('id', email.id);
       await persistGraphIds(email.id, graph);

@@ -413,3 +413,8 @@ Activity tab (that record's submissions only, inline) and Email → All email
   "Didn't send". Engine retries temporary failures after 15m/1h/4h;
   `services/send-retry.js` decides, `recordSendFailure()` in index.js writes,
   `POST /emails/:id/retry` / `POST /emails/retry-failed`. (Session 29, D-0031)
+
+- **AI writes each lead's first cold email** — the leads engine, at send time,
+  one call per lead; template as fallback; switch in Admin → System Settings.
+  `services/engine-draft.js` + `aiWriteFirstEmail()` in index.js. (Session 29,
+  D-0032/D-0033). The hand-driven equivalent is Email → Compose → Generator.

@@ -444,3 +444,10 @@ model). **Verified non-vacuous**: re-introducing the old bare-failed catch and
 removing the `isDue` filter turned two assertions red. Full suite 97/97 on
 Node 22 (after `npm ci` — a fresh sandbox has no node_modules, which reads as 54
 failing suites and is not a real failure).
+
+## Session 29 — `engine-draft-smoke.mjs` (15 assertions)
+Offline, with a stand-in `complete`. Verified non-vacuous: disabling the thin-
+posting rule and removing the send-loop call each turned an assertion red.
+Suite 98/98. Note: the first run had a vacuous-looking FALSE failure of my own —
+the sample email was long enough to pass either floor; the test now asserts the
+sample sits between the two floors before judging.

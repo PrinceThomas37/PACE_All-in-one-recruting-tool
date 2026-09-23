@@ -18,6 +18,8 @@ const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
 const { isStaleProgress } = require('../services/send-progress');
 const sendRetry = require('../services/send-retry');
+const settingsConfig = require('../config/settings');
+const engineDraft = require('../services/engine-draft');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -58,13 +60,20 @@ router.get('/emails', auth, async (req, res) => {
         .select('id,email_address,display_name').in('id', pinnedIds);
       (pinned || []).forEach(m => { pinnedById[m.id] = m; });
     }
+    // D-0032: the engine's first email is written by AI at send time, so a
+    // queued one still shows the template. Say so on the row rather than let
+    // the preview pass for the final text.
+    let aiFirstOn = false;
+    try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1; } catch (_) {}
     allData = allData.map((e) => {
       const mailbox = (e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null;
       // What the Email page says about a failure or a scheduled retry comes
       // from send-retry.js, the same rules the send loop obeyed — no page
       // re-derives "can this be retried".
       return { ...e, ...renderStoredEmail(e, mailbox), sending_email: mailbox,
-        retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) };
+        retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e),
+        ai_written: e.template_variant === 'ai',
+        ai_will_write: aiFirstOn && e.status === 'pending' && engineDraft.isFirstEmail(e) && e.template_variant !== 'ai' };
     });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }

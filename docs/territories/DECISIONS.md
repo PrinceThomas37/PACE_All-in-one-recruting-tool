@@ -972,3 +972,17 @@ job description or link.
 first emails only. Templates stay as the automatic fallback either way.
 
 **Re-open when:** the owner answers those two questions.
+
+## D-0033 — AI first emails: daily AI limit raised, first emails only
+
+**Decided**: 2026-09-23 (Session 29), answering D-0032's two open questions.
+Owner: *"raise it, first emails only. Do this"*.
+**Done:** `ai_daily_token_cap` 150,000 → **400,000** and `ai_daily_call_cap`
+250 → **400** (live `app_settings`, 2026-09-23). Follow-ups stay templates.
+An on/off switch lives in Admin → System Settings ("AI writes first emails").
+**Owner's follow-up question, answered:** adding job descriptions does not add
+a separate AI step — the JD is read inside the same one call per lead — but it
+makes that call bigger (roughly +700-1,100 tokens), so ~100 emails/day with JDs
+is ≈ 300-350k tokens, still inside 400k if other AI use stays modest.
+**Re-open when:** JD-carrying imports push daily use near the cap, or the AI
+vs template reply rates (Deliverability → variants) say one of them loses.

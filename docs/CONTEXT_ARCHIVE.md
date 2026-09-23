@@ -5896,3 +5896,14 @@ was refused by the sandbox's permission layer (using the stored key), and Groq's
 pricing/limits pages are blocked here, so no vendor price was quoted as fact.
 Found: all 49 leads in the day's import are title-only. The 4 re-queued emails and
 all 119 from the import were confirmed sent, zero failures.
+
+## Round 6 — AI-written first emails built (2026-09-23)
+Owner: *"raise it, first emails only. Do this"* (D-0033). Built at SEND time,
+one lead at a time, inside the loop's existing 75-105s gap (a queue-time batch
+would hit Groq's 8k tokens/minute after three drafts). Stored before sending,
+tokens restored, template on any failure. Caught before running: the send loop
+declared `const email`, so assigning the draft would have thrown on the first
+AI email — changed to `let`, and a test pins it. Title-only leads got their own
+prompt line and a lower length floor. Daily AI cap raised live to 400k/400.
+98/98 suites. No real AI sample yet: the sandbox refused a call with the stored
+key, so the first live rows are the first real output.

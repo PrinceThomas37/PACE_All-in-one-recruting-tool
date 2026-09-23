@@ -147,3 +147,12 @@ first place.
 - `recordSendFailure()` checks supabase's returned `error` (a missing column is
   REPORTED, not thrown) and falls back to plain `failed` so a row is never left
   at `sending`.
+
+## Session 29 — AI first email in the send loop
+`aiWriteFirstEmail()` in index.js runs after the atomic claim and before
+`deliverOutboundEmail`, only when `sys_engine_ai_first_email` = 1 and a provider
+is configured, only for first emails, and never for a row already
+`template_variant = 'ai'` (a retry re-sends the stored AI text, no second
+draft). The draft is STORED before sending; if the store fails the template is
+sent. The loop variable is now `let email` — the draft replaces it.
+`GET /emails` attaches `ai_written` / `ai_will_write`.
