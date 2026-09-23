@@ -18,6 +18,19 @@
 - Candidate send hours live in `app_settings` and are edited through
   `config/settings.js`'s schema (Admin → System Settings), never queried directly.
 
+- **FAILED SENDS RETRY THEMSELVES (Session 29, D-0031).** `services/send-retry.js`
+  (pure) sorts every failure — temporary / permanent / needs_fix / uncertain —
+  and `recordSendFailure()` in index.js is the ONLY writer of a failure: a
+  temporary one goes back to `pending` with `next_attempt_at` (15m, 1h, 4h; first
+  send + 3 retries), everything else to `failed` with `fail_reason`. The pending
+  fetch drops rows not yet due via `isDue`, **in Node, not a PostgREST `.or()`**.
+  A sign-in failure also puts the mailbox in `authFailedMailboxes` so the rest of
+  that run leaves its emails pending instead of failing them ~90s apart.
+  **An UNCERTAIN failure (timeout mid-send) is never auto-retried** — the
+  provider may have accepted it. Manual retry: `POST /emails/:id/retry`,
+  `POST /emails/retry-failed`; refused for `permanent`, and refused when the
+  same contact/job/step already has a live twin (`hasLiveTwin`).
+
 ## Fragile — touch with care
 - **Every reader of `emails.body` must call `renderStoredEmail(row, mailbox)`.**
   `test/sender-identity-smoke.mjs` greps for readers and fails on one that does
@@ -29,7 +42,11 @@
 - Gmail headers are RFC 2047-encoded, split on **character** boundaries.
 
 ## Open here
-- **KNOWN, UNFIXED: a dead mailbox sign-in destroys emails.** An auth failure
+- **MOSTLY FIXED 2026-09-23 (D-0031), text below kept for history.** Release
+  to pending, stop the mailbox on the first auth failure and the error column
+  are all shipped. What remains is the Google "Testing" 7-day expiry itself —
+  a truly dead sign-in now gives up after the 4-hour retry instead of instantly.
+- **(was) KNOWN, UNFIXED: a dead mailbox sign-in destroys emails.** An auth failure
   marks each email `failed` with no retry, ~one every 90s, and there is no column
   to record why. Root cause is Google-side — the consent screen is in "Testing",
   where refresh tokens expire after 7 days. **The owner parked this on
@@ -43,3 +60,7 @@
 
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
+
+- **2026-09-23 (Session 29)** — failed-email retry shipped (D-0031, R-036). Live
+  incident: Daniel James 2 × "sign-in expired" while 3 sent fine. Today's 4
+  failures re-queued by SQL at the owner's request (attempt_count=1).

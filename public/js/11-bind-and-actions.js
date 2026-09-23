@@ -331,6 +331,7 @@ function loadEmailsForCurrentUser(){
       apiGet('/emails').then(function(d){
         var all=d||[];
         STATE.pendingEmails=all.filter(function(e){return e.status==='pending';});
+        STATE.failedEmails=all.filter(function(e){return e.status==='failed';});
         STATE.allBDEmails=all;
         loadPendingSummary();
         scheduleRender();
@@ -338,7 +339,27 @@ function loadEmailsForCurrentUser(){
     } else {
       apiGet('/emails?status=pending').then(function(d){STATE.pendingEmails=d||[];loadPendingSummary();scheduleRender();}).catch(function(){});
       apiGet('/emails?status=sent').then(function(d){STATE.sentEmails=d||[];scheduleRender();}).catch(function(){});
+      apiGet('/emails?status=failed').then(function(d){STATE.failedEmails=d||[];scheduleRender();}).catch(function(){});
     }
   }
 }
+
+// ── Retry a failed email (Session 29) ──────────────────────
+// The engine retries temporary failures by itself; these are the person's
+// version. The server decides what may be retried and says why when it will
+// not, so the page never has to guess.
+function afterRetry(r){
+  var n=(r&&r.requeued)||0, refused=(r&&r.refused)||[];
+  if(n)showToast(n+' email'+(n>1?'s':'')+' back in the queue','success');
+  if(refused.length)showToast(refused.length+' not retried: '+refused[0].reason,n?'info':'error');
+  loadEmailsForCurrentUser();
+  if(n)startProgressPoll();
+}
+window.retryFailedEmail=function(id,ev){
+  if(ev)ev.stopPropagation();
+  apiPost('/emails/'+id+'/retry',{}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
+};
+window.retryAllFailedEmails=function(ids){
+  apiPost('/emails/retry-failed',{ids:ids||[]}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
+};
 

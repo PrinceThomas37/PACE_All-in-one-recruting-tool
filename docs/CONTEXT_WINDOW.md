@@ -8,7 +8,7 @@
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #222 (`8ce7312`). **Nothing is
-unmerged once it lands.** **D-0030 is the highest decision id.**
+unmerged once it lands.** **D-0031 is the highest decision id** (failed emails retry themselves, Session 29).
 
 ---
 
@@ -94,7 +94,7 @@ job order** — from a Connected lead, or directly from "+ New Job", which now
 resolves the client, captures its address and requires a POC. Billing and
 self-serve signup are built and **off**.
 
-## Migrations — next is **046** · 045 APPLIED 2026-09-23
+## Migrations — next is **047** · 046 APPLIED 2026-09-23 (email retry columns, D-0031) · 045 APPLIED 2026-09-23
 
 **Never apply one to the live DB without an explicit, fresh go-ahead.** A
 migration adding a table with `org_id` must also add it to `models/tables.js`.

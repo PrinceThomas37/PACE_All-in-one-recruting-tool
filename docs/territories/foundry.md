@@ -435,3 +435,12 @@ conversation-intel rule, applied to a second feature.
 
 `models-smoke.mjs` moved 42 → **43** tenant tables for migration 045, and it
 caught the change the moment the registry moved, which is exactly its job.
+
+## Session 29 — `send-retry-smoke.mjs` (20 assertions)
+Pure classification and ladder tests, the manual-retry rules, and wiring checks
+on index.js (one bare `status:'failed'` left — the no-columns fallback; `isDue`
+filter on the pending fetch; auth-failed mailbox skip; route order; org-scoped
+model). **Verified non-vacuous**: re-introducing the old bare-failed catch and
+removing the `isDue` filter turned two assertions red. Full suite 97/97 on
+Node 22 (after `npm ci` — a fresh sandbox has no node_modules, which reads as 54
+failing suites and is not a real failure).

@@ -135,3 +135,15 @@ first place.
 - **The general store is read best-effort.** If migration 045 is unapplied the
   rest of the timeline must still draw, rather than the whole panel failing
   over a table that is not there yet.
+
+## Session 29 — retry endpoints for failed emails
+- `POST /emails/retry-failed` (literal, registered ABOVE) and
+  `POST /emails/:id/retry`, inline in index.js beside the other send-pipeline
+  routes. Both read and write through `db.forRequest(req)`; another person's
+  email answers 404. `retry-failed` takes optional `ids` (the rows the page is
+  showing); a non-admin is always narrowed to `sent_by = self`.
+- `GET /emails` now attaches `retry_note` + `can_retry` from
+  `services/send-retry.js`, so no page re-derives "can this be retried".
+- `recordSendFailure()` checks supabase's returned `error` (a missing column is
+  REPORTED, not thrown) and falls back to plain `failed` so a row is never left
+  at `sending`.

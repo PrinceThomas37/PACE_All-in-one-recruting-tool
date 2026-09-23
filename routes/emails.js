@@ -17,6 +17,7 @@
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
 const { isStaleProgress } = require('../services/send-progress');
+const sendRetry = require('../services/send-retry');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -59,7 +60,11 @@ router.get('/emails', auth, async (req, res) => {
     }
     allData = allData.map((e) => {
       const mailbox = (e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null;
-      return { ...e, ...renderStoredEmail(e, mailbox), sending_email: mailbox };
+      // What the Email page says about a failure or a scheduled retry comes
+      // from send-retry.js, the same rules the send loop obeyed — no page
+      // re-derives "can this be retried".
+      return { ...e, ...renderStoredEmail(e, mailbox), sending_email: mailbox,
+        retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) };
     });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }

@@ -126,3 +126,10 @@ production reset the same day) — so there is no backfill and no historic gap t
 explain, which is precisely why it was cheap now and would have been expensive
 later. Verified after: 11 columns, RLS on, 1 service-role policy, 3 indexes,
 0 rows. **Next migration is 046.**
+
+## Session 29 — migration 046, retry bookkeeping on `emails`
+Applied 2026-09-23 with the owner's go-ahead (D-0031). Four columns on `emails`:
+`attempt_count` (int, default 0), `next_attempt_at` (timestamptz),
+`fail_kind` (text), `fail_reason` (text), plus a partial index on `sent_by`
+where `status='failed'`. No new table, so `models/tables.js` is unchanged.
+Closes C-0004. **Next migration is 047.**

@@ -408,3 +408,8 @@ record kind is a mapper plus a `PARENT` entry; a new *screen* is a call to
 **Related but different, and deliberately kept apart:** the candidate profile's
 Activity tab (that record's submissions only, inline) and Email → All email
 (what was *sent*, not what *changed*).
+
+- **Retry a failed email (by hand or automatically)** — Email → Pending →
+  "Didn't send". Engine retries temporary failures after 15m/1h/4h;
+  `services/send-retry.js` decides, `recordSendFailure()` in index.js writes,
+  `POST /emails/:id/retry` / `POST /emails/retry-failed`. (Session 29, D-0031)

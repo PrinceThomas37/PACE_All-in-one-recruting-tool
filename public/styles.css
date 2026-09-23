@@ -396,3 +396,20 @@ tr.sel-row td{background:var(--accent-l)}
 .na-team-note{font-size:12px;color:var(--text3);margin-top:4px;white-space:pre-wrap}
 .na-team-empty{padding:26px 20px;text-align:center;font-size:13px;color:var(--text3)}
 @media (max-width:860px){ .na-team-row{flex-wrap:wrap} }
+
+/* ── Didn't send (Session 29, R-036) ─────────────────────────────────────
+   Failed emails stay on the Pending tab with their reason and a Retry.
+   Calm by default (D-0019): neutral card, a 3px stripe, no red ground. */
+.failed-panel{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:var(--r2);margin-bottom:14px;overflow:hidden}
+.failed-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.failed-title{font-weight:700;font-size:13.5px;color:var(--text)}
+.failed-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
+.failed-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border2)}
+.failed-row:last-child{border-bottom:0}
+.failed-main{min-width:0;flex:1}
+.failed-to{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.failed-job{font-weight:400;color:var(--text3);font-size:12px}
+.failed-why{font-size:12px;color:var(--text2);margin-top:2px}
+.failed-note{font-size:11.5px;color:var(--text3);margin-top:2px}
+.retry-chip{font-size:10px;padding:2px 7px;background:var(--amber-l);color:var(--amber);border-radius:6px;font-weight:600;margin-left:6px;white-space:nowrap}
+@media (max-width:860px){.failed-row{flex-wrap:wrap}.failed-row .btn{min-height:40px}}

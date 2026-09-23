@@ -266,7 +266,14 @@ we never have to rewrite to grow (see "Growth bets" below).
   mailbox interleaving preserved inside each band. Do not reorder it casually,
   and never remove the `ORDER BY` from the pending fetch — it paginates with
   `.range()`, which repeats or skips rows without one.
-- **KNOWN, UNFIXED (as of Session 14): a dead mailbox sign-in destroys
+- **FAILED SENDS NOW RETRY (Session 29, D-0031)** — `services/send-retry.js`
+  sorts a failure (temporary / permanent / needs_fix / uncertain); only
+  TEMPORARY is retried automatically, after 15m → 1h → 4h; an UNCERTAIN one
+  (timeout mid-send) never is, because it may have been delivered;
+  `recordSendFailure()` is the only writer of a failure and stores the reason
+  (migration 046). Email → Pending shows "Didn't send" with Retry. The text
+  below is the history it fixed.
+- **(was) KNOWN, UNFIXED (as of Session 14): a dead mailbox sign-in destroys
   emails.** An auth failure marks each email `failed` with no retry, one every
   ~90s, and `emails` has no column to record why — so `friendlySendError`'s
   correct sentence goes only to an in-memory cache and dies with the process.
