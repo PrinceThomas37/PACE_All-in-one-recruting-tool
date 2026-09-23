@@ -5882,3 +5882,42 @@ Ownership: `services/send-retry.js` assigned to harbour in the territory map aft
 
 ## Round 3 — merge (2026-09-23)
 Owner: *"yes and then merge it"* — R-037 (dashboard warning for a failing mailbox sign-in) added as PENDING; PR #225 merged as the release.
+
+Merged as #225 (`4a29427`) — live on Render once the deploy finishes. A check-in is scheduled ~19:51 UTC to confirm the 4 re-queued emails went out and that new failures carry a reason.
+
+## Round 4 — are the emails AI-written? deliverability by channel (2026-09-23)
+Answered, no code. Measured: the leads engine sends TEMPLATES, not AI — 119 queued emails in the last day, 56 from 5 rotating variants and 63 from the single default, merge-filled; AI writes only in the Generator. Deliverability explained: the engine sends through the same Microsoft/Google mailbox as Outlook, so the CHANNEL is not a factor recipients can see; volume, sameness, pacing, links/pixels and domain authentication are. Lead emails carry no tracking pixel and no links. DNS could not be checked from here (proxy blocks dns.google). Suggestions R-038 (AI per lead) and R-039 (check SPF/DKIM/DMARC) recorded.
+
+## Round 5 — AI-written engine emails: approved, costed, two questions open (2026-09-23)
+Owner said yes (D-0032) and asked about per-email vs batch and cost. Sized from
+the real prompt (~1,690 tokens in, ~230 out, plus reasoning) and the app's own
+meter (the Generator has run ~2,100 tokens per draft). A live probe against Groq
+was refused by the sandbox's permission layer (using the stored key), and Groq's
+pricing/limits pages are blocked here, so no vendor price was quoted as fact.
+Found: all 49 leads in the day's import are title-only. The 4 re-queued emails and
+all 119 from the import were confirmed sent, zero failures.
+
+## Round 6 — AI-written first emails built (2026-09-23)
+Owner: *"raise it, first emails only. Do this"* (D-0033). Built at SEND time,
+one lead at a time, inside the loop's existing 75-105s gap (a queue-time batch
+would hit Groq's 8k tokens/minute after three drafts). Stored before sending,
+tokens restored, template on any failure. Caught before running: the send loop
+declared `const email`, so assigning the draft would have thrown on the first
+AI email — changed to `let`, and a test pins it. Title-only leads got their own
+prompt line and a lower length floor. Daily AI cap raised live to 400k/400.
+98/98 suites. No real AI sample yet: the sandbox refused a call with the stored
+key, so the first live rows are the first real output.
+
+## Round 7 — is 400k enough, and are free tiers enough? (2026-09-23)
+Meter history (11 days with use): typical 7-20k tokens/day, peak 81k (Generator
+testing, 2026-09-08). Engine at 100/day adds ~230k → ~250-310k typical, 400k
+covers it; JD-carrying imports would take it to ~330-420k on a heavy day. Found:
+**only Groq is configured** — the OpenRouter key is not saved (health check
+15:40), so there is no second free tier. Vendor daily limits could not be read
+from the sandbox (pages blocked); stated from memory WITH that caveat, matched
+to the 8k tokens/min measured on 2026-09-08. Suggestions R-040 (show real
+limits from response headers), R-041 (fast model for title-only), R-042
+(re-add OpenRouter key) recorded.
+
+## Round 8 — R-041 in, #226 merging (2026-09-23)
+Owner: *"merge it, and do 2 and 3 too"*. R-041 (fast model for title-only leads) added to #226 before merging; R-040 (real limits on the AI card) follows as its own PR.

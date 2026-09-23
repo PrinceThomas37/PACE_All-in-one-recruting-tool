@@ -2,8 +2,8 @@
   "generated": "2026-09-23",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 324,
-    "lines": 77721,
+    "files": 326,
+    "lines": 78056,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 59,
-      "lines": 24100,
+      "lines": 24104,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 929
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-24",
       "openIn": 1,
       "openOut": 1
     },
@@ -73,11 +73,11 @@
         "services/record-history-writer.js"
       ],
       "files": 25,
-      "lines": 7916,
+      "lines": 7991,
       "largest": [
         {
           "f": "index.js",
-          "n": 3491
+          "n": 3561
         },
         {
           "f": "routes/apply.js",
@@ -92,7 +92,7 @@
           "n": 399
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-24",
       "openIn": 4,
       "openOut": 1
     },
@@ -134,7 +134,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-24",
       "openIn": 1,
       "openOut": 0
     },
@@ -177,7 +177,7 @@
         "routes/deliverability.js"
       ],
       "files": 23,
-      "lines": 4554,
+      "lines": 4563,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -196,7 +196,7 @@
           "n": 378
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-24",
       "openIn": 1,
       "openOut": 0
     },
@@ -216,6 +216,7 @@
         "services/ai-provider.js",
         "services/ai-budget.js",
         "services/outreach-generator.js",
+        "services/engine-draft.js",
         "services/candidate-outreach.js",
         "services/morning-briefing.js",
         "match-engine.js",
@@ -235,8 +236,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 21,
-      "lines": 9230,
+      "files": 22,
+      "lines": 9355,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -248,7 +249,7 @@
         },
         {
           "f": "services/outreach-generator.js",
-          "n": 1137
+          "n": 1149
         },
         {
           "f": "routes/candidate-outreach.js",
@@ -377,8 +378,8 @@
         "test/",
         ".github/"
       ],
-      "files": 101,
-      "lines": 19863,
+      "files": 102,
+      "lines": 19985,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -397,7 +398,7 @@
           "n": 503
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-24",
       "openIn": 1,
       "openOut": 0
     },

@@ -951,3 +951,38 @@ genuinely dead — those give up after the 4-hour retry and wait for a reconnect
 
 **Re-open when:** a retried email is found to have gone out twice, or failures
 that are really permanent are seen cycling through the ladder.
+
+## D-0032 — AI writes the engine's cold emails (approved in principle)
+
+**Decided**: 2026-09-23 (Session 29). Owner: *"yes, let AI write the engine
+emails"*, then asked whether it writes per email or per batch, and what one email
+and 100 a day would cost.
+
+**What was established before building:** one AI call per LEAD (each lead is a
+different company and role; a batch would re-create the sameness problem), about
+2,100-2,400 tokens each, ≈230k tokens for 100/day — above the app's default
+daily cap (150k). Groq's free tier also caps tokens per minute (8,000, measured
+2026-09-08), which the engine's one-email-per-~90s pace stays under.
+**Material caveat given to the owner:** imported leads carry only a job title
+(49 of 49 on 2026-09-23), so the AI cannot research the role — the gain is
+varied wording and reader-fit, not insight, unless imports start carrying the
+job description or link.
+
+**Open, asked of the owner:** raise the daily AI cap; AI for follow-ups too or
+first emails only. Templates stay as the automatic fallback either way.
+
+**Re-open when:** the owner answers those two questions.
+
+## D-0033 — AI first emails: daily AI limit raised, first emails only
+
+**Decided**: 2026-09-23 (Session 29), answering D-0032's two open questions.
+Owner: *"raise it, first emails only. Do this"*.
+**Done:** `ai_daily_token_cap` 150,000 → **400,000** and `ai_daily_call_cap`
+250 → **400** (live `app_settings`, 2026-09-23). Follow-ups stay templates.
+An on/off switch lives in Admin → System Settings ("AI writes first emails").
+**Owner's follow-up question, answered:** adding job descriptions does not add
+a separate AI step — the JD is read inside the same one call per lead — but it
+makes that call bigger (roughly +700-1,100 tokens), so ~100 emails/day with JDs
+is ≈ 300-350k tokens, still inside 400k if other AI use stays modest.
+**Re-open when:** JD-carrying imports push daily use near the cap, or the AI
+vs template reply rates (Deliverability → variants) say one of them loses.

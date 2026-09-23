@@ -415,3 +415,8 @@ gained a **Will retry** chip. Loader: `STATE.failedEmails` from
 `GET /emails?status=failed`; actions `window.retryFailedEmail` /
 `window.retryAllFailedEmails` in `11-bind-and-actions.js`. Verified by
 screenshot at 1280 light, 1280 dark and 390 phone.
+
+## Session 29 — AI chips on Email rows
+`.ai-chip` (accent tint, one chip): Pending shows "AI writes at send" on a first
+email while `ai_will_write` (the template on screen is the fallback, not the
+final text); Sent shows "AI-written" when `ai_written`.

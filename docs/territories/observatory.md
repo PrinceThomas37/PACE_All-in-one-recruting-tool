@@ -282,3 +282,20 @@
   day and the legacy endpoint all return true sentences with no provider
   configured. All six observatory suites green.
 - **2026-09-22** — found and fixed OpenRouter's retired fast model; both tiers now on the one variant confirmed live.
+
+## Session 29 — AI writes the engine's first emails (D-0032, D-0033)
+`services/engine-draft.js` (pure; `complete` injected) turns a lead row into the
+Generator's input and runs ONE draft + at most ONE repair through `checkDraft`;
+any failure returns `skipped` and the queued template goes out. Budget feature
+`engine_first_email` (in 3000 / out 800 / quality). **Title-only leads are the
+norm** (49/49 on 2026-09-23 — the importer writes `jd_raw: "Title: X"`), so
+`thin_posting` (< 300 chars) adds a prompt line forbidding invented duties/
+requirements/pay and lowers `too_short` to 35 words — a 60-word floor with no
+facts is an instruction to invent. Measured size: ~1,690 tokens in, ~230 out
+plus reasoning ≈ 2,100-2,400 per lead; a real JD adds roughly 700-1,100 more.
+The stored text has the sender's name/address put back as `{{sender}}` /
+`{{senderemail}}` (`deferSender`) so the send-time rendering rule holds.
+**Not yet seen live:** no real AI sample was produced — the sandbox refused a
+call with the stored Groq key. Check the first AI-written rows in production.
+
+- **2026-09-23 (Session 29, R-041)** — budget feature `engine_first_email_thin` (tier `fast`) for title-only leads; `engine_first_email` (quality) only when a real posting exists. Also splits the meter so the two show separately.

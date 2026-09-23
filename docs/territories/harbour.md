@@ -64,3 +64,7 @@
 - **2026-09-23 (Session 29)** — failed-email retry shipped (D-0031, R-036). Live
   incident: Daniel James 2 × "sign-in expired" while 3 sent fine. Today's 4
   failures re-queued by SQL at the owner's request (attempt_count=1).
+
+- **2026-09-23 (Session 29)** — first emails can now be AI-written at send time
+  (D-0032/D-0033). `template_variant = 'ai'` marks them, so the Deliverability
+  variant comparison shows AI vs templates side by side for free.

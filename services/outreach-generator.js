@@ -153,6 +153,14 @@ function buildUserPayload(input) {
   }
   if (txt(i.notes)) lines.push('CONTEXT ON THE CONTACT OR SITUATION:\n' + txt(i.notes));
   lines.push('JOB POSTING (may include site clutter — extract the real content):\n' + txt(i.job_description));
+  // A lead imported from a spreadsheet often carries only its title. Rule 2
+  // asks for the reason a role is hard to fill, and with no posting the only
+  // way to supply one is to invent it — so say plainly that there is none.
+  if (i.thin_posting) {
+    lines.push('ONLY THE JOB TITLE IS KNOWN. There is no posting to research. Do NOT describe duties, ' +
+      'requirements, pay, schedule or why the role is hard to fill — anything like that would be invented. ' +
+      'Write a short, plain email (roughly 60-110 words) from the title, company, location and the READER note only.');
+  }
   if (txt(i.adjustment)) lines.push('ADJUSTMENT REQUESTED FOR THIS REGENERATION:\n' + txt(i.adjustment));
   // HOUSE STYLE, SHOWN RATHER THAN DESCRIBED. This is the rules writer's draft
   // for this same posting — built from the openers that actually earned replies
@@ -995,7 +1003,11 @@ function checkDraft(draft, input, opts) {
     if (words > 85) add('too_long', `This is a follow-up, so keep it under 85 words. Yours is ${words}. Ask one thing and stop.`);
   } else {
     if (words > 170) add('too_long', `Keep the email to roughly 90-150 words. Yours is ${words}. Cut the weakest paragraph.`);
-    if (words < 60) add('too_short', `At ${words} words there is no researched paragraph. Say what makes this specific role hard to fill.`);
+    // With only a title to go on, demanding more words is demanding invention
+    // (the candidate-outreach lesson: a minimum length with no facts behind it
+    // is an instruction to make something up). A floor still stops a stub.
+    if (i.thin_posting) { if (words < 35) add('too_short', `At ${words} words this reads as a stub. Write a complete, plain email of roughly 60-110 words without adding facts.`); }
+    else if (words < 60) add('too_short', `At ${words} words there is no researched paragraph. Say what makes this specific role hard to fill.`);
   }
 
   if (/!/.test(email)) add('exclamation', 'Remove every exclamation mark. Plain sentences only.');

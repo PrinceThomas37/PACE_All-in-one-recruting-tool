@@ -7,7 +7,7 @@
 **Updated**: 2026-09-23 (Session 28) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #222 (`8ce7312`). **Nothing is
+to `main` IS the release · **Last merged**: #225 (`4a29427`, failed-email retry). **Nothing is
 unmerged once it lands.** **D-0031 is the highest decision id** (failed emails retry themselves, Session 29).
 
 ---

@@ -116,6 +116,11 @@ const SETTINGS_SCHEMA = [
     description: 'Latest hour a candidate is emailed on Saturday or Sunday. Default 20 (8pm).',
     default: 20, min: 0, max: 24,
   },
+  {
+    key: 'engine_ai_first_email', label: 'AI writes first emails', unit: '1 = on, 0 = off', group: 'Email engine',
+    description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",
+    default: 1, min: 0, max: 1,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));
