@@ -1063,6 +1063,31 @@ placeholder to the archive. Never clear it by writing nothing. `.claude/` and
 `docs/` are deliberately unowned (territory-map skips both), so a change there
 owes the archive but no territory memory.
 
+## 📋 THE LIVE LIST — `docs/ROADMAP.md` (D-0030)
+
+**Every suggestion I make to the owner is a row in that file, written in the
+same turn it is made.** Statuses: `PENDING` · `DOING` · `DONE` · `CHANGED` ·
+`DROPPED`. **Nothing is ever deleted** — a dropped row says who dropped it.
+
+- **⚠ `CHANGED` IS NOT `DONE`.** When a thing ships differently from what was
+  proposed, the row keeps **both** versions and says why it moved. Rewriting the
+  row to match the outcome quietly erases the fact that the plan was wrong, and
+  that is the most useful thing on the page.
+- **When the owner asks "what's left", READ THAT FILE.** Do not reconstruct the
+  list from memory or from `git log` — a suggestion that was never built leaves
+  no trace in either. Answer with the `PENDING` rows grouped by who is blocked:
+  me, them, or a decision nobody has made.
+- **Mirror every change to the artifact in the same breath** —
+  `NQ4HUuMfAWJk34g9Vs5EdQ`, collections `items` and `shipped`, one document per
+  row with `doc_id` = the row id. Marking something done is a one-document
+  `update`, not a republish. **The file is the record; the artifact is the
+  window. If they disagree, the file wins and the artifact gets corrected.**
+
+This is the same exposure `DECISIONS.md` was built for and states in its own
+terms: *a decision that exists only in a chat window is lost when that window
+closes.* A **suggestion** has it too, and worse — a decision at least gets acted
+on, while a suggestion nobody picked up leaves no trace anywhere.
+
 ## How this codebase is worked: NINE TERRITORIES → `docs/territories/README.md`
 
 **Read that protocol before starting any job.** Session 22 divided PACE into nine

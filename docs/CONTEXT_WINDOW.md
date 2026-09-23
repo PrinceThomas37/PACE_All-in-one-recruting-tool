@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-22 (Session 27) · **Repo**:
+**Updated**: 2026-09-23 (Session 28) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #218 (`e77275b`). **Nothing is
-unmerged once it lands.** **D-0026 is the highest decision id.**
+to `main` IS the release · **Last merged**: #222 (`8ce7312`). **Nothing is
+unmerged once it lands.** **D-0030 is the highest decision id.**
 
 ---
 
@@ -28,6 +28,21 @@ If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
 anything this file and the archive don't cover — trust it over an old-looking
 line here.
 
+## 📋 READ `docs/ROADMAP.md` — THE LIVE LIST (D-0030, new this session)
+
+**Every suggestion made to the owner is a row there**, written in the same turn
+it is made. `PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`, nothing ever
+deleted. **`CHANGED` is not `DONE`** — such a row keeps what was proposed, what
+shipped and why it moved.
+
+**When the owner asks "what's left", read that file.** Do not rebuild the list
+from memory or `git log`: a suggestion nobody acted on leaves no trace in
+either. Answer grouped by who is blocked — me, them, or an open question.
+
+Mirror every change to the artifact `NQ4HUuMfAWJk34g9Vs5EdQ` (`ArtifactData`,
+collections `items`/`shipped`, `doc_id` = the row id). **The file wins any
+disagreement.**
+
 ## 🧭 READ `docs/territories/README.md` BEFORE STARTING ANY JOB
 
 Nine territories, each a Claude Code subagent with its own border, laws and
@@ -37,7 +52,7 @@ Nine territories, each a Claude Code subagent with its own border, laws and
 - **Arrived as a sentence and a screenshot? → `dispatch`.** It reproduces the
   report, then routes.
 - **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
-  it before proposing anything or calling anything a bug. **D-0026 is the
+  it before proposing anything or calling anything a bug. **D-0030 is the
   highest id used.** D-0023 in particular: TWO of its three calls went against
   my advice, so read it before "improving" any of them.
 - **`docs/territories/CAPABILITIES.md` is what PACE can already DO.** Grep it in
@@ -97,6 +112,24 @@ theorising**; `nodejs.org/dist` is reachable from this sandbox.
 
 ## ✅ RECENTLY SHIPPED — full narratives in `CONTEXT_ARCHIVE.md`
 
+**Session 28 (#220, #221, #222) — the applicant actually arrives somewhere.**
+The Jobs page was throwing `j is not defined` on every render and **five browser
+suites rendered it and passed** — a crashed page has perfect contrast, three DOM
+nodes and no overflow, so it outscores a working one on every metric they
+collect. `test/page-renders-smoke.mjs` now asks the dumber question (did the
+screen render at all) across **190 screens**. Then applicants became visible —
+Candidates → **Applicants** and a block on each job order, both reading ONE
+queue (`D-0028`) — and accepting one was found, **on the live database**, to
+write only the `candidate_pipeline` tag row while every screen reads
+`submissions.stage`: accepted people were in the database and counted nowhere.
+Import now writes both. Applicants get a receipt, the job owner gets a nudge
+(`services/applicant-notify.js`, from the job owner's mailbox **or nobody**),
+and each is scored against the job they chose. Finally the owner corrected the
+domain — *"adding a candidate to a job is not submission"* — and
+`services/submission-stages.js` became the ONE definition: **`submissions` the
+TABLE is misnamed**, the word had been counted three different ways at once, and
+two of them counted sourced candidates as submissions. `D-0029`, `D-0030`.
+
 **Session 27 (#217, #218) — the front door, and an honest Sourcing page.**
 Candidate sourcing was CSV-only; eight of the nine steps were already built, so
 the gap was a front door, not a feature. `routes/apply.js` publishes a job order
@@ -135,12 +168,14 @@ theme follows the person (D-0022); D-0012 completed. A float must be OPAQUE
 
 ## ⏭ PICK THIS UP FIRST
 
-**1. The apply page is live but unproven.** Nothing has been published yet and
-no application has ever been submitted through it in production. The owner was
-asked to publish one job and post the link. **When they report back, the first
-question is whether an applicant actually reached the Sourcing queue** — the
-whole point is step 2 of the candidate journey, and it has only been exercised
-against a stubbed database.
+**0. `docs/ROADMAP.md` holds the full open list.** What follows is the shape of
+it, not a replacement for reading it.
+
+**1. The apply page is PROVEN.** A real applicant (John Raya) came through it in
+production, reached the Sourcing queue, and was accepted onto a job — the live
+record was read directly to confirm it, and repaired by SQL where the
+accept-path bug had half-written it. The open question is now volume: it is
+published on **one** job order (`R-008`).
 
 **2. D-0014 — the row-level interaction brief. Still the live design work.**
 
@@ -174,7 +209,7 @@ it** — they said the revamp is coming *"in sometime"*.
 - **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
   on current code, and was stated as such. Ask before treating it as open.
 
-## 🧪 TESTS: 89 SUITES
+## 🧪 TESTS: 95 SUITES
 
 `npm test` — read the COUNT, not just the exit code, and **never pipe it into
 `tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.

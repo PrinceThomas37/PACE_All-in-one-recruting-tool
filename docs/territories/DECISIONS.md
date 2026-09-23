@@ -855,3 +855,66 @@ phone. This sandbox's Chromium composites in **software** — a scroll measures
 exactly 17ms/frame with 25 blur layers and with none — so no timing claim was
 made from it. Layer counts and pixel diffs are real and were used; frame times
 were measured, found vacuous, and discarded.
+
+---
+
+## D-0030 — Every suggestion is a row in a file, and the owner gets a live window onto it
+
+**Decided**: 2026-09-23 (Session 28) · **Asked for by the owner, unprompted.**
+
+Their words: *"from today onwards keep a list of things that you have suggested
+me doing and start marking them completed and pending, take from a week ago too.
+And keep those in your live memory. This live memory keeps things that are
+pending, strike off the things that are completed, keep updating those things
+when they are being edited or changed in a different way than the proposed. And
+then bring it up when asked for like whats left and how we can do it."*
+
+Underneath the request is an accurate diagnosis. PACE already had three durable
+memories — `DECISIONS.md` (what the owner chose), `CONTEXT_ARCHIVE.md` (what
+happened), the territory files (what the code does) — and **a suggestion is none
+of those three.** It is not a decision, because nobody decided it. It is not
+history, because it never happened. So every "here is what I would build next"
+lived only in a chat window and died with it, which is why the same three items
+kept being re-offered and the AI health check has now been asked for four turns
+running with no record that it was ever asked once.
+
+**The decision:**
+
+1. **`docs/ROADMAP.md` is the record.** A suggestion becomes a row **in the same
+   turn it is made** — the D-0024 rule, for the same reason: "end of session" is
+   a moment that never announces itself.
+2. **Five states**: `PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`.
+   **Nothing is deleted**, ever — a reversal is a new state, exactly as in this
+   file.
+3. **⚠ `CHANGED` is a first-class state, and it is not `DONE`.** The owner asked
+   for this explicitly — *"when they are being edited or changed in a different
+   way than the proposed"*. A row that shipped differently keeps **what was
+   proposed, what shipped, and why it moved.** Rewriting it to match the outcome
+   erases the evidence that the plan was wrong, and that evidence is worth more
+   than the tidy row. The first such row is `R-018`: one submission count was
+   proposed, two plus the gap shipped, because the owner corrected the domain
+   mid-build.
+4. **"What's left" is answered by READING THE FILE**, never reconstructed from
+   memory or from `git log` — neither holds a suggestion that was never built.
+   The answer is grouped by who is blocked: me, them, or an undecided question.
+5. **The artifact `NQ4HUuMfAWJk34g9Vs5EdQ` is the window**, one document per row
+   in its `items` / `shipped` collections, so marking something done from any
+   future chat is a single-document write rather than a republish. **The file
+   wins any disagreement** and the artifact is corrected to it.
+
+**Why a file AND an artifact, rather than one of them:** the owner does not read
+code or open the repo, so a file alone is invisible to them; and an artifact
+alone is invisible to a cold session, which reads the repo and not the gallery.
+Each one covers the other's blind spot. The artifact renders from a snapshot
+baked into the page and upgrades itself to the live store when it loads, so it
+is never blank and never silently stale — the header says which of the two you
+are looking at.
+
+**Re-open when:** the list outgrows a hand-maintained file (roughly, when
+"what's left" stops fitting on one screen), or the owner wants to tick items off
+themselves — which would make the artifact the writer and invert rule 5.
+
+**What this did NOT decide:** automating it. A script can check that a row
+exists; it cannot judge that a thing said in passing was a suggestion worth
+recording. Same split as D-0027 — the gate is dumb on purpose, the judgement
+stays here.
