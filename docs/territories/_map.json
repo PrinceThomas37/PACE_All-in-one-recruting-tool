@@ -2,8 +2,8 @@
   "generated": "2026-09-23",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 315,
-    "lines": 76114,
+    "files": 321,
+    "lines": 77236,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,12 +24,12 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 58,
-      "lines": 23712,
+      "files": 59,
+      "lines": 24033,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1454
+          "n": 1458
         },
         {
           "f": "public/js/47-page-mailbox.js",
@@ -40,8 +40,8 @@
           "n": 1018
         },
         {
-          "f": "public/js/09-page-workflows.js",
-          "n": 888
+          "f": "public/ui.css",
+          "n": 929
         }
       ],
       "lastTouched": "2026-09-22",
@@ -68,14 +68,16 @@
         "events.js",
         "subscribers.js",
         "config/",
-        "engine-runs.js"
+        "engine-runs.js",
+        "services/record-history.js",
+        "services/record-history-writer.js"
       ],
-      "files": 22,
-      "lines": 7351,
+      "files": 25,
+      "lines": 7807,
       "largest": [
         {
           "f": "index.js",
-          "n": 3380
+          "n": 3382
         },
         {
           "f": "routes/apply.js",
@@ -112,12 +114,12 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 53,
-      "lines": 3180,
+      "files": 54,
+      "lines": 3232,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 288
+          "n": 292
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -132,7 +134,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-22",
+      "lastTouched": "2026-09-23",
       "openIn": 2,
       "openOut": 0
     },
@@ -288,11 +290,11 @@
         "lead-ingest.js"
       ],
       "files": 25,
-      "lines": 5859,
+      "lines": 5885,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
-          "n": 729
+          "n": 742
         },
         {
           "f": "routes/recruiting/outreach.js",
@@ -374,8 +376,8 @@
         "test/",
         ".github/"
       ],
-      "files": 99,
-      "lines": 19472,
+      "files": 100,
+      "lines": 19739,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",

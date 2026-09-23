@@ -373,3 +373,32 @@ in dark and light, desktop and phone.
 
   **The label is half the fix.** Two tiles that say what they count cannot
   quietly disagree the way two tiles both saying "Submissions" did.
+
+## Session 28 — the rewind clock: one button, one panel, every record
+
+`public/js/54-record-history.js` — `rewindBtn(entity, id)` and `openRewind()`,
+with the panel registered as `UI.registerOverlay('rewind', ...)`. Wired onto
+four screens: the lead modal, the job order detail, the candidate drawer and
+the client drawer.
+
+**It is ONE module on purpose.** The most expensive bug class in this repo is
+the same idea implemented per screen — three lead-release paths, one stage
+vocabulary in six files. A page adds history by emitting `rewindBtn(...)` and
+nothing else, and a test fails if a second file ever registers that overlay.
+
+- **A new `rewind` icon was added to the kit** (a clock with a counter-clockwise
+  arrow). One mark for "what happened before now", everywhere — a history that
+  looks different per screen reads as a different feature each time.
+- **Date AND time AND relative AND who AND how long it held.** The owner asked
+  for "date and time", so the exact stamp is always on screen and the relative
+  form sits beside it as the glance — never one without the other.
+- **`heldFor()` is free and is the real question.** The entry above an entry IS
+  the end of it, so "held 5 days" costs nothing to compute and answers "where
+  does this rot?", which is what a stage trail is actually asked.
+- **Colour is scarce (D-0019): only a STAGE change earns the accent dot.** A
+  field edit stays neutral. If every row shouted, none of them would.
+- The panel floats, so it paints on **`--card-solid`** — `--card` is glass
+  (.62 light / .055 dark) and was see-through on a phone in Session 25. A test
+  reads that rule out of `ui.css` and fails if it is softened.
+- No inline colours or font sizes anywhere in it: on a phone the scale comes up
+  to meet the 16px input floor via classes, not `style=""`.

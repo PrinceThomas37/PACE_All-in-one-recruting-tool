@@ -47,6 +47,11 @@ window.UI = (function () {
     bell:      S+'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     bolt:      S+'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>',
     filter:    S+'<path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>',
+    // The rewind clock: a clock face with a counter-clockwise arrow. It means
+    // "what happened to this record before now", and is the ONE mark for that
+    // across every screen — a record's history must not be a different shape
+    // on a lead than it is on a candidate.
+    rewind:    S+'<path d="M3 3v6h6"/><path d="M3.5 9a9 9 0 1 0 2.1-3.4L3 8"/><path d="M12 8v4l3 2"/></svg>',
     sliders:   S+'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>',
     refresh:   S+'<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
     unlink:    S+'<path d="M18.84 12.25l1.72-1.71a4.24 4.24 0 0 0-6-6l-1.71 1.72"/><path d="M5.17 11.75l-1.71 1.71a4.24 4.24 0 0 0 6 6l1.71-1.71"/><path d="M8 2v3M2 8h3M16 19v3M19 16h3"/></svg>',

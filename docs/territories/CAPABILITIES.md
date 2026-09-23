@@ -386,3 +386,25 @@ If a new screen needs applicants, call those endpoints and render them.
   signed URL, because an application's resume sits in the PRIVATE
   `candidate-docs` bucket. A plain link works for a CSV row's public URL and
   silently fails for an application. Never link `resume_url` directly.
+
+## Record history — "the rewind clock"
+
+**What the owner sees:** a small clock button on a lead, a job order, a
+candidate and a client. It opens a panel listing every change to that record,
+newest first, with **the exact date and time**, how long ago that was, who did
+it, and how long the record sat at each stage.
+
+**Code:** `services/record-history.js` (pure — the ONE entry shape),
+`services/record-history-writer.js`, `routes/record-history.js`
+(`GET /history/:entity/:id`), `public/js/54-record-history.js` (the button and
+the panel), migration `045_record_history.sql`.
+
+**⚠ THIS IS THE ONLY HISTORY SURFACE. Do not build a second one.** It reads
+three stores — `activity_log` (leads), `submission_activity` (submissions) and
+`record_history` (everything else) — and normalises them into one shape. A new
+record kind is a mapper plus a `PARENT` entry; a new *screen* is a call to
+`rewindBtn(entity, id)`. A test fails if a second file registers the panel.
+
+**Related but different, and deliberately kept apart:** the candidate profile's
+Activity tab (that record's submissions only, inline) and Email → All email
+(what was *sent*, not what *changed*).

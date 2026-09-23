@@ -6,6 +6,7 @@
 const { parseResume } = require('../../resume-parser');
 const entitlements = require('../../services/entitlements');
 const createCandidateFields = require('../../services/candidate-fields');
+const { makeRecorder } = require('../../services/record-history-writer');
 
 module.exports = function (app, core) {
   const {
@@ -17,6 +18,12 @@ module.exports = function (app, core) {
     nextId, logSubmissionActivity,
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
+  // A candidate record had no trail at all: a phone number or an owner could
+  // change with nothing recording who did it or when.
+  const history = makeRecorder(supabase, orgStamp);
+  const CANDIDATE_TRACKED = ['full_name', 'email', 'phone', 'current_employer',
+                             'current_title', 'location', 'owner_id', 'source',
+                             'availability', 'notice_period', 'bill_rate', 'pay_rate'];
   const { CANDIDATE_FIELDS, CANDIDATE_SELECT, pickCandidateFields,
           normName, normEmail, normPhone, findCandidateDuplicates } = createCandidateFields(core);
 
@@ -178,9 +185,14 @@ module.exports = function (app, core) {
       const updates = Object.assign(pickCandidateFields(b), { updated_at: new Date(), updated_by: req.user.id });
       if (b.owner_id !== undefined) updates.owner_id = b.owner_id || null;
       if (Array.isArray(b.tags)) updates.tags = b.tags;
+      // Read the row as it stands BEFORE the write — a history built from the
+      // request body alone cannot tell a real change from a field resent unchanged.
+      const { data: prior } = await supabase.from('candidates')
+        .select('*').eq('id', req.params.id).maybeSingle();
       const { data, error } = await supabase.from('candidates')
         .update(updates).eq('id', req.params.id).select(CANDIDATE_SELECT).single();
       if (error) throw error;
+      await history.recordFields(req, 'candidate', req.params.id, prior || {}, data, CANDIDATE_TRACKED);
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -191,6 +203,7 @@ module.exports = function (app, core) {
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
       await supabase.from('candidates').update({ deleted_at: new Date() }).eq('id', req.params.id);
+      await history.record(req, 'candidate', req.params.id, { action: 'deleted', note: 'Candidate deleted' });
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

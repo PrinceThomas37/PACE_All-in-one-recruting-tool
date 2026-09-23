@@ -111,3 +111,27 @@
     address. No connected mailbox means no email, quietly.
   * Every await inside is bounded by the same 4s `withTimeout` the rest of the
     route uses, and every failure is swallowed.
+
+## Session 28 — the rewind button's endpoint
+
+`GET /history/:entity/:id` (`routes/record-history.js`, mounted after
+`email-history`). ONE endpoint for five record kinds — `lead`, `candidate`,
+`job_order`, `submission`, `company` — because the shapes differ only in which
+store is read, and five endpoints is how three stores came to disagree in the
+first place.
+
+- **The parent record is loaded and org-checked BEFORE any history is read.**
+  A history endpoint keyed on a caller-supplied id is a cross-tenant read
+  waiting to happen. A record in another org answers **404, never 403** — a 403
+  confirms the id exists, which is how ids get probed. A malformed id never
+  reaches the database at all (the apply-page rule).
+- **`services/record-history.js` is PURE and is gateway's**, along with
+  `record-history-writer.js`. They span leads AND recruiting, so they sit with
+  the territory that owns the shared files — the same reasoning that makes
+  `index.js` gateway's rather than the domains'.
+- **A candidate's history merges their own record changes with every stage move
+  on every job they are on.** That is what a recruiter means by "what happened
+  to this person": one person, several job orders, one timeline.
+- **The general store is read best-effort.** If migration 045 is unapplied the
+  rest of the timeline must still draw, rather than the whole panel failing
+  over a table that is not there yet.

@@ -5776,3 +5776,78 @@ the OpenRouter card reading **"Not configured"** directly above its own
 the screen contradicting the system), and a Groq model box showing a different
 model from the one the passing health check reported (`R-031`). Thirty-five
 resume files are now orphaned in private storage (`R-032`).
+
+## Session 28, round 7 — the rewind clock, and three stores that had never been read
+
+The owner: *"build the time of every stage change. Date and time and tag that as
+a small history thing like a rewind clock button ver small in every lead,
+candidate, job and all every variable."*
+
+### The surprise was how much of it already existed
+
+Grepping before building — the CAPABILITIES rule — turned up **three
+history-shaped tables**, two of which were already being written on every stage
+change:
+
+| record | store | recorded? | shown to anybody? |
+|---|---|---|---|
+| lead | `activity_log` | **yes**, with old/new/date/actor | **no** |
+| submission | `submission_activity` | **yes**, old_stage/new_stage | only buried in one profile tab |
+| job order | — | no | no |
+| candidate | — | no | no |
+| company | — | no | no |
+
+So for leads this was never a recording problem at all: every stage change since
+the beginning was already on disk, dated, with the user who made it, and
+**nothing in the product had ever read it back**. That is the same shape as
+Session 23's email history — *"the bodies were being stored the whole time;
+nothing read them back"* — and it is worth naming as a pattern: **this codebase
+stores more than it shows, so the first question about a missing feature is
+whether the data is already there.**
+
+### Three stores, one entry, or it drifts again
+
+`services/record-history.js` is pure and is the ONE definition. Each store gets
+a mapper; every screen reads the one entry shape `{at, kind, field, from, to,
+actor, note, source}`. The alternative — a panel that knows three shapes — is
+exactly how the word "submission" came to mean three things (D-0029) two rounds
+earlier in this same session.
+
+Two rules inside it that are easy to get wrong:
+
+- **A row with no timestamp is DROPPED, never dated `now`.** A history whose
+  times are invented is worse than a short one.
+- **`relativeTime` takes `now` as an argument.** Every label it produces is a
+  factual claim about elapsed time, so a test calling it with the real clock
+  passes on the day it is written and rots quietly. Same reason
+  `conversation-intel.js` has an injectable clock.
+
+And one that turned out to be free: **`durations()` / `heldFor()`.** The entry
+above an entry IS the end of it, so "held 5 days" costs nothing to compute — and
+it answers the question a stage trail is actually asked, which is not "what
+happened" but *"where does this rot?"*. That is `R-001` (time in stage), the
+item I had named as the highest-value next build, arriving as a side effect of
+the button the owner asked for.
+
+### What shipped
+
+`GET /history/:entity/:id` — one endpoint, five record kinds, **404 for another
+org's record, never 403** (a 403 confirms the id exists). `record_history`
+(migration 045) for the three kinds that had nowhere to write, registered in
+`models/tables.js`, applied to an **empty** database so there is no backfill and
+no gap to explain. `public/js/54-record-history.js` is one module: one button,
+one panel, `UI.registerOverlay('rewind', ...)`, wired onto four screens and
+pinned by a test that fails if a second file ever registers that overlay.
+
+**Three guards were verified by reintroducing the bug** — the deleted button,
+the panel repainted on glass `--card`, and a duplicated panel module — because
+four vacuous guards have now been found in this repo and the assumption has to
+be that a new one is vacuous until it has been watched to fail.
+
+### What was deliberately NOT built
+
+The owner said *"every variable"*, which read literally is a full field-level
+audit trail on every column of every table — growth bet #7. What shipped is
+**stage and status changes plus a named list of fields per record kind**, with
+the tracked list at the top of each router so widening it is a list edit rather
+than a new mechanism. Said plainly to the owner rather than quietly scoped down.

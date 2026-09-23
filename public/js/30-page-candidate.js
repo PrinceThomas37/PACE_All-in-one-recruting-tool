@@ -377,7 +377,12 @@
         onclick: c.phone ? "window.location.href='tel:"+UI.attr(String(c.phone).replace(/[^0-9+]/g,''))+"'" : "showToast('No phone number on file','info')" },
       { icon:'check', title:'Add to a job',      onclick:"atsAddToJob('"+c.id+"')" },
       { icon:'doc',   title:'Résumé',            onclick:"cpTab('resume')" },
-      { icon:'cog',   title:'Edit details',      onclick:"atsOpenEdit('"+c.id+"')" }
+      { icon:'cog',   title:'Edit details',      onclick:"atsOpenEdit('"+c.id+"')" },
+      // The rewind clock. On a candidate this is the richest history in PACE:
+      // their own record changes PLUS every stage move on every job they are
+      // on, merged into one timeline by services/record-history.js.
+      { icon:'rewind',title:'History — every change, with the date and time',
+        onclick:"openRewind('candidate','"+c.id+"')" }
     ];
 
     // An empty field is only worth a row if its absence is itself information.

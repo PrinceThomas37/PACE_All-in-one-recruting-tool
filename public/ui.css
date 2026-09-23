@@ -828,3 +828,101 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   .am-when{margin-left:auto}
   .am-text{max-height:300px}
 }
+
+/* ── THE REWIND BUTTON + HISTORY PANEL (Session 28) ────────────────────────
+   Every colour here comes from a token and every size from a class, because
+   an inline value cannot be re-themed, re-scaled or re-laid-out — the shared
+   root cause of the last two rounds of phone and dark-mode faults.
+   The panel FLOATS over content, so it paints on --card-solid. --card is
+   glass (.62 alpha in light, .055 in dark) and would show the page through it.
+   ------------------------------------------------------------------------ */
+
+/* The button is deliberately quiet: a history is available on every record,
+   so if it shouted on every row the rows would be nothing but buttons. */
+.rw-btn{
+  display:inline-flex; align-items:center; gap:5px;
+  background:none; border:1px solid var(--ctl-brd,var(--line,#D7DEE6));
+  color:var(--ink3,var(--text3,#6A7784)); cursor:pointer;
+  padding:4px 7px; border-radius:6px; font:inherit; font-size:11.5px;
+  line-height:1; vertical-align:middle;
+  transition:color .12s ease, border-color .12s ease, background-color .12s ease;
+}
+.rw-btn svg{width:13px; height:13px; display:block}
+.rw-btn:hover{ color:var(--accent,#1E5FBF); border-color:var(--accent,#1E5FBF) }
+.rw-btn:focus-visible{ outline:2px solid var(--accent,#1E5FBF); outline-offset:1px }
+.rw-bare{ border-color:transparent; padding:4px }
+
+/* The panel sits to the right on a desktop and becomes a bottom sheet on a
+   phone — the same shape every other dialog takes below 860px. */
+.rw-overlay{ display:flex; align-items:stretch; justify-content:flex-end }
+.rw-panel{
+  background:var(--card-solid,var(--card,#fff));
+  border-left:1px solid var(--line,#D7DEE6);
+  width:min(430px,100%); display:flex; flex-direction:column;
+  max-height:100%; box-shadow:-18px 0 44px rgba(0,0,0,.18);
+}
+.rw-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:16px 18px 10px; flex:none;
+}
+.rw-title{ display:flex; align-items:center; gap:8px; min-width:0; font-size:15px; font-weight:600 }
+.rw-title svg{ width:16px; height:16px; flex:none; color:var(--accent,#1E5FBF) }
+.rw-title em{
+  font-style:normal; font-weight:400; color:var(--ink3,var(--text3,#6A7784));
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;
+}
+.rw-x{ background:none; border:0; cursor:pointer; color:var(--ink3,var(--text3,#6A7784)); padding:5px; line-height:0 }
+.rw-x svg{ width:16px; height:16px }
+.rw-x:hover{ color:var(--ink,var(--text,#0F1720)) }
+.rw-sub{
+  padding:0 18px 12px; font-size:11.5px; letter-spacing:.04em;
+  text-transform:uppercase; color:var(--ink3,var(--text3,#6A7784)); flex:none;
+}
+.rw-body{ overflow-y:auto; padding:0 18px 24px; flex:1 1 auto }
+.rw-msg{ font-size:13.5px; color:var(--ink3,var(--text3,#6A7784)); line-height:1.6; padding:10px 0 }
+.rw-err{ color:var(--red,#A2492A) }
+
+/* One rail down the left with a dot per entry: the shape reads as time
+   passing, which a plain list does not. */
+.rw-list{ list-style:none; margin:0; padding:0 }
+.rw-row{ display:grid; grid-template-columns:auto minmax(0,1fr); gap:0 13px; position:relative; padding:0 0 16px }
+.rw-row:before{
+  content:""; position:absolute; left:4px; top:14px; bottom:0; width:1px;
+  background:var(--line,#D7DEE6);
+}
+.rw-row:last-child:before{ display:none }
+.rw-dot{
+  width:9px; height:9px; border-radius:50%; margin-top:5px;
+  background:var(--line,#D7DEE6); flex:none; position:relative; z-index:1;
+}
+/* Colour is scarce (D-0019): only a STAGE change earns the accent, because
+   that is the change the owner asked to see. Everything else stays neutral. */
+.rw-stage .rw-dot{ background:var(--accent,#1E5FBF) }
+.rw-main{ min-width:0 }
+.rw-what{ font-size:13.5px; line-height:1.5; color:var(--ink2,var(--text2,#38454F)) }
+.rw-what b{ color:var(--ink,var(--text,#0F1720)); font-weight:600 }
+.rw-to{ color:var(--accent,#1E5FBF) !important }
+.rw-ar{ color:var(--ink3,var(--text3,#6A7784)); padding:0 2px }
+.rw-was{ color:var(--ink3,var(--text3,#6A7784)) }
+.rw-meta{
+  margin-top:3px; display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 9px;
+  font-size:11.5px; color:var(--ink3,var(--text3,#6A7784));
+  font-variant-numeric:tabular-nums;
+}
+.rw-when{ color:var(--ink2,var(--text2,#38454F)) }
+.rw-rel:before,.rw-who:before,.rw-held:before{ content:"·"; padding-right:9px; opacity:.55 }
+.rw-held{ font-style:italic }
+.rw-note{ margin-top:4px; font-size:12.5px; color:var(--ink3,var(--text3,#6A7784)); line-height:1.5 }
+
+@media (max-width:860px){
+  .rw-overlay{ align-items:flex-end; justify-content:center }
+  .rw-panel{
+    width:100%; max-height:82vh; border-left:0;
+    border-top:1px solid var(--line,#D7DEE6);
+    border-radius:14px 14px 0 0; box-shadow:0 -18px 44px rgba(0,0,0,.22);
+  }
+  /* The 16px floor: the phone scale comes up to meet its own inputs. */
+  .rw-what{ font-size:15px }
+  .rw-meta,.rw-sub,.rw-btn{ font-size:13px }
+  .rw-note{ font-size:14px }
+}
