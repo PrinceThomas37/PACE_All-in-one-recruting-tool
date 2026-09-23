@@ -1,5 +1,5 @@
 # Observatory — memory
-> Last written: 2026-09-09 (evening) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-23 (Session 30, C-0024) · seeded from `CLAUDE.md` and Session 21
 
 ## What is true here now
 - **Every AI call goes through `services/ai-provider.js`** — `complete(supabase,
@@ -282,6 +282,7 @@
   day and the legacy endpoint all return true sentences with no provider
   configured. All six observatory suites green.
 - **2026-09-22** — found and fixed OpenRouter's retired fast model; both tiers now on the one variant confirmed live.
+- **2026-09-23** — C-0024 answered: the Generator's pickers show only the viewer's desk (D-0034), a Generator lead is owned by its sender (D-0020), convert-lead is own-sends-only and accepts `id`, and a colleague's existing lead is not enrolled. Raised C-0028 (surface: key the Sent list on `id`). outreach-generator-smoke 138/138, outreach-ai-quality 66/66, the six observatory suites green, scratch harness 35/35 with 7/7 mutations caught.
 
 ## Session 29 — AI writes the engine's first emails (D-0032, D-0033)
 `services/engine-draft.js` (pure; `complete` injected) turns a lead row into the
@@ -321,3 +322,59 @@ if the catalogue is unreachable. `candidateModels()` applies it to OpenRouter
 only and only without an admin override, in both `complete()` and `diagnose()`.
 The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 — the owner's health card is where it shows.
+
+## Session 30 — D-0034 in the Generator (C-0024, answered)
+- **THE RECIPIENT PICKERS SHOW ONLY YOUR DESK.** `/outreach/recipients` and
+  `/outreach/company-contacts/:id` searched every contact in the org, so a BD
+  could pick and cold-email a colleague's contact. Now: `viewerScope(req)`
+  (ownership.js `viewScope` + hierarchy.js `reportingChainIds`, nothing
+  re-derived) → `sightClauses(scope)` → `visibleContacts(scope, build, limit)`.
+  **One query per clause of `canSeeLead`** (`jobs.assigned_to_bd` / `created_by`
+  / `assigned_to` `in` the scope ids, plus `jobs.assigned_to_bd is null` for
+  pool roles) on a `jobs!inner` join, each with its own LIMIT, merged, then
+  `canSeeContact` as the final gate. Why not one PostgREST OR across the
+  embedded table: nothing here can run PostgREST, and the per-clause filter is
+  the exact shape (`jobs!inner` + `.eq('jobs.company_id')`) already live in
+  production. The URLs were captured from real supabase-js 2.108 and match that
+  shape. Admin = one unfiltered clause; an empty scope = no query at all.
+  **Companies stay org-wide.** D-0034 left the client list undecided, so picking
+  a company still works and then offers only the people on leads you may see.
+- **A GENERATOR LEAD HAS AN OWNER.** `createLeadFromOutreach` now writes
+  `assigned_to_bd` = the sender and `assigned_at` (both paths: send+sequence →
+  `Assigned`, convert-lead → `Connected`). Before this the lead was `Assigned`
+  and owned by nobody, so it was missing from its own sender's Leads page.
+  **Behaviour change worth knowing:** with `assigned_at` set, an `Assigned`
+  generator lead now goes through the 30-day recycler like any distributed
+  lead. Before, it could never recycle. The sequence path already resolved
+  its BD as `job.assigned_to_bd || enrollment.enrolled_by`
+  (index.js), so step routing is unchanged.
+- **convert-lead converts your own send only.** It is looked up with
+  `.eq('sent_by', req.user.id)`, and anyone else's row is a 404. It also accepts `id`
+  (the tracking row) as well as `token`. `/outreach/sent` returns `id` now; the
+  `token` stays in that select ONLY until surface keys the page on `id`
+  (C-0028), then drop it. Ledger worried the token opens `/i/<token>/opt-out`.
+  **It does not**: that route reads `candidate_outreach.track_token`, and
+  `/outreach/sent` returns `channel='outreach'` rows only.
+- **A typed address already on a colleague's lead is not enrolled.** The email
+  still goes, and it is linked to that lead (true, and its owner can see it),
+  but `canTouchJob` must pass before `wfEngine.enroll`. Otherwise
+  `sequence.error` says the follow-ups stay with the colleague. The pickers
+  closing did not close the typed path, and this is what does.
+- **Backfill NOT run** (no credentials here; never without a go-ahead).
+  Generator leads from before this change still have `assigned_to_bd` null. The
+  query and its reasoning are in the C-0024 report. Both creating paths shipped
+  2026-09-08, so none of those leads is older than the 30-day recycle threshold.
+- **Proof:** a scratch harness ran the REAL router through real supabase-js with
+  a `global.fetch` that interprets the PostgREST URL against fixtures (8 users
+  across two chains, a pool, 30 invisible matches queued ahead of a visible
+  one). 35/35. **Seven reintroduced bugs each failed it**, including the quiet
+  one: predicate kept but SQL narrowing removed gives B1 an EMPTY picker (the
+  limit was spent on rows they may not see). The harness is scratch, not
+  committed. Foundry is asked to pin it (report, not a contract).
+
+## Fragile — added Session 30
+- **`outreach-generator-smoke`'s "calls no function it does not define" is a
+  regex, and it misreads an arrow parameter inside a call.** `.map((c) => c(x))`
+  is flagged, because its param regex swallows the `(` of `map(` into the name.
+  Write a named arrow (`const runClause = (clause) => …; list.map(runClause)`).
+  The suite is foundry's; do not edit it to suit.

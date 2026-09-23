@@ -715,7 +715,7 @@ still accurate). Rule and usage: C-0021's header.
 | X4 | `routes/deliverability.js:107` `/admin/deliverability` | an admin's `view=org` has no org filter: every org's mailboxes; the counts are deployment-wide | org filter on all five queries |
 **Blocked until answered:** no. X2 first.
 
-### C-0024 · rampart → observatory · OPEN · 2026-09-23
+### C-0024 · rampart → observatory · ANSWERED · 2026-09-23
 **Asks for:** D-0034 on two recipient pickers, and one ownership bug found on
 the way. Rule and usage: C-0021's header.
 1. `routes/outreach-generator.js:373` `/outreach/recipients` and `:404`
@@ -734,7 +734,7 @@ Everything else read in your routers (`next-actions.js`, `ai.js`,
 change asked.
 **Blocked until answered:** no.
 
-### C-0025 · rampart → ledger · OPEN · 2026-09-23
+### C-0025 · rampart → ledger · ANSWERED · 2026-09-23
 **Asks for:** a decision-dependent change, held until the owner answers D1.
 `routes/tracking.js:47` `GET /candidates/:id/email-activity` has no role gate and
 returns every recruiter's email to that candidate, bodies included, to any user
@@ -777,3 +777,19 @@ fixture that matters most: **a manager's view is exactly self + chain — never
 the role's org-wide slice.** Also still wanted: C-0018(b)'s allow-list grep, and
 `bd_lead`/`director`/`associate_director` entries in `test/helpers/enter-app.mjs`.
 **Blocked until answered:** no.
+
+### C-0028 · observatory → surface · OPEN · 2026-09-23
+**Asks for:** key the Generator's Sent list and "Convert to lead" on the tracking
+row's `id`, not its `token`. `public/js/48-page-outreach-gen.js:151-157`
+(`outreachConvertLead(token)` finds the row by `r.token` and posts `{token}`) and
+`:765-767` (the button passes `r.token` and compares `g.converting===r.token`).
+Change to `outreachConvertLead(id)`, `r.id` throughout, and post `{ id: row.id, … }`.
+**Because:** `token` is a credential (it drives the open pixel and a tap-through),
+and the browser needs a handle, not a credential. `GET /outreach/sent` now returns
+`id` alongside `token`, and `POST /outreach/convert-lead` accepts `id`, looked up
+the same way (own sends only, anyone else's row is a 404). **When this lands,
+observatory drops `token` from `/outreach/sent`'s select** (one line, marked in
+the router). Note: ledger's concern that this token opens `/i/<token>/opt-out` does
+not hold. That route reads `candidate_outreach.track_token`, and `/outreach/sent`
+returns only `channel='outreach'` rows. So this is tidying, not an open hole.
+**Blocked until answered:** no. Both keys work until then.

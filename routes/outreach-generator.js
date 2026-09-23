@@ -28,6 +28,7 @@ const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml } = require('../email-signature');
 const gen = require('../services/outreach-generator');
+const own = require('../services/ownership');
 
 // An explicit override for this feature only; otherwise the model comes from
 // whichever provider Admin → Integrations has configured.
@@ -38,8 +39,10 @@ module.exports = (ctx) => {
   const {
     supabase, auth, today, buildHtmlEmailBody, getMailboxSignature,
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage,
-    withOrg, orgStamp, logActivity, wfEngine,
+    withOrg, orgStamp, logActivity, wfEngine, hasRole, orgIdFor, canTouchJob,
   } = ctx;
+  // The ONE chain walk in PACE (D-0034) — never a second copy here.
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
   // The org's own name — this text goes out under the CUSTOMER's identity, so
   // it is looked up per request rather than baked in. "Fute Global LLC" is one
@@ -365,26 +368,90 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // ── WHOSE CONTACTS THIS PERSON MAY PICK (D-0034, C-0024) ────────────────
+  // Both pickers below used to search every contact in the organisation, so a
+  // BD could pick — and cold-email — a person on a colleague's lead. A contact
+  // is seen with its lead (D-0020: a contact's owner is its job's owner), and
+  // who sees a lead is decided ONCE, in services/ownership.js. Nothing here
+  // re-derives it: the scope comes from `viewScope`, the chain from
+  // hierarchy.js, and `canSeeContact` is the final gate on every row.
+  async function viewerScope(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
+
+  // The clauses of `canSeeLead`, each as a filter on the contact's job.
+  // ONE QUERY PER CLAUSE, so each LIMIT is spent only on rows this viewer may
+  // see — filtering after a limit empties a picker silently, and "nobody
+  // matched" is a perfectly plausible thing for a search box to say. Each
+  // filter is the embedded-column shape this file already runs in production
+  // (`jobs!inner` + `.eq('jobs.company_id', …)`), not a PostgREST OR across an
+  // embedded resource that nothing here can exercise. The union of the
+  // clause results holds at least min(limit, visible matches) rows.
+  //   admin          → one clause, the whole org (queryOwnerIds = null)
+  //   empty scope    → no clauses at all: sees nothing, never everything
+  function sightClauses(scope) {
+    const ids = own.queryOwnerIds(scope);
+    if (ids === null) return [(q) => q];
+    if (!ids.length) return [];
+    const clauses = [
+      (q) => q.in('jobs.assigned_to_bd', ids),   // the owner (D-0020)
+      (q) => q.in('jobs.created_by', ids),       // produced by them
+      (q) => q.in('jobs.assigned_to', ids),      // given to them to research
+    ];
+    if (scope.seesPool) clauses.push((q) => q.is('jobs.assigned_to_bd', null));
+    return clauses;
+  }
+
+  // `build()` returns a FRESH contacts query that selects
+  // `jobs!inner(assigned_to_bd,created_by,assigned_to,…)` — the owner fields
+  // are what the predicate reads, and the inner join is what makes a filter on
+  // the job drop the contact rather than just blanking its `jobs`.
+  async function visibleContacts(scope, build, limit) {
+    const clauses = sightClauses(scope);
+    if (!clauses.length) return [];
+    const runClause = (clause) => clause(build()).limit(limit);
+    const results = await Promise.all(clauses.map(runClause));
+    const seen = new Set();
+    const out = [];
+    for (const r of results) {
+      if (r.error) throw r.error;
+      for (const c of (r.data || [])) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        if (own.canSeeContact(c, c.jobs, scope)) out.push(c);   // the rule; the SQL is the speed
+      }
+    }
+    return out.slice(0, limit);
+  }
+
   // ── WHO THIS IS GOING TO ────────────────────────────────────────────────
   // The composer takes a recipient two ways: someone already in the database,
   // or someone typed in from scratch. This is the first. Contacts and companies
   // are searched together because a person looking for "Berks" does not know or
   // care which table the answer is in.
+  //
+  // Contacts are narrowed to the viewer's own desk (above). COMPANIES are not:
+  // the client list is a shared resource D-0034 deliberately left undecided,
+  // so picking a company still works — and then offers only the people at it
+  // on leads this viewer may see.
   router.get('/outreach/recipients', auth, async (req, res) => {
     try {
       const q = String(req.query.q || '').trim();
       if (q.length < 2) return res.json({ contacts: [], companies: [] });
       const like = `%${q}%`;
-      const [contacts, companies] = await Promise.all([
-        withOrg(supabase.from('contacts')
-          .select('id,first_name,last_name,email,designation,job_id,jobs(position,company_id,companies(name))')
+      const scope = await viewerScope(req);
+      const [contactRows, companies] = await Promise.all([
+        visibleContacts(scope, () => withOrg(supabase.from('contacts')
+          .select('id,first_name,last_name,email,designation,job_id,jobs!inner(position,company_id,assigned_to_bd,created_by,assigned_to,companies(name))')
           .or(`email.ilike.${like},first_name.ilike.${like},last_name.ilike.${like}`)
-          .not('email', 'is', null).limit(8), req),
+          .not('email', 'is', null), req), 8),
         withOrg(supabase.from('companies')
           .select('id,name,industry,location').ilike('name', like).is('deleted_at', null).limit(6), req),
       ]);
       res.json({
-        contacts: (contacts.data || []).map(c => ({
+        contacts: contactRows.map(c => ({
           id: c.id, email: c.email,
           name: [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
           title: c.designation || '',
@@ -400,13 +467,16 @@ module.exports = (ctx) => {
   });
 
   // Contacts on one company, so picking a company then a person is two clicks
-  // rather than a second search.
+  // rather than a second search. Only the people on leads this viewer may see
+  // (D-0034) — a company everyone can pick is not permission to email the
+  // contacts on a colleague's leads at it.
   router.get('/outreach/company-contacts/:id', auth, async (req, res) => {
     try {
-      const { data: rows } = await withOrg(supabase.from('contacts')
-        .select('id,first_name,last_name,email,designation,job_id,jobs!inner(position,company_id)')
-        .eq('jobs.company_id', req.params.id).not('email', 'is', null).limit(25), req);
-      res.json((rows || []).map(c => ({
+      const scope = await viewerScope(req);
+      const rows = await visibleContacts(scope, () => withOrg(supabase.from('contacts')
+        .select('id,first_name,last_name,email,designation,job_id,jobs!inner(position,company_id,assigned_to_bd,created_by,assigned_to)')
+        .eq('jobs.company_id', req.params.id).not('email', 'is', null), req), 25);
+      res.json(rows.map(c => ({
         id: c.id, email: c.email,
         name: [c.first_name, c.last_name].filter(Boolean).join(' ').trim(),
         title: c.designation || '', position: (c.jobs && c.jobs.position) || '', job_id: c.job_id || null
@@ -419,10 +489,16 @@ module.exports = (ctx) => {
   // the only place they can be seen. Opens and replies come from the tracking
   // row the send writes; the reply timestamp is stamped by the same 30-minute
   // inbox sweep that watches every other tracked send.
+  //
+  // `id` is the handle a row should be acted on by. `token` is a CREDENTIAL —
+  // it is what the open pixel and a tap-through are keyed on — and it is still
+  // here ONLY because the page keys "Convert to lead" on it today. Once the
+  // page posts `{ id }` instead (contract to surface), drop `token` from this
+  // list; convert-lead already accepts `id`.
   router.get('/outreach/sent', auth, async (req, res) => {
     try {
       const { data } = await withOrg(supabase.from('email_tracking')
-        .select('token,to_email,subject,sent_at,opened_at,open_count,replied_at,lead_id')
+        .select('id,token,to_email,subject,sent_at,opened_at,open_count,replied_at,lead_id')
         .eq('channel', 'outreach').eq('sent_by', req.user.id)
         .order('sent_at', { ascending: false }).limit(40), req);
       res.json(data || []);
@@ -447,6 +523,17 @@ module.exports = (ctx) => {
   // STAGE IS NOT A FREE CHOICE. `Connected` means THEY REPLIED — it drives the
   // funnel, the reports and the 30-day recycler. A lead created because we sent
   // an email is `Assigned`.
+  //
+  // AND AN ASSIGNED LEAD HAS AN OWNER (D-0020, C-0024). This used to write
+  // `stage:'Assigned'` with no `assigned_to_bd`, so the lead was owned by
+  // nobody: missing from its own sender's Leads page (a bd's `GET /jobs` is
+  // `assigned_to_bd === me`), invisible to distribution (which wants
+  // `Unassigned`), and nobody's to act on. The person who sent the email owns
+  // the lead — every caller here is acting on their OWN send (convert-lead
+  // refuses anybody else's token). `assigned_at` is stamped with it, exactly
+  // as /distribute/execute, /jobs/bulk-assign and PUT /jobs/:id stamp it on
+  // assignment, because the outreach-cycle guard and the 30-day recycler both
+  // read it: an owned lead with no `assigned_at` would never recycle.
   async function createLeadFromOutreach(req, b, stage) {
     const toEmail = String(b.email || '').trim().toLowerCase();
     if (!toEmail) return { error: 'No recipient address on that send.' };
@@ -473,6 +560,7 @@ module.exports = (ctx) => {
       }
     }
 
+    const assignedAt = new Date();
     const { data: job, error: jErr } = await supabase.from('jobs').insert(Object.assign({
       company_id: companyId,
       position: String(b.position || b.subject || 'Outreach').slice(0, 200),
@@ -482,7 +570,9 @@ module.exports = (ctx) => {
       notes: String(b.notes || ''),
       created_by: req.user.id,
       assigned_to: req.user.id,
-      created_date: new Date().toISOString().split('T')[0]
+      assigned_to_bd: req.user.id,   // the sender owns it (D-0020)
+      assigned_at: assignedAt,
+      created_date: assignedAt.toISOString().split('T')[0]
     }, org)).select('id').single();
     if (jErr) throw jErr;
 
@@ -505,14 +595,24 @@ module.exports = (ctx) => {
   router.post('/outreach/convert-lead', auth, async (req, res) => {
     try {
       const b = req.body || {};
+      // `id` (the tracking row) is the handle the page should send; `token` is
+      // accepted until it does. Both are looked up the same way.
+      const trackId = String(b.id || '').trim();
       const token = String(b.token || '').trim();
       const email = String(b.email || '').trim().toLowerCase();
-      if (!token && !email) return res.status(400).json({ error: 'token or email required' });
+      if (!trackId && !token && !email) return res.status(400).json({ error: 'token or email required' });
 
       let trk = null;
-      if (token) {
-        const { data } = await withOrg(supabase.from('email_tracking')
-          .select('id,token,to_email,subject,lead_id').eq('token', token), req).maybeSingle();
+      if (trackId || token) {
+        // YOUR OWN SEND ONLY. The lead this creates is owned by whoever calls
+        // (createLeadFromOutreach), and D-0020 gives acting to the owner — so a
+        // reply to a colleague's email is theirs to convert, not yours. The
+        // Sent list (`/outreach/sent`) only ever shows your own sends; this
+        // makes the endpoint agree with the screen. Somebody else's row
+        // answers exactly like a row that does not exist.
+        const mineQ = withOrg(supabase.from('email_tracking')
+          .select('id,token,to_email,subject,lead_id').eq('sent_by', req.user.id), req);
+        const { data } = await (trackId ? mineQ.eq('id', trackId) : mineQ.eq('token', token)).maybeSingle();
         if (!data) return res.status(404).json({ error: 'Not found' });
         if (data.lead_id) return res.status(409).json({ error: 'already_converted', job_id: data.lead_id });
         trk = data;
@@ -603,6 +703,17 @@ module.exports = (ctx) => {
           }, 'Assigned');
           if (made.error) throw new Error(made.error);
           await supabase.from('email_tracking').update({ lead_id: made.job_id }).eq('token', token);
+
+          // AN ADDRESS ALREADY ON A COLLEAGUE'S LEAD STAYS THEIRS (D-0020).
+          // The pickers no longer offer a colleague's contacts (D-0034), but a
+          // typed address reaches the same person — and enrolling it would run
+          // this sender's sequence, from this sender's mailbox, on somebody
+          // else's lead. The email has already gone and is linked to that lead
+          // above, which is true and lets its owner see it; the follow-ups are
+          // theirs to decide.
+          if (made.existing && !(await canTouchJob(req, made.job_id))) {
+            throw new Error('this address is already on a colleague\'s lead, so the follow-ups stay with them.');
+          }
 
           const enrollment = await wfEngine.enroll({
             workflow_id: sequenceId,
