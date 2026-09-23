@@ -202,6 +202,8 @@ module.exports = (ctx) => {
         // shows it again instead of losing it.
         last_test: await aiProvider.getLastTest(supabase),
         defaults: { tokens: aiBudget.DEFAULT_DAILY_TOKENS, calls: aiBudget.DEFAULT_DAILY_CALLS },
+        // R-040: the limits each provider REPORTED on its last answer, per model.
+        provider_limits: await aiProvider.getProviderLimits(supabase),
         features: Object.entries(aiBudget.FEATURES).map(([id, f]) => ({
           id, label: f.label, max_input_tokens: f.in, max_output_tokens: f.out, tier: f.tier,
           spent_today: spent.by_feature[id] || 0,

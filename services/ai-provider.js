@@ -352,6 +352,8 @@ async function complete(supabase, opts = {}) {
       if (!req) continue;
       try {
         const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: opts.timeoutMs || AI_TIMEOUT_MS });
+        // Kept on success AND on refusal — a 429 is exactly when the numbers matter.
+        await recordLimits(supabase, entry.id, model, response.headers);
         if (!response.ok) throw new Error(await describeHttpError(response));
         const payload = await response.json();
         const parsed = parseResponse(entry.id, payload);
@@ -446,6 +448,66 @@ async function recordTest(supabase, result) {
       updated_at: new Date(),
     }, { onConflict: 'key' });
   } catch (_) { /* the answer is still returned to the caller */ }
+}
+
+// ── WHAT THE PROVIDER SAYS ITS OWN LIMITS ARE (R-040) ────────────────────
+// Every answer from an OpenAI-compatible provider carries rate-limit headers.
+// PACE used to throw them away, so "is the free tier enough?" could only be
+// answered from memory of a vendor's pricing page — the exact habit that has
+// cost this project twice (retired model names). Now the numbers the provider
+// REPORTS are kept, per provider and model, and shown on the AI card.
+// PURE. `headers` is a fetch Headers (or a plain object in tests).
+const LIMITS_KEY = 'ai_provider_limits';
+function readRateLimits(headers) {
+  const get = (k) => {
+    try {
+      if (!headers) return null;
+      if (typeof headers.get === 'function') return headers.get(k);
+      const hit = Object.keys(headers).find(h => h.toLowerCase() === k);
+      return hit ? headers[hit] : null;
+    } catch (_) { return null; }
+  };
+  const num = (v) => (v === null || v === undefined || v === '' || !isFinite(Number(v))) ? null : Number(v);
+  const pair = (suffix) => ({
+    limit: num(get('x-ratelimit-limit' + suffix)),
+    remaining: num(get('x-ratelimit-remaining' + suffix)),
+    reset: get('x-ratelimit-reset' + suffix) || null,
+  });
+  const out = { requests: pair('-requests'), tokens: pair('-tokens'), plain: pair('') };
+  const has = (o) => o.limit !== null || o.remaining !== null;
+  if (!has(out.requests) && !has(out.tokens) && !has(out.plain)) return null;
+  return out;
+}
+
+// What each header COUNTS differs by vendor. Groq documents requests as a
+// per-DAY count and tokens as a per-MINUTE count; anything unlisted is shown
+// as reported, with no window claimed for it.
+const LIMIT_WINDOWS = { groq: { requests: 'day', tokens: 'minute' } };
+
+// Best-effort, like the meter: a limits record that cannot be written must
+// never be the reason an AI call fails.
+async function recordLimits(supabase, providerId, model, headers, now = Date.now()) {
+  try {
+    const limits = readRateLimits(headers);
+    if (!limits || !supabase) return;
+    const { data } = await supabase.from('app_settings').select('value').eq('key', LIMITS_KEY).maybeSingle();
+    let all = {};
+    try { all = data && data.value ? JSON.parse(data.value) : {}; } catch (_) { all = {}; }
+    all[providerId + '/' + model] = {
+      provider: providerId, model, at: new Date(now).toISOString(),
+      windows: LIMIT_WINDOWS[providerId] || null, ...limits,
+    };
+    await supabase.from('app_settings').upsert(
+      { key: LIMITS_KEY, value: JSON.stringify(all), updated_at: new Date(now) }, { onConflict: 'key' });
+  } catch (_) {}
+}
+
+async function getProviderLimits(supabase) {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', LIMITS_KEY).maybeSingle();
+    const all = data && data.value ? JSON.parse(data.value) : {};
+    return Object.values(all).sort((a, b) => String(a.provider + a.model).localeCompare(String(b.provider + b.model)));
+  } catch (_) { return []; }
 }
 
 async function getLastTest(supabase) {
@@ -543,6 +605,7 @@ async function diagnose(supabase, opts = {}) {
     if (!req) return { provider: entry.id, model, tier, ok: false, error: 'could not build a request for this provider' };
     try {
       const response = await fetchWithTimeout(req.url, req.options, { timeoutMs: 12000 });
+      await recordLimits(supabase, entry.id, model, response.headers);
       if (!response.ok) throw new Error(await describeHttpError(response));
       const payload = await response.json();
       const parsed = parseResponse(entry.id, payload);
@@ -573,6 +636,7 @@ module.exports = {
   buildRequest, parseResponse, endpointFor, modelFor, modelParams, describeEmptyReply,
   answerCeiling, REASONING_HEADROOM, recordFailure,
   resolveChain, isAvailable, complete, diagnose,
+  readRateLimits, recordLimits, getProviderLimits, LIMIT_WINDOWS, LIMITS_KEY,
   describeHttpError, getLastError, LAST_ERROR_KEY,
   recordTest, getLastTest, LAST_TEST_KEY, listModels,
   budget,

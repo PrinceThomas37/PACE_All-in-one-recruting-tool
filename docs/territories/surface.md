@@ -420,3 +420,6 @@ screenshot at 1280 light, 1280 dark and 390 phone.
 `.ai-chip` (accent tint, one chip): Pending shows "AI writes at send" on a first
 email while `ai_will_write` (the template on screen is the fallback, not the
 final text); Sent shows "AI-written" when `ai_written`.
+
+## Session 29 — R-040 block on the AI budget card
+`aiProviderLimitsBlock()` in `08-page-admin.js` under the Daily budget table: per provider/model, "N of M requests left today" / "tokens left this minute", amber under 15%, "Reported N min ago" ("Last reported" when older than a day). Classes `.ail*` in styles.css.

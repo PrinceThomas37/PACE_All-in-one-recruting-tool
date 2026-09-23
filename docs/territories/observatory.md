@@ -299,3 +299,13 @@ The stored text has the sender's name/address put back as `{{sender}}` /
 call with the stored Groq key. Check the first AI-written rows in production.
 
 - **2026-09-23 (Session 29, R-041)** — budget feature `engine_first_email_thin` (tier `fast`) for title-only leads; `engine_first_email` (quality) only when a real posting exists. Also splits the meter so the two show separately.
+
+## Session 29 — R-040: provider-reported limits
+`readRateLimits(headers)` (pure) reads `x-ratelimit-{limit,remaining,reset}` for
+`-requests`, `-tokens` and the plain form; `recordLimits()` keeps one entry per
+provider/model in `app_settings.ai_provider_limits`, written on success AND on
+refusal (a 429 is exactly when the numbers matter), from both `complete()` and
+`diagnose()`. Best-effort, never throws. `LIMIT_WINDOWS.groq` = requests per
+DAY, tokens per MINUTE (Groq's documented meaning); other providers are shown
+as reported with no window claimed. **Use these numbers, not memory, whenever
+the owner asks whether a free tier is enough.**

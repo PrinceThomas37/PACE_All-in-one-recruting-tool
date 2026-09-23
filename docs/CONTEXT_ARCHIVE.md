@@ -5921,3 +5921,6 @@ limits from response headers), R-041 (fast model for title-only), R-042
 
 ## Round 8 — R-041 in, #226 merging (2026-09-23)
 Owner: *"merge it, and do 2 and 3 too"*. R-041 (fast model for title-only leads) added to #226 before merging; R-040 (real limits on the AI card) follows as its own PR.
+
+## Round 9 — R-040 built (2026-09-23)
+Provider rate-limit headers are now kept per model and shown on the AI budget card. Until now PACE received the answer to "is the free tier enough?" with every AI reply and discarded it. 99/99.

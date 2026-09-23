@@ -226,7 +226,40 @@ function aiBudgetCard(){
         '<td style="padding-bottom:4px">Feature</td><td>Model</td><td style="text-align:right">Per request</td><td style="text-align:right">Used today</td></tr>'+
       rows+
     '</table>'+
+    aiProviderLimitsBlock(b.provider_limits)+
   '</div>';
+}
+// R-040: PACE's own budget above is what PACE ALLOWS. This is what each AI
+// account says it allows, read from the numbers the provider sends back with
+// every answer — so "is the free plan enough?" is answered by the provider,
+// not by anybody's memory of a pricing page.
+function aiAgo(iso){
+  var m=Math.round((Date.now()-new Date(iso).getTime())/60000);
+  if(!isFinite(m))return '';
+  return m<1?'just now':m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' days ago';
+}
+function aiLimitLine(pair,window,noun){
+  if(!pair||(pair.limit==null&&pair.remaining==null))return '';
+  var per=window==='day'?' today':window==='minute'?' this minute':'';
+  var txt=pair.remaining!=null&&pair.limit!=null
+    ? '<b>'+Number(pair.remaining).toLocaleString()+'</b> of '+Number(pair.limit).toLocaleString()+' '+noun+' left'+per
+    : pair.limit!=null ? 'limit '+Number(pair.limit).toLocaleString()+' '+noun+per
+    : '<b>'+Number(pair.remaining).toLocaleString()+'</b> '+noun+' left'+per;
+  var low=pair.limit>0&&pair.remaining!=null&&pair.remaining/pair.limit<0.15;
+  return '<div class="ail-line'+(low?' is-low':'')+'">'+txt+'</div>';
+}
+function aiProviderLimitsBlock(list){
+  var head='<div class="ail-head">What your AI accounts report</div>';
+  if(!list||!list.length)return '<div class="ail">'+head+'<div class="ail-none">No report yet. It appears after the next AI request or health test.</div></div>';
+  var names={groq:'Groq',openrouter:'OpenRouter',anthropic:'Anthropic',ollama:'Ollama'};
+  return '<div class="ail">'+head+list.map(function(l){
+    var w=l.windows||{};
+    var lines=aiLimitLine(l.requests,w.requests,'requests')+aiLimitLine(l.tokens,w.tokens,'tokens')+aiLimitLine(l.plain,null,'requests');
+    var stale=(Date.now()-new Date(l.at).getTime())>86400000;
+    return '<div class="ail-row"><div class="ail-name">'+htmlEsc(names[l.provider]||l.provider)+' <span>'+htmlEsc(l.model)+'</span></div>'+
+      (lines||'<div class="ail-none">No limit numbers in its answers.</div>')+
+      '<div class="ail-at">'+(stale?'Last reported ':'Reported ')+aiAgo(l.at)+'</div></div>';
+  }).join('')+'</div>';
 }
 // Proof, not inference: one real generation through the same path the features
 // use. A provider card's "Test" only lists models — it cannot tell you whether
