@@ -5879,3 +5879,6 @@ approved 4-hour step never happened; now first send + 3 retries. Tests 97/97;
 the new suite was proven non-vacuous by re-introducing the bug.
 
 Ownership: `services/send-retry.js` assigned to harbour in the territory map after the survey flagged it as unowned.
+
+## Round 3 — merge (2026-09-23)
+Owner: *"yes and then merge it"* — R-037 (dashboard warning for a failing mailbox sign-in) added as PENDING; PR #225 merged as the release.
