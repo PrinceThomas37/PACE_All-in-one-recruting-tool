@@ -5924,3 +5924,5 @@ Owner: *"merge it, and do 2 and 3 too"*. R-041 (fast model for title-only leads)
 
 ## Round 9 — R-040 built (2026-09-23)
 Provider rate-limit headers are now kept per model and shown on the AI budget card. Until now PACE received the answer to "is the free tier enough?" with every AI reply and discarded it. 99/99.
+
+Merged #226 (`9626887`) and #227 (`36849a0`). Check-in scheduled 2026-09-24 13:39 UTC to read the first real AI-written emails and the Groq limits.
