@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-23 (Session 28) · **Next id**: `R-030` · **Artifact**:
+**Updated**: 2026-09-23 (Session 28, round 6) · **Next id**: `R-034` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -57,15 +57,16 @@ sees it without reading a file.
 | `R-005` | **Org-scope `/bd-analytics/*`, or retire it into `/reports/recruiting`** (`C-0003`). | Open. Legacy endpoints, un-org-scoped. Rampart raised it; gateway owns it. |
 | `R-006` | **Fold Reports into the Dashboard**, and hierarchy-scope `/recruiting-dashboard` the way `/reports/recruiting` already is (`C-0005`). | Open, and **the owner asked for this directly** several sessions ago. Still two separate screens. |
 | `R-007` | **Wire `/ai/generate-email` to a real screen, or delete it** (`C-0002`). | Open. Reachable only from the orphaned `12-manager-users.js`, and never invoked even there. |
-| `R-008` | **Publish the apply link on more than one job.** | One link produced one real applicant in an afternoon. It is the only candidate source that costs nothing to grow. |
+| `R-008` | **Publish the apply link on more than one job.** | One link produced one real applicant in an afternoon. It is the only candidate source that costs nothing to grow. **Reset to zero 2026-09-23** — the published job order was deleted with everything else, so this now means publishing the first real req. |
+| `R-030` | **The OpenRouter card reads "Not configured" after a valid key is saved.** | **Found by the owner 2026-09-23**, in the same screenshot that proved AI works. The Test button answers `✓ Key valid · 50 credits remaining` and the card's own status badge still says *Not configured*. The key IS stored and the health check DOES use it — so this is the status badge reading the wrong thing, not a broken save. **A card that says "not configured" about a working provider is the same class of fault as the Sourcing page (D-0026): the screen contradicts the system.** |
+| `R-031` | **Confirm which Groq model actually runs.** | The Groq card's model box shows `llama-3.3-70b-versatile`, while the health check that passed reports `openai/gpt-oss-20b` and `openai/gpt-oss-120b`. One of those is a placeholder rather than a stored value — **but a hard-coded model name silently going stale has already cost this project twice**, so it gets checked rather than assumed. |
+| `R-032` | **Clean up the orphaned resume files in storage.** | The production reset deleted 35 `candidate_documents` rows; the files themselves are still in the private `candidate-docs` bucket with nothing pointing at them. Inert and not a leak (the bucket is private), but it is not a clean slate until they are gone. |
 
 ## ⏳ PENDING — waiting on the owner
 
 | id | What I asked for | Where it stands |
 |---|---|---|
-| `R-009` | **Run the AI health check** (Admin → Integrations) now the OpenRouter key is in, and tell me what it lists. | **Carried across four turns, still unanswered.** Until it runs, the OpenRouter model name is one written from memory — and that exact mistake has now happened twice (Groq, then OpenRouter), both silent. |
-| `R-010` | **Check that whoever owns the live job orders has a mailbox connected.** | Raised 2026-09-23. If they have not, the applicant receipt and the recruiter nudge **silently do not send** — by design, but only correct if somebody knows. |
-| `R-011` | **Look at the new "stalled at BDM" number.** | Raised 2026-09-23. It is the number the old single "submissions" figure was hiding: candidates stuck between a recruiter and BD approval. |
+| `R-011` | **Look at the new "stalled at BDM" number.** | **Deferred by the owner 2026-09-23 — "not now".** Still true, still worth a look once there is production data to look at. |
 
 ## ⏳ PENDING — nobody has decided
 
@@ -86,6 +87,7 @@ Newest first. A `CHANGED` row says what moved and why.
 
 | id | What shipped | Landed |
 |---|---|---|
+| `R-033` | **The production reset.** Every lead, company, contact, email, candidate, submission, job order, pipeline row, document and sourcing row deleted from the live database, and the ID counters reset so the next records are `CN-00001` / `JOB-00001`. **`suppression_list` was deliberately kept** — the people who asked never to be emailed. Wiping that would mean emailing them again, which is a compliance problem rather than a data one. Users, the two organisations, all six mailboxes, sequences, templates and settings survive. Owner chose the full wipe with no backup, knowing the Treplar apply link died with it. | live DB, 2026-09-23 |
 | `R-018` **CHANGED** | **Define what a submission is.** *Proposed*: publish one corrected submission count. *Shipped*: **two** numbers plus the gap — `Sent to BDM`, `Sent to client`, and `stalled at BDM`. *Why it moved*: the owner corrected the domain mid-build — *"adding a candidate to a job is not submission"* — and chose "count both, shown separately". A single figure would have hidden the candidates stuck between the two. `D-0029`. | #222, 2026-09-23 |
 | `R-019` | **Accepting an applicant actually puts them on the job.** It had been writing only the `candidate_pipeline` tag row while every screen read `submissions.stage` — so an accepted person was in the database and counted nowhere. | #222, 2026-09-23 |
 | `R-020` | **An applicant gets a receipt and the job owner gets a nudge.** Best-effort, never awaited, only after the row is saved, and **from the job owner's mailbox or nobody**. | #222, 2026-09-23 |

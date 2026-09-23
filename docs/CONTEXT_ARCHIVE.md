@@ -5730,3 +5730,49 @@ shipped list, so it inherited `.ship li`'s two-column grid, collapsed its own
 `<dd>`s to zero width and pushed the page **120px sideways at 390px**. A grid
 declared on a tag selector reaches every descendant that happens to be that tag.
 Scoped to `.ship li:not(.row)` and re-measured: 390/390 and 1180/1180.
+
+## Session 28, round 6 — the production reset
+
+The owner answered the three open asks and then asked for the database to be
+cleared: *"I want to delete the leads and candidates database, I am going to
+start real production work now."*
+
+**The recon came first, and it earned its keep.** "Leads and candidates" read as
+two tables; the live database held **six real client job orders** — Penn Color,
+Phoenix Tailings, Sundream, Griffith Energy, California Garlic, Treplar — with 21
+submissions against them and a **published apply link** on JOB-00008. Deleting
+candidates alone would have emptied those reqs; deleting companies would have
+violated the FK from `job_orders`. The scope genuinely changed the outcome, so it
+was put to the owner as three costed options rather than guessed at. They chose
+the **full wipe, no backup**, knowing the apply link died with it.
+
+Two things the counting found that no amount of reasoning would have:
+
+- **`emails` held 1,654 sent and 138 failed and ZERO pending.** Had anything been
+  queued, deleting leads out from under an in-flight send loop is a genuinely bad
+  failure mode. Check the queue before clearing what it points at.
+- **Two circular foreign keys**, both of which rolled the transaction back before
+  any row was lost: `submissions.pipeline_id` ↔ `candidate_pipeline.submission_id`,
+  and `emails.follow_up_id` → `follow_ups`. The first needs both links NULLed
+  before either side can go; the second only needs the order swapped. **A
+  dependency-ordered delete is not the same as a dependency-ordered list of
+  tables** — a cycle has no valid order, and the database is the thing that tells
+  you so.
+
+**`suppression_list` was deliberately kept, and this is the rule worth carrying:
+a do-not-email list is not business data, it is a promise.** Wiping it alongside
+the leads would have silently re-enabled outreach to everyone who had ever asked
+not to be contacted — a compliance failure that produces no error message and
+shows up only as a complaint. It was the one table excluded from a wipe the owner
+had described as total, and they were told so rather than asked.
+
+`id_sequences` was reset to zero so production starts at `CN-00001` / `JOB-00001`
+rather than continuing from the test data's counters.
+
+Also recorded from the owner's screenshots: **AI is confirmed working on both
+providers** (`R-009` closed after four turns of asking), and two new faults —
+the OpenRouter card reading **"Not configured"** directly above its own
+`✓ Key valid · 50 credits remaining` (`R-030`, the Sourcing-page class of fault:
+the screen contradicting the system), and a Groq model box showing a different
+model from the one the passing health check reported (`R-031`). Thirty-five
+resume files are now orphaned in private storage (`R-032`).
