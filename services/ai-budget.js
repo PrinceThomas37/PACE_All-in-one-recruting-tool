@@ -76,6 +76,10 @@ const FEATURES = {
   // (services/engine-draft.js, D-0032). Same prompt as the Generator, so the
   // same input allowance; a shorter answer, since there is one draft, no angles.
   engine_first_email: { label: 'Engine first emails', in: 3000, out: 800, tier: 'quality' },
+  // R-041: a lead that carries only its title has nothing to research, so the
+  // big model adds little — the fast one writes it and leaves the quality
+  // model's free daily allowance for leads that DO carry a posting.
+  engine_first_email_thin: { label: 'Engine first emails (title only)', in: 3000, out: 800, tier: 'fast' },
   import_briefing: { label: 'Daily import briefing', in: 1200, out: 400,  tier: 'fast' },
   lead_ratio:      { label: 'Lead distribution',     in: 1200, out: 400,  tier: 'fast' },
 };

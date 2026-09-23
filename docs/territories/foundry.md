@@ -451,3 +451,5 @@ posting rule and removing the send-loop call each turned an assertion red.
 Suite 98/98. Note: the first run had a vacuous-looking FALSE failure of my own —
 the sample email was long enough to pass either floor; the test now asserts the
 sample sits between the two floors before judging.
+
+- **2026-09-23** — engine-draft-smoke now 16 (R-041 tier assertion).

@@ -5918,3 +5918,6 @@ from the sandbox (pages blocked); stated from memory WITH that caveat, matched
 to the 8k tokens/min measured on 2026-09-08. Suggestions R-040 (show real
 limits from response headers), R-041 (fast model for title-only), R-042
 (re-add OpenRouter key) recorded.
+
+## Round 8 — R-041 in, #226 merging (2026-09-23)
+Owner: *"merge it, and do 2 and 3 too"*. R-041 (fast model for title-only leads) added to #226 before merging; R-040 (real limits on the AI card) follows as its own PR.

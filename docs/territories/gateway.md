@@ -156,3 +156,5 @@ is configured, only for first emails, and never for a row already
 draft). The draft is STORED before sending; if the store fails the template is
 sent. The loop variable is now `let email` — the draft replaces it.
 `GET /emails` attaches `ai_written` / `ai_will_write`.
+
+- **2026-09-23 (R-041)** — `aiWriteFirstEmail` picks `engine_first_email_thin` when `input.thin_posting`.

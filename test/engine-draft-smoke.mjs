@@ -103,7 +103,12 @@ await t('the send loop asks AI only for first emails not already AI-written, whe
 await t('the draft is stored before it is sent, and unstored text is never sent', () => {
   const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('function retryNote'));
   assert.match(fn, /update\(upd\)\.eq\('id', email\.id\)[\s\S]*if \(error\) return email;/);
-  assert.match(fn, /feature: 'engine_first_email'/);
+  assert.match(fn, /input\.thin_posting \? 'engine_first_email_thin' : 'engine_first_email'/);
+});
+await t('R-041: title-only leads use the fast model, leads with a posting the quality one', () => {
+  const src = readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8');
+  assert.match(src, /engine_first_email_thin: \{[^}]*tier: 'fast'/);
+  assert.match(src, /engine_first_email: \{[^}]*tier: 'quality'/);
 });
 await t('the draft happens after the claim and before delivery', () => {
   const claim = idx.indexOf("from('emails').update({ status: 'sending' })");

@@ -297,3 +297,5 @@ The stored text has the sender's name/address put back as `{{sender}}` /
 `{{senderemail}}` (`deferSender`) so the send-time rendering rule holds.
 **Not yet seen live:** no real AI sample was produced — the sandbox refused a
 call with the stored Groq key. Check the first AI-written rows in production.
+
+- **2026-09-23 (Session 29, R-041)** — budget feature `engine_first_email_thin` (tier `fast`) for title-only leads; `engine_first_email` (quality) only when a real posting exists. Also splits the meter so the two show separately.

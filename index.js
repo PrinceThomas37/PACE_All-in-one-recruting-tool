@@ -1710,7 +1710,8 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
       gen: outreachGen, input, companyName,
       omitSignOff: !!String(sigTemplate || '').trim(),
       complete: (system, prompt) => aiProvider.complete(supabase, {
-        system, prompt, maxTokens: 800, feature: 'engine_first_email', orgId: email.org_id,
+        system, prompt, maxTokens: 800, orgId: email.org_id,
+        feature: input && input.thin_posting ? 'engine_first_email_thin' : 'engine_first_email',
       }),
     });
     if (!res.body) {
