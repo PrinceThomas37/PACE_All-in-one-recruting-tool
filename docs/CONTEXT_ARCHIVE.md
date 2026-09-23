@@ -5907,3 +5907,14 @@ AI email — changed to `let`, and a test pins it. Title-only leads got their ow
 prompt line and a lower length floor. Daily AI cap raised live to 400k/400.
 98/98 suites. No real AI sample yet: the sandbox refused a call with the stored
 key, so the first live rows are the first real output.
+
+## Round 7 — is 400k enough, and are free tiers enough? (2026-09-23)
+Meter history (11 days with use): typical 7-20k tokens/day, peak 81k (Generator
+testing, 2026-09-08). Engine at 100/day adds ~230k → ~250-310k typical, 400k
+covers it; JD-carrying imports would take it to ~330-420k on a heavy day. Found:
+**only Groq is configured** — the OpenRouter key is not saved (health check
+15:40), so there is no second free tier. Vendor daily limits could not be read
+from the sandbox (pages blocked); stated from memory WITH that caveat, matched
+to the 8k tokens/min measured on 2026-09-08. Suggestions R-040 (show real
+limits from response headers), R-041 (fast model for title-only), R-042
+(re-add OpenRouter key) recorded.
