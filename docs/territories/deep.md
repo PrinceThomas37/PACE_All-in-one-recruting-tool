@@ -121,7 +121,8 @@ source is now a mapper in `services/record-history.js`, not a schema change.
   missing from that registry silently escapes org scoping.
 - One index for the only read it serves: `(entity_type, entity_id, created_at DESC)`.
 
-**⚠ Applied to an EMPTY database** (the production reset the same day), so there
-is no backfill and no historic gap to explain — which is precisely why it was
-cheap now and would have been expensive later. `test/models-smoke.mjs` carries
-a note that its 43 is only honest once 045 has actually been applied.
+**APPLIED 2026-09-23** with the owner's go-ahead, to an EMPTY database (the
+production reset the same day) — so there is no backfill and no historic gap to
+explain, which is precisely why it was cheap now and would have been expensive
+later. Verified after: 11 columns, RLS on, 1 service-role policy, 3 indexes,
+0 rows. **Next migration is 046.**

@@ -171,10 +171,8 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   ok('the registry covers the live tenant tables plus those migrations 037/039/042/045 add',
     TENANT_TABLES.size === 43, String(TENANT_TABLES.size));
   // Migration 045 — record_history, the general trail behind the rewind button.
-  // ⚠ This count is only HONEST once 045 has been applied to the live database.
-  // Until then the registry names a table Postgres does not have, which is the
-  // safe direction to be wrong in (a query against it errors and the history
-  // panel degrades) but is still a divergence worth seeing in one place.
+  // 045 was APPLIED to the live database on 2026-09-23 (11 columns, RLS on,
+  // 1 service-role policy, 3 indexes, 0 rows), so this count is honest.
   ok('record_history is registered as tenant data', TENANT_TABLES.has('record_history'));
   ok('conversation_messages is registered as tenant data', TENANT_TABLES.has('conversation_messages'));
   // Migration 042. It holds candidates' names and addresses alongside the text
