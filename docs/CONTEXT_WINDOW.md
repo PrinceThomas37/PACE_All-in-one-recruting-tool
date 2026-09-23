@@ -94,15 +94,17 @@ job order** — from a Connected lead, or directly from "+ New Job", which now
 resolves the client, captures its address and requires a POC. Billing and
 self-serve signup are built and **off**.
 
-## Migrations — next is **045** · 044 APPLIED 2026-09-21
+## Migrations — next is **046** · 045 APPLIED 2026-09-23
 
 **Never apply one to the live DB without an explicit, fresh go-ahead.** A
 migration adding a table with `org_id` must also add it to `models/tables.js`.
+045 added **`record_history`** — one general trail for the record kinds that
+had nowhere to write (job orders, candidates, companies), behind the rewind
+clock. Verified after: 11 columns, RLS on, 1 service-role policy, 3 indexes,
+0 rows. Applied to an EMPTY database, so there is no backfill and no historic
+gap — which is exactly why it was cheap on the day of the production reset.
 044 added `apply_token` / `apply_enabled` / `apply_published_at` / `apply_count`
-to `job_orders` plus two indexes, for the public apply page. Verified after:
-4 columns with the right defaults, both indexes present, and **0 of 6 job
-orders published** — publishing a customer's job to the open internet is never
-a migration's side effect.
+to `job_orders` plus two indexes, for the public apply page.
 
 ## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
 

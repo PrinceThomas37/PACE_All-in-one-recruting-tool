@@ -11,6 +11,7 @@ const createCandidateFields = require('../../services/candidate-fields');
 const clientResolve = require('../../services/client-resolve');
 const companyCooldown = require('../../services/company-cooldown');
 const { getSetting } = require('../../config/settings');
+const { makeRecorder } = require('../../services/record-history-writer');
 
 
 module.exports = function (app, core) {
@@ -23,6 +24,13 @@ module.exports = function (app, core) {
     nextId, logSubmissionActivity,
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
+  // The rewind button's trail. A job order had NO history of any kind before
+  // this — its status could move all week with nothing recording it.
+  const history = makeRecorder(supabase, orgStamp);
+  // Fields worth a history row. Status first, because that is the one the
+  // owner asked about; the rest are the ones a client argument turns on.
+  const JOB_ORDER_TRACKED = ['status', 'job_title', 'client', 'positions', 'priority',
+                             'pay_min', 'pay_max', 'bd_manager_id'];
   // The relevance ranking reads candidates with the same shape the candidates
   // routes use, so it shares that service rather than re-declaring the select.
   const { CANDIDATE_SELECT } = createCandidateFields(core);
@@ -363,6 +371,10 @@ module.exports = function (app, core) {
       const { data, error } = await supabase.from('job_orders')
         .update(updates).eq('id', req.params.id).select(JOB_ORDER_SELECT).single();
       if (error) throw error;
+      // Record what actually moved, against the row as it was BEFORE the write.
+      // Never awaited into the response path beyond this — but it IS awaited, so
+      // a history row cannot lose a race with the next edit of the same record.
+      await history.recordFields(req, 'job_order', req.params.id, current || {}, data, JOB_ORDER_TRACKED);
       // The job changed, so every cached score against it is stale.
       invalidateJobScores(req.params.id);
       res.json(data);
@@ -373,6 +385,7 @@ module.exports = function (app, core) {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can delete job orders.' });
       await supabase.from('job_orders').update({ deleted_at: new Date() }).eq('id', req.params.id);
+      await history.record(req, 'job_order', req.params.id, { action: 'deleted', note: 'Job order deleted' });
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

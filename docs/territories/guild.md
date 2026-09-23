@@ -215,3 +215,23 @@
     being counted, which under-reports. The fix is `submission_activity`'s
     stage history or a `client_submitted_at` column; deferred because the bug
     being fixed was three screens disagreeing.
+
+## Session 28 — job orders and candidates finally keep a trail
+
+Both had **no history of any kind**: a job order's status could move all week,
+and a candidate's phone number or owner could change, with nothing recording
+who did it or when. Leads (`activity_log`) and submissions
+(`submission_activity`) had recorded theirs since the beginning.
+
+- `PUT /job-orders/:id` and `PUT /candidates/:id` now call
+  `history.recordFields(...)` from `services/record-history-writer.js` (gateway's).
+- **The row is read BEFORE the write.** A history built from the request body
+  alone cannot tell a real change from a field resent unchanged, and a trail
+  full of no-op rows is one nobody reads.
+- The tracked lists (`JOB_ORDER_TRACKED`, `CANDIDATE_TRACKED`) are named at the
+  top of each router, so adding a field is a list edit rather than another call
+  site.
+- The write is **awaited** rather than fired and forgotten — a history row must
+  not lose a race with the next edit of the same record — but it swallows its
+  own errors, exactly as `logActivity` and `logSubmissionActivity` already do.
+  Losing one trail entry is strictly better than losing the save it describes.

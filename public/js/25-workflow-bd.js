@@ -1018,6 +1018,10 @@
             '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenKanban(\''+j.id+'\')">Board</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>'+
+            // The rewind clock — same mark, same panel as every other record.
+            // A job order kept NO history at all before this: its status could
+            // move all week with nothing recording who moved it.
+            (window.rewindBtn?rewindBtn('job_order',j.id):'')+
           '</div>'+
         '</div>'+
         '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+

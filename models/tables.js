@@ -55,6 +55,8 @@ const TENANT_TABLES = new Set([
   'sourced_jobs_raw',
   'sourcing_candidates',
   'submission_activity',
+  // Migration 045 — the general record trail (job orders, candidates, clients).
+  'record_history',
   'submissions',
   'suppression_list',
   'team_assignments',

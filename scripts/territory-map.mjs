@@ -29,7 +29,11 @@ const TERRITORIES = [
   { id: 'gateway', name: 'Gateway', role: 'Server & API', terrain: 'the citadel',
     hue: '#C08A3E', pos: [0, 0], height: 15, spread: 12,
     own: ['index.js', 'routes/', 'middleware/rate-limit.js', 'http-client.js',
-          'events.js', 'subscribers.js', 'config/', 'engine-runs.js'],
+          'events.js', 'subscribers.js', 'config/', 'engine-runs.js',
+          // The rewind button's history. It spans leads AND recruiting, so it
+          // belongs to the territory that owns the shared files rather than to
+          // either domain — the same reasoning that makes index.js gateway's.
+          'services/record-history.js', 'services/record-history-writer.js'],
     not: ['routes/recruiting/', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'routes/mailbox.js', 'routes/emails.js', 'routes/warmup.js',

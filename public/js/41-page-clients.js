@@ -186,7 +186,11 @@
         { icon:'mail',     title:'Email this client', onclick:"clientsOpenEmail('"+c.id+"')" },
         { icon:'mailopen', title:'Email history',     onclick:"clientsTab('emails')" },
         { icon:'doc',      title:'Documents',         onclick:"clientsTab('docs')" },
-        { icon:'building', title:'Merge a duplicate in', onclick:"clientsOpenMerge('"+c.id+"')" }
+        { icon:'building', title:'Merge a duplicate in', onclick:"clientsOpenMerge('"+c.id+"')" },
+        // The rewind clock. Same icon, same panel, same place on every record
+        // kind — a history that looks different per screen reads as a different
+        // feature each time.
+        { icon:'rewind',   title:'History — every change, with the date and time', onclick:"openRewind('company','"+c.id+"')" }
       ],
       stats:[
         { v:(c.open_job_order_count||0), label:'Open',      icon:'flame' },

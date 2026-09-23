@@ -414,3 +414,24 @@ One re-run confirmed, per the flake rule. Do not chase it further.
   asserted the string "Subs this week", which the fix renamed. The assertion
   was updated AND given a companion that fails if the old ambiguous wording
   ever returns — a renamed label should not be able to quietly revert.
+
+## Session 28 — `record-history-smoke.mjs` (26 assertions)
+
+Covers the pure normaliser, and greps for the wiring faults that actually ship
+here. Three were **verified by reintroducing the bug and watching the suite go
+red**, per the standing rule that a new guard is assumed vacuous until proven
+otherwise:
+
+| bug reintroduced | caught by |
+|---|---|
+| the job-order button deleted | "all four record screens actually carry the button" |
+| the panel repainted on glass `--card` | "the panel paints on --card-solid" |
+| a second copy of the panel module | "the panel exists ONCE" |
+
+Also pinned: **every time assertion injects `now`.** `relativeTime` makes a
+factual claim about elapsed time, so calling it with the real clock produces a
+test that passes on the day it is written and rots silently after — the
+conversation-intel rule, applied to a second feature.
+
+`models-smoke.mjs` moved 42 → **43** tenant tables for migration 045, and it
+caught the change the moment the registry moved, which is exactly its job.

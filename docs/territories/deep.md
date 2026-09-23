@@ -100,3 +100,29 @@ written.
 `_map.json` guarantees every file has exactly one territory, and that guarantee
 is maintained by hand in this script's `own` arrays. Add the entry in the same
 change as the file, or the next session's survey is the one that finds it.
+
+## Session 28 — migration 045, `record_history`
+
+One general trail for the record kinds that had nowhere to write: job orders,
+candidates, companies. Leads already used `activity_log`; submissions already
+used `submission_activity`.
+
+**Deliberately GENERAL rather than three more bespoke tables.** The reason the
+existing two disagree in shape is that each was added for one caller, and the
+cost of that showed up as a reader that had to know three shapes. A fourth
+source is now a mapper in `services/record-history.js`, not a schema change.
+
+- `entity_id` is **NOT a foreign key**: one table spans several parents, and a
+  history must outlive the record it describes.
+- `entity_type` / `entity_id` are `NOT NULL` — a history row that cannot say
+  what it is about is noise that can never be read back.
+- `org_id NOT NULL`, RLS on, service-role policy, and **registered in
+  `models/tables.js`** (43 tenant tables now). A table with `org_id` that is
+  missing from that registry silently escapes org scoping.
+- One index for the only read it serves: `(entity_type, entity_id, created_at DESC)`.
+
+**APPLIED 2026-09-23** with the owner's go-ahead, to an EMPTY database (the
+production reset the same day) — so there is no backfill and no historic gap to
+explain, which is precisely why it was cheap now and would have been expensive
+later. Verified after: 11 columns, RLS on, 1 service-role policy, 3 indexes,
+0 rows. **Next migration is 046.**

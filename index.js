@@ -3069,6 +3069,8 @@ app.use(require('./routes/apply')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));
+// The rewind button's one endpoint. Read-only, org-scoped, every record kind.
+app.use(require('./routes/record-history')(routeCtx));
 app.use(require('./routes/mailbox')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which
 // providers are actually configured; the callbacks live in the microsoft/gmail

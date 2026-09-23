@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-23 (Session 28, round 6) · **Next id**: `R-034` · **Artifact**:
+**Updated**: 2026-09-23 (Session 28, round 7) · **Next id**: `R-035` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -50,7 +50,7 @@ sees it without reading a file.
 
 | id | What I suggested | Where it stands |
 |---|---|---|
-| `R-001` | **Time in stage** — how long a candidate sits at each ATS stage, and which ones rot. Suggested 2026-09-23 as the highest-value next build now that "submission" is defined. | Not started. Owner has not picked it yet. The data is already on `submissions` + `submission_activity`; this is a read, not a migration. |
+| `R-001` | **Time in stage** — how long a candidate sits at each ATS stage, and which ones rot. | **Half of it arrived for free with `R-034`.** `durations()` / `heldFor()` already show it **per record** ("held 5 days") in the rewind panel, because the entry above an entry is the end of it. What is still missing is the **aggregate**: the report that says which stage rots across the whole desk. That is now a small read over the same data rather than a build from nothing. |
 | `R-002` | **Count a submission from stage HISTORY, not from where it is now.** | Known under-report, shipped deliberately — see `D-0029` "Re-open when". Someone submitted to a client and later marked `Not Accepted` **stops being counted**. Fix is `submission_activity`'s stage history or a `client_submitted_at` column. |
 | `R-003` | **A real `job_order_id` column on `sourcing_candidates`** (plus backfill), replacing the Node-side filter. | Deliberately deferred (`D-0028`). Re-open when applicant volume makes the in-Node filter measurable. |
 | `R-004` | **Record *why* a send failed** — an error column on `emails` (border request `C-0004`). | Open. This is the known, unfixed incident: a dead mailbox sign-in marks emails `failed` one every ~90s with no retry and **no column recording the reason**, so the honest error message dies with the process. |
@@ -87,6 +87,7 @@ Newest first. A `CHANGED` row says what moved and why.
 
 | id | What shipped | Landed |
 |---|---|---|
+| `R-034` | **The rewind clock.** A small clock button on every lead, job order, candidate and client, opening a panel of every change to that record — exact date and time, how long ago, who did it, and **how long it sat at each stage**. Three history stores normalised into one shape by `services/record-history.js`; migration 045 applied for the three record kinds that had nowhere to write. **Leads and submissions had been recording this since the beginning and nothing had ever shown it.** | #224, 2026-09-23 |
 | `R-033` | **The production reset.** Every lead, company, contact, email, candidate, submission, job order, pipeline row, document and sourcing row deleted from the live database, and the ID counters reset so the next records are `CN-00001` / `JOB-00001`. **`suppression_list` was deliberately kept** — the people who asked never to be emailed. Wiping that would mean emailing them again, which is a compliance problem rather than a data one. Users, the two organisations, all six mailboxes, sequences, templates and settings survive. Owner chose the full wipe with no backup, knowing the Treplar apply link died with it. | live DB, 2026-09-23 |
 | `R-018` **CHANGED** | **Define what a submission is.** *Proposed*: publish one corrected submission count. *Shipped*: **two** numbers plus the gap — `Sent to BDM`, `Sent to client`, and `stalled at BDM`. *Why it moved*: the owner corrected the domain mid-build — *"adding a candidate to a job is not submission"* — and chose "count both, shown separately". A single figure would have hidden the candidates stuck between the two. `D-0029`. | #222, 2026-09-23 |
 | `R-019` | **Accepting an applicant actually puts them on the job.** It had been writing only the `candidate_pipeline` tag row while every screen read `submissions.stage` — so an accepted person was in the database and counted nowhere. | #222, 2026-09-23 |
