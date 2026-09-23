@@ -137,3 +137,5 @@ Closes C-0004. **Next migration is 047.**
 - **2026-09-23 (Session 29)** — `services/send-retry.js` added to harbour's list in `scripts/territory-map.mjs` (the survey flagged it as owned by nobody); map regenerated.
 
 - **2026-09-23 (Session 29)** — `services/engine-draft.js` added to observatory in `scripts/territory-map.mjs`. Live settings changed with the owner's go-ahead (D-0033): `ai_daily_token_cap` 400000, `ai_daily_call_cap` 400. No migration.
+
+- **2026-09-23 (Session 29)** — data repair, live: 119 of 119 contacts had `linkedin` = their own email (import misfile, "Email ID" matched "li"). Cleared where `lower(trim(linkedin)) = lower(trim(email))`; nothing lost, the email column holds the same value. It had also made every contact look reachable on LinkedIn to the D-0017 call-task gate.

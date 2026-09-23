@@ -215,6 +215,10 @@ function renderJobs(){
           '<div style="font-size:13.5px;font-weight:600">'+escHtml(j.position||'—')+' <span style="font-weight:400;color:var(--text3)">· '+escHtml(j.company_name||'')+'</span></div>'+
           '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+escHtml(((pc.first_name||'')+' '+(pc.last_name||'')).trim()||'—')+(pc.designation?' · '+escHtml(pc.designation):'')+'</div>'+
           '<div style="font-size:11.5px;color:var(--text3);margin-top:1px">'+[pc.email,pc.phone,(pc.linkedin?'LinkedIn':'')].filter(Boolean).map(escHtml).join(' · ')+'</div>'+
+          ((leadSafeUrl(j.job_url)||leadSafeUrl(j.company_web))?'<div style="font-size:11.5px;margin-top:3px;display:flex;gap:12px">'+
+            (leadSafeUrl(j.job_url)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.job_url))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Job link ↗</a>':'')+
+            (leadSafeUrl(j.company_web)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.company_web))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Website ↗</a>':'')+
+          '</div>':'')+
         '</div>'+
         '<span style="color:var(--text3);font-size:14px">›</span>'+
       '</div>';
@@ -452,6 +456,46 @@ function dismissSendProgress(){ STATE._progressDismissed=true; STATE.sendProgres
 function openAddJob(){ STATE.modal={type:"addJob"}; render(); }
 
 // ── JOB DETAIL MODAL ──────────────────────────────
+// ── LEAD DETAILS (Session 29) ─────────────────────────────────────────────
+// Everything the lead came in with. The browser already had the company's
+// website, the job link, industry and salary; this window simply never drew
+// them, so an owner opening a lead that had just replied could not find the
+// posting or the company's site. Columns the import did not recognise are
+// kept on the lead (research.import_extra) and listed here as written.
+function leadSafeUrl(v){
+  var s=String(v||'').trim(); if(!s)return '';
+  if(!/^https?:\/\//i.test(s)){ if(/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s))s='https://'+s; else return ''; }
+  return s;
+}
+function leadLinkOrText(v){
+  var u=leadSafeUrl(v);
+  return u?'<a href="'+escAttr(u)+'" target="_blank" rel="noopener noreferrer" class="ld-link">'+escHtml(String(v).replace(/^https?:\/\//i,'').replace(/\/$/,''))+'</a>':escHtml(v);
+}
+function leadDetailsBlock(j){
+  var r=j.research||{};
+  var rows=[
+    ['Company',j.company_name],
+    ['Company website',j.company_web,true],
+    ['Job link',j.job_url,true],
+    ['Industry',j.industry||j.company_ind],
+    ['Location',j.location],
+    ['Salary',j.salary_range],
+    ['Job posted',j.job_created_date],
+    ['Source',j.source]
+  ].filter(function(x){return x[1];});
+  var extra=r.import_extra&&typeof r.import_extra==='object'?r.import_extra:{};
+  var extraKeys=Object.keys(extra).filter(function(k){return extra[k];});
+  var cell=function(label,val,isLink){
+    return '<div class="ld-row"><div class="ld-k">'+escHtml(label)+'</div><div class="ld-v">'+(isLink?leadLinkOrText(val):(leadSafeUrl(val)&&/^https?:/i.test(String(val))?leadLinkOrText(val):escHtml(val)))+'</div></div>';
+  };
+  return '<div class="ld">'+
+    '<div class="ld-h">Lead details</div>'+
+    rows.map(function(x){return cell(x[0],x[1],x[2]);}).join('')+
+    (j.job_url?'':'<div class="ld-row"><div class="ld-k">Job link</div><div class="ld-v ld-none">Not in the import</div></div>')+
+    (extraKeys.length?'<div class="ld-h ld-h2">Other details from the import</div>'+extraKeys.map(function(k){return cell(k,extra[k]);}).join(''):'')+
+  '</div>';
+}
+
 function renderJobDetailModal(){
   var j=jobById(STATE.modal.id); if(!j) return "";
   var u=STATE.user;
@@ -521,6 +565,7 @@ function renderJobDetailModal(){
         '</div>'+
         '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Source</label><div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.source||"—")+'</div></div>'+
       '</div>'+
+      leadDetailsBlock(j)+
       '<div style="margin-bottom:18px"><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Notes</label>'+
         (canEdit?'<textarea id="job-notes" onblur="saveJobNotes(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:64px;resize:vertical;font-family:inherit">'+escHtml(j.notes||"")+'</textarea>':'<div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.notes||"—")+'</div>')+
       '</div>'+

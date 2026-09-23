@@ -420,3 +420,6 @@ Activity tab (that record's submissions only, inline) and Email → All email
   D-0032/D-0033). The hand-driven equivalent is Email → Compose → Generator.
 
 - **See each AI account's own reported limits** — Admin → Integrations → AI → Daily budget card, "What your AI accounts report". (Session 29, R-040)
+
+- **See a lead's own details (job link, company website, industry, salary, posted date, other imported columns)** — the lead window's "Lead details" block; job link and website also on the Connected panel. (Session 29)
+- **Import keeps a job link column and every unrecognised column** — `public/js/55-import-columns.js`. (Session 29)

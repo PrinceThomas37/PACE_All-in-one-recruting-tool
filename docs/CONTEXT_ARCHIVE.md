@@ -5926,3 +5926,13 @@ Owner: *"merge it, and do 2 and 3 too"*. R-041 (fast model for title-only leads)
 Provider rate-limit headers are now kept per model and shown on the AI budget card. Until now PACE received the answer to "is the free tier enough?" with every AI reply and discarded it. 99/99.
 
 Merged #226 (`9626887`) and #227 (`36849a0`). Check-in scheduled 2026-09-24 13:39 UTC to read the first real AI-written emails and the Groq limits.
+
+## Round 10 — the replied lead had no details; OpenRouter's model expired again (2026-09-23)
+Owner: a lead replied, they moved it to Connected, and could not see the job
+link, company name or website. Two causes, both real: the lead window never
+drew those fields (the browser had them), and the importer had no job-link
+field and misfiled columns by substring — all 119 contacts had their email in
+LinkedIn. Fixed both, repaired the 119 live rows, kept unrecognised columns.
+Existing leads still have no job link: it was never stored, so re-importing
+that file is the only way to recover it. Same message: OpenRouter's hard-coded
+free model 404'd on connect — now looked up at runtime. 101/101.

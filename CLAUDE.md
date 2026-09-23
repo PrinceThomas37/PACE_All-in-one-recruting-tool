@@ -1314,6 +1314,10 @@ Session 9). What that means in practice:
     health card: it prints the models that account really offers. **Two
     providers, same bug, twice — treat every hardcoded model name here as
     expiring stock, never as a constant.**
+    **THIRD TIME (Session 29): that "confirmed live" OpenRouter model 404'd
+    ("unavailable for free") the day the owner connected OpenRouter. OpenRouter
+    free models are now LOOKED UP at runtime (`freeModelsFor`, cached 6h) — do
+    not reintroduce a fixed `:free` name.**
   * **A PROVIDER'S CATALOGUE IS NOT A LIST OF WRITERS.** Groq returned whisper
     (speech-to-text), orpheus (text-to-speech), prompt-guard/safeguard (safety
     classifiers) and an Arabic-first model alongside the two that can draft an

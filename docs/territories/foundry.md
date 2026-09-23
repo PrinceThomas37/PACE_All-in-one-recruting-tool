@@ -456,3 +456,10 @@ sample sits between the two floors before judging.
 
 ## Session 29 — `ai-limits-smoke.mjs` (9 assertions)
 Verified non-vacuous by removing one of the two `recordLimits` calls. Suite 99/99.
+
+## Session 29 — two more suites, and one honest test change
+`import-columns-smoke.mjs` (11) and `ai-free-models-smoke.mjs` (9).
+`ai-provider-smoke`'s "spent free tier falls through" counted EVERY fetch; the
+OpenRouter catalogue lookup is a fetch but not an attempt at the answer, so the
+mock now counts generation requests only. The assertion's intent (2 providers
+tried) is unchanged. Suite 101/101.

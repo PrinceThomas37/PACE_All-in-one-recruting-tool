@@ -160,3 +160,5 @@ sent. The loop variable is now `let email` — the draft replaces it.
 - **2026-09-23 (R-041)** — `aiWriteFirstEmail` picks `engine_first_email_thin` when `input.thin_posting`.
 
 - **2026-09-23 (R-040)** — `GET /admin/ai-budget` returns `provider_limits`.
+
+- **2026-09-23** — `POST /jobs/bulk` stores `import_extra` into `research.import_extra` via `cleanImportExtra` (≤40 columns, ≤500 chars each). `job_url` was already accepted; the importer simply never sent it.

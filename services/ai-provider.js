@@ -281,6 +281,70 @@ async function isAvailable(supabase) {
   return (await resolveChain(supabase)).length > 0;
 }
 
+// ── OPENROUTER'S FREE MODELS ARE LOOKED UP, NOT REMEMBERED (Session 29) ──
+// The third time a hard-coded model name expired under us: the owner connected
+// OpenRouter on 2026-09-23 and the health card answered "HTTP 404 — This model
+// is unavailable for free" for meta-llama/llama-3.3-70b-instruct:free, the one
+// variant a previous session had confirmed live. OpenRouter's free line-up
+// changes by the month. So PACE now asks OpenRouter which models are free
+// TODAY (its public /models list carries per-token prices) and uses those,
+// cached for 6 hours. An admin's typed model still wins outright.
+const FREE_CACHE_KEY = 'ai_openrouter_free_models';
+const FREE_CACHE_MS = 6 * 60 * 60 * 1000;
+const NOT_WRITERS = /whisper|orpheus|\btts\b|text-to-speech|embed|rerank|guard|moderat|vision-ocr|image|audio/i;
+
+// PURE. OpenRouter /models rows → free text-writing model ids, best first.
+// "Free" means the catalogue prices both directions at zero (or the id says
+// :free). Ranked by context length, a rough proxy for model size, then id.
+function rankFreeModels(rows) {
+  const zero = (v) => v !== undefined && v !== null && Number(v) === 0;
+  return (rows || [])
+    .filter(m => m && m.id && !m.id.startsWith('openrouter/'))
+    .filter(m => m.id.endsWith(':free') || (m.pricing && zero(m.pricing.prompt) && zero(m.pricing.completion)))
+    .filter(m => !NOT_WRITERS.test(m.id))
+    .filter(m => {
+      const out = m.architecture && (m.architecture.output_modalities || m.architecture.modality);
+      return !out || String(out).includes('text');
+    })
+    .sort((a, b) => ((b.context_length || 0) - (a.context_length || 0)) || String(a.id).localeCompare(String(b.id)))
+    .map(m => m.id);
+}
+
+async function freeModelsFor(supabase, entry, now = Date.now(), fetchImpl) {
+  let cached = null;
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', FREE_CACHE_KEY).maybeSingle();
+    cached = data && data.value ? JSON.parse(data.value) : null;
+  } catch (_) { cached = null; }
+  if (cached && Array.isArray(cached.ids) && cached.ids.length && now - Date.parse(cached.at) < FREE_CACHE_MS) return cached.ids;
+  try {
+    const f = fetchImpl || ((u, o) => fetchWithTimeout(u, o, { timeoutMs: 8000 }));
+    const r = await f('https://openrouter.ai/api/v1/models', { headers: entry && entry.key ? { Authorization: `Bearer ${entry.key}` } : {} });
+    if (r && r.ok) {
+      const d = await r.json();
+      const ids = rankFreeModels(d.data || []);
+      if (ids.length) {
+        try {
+          await supabase.from('app_settings').upsert({ key: FREE_CACHE_KEY,
+            value: JSON.stringify({ at: new Date(now).toISOString(), ids: ids.slice(0, 20) }), updated_at: new Date(now) }, { onConflict: 'key' });
+        } catch (_) {}
+        return ids;
+      }
+    }
+  } catch (_) {}
+  // A stale list beats none: the provider is still worth trying.
+  return cached && Array.isArray(cached.ids) ? cached.ids : [];
+}
+
+// The models to try for this provider, in order. Only OpenRouter without an
+// admin override is looked up; everyone else is modelFor() as before.
+async function candidateModels(supabase, entry, tier) {
+  const fixed = modelFor(entry, tier);
+  if (entry.id !== 'openrouter' || entry.model_override) return [fixed];
+  const free = await freeModelsFor(supabase, entry);
+  return free.length ? free.slice(0, 2) : [fixed];
+}
+
 // Which model this provider should use for this kind of work. An admin's
 // explicit model override wins outright — they typed it, they meant it — and
 // otherwise the feature's tier picks between the provider's fast and quality
@@ -344,7 +408,10 @@ async function complete(supabase, opts = {}) {
   };
 
   for (const entry of chain) {
-    for (const model of modelsFor(entry)) {
+    const models = (entry.id === 'openrouter' && !opts.model && !entry.model_override)
+      ? await candidateModels(supabase, entry, limits.tier)
+      : modelsFor(entry);
+    for (const model of models) {
       const req = buildRequest(entry.id, {
         key: entry.key, baseUrl: entry.baseUrl, model,
         system, prompt, maxTokens: answerCeiling(entry.id, model, maxTokens),
@@ -576,7 +643,7 @@ async function diagnose(supabase, opts = {}) {
   for (const entry of chain) {
     const models = [];
     for (const tier of tiers) {
-      const model = modelFor(entry, tier);
+      const model = (await candidateModels(supabase, entry, tier))[0];
       if (!models.some(m => m.model === model)) models.push({ model, tier });
     }
     for (const m of models) probes.push({ entry, ...m });
@@ -637,6 +704,7 @@ module.exports = {
   answerCeiling, REASONING_HEADROOM, recordFailure,
   resolveChain, isAvailable, complete, diagnose,
   readRateLimits, recordLimits, getProviderLimits, LIMIT_WINDOWS, LIMITS_KEY,
+  rankFreeModels, freeModelsFor, candidateModels, FREE_CACHE_KEY,
   describeHttpError, getLastError, LAST_ERROR_KEY,
   recordTest, getLastTest, LAST_TEST_KEY, listModels,
   budget,

@@ -155,14 +155,17 @@ step('complete() with no store returns null', (await ai.complete(null, { prompt:
 // the same place as "not configured": null, and the caller writes with rules.
 const realFetch = globalThis.fetch;
 let calls = 0;
-globalThis.fetch = async () => { calls++; return { ok: false, status: 429, json: async () => ({ error: { message: 'rate limited' } }) }; };
+// Counts GENERATION requests only. OpenRouter's free-model catalogue lookup
+// (Session 29) is also a fetch, and it is not an attempt at the answer.
+const isCatalogue = (u) => /\/models(\?|$)/.test(String(u));
+globalThis.fetch = async (u) => { if (isCatalogue(u)) return { ok: false, status: 503, json: async () => ({}) }; calls++; return { ok: false, status: 429, json: async () => ({ error: { message: 'rate limited' } }) }; };
 const allFail = await ai.complete(storeOf({ int_groq_api_key: 'g', int_openrouter_api_key: 'o' }), { prompt: 'hi', timeoutMs: 2000 });
 step('a spent free tier falls through to the next provider', calls === 2, `${calls} attempts`);
 step('every provider failing returns null, not an error', allFail === null);
 
 // A working provider ends the chain — the fallbacks are not also called.
 calls = 0;
-globalThis.fetch = async () => { calls++; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'drafted' } }] }) }; };
+globalThis.fetch = async (u) => { if (isCatalogue(u)) return { ok: false, status: 503, json: async () => ({}) }; calls++; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'drafted' } }] }) }; };
 const ok = await ai.complete(storeOf({ int_groq_api_key: 'g', int_openrouter_api_key: 'o' }), { prompt: 'hi' });
 step('a working provider returns its text', ok && ok.text === 'drafted');
 step('the answer says which provider wrote it', ok && ok.provider === 'groq', ok && ok.provider);

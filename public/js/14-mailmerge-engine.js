@@ -299,8 +299,12 @@ window.selectSheet=function(sheetName){
   render();
 }
 
-// Column name mapping — accepts many variations
+// Column name mapping. Now delegates to window.ImportColumns
+// (55-import-columns.js), which matches exact names first, only allows partial
+// matches on distinctive words, has a job-link field, and KEEPS unrecognised
+// columns as _extra. COL_MAP below is kept only as the legacy fallback.
 function mapCol(row, keys){
+  if(window.ImportColumns)return window.ImportColumns.mapRow(row);
   var r={};
   Object.keys(row).forEach(function(k){
     var kl=k.toLowerCase().replace(/[\s_\-\.]/g,"");
@@ -431,6 +435,8 @@ function groupImportRows(mapped){
       groups[key]={
         coName:(r.company||"").trim(),
         website:(r.website||"").trim(),
+        jobUrl:(r.jobUrl||"").trim(),
+        extra:{},
         industry:(r.industry||"").trim(),
         location:(r.location||"").trim(),
         position:(r.position||"").trim(),
@@ -445,6 +451,10 @@ function groupImportRows(mapped){
       };
       order.push(key);
     }
+    // Everything else the spreadsheet carried, kept as it was written — the
+    // first non-empty value per column wins for the lead.
+    if(r._extra){Object.keys(r._extra).forEach(function(col){if(!groups[key].extra[col])groups[key].extra[col]=r._extra[col];});}
+    if(!groups[key].jobUrl&&r.jobUrl)groups[key].jobUrl=r.jobUrl.trim();
     if(r.notes){
       var noteText=(r.notes||"").trim();
       if(noteText){groups[key].notes=groups[key].notes?(groups[key].notes+"\n"+noteText):noteText;}
@@ -597,6 +607,8 @@ window.doImportProcess=function(toProcess,dupEmailMap){
       if(g.bdmAssigned)payload.bdm_assigned_name=g.bdmAssigned;
       if(g.notes)payload.notes=g.notes;
       if(g.jdText)payload.jd_text=g.jdText;
+      if(g.jobUrl)payload.job_url=g.jobUrl;
+      if(g.extra&&Object.keys(g.extra).length)payload.import_extra=g.extra;
       return payload;
     }).filter(Boolean);
 

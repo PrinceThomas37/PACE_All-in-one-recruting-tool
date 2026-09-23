@@ -423,3 +423,20 @@ final text); Sent shows "AI-written" when `ai_written`.
 
 ## Session 29 — R-040 block on the AI budget card
 `aiProviderLimitsBlock()` in `08-page-admin.js` under the Daily budget table: per provider/model, "N of M requests left today" / "tokens left this minute", amber under 15%, "Reported N min ago" ("Last reported" when older than a day). Classes `.ail*` in styles.css.
+
+## Session 29 — lead details, and an import that stops misfiling columns
+* **The lead window never drew the lead's own details.** `normaliseJob` had
+  `company_web`, `job_url`, industry, salary and dates all along;
+  `renderJobDetailModal` showed stage, source, notes and contacts only. The
+  owner opened a lead that had just replied and could not find the posting or
+  the company site. `leadDetailsBlock(j)` now draws them, plus "Other details
+  from the import" (`research.import_extra`). Links go through `leadSafeUrl`
+  (http/https only, bare domains get https). The Connected panel rows carry
+  "Job link ↗ / Website ↗" with `stopPropagation`.
+* **`55-import-columns.js` (pure, Node-loadable) replaces `COL_MAP` matching.**
+  The old matcher accepted any column whose name CONTAINED a short word, so
+  "Email ID" (contains "li") became LinkedIn on **all 119** live contacts, and
+  "Job URL" (contains "url") could land in the company WEBSITE. There was no
+  job-link field at all. Now: exact names first, partial matches only on
+  distinctive words, `jobUrl` is a field, and unrecognised columns are kept in
+  `_extra`. `mapCol` delegates to it; `COL_MAP` is the fallback only.
