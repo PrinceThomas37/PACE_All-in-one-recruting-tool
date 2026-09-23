@@ -466,3 +466,7 @@ tried) is unchanged. Suite 101/101.
 
 ## Session 29 — `lead-fill-smoke.mjs` (10)
 Verified non-vacuous: letting the fill overwrite a non-empty field turned two assertions red. Suite 102/102.
+
+`import-columns-smoke` 11 → 16 and `lead-fill-smoke` 10 → 11: the owner's real
+"LinkedIn URL" rows (Indeed / Glassdoor / LinkedIn jobs) must land in `jobUrl`.
+Verified by reverting `valueField` — 3 of the new tests fail. Suite 102/102.

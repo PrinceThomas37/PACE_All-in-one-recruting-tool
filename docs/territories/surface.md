@@ -440,5 +440,14 @@ final text); Sent shows "AI-written" when `ai_written`.
   job-link field at all. Now: exact names first, partial matches only on
   distinctive words, `jobUrl` is a field, and unrecognised columns are kept in
   `_extra`. `mapCol` delegates to it; `COL_MAP` is the fallback only.
+* **A COLUMN'S NAME IS A GUESS; ITS VALUE IS EVIDENCE (2026-09-23).** The
+  owner's sheet headed its job-posting column **"LinkedIn URL"** (Indeed,
+  Glassdoor, linkedin.com/jobs links), so name-matching filed every job link
+  as the contact's LinkedIn. `valueField()` keeps a LinkedIn value only when
+  it is a `/in/` or `/pub/` profile; any other web address becomes `jobUrl`,
+  anything else an extra. The preview uses `columnField(name, rows)` (majority
+  of the first 50 values) and says "(these are job postings, not LinkedIn
+  profiles)" when it re-files a column.
+
 
 - **R-045** — the import no longer drops existing leads: it sends them to `/jobs/fill-missing` and says so in the preview ("won't be added again, but anything they are missing will be filled in"). The column-mapping preview reads `ImportColumns.fieldFor` and says "kept as an extra detail" instead of "not mapped".

@@ -48,6 +48,10 @@ t('an email address is never written into LinkedIn (the #228 misfile)', () => {
   const q = fillPatch(existing, { contacts: [{ email: 'admin@rgbsnm.com', linkedin: 'admin@rgbsnm.com' }] });
   assert.equal(q.contacts.length, 0);
 });
+t('a job posting is never written into a contact\'s LinkedIn', () => {
+  const q = fillPatch(existing, { contacts: [{ email: 'admin@rgbsnm.com', linkedin: 'https://www.indeed.com/viewjob?jk=1' }] });
+  assert.equal(q.contacts.length, 0);
+});
 t('a lead with nothing missing yields an empty patch', () => {
   const full = { job: { job_url: 'u', salary_range: 's', location: 'l', industry: 'i', job_created_date: 'd' }, company: { website: 'w' }, contacts: [] };
   assert.deepEqual(fillPatch(full, sheet).filled.filter(f => !f.startsWith('extra:')), []);

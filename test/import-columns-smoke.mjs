@@ -44,6 +44,32 @@ t('a second column for the same field is kept as an extra, not lost', () => {
   const r = C.mapRow({ Email: 'a@x.com', 'Work Email': 'b@x.com' });
   assert.equal(r.email, 'a@x.com'); assert.equal(r._extra['Work Email'], 'b@x.com');
 });
+t('THE SHEET (2026-09-23): a "LinkedIn URL" column holding job postings is the JOB LINK', () => {
+  for (const u of ['https://www.indeed.com/viewjob?jk=9190e580a6813847&q=rob',
+                   'https://www.glassdoor.co.in/job-listing/office-manager-bookkee',
+                   'https://www.linkedin.com/jobs/view/4469978357/?alternateCha']) {
+    const r = C.mapRow({ 'Email ID': 'admin@rgbsnm.com', 'LinkedIn URL': u, Source: 'Indeed' });
+    assert.equal(r.jobUrl, u, u); assert.equal(r.linkedin, undefined, u);
+  }
+});
+t('a real LinkedIn profile still goes to the contact', () => {
+  const r = C.mapRow({ 'LinkedIn URL': 'https://www.linkedin.com/in/jane-doe' });
+  assert.equal(r.linkedin, 'https://www.linkedin.com/in/jane-doe'); assert.equal(r.jobUrl, undefined);
+});
+t('an email typed in the LinkedIn column is kept as an extra, never a profile', () => {
+  const r = C.mapRow({ LinkedIn: 'a@x.com' });
+  assert.equal(r.linkedin, undefined); assert.equal(r._extra.LinkedIn, 'a@x.com');
+});
+t('a sheet with its own job-link column keeps it; the posting in "LinkedIn" is not lost', () => {
+  const r = C.mapRow({ 'Job Link': 'https://a.com/job', 'LinkedIn URL': 'https://www.indeed.com/viewjob?jk=1' });
+  assert.equal(r.jobUrl, 'https://a.com/job'); assert.equal(r._extra['LinkedIn URL'], 'https://www.indeed.com/viewjob?jk=1');
+});
+t('the preview files the whole column by what it holds', () => {
+  const rows = [{ 'LinkedIn URL': 'https://www.indeed.com/viewjob?jk=1' }, { 'LinkedIn URL': '' }, { 'LinkedIn URL': 'https://www.linkedin.com/jobs/view/1' }];
+  assert.equal(C.columnField('LinkedIn URL', rows), 'jobUrl');
+  assert.equal(C.columnField('LinkedIn URL', [{ 'LinkedIn URL': 'https://linkedin.com/in/x' }]), 'linkedin');
+  assert.equal(C.columnField('LinkedIn URL', []), 'linkedin', 'no values: the name decides');
+});
 
 console.log('\nImport columns — wiring');
 const mm = readFileSync(new URL('../public/js/14-mailmerge-engine.js', import.meta.url), 'utf8');
@@ -55,6 +81,7 @@ t('the importer uses the new matcher and sends job_url and the extras', () => {
   assert.match(mm, /if\(g\.jobUrl\)payload\.job_url=g\.jobUrl;/);
   assert.match(mm, /payload\.import_extra=g\.extra;/);
   assert.match(html, /\/js\/55-import-columns\.js/);
+  assert.match(mm, /ImportColumns\.columnField\(c,STATE\.importPreview\)/, 'the preview judges columns by their values');
 });
 t('the bulk endpoint stores the extras on the lead, bounded', () => {
   assert.match(jobs, /function cleanImportExtra/);

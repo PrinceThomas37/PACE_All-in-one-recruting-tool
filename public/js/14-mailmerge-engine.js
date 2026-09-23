@@ -370,10 +370,12 @@ function renderImportModal(rows, sheetName){
 
   var colRows=cols.map(function(c){
     var kl=c.toLowerCase().replace(/[\s_\-\.]/g,"");
-    var field=window.ImportColumns?window.ImportColumns.fieldFor(c):null;
+    var field=window.ImportColumns?window.ImportColumns.columnField(c,STATE.importPreview):null;
     if(!window.ImportColumns){var match=COL_MAP.find(function(pair){return pair[0].some(function(v){return kl===v||kl.includes(v);});});field=match?match[1]:null;}
+    var named=window.ImportColumns?window.ImportColumns.fieldFor(c):field;
     var status=field?
-      '<span style="color:var(--green);font-weight:500">\u2192 '+field+'</span>':
+      '<span style="color:var(--green);font-weight:500">\u2192 '+field+'</span>'+
+        (field==='jobUrl'&&named==='linkedin'?' <span style="color:var(--text3)">(these are job postings, not LinkedIn profiles)</span>':''):
       '<span style="color:var(--text3)">kept as an extra detail</span>';
     return '<tr><td style="padding:5px 10px;font-size:12.5px">'+htmlEsc(c)+'</td><td style="padding:5px 10px">'+status+'</td></tr>';
   }).join("");

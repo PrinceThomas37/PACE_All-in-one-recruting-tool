@@ -72,6 +72,37 @@
     return null;
   }
 
+  // A column's NAME is a guess; its VALUE is evidence (2026-09-23). The owner's
+  // sheet had a column headed "LinkedIn URL" holding the JOB POSTING — Indeed,
+  // Glassdoor and linkedin.com/jobs links — so filing by name put every job
+  // link into the contact's LinkedIn. A LinkedIn value is kept only when it is
+  // a person's profile; any other web address in it is the job link.
+  var PROFILE_RE = /linkedin\.com\/(in|pub)\//i;
+  var URL_RE = /^(https?:\/\/|www\.)\S+$/i;
+  function isProfileUrl(v) { return PROFILE_RE.test(String(v || '')); }
+  function valueField(field, val) {
+    if (field !== 'linkedin') return field;
+    var v = String(val == null ? '' : val).trim();
+    if (isProfileUrl(v)) return 'linkedin';
+    if (URL_RE.test(v)) return 'jobUrl';
+    return null; // an email address, a note — kept as an extra, never a profile
+  }
+
+  // What a whole column will be filed as, judged on its values (for the preview).
+  function columnField(columnName, rows) {
+    var f = fieldFor(columnName);
+    if (f !== 'linkedin') return f;
+    var tally = {}, best = null;
+    (rows || []).slice(0, 50).forEach(function (r) {
+      var v = String(r && r[columnName] != null ? r[columnName] : '').trim();
+      if (!v) return;
+      var k = String(valueField(f, v));
+      tally[k] = (tally[k] || 0) + 1;
+      if (best === null || tally[k] > tally[best]) best = k;
+    });
+    return best === null ? f : (best === 'null' ? null : best);
+  }
+
   // One spreadsheet row → { <field>: value, ..., _extra: { <Column as written>: value } }.
   // The first non-empty column for a field wins; a second one goes to _extra
   // rather than being lost.
@@ -80,14 +111,14 @@
     Object.keys(row || {}).forEach(function (col) {
       var val = String(row[col] == null ? '' : row[col]).trim();
       if (!val) return;
-      var f = fieldFor(col);
+      var f = valueField(fieldFor(col), val);
       if (f && !out[f]) out[f] = val;
       else out._extra[String(col).trim().slice(0, 80)] = val.slice(0, 500);
     });
     return out;
   }
 
-  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, mapRow: mapRow };
+  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, mapRow: mapRow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ImportColumns = api;
 })(typeof window !== 'undefined' ? window : this);
