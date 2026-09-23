@@ -47,7 +47,8 @@ read is scoped by construction through `models/`.
 **Blocked until answered:** no — but this is a **cross-org read**, which is the
 one class of defect that produces no error message.
 
-### C-0004 · harbour → deep · OPEN · 2026-09-09
+### C-0004 · harbour → deep · CLOSED 2026-09-23 · 2026-09-09
+**Closed by:** migration 046 (`fail_reason`, `fail_kind`, `attempt_count`, `next_attempt_at`), applied 2026-09-23 with the owner's go-ahead (D-0031).
 **Asks for:** an error column on `emails` (migration 043) recording *why* a send
 failed.
 **Because:** a dead mailbox sign-in marks each email `failed` with no retry, one

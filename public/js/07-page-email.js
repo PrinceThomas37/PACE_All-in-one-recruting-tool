@@ -181,7 +181,7 @@ function renderEmail(){
   var sp=STATE.sendProgress;
   var progressBar='';
   if(sp&&(sp.active||sp.done)){
-    var pct=sp.total>0?Math.round((sp.sent+sp.failed)/sp.total*100):0;
+    var pct=sp.total>0?Math.round((sp.sent+sp.failed+(sp.retrying||0))/sp.total*100):0;
     var barColor=sp.done?(sp.failed>0?'var(--amber)':'var(--green)'):'var(--accent)';
     var fails=sp.failDetails||[];
     // Stat chip
@@ -195,6 +195,7 @@ function renderEmail(){
     var chips='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
       statChip(sp.sent,'Sent','var(--green)')+
       statChip(sp.failed,'Failed',sp.failed>0?'#ef4444':'var(--text2)')+
+      (sp.retrying?statChip(sp.retrying,'Will retry','var(--amber)'):'')+
       (waitingTotal?statChip(waitingTotal,'Waiting','var(--amber)'):'')+
       statChip(sp.total,'Total','var(--text)')+
     '</div>';
@@ -319,7 +320,7 @@ function renderEmail(){
         var fuBadge=fu==='fu1'?'<span style="font-size:10px;padding:2px 7px;background:#fef9c3;color:#92400e;border-radius:6px;font-weight:700;margin-left:6px">FU1</span>':fu==='fu2'?'<span style="font-size:10px;padding:2px 7px;background:#ffedd5;color:#9a3412;border-radius:6px;font-weight:700;margin-left:6px">FU2</span>':'';
         var leadTz=(e.job&&e.job.timezone)||'EST';
         var tzRow2=(STATE.pendingSummary&&STATE.pendingSummary.by_timezone||[]).find(function(t){return t.timezone===leadTz;});
-        var winBadge=(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span style="font-size:10px;padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span style="font-size:10px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>';
+        var winBadge=(e.attempt_count>0&&e.retry_note)?'<span class="retry-chip">'+htmlEsc(e.retry_note)+'</span>':(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span style="font-size:10px;padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span style="font-size:10px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>';
         return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+'<td style="padding:10px 12px;font-size:13px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+winBadge+'</div>'+'<div style="font-size:11px;color:var(--text3)">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td style="padding:10px 12px;font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span style="font-size:11px;padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
       }).join('');
       if(!pendingRows)pendingRows='<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--text3)">No pending emails yet.</td></tr>';
@@ -350,8 +351,36 @@ function renderEmail(){
     // Back button for RA Lead drill-down view
     var backBtn=viewingBD?('<div style="margin-bottom:14px"><button onclick="STATE.raLeadSelectedBD=null;STATE.previewPendingId=null;loadPendingSummary();render()" style="background:none;border:1px solid var(--border2);padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--text2)">← Back to all BD Managers</button><span style="margin-left:12px;font-weight:600;font-size:14px">'+htmlEsc(bdName)+'</span></div>'):'';
 
+    // ── DIDN'T SEND ── failed emails used to vanish from this page the moment
+    // the run card expired. They now stay here, with the reason, until they
+    // are retried or deleted. Calm by default (D-0019): a stripe and one chip.
+    var failedList=(STATE.failedEmails||[]).filter(function(e){
+      return !viewingBD||((e.sender&&e.sender.id?e.sender.id:e.sent_by)===STATE.raLeadSelectedBD);
+    });
+    var retryable=failedList.filter(function(e){return e.can_retry;});
+    var failedPanel=failedList.length?(
+      '<div class="failed-panel">'+
+        '<div class="failed-head">'+
+          '<div><div class="failed-title">Didn\'t send ('+failedList.length+')</div>'+
+          '<div class="failed-sub">Temporary problems retry on their own. These need a person.</div></div>'+
+          (retryable.length?'<button class="btn btn-outline btn-sm" onclick="retryAllFailedEmails('+htmlEsc(JSON.stringify(retryable.map(function(e){return e.id;})))+')">Retry all ('+retryable.length+')</button>':'')+
+        '</div>'+
+        failedList.slice(0,50).map(function(e){
+          var jn=(e.job&&e.job.position?e.job.position:'')+(e.job&&e.job.company?(' · '+e.job.company.name):'');
+          return '<div class="failed-row">'+
+            '<div class="failed-main">'+
+              '<div class="failed-to">'+htmlEsc(e.to_email||'(no address)')+(jn?' <span class="failed-job">'+htmlEsc(jn)+'</span>':'')+'</div>'+
+              '<div class="failed-why">'+htmlEsc(e.fail_reason||'Send failed — no reason was recorded (failed before retries existed).')+'</div>'+
+              (e.retry_note?'<div class="failed-note">'+htmlEsc(e.retry_note)+'</div>':'')+
+            '</div>'+
+            (e.can_retry?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
+          '</div>';
+        }).join('')+
+        (failedList.length>50?'<div class="failed-sub" style="padding:8px 14px">Showing 50 of '+failedList.length+'.</div>':'')+
+      '</div>'):'';
+
     pendingHtml='<div>'+scheduleBanner+
-      backBtn+
+      backBtn+failedPanel+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
         '<div style="font-size:13px;color:var(--text2)">'+totalRecipients+' email'+(totalRecipients!==1?'s':'')+' ready · page '+(_pPg+1)+' of '+_pTp+'</div>'+
         sendAllBtn+

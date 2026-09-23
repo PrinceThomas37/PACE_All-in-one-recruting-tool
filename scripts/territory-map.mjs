@@ -54,7 +54,7 @@ const TERRITORIES = [
           // Builds the applicant receipt and the recruiter nudge. It writes mail,
           // so the rules about what may be in one are enforced here.
           'services/applicant-notify.js',
-          'services/outreach-cycle.js', 'services/send-progress.js',
+          'services/outreach-cycle.js', 'services/send-progress.js', 'services/send-retry.js',
           // The double-send rule. Sits with the send loop that enforces it —
           // routes/reminders.js only READS it to decide what to offer.
           'services/outreach-dedup.js',

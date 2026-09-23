@@ -5851,3 +5851,34 @@ audit trail on every column of every table — growth bet #7. What shipped is
 **stage and status changes plus a named list of fields per record kind**, with
 the tracked list at the top of each router so widening it is a list edit rather
 than a new mechanism. Said plainly to the owner rather than quietly scoped down.
+
+# Session 29 — failed emails that never come back
+
+## Round 1 — design only (2026-09-23)
+Owner, after importing a fresh set of leads: failed emails have no retry, by
+hand or automatic. Confirmed in code: every failure branch in
+`processPendingEmailSends` writes `status:'failed'` and nothing ever reads that
+status back. Confirmed on the live DB: 4 failures today (Daniel James 2, Prince
+Thomas 2). Daniel's two carried "Sending mailbox sign-in expired" while three
+more from that SAME mailbox sent minutes later — a transient auth failure
+treated as permanent. That is the fresh incident D-0006 said would re-open it.
+Design recorded as `R-036` (absorbs `R-004`/`C-0004`); nothing built, migration
+046 awaits the owner's go-ahead.
+
+## Round 2 — built (2026-09-23)
+Owner: *"go ahead, retry today's 4 automatically"*. D-0031. Migration 046
+applied (4 columns on `emails`, verified). `services/send-retry.js` is the pure
+rule; `recordSendFailure()` is now the only writer of a send failure in the
+leads loop; the pending fetch filters on `isDue` in Node. A sign-in failure
+stops that mailbox for the rest of the run. Uncertain failures (timeouts) are
+never auto-retried because the email may have gone out. Email → Pending shows
+a calm "Didn't send" card with reasons, Retry and Retry all. Today's 4 re-queued
+by SQL after checking each: address valid, not suppressed, no twin already
+sent, mailbox present. Caught by me before shipping: MAX_ATTEMPTS=3 meant the
+approved 4-hour step never happened; now first send + 3 retries. Tests 97/97;
+the new suite was proven non-vacuous by re-introducing the bug.
+
+Ownership: `services/send-retry.js` assigned to harbour in the territory map after the survey flagged it as unowned.
+
+## Round 3 — merge (2026-09-23)
+Owner: *"yes and then merge it"* — R-037 (dashboard warning for a failing mailbox sign-in) added as PENDING; PR #225 merged as the release.

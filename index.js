@@ -60,6 +60,7 @@ const settingsConfig = require('./config/settings');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { orderPendingForSend } = require('./send-queue-order');
+const sendRetry = require('./services/send-retry');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -267,7 +268,7 @@ const US_METRO_AREA_TZ = {
   'omaha metropolitan area': 'CST',
   'greater chattanooga': 'EST'
 };
-const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
+const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
 
 // Parses a lead's free-text "location" field into one of the four US lead
 // timezones. Deliberately a PARSE, not a scan: the old version matched any
@@ -728,6 +729,68 @@ app.post('/emails/retry-pending-window', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── RETRY A FAILED EMAIL (Session 29, R-036) ─────────────────────────────
+// The send loop retries TEMPORARY failures by itself (services/send-retry.js).
+// These two are the person's version: put a failed email back in the queue.
+// Literal /emails/retry-failed sits ABOVE /emails/:id/retry by convention.
+// Never offered for a PERMANENT failure (opted out, bad address), and never
+// when the same step for the same contact is already queued or sent — a
+// failed row does not block regeneration, so its twin may exist.
+async function requeueFailedEmails(req, rows) {
+  const contactIds = [...new Set(rows.map(r => r.contact_id).filter(Boolean))];
+  let siblings = [];
+  if (contactIds.length) {
+    const { data } = await db.forRequest(req).from('emails')
+      .select('id,contact_id,job_id,followup_type,status').in('contact_id', contactIds);
+    siblings = data || [];
+  }
+  const ok = [], refused = [];
+  for (const r of rows) {
+    if (!sendRetry.canRetryByHand(r)) { refused.push({ id: r.id, reason: 'This address cannot receive this email — it will not be retried.' }); continue; }
+    if (sendRetry.hasLiveTwin(r, siblings)) { refused.push({ id: r.id, reason: 'This contact already has this email queued or sent.' }); continue; }
+    ok.push(r.id);
+  }
+  if (ok.length) {
+    // Conditional on status so a row somebody else already requeued is not reset twice.
+    const { error } = await db.forRequest(req).from('emails')
+      .update(sendRetry.manualRetryUpdate()).in('id', ok).eq('status', 'failed');
+    if (error) throw error;
+    const managers = [...new Set(rows.filter(r => ok.includes(r.id)).map(r => r.sent_by).filter(Boolean))];
+    for (const m of managers) emit(EVENTS.OUTREACH_QUEUED, { managerId: m });
+  }
+  return { requeued: ok.length, refused };
+}
+
+const RETRY_ROW_SELECT = 'id,status,sent_by,contact_id,job_id,followup_type,fail_kind,attempt_count';
+
+app.post('/emails/retry-failed', auth, async (req, res) => {
+  try {
+    // Your own failed emails; an admin may name other people's by id (the
+    // Email page passes exactly the rows it is showing).
+    let q = db.forRequest(req).from('emails').select(RETRY_ROW_SELECT).eq('status', 'failed');
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 500) : null;
+    if (ids) q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    if (!hasRole(req, 'admin')) q = q.eq('sent_by', req.user.id);
+    const { data, error } = await q;
+    if (error) throw error;
+    res.json(await requeueFailedEmails(req, data || []));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/emails/:id/retry', auth, async (req, res) => {
+  try {
+    const { data: row, error } = await db.forRequest(req).from('emails')
+      .select(RETRY_ROW_SELECT).eq('id', req.params.id).maybeSingle();
+    if (error) throw error;
+    // Another person's email answers exactly like a missing one.
+    if (!row || (row.sent_by !== req.user.id && !hasRole(req, 'admin'))) return res.status(404).json({ error: 'Email not found' });
+    if (row.status !== 'failed') return res.status(409).json({ error: 'Only a failed email can be retried.' });
+    const out = await requeueFailedEmails(req, [row]);
+    if (!out.requeued) return res.status(409).json({ error: out.refused[0]?.reason || 'Cannot retry this email.' });
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST /emails (manual mark-sent) → extracted to routes/emails.js (mounted below).
 
 // Send a reminder follow-up through the Graph engine (fresh, non-threaded), like outreach.
@@ -1061,14 +1124,14 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
     console.log(`[SendSelected] Starting ${totalCount} emails, userId=${userId}`);
-    const { sent, failed, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
+    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
     const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
     if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
     const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
     for (const jid of uniqueJobIds) await logActivity(jid, null, userId, 'emails_sent', `${sent} email(s) sent via Microsoft`, null, null);
     const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
     await setSendProgress(userId, {
-      active: false, done: true, total: totalCount, sent, failed, deferred: deferredTotal,
+      active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       failDetails,
       deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),
@@ -1109,14 +1172,14 @@ app.post('/emails/queue-all', auth, async (req, res) => {
       await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
       console.log(`[SendAll] Starting loop for ${totalCount} emails, userId=${userId}`);
-      const { sent, failed, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
+      const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
       const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
       if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
       const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
       for (const jid of uniqueJobIds) await logActivity(jid, null, userId, 'emails_sent', `${sent} email(s) sent via Microsoft`, null, null);
       const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
       await setSendProgress(userId, {
-        active: false, done: true, total: totalCount, sent, failed, deferred: deferredTotal,
+        active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
         deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
         failDetails,
         deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),
@@ -1560,7 +1623,11 @@ async function fetchPendingEmailsForUser(userId) {
     if (data.length < 1000) break;
     from += 1000;
   }
-  return pendingEmails;
+  // A row that failed and is waiting out its backoff stays 'pending' but is not
+  // due yet. Filtered here, in Node, rather than as a PostgREST .or() — a wrong
+  // filter there fails as a plausible short list, and this one is testable.
+  const now = Date.now();
+  return pendingEmails.filter(e => sendRetry.isDue(e, now));
 }
 
 // Translate noisy provider/Graph errors into something a BD user can act on.
@@ -1583,8 +1650,39 @@ function friendlySendError(msg) {
   return m;
 }
 
+// Every failure in the send loop writes through here, so the row always says
+// WHY it failed, how many tries it has had, and whether it will try again
+// (services/send-retry.js decides). Returns the update written.
+async function recordSendFailure(email, rawMsg, reason) {
+  const upd = sendRetry.failureUpdate(email, rawMsg, reason);
+  let ok = false;
+  try {
+    const { error } = await supabase.from('emails').update(upd).eq('id', email.id);
+    ok = !error;
+  } catch (_) {}
+  if (!ok) {
+    // supabase-js REPORTS a missing column rather than throwing, so the error
+    // is checked, not caught. Columns absent (migration 046 not applied) means
+    // no retry bookkeeping — fall back to the old behaviour, never leave the
+    // row stuck at 'sending'.
+    try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+    return { ...upd, status: 'failed', next_attempt_at: null };
+  }
+  return upd;
+}
+
+function retryNote(upd) {
+  if (upd.status !== 'pending' || !upd.next_attempt_at) return '';
+  const mins = Math.round((new Date(upd.next_attempt_at).getTime() - Date.now()) / 60000);
+  return ` — will try again automatically in ${mins < 60 ? mins + ' min' : Math.round(mins / 60) + ' h'}`;
+}
+
 async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   const { autoSend = false } = opts;
+  // Mailboxes whose sign-in failed during THIS run. Their remaining emails are
+  // left pending, untouched, rather than each failing ~90s apart.
+  const authFailedMailboxes = new Set();
+  let retrying = 0;
   const sendWindow = await getSendWindowHours();
   const totalCount = pendingEmails.length;
   let sent = 0, failed = 0, skippedWindow = 0, skippedQuota = 0, skippedDomain = 0, skippedContactStatus = 0, skippedThread = 0, skippedInactive = 0, skippedSuppressed = 0;
@@ -1670,12 +1768,18 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       deferredThread: skippedThread, deferredInactive: skippedInactive,
       skippedContactStatus,
-      failDetails, startedAt, autoSend
+      retrying, failDetails, startedAt, autoSend
     };
 
     if (sendingEmail && sendingEmail.is_active === false) {
       skippedInactive++;
       await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (sending mailbox disabled — skipped)` });
+      continue;
+    }
+
+    if (userEmailId && authFailedMailboxes.has(userEmailId)) {
+      skippedInactive++;
+      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (mailbox sign-in failed this run — left in queue)` });
       continue;
     }
 
@@ -1688,7 +1792,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     if (suppressed.has((email.to_email || '').toLowerCase())) {
       skippedSuppressed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: 'Recipient is on the opt-out / suppression list — not sent' });
-      try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+      await recordSendFailure(email, 'suppression', 'Recipient is on the opt-out / suppression list — not sent');
       await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (suppressed — opted out)` });
       continue;
     }
@@ -1705,7 +1809,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       sendAttempts++;
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: email.from_email || '—', error: 'No sending email configured for this job' });
-      try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+      await recordSendFailure(email, 'No sending email configured for this job', 'No sending mailbox is set on this lead — assign one, then press Retry.');
       await setSendProgress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
@@ -1734,7 +1838,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       sendAttempts++;
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'Gmail sending is not configured on the server yet' });
-      try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+      await recordSendFailure(email, 'Gmail sending is not configured on the server yet', 'Gmail sending is not configured on the server yet');
       await setSendProgress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
@@ -1742,7 +1846,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       sendAttempts++;
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email || '(empty)', from: sendingEmail?.email_address || email.from_email || '—', error: `Invalid recipient address: "${email.to_email}" — not an email` });
-      try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+      await recordSendFailure(email, 'Invalid recipient — not an email', `Invalid recipient address: "${email.to_email}" — not an email`);
       await setSendProgress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
@@ -1758,7 +1862,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         if (isFollowup) {
           await cancelBlockedFollowupSend(email, contact.email_status);
         } else {
-          try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+          await recordSendFailure(email, 'undeliverable', `Not sent — this address is marked ${contactEmailStatus(contact)}.`);
         }
         await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (skipped: ${contactEmailStatus(contact)} address)` });
         continue;
@@ -1825,15 +1929,20 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (follow-up waiting for thread)` });
         continue;
       }
-      failed++;
-      failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: friendlySendError(e.message) });
-      try { await supabase.from('emails').update({ status: 'failed' }).eq('id', email.id); } catch (_) {}
+      // The row is 'sending' (we claimed it), so the update below always
+      // lands: back to 'pending' with a later next_attempt_at for a temporary
+      // failure, 'failed' with the reason for anything else.
+      const friendly = friendlySendError(e && e.message);
+      const upd = await recordSendFailure(email, e && e.message, friendly);
+      if (upd.status === 'pending') retrying++; else failed++;
+      failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: friendly + retryNote(upd), retrying: upd.status === 'pending' });
+      if (sendRetry.isAuthFailure(e && e.message)) authFailedMailboxes.add(userEmailId);
       lastSendAtByMailbox[userEmailId] = Date.now();
-      await setSendProgress(userId, { ...progressBase, failed, current: email.to_email });
+      await setSendProgress(userId, { ...progressBase, failed, retrying, current: email.to_email });
     }
   }
 
-  return { sent, failed, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow };
+  return { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow };
 }
 
 async function retryDeferredPendingSends() {
@@ -1872,7 +1981,7 @@ async function autoSendForManager(managerId) {
     console.log(`[AutoSend] Starting auto-send of ${totalCount} emails for manager ${managerId}`);
     await setSendProgress(managerId, { active: true, total: totalCount, sent: 0, failed: 0, deferred: 0, current: '', failDetails: [], startedAt: new Date().toISOString(), autoSend: true });
 
-    const { sent, failed, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(managerId, pendingEmails, { autoSend: true });
+    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(managerId, pendingEmails, { autoSend: true });
 
     const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
     if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
@@ -1881,7 +1990,7 @@ async function autoSendForManager(managerId) {
 
     const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
     await setSendProgress(managerId, {
-      active: false, done: true, total: totalCount, sent, failed, deferred: deferredTotal,
+      active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       failDetails,
       deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),

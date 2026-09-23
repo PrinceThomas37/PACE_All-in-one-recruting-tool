@@ -2,8 +2,8 @@
   "generated": "2026-09-23",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 321,
-    "lines": 77234,
+    "files": 324,
+    "lines": 77721,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 59,
-      "lines": 24033,
+      "lines": 24100,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -73,11 +73,11 @@
         "services/record-history-writer.js"
       ],
       "files": 25,
-      "lines": 7807,
+      "lines": 7916,
       "largest": [
         {
           "f": "index.js",
-          "n": 3382
+          "n": 3491
         },
         {
           "f": "routes/apply.js",
@@ -114,8 +114,8 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 54,
-      "lines": 3232,
+      "files": 55,
+      "lines": 3260,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -135,7 +135,7 @@
         }
       ],
       "lastTouched": "2026-09-23",
-      "openIn": 2,
+      "openIn": 1,
       "openOut": 0
     },
     {
@@ -162,6 +162,7 @@
         "services/applicant-notify.js",
         "services/outreach-cycle.js",
         "services/send-progress.js",
+        "services/send-retry.js",
         "services/outreach-dedup.js",
         "services/mailbox-reassign.js",
         "services/lead-recycle.js",
@@ -175,8 +176,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 22,
-      "lines": 4397,
+      "files": 23,
+      "lines": 4554,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -195,9 +196,9 @@
           "n": 378
         }
       ],
-      "lastTouched": "2026-09-22",
+      "lastTouched": "2026-09-23",
       "openIn": 1,
-      "openOut": 1
+      "openOut": 0
     },
     {
       "id": "observatory",
@@ -376,8 +377,8 @@
         "test/",
         ".github/"
       ],
-      "files": 100,
-      "lines": 19737,
+      "files": 101,
+      "lines": 19863,
       "largest": [
         {
           "f": "test/candidate-outreach-smoke.mjs",
@@ -602,14 +603,6 @@
       "status": "OPEN",
       "date": "2026-09-09",
       "asks": "`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."
-    },
-    {
-      "id": "C-0004",
-      "from": "harbour",
-      "to": "deep",
-      "status": "OPEN",
-      "date": "2026-09-09",
-      "asks": "an error column on `emails` (migration 043) recording *why* a send failed."
     },
     {
       "id": "C-0005",

@@ -402,3 +402,16 @@ nothing else, and a test fails if a second file ever registers that overlay.
   reads that rule out of `ui.css` and fails if it is softened.
 - No inline colours or font sizes anywhere in it: on a phone the scale comes up
   to meet the 16px input floor via classes, not `style=""`.
+
+## Session 29 — "Didn't send" on the Email → Pending tab
+Failed emails used to be visible only in the send-complete card, which expires
+after 15 minutes; after that they were nowhere on screen. The Pending tab now
+draws a **Didn't send** card (`.failed-panel`, calm per D-0019 — neutral ground,
+3px amber stripe) listing each failed email, its stored reason, the sentence
+from `retry_note`, and a **Retry** button only where `can_retry` is true, plus
+**Retry all**. A pending row waiting on its backoff shows a `.retry-chip`
+("Retry 1 of 3 in 14 min") in place of the window badge. The send-progress card
+gained a **Will retry** chip. Loader: `STATE.failedEmails` from
+`GET /emails?status=failed`; actions `window.retryFailedEmail` /
+`window.retryAllFailedEmails` in `11-bind-and-actions.js`. Verified by
+screenshot at 1280 light, 1280 dark and 390 phone.

@@ -918,3 +918,36 @@ themselves — which would make the artifact the writer and invert rule 5.
 exists; it cannot judge that a thing said in passing was a suggestion worth
 recording. Same split as D-0027 — the gate is dumb on purpose, the judgement
 stays here.
+
+## D-0031 — Failed emails retry themselves on a ladder; D-0006 is re-opened
+
+**Decided**: 2026-09-23 (Session 29) · **Asked for by the owner**, after
+importing a fresh set of leads: *"when email sending gets failed, i dont see the
+re-try option to send the failed email or the automatic version of it in the
+engine after sometime from the failed email ID. can we design that part"* —
+then, on the design: *"go ahead, retry today's 4 automatically"*.
+
+**This re-opens D-0006 on its own stated condition** ("a fresh, visible
+incident"): two of Daniel James's emails failed "sign-in expired" at 18:06 UTC
+while three more from the same mailbox sent minutes later.
+
+**The decision:**
+1. A failure is sorted: **temporary** (sign-in, throttling, provider hiccup),
+   **permanent** (a fact about the recipient — opted out, bad address),
+   **needs fix** (a fact about our setup — no mailbox on the lead), and
+   **uncertain** (a timeout mid-send, which may have been delivered).
+2. Temporary ones retry **after 15 min, then 1 h, then 4 h** — the first send
+   plus three retries — then stop and say so.
+3. **Only temporary retries automatically.** Uncertain never does (it could
+   email a prospect twice); permanent is never offered a Retry button at all.
+4. A mailbox whose sign-in fails is skipped for the rest of that run.
+5. The reason is stored on the email (migration 046) and a person can press
+   **Retry** / **Retry all** on the Email page.
+6. Today's 4 failed emails were re-queued by hand at the owner's request.
+
+**Not decided here:** the Google "Testing" 7-day token expiry itself (D-0006's
+root cause). Retries survive a hiccup; they do not survive a sign-in that is
+genuinely dead — those give up after the 4-hour retry and wait for a reconnect.
+
+**Re-open when:** a retried email is found to have gone out twice, or failures
+that are really permanent are seen cycling through the ladder.
