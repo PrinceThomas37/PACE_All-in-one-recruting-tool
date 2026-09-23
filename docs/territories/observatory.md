@@ -309,3 +309,15 @@ refusal (a 429 is exactly when the numbers matter), from both `complete()` and
 DAY, tokens per MINUTE (Groq's documented meaning); other providers are shown
 as reported with no window claimed. **Use these numbers, not memory, whenever
 the owner asks whether a free tier is enough.**
+
+## Session 29 — OpenRouter free models are looked up, not remembered
+The owner connected OpenRouter and the health card answered **HTTP 404 — this
+model is unavailable for free** for `meta-llama/llama-3.3-70b-instruct:free`,
+the one variant Session 27 had confirmed live. **Third expired model name.**
+`freeModelsFor()` reads OpenRouter's public `/models` (prices per token),
+`rankFreeModels()` (pure) keeps zero-priced text writers, largest context
+first; cached 6h in `app_settings.ai_openrouter_free_models`, a stale list used
+if the catalogue is unreachable. `candidateModels()` applies it to OpenRouter
+only and only without an admin override, in both `complete()` and `diagnose()`.
+The sandbox cannot reach openrouter.ai, so the real list has not been seen here
+— the owner's health card is where it shows.

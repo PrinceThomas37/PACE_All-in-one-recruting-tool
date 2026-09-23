@@ -191,6 +191,17 @@ router.get('/jobs/:id', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+function cleanImportExtra(x) {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(x).slice(0, 40)) {
+    const key = String(k).trim().slice(0, 80);
+    const val = String(v == null ? '' : v).trim().slice(0, 500);
+    if (key && val) out[key] = val;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 router.post('/jobs/bulk', auth, async (req, res) => {
   try {
     const { jobs } = req.body;
@@ -242,7 +253,10 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         industry: j.industry || null,
         ...orgStamp(req)
       };
-      if (research) row.research = research;
+      // Columns the importer did not recognise, kept as written (bounded:
+      // 40 columns, 500 chars each) so nothing in the owner's sheet is lost.
+      const extra = cleanImportExtra(j.import_extra);
+      if (research || extra) row.research = { ...(research || {}), ...(extra ? { import_extra: extra } : {}) };
       return row;
     });
     if (!jobRows.length) return res.status(200).json({ imported: 0, contacts: 0, skipped, message: `All ${skipped} companies are in a 21-day cooldown period.` });
