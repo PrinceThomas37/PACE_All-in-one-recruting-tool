@@ -12,6 +12,8 @@ const clientResolve = require('../../services/client-resolve');
 const companyCooldown = require('../../services/company-cooldown');
 const { getSetting } = require('../../config/settings');
 const { makeRecorder } = require('../../services/record-history-writer');
+const jobOrderVisibility = require('../../services/job-order-visibility');
+const own = require('../../services/ownership');
 
 
 module.exports = function (app, core) {
@@ -35,6 +37,26 @@ module.exports = function (app, core) {
   // routes use, so it shares that service rather than re-declaring the select.
   const { CANDIDATE_SELECT } = createCandidateFields(core);
 
+  // D-0035: who may see a job order's client POC. `bd_manager_id` names the
+  // owner; the viewer's reporting chain (self + every direct/transitive
+  // report) is the same "manages this person" set D-0034 uses elsewhere.
+  // Admin always sees it. One helper so list/detail/browse cannot disagree.
+  async function pocScope(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const ownerIds = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    return { isAdmin, ownerIds };
+  }
+
+  // Mirrors index.js `userOrgId` (routeCtx carries it there, but this router is
+  // mounted with only { supabase, auth, hasRole, today, orgIdFor } — see
+  // bd_recruiter_routes.js — so it never reaches here). Used below to stop a
+  // body-supplied `bd_manager_id` from naming a user in another org.
+  async function userOrgId(userId) {
+    if (!userId) return null;
+    const { data } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
+    return data ? data.org_id : null;
+  }
+
   // CONVERSION — lead -> job order
   // ==========================================================================
 
@@ -43,9 +65,24 @@ module.exports = function (app, core) {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can convert leads to job orders.' });
 
-      const { data: lead, error: leadErr } = await supabase
-        .from('jobs').select('*').eq('id', req.params.jobId).is('deleted_at', null).single();
+      const { data: lead, error: leadErr } = await withOrg(supabase
+        .from('jobs').select('*').eq('id', req.params.jobId).is('deleted_at', null), req).single();
       if (leadErr || !lead) return res.status(404).json({ error: 'Lead not found' });
+
+      // Rampart review (D-0035 #3): any BDM could convert ANY Connected lead in
+      // the org, and `clientOwnerId` prefers `job_orders.bd_manager_id` — so
+      // converting a colleague's lead took over their client (POC, docs, email
+      // rights) with no ownership check at all. Same scope test as bulk-stage:
+      // admin passes; anyone else must own the lead (assigned_to_bd in their
+      // reporting-chain scope).
+      if (!hasRole(req, 'admin')) {
+        const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+        const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+        if (!own.inScope(lead.assigned_to_bd, scope)) {
+          return res.status(403).json({ error: 'This lead belongs to somebody else, so it is not yours to convert.' });
+        }
+      }
+
       if (lead.stage !== 'Connected') {
         return res.status(409).json({ error: `Lead must be at stage "Connected" to convert (currently "${lead.stage}").` });
       }
@@ -65,6 +102,21 @@ module.exports = function (app, core) {
       }
 
       const b = req.body || {};
+      // A body-supplied `bd_manager_id` must name a real user in the caller's
+      // own org AND either the caller themself or someone in their reporting
+      // chain — otherwise converting a lead is also a way to hand a client to
+      // an arbitrary user id (D-0035 #3, same finding). Falls back to the
+      // caller, exactly as before, when the field is absent.
+      let bdManagerId = req.user.id;
+      if (b.bd_manager_id && b.bd_manager_id !== req.user.id) {
+        const targetOrg = await userOrgId(b.bd_manager_id);
+        const reqOrg = orgIdFor(req);
+        const chain = await reportingChainIds(req.user.id, reqOrg);
+        if (!targetOrg || (reqOrg && targetOrg !== reqOrg) || !chain.includes(b.bd_manager_id)) {
+          return res.status(400).json({ error: 'bd_manager_id must be yourself or someone in your reporting chain.' });
+        }
+        bdManagerId = b.bd_manager_id;
+      }
       const jobCode = await nextId('JOB');
       const jobRow = Object.assign({
         job_code: jobCode,
@@ -74,7 +126,7 @@ module.exports = function (app, core) {
         job_title: lead.position,                   // title carries over from the lead
         priority: 'Normal',
         status: 'Active',
-        bd_manager_id: b.bd_manager_id || req.user.id,
+        bd_manager_id: bdManagerId,
         created_by: req.user.id
       }, pickJobFields(b), orgStamp(req));
       // never let the client blank out the inherited title
@@ -260,6 +312,11 @@ module.exports = function (app, core) {
 
   app.get('/job-orders', auth, async (req, res) => {
     try {
+      // This is "My Jobs" for a pure recruiter (the company-wide browse list
+      // is /job-orders/browse below, already open to every recruiting role) —
+      // that filter is unchanged. What's new (D-0035) is the POC strip below:
+      // a BD Manager who is not this job's owner already saw every org job
+      // order through this same list, client contact included.
       let query = withOrg(supabase.from('job_orders').select(JOB_ORDER_SELECT).is('deleted_at', null), req);
 
       // recruiters only see job orders they are assigned to
@@ -272,7 +329,7 @@ module.exports = function (app, core) {
 
       const { data, error } = await query.order('created_at', { ascending: false });
       if (error) throw error;
-      const list = data || [];
+      let list = data || [];
       // Attach assigned recruiters to every job order (the single-get already
       // does this; the list did not — which made the recruiter "My Jobs" filter
       // return nothing and showed everyone as "Unassigned" on the BDM list).
@@ -284,6 +341,7 @@ module.exports = function (app, core) {
         (assigns || []).forEach(a => { (byJob[a.job_order_id] = byJob[a.job_order_id] || []).push(a); });
         list.forEach(j => { j.recruiters = byJob[j.id] || []; });
       }
+      list = jobOrderVisibility.stripJobOrdersPoc(list, await pocScope(req));
       res.json(list);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -318,13 +376,19 @@ module.exports = function (app, core) {
           if (!prev || r.status === 'pending') myReqs[r.job_order_id] = r;
         });
       }
-      res.json(list.map(j => ({
+      // D-0035: this SELECT never included client_manager, so there is nothing
+      // to strip here — but `poc_visible` is attached anyway so the browse
+      // card and the detail view agree about whether THIS viewer is the
+      // job's owner, rather than one screen implying "no contact on file" and
+      // the other implying "hidden from you".
+      const scope = await pocScope(req);
+      res.json(list.map(j => Object.assign({
         ...j,
         recruiters: (assignsByJob[j.id] || []).map(a => (a.recruiter && a.recruiter.name) || '').filter(Boolean),
         submission_count: subCounts[j.id] || 0,
         assigned_to_me: (assignsByJob[j.id] || []).some(a => a.recruiter_id === req.user.id),
         my_request: myReqs[j.id] ? { id: myReqs[j.id].id, status: myReqs[j.id].status } : null
-      })));
+      }, { poc_visible: jobOrderVisibility.canSeeJobOrderPoc({ bd_manager_id: j.bd_manager && j.bd_manager.id }, scope) })));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -336,26 +400,36 @@ module.exports = function (app, core) {
       const reqOrg = orgIdFor(req);
       if (reqOrg && data.org_id && data.org_id !== reqOrg) return res.status(404).json({ error: 'Job order not found' });
 
-      if (isRecruiter(req) && !isBDM(req)) {
-        const ids = await assignedJobOrderIds(req.user.id);
-        if (!ids.includes(data.id)) return res.status(403).json({ error: 'Not assigned to this job order.' });
-      }
+      // D-0035: every job order in the company is now VISIBLE to every
+      // recruiting role — the 403 that used to sit here for an unassigned
+      // recruiter is gone. Interaction (adding/working candidates) is still
+      // gated exactly as before, downstream, by recruiterCanTouchJob in
+      // pipeline.js/submissions.js — this endpoint only ever READS the job.
 
       // attach assigned recruiters
       const { data: assigns } = await supabase.from('recruiter_assignments')
         .select('id, assigned_at, recruiter:users!recruiter_id(id,name,employee_id)')
         .eq('job_order_id', data.id);
       data.recruiters = assigns || [];
-      res.json(data);
+      res.json(jobOrderVisibility.stripJobOrderPoc(data, await pocScope(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   app.put('/job-orders/:id', auth, async (req, res) => {
     try {
-      // BD managers can edit any job order; recruiters can edit a job they are
-      // assigned to (so the people actually working the req can keep it current).
-      if (!isBDM(req) && !(isRecruiter(req) && await recruiterCanTouchJob(req, req.params.id))) {
-        return res.status(403).json({ error: 'Only BD Managers or an assigned recruiter can edit this job order.' });
+      // Read the row first — it is both the org check and, since D-0035, the
+      // OWNERSHIP check: editing the job order itself ("interaction... is the
+      // owner's") now belongs to its bd_manager_id, their manager chain, or
+      // admin — "any BDM role" is no longer enough, and an assigned recruiter
+      // edits candidates on the job (pipeline/submissions), not the req itself.
+      const { data: current } = await supabase.from('job_orders')
+        .select('*').eq('id', req.params.id).maybeSingle();
+      const reqOrg = orgIdFor(req);
+      if (!current || (reqOrg && current.org_id && current.org_id !== reqOrg)) {
+        return res.status(404).json({ error: 'Job order not found' });
+      }
+      if (!(await pocScope(req).then(s => jobOrderVisibility.isJobOrderOwner(current, s)))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can edit it." });
       }
       const b = req.body || {};
       const updates = Object.assign({ updated_at: new Date() }, pickJobFields(b));
@@ -364,8 +438,6 @@ module.exports = function (app, core) {
       // Re-derive against the row as it will be AFTER this edit, not just the
       // fields being sent: a BD who pastes a JD and nothing else should still get
       // skills filled in, and one who types skills by hand must keep them.
-      const { data: current } = await supabase.from('job_orders')
-        .select('*').eq('id', req.params.id).maybeSingle();
       Object.assign(updates, await applyDerivedJobFields(Object.assign({}, current || {}, updates)));
 
       const { data, error } = await supabase.from('job_orders')
@@ -383,7 +455,14 @@ module.exports = function (app, core) {
 
   app.delete('/job-orders/:id', auth, async (req, res) => {
     try {
-      if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can delete job orders.' });
+      const { data: existing } = await withOrg(
+        supabase.from('job_orders').select('id,bd_manager_id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!existing) return res.status(404).json({ error: 'Job order not found' });
+      // D-0035: delete is owner interaction, not "any BDM".
+      if (!jobOrderVisibility.isJobOrderOwner(existing, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can delete it." });
+      }
       await supabase.from('job_orders').update({ deleted_at: new Date() }).eq('id', req.params.id);
       await history.record(req, 'job_order', req.params.id, { action: 'deleted', note: 'Job order deleted' });
       res.json({ success: true });
@@ -495,12 +574,24 @@ module.exports = function (app, core) {
       }
       if (String(req.query.apply || '') !== '1') return res.json({ applied: false, derived });
 
+      // Rampart review (D-0035 #4): `?apply=1` is a WRITE to the job order, and
+      // the gate above ("any BDM, or an assigned recruiter") is the READ gate —
+      // any BDM in the org could persist a change to a job order they don't own.
+      // Applying the fill needs the same owner/chain/admin gate as PUT/DELETE.
+      const scope = await pocScope(req);
+      if (!jobOrderVisibility.isJobOrderOwner(job, scope)) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can apply this." });
+      }
+
       const { data, error } = await supabase.from('job_orders')
         .update(Object.assign({ updated_at: new Date() }, derived))
         .eq('id', req.params.id).select(JOB_ORDER_SELECT).single();
       if (error) throw error;
       invalidateJobScores(req.params.id);
-      res.json({ applied: true, derived, job_order: data });
+      // stripJobOrderPoc is a no-op here (only the owner reaches this line), but
+      // kept so this response can never disagree with list/detail/browse about
+      // what "POC" means if the gate above ever loosens.
+      res.json({ applied: true, derived, job_order: jobOrderVisibility.stripJobOrderPoc(data, scope) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -518,9 +609,9 @@ module.exports = function (app, core) {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       if (!(await recruiterCanTouchJob(req, req.params.id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
-      const { data: j, error } = await supabase.from('job_orders')
+      const { data: j, error } = await withOrg(supabase.from('job_orders')
         .select('job_title,client,end_client,client_manager,job_description,company:companies(name)')
-        .eq('id', req.params.id).is('deleted_at', null).single();
+        .eq('id', req.params.id).is('deleted_at', null), req).single();
       if (error || !j) return res.status(404).json({ error: 'Job order not found' });
       if (!j.job_description || !j.job_description.trim()) return res.status(400).json({ error: 'This job has no description to rewrite.' });
 
@@ -577,15 +668,16 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   app.post('/job-orders/:id/apply-link', auth, async (req, res) => {
     try {
-      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      if (!(await recruiterCanTouchJob(req, req.params.id))) {
-        return res.status(403).json({ error: 'Not assigned to this job order.' });
-      }
       const { data: job, error: e0 } = await withOrg(
-        supabase.from('job_orders').select('id,apply_token,apply_enabled').eq('id', req.params.id), req
+        supabase.from('job_orders').select('id,bd_manager_id,apply_token,apply_enabled').eq('id', req.params.id), req
       ).maybeSingle();
       if (e0) throw e0;
       if (!job) return res.status(404).json({ error: 'Job order not found' });
+      // D-0035: publishing the apply link is owner interaction, not any
+      // BDM/assigned-recruiter permission.
+      if (!jobOrderVisibility.isJobOrderOwner(job, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can publish its apply link." });
+      }
 
       // Reuse the existing token — see the note above about links already in
       // the wild. Only a job that has never been published gets a new one.
@@ -610,9 +702,13 @@ ${String(j.job_description).slice(0, 12000)}`;
 
   app.delete('/job-orders/:id/apply-link', auth, async (req, res) => {
     try {
-      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      if (!(await recruiterCanTouchJob(req, req.params.id))) {
-        return res.status(403).json({ error: 'Not assigned to this job order.' });
+      const { data: job, error: e0 } = await withOrg(
+        supabase.from('job_orders').select('id,bd_manager_id').eq('id', req.params.id), req
+      ).maybeSingle();
+      if (e0) throw e0;
+      if (!job) return res.status(404).json({ error: 'Job order not found' });
+      if (!jobOrderVisibility.isJobOrderOwner(job, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can unpublish its apply link." });
       }
       // The token is KEPT. Unpublishing closes the page (routes/apply.js checks
       // apply_enabled and answers exactly as it would for a link that never
@@ -639,12 +735,34 @@ ${String(j.job_description).slice(0, 12000)}`;
   app.post('/job-orders/:id/recruiters', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can assign recruiters.' });
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id,bd_manager_id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
+      // Rampart review (D-0035 #6): "any BDM" let a colleague assign recruiters
+      // onto a job order they don't own — same owner/chain/admin gate as every
+      // other job-order write.
+      if (!jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can assign recruiters to it." });
+      }
       const recruiterIds = req.body.recruiter_ids || (req.body.recruiter_id ? [req.body.recruiter_id] : []);
       if (!recruiterIds.length) return res.status(400).json({ error: 'recruiter_ids required' });
 
-      const rows = recruiterIds.map(rid => ({
+      // Every id must be a real user in the CALLER's org — otherwise this is a
+      // way to name a stranger's user id (ids are not secret) and have them
+      // upserted onto recruiter_assignments regardless of which org they're in.
+      const reqOrg = orgIdFor(req);
+      let uq = supabase.from('users').select('id').in('id', recruiterIds).is('deleted_at', null);
+      if (reqOrg) uq = uq.eq('org_id', reqOrg);
+      const { data: validUsers } = await uq;
+      const validIds = new Set((validUsers || []).map(u => u.id));
+      if (validIds.size !== recruiterIds.length) {
+        return res.status(400).json({ error: 'One or more recruiter ids are not valid users in your organization.' });
+      }
+
+      const rows = recruiterIds.map(rid => Object.assign({
         job_order_id: req.params.id, recruiter_id: rid, assigned_by: req.user.id
-      }));
+      }, orgStamp(req)));
       // upsert avoids duplicate-assignment errors thanks to the unique index
       const { error } = await supabase.from('recruiter_assignments')
         .upsert(rows, { onConflict: 'job_order_id,recruiter_id', ignoreDuplicates: true });
@@ -660,8 +778,18 @@ ${String(j.job_description).slice(0, 12000)}`;
   app.delete('/job-orders/:id/recruiters/:rid', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can unassign recruiters.' });
-      await supabase.from('recruiter_assignments')
-        .delete().eq('job_order_id', req.params.id).eq('recruiter_id', req.params.rid);
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id,bd_manager_id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
+      // Rampart re-review (round 2, R2): same owner/chain/admin gate as the
+      // assignment POST above — "any BDM" let a colleague unassign recruiters
+      // from a job order they don't own.
+      if (!jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can unassign recruiters from it." });
+      }
+      await withOrg(supabase.from('recruiter_assignments').delete(), req)
+        .eq('job_order_id', req.params.id).eq('recruiter_id', req.params.rid);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -671,13 +799,17 @@ ${String(j.job_description).slice(0, 12000)}`;
     try {
       if (!isRecruiter(req)) return res.status(403).json({ error: 'Recruiters only.' });
       const jid = req.params.id, uid = req.user.id;
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id').eq('id', jid).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
       const assigned = await assignedJobOrderIds(uid);
       if (assigned.includes(jid)) return res.status(400).json({ error: 'You are already assigned to this job.' });
       const { data: existing } = await supabase.from('assignment_requests')
         .select('id,status').eq('job_order_id', jid).eq('recruiter_id', uid).eq('status', 'pending').maybeSingle();
       if (existing) return res.json(existing);
       const { data, error } = await supabase.from('assignment_requests')
-        .insert({ job_order_id: jid, recruiter_id: uid, note: (req.body && req.body.note) || null })
+        .insert(Object.assign({ job_order_id: jid, recruiter_id: uid, note: (req.body && req.body.note) || null }, orgStamp(req)))
         .select().single();
       if (error) throw error;
       res.status(201).json(data);
@@ -687,9 +819,9 @@ ${String(j.job_description).slice(0, 12000)}`;
   // BDM: the queue of recruiters asking for jobs. Recruiter: their own requests.
   app.get('/assignment-requests', auth, async (req, res) => {
     try {
-      let q = supabase.from('assignment_requests')
+      let q = withOrg(supabase.from('assignment_requests')
         .select('id,status,note,created_at,decided_at,job_order_id,recruiter_id,' +
-          'job:job_orders(id,job_code,job_title,client),recruiter:users!recruiter_id(id,name,employee_id)')
+          'job:job_orders(id,job_code,job_title,client),recruiter:users!recruiter_id(id,name,employee_id)'), req)
         .order('created_at', { ascending: false }).limit(100);
       if (isBDM(req)) { if (req.query.status) q = q.eq('status', req.query.status); }
       else if (isRecruiter(req)) q = q.eq('recruiter_id', req.user.id);
@@ -705,13 +837,22 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can decide assignment requests.' });
       const action = (req.body && req.body.action) || '';
       if (!['approve', 'decline'].includes(action)) return res.status(400).json({ error: "action must be 'approve' or 'decline'" });
-      const { data: reqRow } = await supabase.from('assignment_requests')
-        .select('id,job_order_id,recruiter_id,status').eq('id', req.params.id).maybeSingle();
+      const { data: reqRow } = await withOrg(supabase.from('assignment_requests')
+        .select('id,job_order_id,recruiter_id,status').eq('id', req.params.id), req).maybeSingle();
       if (!reqRow) return res.status(404).json({ error: 'Request not found' });
       if (reqRow.status !== 'pending') return res.status(400).json({ error: 'Request already decided.' });
+
+      // Rampart review (D-0035 #6): same finding as /recruiters — any BDM could
+      // approve/decline a request on a job order they don't own.
+      const { data: jo } = await supabase.from('job_orders')
+        .select('id,bd_manager_id').eq('id', reqRow.job_order_id).maybeSingle();
+      if (!jo || !jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can decide requests for it." });
+      }
+
       if (action === 'approve') {
         const { error: aerr } = await supabase.from('recruiter_assignments')
-          .upsert({ job_order_id: reqRow.job_order_id, recruiter_id: reqRow.recruiter_id, assigned_by: req.user.id },
+          .upsert(Object.assign({ job_order_id: reqRow.job_order_id, recruiter_id: reqRow.recruiter_id, assigned_by: req.user.id }, orgStamp(req)),
             { onConflict: 'job_order_id,recruiter_id', ignoreDuplicates: true });
         if (aerr) throw aerr;
       }
@@ -731,11 +872,13 @@ ${String(j.job_description).slice(0, 12000)}`;
       if (!isBDM(req)) return res.status(403).json({ error: 'Admin or BD Manager only' });
       const ids = await assignedJobOrderIds(req.params.id);
       if (!ids.length) return res.json([]);
-      const { data, error } = await supabase.from('job_orders')
-        .select(JOB_ORDER_SELECT).in('id', ids).is('deleted_at', null)
+      const { data, error } = await withOrg(supabase.from('job_orders')
+        .select(JOB_ORDER_SELECT).in('id', ids).is('deleted_at', null), req)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      res.json(data || []);
+      // Rampart review (D-0035 #8): this returned client_manager unstripped —
+      // list/detail/browse already gate it through the one POC helper.
+      res.json(jobOrderVisibility.stripJobOrdersPoc(data, await pocScope(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 };

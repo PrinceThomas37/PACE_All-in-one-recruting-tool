@@ -141,3 +141,6 @@ Closes C-0004. **Next migration is 047.**
 - **2026-09-23 (Session 29)** — data repair, live: 119 of 119 contacts had `linkedin` = their own email (import misfile, "Email ID" matched "li"). Cleared where `lower(trim(linkedin)) = lower(trim(email))`; nothing lost, the email column holds the same value. It had also made every contact look reachable on LinkedIn to the D-0017 call-task gate.
 
 - **2026-09-24** — `services/lead-fill.js` assigned to guild in the territory map.
+
+## 2026-09-24 — map registration (noted by the orchestrator)
+`scripts/territory-map.mjs` gained `services/job-order-visibility.js` under guild: the D-0035 helper that decides which client-POC fields of a job order a non-owner may see. Added by guild during C-0022 so the file is not an orphan; regenerate `_map.json` with `node scripts/territory-map.mjs` after it lands.

@@ -148,13 +148,15 @@
     }).catch(function(){ g.sentLoading=false; g.sent=[]; render(); });
   };
 
-  window.outreachConvertLead=function(token){
+  // C-0028: keyed on the tracking row's id, never its token — the token is a
+  // credential (it drives the open pixel and a tap-through), an id is a handle.
+  window.outreachConvertLead=function(id){
     var g=G();
-    var row=(g.sent||[]).filter(function(r){return r.token===token;})[0];
+    var row=(g.sent||[]).filter(function(r){return r.id===id;})[0];
     if(!row) return;
-    g.converting=token; render();
+    g.converting=id; render();
     apiPost('/outreach/convert-lead',{
-      token:token, email:row.to_email, subject:row.subject,
+      id:id, email:row.to_email, subject:row.subject,
       name:g.form.contact_first_name||'', company:g.form.company||'',
       title:g.form.contact_title||'', location:g.form.location||''
     }).then(function(r){
@@ -762,9 +764,9 @@
         var action = r.lead_id
           ? '<span style="font-size:11.5px;color:var(--text3)">lead created</span>'
           : (r.replied_at
-              ? '<button class="btn btn-outline btn-sm" '+(g.converting===r.token?'disabled style="opacity:.6"':'')+
-                ' onclick="outreachConvertLead(\''+esc(r.token)+'\')">'+
-                (g.converting===r.token?'Creating…':'Convert to lead')+'</button>'
+              ? '<button class="btn btn-outline btn-sm" '+(g.converting===r.id?'disabled style="opacity:.6"':'')+
+                ' onclick="outreachConvertLead(\''+esc(r.id)+'\')">'+
+                (g.converting===r.id?'Creating…':'Convert to lead')+'</button>'
               : '');
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)">'+
           '<div style="flex:1;min-width:0">'+

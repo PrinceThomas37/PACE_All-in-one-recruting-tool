@@ -34,19 +34,36 @@ router.get('/lookup/zipcode', auth, async (req, res) => {
   } catch (err) { res.json([]); }
 });
 
+// D-0035 (D5, the owner's answer to "what does showing the other BD's contact
+// details mean?"): a duplicate answers with WHOSE lead it is and SINCE WHEN —
+// never that lead's own contact's name, and never another org's. This used to
+// have no org filter at all (any authenticated user could probe any org's
+// contacts by email) and returned `contact_name`/`position`, which the one
+// caller (`52-poc-block.js` `_pocNoteHTML`) has never actually rendered — it
+// reads `added_by`, a field this endpoint never sent, so "added by <name>"
+// has been silently dead since it shipped. Fixed as one change: whose lead
+// (the lead's OWNER, D-0020's `assigned_to_bd`) and the client name, not the
+// contact who was found.
 router.post('/contacts/check-email', auth, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.json({ duplicate: false });
     const twoMonthsAgo = new Date(); twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    const { data, error } = await supabase.from('contacts')
-      .select('id,first_name,last_name,email,created_at,job:jobs(id,position,company:companies(name))')
+    let q = supabase.from('contacts')
+      .select('id,created_at,job:jobs(id,assigned_to_bd,company:companies(name),owner:users!assigned_to_bd(id,name))')
       .eq('email', email.toLowerCase().trim()).gte('created_at', twoMonthsAgo.toISOString()).limit(1);
+    if (req.orgId) q = q.eq('org_id', req.orgId);
+    const { data, error } = await q;
     if (error) throw error;
     if (!data?.length) return res.json({ duplicate: false });
     const c = data[0];
     const daysSince = Math.floor((new Date() - new Date(c.created_at)) / 86400000);
-    res.json({ duplicate: true, days_ago: daysSince, contact_name: `${c.first_name} ${c.last_name}`.trim(), company: c.job?.company?.name || '', position: c.job?.position || '' });
+    const job = c.job || {};
+    res.json({
+      duplicate: true, days_ago: daysSince,
+      added_by: (job.owner && job.owner.name) || null,
+      company: (job.company && job.company.name) || '',
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

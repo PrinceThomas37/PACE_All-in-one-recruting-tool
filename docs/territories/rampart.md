@@ -1,136 +1,300 @@
 # Rampart — memory
-> Last written: 2026-09-09 · org-scoping audit (`claude/org-scoping-audit`)
+> Last written: 2026-09-24 · review of the C-0021..C-0029 fixes (`claude/tender-noether-fmxgr0`)
 
 ## What is true here now
+- **Two different questions, and this territory now answers both.**
+  * **Cross-company (X-ORG):** could a person at company A reach company B's
+    data? That is a breach with no error message. Laws 1-8 exist for it.
+  * **Inside one company (D-0034, 2026-09-23):** *"you SEE only what you are
+    responsible for, plus your team's if you manage one."* The owner found the
+    gap as BD Lead 1: 49 leads shown, 25 owned; all 119 emails shown.
+- **THE VISIBILITY RULE IS CALLABLE: `services/ownership.js`, section "SEEING".**
+  PURE. `viewScope({role, roles, userId, chainIds})` → `{all, userId, ownerIds,
+  seesPool, label}`; predicates `canSeeLead`, `canSeeContact`, `canSeeEmail`,
+  `canSeeSubmission`; helpers `scopeLeads`, `scopeEmails`, `queryOwnerIds`,
+  `inScope`, `isPoolLead`, `rolesOf`, `POOL_ROLES`. The header holds the
+  role → scope table. Two rules make that table:
+  1. **Only the CHAIN widens a view, never the role** (admin excepted →
+     whole org). The chain is `hierarchy.js` `reportingChainIds` — the one BFS.
+  2. **A role adds the POOL and nothing else.** Pool = a lead with no
+     `assigned_to_bd`. POOL_ROLES = admin + ra_lead, because every
+     `/distribute/*` route and `/jobs/bulk-assign` gate on exactly those two.
+     **bd_lead does not distribute, so bd_lead does not see the pool.**
+  * **ra_lead, decided:** the pool (they distribute it) + everything their own
+    RAs created (`created_by` in chain — reviewing research is their job) +
+    COUNTS for send operations. Not other BDs' leads as records, and never BD
+    correspondence. The Email page's RA-Lead drill-down loses message bodies —
+    owner-visible, so listed as D4.
+  * **An email is seen by its sender's scope and by the scope of whoever OWNS
+    the lead now** — NOT its creator, NOT the pool. An RA does not read the BD's
+    mail on a lead they researched. A recycled lead's history follows the new
+    owner.
+  * **Fail closed:** no user id → sees nothing; missing chain → self only.
+  * **`rolesOf()` reads roles exactly like `hasRole`** (non-empty `roles[]`
+    wins over `role`). Reading them any other way lets this file and the role
+    gates disagree about who is an admin.
+  * Verified by a 32-assertion scratch check on the live org shape and **six
+    reintroduced bugs, each caught** — but NOT yet a committed suite (C-0027).
 - Multi-tenancy is **shipped**: `org_id` NOT NULL on all tenant tables
-  (migrations 022/023), RLS + service-role policies on all 48 (migration 039,
-  applied 2026-08-05). **Verified after: 0 without RLS, 0 without a policy.**
-- `models/` makes scoping structural: `db.forRequest(req)` scopes by
-  construction, `db.global` covers the 7 tables with no `org_id`, `db.crossOrg()`
-  is the named, greppable escape hatch. Anything else throws.
-- Migration 039 also gave `microsoft_tokens`/`gmail_tokens` an `org_id` — before
-  it, **customers' mailbox refresh tokens were readable with the anon key.**
-- Roles: `users_role_check` accepts `associate_director` and `director` (the UI
-  had offered them since migration 026 and the DB had rejected them since).
-- **Self-serve signup is built and switched OFF** (`SELF_SERVE_SIGNUP`).
-  `decide()` in `services/provisioning.js` is PURE. Three destinations only.
-- SSO with Microsoft is live. Google **sign-in** needs `GOOGLE_CLIENT_ID`/
-  `SECRET` in Render — distinct from per-user Gmail *sending*, which works.
-- **No guest / demo mode.** `Bearer guest` and `01-seed-demo.js` are both gone.
-- **⚠ THE BACKEND RUNS AS SERVICE ROLE — RLS IS BYPASSED ON EVERY REQUEST.**
-  `index.js:73` builds the client with `config.supabaseServiceKey`. Verified,
-  not assumed. This is the single most important fact in this territory and it
-  was NOT written down before 2026-09-09. Consequences, all of which were being
-  got wrong in review:
-  * **"RLS + a service-role policy on all 48 tables" is NOT a mitigation for a
-    missing `org_id` in a route.** It defends against someone holding the anon
-    key — a different attacker. Never again answer a raw-query finding with
-    "but RLS is on".
-  * **Application code is the only tenant boundary that exists.** Every
-    `supabase.from()` on a tenant table without an org or ownership condition is
-    a live cross-org hole, today, with no error message.
-  * `middleware/authorize.js`'s file header has said this since it was split out
-    of index.js. It just never made it into any memory file.
-- **A tenant INSERT that omits `org_id` does not fail — it MISFILES.** Migration
-  022 gave every tenant table a column DEFAULT of the default org, so company
-  B's row lands in company A. This is the quiet half of every scoping bug here
-  and it is a data-corruption bug as much as a leak. Check inserts, not just
-  reads.
-- **`MULTI_ORG` now arms at runtime.** `resolveDefaultOrg()` counts orgs once at
-  boot; `services/provisioning.js` exports `onOrgCreated(fn)` and announces from
-  `createWorkspace()`, and `index.js` subscribes and sets `MULTI_ORG = true`.
-  Before this, the first self-serve workspace left `auth()`'s org-less-session
-  refusal disarmed until the next restart.
-- **`routes/auth.js` has ONE cross-org choke point: `guardUser(req, res, id)`.**
-  Every `/users/:id*` route is keyed on a user id from the URL and none of them
-  checked the org. It returns **404** on a miss, never 403. Add new
-  `/users/:id` routes through it; do not sprinkle `.eq('org_id', …)`.
-  **All 9 `:id` routes are guarded, plus both id arguments of
-  `POST /team-assignments`** (they arrive in the request body and were never
-  checked). Verify by ENUMERATION, not by eye — see the log entry below.
-- **⚠ A BULK EDIT ANCHORED ON A ROLE-GATE STRING WILL MISS A ROUTE, AND THE ONE
-  IT MISSES IS NEVER THE ONE YOU ARE LOOKING AT.** The first pass guarded 8 of
-  9. `PUT /users/:id/emails/:eid/signature` gates on
-  `hasRole(req,'admin','bd_lead','bd')` — the extra `'bd'` meant it did not
-  match the anchor the other four shared, and the `assert count >= 4` passed on
-  the four that did. It was the **worst** of the nine to miss: any `bd` user
-  could set the signature on another org's mailbox, and that signature goes out
-  on their live outbound mail. **Enumerate the routes and assert coverage per
-  route** (`awk '/^router\.(get|post|put|patch|delete)\(/'` + a per-route
-  guard/org/self matrix) rather than counting replacements. This is the same
-  lesson as `CLAUDE.md`'s "a syntax check proves a file parses, not that it
-  still does anything".
-- **`canTouchJob`'s admin bypass is now org-bounded.** It reads the job row
-  first (with the org filter) and applies the bypass after. It gates contact
-  create/update/delete and the follow-up routes.
+  (022/023), RLS + service-role policies on all 48 (039). 0 without RLS, 0
+  without a policy.
+- **⚠ THE BACKEND RUNS AS SERVICE ROLE — RLS IS BYPASSED ON EVERY REQUEST**
+  (`index.js:73`). RLS on 48 tables defends against the anon key, a different
+  attacker. **Application code is the only tenant boundary.** Never answer a
+  raw-query finding with "but RLS is on".
+- **A tenant INSERT that omits `org_id` does not fail — it MISFILES** into the
+  default org (column DEFAULT, migration 022). Check inserts, not just reads.
+- `models/`: `db.forRequest(req)` scopes by construction; raw `supabase` still
+  works, so **unconverted call sites are unprotected.**
+- `routes/auth.js` has ONE cross-org choke point, `guardUser()` — 404 on a miss.
+  All 18 routes carry a guard, an org filter or a `req.user.id` filter.
+- `canTouchJob`'s admin bypass is org-bounded (reads the row first).
+- `MULTI_ORG` arms at runtime via `provisioning.onOrgCreated`.
+- Self-serve signup built and OFF. `decide()` is PURE. No guest/demo mode.
+
+## THE AUDIT — 2026-09-23 (the record the fixing territories work from)
+Roles: A admin · D director · AD assoc. director · BL bd_lead · BD bd ·
+RL ra_lead · RA ra · R recruiter. Verdicts: **LEAK** (wider than D-0034),
+**X-ORG** (crosses companies), **NARROW** (shows less than D-0034 allows — the
+fix widens it), **DECISION** (owner's call), **OK**. Line numbers as of today.
+
+### gateway — contract C-0021
+| where | returns | today | verdict |
+|---|---|---|---|
+| `routes/jobs.js:118` GET /jobs | leads + nested contacts | A,RL all · BL every assigned lead · BD own · D,AD,RA,R `created_by` only | **LEAK** (BL, RL) · **NARROW** (D, AD) |
+| `routes/jobs.js:182` GET /jobs/:id | one lead | A,RL,BL any in org; others owner/creator (403) | **LEAK** (BL, RL) |
+| `routes/jobs.js:168` GET /jobs/export | every lead + contacts | A, RL | **LEAK** (RL) |
+| `routes/jobs.js:413` PUT /jobs/:id | edits + returns lead | any bd/bd_lead edits any lead; `sending_email_id`/`assigned_to_bd` unvalidated | **LEAK** (acting) · **X-ORG critical** (send as another company, with X3) |
+| `routes/email-history.js:79` GET /email/history | 3 pipelines incl. bodies | everyone, whole org | **LEAK** — the owner's report |
+| `index.js:2243` GET /follow-ups | follow-ups + contact + lead | pure BD own; everyone else all — **no org filter** | **LEAK + X-ORG** |
+| `routes/companies.js:318` /companies/:id/email-activity | client email bodies | A, BD, BL: every BD's | **LEAK** (bodies; D2) |
+| `routes/contacts.js:70` PATCH email-status | contact | any BD writes any contact | **LEAK** (acting) |
+| `routes/record-history.js:109` /history/lead/:id | lead history | anyone in org | **LEAK** (low) |
+| `routes/distribution.js:77` /distribute/today-summary | counts | anyone, any manager_id | **LEAK** (low, counts) |
+| `routes/settings.js:82` GET /app-settings | **every `app_settings` row** incl. `int_*_api_key` | **any user, any org** | **X-ORG critical** — secrets |
+| `routes/settings.js:92` POST /app-settings | writes any key | A, RL of any org | **X-ORG critical** |
+| `index.js:2184` /distribute/execute · `workflows.js:200` bulk-assign | assigns to a body user id | no org check on the user/mailbox | **X-ORG critical** (X3) |
+| `routes/events.js:13` GET /events/recent | every org's events (prospect addresses, ids) | A, BL, RL of any org | **X-ORG high** |
+| `routes/companies.js:339/385/358/61/77` | client docs (signed URLs), delete, company edit/delete | no org on any | **X-ORG high** |
+| `routes/jobs.js:489/512/67` | research, parse-jd, skill history | no org | **X-ORG** med/low |
+| `index.js:2993/3007`, `cron.js:115`, sweeps, `integrations.js` | deployment controls | any tenant admin | **X-ORG design** (no platform-operator role) |
+| `routes/companies.js:17/25/90/113/228/296` companies, search, clients, intake, contacts | org-wide client records | A,BD,BL (companies: all) | **DECISION** D2 |
+| `routes/jobs.js:135` today-summary · `index.js:1218` activity · `jobs.js:525` contacts | counts / canTouchJob | pool roles / owner | **OK** (activity+contacts NARROW for managers) |
+| `routes/workflows.js:227` · `lookups.js:37` duplicate checks | another BD's contact on a match | anyone in org | **DECISION** D5 (X-ORG part is C-0017) |
+
+### guild — contract C-0022
+| where | returns | today | verdict |
+|---|---|---|---|
+| `recruiting/analytics.js:33` /recruiting-dashboard | submissions, interviews | RA, RL unscoped (neither isBDM nor isRecruiter) | **LEAK** |
+| `recruiting/analytics.js:370,417` /bd-analytics/* | recruiter numbers | every BDM, **no org** | **LEAK + X-ORG** (C-0003, misaddressed) |
+| `workflows.js:14,35` /insights/{ra,bd}/:userId | counts | only pure RA/BD restricted | **LEAK** (+X-ORG, C-0017) |
+| `wf.js:222` /wf/enrollments | contacts, leads | everyone, **every org** | **LEAK + X-ORG** |
+| `wf.js:51` /wf/sending-mailboxes | mailboxes | A,BL,RL: **every org's** | **LEAK + X-ORG** (feeds X3) |
+| `wf.js:73/85/106/134/236/245-247/269` | sequences, runs, stats | no org; POST files under `'fute'` or body `org_id` | **X-ORG** |
+| `recruiting/candidates.js:128/179/200/226/237/254/266/286/321` | history, edit, delete, notes, **documents (signed resume URLs)** | no org on any; inserts misfile | **X-ORG critical** |
+| `recruiting/job-orders.js:42/353/384/517/639/660/670/688/703/729` | job orders, assignment requests (+client names) | no org | **X-ORG high** |
+| `recruiting/submissions.js:25/52/109/196/216` | pipeline with candidate PII + rates | no org; DELETE by any recruiter | **X-ORG critical** |
+| `recruiting/pipeline.js:37/89/106/125/172` | pipeline | no org | **X-ORG** |
+| `recruiting/sourcing.js:282/296` | import staged by id | no org | **X-ORG** |
+| `recruiting/outreach.js:98` resolveEmailAttachments | **another org's documents as attachments** | no org | **X-ORG critical — exfiltration** |
+| `recruiting/outreach.js:384/446` | interview invite / meeting on a submission | no org | **X-ORG** |
+| `recruiting/lookups.js:103/119/138/153` | vocabularies | all orgs; edits any | **X-ORG** |
+| `recruiting/candidates.js:35/74/97/115`, `job-orders.js:406` matches, `sourcing.js:90/164` | the candidate pool | every recruiting role, whole org | **DECISION** D1 (org-scoped correctly) |
+| `recruiting/job-orders.js:261/296/331`, `candidate-outreach.js:419` | job orders / job board | every BDM, RA, RL (R: assigned; board: all) | **DECISION** D3 |
+| `recruiting/analytics.js:180` /reports/recruiting · `:324` /team/activity | chain-scoped | — | **OK** |
+| `lead-sources.js` /sourced-leads | ownerless intake queue | reviewer roles | **OK** (pool-like, role-gated) |
+
+### harbour — C-0023 (C-0015 still open and accurate)
+| where | today | verdict |
+|---|---|---|
+| `emails.js:32` GET /emails | RL all BDs' bodies; A/RL **every org** (C-0015#1); BL own only | **LEAK + X-ORG** · NARROW (BL) |
+| `emails.js:90` pending-summary | RL/A counts for any manager, every org | OK in-org (counts) · X-ORG (C-0015#4) |
+| `warmup.js:51` | BL, RL every mailbox | **LEAK** low + X-ORG (C-0015) |
+| `deliverability.js:33/53/68/107` | suppression list, **delete another org's opt-out**, sample bodies, mailboxes | **X-ORG** (DELETE is compliance) |
+| `mailbox.js` (all) | own mailboxes only, 404 | **OK** |
+
+### observatory — C-0024
+| where | today | verdict |
+|---|---|---|
+| `outreach-generator.js:373/404` recipient pickers | any user finds any contact in the org | **LEAK** |
+| `outreach-generator.js:450` createLeadFromOutreach | lead with no `assigned_to_bd` — invisible to its own sender | ownership bug |
+| `next-actions.js` (all), `ai.js:183` briefing, `outreach-generator.js:422`, `candidate-outreach.js:442` | chain / own per D-0020, D-0021 | **OK** (briefing's comment wrongly says bd_lead distributes) |
+
+### ledger — C-0025 · rampart (mine) · surface — C-0026
+| where | today | verdict |
+|---|---|---|
+| `tracking.js:47` /candidates/:id/email-activity | any user reads every recruiter's bodies to a candidate | **DECISION**-linked (D1) |
+| `reminders.js` (all) | own `user_id` | **OK** |
+| **`auth.js:232` GET /users/:id/emails** (mine) | any colleague's mailbox list + health | **LEAK** low — open here |
+| `auth.js:90` GET /users | roster; hierarchy fields trimmed outside chain | **OK** |
+| `public/js/02-state.js:24` getMyJobs | re-derives the OLD server ladder | client-side rule (C-0026) |
+| `public/js/07-page-email.js:262/304/359` | RA-Lead filters every BD's emails in the browser | **client-side only** |
+| `public/js/16-insights.js:~559` | bd_lead filters org-wide leads by subtree in the browser | **client-side only** |
+
+## REVIEW OF THE FIXES — 2026-09-24 (verdict: do-not-ship until #1 and #2 are fixed — one line each — then ship-with-followups)
+Read the code of every commit after `5738e08`, not the messages. Rampart's
+seven suites + ownership/scope suites green (13, 5, 17, 53, 44, 56, 26, 69,
+14, 50, 35, 14).
+**Verified closed:** X1/X2 `/app-settings` (allow-list, admin-only write) ·
+X3 `userOrgId`/`mailboxOrgId` on `PUT /jobs/:id`, `/distribute/execute`,
+`/jobs/bulk-assign` · X4 `/events/recent` (payload `orgId`; unstamped rows
+hidden) · X5 client docs/edit/delete org-bound · X6/X8 jobs research/parse-jd/
+skill history · X7 `/follow-ups` · `GET /jobs`, `/jobs/:id` (404), export ·
+contacts email-status · record-history (404) · today-summary · `GET /emails`
+(SQL narrowing + `scopeEmails` boundary; sender-summary counts only) ·
+pending-summary · DELETE/purge (org + status ON the write) · suppression
+list/delete · analytics/templates · deliverability · warmup (+partners same
+org) · gmail/microsoft slot checks · tracking.js (body per `canSeeEmail`,
+token no longer handed out) · candidates/*, pipeline/*, submissions/*,
+sourcing import, recruiting lookups, interview invite/meeting org-bound ·
+`resolveEmailAttachments` org-bound · wf.js org-bound · insights 404 ·
+bd-analytics chain+org · recruiting-dashboard RA/RL · duplicate checks (D5:
+owner + date only) · job-order POC strip on list/detail/browse · job-order
+edit/delete/apply-link owner-only · outreach pickers + lead ownership.
+
+**Defects found (not rampart's files — reported to the orchestrator):**
+1. HIGH regression — `routes/recruiting/outreach.js`: the fix deleted
+   `const MAX_EMAIL_ATTACH_BYTES`; line ~168 still reads it inside a
+   try/catch, so EVERY document attachment (candidate and client email) is
+   silently dropped and the email sends without it.
+2. HIGH in-org leak — `routes/email-history.js` `visibleJobIds` uses
+   `canSeeLead` (creator, `assigned_to`, pool) where the rule is
+   `canSeeEmail` (lead OWNED in scope). An RA reads every BD email body on a
+   lead they researched; an RA Lead reads the old BD's emails on recycled
+   pool leads and on their RAs' leads — exactly what D-0036 forbids.
+3. MED ownership hijack — `POST /job-orders/from-lead/:jobId`: any BDM
+   converts ANY Connected lead, `bd_manager_id` from the body unvalidated;
+   since `clientOwnerId` prefers `job_orders.bd_manager_id`, converting a
+   colleague's lead takes their client (POC, docs, email rights).
+4. MED D-0035 writes not owner-gated: `POST /companies/:id/merge`,
+   `POST /jobs/bulk-stage` (any BD, any lead id), `DELETE /submissions/:id`
+   and `DELETE /pipeline/:id` (any recruiter), `POST /job-orders/:id/parse-jd`
+   `?apply=1` (any BDM; also returns unstripped `client_manager`),
+   `POST /job-orders/:id/recruiters` + assignment decide (any BDM).
+5. MED `DELETE /companies/:id` widened to "owner": no role gate, owner falls
+   back to `companies.created_by` (an RA), and one owner can soft-delete a
+   client colleagues still hold leads on. D-0035 lists edit/documents/email/
+   contacts, not delete.
+6. MED `/companies/:id/contacts` and `/intake` still return every BD's POCs
+   at a client — D-0035/D5 say another BD's contact details are not shown.
+7. LOW `POST /suppression` (deliverability.js:72) does not pass the org to
+   `addToSuppression` → misfiled under the DEFAULT org, where that org's admin
+   can see and DELETE another company's opt-out.
+8. LOW `GET /users/:id/job-orders` returns `client_manager` unstripped.
+9. LOW `PUT /jobs/:id` grants EDIT on anything `canSeeLead` admits (creator/
+   `assigned_to` in chain) — use `inScope(assigned_to_bd)`; D-0020 says a
+   manager reviews and prompts, the comment widens it to "review and edit".
+10. LOW `/wf/enrollments` filters after `.limit(500)` (short pages).
+11. PRE-EXISTING, HIGH — the OAuth callbacks in `routes/microsoft.js` and
+   `routes/gmail.js` interpolate `userEmailId` from the UNSIGNED `state` into
+   an inline `<script>` string: reflected XSS on the app's origin. The new
+   org check trusts the same forgeable state (userId + slot both attacker-
+   chosen), so it adds nothing; sign the state (HMAC) and JSON-encode.
+X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
+says every suggestion to the owner is one. C-0029 is recorded, OPEN.
+
+## RE-REVIEW OF THE FIXES — 2026-09-24, round 2 (verdict: ship-with-followups; land R1 in the same PR)
+Read `git diff 71a8006..HEAD` (fb3658b gateway, 1671962 guild, c7b8e6f
+harbour, fbd3f5b observatory). Rampart suites + ownership (69) + email-history
+(32) green.
+**Closed:** #1 (constant restored) · #2 SQL now `inScope(assigned_to_bd)` +
+`scopeEmails` final gate · #3 from-lead owner-gated, `bd_manager_id` must be
+self/chain in org · #4 merge (owner on BOTH), bulk-stage (bd narrowed, foreign
+ids silently dropped), submission/pipeline delete, parse-jd apply, recruiters
+assign (+ ids must be in org), decide · #5 admin-only + org 404 · #6
+contacts/intake via `canSeeLead` · #7 both suppression writers carry the org
+(`loadAnswerRow` selects `org_id`) · #8 stripped · #9 edit = `inScope(owner)`,
+unseeable = 404 · #10 batched paging · #11 state is a JWT, every popup value
+JSON-encoded with `<` escaped; sign-in states carry `p:'signin'` so the two
+flows still separate correctly.
+**New:**
+- R1 MED regression (fail-CLOSED) — `routes/email-history.js` `LEAD_SELECT`
+  does not select `sent_by`, so the new `scopeEmails` gate reads it as
+  undefined and the "I sent it" half of `canSeeEmail` is dead: a BD's own
+  emails vanish from All email once the lead is reassigned or RECYCLED to the
+  pool (the 30-day recycler makes that routine). Proven with ownership.js
+  directly. One word: add `sent_by` to `LEAD_SELECT`. No test covers it.
+- R2 LOW-MED — `DELETE /job-orders/:id/recruiters/:rid` (job-orders.js:778):
+  any BDM, no owner gate, no 404 for an unknown job. In-org only (withOrg on
+  the delete). Same class as #4; gate with `isJobOrderOwner(pocScope)`.
+- R3 LOW — submission/pipeline delete lets an assigned recruiter delete a
+  COLLEAGUE recruiter's row on a shared job (`|| recruiterCanTouchJob`);
+  D-0035 says "their own candidates".
+- R4 LOW — `ownedJobMap` selects every org lead unbounded (PostgREST caps at
+  1,000): fail-closed truncation on a large org. `/wf/enrollments` now walks
+  the whole org's table for a user who can see little.
+- R5 INFO — the mailbox OAuth state is a JWT_SECRET token with no purpose
+  claim; `auth()` would accept it as a session (no id/role/org → refused
+  once MULTI_ORG; harmless, but token confusion). Add `p:'mailbox'`, require
+  it on verify, and have `auth()` reject any token carrying `p`.
+- Behaviour change, intended: a BD who only CREATED a lead can no longer edit
+  it via `PUT /jobs/:id` (the frontend only edits own leads' stage/notes).
+
+## Decisions for the owner (raised 2026-09-23 — ANSWERED by D-0035/D-0036)
+- **D1 — the candidate database.** Today every recruiting role sees every
+  candidate, note, document and match. Industry norm (Bullhorn, Ceipal,
+  JobDiva): one shared database, "owner" is credit, not visibility; contact
+  details lock until assigned (PACE already does this on job pipelines).
+  **Recommend: keep shared**; email TEXT on a candidate stays with the sender's
+  team.
+- **D2 — the client list.** Every BD sees every client, its contacts across all
+  BDs' leads, its documents, and every BD's emails to it. Norm: company records
+  shared, opportunities owned. **Recommend: client record shared; emails follow
+  D-0034.**
+- **D3 — job orders.** Shared today, and the recruiter job board is built on it.
+  Norm: open reqs visible to the desk. **Recommend: keep shared.**
+- **D4 — the RA Lead.** Decided in code as pool + own RAs' research + counts.
+  The Email page's per-BD drill-down stops showing message text. **Recommend:
+  confirm.** Re-open if RA Leads genuinely operate BDs' mail.
+- **D5 — duplicate warnings.** Checking a prospect's email shows the other
+  BD's contact, company and role. **Recommend: name who owns it and when, not
+  the details.**
 
 ## Fragile — touch with care
-- **`orgIdFor()`'s default-org fallback must stay.** Background sweeps call
-  `withOrg()` with no user; null would turn a scoped query into an unscoped one.
-  The gate is in `auth()`.
-- Raw `supabase` still works, so **unconverted call sites are unprotected**.
-  ~574 hand-written queries once depended on remembering `withOrg()`, and four
-  cross-org leaks got in that way.
-- **`test/helpers/enter-app.mjs` has no entry for `bd_lead`, `director` or
-  `associate_director`** — a five-role sweep silently skips roles real people
-  hold. One icon-collision bug affected `bd_lead` and went unseen for that reason.
+- **`orgIdFor()`'s default-org fallback must stay.** The gate is in `auth()`.
+- **A GLOBAL TABLE CAN HOLD TENANT ROWS.** `domain_events` is in
+  `GLOBAL_TABLES`, and its payloads carry prospect addresses and record ids with
+  **no org**. The 2026-09-09 audit called `routes/events.js` a false alarm on
+  the table name alone — wrong. Judge the ROWS, not the list the table is in.
+  (`app_settings` is the same shape: global table, per-user and secret rows.)
+- **Unguessable ids are not a boundary.** `/events/recent` and
+  `/wf/sending-mailboxes` hand out the very ids the by-id holes need.
+- **Filter in SQL before `.limit()`, then apply the predicate.** Filtering after
+  a limit makes pages silently short or empty.
+- **`test/helpers/enter-app.mjs` has no `bd_lead`, `director` or
+  `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
-- **`/bd-analytics/*` is un-org-scoped.** It is NOT "the last known scoping gap"
-  any more — that line was wrong. See the four contracts below.
-- **65 raw queries across 8 routers were audited on 2026-09-09.** Findings are
-  written up in full, ranked, with the fix pattern, in `_contracts.md`:
-  * **C-0015 → harbour** (`routes/emails.js`, `routes/warmup.js`) — includes the
-    two worst findings: `GET /emails` returns **every email body in the
-    deployment** to an `admin`/`ra_lead`, and `POST /admin/emails/purge-pending`
-    with `all_managers` **deletes every org's pending queue**.
-  * **C-0016 → gateway** (`routes/microsoft.js`, `routes/gmail.js` — the map
-    says gateway, not harbour). The OAuth token routers: `DELETE
-    /auth/*/:userEmailId` kills another org's mailbox and rewrites their leads;
-    the token inserts misfile refresh tokens into the default org.
-  * **C-0017 → guild** (`routes/workflows.js`, `routes/lookups.js` — `lookups.js`
-    is guild's per the map, not gateway's). `POST /jobs/bulk-stage` and
-    `/bulk-assign` take **unvalidated `job_ids` from the body** and mutate them
-    with no org condition; `check-duplicates` / `check-email` are working
-    cross-org enumeration oracles.
-  * **C-0018 → foundry** — the `test/authorize.mjs` assertion that pins the old
-    admin bypass, plus the allow-list grep suite I want.
-- **FALSE ALARMS — do not re-raise these.** `routes/settings.js` (5 queries) hits
-  only `app_settings` and `routes/events.js` (1) only `domain_events`. Both are
-  in `GLOBAL_TABLES` and are correct as written. `routes/microsoft.js`'s
-  schema-check/debug routes and `emails.js:70,219,224` are scoped in practice by
-  `req.user.id`. **A raw query is not automatically a leak** — check the table
-  against `models/tables.js` before reporting one.
-- **`routes/org-domains.js` audited clean** — every query carries
-  `.eq('org_id', org)` and a miss is a 404.
-- Per-role permissions do not exist — roles are hierarchy-only today.
-- "Log In with your Organization" routes by domain; **not** full SAML.
-- **The owner should consider rotating the Groq key** — it passed through a
-  session transcript when it was read from the database.
-- `SELF_SERVE_SIGNUP` is off until strangers should be able to sign up.
+- **All eleven review findings are closed** (round 2, 2026-09-24). Open:
+  R1 (one word, should land before merge), R2-R5 follow-ups — see above.
+- **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
+  `submissions.js:25`** — secrets, sending as another company, and exfiltrating
+  another company's resumes. These outrank the owner's in-org report.
+- Mine to fix: `GET /users/:id/emails` (self, chain or admin). Not done — the
+  Admin and distribution screens call it for other users and were not tested.
+- `schema.sql` is stale (still describes `leads`); could not tell whether
+  `emails.assigned_to` exists (`workflows.js:74`, `16-insights.js`).
+- Owner should rotate the Groq key (seen in a transcript) — and, if X1 is
+  confirmed live, **every `int_*` key**, since any logged-in user could read them.
+- Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
-- **2026-09-09** — seeded. No work done by an agent yet.
-- **2026-09-09** — org-scoping audit. Confirmed the service-role key from the
-  code (the question that set every severity). Audited 65 raw queries in 8
-  routers. Fixed what was inside the border: `guardUser()` across all
-  `/users/:id*` routes in `routes/auth.js` (+ `org_id` stamped on the
-  `user_emails` insert, + the manager loop-walk scoped, + `team_assignments`
-  delete scoped), the `canTouchJob` admin bypass in `middleware/authorize.js`,
-  and runtime `MULTI_ORG` arming via `provisioning.onOrgCreated`. Raised
-  C-0015/16/17/18. Suite 68/69 — the single failure is
-  `test/authorize.mjs` line 58, which pins the bypass that was the bug (C-0018a).
-  **What would have saved an hour:** the service-role fact was sitting in
-  `middleware/authorize.js`'s header the whole time and in no memory file.
-- **2026-09-09, round 2** — coordinator review caught that the first pass
-  guarded **8 of 9** `/users/:id*` routes. Fixed `PUT
-  /users/:id/emails/:eid/signature` (cross-org write onto another customer's
-  live outbound signature) and, from a full re-enumeration of all 18 routes in
-  the file, `POST /team-assignments` (both ids taken from the body unchecked).
-  Re-enumerated: 18/18 routes now carry a guard, an org filter or a
-  `req.user.id` ownership filter; 0 `:id` routes unguarded. `foundry` landed
-  C-0018 on the same branch — `test/authorize.mjs` fixed and
-  `test/org-scoping-guard-smoke.mjs` added (13 assertions, incl. the 404-not-403
-  shape and the `onOrgCreated` arming). **Full suite 70/70, exit 0.**
-  Note: a suite read mid-write by a concurrently-working agent reports a false
-  failure — re-run before believing one on a shared branch.
+- **2026-09-24 (round 2)** — re-reviewed the eleven fixes by reading the
+  diff. All closed; one new fail-closed regression (R1). **What would have
+  saved an hour:** when a fix adds a predicate over fetched rows, check the
+  SELECT list carries every field the predicate reads — a missing column is
+  `undefined`, and `undefined` fails every ownership test silently.
+- **2026-09-09** — org-scoping audit of 65 raw queries; `guardUser()`,
+  `canTouchJob`, runtime `MULTI_ORG`; raised C-0015..C-0018. 70/70.
+- **2026-09-24** — reviewed every C-0021..C-0029 fix against the audit by
+  reading code. Verdict do-not-ship until 2 blockers fixed (attachment
+  regression, email-history predicate), 9 more. **What would have saved an
+  hour:** grepping every identifier a fix DELETED — a removed constant inside
+  a try/catch is a silent regression no suite noticed.
+- **2026-09-23** — D-0034 visibility audit of every record-returning endpoint
+  (index.js, routes/, routes/recruiting/) plus client-side filters. Added the
+  pure "SEEING" rule to `services/ownership.js`. Scratch check 32/32 on the
+  live org shape; 6/6 mutations caught; `ownership-smoke` 31/31 and all seven
+  rampart suites green. Raised C-0021..C-0027. **What would have saved an
+  hour:** reading `GET /app-settings` first — the worst finding was a
+  three-line route that returns a whole table.

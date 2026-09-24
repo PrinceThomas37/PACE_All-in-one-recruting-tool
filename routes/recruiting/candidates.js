@@ -27,6 +27,24 @@ module.exports = function (app, core) {
   const { CANDIDATE_FIELDS, CANDIDATE_SELECT, pickCandidateFields,
           normName, normEmail, normPhone, findCandidateDuplicates } = createCandidateFields(core);
 
+  // A candidate id from another org must read exactly like one that does not
+  // exist — the same 404-not-403 shape as GET /candidates/:id below. Every
+  // candidate sub-resource (history, notes, documents) reads/writes by
+  // candidate_id alone with no org check of its own, so a caller who merely
+  // knows a foreign candidate's id could otherwise read or write its notes,
+  // upload documents onto it, or pull a signed URL to its resume. Sends the
+  // 404 itself and returns null so a caller can `if (!(await …)) return;`.
+  async function requireOwnCandidate(req, res, id) {
+    const { data, error } = await supabase.from('candidates')
+      .select('id,org_id').eq('id', id).is('deleted_at', null).maybeSingle();
+    const reqOrg = orgIdFor(req);
+    if (error || !data || (reqOrg && data.org_id && data.org_id !== reqOrg)) {
+      res.status(404).json({ error: 'Candidate not found' });
+      return null;
+    }
+    return data;
+  }
+
   // CANDIDATES — shared pool (Ceipal-style Applicants database)
   // ==========================================================================
   // GET /candidates
@@ -127,6 +145,7 @@ module.exports = function (app, core) {
   // and the stage-change activity that drives the profile lifecycle bar.
   app.get('/candidates/:id/history', auth, async (req, res) => {
     try {
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const cid = req.params.id;
       const JOB = 'job:job_orders(id,job_code,job_title,client)';
       const { data: pipeline } = await supabase.from('candidate_pipeline')
@@ -187,8 +206,14 @@ module.exports = function (app, core) {
       if (Array.isArray(b.tags)) updates.tags = b.tags;
       // Read the row as it stands BEFORE the write — a history built from the
       // request body alone cannot tell a real change from a field resent unchanged.
+      // The same read is the org check: a candidate in another org must 404
+      // here exactly as GET /candidates/:id does, not be silently edited.
       const { data: prior } = await supabase.from('candidates')
         .select('*').eq('id', req.params.id).maybeSingle();
+      const reqOrg = orgIdFor(req);
+      if (!prior || (reqOrg && prior.org_id && prior.org_id !== reqOrg)) {
+        return res.status(404).json({ error: 'Candidate not found' });
+      }
       const { data, error } = await supabase.from('candidates')
         .update(updates).eq('id', req.params.id).select(CANDIDATE_SELECT).single();
       if (error) throw error;
@@ -202,6 +227,7 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       await supabase.from('candidates').update({ deleted_at: new Date() }).eq('id', req.params.id);
       await history.record(req, 'candidate', req.params.id, { action: 'deleted', note: 'Candidate deleted' });
       res.json({ success: true });
@@ -225,6 +251,7 @@ module.exports = function (app, core) {
   // ── notes ────────────────────────────────────────────────────────────────
   app.get('/candidates/:id/notes', auth, async (req, res) => {
     try {
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const { data, error } = await supabase.from('candidate_notes')
         .select('*, author:users!created_by(id,name,employee_id)')
         .eq('candidate_id', req.params.id).is('deleted_at', null)
@@ -239,13 +266,14 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const b = req.body || {};
       if (!b.body || !String(b.body).trim()) return res.status(400).json({ error: 'body required' });
       const noteType = NOTE_TYPES.includes(b.note_type) ? b.note_type : 'applicant_reference';
-      const { data, error } = await supabase.from('candidate_notes').insert({
+      const { data, error } = await supabase.from('candidate_notes').insert(Object.assign({
         candidate_id: req.params.id, job_order_id: b.job_order_id || null,
         note_type: noteType, body: String(b.body), created_by: req.user.id
-      }).select('*, author:users!created_by(id,name,employee_id)').single();
+      }, orgStamp(req))).select('*, author:users!created_by(id,name,employee_id)').single();
       if (error) throw error;
       res.status(201).json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -256,6 +284,7 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       await supabase.from('candidate_notes').update({ deleted_at: new Date() })
         .eq('id', req.params.noteId).eq('candidate_id', req.params.id);
       res.json({ success: true });
@@ -265,6 +294,9 @@ module.exports = function (app, core) {
   // ── documents (stored in the private candidate-docs bucket) ────────────────
   app.get('/candidates/:id/documents', auth, async (req, res) => {
     try {
+      // Signs a URL to the candidate's résumé — 1-hour signed URLs, so a
+      // foreign candidate id here was a straight cross-org exfiltration path.
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const { data, error } = await supabase.from('candidate_documents')
         .select('*, uploader:users!uploaded_by(id,name,employee_id)')
         .eq('candidate_id', req.params.id).is('deleted_at', null)
@@ -288,6 +320,7 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const b = req.body || {};
       if (!b.filename || !b.data_base64) return res.status(400).json({ error: 'filename and data_base64 required' });
       const raw = String(b.data_base64).replace(/^data:.*;base64,/, '');
@@ -303,11 +336,11 @@ module.exports = function (app, core) {
       if (upErr) throw upErr;
 
       const docType = ['resume', 'cover_letter', 'other'].includes(b.doc_type) ? b.doc_type : 'resume';
-      const { data, error } = await supabase.from('candidate_documents').insert({
+      const { data, error } = await supabase.from('candidate_documents').insert(Object.assign({
         candidate_id: req.params.id, doc_type: docType, filename: String(b.filename),
         storage_path: path, content_type: b.content_type || null, size_bytes: buffer.length,
         uploaded_by: req.user.id
-      }).select('*, uploader:users!uploaded_by(id,name,employee_id)').single();
+      }, orgStamp(req))).select('*, uploader:users!uploaded_by(id,name,employee_id)').single();
       if (error) throw error;
 
       // convenience: if this is the first résumé, backfill candidate.resume_url metadata
@@ -323,6 +356,7 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const gate = await entitlements.gate(supabase, req, 'candidates', { orgIdFor });
       if (gate.blocked) return res.status(gate.status).json(gate.body);
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const { data: doc } = await supabase.from('candidate_documents')
         .select('storage_path').eq('id', req.params.docId).eq('candidate_id', req.params.id).single();
       await supabase.from('candidate_documents').update({ deleted_at: new Date() })

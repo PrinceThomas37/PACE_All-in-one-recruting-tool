@@ -33,6 +33,54 @@ module.exports = function (app, ctx) {
     isSendingPaused, isManagerPaused, loadMailboxDelivState, loadSuppressedSet,
     friendlySendError,
   } = ctx;
+  // This module's own ctx never carried org helpers (unlike routeCtx), but
+  // `auth()` sets `req.orgId` on every request regardless of which router
+  // receives it — self-contained, no gateway change needed.
+  const withOrg = (q, req) => (req && req.orgId ? q.eq('org_id', req.orgId) : q);
+
+  // D-0035 (D2): who may EMAIL a client. Gateway defined ownership for clients
+  // in routes/companies.js (`clientOwnerId`/`requireClientOwner`) but that
+  // module exports only its router, so nothing here can import the function —
+  // mirrored EXACTLY rather than re-derived, so the two files cannot quietly
+  // disagree about who owns a client. If `clientOwnerId` ever changes in
+  // routes/companies.js, this copy must change with it.
+  async function clientOwnerId(req, companyId) {
+    const { data: jos } = await withOrg(supabase.from('job_orders')
+      .select('bd_manager_id,created_at').eq('company_id', companyId).is('deleted_at', null)
+      .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req);
+    if (jos && jos.length) return jos[0].bd_manager_id;
+    const { data: leads } = await withOrg(supabase.from('jobs')
+      .select('assigned_to_bd,created_at').eq('company_id', companyId).is('deleted_at', null)
+      .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req);
+    if (leads && leads.length) return leads[0].assigned_to_bd;
+    const { data: co } = await withOrg(supabase.from('companies')
+      .select('created_by').eq('id', companyId), req).maybeSingle();
+    return co ? co.created_by : null;
+  }
+
+  // Loads the company (org-scoped, 404 if foreign/missing) and, unless the
+  // caller is admin or the owner, refuses naming whose client it is. Returns
+  // the company row on success, or null after already responding — same
+  // shape as gateway's requireClientOwner.
+  async function requireClientOwner(req, res, companyId) {
+    const { data: co } = await withOrg(supabase.from('companies')
+      .select('id,name').eq('id', companyId).is('deleted_at', null), req).maybeSingle();
+    if (!co) { res.status(404).json({ error: 'Not found' }); return null; }
+    if (hasRole(req, 'admin')) return co;
+    const ownerId = await clientOwnerId(req, companyId);
+    if (ownerId && ownerId === req.user.id) return co;
+    let ownerName = null;
+    if (ownerId) {
+      const { data: u } = await supabase.from('users').select('name').eq('id', ownerId).maybeSingle();
+      ownerName = u && u.name;
+    }
+    res.status(403).json({
+      error: ownerName
+        ? `This client belongs to ${ownerName}, so it is not yours to email. Ask them, or your manager can reassign it.`
+        : 'This client is not yours to email. Ask its owner, or your manager can reassign it.',
+    });
+    return null;
+  }
 
 wfEngine.registerContextLoader('submission', async (enrollment) => {
   const { data: sub } = await supabase.from('submissions')
@@ -94,11 +142,30 @@ async function sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachmen
 // the private candidate-docs bucket. Best-effort: a document that fails to
 // download is silently skipped rather than blocking the whole send. Caps
 // total attached bytes so a send can't blow past provider/API limits.
+//
+// Restored 2026-09-24 (rampart review finding #1): the C-0022 org-scoping
+// edit deleted this constant while the function below still reads it inside
+// a try/catch, so EVERY document lookup threw ReferenceError, was swallowed
+// by the catch, and every attachment silently vanished from candidate and
+// client emails with no error anywhere. A scope error is a runtime error —
+// `node --check` cannot see it, only exercising the function can.
 const MAX_EMAIL_ATTACH_BYTES = 18 * 1024 * 1024;
-async function resolveEmailAttachments(table, ids) {
+//
+// `orgId` is REQUIRED context, not an afterthought (Session 30, C-0022 #1 —
+// critical exfiltration). This took a document id straight from the request
+// body with no org condition at all: any authenticated caller could name
+// ANY org's candidate_documents/client_documents row — another company's
+// resumes or signed contracts — and have it attached and emailed out through
+// their own mailbox. A document belonging to a different org is filtered out
+// here exactly as if it did not exist; it is never an error, because the
+// caller must never learn a foreign id was "close" (same fail-closed shape as
+// db.forRequest — see models/index.js).
+async function resolveEmailAttachments(table, ids, orgId) {
   if (!ids || !ids.length) return [];
-  const { data: docs } = await supabase.from(table).select('id,filename,content_type,storage_path')
+  let q = supabase.from(table).select('id,filename,content_type,storage_path,org_id')
     .in('id', ids).is('deleted_at', null);
+  if (orgId) q = q.eq('org_id', orgId);
+  const { data: docs } = await q;
   const out = [];
   let total = 0;
   for (const d of (docs || [])) {
@@ -269,8 +336,8 @@ app.post('/candidates/email', auth, async (req, res) => {
 
     const signature = await filledSignature(mailbox, req.user.id);
     const suppressed = await loadSuppressedSet(recipients.map(r => r.email).filter(Boolean));
-    const attachments = await resolveEmailAttachments('candidate_documents', b.document_ids);
     const orgId = req.orgId || null;
+    const attachments = await resolveEmailAttachments('candidate_documents', b.document_ids, orgId);
     const results = [];
     for (const r of recipients) {
       const to = String(r.email || '').trim();
@@ -310,6 +377,11 @@ app.post('/candidates/email', auth, async (req, res) => {
 app.post('/companies/:id/email', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd', 'bd_lead')) return res.status(403).json({ error: 'BD role required.' });
+    // D-0035 (D2): every BD sees every client, but only its owner (or admin)
+    // may email it. requireClientOwner also org-checks the company (404 for
+    // a foreign org), so this replaces what used to be no ownership/org
+    // check at all on this route.
+    if (!(await requireClientOwner(req, res, req.params.id))) return;
     const b = req.body || {};
     const to = String(b.to || '').trim();
     const subject = String(b.subject || '').trim();
@@ -324,10 +396,10 @@ app.post('/companies/:id/email', auth, async (req, res) => {
     if (suppressed.has(to.toLowerCase())) return res.status(409).json({ error: 'This address has opted out of email from us.' });
 
     const signature = await filledSignature(mailbox, req.user.id);
-    const attachments = await resolveEmailAttachments('client_documents', b.document_ids);
+    const orgId = req.orgId || null;
+    const attachments = await resolveEmailAttachments('client_documents', b.document_ids, orgId);
     const token = newTrackToken();
     const htmlBody = injectTrackPixel(buildHtmlEmailBody(bodyText, signature), token);
-    const orgId = req.orgId || null;
     await sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments });
     await supabase.from('email_tracking').insert({
       token, channel: 'client', company_id: req.params.id, to_email: to, subject, body: bodyText,
@@ -389,9 +461,11 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
     const wantBd = roles.includes('bd_manager') || b.bd_manager === true;
     if (!wantCandidate && !wantBd) return res.status(400).json({ error: 'Pick at least one recipient.' });
 
-    const { data: sub, error } = await supabase.from('submissions')
-      .select('id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email), job:job_orders(id,job_title,client,city,state,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
-      .eq('id', req.params.id).single();
+    let subQ = supabase.from('submissions')
+      .select('id, org_id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email), job:job_orders(id,job_title,client,city,state,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
+      .eq('id', req.params.id);
+    if (req.orgId) subQ = subQ.eq('org_id', req.orgId);
+    const { data: sub, error } = await subQ.single();
     if (error || !sub) return res.status(404).json({ error: 'Submission not found' });
 
     const candidate = sub.candidate || {}, job = sub.job || {}, bd = job.bd_manager || {};
@@ -446,9 +520,11 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
 app.post('/submissions/:id/create-meeting', auth, async (req, res) => {
   try {
     const b = req.body || {};
-    const { data: sub } = await supabase.from('submissions')
-      .select('id, interview_at, candidate:candidates(full_name), job:job_orders(job_title)')
-      .eq('id', req.params.id).single();
+    let subQ = supabase.from('submissions')
+      .select('id, org_id, interview_at, candidate:candidates(full_name), job:job_orders(job_title)')
+      .eq('id', req.params.id);
+    if (req.orgId) subQ = subQ.eq('org_id', req.orgId);
+    const { data: sub } = await subQ.single();
     if (!sub) return res.status(404).json({ error: 'Submission not found' });
 
     const startRaw = b.start || sub.interview_at;

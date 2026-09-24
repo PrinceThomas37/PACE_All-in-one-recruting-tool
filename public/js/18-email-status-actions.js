@@ -54,7 +54,11 @@ function loadReminders(){
 window.previewPendingEmail=function(id){STATE.previewPendingId=id;render();};
 
 window.openSendAllConfirm=function(){
-  var pending=STATE.pendingEmails||[];
+  // D-0034: a bd_lead's Pending tab now includes their team's rows too, but
+  // /emails/queue-all only ever queues the CALLER's own (server-scoped by
+  // sent_by) — so the count shown here must be the caller's own, never the
+  // team total, or the number promised would not match the number sent.
+  var pending=(STATE.pendingEmails||[]).filter(function(e){return e.is_mine!==false;});
   if(!pending.length){showToast('No pending emails','warning');return;}
   var now=new Date();
   var dateStr=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -78,11 +82,14 @@ window.openSendAllConfirm=function(){
 };
 
 window.submitSendAll=function(){
-  var pending=STATE.pendingEmails||[];
+  // Only the caller's own rows are queued (see openSendAllConfirm) — a
+  // teammate's row shown on a bd_lead's Pending tab must not disappear from
+  // under them because a leader clicked Send.
+  var mine=(STATE.pendingEmails||[]).filter(function(e){return e.is_mine!==false;});
   closeModal();
   // Show progress bar immediately — don't wait for first poll
-  STATE.sendProgress={active:true,total:pending.length,sent:0,failed:0,current:'Initiating send...',failDetails:[],startedAt:new Date().toISOString()};
-  STATE.pendingEmails=[];
+  STATE.sendProgress={active:true,total:mine.length,sent:0,failed:0,current:'Initiating send...',failDetails:[],startedAt:new Date().toISOString()};
+  STATE.pendingEmails=(STATE.pendingEmails||[]).filter(function(e){return e.is_mine===false;});
   render(); // bar is visible right now
   stopProgressPoll(); // clear any stale timer from previous send
   startProgressPoll(); // start polling for real backend updates

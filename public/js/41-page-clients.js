@@ -228,13 +228,18 @@
       var status=a.replied_at?'<span style="font-size:10.5px;font-weight:700;color:var(--green)">↩ Replied</span>':(a.opened_at?'<span style="font-size:10.5px;font-weight:700;color:var(--accent)">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span style="font-size:10.5px;color:var(--text3)">Sent</span>');
       // READ WHAT WE ACTUALLY SAID. Before migration 042 the body was never
       // stored, so anything older reads back null and says so rather than
-      // showing an empty box that looks like a bug.
+      // showing an empty box that looks like a bug. `body_visible:false`
+      // (D-0034/D-0035) is a DIFFERENT null — the reader's scope does not
+      // cover the sender, not "never kept a copy" — so it gets the server's
+      // own `body_note`, calm and muted, never the other sentence.
       var open=STATE.clients.openEmail===a.id;
       var panel=open
         ? '<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
-            (a.body
-              ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(a.body)+'</div>'
-              : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>')+
+            (a.body_visible===false
+              ? '<div style="font-size:12px;color:var(--text3)">'+esc(a.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
+              : (a.body
+                ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(a.body)+'</div>'
+                : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>'))+
           '</div>'
         : '';
       return '<div style="border-bottom:1px solid var(--border)">'+

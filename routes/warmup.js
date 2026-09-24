@@ -6,13 +6,26 @@
 // Enrol a mailbox into warm-up, monitor it, and graduate it to outreach. All
 // mutations are admin-only; reads are admin / team-lead. Off by default — a
 // mailbox only warms once started here.
+//
+// ORGANISATION BOUNDARY (C-0015 #6-#8, C-0023 #2). `canManage` is a ROLE check,
+// which another customer's admin passes too — so every mailbox is looked up
+// through `db.forRequest(req)`, and a mailbox that is not this organisation's
+// answers 404. A non-admin lead sees their own reporting chain's mailboxes
+// (D-0034); the pool figures stay the organisation's, because that is the pool
+// the engine actually warms with.
 // ============================================================================
 const express = require('express');
 const { getSetting } = require('../config/settings');
+const { createDb } = require('../models');
 
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, engine, emit, EVENTS } = ctx;
+  // index.js mounts this router with its own small ctx (no `db`), so it builds
+  // the scoped layer itself — auth() has already put the org on the request.
+  const db = ctx.db || createDb(supabase);
+  const { reportingChainIds } = require('../hierarchy')(supabase);
+  const orgOf = (req) => (req && (req.orgId || (req.user && req.user.org_id))) || null;
 
   const canView = (req) => hasRole(req, 'admin', 'bd_lead', 'ra_lead');
   const canManage = (req) => hasRole(req, 'admin');
@@ -51,10 +64,14 @@ module.exports = (ctx) => {
   router.get('/warmup/mailboxes', auth, async (req, res) => {
     try {
       if (!canView(req)) return res.status(403).json({ error: 'Forbidden' });
-      const { data: mbs, error } = await supabase.from('user_emails')
+      const { data: mbs, error } = await db.forRequest(req).from('user_emails')
         .select('id,user_id,email_address,display_name,platform,is_active,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,warmup_graduated_at,owner:users!user_id(name)')
         .eq('is_active', true).order('warmup_status', { ascending: true });
       if (error) throw error;
+      // Which of them this viewer may see: an admin, the organisation's; a lead,
+      // their own reporting chain's. The pool readiness below is still computed
+      // over the whole organisation — it describes the engine's pool.
+      const visible = hasRole(req, 'admin') ? null : new Set(await reportingChainIds(req.user.id, orgOf(req)));
       const ids = (mbs || []).map(m => m.id);
       const connected = await connectedSet(ids);
       const [start, step, hardCap, defDays] = await Promise.all([
@@ -72,9 +89,11 @@ module.exports = (ctx) => {
         const day = daysSince(m.warmup_start_date);
         const days = m.warmup_days || defDays;
         const target = m.warmup_status === 'warming' ? Math.min(hardCap, start + step * day) : null;
+        const shown = !visible || visible.has(m.user_id);
         let health = null;
-        try { health = await engine.healthScore(m.id); } catch (_) {}
+        if (shown) { try { health = await engine.healthScore(m.id); } catch (_) {} }
         out.push({
+          _shown: shown,
           id: m.id, email: m.email_address, display_name: m.display_name || m.email_address,
           platform: m.platform, owner: (m.owner && m.owner.name) || null,
           connected: m.platform === 'Microsoft' ? connected.has(m.id) : false,
@@ -92,7 +111,7 @@ module.exports = (ctx) => {
       const domains = new Set(poolMembers.map(m => (m.email.split('@')[1] || '').toLowerCase()).filter(Boolean));
       const warmingCount = out.filter(m => m.warmup_status === 'warming').length;
       res.json({
-        mailboxes: out,
+        mailboxes: out.filter(m => m._shown).map(({ _shown, ...m }) => m),
         pool_count: poolMembers.length,
         pool_domains: domains.size,
         warming_count: warmingCount,
@@ -102,8 +121,10 @@ module.exports = (ctx) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  async function loadMailbox(id) {
-    const { data } = await supabase.from('user_emails').select('id,email_address,platform,is_active').eq('id', id).maybeSingle();
+  // The one door to a mailbox by id: this organisation's, or nothing (→ 404).
+  async function loadMailbox(req, id) {
+    const { data } = await db.forRequest(req).from('user_emails')
+      .select('id,user_id,email_address,platform,is_active').eq('id', id).maybeSingle();
     return data || null;
   }
   async function isConnected(id) {
@@ -115,7 +136,7 @@ module.exports = (ctx) => {
   router.post('/warmup/:id/start', auth, async (req, res) => {
     try {
       if (!canManage(req)) return res.status(403).json({ error: 'Admin only' });
-      const mb = await loadMailbox(req.params.id);
+      const mb = await loadMailbox(req, req.params.id);
       if (!mb || !mb.is_active) return res.status(404).json({ error: 'Mailbox not found or inactive' });
       if (mb.platform === 'Microsoft' && !(await isConnected(mb.id)))
         return res.status(400).json({ error: 'Mailbox must be connected before warm-up can send. Connect it under the user\'s Email IDs first.' });
@@ -123,7 +144,7 @@ module.exports = (ctx) => {
       let days = parseInt(req.body?.days, 10);
       if (!Number.isInteger(days) || days < 1 || days > 120) days = defDays;
       const optIn = req.body?.opt_in_receive !== false; // default: also receive
-      const { error } = await supabase.from('user_emails').update({
+      const { error } = await db.forRequest(req).from('user_emails').update({
         warmup_status: 'warming', warmup_start_date: todayStr(), warmup_days: days,
         warmup_pool_opt_in: optIn, warmup_graduated_at: null
       }).eq('id', mb.id);
@@ -135,13 +156,13 @@ module.exports = (ctx) => {
 
   async function setStatus(req, res, patch, okStatuses, guardMsg) {
     if (!canManage(req)) return res.status(403).json({ error: 'Admin only' });
-    const mb = await loadMailbox(req.params.id);
+    const mb = await loadMailbox(req, req.params.id);
     if (!mb) return res.status(404).json({ error: 'Mailbox not found' });
     if (okStatuses) {
-      const { data: cur } = await supabase.from('user_emails').select('warmup_status').eq('id', mb.id).maybeSingle();
+      const { data: cur } = await db.forRequest(req).from('user_emails').select('warmup_status').eq('id', mb.id).maybeSingle();
       if (!okStatuses.includes(cur?.warmup_status)) return res.status(409).json({ error: guardMsg });
     }
-    const { error } = await supabase.from('user_emails').update(patch).eq('id', mb.id);
+    const { error } = await db.forRequest(req).from('user_emails').update(patch).eq('id', mb.id);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true, id: mb.id, ...patch });
   }
@@ -159,11 +180,27 @@ module.exports = (ctx) => {
   router.get('/warmup/:id/threads', auth, async (req, res) => {
     try {
       if (!canView(req)) return res.status(403).json({ error: 'Forbidden' });
+      // The mailbox is the boundary: this organisation's, and for a non-admin
+      // lead one in their reporting chain — otherwise it does not exist here.
+      const mb = await loadMailbox(req, req.params.id);
+      if (!mb) return res.status(404).json({ error: 'Mailbox not found' });
+      if (!hasRole(req, 'admin') && !(await reportingChainIds(req.user.id, orgOf(req))).includes(mb.user_id)) {
+        return res.status(404).json({ error: 'Mailbox not found' });
+      }
+      // Threads are read by the (already verified) mailbox, not by org_id:
+      // threads written before the engine stamped org_id sit under the default
+      // organisation, and filtering on it would hide another org's own history.
       const { data, error } = await supabase.from('warmup_threads')
-        .select('id,to_mailbox_id,subject,exchanges,target_exchanges,landed_in,rescued,status,created_at,to:user_emails!to_mailbox_id(email_address)')
-        .eq('from_mailbox_id', req.params.id).order('created_at', { ascending: false }).limit(50);
+        .select('id,to_mailbox_id,subject,exchanges,target_exchanges,landed_in,rescued,status,created_at,to:user_emails!to_mailbox_id(email_address,org_id)')
+        .eq('from_mailbox_id', mb.id).order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
-      res.json(data || []);
+      // A partner mailbox in another organisation (paired before the engine
+      // kept warm-up inside one org) is not this caller's address to read.
+      const org = orgOf(req);
+      res.json((data || []).map(t => {
+        const to = t.to && (!org || !t.to.org_id || t.to.org_id === org) ? { email_address: t.to.email_address } : null;
+        return { ...t, to };
+      }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

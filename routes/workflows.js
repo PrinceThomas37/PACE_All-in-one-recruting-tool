@@ -6,20 +6,44 @@
 // ============================================================================
 const express = require('express');
 const { releaseToPoolUpdate } = require('../services/outreach-cycle');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, today, logActivity, INDUSTRIES, normInd } = ctx;
+  const { supabase, auth, hasRole, today, logActivity, INDUSTRIES, normInd, userOrgId } = ctx;
+  // ctx.withOrg already exists on routeCtx, but fall back to a local
+  // equivalent so this file degrades safely if ever mounted more narrowly.
+  const withOrgLocal = ctx.withOrg || ((q, req) => (req && req.orgId ? q.eq('org_id', req.orgId) : q));
+  // `reportingChainIds` also arrives on ctx (gateway added it to routeCtx),
+  // but fall back to requiring it directly so this file still works if it's
+  // ever mounted with a narrower ctx, the way routes/wf.js is.
+  const { reportingChainIds } = ctx.reportingChainIds ? ctx : require('../hierarchy')(supabase);
+
+  // C-0022 #3: only a PURE `ra`/`bd` was ever restricted to themselves — a
+  // bd_lead outside a target's team, or an ra_lead outside a target's team,
+  // read anyone's counts, from any org (no org filter existed at all).
+  // `inCallerScope` is the one check both insights routes use: self, the
+  // caller's reporting chain (hierarchy.js — the one chain walk), or admin.
+  // A target outside the caller's scope 404s, same shape as a foreign-org id —
+  // never 403, which would confirm the id exists.
+  async function inCallerScope(req, targetId) {
+    if (hasRole(req, 'admin')) return true;
+    const chain = await reportingChainIds(req.user.id, req.orgId || null);
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    return own.inScope(targetId, scope);
+  }
 
 router.get('/insights/ra/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;
-    if (hasRole(req, 'ra') && !hasRole(req, 'admin', 'ra_lead') && req.user.id !== targetId) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await inCallerScope(req, targetId))) return res.status(404).json({ error: 'Not found' });
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
     const monthAgo = new Date(now); monthAgo.setDate(monthAgo.getDate() - 30);
-    const { data: jobs, error } = await supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date').eq('created_by', targetId).is('deleted_at', null).gte('created_at', monthAgo.toISOString());
+    let jq = supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date').eq('created_by', targetId).is('deleted_at', null).gte('created_at', monthAgo.toISOString());
+    if (req.orgId) jq = jq.eq('org_id', req.orgId);
+    const { data: jobs, error } = await jq;
     if (error) throw error;
     const all = jobs || [];
     const todayJobs = all.filter(j => j.created_date === todayStr);
@@ -35,8 +59,7 @@ router.get('/insights/ra/:userId', auth, async (req, res) => {
 router.get('/insights/bd/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;
-    // BD can only see their own; BD Lead and admin can see any
-    if (hasRole(req, 'bd') && !hasRole(req, 'admin', 'bd_lead') && req.user.id !== targetId) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await inCallerScope(req, targetId))) return res.status(404).json({ error: 'Not found' });
 
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
@@ -44,10 +67,12 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
     const monthAgo = new Date(now); monthAgo.setDate(monthAgo.getDate() - 30);
 
     // Jobs assigned to this BD Manager
-    const { data: jobs } = await supabase.from('jobs')
+    let bjq = supabase.from('jobs')
       .select('id,stage,industry,position,assigned_at,company:companies(name,industry)')
       .eq('assigned_to_bd', targetId)
       .is('deleted_at', null);
+    if (req.orgId) bjq = bjq.eq('org_id', req.orgId);
+    const { data: jobs } = await bjq;
 
     const allJobs = jobs || [];
     function jAt(j) { return j.assigned_at ? j.assigned_at.slice(0, 10) : ''; }
@@ -69,10 +94,12 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
     const assigned   = allJobs.filter(j => j.stage === 'Assigned');
 
     // Emails
-    const { data: emails } = await supabase.from('emails')
+    let eq2 = supabase.from('emails')
       .select('id,status,created_at,sent_at')
       .eq('assigned_to', targetId)
       .gte('created_at', monthAgo.toISOString());
+    if (req.orgId) eq2 = eq2.eq('org_id', req.orgId);
+    const { data: emails } = await eq2;
 
     const allEmails   = emails || [];
     const sentEmails  = allEmails.filter(e => e.status === 'sent');
@@ -149,6 +176,9 @@ router.get('/stats', auth, async (req, res) => {
     else if (period === 'quarterly') { const q = new Date(now); q.setMonth(q.getMonth()-3); dateFrom = q.toISOString().split('T')[0]; }
     else { const m = new Date(now.getFullYear(), now.getMonth(), 1); dateFrom = m.toISOString().split('T')[0]; }
     let query = supabase.from('jobs').select('id,stage,created_by,assigned_to,contacts(id,email_sent_at)').is('deleted_at', null).gte('created_at', dateFrom + 'T00:00:00Z');
+    // C-0017 #6: unscoped even for admin — one customer's volume blended with
+    // every other's. Admin is scoped to THEIR org, never the deployment.
+    if (req.orgId) query = query.eq('org_id', req.orgId);
     if (!hasRole(req, 'admin')) query = query.or(`created_by.eq.${req.user.id},assigned_to.eq.${req.user.id}`);
     const { data, error } = await query;
     if (error) throw error;
@@ -181,19 +211,51 @@ router.post('/jobs/bulk-stage', auth, async (req, res) => {
     // generation silently produces nothing for a freshly re-assigned lead.
     if (stage === 'Unassigned') updates = releaseToPoolUpdate(new Date());
 
-    const { error } = await supabase.from('jobs').update(updates).in('id', job_ids);
-    if (error) throw error;
+    // Rampart review (D-0035 #4): a plain BD/BD Lead could stage ANY lead id in
+    // the org, not just their own — the org check above stops another COMPANY's
+    // leads, not a COLLEAGUE's. admin and ra_lead are the pool roles (they run
+    // distribution/recycling org-wide, same as `/distribute/*`) and keep the
+    // access they had; bd/bd_lead are narrowed to leads whose `assigned_to_bd`
+    // is in their own reporting-chain scope. A lead outside that scope is
+    // silently excluded, exactly like a foreign-org id — never a 403 that would
+    // confirm which of the pasted ids exist.
+    let allowedIds = job_ids;
+    if (!hasRole(req, 'admin', 'ra_lead')) {
+      const chain = await reportingChainIds(req.user.id, req.orgId || null);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+      let sq = supabase.from('jobs').select('id,assigned_to_bd').in('id', job_ids);
+      if (req.orgId) sq = sq.eq('org_id', req.orgId);
+      const { data: ownRows } = await sq;
+      allowedIds = (ownRows || []).filter(r => own.inScope(r.assigned_to_bd, scope)).map(r => r.id);
+    }
+    if (!allowedIds.length) return res.json({ success: true, updated: 0, stage });
 
-    for (const jid of job_ids) await logActivity(jid, null, req.user.id, 'stage_changed', `Stage changed to ${stage}`, null, { stage });
+    // C-0017 #1: `job_ids` is caller-supplied with no ownership or org check
+    // at all — any BD in ANY org could rewrite ANY org's leads. The org
+    // condition goes ON the update itself (never check-then-mutate, which is
+    // a race and twice the code): a foreign id simply matches zero rows.
+    let uq = supabase.from('jobs').update(updates).in('id', allowedIds);
+    if (req.orgId) uq = uq.eq('org_id', req.orgId);
+    const { data: updatedRows, error } = await uq.select('id');
+    if (error) throw error;
+    const updatedIds = (updatedRows || []).map(r => r.id);
+
+    for (const jid of updatedIds) await logActivity(jid, null, req.user.id, 'stage_changed', `Stage changed to ${stage}`, null, { stage });
 
     // If resetting to Unassigned, drop the queued outreach and the follow-up
     // schedule with it — both belong to the assignment that just ended.
-    if (stage === 'Unassigned') {
-      await supabase.from('emails').delete().in('job_id', job_ids).eq('status', 'pending');
-      await supabase.from('follow_ups').update({ status: 'expired' }).in('job_id', job_ids).eq('status', 'active');
+    // Scoped to the ids that actually moved (and to this org) so a foreign
+    // job_id in the same request can't be used to clear another org's queue.
+    if (stage === 'Unassigned' && updatedIds.length) {
+      let dq = supabase.from('emails').delete().in('job_id', updatedIds).eq('status', 'pending');
+      if (req.orgId) dq = dq.eq('org_id', req.orgId);
+      await dq;
+      let fq = supabase.from('follow_ups').update({ status: 'expired' }).in('job_id', updatedIds).eq('status', 'active');
+      if (req.orgId) fq = fq.eq('org_id', req.orgId);
+      await fq;
     }
 
-    res.json({ success: true, updated: job_ids.length, stage });
+    res.json({ success: true, updated: updatedIds.length, stage });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -203,8 +265,17 @@ router.post('/jobs/bulk-assign', auth, async (req, res) => {
     const { job_ids, assigned_to_bd } = req.body;
     if (!Array.isArray(job_ids) || !job_ids.length) return res.status(400).json({ error: 'job_ids array required' });
     if (!assigned_to_bd) return res.status(400).json({ error: 'assigned_to_bd required' });
-    const { data: bd } = await supabase.from('users').select('id,name').eq('id', assigned_to_bd).single();
+    const { data: bd } = await withOrgLocal(
+      supabase.from('users').select('id,name').eq('id', assigned_to_bd).is('deleted_at', null), req
+    ).maybeSingle();
     if (!bd) return res.status(400).json({ error: 'BD user not found' });
+    // Belt and braces, with the shared helper gateway added for exactly this
+    // (index.js `userOrgId`, on routeCtx): this reassigns leads AND their
+    // sending mailbox (below) onto `assigned_to_bd`, so a stranger's account
+    // in another org must never pass even if the select above somehow did.
+    if (userOrgId && req.orgId && (await userOrgId(assigned_to_bd)) !== req.orgId) {
+      return res.status(400).json({ error: 'BD user not found' });
+    }
 
     // Get BD's primary active email ID for sending
     const { data: bdEmails } = await supabase.from('user_emails')
@@ -217,20 +288,48 @@ router.post('/jobs/bulk-assign', auth, async (req, res) => {
     const now = new Date();
     const updatePayload = { assigned_to_bd, assigned_at: now, stage: 'Assigned', updated_at: now };
     if (sendingEmailId) updatePayload.sending_email_id = sendingEmailId;
-    const { error } = await supabase.from('jobs').update(updatePayload).in('id', job_ids);
+    // C-0017 #2: same shape as bulk-stage — the org condition goes ON the
+    // update, not a separate check, so a foreign job_id in the batch is
+    // simply not reassigned rather than being reassigned to another org's BD.
+    let uq2 = supabase.from('jobs').update(updatePayload).in('id', job_ids);
+    if (req.orgId) uq2 = uq2.eq('org_id', req.orgId);
+    const { data: assignedRows, error } = await uq2.select('id');
     if (error) throw error;
-    for (const jid of job_ids) await logActivity(jid, null, req.user.id, 'bulk_assigned', `Bulk assigned to BD: ${bd.name}`, null, { assigned_to_bd, bd_name: bd.name });
-    res.json({ success: true, assigned: job_ids.length, bd_name: bd.name, sending_email_id: sendingEmailId });
+    const assignedIds = (assignedRows || []).map(r => r.id);
+    for (const jid of assignedIds) await logActivity(jid, null, req.user.id, 'bulk_assigned', `Bulk assigned to BD: ${bd.name}`, null, { assigned_to_bd, bd_name: bd.name });
+    res.json({ success: true, assigned: assignedIds.length, bd_name: bd.name, sending_email_id: sendingEmailId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// D-0035 (D5, same answer as lookups.js `/contacts/check-email`): a batch
+// duplicate check must say WHOSE lead it is and SINCE WHEN, never the other
+// lead's own contact/position/company details, and never another org's. This
+// had no org filter at all — a pasted prospect list from ANY org could be
+// checked against every other org's contacts, and the response named the
+// matched lead's role and client. `email`/`duplicate`/`days_ago`/`added_by`
+// is the shape 52-poc-block.js's single-address version already expects.
 router.post('/jobs/check-duplicates', auth, async (req, res) => {
   try {
     const { emails } = req.body;
     if (!Array.isArray(emails) || !emails.length) return res.json({ duplicates: [] });
-    const { data, error } = await supabase.from('contacts').select('email, job_id, job:jobs(id,position,company_id,company:companies(name))').in('email', emails.map(e => e.toLowerCase().trim())).not('email', 'is', null);
+    let q = supabase.from('contacts')
+      .select('email,created_at,job:jobs(id,assigned_to_bd,owner:users!assigned_to_bd(id,name))')
+      .in('email', emails.map(e => e.toLowerCase().trim())).not('email', 'is', null);
+    if (req.orgId) q = q.eq('org_id', req.orgId);
+    const { data, error } = await q;
     if (error) throw error;
-    res.json({ duplicates: data || [] });
+    // Shape per the coordinator/gateway agreement (D5): whose lead it is and
+    // since when — never the other lead's company/position/contact.
+    const duplicates = (data || []).map(c => {
+      const job = c.job || {};
+      return {
+        email: c.email,
+        duplicate: true,
+        owner_name: (job.owner && job.owner.name) || null,
+        since: c.created_at || null,
+      };
+    });
+    res.json({ duplicates });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

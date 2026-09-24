@@ -13,6 +13,16 @@
 // The send-window helpers and the send-progress in-memory mirror stay in
 // index.js (the send loop uses them too) and are passed in via ctx, so this
 // module reads the exact same Map/functions the pipeline writes.
+//
+// WHO SEES WHICH EMAIL (D-0034, 2026-09-23 — C-0023 / C-0015)
+// Every query here goes through `db.forRequest(req)`, so it is bound to the
+// caller's organisation by construction: the backend runs as service role, RLS
+// is bypassed, and application code is the only thing between one customer's
+// outbound book and another's. Inside the organisation, GET /emails returns
+// what the viewer's people SENT plus what was sent about the leads their people
+// OWN — the rule is `services/ownership.js`, not re-derived here. An RA Lead
+// gets per-sender COUNTS (GET /emails/sender-summary), never another person's
+// messages (rampart.md decision D4).
 // ============================================================================
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
@@ -20,6 +30,12 @@ const { isStaleProgress } = require('../services/send-progress');
 const sendRetry = require('../services/send-retry');
 const settingsConfig = require('../config/settings');
 const engineDraft = require('../services/engine-draft');
+const own = require('../services/ownership');
+const { createDb } = require('../models');
+
+const chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+const newestFirst = (a, b) => (new Date(b.created_at).getTime() || 0) - (new Date(a.created_at).getTime() || 0);
+const SUMMARY_STATUSES = ['pending', 'sent', 'failed'];
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -28,24 +44,92 @@ module.exports = (ctx) => {
     getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
     formatWindowOpensLabel, padHour, sendProgressCache,
   } = ctx;
+  // routeCtx carries `db`; a harness that builds this router without one still
+  // gets the scoped layer rather than raw, unscoped access.
+  const db = ctx.db || createDb(supabase);
+  const { reportingChainIds } = require('../hierarchy')(supabase);
+  const orgOf = (req) => (ctx.orgIdFor ? ctx.orgIdFor(req) : ((req && (req.orgId || (req.user && req.user.org_id))) || null));
+
+  // The viewer's D-0034 scope. hierarchy.js is the ONE chain walk; admin needs
+  // none because the whole organisation is their view.
+  async function viewScopeFor(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgOf(req));
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
+
+  // Every page of a query. `build` must return a FRESH builder that is already
+  // ORDERED — .range() without an ORDER BY repeats or skips rows between pages.
+  async function allPages(build) {
+    let out = [], from = 0;
+    while (true) {
+      const { data, error } = await build().range(from, from + 999);
+      if (error) throw error;
+      if (!data || !data.length) break;
+      out = out.concat(data);
+      if (data.length < 1000) break;
+      from += 1000;
+    }
+    return out;
+  }
+
+  // The row every Email screen draws. Defined once so the two queries that
+  // fetch it cannot drift; `job.assigned_to_bd` is what the D-0034 gate reads.
+  const emailRows = (req) => db.forRequest(req).from('emails').select(`*, contact:contacts(id,first_name,last_name,email,designation), job:jobs(id,position,timezone,company_id,assigned_to_bd,company:companies(name,industry,location),sending_email:user_emails!sending_email_id(id,email_address,display_name)), sender:users!sent_by(id,name,email)`);
+
+  // Email about a lead the view OWNS, sent by somebody OUTSIDE it — a recycled
+  // lead's history travels with the lead (D-0034). Ids first, so the bodies
+  // already fetched by sender are never fetched twice.
+  async function emailsOnOwnedLeads(req, ownerIds, status, have) {
+    const owned = await allPages(() => db.forRequest(req).from('jobs')
+      .select('id').in('assigned_to_bd', ownerIds).order('id', { ascending: true }));
+    if (!owned.length) return [];
+    const inside = new Set(ownerIds);
+    const want = [];
+    for (const jobIds of chunk(owned.map(j => j.id), 100)) {
+      const rows = await allPages(() => {
+        let q = db.forRequest(req).from('emails').select('id,sent_by').in('job_id', jobIds);
+        if (status) q = q.eq('status', status);
+        return q.order('id', { ascending: true });
+      });
+      rows.forEach(r => { if (!have.has(r.id) && !inside.has(r.sent_by)) want.push(r.id); });
+    }
+    let out = [];
+    for (const ids of chunk(want, 100)) {
+      const { data, error } = await emailRows(req).in('id', ids);
+      if (error) throw error;
+      out = out.concat(data || []);
+    }
+    return out;
+  }
 
 router.get('/emails', auth, async (req, res) => {
   try {
     const { status } = req.query;
-    // Paginate to avoid Supabase 1000-row silent cap
-    let allData = [], from = 0;
-    while (true) {
-      let query = supabase.from('emails').select(`*, contact:contacts(id,first_name,last_name,email,designation), job:jobs(id,position,timezone,company_id,company:companies(name,industry,location),sending_email:user_emails!sending_email_id(id,email_address,display_name)), sender:users!sent_by(id,name,email)`).order('created_at', { ascending: false });
-      if (!hasRole(req, 'admin', 'ra_lead')) query = query.eq('sent_by', req.user.id);
+    // D-0034. What the viewer's people SENT, plus what was sent about the leads
+    // their people OWN. Admin: the whole organisation. `?mine=1` narrows to the
+    // caller's own queue — what the Send/Retry controls act on.
+    const scope = await viewScopeFor(req);
+    const mineOnly = req.query.mine === '1' || req.query.mine === 'true';
+    const senderIds = mineOnly ? [req.user.id] : own.queryOwnerIds(scope); // null = the whole org
+
+    // Narrowed IN SQL before .range() (a filter applied after a page limit
+    // empties pages silently), and ordered, with a unique tie-breaker.
+    let allData = await allPages(() => {
+      let query = emailRows(req);
+      if (senderIds) query = query.in('sent_by', senderIds);
       if (status) query = query.eq('status', status);
-      query = query.range(from, from + 999);
-      const { data, error } = await query;
-      if (error) throw error;
-      if (!data || !data.length) break;
-      allData = allData.concat(data);
-      if (data.length < 1000) break;
-      from += 1000;
+      return query.order('created_at', { ascending: false }).order('id', { ascending: true });
+    });
+    if (senderIds && !mineOnly) {
+      const extra = await emailsOnOwnedLeads(req, senderIds, status, new Set(allData.map(e => e.id)));
+      if (extra.length) allData = allData.concat(extra).sort(newestFirst);
     }
+    // The boundary. The SQL above is the speed; this predicate is the rule.
+    const jobsById = new Map();
+    allData.forEach(e => { if (e.job && e.job.id) jobsById.set(e.job.id, e.job); });
+    allData = own.scopeEmails(allData, jobsById, scope);
+
     // A queued email keeps {{sender}} in storage until it is sent, so it is
     // rendered HERE — once, for every screen — from the mailbox that will
     // actually send it. No page should have to know the token exists.
@@ -55,9 +139,9 @@ router.get('/emails', auth, async (req, res) => {
     // from_email supplies the name.
     const pinnedIds = [...new Set(allData.map(e => e.sending_email_id).filter(Boolean))];
     const pinnedById = {};
-    if (pinnedIds.length) {
-      const { data: pinned } = await supabase.from('user_emails')
-        .select('id,email_address,display_name').in('id', pinnedIds);
+    for (const ids of chunk(pinnedIds, 100)) {
+      const { data: pinned } = await db.forRequest(req).from('user_emails')
+        .select('id,email_address,display_name').in('id', ids);
       (pinned || []).forEach(m => { pinnedById[m.id] = m; });
     }
     // D-0032: the engine's first email is written by AI at send time, so a
@@ -65,13 +149,18 @@ router.get('/emails', auth, async (req, res) => {
     // the preview pass for the final text.
     let aiFirstOn = false;
     try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1; } catch (_) {}
+    const isAdmin = hasRole(req, 'admin');
     allData = allData.map((e) => {
       const mailbox = (e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null;
+      const isMine = e.sent_by === req.user.id;
       // What the Email page says about a failure or a scheduled retry comes
       // from send-retry.js, the same rules the send loop obeyed — no page
-      // re-derives "can this be retried".
+      // re-derives "can this be retried". The retry routes act only on the
+      // caller's own email (or an admin's), so a manager reviewing a report's
+      // failure is not offered a Retry that would answer 404 (D-0020).
       return { ...e, ...renderStoredEmail(e, mailbox), sending_email: mailbox,
-        retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e),
+        is_mine: isMine,
+        retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) && (isMine || isAdmin),
         ai_written: e.template_variant === 'ai',
         ai_will_write: aiFirstOn && e.status === 'pending' && engineDraft.isFirstEmail(e) && e.template_variant !== 'ai' };
     });
@@ -87,6 +176,39 @@ router.get('/emails/pending-count', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Per-sender COUNTS — pending / sent / failed — for the people whose sending
+// the viewer operates. An RA Lead runs send operations for every BD (pausing a
+// BD, retrying a BD's queue), so they and admin get every sender in the
+// ORGANISATION; everyone else gets their own D-0034 view. Numbers only: this
+// never returns a message, an address or a subject (rampart.md decision D4).
+// Registered above every /emails/:id route (a literal after a :param is dead).
+router.get('/emails/sender-summary', auth, async (req, res) => {
+  try {
+    const operator = hasRole(req, 'admin', 'ra_lead');
+    const scope = operator ? null : await viewScopeFor(req);
+    const senderIds = operator ? null : own.queryOwnerIds(scope);
+    const rows = await allPages(() => {
+      let q = db.forRequest(req).from('emails').select('id,sent_by,status').in('status', SUMMARY_STATUSES);
+      if (senderIds) q = q.in('sent_by', senderIds);
+      return q.order('id', { ascending: true });
+    });
+    const bySender = new Map();
+    for (const r of rows) {
+      if (!r.sent_by || !SUMMARY_STATUSES.includes(r.status)) continue;
+      if (!bySender.has(r.sent_by)) bySender.set(r.sent_by, { id: r.sent_by, name: null, pending: 0, sent: 0, failed: 0 });
+      bySender.get(r.sent_by)[r.status] += 1;
+    }
+    for (const ids of chunk([...bySender.keys()], 100)) {
+      const { data: people } = await db.forRequest(req).from('users').select('id,name').in('id', ids);
+      (people || []).forEach(p => { if (bySender.has(p.id)) bySender.get(p.id).name = p.name || null; });
+    }
+    const senders = [...bySender.values()]
+      .map(s => ({ ...s, name: s.name || 'Unknown' }))
+      .sort((a, b) => (b.pending + b.sent + b.failed) - (a.pending + a.sent + a.failed) || String(a.name).localeCompare(String(b.name)));
+    res.json({ scope: operator ? 'org' : scope.label, senders });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/emails/pending-summary', auth, async (req, res) => {
   try {
     const sendWindow = await getSendWindowHours();
@@ -94,12 +216,15 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    let query = supabase.from('emails').select('id, job:jobs(timezone)').eq('status', 'pending');
+    // Counts of the caller's own queue — or, for the two roles that operate
+    // other people's sending, a named sender's. Never outside the organisation.
+    let query = db.forRequest(req).from('emails').select('id, job:jobs(timezone)').eq('status', 'pending');
     if (hasRole(req, 'admin', 'ra_lead') && req.query.manager_id) {
       query = query.eq('sent_by', req.query.manager_id);
     } else if (!hasRole(req, 'admin', 'ra_lead')) {
       query = query.eq('sent_by', req.user.id);
     }
+    query = query.order('id', { ascending: true });
 
     let rows = [], from = 0;
     while (true) {
@@ -155,9 +280,19 @@ router.post('/emails', auth, async (req, res) => {
   try {
     const { contact_id, job_id, to_email, subject, body, platform } = req.body;
     if (!to_email) return res.status(400).json({ error: 'to_email required' });
-    const { data, error } = await supabase.from('emails').insert({ contact_id: contact_id || null, job_id: job_id || null, to_email, subject, body, platform: platform || 'Gmail', sent_by: req.user.id, status: 'sent', sent_at: today() }).select().single();
+    // A record of mail sent about a lead is an ACT on that lead (D-0020), and a
+    // lead or contact in another organisation does not exist for this caller.
+    const scoped = db.forRequest(req);
+    if (job_id) {
+      const touchable = ctx.canTouchJob ? await ctx.canTouchJob(req, job_id) : !!(await scoped.from('jobs').byId(job_id, 'id'));
+      if (!touchable) return res.status(404).json({ error: 'Lead not found' });
+    }
+    if (contact_id && !(await scoped.from('contacts').byId(contact_id, 'id'))) return res.status(404).json({ error: 'Contact not found' });
+    // The scoped insert stamps org_id — an unstamped row would be filed under
+    // the DEFAULT organisation by the column default, silently.
+    const { data, error } = await scoped.from('emails').insert({ contact_id: contact_id || null, job_id: job_id || null, to_email, subject, body, platform: platform || 'Gmail', sent_by: req.user.id, status: 'sent', sent_at: today() }).select().single();
     if (error) throw error;
-    if (contact_id) await supabase.from('contacts').update({ email_sent_at: today(), email_platform: platform || 'Gmail', updated_at: new Date() }).eq('id', contact_id);
+    if (contact_id) await scoped.from('contacts').update({ email_sent_at: today(), email_platform: platform || 'Gmail', updated_at: new Date() }).eq('id', contact_id);
     if (job_id) await logActivity(job_id, contact_id || null, req.user.id, 'email_sent', `Email sent: ${subject || ''}`, null, null);
     res.status(201).json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -192,12 +327,25 @@ router.get('/emails/send-progress', auth, async (req, res) => {
 
 router.delete('/emails/:id', auth, async (req, res) => {
   try {
-    const { data, error } = await supabase.from('emails').select('id,status,sent_by').eq('id', req.params.id).single();
+    // Org-scoped read: another organisation's email answers exactly like a
+    // missing one, admin included.
+    const { data, error } = await db.forRequest(req).from('emails').select('id,status,sent_by,job_id,job:jobs(id,assigned_to_bd)').eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Email not found' });
-    if (data.sent_by !== req.user.id && !hasRole(req, 'admin')) return res.status(403).json({ error: 'Forbidden' });
+    if (data.sent_by !== req.user.id && !hasRole(req, 'admin')) {
+      // Deleting is acting, and acting is the sender's (D-0020). A manager who
+      // can SEE this email is told whose it is; anyone else learns nothing.
+      const scope = await viewScopeFor(req);
+      if (!own.canSeeEmail(data, data.job, scope)) return res.status(404).json({ error: 'Email not found' });
+      return res.status(403).json({ error: "This email is in somebody else's queue, so it is not yours to delete. Ask them, or an admin." });
+    }
     if (data.status !== 'pending' && data.status !== 'failed') return res.status(400).json({ error: 'Can only delete pending or failed emails' });
-    const { error: delErr } = await supabase.from('emails').delete().eq('id', req.params.id);
+    // The conditions ride ON the delete: the org (a by-id delete is never
+    // trusted to the read above), and the status — the send loop may have
+    // claimed this row since we read it, and a sent email must keep its record.
+    const { data: gone, error: delErr } = await db.forRequest(req).from('emails')
+      .delete().eq('id', req.params.id).in('status', ['pending', 'failed']).select('id');
     if (delErr) throw delErr;
+    if (!gone || !gone.length) return res.status(409).json({ error: 'This email changed while you were deleting it — it may be sending now. Refresh and check.' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -265,21 +413,23 @@ router.post('/admin/emails/purge-pending', auth, async (req, res) => {
       if (Number.isNaN(beforeTs)) return res.status(400).json({ error: 'Invalid "before" timestamp' });
     }
 
-    // Fetch all matching pending rows (paginated past Supabase's 1000-row cap —
-    // matters for the all-managers scope, which can be large). When all_managers
-    // is set we don't constrain by sent_by, so every manager's queue is covered.
-    let data = [], pageFrom = 0;
-    while (true) {
-      let q = supabase.from('emails').select('id, followup_type, created_at').eq('status', 'pending');
-      if (!all_managers) q = q.eq('sent_by', manager_id);
-      q = q.range(pageFrom, pageFrom + 999);
-      const { data: page, error } = await q;
-      if (error) throw error;
-      if (!page || !page.length) break;
-      data = data.concat(page);
-      if (page.length < 1000) break;
-      pageFrom += 1000;
+    // "Every manager" means every manager in THIS organisation. The scoped
+    // accessor puts the org condition on the fetch AND on the delete below —
+    // without it, one customer's admin emptied every customer's queue
+    // (C-0015 #2), unrecoverably. A named manager outside the org is a 404.
+    const scoped = db.forRequest(req);
+    if (!all_managers && !(await scoped.from('users').byId(manager_id, 'id'))) {
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    // Fetch all matching pending rows (paginated past Supabase's 1000-row cap —
+    // matters for the all-managers scope, which can be large), ORDERED so the
+    // pages neither repeat nor skip rows.
+    const data = await allPages(() => {
+      let q = scoped.from('emails').select('id, sent_by, followup_type, created_at').eq('status', 'pending');
+      if (!all_managers) q = q.eq('sent_by', manager_id);
+      return q.order('id', { ascending: true });
+    });
 
     const matches = (data || []).filter(e => {
       const t = purgeTypeOf(e.followup_type);
@@ -298,15 +448,17 @@ router.post('/admin/emails/purge-pending', auth, async (req, res) => {
     // to delete. Leaving it up is how the Email page ends up showing 375 total
     // above a queue of 21 — clear it for everyone whose queue this touched.
     const senders = all_managers
-      ? [...new Set((await supabase.from('emails').select('sent_by').in('id', ids.slice(0, 1000))).data?.map(r => r.sent_by).filter(Boolean) || [])]
+      ? [...new Set(matches.map(e => e.sent_by).filter(Boolean))]
       : [manager_id];
 
+    // Only rows still PENDING are removed: one the send loop claimed since the
+    // fetch is on its way out and must keep its record. `deleted` counts what
+    // the database actually removed, not what we asked for.
     let deleted = 0;
-    for (let i = 0; i < ids.length; i += 200) {
-      const batch = ids.slice(i, i + 200);
-      const { error: delErr } = await supabase.from('emails').delete().in('id', batch);
+    for (const batch of chunk(ids, 200)) {
+      const { data: gone, error: delErr } = await scoped.from('emails').delete().in('id', batch).eq('status', 'pending').select('id');
       if (delErr) throw delErr;
-      deleted += batch.length;
+      deleted += (gone || []).length;
     }
     for (const uid of senders) {
       sendProgressCache.set(uid, null);

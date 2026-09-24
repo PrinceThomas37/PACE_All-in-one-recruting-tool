@@ -9,10 +9,60 @@ const clientResolve = require('../services/client-resolve');
 const companyCooldown = require('../services/company-cooldown');
 const companyMerge = require('../services/company-merge');
 const { getSetting } = require('../config/settings');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, withOrg, orgStamp } = ctx;
+  const { supabase, auth, hasRole, withOrg, orgStamp, orgIdFor } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
+
+  // ── D-0035 (owner's answer to D2): every BD SEES every client; only the
+  // client's OWNER (or admin) may ACT on it — edit, delete, its documents, its
+  // email (routes/recruiting/outreach.js — guild's). "Owner of a client" is
+  // read off the data, not stored: the BD who runs its job order(s)
+  // (job_orders.bd_manager_id) takes precedence — that is the desk actually
+  // working it once real recruiting has started — else the BD who owns its
+  // lead(s) (jobs.assigned_to_bd), else whoever created the company record.
+  // Where several leads/job orders at one company have different owners, the
+  // most recently created one wins; a formal "several owners" tie-break is not
+  // asked for and is not built.
+  async function clientOwnerId(req, companyId) {
+    const { data: jos } = await withOrg(supabase.from('job_orders')
+      .select('bd_manager_id,created_at').eq('company_id', companyId).is('deleted_at', null)
+      .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req);
+    if (jos && jos.length) return jos[0].bd_manager_id;
+    const { data: leads } = await withOrg(supabase.from('jobs')
+      .select('assigned_to_bd,created_at').eq('company_id', companyId).is('deleted_at', null)
+      .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req);
+    if (leads && leads.length) return leads[0].assigned_to_bd;
+    const { data: co } = await withOrg(supabase.from('companies')
+      .select('created_by').eq('id', companyId), req).maybeSingle();
+    return co ? co.created_by : null;
+  }
+
+  // Loads the company (org-scoped, 404 if foreign/missing) and, unless the
+  // caller is admin or the owner, sends a 403 naming whose client it is —
+  // same idea as D-0020's closeRefusal: never a bare, unexplained refusal.
+  // Returns the company row on success, or null after already responding.
+  async function requireClientOwner(req, res, companyId) {
+    const { data: co } = await withOrg(supabase.from('companies')
+      .select('*').eq('id', companyId).is('deleted_at', null), req).maybeSingle();
+    if (!co) { res.status(404).json({ error: 'Not found' }); return null; }
+    if (hasRole(req, 'admin')) return co;
+    const ownerId = await clientOwnerId(req, companyId);
+    if (ownerId && ownerId === req.user.id) return co;
+    let ownerName = null;
+    if (ownerId) {
+      const { data: u } = await supabase.from('users').select('name').eq('id', ownerId).maybeSingle();
+      ownerName = u && u.name;
+    }
+    res.status(403).json({
+      error: ownerName
+        ? `This client belongs to ${ownerName}, so it is not yours to change. Ask them, or your manager can reassign it.`
+        : 'This client is not yours to change. Ask its owner, or your manager can reassign it.',
+    });
+    return null;
+  }
 
 router.get('/companies', auth, async (req, res) => {
   try {
@@ -60,6 +110,8 @@ router.post('/companies', auth, async (req, res) => {
 
 router.put('/companies/:id', auth, async (req, res) => {
   try {
+    const co = await requireClientOwner(req, res, req.params.id);
+    if (!co) return; // requireClientOwner already answered (404 foreign/missing, 403 not-yours)
     const { name, website, industry, location, size, notes } = req.body;
     const updates = { updated_at: new Date() };
     if (name !== undefined) updates.name = name;
@@ -68,16 +120,28 @@ router.put('/companies/:id', auth, async (req, res) => {
     if (location !== undefined) updates.location = location;
     if (size !== undefined) updates.size = size;
     if (notes !== undefined) updates.notes = notes;
-    const { data, error } = await supabase.from('companies').update(updates).eq('id', req.params.id).select().single();
+    const { data, error } = await withOrg(supabase.from('companies').update(updates).eq('id', req.params.id), req).select().maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Not found' });
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/companies/:id', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-    await supabase.from('companies').update({ deleted_at: new Date() }).eq('id', req.params.id);
+    // Rampart review (2026-09-24, item #5): D-0035 lists edit, documents,
+    // email and contacts as owner actions — DELETE is not one of them. An
+    // owner falling back to `companies.created_by` (which can be an RA) let
+    // one person soft-delete a client colleagues still hold live leads on.
+    // Admin-only, as it was before this session's widening.
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin role required.' });
+    const { data: exists } = await withOrg(supabase.from('companies')
+      .select('id').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
+    if (!exists) return res.status(404).json({ error: 'Not found' });
+    const { data, error } = await withOrg(supabase.from('companies')
+      .update({ deleted_at: new Date() }).eq('id', req.params.id), req).select('id').maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -183,6 +247,14 @@ router.post('/companies/:id/merge', auth, async (req, res) => {
     const sourceId = (req.body || {}).from;
     const inputError = companyMerge.mergeInputError({ sourceId, targetId: req.params.id });
     if (inputError) return res.status(400).json({ error: inputError });
+    // Rampart review item #2: a merge re-points every job/lead/contact/document
+    // at BOTH companies and then deletes one — gate it the same as any other
+    // D-0035 write. Owner-or-admin on the SOURCE (being folded away) and the
+    // TARGET (absorbing everything); admin passes both.
+    const srcOwned = await requireClientOwner(req, res, sourceId);
+    if (!srcOwned) return;
+    const tgtOwned = await requireClientOwner(req, res, req.params.id);
+    if (!tgtOwned) return;
     const ctx = await mergeContext(req, sourceId, req.params.id);
     if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
 
@@ -236,7 +308,7 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     const company = co[0];
 
     const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('id,position,created_at,users:users!created_by(name)')
+      .select('id,position,created_at,assigned_to_bd,created_by,assigned_to,users:users!created_by(name)')
       .eq('company_id', company.id).is('deleted_at', null), req)
       .order('created_at', { ascending: false });
     const rows = leads || [];
@@ -247,14 +319,22 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
       lastLeadAt: last && last.created_at, now: new Date(), days,
     });
 
-    // The POCs already known at this client, across all of its leads, newest
-    // first and de-duplicated by address — so a BD picks a name instead of
-    // retyping one PACE already holds.
+    // D-0035/D5 (rampart review #4): a POC belongs to its lead (D-0020), so a
+    // BD sees another BD's client contact only when that BD's leads are in
+    // the viewer's own scope — not every lead at the client. Admin sees all.
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const visibleRows = rows.filter(r => own.canSeeLead(r, scope));
+
+    // The POCs already known at this client, across the leads the viewer may
+    // see, newest first and de-duplicated by address — so a BD picks a name
+    // instead of retyping one PACE already holds.
     let contacts = [];
-    if (rows.length) {
+    if (visibleRows.length) {
       const { data: cs } = await supabase.from('contacts')
         .select('first_name,last_name,email,designation,phone,linkedin,is_primary,created_at')
-        .in('job_id', rows.map(r => r.id)).order('created_at', { ascending: false });
+        .in('job_id', visibleRows.map(r => r.id)).order('created_at', { ascending: false });
       const seen = {};
       (cs || []).forEach(c => {
         const em = (c.email || '').toLowerCase().trim();
@@ -296,8 +376,14 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
 router.get('/companies/:id/contacts', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
-    const { data: jobs } = await withOrg(supabase.from('jobs').select('id').eq('company_id', req.params.id).is('deleted_at', null), req);
-    const jobIds = (jobs || []).map(j => j.id);
+    // D-0035/D5 (rampart review #4): a POC is seen with its lead (D-0020) —
+    // another BD's contacts at the same client are not shown here either.
+    const { data: jobs } = await withOrg(supabase.from('jobs')
+      .select('id,assigned_to_bd,created_by,assigned_to').eq('company_id', req.params.id).is('deleted_at', null), req);
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const jobIds = (jobs || []).filter(j => own.canSeeLead(j, scope)).map(j => j.id);
     if (!jobIds.length) return res.json([]);
     const { data: contacts } = await supabase.from('contacts')
       .select('id,first_name,last_name,email,designation,phone,is_primary').in('job_id', jobIds);
@@ -315,13 +401,32 @@ router.get('/companies/:id/contacts', auth, async (req, res) => {
 // Recent tracked emails to this client (from email_tracking, stamped with
 // company_id on POST /companies/:id/email). Powers the "Recent emails" card +
 // per-row Reply.
+// C-0021 #6 / D-0035: the client (and its email envelope — who/when/opened) is
+// visible to every BD, same as the client record itself. Only the email BODY
+// is the sender's own correspondence — visible to the sender's scope (self +
+// reporting chain, or admin), same split tracking.js uses for a candidate's
+// activity. Masked per row, not dropped, so the "who emailed this client and
+// when" history stays intact for everyone who can see the client.
 router.get('/companies/:id/email-activity', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
     const { data } = await withOrg(supabase.from('email_tracking')
-      .select('id,to_email,subject,body,sent_at,opened_at,open_count,replied_at')
+      .select('id,to_email,subject,body,sent_at,opened_at,open_count,replied_at,sent_by')
       .eq('company_id', req.params.id).order('sent_at', { ascending: false }).limit(20), req);
-    res.json(data || []);
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const rows = (data || []).map((r) => {
+      const visible = own.canSeeEmail(r, null, scope);
+      const { sent_by, body, ...rest } = r;
+      return visible
+        ? { ...rest, body, body_visible: true }
+        // NOT the same null as "sent before PACE kept a copy" (migration 042) —
+        // surface must tell the two apart (see gateway's C-0021 report) or a
+        // withheld body will be mis-shown as one this app never stored.
+        : { ...rest, body: null, body_visible: false, body_note: 'Sent by a colleague. Only the sender, whoever they report to and an admin can read what it said.' };
+    });
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -336,12 +441,14 @@ async function ensureClientDocBucket() {
   _clientBucketEnsured = true;
 }
 
+// D-0035: documents are visible to everyone who can see the client (same as
+// the client record) — only upload/delete are owner-gated, below.
 router.get('/companies/:id/documents', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
-    const { data, error } = await supabase.from('client_documents')
+    const { data, error } = await withOrg(supabase.from('client_documents')
       .select('*, uploader:users!uploaded_by(id,name,employee_id)')
-      .eq('company_id', req.params.id).is('deleted_at', null).order('uploaded_at', { ascending: false });
+      .eq('company_id', req.params.id).is('deleted_at', null), req).order('uploaded_at', { ascending: false });
     if (error) throw error;
     const rows = await Promise.all((data || []).map(async (d) => {
       let url = null;
@@ -358,6 +465,11 @@ router.get('/companies/:id/documents', auth, async (req, res) => {
 router.post('/companies/:id/documents', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
+    // D-0035: uploading onto a client is an ACTION — its owner or admin only.
+    // Also closes X5's "POST onto a foreign company": requireClientOwner 404s
+    // a company outside the caller's org before any file is written.
+    const co = await requireClientOwner(req, res, req.params.id);
+    if (!co) return;
     const b = req.body || {};
     if (!b.filename || !b.data_base64) return res.status(400).json({ error: 'filename and data_base64 required' });
     const raw = String(b.data_base64).replace(/^data:.*;base64,/, '');
@@ -385,11 +497,15 @@ router.post('/companies/:id/documents', auth, async (req, res) => {
 router.delete('/companies/:id/documents/:docId', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
-    const { data: doc } = await supabase.from('client_documents')
-      .select('storage_path').eq('id', req.params.docId).eq('company_id', req.params.id).maybeSingle();
-    await supabase.from('client_documents').update({ deleted_at: new Date() })
-      .eq('id', req.params.docId).eq('company_id', req.params.id);
-    if (doc && doc.storage_path) { try { await supabase.storage.from(CLIENT_DOC_BUCKET).remove([doc.storage_path]); } catch (_) {} }
+    // D-0035: deleting a client's document is owner-or-admin, same as upload.
+    const co = await requireClientOwner(req, res, req.params.id);
+    if (!co) return;
+    const { data: doc } = await withOrg(supabase.from('client_documents')
+      .select('storage_path').eq('id', req.params.docId).eq('company_id', req.params.id), req).maybeSingle();
+    if (!doc) return res.status(404).json({ error: 'Not found' });
+    await withOrg(supabase.from('client_documents').update({ deleted_at: new Date() })
+      .eq('id', req.params.docId).eq('company_id', req.params.id), req);
+    if (doc.storage_path) { try { await supabase.storage.from(CLIENT_DOC_BUCKET).remove([doc.storage_path]); } catch (_) {} }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

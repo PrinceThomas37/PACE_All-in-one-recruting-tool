@@ -57,6 +57,22 @@
 
   function normKey(k) { return String(k == null ? '' : k).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 
+  // The spreadsheet's own row-number column is not a lead detail — PACE gives
+  // every record its own id (D-0035, "S,no" screenshot). Matched on the
+  // NORMALISED name against an explicit list, never a substring: "Job ID",
+  // "Req ID" and "Requisition #" are real references and must survive as
+  // extras, so a bare id/#/no counts ONLY when the whole column name is
+  // exactly that.
+  var SERIAL_KEYS = ['sno', 'slno', 'srno', 'serial', 'serialno', 'serialnumber',
+    'row', 'rowno', 'index', 'id', 'no'];
+  function isSerialColumn(columnName) {
+    var raw = String(columnName == null ? '' : columnName).trim();
+    if (raw === '#') return true; // normKey strips punctuation to '', so check the raw form
+    var k = normKey(raw);
+    if (!k) return false;
+    return SERIAL_KEYS.indexOf(k) > -1;
+  }
+
   // Which field is this column? null = not recognised (kept as an extra).
   function fieldFor(columnName) {
     var k = normKey(columnName);
@@ -111,6 +127,7 @@
     Object.keys(row || {}).forEach(function (col) {
       var val = String(row[col] == null ? '' : row[col]).trim();
       if (!val) return;
+      if (isSerialColumn(col)) return; // the sheet's own row number — PACE numbers records itself
       var f = valueField(fieldFor(col), val);
       if (f && !out[f]) out[f] = val;
       else out._extra[String(col).trim().slice(0, 80)] = val.slice(0, 500);
@@ -118,7 +135,7 @@
     return out;
   }
 
-  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, mapRow: mapRow };
+  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, isSerialColumn: isSerialColumn, mapRow: mapRow };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ImportColumns = api;
 })(typeof window !== 'undefined' ? window : this);

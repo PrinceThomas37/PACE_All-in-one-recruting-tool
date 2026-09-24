@@ -5946,3 +5946,47 @@ Merged #229 (`6dce720`).
 
 ## Round 12 — the job link was in the "LinkedIn URL" column (2026-09-23)
 Owner, with a screenshot of the sheet: the lead said "Job link: Not in the import", yet column M held the job posting. The column was headed **"LinkedIn URL"** and held Indeed / Glassdoor / linkedin.com/jobs links. Live DB: 0 of 119 contacts from that import hold any LinkedIn value, 49 jobs with no job_url — at import time the old matcher filed "Email ID" as LinkedIn first (first column wins), so column M was dropped, and the email-as-LinkedIn values were cleared in round 9. Even the NEW matcher would have sent column M to the contact's LinkedIn, so the R-045 re-import would not have recovered it. Fix: the import now judges a LinkedIn column by its VALUES — only a `/in/` or `/pub/` profile is a person; any other web address is the job link. `fillPatch` refuses a non-profile LinkedIn too. Guard verified by reverting it. 102/102.
+
+Merged #230 (`8341d63`).
+
+## Round 13 — who sees what (2026-09-23) — IN PROGRESS
+Owner (screenshots as BD Lead 1): leads and All email show everything to every user; asked for an audit across the system using the territory agents. Measured: BD Lead 1 owns 25 leads, saw 49 (`GET /jobs` gives `bd_lead` every assigned lead org-wide); All email (`routes/email-history.js`) is org-scoped only — all 119 emails to everyone. Rule recorded as D-0034. Rampart dispatched for the full audit + a pure rule in `services/ownership.js`; fixes follow per territory.
+
+### Round 13a — Rampart's audit (2026-09-23)
+Rampart audited every record-returning endpoint and added the D-0034 rule to `services/ownership.js` as pure functions (`viewScope`, `canSeeLead/Contact/Email/Submission`, `scopeLeads/Emails`, `queryOwnerIds`, `inScope`, `POOL_ROLES` = admin, ra_lead). Findings table in `docs/territories/rampart.md`; work split into C-0021 (gateway), C-0022 (guild), C-0023 (harbour), C-0024 (observatory), C-0025 (ledger), C-0026 (surface), C-0027 (foundry).
+**Worse than reported — cross-company holes.** Verified live by the orchestrator: `GET /app-settings` returns all 79 `app_settings` rows to ANY logged-in user, including three real plaintext AI keys (`int_anthropic_api_key`, `int_groq_api_key`, `int_openrouter_api_key`). Two orgs exist live (the second is the owner's own private workspace), so no outside customer is exposed today, but any of ~40 Fute Global users could read the keys. Also by reading (not exercised): send-as-another-org via unvalidated `sending_email_id`/`assigned_to_bd`/`manager_id`; `resolveEmailAttachments` attaching any org's documents; foreign resumes via signed URLs; `DELETE /suppression/:id` removing another org's opt-out; `/events/recent` carries no org. X9 (a tenant admin operates the whole deployment — global pause, engine runs, AI keys) is a design question for the owner: a "platform operator" role does not exist.
+Owner decisions raised, not assumed: D1 candidate pool shared?, D2 client list shared?, D3 job orders shared? (all kept shared meanwhile — industry norm), D4 RA Lead sees pool + own RAs' research + per-BD counts (confirm), D5 duplicate-email hit shows owner+date only?
+Five fixing territories dispatched in parallel (gateway, guild, harbour, observatory, ledger); surface after gateway+harbour; then foundry pins; then rampart reviews.
+
+- IN FLIGHT (2026-09-23): Ledger C-0025 landed (34f90bc). Gateway C-0021, Guild C-0022, Harbour C-0023, Observatory C-0024 are editing in the working tree now; their territory memories are written by each agent when it finishes. Surface C-0026 (+ the candidate card's body_note), Foundry C-0027 and Rampart review follow. Nothing merged.
+
+- IN FLIGHT (still, 2026-09-23): guild and observatory code edits uncommitted in the tree; their memories carry an in-flight line until each agent reports.
+
+### Round 13b — owner answered D1–D5 (2026-09-23)
+Recorded as D-0035: candidates shared (ownership is per candidate-on-a-job); every BD sees every client but only its owner acts on it; every job order visible company-wide but client POC details only to the owner, interaction owner-only; duplicate check marks duplicate and names whose lead it is + since when (the owner asked what the alternative meant — explained). Also: drop the spreadsheet's own serial-number column ("S,no", on all 49 imported leads) — PACE numbers records itself. Guild and gateway re-briefed mid-flight; surface dispatched for the serial column + Ledger's candidate-card note. Live cleanup of the 49 rows' "S,no" key waits until surface lands.
+
+- IN FLIGHT: gateway, guild, harbour, observatory, surface editing; memories carry in-flight lines until each reports.
+
+### Round 13c — D4 confirmed, ownership requests wanted (2026-09-23)
+Owner confirmed the RA Lead scope and asked for "request to take over" approved by the asker's manager (admin if none). Recorded D-0036; roadmap R-047 (after R-046).
+
+- IN FLIGHT: observatory landed (c2de5a8); gateway, guild, harbour, surface still editing.
+
+- 2026-09-24: a usage limit cut off gateway, guild and surface mid-job; harbour finished and landed (59a4f46). The three were resumed with their context intact.
+
+- 2026-09-24: gateway (59da736), guild (c8d509f) landed. Every server-side leak in the audit is closed; surface (screens) still working; foundry started on the tests. Roadmap R-048 (recruiting lookups unique index needs org_id, deep).
+
+- IN FLIGHT (2026-09-24): surface editing public/js for C-0026/C-0028 + D-0035 screen changes; foundry writing the visibility suites. Both uncommitted until they report.
+
+- 2026-09-24: surface landed (e76a377). Live cleanup: removed the "S,no" key from import_extra on all 49 imported leads (owner asked). Full suite 104/105 — team-structure-smoke still asserts the old browser-side lead filter; foundry updating it. Rampart doing the final review.
+
+### Round 13d — rampart's review: DO-NOT-SHIP (2026-09-24)
+All cross-company rows verified closed. Two blockers: (1) guild's edit deleted MAX_EMAIL_ATTACH_BYTES in routes/recruiting/outreach.js — every attachment silently dropped (swallowed ReferenceError; no suite caught it); (2) email-history visibleJobIds used canSeeLead (admits creator/pool) instead of owned-lead — RA/RA Lead could read BD bodies. Plus 9 follow-ups (lead-to-job-order steals a client, owner-only gaps on merge/bulk-stage/deletes/parse-jd, DELETE company should stay admin-only, other BDs' contacts at a client, manual opt-out org stamp, POC on /users/:id/job-orders, PUT /jobs wider than D-0020, pre-existing reflected XSS in OAuth callbacks). Merge held; guild, gateway, harbour fixing in parallel. Roadmap R-049 (platform operator role, X9).
+
+- IN FLIGHT (2026-09-24 12:2x UTC): a usage limit stopped the three review-fix agents; resumed. Guild had already restored MAX_EMAIL_ATTACH_BYTES.
+
+### Round 13e — rampart re-review: ship with follow-ups (2026-09-24)
+All 11 findings verified closed; no cross-company path found. R1 (MED, fails closed): email-history LEAD_SELECT lacked sent_by, so a sender lost their own emails after a recycle — must land before merge (gateway). R2/R3 owner gates on job-order recruiter removal and recruiter deletes (guild). R4 page-size limits and R5 OAuth state purpose claim noted. Full suite 105/105 before these. IN FLIGHT: gateway R1/R5, guild R2/R3, foundry pinning the blockers.
+
+### Round 13f — R-046 finished (2026-09-24)
+R1 (sender keeps own emails) and R2/R3 owner gates landed; R5 mailbox OAuth state carries p:"mailbox" and auth() refuses any token with p. Foundry pinned both review blockers (email-attachments-smoke, email-history-scope-smoke; fake db projects rows to the route's own select). Full suite 107/107. CLAUDE.md, CAPABILITIES ("Seeing only what you're responsible for"), ROADMAP R-046 DONE. Open follow-ups: R-047 (ownership requests), R-048 (lookups index), R-049 (platform operator), C-0029 (client ownership hint), rampart R4 (page-size limits), ledger: opt-outs per-company vs global. Owner action: rotate the three AI keys (readable via /app-settings until this merge).

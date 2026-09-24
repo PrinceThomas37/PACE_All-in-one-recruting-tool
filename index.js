@@ -169,6 +169,12 @@ const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./ser
 // Ollama). Returns null when none is usable, and every caller has a rules
 // fallback behind that null.
 const aiProvider = require('./services/ai-provider');
+// D-0034: who may SEE a record, on top of D-0020's who may ACT on it. Pure —
+// see the file header before touching any scoping that uses it.
+const ownership = require('./services/ownership');
+// The one reporting-chain walk in the app (self + every direct/transitive
+// report on users.manager_id). Never write a second BFS over manager_id.
+const { reportingChainIds } = require('./hierarchy')(supabase);
 async function resolveDefaultOrg() {
   try {
     const { data } = await supabase.from('organizations').select('id')
@@ -195,6 +201,24 @@ function orgIdFor(req) { return (req && req.user && req.user.org_id) || DEFAULT_
 function withOrg(query, req) { const o = orgIdFor(req); return o ? query.eq('org_id', o) : query; }
 function orgStamp(req) { const o = orgIdFor(req); return o ? { org_id: o } : {}; }
 
+// C-0021 X3: before a request-supplied user/mailbox id is written onto a
+// tenant record (assigned_to_bd, sending_email_id, a distribution manager_id),
+// confirm it actually belongs to the caller's org. Without this, company A's
+// admin could assign a lead to — or send from — company B's user/mailbox by id,
+// since neither users nor user_emails ids are secret. A null org (early boot,
+// before resolveDefaultOrg runs) is a transitional no-op, same convention as
+// withOrg/orgStamp above.
+async function userOrgId(userId) {
+  if (!userId) return null;
+  const { data } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
+  return data ? data.org_id : null;
+}
+async function mailboxOrgId(userEmailId) {
+  if (!userEmailId) return null;
+  const { data } = await supabase.from('user_emails').select('org_id').eq('id', userEmailId).maybeSingle();
+  return data ? data.org_id : null;
+}
+
 function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header) return res.status(401).json({ error: 'No token' });
@@ -208,6 +232,13 @@ function auth(req, res, next) {
   try {
     claims = jwt.verify(token, process.env.JWT_SECRET);
   } catch { return res.status(401).json({ error: 'Invalid token' }); }
+  // R5 (rampart round 2): the mailbox-connect OAuth `state` is a JWT signed
+  // with this same JWT_SECRET (routes/microsoft.js, routes/gmail.js). It now
+  // carries `p:'mailbox'` so it cannot double as a session token here — any
+  // token carrying a `p` claim at all is refused as a session, whatever its
+  // value, so a future purpose-marked token never accidentally becomes valid
+  // here just by being handed to the wrong endpoint.
+  if (claims && claims.p) return res.status(401).json({ error: 'Invalid token' });
   // A session with no organisation on it cannot be scoped. While there is only
   // one org that is harmless (it defaults there anyway), but the moment a
   // second exists, "no org" would silently mean "the first org" — i.e. somebody
@@ -546,10 +577,15 @@ async function loadSuppressedSet(emails) {
   } catch (_) {}
   return set;
 }
-async function addToSuppression(email, reason, source, createdBy, note) {
+// orgId is optional and additive: suppression_list is a tenant table (migration
+// 039), so an un-stamped insert files under the DEFAULT org's column default —
+// harmless with one org, a misfiling once a second exists. The CHECK before a
+// send stays deployment-wide (unchanged here — that is ledger's call, not
+// this fix), this only fixes who the row is recorded AS BELONGING TO.
+async function addToSuppression(email, reason, source, createdBy, note, orgId) {
   if (!email) return;
   await supabase.from('suppression_list')
-    .insert({ email: String(email).toLowerCase(), reason: reason || 'manual', source: source || 'admin', created_by: createdBy || null, note: note || null });
+    .insert({ email: String(email).toLowerCase(), reason: reason || 'manual', source: source || 'admin', created_by: createdBy || null, note: note || null, ...(orgId ? { org_id: orgId } : {}) });
   // A duplicate (already suppressed) or absent table returns an error we ignore.
 }
 async function loadMailboxDelivState(ids) {
@@ -727,7 +763,7 @@ app.post('/emails/retry-pending-window', auth, async (req, res) => {
       return res.json({ started: false, message: 'Send already in progress for this manager' });
     }
     res.json({ started: true, message: 'Retrying in-window pending emails' });
-    emit(EVENTS.OUTREACH_QUEUED, { managerId });
+    emit(EVENTS.OUTREACH_QUEUED, { managerId, orgId: orgIdFor(req) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -758,7 +794,7 @@ async function requeueFailedEmails(req, rows) {
       .update(sendRetry.manualRetryUpdate()).in('id', ok).eq('status', 'failed');
     if (error) throw error;
     const managers = [...new Set(rows.filter(r => ok.includes(r.id)).map(r => r.sent_by).filter(Boolean))];
-    for (const m of managers) emit(EVENTS.OUTREACH_QUEUED, { managerId: m });
+    for (const m of managers) emit(EVENTS.OUTREACH_QUEUED, { managerId: m, orgId: orgIdFor(req) });
   }
   return { requeued: ok.length, refused };
 }
@@ -882,7 +918,7 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${filledSubject}`, null, null);
 
     res.status(201).json({ success: true, email_id: row.id });
-    emit(EVENTS.OUTREACH_QUEUED, { managerId: req.user.id });
+    emit(EVENTS.OUTREACH_QUEUED, { managerId: req.user.id, orgId: orgIdFor(req) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2096,12 +2132,21 @@ app.post('/distribute/execute', auth, async (req, res) => {
     const { manager_id, ratio } = req.body;
     if (!manager_id || !ratio) return res.status(400).json({ error: 'manager_id and ratio required' });
 
+    // C-0021 X3: manager_id is a request body value with no secrecy to it — an
+    // admin/ra_lead of org B could otherwise hand org A's whole lead pool to a
+    // user id belonging to a different organisation entirely. A 400, not a
+    // 404: this is the caller's own bad input, not somebody else's record.
+    const distOrg = orgIdFor(req);
+    if (distOrg && (await userOrgId(manager_id)) !== distOrg) {
+      return res.status(400).json({ error: 'That manager is not in your organisation.' });
+    }
+
     // Get manager's active email accounts that have a working, connected token
     // (Microsoft or Gmail — leads used to only ever go to Microsoft mailboxes,
     // silently starving Gmail accounts and any mailbox whose token had gone
     // bad, since a stale/broken token row still counted as "connected").
-    const { data: allUserEmails } = await supabase.from('user_emails')
-      .select('id,email_address,display_name,daily_send_limit').eq('user_id', manager_id).eq('is_active', true);
+    const { data: allUserEmails } = await withOrg(supabase.from('user_emails')
+      .select('id,email_address,display_name,daily_send_limit').eq('user_id', manager_id).eq('is_active', true), req);
     if (!allUserEmails?.length) return res.status(400).json({ error: 'Manager has no active email IDs configured' });
     const emailIds = allUserEmails.map(e => e.id);
     const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
@@ -2221,7 +2266,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // Announce the assignment. In auto mode the lead.assigned subscriber
     // generates the emails and triggers the send; in manual mode it records the
     // assignment for audit but does not auto-send (autoSend:false).
-    emit(EVENTS.LEAD_ASSIGNED, { jobIds, managerId: manager_id, actorUserId: req.user.id, autoSend });
+    emit(EVENTS.LEAD_ASSIGNED, { jobIds, managerId: manager_id, actorUserId: req.user.id, autoSend, orgId: orgIdFor(req) });
 
     res.json({ success: true, total_assigned: selected.length, manager_id, by_freshness: used.freshness, by_industry: used.industry, by_timezone: used.timezone, email_accounts_used: new Set(assignedLeads.map(l => l.user_email_id)).size, ratio_summary: ratio.summary || '', assigned_at: now.toISOString(), auto_send: autoSend, ra_mode: raMode });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -2240,18 +2285,23 @@ app.post('/distribute/execute', auth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // FOLLOW-UPS
 // ══════════════════════════════════════════════════════════════
+// C-0021 #5/X7: this used to narrow only for a pure `bd` (and, separately,
+// carried no org filter at all — X7). Every other role — ra, ra_lead, admin,
+// recruiter, associate_director, director — got every org's follow-up in the
+// deployment. Now: org-scoped, then D-0034's own rule (self + reporting
+// chain; admin sees the org) via the job each follow-up hangs off.
 app.get('/follow-ups', auth, async (req, res) => {
   try {
-    let query = supabase.from('follow_ups').select(`*, contact:contacts(id,first_name,last_name,email,designation), job:jobs(id,position,stage,company:companies(name))`).order('followup1_due_date', { ascending: true });
-    if (hasRole(req, 'bd') && !hasRole(req, 'admin', 'ra_lead', 'bd_lead')) {
-      const { data: myJobs } = await supabase.from('jobs').select('id').eq('assigned_to_bd', req.user.id).is('deleted_at', null);
-      const myJobIds = (myJobs || []).map(j => j.id);
-      if (!myJobIds.length) return res.json([]);
-      query = query.in('job_id', myJobIds);
-    }
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = ownership.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const query = withOrg(supabase.from('follow_ups')
+      .select(`*, contact:contacts(id,first_name,last_name,email,designation), job:jobs(id,position,stage,assigned_to_bd,created_by,assigned_to,company:companies(name))`)
+      .order('followup1_due_date', { ascending: true }), req);
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    const rows = (data || []).filter(r => ownership.canSeeLead(r.job, scope));
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2671,8 +2721,8 @@ async function sweepMailboxBounces(tokenRow, ownAddresses) {
         for (const c of (matches || [])) {
           if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
           await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
-          emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address });
-          emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce' });
+          emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
+          emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
           await logActivity(c.job_id, c.id, null, 'email_bounced',
             `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
             { source: 'ndr', mailbox: tokenRow.email_address, folder });
@@ -2691,7 +2741,9 @@ async function sweepMailboxBounces(tokenRow, ownAddresses) {
 
 async function runBounceSweep() {
   try {
-    const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address');
+    // org_id added so EMAIL_BOUNCED/CONTACT_INVALIDATED below can carry it —
+    // see the C-0021 X4 note on emit() near events.js.
+    const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
     if (!tokens || !tokens.length) return 0;
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
@@ -2835,10 +2887,10 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       try { await supabase.from('jobs').update({ stage: 'Connected' }).eq('id', c.job_id).eq('stage', 'Assigned'); } catch (_) {}
       await skipActiveFollowUpsForContact(c.id);
       await logActivity(c.job_id, c.id, null, 'reply_received', `Reply received from ${from} — follow-ups stopped`, null, { source: 'inbox', mailbox: tokenRow.email_address });
-      emit(EVENTS.CONTACT_REPLIED, { contactId: c.id, jobId: c.job_id, from, mailbox: tokenRow.email_address });
+      emit(EVENTS.CONTACT_REPLIED, { contactId: c.id, jobId: c.job_id, from, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
       if (isOptOutReply(snippet) || isOptOutReply(msg.body?.content || '')) {
-        await addToSuppression(from, 'unsubscribe', 'reply', null);
-        emit(EVENTS.CONTACT_UNSUBSCRIBED, { contactId: c.id, jobId: c.job_id, email: from });
+        await addToSuppression(from, 'unsubscribe', 'reply', null, null, tokenRow && tokenRow.org_id);
+        emit(EVENTS.CONTACT_UNSUBSCRIBED, { contactId: c.id, jobId: c.job_id, email: from, orgId: tokenRow.org_id || null });
       }
       detected++;
     }
@@ -2867,10 +2919,10 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
           await supabase.from('candidates')
             .update({ last_reply_at: msg.receivedDateTime || new Date() }).eq('id', candidateId);
         } catch (_) { /* the column arrives with migration 036 */ }
-        emit(EVENTS.CANDIDATE_REPLIED, { candidateId, from, at: msg.receivedDateTime || new Date() });
+        emit(EVENTS.CANDIDATE_REPLIED, { candidateId, from, at: msg.receivedDateTime || new Date(), orgId: tokenRow.org_id || null });
         if (optedOut) {
-          await addToSuppression(from, 'unsubscribe', 'candidate_reply');
-          emit(EVENTS.CANDIDATE_UNSUBSCRIBED, { candidateId, from });
+          await addToSuppression(from, 'unsubscribe', 'candidate_reply', null, null, tokenRow && tokenRow.org_id);
+          emit(EVENTS.CANDIDATE_UNSUBSCRIBED, { candidateId, from, orgId: tokenRow.org_id || null });
         }
       }
     } catch (_) { /* best-effort */ }
@@ -2919,8 +2971,11 @@ async function sweepGmailReplies(tokenRow, ownAddresses) {
 
 async function runReplySweep() {
   try {
-    const { data: msTokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address');
-    const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address');
+    // org_id added to both selects only so a suppression row written from a
+    // reply on this mailbox (below) can be stamped correctly — the sweep
+    // itself still walks every org's mailboxes in one tick, unchanged.
+    const { data: msTokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
+    const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address,org_id');
     const ms = msTokens || [], gm = gmTokens || [];
     if (!ms.length && !gm.length) return 0;
 
@@ -3213,6 +3268,7 @@ function buildHtmlEmailBody(plainText, signatureHtml, includeFooter = true) {
 const routeCtx = {
   applyLimiter,
   supabase, db, auth, hasRole, today, orgIdFor, withOrg, orgStamp,
+  ownership, reportingChainIds, userOrgId, mailboxOrgId,
   loadMailboxSignatures, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody,
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
   logActivity, INDUSTRIES, normInd,
@@ -3229,7 +3285,7 @@ const routeCtx = {
 };
 app.use(require('./routes/auth')(routeCtx));
 app.use(require('./routes/microsoft')(routeCtx));
-app.use(require('./routes/gmail')({ supabase, auth, hasRole, provider: gmailProvider }));
+app.use(require('./routes/gmail')({ supabase, auth, hasRole, orgIdFor, provider: gmailProvider }));
 app.use(require('./routes/workflows')(routeCtx));
 app.use(require('./routes/companies')(routeCtx));
 app.use(require('./routes/reminders')(routeCtx));

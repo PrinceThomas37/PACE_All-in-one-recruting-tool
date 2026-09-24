@@ -47,6 +47,103 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0036 · 2026-09-23 · STANDS · RA Lead scope confirmed; ownership changes by request, approved by the requester's manager
+**Their words:** on the RA Lead (rampart's D4): *"YEs thats fine"*. On a
+"request to take over this client" step: *"yes to the person to which the user
+is assigned to , if the no one is assigned, to the admin"*.
+
+**Chosen:**
+* **RA Lead (D4) — confirmed:** sees the Unassigned pool, the leads their own
+  RAs researched, and each BD's email COUNTS — never the text of BDs' emails.
+* **Ownership changes by REQUEST.** A user asks to take over a lead/client/job
+  order; the request goes to **the person that user reports to**
+  (`users.manager_id`); if nobody is assigned as their manager, it goes to the
+  **admin**. Approving it reassigns the record (through the existing release /
+  assignment paths, never an inline field write). Built after R-046, as
+  **R-047**. Interpretation recorded: "the user" = the one making the request.
+
+**Re-open when:** a cross-team request (the record belongs to another manager's
+report) needs that owner's manager to agree too — not asked yet, raise it when
+R-047 is designed rather than assume.
+
+### D-0035 · 2026-09-23 · STANDS · Shared to SEE, owned to TOUCH: candidates, clients, job orders
+**Their words** (answering rampart's D1–D5): *"do the fixing, only people
+responsible of the data based on our design shuld be seeing and interacting with
+it, no one else.*
+*1. Should every recruiter see every candidate? - Yes, the wonership of a
+candidate in a job is defined, not in the system. which means, that same
+candidate can be added to a different job too by a different recruiter.*
+*2. Yes, every BD can see every client, but interaction is limited to only owner
+of the lead or the client until ownership is changed by permission of the
+manager.*
+*3. Yes, full job list shows all jobs in the company, but interaction is
+limited. just to candidate infomation, JD, job location, website and all. No POC
+details shown other than to owner*
+*4. mark as duplicate. what does how it to other BD contact details means?"*
+
+**Chosen:**
+* **Candidates (D1):** the candidate database is SHARED across the company — every
+  recruiter sees every candidate. Ownership exists only per candidate-on-a-JOB
+  (`submissions.recruiter_id`): the same person can be added to a different job
+  by a different recruiter, and each such submission is its recruiter's.
+* **Clients (D2):** every BD SEES every client. Only the OWNER of the lead / client
+  may ACT on it (edit, documents, email it, contacts). Ownership changes only
+  with the manager's permission — a reassignment, not a free-for-all.
+* **Job orders (D3):** every job in the company is visible to everyone, but a
+  non-owner sees the candidate-facing parts only — JD, title, location, website,
+  pay, requirements. **Client POC details (name, email, phone) are shown to the
+  owner only.** Interaction (edit, delete, workflow actions) is the owner's (and
+  the recruiters assigned to it, for adding their candidates).
+* **D5 duplicate check:** a new lead whose contact is already on someone else's
+  lead is MARKED DUPLICATE. The owner asked what "show the other BD's contact
+  details" meant — explained in chat; pending their reply, the default is the
+  recommendation: say whose lead it is and since when, not that lead's details.
+* **D4 (RA Lead)** was not answered; rampart's default stands until they do.
+
+**Also (same message):** the import must not keep a spreadsheet's own serial
+number column ("S,no") as a lead detail — PACE gives every record its own id.
+
+**Re-open when:** the owner wants a manager able to ACT on a report's client or
+job order (today: review and prompt, D-0020), or wants a formal "request
+ownership change" flow built — the words "until ownership is changed by
+permission of the manager" describe one; today reassignment is done by an admin.
+
+### D-0034 · 2026-09-23 · STANDS · You SEE only what you are responsible for (plus your team's, if you manage one)
+**Their words** (with screenshots of the Leads page and Email → All email as
+BD Lead 1): *"in leads or in outreach all emails, full information is shown to
+all users. Like earlier we did designed what information to be show to each
+user, only the ones that they are responsible for or given to, like the
+particular set of lead assigned to a particular user, a particular set of
+emails being generated from the email assigned to particular user, like that,
+but here its complete opposite. whys that? … can this be prevalent all across
+the system, look into that and work on it. Use agents we built."*
+
+**The rule.** D-0020 defined who OWNS a record (a lead → `assigned_to_bd`, a
+submission → `recruiter_id`, a reminder → `user_id`, a contact → its job's
+owner). This extends it from *acting* to *seeing*:
+* **You see what you own**, and what was given to you (an email is visible to
+  the owner of the lead or record it was sent about, and to whoever sent it).
+* **A manager also sees what their reporting chain owns** — review, per
+  D-0020, using the one chain helper (`hierarchy.js` `reportingChainIds`).
+* **Admin sees the whole organisation.**
+* A record nobody owns yet (the Unassigned pool) is seen by the roles that
+  distribute it, not by everyone.
+
+**Measured when decided:** BD Lead 1 owns 25 leads and saw 49 (`GET /jobs`
+gave every `bd_lead` all ASSIGNED leads org-wide — written before the
+hierarchy existed); Email → All email (`routes/email-history.js`) was scoped
+by organisation only, so every user saw all 119 outreach emails.
+
+**Not decided here, and must be asked rather than assumed:** whether a
+genuinely SHARED resource — the candidate talent pool, the client list —
+stays shared. Most ATS products share the candidate database across
+recruiters; hiding it would break duplicate checks and sourcing. Those are
+listed for the owner, never silently narrowed.
+
+**Re-open when:** the owner wants a role to see more than its chain (e.g. a
+BD Lead covering another team), which is reassignment/cover — D-0020's
+re-open condition — not a visibility leak.
+
 ### D-0029 · 2026-09-22 · STANDS · A submission is a candidate sent to the CLIENT, and PACE counts two numbers
 
 **Their words:** *"define submission, ie job submission. adding a candidate to a

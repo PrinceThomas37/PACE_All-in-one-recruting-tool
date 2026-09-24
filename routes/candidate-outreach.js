@@ -371,7 +371,7 @@ module.exports = (ctx) => {
 
       if (o.suppress && row.to_email) {
         // The real opt-out, and the only branch that writes to suppression_list.
-        await withTimeout(addToSuppression(row.to_email, 'unsubscribe', 'candidate_outreach', row.sent_by, 'Opted out from a candidate outreach email'));
+        await withTimeout(addToSuppression(row.to_email, 'unsubscribe', 'candidate_outreach', row.sent_by, 'Opted out from a candidate outreach email', row.org_id));
         // Anything still queued for them stops. Leaving it would send more mail
         // to somebody who just asked us not to, which is the one outcome an
         // opt-out exists to prevent.

@@ -18,6 +18,9 @@ const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, title
 const { annotateContactEmailStatus } = require('../email-validation');
 const { getSetting } = require('../config/settings');
 const { fillPatch } = require('../services/lead-fill');
+// D-0034: who may SEE/edit a lead, on top of the role ladder above it. Read
+// services/ownership.js's header before changing any of the scoping below.
+const own = require('../services/ownership');
 
 // Lead stage permission matrix for PUT /jobs/:id — pulled out to a pure
 // function (no supabase/Express dependency) so it's directly unit-testable.
@@ -46,8 +49,17 @@ module.exports = (ctx) => {
   const {
     supabase, auth, hasRole, today, logActivity, canTouchJob,
     loadAllJobs, JOB_SELECT, getTimezoneFromLocation, persistLearnedSkills,
-    orgIdFor, withOrg, orgStamp,
+    orgIdFor, withOrg, orgStamp, userOrgId, mailboxOrgId,
   } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
+
+  // The caller's D-0034 view scope — self + reporting chain, or the whole org
+  // for admin. Built once per request; every route below narrows with it.
+  async function scopeFor(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
 
   /**
    * Skill inference from the system's own job history.
@@ -59,17 +71,20 @@ module.exports = (ctx) => {
    *
    * Returns Map<originalTitle, skills[]>.
    */
-  async function inferSkillsFromJobHistory(positions) {
+  async function inferSkillsFromJobHistory(positions, req) {
     const result = new Map();
     const wanted = [...new Set(positions.filter(Boolean))];
     if (!wanted.length) return result;
 
-    const { data: history } = await supabase.from('jobs')
+    // C-0021 X8: this used to read every org's job history to guess skills for
+    // THIS org's import — low severity (skills only, no contact/company detail)
+    // but still another customer's lead titles/skills leaking through a guess.
+    const { data: history } = await withOrg(supabase.from('jobs')
       .select('position, research')
       .not('research', 'is', null)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
-      .limit(1500);
+      .limit(1500), req);
     if (!history || !history.length) return result;
 
     const entries = [];
@@ -115,20 +130,18 @@ module.exports = (ctx) => {
     return result;
   }
 
+// C-0021 #1 / D-0034: the whole role ladder is replaced by the one rule. Before
+// this a bd_lead got EVERY assigned lead in the org (49, for an owner of 25);
+// ra_lead/admin got the whole org; director/associate_director fell into the
+// `else` and saw almost nothing (created_by only). Now: self + reporting
+// chain, admin sees the org, and the pool goes only to the roles that
+// distribute it (own.POOL_ROLES). This is also what drives the Leads page's
+// stat cards (Total/Assigned/Connected/Rejected) — they read this same list.
 router.get('/jobs', auth, async (req, res) => {
   try {
     const all = await loadAllJobs(orgIdFor(req));
-    let data;
-    if (hasRole(req, 'admin', 'ra_lead')) {
-      data = all;
-    } else if (hasRole(req, 'bd_lead')) {
-      data = all.filter(j => j.assigned_to_bd != null);
-    } else if (hasRole(req, 'bd')) {
-      data = all.filter(j => j.assigned_to_bd === req.user.id);
-    } else {
-      data = all.filter(j => j.created_by === req.user.id);
-    }
-    res.json(data);
+    const scope = await scopeFor(req);
+    res.json(own.scopeLeads(all, scope));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -169,13 +182,18 @@ router.get('/jobs/export', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
     const { from, to, stage } = req.query;
-    let query = withOrg(supabase.from('jobs').select('id,position,stage,location,industry,timezone,freshness,salary_range,job_created_date,job_opened_date,bdm_assigned_name,source,created_at,company:companies(name,website,industry,location),contacts(first_name,last_name,designation,email,phone,linkedin),creator:users!created_by(name)').is('deleted_at', null).order('created_at', { ascending: false }), req);
+    // C-0021 #3: ra_lead exported every lead in the org, with every contact's
+    // email/phone. Scoped the same way as GET /jobs: self + reporting chain
+    // (admin — the whole org — is unaffected, since that role's export was
+    // always meant to cover the org).
+    let query = withOrg(supabase.from('jobs').select('id,position,stage,location,industry,timezone,freshness,salary_range,job_created_date,job_opened_date,bdm_assigned_name,source,created_at,assigned_to_bd,created_by,assigned_to,company:companies(name,website,industry,location),contacts(first_name,last_name,designation,email,phone,linkedin),creator:users!created_by(name)').is('deleted_at', null).order('created_at', { ascending: false }), req);
     if (from) query = query.gte('created_at', from);
     if (to) query = query.lte('created_at', to + 'T23:59:59Z');
     if (stage) query = query.eq('stage', stage);
     const { data, error } = await query;
     if (error) throw error;
-    res.json(data || []);
+    const scope = await scopeFor(req);
+    res.json(own.scopeLeads(data || [], scope));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -185,9 +203,10 @@ router.get('/jobs/:id', auth, async (req, res) => {
     if (error) throw error;
     const reqOrg = orgIdFor(req);
     if (reqOrg && data.org_id && data.org_id !== reqOrg) return res.status(404).json({ error: 'Not found' });
-    if (!hasRole(req, 'admin', 'ra_lead', 'bd_lead') && data.created_by !== req.user.id && data.assigned_to !== req.user.id && data.assigned_to_bd !== req.user.id) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
+    // C-0021 #2: bd_lead/ra_lead could open ANY lead by id. Same 404 shape as a
+    // foreign-org id — a 403 would confirm the lead exists.
+    const scope = await scopeFor(req);
+    if (!own.canSeeLead(data, scope)) return res.status(404).json({ error: 'Not found' });
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -272,7 +291,7 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         return reqr.skills_source === 'title_inference' || !(reqr.suggested_skills || []).length;
       });
       if (needsHistory.length) {
-        const historySkills = await inferSkillsFromJobHistory(needsHistory.map((r) => r.position));
+        const historySkills = await inferSkillsFromJobHistory(needsHistory.map((r) => r.position), req);
         for (const row of needsHistory) {
           const skills = historySkills.get(row.position);
           if (!skills || !skills.length) continue;
@@ -375,7 +394,7 @@ router.post('/jobs', auth, async (req, res) => {
       const reqr = researchObj && researchObj.requirements;
       if (reqr && (reqr.skills_source === 'title_inference' || !(reqr.suggested_skills || []).length)) {
         try {
-          const hist = await inferSkillsFromJobHistory([position]);
+          const hist = await inferSkillsFromJobHistory([position], req);
           const skills = hist.get(position);
           if (skills && skills.length) {
             reqr.skills = skills;
@@ -421,7 +440,22 @@ router.put('/jobs/:id', auth, async (req, res) => {
     const editWindowHours = await getSetting(supabase, 'ra_edit_window_hours');
     const hoursSinceCreation = (new Date() - new Date(existing.created_at)) / 3600000;
     const raCanEdit = isRA && existing.created_by === req.user.id && hoursSinceCreation <= editWindowHours;
-    const canEdit = hasRole(req, 'admin', 'ra_lead', 'bd', 'bd_lead') || existing.created_by === req.user.id || existing.assigned_to_bd === req.user.id || raCanEdit;
+    // Rampart review (2026-09-24, item #9): `own.canSeeLead` also admits a
+    // lead's CREATOR and whoever it is merely ASSIGNED TO for research, and
+    // the pool — sight, not editing rights (D-0020). Using it here let every
+    // `bd`/`bd_lead` in the reporting chain of a lead's *creator* edit a lead
+    // they do not own, which is "review and edit" where D-0020 only grants
+    // "review and prompt". Edit = the OWNER (assigned_to_bd) or their own
+    // managers per the chain, plus admin/ra_lead's full rights, plus the
+    // existing RA-in-window rule. A lead the caller cannot even SEE is a 404,
+    // never a 403 — a 403 would confirm the id exists.
+    const scope = await scopeFor(req);
+    if (!hasRole(req, 'admin', 'ra_lead') && !own.canSeeLead(existing, scope)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const canEdit = hasRole(req, 'admin', 'ra_lead')
+      || own.inScope(existing.assigned_to_bd, scope)
+      || raCanEdit;
     if (!canEdit) return res.status(403).json({ error: 'Forbidden' });
     if (isRA && !raCanEdit) return res.status(403).json({ error: `Edit window has expired (${editWindowHours} hours)` });
     const { position, location, source, job_url, stage, notes, assigned_to, assigned_to_bd, sending_email_id, salary_range, job_created_date, industry: jobIndustry, research } = req.body;
@@ -443,13 +477,32 @@ router.put('/jobs/:id', auth, async (req, res) => {
       if (resolved.stage === 'Unassigned') Object.assign(updates, releaseToPoolUpdate(new Date()));
     }
     if (notes !== undefined) updates.notes = notes;
-    if (assigned_to !== undefined && hasRole(req, 'admin', 'ra_lead')) updates.assigned_to = assigned_to || null;
+    // C-0021 X3: none of these three checked that the id supplied in the
+    // request actually belongs to the caller's org before writing it — an
+    // admin/ra_lead could hand a lead to another org's user, or point its send
+    // path at another org's mailbox, just by knowing the id (neither is
+    // secret). A mismatch is a plain 400: this is a bad request, not a
+    // record the caller cannot see.
+    if (assigned_to !== undefined && hasRole(req, 'admin', 'ra_lead')) {
+      if (assigned_to && reqOrg && (await userOrgId(assigned_to)) !== reqOrg) {
+        return res.status(400).json({ error: 'That user is not in your organisation.' });
+      }
+      updates.assigned_to = assigned_to || null;
+    }
     if (assigned_to_bd !== undefined && hasRole(req, 'admin', 'ra_lead')) {
+      if (assigned_to_bd && reqOrg && (await userOrgId(assigned_to_bd)) !== reqOrg) {
+        return res.status(400).json({ error: 'That user is not in your organisation.' });
+      }
       updates.assigned_to_bd = assigned_to_bd || null;
       updates.assigned_at = assigned_to_bd ? new Date() : null;
       if (assigned_to_bd && stage === undefined) updates.stage = 'Assigned';
     }
-    if (sending_email_id !== undefined && hasRole(req, 'admin', 'ra_lead')) updates.sending_email_id = sending_email_id || null;
+    if (sending_email_id !== undefined && hasRole(req, 'admin', 'ra_lead')) {
+      if (sending_email_id && reqOrg && (await mailboxOrgId(sending_email_id)) !== reqOrg) {
+        return res.status(400).json({ error: 'That mailbox is not in your organisation.' });
+      }
+      updates.sending_email_id = sending_email_id || null;
+    }
     if (salary_range !== undefined) updates.salary_range = salary_range || null;
     if (job_created_date !== undefined) updates.job_created_date = job_created_date || null;
     if (jobIndustry !== undefined) updates.industry = jobIndustry || null;
@@ -486,15 +539,18 @@ router.delete('/jobs/:id', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// C-0021 X6: neither of these two carried an org check at all — a job id from
+// another org read (and, worse, wrote) its research by guessing the id.
 router.patch('/jobs/:id/research', auth, async (req, res) => {
   try {
     const { research } = req.body;
     if (!research) return res.status(400).json({ error: 'research object required' });
-    const { data: job } = await supabase.from('jobs').select('created_by,industry').eq('id', req.params.id).single();
+    const { data: job } = await withOrg(supabase.from('jobs').select('created_by,industry').eq('id', req.params.id), req).maybeSingle();
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (!hasRole(req, 'admin', 'ra_lead') && job.created_by !== req.user.id) return res.status(403).json({ error: 'Only the RA who created this lead can add research' });
-    const { data, error } = await supabase.from('jobs').update({ research, updated_at: new Date() }).eq('id', req.params.id).select('id,research,industry').single();
+    const { data, error } = await withOrg(supabase.from('jobs').update({ research, updated_at: new Date() }).eq('id', req.params.id), req).select('id,research,industry').maybeSingle();
     if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Job not found' });
     persistLearnedSkills(data.industry || job.industry, research);
     res.json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -513,7 +569,7 @@ router.post('/jobs/:id/parse-jd', auth, async (req, res) => {
   try {
     const { jd_text, industry } = req.body;
     if (!jd_text || !String(jd_text).trim()) return res.status(400).json({ error: 'jd_text required' });
-    const { data: job } = await supabase.from('jobs').select('created_by,industry,company:companies(industry)').eq('id', req.params.id).single();
+    const { data: job } = await withOrg(supabase.from('jobs').select('created_by,industry,company:companies(industry)').eq('id', req.params.id), req).maybeSingle();
     if (!job) return res.status(404).json({ error: 'Job not found' });
     if (!hasRole(req, 'admin', 'ra_lead') && job.created_by !== req.user.id) return res.status(403).json({ error: 'Only the RA who created this lead can parse JD' });
     const resolvedIndustry = industry || job.industry || job.company?.industry || '';

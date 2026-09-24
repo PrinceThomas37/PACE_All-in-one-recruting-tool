@@ -5,19 +5,31 @@
 // Definitions are org data; enrollments are the running state machines.
 // ============================================================================
 const express = require('express');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, engine, logActivity } = ctx;
+  // This router's own ctx never carried org helpers (unlike routeCtx), but
+  // `auth()` in index.js stamps `req.orgId` on every request regardless of
+  // which router receives it, so a local, self-contained `withOrg` is all
+  // this file needs — no gateway change required.
+  const withOrg = (q, req) => (req.orgId ? q.eq('org_id', req.orgId) : q);
+  const orgStamp = (req) => (req.orgId ? { org_id: req.orgId } : {});
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
   const canDesign = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead', 'recruiter');
 
   // Validate + order a set of "from" mailbox ids for rotation. Drops ids that
-  // are inactive, non-existent, or (for a plain BD/recruiter) not their own.
-  // Returns [{ id, email }] in the caller's order.
+  // are inactive, non-existent, out of the caller's org, or (for a plain
+  // BD/recruiter) not their own. Returns [{ id, email }] in the caller's order.
+  // The org filter is NEW (C-0022): a privileged designer could previously
+  // rotate a sequence's "from" address across ANY org's mailbox ids —
+  // `GET /wf/sending-mailboxes` handed every org's mailbox ids to admin/
+  // bd_lead/ra_lead, so this was reachable, not theoretical.
   async function resolveFromMailboxes(req, ids) {
     if (!Array.isArray(ids) || !ids.length) return [];
-    let q = supabase.from('user_emails').select('id,email_address,user_id').in('id', ids).eq('is_active', true);
+    let q = withOrg(supabase.from('user_emails').select('id,email_address,user_id').in('id', ids).eq('is_active', true), req);
     if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) q = q.eq('user_id', req.user.id);
     const { data } = await q;
     const byId = {}; (data || []).forEach(m => { byId[m.id] = m; });
@@ -50,10 +62,23 @@ module.exports = (ctx) => {
   // (Microsoft mailbox with a stored token) — the picker warns on the rest.
   router.get('/wf/sending-mailboxes', auth, async (req, res) => {
     try {
-      let q = supabase.from('user_emails')
+      // C-0022 #5: admin/bd_lead/ra_lead saw every org's mailboxes (this is
+      // the id source that later let a sequence send from another org's
+      // mailbox — C-0021 X3). Org-scoped now, and a bd_lead/ra_lead is
+      // narrowed to their own reporting chain rather than the whole org —
+      // "privileged designer" meant "sees their desk's mailboxes", not
+      // literally everyone's.
+      let q = withOrg(supabase.from('user_emails')
         .select('id,user_id,email_address,display_name,platform,is_active,is_primary,daily_send_limit,owner:users!user_id(name)')
-        .eq('is_active', true).order('is_primary', { ascending: false });
-      if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) q = q.eq('user_id', req.user.id);
+        .eq('is_active', true), req).order('is_primary', { ascending: false });
+      if (!hasRole(req, 'admin')) {
+        if (hasRole(req, 'bd_lead', 'ra_lead')) {
+          const chain = await reportingChainIds(req.user.id, req.orgId || null);
+          q = q.in('user_id', chain);
+        } else {
+          q = q.eq('user_id', req.user.id);
+        }
+      }
       const { data, error } = await q;
       if (error) throw error;
       const ids = (data || []).map(e => e.id);
@@ -72,7 +97,7 @@ module.exports = (ctx) => {
 
   router.get('/wf/definitions', auth, async (req, res) => {
     try {
-      let q = supabase.from('workflow_definitions').select(DEF_SELECT).order('created_at', { ascending: false });
+      let q = withOrg(supabase.from('workflow_definitions').select(DEF_SELECT), req).order('created_at', { ascending: false });
       if (req.query.domain) q = q.eq('domain', req.query.domain);
       if (req.query.status) q = q.eq('status', req.query.status);
       const { data, error } = await q;
@@ -88,15 +113,19 @@ module.exports = (ctx) => {
       const b = req.body || {};
       if (!b.name) return res.status(400).json({ error: 'name required' });
       const steps = normalizeSteps(b.steps);
-      const { data: org } = await supabase.from('organizations').select('id').eq('slug', 'fute').maybeSingle();
+      // C-0022: this used to look up the org by the hard-coded slug 'fute',
+      // or trust a body-supplied `org_id` — either way every new sequence
+      // filed under one customer's org (or whichever org a caller named),
+      // never the caller's own. `req.orgId` is the one source of truth.
       const { data: wf, error } = await supabase.from('workflow_definitions').insert({
-        org_id: b.org_id || org?.id || null,
+        ...orgStamp(req),
         domain: b.domain || 'sales', name: b.name, description: b.description || null,
         entity_type: b.entity_type || 'contact', trigger_event: b.trigger_event || null,
         status: 'draft', created_by: req.user.id
       }).select().single();
       if (error) throw error;
-      const { error: stErr } = await supabase.from('workflow_steps').insert(steps.map(s => ({ ...s, workflow_id: wf.id })));
+      const { error: stErr } = await supabase.from('workflow_steps')
+        .insert(steps.map(s => ({ ...s, workflow_id: wf.id, ...orgStamp(req) })));
       if (stErr) throw stErr;
       const { data: full } = await supabase.from('workflow_definitions').select(DEF_SELECT).eq('id', wf.id).single();
       res.json(full);
@@ -106,6 +135,13 @@ module.exports = (ctx) => {
   router.put('/wf/definitions/:id', auth, async (req, res) => {
     try {
       if (!canDesign(req)) return res.status(403).json({ error: 'Forbidden' });
+      // C-0022: this edited any org's workflow by id. A foreign definition
+      // reads exactly like a missing one — 404, never 403, same shape as
+      // every other by-id fix in this pass.
+      const { data: owned } = await withOrg(
+        supabase.from('workflow_definitions').select('id').eq('id', req.params.id), req
+      ).maybeSingle();
+      if (!owned) return res.status(404).json({ error: 'Workflow not found' });
       const b = req.body || {};
       const meta = {};
       ['name', 'description', 'domain', 'trigger_event'].forEach(k => { if (b[k] !== undefined) meta[k] = b[k]; });
@@ -116,7 +152,8 @@ module.exports = (ctx) => {
         if (count > 0) return res.status(409).json({ error: `Workflow has ${count} active enrollment(s) — exit or complete them before editing steps.` });
         const steps = normalizeSteps(b.steps);
         await supabase.from('workflow_steps').delete().eq('workflow_id', req.params.id);
-        const { error: stErr } = await supabase.from('workflow_steps').insert(steps.map(s => ({ ...s, workflow_id: req.params.id })));
+        const { error: stErr } = await supabase.from('workflow_steps')
+          .insert(steps.map(s => ({ ...s, workflow_id: req.params.id, ...orgStamp(req) })));
         if (stErr) throw stErr;
         const { data: cur } = await supabase.from('workflow_definitions').select('version').eq('id', req.params.id).single();
         meta.version = (cur?.version || 1) + 1;
@@ -136,9 +173,13 @@ module.exports = (ctx) => {
       if (!canDesign(req)) return res.status(403).json({ error: 'Forbidden' });
       const status = req.body?.status;
       if (!['draft', 'active', 'archived'].includes(status)) return res.status(400).json({ error: 'status must be draft | active | archived' });
-      const { data, error } = await supabase.from('workflow_definitions')
-        .update({ status, updated_at: new Date().toISOString() }).eq('id', req.params.id).select().single();
+      // The org condition goes ON the update itself — a foreign id matches
+      // zero rows rather than needing a separate check-then-mutate.
+      const { data, error } = await withOrg(supabase.from('workflow_definitions')
+        .update({ status, updated_at: new Date().toISOString() }), req)
+        .eq('id', req.params.id).select().maybeSingle();
       if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Workflow not found' });
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -221,20 +262,58 @@ module.exports = (ctx) => {
 
   router.get('/wf/enrollments', auth, async (req, res) => {
     try {
-      let q = supabase.from('workflow_enrollments')
-        .select('*, workflow:workflow_definitions(id,name,domain), contact:contacts(id,first_name,last_name,email), job:jobs(id,position,company:companies(name))')
-        .order('created_at', { ascending: false }).limit(500);
-      if (req.query.status) q = q.eq('status', req.query.status);
-      if (req.query.workflow_id) q = q.eq('workflow_id', req.query.workflow_id);
-      if (req.query.job_id) q = q.eq('job_id', req.query.job_id);
-      const { data, error } = await q;
-      if (error) throw error;
-      res.json(data || []);
+      // C-0022 #4: every user saw every enrollment — contact names/emails,
+      // lead titles and companies, across the whole org. Org-scoped, and then
+      // filtered by the enrollment's LEAD (D-0034 `canSeeLead`) for the
+      // enrollments that have one — a contact/job-type sequence is exactly
+      // the lead-outreach vocabulary D-0034 already scopes everywhere else.
+      // Candidate/submission-type enrollments (job_id null by design) are
+      // untouched here; that ownership question is a separate, larger piece
+      // of guild's recruiting-side work and is not narrowed by this pass.
+      const isAdmin = hasRole(req, 'admin');
+      const chain = isAdmin ? null : await reportingChainIds(req.user.id, req.orgId || null);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+
+      // Rampart review (D-0035 #10): filtering by ownership AFTER `.limit(500)`
+      // silently shorted a non-admin's page — 500 org-wide rows can easily
+      // contain fewer than 500 the viewer may see, or none at all, and nothing
+      // said so. Page through in SQL-ordered batches, applying the ownership
+      // filter per batch, until PAGE_SIZE results are collected or the org's
+      // rows run out. Admin (scope.all) takes the first batch, unchanged.
+      const PAGE_SIZE = 500;
+      const BATCH = 500;
+      const rows = [];
+      let offset = 0;
+      for (;;) {
+        let q = withOrg(supabase.from('workflow_enrollments')
+          .select('*, workflow:workflow_definitions(id,name,domain), contact:contacts(id,first_name,last_name,email), job:jobs(id,position,assigned_to_bd,created_by,assigned_to,company:companies(name))'), req)
+          .order('created_at', { ascending: false }).range(offset, offset + BATCH - 1);
+        if (req.query.status) q = q.eq('status', req.query.status);
+        if (req.query.workflow_id) q = q.eq('workflow_id', req.query.workflow_id);
+        if (req.query.job_id) q = q.eq('job_id', req.query.job_id);
+        const { data, error } = await q;
+        if (error) throw error;
+        for (const r of (data || [])) {
+          if (scope.all || !r.job_id || own.canSeeLead(r.job, scope)) {
+            rows.push(r);
+            if (rows.length >= PAGE_SIZE) break;
+          }
+        }
+        if (rows.length >= PAGE_SIZE || !data || data.length < BATCH) break;
+        offset += BATCH;
+      }
+      res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   router.get('/wf/enrollments/:id/runs', auth, async (req, res) => {
     try {
+      // Confirm the enrollment is this org's before returning its run
+      // history — `workflow_step_runs` rows are keyed by enrollment_id alone.
+      const { data: enr } = await withOrg(
+        supabase.from('workflow_enrollments').select('id').eq('id', req.params.id), req
+      ).maybeSingle();
+      if (!enr) return res.status(404).json({ error: 'Enrollment not found' });
       const { data, error } = await supabase.from('workflow_step_runs')
         .select('*').eq('enrollment_id', req.params.id).order('run_at');
       if (error) throw error;
@@ -251,8 +330,10 @@ module.exports = (ctx) => {
       const patch = { status, updated_at: new Date().toISOString() };
       if (exitReason) patch.exit_reason = exitReason;
       if (close) patch.completed_at = new Date().toISOString();
-      const { data, error } = await supabase.from('workflow_enrollments')
-        .update(patch).eq('id', req.params.id).in('status', fromStatuses).select().maybeSingle();
+      // The org condition goes ON the update — pause/resume/exit any org's
+      // enrollment by id was reachable before this.
+      const { data, error } = await withOrg(supabase.from('workflow_enrollments').update(patch), req)
+        .eq('id', req.params.id).in('status', fromStatuses).select().maybeSingle();
       if (error) throw error;
       if (!data) return res.status(409).json({ error: `Enrollment is not in a state that allows "${status}"` });
       res.json(data);
@@ -268,7 +349,9 @@ module.exports = (ctx) => {
 
   router.get('/wf/stats', auth, async (req, res) => {
     try {
-      const { data, error } = await supabase.from('workflow_enrollments').select('workflow_id,status');
+      const { data, error } = await withOrg(
+        supabase.from('workflow_enrollments').select('workflow_id,status'), req
+      );
       if (error) throw error;
       const byWorkflow = {};
       (data || []).forEach(r => {

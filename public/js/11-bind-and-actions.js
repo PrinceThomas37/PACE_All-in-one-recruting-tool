@@ -209,6 +209,12 @@ window.setEmailTab=function(t){if(t==='generator')t='compose';  // the two tabs 
   STATE.emailTab=t;STATE.raLeadSelectedBD=null;STATE.genEmail=null;STATE.emailSearch=null;STATE.previewEmail=null;STATE.showEmailPreview=false;STATE.composeFromEmailId=null;STATE.pendingEmailPage=0;STATE.sentEmailPage=0;loadEmailsForCurrentUser();if(t==='pending'){loadPendingSummary();startPendingSummaryPoll();}else{stopPendingSummaryPoll();}render();}
 
 
+// C-0026 #2 (D-0034): per-sender COUNTS for the RA Lead picker/drill-down —
+// never a message, an address or a subject (rampart.md D4 / D-0036).
+function loadSenderSummary(){
+  if(!STATE.user||!STATE.token)return;
+  apiGet('/emails/sender-summary').then(function(d){STATE.senderSummary=d;scheduleRender();}).catch(function(){});
+}
 function loadPendingSummary(){
   if(!STATE.user||!STATE.token)return;
   var q='';
@@ -327,15 +333,20 @@ function loadEmailsForCurrentUser(){
   var isBD=userHasAnyRole(u,'bd','bd_lead','admin','ra_lead');
   if(isBD){
     if(userHasRole(u,'ra_lead')){
-      // RA Lead needs all emails across all BD users (no status filter)
+      // D-0034: GET /emails now scopes to the RA Lead's OWN chain (their
+      // RAs), never another BD's messages — so this is no longer "all BD
+      // users' emails", just whatever the RA Lead's own scope legitimately
+      // holds. The per-BD picker and drill-down read COUNTS from
+      // /emails/sender-summary instead (C-0026 #2).
       apiGet('/emails').then(function(d){
         var all=d||[];
         STATE.pendingEmails=all.filter(function(e){return e.status==='pending';});
+        STATE.sentEmails=all.filter(function(e){return e.status==='sent';});
         STATE.failedEmails=all.filter(function(e){return e.status==='failed';});
-        STATE.allBDEmails=all;
-        loadPendingSummary();
         scheduleRender();
       }).catch(function(){});
+      loadSenderSummary();
+      loadPendingSummary();
     } else {
       apiGet('/emails?status=pending').then(function(d){STATE.pendingEmails=d||[];loadPendingSummary();scheduleRender();}).catch(function(){});
       apiGet('/emails?status=sent').then(function(d){STATE.sentEmails=d||[];scheduleRender();}).catch(function(){});

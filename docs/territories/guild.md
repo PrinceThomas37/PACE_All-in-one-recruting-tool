@@ -246,3 +246,235 @@ website, new `import_extra` keys, and blank contact fields matched by EMAIL
 `fillPatch` also refuses a non-profile LinkedIn value (a job posting) for a
 contact — only `linkedin.com/in|pub/` is a person (2026-09-23, the
 "LinkedIn URL" column that held job links).
+
+## Session 30 — D-0034/D-0035 visibility pass (C-0022, C-0017, C-0003)
+
+Rampart's audit found the recruiting side had almost no org scoping at all
+outside `job_orders`/`candidates` list reads, and D-0034/D-0035 (mid-job, the
+owner's own answer) added a second dimension — not just "which org" but
+"which of MY OWN org's records may this viewer see or touch". Both landed in
+one pass across every guild-owned route file.
+
+**Cross-org holes closed (C-0022's list, one by one):**
+- `outreach.js` — `resolveEmailAttachments` now takes `orgId` and filters
+  `candidate_documents`/`client_documents` by it (was the critical
+  exfiltration item — attach another company's résumés or client contracts to
+  any email). `interview-invite` and `create-meeting` now org-check the
+  submission first.
+- `candidates.js` — one `requireOwnCandidate()` gate in front of history,
+  PUT, DELETE, notes (GET/POST/DELETE) and documents (GET/POST/DELETE); a
+  foreign candidate id 404s everywhere, never 403. Every insert
+  (`candidate_notes`, `candidate_documents`) now stamps `org_id` — both were
+  misfiling into the default org before.
+- `job-orders.js` — from-lead, PUT, DELETE, posting-jd, recruiters
+  POST/DELETE, request-assignment, `GET /assignment-requests`, decide, and
+  `/users/:id/job-orders` are all org-checked or org-scoped now; every insert
+  along the way stamps `org_id`.
+- `submissions.js` — the job-order/candidate roster read, POST, both
+  PATCHes and DELETE all check the job order (and, on create, the candidate)
+  belongs to the caller's org; `candidate_pipeline` insert now stamps org too.
+- `pipeline.js` — same shape as submissions: a job-order/candidate-pipeline
+  org check sits in front of `recruiterCanTouchJob` on all five routes, since
+  that helper (rightly, per its own comment) never checked org — it only ever
+  narrowed a pure recruiter, and every other role passed through unconditionally.
+- `sourcing.js` — the two staged-candidate-by-id import routes are org-scoped.
+- `routes/recruiting/lookups.js` — `/recruiting-lookups` (GET/POST/PATCH/
+  DELETE) is org-scoped; inserts stamp org. **Known residual gap for `deep`:**
+  the `(category, lower(value))` unique index (migration 016) has no org_id in
+  it, so two orgs sharing a value (e.g. "LinkedIn" under `source`) will now
+  collide on that index once scoping is real. Needs a migration; not fixed here.
+- `routes/wf.js` — definitions GET org-scoped; **POST no longer files a new
+  sequence under the hard-coded `'fute'` org slug or a body-supplied
+  `org_id`** — it is `req.orgId`, always. PUT/status are org-checked.
+  `workflow_steps` inserts now stamp org (they never did). `GET /wf/enrollments`
+  is org-scoped and then filtered by the enrollment's lead
+  (`services/ownership.js` `canSeeLead`) for the ones that have one —
+  candidate/submission-type enrollments (`job_id` null by design) are
+  untouched by this pass, a separate and larger ownership question.
+  `/wf/enrollments/:id/runs`, pause/resume/exit and `/wf/stats` are org-checked
+  or org-scoped. `/wf/sending-mailboxes` is org-scoped and bd_lead/ra_lead are
+  narrowed to their own reporting chain, not the whole org.
+- **Found while fixing wf.js, not on the original list:** `workflow-engine.js`
+  `recordRun()` never stamped `org_id` on `workflow_step_runs` — every step
+  execution, for every org, misfiled under the column DEFAULT. Same class of
+  bug the fix pattern already named for notes/pipeline/recruiter inserts;
+  fixed alongside it.
+- `routes/workflows.js` — `bulk-stage`/`bulk-assign` now put the org
+  condition **ON the update itself** (never check-then-mutate — a race, and
+  twice the code) and report the actual matched-row count. `/insights/
+  {ra,bd}/:userId` goes through one `inCallerScope()` (self, reporting chain,
+  or admin) and 404s outside it. `/stats` is org-scoped even for admin (was
+  reading every customer's volume blended into one number).
+- `routes/recruiting/analytics.js` — `/recruiting-dashboard`'s submissions
+  query used to fall through unscoped for `ra`/`ra_lead` (neither `isBDM` nor
+  `isRecruiter`); every non-admin, non-recruiter role is chain-scoped now.
+  `/bd-analytics/*` (ex-**C-0003**, misaddressed to gateway — it lives here)
+  is org-scoped and, matching `/reports/recruiting`, chain-scoped for
+  non-admin.
+
+**D-0035 — job orders (D3), narrowed mid-job by the owner:**
+`services/job-order-visibility.js` (new, pure) is the one place a job order's
+client-POC field is named. **Owner = `bd_manager_id`** (plus reporting chain,
+plus admin) — the live schema's one column for "who runs this client
+relationship"; `created_by`/`source_lead_id` are provenance, not ownership.
+The only person-identifying column the schema actually has is
+`client_manager` (`client`/`end_client`/`client_job_id` name the CLIENT, a
+company, not a person, and stay visible to everyone — a recruiter needs to
+know which company a role is for). `list`/`browse`/`detail` in
+`job-orders.js` all read the same helper so they cannot disagree, and every
+response now carries `poc_visible` so a screen can say "Client contact
+visible to the job owner" instead of rendering a blank.
+
+The SAME ownership check now also gates **interaction** — edit, delete,
+publish/unpublish the apply link — replacing the old "any BDM role" gate,
+per the owner's own words: *"Interaction... is the owner's; the recruiters
+ASSIGNED to the job keep adding/working their own candidates on it."*
+**`GET /job-orders/:id` no longer 403s an unassigned recruiter** — a job
+order's basic detail (title, JD, pay, location) is visible company-wide now;
+only the candidate/submission machinery underneath stays gated by
+`recruiterCanTouchJob`, unchanged.
+
+⚠ **This is a real capability change, not just a leak closed**, and I did not
+coordinate a UI update for it: a BD who is not a job's `bd_manager_id` (or in
+their chain) will now see Edit/Delete/Publish buttons that 403 when clicked,
+the exact "looks actionable, isn't" shape CLAUDE.md warns against (D-0020).
+**Flagging for surface**: those buttons should be conditioned on the job's own
+`poc_visible`/an equivalent "am I the owner" field the job-order payload now
+carries, or hidden for a non-owner.
+
+**Deliberately not tightened**, named rather than silently skipped: recruiter
+assignment (POST/DELETE `/job-orders/:id/recruiters`) and
+`/assignment-requests/:id/decide` stayed `isBDM`-gated — D-0035 didn't name
+them and guessing past what was asked felt like the wrong risk mid-pass.
+
+**D-0035 — clients (D2), gateway's definition, mirrored here:**
+`POST /companies/:id/email` (`outreach.js`) now requires
+`requireClientOwner()` — a byte-for-byte mirror of gateway's
+`routes/companies.js` `clientOwnerId`/`requireClientOwner` (owner =
+job order's `bd_manager_id` → lead's `assigned_to_bd` → `companies.created_by`;
+admin always passes). Mirrored, not shared, because `routes/companies.js`
+exports only its router — **if gateway's version changes, this copy must
+change with it**, and that drift risk is exactly why a future contract should
+ask gateway to export the function instead.
+
+**D-0035 — D5 (duplicate check), both endpoints PACE has:**
+`routes/lookups.js` `POST /contacts/check-email` and `routes/workflows.js`
+`POST /jobs/check-duplicates` are both org-scoped now (neither had any org
+filter) and answer only **whose lead it is and since when** — never the
+matched lead's own contact name, position or full company. The two responses
+deliberately use different field names because each already had (or was
+given) its own frontend contract: `check-email` → `{duplicate, days_ago,
+added_by, company}` (matches `52-poc-block.js`, which already read
+`d.added_by` — a field the backend had never once sent, so this also revives
+a dead UI feature); `check-duplicates` → `{email, duplicate, owner_name,
+since}` (the shape gateway specified for `14-mailmerge-engine.js`, which
+surface will adapt to read).
+
+**Verification:** `node --check` on every touched file;
+`test/recruiting-routes-mounted.mjs` (7/7, all 64 routes still mounted, order
+unchanged), `test/stage-consolidation-smoke.mjs`, `test/workflow-gating-smoke.mjs`,
+`test/lead-stage-permission.mjs`, `test/submission-review-smoke.mjs`,
+`test/submission-stages-smoke.mjs`, `test/applicants-smoke.mjs`,
+`test/job-candidate-updates-smoke.mjs`, `test/candidate-sequence-smoke.mjs`,
+`test/org-scoping-routes-smoke.mjs`, `test/ownership-smoke.mjs` — all green.
+`test/org-scoping-guard-smoke.mjs` fails on its `KNOWN_DEBT` snapshot, which
+is now STALE for entries in `routes/workflows.js` and `routes/lookups.js` that
+this pass fixed — that file is foundry's, flagged in their report rather than
+edited here. Did not run the full `npm test` (other territories mid-edit in
+the same tree).
+
+**For foundry**, worth pinning (none written — `test/` is not mine):
+`resolveEmailAttachments` drops a foreign-org document silently rather than
+attaching it; `job-orders.js` never returns `client_manager` to a non-owner
+and always returns it to the owner/chain/admin; neither `check-email` nor
+`check-duplicates` ever includes `contact_name`/`position`/full `company` in
+its response; `POST /wf/definitions` never accepts a body-supplied `org_id`
+or files under `'fute'`; and `workflow_step_runs` rows always carry the
+enrollment's `org_id`.
+
+## Session 30, round 2 — rampart's review fixes (2026-09-24)
+
+Rampart reviewed the C-0022 pass and found ten issues in guild's files (two
+blockers, plus eight D-0035 write-gate gaps). All fixed in one pass:
+
+- **BLOCKER, own regression:** `routes/recruiting/outreach.js`'s C-0022 edit
+  deleted `const MAX_EMAIL_ATTACH_BYTES` while `resolveEmailAttachments` still
+  read it inside a `try/catch` — every document lookup threw, was swallowed,
+  and every attachment silently vanished from candidate/client emails.
+  Restored above the function. **Verified by actually exercising the handler**
+  (stubbed supabase/mailbox, captured what `POST /candidates/email` passed to
+  `sendMailboxNewMessage`) rather than trusting `node --check` — a scope error
+  is a runtime error and only running the code finds it. Grepped every other
+  file this session touched for a deleted top-level `const`/`function` still
+  referenced elsewhere; `MAX_EMAIL_ATTACH_BYTES` was the only one.
+- `POST /job-orders/from-lead/:jobId` (job-orders.js): now requires the caller
+  own the LEAD being converted (`assigned_to_bd` in their reporting-chain scope,
+  or admin) — closing the "convert a colleague's Connected lead and take their
+  client" hole — and a body-supplied `bd_manager_id` must be a real user in the
+  caller's own org AND either the caller or someone in their chain.
+- `POST /jobs/bulk-stage` (routes/workflows.js): admin/ra_lead (the pool roles
+  that already run `/distribute/*`) keep unrestricted access; bd/bd_lead are
+  now narrowed to lead ids whose `assigned_to_bd` is in their own chain scope —
+  a lead outside it is silently dropped from the batch, never a 403.
+- `DELETE /submissions/:id` and `DELETE /pipeline/:id`: a recruiter may delete
+  only their own (`recruiter_id`/`tagged_by`) or one on a job they're assigned
+  to (`recruiterCanTouchJob`); BD needs owner/chain/admin, same test as every
+  other job-order write.
+- `POST /job-orders/:id/parse-jd?apply=1`: the WRITE (not the dry-run preview)
+  is now owner/chain/admin-gated, and the returned `job_order` goes through
+  `jobOrderVisibility.stripJobOrderPoc` (currently a no-op since only the owner
+  reaches that line, kept so the response can never disagree with list/detail
+  if the gate ever loosens).
+- `POST /job-orders/:id/recruiters` and `POST /assignment-requests/:id/decide`:
+  both now require the caller own the job order (owner/chain/admin); the
+  recruiters route also verifies every `recruiter_id` in the body is a real
+  user in the caller's own org before upserting `recruiter_assignments`.
+- `GET /users/:id/job-orders`: now runs through `stripJobOrdersPoc` like every
+  other job-order list.
+- `GET /wf/enrollments`: the ownership filter used to run AFTER `.limit(500)`,
+  which could short a non-admin's page arbitrarily (even to zero, if the first
+  500 org rows all belonged to other people). Now pages through in 500-row,
+  order-preserved batches, filtering each batch, until 500 VISIBLE rows are
+  collected or the org's rows run out. Admin (`scope.all`) still takes the
+  first batch, unchanged.
+- **Not touched, flagged instead:** `DELETE /job-orders/:id/recruiters/:rid`
+  is still "any BDM" — the review only named the POST route, and adding an
+  unrequested gate mid-fix felt like the wrong risk; same shape as
+  `POST /job-orders/:id/recruiters` and worth the same fix in a follow-up.
+
+**Verification:** `node --check` on every touched file; grepped the whole
+C-0022 diff for deleted top-level declarations (only the one regression);
+`test/recruiting-routes-mounted.mjs` (7/7), `test/stage-consolidation-smoke.mjs`,
+`test/workflow-gating-smoke.mjs`, `test/lead-stage-permission.mjs`,
+`test/submission-review-smoke.mjs`, `test/org-scoping-routes-smoke.mjs`,
+`test/ownership-smoke.mjs`, `test/candidate-sequence-smoke.mjs`,
+`test/submission-stages-smoke.mjs`, `test/applicants-smoke.mjs`,
+`test/job-candidate-updates-smoke.mjs` — all green. No suite covers
+`bulk-stage`'s ownership narrowing or the new owner gates directly — worth
+pinning by foundry (see handback report). Did not run full `npm test`
+(gateway/harbour mid-edit in the same tree).
+
+## Session 30 addendum — scripts/territory-map.mjs
+Added `services/job-order-visibility.js` to guild's `own` list (a config
+entry, same as prior sessions' `client-resolve.js`/`lead-fill.js` additions)
+and ran `node scripts/territory-map.mjs` to regenerate `_map.json`/
+`island.html` — 27 files, 6,397 lines now attributed here.
+
+
+## Session 30 round 2 — Rampart re-review R2/R3
+`DELETE /job-orders/:id/recruiters/:rid` (routes/recruiting/job-orders.js
+~:778) checked `isBDM` only, so any BD manager in the org could unassign a
+recruiter from a job order they don't own; it now 404s when the job order
+isn't found in the caller's org and applies the same
+`jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))` gate the
+assignment POST already uses. Separately, D-0035 says recruiters work their
+OWN candidates, but the submission (routes/recruiting/submissions.js ~:249-252)
+and pipeline (routes/recruiting/pipeline.js ~:200-203) deletes accepted
+`|| recruiterCanTouchJob`, letting a recruiter on a shared job order delete a
+colleague recruiter's row — tightened both to `recruiter_id`/`tagged_by ===
+req.user.id` only for a pure recruiter; BD owner/chain/admin unchanged.
+Verified: `node --check` on all three files; `test/recruiting-routes-mounted.mjs`
+(7/7), `test/submission-review-smoke.mjs` (16/16), `test/workflow-gating-smoke.mjs`
+(25/25), `test/lead-stage-permission.mjs` (13/13), `test/stage-consolidation-smoke.mjs`
+(14/14) — all green. No dedicated pipeline-delete test file exists yet
+(foundry writing tests concurrently). Did not run full `npm test`; did not commit.

@@ -256,16 +256,14 @@ function renderEmail(){
     var isRaLead=userHasRole(u,'ra_lead');
 
     // ── RA LEAD: BD user picker ──────────────────────────────────────
+    // C-0026 #2 / D-0034: GET /emails now scopes to the viewer's own chain, so
+    // grouping it client-side showed every BD at zero. Counts come from
+    // GET /emails/sender-summary instead — numbers only, never a message
+    // (rampart.md D4 / D-0036).
     if(isRaLead && !STATE.raLeadSelectedBD){
-      // Group ALL emails (pending + sent + failed) by BD user for the picker
       var bdGroups={};
-      (STATE.allBDEmails||STATE.pendingEmails||[]).forEach(function(e){
-        var sid=e.sender&&e.sender.id?e.sender.id:(e.sent_by||'unknown');
-        var sname=e.sender&&e.sender.name?e.sender.name:'Unknown';
-        if(!bdGroups[sid])bdGroups[sid]={id:sid,name:sname,pending:0,sent:0,failed:0};
-        if(e.status==='pending')bdGroups[sid].pending++;
-        else if(e.status==='sent')bdGroups[sid].sent++;
-        else if(e.status==='failed')bdGroups[sid].failed++;
+      ((STATE.senderSummary&&STATE.senderSummary.senders)||[]).forEach(function(s){
+        bdGroups[s.id]={id:s.id,name:s.name||'Unknown',pending:s.pending||0,sent:s.sent||0,failed:s.failed||0};
       });
       // Always show all BD/BD_Lead users even if they have no emails yet
       (STATE.users||[]).filter(function(usr){return userHasRole(usr,'bd')||userHasRole(usr,'bd_lead');}).forEach(function(usr){
@@ -298,42 +296,73 @@ function renderEmail(){
       '</div>';
 
     // ── RA LEAD: viewing a specific BD's emails ──────────────────────
-    } else {
-      var viewingBD=isRaLead&&STATE.raLeadSelectedBD;
-      var displayPending=viewingBD
-        ? (STATE.allBDEmails||STATE.pendingEmails||[]).filter(function(e){return (e.sender&&e.sender.id?e.sender.id:e.sent_by)===STATE.raLeadSelectedBD;})
-        : pending;
-      var bdName=viewingBD?(function(){var bd=(STATE.users||[]).find(function(u){return u.id===STATE.raLeadSelectedBD;});return bd?bd.name:'BD Manager';})():'';
+    } else if(isRaLead&&STATE.raLeadSelectedBD){
+      // D-0036 confirmed: the drill-down is COUNTS, never another person's
+      // messages — no row, no subject, no body. pending-summary(manager_id=)
+      // still gives the timezone breakdown; sender-summary gives the totals.
+      var bdId=STATE.raLeadSelectedBD;
+      var bdName=(function(){var bd=(STATE.users||[]).find(function(u){return u.id===bdId;});return bd?bd.name:'BD Manager';})();
+      var bdSum=((STATE.senderSummary&&STATE.senderSummary.senders)||[]).find(function(s){return s.id===bdId;})||{pending:0,sent:0,failed:0};
+      var backBtn='<div style="margin-bottom:14px"><button onclick="STATE.raLeadSelectedBD=null;render()" style="background:none;border:1px solid var(--border2);padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--text2)">← Back to all BD Managers</button><span style="margin-left:12px;font-weight:600;font-size:14px">'+htmlEsc(bdName)+'</span></div>';
+      var ps=STATE.pendingSummary;
+      var tzRows=((ps&&ps.by_timezone)||[]).map(function(t){
+        return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span>'+htmlEsc(t.timezone)+'</span><span>'+t.ready_now+' ready now · '+t.waiting_window+' waiting</span></div>';
+      }).join('');
+      pendingHtml='<div>'+scheduleBanner+backBtn+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;text-align:center;margin-bottom:14px">'+
+          '<div><div style="font-size:24px;font-weight:700;color:var(--amber)">'+(bdSum.pending||0)+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">PENDING</div></div>'+
+          '<div><div style="font-size:24px;font-weight:700;color:var(--green)">'+(bdSum.sent||0)+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">SENT</div></div>'+
+          '<div><div style="font-size:24px;font-weight:700;color:var(--red,#dc2626)">'+(bdSum.failed||0)+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">FAILED (all runs)</div></div>'+
+        '</div>'+
+        (tzRows?'<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 18px"><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Pending, by lead timezone</div>'+tzRows+'</div>':
+          '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">Only this manager\'s counts are shown here — not the messages themselves.</div>')+
+      '</div>';
 
-      var totalRecipients=displayPending.length;
+    // ── everyone else: bd, bd_lead, admin ─────────────────────────────
+    } else {
+      // C-0026 #2 (D-0034): GET /emails?status=pending now includes a
+      // bd_lead's team's rows too (the reporting chain), each carrying
+      // `is_mine`. "Send all" acts only on the caller's own queue
+      // (`/emails/queue-all` is server-scoped to `sent_by=req.user.id`
+      // regardless of what is shown), so the count and the confirm modal
+      // must say so rather than promise a number they will not send.
+      var minePending=pending.filter(function(e){return e.is_mine!==false;});
+      var totalRecipients=pending.length;
+      var mineCount=minePending.length;
       var _pPg=Math.min(STATE.pendingEmailPage||0,Math.max(0,Math.ceil(totalRecipients/20)-1));
       var _pTp=Math.max(1,Math.ceil(totalRecipients/20));
-      var pendingPaged=displayPending.slice(_pPg*20,(_pPg+1)*20);
-      var sendBlocked=!totalRecipients||STATE.mySendingPaused;
-      var sendAllBtn=isRaLead?'':('<button onclick="openSendAllConfirm()" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer'+(sendBlocked?';opacity:.4;cursor:not-allowed':'')+'"'+(sendBlocked?'disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+totalRecipients+')</button>');
+      var pendingPaged=pending.slice(_pPg*20,(_pPg+1)*20);
+      var sendBlocked=!mineCount||STATE.mySendingPaused;
+      var sendAllBtn='<button onclick="openSendAllConfirm()" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer'+(sendBlocked?';opacity:.4;cursor:not-allowed':'')+'"'+(sendBlocked?'disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+mineCount+')</button>';
 
       var pendingRows=pendingPaged.map(function(e){
+        var isMine=e.is_mine!==false;
         var isSelected=STATE.previewPendingId===e.id;
         var jname=(e.job&&e.job.position?e.job.position:'')+(e.job&&e.job.company?(' · '+e.job.company.name):'');
         var fu=e.followup_type;
         var rowBg=isSelected?'var(--accent-l)':fu==='fu2'?'#fff8f0':fu==='fu1'?'#fffdf0':'';
         var fuBadge=fu==='fu1'?'<span style="font-size:10px;padding:2px 7px;background:#fef9c3;color:#92400e;border-radius:6px;font-weight:700;margin-left:6px">FU1</span>':fu==='fu2'?'<span style="font-size:10px;padding:2px 7px;background:#ffedd5;color:#9a3412;border-radius:6px;font-weight:700;margin-left:6px">FU2</span>':'';
+        // A teammate's row (bd_lead's team view): named, never blended into
+        // the caller's own — the same reason a rewind entry always says who.
+        var ownerBadge=isMine?'':'<span style="font-size:10px;padding:2px 7px;background:var(--bg);border:1px solid var(--border2);color:var(--text3);border-radius:6px;font-weight:600;margin-left:6px">'+htmlEsc((e.sender&&e.sender.name)||'Teammate')+'</span>';
         var leadTz=(e.job&&e.job.timezone)||'EST';
         var tzRow2=(STATE.pendingSummary&&STATE.pendingSummary.by_timezone||[]).find(function(t){return t.timezone===leadTz;});
         var aiBadge=e.ai_written?'<span class="ai-chip">AI-written</span>':e.ai_will_write?'<span class="ai-chip" title="The template below is the fallback. AI writes this lead\'s own email just before it is sent.">AI writes at send</span>':'';
         var winBadge=aiBadge+((e.attempt_count>0&&e.retry_note)?'<span class="retry-chip">'+htmlEsc(e.retry_note)+'</span>':(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span style="font-size:10px;padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span style="font-size:10px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>');
-        return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+'<td style="padding:10px 12px;font-size:13px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+winBadge+'</div>'+'<div style="font-size:11px;color:var(--text3)">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td style="padding:10px 12px;font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span style="font-size:11px;padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
+        return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+'<td style="padding:10px 12px;font-size:13px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+ownerBadge+winBadge+'</div>'+'<div style="font-size:11px;color:var(--text3)">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td style="padding:10px 12px;font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span style="font-size:11px;padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
       }).join('');
       if(!pendingRows)pendingRows='<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--text3)">No pending emails yet.</td></tr>';
 
-    // Preview panel
+    // Preview panel — Edit is the sender's own act (PATCH /emails/:id is
+    // sender-scoped server-side), so it is offered only on the caller's own row.
     var previewPanel='';
     if(STATE.previewPendingId){
-      var pe=displayPending.find(function(e){return e.id===STATE.previewPendingId;});
+      var pe=pending.find(function(e){return e.id===STATE.previewPendingId;});
       if(pe){
+        var peMine=pe.is_mine!==false;
         previewPanel='<div style="width:380px;flex-shrink:0;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
           '<div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-            '<div style="font-weight:600;font-size:13px">Email Preview</div>'+
+            '<div style="font-weight:600;font-size:13px">Email Preview'+(peMine?'':' — '+htmlEsc((pe.sender&&pe.sender.name)||'Teammate'))+'</div>'+
             '<button class="btn-icon" onclick="STATE.previewPendingId=null;render()">'+ico('x',13)+'</button>'+
           '</div>'+
           '<div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)">'+
@@ -341,24 +370,22 @@ function renderEmail(){
             '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(pe.subject||'')+'</div>'+
           '</div>'+
           '<div style="padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(pe.body||'')+'</div>'+
-          '<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
+          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
-          '</div>'+
+          '</div>':'')+
           '</div>'+
         '</div>';
       }
     }
 
-    // Back button for RA Lead drill-down view
-    var backBtn=viewingBD?('<div style="margin-bottom:14px"><button onclick="STATE.raLeadSelectedBD=null;STATE.previewPendingId=null;loadPendingSummary();render()" style="background:none;border:1px solid var(--border2);padding:6px 14px;border-radius:7px;font-size:13px;cursor:pointer;color:var(--text2)">← Back to all BD Managers</button><span style="margin-left:12px;font-weight:600;font-size:14px">'+htmlEsc(bdName)+'</span></div>'):'';
-
     // ── DIDN'T SEND ── failed emails used to vanish from this page the moment
     // the run card expired. They now stay here, with the reason, until they
     // are retried or deleted. Calm by default (D-0019): a stripe and one chip.
-    var failedList=(STATE.failedEmails||[]).filter(function(e){
-      return !viewingBD||((e.sender&&e.sender.id?e.sender.id:e.sent_by)===STATE.raLeadSelectedBD);
-    });
-    var retryable=failedList.filter(function(e){return e.can_retry;});
+    // A bd_lead's team rows are visible here too now (D-0034) — Retry stays
+    // the sender's own act (POST /emails/:id/retry answers 404 for anyone
+    // else's row), so the button is offered only on `is_mine` rows.
+    var failedList=STATE.failedEmails||[];
+    var retryable=failedList.filter(function(e){return e.can_retry&&e.is_mine!==false;});
     var failedPanel=failedList.length?(
       '<div class="failed-panel">'+
         '<div class="failed-head">'+
@@ -367,23 +394,25 @@ function renderEmail(){
           (retryable.length?'<button class="btn btn-outline btn-sm" onclick="retryAllFailedEmails('+htmlEsc(JSON.stringify(retryable.map(function(e){return e.id;})))+')">Retry all ('+retryable.length+')</button>':'')+
         '</div>'+
         failedList.slice(0,50).map(function(e){
+          var isMine=e.is_mine!==false;
           var jn=(e.job&&e.job.position?e.job.position:'')+(e.job&&e.job.company?(' · '+e.job.company.name):'');
+          var ownerNote=isMine?'':' <span class="failed-job">'+htmlEsc((e.sender&&e.sender.name)||'Teammate')+'</span>';
           return '<div class="failed-row">'+
             '<div class="failed-main">'+
-              '<div class="failed-to">'+htmlEsc(e.to_email||'(no address)')+(jn?' <span class="failed-job">'+htmlEsc(jn)+'</span>':'')+'</div>'+
+              '<div class="failed-to">'+htmlEsc(e.to_email||'(no address)')+(jn?' <span class="failed-job">'+htmlEsc(jn)+'</span>':'')+ownerNote+'</div>'+
               '<div class="failed-why">'+htmlEsc(e.fail_reason||'Send failed — no reason was recorded (failed before retries existed).')+'</div>'+
               (e.retry_note?'<div class="failed-note">'+htmlEsc(e.retry_note)+'</div>':'')+
             '</div>'+
-            (e.can_retry?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
+            (e.can_retry&&isMine?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
           '</div>';
         }).join('')+
         (failedList.length>50?'<div class="failed-sub" style="padding:8px 14px">Showing 50 of '+failedList.length+'.</div>':'')+
       '</div>'):'';
 
     pendingHtml='<div>'+scheduleBanner+
-      backBtn+failedPanel+
+      failedPanel+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div style="font-size:13px;color:var(--text2)">'+totalRecipients+' email'+(totalRecipients!==1?'s':'')+' ready · page '+(_pPg+1)+' of '+_pTp+'</div>'+
+        '<div style="font-size:13px;color:var(--text2)">'+totalRecipients+' email'+(totalRecipients!==1?'s':'')+' ready'+(totalRecipients!==mineCount?' · '+mineCount+' yours':'')+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
         sendAllBtn+
       '</div>'+
       '<div style="display:flex;gap:14px;align-items:flex-start">'+

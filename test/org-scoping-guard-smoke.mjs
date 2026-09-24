@@ -47,7 +47,14 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
 // `GET /emails` bug shipped with a fully green suite. Existing entries are
 // PRE-EXISTING DEBT surfaced by this audit, not something this territory may
 // fix (routes/*.js belong to other territories) — raised as C-0019.
-const GUARD = /withOrg\(|\.eq\(\s*['"](org_id|sent_by|user_id|created_by|assigned_to|assigned_to_bd|owner_id)['"]|crossOrg|forRequest\(|guardUser\(|org_id:\s*(orgId|org)\b/;
+// `orgStamp\(` added 2026-09-24 (C-0027 follow-up): `POST /wf/definitions` and
+// several inserts in routes/companies.js/routes/lead-sources.js stamp the org
+// with `...orgStamp(req)` — a real org guard on a WRITE, spelled differently
+// from the `.eq('org_id', …)` guard on a READ. Without this the scanner
+// flagged `wf.js`'s fix for the exact "trusted a body-supplied org_id" bug
+// (C-0022) as if it were still unguarded, which is a false positive this test
+// must not carry as debt.
+const GUARD = /withOrg\(|orgStamp\(|\.eq\(\s*['"](org_id|sent_by|user_id|created_by|assigned_to|assigned_to_bd|owner_id)['"]|crossOrg|forRequest\(|guardUser\(|org_id:\s*(orgId|org)\b/;
 
 function walk(dir) {
   let out = [];
@@ -65,7 +72,19 @@ function findUnguarded(routesDir) {
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');
     const starts = [];
-    const re0 = /\nrouter\.[a-zA-Z]+\(/g;
+    // Allows leading whitespace before `router.` (2026-09-24, C-0027
+    // follow-up). `routes/warmup.js` wraps its handlers one level deep
+    // (`module.exports = function(ctx) { … router.get(…) … }`), so every one
+    // of its `router.<verb>(` calls is indented — the old anchor
+    // `/\nrouter\.[a-zA-Z]+\(/` required the call to start a line with ZERO
+    // indentation, matched nothing in that file, and the whole file collapsed
+    // into ONE block from its first line to its last. That is not "scanned
+    // and clean" — it is unscanned, and the difference is invisible in the
+    // output (both look like zero flags). Found by hand-checking why the
+    // mutation harness's "cross-org partner address shown" bug was catchable
+    // only behaviourally (test/scope-emails-warmup-smoke.mjs) and never by
+    // this source scan, on a file this scan was supposed to also cover.
+    const re0 = /\n[ \t]*router\.[a-zA-Z]+\(/g;
     let mm;
     while ((mm = re0.exec(src))) starts.push(mm.index + 1);
     starts.push(src.length);
@@ -99,64 +118,74 @@ function findUnguarded(routesDir) {
   return flags.sort();
 }
 
-// Snapshot taken 2026-09-09 while closing C-0018 (refreshed once, live, when
-// routes/auth.js changed under this test mid-session — see the comment on
-// the snippet key above). Every line here is pre-existing debt raised to its
-// owning territory via C-0019, NOT fixed by this test. If this list shrinks
-// because someone fixed one, update it here too — that is a welcome edit.
-// If it GROWS, that is a new unguarded call site and the fix belongs in the
-// router, not in this allow-list.
+// Snapshot REFRESHED 2026-09-24 (C-0027 follow-up), after the D-0034 session
+// fixed harbour's routes/emails.js + routes/deliverability.js (15 lines),
+// gateway's routes/companies.js (5) and 3 of routes/jobs.js's 10, and guild's
+// routes/workflows.js + routes/lookups.js (6) — all removed below, none of
+// them "silently"; each is gone because `findUnguarded()` no longer flags it,
+// checked live against this exact commit. The scan was ALSO widened twice in
+// the same pass (see the GUARD and re0 comments above), which surfaced
+// pre-existing debt in routes/candidate-outreach.js, routes/gmail.js,
+// routes/lead-sources.js (fixed immediately by the orgStamp guard change,
+// so it never needed an entry), routes/sso.js and routes/warmup.js that the
+// OLD, narrower scan had never once looked at. None of that is new debt from
+// this session — it was always there, unmeasured. Raised as C-0030 to the
+// owning territories rather than fixed here (routes/*.js is not foundry's).
+//
+// Two DELIBERATE, JUSTIFIED entries (not debt to raise further): the
+// microsoft.js/gmail.js OAuth-callback pair. `GET /oauth/microsoft/callback`
+// and `GET /oauth/gmail/callback` run with no `req.user`/`req.orgId` at all —
+// they are redirects FROM Microsoft/Google, not an authenticated app
+// request — so `withOrg`/`.eq('org_id', …)` do not apply. The org check IS
+// there, just shaped as two reads compared against each other rather than a
+// query filter: `stateUser` (the org of the user who started the connection,
+// decoded from the signed `state` — see the C-0016 comment right above it in
+// each file) is compared to `slotForOrgCheck` (the org actually stamped on
+// the mailbox slot), and a mismatch refuses with the same generic sentence as
+// any other OAuth failure. This regex cannot see a comparison of two fetched
+// values, only a filter clause — a real gap in the scanner, not in the route.
+//
+// Every OTHER line here is pre-existing debt raised to its owning territory
+// via C-0019 (original batch) or C-0030 (this refresh), NOT fixed by this
+// test. If this list shrinks because someone fixed one, update it here too —
+// that is a welcome edit. If it GROWS, that is a new unguarded call site and
+// the fix belongs in the router, not in this allow-list.
 const KNOWN_DEBT = [
   "routes/auth.js :: const { data, error } = await supabase.from('users').select(USER_COLS).eq('id',  [users]",
   "routes/auth.js :: const { data: user, error } = await supabase.from('users').select('*') [users]",
-  "routes/companies.js :: await supabase.from('client_documents').update({ deleted_at: new Date() }) [client_documents]",
-  "routes/companies.js :: await supabase.from('companies').update({ deleted_at: new Date() }).eq('id', req [companies]",
-  "routes/companies.js :: const { data, error } = await supabase.from('client_documents') [client_documents]",
-  "routes/companies.js :: const { data, error } = await supabase.from('client_documents').insert({ [client_documents]",
-  "routes/companies.js :: const { data, error } = await supabase.from('companies').insert(rows).select('id [companies]",
-  "routes/companies.js :: const { data, error } = await supabase.from('companies').insert({ name, website, [companies]",
-  "routes/companies.js :: const { data, error } = await supabase.from('companies').update(updates).eq('id' [companies]",
-  "routes/companies.js :: const { data: doc } = await supabase.from('client_documents') [client_documents]",
-  "routes/deliverability.js :: await supabase.from('suppression_list').delete().eq('id', req.params.id); [suppression_list]",
-  "routes/deliverability.js :: const { data: emails } = await supabase.from('emails').select('status,created_at [emails]",
-  "routes/deliverability.js :: const { data: mbs } = await supabase.from('user_emails').select('email_address') [user_emails]",
-  "routes/deliverability.js :: const { data: replied } = await supabase.from('contacts').select('id').in('id',  [contacts]",
-  "routes/deliverability.js :: let mbQuery = supabase.from('user_emails').select('id,email_address,display_name [user_emails]",
-  "routes/deliverability.js :: let q = supabase.from('emails').select('template_variant,contact_id,status,subje [emails]",
-  "routes/deliverability.js :: let query = supabase.from('suppression_list').select('id,email,reason,source,not [suppression_list]",
-  "routes/deliverability.js :: try { const { count } = await supabase.from('contacts').select('id', { count: 'e [contacts]",
-  "routes/deliverability.js :: try { const { count } = await supabase.from('contacts').select('id', { count: 'e [contacts]",
-  "routes/deliverability.js :: try { const { count } = await supabase.from('suppression_list').select('id', { c [suppression_list]",
-  "routes/deliverability.js :: try { const { data } = await supabase.from('user_emails').select('id,warmup_star [user_emails]",
-  "routes/emails.js :: const { data, error } = await supabase.from('emails').insert({ contact_id: conta [emails]",
-  "routes/emails.js :: const { data, error } = await supabase.from('emails').select('id,status,sent_by' [emails]",
-  "routes/emails.js :: const { error: delErr } = await supabase.from('emails').delete().eq('id', req.pa [emails]",
-  "routes/emails.js :: if (contact_id) await supabase.from('contacts').update({ email_sent_at: today(), [contacts]",
+  "routes/candidate-outreach.js :: await withTimeout(supabase.from('candidate_outreach') [candidate_outreach]",
+  "routes/candidate-outreach.js :: await withTimeout(supabase.from('candidates') [candidates]",
+  "routes/candidate-outreach.js :: const wrote = await withTimeout(supabase.from('candidate_outreach') [candidate_outreach]",
+  "routes/gmail.js :: await supabase.from('gmail_tokens').delete().eq('user_email_id', req.params.user [gmail_tokens]",
+  "routes/gmail.js :: await supabase.from('gmail_tokens').delete().eq('user_email_id', userEmailId); [gmail_tokens]",
+  "routes/gmail.js :: await supabase.from('user_emails').update({ is_active: false }).eq('id', req.par [user_emails]",
+  "routes/gmail.js :: await supabase.from('user_emails').update({ platform: 'Gmail', is_active: true } [user_emails]",
+  "routes/gmail.js :: const { data } = await supabase.from('gmail_tokens').select('email_address,expir [gmail_tokens]",
+  "routes/gmail.js :: const { data: slot } = await supabase.from('user_emails').select('email_address' [user_emails]",
+  // ↓ DELIBERATE — see the OAuth-callback note above.
+  "routes/gmail.js :: const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org [user_emails]",
+  "routes/gmail.js :: const { data: stateUser } = await supabase.from('users').select('org_id').eq('id [users]",
+  "routes/gmail.js :: const { error: insErr } = await supabase.from('gmail_tokens').insert({ [gmail_tokens]",
   "routes/jobs.js :: await supabase.from('emails').delete().eq('job_id', req.params.id).eq('status',  [emails]",
   "routes/jobs.js :: await supabase.from('follow_ups').update({ status: 'skipped' }).eq('job_id', req [follow_ups]",
   "routes/jobs.js :: await supabase.from('jobs').update({ deleted_at: new Date() }).eq('id', req.para [jobs]",
   "routes/jobs.js :: const { data, error } = await supabase.from('contacts').select('*').eq('job_id', [contacts]",
   "routes/jobs.js :: const { data, error } = await supabase.from('jobs').select(JOB_SELECT).eq('id',  [jobs]",
   "routes/jobs.js :: const { data, error } = await supabase.from('jobs').update(updates).eq('id', req [jobs]",
-  "routes/jobs.js :: const { data, error } = await supabase.from('jobs').update({ research, updated_a [jobs]",
   "routes/jobs.js :: const { data: existing } = await supabase.from('jobs').select('*').eq('id', req. [jobs]",
   "routes/jobs.js :: const { data: existing } = await supabase.from('jobs').select('created_by,positi [jobs]",
-  "routes/jobs.js :: const { data: job } = await supabase.from('jobs').select('created_by,industry'). [jobs]",
-  "routes/jobs.js :: const { data: job } = await supabase.from('jobs').select('created_by,industry,co [jobs]",
-  "routes/lookups.js :: const { data, error } = await supabase.from('contacts') [contacts]",
   "routes/microsoft.js :: await supabase.from('microsoft_tokens').delete().eq('user_email_id', req.params. [microsoft_tokens]",
   "routes/microsoft.js :: await supabase.from('microsoft_tokens').delete().eq('user_email_id', userEmailId [microsoft_tokens]",
   "routes/microsoft.js :: await supabase.from('user_emails').update({ is_active: false }).eq('id', req.par [user_emails]",
   "routes/microsoft.js :: await supabase.from('user_emails').update({ platform: 'Microsoft', is_active: tr [user_emails]",
   "routes/microsoft.js :: const { data } = await supabase.from('microsoft_tokens').select('email_address,e [microsoft_tokens]",
-  "routes/microsoft.js :: const { data: mailbox } = await supabase.from('user_emails').select('user_id').e [user_emails]",
+  // ↓ DELIBERATE — see the OAuth-callback note above.
+  "routes/microsoft.js :: const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org [user_emails]",
+  "routes/microsoft.js :: const { data: stateUser } = await supabase.from('users').select('org_id').eq('id [users]",
   "routes/microsoft.js :: const { data: userEmailRow } = await supabase.from('user_emails').select('email_ [user_emails]",
   "routes/microsoft.js :: const { error: insertErr } = await supabase.from('microsoft_tokens').insert( [microsoft_tokens]",
-  "routes/workflows.js :: await supabase.from('emails').delete().in('job_id', job_ids).eq('status', 'pendi [emails]",
-  "routes/workflows.js :: await supabase.from('follow_ups').update({ status: 'expired' }).in('job_id', job [follow_ups]",
-  "routes/workflows.js :: const { data, error } = await supabase.from('contacts').select('email, job_id, j [contacts]",
-  "routes/workflows.js :: const { error } = await supabase.from('jobs').update(updates).in('id', job_ids); [jobs]",
-  "routes/workflows.js :: let query = supabase.from('jobs').select('id,stage,created_by,assigned_to,contac [jobs]",
+  "routes/sso.js :: const { data: rows } = await ctx.supabase.from('users') [users]",
+  "routes/warmup.js :: const { data, error } = await supabase.from('warmup_threads') [warmup_threads]",
 ].sort();
 
 {
@@ -173,8 +202,45 @@ const KNOWN_DEBT = [
   // bug dispatch found (GET /emails, no org_id condition) must still be in
   // the snapshot right now — if this ever goes false because the underlying
   // scan logic broke, that is itself worth knowing.
-  ok('the grep catches the ORIGINAL reported bug (routes/emails.js has unguarded `emails` reads)',
-    flags.some(f => f.startsWith('routes/emails.js') && f.endsWith('[emails]')));
+  // The ORIGINAL reported bug (routes/emails.js's unguarded `emails` reads) is
+  // now fixed — harbour's D-0034 pass added the SQL narrowing and the
+  // own.scopeEmails() gate — so asserting against the real file here would
+  // silently degrade into "the file doesn't happen to trip the regex today",
+  // which proves nothing about whether the regex still WORKS. A synthetic,
+  // deliberately-bad fixture is the only way to keep testing the SCANNER
+  // itself rather than the state of a file this scanner no longer needs to
+  // catch anything in. (2026-09-24, C-0027 follow-up.)
+  const os = require('node:os');
+  const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'org-scoping-guard-'));
+  try {
+    fs.writeFileSync(path.join(scratchDir, 'bad-router.js'), [
+      "const express = require('express');",
+      "const router = express.Router();",
+      "router.get('/whatever', async (req, res) => {",
+      "  const { data } = await supabase.from('contacts').select('*');",
+      "  res.json(data);",
+      "});",
+      "module.exports = router;",
+    ].join('\n'));
+    const syntheticFlags = findUnguarded(scratchDir);
+    ok('the scanner still catches an unguarded tenant-table read (synthetic fixture, since the original routes/emails.js bug is now fixed)',
+      syntheticFlags.some(f => f.includes('bad-router.js') && f.endsWith('[contacts]')),
+      JSON.stringify(syntheticFlags));
+
+    fs.writeFileSync(path.join(scratchDir, 'good-router.js'), [
+      "const express = require('express');",
+      "const router = express.Router();",
+      "router.get('/whatever', async (req, res) => {",
+      "  const { data } = await withOrg(supabase.from('contacts').select('*'), req);",
+      "  res.json(data);",
+      "});",
+      "module.exports = router;",
+    ].join('\n'));
+    const goodFlags = findUnguarded(scratchDir).filter(f => f.includes('good-router.js'));
+    ok('...and does NOT flag the same read once it carries withOrg()', goodFlags.length === 0, JSON.stringify(goodFlags));
+  } finally {
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

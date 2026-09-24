@@ -1,12 +1,15 @@
 # Foundry — memory
-> Last written: 2026-09-09 · timezone resolver review (C-0014 origin)
+> Last written: 2026-09-24 · Rampart review blockers pinned, 107/107
 
 ## What is true here now
-- **`npm test` runs 69 suites** via `test/run-all.mjs` and reports one summary
-  (was 68; added `test/timezone-resolver-smoke.mjs` this session).
-  Confirmed **69/69 on both Node 22 (sandbox) and Node 26 (Render's
-  version)** — full log written to a file and grepped for the summary line
-  each time, never piped to `tail`.
+- **`npm test` runs 107 suites** via `test/run-all.mjs` and reports one summary
+  (was 105 at the last count in this file; +2 this session —
+  `email-attachments-smoke.mjs`, `email-history-scope-smoke.mjs`). Confirmed
+  **107/107 on Node 22** this session, full log written to a file and grepped
+  for the summary line, never piped to `tail`. (The 69→105 jump in between
+  happened across several other sessions' work; this file's own count had
+  fallen behind — always trust `test/run-all.mjs`'s own printed total over a
+  remembered number.)
   It judges by **exit code**, not by grepping stdout (the suites print in two
   formats, and a stdout grep mis-reports whole suites as failures).
 - **22 suites are Playwright.** `playwright-core` is a devDependency; Chromium is
@@ -470,3 +473,256 @@ Verified non-vacuous: letting the fill overwrite a non-empty field turned two as
 `import-columns-smoke` 11 → 16 and `lead-fill-smoke` 10 → 11: the owner's real
 "LinkedIn URL" rows (Indeed / Glassdoor / LinkedIn jobs) must land in `jobUrl`.
 Verified by reverting `valueField` — 3 of the new tests fail. Suite 102/102.
+
+## Session 30, round 2 — fixed the one test D-0034 broke, 105/105 clean
+
+D-0034 moved lead visibility to the SERVER (`GET /jobs` now returns only what
+`services/ownership.js` `scopeLeads` allows — `public/js/02-state.js`
+`getMyJobs` no longer re-filters client-side). That left
+`test/team-structure-smoke.mjs`'s "Individual dashboard shows real leads (own
+jobs only, not j4)" step testing a boundary that had moved out from under it:
+it injected a foreign-owner job (`j4`, `created_by: 'someone-else'`) straight
+into `STATE.jobs` and expected the dashboard to filter it client-side — a
+browser-side filter is exactly what D-0034 says is not a boundary.
+
+Fixed by changing what the fixture represents: `STATE.jobs` now holds only
+Ora's own three leads (no `j4` at all), i.e. what the server would actually
+have handed her, and the step asserts the dashboard renders real lead data
+(not the dead `STATE.leads` seed) rather than re-proving the ownership
+boundary. A comment in the test points at `test/scope-jobs-smoke.mjs` as where
+the "never a foreign lead" guarantee now actually lives (it drives the real
+`GET /jobs` route + `scopeLeads`). Did not touch `public/js/*` or `routes/*`.
+
+Ran `test/team-structure-smoke.mjs` alone (20/20) then the full `npm test`
+(background job, log written to a file and grepped for the summary line, never
+piped to `tail`): **105/105 suites passed, exit code 0.**
+
+## Session 30 — D-0034 visibility work pinned (C-0027 answered, C-0018 closed), 105 suites
+
+The owner's report (D-0034): BD Lead 1 owned 25 leads and saw 49; every user
+saw all 119 outreach emails. Six territories landed the fix
+(`services/ownership.js`'s `viewScope`/`canSeeLead`/`canSeeEmail`/… plus every
+route that now calls them). This session turned that into committed tests that
+FAIL when the leak comes back, rather than scratch harnesses that evaporate
+with the session that wrote them.
+
+**Three new suites + one extended, 105 suite files total (was 102 per the last log entry, +3 new
+files +1 extended file; `test/scope-jobs-smoke.mjs`,
+`test/scope-emails-warmup-smoke.mjs`, `test/scope-outreach-pickers-smoke.mjs`
+are new, `test/ownership-smoke.mjs` grew from 37 to 69 assertions):**
+
+* **`test/ownership-smoke.mjs`** (69, was 37) — added rampart's exact
+  32-assertion D-0034 fixture (the live org shape: BD Lead 1's 25-of-59 leads
+  and 56-of-119 emails, reproduced with the owner's own numbers rather than
+  rounded stand-ins) plus **all six mutations C-0027 named**: pool shown to
+  every role, email sight granted via a lead's creator, no-user-id failing
+  OPEN, `role` read before `roles[]` (disagreeing with
+  `middleware/authorize.js`'s `hasRole`), a manager seeing every assigned lead
+  org-wide instead of just their chain, and `bd_lead` added to `POOL_ROLES`.
+  Each mutation is a hand-written LOCAL reimplementation of the real function
+  carrying exactly that one bug — the shipped `services/ownership.js` is never
+  touched — and the assertion is that the mutation FLIPS the real, already-true
+  assertion above it. All six flip. This is what "including the mutations in a
+  committed suite" means for a pure function: not re-running the source file
+  edited-and-restored (which cannot survive being committed), but pinning the
+  BEHAVIOUR the mutation would break.
+* **`test/scope-jobs-smoke.mjs`** (14, new) — `GET /jobs`, `GET /jobs/:id`,
+  `GET /jobs/export` through the REAL `routes/jobs.js` router, the REAL
+  `hierarchy.js` chain walk, and a real `@supabase/supabase-js` client
+  answered by a tiny in-memory PostgREST interpreter. A BD Lead sees exactly
+  self+chain (25 of a 59-lead org, never a SIBLING BD Lead's 24-lead chain,
+  never the pool), a plain BD sees only their own, admin sees all 59 and never
+  a foreign org's lead, RA Lead sees the pool plus exactly what their own RA
+  researched (35, never a different researcher's leads even when those are
+  otherwise assigned within scope by coincidence — the fixture deliberately
+  gives BD Lead 2's leads a DIFFERENT researcher so this isn't a fluke), and
+  `GET /jobs/:id` answers 404 (never 403, never leaking existence) for a
+  same-org-but-out-of-chain id as well as a cross-org one, including for admin
+  on a foreign org. Verified non-vacuous: nulling the chain lookup (simulating
+  "reporting chain not applied") flipped 3 of 14 assertions red; restored.
+* **`test/scope-emails-warmup-smoke.mjs`** (50, new) — adapted from harbour's
+  C-0023/C-0015 scratch proof, kept close to verbatim because the fixture and
+  every stub trick in it cost real debugging time to find (the same reasoning
+  CLAUDE.md gives for the candidate-outreach drip test). Drives `GET /emails`
+  (+`?mine=1`, `is_mine`, `can_retry` — a report's failure is never
+  retryable-looking on a manager's own screen), `GET /emails/sender-summary`
+  (counts only — asserts no subject/body/address/`@` anywhere in the payload),
+  `GET /emails/pending-summary`, `DELETE /emails/:id` (404 for a stranger, 403
+  — row kept — for a manager who can SEE but not touch a report's email),
+  `POST /admin/emails/purge-pending` (scoped to the caller's org even for
+  `all_managers`), `POST /emails` (mark-sent refuses a foreign lead/contact by
+  404, stamps the caller's org on success), `GET/DELETE /suppression`,
+  `/analytics/templates` (RA Lead gets the counts, never a BD's letter as the
+  sample), `/admin/deliverability`, and the warm-up mailbox/thread endpoints
+  — including a historic cross-org warm-up partner's address being withheld
+  while the rest of that thread row still renders.
+* **`test/scope-outreach-pickers-smoke.mjs`** (35, new) — adapted from
+  observatory's C-0024 scratch proof. `GET /outreach/recipients` and
+  `/outreach/company-contacts/:id` scoped per viewer across 7 roles, **and the
+  exact case this job's brief asked for by name**: 30 contacts on a
+  colleague's lead are seeded FIRST in fetch order so a limit spent before
+  filtering would eat every slot, and the caller's own single visible contact
+  (sitting behind all 30 invisible ones) must still come back — it does.
+  `POST /outreach/send` stamps the sender as the new lead's owner;
+  `POST /outreach/convert-lead` is 404 on a colleague's token or tracking-row
+  id and 201, owned by the caller, on their own.
+
+**`test/org-scoping-guard-smoke.mjs` was stale on `main` (10/13, three real
+drift failures) and is fixed, per the four specific asks:**
+* **KNOWN_DEBT refreshed** against the live scan: removed harbour's 15 fixed
+  lines (11 `deliverability.js` + 4 `emails.js`), gateway's 5 `companies.js`
+  and 3 (not 2 — verified against the live scan rather than trusting the
+  job's own count) `jobs.js` lines, and guild's 6 `workflows.js`/`lookups.js`
+  lines — every removal checked against `findUnguarded()` actually not
+  flagging it any more, not assumed.
+* **The handler-splitter bug**: `/\nrouter\.[a-zA-Z]+\(/` required zero
+  indentation, so `routes/warmup.js` (handlers wrapped one level deep inside
+  `module.exports = function(ctx){…}`) collapsed into ONE unsplit block and
+  was **never actually scanned** — indistinguishable from "scanned and clean"
+  in the output. Now `/\n[ \t]*router\.[a-zA-Z]+\(/`. This is the same
+  vacuous-guard shape CLAUDE.md already has three entries for: a check that
+  cannot take its measurement passed anyway.
+* **`orgStamp(` added as an accepted guard** alongside `withOrg(` — without it
+  the scanner flagged `routes/wf.js`'s `POST /wf/definitions` (which the
+  C-0022 fix already stamps correctly via `...orgStamp(req)`) as unguarded, a
+  false positive that would have sat in KNOWN_DEBT forever looking like real
+  debt.
+* **The two microsoft.js/gmail.js OAuth-callback lines are now marked
+  DELIBERATE** with the reasoning inline: those routes run pre-authentication
+  (no `req.user`/`req.orgId`), and the org check is a comparison of two
+  fetched values (`stateUser`'s org vs. `slotForOrgCheck`'s org) rather than a
+  filter clause — a real gap in what this regex can see, not in the route.
+* **The "catches the original bug" assertion** used to point at
+  `routes/emails.js`, which is now fixed — so the assertion had quietly
+  degraded into "this file doesn't happen to trip the regex today", which
+  proves nothing about the regex. Replaced with a synthetic bad/good fixture
+  pair (`fs.mkdtempSync`, cleaned up after) that proves the scanner still
+  flags an unguarded `supabase.from('contacts')` read and still stays quiet
+  once it carries `withOrg(`.
+* **Fixing the handler-splitter widened the scan** into files the OLD, narrower
+  scanner had never looked at at all: `candidate-outreach.js` (3 lines),
+  `gmail.js` (7, mirroring `microsoft.js`), `lead-sources.js` (1, resolved
+  immediately by the `orgStamp(` fix), `sso.js` (1), `warmup.js` (1). None of
+  this is new debt from this session's D-0034 work — it was always there,
+  unmeasured — but it is not foundry's to fix (`routes/*.js`). **Raised as
+  C-0030** to gateway/harbour/guild rather than touched.
+* Verified non-vacuous twice: appending a genuinely new unguarded
+  `supabase.from('contacts')` read to `routes/jobs.js` turned the "no NEW
+  unguarded call" assertion red (restored after); the synthetic fixture pair
+  above is itself the non-vacuous proof for the "catches the original bug"
+  replacement.
+
+**C-0018 closed** — all four items were already done by whoever landed the
+fixes (found while auditing for C-0027, not fixed by foundry): `test/authorize.mjs`
+already carries the corrected `canTouchJob` assertions, and its four numbered
+asks are exactly `test/org-scoping-guard-smoke.mjs`'s four sections (refreshed
+above) plus C-0030 for the newly-surfaced debt. `test/helpers/enter-app.mjs`
+already had `bd_lead`/`director`/`associate_director` (closed by foundry itself,
+2026-09-09, per this file's own earlier log entry).
+
+**One real, minor finding for harbour, not fixed (routes/emails.js:131).**
+Mutation-testing `routes/emails.js` against `test/scope-emails-warmup-smoke.mjs`
+caught 16 of 17 hand-reintroduced bugs; the one MISS was removing the final
+`allData = own.scopeEmails(allData, jobsById, scope);` gate at line 131 while
+leaving the SQL narrowing (`if (senderIds) query = query.in('sent_by',
+senderIds);`) and the `emailsOnOwnedLeads()` secondary fetch (which is already
+restricted to jobs owned within scope) both in place. In the current code both
+of those upstream queries already narrow correctly on their own, so removing
+the final predicate is currently a REDUNDANT line, not a live hole — this
+harness's fixture could not distinguish "belt" from "belt and suspenders."
+Flagging it because CLAUDE.md is explicit that a defence with only one layer is
+how a future refactor of either upstream query (e.g. widening
+`emailsOnOwnedLeads`'s job filter) would silently become exploitable with no
+test catching it — the line at 131 is the ONLY thing that would still be
+correct if that happened, and it should stay.
+
+**Ran, not the full suite** (per this job's explicit instruction — surface is
+mid-edit on the frontend): every new/changed suite individually, plus
+`node test/run-all.mjs ownership scope org-scoping` (6/6) and
+`node test/run-all.mjs scope-outreach` (1/1) to confirm auto-discovery via
+`test/run-all.mjs`'s glob (no manual registration needed — it globs
+`test/*.mjs`). Did not run the Playwright suites or `npm test` as instructed;
+the orchestrator runs the full suite once surface lands. Did not touch
+`routes/`, `services/`, or `public/js/` — every finding above is reported to
+its owning territory rather than fixed here.
+
+## 2026-09-24 — Rampart's two do-not-ship blockers, both now pinned (107 suites)
+
+Rampart's review found two real defects that **105/105 passed with both fully
+present** — the fourth and fifth times a green suite here has proven nothing
+about a specific fault, not the first. Both are already fixed and committed
+(`fb3658b` Gateway, `1671962` Guild); this session's job was to make sure
+neither can come back silently.
+
+**1. `test/email-attachments-smoke.mjs` (8 assertions, new).** The C-0022
+org-scoping edit deleted `MAX_EMAIL_ATTACH_BYTES` from
+`routes/recruiting/outreach.js` while `resolveEmailAttachments` still read it
+inside a per-document `try/catch` — every lookup threw `ReferenceError`, was
+swallowed, and every attachment silently vanished from candidate/client
+emails with no error anywhere. Drives the REAL `POST /candidates/email`
+handler (not a reimplementation) through a real express app + a real
+`@supabase/supabase-js` client on a fake-fetch PostgREST interpreter, with
+`supabase.storage.from().download()` stubbed to real bytes; asserts a real
+attachment object (filename, and content that round-trips byte-for-byte)
+reaches the send call, and that a document belonging to a **different org**
+never comes back — not even by filename.
+**Verified non-vacuous twice:** deleting the constant again dropped 4 of 8
+assertions to FAIL (empty attachments array); removing the `orgId` filter on
+the document lookup made the foreign-org document surface with its real
+filename and bytes attached, failing the leak assertion while everything else
+still passed — i.e. the guard catches EITHER fault on its own, not just both
+together. File restored after each, `node --check` clean.
+
+**2. `test/email-history-scope-smoke.mjs` (12 assertions, new).**
+`GET /email/history`'s "leads" source must apply `canSeeEmail` (sender's
+scope, OR the lead's CURRENT `assigned_to_bd` owner's scope) as its FINAL
+gate over the merged rows — never `canSeeLead`'s wider "created it / was
+assigned to research it / pool" rule, which is exactly the C-0021 finding #2
+this file's own header comment already names. Fixture: an RA who created a
+lead now owned by a BD, an RA Lead managing that RA, the owning BD, the BD's
+manager, and admin — real router, real `hierarchy.js` chain walk, fake
+PostgREST. Confirms: **the RA who only created the lead sees zero of the BD's
+email on it**; **the RA Lead sees zero BD email both on that lead and on a
+pool/recycled lead** (assigned_to_bd null) that the same RA created; **the
+owning BD and their manager still see it**; **admin sees all**.
+
+**Mid-task addition, addressed before finishing:** the coordinator flagged
+rampart's R1 — `LEAD_SELECT` in `routes/email-history.js` omitted `sent_by`,
+so a BD lost sight of their OWN sent email the moment its lead was
+reassigned or recycled, because the SQL projection itself never returned the
+column `canSeeEmail` needs to say "I sent it." Added a fourth job/email pair
+(a lead **reassigned to a different BD, not just released to the pool**) and
+a dedicated assertion, and — the more general fix — **the fake db now
+PROJECTS every returned row to exactly the columns the route's own
+`.select(...)` string names**, the same way real PostgREST does. Before this
+the fixture returned full objects regardless of the select string, which is
+exactly the shape of bug that would have hidden R1 from this suite too: a
+column silently missing from a SQL select is invisible to a fake db that
+doesn't enforce projection. Confirmed R1 was already fixed on disk
+(`LEAD_SELECT` already carries `sent_by`, Gateway's fix landed mid-task) —
+12/12 clean.
+
+**Both suites verified non-vacuous by reintroducing the exact bug named in
+the brief and watching the right assertions fail, then restoring:**
+- deleting `MAX_EMAIL_ATTACH_BYTES` → 4/8 (attachment-content assertions)
+- removing the document org filter → 6/8 (the leak assertion, specifically)
+- removing `sent_by` from `LEAD_SELECT` → 7/12 (every "sender still sees
+  their own email" assertion, including the new reassignment case)
+- swapping the final `own.scopeEmails(...)` gate for a `canSeeLead`-based
+  filter → 7/12 (a DIFFERENT 5 assertions fail than the `sent_by` case, for a
+  reason worth recording: `ownedJobMap`'s jobs query only selects
+  `id,assigned_to_bd`, so a `canSeeLead` check run against those rows can't
+  even see `created_by` — the swap breaks senders seeing their OWN mail too,
+  not just the intended leak. A test that only checked "does the bug leak"
+  would have missed that this particular wrong-predicate swap fails
+  **differently** than expected; asserting the full set of positive AND
+  negative cases is what caught it either way.)
+File restored and `node --check`ed clean after each reintroduction.
+
+Ran the full suite (background job, logged to a file, grepped for the summary
+line, never piped to `tail`): **107/107 suites passed, exit code 0.** No
+`[FAIL]` lines in the log. Did not run Node 26 this round (no parsing/binary
+path touched — both new suites are pure Node + in-memory fakes, no file I/O
+beyond requiring source). Did not touch `routes/`, `services/`, or
+`public/js/` — both fixes were already landed by gateway/guild before this
+job started.

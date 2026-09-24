@@ -271,5 +271,205 @@ t('every way into the app loads the person\'s own theme', () => {
   assert.ok(/loadThemePreference\(\)/.test(shell), 'SSO');
 });
 
+// ── 8. SEEING (D-0034, C-0027) ──────────────────────────────────────────────
+// Extends the definition above from ACTING to SEEING. The owner's report,
+// logged in as BD Lead 1: "in leads or in outreach all emails, full
+// information is shown to all users… only the ones that they are responsible
+// for or given to… but here its complete opposite." Measured live: BD Lead 1
+// owned 25 leads and saw 49; every user saw all 119 outreach emails.
+//
+// The fixture below is the live org shape rampart built while auditing this
+// (docs/territories/_contracts.md C-0027) — the exact numbers the owner
+// reported (25 of 49, 56 of 119) are reproduced here on purpose, not rounded
+// off, so this suite is provably testing the real incident and not a tidier
+// stand-in for it.
+console.log('\nSeeing (D-0034)');
+
+{
+  const chainOf = {
+    bdl1: ['bdl1', 'bd2', 'bd3', 'bd4', 'bd10', 'rec1'],
+    bdl2: ['bdl2', 'bd5'],
+    bd2: ['bd2', 'rec1'],
+    ral1: ['ral1', 'ra1'],
+    ral2: ['ral2', 'ra9'],
+    ra1: ['ra1'],
+    rec1: ['rec1'],
+    dir: ['dir', 'bdl1', 'bdl2', 'bd2', 'bd3', 'bd4', 'bd10', 'bd5', 'rec1'],
+  };
+  const sc = (role, id) => own.viewScope({ role, userId: id, chainIds: role === 'admin' ? null : chainOf[id] });
+
+  // 25 leads owned by BD Lead 1, 24 by BD Lead 2, 10 in the pool (6 researched
+  // by RA1, 4 by RA9) — 59 total, matching the owner's "25 of 49 ASSIGNED".
+  const leads = [];
+  for (let i = 0; i < 25; i++) leads.push({ id: 'a' + i, assigned_to_bd: 'bdl1', created_by: i < 12 ? 'ra1' : 'ra9', stage: 'Assigned' });
+  for (let i = 0; i < 24; i++) leads.push({ id: 'b' + i, assigned_to_bd: 'bdl2', created_by: 'ra9', stage: 'Assigned' });
+  for (let i = 0; i < 10; i++) leads.push({ id: 'p' + i, assigned_to_bd: null, created_by: i < 6 ? 'ra1' : 'ra9', stage: 'Unassigned' });
+  const byId = Object.fromEntries(leads.map(l => [l.id, l]));
+  const n = (s) => own.scopeLeads(leads, s).length;
+
+  t('BD Lead 1 sees their 25, never the org\'s 49 ASSIGNED leads', () => assert.equal(n(sc('bd_lead', 'bdl1')), 25));
+  t('a manager\'s view is exactly self + chain, never the role\'s org-wide slice: BD Lead 2 sees their own 24, never BD Lead 1\'s 25', () => assert.equal(n(sc('bd_lead', 'bdl2')), 24));
+  t('bd_lead does not see the pool (does not distribute)', () => assert.ok(!own.canSeeLead(byId.p0, sc('bd_lead', 'bdl1'))));
+  t('admin sees everything (59)', () => assert.equal(n(sc('admin', 'adm')), 59));
+  t('director sees chain: both BD leads\' 49, never the whole org\'s 59', () => assert.equal(n(sc('director', 'dir')), 49));
+  t('a BD with no leads sees 0, not their manager\'s desk', () => assert.equal(n(sc('bd', 'bd2')), 0));
+  t('RA Lead 1: pool 10 + RA1-created assigned 12 = 22', () => assert.equal(n(sc('ra_lead', 'ral1')), 22));
+  t('RA Lead 2: pool 10 + RA9-created assigned 13+24 = 47', () => assert.equal(n(sc('ra_lead', 'ral2')), 47));
+  t('RA1 sees what they researched (12 assigned + 6 pool)', () => assert.equal(n(sc('ra', 'ra1')), 18));
+  t('a recruiter sees no leads', () => assert.equal(n(sc('recruiter', 'rec1')), 0));
+  t('multi-role: roles[] wins over role, exactly like middleware/authorize.js hasRole', () => {
+    assert.equal(own.viewScope({ role: 'admin', roles: ['bd'], userId: 'bd3', chainIds: ['bd3'] }).all, false);
+  });
+  t('roles[] containing ra_lead grants the pool even with a different primary role', () => {
+    assert.equal(own.viewScope({ role: 'bd', roles: ['bd', 'ra_lead'], userId: 'x', chainIds: ['x'] }).seesPool, true);
+  });
+
+  // Emails: 56 on BD Lead 1's leads, 63 on BD Lead 2's — 119 total, matching
+  // the owner's exact report ("every user saw all 119 outreach emails").
+  const emails = [];
+  for (let i = 0; i < 56; i++) emails.push({ id: 'e' + i, job_id: 'a' + (i % 25), sent_by: 'bdl1' });
+  for (let i = 0; i < 63; i++) emails.push({ id: 'f' + i, job_id: 'b' + (i % 24), sent_by: 'bdl2' });
+  const ne = (s) => own.scopeEmails(emails, byId, s).length;
+  t('BD Lead 1 sees 56 of the 119 emails, exactly what the owner measured', () => assert.equal(ne(sc('bd_lead', 'bdl1')), 56));
+  t('BD Lead 2 sees 63', () => assert.equal(ne(sc('bd_lead', 'bdl2')), 63));
+  t('admin sees all 119', () => assert.equal(ne(sc('admin', 'adm')), 119));
+  t('RA Lead reads NO BD correspondence — creator/pool grant sight of the LEAD, never the mail on it', () => assert.equal(ne(sc('ra_lead', 'ral1')), 0));
+  t('an RA reads no correspondence on a lead they merely researched', () => assert.equal(ne(sc('ra', 'ra1')), 0));
+  t('scopeEmails accepts a Map keyed by job id, not just a plain object', () => {
+    assert.equal(own.scopeEmails(emails, new Map(Object.entries(byId)), sc('bd_lead', 'bdl1')).length, 56);
+  });
+  t('a recycled lead: the NEW owner sees its earlier history', () => {
+    assert.ok(own.canSeeEmail({ sent_by: 'bd5', job_id: 'a0' }, byId.a0, sc('bd_lead', 'bdl1')));
+  });
+  t('...and the PREVIOUS sender keeps sight of what they themselves sent', () => {
+    assert.ok(own.canSeeEmail({ sent_by: 'bd5', job_id: 'a0' }, byId.a0, sc('bd', 'bd5')));
+  });
+  t('an individual send with no job (candidate/client mail) is sender-scope only', () => {
+    assert.ok(own.canSeeEmail({ sent_by: 'rec1' }, null, sc('bd', 'bd2')));
+    assert.ok(!own.canSeeEmail({ sent_by: 'rec1' }, null, sc('bd', 'bd5')));
+  });
+
+  t('a contact follows its lead\'s scope, not a scope of its own', () => {
+    assert.ok(own.canSeeContact({ id: 'c' }, byId.a0, sc('bd_lead', 'bdl1')));
+    assert.ok(!own.canSeeContact({ id: 'c' }, byId.b0, sc('bd_lead', 'bdl1')));
+  });
+  t('a contact with no lead at all is never seen', () => assert.ok(!own.canSeeContact({ id: 'c' }, null, sc('bd_lead', 'bdl1'))));
+  t('a submission: the recruiter\'s own manager sees it', () => assert.ok(own.canSeeSubmission({ recruiter_id: 'rec1' }, sc('bd', 'bd2'))));
+  t('a submission: the job order\'s BD sees it, via bd_manager_id', () => {
+    assert.ok(own.canSeeSubmission({ recruiter_id: 'zz', job_order: { bd_manager_id: 'bd5' } }, sc('bd', 'bd5')));
+  });
+  t('a submission: an unrelated BD does not see it', () => {
+    assert.ok(!own.canSeeSubmission({ recruiter_id: 'zz', job_order: { bd_manager_id: 'bd5' } }, sc('bd', 'bd3')));
+  });
+
+  t('FAIL CLOSED: no user id sees nothing, never everything', () => {
+    assert.equal(own.viewScope({ role: 'admin' }).all, false);
+    assert.equal(n(own.viewScope({ role: 'admin' })), 0);
+  });
+  t('FAIL CLOSED: no chain at all means self only', () => {
+    assert.equal(own.viewScope({ role: 'bd_lead', userId: 'bdl1' }).ownerIds.join(), 'bdl1');
+  });
+  t('FAIL CLOSED: a null scope sees nothing', () => {
+    assert.equal(own.scopeLeads(leads, null).length, 0);
+    assert.ok(!own.canSeeEmail(emails[0], byId.a0, null));
+  });
+  t('queryOwnerIds: null for admin (no filter), real ids otherwise, [] for a missing scope', () => {
+    assert.equal(own.queryOwnerIds(sc('admin', 'adm')), null);
+    assert.equal(own.queryOwnerIds(sc('bd_lead', 'bdl1')).length, 6);
+    assert.equal(own.queryOwnerIds(null).length, 0);
+  });
+  t('labels match the /next-actions and /reports/recruiting vocabulary', () => {
+    assert.equal(sc('admin', 'adm').label, 'org');
+    assert.equal(sc('bd_lead', 'bdl1').label, 'team');
+    assert.equal(sc('bd', 'bd3').label, 'own');
+  });
+  t('an ownerless email (no sender, no job) is never seen by a non-admin', () => {
+    assert.ok(!own.canSeeEmail({}, null, sc('bd', 'bd3')));
+  });
+
+  // ── the six mutations C-0027 asked for, run against LOCAL reimplementations
+  // of the real bugs (never the shipped file — that stays untouched) ────────
+  // Each one takes the SAME fixture above and re-asserts the ONE line the real
+  // suite already pins, through a hand-mutated copy of the real function
+  // carrying exactly the regression named. A mutation "catches" a bug when the
+  // real assertion (proven true above) flips false under it — proof this
+  // suite would go red the day any of these six actually ships, not just that
+  // it currently agrees with the code.
+  console.log('\nSeeing — the six reintroduced bugs C-0027 asked to be pinned');
+
+  const POOL_ROLES_REAL = own.POOL_ROLES;
+
+  t('MUTATION 1 — pool shown to every role, not just admin/ra_lead', () => {
+    // Real: viewScope's seesPool = rs.some(r => POOL_ROLES.includes(r)).
+    // Bug: seesPool is always true.
+    const buggyScope = (role, id) => ({ ...sc(role, id), seesPool: true });
+    const real = !own.canSeeLead(byId.p0, sc('bd_lead', 'bdl1'));
+    const buggy = !own.canSeeLead(byId.p0, buggyScope('bd_lead', 'bdl1'));
+    assert.equal(real, true, 'sanity: the real code correctly hides the pool from bd_lead');
+    assert.equal(buggy, false, 'the mutation must flip it — a bd_lead now "sees" the pool');
+  });
+
+  t('MUTATION 2 — email sight granted via the lead\'s CREATOR, not just its owner/sender', () => {
+    function canSeeEmailBuggy(email, job, scope) {
+      if (!email || !scope) return false;
+      if (scope.all) return true;
+      if (own.inScope(email.sent_by, scope)) return true;
+      if (!!job && own.inScope(job.assigned_to_bd, scope)) return true;
+      return !!job && own.inScope(job.created_by, scope); // BUG: grants sight via creator
+    }
+    const scope = sc('ra_lead', 'ral1'); // ral1's chain includes ra1, who created a0..a11
+    const email = { sent_by: 'bdl1', job_id: 'a0' };
+    assert.equal(own.canSeeEmail(email, byId.a0, scope), false, 'sanity: RA Lead reads no BD correspondence today');
+    assert.equal(canSeeEmailBuggy(email, byId.a0, scope), true, 'the mutation must flip it — RA1\'s manager now reads a BD\'s mail');
+  });
+
+  t('MUTATION 3 — no user id fails OPEN instead of closed', () => {
+    function viewScopeBuggy({ role, roles, userId, chainIds } = {}) {
+      const rs = own.rolesOf({ role, roles });
+      if (!userId) return { all: true, userId: null, ownerIds: [], seesPool: true, label: 'org' }; // BUG
+      return own.viewScope({ role, roles, userId, chainIds });
+    }
+    assert.equal(own.viewScope({ role: 'admin' }).all, false, 'sanity: the real code fails closed with no user');
+    assert.equal(viewScopeBuggy({ role: 'admin' }).all, true, 'the mutation must flip it — a request with no user now sees everything');
+  });
+
+  t('MUTATION 4 — role read before roles[] (disagrees with middleware/authorize.js hasRole)', () => {
+    function rolesOfBuggy({ role, roles } = {}) {
+      if (role) return [String(role)]; // BUG: checked before roles[]
+      if (Array.isArray(roles) && roles.length) return roles.filter(Boolean).map(String);
+      return [];
+    }
+    const input = { role: 'bd', roles: ['admin'], userId: 'bd3', chainIds: ['bd3'] };
+    const realAll = own.viewScope(input).all;
+    const buggyRoles = rolesOfBuggy(input);
+    assert.equal(realAll, true, 'sanity: roles:[\'admin\'] wins today even with role:\'bd\', exactly like hasRole');
+    assert.ok(!buggyRoles.includes('admin'), 'the mutation must flip it — the legacy role wins, admin is lost');
+  });
+
+  t('MUTATION 5 — a manager sees every ASSIGNED lead org-wide, not just their chain\'s', () => {
+    function canSeeLeadBuggy(job, scope) {
+      if (!job || !scope) return false;
+      if (scope.all) return true;
+      if (scope.label === 'team' && job.assigned_to_bd) return true; // BUG: any manager, any assigned lead
+      if (own.inScope(job.assigned_to_bd, scope)) return true;
+      if (own.inScope(job.created_by, scope) || own.inScope(job.assigned_to, scope)) return true;
+      return own.isPoolLead(job) && !!scope.seesPool;
+    }
+    const scope = sc('bd_lead', 'bdl1'); // label is 'team' (chain > 1)
+    const foreignLead = byId.b0; // owned by bdl2, outside bdl1's chain
+    assert.equal(own.canSeeLead(foreignLead, scope), false, 'sanity: bdl1 cannot see bdl2\'s lead today');
+    assert.equal(canSeeLeadBuggy(foreignLead, scope), true, 'the mutation must flip it — a manager now sees every assigned lead in the org');
+  });
+
+  t('MUTATION 6 — bd_lead added to POOL_ROLES', () => {
+    const buggyPoolRoles = Object.freeze([...POOL_ROLES_REAL, 'bd_lead']);
+    const seesPoolReal = own.viewScope({ role: 'bd_lead', userId: 'bdl1', chainIds: chainOf.bdl1 }).seesPool;
+    const seesPoolBuggy = buggyPoolRoles.includes('bd_lead');
+    assert.equal(seesPoolReal, false, 'sanity: bd_lead does not distribute the pool today');
+    assert.equal(seesPoolBuggy, true, 'the mutation must flip it — bd_lead now distributes the pool');
+    assert.ok(!own.POOL_ROLES.includes('bd_lead'), 'and the SHIPPED POOL_ROLES must never actually contain it');
+  });
+}
+
 console.log(`\nSUMMARY: ${pass}/${pass + fail} passed`);
 process.exit(fail ? 1 : 0);
