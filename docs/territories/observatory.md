@@ -378,3 +378,4 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
   is flagged, because its param regex swallows the `(` of `map(` into the name.
   Write a named arrow (`const runClause = (clause) => …; list.map(runClause)`).
   The suite is foundry's; do not edit it to suit.
+- **Session 30 (rampart review):** the candidate opt-out (`routes/candidate-outreach.js:374`) now passes `row.org_id` to `addToSuppression`, so the suppression row is filed under the sending org, not the default one (whose admin could delete it and re-open email). It was the only suppression write in Observatory's files.
