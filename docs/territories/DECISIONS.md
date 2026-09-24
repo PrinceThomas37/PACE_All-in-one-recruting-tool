@@ -47,6 +47,29 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0037 · 2026-09-24 · STANDS · Take-over requests: the CURRENT OWNER's manager approves; a new table is fine
+**Their words:** *"okay, build the take-over request next"*. Asked who approves a
+request for a record owned by someone on a DIFFERENT manager's team, they chose
+**"Current owner's manager"** (over "asker's manager only" and "both managers").
+Asked whether a new table may be added to the live database at merge: **"Yes, add
+it"**.
+
+**The rule (refines D-0036's approver):**
+* A request to take over a lead / client / job order goes to **the current
+  owner's manager** — it is their team losing the record. Same team: that is
+  also the asker's manager, so D-0036 still reads true there.
+* The current owner has **no manager** → the **admin**.
+* The record has **no owner** (e.g. Unassigned pool) → the **asker's manager**
+  (admin if none), per D-0036.
+* **Nobody approves their own request** — if the approver would be the asker
+  (a manager asking for a report's record), it goes to the admin.
+* The current owner is TOLD (a line on their list), and does not have to agree.
+* Approving reassigns through the existing assignment paths; declining leaves
+  everything as it was. Every request, decision and decider is kept (the table).
+
+**Re-open when:** the owner wants the current owner to be able to object, or a
+second approver on cross-team moves.
+
 ### D-0036 · 2026-09-23 · STANDS · RA Lead scope confirmed; ownership changes by request, approved by the requester's manager
 **Their words:** on the RA Lead (rampart's D4): *"YEs thats fine"*. On a
 "request to take over this client" step: *"yes to the person to which the user

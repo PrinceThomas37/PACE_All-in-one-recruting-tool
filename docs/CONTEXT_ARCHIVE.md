@@ -5992,3 +5992,6 @@ All 11 findings verified closed; no cross-company path found. R1 (MED, fails clo
 R1 (sender keeps own emails) and R2/R3 owner gates landed; R5 mailbox OAuth state carries p:"mailbox" and auth() refuses any token with p. Foundry pinned both review blockers (email-attachments-smoke, email-history-scope-smoke; fake db projects rows to the route's own select). Full suite 107/107. CLAUDE.md, CAPABILITIES ("Seeing only what you're responsible for"), ROADMAP R-046 DONE. Open follow-ups: R-047 (ownership requests), R-048 (lookups index), R-049 (platform operator), C-0029 (client ownership hint), rampart R4 (page-size limits), ledger: opt-outs per-company vs global. Owner action: rotate the three AI keys (readable via /app-settings until this merge).
 
 Merged #231 (`2b95420`).
+
+# Session 30 (cont.) — R-047 take-over requests
+Owner: "build the take-over request next". Decided D-0037: the CURRENT OWNER's manager approves (admin if none; unowned → asker's manager; nobody approves their own); new table OK at merge. IN FLIGHT: rampart (rule), deep (migration), then gateway/guild routes, surface screens, foundry tests.
