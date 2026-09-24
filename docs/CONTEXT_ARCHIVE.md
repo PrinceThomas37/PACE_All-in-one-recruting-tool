@@ -6048,3 +6048,6 @@ Worked directly (not via subagents) on branch `claude/confident-hypatia-l8ma42`.
   suite 108/108 before the last suite was added.
 
 - 2026-09-24: owner said "merge it". Checked the parallel chat first: its work was merged through #232 (already inside this branch); its branch holds one docs-only commit ("Record #232 as merged") not yet on main — left for that chat. Merged #233 (`94a890b`).
+
+### Round 2 — client intelligence designed, not built (2026-09-24)
+Owner: build the client timeline + AI summary first, OFF until they say, and design the token and storage use first; PACE must fit any industry. Measured: 77 stored inbound messages, only 3 tied to a contact (the rest job-board alerts, account mail, unknown senders). Design: `docs/CLIENT_INTEL_DESIGN.md` (gate → file ~2 KB → free facts → rationed incremental AI summary; everything switched off by default; per-company playbook for industry fit). D-0039, R-051 DOING, R-054 new.
