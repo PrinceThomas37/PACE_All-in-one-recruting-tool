@@ -46,12 +46,18 @@ module.exports = function (app, ctx) {
   // own comment warned about. Fetch the same rows gateway's version reads
   // (job orders, leads, the company) and hand them to the shared function
   // instead of re-deriving the ladder here.
+  // R-047 L4: the rows feeding clientOwnerFrom must stay newest-first and
+  // bounded, same as before this was centralised — an old client can carry
+  // years of closed job orders / recycled leads, and clientOwnerFrom only
+  // ever wants the single newest owned row of each kind.
   async function clientOwnerId(req, companyId) {
     const [{ data: jos }, { data: leads }, { data: co }] = await Promise.all([
       withOrg(supabase.from('job_orders')
-        .select('bd_manager_id,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null), req),
+        .select('bd_manager_id,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null)
+        .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req),
       withOrg(supabase.from('jobs')
-        .select('assigned_to_bd,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null), req),
+        .select('assigned_to_bd,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null)
+        .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req),
       withOrg(supabase.from('companies')
         .select('id,created_by').eq('id', companyId), req).maybeSingle(),
     ]);

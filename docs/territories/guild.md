@@ -506,3 +506,50 @@ Verified: `node --check` on all three files; `test/recruiting-routes-mounted.mjs
 (14/14) — all green. No dedicated pipeline-delete test file exists yet
 (foundry writing tests concurrently). Did not run full `npm test`; did not commit.
 
+
+## Session 30 round 3 — R-047 do-not-ship fixes (lead_id / can_request / clientOwnerId bound)
+Rampart's blocker: a lead id on the duplicate responses is handed to exactly
+the people D-0034 hides that lead from. Fixed per rampart's chosen option (a)
+— **removed `lead_id` from both responses**; the take-over path resolves the
+lead from the typed/matched email server-side (D-0038's
+`viaDuplicateEmailMatch`), never from an id the browser hands back.
+- `routes/workflows.js` `POST /jobs/check-duplicates` → now
+  `{email, duplicate, owner_name, since, can_request}` per duplicate (was
+  `+lead_id`). `can_request` is no longer `assigned_to_bd !== caller` — it is
+  computed with `own.canRequestTakeover({kind:'lead', record: job, requester,
+  scope, viaDuplicateEmailMatch:true})` (F2), so an RA, a recruiter or an admin
+  never sees a link that would then refuse (role/admin/already-pending are now
+  checked before the link is offered). Needs `job.org_id`/`job.deleted_at` in
+  the select for that check to run — added.
+- `routes/lookups.js` `POST /contacts/check-email` → now
+  `{duplicate, days_ago, added_by, can_request}` (was
+  `+company, +lead_id`; D5 says owner + date only). Same `canRequestTakeover`
+  call, same reasoning. Added `own`/`reportingChainIds` imports (same fallback
+  pattern as `workflows.js`/`wf.js` for a narrower mount).
+- **Left for gateway/surface — not mine to touch:** `public/js/52-poc-block.js`
+  (:139-142) reads `d.company` and gates/builds its "Ask to take over" link on
+  `d.can_request && d.lead_id`, and `public/js/14-mailmerge-engine.js`
+  (:595-599) does the same for the batch duplicate-import warning. Both fields
+  are now gone from these two responses. `otOpen('lead', recordId, viaEmail,
+  …)` (`56-ownership-requests.js`) still takes a `recordId` — with no lead id
+  to hand it for these two call sites, gateway's `/ownership-requests` (or the
+  `can-request` GET) needs a mode that resolves the record from `via_email`
+  alone for the lead case, and surface's two files need to stop reading
+  `lead_id`/`company` and call `otOpen` with no record id (or whatever shape
+  gateway picks). `can_request` alone is now sufficient to decide whether to
+  draw the link at all.
+- `routes/recruiting/outreach.js`'s `clientOwnerId` (L4): the three queries
+  feeding `clientOwnerFrom` had gone unbounded (every JO/lead of a company,
+  unordered) when this was centralised onto rampart's ladder — restored the
+  original bound (`.not(<owner field>, 'is', null).order('created_at',
+  {ascending:false}).limit(1)` on both the job_orders and jobs queries), so an
+  old client with years of closed job orders/recycled leads still costs two
+  single-row fetches, not two full-table ones.
+- **Verification:** `node --check` on all three touched files;
+  `test/ownership-smoke.mjs` (69/69), `test/ownership-requests-smoke.mjs`
+  (36/36), `test/recruiting-routes-mounted.mjs` (7/7, 64 routes, order
+  unchanged), `test/lead-stage-permission.mjs` (13/13),
+  `test/route-shadowing-smoke.mjs` (9/9), `test/workflow-gating-smoke.mjs`
+  (25/25), `test/submission-review-smoke.mjs` (16/16),
+  `test/stage-consolidation-smoke.mjs` (14/14) — all green. Did not run full
+  `npm test`; did not commit.
