@@ -59,10 +59,15 @@ router.post('/contacts/check-email', auth, async (req, res) => {
     const c = data[0];
     const daysSince = Math.floor((new Date() - new Date(c.created_at)) / 86400000);
     const job = c.job || {};
+    // D-0038: lead_id (for "Ask to take over") + can_request (false only when
+    // the caller already owns this lead) — the eligibility check runs again,
+    // fully, when the actual POST /ownership-requests is made.
     res.json({
       duplicate: true, days_ago: daysSince,
       added_by: (job.owner && job.owner.name) || null,
       company: (job.company && job.company.name) || '',
+      lead_id: job.id || null,
+      can_request: !!job.id && job.assigned_to_bd !== req.user.id,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

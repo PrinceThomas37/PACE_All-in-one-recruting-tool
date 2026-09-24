@@ -320,6 +320,10 @@ router.post('/jobs/check-duplicates', auth, async (req, res) => {
     if (error) throw error;
     // Shape per the coordinator/gateway agreement (D5): whose lead it is and
     // since when — never the other lead's company/position/contact.
+    // D-0038: also the lead id (so the screen can offer "Ask to take over")
+    // and can_request (false only when the caller already owns this lead —
+    // the full eligibility check happens server-side again on the actual
+    // POST /ownership-requests, this is just what hides the button).
     const duplicates = (data || []).map(c => {
       const job = c.job || {};
       return {
@@ -327,6 +331,8 @@ router.post('/jobs/check-duplicates', auth, async (req, res) => {
         duplicate: true,
         owner_name: (job.owner && job.owner.name) || null,
         since: c.created_at || null,
+        lead_id: job.id || null,
+        can_request: !!job.id && job.assigned_to_bd !== req.user.id,
       };
     });
     res.json({ duplicates });

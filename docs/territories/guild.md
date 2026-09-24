@@ -461,6 +461,33 @@ and ran `node scripts/territory-map.mjs` to regenerate `_map.json`/
 `island.html` — 27 files, 6,397 lines now attributed here.
 
 
+## Session 30 round 3 — D-0038 wiring: lead_id + can_request, and one ownership ladder
+- **The two D5 duplicate-check responses now carry `lead_id` and
+  `can_request`**, so the screen can offer "Ask to take over" straight off the
+  warning (D-0038) without a second lookup and without leaking anything new —
+  still only `owner_name`/`since` (or `added_by`/`company`) about the OTHER
+  lead. `can_request` is the narrow question the field name promises: `false`
+  only when the caller already owns that lead (`assigned_to_bd === req.user.id`)
+  or there is no lead to ask for; it is deliberately NOT the full
+  `ownership.canRequestTakeover` check (role, org, already-pending) — that
+  runs for real, server-side, when `POST /ownership-requests` is actually
+  called. This just decides whether the button renders.
+  - `routes/workflows.js` `POST /jobs/check-duplicates` → `{email, duplicate,
+    owner_name, since, lead_id, can_request}` per duplicate.
+  - `routes/lookups.js` `POST /contacts/check-email` → `{duplicate, days_ago,
+    added_by, company, lead_id, can_request}`.
+- **`routes/recruiting/outreach.js`'s `clientOwnerId` no longer re-derives the
+  client ownership ladder** — it fetches the same rows (job orders, leads, the
+  company) and hands them to rampart's `services/ownership.js`
+  `clientOwnerFrom`, the one place D-0038 names for this ladder. Was a
+  byte-for-byte mirror of gateway's `routes/companies.js` copy; now both read
+  the same function instead of needing to stay in sync by hand.
+- **Verification:** `node --check` on all three touched files;
+  `test/workflow-gating-smoke.mjs` (25/25), `test/recruiting-routes-mounted.mjs`
+  (7/7, 64 routes, order unchanged), `test/lead-stage-permission.mjs` (13/13),
+  `test/submission-review-smoke.mjs` (16/16). Did not run full `npm test`; did
+  not commit.
+
 ## Session 30 round 2 — Rampart re-review R2/R3
 `DELETE /job-orders/:id/recruiters/:rid` (routes/recruiting/job-orders.js
 ~:778) checked `isBDM` only, so any BD manager in the org could unassign a
@@ -478,3 +505,4 @@ Verified: `node --check` on all three files; `test/recruiting-routes-mounted.mjs
 (25/25), `test/lead-stage-permission.mjs` (13/13), `test/stage-consolidation-smoke.mjs`
 (14/14) — all green. No dedicated pipeline-delete test file exists yet
 (foundry writing tests concurrently). Did not run full `npm test`; did not commit.
+
