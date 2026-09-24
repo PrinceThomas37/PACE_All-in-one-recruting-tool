@@ -274,7 +274,11 @@
     if(!count) return '';
     return '<div class="card" style="padding:9px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="font-size:12.5px;color:var(--text2)"><b>'+count+'</b> selected</span>'+
-      '<button class="btn btn-sm btn-primary" onclick="plSequenceSelected()">▶ Start sequence</button>'+
+      // Session 31: the owner asked for an email option here. It is NOT the
+      // removed D-0012 flow coming back — it opens the one survivor, Email →
+      // Compose → Candidates, with this job and these people already picked.
+      '<button class="btn btn-sm btn-primary" onclick="plEmailSelected()">✉ Email about this job</button>'+
+      '<button class="btn btn-sm btn-outline" onclick="plSequenceSelected()">▶ Start sequence</button>'+
       // D-0012: "✉ Email JD to candidates" lived here. It was the second way to
       // do one thing — Email → Compose → Candidates is the survivor, and the job
       // description now travels inside that email as a formatted panel instead
@@ -300,6 +304,15 @@
   };
   window.plClearSel = function(){ STATE.bd.plSel={}; plRepaintSelection(); };
   window.plSetSort = function(m){ STATE.bd.plSort=m; render(); };
+  window.plEmailSelected = function(){
+    var ids = plSelectedRows().map(function(p){ return p.candidate_id; }).filter(Boolean);
+    if(!ids.length) return;
+    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
+    var j = (STATE.bd.jobOrders||[]).find(function(x){ return x.id===jid; }) || {id:jid};
+    if(!window.candOutreachStartFor){ showToast('The email screen is not loaded','error'); return; }
+    candOutreachStartFor({ id:jid, job_code:j.job_code, job_title:j.job_title||'this job', client:j.client||'',
+      place:[j.city,j.state].filter(Boolean).join(', '), status:j.status }, ids);
+  };
   window.plSequenceSelected = function(){
     // Sequencing enrolls a submitted candidate — only promoted rows qualify.
     var promoted = plSelectedRows().filter(function(p){ return p.submission_id; });

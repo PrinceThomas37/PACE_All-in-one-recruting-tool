@@ -135,7 +135,7 @@ window.wfEnrollSelectionInto=function(workflowId,entityType,items){
       var msg='Enrolled '+(r.enrolled||0)+(r.skipped?', '+r.skipped+' already in it':'')+(r.errors&&r.errors.length?', '+r.errors.length+' failed':'');
       if(r.rotation&&r.rotation.length)msg+=' · rotating across '+r.rotation.length+' mailbox'+(r.rotation.length>1?'es':'');
       showToast(msg,(r.enrolled?'success':'warning'));
-      STATE.wfStart=null; if(STATE.bd)STATE.bd.seqSel=[]; if(STATE.leadSeqSel)STATE.leadSeqSel={};
+      STATE.wfStart=null; if(STATE.bd){STATE.bd.seqSel=[];STATE.bd.candSel={};} if(STATE.leadSeqSel)STATE.leadSeqSel={};
       if(STATE.ats)STATE.ats.sel={};
       closeModal(); loadWorkflows();
     })

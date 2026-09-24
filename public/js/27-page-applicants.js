@@ -167,6 +167,7 @@
       { id:'sourcing', label:'Sourcing',                        onclick:"atsSetView('sourcing')" }
     ], a.view||'grid',
       (canManage?'<button class="btn btn-outline btn-sm" onclick="atsOpenLookupsManager()">Manage lists</button>':'')+
+      '<button class="btn btn-outline btn-sm" onclick="atsOpenBulkUpload()">'+UI.ic('plus')+'Upload resumes</button>'+
       '<button class="btn btn-primary btn-sm" onclick="atsOpenNew()">'+UI.ic('plus')+'New Candidate</button>');
 
     // ── stat strip: total + one cell per status, each a filter ────────────
@@ -234,7 +235,10 @@
     var bulkBar = selIds.length ?
       '<div class="card" style="padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">'+
         '<span style="font-size:12.5px;color:var(--ink2)"><b>'+selIds.length+'</b> selected</span>'+
-        '<button class="btn btn-sm btn-primary" onclick="atsSequenceSelected()">'+UI.ic('send')+'Add to email sequence</button>'+
+        // Session 31: tag the whole selection to a job in one go — it used to
+        // be one row, one picker, one click, twelve times over.
+        '<button class="btn btn-sm btn-primary" onclick="atsAddSelectedToJob()">'+UI.ic('plus')+'Add to job</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="atsSequenceSelected()">'+UI.ic('send')+'Add to email sequence</button>'+
         '<button class="btn btn-sm btn-outline" onclick="atsClearSel()">Clear</button>'+
       '</div>' : '';
 
@@ -471,15 +475,13 @@
     var modalTitle = editing ? ('Edit Candidate'+(f.candidate_code?' '+code(f.candidate_code):''))
       : (jobCtx ? ('Add Candidate'+(jobCtx.jobTitle?' — '+esc(jobCtx.jobTitle):'')) : 'New Candidate');
     var saveLabel = editing ? 'Save changes' : (jobCtx ? 'Create & add to job' : 'Create candidate');
-    var ownerSel = '';
-    if (isBDMlike(u)) {
-      var owners = (STATE.users||[]).filter(function(x){ return userHasAnyRole(x,'admin','bd','bd_lead','recruiter'); });
-      ownerSel = fld('Ownership',
-        '<select class="sel" onchange="atsFormSet(\'owner_id\',this.value)">'+
-          '<option value="">'+esc(u.name)+' (me)</option>'+
-          owners.map(function(o){ return '<option value="'+o.id+'"'+(f.owner_id===o.id?' selected':'')+'>'+esc(o.name)+'</option>'; }).join('')+
-        '</select>');
-    }
+    // OWNERSHIP IS SHOWN, NOT CHOSEN (Session 31, the owner's call). The form
+    // used to let a BD hand a new candidate to anybody from a dropdown. The
+    // owner is whoever creates the record; on edit it is whoever that was.
+    var ownerNameShown = editing ? ((f.owner && f.owner.name) || (f.creator && f.creator.name) || '—') : (u.name || 'You');
+    var ownerSel = fld('Owner',
+      '<div class="sel" style="background:var(--bg);color:var(--text2);cursor:default" title="The person who added this candidate">'+
+        esc(ownerNameShown)+(editing?'':' <span style="color:var(--text3)">(you)</span>')+'</div>');
 
     var dup = STATE.ats.dupMatches.length ? (
       '<div class="warn-panel warn-panel-sm">'+
@@ -552,6 +554,8 @@
     var f = STATE.ats.form;
     if (!f.full_name || !f.full_name.trim()){ showToast('Full name is required','error'); return; }
     var payload = Object.assign({}, f); if (force) payload.force = true;
+    // Never send an owner from this form — the server stamps the creator.
+    delete payload.owner_id; delete payload.owner; delete payload.creator;
 
     if (STATE.ats.editId){
       var editId = STATE.ats.editId;
@@ -595,8 +599,17 @@
   // ── add a candidate to a job — type-to-search the job by id / title / client ─
   window.atsAddToJob = function(cid){
     var c = STATE.ats.rows.find(function(x){ return x.id===cid; }) || {};
+    atsPickJobFor([cid], c.full_name||'candidate');
+  };
+  window.atsAddSelectedToJob = function(){
+    var ids = Object.keys(STATE.ats.sel).filter(function(k){ return STATE.ats.sel[k]; });
+    if (!ids.length){ showToast('Select candidates first','error'); return; }
+    atsPickJobFor(ids, ids.length+' candidate'+(ids.length===1?'':'s'));
+  };
+  // The ONE job picker, for one candidate or many. `cids` is always a list.
+  window.atsPickJobFor = function(cids, name){
     apiGet('/job-orders').then(function(jobs){
-      STATE.ats._jobPick = { cid:cid, name:c.full_name||'candidate', jobs:jobs||[], q:'' };
+      STATE.ats._jobPick = { cids:cids, cid:cids[0], name:name||'candidate', jobs:jobs||[], q:'' };
       atsRenderJobPick();
     }).catch(function(e){ showToast('Failed to load jobs: '+e.message,'error'); });
   };
@@ -609,7 +622,8 @@
       return [j.job_code,j.job_title,j.client].some(function(v){ return String(v||'').toLowerCase().indexOf(q)>-1; });
     }).slice(0,30);
     var rows = list.map(function(j){
-      return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:6px;cursor:pointer" onclick="atsDoAddToJob(\''+jp.cid+'\',\''+j.id+'\')">'+
+      var go = (jp.cids&&jp.cids.length>1) ? 'atsDoAddManyToJob(\''+j.id+'\')' : 'atsDoAddToJob(\''+jp.cid+'\',\''+j.id+'\')';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:6px;cursor:pointer" onclick="'+go+'">'+
         '<div><div style="font-weight:600;font-size:13px">'+esc(j.job_title||'')+' '+code(j.job_code||'')+'</div>'+
         '<div style="font-size:11px;color:var(--text3)">'+esc(j.client||'')+(j.status?' · '+esc(j.status):'')+'</div></div>'+
         '<span class="btn btn-sm btn-primary">Tag</span>'+
@@ -621,7 +635,7 @@
         '<div style="padding:18px 20px">'+
           '<input class="sel" placeholder="Search by job ID, title, or client…" value="'+esc(jp.q)+'" oninput="atsJobPickSearch(this.value)" style="margin-bottom:10px">'+
           '<div style="max-height:40vh;overflow-y:auto">'+rows+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Tags the candidate into the job pipeline. Promote to a submission from the job\'s Pipeline tab.</div>'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Puts '+((jp.cids&&jp.cids.length>1)?'them':'the candidate')+' on the job at Sourced — they show on the job\'s own page straight away.</div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
           '<button class="btn btn-outline" onclick="closeModal()">Close</button>'+
@@ -629,10 +643,25 @@
       '</div>';
     render();
   }
+  // Many at once: one request, and the answer says what happened to each kind
+  // of row — added, already there, or something that needs a look.
+  window.atsDoAddManyToJob = function(jid){
+    var jp = STATE.ats._jobPick; if(!jp||!jid) return;
+    var job = (jp.jobs||[]).find(function(j){ return j.id===jid; }) || {};
+    showToast('Adding '+jp.cids.length+' candidates to '+(job.job_title||'the job')+'…','info');
+    apiPost('/pipeline/bulk', { candidate_ids:jp.cids, job_order_id:jid }).then(function(r){
+      var parts = [];
+      if (r.added) parts.push(r.added+' added');
+      if (r.already) parts.push(r.already+' already on it');
+      if (r.failed||r.not_found) parts.push((r.failed+r.not_found)+' could not be added');
+      showToast((job.job_title||'Job')+': '+(parts.join(' · ')||'nothing to add'), (r.failed||r.not_found)?'warning':'success');
+      STATE.ats._jobPick=null; STATE.ats.sel={}; closeModal();
+    }).catch(function(e){ showToast('Failed: '+e.message,'error'); });
+  };
   window.atsDoAddToJob = function(cid, jid){
     if(!jid){ showToast('Pick a job','error'); return; }
     apiPost('/pipeline', { candidate_id:cid, job_order_id:jid }).then(function(){
-      showToast('Tagged to job pipeline','success'); STATE.ats._jobPick=null; closeModal();
+      showToast('Added to the job','success'); STATE.ats._jobPick=null; closeModal();
     }).catch(function(e){
       if (/already tagged/i.test(e.message)) showToast('Candidate already in that pipeline','error');
       else showToast('Failed: '+e.message,'error');

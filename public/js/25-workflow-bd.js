@@ -77,167 +77,44 @@
     return apiGet('/job-orders/'+joId+'/submissions').then(function(d){return d||[];}).catch(function(){return[];});
   }
 
-  // ── NAV injection ──────────────────────────────────────────────────────────
-  var _origRender=window.render;
-  window.render=function(){
-    _origRender.apply(this,arguments);
-    if(STATE.page==='leads')injectLeadsTaskbar();
-    // The four BD pages are drawn by the shell (UI.registerPage below); this
-    // wrapper no longer repaints #content behind it.
-  };
-
-  // (BD nav items — Jobs / My Jobs — are now built by the sidebar in
-  // 04-shell-login.js; page titles come from its pageTitles map.)
-
-  // ── Leads page task bar ────────────────────────────────────────────────────
-  function injectLeadsTaskbar(){
-    var u=STATE.user; if(!u||!isBDM(u))return;
-    var content=document.getElementById('content'); if(!content)return;
-    if(content.querySelector('[data-bd-taskbar]'))return;
-    var sel=Object.keys(STATE.bd.leadSel).filter(function(id){return STATE.bd.leadSel[id];});
-    var connSel=sel.filter(function(id){
-      var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
-      return j&&j.stage==='Connected';
-    });
-    var bar=document.createElement('div');
-    bar.setAttribute('data-bd-taskbar','1');
-    bar.className='card';
-    bar.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 14px;margin:0 0 12px 0;flex-wrap:wrap';
-    bar.innerHTML=
-      '<span style="font-size:12.5px;color:var(--ink2)">Select connected leads to convert into jobs.</span>'+
-      '<span style="font-size:12px;color:var(--ink3)">'+sel.length+' selected'+(sel.length?' · '+connSel.length+' connected':'')+'</span>'+
-      '<div style="margin-left:auto;display:flex;gap:8px">'+
-        (sel.length?'<button class="btn btn-sm btn-outline" onclick="bdClearLeadSel()">Clear</button>':'')+
-        '<button class="btn btn-sm btn-primary" '+(connSel.length?'':'disabled style="opacity:.5;cursor:not-allowed"')+' onclick="bdConvertSelected()">Convert to Job'+(connSel.length>1?' ('+connSel.length+')':'')+'</button>'+
-      '</div>';
-    // Insert into the page BODY, not above the page. On a kit page the frame is
-    // tabs → strip → toolbar → .pg-body, and dropping a bar in front of all of
-    // that put it above the page's own identity. `.page` is the pre-kit
-    // fallback, for the screens that have not been converted yet.
-    var host=content.querySelector('.pg-body')||content.querySelector('.page')||content.firstElementChild;
-    if(host)host.insertBefore(bar,host.firstChild);else content.insertBefore(bar,content.firstChild);
-    addLeadCheckboxes();
-  }
-
-  // ── THE CONVERT PICKER — item 4 of docs/AGEING_UI_PLAN.md ─────────────────
-  // This drew EVERY lead ever marked Connected as a chip: no date bound, no
-  // cap, and the ones already converted stayed forever, greyed out with a tick.
-  // 19 chips in the owner's screenshot. ~400 in two years, stacked above the
-  // table they exist to help you use.
+  // ── Converting a lead (Session 31) ─────────────────────────────────────────
+  // There used to be a "Select connected leads to convert" bar injected above
+  // the Leads table, plus a chip picker. The owner found its Convert button
+  // stayed dead until a lead was ticked in BOTH places, and once lit it never
+  // went out: the bar was written into the DOM once and the render engine,
+  // which only rewrites what changed, never rewrote it. It is gone. A connected
+  // lead now carries its own Convert button (on the row and in its expanded
+  // panel), and the Connected count on the strip filters the table itself.
   //
-  // Two rules from the plan, applied here:
-  //   * a picker you SCAN does not survive its own success — past PICKER_CAP it
-  //     becomes a field you TYPE in, because ticking one of 400 is worse than
-  //     typing three letters. The interaction changes shape, it does not just
-  //     get taller;
-  //   * finished things leave — a converted lead is done and is gone from the
-  //     picker entirely, not dimmed in place. It is still on the Leads page and
-  //     still in the database; it is simply no longer a thing you can pick.
-  function addLeadCheckboxes(){
-    var content=document.getElementById('content'); if(!content)return;
-    if(content.querySelector('[data-bd-leadpick]'))return;
-    var already=STATE.bd.jobOrders.map(function(o){return o.source_lead_id;});
-    var connected=(STATE.jobs||[]).filter(function(j){
-      return j.stage==='Connected' && already.indexOf(j.id)<0;
-    });
-    if(!connected.length)return;
-
-    // Newest first: the lead you just connected is the one you came to convert.
-    connected.sort(function(a,b){
-      return String(b.created_at||b.date||'').localeCompare(String(a.created_at||a.date||''));
-    });
-
-    var q=(STATE.bd.leadPickSearch||'').trim().toLowerCase();
-    var mode=UI.pickerMode(connected.length);
-    var pool=connected;
-    if(q){
-      pool=connected.filter(function(j){
-        return [j.position,j.pos,j.company_name].some(function(v){
-          return String(v||'').toLowerCase().indexOf(q)>-1;
-        });
-      });
-    }
-    // In search mode an untyped picker shows only the most recent few — the
-    // rest are reachable by typing, and the count says how many that is.
-    var shown = (mode==='search'&&!q) ? pool.slice(0,UI.PICKER_RECENT) : pool.slice(0,50);
-
-    function chip(j){
-      var on=STATE.bd.leadSel[j.id]?'checked':'';
-      return '<label class="lp-chip">'+
-        '<input type="checkbox" '+on+' onchange="bdToggleLead(\''+j.id+'\',this.checked)">'+
-        '<span class="lp-pos">'+esc(j.position||j.pos||'')+'</span>'+
-        '<span class="lp-co">'+esc(j.company_name||'')+'</span>'+
-      '</label>';
-    }
-
-    // Selected leads always stay visible, even when a search excludes them —
-    // otherwise typing silently hides what you already ticked and the Convert
-    // button acts on records that are no longer on screen.
-    var shownIds=shown.map(function(j){return j.id;});
-    var stuck=connected.filter(function(j){
-      return STATE.bd.leadSel[j.id] && shownIds.indexOf(j.id)<0;
-    });
-
-    var head='Connected leads ('+connected.length+')'+
-      (mode==='search'?'':' — tick to convert');
-
-    var body;
-    if(mode==='search'){
-      body=
-        '<div class="lp-search">'+
-          UI.searchBox(STATE.bd.leadPickSearch,'bdLeadPickSearch(this.value)',
-            'Type to find a connected lead…')+
-          (q
-            ? '<span class="lp-hint">'+pool.length+' match'+(pool.length===1?'':'es')+'</span>'
-            : '<span class="lp-hint">Showing the '+shown.length+' most recent. Type to reach the other '+
-              Math.max(0,connected.length-shown.length)+'.</span>')+
-        '</div>'+
-        '<div class="lp-chips">'+shown.map(chip).join('')+'</div>'+
-        (q&&!pool.length?'<div class="lp-hint">Nothing matches “'+esc(q)+'”.</div>':'');
-    } else {
-      body='<div class="lp-chips">'+shown.map(chip).join('')+'</div>';
-    }
-    if(stuck.length){
-      body+='<div class="lp-stuck"><span class="lp-hint">Still selected:</span>'+
-        '<div class="lp-chips">'+stuck.map(chip).join('')+'</div></div>';
-    }
-
-    var wrap=document.createElement('div');
-    wrap.setAttribute('data-bd-leadpick','1');
-    wrap.className='lp-wrap';
-    wrap.innerHTML='<div class="lp-head">'+head+'</div>'+body;
-    var taskbar=content.querySelector('[data-bd-taskbar]');
-    if(taskbar&&taskbar.parentNode)taskbar.parentNode.insertBefore(wrap,taskbar.nextSibling);
+  // CONVERTING NEVER LEAVES THE PAGE YOU ARE ON. It used to goPage('bd_joborders')
+  // first, so cancelling the form dropped you on Jobs rather than back on Leads.
+  window.bdConvertLead=function(leadId){
+    var lead=(STATE.jobs||[]).find(function(x){return x.id===leadId;});
+    if(!lead){showToast('Lead not found','error');return;}
+    if(lead.stage!=='Connected'){showToast('Only a Connected lead can become a job','warning');return;}
+    var done=convertedJobFor(leadId);
+    if(done){showToast('Already a job — '+(done.job_code||'open it from Jobs'),'info');return;}
+    STATE.bd._convertQueue=null;
+    bdOpenNewJob(leadId);
+  };
+  // The job order a lead already became, if the browser knows of one. The
+  // server refuses a double conversion regardless; this only decides the label.
+  function convertedJobFor(leadId){
+    return (STATE.bd.jobOrders||[]).find(function(o){return o.source_lead_id===leadId;})||null;
   }
-  window.bdLeadPickSearch=function(v){
-    STATE.bd.leadPickSearch=v;
-    // Repaint the picker in place. A full render() would rebuild the shell and
-    // take the caret with it — you cannot type into a box that is re-created
-    // on every keystroke.
-    var content=document.getElementById('content'); if(!content)return;
-    var old=content.querySelector('[data-bd-leadpick]');
-    var focused=document.activeElement;
-    var caret=focused&&focused.classList&&focused.classList.contains('hz-search')
-      ? {start:focused.selectionStart,end:focused.selectionEnd} : null;
-    if(old&&old.parentNode)old.parentNode.removeChild(old);
-    addLeadCheckboxes();
-    var box=content.querySelector('[data-bd-leadpick] .hz-search');
-    if(box){ box.focus(); if(caret){ try{box.setSelectionRange(caret.start,caret.end);}catch(e){} } }
+  window.bdConvertedJobFor=convertedJobFor;
+  // The Leads page asks for the job list once, quietly, so a converted lead can
+  // say so instead of offering a button the server would refuse.
+  window.bdEnsureJobOrdersForLeads=function(){
+    if(STATE.bd._joForLeads)return;
+    STATE.bd._joForLeads=true;
+    apiGet('/job-orders').then(function(d){
+      if(!STATE.bd.jobOrders||!STATE.bd.jobOrders.length){STATE.bd.jobOrders=d||[];}
+      scheduleRender();
+    }).catch(function(){});
   };
 
-  window.bdToggleLead=function(id,on){STATE.bd.leadSel[id]=on;render();};
-  window.bdClearLeadSel=function(){STATE.bd.leadSel={};render();};
-  window.bdConvertSelected=function(){
-    var ids=Object.keys(STATE.bd.leadSel).filter(function(id){return STATE.bd.leadSel[id];});
-    var alreadyConverted=STATE.bd.jobOrders.map(function(o){return o.source_lead_id;});
-    var conn=ids.map(function(id){return (STATE.jobs||[]).find(function(x){return x.id===id;});})
-                .filter(function(j){return j&&j.stage==='Connected'&&alreadyConverted.indexOf(j.id)<0;});
-    if(!conn.length){showToast('Select at least one connected lead that hasn\'t been converted','error');return;}
-    STATE.bd._convertQueue=conn.slice(1).map(function(j){return j.id;});
-    STATE.bd.leadSel={};
-    goPage('bd_joborders');
-    bdOpenNewJob(conn[0].id);
-  };
+  var _origRender=window.render;
 
   // ── Page routing ───────────────────────────────────────────────────────────
   var BD_PAGES={bd_joborders:1,bd_myjobs:1,bd_jodetail:1,bd_kanban:1};
@@ -459,6 +336,14 @@
         f.company_id=lead.company_id||null;
         var loc=parseLeadLocation(lead.location);
         f.city=loc.city; f.state=loc.state;
+        // THE POSTING TRAVELS WITH THE LEAD (Session 31). The import keeps the
+        // job link; the form now shows it right where the description goes, so
+        // converting is "open, copy, paste", not a hunt for the lead record.
+        f.job_url=lead.job_url||'';
+        var req=(lead.research&&lead.research.requirements)||{};
+        var sk=(req.skills||[]).filter(function(x){return x&&String(x).toLowerCase()!=='title';});
+        if(sk.length&&!f.primary_skills)f.primary_skills=sk.join(', ');
+        if(lead.salary_range&&!f.comments)f.comments='Posted salary: '+lead.salary_range;
       }
     }
     STATE.bd.form=f;
@@ -615,6 +500,84 @@
     renderNewJobModal();
   };
 
+  // ── THE JOB DESCRIPTION BOX (Session 31) ──────────────────────────────────
+  // On the first tab, because it is the thing a converted lead is missing and
+  // the thing everything downstream (matching, candidate emails, the apply
+  // page) reads. It used to sit last, on "Organizational".
+  function jdBlockHTML(f){
+    var url=leadSafeLink(f.job_url);
+    return '<div style="margin-top:8px;padding-top:12px;border-top:1px solid var(--border)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
+        '<label style="font-size:11.5px;color:var(--text2)">Job Description <span style="color:var(--red)">*</span></label>'+
+        '<div style="display:flex;gap:6px;align-items:center">'+
+          (f._jdPrev!=null?'<button type="button" class="btn btn-sm btn-outline" onclick="bdUndoJdRewrite()" style="font-size:11.5px">Undo rewrite</button>':'')+
+          '<button type="button" id="bd-jd-ai" class="btn btn-sm btn-outline" onclick="bdRewriteJd()" style="font-size:11.5px">'+(f._jdBusy?'Rewriting…':'✨ Rewrite with AI')+'</button>'+
+        '</div>'+
+      '</div>'+
+      (url?'<div style="font-size:12px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+        '<a class="ld-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer" style="font-weight:600">Open the job posting ↗</a>'+
+        '<span style="color:var(--text3)">Copy the description there and paste it below — then let AI tidy it up if you like.</span>'+
+      '</div>':'')+
+      '<textarea id="bd-jd" class="sel" style="min-height:150px;resize:vertical" oninput="bdFormSet(\'job_description\',this.value)" placeholder="Paste the job description here">'+esc(f.job_description)+'</textarea>'+
+    '</div>';
+  }
+  function leadSafeLink(v){
+    var s=String(v||'').trim(); if(!s)return '';
+    if(!/^https?:\/\//i.test(s)){ if(/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s))s='https://'+s; else return ''; }
+    return s;
+  }
+  window.bdRewriteJd=function(){
+    var f=STATE.bd.form; if(!f||f._jdBusy)return;
+    var ta=document.getElementById('bd-jd');
+    var text=ta?ta.value:(f.job_description||'');
+    if(String(text).trim().length<40){showToast('Paste the job description first — then AI can rewrite it.','warning');return;}
+    f.job_description=text; f._jdBusy=true; renderNewJobModal();
+    apiPost('/job-orders/rewrite-jd',{text:text,job_title:f.job_title,client:f.client}).then(function(r){
+      var cur=STATE.bd.form; if(!cur)return; cur._jdBusy=false;
+      if(r&&r.used_ai&&r.text){
+        cur._jdPrev=text; cur.job_description=r.text;
+        showToast('Rewritten by AI — read it through before saving','success');
+      } else {
+        aiSubscribePopup(r&&r.reason);
+      }
+      renderNewJobModal();
+    }).catch(function(e){
+      var cur=STATE.bd.form; if(cur){cur._jdBusy=false;renderNewJobModal();}
+      showToast('Could not rewrite: '+e.message,'error');
+    });
+  };
+  window.bdUndoJdRewrite=function(){
+    var f=STATE.bd.form; if(!f||f._jdPrev==null)return;
+    f.job_description=f._jdPrev; f._jdPrev=null; renderNewJobModal();
+  };
+
+  // ── "SUBSCRIBE TO AI TO REWRITE" (Session 31) ─────────────────────────────
+  // The owner's words for what should happen when there is no AI to call. A
+  // small card in the corner, not a dialog: it must not replace the form the
+  // person is filling in (that form IS the modal). Painted on --card-solid —
+  // a float is opaque (Session 25). Toggled directly, never through render().
+  window.aiSubscribePopup=function(reason){
+    var old=document.getElementById('ai-sub-pop'); if(old)old.remove();
+    var isAdmin=userHasRole(STATE.user,'admin');
+    var line=reason==='daily_limit'
+      ? 'Today\'s AI allowance has been used up. Subscribe to AI for a bigger allowance, or try again tomorrow.'
+      : reason==='no_answer'
+        ? 'AI did not answer this time. Try again in a minute — if it keeps happening, check the AI subscription.'
+        : 'AI rewriting is not switched on for your company yet.';
+    var el=document.createElement('div');
+    el.id='ai-sub-pop'; el.setAttribute('role','status');
+    el.style.cssText='position:fixed;right:18px;bottom:18px;z-index:10000;width:min(340px,calc(100vw - 32px));background:var(--card-solid,#fff);color:var(--text);border:1px solid var(--border2);border-radius:12px;box-shadow:var(--sh2,0 8px 24px rgba(0,0,0,.18));padding:14px 16px';
+    el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:start;gap:10px">'+
+        '<div style="font-weight:700;font-size:14px">✨ Subscribe to AI to rewrite</div>'+
+        '<button type="button" aria-label="Close" onclick="this.closest(\'#ai-sub-pop\').remove()" style="border:0;background:none;font-size:20px;line-height:1;cursor:pointer;color:var(--text3)">×</button>'+
+      '</div>'+
+      '<div style="font-size:12.5px;color:var(--text2);margin-top:6px;line-height:1.5">'+esc(line)+'</div>'+
+      (isAdmin&&reason!=='no_answer'?'<button type="button" class="btn btn-sm btn-primary" style="margin-top:10px" onclick="document.getElementById(\'ai-sub-pop\').remove();closeModal();goPage(\'admin\')">Set up AI</button>'
+        :(reason!=='no_answer'?'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Ask your admin to turn it on.</div>':''));
+    document.body.appendChild(el);
+    setTimeout(function(){ var n=document.getElementById('ai-sub-pop'); if(n===el)el.remove(); },12000);
+  };
+
   function renderNewJobModal(){
     var f=STATE.bd.form;
     var tabBtn=function(id,lbl){var on=f.tab===id;return '<button class="mtab" onclick="bdFormTab(\''+id+'\')" style="border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';font-weight:'+(on?'700':'500')+';color:'+(on?'var(--accent)':'var(--text2)')+'">'+lbl+'</button>';};
@@ -647,7 +610,8 @@
         '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="sel" style="max-width:90px;flex:0 0 auto" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
         '<input class="sel" placeholder="Min" value="'+esc(f.pay_min)+'" oninput="bdFormSet(\'pay_min\',this.value)">'+
         '<input class="sel" placeholder="Max" value="'+esc(f.pay_max)+'" oninput="bdFormSet(\'pay_max\',this.value)"></div>')+
-      '</div>';
+      '</div>'+
+      jdBlockHTML(f);
     } else if(f.tab==='client'){
       var known=(f.intake&&f.intake.contacts)||[];
       // POCs PACE already holds at this client, offered as a click. Nobody
@@ -713,8 +677,7 @@
         fld('Assign Recruiter(s)',
           '<input class="sel" id="bd-rec-search" placeholder="Type 3+ letters of a recruiter\'s name…" oninput="bdRecSearch(this.value)" autocomplete="off">'+
           '<div id="bd-rec-suggest" style="position:relative"></div>'+
-          '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+(assigned||'<span style="font-size:12px;color:var(--text3)">None assigned yet.</span>')+'</div>')+
-        fld('Job Description','<textarea class="sel" style="min-height:120px;resize:vertical" oninput="bdFormSet(\'job_description\',this.value)" placeholder="Required">'+esc(f.job_description)+'</textarea>',true);
+          '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+(assigned||'<span style="font-size:12px;color:var(--text3)">None assigned yet.</span>')+'</div>');
     }
 
     var queueNote=STATE.bd._convertQueue&&STATE.bd._convertQueue.length?STATE.bd._convertQueue.length+' more lead(s) queued after this':'';
@@ -778,7 +741,8 @@
     var body;
     if(f.source_lead_id){
       // convert-from-lead: flat body with job fields
-      body=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined});
+      body=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined,
+        job_url:undefined,_jdPrev:undefined,_jdBusy:undefined});
       apiPost('/job-orders/from-lead/'+f.source_lead_id,body).then(function(jo){
         bdAfterSave(jo,f);
       }).catch(function(e){showToast('Failed to create job: '+e.message,'error');});
@@ -792,7 +756,8 @@
       var lead={position:f.job_title,company_id:f.company_id||undefined,
         company_name:(f.client||'').trim(),location:loc||undefined,source:'BD Direct',
         address:f.address||{},contacts:pocPayload('bd')};
-      var job=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined});
+      var job=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined,
+        job_url:undefined,_jdPrev:undefined,_jdBusy:undefined});
       apiPost('/job-orders',{lead:lead,job:job}).then(function(jo){
         bdAfterSave(jo,f);
       }).catch(function(e){
@@ -811,7 +776,7 @@
     var id=f._editId;
     var body=Object.assign({},f);
     delete body.tab; delete body._editId; delete body.recruiter_ids;
-    delete body.source_lead_id; delete body.lead_code;
+    delete body.source_lead_id; delete body.lead_code; delete body._jdPrev; delete body._jdBusy; delete body.job_url;
     apiPut('/job-orders/'+id,body).then(function(jo){
       var arr=STATE.bd.jobOrders=STATE.bd.jobOrders||[];
       var idx=arr.findIndex(function(x){return x.id===id;});
@@ -1049,8 +1014,12 @@
         jdBlock+
         applyBlock+
       '</div>'+
-      (window.renderJobApplicants?renderJobApplicants(j.id):'')+
+      // Who is on the job comes FIRST after the job itself (Session 31): the
+      // owner looked for it on the job's first screen and found it at the
+      // bottom, under Applicants and Recruiters.
       approval+
+      seqCandidatesCard(j.id)+
+      (window.renderJobApplicants?renderJobApplicants(j.id):'')+
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
           '<div style="font-weight:600;font-size:14px">Assigned Recruiters</div>'+
@@ -1058,58 +1027,101 @@
         '</div>'+
         '<div style="display:flex;flex-wrap:wrap;gap:8px">'+(recChips||'<span style="font-size:12.5px;color:var(--text3)">No recruiters assigned.</span>')+'</div>'+
       '</div>'+
-      seqCandidatesCard(j.id)+
       bdFunnelCard(j.id)+
     '</div>';
   };
 
-  // Candidates on this job with multi-select → "Start sequence" (bulk enroll).
-  function seqCandidatesCard(jid){
+  // ── WHO IS ON THIS JOB — the job's own page (Session 31) ─────────────────
+  // Everyone on the job, on the first page: the submissions (the pipeline
+  // record) plus anybody who was only TAGGED before Session 31 made tagging
+  // write a submission too. The owner tagged candidates from the database and
+  // they never appeared here — 15 of 15 tagged rows had no submission.
+  //
+  // Selection is by CANDIDATE, because the two things you do with a selection
+  // take different ids: emailing about the job takes people, a sequence takes
+  // submissions. A tagged-only row can be emailed; it joins a sequence once it
+  // is on the pipeline.
+  function jobRoster(jid){
     var subs=(STATE.bd.submissions||[]).filter(function(s){return s.job_order_id===jid;});
-    var sel=STATE.bd.seqSel||[];
-    var rows=subs.map(function(s){
-      var c=s.candidate||{}; var on=sel.indexOf(s.id)>-1;
-      var curStage=nStage(s.stage);
-      var nextStages=BD_STAGES.filter(function(x){return x!==curStage;});
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
-        '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleSeqSel(\''+s.id+'\')" style="cursor:pointer">'+
-        '<div style="flex:1;min-width:0">'+
-          '<span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'Candidate')+'</span> '+code(c.candidate_code||'')+
-          (s.sub_stage?' <span style="font-size:10px;color:var(--text3)">· '+esc(s.sub_stage)+'</span>':'')+
-        '</div>'+
-        '<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[curStage]||'var(--text3)')+'">'+esc(curStage||'')+'</span>'+
-        '<select class="sel" style="font-size:11px;padding:3px 6px;max-width:120px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
+    var seen={}; subs.forEach(function(s){ if(s.candidate_id||(s.candidate&&s.candidate.id)) seen[s.candidate_id||s.candidate.id]=1; });
+    var rows=subs.map(function(s){ return {kind:'sub', sub:s, cand:s.candidate||{}, cid:s.candidate_id||(s.candidate&&s.candidate.id)}; });
+    (STATE.bd.jobPipeline||[]).filter(function(p){return p.job_order_id===jid;}).forEach(function(p){
+      if(seen[p.candidate_id]) return;
+      seen[p.candidate_id]=1;
+      rows.push({kind:'tag', pl:p, cand:p.candidate||{}, cid:p.candidate_id});
+    });
+    return rows;
+  }
+  function seqCandidatesCard(jid){
+    var roster=jobRoster(jid);
+    var sel=STATE.bd.candSel||(STATE.bd.candSel={});
+    var picked=roster.filter(function(r){return sel[r.cid];});
+    var pickedSubs=picked.filter(function(r){return r.kind==='sub';}).length;
+    var rows=roster.map(function(r){
+      var c=r.cand||{}; var on=!!sel[r.cid];
+      var stageHtml, moveHtml='';
+      if(r.kind==='sub'){
+        var s=r.sub, curStage=nStage(s.stage);
+        var nextStages=BD_STAGES.filter(function(x){return x!==curStage;});
+        stageHtml='<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS[curStage]||'var(--text3)')+'">'+esc(curStage||'')+'</span>'+
+          (s.sub_stage?' <span style="font-size:10px;color:var(--text3)">· '+esc(s.sub_stage)+'</span>':'');
+        moveHtml='<select class="sel" style="font-size:11px;padding:3px 6px;max-width:120px" onchange="bdMoveStage(\''+s.id+'\',this.value)">'+
           '<option value="">Move…</option>'+
           nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
-        '</select>'+
+        '</select>';
+      } else {
+        stageHtml='<span style="font-size:11px;font-weight:700;color:var(--text3)">Tagged</span>';
+      }
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
+        '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleCandSel(\''+r.cid+'\')" style="cursor:pointer">'+
+        '<div style="flex:1;min-width:0">'+
+          '<span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(r.cid||'')+'\')">'+esc(c.full_name||'Candidate')+'</span> '+code(c.candidate_code||'')+
+          '<div style="font-size:11px;color:var(--text3)">'+esc([c.current_title||c.headline,c.email||'no email on file'].filter(Boolean).join(' · '))+'</div>'+
+        '</div>'+
+        stageHtml+moveHtml+
       '</div>';
-    }).join('')||'<div style="font-size:12.5px;color:var(--text3);padding:6px 2px">No candidates on this job yet.</div>';
-    var allOn=subs.length&&subs.every(function(s){return sel.indexOf(s.id)>-1;});
+    }).join('')||'<div style="font-size:12.5px;color:var(--text3);padding:6px 2px">No candidates on this job yet. Add them from Candidates — tick several and use “Add to job”.</div>';
+    var allOn=roster.length&&roster.every(function(r){return sel[r.cid];});
+    var dis=' disabled style="opacity:.45;cursor:default"';
     return '<div class="card" style="padding:16px;margin-bottom:16px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-        '<div style="font-weight:600;font-size:14px">Candidates ('+subs.length+')</div>'+
-        '<div style="display:flex;gap:8px;align-items:center">'+
-          (subs.length?'<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleSeqSelAll(\''+jid+'\')" style="cursor:pointer"> All</label>':'')+
-          '<button class="btn btn-sm btn-primary" '+(sel.length?'':'disabled style="opacity:.45;cursor:default"')+' onclick="bdStartSequence()">▶ Start sequence'+(sel.length?' ('+sel.length+')':'')+'</button>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
+        '<div style="font-weight:600;font-size:14px">Candidates on this job ('+roster.length+')</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+          (roster.length?'<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleCandSelAll(\''+jid+'\')" style="cursor:pointer"> All</label>':'')+
+          '<button class="btn btn-sm btn-outline" onclick="atsOpenBulkUpload({jobId:\''+jid+'\',jobTitle:'+esc(JSON.stringify((joById(jid)||{}).job_title||''))+'})">Upload resumes</button>'+
+          '<button class="btn btn-sm btn-primary"'+(picked.length?'':dis)+' onclick="bdEmailSelected(\''+jid+'\')">✉ Email about this job'+(picked.length?' ('+picked.length+')':'')+'</button>'+
+          '<button class="btn btn-sm btn-outline"'+(pickedSubs?'':dis)+' onclick="bdStartSequence(\''+jid+'\')">▶ Start sequence'+(pickedSubs?' ('+pickedSubs+')':'')+'</button>'+
         '</div>'+
       '</div>'+rows+
-      (sel.length?'':'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Tick candidates from any stage, then Start sequence — you\'ll pick which mailbox(es) to send from (rotated across the batch).</div>')+
+      (picked.length?'':'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Tick candidates, then email them about this job (you see every email before it goes) or start a sequence.</div>')+
     '</div>';
   }
-  window.bdToggleSeqSel=function(sid){ STATE.bd.seqSel=STATE.bd.seqSel||[]; var i=STATE.bd.seqSel.indexOf(sid); if(i>-1)STATE.bd.seqSel.splice(i,1); else STATE.bd.seqSel.push(sid); render(); };
-  window.bdToggleSeqSelAll=function(jid){
-    var subs=(STATE.bd.submissions||[]).filter(function(s){return s.job_order_id===jid;});
-    var sel=STATE.bd.seqSel||[];
-    var allOn=subs.length&&subs.every(function(s){return sel.indexOf(s.id)>-1;});
-    if(allOn){ subs.forEach(function(s){ var i=sel.indexOf(s.id); if(i>-1)sel.splice(i,1); }); }
-    else { subs.forEach(function(s){ if(sel.indexOf(s.id)<0)sel.push(s.id); }); }
-    STATE.bd.seqSel=sel; render();
+  window.bdToggleCandSel=function(cid){ var s=STATE.bd.candSel||(STATE.bd.candSel={}); if(s[cid])delete s[cid]; else s[cid]=true; render(); };
+  window.bdToggleCandSelAll=function(jid){
+    var roster=jobRoster(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
+    var allOn=roster.length&&roster.every(function(r){return s[r.cid];});
+    roster.forEach(function(r){ if(allOn)delete s[r.cid]; else s[r.cid]=true; });
+    render();
   };
-  window.bdStartSequence=function(){
-    var sel=STATE.bd.seqSel||[]; if(!sel.length)return;
-    var subs=(STATE.bd.submissions||[]);
-    var items=sel.map(function(sid){ var s=subs.find(function(x){return x.id===sid;})||{}; var c=s.candidate||{}; return {entity_id:sid,label:c.full_name||'Candidate'}; });
+  window.bdStartSequence=function(jid){
+    var s=STATE.bd.candSel||{};
+    var items=jobRoster(jid).filter(function(r){return s[r.cid]&&r.kind==='sub';})
+      .map(function(r){ return {entity_id:r.sub.id,label:(r.cand&&r.cand.full_name)||'Candidate'}; });
+    if(!items.length)return;
     wfStartSequence('submission',items);
+  };
+  // ONE candidate-email workflow (D-0012): this does not send anything itself.
+  // It opens Email → Compose → Candidates with this job and these people
+  // already picked, straight onto the preview — the same screen, the same
+  // checks, the same queue as starting there.
+  window.bdEmailSelected=function(jid){
+    var s=STATE.bd.candSel||{};
+    var ids=jobRoster(jid).filter(function(r){return s[r.cid];}).map(function(r){return r.cid;});
+    if(!ids.length)return;
+    var j=joById(jid)||{};
+    if(!window.candOutreachStartFor){showToast('The email screen is not loaded','error');return;}
+    candOutreachStartFor({id:j.id,job_code:j.job_code,job_title:j.job_title,client:j.client||'',
+      place:[j.city,j.state].filter(Boolean).join(', '),status:j.status}, ids);
   };
 
   // Compact vertical funnel — one thin column per stage instead of a tall
@@ -1200,7 +1212,15 @@
   window.bdReloadSubmissions=function(joId){
     if(!joId) return;
     loadSubmissions(joId).then(function(subs){ STATE.bd.submissions=subs; render(); }).catch(function(){});
+    loadJobPipeline(joId);
   };
+  // The tag rows too, so a candidate tagged before tagging wrote a submission
+  // is still on the job's page. Not waited for — it only ever adds rows.
+  function loadJobPipeline(joId){
+    apiGet('/job-orders/'+joId+'/pipeline').then(function(rows){
+      STATE.bd.jobPipeline=rows||[]; scheduleRender();
+    }).catch(function(){ STATE.bd.jobPipeline=[]; });
+  }
 
   window.bdOpenJobOrder=function(id){
     STATE.bd.view.joId=id;
@@ -1209,6 +1229,8 @@
     // to delay a recruiter opening their own job. The block renders "Loading…"
     // and fills in.
     if (window.appliedLoad) { try { appliedLoad(id); } catch (_) {} }
+    if (STATE.bd.view._candSelFor!==id){ STATE.bd.candSel={}; STATE.bd.view._candSelFor=id; }
+    STATE.bd.jobPipeline=[]; loadJobPipeline(id);
     // load submissions for this job before opening detail
     loadSubmissions(id).then(function(subs){
       STATE.bd.submissions=subs;
@@ -1285,7 +1307,13 @@
     apiPost('/job-orders/'+jid+'/posting-jd',{}).then(function(r){
       var ta=document.getElementById('pjd-text');
       if(ta)ta.value=r.posting||'';
-      showToast(r.used_ai?'AI rewrite ready — review before posting':'Sanitized (rule-based, no AI key) — review carefully before posting','success');
+      if(r.used_ai) showToast('AI rewrite ready — review before posting','success');
+      else {
+        // Same answer as the New Job form: the rules still anonymise it, but
+        // AI did not write it, and the person is told why (Session 31).
+        showToast('Cleaned by the built-in rules — review carefully before posting','info');
+        aiSubscribePopup(r.ai_reason);
+      }
     }).catch(function(e){showToast('Failed: '+e.message,'error');});
   };
   window.bdSavePostingJD=function(jid){

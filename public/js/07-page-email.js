@@ -132,7 +132,9 @@ function renderEmail(){
   // 'allmail' — one window onto all THREE email pipelines (Session 23). The
   // Sent tab reads only `emails` (the leads engine), which is why a client
   // email or a candidate batch never appeared in it however hard you looked.
-  var tabs=isBD?['pending','compose','sent','allmail','outreachplan','sequence']:['compose','sent','allmail','outreachplan'];
+  // Recruiters get Pending too (Session 31): their candidate emails wait in a
+  // queue of their own, and "is it still queued?" had nowhere to be answered.
+  var tabs=isBD?['pending','compose','sent','allmail','outreachplan','sequence']:['compose','pending','sent','allmail','outreachplan'];
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
   // ── WHO THIS ORGANISATION WRITES TO ──────────────────────────────────────
@@ -144,7 +146,11 @@ function renderEmail(){
   // are two. Somebody with a single side is put on it and never sees a picker
   // asking a question with one answer.
   var canClients=userHasAnyRole(u,'bd','bd_lead','admin','director','associate_director');
-  var canCandidates=userHasAnyRole(u,'ra','ra_lead','recruiter','admin','director','associate_director','bd_lead');
+  var canCandidates=userHasAnyRole(u,'ra','ra_lead','recruiter','admin','director','associate_director','bd_lead')||
+    // Arriving from a job's "Email about this job" (Session 31) opens this side
+    // for whoever pressed it — the job page offered the button, so this side
+    // must exist for them, or the click would land on the wrong screen.
+    !!(STATE.candOutreach&&STATE.candOutreach.job);
   if(!canClients&&!canCandidates)canClients=true;   // never leave Compose with nothing in it
   if(STATE.composeSide!=='clients'&&STATE.composeSide!=='candidates'){
     STATE.composeSide=canClients?'clients':'candidates';
@@ -242,7 +248,8 @@ function renderEmail(){
   var ps=STATE.pendingSummary;
   var tabBar=UI.tabs(tabs.map(function(t){
     var n=null;
-    if(t==='pending')n=(ps&&ps.total_pending)||pending.length||null;
+    if(t==='pending')n=((isBD&&((ps&&ps.total_pending)||pending.length))||0)+
+      (window.candidatePendingCount?candidatePendingCount():0)||null;
     return { id:t, label:TAB_LABELS[t]||t, n:n, onclick:"setEmailTab('"+t+"')" };
   }), STATE.emailTab,
     (ps&&ps.total_pending&&STATE.emailTab==='pending'
@@ -251,7 +258,7 @@ function renderEmail(){
 
   // ── PENDING TAB ──
   var pendingHtml='';
-  if(STATE.emailTab==='pending'){
+  if(STATE.emailTab==='pending'&&isBD){
     var scheduleBanner=renderPendingScheduleBanner();
     var isRaLead=userHasRole(u,'ra_lead');
 
@@ -845,7 +852,10 @@ function renderEmail(){
       bdSummaryCard+
       pausedBanner+
       progressBar+
-      (STATE.emailTab==='pending'?pendingHtml:'')+
+      // Candidate emails first: they are drained on their own queue and used
+      // to be invisible here, so a batch that was quietly going out one every
+      // ninety seconds read as stuck (Session 31).
+      (STATE.emailTab==='pending'?(window.renderCandidatePendingPanel?renderCandidatePendingPanel(isBD):'')+pendingHtml:'')+
       // Compose is drawn by 48-page-outreach-gen.js, which loads after this
       // file — hence the guard rather than a bare call. The old hand-rolled
       // compose body is kept below as `composeHtml` only for the reminder flow,

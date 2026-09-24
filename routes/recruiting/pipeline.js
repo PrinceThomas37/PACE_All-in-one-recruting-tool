@@ -5,6 +5,7 @@
 // ============================================================================
 
 const { EVENTS, emit } = require('../../events');
+const applicants = require('../../services/applicants');
 
 module.exports = function (app, core) {
   const {
@@ -52,6 +53,115 @@ module.exports = function (app, core) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // ── "ON A JOB" MEANS A SUBMISSIONS ROW (Session 28), SO TAGGING WRITES ONE ──
+  // Session 31: the owner tagged candidates to a job from the database and
+  // they never appeared on the job's own page. Measured on the live database:
+  // all 15 tagged candidates had a `candidate_pipeline` row and NO
+  // `submissions` row, while the job page, the board, the funnel and every
+  // report read `submissions`. The applicant import was fixed for exactly this
+  // in Session 28; the plain Tag button was not. Tagging now writes both, at
+  // `Sourced`, with NO submitted_at (D-0029: adding somebody to a job is
+  // membership, not a submission), through the same `submissionRowFor` the
+  // import uses — one definition of the row, two callers.
+  async function writeSourcedSubmission(req, cand, jobOrderId, pipelineId) {
+    const row = applicants.submissionRowFor(cand, jobOrderId, req.user.id);
+    if (!row) return null;
+    const { data, error } = await supabase.from('submissions').insert(Object.assign(row, {
+      submission_code: await nextId('SB'), pipeline_id: pipelineId || null,
+    }, orgStamp(req))).select('id').single();
+    if (!error) {
+      await logSubmissionActivity(data.id, jobOrderId, req.user.id, 'created', null, 'Sourced', null);
+      return data.id;
+    }
+    if (error.code !== '23505') throw error;
+    // Already on this job — link to what is there rather than fail.
+    const { data: existing } = await supabase.from('submissions').select('id')
+      .eq('candidate_id', cand.id).eq('job_order_id', jobOrderId).is('deleted_at', null).maybeSingle();
+    return existing ? existing.id : null;
+  }
+
+  // One candidate onto one job: the tag row, then the membership row. Returns
+  // 'added' | 'already' — never throws on a duplicate, because adding somebody
+  // who is already there is not a failure worth interrupting a batch for.
+  async function tagOne(req, cand, jobOrderId, body) {
+    const b = body || {};
+    const pick = (k, fallback) => (b[k] !== undefined ? b[k] : (fallback || null));
+    const row = Object.assign({
+      pipeline_code: await nextId('PL'),
+      candidate_id: cand.id, job_order_id: jobOrderId,
+      pipeline_status: b.pipeline_status || 'Tagged',
+      work_auth_snap: pick('work_auth_snap', cand.work_authorization),
+      bill_rate: pick('bill_rate', cand.bill_rate),
+      pay_rate: pick('pay_rate', cand.pay_rate),
+      employer_name: pick('employer_name', cand.current_employer),
+      availability: pick('availability', cand.availability),
+      notice_period: pick('notice_period', cand.notice_period),
+      current_ctc: pick('current_ctc', cand.current_ctc),
+      source: pick('source', cand.source),
+      notes: b.notes || null,
+      tagged_by: req.user.id
+    }, orgStamp(req));
+    let status = 'added', pl = null;
+    const { data, error } = await supabase.from('candidate_pipeline').insert(row).select(PIPELINE_SELECT).single();
+    if (error) {
+      if (error.code !== '23505') throw error;
+      status = 'already';
+      const { data: ex } = await supabase.from('candidate_pipeline').select(PIPELINE_SELECT)
+        .eq('candidate_id', cand.id).eq('job_order_id', jobOrderId).is('deleted_at', null).maybeSingle();
+      pl = ex || null;
+    } else {
+      pl = data;
+      await logSubmissionActivity(null, jobOrderId, req.user.id, 'tagged', null, 'Tagged', null);
+    }
+    // The membership row. A failure here is REPORTED, never rolled back — the
+    // tag is real and saved (the same rule as the applicant import).
+    let linkFailed = null;
+    try {
+      const subId = await writeSourcedSubmission(req, cand, jobOrderId, pl && pl.id);
+      if (subId && pl && !pl.submission_id) {
+        await supabase.from('candidate_pipeline').update({ submission_id: subId }).eq('id', pl.id);
+        pl.submission_id = subId;
+      }
+    } catch (e) { linkFailed = (e && e.message) || 'could not add to the job'; }
+    return { status, pipeline: pl, link_failed: linkFailed };
+  }
+
+  const TAG_CAND_SELECT = 'id,work_authorization,bill_rate,pay_rate,current_employer,availability,notice_period,current_ctc,source';
+
+  // ── MANY CANDIDATES ONTO ONE JOB (Session 31) ─────────────────────────────
+  // "If we want to add 12 candidates, we have to individually tag them to the
+  // job, and that's too much work." One request, one job check, one candidate
+  // read, a count back. Literal path, registered above every /pipeline/:id.
+  app.post('/pipeline/bulk', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const b = req.body || {};
+      const ids = Array.isArray(b.candidate_ids) ? [...new Set(b.candidate_ids.map(x => String(x || '').trim()).filter(Boolean))] : [];
+      if (!ids.length || !b.job_order_id) return res.status(400).json({ error: 'candidate_ids and job_order_id required' });
+      if (ids.length > 500) return res.status(400).json({ error: 'That is more than 500 people in one go. Split it up.' });
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id').eq('id', b.job_order_id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
+      if (!(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
+      // Org-scoped read: an id from another company is simply not found.
+      const { data: cands } = await withOrg(
+        supabase.from('candidates').select(TAG_CAND_SELECT).in('id', ids).is('deleted_at', null), req);
+      const found = new Map((cands || []).map(c => [c.id, c]));
+      const out = { added: 0, already: 0, not_found: 0, failed: 0, errors: [] };
+      for (const id of ids) {
+        const cand = found.get(id);
+        if (!cand) { out.not_found++; continue; }
+        try {
+          const r = await tagOne(req, cand, b.job_order_id, {});
+          out[r.status]++;
+          if (r.link_failed) out.errors.push({ candidate_id: id, error: r.link_failed });
+        } catch (e) { out.failed++; out.errors.push({ candidate_id: id, error: (e && e.message) || 'failed' }); }
+      }
+      res.json(out);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // tag a candidate (from the pool) into a job order's pipeline
   app.post('/pipeline', auth, async (req, res) => {
     try {
@@ -72,33 +182,10 @@ module.exports = function (app, core) {
 
       // snapshot rate/availability/employer from the candidate (overridable via body)
       const { data: cand } = await supabase.from('candidates')
-        .select('work_authorization,bill_rate,pay_rate,current_employer,availability,notice_period,current_ctc,source')
-        .eq('id', b.candidate_id).single();
-      const c = cand || {};
-      const pick = (k, fallback) => (b[k] !== undefined ? b[k] : (fallback || null));
-      const row = {
-        pipeline_code: await nextId('PL'),
-        candidate_id: b.candidate_id, job_order_id: b.job_order_id,
-        pipeline_status: b.pipeline_status || 'Tagged',
-        work_auth_snap: pick('work_auth_snap', c.work_authorization),
-        bill_rate: pick('bill_rate', c.bill_rate),
-        pay_rate: pick('pay_rate', c.pay_rate),
-        employer_name: pick('employer_name', c.current_employer),
-        availability: pick('availability', c.availability),
-        notice_period: pick('notice_period', c.notice_period),
-        current_ctc: pick('current_ctc', c.current_ctc),
-        source: pick('source', c.source),
-        notes: b.notes || null,
-        tagged_by: req.user.id
-      };
-      Object.assign(row, orgStamp(req));
-      const { data, error } = await supabase.from('candidate_pipeline').insert(row).select(PIPELINE_SELECT).single();
-      if (error) {
-        if (error.code === '23505') return res.status(409).json({ error: 'This candidate is already tagged to this job.' });
-        throw error;
-      }
-      await logSubmissionActivity(null, b.job_order_id, req.user.id, 'tagged', null, 'Tagged', null);
-      res.status(201).json(data);
+        .select(TAG_CAND_SELECT).eq('id', b.candidate_id).single();
+      const r = await tagOne(req, cand || { id: b.candidate_id }, b.job_order_id, b);
+      if (r.status === 'already') return res.status(409).json({ error: 'This candidate is already tagged to this job.' });
+      res.status(201).json(Object.assign({}, r.pipeline, r.link_failed ? { job_link_failed: r.link_failed } : {}));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

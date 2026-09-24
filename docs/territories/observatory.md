@@ -1,6 +1,24 @@
 # Observatory — memory
 > Last written: 2026-09-23 (Session 30, C-0024) · seeded from `CLAUDE.md` and Session 21
 
+## Session 31 (2026-09-24)
+- **`aiProvider.availability(supabase, {feature, orgId})`** → `{available,
+  reason}` with reason `not_configured` or `daily_limit`, estimated like
+  `complete()`. For buttons that must SAY why there is no AI instead of
+  silently falling back (the owner's "Subscribe AI to rewrite" pop-up).
+- Candidate outreach (`routes/candidate-outreach.js`): **the page may choose
+  the sending mailbox, but only among the caller's OWN connected, active
+  mailboxes** (`ownSendingMailboxes` / `sendingMailboxFor`); any other id →
+  404, never used. Preview and queue both take `mailbox_id`; the row stores it
+  and the drain sends from it. **The first queued row is due now** (spacing is
+  BETWEEN emails) and the queue kicks the drain right after responding;
+  `drainDueOutreach` has a module-level in-flight guard so the kick and the
+  10-minute heartbeat can never send one row twice. `GET /candidate-outreach/
+  queue?status=pending` feeds Email → Pending.
+- Live check 2026-09-24: all 21 candidate emails queued 15:34 UTC went out
+  15:41–16:24 (6–18 min after their slot: 10-min tick × 6 per tick). Nothing
+  was stuck; they were invisible in Pending, which read only `emails`.
+
 ## What is true here now
 - **Every AI call goes through `services/ai-provider.js`** — `complete(supabase,
   {system, prompt, maxTokens, feature, orgId})`. Two wire formats only:

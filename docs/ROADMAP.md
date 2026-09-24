@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-23 (Session 28, round 7) · **Next id**: `R-035` · **Artifact**:
+**Updated**: 2026-09-23 (Session 28, round 7) · **Next id**: `R-054` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -86,6 +86,9 @@ sees it without reading a file.
 
 | id | The question | Where it stands |
 |---|---|---|
+| `R-051` | **Client page: the real email conversation + an AI summary** (owner asked 2026-09-24). One read-only timeline per client from all three email pipelines plus stored replies, better reply-to-contact matching, and a cached 4–6 line AI summary (~4–5k tokens each). Design in `docs/SESSION31_DESIGNS.md` §1. | **Designed, not built.** Waiting on the owner's go-ahead. Live data: only 3 of 77 stored replies are linked to a contact today, so the matching fix is half the value. |
+| `R-052` | **Create documents, not only upload them** (owner, 2026-09-24: "We'll design the entire thing later"). | **Parked by the owner.** Starting point when picked up: the formatted-resume generator already in PACE. §2 of the design doc. |
+| `R-053` | **The contact-finder engine: 4 POCs per open job** (2 HR/TA, 2 hiring managers by firm size), into a sequence or the outreach engine. Design §3. | **Needs the owner's call on the data source.** Nothing in PACE calls Apollo today and Apollo's free tier has no API — the people search is a paid plan. The title rules (`pocTargets`) are free and can be built first. |
 | `R-012` | **D-0014 — the row-level interaction brief.** The owner's real design ask was *progressive disclosure*; Session 23 answered it with volume control and was corrected. | **The live design work.** Agreed approach: ONE screen first, then repeat. **Ask before building any of it** — they said the revamp is coming "in sometime". |
 | `R-013` | **~1,600 inline font sizes and a comparable number of inline colours in `public/js`.** | Offered as a session of invisible work; **the owner has not answered.** This is the shared root cause of the last two rounds of phone and theme faults — an inline value cannot be re-themed, re-scaled or re-laid-out. Do not start it unasked. |
 | `R-014` | **PACE holds almost no contact phone numbers**, so sequence step 3 ("call them") correctly skips nearly always. Either start capturing numbers at import, or redesign that step around email. | **Owner has not chosen.** |
@@ -101,6 +104,7 @@ Newest first. A `CHANGED` row says what moved and why.
 
 | id | What shipped | Landed |
 |---|---|---|
+| `R-050` | **Session 31 batch** — Leads connected/convert rework, JD link + AI rewrite + subscribe pop-up on New Job, bulk add-to-job, bulk resume upload, owner shown not chosen, tagging puts people on the job (15 live rows were invisible), job page lists everyone with Email about this job, candidate-email From picker / no scroll jump / first email at once / shown in Pending. | branch `claude/confident-hypatia-l8ma42`, 2026-09-24 (draft PR, awaiting owner) |
 | `R-034` | **The rewind clock.** A small clock button on every lead, job order, candidate and client, opening a panel of every change to that record — exact date and time, how long ago, who did it, and **how long it sat at each stage**. Three history stores normalised into one shape by `services/record-history.js`; migration 045 applied for the three record kinds that had nowhere to write. **Leads and submissions had been recording this since the beginning and nothing had ever shown it.** | #224, 2026-09-23 |
 | `R-033` | **The production reset.** Every lead, company, contact, email, candidate, submission, job order, pipeline row, document and sourcing row deleted from the live database, and the ID counters reset so the next records are `CN-00001` / `JOB-00001`. **`suppression_list` was deliberately kept** — the people who asked never to be emailed. Wiping that would mean emailing them again, which is a compliance problem rather than a data one. Users, the two organisations, all six mailboxes, sequences, templates and settings survive. Owner chose the full wipe with no backup, knowing the Treplar apply link died with it. | live DB, 2026-09-23 |
 | `R-018` **CHANGED** | **Define what a submission is.** *Proposed*: publish one corrected submission count. *Shipped*: **two** numbers plus the gap — `Sent to BDM`, `Sent to client`, and `stalled at BDM`. *Why it moved*: the owner corrected the domain mid-build — *"adding a candidate to a job is not submission"* — and chose "count both, shown separately". A single figure would have hidden the candidates stuck between the two. `D-0029`. | #222, 2026-09-23 |

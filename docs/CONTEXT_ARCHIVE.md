@@ -5990,3 +5990,34 @@ All 11 findings verified closed; no cross-company path found. R1 (MED, fails clo
 
 ### Round 13f — R-046 finished (2026-09-24)
 R1 (sender keeps own emails) and R2/R3 owner gates landed; R5 mailbox OAuth state carries p:"mailbox" and auth() refuses any token with p. Foundry pinned both review blockers (email-attachments-smoke, email-history-scope-smoke; fake db projects rows to the route's own select). Full suite 107/107. CLAUDE.md, CAPABILITIES ("Seeing only what you're responsible for"), ROADMAP R-046 DONE. Open follow-ups: R-047 (ownership requests), R-048 (lookups index), R-049 (platform operator), C-0029 (client ownership hint), rampart R4 (page-size limits), ledger: opt-outs per-company vs global. Owner action: rotate the three AI keys (readable via /app-settings until this merge).
+
+# Session 31 — the owner's long list, worked in one chat (2026-09-24)
+
+Owner sent ~15 items in one message while another chat worked other things.
+Worked directly (not via subagents) on branch `claude/confident-hypatia-l8ma42`.
+
+### Round 1 — what was built
+- **Leads**: the "connected leads to convert" bar removed (its Convert button
+  was injected once and never repainted — the render engine only rewrites what
+  changed). Connected filters the table, newest first; each Connected row has
+  Convert; converting stays on Leads, Cancel stays on Leads.
+- **New Job from a lead**: JD box on the first tab, the lead's posting link
+  beside it, skills pre-filled from import, "Rewrite with AI"
+  (`/job-orders/rewrite-jd`), and a "Subscribe to AI to rewrite" corner pop-up
+  when AI is unavailable (also on the in-job rewrite).
+- **Candidates**: bulk "Add to job" (`/pipeline/bulk`), bulk resume upload with
+  progress + editable preview + counted add, owner shown not chosen.
+- **Tagging writes a submission** — live DB had 15/15 tagged rows with no
+  submission, which is why tagged people never showed on the job page. Job page
+  now lists everyone (incl. legacy tags) right under the job card, with Email
+  about this job (opens the ONE candidate-email screen, D-0012) and Upload resumes.
+- **Candidate email**: list no longer jumps to the top on tick (`data-keep-scroll`
+  in putRegion), From-mailbox picker (own mailboxes only), first email due at
+  once + immediate drain kick with an in-flight guard, candidate emails shown in
+  Email → Pending. Live: today's 21 had all sent 15:41–16:24 UTC; nothing stuck.
+- **Designs only** (docs/SESSION31_DESIGNS.md): client email timeline + AI
+  summary (~4–5k tokens each, cached), create-documents (parked by owner),
+  4-POC contact finder (rules are free; Apollo's API is a paid plan, nothing in
+  PACE calls Apollo today).
+- Tests: session31-flows-smoke (30), pipeline-tag-membership-smoke (11); full
+  suite 108/108 before the last suite was added.

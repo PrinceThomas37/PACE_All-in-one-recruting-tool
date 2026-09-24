@@ -86,7 +86,24 @@ function putRegion(el, html, outer){
   var fid=ae&&el.contains(ae)?ae.id:'';
   var s0=fid&&typeof ae.selectionStart==='number'?ae.selectionStart:-1;
   var s1=fid&&typeof ae.selectionEnd==='number'?ae.selectionEnd:-1;
+  // A SCROLL BOX INSIDE A REGION KEEPS ITS PLACE (Session 31). The page's own
+  // scroll was always restored, but a list that scrolls in its own box (the
+  // candidate picker, 420px tall) was re-created at the top on every repaint,
+  // so ticking the 30th person threw you back to the first. Mark the box with
+  // data-keep-scroll="<name>" and its position survives the rewrite.
+  var kept={};
+  el.querySelectorAll('[data-keep-scroll]').forEach(function(n){
+    if(n.scrollTop||n.scrollLeft) kept[n.getAttribute('data-keep-scroll')]=[n.scrollTop,n.scrollLeft];
+  });
   if(outer) el.outerHTML=html; else el.innerHTML=html;
+  var keys=Object.keys(kept);
+  if(keys.length){
+    var root=outer?document:el;
+    keys.forEach(function(k){
+      var n=root.querySelector('[data-keep-scroll="'+k+'"]');
+      if(n){ n.scrollTop=kept[k][0]; n.scrollLeft=kept[k][1]; }
+    });
+  }
   if(fid){
     var back=document.getElementById(fid);
     if(back&&back!==document.activeElement){

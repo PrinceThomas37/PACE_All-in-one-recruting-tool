@@ -23,7 +23,7 @@
       brief:null, briefLoading:false,
       pool:null, poolLoading:false, poolQuery:'', picked:{},
       angle:'direct', preview:null, previewFor:null, previewLoading:false, previewIdx:0,
-      sender:null, senderLoading:false,
+      sender:null, senderLoading:false, mailboxId:null,
       addToPipeline:false, queuing:false, result:null,
       queue:null, queueLoading:false, openQueue:null
     };
@@ -70,10 +70,29 @@
     candOutreachLoadBrief();
   };
 
+  // Entry from a JOB (Session 31): the job's page and its Candidates list open
+  // this screen with the job and the people already chosen, straight onto the
+  // preview. One workflow, several doors (D-0012) — nothing here sends.
+  window.candOutreachStartFor=function(job,candidateIds){
+    var s=S();
+    s.job=job; s.step=3; s.picked={}; s.result=null;
+    (candidateIds||[]).forEach(function(id){ s.picked[id]=true; });
+    s.pool=null; s.brief=null; s.preview=null; s.previewFor=null; s.previewIdx=0; s.queue=null;
+    STATE.composeSide='candidates'; STATE.composeContext=null;
+    if(window.setEmailTab){ STATE.page='email'; }
+    goPage('email');
+    setEmailTab('compose');
+    candOutreachLoadBrief();
+    candOutreachPreview();
+  };
+
   window.candOutreachBackTo=function(step){
     var s=S(); s.step=step;
     if(step===1){ s.job=null; s.pool=null; s.picked={}; s.preview=null; s.previewIdx=0; s.result=null; }
     render();
+    // Arriving from a job page lands on step 3 with no list loaded; stepping
+    // back must fetch it, or "Back to the list" shows an empty list.
+    if(step===2&&!s.pool) candOutreachLoadPool(true);
   };
 
   window.candOutreachLoadBrief=function(){
@@ -170,7 +189,7 @@
     if(s.previewFor===id&&s.preview) return;
     s.previewLoading=true; render();
     apiPost('/candidate-outreach/preview',{
-      candidate_id:id, job_order_id:s.job?s.job.id:null
+      candidate_id:id, job_order_id:s.job?s.job.id:null, mailbox_id:s.mailboxId||undefined
     }).then(function(r){
       s.preview=r; s.previewFor=id; s.previewLoading=false; render();
     }).catch(function(e){
@@ -188,6 +207,14 @@
     candOutreachPreview();
   };
 
+  // Change the From mailbox. The preview is rebuilt, because the sign-off and
+  // signature are filled from the mailbox that sends — a preview still showing
+  // the old name would be a preview of an email nobody receives.
+  window.candOutreachSetMailbox=function(id){
+    var s=S(); s.mailboxId=id||null; s.preview=null; s.previewFor=null;
+    if(s.step===3) candOutreachPreview(); else render();
+  };
+
   window.candOutreachSetPipeline=function(on){ S().addToPipeline=!!on; render(); };
 
   // Open one sent email to read it; clicking it again closes it.
@@ -200,7 +227,7 @@
     s.queuing=true; render();
     apiPost('/candidate-outreach/queue',{
       candidate_ids:ids, job_order_id:s.job?s.job.id:null,
-      angle:s.angle, add_to_pipeline:s.addToPipeline
+      angle:s.angle, add_to_pipeline:s.addToPipeline, mailbox_id:s.mailboxId||undefined
     }).then(function(r){
       s.queuing=false; s.result=r; s.picked={}; s.pool=null; s.queue=null;
       // BACK TO THE LIST, NOT STUCK ON THE COMPOSER. Clearing the picks while
@@ -210,7 +237,7 @@
       // as "already asked".
       s.step=2; s.preview=null; s.previewFor=null; s.previewIdx=0;
       showToast(r.queued+' email'+(r.queued===1?'':'s')+' queued','success');
-      candOutreachLoadPool(true); candOutreachLoadQueue(true); render();
+      s.pendingAt=0; candOutreachLoadPool(true); candOutreachLoadQueue(true); render();
     }).catch(function(e){
       s.queuing=false;
       showToast(e.message==='no_connected_mailbox'
@@ -233,7 +260,7 @@
   window.candOutreachCancel=function(id){
     apiPost('/candidate-outreach/cancel/'+encodeURIComponent(id),{}).then(function(){
       showToast('Pulled back before it went out','success');
-      S().queue=null; candOutreachLoadQueue(true);
+      S().queue=null; S().pendingAt=0; candOutreachLoadQueue(true);
     }).catch(function(e){ showToast(e.message||'Could not cancel that one.','warning'); });
   };
 
@@ -250,7 +277,7 @@
     }
     return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-      '<div style="font-size:12.5px;flex:1;min-width:180px">Sends as <strong>'+esc(s.mailbox.display_name||s.mailbox.email)+'</strong> &lt;'+esc(s.mailbox.email)+'&gt;'+
+      '<div style="font-size:12.5px;flex:1;min-width:180px">'+fromLine(s)+
         (s.company_name?' · '+esc(s.company_name):'')+
         '<div style="font-size:11.5px;color:var(--text3)">'+
           (s.ai?'The role description is written once per job by the AI writer; each email is personalised from the match reasons.'
@@ -267,6 +294,23 @@
         '</div>':'')+
       '</div>'+
     '</div>';
+  }
+
+  // One mailbox: say it. Several: let them pick. The list comes from the
+  // server and holds only this person's own connected mailboxes.
+  function fromLine(s){
+    var list=s.mailboxes||[];
+    var cur=S().mailboxId||(s.mailbox&&s.mailbox.id);
+    if(list.length<2){
+      return 'Sends as <strong>'+esc(s.mailbox.display_name||s.mailbox.email)+'</strong> &lt;'+esc(s.mailbox.email)+'&gt;';
+    }
+    return '<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;vertical-align:middle"><span>Sends from</span>'+
+      '<select class="sel" style="width:auto;font-size:12.5px;padding:4px 28px 4px 8px;max-width:320px;margin:0" onchange="candOutreachSetMailbox(this.value)">'+
+        list.map(function(m){
+          return '<option value="'+esc(m.id)+'"'+(m.id===cur?' selected':'')+'>'+
+            esc((m.display_name?m.display_name+' · ':'')+m.email)+'</option>';
+        }).join('')+
+      '</select></span>';
   }
 
   function stepBar(){
@@ -311,7 +355,7 @@
         '<input class="inp" placeholder="Search by title, client or job code" value="'+esc(s.jobQuery)+'" oninput="candOutreachJobSearch(this.value)">'+
       '</div>'+
       (s.jobsLoading?'<div style="font-size:12px;color:var(--text3);padding:8px 2px">Loading…</div>':
-        rows?'<div class="tbl-wrap" style="border:1px solid var(--border2);border-radius:var(--r);max-height:340px;overflow:auto">'+rows+'</div>'
+        rows?'<div class="tbl-wrap" data-keep-scroll="co-jobs" style="border:1px solid var(--border2);border-radius:var(--r);max-height:340px;overflow:auto">'+rows+'</div>'
             :'<div style="font-size:12px;color:var(--text3);padding:8px 2px">No job orders match that.</div>')+
     '</div>';
   }
@@ -416,7 +460,7 @@
           'This job order has no skills listed, so everyone is scored on title and location alone. Adding primary skills to the job will sharpen this list a lot.</div>'
         : '')+
       (s.poolLoading?'<div style="font-size:12px;color:var(--text3);padding:8px 2px">Ranking the pool…</div>':
-        rows?'<div class="tbl-wrap" style="overflow:auto;max-height:420px;border:1px solid var(--border2);border-radius:var(--r)">'+
+        rows?'<div class="tbl-wrap" data-keep-scroll="co-pool" style="overflow:auto;max-height:420px;border:1px solid var(--border2);border-radius:var(--r)">'+
               '<table style="width:100%;border-collapse:collapse;min-width:560px">'+
               '<thead><tr style="background:var(--bg);position:sticky;top:0">'+
                 '<th></th>'+
@@ -610,6 +654,57 @@
       rows+
     '</div>';
   }
+
+  // ── EMAIL → PENDING: candidate emails still waiting to go ──────────────────
+  // The same rows and the same "why it has not gone yet" sentence the Compose
+  // screen's list uses — one reader (GET /candidate-outreach/queue), two places
+  // to see it. Read-only apart from Cancel, which already existed.
+  window.candidatePendingCount=function(){
+    var q=S().pendingQueue; return q?q.length:0;
+  };
+  function loadCandidatePending(){
+    var s=S(); if(s.pendingLoading) return;
+    s.pendingLoading=true;
+    apiGet('/candidate-outreach/queue?status=pending').then(function(rows){
+      s.pendingLoading=false; s.pendingQueue=rows||[]; s.pendingAt=Date.now(); render();
+    }).catch(function(){ s.pendingLoading=false; s.pendingQueue=[]; s.pendingAt=Date.now(); render(); });
+  }
+  window.renderCandidatePendingPanel=function(isBD){
+    var s=S();
+    if(!s.pendingLoading&&(!s.pendingAt||Date.now()-s.pendingAt>60000)) loadCandidatePending();
+    var rows=s.pendingQueue||[];
+    if(!rows.length){
+      if(isBD) return '';
+      return '<div class="card cp" style="font-size:12.5px;color:var(--text3)">'+
+        (s.pendingLoading&&!s.pendingQueue?'Checking your queue…':'Nothing waiting — every candidate email you queued has gone out.')+'</div>';
+    }
+    var fmt=function(d){ return new Date(d).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); };
+    var next=rows.slice().sort(function(a,b){return String(a.send_after).localeCompare(String(b.send_after));})[0];
+    var list=rows.slice(0,50).map(function(r){
+      var why=r.wait?r.wait.text:'';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border2)">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name||r.to_email)+
+            ' <span style="font-weight:400;color:var(--text3)">'+esc(r.to_email||'')+'</span></div>'+
+          '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
+          (why?'<div style="font-size:11px;color:var(--text2)">'+esc(why)+'</div>':'')+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--text3);white-space:nowrap">'+(r.send_after?'due '+esc(fmt(r.send_after)):'')+'</div>'+
+        '<button class="btn btn-outline btn-sm" onclick="candOutreachCancel(\''+r.id+'\');S_pendingReload()">Cancel</button>'+
+      '</div>';
+    }).join('');
+    return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">'+
+      '<div style="padding:11px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'+
+        '<div style="font-size:13px;font-weight:600">Candidate emails waiting to go ('+rows.length+')</div>'+
+        '<div style="font-size:11.5px;color:var(--text3)">They go out one about every 90 seconds, so a batch does not look like a blast'+
+          (next&&next.send_after?' · next '+esc(fmt(next.send_after)):'')+'</div>'+
+      '</div>'+list+
+    '</div>';
+  };
+  window.S_pendingReload=function(){ var s=S(); s.pendingAt=0; };
+  // Fresh numbers every time the Pending tab is opened.
+  var _setTab=window.setEmailTab;
+  if(_setTab) window.setEmailTab=function(t){ if(t==='pending'){ var s=S(); s.pendingAt=0; } return _setTab.apply(this,arguments); };
 
   // The Email page calls this for the Candidates side of the Compose tab.
   window.renderCandidateOutreachBody=function(){
