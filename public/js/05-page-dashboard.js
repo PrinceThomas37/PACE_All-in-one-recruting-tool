@@ -43,6 +43,11 @@ function renderDashboard(){
   // on "Working out what came in today…" forever whenever a manager opened
   // "view as" before ever loading their own dashboard this session (C-0008).
   if(STATE.briefing===undefined)loadMorningBriefing();
+  // Take-over requests (R-047) — per-user, like next-actions: a "view as"
+  // preview must not fetch the viewer's own waiting/mine lists and label them
+  // as someone else's.
+  if(!isViewingOther&&typeof loadOwnershipWaiting==='function'&&STATE.otWaiting===undefined)loadOwnershipWaiting();
+  if(!isViewingOther&&typeof loadOwnershipMine==='function'&&STATE.otMine===undefined)loadOwnershipMine();
 
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
@@ -282,6 +287,7 @@ function renderRecruiterDashboard(u){
     renderMorningBriefingCard()+
 
     renderNextActionsCard()+
+    (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your desk…</div>':'')+
 
@@ -406,6 +412,7 @@ function renderManagerDashboard(u){
     renderMorningBriefingCard()+
 
     renderNextActionsCard()+
+    (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your team\'s desk…</div>':'')+
 
@@ -535,6 +542,7 @@ function renderIndividualDashboard(u){
     renderMorningBriefingCard()+
 
     renderNextActionsCard()+
+    (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     '<div class="flex gap2 mb4 flex-wrap">'+pickers+'</div>'+
 

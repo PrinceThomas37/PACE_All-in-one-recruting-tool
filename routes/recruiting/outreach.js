@@ -24,6 +24,7 @@ const { fillTemplate } = require('../../email-vars');
 const { emailSyntaxValid } = require('../../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
 const { fillSignatureHtml } = require('../../email-signature');
+const { clientOwnerFrom } = require('../../services/ownership');
 
 module.exports = function (app, ctx) {
   const {
@@ -38,24 +39,33 @@ module.exports = function (app, ctx) {
   // receives it — self-contained, no gateway change needed.
   const withOrg = (q, req) => (req && req.orgId ? q.eq('org_id', req.orgId) : q);
 
-  // D-0035 (D2): who may EMAIL a client. Gateway defined ownership for clients
-  // in routes/companies.js (`clientOwnerId`/`requireClientOwner`) but that
-  // module exports only its router, so nothing here can import the function —
-  // mirrored EXACTLY rather than re-derived, so the two files cannot quietly
-  // disagree about who owns a client. If `clientOwnerId` ever changes in
-  // routes/companies.js, this copy must change with it.
+  // D-0035 (D2)/D-0038: who may EMAIL a client. Ownership itself is now
+  // rampart's ONE ladder, `services/ownership.js` `clientOwnerFrom` — this
+  // used to be a byte-for-byte mirror of gateway's own copy in
+  // routes/companies.js, and two copies is exactly the drift risk that file's
+  // own comment warned about. Fetch the same rows gateway's version reads
+  // (job orders, leads, the company) and hand them to the shared function
+  // instead of re-deriving the ladder here.
+  // R-047 L4: the rows feeding clientOwnerFrom must stay newest-first and
+  // bounded, same as before this was centralised — an old client can carry
+  // years of closed job orders / recycled leads, and clientOwnerFrom only
+  // ever wants the single newest owned row of each kind.
   async function clientOwnerId(req, companyId) {
-    const { data: jos } = await withOrg(supabase.from('job_orders')
-      .select('bd_manager_id,created_at').eq('company_id', companyId).is('deleted_at', null)
-      .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req);
-    if (jos && jos.length) return jos[0].bd_manager_id;
-    const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('assigned_to_bd,created_at').eq('company_id', companyId).is('deleted_at', null)
-      .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req);
-    if (leads && leads.length) return leads[0].assigned_to_bd;
-    const { data: co } = await withOrg(supabase.from('companies')
-      .select('created_by').eq('id', companyId), req).maybeSingle();
-    return co ? co.created_by : null;
+    const [{ data: jos }, { data: leads }, { data: co }] = await Promise.all([
+      withOrg(supabase.from('job_orders')
+        .select('bd_manager_id,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null)
+        .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req),
+      withOrg(supabase.from('jobs')
+        .select('assigned_to_bd,created_at,company_id,deleted_at').eq('company_id', companyId).is('deleted_at', null)
+        .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req),
+      withOrg(supabase.from('companies')
+        .select('id,created_by').eq('id', companyId), req).maybeSingle(),
+    ]);
+    return clientOwnerFrom({
+      company: co || { id: companyId },
+      jobOrders: jos || [],
+      leads: leads || [],
+    });
   }
 
   // Loads the company (org-scoped, 404 if foreign/missing) and, unless the

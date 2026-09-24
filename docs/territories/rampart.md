@@ -1,5 +1,5 @@
 # Rampart — memory
-> Last written: 2026-09-24 · review of the C-0021..C-0029 fixes (`claude/tender-noether-fmxgr0`)
+> Last written: 2026-09-24 · R-047 re-review (round 2): B1-B3/F1-F3/M1/M2/L1-L5 closed; one residual id leak
 
 ## What is true here now
 - **Two different questions, and this territory now answers both.**
@@ -35,6 +35,50 @@
     gates disagree about who is an admin.
   * Verified by a 32-assertion scratch check on the live org shape and **six
     reintroduced bugs, each caught** — but NOT yet a committed suite (C-0027).
+- **THE TAKE-OVER RULE IS CALLABLE (R-047, D-0037, 2026-09-24):
+  `services/ownership.js`, section "TAKING OVER".** PURE. deep builds the table,
+  gateway/guild the routes, surface the screens — all ON these, re-deriving none.
+  * `recordOwnerId(kind, record)` — lead → `assigned_to_bd`; job_order →
+    `bd_manager_id`; client → `{company, jobOrders, leads}` through
+    `clientOwnerFrom` = `routes/companies.js` `clientOwnerId()` ladder without
+    the queries (newest live JO's BD → newest live lead's BD → `created_by`).
+    **Unknown kind THROWS** — "unowned" would route to the asker's own manager.
+  * `canRequestTakeover({kind, record, requester, scope, openRequests?})` →
+    `{ok, reason, code, ownerId}`. Order: kind · same org + can SEE (lead →
+    `canSeeLead`; client/JO → shared, D-0035) · not admin · not owner · role
+    can own (lead: bd, bd_lead; JO/client: bd, bd_lead, associate_director,
+    director) · no own pending duplicate. **Every sight/org/deleted miss is the
+    SAME sentence, code `not_found` → route answers 404** (law 3).
+  * `approverFor({owner, requester, usersById, adminIds})` →
+    `{approverId, basis, why}`: owner's live manager · owner no manager → admin
+    · unowned → asker's manager, else admin · would be the asker → admin.
+    **Which admin: longest-serving live admin (earliest `created_at`, then
+    smallest id), never the asker.** No live admin → `approverId: null`,
+    basis `no_approver` → route must refuse to create.
+  * `canDecide({request, deciderId, deciderRoles, deciderOrgId})` — recorded
+    approver, or admin OF THE SAME ORG (no `deciderOrgId` → refused, fail
+    closed). Never the requester, admin or not. Pending only.
+    `canCancel({request, actorId})` — requester only, pending only.
+  * `takeoverTransition(from, to)` — pending → approved|declined|cancelled;
+    the three outcomes are FINAL (re-ask = new row).
+  * **~~A consequence the owner has not seen~~ — answered by D-0038
+    (2026-09-24):** a BD could not ask for a peer's / pool lead because they
+    cannot SEE it. The owner chose "from the duplicate warning". Option
+    **`viaDuplicateEmailMatch`** (name fixed — gateway's
+    `routes/ownership-requests.js` passes it): when **literally `true`** it
+    stands in for lead SIGHT only. Org, deleted, scope-owner, admin,
+    already_owner, role and already_requested all still apply; clients/job
+    orders ignore it; `not_found` wording is unchanged for every miss.
+    **REVIEW POINT for gateway's route:** the flag may be set ONLY after the
+    route matched the typed email against that lead's contacts IN THE DB,
+    org-scoped — never from a request body field. The asker still never sees
+    the lead's details (the approver does); the route's error for a non-match
+    must be the same 404 as a nonexistent lead.
+  * Scratch check (83 assertions, 16 for D-0038) + **13 + 5 reintroduced
+    bugs, all caught** (D-0038's: flag honoured for job_order/client, honoured
+    when unset, honoured on truthy non-`true`, flag skipping the org check,
+    flag short-circuiting role/admin). Not yet a committed suite; list handed
+    to foundry.
 - Multi-tenancy is **shipped**: `org_id` NOT NULL on all tenant tables
   (022/023), RLS + service-role policies on all 48 (039). 0 without RLS, 0
   without a policy.
@@ -193,6 +237,106 @@ edit/delete/apply-link owner-only · outreach pickers + lead ownership.
 X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
 says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 
+## R-047 FINAL RE-CHECK — 2026-09-24, round 3 (verdict: SHIP)
+83ff874 (guild) + 8af086c (gateway): R47-1 closed both halves (record_id nulled on every shapeRequest path via fresh canSeeLead, query-miss hides; /wf/enroll+bulk gate workflow/contact/job org-scoped, job must equal contact's, canActOnJob, one 404). R47-2..5 closed.
+No fail-open: req.orgId always set by auth() so wf.js `|| null` never unscopes; chain includes self. Residual LOW: a job-less contact / any in-org candidate is enrollable by anyone in the org (same-org only, no cross-org path).
+
+## RE-REVIEW OF R-047 — 2026-09-24, round 2 (verdict: DO-NOT-SHIP until R47-1 closes — a few lines)
+Read 19218ab (gateway), 4f16ff0 (ledger), 9dbedf9 (guild), 84188b3 (surface),
+08d278d (deep). Suites green except foundry's in-flight mutation assertion in
+`ownership-requests-smoke` (35/36: the "status guard removed" mutation no
+longer double-approves because M1's conditional reassign now also refuses —
+defence in depth, the TEST's expectation is stale).
+**Closed:** B1 reminder-send (canTouchJob, contact must be on that job,
+forRequest reads, org stamped) · B2 reminders write (canTouchJob, contact
+decides the job, identical 404s) + read (`reminderEmbedFor`: org + canSeeLead
+on the embed, withheld rows cannot send) · B3 generate (forRequest read,
+canTouchJob per id, stamped insert) · duplicate responses carry no lead_id and
+no company; `can_request` = `canRequestTakeover(…, viaDuplicateEmailMatch:
+true)` · can-request is POST · lead resolved server-side from `via_email`
+(`resolveLeadByEmail`, forRequest, exact match after ilike) · M1 conditional
+writes + revert to pending · M2 created_by rung · L1 liveness + role · L2
+models · L4 bounded · F1 data-attributes everywhere a string reaches a handler
+· F3 · 047 decided-has-decider.
+**Open:**
+- **R47-1 HIGH (blocker)** — the lead id still reaches the asker: `shapeRequest`
+  (`routes/ownership-requests.js:130`) returns `record_id` in the POST 201 and
+  in `box=mine`, including for a lead resolved from `via_email` the asker cannot
+  see. And `POST /wf/enroll` + `/wf/enroll-bulk` (`routes/wf.js:188/219`,
+  guild) check NOTHING about `job_id`, `entity_id` or `workflow_id` — the
+  contact context loader and email channel (`index.js` ~:3376-3460) read them
+  raw. So: own contact (any address) + colleague's `job_id` + `any_stage` →
+  a queued email from the colleague's mailbox, `sent_by` = the colleague,
+  filled with that lead's pos/company. Foreign ids → cross-org. Fix both:
+  withhold `record_id` on lead rows the viewer cannot `canSeeLead` (min fix);
+  gate enroll (workflow in org, contact org-scoped + `canTouchJob(contact.
+  job_id)`, `job_id` must equal the contact's job).
+- R47-2 LOW — canTouchJob admits the lead's CREATOR/researcher, so an RA can
+  queue a reminder-send that goes from the owning BD's mailbox (D-0020 says
+  acting is the owner's). R47-3 LOW — `resolveLeadByEmail` uses `ilike` with
+  unescaped `%`/`_` (harmless: exact filter after; unbounded fetch). R47-4
+  INFO — M2 rewrites `companies.created_by` (provenance) and an UNOWNED client
+  can never be approved (always reverts; request sits pending forever).
+  R47-5 LOW (pre-existing) — `resolveFromMailboxes` lets bd_lead/ra_lead pick
+  ANY org mailbox as a sequence "from".
+
+## REVIEW OF R-047 TAKE-OVER — 2026-09-24 (verdict: DO-NOT-SHIP as built)
+Read b05d1f3 (gateway), 9b0376f (guild), a9c8b05 (deep 047), 5ec3ef7 (surface).
+Suites green: 7 rampart + ownership 69 + models + ownership-requests 31 +
+route-shadowing 9.
+**Verified correct:** `viaDuplicateEmailMatch` is set ONLY by
+`emailMatchesLead` (org-scoped `contacts` by `job_id`, case-folded); no body
+boolean is read; a non-match is the same 404 + body (POST) / same sentence
+(can-request) as a missing lead; `record_label` for that path is "A lead with
+<typed email>"; mine box carries no lead details; `box=record` 404s a lead the
+viewer cannot see; every read/write is `db.forRequest`; approve = `canDecide`
+(same org) + requester active + live owner re-check + `.eq('status','pending')`;
+client move filtered by the OLD owner on both JOs and leads; a request cannot
+point at another org's record (row and record both loaded org-scoped). 047
+matches 039 (RLS + `service_all_*`), constraints sound, registered TENANT.
+**BLOCKERS — the new `lead_id` on duplicate responses hands a lead id to
+exactly the people D-0034 hides that lead from, and three PRE-EXISTING routes
+act on any job id with no org or owner check:**
+- B1 CRITICAL `index.js` `POST /emails/reminder-send` (~:835): `job_id` from
+  the body, raw fetch, no org/owner check; queues `sent_by=caller` and the send
+  loop (~:1863) sends from `job.sending_email_id` — **the lead owner's mailbox
+  (another company's, given a foreign id), arbitrary recipient and body.** The
+  filled body (pos/company) is then readable in the caller's own GET /emails.
+  Insert has no org_id → misfiles to the default org.
+- B2 HIGH `routes/reminders.js` `POST /reminders` (:189, ledger): `job_id` and
+  `contact_id` unvalidated; `GET /reminders` embeds `job:jobs(position,
+  location, company…)` and `contact:contacts(email, phone, linkedin…)` —
+  embedded joins are NOT org-filtered. Any lead's details for any id.
+- B3 HIGH `index.js` `POST /emails/generate` (~:1090): `.in('id', job_ids)`
+  no org/owner; queues cold emails under the owner's mailbox; a POOL lead
+  queues `sent_by=caller` (body readable); insert unstamped.
+Fix: `canTouchJob` + org on all three (and contact_id org-checked). Cheapest
+R-047-side mitigation: drop `lead_id` from both duplicate responses and let
+can-request/POST resolve the lead from `via_email` server-side.
+**Other findings:** M1 approve flips to `approved` BEFORE reassigning; the
+reassign writes ignore errors and are not conditional on the old owner (a
+distribute in between is overwritten; a failed write still says "approved —
+reassigned"). M2 client whose owner comes from `created_by` fallback (or
+unowned): approved, nothing moves, owner unchanged. L1 approve does not
+re-check the record is live or the requester's role. L2 `orgUsers`/
+`isActiveOrgUser` raw `supabase.from('users')` (law 2; scoped by hand, correct
+today). L3 `via_email` in a GET query string (prospect address in logs). L4
+`clientOwnerId` (companies.js, outreach.js) now fetches every JO/lead of a
+company unordered/unbounded — was order+limit 1. L5 `/contacts/check-email`
+still returns the matched lead's `company` (D5 said owner+date). 047: add
+`CHECK (status='pending' OR decided_by IS NOT NULL)`; table count is 49 once
+applied — law 6's "48" must move with it.
+**Surface (56 + call sites):** F1 MED JS-string injection — `esc()`/`htmlEsc()`
+inside `onclick="…('…')"` (56 otSlotInner viaEmail + approverName; 14/52 email)
+escape neither `'` nor anything that matters AFTER the attribute is decoded:
+"O'Brien" breaks the button; a contact email `x');…//@a.co` passes EMAIL_RE →
+stored XSS on any BD who hits the duplicate. Use data-attributes. F2 the
+duplicate link is drawn from guild's `can_request` (= "not the owner"), so
+RA/recruiter/admin see a link that refuses — compute it with
+`canRequestTakeover(…, viaDuplicateEmailMatch:true)`. F3 modal reads `can.why`
+(null on refusal; server sends `reason`); chip maps `withdrawn`, status is
+`cancelled`. Text renders of label/note/names all go through `esc()` — OK.
+
 ## RE-REVIEW OF THE FIXES — 2026-09-24, round 2 (verdict: ship-with-followups; land R1 in the same PR)
 Read `git diff 71a8006..HEAD` (fb3658b gateway, 1671962 guild, c7b8e6f
 harbour, fbd3f5b observatory). Rampart suites + ownership (69) + email-history
@@ -265,6 +409,7 @@ flows still separate correctly.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
+- **R-047: all findings closed (round 3, SHIP).** Residual LOW: job-less contact / candidate enrol is org-only.
 - **All eleven review findings are closed** (round 2, 2026-09-24). Open:
   R1 (one word, should land before merge), R2-R5 follow-ups — see above.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
@@ -279,6 +424,23 @@ flows still separate correctly.
 - Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
+- **2026-09-24 (R-047 round 2)** — every named fix verified in code; the id
+  handout was removed from the duplicate responses but survives in the
+  request's own `record_id`, and one more body-id route (`/wf/enroll`) was
+  never gated. **What would have saved time:** after a fix removes a field,
+  grep every RESPONSE the feature produces for the same value under a
+  different name, not just the field that was named in the finding.
+- **2026-09-24 (R-047 review)** — do-not-ship: `lead_id` on duplicate
+  responses reaches three pre-existing job-id routes with no owner/org check
+  (reminder-send sends from the owner's mailbox). **What would have saved
+  time:** when a change HANDS OUT a new id, grep every route that accepts that
+  id in a BODY (`req.body.job_id`), not just the `/:id` routes — the `/:id`
+  ones were all fixed in the audit; the body ones never were.
+- **2026-09-24 (R-047)** — wrote the take-over rule as pure functions in
+  `ownership.js`. **What would have saved time:** a fixture lead with
+  `created_by` = an RA in the asker's chain is VISIBLE to that asker (D-0034
+  research sight), so my "cross-team lead is invisible" case first failed on
+  the fixture, not the rule — seed sight-granting fields deliberately.
 - **2026-09-24 (round 2)** — re-reviewed the eleven fixes by reading the
   diff. All closed; one new fail-closed regression (R1). **What would have
   saved an hour:** when a fix adds a predicate over fetched rows, check the
@@ -298,3 +460,5 @@ flows still separate correctly.
   rampart suites green. Raised C-0021..C-0027. **What would have saved an
   hour:** reading `GET /app-settings` first — the worst finding was a
   three-line route that returns a whole table.
+
+

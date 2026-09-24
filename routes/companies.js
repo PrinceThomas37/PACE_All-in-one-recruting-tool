@@ -26,18 +26,31 @@ module.exports = (ctx) => {
   // Where several leads/job orders at one company have different owners, the
   // most recently created one wins; a formal "several owners" tie-break is not
   // asked for and is not built.
+  // The ladder itself is `own.clientOwnerFrom()` now (services/ownership.js) —
+  // the ONE place it lives, per D-0037's "TAKING OVER" section. This function
+  // is just the three queries that feed it; if the ladder ever changes it
+  // changes there, and this and routes/ownership-requests.js agree by
+  // construction rather than by two copies staying in sync.
+  // L4 (R-047 review round 2): `clientOwnerFrom` only ever reads the NEWEST
+  // live row with an owner off each list — sorting the whole table client-side
+  // was pure waste once these two queries stopped being limit-1, and on a
+  // client with a long job-order/lead history it is the query doing the most
+  // work for the least of it. Order + bound it in SQL instead: newest first,
+  // already filtered to live rows that actually have an owner, capped at 1 —
+  // there is nothing after the first row that could change the ladder's answer.
   async function clientOwnerId(req, companyId) {
-    const { data: jos } = await withOrg(supabase.from('job_orders')
-      .select('bd_manager_id,created_at').eq('company_id', companyId).is('deleted_at', null)
-      .not('bd_manager_id', 'is', null).order('created_at', { ascending: false }).limit(1), req);
-    if (jos && jos.length) return jos[0].bd_manager_id;
-    const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('assigned_to_bd,created_at').eq('company_id', companyId).is('deleted_at', null)
-      .not('assigned_to_bd', 'is', null).order('created_at', { ascending: false }).limit(1), req);
-    if (leads && leads.length) return leads[0].assigned_to_bd;
     const { data: co } = await withOrg(supabase.from('companies')
-      .select('created_by').eq('id', companyId), req).maybeSingle();
-    return co ? co.created_by : null;
+      .select('id,created_by').eq('id', companyId), req).maybeSingle();
+    if (!co) return null;
+    const { data: jos } = await withOrg(supabase.from('job_orders')
+      .select('bd_manager_id,created_at,company_id,deleted_at').eq('company_id', companyId)
+      .is('deleted_at', null).not('bd_manager_id', 'is', null)
+      .order('created_at', { ascending: false }).limit(1), req);
+    const { data: leads } = await withOrg(supabase.from('jobs')
+      .select('assigned_to_bd,created_at,company_id,deleted_at').eq('company_id', companyId)
+      .is('deleted_at', null).not('assigned_to_bd', 'is', null)
+      .order('created_at', { ascending: false }).limit(1), req);
+    return own.clientOwnerFrom({ company: co, jobOrders: jos || [], leads: leads || [] });
   }
 
   // Loads the company (org-scoped, 404 if foreign/missing) and, unless the

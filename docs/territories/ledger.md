@@ -1,5 +1,5 @@
 # Ledger — memory
-> Last written: 2026-09-23 · C-0025 (D-0034 on the candidate email-activity card)
+> Last written: 2026-09-24 · R-047 B2 (reminders could read any lead by id)
 
 ## What is true here now
 - Billing is **built and payments are switched off** (Session 11).
@@ -35,6 +35,28 @@
   The rule is the exported pure `activityRowFor(row, scope, senderName)`.
 
 ## Fragile — touch with care
+- **`routes/reminders.js`: an EMBEDDED JOIN IS NOT ORG-FILTERED (R-047 B2).**
+  `db.forRequest` scopes `reminders`; the `job:jobs(...)` / `contact:contacts(...)`
+  embeds in `GET /reminders` are not. `POST /reminders` used to take any
+  `job_id`/`contact_id`, so a reminder naming another company's lead read back
+  its position, company and the contact's email/phone/LinkedIn. Now BOTH ends:
+  * **write** — `contact_id` must be an org contact with a `job_id` (its lead
+    becomes the reminder's lead, or must equal the `job_id` sent), and the lead
+    must pass `canTouchJob` (org-bound). Every miss is the same **404** "Lead or
+    contact not found". `org_id` stamped by `db.forRequest`. No frontend caller
+    sends either id today (manual + meeting reminders), so nothing changed there.
+  * **read** — `reminderEmbedFor(row, {orgId, scope})` (PURE, exported off the
+    router module) keeps the job only if in-org, matches `job_id` and passes
+    `ownership.canSeeLead` (D-0034 scope; the chain is fetched only when some
+    lead is not visibly the caller's), the company only if in-org, the contact
+    only if in-org AND on THAT lead. A failing row keeps its own stored text,
+    loses the embed, is **never deleted or hidden**, and is send-blocked through
+    the existing `outreach.blocked` channel (`block_reason:'not_on_desk'`) so
+    the page refuses up front with no new branch. Sequence / sent-mail lookups
+    run on the safe rows, so a withheld contact cannot leak via enrichment.
+  * Consequence worth knowing: a reminder on a lead since recycled to the pool
+    or handed to someone outside the caller's chain now shows its stored
+    name/company only. That is D-0034, not a regression.
 - **`email_tracking.token` is a BEARER SECRET and must never be sent to a
   browser.** It is the pixel token AND the candidate answer-page token —
   `POST /i/<token>/opt-out` needs nothing else and writes the GLOBAL
@@ -85,3 +107,13 @@
   run:** my first mutation pass reported every bug "caught" because the copied
   module failed to LOAD (exit 1, zero FAIL lines) — count FAIL lines, never
   trust a non-zero exit as a catch.
+- **2026-09-24** — R-047 B2 closed in `routes/reminders.js`: POST validates
+  lead (canTouchJob) + contact (org, same lead), 404 on any miss; GET drops
+  cross-org / out-of-scope embeds via `reminderEmbedFor`, send-blocks those
+  rows. Verified: `reminder-clarity` 50/51 (the 1 failure is surface's
+  in-flight `.ot-chip.approved` hex appended after the REMINDERS block in
+  `public/styles.css`, not mine), next-action 49/49, org-scoping-routes 13/13,
+  ownership 69/69, backend 107/107, models 53/53, route-shadowing 9/9. A
+  14-assertion scratch check (pure rule + POST handler on a fake db) passes and
+  FAILS with the `canSeeLead` clause or the `canTouchJob` gate removed.
+  **Unpinned:** foundry should commit it.

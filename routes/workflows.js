@@ -308,25 +308,43 @@ router.post('/jobs/bulk-assign', auth, async (req, res) => {
 // checked against every other org's contacts, and the response named the
 // matched lead's role and client. `email`/`duplicate`/`days_ago`/`added_by`
 // is the shape 52-poc-block.js's single-address version already expects.
+// R-047 (rampart, do-not-ship blocker): `lead_id` used to ride along on this
+// response so the caller could later ask `POST /ownership-requests` to take
+// the lead over — but D-0034 hides that same lead from most of these callers,
+// and a lead id handed to someone who cannot see the lead is exactly the kind
+// of hole this territory keeps closing. Gateway's route resolves the lead
+// from the typed email itself (D-0038's `viaDuplicateEmailMatch`), org-scoped,
+// server-side — never from an id a browser hands back. `can_request` is
+// computed here with the SAME rule the take-over route enforces
+// (`canRequestTakeover`, viaDuplicateEmailMatch: true) so an RA, a recruiter
+// or an admin never sees a link that then refuses (R-047 F2).
 router.post('/jobs/check-duplicates', auth, async (req, res) => {
   try {
     const { emails } = req.body;
     if (!Array.isArray(emails) || !emails.length) return res.json({ duplicates: [] });
     let q = supabase.from('contacts')
-      .select('email,created_at,job:jobs(id,assigned_to_bd,owner:users!assigned_to_bd(id,name))')
+      .select('email,created_at,job:jobs(id,org_id,deleted_at,assigned_to_bd,owner:users!assigned_to_bd(id,name))')
       .in('email', emails.map(e => e.toLowerCase().trim())).not('email', 'is', null);
     if (req.orgId) q = q.eq('org_id', req.orgId);
     const { data, error } = await q;
     if (error) throw error;
+    const chain = await reportingChainIds(req.user.id, req.orgId || null);
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const requester = { id: req.user.id, role: req.user.role, roles: req.user.roles, org_id: req.orgId };
     // Shape per the coordinator/gateway agreement (D5): whose lead it is and
-    // since when — never the other lead's company/position/contact.
+    // since when — never the other lead's company/position/contact, and
+    // never the lead's own id.
     const duplicates = (data || []).map(c => {
       const job = c.job || {};
+      const canReq = job.id
+        ? own.canRequestTakeover({ kind: 'lead', record: job, requester, scope, viaDuplicateEmailMatch: true })
+        : { ok: false };
       return {
         email: c.email,
         duplicate: true,
         owner_name: (job.owner && job.owner.name) || null,
         since: c.created_at || null,
+        can_request: canReq.ok,
       };
     });
     res.json({ duplicates });

@@ -70,6 +70,10 @@
       STATE.bd.jobOrders=d||[];STATE.bd.loading=false;render();
     }).catch(function(e){STATE.bd.loading=false;showToast('Failed to load jobs: '+e.message,'error');render();});
   }
+  // Named global so a take-over approval (56-ownership-requests.js) can
+  // refresh the job-orders list without an `if(window.x)` guard — CLAUDE.md's
+  // rule for a cross-module call that is supposed to happen.
+  window.bdReloadJobOrders = function(){ loadJobOrders(); };
   function loadCandidates(q){
     return apiGet('/candidates'+(q?'?q='+encodeURIComponent(q):'')).then(function(d){return d||[];}).catch(function(){return[];});
   }
@@ -1026,6 +1030,10 @@
             // D-0035: `PUT /job-orders/:id` now 403s a non-owner — never draw
             // a button that will refuse (Session 24 rule).
             (canOwn?'<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>':'')+
+        // D-0038: every job order is visible company-wide (D-0035); only the
+        // owner may act on it. A non-owner gets "Ask to take over" once the
+        // server confirms they may ask — never a button that will refuse.
+        (canOwn?'':(window.otSlot?otSlot('job_order',j.id):''))+
             // The rewind clock — same mark, same panel as every other record.
             // A job order kept NO history at all before this: its status could
             // move all week with nothing recording who moved it.
