@@ -69,7 +69,7 @@ router.post('/suppression', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
     const { email, note } = req.body || {};
     if (!email || !emailSyntaxValid(email)) return res.status(400).json({ error: 'Valid email required' });
-    await addToSuppression(email, 'manual', 'admin', req.user.id, note || null);
+    await addToSuppression(email, 'manual', 'admin', req.user.id, note || null, orgOf(req));
     res.status(201).json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

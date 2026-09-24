@@ -125,6 +125,9 @@
   DEFAULT org, so a second org cannot see its own opt-outs (safe direction),
   and the default org's admin could remove one another org recorded. Needs
   gateway (stamp) + ledger (is an opt-out per-org or per-deployment?).
+  **Stamp half CLOSED (rampart review):** `POST /suppression` now passes
+  `orgOf(req)` as `addToSuppression`'s 6th arg (routes/deliverability.js:72); the
+  per-org vs deployment-wide CHECK question stays ledger's.
 - `/warmup/tick` and `connectedSet` (Microsoft only — Gmail mailboxes read as
   "not connected" in readiness) are unchanged; the tick is a deployment
   control (C-0021 X9).
@@ -163,4 +166,5 @@
   narrowing stays — defence in depth, and removing both IS caught. Engine
   check 6/6, and the pre-fix engine fails it. Harness is scratch, not committed
   — foundry to pin (C-0027 family).
+
 
