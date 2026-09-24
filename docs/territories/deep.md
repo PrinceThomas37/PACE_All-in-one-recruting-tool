@@ -175,3 +175,28 @@ file, so this is 047. **Next migration is 048.**
   foundry's file; they must bump it to 44 when this lands.
 - Not to be confused with `assignment_requests` (020): that asks to be PUT ON a
   job order as a recruiter; this asks to OWN a record.
+
+
+## 2026-09-24 — 047 gains a fourth CHECK (rampart review), still NOT APPLIED
+- Added `ownership_requests_decided_has_decider`:
+  `CHECK (status = 'pending' OR decided_by IS NOT NULL)`. The existing
+  `decider_not_requester` check uses `IS DISTINCT FROM`, which is TRUE for a
+  NULL `decided_by`, so without this an approval could be stored with no decider.
+  Named, inline in the CREATE, **and** re-added by a guarded `DO` block
+  (`pg_constraint` lookup) so a re-run over a pre-existing table converges.
+  Syntax re-read by hand; no Postgres server in the sandbox to dry-run it.
+- **THE "48 TABLES" FIGURE IS ALREADY STALE, NOT "48 → 49".** By the registry
+  (`models/tables.js`, which `models-smoke` pins against applied migrations):
+  live today = **43 tenant + 7 global = 50**; after 047 = **44 + 7 = 51**.
+  037, 042 (`candidate_outreach`) and 045 (`record_history`) each added a table
+  after the 48 was written, and nobody moved the number. **Not re-verified
+  against the live schema this round** (no Supabase tool in this session) —
+  confirm with `select count(*) from pg_tables where schemaname='public'`
+  before writing the new figure anywhere.
+- Files still saying 48 (grep, excluding the append-only archive):
+  `CLAUDE.md:1436`, `docs/CONTEXT_WINDOW.md:264`, `docs/territories/_contracts.md:388`,
+  `docs/territories/rampart.md:83,86`, `.claude/agents/deep.md:10,34`,
+  `.claude/agents/rampart.md:38`, and this file's own header (lines 5, 15 —
+  left as-is here pending the live count). **No test pins 48**; the only
+  table-total pin is `test/models-smoke.mjs:171-172` (`TENANT_TABLES.size === 44`),
+  already at the post-047 value. `models-smoke` 53/53 PASS.

@@ -60,8 +60,29 @@ CREATE TABLE IF NOT EXISTS ownership_requests (
     CHECK ((status = 'pending') = (decided_at IS NULL)),
   -- Approving or declining is never the asker's own act (cancelling is).
   CONSTRAINT ownership_requests_decider_not_requester
-    CHECK (status NOT IN ('approved', 'declined') OR decided_by IS DISTINCT FROM requester_id)
+    CHECK (status NOT IN ('approved', 'declined') OR decided_by IS DISTINCT FROM requester_id),
+  -- A decided request says WHO decided (rampart review). Without this a NULL
+  -- decided_by passes the check above ("IS DISTINCT FROM" is true for NULL),
+  -- so an approval could be recorded with no decider at all.
+  CONSTRAINT ownership_requests_decided_has_decider
+    CHECK (status = 'pending' OR decided_by IS NOT NULL)
 );
+
+-- The table is CREATE ... IF NOT EXISTS, so on a re-run against a table that
+-- predates the constraint above, the inline copy would be skipped. Add it by
+-- name if it is missing, so every run ends with the same constraint set.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'ownership_requests_decided_has_decider'
+       AND conrelid = 'public.ownership_requests'::regclass
+  ) THEN
+    ALTER TABLE ownership_requests
+      ADD CONSTRAINT ownership_requests_decided_has_decider
+      CHECK (status = 'pending' OR decided_by IS NOT NULL);
+  END IF;
+END $$;
 
 -- One PENDING request per person per record. Re-asking after a decision is
 -- allowed; asking twice while one is waiting is a 23505 the route should read
