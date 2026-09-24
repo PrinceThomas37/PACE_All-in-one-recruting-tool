@@ -6016,3 +6016,5 @@ All round-1 fixes verified in code. R47-1: shapeRequest still returned record_id
 
 ### R-047 finished (2026-09-24)
 Rampart round 3: ship. Foundry pinned the flow (111/111). Migration 047 applied live: ownership_requests, 15 columns, RLS on, 1 service policy, 5 indexes, 0 rows. Found: two 10-Sep backup tables with RLS off (R-050, needs owner OK). Usage note: the owner's usage report showed 100% subagent-heavy, 80% of usage at >150k context — keep agent briefs narrow.
+
+Merged #232 (`03eb5b7`).
