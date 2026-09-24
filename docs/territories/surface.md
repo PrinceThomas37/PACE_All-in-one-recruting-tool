@@ -637,3 +637,107 @@ non-owner.
 orchestrator):** `GET /clients` needs an owner hint so the client Upload/
 Delete-document buttons can be hidden for a non-owner the same way job orders
 now are — today they are drawn unconditionally and rely on the 403 toast alone.
+
+## 2026-09-24 (round 3) — "Ask to take over" (R-047, D-0036/D-0037/D-0038)
+
+**One new module, `public/js/56-ownership-requests.js`, is the whole feature.**
+Every door — the client page, the job-order detail, the lead drawer, the
+import's duplicate-warning modal, the new-contact "already exists" note, and
+the manager's approval screen — calls into this one file. Coded to the API
+shape gateway/guild described (not landed yet at time of writing): `GET
+/ownership-requests/can-request`, `POST /ownership-requests`, `GET
+/ownership-requests?box=mine|waiting|record`, `POST .../:id/approve|decline|
+cancel`; guild's `lead_id`+`can_request` on `POST /jobs/check-duplicates` and
+`/contacts/check-email`.
+
+* **`otSlot(kind, recordId, viaEmail)` draws NOTHING until the server answers,
+  and draws nothing at all if the answer is no** (Session 24's rule, restated
+  for a new feature: never a button that will refuse). Three outcomes only:
+  empty, "Ask to take over" + "\<name\> decides.", or "Requested · waiting on
+  \<name\>" + Withdraw. **Cached per (kind, record, via_email)** so a tab
+  switch or an unrelated repaint renders the answer synchronously — no
+  flicker, no repeat network call — until a submit/withdraw invalidates it.
+  Patches its own `<div>` when the answer lands, same family as the POC
+  duplicate-email check (52-poc-block.js).
+* **The ask modal uses the app's existing plain `STATE.modal` idiom**
+  (clientsOpenEmail / bdOpenAssign / the duplicate-warning modal all do this
+  already) rather than a second overlay mechanism — one fewer pattern in the
+  app, not a new one.
+* **The duplicate-warning link needs no pre-check**: the server already
+  computed `can_request` when it found the duplicate (proof of the right to
+  ask is that the person just typed that exact email), so the link is
+  conditional on the flag alone. Opening its modal does its OWN can-request
+  fetch (no approver name known yet) to confirm eligibility and get the
+  approver's name before Send is enabled — a genuine race is possible between
+  "duplicate found" and "click the link".
+* **Placement mirrors each screen's existing ownership gate** — never a new
+  one: the client page always asks the server (no owner id on `GET /clients`
+  yet, see the open contract above); the job-order detail reuses `canOwn =
+  j.poc_visible!==false` (D-0035); the lead drawer reuses `canEdit` (already
+  exactly "am I this lead's owner").
+* **Approvals live next to "Needs you today"**, not on the Reminders page. The
+  app had already decided a manager reviews their team's open work there
+  (`naTeamLine`/`naOpenTeam`, D-0020) — a take-over request is exactly that
+  kind of review, and the Reminders page (`10-page-modals.js`) is personal-only
+  (`myReminders` filtered by `user_id`), which is the wrong shape for
+  something a manager approves. `renderOwnershipSummaryCard()` is a quiet
+  standalone card (own line, `.na-hidden` styling, D-0019: no red, appears
+  only when `waiting_count` or "my requests" count is non-zero) placed right
+  after `renderNextActionsCard()` on all three dashboards. Loaded once per
+  visit like next-actions/the morning briefing — **nothing here polls on a
+  timer**. Clicking either half opens one modal with two tabs, "Waiting on
+  you" (Approve/Decline, decline reveals an inline optional-note box, never
+  `prompt()`) and "My requests" (pending/approved/declined/withdrawn, a stripe
+  + one chip, no red — D-0019, verified by screenshot with all three
+  non-pending states).
+* **After a decision, three named globals refresh the lists that show
+  ownership** — `refreshJobs()` (already a top-level global in `22-api.js`),
+  and two new ones added for this: `window.clientsReload` (`41-page-
+  clients.js`) and `window.bdReloadJobOrders` (`25-workflow-bd.js`). Called
+  directly, not behind `if(window.x)` — CLAUDE.md's rule that a guard around a
+  call that is SUPPOSED to happen converts a crash into a silence. (The
+  `otSlot`/`rewindBtn`-style `window.x?x():''` guards used at the three button
+  placements are a different case — an optional decoration that may
+  legitimately not exist yet on a page mid-render, the same precedent
+  `rewindBtn` already set in this codebase.)
+* New CSS: `.ot-*` classes appended to the end of `styles.css` (no inline
+  colours, no inline widths — reuses `.na-act`/`.na-act-quiet`/`.btn`/`.modal`
+  for everything that already has a themed class). Reflows at 390px: the panel
+  becomes the existing bottom-sheet dialog treatment, Approve/Decline get
+  40px touch targets under `@media (max-width:860px)`.
+
+**Verified:** `node --check` on all seven touched files; `bash
+test/verify-frontend.sh`; `node test/page-renders-smoke.mjs` 7/7; `node
+test/mobile-layout-smoke.mjs` 39/39; `node test/theme-contrast-smoke.mjs`
+10/10; `node test/frontend-smoke.mjs` 14/14; `node test/nav-icons-smoke.mjs`
+55/55; `node test/screen-stability-smoke.mjs` 23/23. Screenshots taken with a
+stubbed `apiGet`/`apiPost` (Playwright, run from the scratchpad — not added to
+`test/`) at 1280px and 390px: client page as non-owner with the button, the
+request modal, the duplicate-warning modal (one row with the link, one
+without — `can_request:false`), the approvals panel with two waiting requests,
+the "My requests" tab (pending + declined), the dashboard summary line, the
+lead drawer as a non-owner, the job-order detail as a non-owner, and the
+approvals panel reflowed on a 390px phone.
+
+**Not run:** the full `npm test` (task said not to). **Files I did not touch:**
+`test/*` and every other territory's paths — did not touch them.
+
+**What foundry should pin** (none of this is covered by any existing suite):
+1. `otSlot` renders nothing while `can-request` is pending, the button+
+   "\<approver\> decides" once `ok:true` lands, and "Requested · waiting on
+   \<approver\>" once a record-scoped pending request from the caller is
+   found — never more than one of the three at once.
+2. A duplicate-warning / already-exists note with `can_request:false` (or no
+   `lead_id`) never renders the "Ask to take over" link; one with both true
+   does, and clicking it opens the modal with `kind:'lead'` and the typed
+   email as `via_email`.
+3. Approving/declining in the panel calls `refreshJobs()`,
+   `window.clientsReload`, and `window.bdReloadJobOrders` — and none of them
+   throw when the corresponding page has never been visited this session
+   (module-scope `STATE.bd`/`STATE.clients` may not exist yet).
+4. The "My requests" tab never shows Approve/Decline (`can_decide` is a
+   `waiting`-box-only concept); the "Waiting on you" tab never shows Withdraw.
+5. A repeated `otSlot()` call for the same (kind, record, via_email) within one
+   session does not re-issue the network call — the cache is genuinely used
+   (this is the property the render-engine "idle repaint writes nothing" rule
+   depends on here, at the level of network calls rather than DOM writes).

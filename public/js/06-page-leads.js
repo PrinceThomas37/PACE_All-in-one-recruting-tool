@@ -568,6 +568,11 @@ function renderJobDetailModal(){
         '</div>'+
         '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Source</label><div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.source||"—")+'</div></div>'+
       '</div>'+
+      // D-0038: a manager viewing a report's lead (or anyone else who is not
+      // its owner) sees "Ask to take over" once the server confirms it —
+      // never a button that will refuse. `canEdit` already IS the ownership
+      // check for a lead, so this is exactly its inverse.
+      (canEdit?'':'<div style="margin-bottom:16px">'+(window.otSlot?otSlot('lead',j.id):'')+'</div>')+
       leadDetailsBlock(j)+
       '<div style="margin-bottom:18px"><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Notes</label>'+
         (canEdit?'<textarea id="job-notes" onblur="saveJobNotes(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:64px;resize:vertical;font-family:inherit">'+escHtml(j.notes||"")+'</textarea>':'<div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.notes||"—")+'</div>')+

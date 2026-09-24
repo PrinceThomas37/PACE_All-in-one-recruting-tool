@@ -439,3 +439,43 @@ tr.sel-row td{background:var(--accent-l)}
 .ld-link{color:var(--accent);text-decoration:none}
 .ld-link:hover{text-decoration:underline}
 @media (max-width:860px){.ld-row{grid-template-columns:1fr;gap:0}.ld-k{font-size:11.5px}}
+
+/* ── "Ask to take over" (R-047, D-0036/D-0037/D-0038) ─────────────────────── */
+/* Calm by construction: no red anywhere in this block (D-0019) — a request is
+   a normal workflow step, not a fault. */
+.ot-slot{display:inline-block}
+.ot-ask{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px}
+.ot-decides{font-size:11px;color:var(--text3)}
+.ot-pending{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ot-pending-lbl{font-size:12px;color:var(--text2);font-weight:600}
+.ot-check{font-size:12.5px;color:var(--text3);padding:4px 0}
+.ot-check.ot-blocked{color:var(--amber)}
+.ot-label{font-size:11px;color:var(--text2);display:block;margin:10px 0 4px}
+.ot-decides-line{font-size:12.5px;color:var(--text2);margin-bottom:10px}
+.ot-dup-link{color:var(--accent);text-decoration:none;font-weight:600}
+.ot-dup-link:hover{text-decoration:underline}
+.ot-summary{padding:12px 14px}
+
+.ot-panel{max-width:640px;width:100%}
+.ot-tabs{display:flex;gap:0;padding:0 20px;border-bottom:1px solid var(--border)}
+.ot-tab{padding:10px 4px;margin-right:18px;font-size:12.5px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent}
+.ot-tab.on{color:var(--text);border-bottom-color:var(--accent)}
+.ot-body{max-height:60vh;overflow:auto}
+.ot-row{padding:12px 20px;border-bottom:1px solid var(--border2);border-left:3px solid transparent}
+.ot-row.st-pending{border-left-color:var(--accent)}
+.ot-row.st-approved{border-left-color:var(--green)}
+.ot-row.st-declined,.ot-row.st-withdrawn{border-left-color:var(--text3)}
+.ot-row-t{font-size:13.5px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ot-row-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.ot-row-note{font-size:12px;color:var(--text2);margin-top:4px;white-space:pre-wrap}
+.ot-row-acts{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+.ot-decline-box{margin-top:8px}
+.ot-empty{padding:26px 20px;text-align:center;font-size:13px;color:var(--text3)}
+.ot-chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:8px}
+.ot-chip.pending{background:var(--accent-l);color:var(--accent)}
+.ot-chip.approved{background:#E7F7EC;color:#166534}
+.ot-chip.declined,.ot-chip.withdrawn{background:var(--bg);color:var(--text3);border:1px solid var(--border2)}
+@media (max-width:860px){
+  .ot-row-acts .btn{min-height:40px}
+  .ot-tabs{padding:0 14px}
+}

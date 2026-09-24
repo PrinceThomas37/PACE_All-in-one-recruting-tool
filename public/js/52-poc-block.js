@@ -132,10 +132,16 @@ window.pocRemove = function (name, idx) {
 function _pocNoteHTML(c) {
   if (c._emailDup && c._emailDup.duplicate) {
     var d = c._emailDup;
+    // D-0038: same proof-of-right-to-ask as the import's duplicate warning —
+    // this person typed the email themselves, and the server checked it.
     return '<div style="padding:6px 10px;background:var(--red-l);border-radius:var(--r);font-size:11.5px;color:var(--red)">' +
       'Already in PACE — added ' + d.days_ago + ' day' + (d.days_ago !== 1 ? 's' : '') + ' ago' +
       (d.added_by ? ' by <strong>' + htmlEsc(d.added_by) + '</strong>' : '') +
-      (d.company ? ' at <strong>' + htmlEsc(d.company) + '</strong>' : '') + '.</div>';
+      (d.company ? ' at <strong>' + htmlEsc(d.company) + '</strong>' : '') + '.' +
+      (d.can_request && d.lead_id
+        ? ' <a href="#" class="ot-dup-link" onclick="event.preventDefault();otOpen(\'lead\',\'' + htmlEsc(d.lead_id) + '\',\'' + htmlEsc(c.email || '') + '\')">Ask to take over</a>'
+        : '') +
+    '</div>';
   }
   if (c._emailState === 'ok') return '<div style="font-size:11px;color:var(--text3)">Not seen before.</div>';
   // A placeholder line of the SAME shape, so the empty state is exactly as tall
