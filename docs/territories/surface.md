@@ -28,7 +28,7 @@
   loads the pool. Email → **Pending** shows "Candidate emails waiting to go"
   (`renderCandidatePendingPanel`), and recruiters get a Pending tab.
 - Candidates: selection bar has **Add to job** (one `POST /pipeline/bulk`);
-  **Upload resumes** (`56-bulk-resume.js`: pick ≤25 → read one at a time with a
+  **Upload resumes** (`57-bulk-resume.js`: pick ≤25 → read one at a time with a
   progress bar → editable table → add one at a time with a count; reuses
   parse-resume, POST /candidates, documents, /pipeline — no new server path).
   New Candidate shows **Owner (you)** read-only; no picker, never sends owner_id.
@@ -674,3 +674,195 @@ non-owner.
 orchestrator):** `GET /clients` needs an owner hint so the client Upload/
 Delete-document buttons can be hidden for a non-owner the same way job orders
 now are — today they are drawn unconditionally and rely on the 403 toast alone.
+
+## 2026-09-24 (round 3) — "Ask to take over" (R-047, D-0036/D-0037/D-0038)
+
+**One new module, `public/js/56-ownership-requests.js`, is the whole feature.**
+Every door — the client page, the job-order detail, the lead drawer, the
+import's duplicate-warning modal, the new-contact "already exists" note, and
+the manager's approval screen — calls into this one file. Coded to the API
+shape gateway/guild described (not landed yet at time of writing): `GET
+/ownership-requests/can-request`, `POST /ownership-requests`, `GET
+/ownership-requests?box=mine|waiting|record`, `POST .../:id/approve|decline|
+cancel`; guild's `lead_id`+`can_request` on `POST /jobs/check-duplicates` and
+`/contacts/check-email`.
+
+* **`otSlot(kind, recordId, viaEmail)` draws NOTHING until the server answers,
+  and draws nothing at all if the answer is no** (Session 24's rule, restated
+  for a new feature: never a button that will refuse). Three outcomes only:
+  empty, "Ask to take over" + "\<name\> decides.", or "Requested · waiting on
+  \<name\>" + Withdraw. **Cached per (kind, record, via_email)** so a tab
+  switch or an unrelated repaint renders the answer synchronously — no
+  flicker, no repeat network call — until a submit/withdraw invalidates it.
+  Patches its own `<div>` when the answer lands, same family as the POC
+  duplicate-email check (52-poc-block.js).
+* **The ask modal uses the app's existing plain `STATE.modal` idiom**
+  (clientsOpenEmail / bdOpenAssign / the duplicate-warning modal all do this
+  already) rather than a second overlay mechanism — one fewer pattern in the
+  app, not a new one.
+* **The duplicate-warning link needs no pre-check**: the server already
+  computed `can_request` when it found the duplicate (proof of the right to
+  ask is that the person just typed that exact email), so the link is
+  conditional on the flag alone. Opening its modal does its OWN can-request
+  fetch (no approver name known yet) to confirm eligibility and get the
+  approver's name before Send is enabled — a genuine race is possible between
+  "duplicate found" and "click the link".
+* **Placement mirrors each screen's existing ownership gate** — never a new
+  one: the client page always asks the server (no owner id on `GET /clients`
+  yet, see the open contract above); the job-order detail reuses `canOwn =
+  j.poc_visible!==false` (D-0035); the lead drawer reuses `canEdit` (already
+  exactly "am I this lead's owner").
+* **Approvals live next to "Needs you today"**, not on the Reminders page. The
+  app had already decided a manager reviews their team's open work there
+  (`naTeamLine`/`naOpenTeam`, D-0020) — a take-over request is exactly that
+  kind of review, and the Reminders page (`10-page-modals.js`) is personal-only
+  (`myReminders` filtered by `user_id`), which is the wrong shape for
+  something a manager approves. `renderOwnershipSummaryCard()` is a quiet
+  standalone card (own line, `.na-hidden` styling, D-0019: no red, appears
+  only when `waiting_count` or "my requests" count is non-zero) placed right
+  after `renderNextActionsCard()` on all three dashboards. Loaded once per
+  visit like next-actions/the morning briefing — **nothing here polls on a
+  timer**. Clicking either half opens one modal with two tabs, "Waiting on
+  you" (Approve/Decline, decline reveals an inline optional-note box, never
+  `prompt()`) and "My requests" (pending/approved/declined/withdrawn, a stripe
+  + one chip, no red — D-0019, verified by screenshot with all three
+  non-pending states).
+* **After a decision, three named globals refresh the lists that show
+  ownership** — `refreshJobs()` (already a top-level global in `22-api.js`),
+  and two new ones added for this: `window.clientsReload` (`41-page-
+  clients.js`) and `window.bdReloadJobOrders` (`25-workflow-bd.js`). Called
+  directly, not behind `if(window.x)` — CLAUDE.md's rule that a guard around a
+  call that is SUPPOSED to happen converts a crash into a silence. (The
+  `otSlot`/`rewindBtn`-style `window.x?x():''` guards used at the three button
+  placements are a different case — an optional decoration that may
+  legitimately not exist yet on a page mid-render, the same precedent
+  `rewindBtn` already set in this codebase.)
+* New CSS: `.ot-*` classes appended to the end of `styles.css` (no inline
+  colours, no inline widths — reuses `.na-act`/`.na-act-quiet`/`.btn`/`.modal`
+  for everything that already has a themed class). Reflows at 390px: the panel
+  becomes the existing bottom-sheet dialog treatment, Approve/Decline get
+  40px touch targets under `@media (max-width:860px)`.
+
+**Verified:** `node --check` on all seven touched files; `bash
+test/verify-frontend.sh`; `node test/page-renders-smoke.mjs` 7/7; `node
+test/mobile-layout-smoke.mjs` 39/39; `node test/theme-contrast-smoke.mjs`
+10/10; `node test/frontend-smoke.mjs` 14/14; `node test/nav-icons-smoke.mjs`
+55/55; `node test/screen-stability-smoke.mjs` 23/23. Screenshots taken with a
+stubbed `apiGet`/`apiPost` (Playwright, run from the scratchpad — not added to
+`test/`) at 1280px and 390px: client page as non-owner with the button, the
+request modal, the duplicate-warning modal (one row with the link, one
+without — `can_request:false`), the approvals panel with two waiting requests,
+the "My requests" tab (pending + declined), the dashboard summary line, the
+lead drawer as a non-owner, the job-order detail as a non-owner, and the
+approvals panel reflowed on a 390px phone.
+
+**Not run:** the full `npm test` (task said not to). **Files I did not touch:**
+`test/*` and every other territory's paths — did not touch them.
+
+**What foundry should pin** (none of this is covered by any existing suite):
+1. `otSlot` renders nothing while `can-request` is pending, the button+
+   "\<approver\> decides" once `ok:true` lands, and "Requested · waiting on
+   \<approver\>" once a record-scoped pending request from the caller is
+   found — never more than one of the three at once.
+2. A duplicate-warning / already-exists note with `can_request:false` never
+   renders the "Ask to take over" link; one with `can_request:true` does, and
+   clicking it opens the modal with `kind:'lead'` and the typed email as
+   `via_email` — with NO `record_id` anywhere in the request (see round 3 log
+   below: `lead_id` is gone from this response entirely).
+3. Approving/declining in the panel calls `refreshJobs()`,
+   `window.clientsReload`, and `window.bdReloadJobOrders` — and none of them
+   throw when the corresponding page has never been visited this session
+   (module-scope `STATE.bd`/`STATE.clients` may not exist yet).
+4. The "My requests" tab never shows Approve/Decline (`can_decide` is a
+   `waiting`-box-only concept); the "Waiting on you" tab never shows Withdraw.
+5. A repeated `otSlot()` call for the same (kind, record, via_email) within one
+   session does not re-issue the network call — the cache is genuinely used
+   (this is the property the render-engine "idle repaint writes nothing" rule
+   depends on here, at the level of network calls rather than DOM writes).
+
+## 2026-09-24 (round 4) — R-047 review fixes: data-attributes, not JS-string interpolation (F1/F3), and the `lead_id` removal
+
+Fixed everything rampart's re-review flagged in this territory (R-047 review,
+"Surface (56 + call sites)" section).
+
+* **F1 (script injection).** `otSlotInner`'s Withdraw / "Ask to take over"
+  buttons, and the duplicate-warning links in `14-mailmerge-engine.js` and
+  `52-poc-block.js`, used to build `onclick="fn('...')"` by concatenating
+  `esc()`/`htmlEsc()`-escaped values straight into the JS-string literal.
+  **That escaping only protects the HTML ATTRIBUTE — the browser decodes the
+  attribute before the JS string inside it is ever parsed**, so an escaped
+  `'` still closes the string early: an owner name like `O'Brien` broke the
+  button (truncated the call, threw on click), and a contact email such as
+  `x');alert(1);//@a.co` — which still matches the app's own email shape check
+  — was stored XSS, fired the moment a BD's screen rendered that duplicate
+  warning. Every one of those values now travels as a `data-*` attribute
+  (`data-kind`, `data-record-id`, `data-via-email`, `data-approver-name`,
+  `data-req-id`, `data-slot-id`), read back with `el.dataset` by two new
+  handlers — `otOpenFromEl(this)` / `otWithdrawFromEl(this)` — which never
+  re-enter JS-string parsing at all. Verified live (headless Playwright, both
+  screenshots below): the hostile email renders as inert text with no popup,
+  clicking the link still opens the modal, and `O'Brien` renders correctly as
+  the owner name without breaking anything.
+* **F3.** The ask-modal's refusal read `can.why`, which the server never
+  sends (it sends `reason`) — every real refusal sentence was silently
+  swallowed and replaced by the generic fallback. Now reads `can.reason`.
+  The status-chip map had `withdrawn` as a key; the stored status is
+  `cancelled` — the chip fell through to the raw word "cancelled" instead of
+  saying "Withdrawn". Fixed the map key; added `.ot-chip.cancelled` /
+  `.ot-row.st-cancelled` alongside the pre-existing `.withdrawn` classes in
+  `styles.css` (kept both — harmless, and cheap insurance against a future
+  caller that does emit "withdrawn").
+* **No more `lead_id` on duplicates (guild's option (a)).** The
+  duplicate-warning link in both `14-mailmerge-engine.js` and
+  `52-poc-block.js` now checks only `d.can_request` (no `lead_id` in the
+  condition or stored in `dupEmailMap`) and posts `{kind:'lead', via_email}`
+  with no `record_id` — the server resolves the lead from the email itself
+  (D-0038's `viaDuplicateEmailMatch`).
+* **`can-request` moved from a GET query string to POST**, body
+  `{kind, record_id?, via_email?}` — per gateway's new contract and rampart's
+  L3 finding (a prospect's email address in a GET query string ends up in
+  server access logs). Both call sites (`otFetch`, used by every `otSlot()`,
+  and `otCheckForModal`, used by the ask modal) now POST.
+* **`52-poc-block.js` was already safe on `company`** — `d.company` was
+  already rendered behind `d.company ? … : ''`, so guild dropping that field
+  from `/contacts/check-email` needs no change here; confirmed by reading the
+  code path, not assumed.
+
+Files: `public/js/56-ownership-requests.js`, `public/js/14-mailmerge-engine.js`,
+`public/js/52-poc-block.js`, `public/styles.css` (`.ot-chip.approved` — a
+pre-existing hard-coded `#E7F7EC`/`#166534` in the same file, flagged by the
+coordinator via `reminder-clarity-smoke.mjs`'s "palette is tokens only" check
+because it sits in the CSS block after the REMINDERS marker that test scans —
+now `var(--green-l)`/`var(--green)`).
+
+Verified: `node --check` on all three touched `.js` files; `bash
+test/verify-frontend.sh`; `node test/page-renders-smoke.mjs` 7/7; `node
+test/mobile-layout-smoke.mjs` 39/39; `node test/theme-contrast-smoke.mjs`
+10/10; `node test/screen-stability-smoke.mjs` 23/23; `node
+test/reminder-clarity-smoke.mjs` 51/51 (was 50/51 before the CSS token fix).
+Screenshots (headless Playwright, stubbed `apiGet`/`apiPost`, run from the
+scratchpad — not added to `test/`): the duplicate-warning modal with the
+hostile email + apostrophe owner name rendering as plain text, and the
+resulting "Ask to take over" modal after clicking through, showing
+`Manager O'Hara decides.` intact and the POST body correctly shaped
+`{kind:'lead', via_email:"x');alert(1);//@a.co"}` with no `record_id`.
+
+**What foundry should pin, none of it covered today:**
+1. `otSlotInner`'s Withdraw and "Ask to take over" buttons carry their kind/
+   record id/via-email/approver-name as `data-*` attributes, never inside the
+   `onclick` string itself (grep `onclick="ot(Open|Withdraw)FromEl\(this\)"`
+   and assert the values live on the element, not in the handler call).
+2. A record/name/email containing a single quote (`O'Brien`, or an email
+   containing `');`) renders as literal text in the duplicate-warning link and
+   the ask modal, AND clicking the link still opens the modal and issues the
+   correct `can-request` POST body — i.e. both "doesn't break" and "still
+   works" are asserted, not just the first.
+3. `otFetch`/`otCheckForModal` call `apiPost('/ownership-requests/can-request', …)`,
+   never `apiGet` with a query string containing `via_email`.
+4. A duplicate-warning response with `can_request:true` and no `lead_id`
+   field at all still renders the link, and clicking it posts
+   `{kind:'lead', via_email:<the email>}` with `record_id` absent (not `null`,
+   not `undefined` as a literal key — genuinely absent from the JSON body).
+5. `otStatusChip('cancelled')` renders "Withdrawn"; `otStatusChip('withdrawn')`
+   (should the server ever send that word) still renders "Withdrawn" too.
+

@@ -1,5 +1,5 @@
 # Guild — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-24 · R-047 round 2: enroll gate closed (R47-1/R47-5)
 
 ## Session 31 (2026-09-24)
 - **Tagging now puts the candidate ON the job.** `POST /pipeline` (and the new
@@ -484,6 +484,33 @@ and ran `node scripts/territory-map.mjs` to regenerate `_map.json`/
 `island.html` — 27 files, 6,397 lines now attributed here.
 
 
+## Session 30 round 3 — D-0038 wiring: lead_id + can_request, and one ownership ladder
+- **The two D5 duplicate-check responses now carry `lead_id` and
+  `can_request`**, so the screen can offer "Ask to take over" straight off the
+  warning (D-0038) without a second lookup and without leaking anything new —
+  still only `owner_name`/`since` (or `added_by`/`company`) about the OTHER
+  lead. `can_request` is the narrow question the field name promises: `false`
+  only when the caller already owns that lead (`assigned_to_bd === req.user.id`)
+  or there is no lead to ask for; it is deliberately NOT the full
+  `ownership.canRequestTakeover` check (role, org, already-pending) — that
+  runs for real, server-side, when `POST /ownership-requests` is actually
+  called. This just decides whether the button renders.
+  - `routes/workflows.js` `POST /jobs/check-duplicates` → `{email, duplicate,
+    owner_name, since, lead_id, can_request}` per duplicate.
+  - `routes/lookups.js` `POST /contacts/check-email` → `{duplicate, days_ago,
+    added_by, company, lead_id, can_request}`.
+- **`routes/recruiting/outreach.js`'s `clientOwnerId` no longer re-derives the
+  client ownership ladder** — it fetches the same rows (job orders, leads, the
+  company) and hands them to rampart's `services/ownership.js`
+  `clientOwnerFrom`, the one place D-0038 names for this ladder. Was a
+  byte-for-byte mirror of gateway's `routes/companies.js` copy; now both read
+  the same function instead of needing to stay in sync by hand.
+- **Verification:** `node --check` on all three touched files;
+  `test/workflow-gating-smoke.mjs` (25/25), `test/recruiting-routes-mounted.mjs`
+  (7/7, 64 routes, order unchanged), `test/lead-stage-permission.mjs` (13/13),
+  `test/submission-review-smoke.mjs` (16/16). Did not run full `npm test`; did
+  not commit.
+
 ## Session 30 round 2 — Rampart re-review R2/R3
 `DELETE /job-orders/:id/recruiters/:rid` (routes/recruiting/job-orders.js
 ~:778) checked `isBDM` only, so any BD manager in the org could unassign a
@@ -501,3 +528,118 @@ Verified: `node --check` on all three files; `test/recruiting-routes-mounted.mjs
 (25/25), `test/lead-stage-permission.mjs` (13/13), `test/stage-consolidation-smoke.mjs`
 (14/14) — all green. No dedicated pipeline-delete test file exists yet
 (foundry writing tests concurrently). Did not run full `npm test`; did not commit.
+
+
+## Session 30 round 3 — R-047 do-not-ship fixes (lead_id / can_request / clientOwnerId bound)
+Rampart's blocker: a lead id on the duplicate responses is handed to exactly
+the people D-0034 hides that lead from. Fixed per rampart's chosen option (a)
+— **removed `lead_id` from both responses**; the take-over path resolves the
+lead from the typed/matched email server-side (D-0038's
+`viaDuplicateEmailMatch`), never from an id the browser hands back.
+- `routes/workflows.js` `POST /jobs/check-duplicates` → now
+  `{email, duplicate, owner_name, since, can_request}` per duplicate (was
+  `+lead_id`). `can_request` is no longer `assigned_to_bd !== caller` — it is
+  computed with `own.canRequestTakeover({kind:'lead', record: job, requester,
+  scope, viaDuplicateEmailMatch:true})` (F2), so an RA, a recruiter or an admin
+  never sees a link that would then refuse (role/admin/already-pending are now
+  checked before the link is offered). Needs `job.org_id`/`job.deleted_at` in
+  the select for that check to run — added.
+- `routes/lookups.js` `POST /contacts/check-email` → now
+  `{duplicate, days_ago, added_by, can_request}` (was
+  `+company, +lead_id`; D5 says owner + date only). Same `canRequestTakeover`
+  call, same reasoning. Added `own`/`reportingChainIds` imports (same fallback
+  pattern as `workflows.js`/`wf.js` for a narrower mount).
+- **Left for gateway/surface — not mine to touch:** `public/js/52-poc-block.js`
+  (:139-142) reads `d.company` and gates/builds its "Ask to take over" link on
+  `d.can_request && d.lead_id`, and `public/js/14-mailmerge-engine.js`
+  (:595-599) does the same for the batch duplicate-import warning. Both fields
+  are now gone from these two responses. `otOpen('lead', recordId, viaEmail,
+  …)` (`56-ownership-requests.js`) still takes a `recordId` — with no lead id
+  to hand it for these two call sites, gateway's `/ownership-requests` (or the
+  `can-request` GET) needs a mode that resolves the record from `via_email`
+  alone for the lead case, and surface's two files need to stop reading
+  `lead_id`/`company` and call `otOpen` with no record id (or whatever shape
+  gateway picks). `can_request` alone is now sufficient to decide whether to
+  draw the link at all.
+- `routes/recruiting/outreach.js`'s `clientOwnerId` (L4): the three queries
+  feeding `clientOwnerFrom` had gone unbounded (every JO/lead of a company,
+  unordered) when this was centralised onto rampart's ladder — restored the
+  original bound (`.not(<owner field>, 'is', null).order('created_at',
+  {ascending:false}).limit(1)` on both the job_orders and jobs queries), so an
+  old client with years of closed job orders/recycled leads still costs two
+  single-row fetches, not two full-table ones.
+- **Verification:** `node --check` on all three touched files;
+  `test/ownership-smoke.mjs` (69/69), `test/ownership-requests-smoke.mjs`
+  (36/36), `test/recruiting-routes-mounted.mjs` (7/7, 64 routes, order
+  unchanged), `test/lead-stage-permission.mjs` (13/13),
+  `test/route-shadowing-smoke.mjs` (9/9), `test/workflow-gating-smoke.mjs`
+  (25/25), `test/submission-review-smoke.mjs` (16/16),
+  `test/stage-consolidation-smoke.mjs` (14/14) — all green. Did not run full
+  `npm test`; did not commit.
+
+## Session 30 round 4 — R-047 round-2 review: `/wf/enroll` had no gate at all
+
+Rampart's round-2 blocker (R47-1, HIGH): `POST /wf/enroll` and
+`/wf/enroll-bulk` (`routes/wf.js`) checked NOTHING about `workflow_id`,
+`entity_id` or `job_id` before handing them to `engine.enroll` — the contact
+context loader and `email` channel (`index.js` ~:3376-3460, gateway's, not
+touched) then read `job_id` raw and resolved the SENDING MAILBOX from
+whatever job it named. So: own contact (any address) + a colleague's (or
+another org's) `job_id` + `any_stage:true` → a queued email from the
+colleague's mailbox, filled with THAT lead's position/company, `sent_by` the
+caller. Foreign ids reached straight into another org.
+
+Fixed with one shared gate, `gateEnrollTarget()`, called from both routes
+before `engine.enroll`:
+- **The workflow must be the caller's org's** — `loadWorkflowOrgScoped()`,
+  same shape as every other by-id fix this session; a foreign/missing
+  workflow_id is now the same 404.
+- **`entity_type: 'contact'`** — the contact is looked up org-scoped; if a
+  `job_id` is supplied it must equal the contact's OWN `job_id` (never someone
+  else's, never used to attach a stranger's job to this contact); the
+  resulting job (the contact's own, or none) is then org-scoped and the caller
+  must be allowed to ACT on it — `canActOnJob()`, owner or reporting chain via
+  `own.inScope(job.assigned_to_bd, scope)`, admin always passes. **Checked and
+  extended, not invented:** admin/ra_lead (the pool roles) may also act on a
+  still-unassigned pool lead (`own.isPoolLead(job) && scope.seesPool`) — the
+  same clause `canSeeLead` already carries for sight, extended to acting
+  because distributing the pool IS their job and a pool lead has no owner to
+  overrule. A plain BD/recruiter cannot enroll a pool lead's contact.
+- **`entity_type: 'submission'`** — org-scoped lookup, then
+  `recruiterCanTouchJob(req, submission.job_order_id)` (from
+  `services/recruiting-core.js`, built locally in this file with no gateway
+  ctx change — mirrors this file's existing self-contained `withOrg`), the
+  same rule the submissions/pipeline routes already enforce.
+- **`entity_type: 'candidate'`** (nurture, no job) — org-scoped lookup only,
+  matching `requireOwnCandidate`'s own reasoning elsewhere in this codebase
+  (candidates are shared-to-see inside an org; there is no per-user candidate
+  ownership column to check against).
+- **Every miss is the SAME 404** (law 3) — a foreign, unowned or nonexistent
+  id all read identically; nothing here ever answers 403 (which would confirm
+  the record exists).
+- `enroll-bulk` runs the identical per-item gate rather than trusting the
+  batch shape to be safer than the single call — it is the exact shape the
+  report used (own ids mixed with a foreign `job_id` inside one payload), so
+  batching the check away would have left the bulk path exploitable while the
+  single one wasn't.
+
+**R47-5 (LOW, same review):** `resolveFromMailboxes` treated bd_lead/ra_lead
+as org-wide — same bug `GET /wf/sending-mailboxes` had before C-0022, just not
+yet fixed here. Narrowed to the reporting chain (mirrors that GET, which sits
+20 lines above it in the same file); admin keeps the whole org.
+
+**Not touched:** `index.js`'s `wfEngine.registerContextLoader`/`registerChannel`
+code (~3376-3460) is gateway's per the border, and needed no change — the gate
+now refuses before that code ever runs, so it never sees a foreign job_id.
+
+**Verification:** `node --check routes/wf.js`; `test/recruiting-routes-mounted.mjs`
+(7/7, 64 routes, order unchanged), `test/workflow-gating-smoke.mjs` (25/25),
+`test/lead-stage-permission.mjs` (13/13), `test/submission-review-smoke.mjs`
+(16/16), `test/candidate-sequence-smoke.mjs` (34/34 — calls `wfEngine.enroll`
+directly, so it doesn't exercise the new route-level gate but confirms the
+engine itself is untouched), `test/backend-smoke.mjs` (107/107, including the
+`/wf/enroll-bulk` dependency-resolution check). Did not run full `npm test`
+(other territories mid-edit in the same tree, per this session's other rounds).
+No dedicated test exists for the enroll gate itself — worth a foundry pin
+(own contact + colleague's job_id → 404; pool lead → ra_lead/admin ok, plain
+BD refused; foreign submission/candidate id → 404). Did not commit.

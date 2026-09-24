@@ -32,6 +32,10 @@
     return apiGet('/clients').then(function(d){ STATE.clients.list=d||[]; STATE.clients.loading=false; paint(); })
       .catch(function(e){ STATE.clients.loading=false; showToast('Failed to load clients: '+e.message,'error'); paint(); });
   }
+  // Named global so a take-over approval (56-ownership-requests.js) can refresh
+  // this list without an `if(window.x)` guard — CLAUDE.md's rule for a
+  // cross-module call that is supposed to happen.
+  window.clientsReload = loadClients;
   // Repaint just the open drawer. paint() rebuilds #content, and the drawer is
   // an OVERLAY drawn after #content — so these four responses would otherwise
   // land in state and never reach the screen.
@@ -202,7 +206,12 @@
         UI.kv('Location', c.location, { placeholder:'Not recorded' })+
         (c.website
           ? UI.kv('Website','<a href="'+esc(/^https?:/.test(c.website)?c.website:'https://'+c.website)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(c.website)+'</a>',{ html:true })
-          : UI.kv('Website','',{ placeholder:'Not recorded' })),
+          : UI.kv('Website','',{ placeholder:'Not recorded' }))+
+        // D-0038: every BD sees every client (D-0035), but only its owner may
+        // act on it. `GET /clients` carries no owner today, so this always
+        // asks the server — it draws nothing until can-request answers, and
+        // draws nothing at all if the caller already owns this client.
+        (window.otSlot ? otSlot('client', c.id) : ''),
       tabs: tabBar,
       body: body
     });

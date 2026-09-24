@@ -5991,6 +5991,31 @@ All 11 findings verified closed; no cross-company path found. R1 (MED, fails clo
 ### Round 13f — R-046 finished (2026-09-24)
 R1 (sender keeps own emails) and R2/R3 owner gates landed; R5 mailbox OAuth state carries p:"mailbox" and auth() refuses any token with p. Foundry pinned both review blockers (email-attachments-smoke, email-history-scope-smoke; fake db projects rows to the route's own select). Full suite 107/107. CLAUDE.md, CAPABILITIES ("Seeing only what you're responsible for"), ROADMAP R-046 DONE. Open follow-ups: R-047 (ownership requests), R-048 (lookups index), R-049 (platform operator), C-0029 (client ownership hint), rampart R4 (page-size limits), ledger: opt-outs per-company vs global. Owner action: rotate the three AI keys (readable via /app-settings until this merge).
 
+Merged #231 (`2b95420`).
+
+# Session 30 (cont.) — R-047 take-over requests
+Owner: "build the take-over request next". Decided D-0037: the CURRENT OWNER's manager approves (admin if none; unowned → asker's manager; nobody approves their own); new table OK at merge. IN FLIGHT: rampart (rule), deep (migration), then gateway/guild routes, surface screens, foundry tests.
+
+- IN FLIGHT: deep landed migration 047 (a9c8b05, not applied); rampart writing the take-over rule in ownership.js.
+
+- D-0038 recorded: lead take-over requests start from the duplicate warning. Dispatching rampart (duplicate-proof path), gateway (routes/ownership-requests.js), guild (lead_id on duplicate responses), surface (buttons + approval list).
+
+- IN FLIGHT: R-047 — rampart (duplicate path), gateway (routes), guild (lead_id on duplicates), surface (screens) editing.
+
+- IN FLIGHT: surface landed R-047 screens (5ec3ef7). Foundry (tests) and rampart (review) resumed after a usage limit.
+
+### R-047 review round 1 — do-not-ship (2026-09-24)
+Rampart: take-over code sound, but lead_id on duplicate responses hands ids to people who cannot see the lead, and three OLDER by-id holes act on any lead id: POST /emails/reminder-send (sends from the owner's mailbox, crosses orgs, no org_id), POST /reminders + GET embed (reads any lead), POST /emails/generate (unchecked job_ids). Chosen: option (a) drop lead_id (server resolves the lead from the typed email) AND fix B1-B3. Also M1 approve-before-reassign, M2 client no-op approval, F1 onclick script injection in the new screens, F2/F3/L1-L5, 047 extra CHECK. Dispatched gateway, ledger, guild, deep, surface; foundry still pinning.
+
+- IN FLIGHT: R-047 review fixes — gateway, ledger, guild, deep, surface, foundry all editing; uncommitted until each reports.
+
+### R-047 review round 2 — one blocker (2026-09-24)
+All round-1 fixes verified in code. R47-1: shapeRequest still returned record_id (the lead id) to a duplicate-door asker, and /wf/enroll(+bulk) accept any job_id/entity/workflow unchecked → a BD could get an email sent from a colleague's mailbox. Fixing: gateway withholds record_id + R47-2 reminder-send owner-only + R47-3 ilike escape + R47-4 unowned client; guild gates enroll + R47-5 mailbox picker. Foundry adding cases.
+
+- IN FLIGHT: R47 round-2 fixes (gateway, guild) and foundry tests editing; uncommitted until each reports.
+
+### R-047 finished (2026-09-24)
+Rampart round 3: ship. Foundry pinned the flow (111/111). Migration 047 applied live: ownership_requests, 15 columns, RLS on, 1 service policy, 5 indexes, 0 rows. Found: two 10-Sep backup tables with RLS off (R-050, needs owner OK). Usage note: the owner's usage report showed 100% subagent-heavy, 80% of usage at >150k context — keep agent briefs narrow.
 # Session 31 — the owner's long list, worked in one chat (2026-09-24)
 
 Owner sent ~15 items in one message while another chat worked other things.

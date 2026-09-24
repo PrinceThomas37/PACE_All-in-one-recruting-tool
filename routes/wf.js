@@ -20,6 +20,90 @@ module.exports = (ctx) => {
 
   const canDesign = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead', 'recruiter');
 
+  // R47-1: `recruiterCanTouchJob`/`isBDM`/`isRecruiter` for the recruiting-side
+  // enroll gate below — built locally (mirrors the self-contained `withOrg`
+  // above) so this file does not need a gateway ctx change to reach them.
+  const { recruiterCanTouchJob } = require('../services/recruiting-core')({
+    supabase, hasRole, orgIdFor: (r) => (r && r.orgId) || null,
+  });
+
+  async function loadWorkflowOrgScoped(req, workflowId) {
+    if (!workflowId) return null;
+    const { data } = await withOrg(
+      supabase.from('workflow_definitions').select('id,entity_type,status'), req
+    ).eq('id', workflowId).maybeSingle();
+    return data || null;
+  }
+
+  async function scopeForEnroll(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, req.orgId || null);
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
+
+  // A lead the caller may ACT on (not merely see): owned by them or their
+  // chain (D-0020), or — for the two roles that run /distribute/* — still in
+  // the Unassigned pool, since a pool lead has no owner to overrule and
+  // distributing it IS admin/ra_lead's job (the same pool clause `canSeeLead`
+  // already carries, extended here to acting).
+  function canActOnJob(job, scope) {
+    if (!job) return true; // no job context — nothing to gate
+    if (own.inScope(job.assigned_to_bd, scope)) return true;
+    return own.isPoolLead(job) && !!scope.seesPool;
+  }
+
+  // R47-1 (HIGH): `POST /wf/enroll`/`enroll-bulk` checked nothing about
+  // `job_id`, `entity_id` or `workflow_id` — the contact context loader and
+  // email channel (index.js, gateway's) then read them raw and sent from the
+  // resolved job's mailbox. Own contact + a colleague's (or another org's)
+  // `job_id` + `any_stage:true` produced a queued email from the colleague's
+  // mailbox, filled with THAT lead's position/company, `sent_by` the caller.
+  // Every miss below answers the SAME 404 (law 3) — a foreign/unowned id must
+  // read exactly like a missing one, never a 403 that confirms it exists.
+  // `job_id` is only meaningful for entity_type 'contact' (the sales
+  // vocabulary); 'submission' and 'candidate' carry their own job reference
+  // (job_order_id / none) and ignore it, matching the context loaders in
+  // routes/recruiting/outreach.js.
+  async function gateEnrollTarget(req, { entityType, entityId, jobId }) {
+    if (entityType === 'contact') {
+      const { data: contact } = await withOrg(
+        supabase.from('contacts').select('id,job_id'), req
+      ).eq('id', entityId).maybeSingle();
+      if (!contact) return { ok: false, status: 404, error: 'Contact not found' };
+      if (jobId && contact.job_id && jobId !== contact.job_id) {
+        return { ok: false, status: 404, error: 'Lead not found' };
+      }
+      const effectiveJobId = jobId || contact.job_id || null;
+      if (effectiveJobId) {
+        const { data: job } = await withOrg(
+          supabase.from('jobs').select('id,assigned_to_bd'), req
+        ).eq('id', effectiveJobId).maybeSingle();
+        if (!job) return { ok: false, status: 404, error: 'Lead not found' };
+        const scope = await scopeForEnroll(req);
+        if (!canActOnJob(job, scope)) return { ok: false, status: 404, error: 'Lead not found' };
+      }
+      return { ok: true };
+    }
+    if (entityType === 'submission') {
+      const { data: sub } = await withOrg(
+        supabase.from('submissions').select('id,job_order_id'), req
+      ).eq('id', entityId).maybeSingle();
+      if (!sub) return { ok: false, status: 404, error: 'Submission not found' };
+      if (sub.job_order_id && !(await recruiterCanTouchJob(req, sub.job_order_id))) {
+        return { ok: false, status: 404, error: 'Job order not found' };
+      }
+      return { ok: true };
+    }
+    if (entityType === 'candidate') {
+      const { data: cand } = await withOrg(
+        supabase.from('candidates').select('id'), req
+      ).eq('id', entityId).maybeSingle();
+      if (!cand) return { ok: false, status: 404, error: 'Candidate not found' };
+      return { ok: true };
+    }
+    return { ok: false, status: 400, error: `Unknown entity_type "${entityType}"` };
+  }
+
   // Validate + order a set of "from" mailbox ids for rotation. Drops ids that
   // are inactive, non-existent, out of the caller's org, or (for a plain
   // BD/recruiter) not their own. Returns [{ id, email }] in the caller's order.
@@ -27,10 +111,21 @@ module.exports = (ctx) => {
   // rotate a sequence's "from" address across ANY org's mailbox ids —
   // `GET /wf/sending-mailboxes` handed every org's mailbox ids to admin/
   // bd_lead/ra_lead, so this was reachable, not theoretical.
+  // R47-5: bd_lead/ra_lead were then treated as "org-wide", same as admin —
+  // so a BD Lead could pick ANY org mailbox as a sequence's From, not just
+  // their own desk's. Narrowed to the reporting chain, mirroring
+  // `GET /wf/sending-mailboxes` just above; admin keeps the whole org.
   async function resolveFromMailboxes(req, ids) {
     if (!Array.isArray(ids) || !ids.length) return [];
     let q = withOrg(supabase.from('user_emails').select('id,email_address,user_id').in('id', ids).eq('is_active', true), req);
-    if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) q = q.eq('user_id', req.user.id);
+    if (!hasRole(req, 'admin')) {
+      if (hasRole(req, 'bd_lead', 'ra_lead')) {
+        const chain = await reportingChainIds(req.user.id, req.orgId || null);
+        q = q.in('user_id', chain);
+      } else {
+        q = q.eq('user_id', req.user.id);
+      }
+    }
     const { data } = await q;
     const byId = {}; (data || []).forEach(m => { byId[m.id] = m; });
     const seen = new Set(); const out = [];
@@ -191,16 +286,21 @@ module.exports = (ctx) => {
       if (!b.workflow_id) return res.status(400).json({ error: 'workflow_id required' });
       const entityId = b.entity_id || b.contact_id;
       if (!entityId) return res.status(400).json({ error: 'entity_id (or contact_id) required' });
+      const wf = await loadWorkflowOrgScoped(req, b.workflow_id);
+      if (!wf) return res.status(404).json({ error: 'Workflow not found' });
+      const entityType = b.entity_type || 'contact';
+      const gate = await gateEnrollTarget(req, { entityType, entityId, jobId: b.job_id || null });
+      if (!gate.ok) return res.status(gate.status).json({ error: gate.error });
       const metadata = { ...(b.metadata || {}) };
       const rot = await resolveFromMailboxes(req, b.from_mailbox_id ? [b.from_mailbox_id] : b.from_mailbox_ids);
       if (rot.length) { metadata.from_mailbox_id = rot[0].id; metadata.from_mailbox_email = rot[0].email; }
       if (b.any_stage) metadata.any_stage = true;
       const enrollment = await engine.enroll({
         workflow_id: b.workflow_id,
-        entity_type: b.entity_type || 'contact',
+        entity_type: entityType,
         entity_id: entityId,
         job_id: b.job_id || null,
-        contact_id: b.contact_id || ((b.entity_type || 'contact') === 'contact' ? entityId : null),
+        contact_id: b.contact_id || (entityType === 'contact' ? entityId : null),
         enrolled_by: req.user.id,
         metadata
       });
@@ -220,6 +320,8 @@ module.exports = (ctx) => {
     try {
       const b = req.body || {};
       if (!b.workflow_id) return res.status(400).json({ error: 'workflow_id required' });
+      const wf = await loadWorkflowOrgScoped(req, b.workflow_id);
+      if (!wf) return res.status(404).json({ error: 'Workflow not found' });
       const entityType = b.entity_type || 'contact';
       const items = Array.isArray(b.items) && b.items.length
         ? b.items
@@ -238,6 +340,13 @@ module.exports = (ctx) => {
         const entityId = it.entity_id || it.contact_id;
         if (!entityId) { out.errors.push({ entity_id: null, error: 'missing entity_id' }); continue; }
         const jobId = it.job_id || b.job_id || null;
+        // R47-1: same per-item gate as the single-enroll route — a bulk call is
+        // exactly the shape the report used (own contact ids mixed with a
+        // colleague's job_id via the batch payload), so batching the check
+        // away would leave the bulk path exploitable while the single one
+        // wasn't.
+        const gate = await gateEnrollTarget(req, { entityType, entityId, jobId });
+        if (!gate.ok) { out.errors.push({ entity_id: entityId, error: gate.error }); continue; }
         const chosen = rotation.length ? rotation[idx % rotation.length] : null;
         idx++;
         const metadata = { ...baseMeta, ...(it.metadata || {}) };

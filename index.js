@@ -839,11 +839,42 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     if (!subject || !subject.trim() || !body || !body.trim()) return res.status(400).json({ error: 'Subject and body required' });
     if (!job_id) return res.status(400).json({ error: 'Reminder must be linked to a job to send through the engine' });
 
+    // Org-bound ownership gate. This used to be `canTouchJob`, which — besides
+    // scoping by org — admits the job's CREATOR and RESEARCHER as well as its
+    // BD owner. That is right for touching the record, but D-0020 is explicit
+    // that ACTING belongs to the owner (or their reporting chain), never
+    // merely whoever created or researched it: sending from `job.sending_
+    // email_id` under `sent_by = req.user.id` is exactly "the owner's mailbox,
+    // someone else's hand on the send button" (R47-2). `inScope` is the one
+    // shared definition of "owner or their managers" (services/ownership.js);
+    // a job with no resolvable owner in scope answers the same 404 as one
+    // that does not exist.
+    const { data: ownerRow } = await db.forRequest(req).from('jobs')
+      .select('assigned_to_bd').eq('id', job_id).maybeSingle();
+    if (!ownerRow) return res.status(404).json({ error: 'Reminder must be linked to a job to send through the engine' });
+    const isReminderSendAdmin = hasRole(req, 'admin');
+    const reminderSendChain = isReminderSendAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const reminderSendScope = ownership.viewScope({
+      role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: reminderSendChain,
+    });
+    if (!ownership.inScope(ownerRow.assigned_to_bd, reminderSendScope)) {
+      return res.status(404).json({ error: 'Reminder must be linked to a job to send through the engine' });
+    }
+
+    // A contact_id must belong to THIS job, org-scoped — otherwise a caller
+    // could point a legitimate job_id at a contact on a different (possibly
+    // foreign-org) lead and have its details filled into the merge fields.
+    if (contact_id) {
+      const { data: contactCheck } = await db.forRequest(req).from('contacts')
+        .select('id').eq('id', contact_id).eq('job_id', job_id).maybeSingle();
+      if (!contactCheck) return res.status(400).json({ error: 'That contact is not on this job.' });
+    }
+
     // The engine resolves the sending mailbox from the job, so make sure it has one.
     // The company/industry/location come along too because this row is also the
     // authority on what {{pos}}, {{company}} and {{loc}} mean for this message —
     // see the merge-field pass below.
-    const { data: job } = await supabase
+    const { data: job } = await db.forRequest(req)
       .from('jobs')
       .select('id, position, location, industry, timezone, company_id, company:companies(name,industry,location), research, salary_range, sending_email_id, sending_email:user_emails!sending_email_id(email_address)')
       .eq('id', job_id).single();
@@ -867,7 +898,7 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     // one rule the outbound path has (see email-vars.js DEFER_SENDER).
     let filledSubject = subject, filledBody = body;
     const { data: reminderContact } = contact_id
-      ? await supabase.from('contacts').select('id,first_name,last_name,email,designation').eq('id', contact_id).single()
+      ? await db.forRequest(req).from('contacts').select('id,first_name,last_name,email,designation').eq('id', contact_id).single()
       : { data: null };
     if (job) {
       const vars = buildEmailVars({ job, contact: reminderContact, senderDisplayName: DEFER_SENDER });
@@ -891,11 +922,11 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     }
     let sendingAddr = job?.sending_email?.email_address || null;
     if (!job?.sending_email_id) {
-      const { data: ue } = await supabase.from('user_emails')
+      const { data: ue } = await db.forRequest(req).from('user_emails')
         .select('id,email_address,is_primary').eq('user_id', req.user.id).eq('is_active', true)
         .order('is_primary', { ascending: false }).limit(1);
       if (!ue || !ue.length) return res.status(400).json({ error: 'No active sending mailbox available' });
-      await supabase.from('jobs').update({ sending_email_id: ue[0].id }).eq('id', job_id);
+      await db.forRequest(req).from('jobs').update({ sending_email_id: ue[0].id }).eq('id', job_id);
       sendingAddr = ue[0].email_address;
     }
 
@@ -905,16 +936,18 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
       return res.status(409).json({ error: 'A follow-up to this contact is already queued or was sent today — skipped to avoid a duplicate email.' });
     }
 
-    // Queue as a fresh send (followup_type 'reminder' is not a thread reply) so the engine delivers it.
-    const { data: row, error } = await supabase.from('emails').insert({
+    // Queue as a fresh send (followup_type 'reminder' is not a thread reply) so
+    // the engine delivers it. `orgStamp` stamps org_id, or every reminder-send
+    // misfiles into the default org (models/tables.js DEFAULT).
+    const { data: row, error } = await db.forRequest(req).from('emails').insert({
       contact_id: contact_id || null, job_id, to_email,
       subject: filledSubject, body: filledBody,
       platform: 'Outlook', sent_by: req.user.id, from_email: sendingAddr,
-      status: 'pending', followup_type: 'reminder'
+      status: 'pending', followup_type: 'reminder', ...orgStamp(req)
     }).select().single();
     if (error) throw error;
 
-    if (reminder_id) await supabase.from('reminders').update({ status: 'sent' }).eq('id', reminder_id).eq('user_id', req.user.id);
+    if (reminder_id) await db.forRequest(req).from('reminders').update({ status: 'sent' }).eq('id', reminder_id).eq('user_id', req.user.id);
     await logActivity(job_id, contact_id || null, req.user.id, 'reminder_email_queued', `Reminder follow-up queued: ${filledSubject}`, null, null);
 
     res.status(201).json({ success: true, email_id: row.id });
@@ -1091,10 +1124,31 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
 app.post('/emails/generate', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'ra_lead', 'bd', 'bd_lead')) return res.status(403).json({ error: 'Not allowed' });
-    const { job_ids } = req.body;
-    if (!Array.isArray(job_ids) || !job_ids.length) return res.status(400).json({ error: 'job_ids required' });
-    const { data: jobs, error: jErr } = await supabase.from('jobs').select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)').in('id', job_ids);
+    const { job_ids: rawJobIds } = req.body;
+    if (!Array.isArray(rawJobIds) || !rawJobIds.length) return res.status(400).json({ error: 'job_ids required' });
+    // Org-scoped read (db.forRequest narrows to the caller's org), then narrowed
+    // again to the leads the caller may actually TOUCH — otherwise any id in the
+    // body queued a cold email under its OWNER's mailbox and sent_by=caller,
+    // whatever company it belonged to. A foreign/unowned id is silently dropped
+    // rather than erroring, same shape as the bulk-stage fix (C-0021 round 2).
+    //
+    // R47-2 (reviewed, deliberately unchanged here): `canTouchJob` admits the
+    // job's creator/researcher as well as its owner, which is exactly right
+    // for THIS route and not a gap — the whole point of distribution is that
+    // an RA/ra_lead/admin generates initial outreach for a POOL lead (no
+    // `assigned_to_bd` yet) or for a lead they researched before it was
+    // assigned. `reminder-send` above is a different case: it is a FOLLOW-UP
+    // on an already-owned lead, sent under that owner's identity, which is
+    // acting rather than researching (D-0020) — that is the route that needed
+    // narrowing to `inScope(owner)`, not this one.
+    const { data: candidateJobs, error: jErr } = await db.forRequest(req).from('jobs')
+      .select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)')
+      .in('id', rawJobIds);
     if (jErr) throw jErr;
+    const touchable = await Promise.all((candidateJobs || []).map(async j => ((await canTouchJob(req, j.id)) ? j : null)));
+    const jobs = touchable.filter(Boolean);
+    const job_ids = jobs.map(j => j.id);
+    if (!job_ids.length) return res.status(400).json({ error: 'job_ids required' });
     const bdIds = [...new Set(jobs.map(j => j.assigned_to_bd).filter(Boolean))];
     const { data: bdUsers } = bdIds.length ? await supabase.from('users').select('id,name,email').in('id', bdIds) : { data: [] };
     const bdMap = {};
@@ -1128,7 +1182,9 @@ app.post('/emails/generate', auth, async (req, res) => {
       jobs, req.user.id, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
     );
     if (emailsToInsert.length) {
-      const { error: insErr } = await supabase.from('emails').insert(emailsToInsert);
+      // db.forRequest stamps org_id — the raw supabase insert here left every
+      // queued row unstamped, misfiling into the default org (B3, R-047 review).
+      const { error: insErr } = await db.forRequest(req).from('emails').insert(emailsToInsert);
       if (insErr) throw insErr;
     }
     res.json({
@@ -3307,6 +3363,11 @@ app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));
 // The rewind button's one endpoint. Read-only, org-scoped, every record kind.
 app.use(require('./routes/record-history')(routeCtx));
+// Take-over requests (D-0036/D-0037/D-0038) — asking to own somebody else's
+// lead, client or job order. No bare `:id` GET/PUT here, so there is nothing
+// for a new literal to shadow today, but any literal added later still goes
+// above `/ownership-requests/:id/*`.
+app.use(require('./routes/ownership-requests')(routeCtx));
 app.use(require('./routes/mailbox')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which
 // providers are actually configured; the callbacks live in the microsoft/gmail

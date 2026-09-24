@@ -26,6 +26,12 @@
 //     lead              →  jobs.assigned_to_bd
 //     submission        →  submissions.recruiter_id
 //     contact           →  the owner of the job it hangs off
+//     job order         →  job_orders.bd_manager_id           (D-0035)
+//     client            →  its job order's BD → its lead's BD → its creator
+//                          (`recordOwnerId('client', …)`, section TAKING OVER)
+//
+// Ownership CHANGES only by a take-over request approved by the current
+// owner's manager (D-0036/D-0037) — see section "TAKING OVER" at the foot.
 //
 // What ownership BUYS you: it appears on your daily list, and you can act on it.
 // What it COSTS everyone else: nobody else's daily list carries your work, and
@@ -358,10 +364,379 @@ function scopeEmails(emails, jobsById, scope) {
   return (emails || []).filter(e => canSeeEmail(e, get(e && e.job_id), scope));
 }
 
+// ============================================================================
+// TAKING OVER — who may ASK to own a record, and who says yes (R-047, D-0037)
+// ----------------------------------------------------------------------------
+// D-0020 said ownership changes by REASSIGNMENT, not by a manager reaching in.
+// D-0035 said a client changes owner only "by permission of the manager".
+// D-0036 made that a request; D-0037 settled who approves it. This section is
+// the ONE place that rule lives: the table (deep), the routes (gateway/guild)
+// and the screens (surface) all call these functions and re-derive nothing.
+//
+// ── WHO OWNS WHAT (recordOwnerId) ──────────────────────────────────────────
+//   kind        record shape                          owner
+//   ──────────  ────────────────────────────────────  ─────────────────────────
+//   lead        a `jobs` row                          assigned_to_bd
+//   job_order   a `job_orders` row                    bd_manager_id
+//   client      { company, jobOrders, leads }         newest live job order's
+//                                                     bd_manager_id → newest
+//                                                     live lead's assigned_to_bd
+//                                                     → companies.created_by
+// The client ladder is `routes/companies.js` `clientOwnerId()` step for step
+// (and the copy in routes/recruiting/outreach.js). Those do three queries;
+// this takes the three results as arguments and applies the same order —
+// "newest" by created_at, rows with deleted_at or a null owner skipped. If
+// that ladder ever changes, it changes HERE and both routes call this.
+// Null = nobody owns it. An unknown kind THROWS: silently answering "unowned"
+// would route the request to the asker's own manager, i.e. fail open.
+//
+// ── WHO MAY ASK (canRequestTakeover) ───────────────────────────────────────
+// Checked in this order; the first failure is the answer.
+//   1. The kind is lead / job_order / client.
+//   2. SAME ORG, and the requester can SEE it. A record in another company, a
+//      deleted one, and one the requester cannot see all answer the SAME
+//      sentence with code 'not_found' — a route maps that to 404, because a
+//      different answer confirms the record exists (rampart law 3).
+//      Sight is the existing rule, never a new one: a lead → `canSeeLead`
+//      (D-0034: own + chain; the pool only to distributors); a client or job
+//      order → anyone in the org (D-0035: shared to see, owned to touch).
+//      ONE exception, leads only (D-0038): `viaDuplicateEmailMatch === true`
+//      stands in for sight. A BD cannot see a colleague's lead, so the
+//      request starts from the duplicate warning — they typed a contact
+//      email that is on that lead. ONLY A ROUTE may set it, and only after
+//      it has itself matched that email against the lead's contacts IN THE
+//      DATABASE; never copy it from a request body. It must be literally
+//      `true` (not "true", not 1). It replaces the SIGHT check and nothing
+//      else: a foreign-org or deleted lead is still 'not_found', and the
+//      admin / owner / role / duplicate checks below still run. Ignored for
+//      clients and job orders (already shared to see). The asker still
+//      never sees the lead — the approver does.
+//   3. Not an admin. An admin can already reassign directly; an admin asking
+//      would have to be approved by another admin, or by themselves.
+//   4. They do not already own it.
+//   5. Their role can own that kind — decided from how assignment works today:
+//        lead       bd, bd_lead            (the Assign Leads picker, and the
+//                                            BD stage gates in routes/jobs.js)
+//        job_order  bd, bd_lead,            (`isBDM` in recruiting-core.js,
+//        client     associate_director,      minus admin — see 3)
+//                   director
+//      An RA, RA Lead or recruiter owns none of the three, so cannot ask.
+//   6. They have not already got a PENDING request open on this record (if
+//      the caller passes `openRequests`). Somebody ELSE's pending request does
+//      not block: the approver sees both and chooses.
+//
+// ── WHO APPROVES (approverFor) ─────────────────────────────────────────────
+//   owned, owner has an active manager  → the OWNER's manager (their team is
+//                                          losing it; same team = the asker's
+//                                          manager too, so D-0036 still holds)
+//   owned, owner has no manager         → an admin
+//   unowned                             → the ASKER's manager, admin if none
+//   the answer would be the asker       → an admin (nobody approves their own
+//     (a manager asking for a report's    request)
+//      record)
+// "Has a manager" means `manager_id` names an ACTIVE, undeleted user in
+// `usersById` (same org, if both carry org_id). A departed manager cannot
+// approve anything, so it falls to an admin rather than to nobody.
+// WHICH ADMIN, when there are several: the longest-serving active admin —
+// earliest `created_at`, then smallest id — never the asker. Deterministic, so
+// a retried request lands on the same desk. No admin at all → approverId null,
+// and the route must refuse to create the request (it would sit forever).
+//
+// ── WHO DECIDES (canDecide) ────────────────────────────────────────────────
+// The recorded approver, or an admin OF THE SAME ORG. Never the requester —
+// not even an admin requester. Only a PENDING request can be decided.
+// The requester may CANCEL their own pending request (canCancel); nobody else.
+//
+// ── THE STATES (takeoverTransition) ────────────────────────────────────────
+//   pending → approved | declined | cancelled.   Nothing else, ever: the three
+// outcomes are final, so a declined request cannot be re-approved by a second
+// click — the asker opens a new request, and the history keeps both.
+// Approving REASSIGNS through the existing assignment paths (for a lead,
+// `releaseToPoolUpdate` / the assignment fields — never an inline write); this
+// file only says whether it may happen.
+// ============================================================================
+
+const TAKEOVER_KINDS = Object.freeze(['lead', 'job_order', 'client']);
+
+/** Roles that can OWN each kind. Admin is deliberately absent — see rule 3. */
+const TAKEOVER_OWNER_ROLES = Object.freeze({
+  lead:      Object.freeze(['bd', 'bd_lead']),
+  job_order: Object.freeze(['bd', 'bd_lead', 'associate_director', 'director']),
+  client:    Object.freeze(['bd', 'bd_lead', 'associate_director', 'director']),
+});
+
+const KIND_WORD = Object.freeze({ lead: 'lead', job_order: 'job order', client: 'client' });
+
+const TAKEOVER_STATES = Object.freeze(['pending', 'approved', 'declined', 'cancelled']);
+const TAKEOVER_TRANSITIONS = Object.freeze({
+  pending: Object.freeze(['approved', 'declined', 'cancelled']),
+  approved: Object.freeze([]),
+  declined: Object.freeze([]),
+  cancelled: Object.freeze([]),
+});
+
+const NOT_FOUND_SENTENCE = 'We could not find that record.';
+
+function assertKind(kind) {
+  if (!TAKEOVER_KINDS.includes(kind)) {
+    throw new Error(`ownership: unknown take-over kind "${kind}" (expected ${TAKEOVER_KINDS.join(' / ')})`);
+  }
+}
+
+/** Newest-first by created_at (missing dates last), then id — deterministic. */
+function newestFirst(a, b) {
+  const ta = a && a.created_at ? Date.parse(a.created_at) : NaN;
+  const tb = b && b.created_at ? Date.parse(b.created_at) : NaN;
+  const va = Number.isNaN(ta) ? -Infinity : ta;
+  const vb = Number.isNaN(tb) ? -Infinity : tb;
+  if (va !== vb) return vb - va;
+  return String((a && a.id) || '').localeCompare(String((b && b.id) || ''));
+}
+
+/**
+ * The client ladder — `routes/companies.js` `clientOwnerId()` without the
+ * queries. `jobOrders` / `leads` are that company's rows (org-scoped by the
+ * caller); rows belonging to a different company_id are ignored.
+ */
+function clientOwnerFrom({ company, jobOrders, leads } = {}) {
+  const cid = company && company.id;
+  const mine = (r) => r && !r.deleted_at && (!cid || !r.company_id || r.company_id === cid);
+  const jo = (jobOrders || []).filter(r => mine(r) && r.bd_manager_id).sort(newestFirst)[0];
+  if (jo) return jo.bd_manager_id;
+  const ld = (leads || []).filter(r => mine(r) && r.assigned_to_bd).sort(newestFirst)[0];
+  if (ld) return ld.assigned_to_bd;
+  return (company && company.created_by) || null;
+}
+
+/**
+ * The one responsible person for a record, or null when nobody owns it.
+ *   recordOwnerId('lead', jobsRow)
+ *   recordOwnerId('job_order', jobOrderRow)
+ *   recordOwnerId('client', { company, jobOrders, leads })
+ */
+function recordOwnerId(kind, record) {
+  assertKind(kind);
+  if (!record) return null;
+  if (kind === 'lead') return record.assigned_to_bd || null;
+  if (kind === 'job_order') return record.bd_manager_id || null;
+  return clientOwnerFrom(record);
+}
+
+/** The row that carries org_id / deleted_at for a record of this kind. */
+function recordRow(kind, record) {
+  if (!record) return null;
+  return kind === 'client' ? (record.company || null) : record;
+}
+
+/**
+ * May `requester` ask to take this record over?
+ *   requester: { id, role, roles, org_id }
+ *   scope:     viewScope(...) for the same requester
+ *   openRequests (optional): take-over requests already on this record
+ *   viaDuplicateEmailMatch (optional, lead only): true ONLY when the route
+ *     has verified server-side that the requester's typed contact email is
+ *     on this lead (D-0038). Satisfies lead SIGHT; nothing else.
+ * → { ok: true, reason: null, code: null, ownerId }
+ * → { ok: false, reason: '<sentence>', code, ownerId }
+ * code ∈ 'bad_kind' | 'not_found' | 'admin' | 'already_owner' | 'role' |
+ *        'already_requested'. A route answers 'not_found' with a 404.
+ */
+function canRequestTakeover({ kind, record, requester, scope, openRequests, viaDuplicateEmailMatch } = {}) {
+  const no = (code, reason, ownerId = null) => ({ ok: false, reason, code, ownerId });
+  if (!TAKEOVER_KINDS.includes(kind)) return no('bad_kind', 'That kind of record cannot be taken over.');
+  const word = KIND_WORD[kind];
+
+  // 2. same org + can see. Every failure here reads identically.
+  const row = recordRow(kind, record);
+  const rid = requester && requester.id;
+  if (!rid || !row || row.deleted_at) return no('not_found', NOT_FOUND_SENTENCE);
+  if (!row.org_id || !requester.org_id || row.org_id !== requester.org_id) return no('not_found', NOT_FOUND_SENTENCE);
+  if (!scope || scope.userId !== rid) return no('not_found', NOT_FOUND_SENTENCE);
+  // D-0035: clients & job orders are shared to see. D-0038: a lead the route
+  // verified by a duplicate contact-email match counts as seen — lead only.
+  const sees = kind === 'lead'
+    ? (viaDuplicateEmailMatch === true || canSeeLead(row, scope))
+    : true;
+  if (!sees) return no('not_found', NOT_FOUND_SENTENCE);
+
+  const ownerId = recordOwnerId(kind, record);
+  const rs = rolesOf(requester);
+
+  // 3. admin
+  if (rs.includes('admin')) {
+    return no('admin', `As an admin you can reassign this ${word} directly — there is nobody above you to ask.`, ownerId);
+  }
+  // 4. already theirs
+  if (ownerId && ownerId === rid) return no('already_owner', `This ${word} is already yours.`, ownerId);
+  // 5. role can own the kind
+  const allowed = TAKEOVER_OWNER_ROLES[kind];
+  if (!rs.some(r => allowed.includes(r))) {
+    return no('role', `Only business-development roles look after a ${word}, so your role cannot take one over. `
+      + 'You can still ask its owner to pick something up.', ownerId);
+  }
+  // 6. no duplicate pending request from the same person
+  const dup = (openRequests || []).some(q => q && q.status === 'pending' && q.requester_id === rid);
+  if (dup) return no('already_requested', `You have already asked to take over this ${word}. It is waiting for a decision.`, ownerId);
+
+  return { ok: true, reason: null, code: null, ownerId };
+}
+
+function isLiveUser(u, orgId) {
+  if (!u || !u.id) return false;
+  if (u.deleted_at) return false;
+  if (u.is_active === false) return false;
+  if (orgId && u.org_id && u.org_id !== orgId) return false;
+  return true;
+}
+
+function lookup(usersById, id) {
+  if (!id || !usersById) return null;
+  return typeof usersById.get === 'function' ? (usersById.get(id) || null) : (usersById[id] || null);
+}
+
+function nameOf(usersById, id, fallback) {
+  const u = lookup(usersById, id);
+  return (u && u.name && String(u.name).trim()) || fallback;
+}
+
+/**
+ * The deterministic admin: longest-serving active admin (earliest created_at,
+ * then smallest id), never `excludeId`. Null when there is none.
+ */
+function pickAdmin(adminIds, usersById, excludeId, orgId) {
+  const cands = [...new Set((adminIds || []).filter(Boolean))]
+    .filter(id => id !== excludeId)
+    .map(id => lookup(usersById, id) || { id })
+    .filter(u => isLiveUser(u, orgId));
+  if (!cands.length) return null;
+  cands.sort((a, b) => {
+    const ta = a.created_at ? Date.parse(a.created_at) : NaN;
+    const tb = b.created_at ? Date.parse(b.created_at) : NaN;
+    const va = Number.isNaN(ta) ? Infinity : ta;
+    const vb = Number.isNaN(tb) ? Infinity : tb;
+    if (va !== vb) return va - vb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  return cands[0].id;
+}
+
+/**
+ * Who approves this request (D-0037).
+ *   owner:     the current owner's user id, or null when unowned
+ *   requester: the asker's user id
+ *   usersById: Map or object of { id, name, manager_id, is_active, deleted_at,
+ *              org_id, created_at } — the org's users
+ *   adminIds:  the org's admin user ids
+ * → { approverId, basis, why }
+ * basis ∈ 'owner_manager' | 'owner_no_manager' | 'unowned_requester_manager' |
+ *         'unowned_no_manager' | 'self_approval' | 'no_approver'
+ * approverId is null only with basis 'no_approver' — refuse to create then.
+ */
+function approverFor({ owner, requester, usersById, adminIds } = {}) {
+  const reqUser = lookup(usersById, requester);
+  const orgId = (reqUser && reqUser.org_id) || null;
+  const reqName = nameOf(usersById, requester, 'the person asking');
+
+  const managerOf = (id) => {
+    const u = lookup(usersById, id);
+    const mid = u && u.manager_id;
+    if (!mid || mid === id) return null;
+    const m = lookup(usersById, mid);
+    return isLiveUser(m, orgId) ? mid : null;
+  };
+  const toAdmin = (basis, lead) => {
+    const aid = pickAdmin(adminIds, usersById, requester, orgId);
+    if (!aid) {
+      return { approverId: null, basis: 'no_approver',
+        why: `${lead} and there is no admin who can decide it, so this request cannot be sent yet.` };
+    }
+    return { approverId: aid, basis,
+      why: `${lead}, so it goes to ${nameOf(usersById, aid, 'an admin')}, an admin.` };
+  };
+
+  let basis, approverId, why;
+  if (owner) {
+    const ownerName = nameOf(usersById, owner, 'its owner');
+    const mid = managerOf(owner);
+    if (!mid) return toAdmin('owner_no_manager', `${ownerName} owns this and has no manager in PACE`);
+    basis = 'owner_manager';
+    approverId = mid;
+    why = `${ownerName} owns this, and ${nameOf(usersById, mid, 'their manager')} manages ${ownerName}, so they decide.`;
+  } else {
+    const mid = managerOf(requester);
+    if (!mid) return toAdmin('unowned_no_manager', `Nobody owns this yet and ${reqName} has no manager in PACE`);
+    basis = 'unowned_requester_manager';
+    approverId = mid;
+    why = `Nobody owns this yet, so ${reqName}'s manager, ${nameOf(usersById, mid, 'their manager')}, decides.`;
+  }
+  if (approverId === requester) {
+    return toAdmin('self_approval', `${reqName} would be approving their own request`);
+  }
+  return { approverId, basis, why };
+}
+
+function deciderRoleList(deciderRoles) {
+  if (Array.isArray(deciderRoles)) return deciderRoles.filter(Boolean).map(String);
+  if (typeof deciderRoles === 'string') return [deciderRoles];
+  if (deciderRoles && typeof deciderRoles === 'object') return rolesOf(deciderRoles);
+  return [];
+}
+
+/**
+ * Move a request between states. → { ok, reason }
+ * pending → approved | declined | cancelled; everything else is refused.
+ */
+function takeoverTransition(from, to) {
+  if (!TAKEOVER_STATES.includes(from) || !TAKEOVER_STATES.includes(to)) {
+    return { ok: false, reason: 'That is not a state a take-over request can be in.' };
+  }
+  if (!TAKEOVER_TRANSITIONS[from].includes(to)) {
+    return { ok: false, reason: from === 'pending'
+      ? 'A waiting request can only be approved, declined or withdrawn.'
+      : `This request was already ${from}, so it cannot be changed. Ask again if something has changed.` };
+  }
+  return { ok: true, reason: null };
+}
+
+/**
+ * May this person approve or decline the request? → { ok, reason }
+ *   request:      { requester_id, approver_id, status, org_id }
+ *   deciderRoles: ['admin', …] | 'admin' | { role, roles }
+ *   deciderOrgId: required for the admin path when the request carries org_id
+ * The recorded approver, or an admin of the same org. Never the requester.
+ */
+function canDecide({ request, deciderId, deciderRoles, deciderOrgId } = {}) {
+  if (!request || !deciderId) return { ok: false, reason: NOT_FOUND_SENTENCE };
+  if (request.requester_id && request.requester_id === deciderId) {
+    return { ok: false, reason: 'You cannot decide your own request — somebody else has to.' };
+  }
+  const st = takeoverTransition(request.status, 'approved');
+  if (!st.ok) return st;
+  if (request.approver_id && request.approver_id === deciderId) return { ok: true, reason: null };
+  const isAdmin = deciderRoleList(deciderRoles).includes('admin');
+  const sameOrg = !request.org_id || (deciderOrgId && deciderOrgId === request.org_id);
+  if (isAdmin && sameOrg) return { ok: true, reason: null };
+  if (isAdmin && !sameOrg) return { ok: false, reason: NOT_FOUND_SENTENCE };
+  return { ok: false, reason: 'This request is waiting for somebody else to decide it.' };
+}
+
+/** Only the requester may withdraw, and only while it is pending. → { ok, reason } */
+function canCancel({ request, actorId } = {}) {
+  if (!request || !actorId) return { ok: false, reason: NOT_FOUND_SENTENCE };
+  if (request.requester_id !== actorId) {
+    return { ok: false, reason: 'Only the person who asked can withdraw this request.' };
+  }
+  return takeoverTransition(request.status, 'cancelled');
+}
+
 module.exports = {
   ownerOf, isMine, splitByOwner, teamSummary, actionsFor, promptNote, closeRefusal,
   // seeing (D-0034)
   POOL_ROLES, rolesOf, viewScope, inScope, isPoolLead,
   canSeeLead, canSeeContact, canSeeEmail, canSeeSubmission,
   queryOwnerIds, scopeLeads, scopeEmails,
+  // taking over (R-047, D-0037)
+  TAKEOVER_KINDS, TAKEOVER_OWNER_ROLES, TAKEOVER_STATES, TAKEOVER_TRANSITIONS,
+  recordOwnerId, clientOwnerFrom, canRequestTakeover, approverFor, pickAdmin,
+  canDecide, canCancel, takeoverTransition,
 };

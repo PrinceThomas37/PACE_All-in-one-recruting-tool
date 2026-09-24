@@ -1,5 +1,6 @@
 # Foundry — memory
-> Last written: 2026-09-24 · Rampart review blockers pinned, 107/107
+> Last written: 2026-09-24 · R-047 take-over requests pinned, 109/110 (1 known,
+> expected failure — see "Open here")
 
 ## Session 31 (2026-09-24)
 - **109 suites** now: +`session31-flows-smoke.mjs` (Playwright, stub API at
@@ -13,7 +14,7 @@
   to the Leads Stage dropdown.
 
 ## What is true here now
-- **`npm test` runs 107 suites** via `test/run-all.mjs` and reports one summary
+- **`npm test` runs 110 suite files** via `test/run-all.mjs` and reports one summary
   (was 105 at the last count in this file; +2 this session —
   `email-attachments-smoke.mjs`, `email-history-scope-smoke.mjs`). Confirmed
   **107/107 on Node 22** this session, full log written to a file and grepped
@@ -737,3 +738,114 @@ path touched — both new suites are pure Node + in-memory fakes, no file I/O
 beyond requiring source). Did not touch `routes/`, `services/`, or
 `public/js/` — both fixes were already landed by gateway/guild before this
 job started.
+
+## 2026-09-24, round 3 — R-047 take-over requests: 3 new suites, 1 known-failing (gateway mid-flight)
+
+D-0036/D-0037/D-0038 (take-over requests: `services/ownership.js`'s
+`recordOwnerId`/`canRequestTakeover`/`approverFor`/`canDecide`/`canCancel`/
+`takeoverTransition`, `routes/ownership-requests.js`, migration 047's
+`ownership_requests` table — 44th tenant table) landed from gateway/deep/guild.
+This job turned two scratch harnesses into committed suites, added the checks
+the brief named that neither harness had, and verified every one of the
+requested mutations by reintroducing the real bug in the real source and
+watching the right assertions fail — never by re-deriving the logic locally.
+
+**`test/models-smoke.mjs`**: `TENANT_TABLES.size` 43 → **44**, plus an explicit
+`TENANT_TABLES.has('ownership_requests')` assertion.
+
+**`test/takeover-rule-smoke.mjs` (new, 86 assertions)** — the PURE rule, no
+database, no server. Adapted near-verbatim from rampart's scratch review
+(`recordOwnerId`/`clientOwnerFrom`/`canRequestTakeover`/`approverFor`/
+`pickAdmin`/`canDecide`/`canCancel`/`takeoverTransition`; 83 cases, confirmed
+83/83 against the shipped file before converting). Added one embedded
+mutation: a hand-written `approverFor_WRONG_askersManager` that routes a
+cross-team request to the ASKER's manager instead of the OWNER's — the exact
+shape D-0037 explicitly rejected — and asserts it disagrees with the shipped
+answer on a real case (bl1 vs bl2). Convention matches `ownership-smoke.mjs`:
+the mutation lives in the committed file as its own assertion, not as a
+transient edit-and-restore that evaporates with the session.
+
+**`test/ownership-requests-smoke.mjs` (new, 36 assertions)** — the database/
+route half, adapted from gateway's scratch harness (kept close to verbatim;
+the fixture and the fake-postgrest QB cost real thought). Drives the REAL
+router + `services/ownership.js` + `models/index.js` + `hierarchy.js` against
+a tiny in-memory fake that PROJECTS every row to the columns the route's own
+`.select(...)` names. Covers: the duplicate-email door (same-team and
+cross-team, D-0038), identical `not_found` for a genuinely-unrelated ask,
+unowned → asker's manager, a manager asking for a report's lead → the
+deterministic admin, duplicate-ask 409, `mine`/`waiting` boxes, wrong-decider
+403, approve moving the lead (and re-picking or clearing its sending mailbox),
+re-decision refused, decline leaving the record untouched, only the requester
+may cancel, and the client take-over moving a job order + a lead while
+leaving a DIFFERENT owner's lead at the same company alone. Added beyond the
+harness (per this job's brief):
+* **The body-can't-set-the-flag check, driven behaviourally, not by grep.**
+  `viaDuplicateEmailMatch` sent directly in a GET query string or a POST body
+  — with no matching (or no) `via_email` — must still answer `not_found`.
+  Verified non-vacuous: temporarily made the route trust
+  `req.body.viaDuplicateEmailMatch` directly and re-ran — both assertions
+  flipped (a stranger's take-over request was created with no verified email
+  match); restored, `node --check` clean.
+* **A mutation proving the DB-level conditional-update race guard matters,**
+  built as an ISOLATED fixture with its own users/jobs/app/server (never
+  touching the shared one) whose fake `ownership_requests` UPDATE silently
+  drops an `.eq('status', …)` filter — simulating the guard's removal — plus a
+  hand-rolled BARRIER that forces both concurrent approvals' `loadOwnRequest`
+  read to land at the exact same instant (a fast synchronous fake db can
+  otherwise let one request finish entirely before the other starts, which
+  proves nothing about a guard meant for a genuine network race). Confirmed
+  the barrier itself isn't what causes the double-success — ran the SAME
+  barrier against the REAL guarded QB in a throwaway script first and it still
+  correctly produced exactly one 200/one 409; only the no-guard mutation
+  produces 200/200.
+
+**All four mutations named in the brief verified by reintroducing the real
+bug in the real source file, watching the right assertions fail, then
+restoring (`git diff --stat` clean, `node --check` clean, after each):**
+| bug reintroduced | file | result |
+|---|---|---|
+| `approverFor`'s owner branch reads `managerOf(requester)` instead of `managerOf(owner)` | `services/ownership.js` | 10/86 fail in takeover-rule-smoke; ownership-requests-smoke crashes outright (a downstream assertion dereferences an approver that no longer exists) |
+| body-supplied `viaDuplicateEmailMatch` trusted directly | `routes/ownership-requests.js` | 2/36 fail (a stranger's request is created with no real email match) |
+| `.eq('status', 'pending')` dropped from the approve/decline/cancel UPDATE | `routes/ownership-requests.js` (simulated in an isolated test fixture, not the real file — the real file was never edited for this one since the fixture reproduces the exact removed line) | both concurrent approvals return 200 instead of 200/409 |
+| client take-over's lead query drops `.eq('assigned_to_bd', oldOwner)` | `routes/ownership-requests.js` | 2/36 fail — the OTHER owner's lead at the same company gets swept up too |
+
+**`test/reminder-lead-visibility-smoke.mjs` (new, 15 assertions)** — R-047 B2
+(mid-session addition from the coordinator, ledger's scratch check). Pins
+`reminderEmbedFor` (pure, exported from `routes/reminders.js`): a reminder's
+embedded lead/contact is kept only when the lead is in the caller's org AND
+in view scope (`canSeeLead`, D-0034) and the contact hangs off that same
+lead — own lead, cross-org, out-of-scope, contact-on-a-different-lead,
+contact-with-no-job, company-in-a-different-org (lead kept, company nulled),
+admin exception, and a plain manual reminder (no lead at all) never reads as
+withheld. Plus `POST /reminders` driven through the real router with a fake
+db: a lead the caller cannot touch, or a contact in a different org/lead,
+both answer the identical 404; a touchable lead, a lead derived from the
+contact alone, and a manual reminder with no lead all still work. Verified
+non-vacuous: commented out the `canTouchJob` gate and re-ran — 14/15
+(job `j9` created a reminder with no check); restored, `node --check` clean.
+
+**Open, per the coordinator's explicit instruction — do NOT resolve without
+a fresh go-ahead:** gateway is mid-flight changing the take-over API while
+this job was running (`routes/ownership-requests.js` uncommitted, live diff
+seen): `GET /ownership-requests/can-request` → `POST` (query strings must
+never carry a prospect's email, per L3), and the duplicate-email door now
+resolves a lead from `via_email` alone with **no `record_id`** at all
+(`resolveLeadByEmail`), plus `reassignLead`'s write became conditional on the
+live owner (M1 round-2 fix) and returns whether anything actually moved.
+`test/ownership-requests-smoke.mjs` was written against the PRE-change API
+(`GET` + `record_id`-required `POST`) and now fails outright
+(`SyntaxError: Unexpected token '<'` — the GET hits Express's 404 HTML page,
+not a JSON one) — **this is the one known, expected failure in the 110-suite
+run below, not a regression to chase.** Full suite: **109/110**, the single
+failure being exactly this. Do not touch `ownership-requests-smoke.mjs` again
+until the coordinator confirms the new API has landed and is stable; the
+pure-rule suite (`takeover-rule-smoke.mjs`, 86/86) and the reminder suite
+(15/15) are both independent of this and unaffected.
+
+Ran both new/changed suites individually, then the full `npm test` twice
+(background jobs, each logged to a file, grepped for the summary line, never
+piped to `tail`; the second run added `reminder-lead-visibility-smoke.mjs`,
+which hadn't existed when the first run started — **109/110** both times,
+same single expected failure). Did not touch `routes/companies.js` or
+`tmp_gateway_oreq_scratch.mjs`, both of which appeared mid-session as
+gateway's own in-flight work. Did not commit anything, per instruction.
