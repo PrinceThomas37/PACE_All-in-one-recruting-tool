@@ -1,5 +1,5 @@
 # Guild — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-24 · R-047 round 2: enroll gate closed (R47-1/R47-5)
 
 ## What is true here now
 - `bd_recruiter_routes.js` is a **43-line mounter** over
@@ -553,3 +553,70 @@ lead from the typed/matched email server-side (D-0038's
   (25/25), `test/submission-review-smoke.mjs` (16/16),
   `test/stage-consolidation-smoke.mjs` (14/14) — all green. Did not run full
   `npm test`; did not commit.
+
+## Session 30 round 4 — R-047 round-2 review: `/wf/enroll` had no gate at all
+
+Rampart's round-2 blocker (R47-1, HIGH): `POST /wf/enroll` and
+`/wf/enroll-bulk` (`routes/wf.js`) checked NOTHING about `workflow_id`,
+`entity_id` or `job_id` before handing them to `engine.enroll` — the contact
+context loader and `email` channel (`index.js` ~:3376-3460, gateway's, not
+touched) then read `job_id` raw and resolved the SENDING MAILBOX from
+whatever job it named. So: own contact (any address) + a colleague's (or
+another org's) `job_id` + `any_stage:true` → a queued email from the
+colleague's mailbox, filled with THAT lead's position/company, `sent_by` the
+caller. Foreign ids reached straight into another org.
+
+Fixed with one shared gate, `gateEnrollTarget()`, called from both routes
+before `engine.enroll`:
+- **The workflow must be the caller's org's** — `loadWorkflowOrgScoped()`,
+  same shape as every other by-id fix this session; a foreign/missing
+  workflow_id is now the same 404.
+- **`entity_type: 'contact'`** — the contact is looked up org-scoped; if a
+  `job_id` is supplied it must equal the contact's OWN `job_id` (never someone
+  else's, never used to attach a stranger's job to this contact); the
+  resulting job (the contact's own, or none) is then org-scoped and the caller
+  must be allowed to ACT on it — `canActOnJob()`, owner or reporting chain via
+  `own.inScope(job.assigned_to_bd, scope)`, admin always passes. **Checked and
+  extended, not invented:** admin/ra_lead (the pool roles) may also act on a
+  still-unassigned pool lead (`own.isPoolLead(job) && scope.seesPool`) — the
+  same clause `canSeeLead` already carries for sight, extended to acting
+  because distributing the pool IS their job and a pool lead has no owner to
+  overrule. A plain BD/recruiter cannot enroll a pool lead's contact.
+- **`entity_type: 'submission'`** — org-scoped lookup, then
+  `recruiterCanTouchJob(req, submission.job_order_id)` (from
+  `services/recruiting-core.js`, built locally in this file with no gateway
+  ctx change — mirrors this file's existing self-contained `withOrg`), the
+  same rule the submissions/pipeline routes already enforce.
+- **`entity_type: 'candidate'`** (nurture, no job) — org-scoped lookup only,
+  matching `requireOwnCandidate`'s own reasoning elsewhere in this codebase
+  (candidates are shared-to-see inside an org; there is no per-user candidate
+  ownership column to check against).
+- **Every miss is the SAME 404** (law 3) — a foreign, unowned or nonexistent
+  id all read identically; nothing here ever answers 403 (which would confirm
+  the record exists).
+- `enroll-bulk` runs the identical per-item gate rather than trusting the
+  batch shape to be safer than the single call — it is the exact shape the
+  report used (own ids mixed with a foreign `job_id` inside one payload), so
+  batching the check away would have left the bulk path exploitable while the
+  single one wasn't.
+
+**R47-5 (LOW, same review):** `resolveFromMailboxes` treated bd_lead/ra_lead
+as org-wide — same bug `GET /wf/sending-mailboxes` had before C-0022, just not
+yet fixed here. Narrowed to the reporting chain (mirrors that GET, which sits
+20 lines above it in the same file); admin keeps the whole org.
+
+**Not touched:** `index.js`'s `wfEngine.registerContextLoader`/`registerChannel`
+code (~3376-3460) is gateway's per the border, and needed no change — the gate
+now refuses before that code ever runs, so it never sees a foreign job_id.
+
+**Verification:** `node --check routes/wf.js`; `test/recruiting-routes-mounted.mjs`
+(7/7, 64 routes, order unchanged), `test/workflow-gating-smoke.mjs` (25/25),
+`test/lead-stage-permission.mjs` (13/13), `test/submission-review-smoke.mjs`
+(16/16), `test/candidate-sequence-smoke.mjs` (34/34 — calls `wfEngine.enroll`
+directly, so it doesn't exercise the new route-level gate but confirms the
+engine itself is untouched), `test/backend-smoke.mjs` (107/107, including the
+`/wf/enroll-bulk` dependency-resolution check). Did not run full `npm test`
+(other territories mid-edit in the same tree, per this session's other rounds).
+No dedicated test exists for the enroll gate itself — worth a foundry pin
+(own contact + colleague's job_id → 404; pool lead → ra_lead/admin ok, plain
+BD refused; foreign submission/candidate id → 404). Did not commit.
