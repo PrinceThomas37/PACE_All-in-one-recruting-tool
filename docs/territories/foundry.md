@@ -1,12 +1,15 @@
 # Foundry — memory
-> Last written: 2026-09-24 · D-0034 visibility work pinned (C-0027, C-0018 closed)
+> Last written: 2026-09-24 · Rampart review blockers pinned, 107/107
 
 ## What is true here now
-- **`npm test` runs 69 suites** via `test/run-all.mjs` and reports one summary
-  (was 68; added `test/timezone-resolver-smoke.mjs` this session).
-  Confirmed **69/69 on both Node 22 (sandbox) and Node 26 (Render's
-  version)** — full log written to a file and grepped for the summary line
-  each time, never piped to `tail`.
+- **`npm test` runs 107 suites** via `test/run-all.mjs` and reports one summary
+  (was 105 at the last count in this file; +2 this session —
+  `email-attachments-smoke.mjs`, `email-history-scope-smoke.mjs`). Confirmed
+  **107/107 on Node 22** this session, full log written to a file and grepped
+  for the summary line, never piped to `tail`. (The 69→105 jump in between
+  happened across several other sessions' work; this file's own count had
+  fallen behind — always trust `test/run-all.mjs`'s own printed total over a
+  remembered number.)
   It judges by **exit code**, not by grepping stdout (the suites print in two
   formats, and a stdout grep mis-reports whole suites as failures).
 - **22 suites are Playwright.** `playwright-core` is a devDependency; Chromium is
@@ -642,3 +645,84 @@ mid-edit on the frontend): every new/changed suite individually, plus
 the orchestrator runs the full suite once surface lands. Did not touch
 `routes/`, `services/`, or `public/js/` — every finding above is reported to
 its owning territory rather than fixed here.
+
+## 2026-09-24 — Rampart's two do-not-ship blockers, both now pinned (107 suites)
+
+Rampart's review found two real defects that **105/105 passed with both fully
+present** — the fourth and fifth times a green suite here has proven nothing
+about a specific fault, not the first. Both are already fixed and committed
+(`fb3658b` Gateway, `1671962` Guild); this session's job was to make sure
+neither can come back silently.
+
+**1. `test/email-attachments-smoke.mjs` (8 assertions, new).** The C-0022
+org-scoping edit deleted `MAX_EMAIL_ATTACH_BYTES` from
+`routes/recruiting/outreach.js` while `resolveEmailAttachments` still read it
+inside a per-document `try/catch` — every lookup threw `ReferenceError`, was
+swallowed, and every attachment silently vanished from candidate/client
+emails with no error anywhere. Drives the REAL `POST /candidates/email`
+handler (not a reimplementation) through a real express app + a real
+`@supabase/supabase-js` client on a fake-fetch PostgREST interpreter, with
+`supabase.storage.from().download()` stubbed to real bytes; asserts a real
+attachment object (filename, and content that round-trips byte-for-byte)
+reaches the send call, and that a document belonging to a **different org**
+never comes back — not even by filename.
+**Verified non-vacuous twice:** deleting the constant again dropped 4 of 8
+assertions to FAIL (empty attachments array); removing the `orgId` filter on
+the document lookup made the foreign-org document surface with its real
+filename and bytes attached, failing the leak assertion while everything else
+still passed — i.e. the guard catches EITHER fault on its own, not just both
+together. File restored after each, `node --check` clean.
+
+**2. `test/email-history-scope-smoke.mjs` (12 assertions, new).**
+`GET /email/history`'s "leads" source must apply `canSeeEmail` (sender's
+scope, OR the lead's CURRENT `assigned_to_bd` owner's scope) as its FINAL
+gate over the merged rows — never `canSeeLead`'s wider "created it / was
+assigned to research it / pool" rule, which is exactly the C-0021 finding #2
+this file's own header comment already names. Fixture: an RA who created a
+lead now owned by a BD, an RA Lead managing that RA, the owning BD, the BD's
+manager, and admin — real router, real `hierarchy.js` chain walk, fake
+PostgREST. Confirms: **the RA who only created the lead sees zero of the BD's
+email on it**; **the RA Lead sees zero BD email both on that lead and on a
+pool/recycled lead** (assigned_to_bd null) that the same RA created; **the
+owning BD and their manager still see it**; **admin sees all**.
+
+**Mid-task addition, addressed before finishing:** the coordinator flagged
+rampart's R1 — `LEAD_SELECT` in `routes/email-history.js` omitted `sent_by`,
+so a BD lost sight of their OWN sent email the moment its lead was
+reassigned or recycled, because the SQL projection itself never returned the
+column `canSeeEmail` needs to say "I sent it." Added a fourth job/email pair
+(a lead **reassigned to a different BD, not just released to the pool**) and
+a dedicated assertion, and — the more general fix — **the fake db now
+PROJECTS every returned row to exactly the columns the route's own
+`.select(...)` string names**, the same way real PostgREST does. Before this
+the fixture returned full objects regardless of the select string, which is
+exactly the shape of bug that would have hidden R1 from this suite too: a
+column silently missing from a SQL select is invisible to a fake db that
+doesn't enforce projection. Confirmed R1 was already fixed on disk
+(`LEAD_SELECT` already carries `sent_by`, Gateway's fix landed mid-task) —
+12/12 clean.
+
+**Both suites verified non-vacuous by reintroducing the exact bug named in
+the brief and watching the right assertions fail, then restoring:**
+- deleting `MAX_EMAIL_ATTACH_BYTES` → 4/8 (attachment-content assertions)
+- removing the document org filter → 6/8 (the leak assertion, specifically)
+- removing `sent_by` from `LEAD_SELECT` → 7/12 (every "sender still sees
+  their own email" assertion, including the new reassignment case)
+- swapping the final `own.scopeEmails(...)` gate for a `canSeeLead`-based
+  filter → 7/12 (a DIFFERENT 5 assertions fail than the `sent_by` case, for a
+  reason worth recording: `ownedJobMap`'s jobs query only selects
+  `id,assigned_to_bd`, so a `canSeeLead` check run against those rows can't
+  even see `created_by` — the swap breaks senders seeing their OWN mail too,
+  not just the intended leak. A test that only checked "does the bug leak"
+  would have missed that this particular wrong-predicate swap fails
+  **differently** than expected; asserting the full set of positive AND
+  negative cases is what caught it either way.)
+File restored and `node --check`ed clean after each reintroduction.
+
+Ran the full suite (background job, logged to a file, grepped for the summary
+line, never piped to `tail`): **107/107 suites passed, exit code 0.** No
+`[FAIL]` lines in the log. Did not run Node 26 this round (no parsing/binary
+path touched — both new suites are pure Node + in-memory fakes, no file I/O
+beyond requiring source). Did not touch `routes/`, `services/`, or
+`public/js/` — both fixes were already landed by gateway/guild before this
+job started.

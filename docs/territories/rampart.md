@@ -193,6 +193,43 @@ edit/delete/apply-link owner-only · outreach pickers + lead ownership.
 X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
 says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 
+## RE-REVIEW OF THE FIXES — 2026-09-24, round 2 (verdict: ship-with-followups; land R1 in the same PR)
+Read `git diff 71a8006..HEAD` (fb3658b gateway, 1671962 guild, c7b8e6f
+harbour, fbd3f5b observatory). Rampart suites + ownership (69) + email-history
+(32) green.
+**Closed:** #1 (constant restored) · #2 SQL now `inScope(assigned_to_bd)` +
+`scopeEmails` final gate · #3 from-lead owner-gated, `bd_manager_id` must be
+self/chain in org · #4 merge (owner on BOTH), bulk-stage (bd narrowed, foreign
+ids silently dropped), submission/pipeline delete, parse-jd apply, recruiters
+assign (+ ids must be in org), decide · #5 admin-only + org 404 · #6
+contacts/intake via `canSeeLead` · #7 both suppression writers carry the org
+(`loadAnswerRow` selects `org_id`) · #8 stripped · #9 edit = `inScope(owner)`,
+unseeable = 404 · #10 batched paging · #11 state is a JWT, every popup value
+JSON-encoded with `<` escaped; sign-in states carry `p:'signin'` so the two
+flows still separate correctly.
+**New:**
+- R1 MED regression (fail-CLOSED) — `routes/email-history.js` `LEAD_SELECT`
+  does not select `sent_by`, so the new `scopeEmails` gate reads it as
+  undefined and the "I sent it" half of `canSeeEmail` is dead: a BD's own
+  emails vanish from All email once the lead is reassigned or RECYCLED to the
+  pool (the 30-day recycler makes that routine). Proven with ownership.js
+  directly. One word: add `sent_by` to `LEAD_SELECT`. No test covers it.
+- R2 LOW-MED — `DELETE /job-orders/:id/recruiters/:rid` (job-orders.js:778):
+  any BDM, no owner gate, no 404 for an unknown job. In-org only (withOrg on
+  the delete). Same class as #4; gate with `isJobOrderOwner(pocScope)`.
+- R3 LOW — submission/pipeline delete lets an assigned recruiter delete a
+  COLLEAGUE recruiter's row on a shared job (`|| recruiterCanTouchJob`);
+  D-0035 says "their own candidates".
+- R4 LOW — `ownedJobMap` selects every org lead unbounded (PostgREST caps at
+  1,000): fail-closed truncation on a large org. `/wf/enrollments` now walks
+  the whole org's table for a user who can see little.
+- R5 INFO — the mailbox OAuth state is a JWT_SECRET token with no purpose
+  claim; `auth()` would accept it as a session (no id/role/org → refused
+  once MULTI_ORG; harmless, but token confusion). Add `p:'mailbox'`, require
+  it on verify, and have `auth()` reject any token carrying `p`.
+- Behaviour change, intended: a BD who only CREATED a lead can no longer edit
+  it via `PUT /jobs/:id` (the frontend only edits own leads' stage/notes).
+
 ## Decisions for the owner (raised 2026-09-23 — ANSWERED by D-0035/D-0036)
 - **D1 — the candidate database.** Today every recruiting role sees every
   candidate, note, document and match. Industry norm (Bullhorn, Ceipal,
@@ -228,8 +265,8 @@ says every suggestion to the owner is one. C-0029 is recorded, OPEN.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
-- **The audit is FIXED except the eleven review findings above** (2026-09-24).
-  The X-ORG rows are closed; items 1 and 2 of the review block the merge.
+- **All eleven review findings are closed** (round 2, 2026-09-24). Open:
+  R1 (one word, should land before merge), R2-R5 follow-ups — see above.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
   `submissions.js:25`** — secrets, sending as another company, and exfiltrating
   another company's resumes. These outrank the owner's in-org report.
@@ -242,6 +279,11 @@ says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 - Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
+- **2026-09-24 (round 2)** — re-reviewed the eleven fixes by reading the
+  diff. All closed; one new fail-closed regression (R1). **What would have
+  saved an hour:** when a fix adds a predicate over fetched rows, check the
+  SELECT list carries every field the predicate reads — a missing column is
+  `undefined`, and `undefined` fails every ownership test silently.
 - **2026-09-09** — org-scoping audit of 65 raw queries; `guardUser()`,
   `canTouchJob`, runtime `MULTI_ORG`; raised C-0015..C-0018. 70/70.
 - **2026-09-24** — reviewed every C-0021..C-0029 fix against the audit by
