@@ -5975,3 +5975,7 @@ Owner confirmed the RA Lead scope and asked for "request to take over" approved 
 - 2026-09-24: a usage limit cut off gateway, guild and surface mid-job; harbour finished and landed (59a4f46). The three were resumed with their context intact.
 
 - 2026-09-24: gateway (59da736), guild (c8d509f) landed. Every server-side leak in the audit is closed; surface (screens) still working; foundry started on the tests. Roadmap R-048 (recruiting lookups unique index needs org_id, deep).
+
+- IN FLIGHT (2026-09-24): surface editing public/js for C-0026/C-0028 + D-0035 screen changes; foundry writing the visibility suites. Both uncommitted until they report.
+
+- 2026-09-24: surface landed (e76a377). Live cleanup: removed the "S,no" key from import_extra on all 49 imported leads (owner asked). Full suite 104/105 — team-structure-smoke still asserts the old browser-side lead filter; foundry updating it. Rampart doing the final review.

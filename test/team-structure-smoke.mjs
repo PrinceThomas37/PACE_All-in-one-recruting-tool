@@ -142,20 +142,30 @@ try {
   // 7. Individual (RA) dashboard: real STATE.jobs data, not the dead STATE.leads
   // seed. Ora has no reports and role 'ra' — the one role left that isn't a
   // recruiter or a manager, so it must hit renderIndividualDashboard().
+  //
+  // D-0034 / C-0026 #1 moved the "not somebody else's lead" boundary to the
+  // SERVER: `getMyJobs` no longer re-filters STATE.jobs by role client-side
+  // ("a browser-side filter is not a boundary"), and `GET /jobs` now returns
+  // only what `services/ownership.js` `scopeLeads` says the viewer may see.
+  // So STATE.jobs here is the fixture for what the SERVER would already have
+  // handed Ora — her own leads only, with no j4-style foreign lead in it at
+  // all — and this step's job is just confirming the dashboard renders real
+  // lead data (not the dead STATE.leads seed) rather than re-proving the
+  // ownership boundary itself. That guarantee now lives in
+  // `test/scope-jobs-smoke.mjs`, which drives the real `GET /jobs` route.
   const ra = await page.evaluate(() => {
     STATE.user = Object.assign({}, STATE.user, { id: 'ora', role: 'ra', roles: ['ra'], name: 'Ora Analyst' });
     STATE.jobs = [
       { id: 'j1', position: 'Backend Engineer', company_name: 'Acme Co', industry: 'Software', location: 'Remote', stage: 'Connected', is_duplicate: false, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() },
       { id: 'j2', position: 'Frontend Engineer', company_name: 'Beta Inc', industry: 'Software', location: 'NYC', stage: 'Unassigned', is_duplicate: false, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() },
-      { id: 'j3', position: 'Data Analyst', company_name: 'Gamma LLC', industry: 'Finance', location: 'SF', stage: 'Assigned', is_duplicate: true, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() },
-      { id: 'j4', position: 'Other Analyst', company_name: 'Zeta Co', industry: 'Retail', location: 'LA', stage: 'Connected', is_duplicate: false, created_by: 'someone-else', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() }
+      { id: 'j3', position: 'Data Analyst', company_name: 'Gamma LLC', industry: 'Finance', location: 'SF', stage: 'Assigned', is_duplicate: true, created_by: 'ora', created_date: new Date().toISOString().slice(0,10), created_at: new Date().toISOString() }
     ];
     STATE.reminders = [];
     STATE.viewingUser = null;
     STATE.page = 'dashboard';
     return { html: renderDashboard() };
   });
-  step('Individual dashboard shows real leads (own jobs only, not j4)', ra.html.includes('Backend Engineer') && ra.html.includes('Data Analyst') && !ra.html.includes('Other Analyst'));
+  step('Individual dashboard shows real leads (server-scoped to Ora\'s own)', ra.html.includes('Backend Engineer') && ra.html.includes('Data Analyst'));
   step('Individual dashboard shows real stage pills', ra.html.includes('Connected') && ra.html.includes('Unassigned'));
   step('Individual dashboard has no dead-data leftovers', !ra.html.includes('Response rate trend') && !ra.html.includes('Positive') && !ra.html.includes('Negative'));
 
