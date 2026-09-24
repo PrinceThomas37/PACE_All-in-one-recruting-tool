@@ -5969,3 +5969,9 @@ Recorded as D-0035: candidates shared (ownership is per candidate-on-a-job); eve
 
 ### Round 13c — D4 confirmed, ownership requests wanted (2026-09-23)
 Owner confirmed the RA Lead scope and asked for "request to take over" approved by the asker's manager (admin if none). Recorded D-0036; roadmap R-047 (after R-046).
+
+- IN FLIGHT: observatory landed (c2de5a8); gateway, guild, harbour, surface still editing.
+
+- 2026-09-24: a usage limit cut off gateway, guild and surface mid-job; harbour finished and landed (59a4f46). The three were resumed with their context intact.
+
+- 2026-09-24: gateway (59da736), guild (c8d509f) landed. Every server-side leak in the audit is closed; surface (screens) still working; foundry started on the tests. Roadmap R-048 (recruiting lookups unique index needs org_id, deep).
