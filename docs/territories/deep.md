@@ -144,3 +144,34 @@ Closes C-0004. **Next migration is 047.**
 
 ## 2026-09-24 — map registration (noted by the orchestrator)
 `scripts/territory-map.mjs` gained `services/job-order-visibility.js` under guild: the D-0035 helper that decides which client-POC fields of a job order a non-owner may see. Added by guild during C-0022 so the file is not an orphan; regenerate `_map.json` with `node scripts/territory-map.mjs` after it lands.
+
+## 2026-09-24 — migration 047, `ownership_requests` (WRITTEN, NOT APPLIED)
+Take-over requests, D-0036/D-0037. The owner approved adding the table at
+merge time ("Yes, add it"); **the orchestrator applies it, and it must be
+applied BEFORE the routes that use it are merged.** 046 was the true highest
+file, so this is 047. **Next migration is 048.**
+
+- Columns: `id`, `org_id` (NOT NULL, FK organizations, default-org DEFAULT via
+  the 042 DO-block), `record_kind` (lead|client|job_order), `record_id` (**not
+  an FK** — spans jobs/companies/job_orders, and history outlives the record),
+  `record_label` (≤300, what the asker saw), `requester_id`, `current_owner_id`
+  (NULL = was in the pool), `approver_id`, `status`
+  (pending|approved|declined|cancelled, default pending), `note` (≤1000),
+  `decision_note` (≤1000), `decided_by`, `decided_at`, `created_at`,
+  `updated_at` (no trigger — the route sets it; the house has no triggers).
+- **Every user FK is `ON DELETE RESTRICT`.** Users are soft-deleted
+  (`routes/auth.js` sets `deleted_at`/`is_active`), so this costs nothing today;
+  if a hard delete is ever added it must not erase who asked or who decided.
+- **Three CHECKs carry the owner's rules into the schema:** approver ≠
+  requester (nobody approves their own request); `decided_at` is set exactly
+  when status ≠ pending (cancel included); an approve/decline is never decided
+  by the requester.
+- Partial UNIQUE on `(org_id, record_kind, record_id, requester_id) WHERE
+  status='pending'` → a second ask while one waits is a 23505.
+- Indexes: approver queue, requester's list, per-record history.
+- RLS on + `service_all_ownership_requests`, same as 039.
+- Registered in `models/tables.js` → **44 tenant / 7 global in the registry**
+  (live stays 43/7 until applied). `test/models-smoke.mjs` pins 43 — that is
+  foundry's file; they must bump it to 44 when this lands.
+- Not to be confused with `assignment_requests` (020): that asks to be PUT ON a
+  job order as a recruiter; this asks to OWN a record.

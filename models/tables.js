@@ -47,6 +47,9 @@ const TENANT_TABLES = new Set([
   'lead_sources',
   'match_scores',
   'microsoft_tokens',   // see gmail_tokens above — migration 039
+  // Migration 047 — take-over requests (D-0036/D-0037). Written 2026-09-24;
+  // must be APPLIED before the routes that read it are merged.
+  'ownership_requests',
   'recruiter_assignments',
   'recruiting_lookups',
   'reminders',
