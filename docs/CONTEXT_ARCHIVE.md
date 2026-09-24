@@ -6046,3 +6046,5 @@ Worked directly (not via subagents) on branch `claude/confident-hypatia-l8ma42`.
   PACE calls Apollo today).
 - Tests: session31-flows-smoke (30), pipeline-tag-membership-smoke (11); full
   suite 108/108 before the last suite was added.
+
+- 2026-09-24: owner said "merge it". Checked the parallel chat first: its work was merged through #232 (already inside this branch); its branch holds one docs-only commit ("Record #232 as merged") not yet on main — left for that chat. Merged #233 (`94a890b`).
