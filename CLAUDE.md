@@ -142,6 +142,21 @@ we never have to rewrite to grow (see "Growth bets" below).
     `{{sender}}` and would never have filled `{{sender_name}}`.
   `test/reminder-clarity-smoke.mjs` pins all of it, and all three guards were
   verified by reintroducing each bug and watching them fail.
+- **WHO SEES WHAT IS ALSO DEFINED THERE (Session 30, D-0034/D-0035/D-0036).**
+  The owner found BD Lead 1 seeing all 49 leads (owns 25) and every user seeing
+  all 119 emails. The rule: **you see what you own, plus your reporting
+  chain's; admin sees the company; the Unassigned pool only to the roles that
+  distribute it (admin, ra_lead).** Candidates, clients and job orders are
+  *shared to see, owned to touch*; a job order's client POC shows only to its
+  owner (`services/job-order-visibility.js`). Call `viewScope` / `scopeLeads` /
+  `scopeEmails` / `canSee*` — never re-derive a role ladder, and **never filter
+  in the browser** (a browser filter is not a boundary). Narrow in SQL before
+  any `.limit()`; unseeable by id → 404. The audit also closed cross-company
+  holes (every stored AI key was readable via `GET /app-settings`).
+  **Two review blockers passed 105/105 tests**: a deleted constant read inside
+  a try/catch silently dropped every email attachment, and a select missing
+  `sent_by` hid a sender's own mail. A fake db must PROJECT rows to the route's
+  own select, or a missing column is invisible to the test.
 - **OWNERSHIP IS DEFINED ONCE, IN `services/ownership.js` (Session 24, D-0020).**
   The owner asked for it by name — *"Maybe we can define what ownership or
   responsibility means"* — after finding their daily list carrying their

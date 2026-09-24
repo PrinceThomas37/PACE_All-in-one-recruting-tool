@@ -192,6 +192,19 @@ a review screen (`GET /next-actions/team`) where they can PROMPT the owner
 adding any "manager can also…" affordance, read D-0020 — the answer to holiday
 cover is reassignment, not acting on another person's behalf.
 
+### Seeing only what you're responsible for
+**Status:** LIVE (Session 30) · owner `rampart` (the rule) · `services/ownership.js`
+(`viewScope`, `scopeLeads`, `scopeEmails`, `canSeeLead/Contact/Email/Submission`)
++ `services/job-order-visibility.js` (guild). **D-0034/D-0035/D-0036.** Every list
+and record returns what the viewer owns plus their reporting chain's; admin sees
+the company; the Unassigned pool only admin/ra_lead. Candidates, clients and job
+orders are shared to SEE and owned to TOUCH; a job order's client POC shows to its
+owner only; an email's text only to the sender's line and the lead owner's line;
+RA Leads get per-BD counts (`GET /emails/sender-summary`), not messages. **Every new
+endpoint that returns records calls these — never a hand-written role ladder, never
+a browser-side filter.** Pinned by ownership-smoke, scope-*-smoke,
+email-history-scope-smoke, email-attachments-smoke.
+
 ### Telling a user what to do next
 **Status:** LIVE · owner `observatory`
 `GET /next-actions`, on all three dashboards. **Opted-out threads never produce
