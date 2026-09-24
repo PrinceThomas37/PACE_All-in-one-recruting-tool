@@ -102,8 +102,8 @@ module.exports = function (app, core) {
   // GET /recruiting-lookups?all=1  → { category: [{id,value,sort_order,is_active}, …] } (management)
   app.get('/recruiting-lookups', auth, async (req, res) => {
     try {
-      const { data, error } = await supabase.from('recruiting_lookups')
-        .select('id,category,value,sort_order,is_active')
+      const { data, error } = await withOrg(supabase.from('recruiting_lookups')
+        .select('id,category,value,sort_order,is_active'), req)
         .order('category', { ascending: true }).order('sort_order', { ascending: true });
       if (error) throw error;
       const grouped = {};
@@ -122,11 +122,12 @@ module.exports = function (app, core) {
       const b = req.body || {};
       if (!LOOKUP_CATEGORIES.includes(b.category)) return res.status(400).json({ error: 'Invalid category.' });
       if (!b.value || !String(b.value).trim()) return res.status(400).json({ error: 'value required' });
-      const { data: last } = await supabase.from('recruiting_lookups')
-        .select('sort_order').eq('category', b.category).order('sort_order', { ascending: false }).limit(1);
+      const { data: last } = await withOrg(supabase.from('recruiting_lookups')
+        .select('sort_order').eq('category', b.category), req).order('sort_order', { ascending: false }).limit(1);
       const nextOrder = (last && last.length) ? (last[0].sort_order + 1) : 0;
       const { data, error } = await supabase.from('recruiting_lookups')
-        .insert({ category: b.category, value: String(b.value).trim(), sort_order: nextOrder }).select().single();
+        .insert(Object.assign({ category: b.category, value: String(b.value).trim(), sort_order: nextOrder }, orgStamp(req)))
+        .select().single();
       if (error) {
         if (error.code === '23505') return res.status(409).json({ error: 'That value already exists in this list.' });
         throw error;
@@ -143,9 +144,10 @@ module.exports = function (app, core) {
       if (b.value !== undefined) updates.value = String(b.value).trim();
       if (b.is_active !== undefined) updates.is_active = !!b.is_active;
       if (b.sort_order !== undefined) updates.sort_order = parseInt(b.sort_order, 10) || 0;
-      const { data, error } = await supabase.from('recruiting_lookups')
-        .update(updates).eq('id', req.params.id).select().single();
+      const { data, error } = await withOrg(supabase.from('recruiting_lookups').update(updates), req)
+        .eq('id', req.params.id).select().maybeSingle();
       if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Lookup value not found' });
       res.json(data);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -153,7 +155,7 @@ module.exports = function (app, core) {
   app.delete('/admin/recruiting-lookups/:id', auth, async (req, res) => {
     try {
       if (!isLookupAdmin(req)) return res.status(403).json({ error: 'Admin or BD Lead only.' });
-      await supabase.from('recruiting_lookups').delete().eq('id', req.params.id);
+      await withOrg(supabase.from('recruiting_lookups').delete(), req).eq('id', req.params.id);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

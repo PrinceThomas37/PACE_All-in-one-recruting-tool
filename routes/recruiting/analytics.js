@@ -33,9 +33,16 @@ module.exports = function (app, core) {
   app.get('/recruiting-dashboard', auth, async (req, res) => {
     try {
       const recruiterView = isRecruiter(req) && !isBDM(req);
-      const managerScoped = isBDM(req) && !hasRole(req, 'admin');
+      const isAdmin = hasRole(req, 'admin');
+      const managerScoped = isBDM(req) && !isAdmin;
       const uid = req.user.id;
-      const chain = managerScoped ? await reportingChainIds(uid, orgIdFor(req)) : null;
+      // C-0022 #1: `ra`/`ra_lead` are neither isBDM nor isRecruiter, so this
+      // used to fall through both branches with `chain` null and the
+      // submissions query wide open — the whole org's submissions and
+      // upcoming interviews (candidate names) to a role that has no chain of
+      // its own defined here. Every non-admin, non-recruiter role is now
+      // chain-scoped, not just a BD manager.
+      const chain = (!isAdmin && !recruiterView) ? await reportingChainIds(uid, orgIdFor(req)) : null;
 
       let jobIds = null;
       let assignedAtByJob = {};
@@ -60,7 +67,7 @@ module.exports = function (app, core) {
         .select('id,stage,sub_stage,created_at,submitted_at,stage_updated_at,rejection_reason,interview_at,interview_location,job_order_id,recruiter_id,candidate:candidates(id,full_name)')
         .is('deleted_at', null), req);
       if (recruiterView) sq = sq.eq('recruiter_id', uid);
-      else if (managerScoped) sq = sq.in('recruiter_id', chain);
+      else if (chain) sq = sq.in('recruiter_id', chain);
       const { data: subs } = await sq;
 
       const now = new Date();
@@ -146,10 +153,11 @@ module.exports = function (app, core) {
       res.json({
         role: recruiterView ? 'recruiter' : 'manager',
         // scope tells the UI how the submission numbers below are bounded:
-        // 'own' = just this recruiter's, 'team' = this manager's reporting
-        // chain, 'org' = the whole desk (admin). team_size = chain headcount.
-        scope: recruiterView ? 'own' : (managerScoped ? 'team' : 'org'),
-        team_size: managerScoped ? chain.length : null,
+        // 'own' = just this recruiter's, 'team' = the caller's reporting
+        // chain (BD manager OR ra/ra_lead — chain is non-null for both since
+        // the C-0022 fix above), 'org' = the whole desk (admin).
+        scope: recruiterView ? 'own' : (isAdmin ? 'org' : (chain && chain.length > 1 ? 'team' : 'own')),
+        team_size: chain ? chain.length : null,
         jobs: {
           total: (jobs || []).length,
           active: (jobs || []).filter(j => j.status === 'Active').length
@@ -367,21 +375,31 @@ module.exports = function (app, core) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
+  // C-0022 #2 (was C-0003, misaddressed): legacy and un-org-scoped — every BD
+  // saw every org's recruiter numbers, blended with no org filter at all. Now
+  // org-scoped, and (matching /reports/recruiting) chain-scoped for anyone
+  // who is not admin — a BD sees their own reporting chain's recruiters, not
+  // the whole desk.
   app.get('/bd-analytics/recruiters', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'BD Manager only.' });
+      const isAdmin = hasRole(req, 'admin');
+      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
 
-      const { data: subs } = await supabase.from('submissions')
-        .select('recruiter_id, stage, job_order_id').is('deleted_at', null);
-      const { data: recruiters } = await supabase.from('users')
-        .select('id,name,employee_id,roles,role');
+      let sq = withOrg(supabase.from('submissions')
+        .select('recruiter_id, stage, job_order_id').is('deleted_at', null), req);
+      if (chain) sq = sq.in('recruiter_id', chain);
+      const { data: subs } = await sq;
+      let uq = withOrg(supabase.from('users').select('id,name,employee_id,roles,role'), req);
+      if (chain) uq = uq.in('id', chain);
+      const { data: recruiters } = await uq;
 
       // placement fee per job → revenue attribution for placed submissions
       const placedJobIds = [...new Set((subs || []).filter(s => s.stage === 'Placement').map(s => s.job_order_id))];
       const feeByJob = {};
       if (placedJobIds.length) {
-        const { data: fj } = await supabase.from('job_orders')
-          .select('id, placement_fee').in('id', placedJobIds);
+        const { data: fj } = await withOrg(supabase.from('job_orders')
+          .select('id, placement_fee'), req).in('id', placedJobIds);
         (fj || []).forEach(j => {
           const n = parseFloat(String(j.placement_fee || '').replace(/[^0-9.]/g, ''));
           feeByJob[j.id] = isNaN(n) ? 0 : n;
@@ -417,8 +435,11 @@ module.exports = function (app, core) {
   app.get('/bd-analytics/funnel', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'BD Manager only.' });
-      let query = supabase.from('submissions').select('stage').is('deleted_at', null);
+      const isAdmin = hasRole(req, 'admin');
+      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+      let query = withOrg(supabase.from('submissions').select('stage,recruiter_id').is('deleted_at', null), req);
       if (req.query.job_order_id) query = query.eq('job_order_id', req.query.job_order_id);
+      if (chain) query = query.in('recruiter_id', chain);
       const { data } = await query;
       const counts = {};
       STAGES.forEach(s => { counts[s] = 0; });

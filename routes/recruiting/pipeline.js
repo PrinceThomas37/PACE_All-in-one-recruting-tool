@@ -36,6 +36,13 @@ module.exports = function (app, core) {
   // list the pipeline (tagged candidates) for a job order — the Pipeline-tab grid
   app.get('/job-orders/:id/pipeline', auth, async (req, res) => {
     try {
+      // recruiterCanTouchJob only narrows a pure recruiter — every other role
+      // passes unconditionally, so the org check has to live here, on the job
+      // order itself, or a BDM in another org could read this whole roster.
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
       if (!(await recruiterCanTouchJob(req, req.params.id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
       const { data, error } = await supabase.from('candidate_pipeline')
         .select(PIPELINE_SELECT).eq('job_order_id', req.params.id).is('deleted_at', null)
@@ -51,6 +58,16 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const b = req.body || {};
       if (!b.candidate_id || !b.job_order_id) return res.status(400).json({ error: 'candidate_id and job_order_id required' });
+      // Both ids are caller-supplied — a foreign job order or candidate must
+      // 404, the same reason submissions.js checks both before inserting.
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id').eq('id', b.job_order_id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
+      const { data: candOwn } = await withOrg(
+        supabase.from('candidates').select('id').eq('id', b.candidate_id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!candOwn) return res.status(404).json({ error: 'Candidate not found' });
       if (!(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
 
       // snapshot rate/availability/employer from the candidate (overridable via body)
@@ -91,8 +108,8 @@ module.exports = function (app, core) {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const st = req.body.status;
       if (!PIPELINE_STATUSES.includes(st)) return res.status(400).json({ error: `Invalid pipeline status. Allowed: ${PIPELINE_STATUSES.join(', ')}` });
-      const { data: row, error: e0 } = await supabase.from('candidate_pipeline')
-        .select('job_order_id').eq('id', req.params.id).is('deleted_at', null).single();
+      const { data: row, error: e0 } = await withOrg(supabase.from('candidate_pipeline')
+        .select('job_order_id').eq('id', req.params.id).is('deleted_at', null), req).single();
       if (e0 || !row) return res.status(404).json({ error: 'Pipeline entry not found' });
       if (!(await recruiterCanTouchJob(req, row.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
       const { data, error } = await supabase.from('candidate_pipeline')
@@ -106,8 +123,8 @@ module.exports = function (app, core) {
   app.patch('/pipeline/:id', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      const { data: row, error: e0 } = await supabase.from('candidate_pipeline')
-        .select('job_order_id').eq('id', req.params.id).is('deleted_at', null).single();
+      const { data: row, error: e0 } = await withOrg(supabase.from('candidate_pipeline')
+        .select('job_order_id').eq('id', req.params.id).is('deleted_at', null), req).single();
       if (e0 || !row) return res.status(404).json({ error: 'Pipeline entry not found' });
       if (!(await recruiterCanTouchJob(req, row.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
       const allowed = ['work_auth_snap','bill_rate','pay_rate','employer_name','availability','notice_period','current_ctc','source','notes','pipeline_status'];
@@ -125,8 +142,8 @@ module.exports = function (app, core) {
   app.post('/pipeline/:id/promote', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      const { data: pl, error: e0 } = await supabase.from('candidate_pipeline')
-        .select('*').eq('id', req.params.id).is('deleted_at', null).single();
+      const { data: pl, error: e0 } = await withOrg(supabase.from('candidate_pipeline')
+        .select('*').eq('id', req.params.id).is('deleted_at', null), req).single();
       if (e0 || !pl) return res.status(404).json({ error: 'Pipeline entry not found' });
       if (!(await recruiterCanTouchJob(req, pl.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
 
@@ -172,6 +189,10 @@ module.exports = function (app, core) {
   app.delete('/pipeline/:id', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const { data: existing } = await withOrg(
+        supabase.from('candidate_pipeline').select('id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!existing) return res.status(404).json({ error: 'Pipeline entry not found' });
       await supabase.from('candidate_pipeline').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }

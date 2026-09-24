@@ -282,7 +282,9 @@ module.exports = function (app, core) {
   app.post('/sourcing/staged/:id/import', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      const { data: staged, error: e0 } = await supabase.from('sourcing_candidates').select('*').eq('id', req.params.id).single();
+      const { data: staged, error: e0 } = await withOrg(
+        supabase.from('sourcing_candidates').select('*').eq('id', req.params.id), req
+      ).single();
       if (e0 || !staged) return res.status(404).json({ error: 'Staged candidate not found' });
       if (staged.status === 'imported') return res.status(409).json({ error: 'Already imported.' });
       const b = req.body || {};
@@ -300,7 +302,9 @@ module.exports = function (app, core) {
       const ids = Array.isArray(b.ids) ? b.ids : [];
       if (!ids.length) return res.status(400).json({ error: 'ids required' });
       if (b.job_order_id && !(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
-      const { data: staged } = await supabase.from('sourcing_candidates').select('*').in('id', ids).eq('status', 'new');
+      const { data: staged } = await withOrg(
+        supabase.from('sourcing_candidates').select('*').in('id', ids).eq('status', 'new'), req
+      );
       let imported = 0, skipped = 0;
       for (const s of (staged || [])) {
         try {

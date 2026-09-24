@@ -114,10 +114,16 @@ function createWorkflowEngine({ supabase, emit, EVENTS }) {
 
   async function recordRun(enrollment, step, outcome, detail) {
     try {
+      // `enrollment.org_id` is on the row `tick()` read with `select('*')` —
+      // without it this insert had no org intent at all and every step run,
+      // for every org, misfiled under the column DEFAULT (the platform's
+      // default org). Same class of bug as the notes/pipeline inserts fixed
+      // alongside this one (C-0022).
       await supabase.from('workflow_step_runs').insert({
         enrollment_id: enrollment.id, workflow_id: enrollment.workflow_id,
         step_id: step.id, step_order: step.step_order, channel: step.channel,
-        outcome, detail: detail || {}
+        outcome, detail: detail || {},
+        ...(enrollment.org_id ? { org_id: enrollment.org_id } : {})
       });
     } catch (e) { console.error('[wf] step-run record failed:', e.message); }
   }

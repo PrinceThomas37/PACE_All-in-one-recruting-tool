@@ -89,6 +89,9 @@ const TERRITORIES = [
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
           'services/company-merge.js', 'services/lead-fill.js',
+          // D-0035: the one place a job order's client-POC fields are named,
+          // so list/detail/browse in routes/recruiting/job-orders.js agree.
+          'services/job-order-visibility.js',
           'bd_recruiter_routes.js',
           'workflow-engine.js', 'routes/workflows.js', 'routes/wf.js',
           'routes/lookups.js', 'hierarchy.js', 'lead-sources/',
