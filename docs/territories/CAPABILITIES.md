@@ -85,6 +85,10 @@ remembering before concluding something needs to be captured.
 **inside** A's email as a formatted panel.
 **No attachments** — asked and answered; B's document attachment is dropped
 deliberately, not overlooked.
+**Session 31:** the job page ("Email about this job") and the job's Candidates
+list ("✉ Email about this job") are new DOORS into A — `candOutreachStartFor(job,
+ids)` opens A with the job and people picked. They send nothing themselves.
+This is not B coming back.
 
 | | A · Compose → Candidates | B · "Email JD to candidates" |
 |---|---|---|
@@ -441,3 +445,25 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Import keeps a job link column and every unrecognised column** — `public/js/55-import-columns.js`. (Session 29)
 
 - **Re-import a file to fill in missing lead details** — Leads → Import Excel; existing leads get their blanks filled (job link, website, salary, extra columns, contact phone/LinkedIn), nothing overwritten. `services/lead-fill.js`, `POST /jobs/fill-missing`. (Session 29, R-045)
+
+## Putting candidates on a job — one or many (Session 31)
+- **One implementation:** `tagOne()` in `routes/recruiting/pipeline.js`, behind
+  `POST /pipeline` (one) and `POST /pipeline/bulk` (many). Writes the tag AND a
+  `Sourced` submission — "on a job" means a submissions row (Session 28).
+- Entry points: Candidates → tick → **Add to job**; a row's **Add to Job**; the
+  job's **+ Add Candidate** search; the bulk resume upload with a job context.
+  The applicant import has its own writer of the same row (`submissionRowFor`)
+  — do not add a third.
+
+## Adding many candidates from resumes at once (Session 31)
+- `public/js/57-bulk-resume.js` (`atsOpenBulkUpload(jobCtx?)`). **No server path
+  of its own** — it calls parse-resume, POST /candidates, the documents upload
+  and /pipeline one at a time. The single "Parse & fill" in New Candidate is the
+  same reader. Extend this, never build a second importer for resumes.
+
+## Rewriting a job description with AI
+- In a job: "Re-write job description" (`/job-orders/:id/posting-jd`, anonymises
+  for posting, rules fallback). In the New Job form: "Rewrite with AI"
+  (`/job-orders/rewrite-jd`, tidies a pasted posting, NO rules fallback — shows
+  the "Subscribe to AI" pop-up, `aiSubscribePopup`). Two jobs, two endpoints,
+  one pop-up.

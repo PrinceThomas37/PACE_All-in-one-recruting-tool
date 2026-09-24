@@ -1,6 +1,29 @@
 # Guild — memory
 > Last written: 2026-09-24 · R-047 round 2: enroll gate closed (R47-1/R47-5)
 
+## Session 31 (2026-09-24)
+- **Tagging now puts the candidate ON the job.** `POST /pipeline` (and the new
+  `POST /pipeline/bulk`, literal, above every `/pipeline/:id`) go through
+  `tagOne()` in `routes/recruiting/pipeline.js`: the `candidate_pipeline` row
+  AND a `Sourced` submission via `applicants.submissionRowFor` (no
+  submitted_at, D-0029), linked. Measured live before fixing: 15/15 tagged rows
+  had no submission, so the job page never showed them. Re-tagging an
+  already-tagged person heals a missing submission and still answers 409 — that
+  is how the 15 legacy rows get fixed without a data migration (the job page
+  also lists tagged-only rows meanwhile). Bulk answers
+  `{added, already, not_found, failed, errors}`; foreign-org ids are not_found.
+- `POST /candidates` always stamps `owner_id = req.user.id` (owner's call: the
+  owner is whoever creates it). PUT still accepts owner_id (admin reassignment
+  path, D-0020) — the form no longer sends it.
+- `POST /job-orders/rewrite-jd` (literal, above `/job-orders/:id`): rewrites a
+  PASTED posting for the New Job form. **No rules fallback by design** — returns
+  `{used_ai:false, reason:not_configured|daily_limit|no_answer}` so the page can
+  show the subscribe pop-up. `posting-jd` now also returns `ai_reason`.
+- Known, not fixed: `POST /submissions` still stamps `submitted_at` on a
+  Sourced row (D-0029 violation, pre-existing).
+- Pinned by `test/pipeline-tag-membership-smoke.mjs` (real handlers, in-memory
+  db; fails when the submission write is removed).
+
 ## What is true here now
 - `bd_recruiter_routes.js` is a **43-line mounter** over
   `routes/recruiting/{job-orders,candidates,submissions,pipeline,lookups,

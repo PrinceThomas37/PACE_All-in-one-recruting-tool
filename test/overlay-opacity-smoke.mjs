@@ -87,16 +87,19 @@ try {
     const page = await open(theme);
     const bg = await page.evaluate(() => {
       STATE.jobs = []; STATE.contacts = {};
-      STATE.page = 'leads'; STATE.leadsConnectedOpen = true; render();
-      // The drawer is the fixed panel that is not the scrim.
-      const panels = [...document.querySelectorAll('div')].filter(d => {
+      // Session 31: the Connected-leads drawer this step used to open is gone
+      // (Connected now filters the table). The float that replaced it as the
+      // Leads page's floating panel is the Stage filter dropdown — same rule,
+      // painted on --card-solid, so that is what is measured now.
+      STATE.page = 'leads'; STATE.openDrop = 'Stage'; render();
+      const panels = [...document.querySelectorAll('#content div')].filter(d => {
         const cs = getComputedStyle(d);
-        return cs.position === 'fixed' && d.getBoundingClientRect().width > 200 && cs.backgroundColor !== 'rgba(0, 0, 0, 0)';
+        return cs.position === 'absolute' && d.getBoundingClientRect().width > 150 && cs.backgroundColor !== 'rgba(0, 0, 0, 0)';
       });
       const p = panels[panels.length - 1];
       return p ? getComputedStyle(p).backgroundColor : null;
     });
-    step(`the Connected-leads drawer has an opaque ground in ${theme}`, bg && alphaOf(bg) === 1, bg);
+    step(`the Leads filter dropdown has an opaque ground in ${theme}`, bg && alphaOf(bg) === 1, bg);
     await page.close();
   }
 

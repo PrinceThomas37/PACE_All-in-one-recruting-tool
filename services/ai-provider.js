@@ -281,6 +281,22 @@ async function isAvailable(supabase) {
   return (await resolveChain(supabase)).length > 0;
 }
 
+// Can this FEATURE have AI right now, and if not, why? (Session 31.) A button
+// that offers "rewrite with AI" must be able to say, BEFORE it is pressed or
+// instead of silently falling back, which of two different things is true:
+// nothing is set up at all, or today's allowance is spent. Estimated the same
+// way complete() estimates, from the feature's own ceilings.
+async function availability(supabase, { feature, orgId } = {}) {
+  if (!(await isAvailable(supabase))) return { available: false, reason: 'not_configured' };
+  try {
+    const limits = budget.featureLimits(feature);
+    const estimated = limits.in + limits.out + REASONING_HEADROOM;
+    const verdict = budget.checkBudget(await budget.getSpend(supabase, orgId), estimated, await budget.getCaps(supabase));
+    if (!verdict.allowed) return { available: false, reason: 'daily_limit' };
+  } catch (_) { /* a meter that cannot be read does not block */ }
+  return { available: true, reason: null };
+}
+
 // ── OPENROUTER'S FREE MODELS ARE LOOKED UP, NOT REMEMBERED (Session 29) ──
 // The third time a hard-coded model name expired under us: the owner connected
 // OpenRouter on 2026-09-23 and the health card answered "HTTP 404 — This model
@@ -702,7 +718,7 @@ module.exports = {
   PROVIDERS, PROVIDER_ORDER, AI_TIMEOUT_MS,
   buildRequest, parseResponse, endpointFor, modelFor, modelParams, describeEmptyReply,
   answerCeiling, REASONING_HEADROOM, recordFailure,
-  resolveChain, isAvailable, complete, diagnose,
+  resolveChain, isAvailable, availability, complete, diagnose,
   readRateLimits, recordLimits, getProviderLimits, LIMIT_WINDOWS, LIMITS_KEY,
   rankFreeModels, freeModelsFor, candidateModels, FREE_CACHE_KEY,
   describeHttpError, getLastError, LAST_ERROR_KEY,

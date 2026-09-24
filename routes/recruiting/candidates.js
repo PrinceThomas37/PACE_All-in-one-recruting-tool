@@ -185,7 +185,10 @@ module.exports = function (app, core) {
       const row = Object.assign(pickCandidateFields(b), {
         candidate_code: code,
         applicant_status: b.applicant_status || 'New lead',
-        owner_id: b.owner_id || req.user.id,
+        // The owner is whoever creates the record (Session 31, the owner's
+        // call) — the form no longer offers a picker, and the server does not
+        // take one from a body either.
+        owner_id: req.user.id,
         created_by: req.user.id
       }, orgStamp(req));
       if (Array.isArray(b.tags)) row.tags = b.tags;

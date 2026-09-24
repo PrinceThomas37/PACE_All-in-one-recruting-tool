@@ -2,6 +2,17 @@
 > Last written: 2026-09-24 · R-047 take-over requests pinned, 109/110 (1 known,
 > expected failure — see "Open here")
 
+## Session 31 (2026-09-24)
+- **109 suites** now: +`session31-flows-smoke.mjs` (Playwright, stub API at
+  the Render host — routes `https://fute-lms-backend.onrender.com/**` to a
+  fake, so screens can be driven with data and write screenshots via
+  `SHOTS=<dir>`) and +`pipeline-tag-membership-smoke.mjs` (mounts the real
+  route handlers on a Proxy app with an in-memory PostgREST-shaped db; a
+  reusable pattern). Full run 108/108 before the second was added; both new
+  suites verified by reintroducing their bugs.
+- `overlay-opacity-smoke` step 2 re-pointed from the removed Connected drawer
+  to the Leads Stage dropdown.
+
 ## What is true here now
 - **`npm test` runs 110 suite files** via `test/run-all.mjs` and reports one summary
   (was 105 at the last count in this file; +2 this session —

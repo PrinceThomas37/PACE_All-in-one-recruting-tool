@@ -1,6 +1,43 @@
 # Surface — memory
 > Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
 
+## Session 31 (2026-09-24) — owner's list, what changed on screen
+- **Leads: the "Select connected leads to convert" bar and chip picker are GONE.**
+  It was injected into the DOM once by a `render` wrapper in `25-workflow-bd.js`;
+  the render engine only rewrites regions that changed, so its Convert button
+  never re-lit (and once lit, never went out). Connected is now a plain strip
+  filter (newest first) and every Connected row carries its own Convert button
+  (`leadConvertBtn` in `06-page-leads.js` → `bdConvertLead`). **Converting never
+  calls `goPage`** — Cancel leaves you on Leads. The Connected side drawer is
+  gone too (`leadsShowConnected` now just filters); job link + website moved into
+  the row's expand panel. `overlay-opacity-smoke` step 2 now measures the Stage
+  dropdown instead of the drawer.
+- **New Job form: the Job Description box is on the FIRST tab** (moved from
+  Organizational) with the lead's posting link beside it and "✨ Rewrite with AI"
+  (`POST /job-orders/rewrite-jd`) + Undo. No AI → `aiSubscribePopup(reason)`, a
+  small opaque corner card (NOT a modal — the form is the modal). The in-job
+  "Re-write job description" shows the same pop-up when it fell back to rules.
+- **`putRegion` now preserves the scroll of any `[data-keep-scroll="name"]` box**
+  inside a region (`03-core-render.js`). The candidate-outreach pool jumped to
+  the top on every tick because its 420px box was re-created. Mark any inner
+  scroller a user clicks inside.
+- Candidate outreach: **From picker** (the user's own connected mailboxes, from
+  `/candidate-outreach/sender.mailboxes`), `candOutreachStartFor(job, ids)` opens
+  Compose → Candidates on the preview with job + people picked (used by the job
+  page and the job Candidates list — ONE workflow, D-0012). Back-to-list now
+  loads the pool. Email → **Pending** shows "Candidate emails waiting to go"
+  (`renderCandidatePendingPanel`), and recruiters get a Pending tab.
+- Candidates: selection bar has **Add to job** (one `POST /pipeline/bulk`);
+  **Upload resumes** (`57-bulk-resume.js`: pick ≤25 → read one at a time with a
+  progress bar → editable table → add one at a time with a count; reuses
+  parse-resume, POST /candidates, documents, /pipeline — no new server path).
+  New Candidate shows **Owner (you)** read-only; no picker, never sends owner_id.
+- Job page: "Candidates on this job" sits right under the job card, lists
+  submissions AND tagged-only rows (from `/job-orders/:id/pipeline`), selection is
+  by candidate id, with Upload resumes / Email about this job / Start sequence.
+- Pinned by `test/session31-flows-smoke.mjs` (30 checks, real browser, stub API;
+  the scroll and owner guards were verified by reintroducing each bug).
+
 ## What is true here now
 - 48 modules in `public/js/`, ~19,000 lines, loaded in order by `index.html`.
   No build step. Global `window.*` + `STATE`.

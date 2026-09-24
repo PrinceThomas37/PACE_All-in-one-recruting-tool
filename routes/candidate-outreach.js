@@ -89,6 +89,37 @@ module.exports = (ctx) => {
     } catch (_) { return ''; }
   }
 
+  // ── WHICH MAILBOX SENDS (Session 31) ─────────────────────────────────────
+  // The owner holds three connected mailboxes and could only ever send from
+  // whichever one the database happened to list first. The page may now CHOOSE
+  // — but only among the caller's OWN connected, active mailboxes. The rule
+  // that a From address is never chosen by the client still holds in the form
+  // that matters: the page names an id, the server checks it is one of yours,
+  // and anything else is refused exactly as if it did not exist.
+  async function ownSendingMailboxes(req) {
+    const { data: rows } = await supabase.from('user_emails')
+      .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
+      .eq('user_id', req.user.id).order('is_primary', { ascending: false });
+    const org = req.orgId || null;
+    const mine = (rows || []).filter(m => m.is_active !== false && (!org || !m.org_id || m.org_id === org));
+    if (!mine.length) return [];
+    const ids = mine.map(m => m.id);
+    const [{ data: ms }, { data: gm }] = await Promise.all([
+      supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
+      supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+    ]);
+    const live = new Set([...(ms || []), ...(gm || [])].map(t => t.user_email_id));
+    return mine.filter(m => live.has(m.id));
+  }
+  // A requested id that is not one of yours answers null — the caller then
+  // refuses. No id at all means the default (the same one as always).
+  async function sendingMailboxFor(req, requestedId) {
+    const want = txt(requestedId);
+    if (!want) return recruiterSendingMailbox(req.user.id);
+    const own = await ownSendingMailboxes(req);
+    return own.find(m => m.id === want) || null;
+  }
+
   // ⚠ THE PREVIEW AND THE QUEUE MUST READ THE BRIEF THE SAME WAY.
   // They did not. The preview built its input without a `brief` at all, so
   // draftParts fell back to the RULES brief, while the queue read the cached AI
@@ -449,6 +480,8 @@ module.exports = (ctx) => {
         .eq('sent_by', req.user.id), req);
       const jobId = txt(req.query.job_order_id);
       if (jobId) q = q.eq('job_order_id', jobId);
+      // Email → Pending asks for just what is still waiting.
+      if (txt(req.query.status) === 'pending') q = q.eq('status', 'pending');
       const { data } = await q.order('created_at', { ascending: false }).limit(100);
       const rows = data || [];
 
@@ -494,8 +527,8 @@ module.exports = (ctx) => {
   // be able to say "this will send from X" before anybody writes anything.
   router.get('/candidate-outreach/sender', auth, async (req, res) => {
     try {
-      const [mailbox, companyName] = await Promise.all([
-        recruiterSendingMailbox(req.user.id), orgCompanyName(req)
+      const [mailbox, companyName, own] = await Promise.all([
+        recruiterSendingMailbox(req.user.id), orgCompanyName(req), ownSendingMailboxes(req)
       ]);
       // The page must be able to state the sending hours BEFORE anything is
       // queued. The owner queued a batch at 3am and then had to ask why nothing
@@ -509,6 +542,11 @@ module.exports = (ctx) => {
           id: mailbox.id, email: mailbox.email_address,
           display_name: mailbox.display_name || null, platform: mailbox.platform || 'Microsoft',
         } : null,
+        // Every mailbox this person may send from — the "From" picker.
+        mailboxes: own.map(m => ({
+          id: m.id, email: m.email_address, display_name: m.display_name || null,
+          platform: m.platform || 'Microsoft',
+        })),
         signature_html: await mailboxSignature(mailbox, req.user.id),
         // ⚠ WHEN THE WINDOW IS OFF THIS MUST STOP PROMISING ONE. The sentence
         // on screen was "Candidates are emailed in their own local free time —
@@ -688,8 +726,9 @@ module.exports = (ctx) => {
       }
 
       const [mailbox, companyName] = await Promise.all([
-        recruiterSendingMailbox(req.user.id), orgCompanyName(req)
+        sendingMailboxFor(req, b.mailbox_id), orgCompanyName(req)
       ]);
+      if (txt(b.mailbox_id) && !mailbox) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
       const input = {
         candidate, job,
@@ -754,8 +793,12 @@ module.exports = (ctx) => {
       if (ids.length > 200) return res.status(400).json({ error: 'That is more than 200 people in one go. Split it up.' });
 
       const angle = txt(b.angle) || 'direct';
-      const mailbox = await recruiterSendingMailbox(req.user.id);
-      if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+      const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+      if (!mailbox) {
+        return txt(b.mailbox_id)
+          ? res.status(404).json({ error: 'That mailbox is not one you can send from.' })
+          : res.status(409).json({ error: 'no_connected_mailbox' });
+      }
 
       let job = null;
       const jobId = txt(b.job_order_id);
@@ -817,7 +860,11 @@ module.exports = (ctx) => {
 
         // Each row carries its own due time. Jittered rather than exactly 90s
         // apart, because a perfectly regular cadence is itself a signature.
-        offset += DRIP_MIN_MS + Math.floor(Math.random() * (DRIP_MAX_MS - DRIP_MIN_MS));
+        // THE FIRST ONE IS DUE NOW (Session 31). It used to wait a full drip
+        // slot and then the next 10-minute tick, so a batch queued at 3:34 sent
+        // its first email at 3:41 and the owner read the gap as a stuck queue.
+        // The spacing is BETWEEN emails; nothing needs to wait before the first.
+        if (rows.length) offset += DRIP_MIN_MS + Math.floor(Math.random() * (DRIP_MAX_MS - DRIP_MIN_MS));
         rows.push(Object.assign({
           candidate_id: c.id,
           job_order_id: job ? job.id : null,
@@ -887,6 +934,12 @@ module.exports = (ctx) => {
           `${queued.length} candidate email(s) queued for ${job.job_title}`);
       } catch (_) { /* audit is best-effort */ }
 
+      // Start the drip now rather than at the next 10-minute tick. After the
+      // response, never inside it: nothing sends inside a request. The drain's
+      // own in-flight guard means this can never overlap the heartbeat's run
+      // and send one row twice.
+      if (queued.length) setImmediate(() => { drainDueOutreach().catch(() => {}); });
+
       res.status(201).json({
         queued: queued.length,
         skipped,
@@ -918,7 +971,16 @@ module.exports = (ctx) => {
   // same gates the lead send loop applies — pause, send window, daily cap,
   // warm-up ramp, mailbox auto-pause, suppression. A candidate email that
   // ignored those would burn the same domain the cold email depends on.
+  // ONE DRAIN AT A TIME, IN THIS PROCESS. The heartbeat and the queue's own
+  // kick both call this; two overlapping passes would each read the same due
+  // row and send it twice. A second caller simply finds nothing to do.
+  let draining = false;
   async function drainDueOutreach(limit = DRAIN_PER_TICK) {
+    if (draining) return { skipped: 'already_running' };
+    draining = true;
+    try { return await drainOnce(limit); } finally { draining = false; }
+  }
+  async function drainOnce(limit) {
     if (isSendingPaused && isSendingPaused()) return { sent: 0, skipped: 0, reason: 'paused' };
 
     const { data: due } = await supabase.from('candidate_outreach')

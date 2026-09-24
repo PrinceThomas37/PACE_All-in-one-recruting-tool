@@ -57,6 +57,43 @@ module.exports = function (app, core) {
     return data ? data.org_id : null;
   }
 
+  // ── REWRITE A PASTED JOB DESCRIPTION (Session 31) ─────────────────────────
+  // For the New Job form, before the job exists: the recruiter opens the lead's
+  // posting, pastes it in, and asks AI to tidy it into a clean internal JD.
+  // Literal path — registered above every /job-orders/:id route.
+  //
+  // THERE IS NO SILENT RULES FALLBACK HERE, on purpose. The owner asked for a
+  // plain "subscribe to AI to rewrite" when AI is not available, and a rules
+  // pass on a pasted page would hand back the same text reformatted and call it
+  // a rewrite. So the answer is either AI's text or a reason:
+  //   not_configured — no AI provider is set up for this company
+  //   daily_limit    — today's AI allowance is spent
+  //   no_answer      — AI is set up but did not answer this time
+  app.post('/job-orders/rewrite-jd', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const b = req.body || {};
+      const text = String(b.text || '').trim();
+      if (text.length < 40) return res.status(400).json({ error: 'Paste the job description first — there is nothing to rewrite yet.' });
+      const state = await aiProvider.availability(supabase, { feature: 'jd_scrub', orgId: req.orgId });
+      if (!state.available) return res.json({ used_ai: false, reason: state.reason });
+      const prompt = `Rewrite this job posting as a clean, well-organised internal job description for a recruiting team.
+Use these plain-text sections when the posting supports them: Overview, Responsibilities, Requirements, Nice to have, Pay and benefits, Location and schedule.
+Keep EVERY fact that is in the posting (duties, requirements, pay, benefits, location, schedule). Do not invent anything that is not there. Drop website boilerplate, cookie notices, "apply now" buttons and unrelated listings.
+Use short bullet lines starting with "- ". No markdown headings symbols, no bold. Reply with ONLY the description — no preamble.
+
+JOB TITLE: ${String(b.job_title || '').slice(0, 200)}
+COMPANY: ${String(b.client || '').slice(0, 200)}
+
+POSTING:
+${text.slice(0, 12000)}`;
+      const out = await aiProvider.complete(supabase, { prompt, maxTokens: 2500, feature: 'jd_scrub', orgId: req.orgId });
+      const written = out && String(out.text || '').trim();
+      if (!written) return res.json({ used_ai: false, reason: 'no_answer' });
+      res.json({ used_ai: true, text: written });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // CONVERSION — lead -> job order
   // ==========================================================================
 
@@ -633,7 +670,11 @@ ${String(j.job_description).slice(0, 12000)}`;
           if (text) return res.json({ posting: scrubJobDescription(text, names), used_ai: true });
         } catch (_) { /* fall through to rules */ }
       }
-      res.json({ posting: scrubJobDescription(j.job_description, names), used_ai: false });
+      // Say WHY it was the rules, so the page can offer the subscribe prompt
+      // rather than presenting a rules scrub as though AI had written it.
+      const state = await aiProvider.availability(supabase, { feature: 'jd_scrub', orgId: req.orgId });
+      res.json({ posting: scrubJobDescription(j.job_description, names), used_ai: false,
+                 ai_reason: state.available ? 'no_answer' : state.reason });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

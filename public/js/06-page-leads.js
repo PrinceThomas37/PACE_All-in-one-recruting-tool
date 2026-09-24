@@ -19,6 +19,15 @@ function renderJobs(){
     });
   }
   if(f.stages&&f.stages.length)jobs=jobs.filter(function(j){return f.stages.indexOf(j.stage)>-1;});
+  // CONNECTED, NEWEST FIRST (Session 31). The owner: "just show those
+  // connected based on the created date". Looking at Connected is looking for
+  // the lead that just replied, and that is the newest one.
+  var connOnly=f.stages&&f.stages.length===1&&f.stages[0]==='Connected';
+  if(connOnly){
+    jobs=jobs.slice().sort(function(a,b){
+      return String(b.created_at||b.created_date||'').localeCompare(String(a.created_at||a.created_date||''));
+    });
+  }
   if(f.industries&&f.industries.length)jobs=jobs.filter(function(j){return f.industries.indexOf(j.industry||j.company_ind||"")>-1;});
   if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
   if(f.dateRange==="custom"){if(f.dateFrom)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=f.dateFrom;});if(f.dateTo)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)<=f.dateTo;});}
@@ -27,6 +36,11 @@ function renderJobs(){
   var stageOpts=stages.map(function(st){return '<option value="'+st+'"'+(f.stage===st?" selected":"")+'>'+st+'</option>';}).join("");
 
   var canChangeStageInline=userHasAnyRole(u,'admin','bd','bd_lead');
+  // Converting is a BD action on a Connected lead. The job list is fetched
+  // once so a lead that already became a job says so instead of offering a
+  // button the server would refuse.
+  var canConvert=canChangeStageInline;
+  if(canConvert&&window.bdEnsureJobOrdersForLeads)bdEnsureJobOrdersForLeads();
   // Cross-group sequencing: BD / BD Lead / Admin can multi-select leads across
   // any stage group and start one sequence for the lot (rotating "from" mailboxes).
   var canSequence=userHasAnyRole(u,'admin','bd','bd_lead');
@@ -57,6 +71,7 @@ function renderJobs(){
           return '<option value="'+st+'"'+(j.stage===st?' selected':'')+'>'+st+'</option>';
         }).join('')+'</select>'
       : '<span class="pill" style="background:'+stageColor+'14;color:'+stageColor+'"><i></i>'+escHtml(j.stage)+'</span>';
+    if(canConvert&&j.stage==='Connected')stageCell='<span style="display:inline-flex;align-items:center;gap:6px">'+stageCell+leadConvertBtn(j,true)+'</span>';
 
     var cells=[];
     if(canSequence) cells.push({ cls:'tight', html:
@@ -188,51 +203,17 @@ function renderJobs(){
     onclick:"STATE.jobsFilter.stages=[];STATE.leadsPage=0;render()"
   },{ sep:true }];
   stageList.filter(function(st){return stageCounts[st]>0;}).forEach(function(st){
-    // "Connected" keeps its drill-down: the panel shows each connected lead's
-    // email, phone and LinkedIn, which the table does not. Deliberate, and the
-    // chevron says the click does something different.
-    var isConn=(st==='Connected');
+    // Every stage FILTERS THE TABLE, Connected included (Session 31). Connected
+    // used to open a side panel instead; the owner asked for the main list to
+    // show just the connected leads, where the Convert button now lives.
     stripItems.push({
       v:stageCounts[st],
-      label:st+(isConn?' ▸':''),
-      on:!isConn&&!!(f.stages&&f.stages.length===1&&f.stages[0]===st),
-      onclick:isConn?'leadsShowConnected()'
-                    :"STATE.jobsFilter.stages=['"+st+"'];STATE.leadsPage=0;render()"
+      label:st,
+      on:!!(f.stages&&f.stages.length===1&&f.stages[0]===st),
+      onclick:"STATE.jobsFilter.stages=['"+st+"'];STATE.leadsPage=0;render()"
     });
   });
   var stageSummary=UI.strip(stripItems);
-
-  // Connected-leads drill-down (item 7): a panel listing the connected leads with
-  // their basic contact details, opened from the green "Connected" chip.
-  var connectedOverlay='';
-  if(STATE.leadsConnectedOpen){
-    var connList=allJobs.filter(function(j){return j.stage==='Connected';});
-    var connRows=connList.length?connList.map(function(j){
-      var cs=jobContacts(j.id);var pc=(cs.find(function(c){return c.is_primary;})||cs[0]||{});
-      return '<div onclick="STATE.leadsConnectedOpen=false;openJob(\''+j.id+'\')" style="display:flex;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer" onmouseenter="this.style.background=\'var(--bg)\'" onmouseleave="this.style.background=\'transparent\'">'+
-        '<div style="width:9px;height:9px;border-radius:50%;background:'+leadStageColor('Connected')+';margin-top:5px;flex-shrink:0"></div>'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:13.5px;font-weight:600">'+escHtml(j.position||'—')+' <span style="font-weight:400;color:var(--text3)">· '+escHtml(j.company_name||'')+'</span></div>'+
-          '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+escHtml(((pc.first_name||'')+' '+(pc.last_name||'')).trim()||'—')+(pc.designation?' · '+escHtml(pc.designation):'')+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:1px">'+[pc.email,pc.phone,(pc.linkedin?'LinkedIn':'')].filter(Boolean).map(escHtml).join(' · ')+'</div>'+
-          ((leadSafeUrl(j.job_url)||leadSafeUrl(j.company_web))?'<div style="font-size:11.5px;margin-top:3px;display:flex;gap:12px">'+
-            (leadSafeUrl(j.job_url)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.job_url))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Job link ↗</a>':'')+
-            (leadSafeUrl(j.company_web)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.company_web))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Website ↗</a>':'')+
-          '</div>':'')+
-        '</div>'+
-        '<span style="color:var(--text3);font-size:14px">›</span>'+
-      '</div>';
-    }).join(''):'<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">No connected leads yet.</div>';
-    connectedOverlay='<div onclick="leadsCloseConnected()" style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100"></div>'+
-      '<div style="position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);background:var(--card-solid);border-left:1px solid var(--border);z-index:101;box-shadow:-8px 0 24px rgba(0,0,0,.14);display:flex;flex-direction:column">'+
-        '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-          '<div><div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:'+leadStageColor('Connected')+'"></span>Connected leads</div>'+
-            '<div style="font-size:12px;color:var(--text3)">'+connList.length+' lead'+(connList.length===1?'':'s')+' · click one to open it</div></div>'+
-          '<button onclick="leadsCloseConnected()" style="border:0;background:none;font-size:24px;cursor:pointer;color:var(--text3);line-height:1">×</button>'+
-        '</div>'+
-        '<div style="flex:1;overflow:auto;padding:6px 18px 18px">'+connRows+'</div>'+
-      '</div>';
-  }
 
   var clearFilters="STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];"+
     "STATE.jobsFilter.dateRange='all';STATE.jobsFilter.dateFrom='';STATE.jobsFilter.dateTo='';"+
@@ -296,12 +277,22 @@ function renderJobs(){
           '<span>Page '+(_pg+1)+' / '+_tp+'</span>'+
           '<button class="btn btn-sm btn-outline" onclick="setLeadsPage('+(_pg+1)+')"'+(_pg>=_tp-1?' disabled style="opacity:.5"':'')+'>Next &rsaquo;</button>'+
         '</div>':'')+
-      '</div>'+
-      connectedOverlay
+      '</div>'
   });
 }
-window.leadsShowConnected=function(){STATE.leadsConnectedOpen=true;render();};
-window.leadsCloseConnected=function(){STATE.leadsConnectedOpen=false;render();};
+// The Connected side panel is gone (Session 31); anything still calling this
+// gets the same thing the strip now does — the table, filtered to Connected.
+window.leadsShowConnected=function(){STATE.jobsFilter.stages=['Connected'];STATE.leadsPage=0;render();};
+window.leadsCloseConnected=function(){};
+
+// One Convert button, drawn on the row and in the expanded panel. A lead that
+// already became a job names the job instead.
+function leadConvertBtn(j,compact){
+  var done=window.bdConvertedJobFor?bdConvertedJobFor(j.id):null;
+  if(done)return '<span style="font-size:11px;color:var(--ink3);white-space:nowrap" title="Already converted">✓ '+escHtml(done.job_code||'Job')+'</span>';
+  return '<button class="btn btn-sm '+(compact?'btn-outline':'btn-primary')+'" style="white-space:nowrap'+(compact?';padding:3px 9px;font-size:11.5px':'')+'" '+
+    'onclick="event.stopPropagation();bdConvertLead(\''+j.id+'\')">'+(compact?'Convert':'Convert to job')+'</button>';
+}
 
 // Bind search/filter inputs (called from render() after DOM replace)
 // The search box and the stage <select> this used to wire up are now built by
@@ -390,6 +381,13 @@ function leadExpandHtml(j){
     '</div>'+
     '<div class="lx-side">'+
       '<div class="lx-facts">'+facts+'</div>'+
+      // The job link and website used to live only in the Connected side
+      // panel, which is gone; they belong with the lead wherever it opens.
+      ((leadSafeUrl(j.job_url)||leadSafeUrl(j.company_web))?'<div style="font-size:12px;margin:0 0 8px;display:flex;gap:12px;flex-wrap:wrap">'+
+        (leadSafeUrl(j.job_url)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.job_url))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Job posting ↗</a>':'')+
+        (leadSafeUrl(j.company_web)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.company_web))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Website ↗</a>':'')+
+      '</div>':'')+
+      ((j.stage==='Connected'&&userHasAnyRole(STATE.user,'admin','bd','bd_lead'))?'<div style="margin-bottom:8px">'+leadConvertBtn(j,false)+'</div>':'')+
       '<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();openJob(\''+j.id+'\')">Open full record</button>'+
     '</div>'+
   '</div>';
