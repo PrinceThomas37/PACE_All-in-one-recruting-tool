@@ -1,5 +1,5 @@
 # Rampart — memory
-> Last written: 2026-09-24 · review of the R-047 take-over build (server, 047, duplicate responses, surface 56)
+> Last written: 2026-09-24 · R-047 re-review (round 2): B1-B3/F1-F3/M1/M2/L1-L5 closed; one residual id leak
 
 ## What is true here now
 - **Two different questions, and this territory now answers both.**
@@ -237,6 +237,45 @@ edit/delete/apply-link owner-only · outreach pickers + lead ownership.
 X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
 says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 
+## RE-REVIEW OF R-047 — 2026-09-24, round 2 (verdict: DO-NOT-SHIP until R47-1 closes — a few lines)
+Read 19218ab (gateway), 4f16ff0 (ledger), 9dbedf9 (guild), 84188b3 (surface),
+08d278d (deep). Suites green except foundry's in-flight mutation assertion in
+`ownership-requests-smoke` (35/36: the "status guard removed" mutation no
+longer double-approves because M1's conditional reassign now also refuses —
+defence in depth, the TEST's expectation is stale).
+**Closed:** B1 reminder-send (canTouchJob, contact must be on that job,
+forRequest reads, org stamped) · B2 reminders write (canTouchJob, contact
+decides the job, identical 404s) + read (`reminderEmbedFor`: org + canSeeLead
+on the embed, withheld rows cannot send) · B3 generate (forRequest read,
+canTouchJob per id, stamped insert) · duplicate responses carry no lead_id and
+no company; `can_request` = `canRequestTakeover(…, viaDuplicateEmailMatch:
+true)` · can-request is POST · lead resolved server-side from `via_email`
+(`resolveLeadByEmail`, forRequest, exact match after ilike) · M1 conditional
+writes + revert to pending · M2 created_by rung · L1 liveness + role · L2
+models · L4 bounded · F1 data-attributes everywhere a string reaches a handler
+· F3 · 047 decided-has-decider.
+**Open:**
+- **R47-1 HIGH (blocker)** — the lead id still reaches the asker: `shapeRequest`
+  (`routes/ownership-requests.js:130`) returns `record_id` in the POST 201 and
+  in `box=mine`, including for a lead resolved from `via_email` the asker cannot
+  see. And `POST /wf/enroll` + `/wf/enroll-bulk` (`routes/wf.js:188/219`,
+  guild) check NOTHING about `job_id`, `entity_id` or `workflow_id` — the
+  contact context loader and email channel (`index.js` ~:3376-3460) read them
+  raw. So: own contact (any address) + colleague's `job_id` + `any_stage` →
+  a queued email from the colleague's mailbox, `sent_by` = the colleague,
+  filled with that lead's pos/company. Foreign ids → cross-org. Fix both:
+  withhold `record_id` on lead rows the viewer cannot `canSeeLead` (min fix);
+  gate enroll (workflow in org, contact org-scoped + `canTouchJob(contact.
+  job_id)`, `job_id` must equal the contact's job).
+- R47-2 LOW — canTouchJob admits the lead's CREATOR/researcher, so an RA can
+  queue a reminder-send that goes from the owning BD's mailbox (D-0020 says
+  acting is the owner's). R47-3 LOW — `resolveLeadByEmail` uses `ilike` with
+  unescaped `%`/`_` (harmless: exact filter after; unbounded fetch). R47-4
+  INFO — M2 rewrites `companies.created_by` (provenance) and an UNOWNED client
+  can never be approved (always reverts; request sits pending forever).
+  R47-5 LOW (pre-existing) — `resolveFromMailboxes` lets bd_lead/ra_lead pick
+  ANY org mailbox as a sequence "from".
+
 ## REVIEW OF R-047 TAKE-OVER — 2026-09-24 (verdict: DO-NOT-SHIP as built)
 Read b05d1f3 (gateway), 9b0376f (guild), a9c8b05 (deep 047), 5ec3ef7 (surface).
 Suites green: 7 rampart + ownership 69 + models + ownership-requests 31 +
@@ -366,8 +405,8 @@ flows still separate correctly.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
-- **R-047 blockers B1-B3** (reminder-send, POST /reminders, /emails/generate —
-  body `job_id` with no owner/org check) + F1 (onclick injection). See review.
+- **R-047: B1-B3 and F1 closed (round 2). R47-1 open** — `record_id` still
+  handed to the asker + `/wf/enroll` accepts any job/contact/workflow id.
 - **All eleven review findings are closed** (round 2, 2026-09-24). Open:
   R1 (one word, should land before merge), R2-R5 follow-ups — see above.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
@@ -382,6 +421,12 @@ flows still separate correctly.
 - Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
+- **2026-09-24 (R-047 round 2)** — every named fix verified in code; the id
+  handout was removed from the duplicate responses but survives in the
+  request's own `record_id`, and one more body-id route (`/wf/enroll`) was
+  never gated. **What would have saved time:** after a fix removes a field,
+  grep every RESPONSE the feature produces for the same value under a
+  different name, not just the field that was named in the finding.
 - **2026-09-24 (R-047 review)** — do-not-ship: `lead_id` on duplicate
   responses reaches three pre-existing job-id routes with no owner/org check
   (reminder-send sends from the owner's mailbox). **What would have saved

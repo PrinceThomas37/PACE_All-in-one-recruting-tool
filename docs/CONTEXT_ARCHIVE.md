@@ -6006,3 +6006,8 @@ Owner: "build the take-over request next". Decided D-0037: the CURRENT OWNER's m
 
 ### R-047 review round 1 — do-not-ship (2026-09-24)
 Rampart: take-over code sound, but lead_id on duplicate responses hands ids to people who cannot see the lead, and three OLDER by-id holes act on any lead id: POST /emails/reminder-send (sends from the owner's mailbox, crosses orgs, no org_id), POST /reminders + GET embed (reads any lead), POST /emails/generate (unchecked job_ids). Chosen: option (a) drop lead_id (server resolves the lead from the typed email) AND fix B1-B3. Also M1 approve-before-reassign, M2 client no-op approval, F1 onclick script injection in the new screens, F2/F3/L1-L5, 047 extra CHECK. Dispatched gateway, ledger, guild, deep, surface; foundry still pinning.
+
+- IN FLIGHT: R-047 review fixes — gateway, ledger, guild, deep, surface, foundry all editing; uncommitted until each reports.
+
+### R-047 review round 2 — one blocker (2026-09-24)
+All round-1 fixes verified in code. R47-1: shapeRequest still returned record_id (the lead id) to a duplicate-door asker, and /wf/enroll(+bulk) accept any job_id/entity/workflow unchecked → a BD could get an email sent from a colleague's mailbox. Fixing: gateway withholds record_id + R47-2 reminder-send owner-only + R47-3 ilike escape + R47-4 unowned client; guild gates enroll + R47-5 mailbox picker. Foundry adding cases.
