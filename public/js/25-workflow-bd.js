@@ -984,6 +984,12 @@
     // only the action that state allows. A single toggle would leave the
     // recruiter guessing whether the link is live right now, which is the one
     // thing they need to be sure of before pasting it anywhere.
+    // D-0035: publishing/unpublishing the apply link is an owner action
+    // (`POST /job-orders/:id/apply-link` now 403s a non-owner) — never draw a
+    // button that will refuse (Session 24 rule). A non-owner still sees the
+    // link's live/off state and the applicant count when it is on; they just
+    // get no controls to change it.
+    var canOwn=j.poc_visible!==false;
     var applyOn=!!j.apply_enabled, applyTok=j.apply_token||'', applyN=j.apply_count||0;
     var applyUrl=applyTok?(location.origin+'/apply/'+applyTok):'';
     var applyBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
@@ -992,17 +998,17 @@
           (applyOn?' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· live</span>':'')+
           (applyN?' <span style="font-size:11px;color:var(--text3);font-weight:500">· '+applyN+' applicant'+(applyN===1?'':'s')+'</span>':'')+
         '</div>'+
-        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+        (canOwn?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
           (applyOn
             ? '<button class="btn btn-sm btn-outline" onclick="bdCopyApplyLink()" style="font-size:11.5px">Copy link</button>'+
               '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',false)" style="font-size:11.5px">Turn off</button>'
             : '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',true)" style="font-size:11.5px">Publish apply page</button>')+
-        '</div>'+
+        '</div>':'')+
       '</div>'+
       (applyOn
-        ? '<input id="bd-apply-url" readonly value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>'
-        : '<div style="font-size:12.5px;color:var(--text3)">Publish a page anyone can apply on, then post the link wherever you like — a job board, LinkedIn, WhatsApp, your website. Applicants arrive already parsed and scored, in the Sourcing review queue.</div>')+
+        ? (canOwn?'<input id="bd-apply-url" readonly value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
+          '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>':'')
+        : (canOwn?'<div style="font-size:12.5px;color:var(--text3)">Publish a page anyone can apply on, then post the link wherever you like — a job board, LinkedIn, WhatsApp, your website. Applicants arrive already parsed and scored, in the Sourcing review queue.</div>':''))+
     '</div>';
 
     return '<div class="page">'+
@@ -1017,7 +1023,9 @@
           '<div style="display:flex;gap:8px">'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenKanban(\''+j.id+'\')">Board</button>'+
-            '<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>'+
+            // D-0035: `PUT /job-orders/:id` now 403s a non-owner — never draw
+            // a button that will refuse (Session 24 rule).
+            (canOwn?'<button class="btn btn-sm btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>':'')+
             // The rewind clock — same mark, same panel as every other record.
             // A job order kept NO history at all before this: its status could
             // move all week with nothing recording who moved it.
@@ -1030,6 +1038,13 @@
           dr('Priority',j.priority)+dr('Positions',j.positions)+dr('Duration',j.duration)+
           dr('Primary Skills',j.primary_skills)+dr('Experience',(j.exp_min||j.exp_max)?j.exp_min+'–'+j.exp_max+' yrs':'')+dr('Industry',j.industry)+
           dr('Lead',j.lead_code)+dr('Client Job ID',j.client_job_id)+dr('Job Category',j.job_category)+
+          // D-0035: `client_manager` is the client's POC — stripped server-side
+          // (`poc_visible:false`) for anyone but the job's owner + their
+          // reporting chain + admin. A blank field reads as "nobody recorded
+          // this"; the quiet note says what actually happened instead.
+          (j.poc_visible===false
+            ? '<div style="font-size:12.5px;margin-bottom:4px;color:var(--text3)">Client contact: visible to the job owner</div>'
+            : dr('Client Manager',j.client_manager))+
         '</div>'+
         jdBlock+
         applyBlock+

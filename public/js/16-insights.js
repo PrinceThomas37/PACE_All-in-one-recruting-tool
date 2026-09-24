@@ -24,7 +24,11 @@ function renderInsights(){
       var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===bd.id;});
       var convJ=bdJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';});
       var posJ=bdJobs.filter(function(j){return j.stage==='Positive';});
-      var sentE=(STATE.emails||[]).filter(function(e){return e.assigned_to===bd.id&&e.status==='sent';});
+      // C-0026 #4: `emails` has no `assigned_to` column (only `sent_by`) — this
+      // always counted zero. `STATE.emails` was also always empty (fetched as
+      // `?status=queued`, a status this app never writes); `STATE.sentEmails`
+      // (`?status=sent`) is the array that actually holds sent rows.
+      var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===bd.id;});
       var todayJ=bdJobs.filter(function(j){return jAtBD(j)===todayStrBD;});
       var weekJ=bdJobs.filter(function(j){return jAtBD(j)>=weekAgoBD;});
       var monthJ=bdJobs.filter(function(j){return jAtBD(j)>=monthAgoBD;});
@@ -515,8 +519,10 @@ function renderTeamInsightsBody(){
     var todayJ=bdJobs.filter(function(j){return jAt(j)===todayStr;});
     var weekJ=bdJobs.filter(function(j){return jAt(j)>=weekAgo;});
     var monthJ=bdJobs.filter(function(j){return jAt(j)>=monthAgo;});
-    var sentE=(STATE.emails||[]).filter(function(e){return e.assigned_to===selectedBD&&e.status==='sent';});
-    var pendE=(STATE.emails||[]).filter(function(e){return e.assigned_to===selectedBD&&e.status==='pending';});
+    // C-0026 #4: same fix as the admin BD-team view above — `sent_by`, not the
+    // nonexistent `assigned_to`, and the arrays that are actually populated.
+    var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===selectedBD;});
+    var pendE=(STATE.pendingEmails||[]).filter(function(e){return e.sent_by===selectedBD;});
     var stgColors={Connected:'var(--green)','In Discussion':'var(--accent)',Positive:'var(--teal)',Assigned:'var(--text3)','No Response':'var(--amber)',Negative:'var(--red)',Future:'var(--purple)','Out of Office':'var(--amber)'};
     var stgRows=['Connected','In Discussion','Positive','Assigned','No Response','Negative','Future','Out of Office'].map(function(s){
       var cnt=bdJobs.filter(function(j){return j.stage===s;}).length; if(!cnt)return'';
@@ -561,7 +567,10 @@ function renderTeamInsightsBody(){
     var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===bd.id;});
     var convJ=bdJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';});
     var posJ=bdJobs.filter(function(j){return j.stage==='Positive';});
-    var sentE=(STATE.emails||[]).filter(function(e){return e.assigned_to===bd.id&&e.status==='sent';});
+    // C-0026 #4: same fix as above — `sent_by`, not the nonexistent
+    // `assigned_to`, and `STATE.sentEmails` rather than the always-empty
+    // `STATE.emails` (fetched as `?status=queued`, a status never written).
+    var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===bd.id;});
     var todayJ=bdJobs.filter(function(j){return jAt(j)===todayStr;});
     var weekJ=bdJobs.filter(function(j){return jAt(j)>=weekAgo;});
     var monthJ=bdJobs.filter(function(j){return jAt(j)>=monthAgo;});

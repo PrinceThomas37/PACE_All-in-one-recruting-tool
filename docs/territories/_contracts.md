@@ -982,3 +982,25 @@ body is `{id:id, email:…}`. `token` is not referenced anywhere in that file an
 more — observatory's promised follow-up (dropping `token` from `/outreach/sent`'s
 select) is now safe to land. Verified: `node --check`,
 `outreach-generator-smoke.mjs` 138/138.
+
+### C-0029 · surface → gateway · OPEN · 2026-09-24
+**Asks for:** an ownership hint on `GET /clients` (and ideally `GET /companies/:id`)
+so the client drawer can hide its Upload-document/Delete-document controls for
+a non-owner, the same way `25-workflow-bd.js` now hides "Edit job" and the
+apply-link controls on a job order using its new `poc_visible` field.
+**Because:** gateway's D-0035 pass already gates `POST /companies/:id/documents`
+and `DELETE /companies/:id/documents/:docId` to the client's owner (or admin),
+naming the owner in the 403 sentence — but `GET /clients` returns only
+`{id,name,industry,location,website,job_order_count,open_job_order_count}`,
+with no owner id or `can_edit` flag. So today those two buttons are drawn for
+every viewer regardless of ownership; clicking them as a non-owner correctly
+refuses with the named sentence (already surfaced via toast — `apiFetch`
+throws `d.error` verbatim), but Session 24's "never draw a button that will
+refuse" rule is not fully met the way it now is on job orders.
+**Suggested shape:** attach `can_edit` (bool) — computed the same way
+`requireClientOwner`/`clientOwnerId` already do in `routes/companies.js` — to
+each row of `GET /clients`, and to `GET /companies/:id` if one exists. Do not
+attach `owner_name`/`owner_id` unless wanted for a "Client contact: visible to
+the job owner"-style note; `can_edit` alone is enough to hide the buttons.
+**Blocked until answered:** no — the 403 toast is a correct, if less polished,
+fallback in the meantime.

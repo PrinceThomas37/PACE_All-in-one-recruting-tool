@@ -301,11 +301,19 @@
       // A render() here would rebuild the whole drawer and throw away a
       // half-typed note, which is exactly what scheduleRender refuses to do.
       // Anything from before migration 042 has no stored copy and says so.
+      // body_visible:false means the READER's scope does not cover the sender
+      // (D-0034/C-0025) — the note says who holds it, calmly, never in red
+      // (D-0019). That is different from a genuinely missing body
+      // (body_visible!==false && !body), which still means "sent before PACE
+      // kept a copy" — the two nulls must not collapse into one sentence.
+      var bodyHtml = e.body_visible===false
+        ? '<div style="font-size:12px;color:var(--text3)">'+esc(e.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
+        : (e.body
+          ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(e.body)+'</div>'
+          : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>');
       var panel='<div data-cpmail="'+esc(e.id)+'" hidden '+
         'style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
-          (e.body
-            ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(e.body)+'</div>'
-            : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>')+
+          bodyHtml+
         '</div>';
       return '<div style="border-bottom:1px solid var(--border)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" '+

@@ -373,7 +373,10 @@ function renderImportModal(rows, sheetName){
     var field=window.ImportColumns?window.ImportColumns.columnField(c,STATE.importPreview):null;
     if(!window.ImportColumns){var match=COL_MAP.find(function(pair){return pair[0].some(function(v){return kl===v||kl.includes(v);});});field=match?match[1]:null;}
     var named=window.ImportColumns?window.ImportColumns.fieldFor(c):field;
-    var status=field?
+    var isSerial=window.ImportColumns&&window.ImportColumns.isSerialColumn(c);
+    var status=isSerial?
+      '<span style="color:var(--text3)">ignored \u2014 PACE numbers records itself</span>':
+      field?
       '<span style="color:var(--green);font-weight:500">\u2192 '+field+'</span>'+
         (field==='jobUrl'&&named==='linkedin'?' <span style="color:var(--text3)">(these are job postings, not LinkedIn profiles)</span>':''):
       '<span style="color:var(--text3)">kept as an extra detail</span>';
@@ -554,11 +557,15 @@ window.confirmImport=function(){
 
   if(allEmails.length){
     apiPost('/jobs/check-duplicates',{emails:allEmails}).then(function(res){
+      // D5 (guild, routes/workflows.js): {email, duplicate:true, owner_name,
+      // since} per row — whose lead it is and since when, never the other
+      // lead's company/position/contact (the owner's answer to rampart's D5:
+      // never show one BD's lead details to another).
       var dupEmailMap={};
       (res.duplicates||[]).forEach(function(d){
         if(d.email){dupEmailMap[d.email.toLowerCase()]={
-          position:(d.job&&d.job.position)||'',
-          company:(d.job&&d.job.company&&d.job.company.name)||''
+          owner_name:d.owner_name||'',
+          since:d.since||''
         };}
       });
       if(Object.keys(dupEmailMap).length){
@@ -573,11 +580,15 @@ window.confirmImport=function(){
 
 function renderDuplicateWarningModal(groups,dupEmailMap){
   var dupCount=Object.keys(dupEmailMap).length;
+  // D5: says WHOSE lead it is and SINCE WHEN \u2014 never that lead's company,
+  // position or contact details (the owner's answer: a duplicate names who
+  // holds the record, not what is on it).
   var items=Object.keys(dupEmailMap).slice(0,6).map(function(email){
     var d=dupEmailMap[email];
+    var since=d.since?new Date(d.since).toLocaleDateString():'';
     return '<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'+
       '<span style="color:var(--amber);font-weight:600">'+htmlEsc(email)+'</span>'+
-      (d.company?' \u2014 already in <strong>'+htmlEsc(d.company)+'</strong>'+(d.position?' ('+htmlEsc(d.position)+')':''):'')+
+      (d.owner_name?' \u2014 already on <strong>'+htmlEsc(d.owner_name)+'</strong>\u2019s lead'+(since?' since '+htmlEsc(since):''):' \u2014 already on someone else\u2019s lead')+
     '</div>';
   }).join('');
   return '<div class="modal modal-w480">'+

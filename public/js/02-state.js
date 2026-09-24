@@ -21,13 +21,14 @@ window.leadStageColor = function(stage){ return window.LEAD_STAGE_COLORS[stage] 
 // ════════════════════════════════════════════════
 // JOBS / CONTACTS MODEL  (matches backend index.js)
 // ════════════════════════════════════════════════
+// C-0026 #1 (rampart, D-0034): this used to re-implement the server's OLD role
+// ladder in the browser — a browser-side filter is not a boundary, the data
+// had already reached the page. `GET /jobs` now scopes by ownership + the
+// reporting chain itself (gateway, C-0021 #1), so the server's list IS the
+// answer: render it, do not re-filter it here.
 function getMyJobs(u){
   if (!u) return [];
-  if (userHasAnyRole(u,'admin','ra_lead')) return STATE.jobs.slice();
-  if (userHasRole(u,'bd_lead')) return STATE.jobs.filter(function(j){return j.assigned_to_bd!==null;});
-  if (userHasRole(u,'bd')) return STATE.jobs.filter(function(j){return j.assigned_to_bd===u.id;});
-  // ra: only jobs they created
-  return STATE.jobs.filter(function(j){return j.created_by===u.id;});
+  return STATE.jobs.slice();
 }
 function jobContacts(jid){
   return STATE.contacts.filter(function(c){return c.job_id===jid;})

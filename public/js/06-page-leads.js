@@ -484,7 +484,10 @@ function leadDetailsBlock(j){
     ['Source',j.source]
   ].filter(function(x){return x[1];});
   var extra=r.import_extra&&typeof r.import_extra==='object'?r.import_extra:{};
-  var extraKeys=Object.keys(extra).filter(function(k){return extra[k];});
+  // The spreadsheet's own row number ("S,no") is not a lead detail — PACE
+  // numbers records itself. Already-imported leads may still carry the key
+  // (D-0035); skip it here too, sharing the one list rather than a second copy.
+  var extraKeys=Object.keys(extra).filter(function(k){return extra[k]&&!(window.ImportColumns&&window.ImportColumns.isSerialColumn(k));});
   var cell=function(label,val,isLink){
     return '<div class="ld-row"><div class="ld-k">'+escHtml(label)+'</div><div class="ld-v">'+(isLink?leadLinkOrText(val):(leadSafeUrl(val)&&/^https?:/i.test(String(val))?leadLinkOrText(val):escHtml(val)))+'</div></div>';
   };

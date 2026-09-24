@@ -451,3 +451,189 @@ final text); Sent shows "AI-written" when `ai_written`.
 
 
 - **R-045** — the import no longer drops existing leads: it sends them to `/jobs/fill-missing` and says so in the preview ("won't be added again, but anything they are missing will be filled in"). The column-mapping preview reads `ImportColumns.fieldFor` and says "kept as an extra detail" instead of "not mapped".
+
+## 2026-09-24 — the spreadsheet's own row number is not a lead detail (D-0035)
+
+The owner's screenshot showed a lead's "Other details from the import" listing
+`S,no 94` — the sheet's own serial column, not a fact about the lead.
+`55-import-columns.js` gained `isSerialColumn(name)`: normalises the column
+name (`normKey`) and matches an EXPLICIT list — `sno`, `slno`, `srno`,
+`serial`, `serialno`, `serialnumber`, `row`, `rowno`, `index`, `id`, `no`, plus
+a raw `"#"` (which `normKey` would otherwise strip to `''`). `mapRow` drops a
+matching column entirely — it never reaches `_extra`. A bare `id`/`no`/`#`
+counts ONLY when the WHOLE column name is exactly that, so "Job ID", "Req ID"
+and "Requisition #" still survive as extras — verified by hand
+(`node -e`) against both lists before wiring it in.
+
+- **One list, two readers.** `14-mailmerge-engine.js`'s column-mapping preview
+  now says "ignored — PACE numbers records itself" for a serial column
+  (instead of "kept as an extra detail"); `06-page-leads.js`'s
+  `leadDetailsBlock` filters `research.import_extra` through the same
+  `ImportColumns.isSerialColumn` so the 49 already-imported leads stop showing
+  `S,no` immediately, before any backend cleanup of the stored rows.
+- Confirmed live in a headless render: a lead imported with `S,no`,
+  `Requisition #` and `Shift` in its extras shows only `Requisition #` and
+  `Shift` under "Other details from the import" — the serial number is gone
+  from both the modal and the import preview.
+
+Files: `public/js/55-import-columns.js`, `public/js/14-mailmerge-engine.js`
+(~:373), `public/js/06-page-leads.js` (`leadDetailsBlock`).
+Verified: `node --check` on all three, `import-columns-smoke.mjs` 16/16 (still
+green — no case in that suite exercises a serial column, so foundry should add
+one; see below), `verify-frontend.sh`, `screen-stability-smoke` 23/23,
+`mobile-layout-smoke` 39/39, `frontend-smoke` 14/14, `nav-icons-smoke` 55/55,
+plus screenshots (lead-details modal, import preview).
+
+**What foundry should pin** (none of this is covered by
+`import-columns-smoke.mjs` yet):
+1. `isSerialColumn` true for: `S,no`, `S.No`, `S No`, `SNo`, `Sl No`,
+   `Sl. No.`, `Sr No`, `Sr. No.`, `Serial`, `Serial No`, `Serial Number`, `#`,
+   `No`, `No.`, `Row`, `Row No`, `Index`, `ID`, `Id`.
+2. `isSerialColumn` FALSE for: `Job ID`, `Req ID`, `Requisition #`,
+   `Employee ID`, `Candidate ID`, `SSN`, `Position`, `Row Number Requested`.
+3. `mapRow({'S,no':'94','Job ID':'REQ-1234','Company':'Acme'})` — the result
+   has no `S,no` key anywhere (not even in `_extra`), and `_extra['Job ID']`
+   is `'REQ-1234'`.
+4. A lead whose `research.import_extra` already contains `S,no` (simulating an
+   already-imported row) does not render it in `leadDetailsBlock`'s "Other
+   details from the import" section, while a sibling key does render.
+
+## 2026-09-24 — the candidate email card stops claiming a withheld body was never kept (D-0034/C-0025 follow-up)
+
+Ledger's `GET /candidates/:id/email-activity` change (`routes/tracking.js`)
+now withholds a `body` outside the sender's reporting scope: such a row comes
+back `body_visible:false, body:null, body_note:'<sentence>'`. The candidate
+profile (`30-page-candidate.js` ~:304-315) used to treat ANY null `body` as
+"sent before PACE kept a copy" — which would now be a false statement for a
+withheld one. Three states are now rendered distinctly:
+- `body_visible===false` → the server's `body_note`, calm/muted
+  (`color:var(--text3)`, no red — D-0019), never the "before PACE kept a copy"
+  sentence.
+- `body_visible!==false && body` → the real text, unchanged.
+- `body_visible!==false && !body` → the old "sent before PACE kept a copy"
+  sentence, now reserved for genuinely pre-migration rows.
+
+Verified live: a fixture with all three states (own send with a body, a
+colleague's send withheld, and a pre-migration row with no body) rendered all
+three sentences correctly in one screenshot.
+
+Files: `public/js/30-page-candidate.js` (~:304-317).
+Verified: `node --check`, `verify-frontend.sh`, plus the same four browser
+suites listed above.
+
+## 2026-09-24 — C-0026 (rampart) and C-0028 (observatory): rendering what the server now scopes
+
+Both closed; full text in `docs/territories/_contracts.md` C-0026/C-0028. In
+this territory's own words:
+
+- **`getMyJobs` (`02-state.js`) is now `return STATE.jobs.slice()`** — it used
+  to re-implement the server's OLD role ladder in the browser (a bd_lead saw
+  every ASSIGNED lead org-wide, 49 of them when they owned 25). `GET /jobs` is
+  the boundary now; a page renders what it returns.
+- **The Email page's RA Lead picker/drill-down (`07-page-email.js`) no longer
+  reads message content to build its numbers.** `GET /emails/sender-summary`
+  (new `loadSenderSummary()` in `11-bind-and-actions.js`, `STATE.senderSummary`)
+  feeds the picker; the drill-down is now a **counts-only** card (pending/sent/
+  failed + the by-timezone breakdown from the pre-existing
+  `pending-summary?manager_id=`) — no row, subject or body of another BD's
+  mail is ever drawn there again (D-0036). `STATE.allBDEmails` is gone.
+- **A bd_lead's Pending tab now shows their team's queued/failed rows too**
+  (the backend includes them per D-0034), each carrying `is_mine`. A
+  teammate's row is labelled with their name; Retry and the preview's Edit
+  button are hidden on it (the backend 404s/403s those for anyone but the
+  sender or an admin); "Send all pending (N)", "Retry all (N)" and the confirm
+  modal all count **only `is_mine`** rows, because `/emails/queue-all` only
+  ever queues the caller's own regardless of what the list shows — the number
+  promised has to match the number actually sent.
+- **`16-insights.js`'s `e.assigned_to` counts were dead twice over**: `emails`
+  has never had an `assigned_to` column (only `sent_by`, confirmed by grepping
+  every migration), AND the array they read (`STATE.emails`, fetched as
+  `?status=queued`) was always empty because nothing in the backend ever
+  writes that status. Both fixed: `sent_by`, and reading `STATE.sentEmails`/
+  `STATE.pendingEmails` instead — both already scoped to the viewer's own
+  chain by the backend, so the "team overview" numbers are now both non-zero
+  and correctly bounded.
+- **`48-page-outreach-gen.js`'s "Convert to lead" is keyed on `r.id`, never
+  `r.token`** — a token is a credential (drives the open pixel + tap-through),
+  an id is a handle. `outreachConvertLead(id)` posts `{id:...}`.
+
+Files: `public/js/02-state.js`, `public/js/07-page-email.js`,
+`public/js/11-bind-and-actions.js`, `public/js/18-email-status-actions.js`,
+`public/js/16-insights.js`, `public/js/48-page-outreach-gen.js`.
+Verified: `node --check` on all six, `verify-frontend.sh`,
+`screen-stability-smoke` 23/23, `mobile-layout-smoke` 39/39, `frontend-smoke`
+14/14, `nav-icons-smoke` 55/55, `outreach-generator-smoke` 138/138, plus
+screenshots (bd_lead Pending tab with an own + a teammate row, the RA Lead
+picker reading sender-summary, the RA Lead drill-down showing counts only).
+
+**What foundry should pin, none of it covered today:**
+1. A bd_lead's `GET /emails?status=pending` fixture with one `is_mine:true`
+   and one `is_mine:false` row renders: the teammate's row carries their name
+   and NO Retry/Edit control anywhere in that row's markup; "Send all pending"
+   and "Retry all" counts equal the `is_mine` count, not the total.
+2. An RA Lead's Pending-tab picker, given only `STATE.senderSummary` (no
+   `STATE.pendingEmails`/`allBDEmails`), still renders every BD with correct
+   numbers — the old bug (grouping an empty/narrowly-scoped `GET /emails`)
+   would have shown every BD at zero.
+3. An RA Lead's drill-down never emits a recipient address, a subject or a
+   message body anywhere in its rendered html — only digits and the BD's own
+   name/timezone labels.
+4. `outreachConvertLead` and the Sent-list button never reference `.token`
+   anywhere in `48-page-outreach-gen.js` (grep), only `.id`.
+
+## 2026-09-24 (round 2) — three more D-0034/D-0035 follow-ups mid-session
+
+- **`41-page-clients.js`'s `recentEmailsCard`** gets the same three-state fix
+  as the candidate card: `body_visible===false` renders `a.body_note` (calm,
+  muted); the "sent before PACE kept a copy" sentence is reserved for a
+  genuinely empty-but-visible body. **Checked and NOT changed:** there is no
+  Edit-client or Delete-client control anywhere in this file today (grepped
+  for `apiPut`/`apiDelete` against `/companies/:id` with no sub-path) — so
+  there is nothing to hide there yet. Upload-document and delete-document
+  already toast `e.message` verbatim, which is the server's exact 403
+  sentence (`apiFetch` in `22-api.js` throws `new Error(d.error||...)` on any
+  non-ok response) — confirmed by reading the code path, not assumed.
+  **Left for gateway/a later pass:** `GET /clients` does not carry an owner
+  id/name today, so the Upload/Delete-document buttons on a non-owner's
+  client are still drawn unconditionally (they will 403 correctly if clicked,
+  named plainly, but the Session 24 "don't draw a button that will refuse"
+  rule is not fully met here the way it now is on job orders). Needs a
+  contract to gateway for an `owner_id`/`can_edit` field on `GET /clients` /
+  `GET /companies/:id` before that can be fixed properly.
+- **D5 duplicate-lead check (`14-mailmerge-engine.js` `dupEmailMap` +
+  `renderDuplicateWarningModal`)** now reads guild's shipped shape from
+  `POST /jobs/check-duplicates` — `{email, duplicate:true, owner_name, since}`
+  — and says "already on `<owner_name>`'s lead since `<date>`", never the
+  other lead's company/position/contact. Verified in a screenshot with two
+  fixture rows (one with an owner name, one without, to check the fallback
+  sentence: "already on someone else's lead").
+- **Job orders carry `poc_visible` now (D-0035, `services/job-order-visibility.js`,
+  gateway).** `client_manager` is the only POC field in the live schema. In
+  `25-workflow-bd.js`'s `renderJobOrderDetail`: a `canOwn=j.poc_visible!==false`
+  gates the "Edit job" button and every apply-link control (Copy link / Turn
+  off / Publish apply page) — those endpoints now 403 a non-owner, and Session
+  24's rule is never draw a button that will refuse. A non-owner still sees
+  the apply link's live/off state and applicant count (candidate-facing
+  information stays visible per D-0035), just no controls to change it. Where
+  "Client Manager" would show, a non-owner sees a quiet
+  "Client contact: visible to the job owner" line instead of a blank row.
+  **Checked:** no Delete-job-order control exists anywhere in this file
+  (grepped) — nothing to hide there either. **Verified a recruiter (or any
+  non-owner) opening a job they don't own renders sensibly** — screenshot with
+  `poc_visible:false` shows the full candidate-facing page (title, client
+  company name, JD, apply-link status, applicants, recruiters, candidates)
+  with no crash and no leaked contact name.
+
+Files: `public/js/41-page-clients.js` (~:229-239), `public/js/14-mailmerge-engine.js`
+(~:557-596), `public/js/25-workflow-bd.js` (~:987-1036).
+Verified: `node --check` on all three, `verify-frontend.sh`,
+`screen-stability-smoke` 23/23, `mobile-layout-smoke` 39/39, `frontend-smoke`
+14/14, `nav-icons-smoke` 55/55, `applicants-ui-smoke` 14/14 (shares
+`25-workflow-bd.js`'s job-detail render path), plus screenshots: the
+duplicate-lead modal, and a job-order detail rendered both as owner and as
+non-owner.
+
+**Open contract worth raising (not opened yet, noted for next session or the
+orchestrator):** `GET /clients` needs an owner hint so the client Upload/
+Delete-document buttons can be hidden for a non-owner the same way job orders
+now are — today they are drawn unconditionally and rely on the 403 toast alone.
