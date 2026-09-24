@@ -5995,3 +5995,7 @@ Merged #231 (`2b95420`).
 
 # Session 30 (cont.) — R-047 take-over requests
 Owner: "build the take-over request next". Decided D-0037: the CURRENT OWNER's manager approves (admin if none; unowned → asker's manager; nobody approves their own); new table OK at merge. IN FLIGHT: rampart (rule), deep (migration), then gateway/guild routes, surface screens, foundry tests.
+
+- IN FLIGHT: deep landed migration 047 (a9c8b05, not applied); rampart writing the take-over rule in ownership.js.
+
+- D-0038 recorded: lead take-over requests start from the duplicate warning. Dispatching rampart (duplicate-proof path), gateway (routes/ownership-requests.js), guild (lead_id on duplicate responses), surface (buttons + approval list).

@@ -47,6 +47,19 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0038 · 2026-09-24 · STANDS · A lead take-over starts from the duplicate warning
+**Their words:** asked where a BD's request for a colleague's lead should start
+(a BD cannot see a colleague's lead since D-0034), they chose **"From the
+duplicate warning"** over "only via the client" and "managers only".
+**Chosen:** when adding/importing a lead hits "Already on <owner>'s lead since
+<date>" (D-0035 D5), that message carries **Ask to take over**. The asker still
+never sees the other lead's details — the approver does. Proof of the right to
+ask is that the asker typed a contact email that is on that lead; the server
+verifies the match, never the browser. Clients and job orders get the button on
+their own page (they are visible company-wide, D-0035). Managers can still ask
+for their own team's leads from the lead itself.
+**Re-open when:** the owner wants BDs to browse colleagues' leads to request them.
+
 ### D-0037 · 2026-09-24 · STANDS · Take-over requests: the CURRENT OWNER's manager approves; a new table is fine
 **Their words:** *"okay, build the take-over request next"*. Asked who approves a
 request for a record owned by someone on a DIFFERENT manager's team, they chose
