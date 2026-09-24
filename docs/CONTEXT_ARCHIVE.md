@@ -6011,3 +6011,5 @@ Rampart: take-over code sound, but lead_id on duplicate responses hands ids to p
 
 ### R-047 review round 2 — one blocker (2026-09-24)
 All round-1 fixes verified in code. R47-1: shapeRequest still returned record_id (the lead id) to a duplicate-door asker, and /wf/enroll(+bulk) accept any job_id/entity/workflow unchecked → a BD could get an email sent from a colleague's mailbox. Fixing: gateway withholds record_id + R47-2 reminder-send owner-only + R47-3 ilike escape + R47-4 unowned client; guild gates enroll + R47-5 mailbox picker. Foundry adding cases.
+
+- IN FLIGHT: R47 round-2 fixes (gateway, guild) and foundry tests editing; uncommitted until each reports.
