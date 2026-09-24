@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-23 (Session 28, round 7) · **Next id**: `R-054` · **Artifact**:
+**Updated**: 2026-09-23 (Session 28, round 7) · **Next id**: `R-055` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -87,7 +87,8 @@ sees it without reading a file.
 
 | id | The question | Where it stands |
 |---|---|---|
-| `R-051` | **Client page: the real email conversation + an AI summary** (owner asked 2026-09-24). One read-only timeline per client from all three email pipelines plus stored replies, better reply-to-contact matching, and a cached 4–6 line AI summary (~4–5k tokens each). Design in `docs/SESSION31_DESIGNS.md` §1. | **Designed, not built.** Waiting on the owner's go-ahead. Live data: only 3 of 77 stored replies are linked to a contact today, so the matching fix is half the value. |
+| `R-051` | **Client page: the real email conversation + an AI summary** (owner asked 2026-09-24). One read-only timeline per client from all three email pipelines plus stored replies, better reply-to-contact matching, and a cached 4–6 line AI summary (~4–5k tokens each). Design in `docs/SESSION31_DESIGNS.md` §1. | **DOING — owner said build it first, OFF until they say (D-0039, 2026-09-24).** Token/storage design in `docs/CLIENT_INTEL_DESIGN.md`: noise never stored, ~2 KB per kept message, free facts, AI summary only on open + only when changed, incremental, capped. Awaiting the owner's reaction to the design before code. |
+| `R-054` | **Make PACE fit any industry — a per-company playbook** (words, lead stages, buying signals, allowed next steps), recruiting as preset #1. First used by the client summary; later the stages and screens themselves (today recruiting-shaped in code — the stage list lives in six places). | Owner asked 2026-09-24 (D-0039). Intelligence part is designed with R-051; the screens/stages part is a larger separate job, before selling to a non-recruiting company. |
 | `R-052` | **Create documents, not only upload them** (owner, 2026-09-24: "We'll design the entire thing later"). | **Parked by the owner.** Starting point when picked up: the formatted-resume generator already in PACE. §2 of the design doc. |
 | `R-053` | **The contact-finder engine: 4 POCs per open job** (2 HR/TA, 2 hiring managers by firm size), into a sequence or the outreach engine. Design §3. | **Needs the owner's call on the data source.** Nothing in PACE calls Apollo today and Apollo's free tier has no API — the people search is a paid plan. The title rules (`pocTargets`) are free and can be built first. |
 | `R-012` | **D-0014 — the row-level interaction brief.** The owner's real design ask was *progressive disclosure*; Session 23 answered it with volume control and was corrected. | **The live design work.** Agreed approach: ONE screen first, then repeat. **Ask before building any of it** — they said the revamp is coming "in sometime". |

@@ -47,6 +47,33 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0039 · 2026-09-24 · STANDS · Client email timeline + AI summary: build it first, OFF until the owner says, token use designed first; PACE must fit any industry
+**Their words:** *"Build the client email timeline and AI summary first. Don't
+switch it on till I say. If it's switched on just like that, all the emails will
+be read and unlimited tokens will be used so we have to design that token usage
+to read the emails and make sense of it and match the to and from emails to the
+lead emails we have and store that data and retrieve it when needed and rewrite
+it … Which is not storage intensive, not AI intensive yet, give the right
+summary and suggested next steps based on current situation."* And: *"a lead
+management system that can run for any industry not just recruiting … flexible
+enough to work right. Right means relevant to that industry and company
+process."*
+
+**Chosen:** R-051 is next. Design in `docs/CLIENT_INTEL_DESIGN.md`: a gate that
+stores only mail matched to a lead contact or our own thread (noise never
+stored), ~2 KB per kept message, free rule-based facts on arrival, and an AI
+summary that runs only when a client is opened AND something changed,
+incremental from the last summary, fingerprinted, checked, with its own daily
+cap. Every switch ships OFF. Industry fit comes from a per-company
+**playbook** (words, stages, signals, allowed next steps), recruiting as the
+first preset (R-054).
+
+**Measured when decided:** 77 stored inbound messages, 3 tied to a contact; the
+rest job-board alerts, account mail and unknown senders.
+
+**Re-open when:** the owner says to switch it on (per company), or the measured
+cost of a summary is far from the ~2.5k-token estimate.
+
 ### D-0038 · 2026-09-24 · STANDS · A lead take-over starts from the duplicate warning
 **Their words:** asked where a BD's request for a colleague's lead should start
 (a BD cannot see a colleague's lead since D-0034), they chose **"From the
