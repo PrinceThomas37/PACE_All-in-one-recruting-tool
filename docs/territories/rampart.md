@@ -61,13 +61,24 @@
     `canCancel({request, actorId})` — requester only, pending only.
   * `takeoverTransition(from, to)` — pending → approved|declined|cancelled;
     the three outcomes are FINAL (re-ask = new row).
-  * **A consequence the owner has not seen:** a lead is only requestable by
-    someone who can SEE it (D-0034), so a BD cannot ask for a PEER's lead or a
-    pool lead — in practice lead take-over reaches only a manager over their
-    chain. Clients and job orders are shared, so cross-team requests work
-    there. Raised, not widened (widening is a D-0034 change).
-  * Scratch check (67 assertions) + **13 reintroduced bugs, all caught** — not
-    yet a committed suite; list handed to foundry.
+  * **~~A consequence the owner has not seen~~ — answered by D-0038
+    (2026-09-24):** a BD could not ask for a peer's / pool lead because they
+    cannot SEE it. The owner chose "from the duplicate warning". Option
+    **`viaDuplicateEmailMatch`** (name fixed — gateway's
+    `routes/ownership-requests.js` passes it): when **literally `true`** it
+    stands in for lead SIGHT only. Org, deleted, scope-owner, admin,
+    already_owner, role and already_requested all still apply; clients/job
+    orders ignore it; `not_found` wording is unchanged for every miss.
+    **REVIEW POINT for gateway's route:** the flag may be set ONLY after the
+    route matched the typed email against that lead's contacts IN THE DB,
+    org-scoped — never from a request body field. The asker still never sees
+    the lead's details (the approver does); the route's error for a non-match
+    must be the same 404 as a nonexistent lead.
+  * Scratch check (83 assertions, 16 for D-0038) + **13 + 5 reintroduced
+    bugs, all caught** (D-0038's: flag honoured for job_order/client, honoured
+    when unset, honoured on truthy non-`true`, flag skipping the org check,
+    flag short-circuiting role/admin). Not yet a committed suite; list handed
+    to foundry.
 - Multi-tenancy is **shipped**: `org_id` NOT NULL on all tenant tables
   (022/023), RLS + service-role policies on all 48 (039). 0 without RLS, 0
   without a policy.
@@ -336,4 +347,5 @@ flows still separate correctly.
   rampart suites green. Raised C-0021..C-0027. **What would have saved an
   hour:** reading `GET /app-settings` first — the worst finding was a
   three-line route that returns a whole table.
+
 

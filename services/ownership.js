@@ -400,6 +400,17 @@ function scopeEmails(emails, jobsById, scope) {
 //      Sight is the existing rule, never a new one: a lead → `canSeeLead`
 //      (D-0034: own + chain; the pool only to distributors); a client or job
 //      order → anyone in the org (D-0035: shared to see, owned to touch).
+//      ONE exception, leads only (D-0038): `viaDuplicateEmailMatch === true`
+//      stands in for sight. A BD cannot see a colleague's lead, so the
+//      request starts from the duplicate warning — they typed a contact
+//      email that is on that lead. ONLY A ROUTE may set it, and only after
+//      it has itself matched that email against the lead's contacts IN THE
+//      DATABASE; never copy it from a request body. It must be literally
+//      `true` (not "true", not 1). It replaces the SIGHT check and nothing
+//      else: a foreign-org or deleted lead is still 'not_found', and the
+//      admin / owner / role / duplicate checks below still run. Ignored for
+//      clients and job orders (already shared to see). The asker still
+//      never sees the lead — the approver does.
 //   3. Not an admin. An admin can already reassign directly; an admin asking
 //      would have to be approved by another admin, or by themselves.
 //   4. They do not already own it.
@@ -522,12 +533,15 @@ function recordRow(kind, record) {
  *   requester: { id, role, roles, org_id }
  *   scope:     viewScope(...) for the same requester
  *   openRequests (optional): take-over requests already on this record
+ *   viaDuplicateEmailMatch (optional, lead only): true ONLY when the route
+ *     has verified server-side that the requester's typed contact email is
+ *     on this lead (D-0038). Satisfies lead SIGHT; nothing else.
  * → { ok: true, reason: null, code: null, ownerId }
  * → { ok: false, reason: '<sentence>', code, ownerId }
  * code ∈ 'bad_kind' | 'not_found' | 'admin' | 'already_owner' | 'role' |
  *        'already_requested'. A route answers 'not_found' with a 404.
  */
-function canRequestTakeover({ kind, record, requester, scope, openRequests } = {}) {
+function canRequestTakeover({ kind, record, requester, scope, openRequests, viaDuplicateEmailMatch } = {}) {
   const no = (code, reason, ownerId = null) => ({ ok: false, reason, code, ownerId });
   if (!TAKEOVER_KINDS.includes(kind)) return no('bad_kind', 'That kind of record cannot be taken over.');
   const word = KIND_WORD[kind];
@@ -538,7 +552,11 @@ function canRequestTakeover({ kind, record, requester, scope, openRequests } = {
   if (!rid || !row || row.deleted_at) return no('not_found', NOT_FOUND_SENTENCE);
   if (!row.org_id || !requester.org_id || row.org_id !== requester.org_id) return no('not_found', NOT_FOUND_SENTENCE);
   if (!scope || scope.userId !== rid) return no('not_found', NOT_FOUND_SENTENCE);
-  const sees = kind === 'lead' ? canSeeLead(row, scope) : true; // D-0035: clients & job orders are shared to see
+  // D-0035: clients & job orders are shared to see. D-0038: a lead the route
+  // verified by a duplicate contact-email match counts as seen — lead only.
+  const sees = kind === 'lead'
+    ? (viaDuplicateEmailMatch === true || canSeeLead(row, scope))
+    : true;
   if (!sees) return no('not_found', NOT_FOUND_SENTENCE);
 
   const ownerId = recordOwnerId(kind, record);
