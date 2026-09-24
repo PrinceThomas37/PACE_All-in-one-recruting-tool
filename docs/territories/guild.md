@@ -460,3 +460,21 @@ entry, same as prior sessions' `client-resolve.js`/`lead-fill.js` additions)
 and ran `node scripts/territory-map.mjs` to regenerate `_map.json`/
 `island.html` — 27 files, 6,397 lines now attributed here.
 
+
+## Session 30 round 2 — Rampart re-review R2/R3
+`DELETE /job-orders/:id/recruiters/:rid` (routes/recruiting/job-orders.js
+~:778) checked `isBDM` only, so any BD manager in the org could unassign a
+recruiter from a job order they don't own; it now 404s when the job order
+isn't found in the caller's org and applies the same
+`jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))` gate the
+assignment POST already uses. Separately, D-0035 says recruiters work their
+OWN candidates, but the submission (routes/recruiting/submissions.js ~:249-252)
+and pipeline (routes/recruiting/pipeline.js ~:200-203) deletes accepted
+`|| recruiterCanTouchJob`, letting a recruiter on a shared job order delete a
+colleague recruiter's row — tightened both to `recruiter_id`/`tagged_by ===
+req.user.id` only for a pure recruiter; BD owner/chain/admin unchanged.
+Verified: `node --check` on all three files; `test/recruiting-routes-mounted.mjs`
+(7/7), `test/submission-review-smoke.mjs` (16/16), `test/workflow-gating-smoke.mjs`
+(25/25), `test/lead-stage-permission.mjs` (13/13), `test/stage-consolidation-smoke.mjs`
+(14/14) — all green. No dedicated pipeline-delete test file exists yet
+(foundry writing tests concurrently). Did not run full `npm test`; did not commit.

@@ -778,6 +778,16 @@ ${String(j.job_description).slice(0, 12000)}`;
   app.delete('/job-orders/:id/recruiters/:rid', auth, async (req, res) => {
     try {
       if (!isBDM(req)) return res.status(403).json({ error: 'Only BD Managers can unassign recruiters.' });
+      const { data: jo } = await withOrg(
+        supabase.from('job_orders').select('id,bd_manager_id').eq('id', req.params.id).is('deleted_at', null), req
+      ).maybeSingle();
+      if (!jo) return res.status(404).json({ error: 'Job order not found' });
+      // Rampart re-review (round 2, R2): same owner/chain/admin gate as the
+      // assignment POST above — "any BDM" let a colleague unassign recruiters
+      // from a job order they don't own.
+      if (!jobOrderVisibility.isJobOrderOwner(jo, await pocScope(req))) {
+        return res.status(403).json({ error: "Only this job order's owner (or their manager) can unassign recruiters from it." });
+      }
       await withOrg(supabase.from('recruiter_assignments').delete(), req)
         .eq('job_order_id', req.params.id).eq('recruiter_id', req.params.rid);
       res.json({ success: true });

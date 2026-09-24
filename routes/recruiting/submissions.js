@@ -239,16 +239,16 @@ module.exports = function (app, core) {
       ).maybeSingle();
       if (!existing) return res.status(404).json({ error: 'Submission not found' });
 
-      // Rampart review (D-0035 #4): any recruiter or BDM in the org could
-      // delete ANY submission — the org check above only stops another
-      // COMPANY's row. A recruiter may delete only one they own
-      // (recruiter_id) or one on a job order they're assigned to
-      // (recruiterCanTouchJob, the same gate PATCH already uses above); a BD
-      // manager needs the same owner/chain/admin test as every other
-      // job-order write.
+      // Rampart review (D-0035 #4, tightened round 2 R3): any recruiter or
+      // BDM in the org could delete ANY submission — the org check above
+      // only stops another COMPANY's row. D-0035: recruiters work their OWN
+      // candidates — sharing a job order does not give a recruiter the right
+      // to delete a colleague's submission row, so a pure recruiter may
+      // delete only a row they are recruiter_id on. A BD manager needs the
+      // same owner/chain/admin test as every other job-order write.
       let allowed = hasRole(req, 'admin');
       if (!allowed && isRecruiter(req) && !isBDM(req)) {
-        allowed = existing.recruiter_id === req.user.id || await recruiterCanTouchJob(req, existing.job_order_id);
+        allowed = existing.recruiter_id === req.user.id;
       }
       if (!allowed && isBDM(req)) {
         const { data: jo } = await supabase.from('job_orders')

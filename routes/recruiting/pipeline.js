@@ -194,12 +194,14 @@ module.exports = function (app, core) {
       ).maybeSingle();
       if (!existing) return res.status(404).json({ error: 'Pipeline entry not found' });
 
-      // Rampart review (D-0035 #4), same shape as the submissions delete: a
-      // recruiter may delete only their own tag (tagged_by) or one on a job
-      // they're assigned to; a BD manager needs owner/chain/admin.
+      // Rampart review (D-0035 #4, tightened round 2 R3), same shape as the
+      // submissions delete: D-0035 says recruiters work their OWN
+      // candidates, so a pure recruiter may delete only their own tag
+      // (tagged_by) — sharing a job order is not enough. A BD manager needs
+      // owner/chain/admin.
       let allowed = hasRole(req, 'admin');
       if (!allowed && isRecruiter(req) && !isBDM(req)) {
-        allowed = existing.tagged_by === req.user.id || await recruiterCanTouchJob(req, existing.job_order_id);
+        allowed = existing.tagged_by === req.user.id;
       }
       if (!allowed && isBDM(req)) {
         const { data: jo } = await supabase.from('job_orders')
