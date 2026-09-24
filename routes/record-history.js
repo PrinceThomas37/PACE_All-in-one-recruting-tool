@@ -18,10 +18,12 @@
 // ============================================================================
 const express = require('express');
 const H = require('../services/record-history');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, withOrg } = ctx;
+  const { supabase, auth, withOrg, hasRole, orgIdFor } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
   // A history is a glance, not an archive dump. 200 entries is far past what a
   // person reads and still bounded — the ageing rule (D-0013) applies to a
@@ -30,10 +32,14 @@ module.exports = (ctx) => {
 
   // Which table holds the record itself, so we can prove the caller may see it.
   const PARENT = {
-    lead:       { table: 'jobs',        select: 'id,position,stage' },
+    // assigned_to_bd/created_by/assigned_to (lead) and recruiter_id + its job
+    // order's bd_manager_id (submission) are selected only so C-0021 #9 below
+    // can judge who may see the parent — never sent back on the wire raw
+    // beyond what titleOf() reads.
+    lead:       { table: 'jobs',        select: 'id,position,stage,assigned_to_bd,created_by,assigned_to' },
     candidate:  { table: 'candidates',  select: 'id,first_name,last_name,candidate_code' },
     job_order:  { table: 'job_orders',  select: 'id,job_title,job_code,status' },
-    submission: { table: 'submissions', select: 'id,stage,candidate_id,job_order_id' },
+    submission: { table: 'submissions', select: 'id,stage,candidate_id,job_order_id,recruiter_id,job_order:job_orders(bd_manager_id)' },
     company:    { table: 'companies',   select: 'id,name' },
   };
 
@@ -119,6 +125,20 @@ module.exports = (ctx) => {
 
       const parent = await loadParent(req, entity, id);
       if (!parent) return res.status(404).json({ error: 'not_found' });
+
+      // C-0021 #9: org scoping alone let any user in the org read the history
+      // of any LEAD or SUBMISSION by id (candidate/job_order/company stay as
+      // they were — org-only — pending the owner's D1/D3 answers on whether
+      // those are shared records). A miss is the same 404 as a foreign-org id.
+      if (entity === 'lead' || entity === 'submission') {
+        const isAdmin = hasRole(req, 'admin');
+        const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+        const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+        const visible = entity === 'lead'
+          ? own.canSeeLead(parent, scope)
+          : own.canSeeSubmission(parent, scope, parent.job_order);
+        if (!visible) return res.status(404).json({ error: 'not_found' });
+      }
 
       const lists = [];
       if (entity === 'lead') {

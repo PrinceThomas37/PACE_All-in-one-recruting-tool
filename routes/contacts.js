@@ -70,6 +70,13 @@ router.delete('/contacts/:id', auth, async (req, res) => {
 router.patch('/contacts/:id/email-status', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd', 'bd_lead')) return res.status(403).json({ error: 'BD role required' });
+    // C-0021 #7: this was the one contact mutation with no canTouchJob gate at
+    // all — any BD could mark another BD's contact invalid/OOO (which stops
+    // THAT BD's follow-ups) just by knowing its id. Same check as its three
+    // siblings (PUT/DELETE /contacts/:id, POST /contacts).
+    const existing = await db.forRequest(req).from('contacts').byId(req.params.id, 'job_id');
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!(await canTouchJob(req, existing.job_id))) return res.status(403).json({ error: 'Forbidden' });
     const { email_status, ooo_until } = req.body;
     const allowed = ['valid','invalid','deactivated','out_of_office'];
     if (!allowed.includes(email_status)) return res.status(400).json({ error: 'Invalid status' });

@@ -15,7 +15,19 @@ const OAUTH_TIMEOUT_MS = 15000;
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, today, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody, MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES } = ctx;
+  const { supabase, auth, hasRole, today, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody, orgIdFor, MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES } = ctx;
+
+  // C-0016: is this userEmailId slot in the caller's own org? A miss is
+  // treated as "not found", never a 403 — a 403 would confirm the slot exists
+  // in some other org, which is exactly the oracle rampart flagged (#4/#5 in
+  // the ledger). Returns the slot row (with org_id) or null.
+  async function ownedMailboxSlot(orgId, userEmailId) {
+    if (!userEmailId) return null;
+    const { data } = await supabase.from('user_emails').select('id,user_id,email_address,org_id').eq('id', userEmailId).maybeSingle();
+    if (!data) return null;
+    if (orgId && data.org_id && data.org_id !== orgId) return null;
+    return data;
+  }
 
 router.get('/auth/microsoft/connect', async (req, res) => {
   try {
@@ -26,6 +38,12 @@ router.get('/auth/microsoft/connect', async (req, res) => {
     if (!reqUser.roles?.includes('admin') && reqUser.role !== 'admin') return res.status(403).send('Admin only');
     const { userEmailId } = req.query;
     if (!userEmailId) return res.status(400).send('userEmailId required');
+    // C-0016 #3: userEmailId used to go straight into the OAuth `state` with no
+    // org check — an admin of org B could point their own connect flow at org
+    // A's mailbox slot id. No state is minted for a foreign slot now.
+    const orgId = orgIdFor({ user: reqUser });
+    const slot = await ownedMailboxSlot(orgId, userEmailId);
+    if (!slot) return res.status(404).send('Not found');
     const state = Buffer.from(JSON.stringify({ userEmailId, userId: reqUser.id })).toString('base64');
     const url = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/authorize?client_id=${MS_CLIENT}&response_type=code&redirect_uri=${encodeURIComponent(MS_REDIRECT)}&scope=${encodeURIComponent(MS_SCOPES)}&state=${encodeURIComponent(state)}&prompt=select_account`;
     res.redirect(url);
@@ -72,6 +90,16 @@ router.get('/auth/microsoft/callback', async (req, res) => {
     if (msError) return res.send(`<script>window.opener&&window.opener.postMessage({type:'ms_oauth_error',error:'${msError}'},'*');window.close();</script>`);
     if (!code || !state) return res.status(400).send('Missing code or state');
     const { userEmailId, userId } = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());
+    // C-0016 #3/#4 defence in depth: `state` is base64, not signed, so this is
+    // checked again here rather than trusting that /connect already refused a
+    // foreign slot. A mismatch gets the SAME generic sentence as any other
+    // failure — never the "this slot is for <email>" oracle below, which is
+    // fine to disclose once we already know userId legitimately owns the slot.
+    const { data: stateUser } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
+    const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org_id').eq('id', userEmailId).maybeSingle();
+    if (!slotForOrgCheck || (stateUser && slotForOrgCheck.org_id && stateUser.org_id && slotForOrgCheck.org_id !== stateUser.org_id)) {
+      return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:'This connection request is no longer valid. Please try again.'},'*');window.close();</scr`+`ipt>`);
+    }
     // No retry on the code exchange: an OAuth authorization code is single-use,
     // so a replay fails with invalid_grant and buries the real error.
     const tokenRes = await fetchWithTimeout(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, code, redirect_uri: MS_REDIRECT, grant_type: 'authorization_code', scope: MS_SCOPES }) }, { timeoutMs: OAUTH_TIMEOUT_MS });
@@ -117,6 +145,12 @@ router.get('/auth/microsoft/callback', async (req, res) => {
 
 router.get('/auth/microsoft/status/:userEmailId', auth, async (req, res) => {
   try {
+    // C-0016 #5: this answered for ANY slot id in the deployment — no auth,
+    // no org. A foreign slot now reads exactly like a disconnected one; the
+    // route's own vocabulary has no "not found" state to add one without
+    // changing its shape for every existing caller.
+    const slot = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
+    if (!slot) return res.json({ connected: false });
     const { data } = await supabase.from('microsoft_tokens').select('email_address,expires_at').eq('user_email_id', req.params.userEmailId).single();
     if (!data) return res.json({ connected: false });
     res.json({ connected: true, email_address: data.email_address, expired: new Date(data.expires_at) < new Date() });
@@ -158,7 +192,12 @@ router.get('/auth/microsoft/debug', auth, async (req, res) => {
 router.delete('/auth/microsoft/:userEmailId', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
-    const { data: mailbox } = await supabase.from('user_emails').select('user_id').eq('id', req.params.userEmailId).maybeSingle();
+    // C-0016 #1 (critical): gated on ROLE only — an admin/bd_lead of org B
+    // could disconnect org A's mailbox by id, which also rewrites org A's
+    // leads onto a different sending mailbox (reassignJobsOffMailbox below).
+    // 404, never 403 — a 403 would confirm the slot exists in another org.
+    const mailbox = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
+    if (!mailbox) return res.status(404).json({ error: 'Not found' });
     await supabase.from('microsoft_tokens').delete().eq('user_email_id', req.params.userEmailId);
     await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
     // Move any leads still pointed at this mailbox before it went dead, so

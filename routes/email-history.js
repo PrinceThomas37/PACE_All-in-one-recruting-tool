@@ -39,20 +39,57 @@
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
 const horizon = require('../services/view-horizon');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, withOrg } = ctx;
+  const { supabase, auth, hasRole, withOrg, orgIdFor } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
   // Bounded per source. Three unbounded selects merged in memory is the same
   // ageing bug this plan exists to remove, just moved to the server.
   const PER_SOURCE = 400;
   const PAGE = 25;
 
+  function chunk(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+
+  // The leads engine's `emails` table is about a LEAD, so a viewer sees their
+  // own sends plus anyone else's send on a lead they own (D-0034 canSeeEmail).
+  // `email_tracking`/`candidate_outreach` aren't about a lead at all (a client
+  // email, a one-off candidate email, a candidate batch), so — per
+  // rampart.md's D1/D2, still open — they narrow to the sender's own scope
+  // only for now: self + reporting chain, or the whole org for admin.
+  async function scopeFor(req) {
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
+
+  // The lead ids the viewer may see, org-scoped, or null for "no restriction"
+  // (admin). Used to pull in emails sent by SOMEONE ELSE about a lead the
+  // viewer owns — the other half of canSeeEmail besides "I sent it".
+  async function visibleJobIds(req, scope) {
+    if (scope.all) return null;
+    const { data } = await withOrg(supabase.from('jobs')
+      .select('id,assigned_to_bd,created_by,assigned_to').is('deleted_at', null), req);
+    return (data || []).filter(j => own.canSeeLead(j, scope)).map(j => j.id);
+  }
+
   function normalise(row, source) {
     return {
       source,
-      id: row.id || row.token || null,
+      // NEVER row.token. A ledger fix (routes/tracking.js) found the same
+      // fault: `email_tracking.token` is the bearer secret behind the open
+      // pixel AND `POST /i/<token>/opt-out`, which writes the GLOBAL
+      // suppression list — so handing it to the browser as a row's "id" let
+      // anyone who can see this list opt a candidate out of every future role.
+      // The real `id` column identifies the row just as well and is not a
+      // credential.
+      id: row.id || null,
       to_email: row.to_email || null,
       from_email: row.from_email || row.mailbox_email || null,
       subject: row.subject || '',
@@ -88,18 +125,51 @@ module.exports = (ctx) => {
 
       const out = [];
       const sourceErrors = [];
+      const scope = await scopeFor(req);
 
       // ── 1. the leads engine ────────────────────────────────────────────────
+      // C-0021 #4 (D-0034): every user saw all three pipelines org-wide. This
+      // one is ABOUT a lead, so canSeeEmail is "I sent it" OR "I own the lead
+      // it was about" — two queries, each narrowed in SQL before its own
+      // .limit() (never filtered after one), merged and de-duped by id so a
+      // lead handed to a new BD still shows its history to its new owner.
       if (wants('leads')) {
         try {
-          let sel = withOrg(supabase.from('emails')
-            .select('id,to_email,from_email,subject,body,status,sent_at,created_at,job_id,contact_id')
-            .order('created_at', { ascending: false }).limit(PER_SOURCE), req);
-          if (req.query.contact_id) sel = sel.eq('contact_id', req.query.contact_id);
-          if (req.query.job_id) sel = sel.eq('job_id', req.query.job_id);
-          const { data, error } = await sel;
-          if (error) throw error;
-          for (const r of (data || [])) {
+          const LEAD_SELECT = 'id,to_email,from_email,subject,body,status,sent_at,created_at,job_id,contact_id';
+          const base = () => {
+            let sel = withOrg(supabase.from('emails').select(LEAD_SELECT), req);
+            if (req.query.contact_id) sel = sel.eq('contact_id', req.query.contact_id);
+            if (req.query.job_id) sel = sel.eq('job_id', req.query.job_id);
+            return sel;
+          };
+          let rows = [];
+          if (scope.all) {
+            const { data, error } = await base().order('created_at', { ascending: false }).limit(PER_SOURCE);
+            if (error) throw error;
+            rows = data || [];
+          } else {
+            const ownIds = own.queryOwnerIds(scope) || [];
+            const jobIds = await visibleJobIds(req, scope);
+            const queries = [];
+            if (ownIds.length) queries.push(base().in('sent_by', ownIds).order('created_at', { ascending: false }).limit(PER_SOURCE));
+            for (const part of chunk(jobIds || [], 200)) {
+              queries.push(base().in('job_id', part).order('created_at', { ascending: false }).limit(PER_SOURCE));
+            }
+            const results = await Promise.all(queries);
+            for (const r of results) { if (r.error) throw r.error; rows.push(...(r.data || [])); }
+            const byId = new Map();
+            for (const r of rows) byId.set(r.id, r);
+            // Each query is already correctly scoped by construction (sent_by
+            // IN the viewer's own ids, or job_id IN leads the viewer may see)
+            // — merging two already-scoped queries and re-capping the total is
+            // the safe order; re-checking ownership per row here would need
+            // refetching every job's ownership fields a second time for no
+            // extra safety, since there is nothing left to filter.
+            rows = [...byId.values()]
+              .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+              .slice(0, PER_SOURCE);
+          }
+          for (const r of rows) {
             // Render before anything can show it. See the header note.
             const rendered = renderStoredEmail(r, null);
             out.push(normalise({ ...r, subject: rendered.subject, body: rendered.body }, 'leads'));
@@ -108,21 +178,27 @@ module.exports = (ctx) => {
       }
 
       // ── 2. individual sends ────────────────────────────────────────────────
+      // Not about a lead (a client email, a one-off candidate email) — scoped
+      // to the SENDER's own D-0034 scope until D2 (rampart.md) says whether
+      // these should also follow the client/candidate they were about.
       if (wants('individual')) {
         try {
           let sel = withOrg(supabase.from('email_tracking')
-            .select('token,to_email,mailbox_email,subject,body,sent_at,opened_at,open_count,replied_at,channel,company_id,candidate_id,job_order_id')
-            .order('sent_at', { ascending: false }).limit(PER_SOURCE), req);
+            .select('id,to_email,mailbox_email,subject,body,sent_at,opened_at,open_count,replied_at,channel,company_id,candidate_id,job_order_id,sent_by'), req);
           if (req.query.company_id) sel = sel.eq('company_id', req.query.company_id);
           if (req.query.candidate_id) sel = sel.eq('candidate_id', req.query.candidate_id);
-          const { data, error } = await sel;
+          if (!scope.all) {
+            const ids = own.queryOwnerIds(scope) || [];
+            sel = sel.in('sent_by', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+          }
+          const { data, error } = await sel.order('sent_at', { ascending: false }).limit(PER_SOURCE);
           if (error) throw error;
           for (const r of (data || [])) {
             // These are stored already-rendered (they were sent immediately),
             // but rendering again is a no-op and keeps one rule for all three.
             const rendered = renderStoredEmail(r, null);
             out.push(Object.assign(
-              normalise({ ...r, id: r.token, subject: rendered.subject, body: rendered.body }, 'individual'),
+              normalise({ ...r, subject: rendered.subject, body: rendered.body }, 'individual'),
               { channel: r.channel || null }
             ));
           }
@@ -133,10 +209,13 @@ module.exports = (ctx) => {
       if (wants('candidates')) {
         try {
           let sel = withOrg(supabase.from('candidate_outreach')
-            .select('id,to_email,subject,body,status,send_after,sent_at,candidate_id,job_order_id,angle,engine,fail_reason')
-            .order('send_after', { ascending: false }).limit(PER_SOURCE), req);
+            .select('id,to_email,subject,body,status,send_after,sent_at,candidate_id,job_order_id,angle,engine,fail_reason,sent_by'), req);
           if (req.query.candidate_id) sel = sel.eq('candidate_id', req.query.candidate_id);
-          const { data, error } = await sel;
+          if (!scope.all) {
+            const ids = own.queryOwnerIds(scope) || [];
+            sel = sel.in('sent_by', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+          }
+          const { data, error } = await sel.order('send_after', { ascending: false }).limit(PER_SOURCE);
           if (error) throw error;
           for (const r of (data || [])) {
             const rendered = renderStoredEmail(r, null);

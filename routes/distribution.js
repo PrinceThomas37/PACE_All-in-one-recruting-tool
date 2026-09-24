@@ -9,10 +9,12 @@
 // can trigger auto-send, so it belongs with the send-pipeline work.
 // ============================================================================
 const express = require('express');
+const own = require('../services/ownership');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, today, normInd, withOrg } = ctx;
+  const { supabase, auth, hasRole, today, normInd, withOrg, orgIdFor } = ctx;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
 
 router.get('/admin/manager-ra-modes', auth, async (req, res) => {
   try {
@@ -77,6 +79,17 @@ router.get('/distribute/pool-stats', auth, async (req, res) => {
 router.get('/distribute/today-summary', auth, async (req, res) => {
   try {
     const targetId = req.query.manager_id || req.user.id;
+    // C-0021 #10: anyone could read any BD's daily assignment counts by
+    // passing their id. Allowed for yourself, anyone in your reporting chain
+    // (a manager reviewing), admin, or a role that distributes the pool
+    // (own.POOL_ROLES — they already see every account's numbers to run
+    // distribution). These are counts, not records — low severity — but the
+    // gate costs nothing.
+    if (targetId !== req.user.id && !hasRole(req, 'admin')) {
+      const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+      if (!own.inScope(targetId, scope) && !scope.seesPool) return res.status(403).json({ error: 'Forbidden' });
+    }
     const { data: jobs } = await withOrg(supabase.from('jobs').select('id,industry,timezone,assigned_at,company:companies(industry)').eq('assigned_to_bd', targetId).gte('assigned_at', today() + 'T00:00:00Z'), req);
     const summary = { total: jobs?.length || 0, by_industry: {}, by_timezone: {} };
     (jobs || []).forEach(j => {

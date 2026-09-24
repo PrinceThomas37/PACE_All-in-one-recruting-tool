@@ -14,7 +14,17 @@ const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, provider } = ctx;
+  const { supabase, auth, hasRole, orgIdFor, provider } = ctx;
+
+  // C-0016, mirrors routes/microsoft.js exactly — see that file for the
+  // reasoning. A miss is treated as "not found", never a 403.
+  async function ownedMailboxSlot(orgId, userEmailId) {
+    if (!userEmailId) return null;
+    const { data } = await supabase.from('user_emails').select('id,user_id,email_address,org_id').eq('id', userEmailId).maybeSingle();
+    if (!data) return null;
+    if (orgId && data.org_id && data.org_id !== orgId) return null;
+    return data;
+  }
 
   const notConfiguredPage = (res) =>
     res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',error:'Gmail is not configured on the server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).'},'*');window.close();</scr` + `ipt>`);
@@ -29,6 +39,10 @@ module.exports = (ctx) => {
       if (!reqUser.roles?.includes('admin') && reqUser.role !== 'admin') return res.status(403).send('Admin only');
       const { userEmailId } = req.query;
       if (!userEmailId) return res.status(400).send('userEmailId required');
+      // C-0016 #3: no state minted for a slot outside the caller's own org.
+      const orgId = orgIdFor({ user: reqUser });
+      const slot = await ownedMailboxSlot(orgId, userEmailId);
+      if (!slot) return res.status(404).send('Not found');
       const state = Buffer.from(JSON.stringify({ userEmailId, userId: reqUser.id })).toString('base64');
       res.redirect(provider.authorizeUrl(state));
     } catch (err) { res.status(500).send(err.message); }
@@ -84,6 +98,15 @@ module.exports = (ctx) => {
       const parsed = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());
       userEmailId = parsed.userEmailId; const userId = parsed.userId;
 
+      // C-0016 #3/#4 defence in depth — see routes/microsoft.js for the full
+      // reasoning (unsigned state, checked again here rather than trusting
+      // /connect alone).
+      const { data: stateUser } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
+      const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org_id').eq('id', userEmailId).maybeSingle();
+      if (!slotForOrgCheck || (stateUser && slotForOrgCheck.org_id && stateUser.org_id && slotForOrgCheck.org_id !== stateUser.org_id)) {
+        return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:'This connection request is no longer valid. Please try again.'},'*');window.close();</scr` + `ipt>`);
+      }
+
       const tokens = await provider.exchangeCode(code);
       if (tokens.error) return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:${JSON.stringify(tokens.error_description || tokens.error)}},'*');window.close();</scr` + `ipt>`);
       const emailAddress = await provider.getProfileEmail(tokens.access_token);
@@ -119,6 +142,9 @@ module.exports = (ctx) => {
 
   router.get('/auth/google/status/:userEmailId', auth, async (req, res) => {
     try {
+      // C-0016 #5: mirrors routes/microsoft.js's status fix.
+      const slot = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
+      if (!slot) return res.json({ connected: false, configured: provider.isConfigured() });
       const { data } = await supabase.from('gmail_tokens').select('email_address,expires_at').eq('user_email_id', req.params.userEmailId).single();
       if (!data) return res.json({ connected: false, configured: provider.isConfigured() });
       res.json({ connected: true, configured: provider.isConfigured(), email_address: data.email_address, expired: new Date(data.expires_at) < new Date() });
@@ -128,7 +154,9 @@ module.exports = (ctx) => {
   router.delete('/auth/google/:userEmailId', auth, async (req, res) => {
     try {
       if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
-      const { data: mailbox } = await supabase.from('user_emails').select('user_id').eq('id', req.params.userEmailId).maybeSingle();
+      // C-0016 #1: mirrors routes/microsoft.js's DELETE fix — 404, never 403.
+      const mailbox = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
+      if (!mailbox) return res.status(404).json({ error: 'Not found' });
       await supabase.from('gmail_tokens').delete().eq('user_email_id', req.params.userEmailId);
       await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
       // Move any leads still pointed at this mailbox before it went dead, so
