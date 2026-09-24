@@ -88,11 +88,13 @@ module.exports = (ctx) => {
   }
 
   // ── users of the org, for approverFor/canDecide/display names ──────────
-  async function orgUsers(orgId) {
-    let q = supabase.from('users')
+  // `db.forRequest(req)` (L2, R-047 review round 2) — a raw `supabase.from`
+  // read on a tenant table is exactly the "unconverted call site" CLAUDE.md
+  // warns is unprotected the moment a second org exists; this table already
+  // carries `org_id`, so there is no reason for this file to hand-scope it.
+  async function orgUsers(req) {
+    const { data } = await db.forRequest(req).from('users')
       .select('id,name,manager_id,is_active,deleted_at,org_id,created_at,role,roles');
-    if (orgId) q = q.eq('org_id', orgId);
-    const { data } = await q;
     const list = data || [];
     const usersById = new Map(list.map(u => [u.id, u]));
     const adminIds = list.filter(u => !u.deleted_at && u.is_active !== false && own.rolesOf(u).includes('admin')).map(u => u.id);
@@ -182,63 +184,30 @@ module.exports = (ctx) => {
   // (index.js `processPendingEmailSends`), so any still-queued outreach for
   // this lead goes out under the NEW owner's mailbox the moment this commits —
   // nothing in the send loop itself needs to change.
+  //
+  // The write is CONDITIONAL on the owner still being `oldOwnerId` (M1,
+  // R-047 review round 2): a distribute or a second approval landing in the
+  // gap between the live-owner re-check above and this write must not be
+  // silently overwritten. `.select()` reports exactly what moved, so the
+  // caller can tell "reassigned" from "nothing moved" rather than assuming.
   async function reassignLead(req, jobId, newOwnerId, oldOwnerId) {
     const mailboxId = await pickMailboxFor(req, newOwnerId);
     const now = new Date();
-    await db.forRequest(req).from('jobs')
+    let q = db.forRequest(req).from('jobs')
       .update({ assigned_to_bd: newOwnerId, assigned_at: now, sending_email_id: mailboxId, updated_at: now })
       .eq('id', jobId);
+    q = oldOwnerId ? q.eq('assigned_to_bd', oldOwnerId) : q.is('assigned_to_bd', null);
+    const { data, error } = await q.select('id');
+    if (error) throw error;
+    const moved = !!(data && data.length);
+    if (!moved) return { mailboxAssigned: false, moved: false };
     try {
       await logActivity(jobId, null, req.user.id, 'ownership_transfer',
         'Ownership transferred (take-over request approved)',
         { assigned_to_bd: oldOwnerId }, { assigned_to_bd: newOwnerId });
     } catch (_) { /* best-effort, same as every other logActivity call site */ }
-    return { mailboxAssigned: !!mailboxId };
+    return { mailboxAssigned: !!mailboxId, moved: true };
   }
-
-  // ── GET /ownership-requests/can-request ─────────────────────────────────
-  router.get('/ownership-requests/can-request', auth, async (req, res) => {
-    try {
-      const kind = String(req.query.kind || '');
-      const recordId = String(req.query.record_id || '');
-      if (!own.TAKEOVER_KINDS.includes(kind) || !recordId) {
-        return res.json({ ok: false, reason: 'Ask about a lead, client or job order by id.', approver: null, why: null });
-      }
-      const record = await loadRecord(req, kind, recordId);
-      const orgId = orgIdFor(req);
-      const isAdmin = hasRole(req, 'admin');
-      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
-      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
-
-      let viaDuplicateEmailMatch = false;
-      const viaEmail = req.query.via_email ? String(req.query.via_email).trim() : '';
-      if (kind === 'lead' && record && viaEmail) {
-        viaDuplicateEmailMatch = await emailMatchesLead(req, recordId, viaEmail);
-      }
-
-      const { data: openRequests } = await db.forRequest(req).from('ownership_requests')
-        .select('id,requester_id,status').eq('record_kind', kind).eq('record_id', recordId).eq('status', 'pending');
-
-      const requester = { id: req.user.id, role: req.user.role, roles: req.user.roles, org_id: orgId };
-      const result = own.canRequestTakeover({
-        kind, record, requester, scope, openRequests: openRequests || [], viaDuplicateEmailMatch,
-      });
-      if (!result.ok) {
-        return res.json({ ok: false, reason: result.reason, approver: null, why: null });
-      }
-
-      const { usersById, adminIds } = await orgUsers(orgId);
-      const approver = own.approverFor({ owner: result.ownerId, requester: req.user.id, usersById, adminIds });
-      if (!approver.approverId) {
-        return res.json({ ok: false, reason: approver.why, approver: null, why: null });
-      }
-      return res.json({
-        ok: true, reason: null,
-        approver: nameObj(approver.approverId, usersById),
-        why: approver.why,
-      });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
 
   // Verifies, server-side, that `email` is a contact on lead `jobId` — the
   // ONLY thing that may set `viaDuplicateEmailMatch` (D-0038). Never trust a
@@ -251,31 +220,140 @@ module.exports = (ctx) => {
     return (data || []).some(c => String(c.email || '').trim().toLowerCase() === needle);
   }
 
+  // Resolves a lead from a typed contact email alone — no record_id at all —
+  // for the case guild's duplicate-warning no longer hands out a lead id
+  // (option (a)). Org-scoped (db.forRequest), case-insensitive, and this
+  // resolution itself IS the server-side proof `viaDuplicateEmailMatch`
+  // requires: it is never copied from anything the browser sent.
+  //   - excludes a lead already deleted
+  //   - excludes a lead the CALLER already owns (nothing to take over)
+  //   - several matching leads → the most recently assigned wins (ties broken
+  //     by id), stated here rather than left to guess: a contact email can sit
+  //     on more than one lead over its life (recycled, re-researched), and the
+  //     freshest assignment is the one a colleague is most likely mid-workflow
+  //     on right now.
+  async function resolveLeadByEmail(req, email, requesterId) {
+    const needle = String(email || '').trim().toLowerCase();
+    if (!needle) return null;
+    const D = db.forRequest(req);
+    const { data: contacts } = await D.from('contacts').select('id,job_id,email').ilike('email', needle);
+    const jobIds = [...new Set((contacts || [])
+      .filter(c => String(c.email || '').trim().toLowerCase() === needle)
+      .map(c => c.job_id).filter(Boolean))];
+    if (!jobIds.length) return null;
+    const { data: jobs } = await D.from('jobs')
+      .select('id,position,stage,assigned_to_bd,created_by,assigned_to,deleted_at,org_id,company_id,assigned_at,created_at,company:companies(id,name)')
+      .in('id', jobIds);
+    const candidates = (jobs || []).filter(j => !j.deleted_at && j.assigned_to_bd !== requesterId);
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => {
+      const ta = a.assigned_at ? Date.parse(a.assigned_at) : (a.created_at ? Date.parse(a.created_at) : -Infinity);
+      const tb = b.assigned_at ? Date.parse(b.assigned_at) : (b.created_at ? Date.parse(b.created_at) : -Infinity);
+      if (tb !== ta) return tb - ta;
+      return String(b.id).localeCompare(String(a.id));
+    });
+    return candidates[0];
+  }
+
+  // ── POST /ownership-requests/can-request ─────────────────────────────────
+  // Body, not query string (L3): `via_email` is a prospect's address and must
+  // never sit in a URL that ends up in an access log. `{kind, record_id?,
+  // via_email?}` — a lead may be named either by `record_id` (the requester
+  // already sees it) or by `via_email` alone (the duplicate-warning door,
+  // D-0038; resolved server-side, see resolveLeadByEmail above). The GET
+  // version of this endpoint is retired — one door, one law, rather than two
+  // endpoints that could silently drift on which one enforces L3.
+  router.post('/ownership-requests/can-request', auth, async (req, res) => {
+    try {
+      const kind = String((req.body && req.body.kind) || '');
+      let recordId = req.body && req.body.record_id ? String(req.body.record_id) : '';
+      const viaEmail = req.body && req.body.via_email ? String(req.body.via_email).trim() : '';
+      if (!own.TAKEOVER_KINDS.includes(kind) || (!recordId && !viaEmail)) {
+        return res.json({ ok: false, reason: 'Ask about a lead, client or job order by id.', approver: null, why: null });
+      }
+
+      let viaDuplicateEmailMatch = false;
+      let record = null;
+      if (!recordId && kind === 'lead' && viaEmail) {
+        const resolved = await resolveLeadByEmail(req, viaEmail, req.user.id);
+        if (!resolved) return res.json({ ok: false, reason: NOT_FOUND.reason, approver: null, why: null });
+        recordId = resolved.id;
+        record = resolved;
+        viaDuplicateEmailMatch = true;
+      } else {
+        record = await loadRecord(req, kind, recordId);
+        if (kind === 'lead' && record && viaEmail) {
+          viaDuplicateEmailMatch = await emailMatchesLead(req, recordId, viaEmail);
+        }
+      }
+
+      const orgId = orgIdFor(req);
+      const isAdmin = hasRole(req, 'admin');
+      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+
+      const { data: openRequests } = await db.forRequest(req).from('ownership_requests')
+        .select('id,requester_id,status').eq('record_kind', kind).eq('record_id', recordId).eq('status', 'pending');
+
+      const requester = { id: req.user.id, role: req.user.role, roles: req.user.roles, org_id: orgId };
+      const result = own.canRequestTakeover({
+        kind, record, requester, scope, openRequests: openRequests || [], viaDuplicateEmailMatch,
+      });
+      if (!result.ok) {
+        return res.json({ ok: false, reason: result.reason, approver: null, why: null });
+      }
+
+      const { usersById, adminIds } = await orgUsers(req);
+      const approver = own.approverFor({ owner: result.ownerId, requester: req.user.id, usersById, adminIds });
+      if (!approver.approverId) {
+        return res.json({ ok: false, reason: approver.why, approver: null, why: null });
+      }
+      return res.json({
+        ok: true, reason: null,
+        approver: nameObj(approver.approverId, usersById),
+        why: approver.why,
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // ── POST /ownership-requests ─────────────────────────────────────────────
   router.post('/ownership-requests', auth, async (req, res) => {
     try {
       const kind = String((req.body && req.body.kind) || '');
-      const recordId = String((req.body && req.body.record_id) || '');
+      let recordId = String((req.body && req.body.record_id) || '');
       const note = (req.body && req.body.note) ? String(req.body.note).slice(0, 1000) : null;
       const viaEmailRaw = (req.body && req.body.via_email) ? String(req.body.via_email).trim() : '';
 
       if (!own.TAKEOVER_KINDS.includes(kind)) {
         return res.status(400).json({ error: 'bad_kind', reason: 'That kind of record cannot be taken over.' });
       }
-      if (!recordId) return res.status(404).json(NOT_FOUND);
+      if (!recordId && !(kind === 'lead' && viaEmailRaw)) return res.status(404).json(NOT_FOUND);
 
-      const record = await loadRecord(req, kind, recordId);
+      // Option (a): the duplicate warning no longer hands out a lead id — a
+      // lead-kind request with no record_id resolves it here, server-side,
+      // from the typed contact email alone. That resolution IS the
+      // viaDuplicateEmailMatch proof; nothing is trusted from the body.
+      let record;
+      let viaDuplicateEmailMatch = false;
+      if (!recordId && kind === 'lead' && viaEmailRaw) {
+        const resolved = await resolveLeadByEmail(req, viaEmailRaw, req.user.id);
+        if (!resolved) return res.status(404).json(NOT_FOUND);
+        recordId = resolved.id;
+        record = resolved;
+        viaDuplicateEmailMatch = true;
+      } else {
+        record = await loadRecord(req, kind, recordId);
+        // D-0038: only a route may set this, only after verifying the typed
+        // email is really on this lead. Lead-only; ignored for client/job_order.
+        if (kind === 'lead' && record && viaEmailRaw) {
+          viaDuplicateEmailMatch = await emailMatchesLead(req, recordId, viaEmailRaw);
+        }
+      }
+
       const orgId = orgIdFor(req);
       const isAdmin = hasRole(req, 'admin');
       const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
       const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
-
-      // D-0038: only a route may set this, only after verifying the typed
-      // email is really on this lead. Lead-only; ignored for client/job_order.
-      let viaDuplicateEmailMatch = false;
-      if (kind === 'lead' && record && viaEmailRaw) {
-        viaDuplicateEmailMatch = await emailMatchesLead(req, recordId, viaEmailRaw);
-      }
 
       const { data: openRequests } = await db.forRequest(req).from('ownership_requests')
         .select('id,requester_id,status').eq('record_kind', kind).eq('record_id', recordId).eq('status', 'pending');
@@ -290,7 +368,7 @@ module.exports = (ctx) => {
         return res.status(403).json({ error: result.code, reason: result.reason });
       }
 
-      const { usersById, adminIds } = await orgUsers(orgId);
+      const { usersById, adminIds } = await orgUsers(req);
       const approver = own.approverFor({ owner: result.ownerId, requester: req.user.id, usersById, adminIds });
       if (!approver.approverId) {
         return res.status(409).json({ error: 'no_approver', reason: approver.why });
@@ -329,7 +407,7 @@ module.exports = (ctx) => {
       const orgId = orgIdFor(req);
       const isAdmin = hasRole(req, 'admin');
       const D = db.forRequest(req);
-      const { usersById, adminIds } = await orgUsers(orgId);
+      const { usersById, adminIds } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
 
       // waiting_count is always answered — it is the approver's badge, not a
@@ -393,11 +471,16 @@ module.exports = (ctx) => {
     return { record, ownerId: own.recordOwnerId(kind, record) };
   }
 
-  async function isActiveOrgUser(userId, orgId) {
-    const { data } = await supabase.from('users').select('id,is_active,deleted_at,org_id').eq('id', userId).maybeSingle();
-    if (!data || data.deleted_at || data.is_active === false) return false;
-    if (orgId && data.org_id && data.org_id !== orgId) return false;
-    return true;
+  // Loads the requester's own current row (L2: db.forRequest, not a
+  // hand-scoped raw `supabase.from`) so approve-time can re-check BOTH that
+  // they are still active in the org AND (L1) that their role can still own
+  // this kind of record — a role change between asking and deciding is the
+  // same class of staleness as an owner change, and canRequestTakeover
+  // already refuses the ask itself on this exact rule.
+  async function liveRequester(req, userId) {
+    const { data } = await db.forRequest(req).from('users')
+      .select('id,is_active,deleted_at,org_id,role,roles').eq('id', userId).maybeSingle();
+    return data || null;
   }
 
   // ── POST /ownership-requests/:id/approve ─────────────────────────────────
@@ -413,11 +496,26 @@ module.exports = (ctx) => {
         return res.status(403).json({ error: 'cannot_decide', reason: decide.reason });
       }
 
-      if (!(await isActiveOrgUser(row.requester_id, orgId))) {
+      const requesterUser = await liveRequester(req, row.requester_id);
+      if (!requesterUser || requesterUser.deleted_at || requesterUser.is_active === false
+        || (orgId && requesterUser.org_id && requesterUser.org_id !== orgId)) {
         return res.status(409).json({ error: 'requester_inactive', reason: 'The person who asked is no longer active in this organisation, so this request cannot be approved.' });
       }
+      // L1: the requester's role may have changed since they asked (a
+      // recruiter promoted from BD, say) — canRequestTakeover's own rule 5
+      // (TAKEOVER_OWNER_ROLES) is re-run here rather than re-derived.
+      const allowedRoles = own.TAKEOVER_OWNER_ROLES[row.record_kind] || [];
+      if (!own.rolesOf(requesterUser).some(r => allowedRoles.includes(r))) {
+        return res.status(409).json({ error: 'role_changed', reason: 'The person who asked no longer holds a role that can own this, so this request cannot be approved.' });
+      }
+
       const { record, ownerId: liveOwnerId } = await currentOwnerOf(req, row.record_kind, row.record_id);
       if (!record) return res.status(404).json(NOT_FOUND);
+      // L1: the record itself must still be live — a soft-deleted lead/job
+      // order/client is the same "cannot be approved" answer as one that was
+      // never there.
+      const liveRow = recordRow(row.record_kind, record);
+      if (!liveRow || liveRow.deleted_at) return res.status(404).json(NOT_FOUND);
       if ((liveOwnerId || null) !== (row.current_owner_id || null)) {
         return res.status(409).json({ error: 'owner_changed', reason: 'This record\'s owner has already changed since the request was made — ask again if it is still needed.' });
       }
@@ -430,14 +528,41 @@ module.exports = (ctx) => {
       if (error) throw error;
       if (!updated) return res.status(409).json({ error: 'already_decided', reason: 'Someone else already decided this request.' });
 
+      // M1 (R-047 review round 2): the status flip above is optimistic — it
+      // only proves nobody else DECIDED this request twice. It says nothing
+      // about whether the underlying record is still owned by who it was
+      // when the request was made. Every write below is therefore CONDITIONAL
+      // on that same old-owner match, and its row count is checked before the
+      // outcome is ever reported — a write that touches nothing must never be
+      // reported as "approved — reassigned". A single-record kind (lead,
+      // job_order) that loses that race reverts the approval back to
+      // `pending` rather than leaving an "approved" request that moved
+      // nothing; "flip status, then verify the write actually happened" is
+      // the shape used here, deliberately, so the revert only ever undoes a
+      // status flip that already happened — never a half-completed move.
+      const revertApproval = async (reason) => {
+        await db.forRequest(req).from('ownership_requests')
+          .update({ status: 'pending', decision_note: null, decided_by: null, decided_at: null, updated_at: new Date() })
+          .eq('id', row.id).eq('status', 'approved');
+        return res.status(409).json({ error: 'owner_changed', reason });
+      };
+
       // ── the reassignment, through the existing paths ──────────────────
       const moved = {};
       if (row.record_kind === 'lead') {
         const r = await reassignLead(req, row.record_id, row.requester_id, row.current_owner_id);
+        if (!r.moved) {
+          return await revertApproval("This lead's owner changed just as the request was being approved, so nothing moved. Ask again if it is still needed.");
+        }
         moved.lead = { id: row.record_id, mailbox_assigned: r.mailboxAssigned };
       } else if (row.record_kind === 'job_order') {
-        await db.forRequest(req).from('job_orders')
-          .update({ bd_manager_id: row.requester_id, updated_at: now }).eq('id', row.record_id);
+        const { data: joUpdated, error: joErr } = await db.forRequest(req).from('job_orders')
+          .update({ bd_manager_id: row.requester_id, updated_at: now })
+          .eq('id', row.record_id).eq('bd_manager_id', row.current_owner_id).select('id');
+        if (joErr) throw joErr;
+        if (!joUpdated || !joUpdated.length) {
+          return await revertApproval("This job order's owner changed just as the request was being approved, so nothing moved. Ask again if it is still needed.");
+        }
         await history.record(req, 'job_order', row.record_id, {
           action: 'ownership_transfer', field: 'bd_manager_id',
           from: row.current_owner_id, to: row.requester_id, note: 'Take-over request approved',
@@ -451,23 +576,64 @@ module.exports = (ctx) => {
         const { data: leads } = await db.forRequest(req).from('jobs')
           .select('id,assigned_to_bd').eq('company_id', companyId).is('deleted_at', null).eq('assigned_to_bd', oldOwner)
           .neq('stage', 'Unassigned');
+        // Each write is re-guarded by the same old-owner match at write time —
+        // the SELECT above can be stale by the time the UPDATE runs, and a
+        // job order or lead that moved in between must be skipped, not
+        // silently taken from whoever it moved to.
+        let jobOrdersMoved = 0;
         for (const jo of (jos || [])) {
-          await db.forRequest(req).from('job_orders').update({ bd_manager_id: row.requester_id, updated_at: now }).eq('id', jo.id);
+          const { data: joUpd, error: joErr } = await db.forRequest(req).from('job_orders')
+            .update({ bd_manager_id: row.requester_id, updated_at: now })
+            .eq('id', jo.id).eq('bd_manager_id', oldOwner).select('id');
+          if (joErr) throw joErr;
+          if (joUpd && joUpd.length) jobOrdersMoved++;
         }
         const leadResults = [];
         for (const ld of (leads || [])) {
           const r = await reassignLead(req, ld.id, row.requester_id, oldOwner);
-          leadResults.push({ id: ld.id, mailbox_assigned: r.mailboxAssigned });
+          if (r.moved) leadResults.push({ id: ld.id, mailbox_assigned: r.mailboxAssigned });
+        }
+
+        // M2 (R-047 review round 2): the ownership ladder (recordOwnerId /
+        // clientOwnerFrom) has a THIRD rung below job orders and leads —
+        // `companies.created_by`. A client with no live job order or lead
+        // owned by `oldOwner` is only "theirs" through that fallback, and if
+        // this approval moved zero job orders and zero leads that is exactly
+        // the case: nothing above moved because there was nothing above to
+        // move. Reporting "approved" with an empty `moved` block then would
+        // be the no-op M2 calls out — so make the SAME rung the ladder reads
+        // the write: hand `created_by` to the requester, the same way owning
+        // this client made the previous person its owner. Conditional on
+        // `created_by` still matching `oldOwner` for the same race reason as
+        // every other write here.
+        let createdByTransferred = false;
+        if (!jobOrdersMoved && !leadResults.length && record.company.created_by && record.company.created_by === oldOwner) {
+          const { data: coUpd, error: coErr } = await db.forRequest(req).from('companies')
+            .update({ created_by: row.requester_id, updated_at: now })
+            .eq('id', companyId).eq('created_by', oldOwner).select('id');
+          if (coErr) throw coErr;
+          createdByTransferred = !!(coUpd && coUpd.length);
+        }
+        if (!jobOrdersMoved && !leadResults.length && !createdByTransferred) {
+          // Nothing above moved and the created_by rung either does not apply
+          // (this client's ownership never actually traced to `oldOwner`) or
+          // lost its own race — either way, this approval must not report a
+          // reassignment that did not happen.
+          return await revertApproval("This client's owner changed just as the request was being approved, so nothing moved. Ask again if it is still needed.");
         }
         await history.record(req, 'company', companyId, {
           action: 'ownership_transfer', field: 'owner',
           from: oldOwner, to: row.requester_id,
-          note: `Take-over request approved — moved ${(jos || []).length} job order(s) and ${leadResults.length} lead(s)`,
+          note: `Take-over request approved — moved ${jobOrdersMoved} job order(s), ${leadResults.length} lead(s)`
+              + (createdByTransferred ? ', and the client record itself (no owned job order or lead existed)' : ''),
         });
-        moved.client = { company_id: companyId, job_orders_moved: (jos || []).length, leads_moved: leadResults, other_owners_untouched: true };
+        moved.client = {
+          company_id: companyId, job_orders_moved: jobOrdersMoved, leads_moved: leadResults,
+          created_by_transferred: createdByTransferred, other_owners_untouched: true,
+        };
       }
 
-      const { usersById } = await orgUsers(orgId);
+      const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
       res.json({ request: shapeRequest(updated, viewer, usersById), moved });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -492,7 +658,7 @@ module.exports = (ctx) => {
       if (error) throw error;
       if (!updated) return res.status(409).json({ error: 'already_decided', reason: 'Someone else already decided this request.' });
 
-      const { usersById } = await orgUsers(orgId);
+      const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
       res.json({ request: shapeRequest(updated, viewer, usersById) });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -515,7 +681,7 @@ module.exports = (ctx) => {
       if (error) throw error;
       if (!updated) return res.status(409).json({ error: 'already_decided', reason: 'This request was already decided.' });
 
-      const { usersById } = await orgUsers(orgId);
+      const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
       res.json({ request: shapeRequest(updated, viewer, usersById) });
     } catch (err) { res.status(500).json({ error: err.message }); }

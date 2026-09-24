@@ -568,3 +568,124 @@ routes/email-history.js, routes/microsoft.js, routes/gmail.js, index.js;
 9/9, `recruiting-routes-mounted` 7/7, `org-scoping-routes-smoke` 13/13. Did
 not touch `test/` (foundry is concurrently writing there). Not committed.
 
+## 2026-09-24 (R-047 review, do-not-ship fix) — B1/B3 + the ownership-request rework (M1/M2/L1/L2/L4)
+
+Rampart's review found `POST /emails/reminder-send` and `POST /emails/generate`
+took a body `job_id`/`job_ids` with **no org or owner check at all** — a
+foreign company's lead could be named, queued a send off that lead's own
+mailbox, and (reminder-send) put the caller's own name on the `sent_by`.
+Rampart's cheapest mitigation for the trigger (guild dropping `lead_id` from
+duplicate responses) didn't remove the underlying holes, so both got fixed
+directly, plus everything the take-over-request review found in gateway's file.
+
+- **B1 `POST /emails/reminder-send` (index.js)** — gated with `canTouchJob`
+  (org-bound already; admits creator/researcher/BD owner) before touching
+  anything; a `contact_id` is now checked to actually belong to `job_id`
+  (org-scoped) before its fields feed the merge pass; every read/write on this
+  path switched from raw `supabase` to `db.forRequest(req)`; the insert now
+  carries `orgStamp(req)` (belt-and-braces — `emails` auto-stamps via
+  `db.forRequest` already, but the row is stamped explicitly too since this
+  was the exact defect named).
+- **B3 `POST /emails/generate` (index.js)** — the job read is now
+  `db.forRequest(req)` (org-scoped), then narrowed AGAIN per id through
+  `canTouchJob` — same shape as the C-0021 bulk-stage fix: a foreign or
+  untouchable id is silently dropped from the batch rather than erroring.
+  `job_ids` is recomputed from the surviving rows before anything downstream
+  reads it. The final insert also moved to `db.forRequest(req)` so it stamps
+  `org_id` instead of misfiling to the default org.
+- **Option (a), `routes/ownership-requests.js`** — a lead-kind ask may now
+  come in as `{kind:'lead', via_email}` with **no `record_id` at all**.
+  `resolveLeadByEmail()` is the new function: org-scoped, case-insensitive
+  match against `contacts.email`, restricted to a live lead not already owned
+  by the caller; several matches → the most recently ASSIGNED wins (falls back
+  to `created_at`, then id, for determinism) — this resolution itself IS the
+  `viaDuplicateEmailMatch` proof (D-0038), never a value trusted from the
+  body. Wired into both `POST /ownership-requests` (create) and the new
+  can-request endpoint below.
+  **`GET /ownership-requests/can-request` is RETIRED.** Replaced by
+  **`POST /ownership-requests/can-request`** taking `{kind, record_id?,
+  via_email?}` in the body — L3 said a prospect's email must never sit in a
+  URL, and keeping a GET that only handled the `record_id`-only case while a
+  POST handled the rest would have meant enforcing that law in exactly one of
+  two doors. One endpoint, one law. **Surface must switch its can-request
+  caller from GET+query-string to POST+body**; the response shape is
+  unchanged (`{ok, reason, approver, why}`).
+- **M1** — every reassignment write on approve is now CONDITIONAL on the
+  record still being owned by `row.current_owner_id` at write time (not just
+  at the earlier `currentOwnerOf` re-check, which is itself a TOCTOU window):
+  `reassignLead()` guards on `.eq('assigned_to_bd', oldOwnerId)` /
+  `.is('assigned_to_bd', null)` and returns `moved:false` on a miss instead of
+  writing regardless; the job_order write and each client-transfer's per-row
+  writes carry the matching `.eq(ownerCol, oldOwner)` guard + `.select('id')`
+  so the row count is checked, never assumed. A lead/job_order approval that
+  loses this race calls `revertApproval()` — flips the request back to
+  `pending` and answers 409 `owner_changed` — rather than ever reporting
+  "approved" over a write that touched nothing.
+- **M2** — a client whose ownership only ever traced to `companies.created_by`
+  (no live job order or lead owned by `oldOwner`) used to approve with an
+  empty `moved` block: nothing moved, nothing said so. The route now performs
+  the SAME rung the ladder itself reads: it moves `created_by` to the
+  requester (conditional on `created_by` still matching `oldOwner`), and
+  reports `moved.client.created_by_transferred: true`. If that write ALSO
+  finds nothing to move (ownership drifted elsewhere entirely, or lost its own
+  race), the whole approval reverts via the same `revertApproval()` path —
+  never a silent no-op success.
+- **L1** — approve now re-loads the requester's own row
+  (`liveRequester()`, `db.forRequest`) and refuses (`role_changed`) if their
+  CURRENT role is no longer one of `own.TAKEOVER_OWNER_ROLES[kind]` — a role
+  change between asking and deciding is the same staleness class as an owner
+  change, and `canRequestTakeover` already enforces this rule at ask time; it
+  just wasn't re-checked at decide time. Also re-checks the record itself is
+  still live (`!liveRow.deleted_at`) via the module's existing `recordRow()`
+  helper — a soft-deleted lead/job-order/client now 404s at approve exactly as
+  it would at ask time.
+- **L2** — `orgUsers` and the old `isActiveOrgUser` (renamed `liveRequester`,
+  now also carries role/roles for L1) both switched from a hand-scoped raw
+  `supabase.from('users')` to `db.forRequest(req)`. `orgUsers`'s signature
+  changed from `orgUsers(orgId)` to `orgUsers(req)` — all six call sites in
+  the file updated together; no external caller of this internal function
+  exists.
+- **L4, `routes/companies.js` `clientOwnerId()`** — the job-orders/leads
+  queries feeding `clientOwnerFrom` now filter `deleted_at is null` + the
+  owner column not null, order by `created_at desc`, and `limit(1)` — the pure
+  function only ever reads the newest live owned row off each list, so
+  fetching and sorting the whole table client-side was pure waste. Same
+  ladder, same answer, one row instead of N.
+- **Not touched (rampart's file):** `services/ownership.js` — none of the
+  above re-derives `canRequestTakeover`/`approverFor`/`canDecide`/
+  `clientOwnerFrom`; L1's role/live re-checks call the SAME constants/rule
+  those already enforce at ask time, they don't duplicate them.
+
+**`test/ownership-requests-smoke.mjs` (foundry's, not touched) WILL fail as
+committed** — it calls `GET /ownership-requests/can-request?...` in nine
+places, and that route no longer exists (an unmatched Express route answers
+its default HTML 404 page, which crashes the harness's `JSON.parse` rather
+than reporting a clean failure). I verified the fix is otherwise sound by
+copying the file to a scratch location, mechanically rewriting every
+`GET .../can-request?a=b&c=d` call to `POST .../can-request` with
+`{a:'b',c:'d'}` as the body, and running it: **35/36 passed** against the
+real router. The one failure is a pre-existing "MUTATION: remove the
+DB-level status guard" test (line ~421) whose OWN comment says it proves that
+without `ownership_requests`'s `.eq('status','pending')` guard, two
+concurrent approvals both return 200 — it isolates that one guard by
+building a fixture with no other protection. **M1's new job/job_order-row
+conditional guard now ALSO stops the double-move even with the status guard
+disabled**, so the second approval now correctly answers 409 instead of the
+200 the test expects — this is the fix working as more defense-in-depth than
+that one test isolated, not a regression. That specific assertion needs
+updating to check "not both 200" rather than "both 200", or to disable the
+row-level guard too if it wants to keep isolating the status guard alone.
+Everything else in the file — the D-0038 email-match cases, mine/waiting/
+record boxes, approve/decline/cancel, the real (non-mutated) race test, and
+the client-transfer case — passed unchanged against the real router with only
+the GET→POST call-site rewrite. Scratch copy was deleted, not committed.
+
+Verified: `node --check` on `index.js`, `routes/ownership-requests.js`,
+`routes/companies.js` — all clean. `route-shadowing-smoke` 9/9,
+`recruiting-routes-mounted` 7/7, `backend-smoke` 107/107,
+`org-scoping-routes-smoke` 13/13, `takeover-rule-smoke` 86/86 (pure lib,
+untouched), `reminder-lead-visibility-smoke` 15/15 (ledger's file, unaffected)
+— all green. Did not touch `test/`, `public/js`, or any other territory's
+files. Not committed.
+
+
