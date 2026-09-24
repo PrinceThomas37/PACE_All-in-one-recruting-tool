@@ -37,10 +37,43 @@ const express = require('express');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
 const { describeReminder, dueState, dueLabel } = require('../services/reminder-source');
 const { describeOutreach, canBeContactedDirectly } = require('../services/outreach-dedup');
+const ownershipRules = require('../services/ownership');
+
+// ── WHOSE LEAD MAY A REMINDER SHOW? (R-047 B2) ──────────────────────────────
+// `reminders` stores a job_id and a contact_id, and GET /reminders EMBEDS the
+// lead and the contact through PostgREST joins. An embedded join is NOT
+// org-filtered — db.forRequest scopes the `reminders` table, not what it
+// points at — and POST /reminders used to accept any job_id / contact_id
+// unchecked. So creating a reminder naming any lead id, in any company, read
+// that lead's position, company and contact's email/phone/LinkedIn back out.
+//
+// Two halves, because either alone leaves a hole:
+//   * WRITE: the lead must be one the caller may touch (canTouchJob, org-bound)
+//     and the contact must be that lead's, in the caller's org.
+//   * READ: rows written before this fix (or by any other writer) are checked
+//     again here — the embed is kept only when the lead is in the caller's
+//     org AND in their view scope (ownership.canSeeLead, D-0034), and the
+//     contact is in the org and hangs off THAT lead. A row that fails keeps
+//     its own stored text (contact_name, company_name, email — written by or
+//     for its owner) and loses the embed; it is never deleted or hidden.
+//
+// PURE: the caller supplies the org and the scope.
+function reminderEmbedFor(r, { orgId, scope } = {}) {
+  const inOrg = (x) => !!x && (!orgId || x.org_id === orgId);
+  let job = r && r.job;
+  if (!inOrg(job) || (r.job_id && job.id !== r.job_id) || !ownershipRules.canSeeLead(job, scope)) job = null;
+  if (job && job.company && job.company.org_id !== undefined && !inOrg(job.company)) job = { ...job, company: null };
+  let contact = r && r.contact;
+  if (!inOrg(contact) || !job || contact.job_id !== job.id || (r.contact_id && contact.id !== r.contact_id)) contact = null;
+  const withheld = !!((r && r.job && !job) || (r && r.contact && !contact));
+  return { job, contact, withheld };
+}
+
+const WITHHELD_SENTENCE = 'This lead is no longer on your desk, so PACE will not send from this reminder. Mark it done, or ask the lead\'s owner.';
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { db, auth, today } = ctx;
+  const { db, auth, today, canTouchJob, reportingChainIds } = ctx;
 
   // Which sequence produced each of these reminders? One query for the page,
   // keyed by "contactId:jobId" — the pair a sales enrollment is unique on.
@@ -111,18 +144,33 @@ module.exports = (ctx) => {
 router.get('/reminders', auth, async (req, res) => {
   try {
     const { data, error } = await db.forRequest(req).from('reminders')
-      .select(`*, job:jobs(id,position,location,industry,stage,company_id,company:companies(name,industry,location)), contact:contacts(id,first_name,last_name,email,designation,linkedin,phone)`)
+      .select(`*, job:jobs(id,org_id,position,location,industry,stage,company_id,assigned_to_bd,created_by,assigned_to,company:companies(org_id,name,industry,location)), contact:contacts(id,org_id,job_id,first_name,last_name,email,designation,linkedin,phone)`)
       .eq('user_id', req.user.id).order('return_date');
     if (error) throw error;
 
-    const rows = data || [];
+    // Scope first with the caller alone (no query); fetch the reporting chain
+    // only if some lead is not visibly theirs — most pages never need it.
+    const orgId = req.orgId || req.user?.org_id || null;
+    const who = { role: req.user.role, roles: req.user.roles, userId: req.user.id };
+    let scope = ownershipRules.viewScope({ ...who, chainIds: [] });
+    if (!scope.all && reportingChainIds && (data || []).some(r => r.job && !ownershipRules.canSeeLead(r.job, scope))) {
+      const chain = await reportingChainIds(req.user.id, orgId).catch(() => []);
+      scope = ownershipRules.viewScope({ ...who, chainIds: chain || [] });
+    }
+    // Every downstream lookup (sequence, sent mail) runs on the SAFE rows, so a
+    // withheld contact cannot leak back through the enrichment either.
+    const rows = (data || []).map(r => {
+      const e = reminderEmbedFor(r, { orgId, scope });
+      return { ...r, job: e.job, contact: e.contact, _withheld: e.withheld };
+    });
+    const lookupRows = rows.map(r => (r._withheld ? { ...r, contact_id: r.contact ? r.contact_id : null } : r));
     const [seqByPair, mailByPair] = await Promise.all([
-      sequenceContext(req, rows),
-      outreachContext(req, rows)
+      sequenceContext(req, lookupRows),
+      outreachContext(req, lookupRows)
     ]);
     const t = today();
 
-    const enriched = rows.map(r => {
+    const enriched = rows.map(({ _withheld, ...r }) => {
       const job = r.job || null;
       const contact = r.contact || null;
       // Render the stored note the same way the outbound path renders a stored
@@ -133,9 +181,15 @@ router.get('/reminders', auth, async (req, res) => {
       const vars = job
         ? { ...buildEmailVars({ job, contact, senderDisplayName: req.user.name || '' }) }
         : { fn: (contact?.first_name) || '', company: r.company_name || '', sender: req.user.name || '' };
-      const pairKey = `${r.contact_id}:${r.job_id || ''}`;
+      const pairKey = _withheld && !contact ? '__withheld__' : `${r.contact_id}:${r.job_id || ''}`;
       const seq = seqByPair[pairKey] || null;
-      const outreach = describeOutreach(mailByPair[pairKey] || [], t);
+      const described = describeOutreach(mailByPair[pairKey] || [], t);
+      // A withheld lead (R-047 B2) is not something this page may send from:
+      // it rides the same `blocked` channel the page already honours, so no
+      // screen needs a new branch to refuse it up front.
+      const outreach = _withheld
+        ? { ...described, blocked: true, block_reason: 'not_on_desk', block_sentence: WITHHELD_SENTENCE }
+        : described;
       const due = dueState(r.return_date, t);
       // A bd_touch step asks for a CALL. Whether that is even possible is a
       // property of the record, and the card must say so rather than offering a
@@ -173,9 +227,9 @@ router.get('/reminders', auth, async (req, res) => {
           position: job?.position || '',
           location: job?.location || job?.company?.location || '',
           industry: job?.company?.industry || job?.industry || '',
-          job_id: r.job_id || job?.id || null,
-          contact_id: r.contact_id || contact?.id || null,
-          can_send: !!((contact?.email || r.email) && (r.job_id || job?.id)) && !outreach.blocked,
+          job_id: _withheld ? (job?.id || null) : (r.job_id || job?.id || null),
+          contact_id: _withheld ? (contact?.id || null) : (r.contact_id || contact?.id || null),
+          can_send: !_withheld && !!((contact?.email || r.email) && (r.job_id || job?.id)) && !outreach.blocked,
           // Why a send is not on offer — stated here so the page can say it
           // BEFORE somebody composes an email the send path will refuse.
           blocked_sentence: outreach.blocked ? outreach.block_sentence : null
@@ -190,7 +244,20 @@ router.post('/reminders', auth, async (req, res) => {
   try {
     const { job_id, contact_name, company_name, email, return_date, reminder_time, note, contact_id, reminder_type } = req.body;
     if (!return_date) return res.status(400).json({ error: 'Return date required' });
-    const { data, error } = await db.forRequest(req).from('reminders').insert({ job_id: job_id || null, user_id: req.user.id, contact_name, company_name, email, return_date, reminder_time: reminder_time || '09:00', note, status: 'pending', contact_id: contact_id || null, reminder_type: reminder_type || null }).select().single();
+    // R-047 B2: a reminder may only point at a lead the caller may touch, and
+    // at that lead's own contact, in the caller's org. Every miss — unknown,
+    // other company, not yours, contact on a different lead — answers the same
+    // 404, so an id cannot be probed. org_id is stamped by db.forRequest.
+    const NOT_FOUND = { error: 'Lead or contact not found' };
+    let jobId = job_id || null;
+    const contactId = contact_id || null;
+    if (contactId) {
+      const { data: c } = await db.forRequest(req).from('contacts').select('id,job_id').eq('id', contactId).maybeSingle();
+      if (!c || !c.job_id || (jobId && String(c.job_id) !== String(jobId))) return res.status(404).json(NOT_FOUND);
+      jobId = c.job_id;
+    }
+    if (jobId && !(await canTouchJob(req, jobId))) return res.status(404).json(NOT_FOUND);
+    const { data, error } = await db.forRequest(req).from('reminders').insert({ job_id: jobId, user_id: req.user.id, contact_name, company_name, email, return_date, reminder_time: reminder_time || '09:00', note, status: 'pending', contact_id: contactId, reminder_type: reminder_type || null }).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -219,3 +286,4 @@ router.delete('/reminders/:id', auth, async (req, res) => {
 
   return router;
 };
+module.exports.reminderEmbedFor = reminderEmbedFor;
