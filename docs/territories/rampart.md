@@ -1,5 +1,5 @@
 # Rampart — memory
-> Last written: 2026-09-24 · the take-over RULE (R-047, D-0037) in `services/ownership.js`
+> Last written: 2026-09-24 · review of the R-047 take-over build (server, 047, duplicate responses, surface 56)
 
 ## What is true here now
 - **Two different questions, and this territory now answers both.**
@@ -237,6 +237,63 @@ edit/delete/apply-link owner-only · outreach pickers + lead ownership.
 X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
 says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 
+## REVIEW OF R-047 TAKE-OVER — 2026-09-24 (verdict: DO-NOT-SHIP as built)
+Read b05d1f3 (gateway), 9b0376f (guild), a9c8b05 (deep 047), 5ec3ef7 (surface).
+Suites green: 7 rampart + ownership 69 + models + ownership-requests 31 +
+route-shadowing 9.
+**Verified correct:** `viaDuplicateEmailMatch` is set ONLY by
+`emailMatchesLead` (org-scoped `contacts` by `job_id`, case-folded); no body
+boolean is read; a non-match is the same 404 + body (POST) / same sentence
+(can-request) as a missing lead; `record_label` for that path is "A lead with
+<typed email>"; mine box carries no lead details; `box=record` 404s a lead the
+viewer cannot see; every read/write is `db.forRequest`; approve = `canDecide`
+(same org) + requester active + live owner re-check + `.eq('status','pending')`;
+client move filtered by the OLD owner on both JOs and leads; a request cannot
+point at another org's record (row and record both loaded org-scoped). 047
+matches 039 (RLS + `service_all_*`), constraints sound, registered TENANT.
+**BLOCKERS — the new `lead_id` on duplicate responses hands a lead id to
+exactly the people D-0034 hides that lead from, and three PRE-EXISTING routes
+act on any job id with no org or owner check:**
+- B1 CRITICAL `index.js` `POST /emails/reminder-send` (~:835): `job_id` from
+  the body, raw fetch, no org/owner check; queues `sent_by=caller` and the send
+  loop (~:1863) sends from `job.sending_email_id` — **the lead owner's mailbox
+  (another company's, given a foreign id), arbitrary recipient and body.** The
+  filled body (pos/company) is then readable in the caller's own GET /emails.
+  Insert has no org_id → misfiles to the default org.
+- B2 HIGH `routes/reminders.js` `POST /reminders` (:189, ledger): `job_id` and
+  `contact_id` unvalidated; `GET /reminders` embeds `job:jobs(position,
+  location, company…)` and `contact:contacts(email, phone, linkedin…)` —
+  embedded joins are NOT org-filtered. Any lead's details for any id.
+- B3 HIGH `index.js` `POST /emails/generate` (~:1090): `.in('id', job_ids)`
+  no org/owner; queues cold emails under the owner's mailbox; a POOL lead
+  queues `sent_by=caller` (body readable); insert unstamped.
+Fix: `canTouchJob` + org on all three (and contact_id org-checked). Cheapest
+R-047-side mitigation: drop `lead_id` from both duplicate responses and let
+can-request/POST resolve the lead from `via_email` server-side.
+**Other findings:** M1 approve flips to `approved` BEFORE reassigning; the
+reassign writes ignore errors and are not conditional on the old owner (a
+distribute in between is overwritten; a failed write still says "approved —
+reassigned"). M2 client whose owner comes from `created_by` fallback (or
+unowned): approved, nothing moves, owner unchanged. L1 approve does not
+re-check the record is live or the requester's role. L2 `orgUsers`/
+`isActiveOrgUser` raw `supabase.from('users')` (law 2; scoped by hand, correct
+today). L3 `via_email` in a GET query string (prospect address in logs). L4
+`clientOwnerId` (companies.js, outreach.js) now fetches every JO/lead of a
+company unordered/unbounded — was order+limit 1. L5 `/contacts/check-email`
+still returns the matched lead's `company` (D5 said owner+date). 047: add
+`CHECK (status='pending' OR decided_by IS NOT NULL)`; table count is 49 once
+applied — law 6's "48" must move with it.
+**Surface (56 + call sites):** F1 MED JS-string injection — `esc()`/`htmlEsc()`
+inside `onclick="…('…')"` (56 otSlotInner viaEmail + approverName; 14/52 email)
+escape neither `'` nor anything that matters AFTER the attribute is decoded:
+"O'Brien" breaks the button; a contact email `x');…//@a.co` passes EMAIL_RE →
+stored XSS on any BD who hits the duplicate. Use data-attributes. F2 the
+duplicate link is drawn from guild's `can_request` (= "not the owner"), so
+RA/recruiter/admin see a link that refuses — compute it with
+`canRequestTakeover(…, viaDuplicateEmailMatch:true)`. F3 modal reads `can.why`
+(null on refusal; server sends `reason`); chip maps `withdrawn`, status is
+`cancelled`. Text renders of label/note/names all go through `esc()` — OK.
+
 ## RE-REVIEW OF THE FIXES — 2026-09-24, round 2 (verdict: ship-with-followups; land R1 in the same PR)
 Read `git diff 71a8006..HEAD` (fb3658b gateway, 1671962 guild, c7b8e6f
 harbour, fbd3f5b observatory). Rampart suites + ownership (69) + email-history
@@ -309,6 +366,8 @@ flows still separate correctly.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
+- **R-047 blockers B1-B3** (reminder-send, POST /reminders, /emails/generate —
+  body `job_id` with no owner/org check) + F1 (onclick injection). See review.
 - **All eleven review findings are closed** (round 2, 2026-09-24). Open:
   R1 (one word, should land before merge), R2-R5 follow-ups — see above.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
@@ -323,6 +382,12 @@ flows still separate correctly.
 - Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
+- **2026-09-24 (R-047 review)** — do-not-ship: `lead_id` on duplicate
+  responses reaches three pre-existing job-id routes with no owner/org check
+  (reminder-send sends from the owner's mailbox). **What would have saved
+  time:** when a change HANDS OUT a new id, grep every route that accepts that
+  id in a BODY (`req.body.job_id`), not just the `/:id` routes — the `/:id`
+  ones were all fixed in the audit; the body ones never were.
 - **2026-09-24 (R-047)** — wrote the take-over rule as pure functions in
   `ownership.js`. **What would have saved time:** a fixture lead with
   `created_by` = an RA in the asker's chain is VISIBLE to that asker (D-0034
