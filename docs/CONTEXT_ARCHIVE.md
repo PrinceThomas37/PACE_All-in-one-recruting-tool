@@ -5979,3 +5979,6 @@ Owner confirmed the RA Lead scope and asked for "request to take over" approved 
 - IN FLIGHT (2026-09-24): surface editing public/js for C-0026/C-0028 + D-0035 screen changes; foundry writing the visibility suites. Both uncommitted until they report.
 
 - 2026-09-24: surface landed (e76a377). Live cleanup: removed the "S,no" key from import_extra on all 49 imported leads (owner asked). Full suite 104/105 — team-structure-smoke still asserts the old browser-side lead filter; foundry updating it. Rampart doing the final review.
+
+### Round 13d — rampart's review: DO-NOT-SHIP (2026-09-24)
+All cross-company rows verified closed. Two blockers: (1) guild's edit deleted MAX_EMAIL_ATTACH_BYTES in routes/recruiting/outreach.js — every attachment silently dropped (swallowed ReferenceError; no suite caught it); (2) email-history visibleJobIds used canSeeLead (admits creator/pool) instead of owned-lead — RA/RA Lead could read BD bodies. Plus 9 follow-ups (lead-to-job-order steals a client, owner-only gaps on merge/bulk-stage/deletes/parse-jd, DELETE company should stay admin-only, other BDs' contacts at a client, manual opt-out org stamp, POC on /users/:id/job-orders, PUT /jobs wider than D-0020, pre-existing reflected XSS in OAuth callbacks). Merge held; guild, gateway, harbour fixing in parallel. Roadmap R-049 (platform operator role, X9).

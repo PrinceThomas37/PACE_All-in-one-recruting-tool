@@ -1,5 +1,5 @@
 # Rampart — memory
-> Last written: 2026-09-23 · D-0034 visibility audit (`claude/tender-noether-fmxgr0`)
+> Last written: 2026-09-24 · review of the C-0021..C-0029 fixes (`claude/tender-noether-fmxgr0`)
 
 ## What is true here now
 - **Two different questions, and this territory now answers both.**
@@ -131,7 +131,69 @@ fix widens it), **DECISION** (owner's call), **OK**. Line numbers as of today.
 | `public/js/07-page-email.js:262/304/359` | RA-Lead filters every BD's emails in the browser | **client-side only** |
 | `public/js/16-insights.js:~559` | bd_lead filters org-wide leads by subtree in the browser | **client-side only** |
 
-## Decisions for the owner (raised 2026-09-23, not yet answered)
+## REVIEW OF THE FIXES — 2026-09-24 (verdict: do-not-ship until #1 and #2 are fixed — one line each — then ship-with-followups)
+Read the code of every commit after `5738e08`, not the messages. Rampart's
+seven suites + ownership/scope suites green (13, 5, 17, 53, 44, 56, 26, 69,
+14, 50, 35, 14).
+**Verified closed:** X1/X2 `/app-settings` (allow-list, admin-only write) ·
+X3 `userOrgId`/`mailboxOrgId` on `PUT /jobs/:id`, `/distribute/execute`,
+`/jobs/bulk-assign` · X4 `/events/recent` (payload `orgId`; unstamped rows
+hidden) · X5 client docs/edit/delete org-bound · X6/X8 jobs research/parse-jd/
+skill history · X7 `/follow-ups` · `GET /jobs`, `/jobs/:id` (404), export ·
+contacts email-status · record-history (404) · today-summary · `GET /emails`
+(SQL narrowing + `scopeEmails` boundary; sender-summary counts only) ·
+pending-summary · DELETE/purge (org + status ON the write) · suppression
+list/delete · analytics/templates · deliverability · warmup (+partners same
+org) · gmail/microsoft slot checks · tracking.js (body per `canSeeEmail`,
+token no longer handed out) · candidates/*, pipeline/*, submissions/*,
+sourcing import, recruiting lookups, interview invite/meeting org-bound ·
+`resolveEmailAttachments` org-bound · wf.js org-bound · insights 404 ·
+bd-analytics chain+org · recruiting-dashboard RA/RL · duplicate checks (D5:
+owner + date only) · job-order POC strip on list/detail/browse · job-order
+edit/delete/apply-link owner-only · outreach pickers + lead ownership.
+
+**Defects found (not rampart's files — reported to the orchestrator):**
+1. HIGH regression — `routes/recruiting/outreach.js`: the fix deleted
+   `const MAX_EMAIL_ATTACH_BYTES`; line ~168 still reads it inside a
+   try/catch, so EVERY document attachment (candidate and client email) is
+   silently dropped and the email sends without it.
+2. HIGH in-org leak — `routes/email-history.js` `visibleJobIds` uses
+   `canSeeLead` (creator, `assigned_to`, pool) where the rule is
+   `canSeeEmail` (lead OWNED in scope). An RA reads every BD email body on a
+   lead they researched; an RA Lead reads the old BD's emails on recycled
+   pool leads and on their RAs' leads — exactly what D-0036 forbids.
+3. MED ownership hijack — `POST /job-orders/from-lead/:jobId`: any BDM
+   converts ANY Connected lead, `bd_manager_id` from the body unvalidated;
+   since `clientOwnerId` prefers `job_orders.bd_manager_id`, converting a
+   colleague's lead takes their client (POC, docs, email rights).
+4. MED D-0035 writes not owner-gated: `POST /companies/:id/merge`,
+   `POST /jobs/bulk-stage` (any BD, any lead id), `DELETE /submissions/:id`
+   and `DELETE /pipeline/:id` (any recruiter), `POST /job-orders/:id/parse-jd`
+   `?apply=1` (any BDM; also returns unstripped `client_manager`),
+   `POST /job-orders/:id/recruiters` + assignment decide (any BDM).
+5. MED `DELETE /companies/:id` widened to "owner": no role gate, owner falls
+   back to `companies.created_by` (an RA), and one owner can soft-delete a
+   client colleagues still hold leads on. D-0035 lists edit/documents/email/
+   contacts, not delete.
+6. MED `/companies/:id/contacts` and `/intake` still return every BD's POCs
+   at a client — D-0035/D5 say another BD's contact details are not shown.
+7. LOW `POST /suppression` (deliverability.js:72) does not pass the org to
+   `addToSuppression` → misfiled under the DEFAULT org, where that org's admin
+   can see and DELETE another company's opt-out.
+8. LOW `GET /users/:id/job-orders` returns `client_manager` unstripped.
+9. LOW `PUT /jobs/:id` grants EDIT on anything `canSeeLead` admits (creator/
+   `assigned_to` in chain) — use `inScope(assigned_to_bd)`; D-0020 says a
+   manager reviews and prompts, the comment widens it to "review and edit".
+10. LOW `/wf/enrollments` filters after `.limit(500)` (short pages).
+11. PRE-EXISTING, HIGH — the OAuth callbacks in `routes/microsoft.js` and
+   `routes/gmail.js` interpolate `userEmailId` from the UNSIGNED `state` into
+   an inline `<script>` string: reflected XSS on the app's origin. The new
+   org check trusts the same forgeable state (userId + slot both attacker-
+   chosen), so it adds nothing; sign the state (HMAC) and JSON-encode.
+X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
+says every suggestion to the owner is one. C-0029 is recorded, OPEN.
+
+## Decisions for the owner (raised 2026-09-23 — ANSWERED by D-0035/D-0036)
 - **D1 — the candidate database.** Today every recruiting role sees every
   candidate, note, document and match. Industry norm (Bullhorn, Ceipal,
   JobDiva): one shared database, "owner" is credit, not visibility; contact
@@ -166,8 +228,8 @@ fix widens it), **DECISION** (owner's call), **OK**. Line numbers as of today.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
-- **Nothing in this audit is FIXED yet.** It is a map plus a callable rule.
-  Contracts C-0021..C-0027 carry the work; C-0003, C-0015..C-0018 are still open.
+- **The audit is FIXED except the eleven review findings above** (2026-09-24).
+  The X-ORG rows are closed; items 1 and 2 of the review block the merge.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,
   `submissions.js:25`** — secrets, sending as another company, and exfiltrating
   another company's resumes. These outrank the owner's in-org report.
@@ -182,6 +244,11 @@ fix widens it), **DECISION** (owner's call), **OK**. Line numbers as of today.
 ## Log
 - **2026-09-09** — org-scoping audit of 65 raw queries; `guardUser()`,
   `canTouchJob`, runtime `MULTI_ORG`; raised C-0015..C-0018. 70/70.
+- **2026-09-24** — reviewed every C-0021..C-0029 fix against the audit by
+  reading code. Verdict do-not-ship until 2 blockers fixed (attachment
+  regression, email-history predicate), 9 more. **What would have saved an
+  hour:** grepping every identifier a fix DELETED — a removed constant inside
+  a try/catch is a silent regression no suite noticed.
 - **2026-09-23** — D-0034 visibility audit of every record-returning endpoint
   (index.js, routes/, routes/recruiting/) plus client-side filters. Added the
   pure "SEEING" rule to `services/ownership.js`. Scratch check 32/32 on the
