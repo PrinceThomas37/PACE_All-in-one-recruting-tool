@@ -1,5 +1,5 @@
 # Rampart — memory
-> Last written: 2026-09-24 · review of the C-0021..C-0029 fixes (`claude/tender-noether-fmxgr0`)
+> Last written: 2026-09-24 · the take-over RULE (R-047, D-0037) in `services/ownership.js`
 
 ## What is true here now
 - **Two different questions, and this territory now answers both.**
@@ -35,6 +35,39 @@
     gates disagree about who is an admin.
   * Verified by a 32-assertion scratch check on the live org shape and **six
     reintroduced bugs, each caught** — but NOT yet a committed suite (C-0027).
+- **THE TAKE-OVER RULE IS CALLABLE (R-047, D-0037, 2026-09-24):
+  `services/ownership.js`, section "TAKING OVER".** PURE. deep builds the table,
+  gateway/guild the routes, surface the screens — all ON these, re-deriving none.
+  * `recordOwnerId(kind, record)` — lead → `assigned_to_bd`; job_order →
+    `bd_manager_id`; client → `{company, jobOrders, leads}` through
+    `clientOwnerFrom` = `routes/companies.js` `clientOwnerId()` ladder without
+    the queries (newest live JO's BD → newest live lead's BD → `created_by`).
+    **Unknown kind THROWS** — "unowned" would route to the asker's own manager.
+  * `canRequestTakeover({kind, record, requester, scope, openRequests?})` →
+    `{ok, reason, code, ownerId}`. Order: kind · same org + can SEE (lead →
+    `canSeeLead`; client/JO → shared, D-0035) · not admin · not owner · role
+    can own (lead: bd, bd_lead; JO/client: bd, bd_lead, associate_director,
+    director) · no own pending duplicate. **Every sight/org/deleted miss is the
+    SAME sentence, code `not_found` → route answers 404** (law 3).
+  * `approverFor({owner, requester, usersById, adminIds})` →
+    `{approverId, basis, why}`: owner's live manager · owner no manager → admin
+    · unowned → asker's manager, else admin · would be the asker → admin.
+    **Which admin: longest-serving live admin (earliest `created_at`, then
+    smallest id), never the asker.** No live admin → `approverId: null`,
+    basis `no_approver` → route must refuse to create.
+  * `canDecide({request, deciderId, deciderRoles, deciderOrgId})` — recorded
+    approver, or admin OF THE SAME ORG (no `deciderOrgId` → refused, fail
+    closed). Never the requester, admin or not. Pending only.
+    `canCancel({request, actorId})` — requester only, pending only.
+  * `takeoverTransition(from, to)` — pending → approved|declined|cancelled;
+    the three outcomes are FINAL (re-ask = new row).
+  * **A consequence the owner has not seen:** a lead is only requestable by
+    someone who can SEE it (D-0034), so a BD cannot ask for a PEER's lead or a
+    pool lead — in practice lead take-over reaches only a manager over their
+    chain. Clients and job orders are shared, so cross-team requests work
+    there. Raised, not widened (widening is a D-0034 change).
+  * Scratch check (67 assertions) + **13 reintroduced bugs, all caught** — not
+    yet a committed suite; list handed to foundry.
 - Multi-tenancy is **shipped**: `org_id` NOT NULL on all tenant tables
   (022/023), RLS + service-role policies on all 48 (039). 0 without RLS, 0
   without a policy.
@@ -279,6 +312,11 @@ flows still separate correctly.
 - Per-role permissions do not exist; a tenant admin is a deployment operator.
 
 ## Log
+- **2026-09-24 (R-047)** — wrote the take-over rule as pure functions in
+  `ownership.js`. **What would have saved time:** a fixture lead with
+  `created_by` = an RA in the asker's chain is VISIBLE to that asker (D-0034
+  research sight), so my "cross-team lead is invisible" case first failed on
+  the fixture, not the rule — seed sight-granting fields deliberately.
 - **2026-09-24 (round 2)** — re-reviewed the eleven fixes by reading the
   diff. All closed; one new fail-closed regression (R1). **What would have
   saved an hour:** when a fix adds a predicate over fetched rows, check the
@@ -298,3 +336,4 @@ flows still separate correctly.
   rampart suites green. Raised C-0021..C-0027. **What would have saved an
   hour:** reading `GET /app-settings` first — the worst finding was a
   three-line route that returns a whole table.
+
