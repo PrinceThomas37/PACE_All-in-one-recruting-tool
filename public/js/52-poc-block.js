@@ -138,8 +138,14 @@ function _pocNoteHTML(c) {
       'Already in PACE — added ' + d.days_ago + ' day' + (d.days_ago !== 1 ? 's' : '') + ' ago' +
       (d.added_by ? ' by <strong>' + htmlEsc(d.added_by) + '</strong>' : '') +
       (d.company ? ' at <strong>' + htmlEsc(d.company) + '</strong>' : '') + '.' +
-      (d.can_request && d.lead_id
-        ? ' <a href="#" class="ot-dup-link" onclick="event.preventDefault();otOpen(\'lead\',\'' + htmlEsc(d.lead_id) + '\',\'' + htmlEsc(c.email || '') + '\')">Ask to take over</a>'
+      // No `lead_id` any more (guild dropped it) — the request is posted with
+      // `{kind:'lead', via_email}` and the server resolves the lead itself.
+      // The email travels as a `data-*` attribute, never interpolated into
+      // the onclick JS-string: an escaped `'` still closes a JS string once
+      // the browser has decoded the attribute, so an address like
+      // `x');…//@a.co` (which still matches the email shape) was stored XSS.
+      (d.can_request
+        ? ' <a href="#" class="ot-dup-link" data-kind="lead" data-via-email="' + htmlEsc(c.email || '') + '" onclick="event.preventDefault();otOpenFromEl(this)">Ask to take over</a>'
         : '') +
     '</div>';
   }

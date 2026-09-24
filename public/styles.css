@@ -464,7 +464,7 @@ tr.sel-row td{background:var(--accent-l)}
 .ot-row{padding:12px 20px;border-bottom:1px solid var(--border2);border-left:3px solid transparent}
 .ot-row.st-pending{border-left-color:var(--accent)}
 .ot-row.st-approved{border-left-color:var(--green)}
-.ot-row.st-declined,.ot-row.st-withdrawn{border-left-color:var(--text3)}
+.ot-row.st-declined,.ot-row.st-withdrawn,.ot-row.st-cancelled{border-left-color:var(--text3)}
 .ot-row-t{font-size:13.5px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ot-row-sub{font-size:12px;color:var(--text3);margin-top:2px}
 .ot-row-note{font-size:12px;color:var(--text2);margin-top:4px;white-space:pre-wrap}
@@ -473,8 +473,8 @@ tr.sel-row td{background:var(--accent-l)}
 .ot-empty{padding:26px 20px;text-align:center;font-size:13px;color:var(--text3)}
 .ot-chip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:8px}
 .ot-chip.pending{background:var(--accent-l);color:var(--accent)}
-.ot-chip.approved{background:#E7F7EC;color:#166534}
-.ot-chip.declined,.ot-chip.withdrawn{background:var(--bg);color:var(--text3);border:1px solid var(--border2)}
+.ot-chip.approved{background:var(--green-l);color:var(--green)}
+.ot-chip.declined,.ot-chip.withdrawn,.ot-chip.cancelled{background:var(--bg);color:var(--text3);border:1px solid var(--border2)}
 @media (max-width:860px){
   .ot-row-acts .btn{min-height:40px}
   .ot-tabs{padding:0 14px}

@@ -727,10 +727,11 @@ approvals panel reflowed on a 390px phone.
    "\<approver\> decides" once `ok:true` lands, and "Requested · waiting on
    \<approver\>" once a record-scoped pending request from the caller is
    found — never more than one of the three at once.
-2. A duplicate-warning / already-exists note with `can_request:false` (or no
-   `lead_id`) never renders the "Ask to take over" link; one with both true
-   does, and clicking it opens the modal with `kind:'lead'` and the typed
-   email as `via_email`.
+2. A duplicate-warning / already-exists note with `can_request:false` never
+   renders the "Ask to take over" link; one with `can_request:true` does, and
+   clicking it opens the modal with `kind:'lead'` and the typed email as
+   `via_email` — with NO `record_id` anywhere in the request (see round 3 log
+   below: `lead_id` is gone from this response entirely).
 3. Approving/declining in the panel calls `refreshJobs()`,
    `window.clientsReload`, and `window.bdReloadJobOrders` — and none of them
    throw when the corresponding page has never been visited this session
@@ -741,3 +742,90 @@ approvals panel reflowed on a 390px phone.
    session does not re-issue the network call — the cache is genuinely used
    (this is the property the render-engine "idle repaint writes nothing" rule
    depends on here, at the level of network calls rather than DOM writes).
+
+## 2026-09-24 (round 4) — R-047 review fixes: data-attributes, not JS-string interpolation (F1/F3), and the `lead_id` removal
+
+Fixed everything rampart's re-review flagged in this territory (R-047 review,
+"Surface (56 + call sites)" section).
+
+* **F1 (script injection).** `otSlotInner`'s Withdraw / "Ask to take over"
+  buttons, and the duplicate-warning links in `14-mailmerge-engine.js` and
+  `52-poc-block.js`, used to build `onclick="fn('...')"` by concatenating
+  `esc()`/`htmlEsc()`-escaped values straight into the JS-string literal.
+  **That escaping only protects the HTML ATTRIBUTE — the browser decodes the
+  attribute before the JS string inside it is ever parsed**, so an escaped
+  `'` still closes the string early: an owner name like `O'Brien` broke the
+  button (truncated the call, threw on click), and a contact email such as
+  `x');alert(1);//@a.co` — which still matches the app's own email shape check
+  — was stored XSS, fired the moment a BD's screen rendered that duplicate
+  warning. Every one of those values now travels as a `data-*` attribute
+  (`data-kind`, `data-record-id`, `data-via-email`, `data-approver-name`,
+  `data-req-id`, `data-slot-id`), read back with `el.dataset` by two new
+  handlers — `otOpenFromEl(this)` / `otWithdrawFromEl(this)` — which never
+  re-enter JS-string parsing at all. Verified live (headless Playwright, both
+  screenshots below): the hostile email renders as inert text with no popup,
+  clicking the link still opens the modal, and `O'Brien` renders correctly as
+  the owner name without breaking anything.
+* **F3.** The ask-modal's refusal read `can.why`, which the server never
+  sends (it sends `reason`) — every real refusal sentence was silently
+  swallowed and replaced by the generic fallback. Now reads `can.reason`.
+  The status-chip map had `withdrawn` as a key; the stored status is
+  `cancelled` — the chip fell through to the raw word "cancelled" instead of
+  saying "Withdrawn". Fixed the map key; added `.ot-chip.cancelled` /
+  `.ot-row.st-cancelled` alongside the pre-existing `.withdrawn` classes in
+  `styles.css` (kept both — harmless, and cheap insurance against a future
+  caller that does emit "withdrawn").
+* **No more `lead_id` on duplicates (guild's option (a)).** The
+  duplicate-warning link in both `14-mailmerge-engine.js` and
+  `52-poc-block.js` now checks only `d.can_request` (no `lead_id` in the
+  condition or stored in `dupEmailMap`) and posts `{kind:'lead', via_email}`
+  with no `record_id` — the server resolves the lead from the email itself
+  (D-0038's `viaDuplicateEmailMatch`).
+* **`can-request` moved from a GET query string to POST**, body
+  `{kind, record_id?, via_email?}` — per gateway's new contract and rampart's
+  L3 finding (a prospect's email address in a GET query string ends up in
+  server access logs). Both call sites (`otFetch`, used by every `otSlot()`,
+  and `otCheckForModal`, used by the ask modal) now POST.
+* **`52-poc-block.js` was already safe on `company`** — `d.company` was
+  already rendered behind `d.company ? … : ''`, so guild dropping that field
+  from `/contacts/check-email` needs no change here; confirmed by reading the
+  code path, not assumed.
+
+Files: `public/js/56-ownership-requests.js`, `public/js/14-mailmerge-engine.js`,
+`public/js/52-poc-block.js`, `public/styles.css` (`.ot-chip.approved` — a
+pre-existing hard-coded `#E7F7EC`/`#166534` in the same file, flagged by the
+coordinator via `reminder-clarity-smoke.mjs`'s "palette is tokens only" check
+because it sits in the CSS block after the REMINDERS marker that test scans —
+now `var(--green-l)`/`var(--green)`).
+
+Verified: `node --check` on all three touched `.js` files; `bash
+test/verify-frontend.sh`; `node test/page-renders-smoke.mjs` 7/7; `node
+test/mobile-layout-smoke.mjs` 39/39; `node test/theme-contrast-smoke.mjs`
+10/10; `node test/screen-stability-smoke.mjs` 23/23; `node
+test/reminder-clarity-smoke.mjs` 51/51 (was 50/51 before the CSS token fix).
+Screenshots (headless Playwright, stubbed `apiGet`/`apiPost`, run from the
+scratchpad — not added to `test/`): the duplicate-warning modal with the
+hostile email + apostrophe owner name rendering as plain text, and the
+resulting "Ask to take over" modal after clicking through, showing
+`Manager O'Hara decides.` intact and the POST body correctly shaped
+`{kind:'lead', via_email:"x');alert(1);//@a.co"}` with no `record_id`.
+
+**What foundry should pin, none of it covered today:**
+1. `otSlotInner`'s Withdraw and "Ask to take over" buttons carry their kind/
+   record id/via-email/approver-name as `data-*` attributes, never inside the
+   `onclick` string itself (grep `onclick="ot(Open|Withdraw)FromEl\(this\)"`
+   and assert the values live on the element, not in the handler call).
+2. A record/name/email containing a single quote (`O'Brien`, or an email
+   containing `');`) renders as literal text in the duplicate-warning link and
+   the ask modal, AND clicking the link still opens the modal and issues the
+   correct `can-request` POST body — i.e. both "doesn't break" and "still
+   works" are asserted, not just the first.
+3. `otFetch`/`otCheckForModal` call `apiPost('/ownership-requests/can-request', …)`,
+   never `apiGet` with a query string containing `via_email`.
+4. A duplicate-warning response with `can_request:true` and no `lead_id`
+   field at all still renders the link, and clicking it posts
+   `{kind:'lead', via_email:<the email>}` with `record_id` absent (not `null`,
+   not `undefined` as a literal key — genuinely absent from the JSON body).
+5. `otStatusChip('cancelled')` renders "Withdrawn"; `otStatusChip('withdrawn')`
+   (should the server ever send that word) still renders "Withdrawn" too.
+

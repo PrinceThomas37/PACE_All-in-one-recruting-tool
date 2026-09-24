@@ -561,16 +561,18 @@ window.confirmImport=function(){
       // since} per row — whose lead it is and since when, never the other
       // lead's company/position/contact (the owner's answer to rampart's D5:
       // never show one BD's lead details to another).
-      // D-0038: guild also adds `lead_id`+`can_request` — proof of the right
-      // to ask is that this BD typed a contact email that is on that lead, so
-      // no separate slot check is needed here; the link just reads the flag
-      // the server already computed.
+      // D-0038: guild also adds `can_request` — proof of the right to ask is
+      // that this BD typed a contact email that is on that lead, so no
+      // separate slot check is needed here; the link just reads the flag the
+      // server already computed. No more `lead_id` on this response (guild
+      // removed it, option (a)) — the request is posted as
+      // `{kind:'lead', via_email}` with no record_id, and the server resolves
+      // the lead from the email itself.
       var dupEmailMap={};
       (res.duplicates||[]).forEach(function(d){
         if(d.email){dupEmailMap[d.email.toLowerCase()]={
           owner_name:d.owner_name||'',
           since:d.since||'',
-          lead_id:d.lead_id||null,
           can_request:!!d.can_request
         };}
       });
@@ -595,8 +597,12 @@ function renderDuplicateWarningModal(groups,dupEmailMap){
     return '<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'+
       '<span style="color:var(--amber);font-weight:600">'+htmlEsc(email)+'</span>'+
       (d.owner_name?' \u2014 already on <strong>'+htmlEsc(d.owner_name)+'</strong>\u2019s lead'+(since?' since '+htmlEsc(since):''):' \u2014 already on someone else\u2019s lead')+
-      (d.can_request&&d.lead_id
-        ? ' \u00b7 <a href="#" class="ot-dup-link" onclick="event.preventDefault();otOpen(\'lead\',\''+htmlEsc(d.lead_id)+'\',\''+htmlEsc(email)+'\')">Ask to take over</a>'
+      // The typed email travels as a `data-*` attribute, never interpolated
+      // into the onclick JS-string \u2014 esc()/htmlEsc() only protects the HTML
+      // attribute, not a JS string one level in, and an address containing a
+      // quote plus JS survives EMAIL_RE and would have been stored XSS.
+      (d.can_request
+        ? ' \u00b7 <a href="#" class="ot-dup-link" data-kind="lead" data-via-email="'+htmlEsc(email)+'" onclick="event.preventDefault();otOpenFromEl(this)">Ask to take over</a>'
         : '')+
     '</div>';
   }).join('');
