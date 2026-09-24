@@ -237,6 +237,10 @@ edit/delete/apply-link owner-only · outreach pickers + lead ownership.
 X9 is recorded (C-0021, gateway.md) but has no `docs/ROADMAP.md` row — D-0030
 says every suggestion to the owner is one. C-0029 is recorded, OPEN.
 
+## R-047 FINAL RE-CHECK — 2026-09-24, round 3 (verdict: SHIP)
+83ff874 (guild) + 8af086c (gateway): R47-1 closed both halves (record_id nulled on every shapeRequest path via fresh canSeeLead, query-miss hides; /wf/enroll+bulk gate workflow/contact/job org-scoped, job must equal contact's, canActOnJob, one 404). R47-2..5 closed.
+No fail-open: req.orgId always set by auth() so wf.js `|| null` never unscopes; chain includes self. Residual LOW: a job-less contact / any in-org candidate is enrollable by anyone in the org (same-org only, no cross-org path).
+
 ## RE-REVIEW OF R-047 — 2026-09-24, round 2 (verdict: DO-NOT-SHIP until R47-1 closes — a few lines)
 Read 19218ab (gateway), 4f16ff0 (ledger), 9dbedf9 (guild), 84188b3 (surface),
 08d278d (deep). Suites green except foundry's in-flight mutation assertion in
@@ -405,8 +409,7 @@ flows still separate correctly.
   `associate_director`** — and those three are exactly the roles D-0034 changes.
 
 ## Open here
-- **R-047: B1-B3 and F1 closed (round 2). R47-1 open** — `record_id` still
-  handed to the asker + `/wf/enroll` accepts any job/contact/workflow id.
+- **R-047: all findings closed (round 3, SHIP).** Residual LOW: job-less contact / candidate enrol is org-only.
 - **All eleven review findings are closed** (round 2, 2026-09-24). Open:
   R1 (one word, should land before merge), R2-R5 follow-ups — see above.
 - **Lead with C-0021 X1-X3 and C-0022's `outreach.js:98`, `candidates.js:266`,

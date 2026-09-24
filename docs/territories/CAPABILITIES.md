@@ -192,6 +192,9 @@ a review screen (`GET /next-actions/team`) where they can PROMPT the owner
 adding any "manager can also…" affordance, read D-0020 — the answer to holiday
 cover is reassignment, not acting on another person's behalf.
 
+### Asking to take over a lead, client or job order
+**Status:** LIVE (Session 30, R-047) · rule `rampart` (`services/ownership.js` take-over section) · API `gateway` (`routes/ownership-requests.js`) · table `ownership_requests` (migration 047) · screens `surface` (`public/js/56-ownership-requests.js`). **D-0036/D-0037/D-0038.** A non-owner asks from the client page, the job order, a manager's lead drawer, or the duplicate warning (by typed email — no lead id is ever returned to someone who can't see the lead). The CURRENT owner's manager decides (admin if none; unowned → asker's manager; never self). Approval moves the record through the assignment fields, conditional on the old owner; nothing moved → the request goes back to pending. Approvals live beside "Needs you today".
+
 ### Seeing only what you're responsible for
 **Status:** LIVE (Session 30) · owner `rampart` (the rule) · `services/ownership.js`
 (`viewScope`, `scopeLeads`, `scopeEmails`, `canSeeLead/Contact/Email/Submission`)
