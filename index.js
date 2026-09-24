@@ -3307,6 +3307,11 @@ app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));
 // The rewind button's one endpoint. Read-only, org-scoped, every record kind.
 app.use(require('./routes/record-history')(routeCtx));
+// Take-over requests (D-0036/D-0037/D-0038) — asking to own somebody else's
+// lead, client or job order. No bare `:id` GET/PUT here, so there is nothing
+// for a new literal to shadow today, but any literal added later still goes
+// above `/ownership-requests/:id/*`.
+app.use(require('./routes/ownership-requests')(routeCtx));
 app.use(require('./routes/mailbox')(routeCtx));
 // SSO sign-in. Mounted with gmailProvider + config so it can report which
 // providers are actually configured; the callbacks live in the microsoft/gmail
