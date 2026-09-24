@@ -56,7 +56,10 @@ module.exports = (ctx) => {
       // Signed the same way sso.js signs its own OAuth state (JWT_SECRET, the
       // one secret this app already requires at startup) — a forged state now
       // fails verification before any of its fields are read or echoed back.
-      const state = jwt.sign({ userEmailId, userId: reqUser.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+      // R5 (rampart round 2): `p:'mailbox'` marks what this token is FOR —
+      // see routes/microsoft.js for the full reasoning. Checked on the way
+      // back below; auth() rejects any token carrying `p` at all.
+      const state = jwt.sign({ userEmailId, userId: reqUser.id, p: 'mailbox' }, process.env.JWT_SECRET, { expiresIn: '15m' });
       res.redirect(provider.authorizeUrl(state));
     } catch (err) { res.status(500).send(err.message); }
   });
@@ -111,6 +114,7 @@ module.exports = (ctx) => {
       let parsed;
       try {
         parsed = jwt.verify(state, process.env.JWT_SECRET);
+        if (parsed.p !== 'mailbox') throw new Error('wrong purpose');
       } catch {
         return res.send(popupMessage({ type: 'google_oauth_error', error: 'This connection request is no longer valid. Please try again.' }));
       }

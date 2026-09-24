@@ -65,7 +65,12 @@ router.get('/auth/microsoft/connect', async (req, res) => {
     // verification before any of its fields are ever read, closing both the
     // XSS and the "org check trusts a forgeable value" gap the same finding
     // named.
-    const state = jwt.sign({ userEmailId, userId: reqUser.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    // R5 (rampart round 2): `p:'mailbox'` marks what this token is FOR. A
+    // session token and this OAuth state are both JWTs signed with the same
+    // JWT_SECRET; without a purpose claim, a leaked/logged mailbox-connect
+    // state would verify cleanly as a session in auth(). The claim is checked
+    // on the way back below, and auth() rejects any token carrying `p` at all.
+    const state = jwt.sign({ userEmailId, userId: reqUser.id, p: 'mailbox' }, process.env.JWT_SECRET, { expiresIn: '15m' });
     const url = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/authorize?client_id=${MS_CLIENT}&response_type=code&redirect_uri=${encodeURIComponent(MS_REDIRECT)}&scope=${encodeURIComponent(MS_SCOPES)}&state=${encodeURIComponent(state)}&prompt=select_account`;
     res.redirect(url);
   } catch (err) { res.status(500).send(err.message); }
@@ -117,6 +122,7 @@ router.get('/auth/microsoft/callback', async (req, res) => {
     let mailboxState;
     try {
       mailboxState = jwt.verify(state, process.env.JWT_SECRET);
+      if (mailboxState.p !== 'mailbox') throw new Error('wrong purpose');
     } catch {
       return res.send(popupMessage({ type: 'ms_oauth_error', error: 'This connection request is no longer valid. Please try again.' }));
     }

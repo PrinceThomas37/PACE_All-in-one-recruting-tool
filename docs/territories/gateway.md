@@ -402,3 +402,22 @@ Verified: `route-shadowing-smoke` (9/9), `recruiting-routes-mounted` (7/7),
 update named above (not a new leak). `node --check` clean on every file
 touched.
 
+
+**2026-09-24 (rampart round-2 R1/R5):** `routes/email-history.js:147` `LEAD_SELECT`
+was missing `sent_by` — `own.scopeEmails`'s final gate (services/ownership.js
+`canSeeEmail`) reads `email.sent_by` OR `job.assigned_to_bd`, so with `sent_by`
+absent a recycled/reassigned lead's history silently lost the "I sent it" half
+of the rule for its original sender; added `sent_by` to the select (companies.js
+email-activity, emails.js `emailRows`, and tracking.js `ACTIVITY_SELECT` were
+already correct — checked all three). Also R5: the mailbox-connect OAuth
+`state` JWT (`routes/microsoft.js:68/119`, `routes/gmail.js:59/113`) is signed
+with the same `JWT_SECRET` as a real session token and carried no purpose
+claim, so a leaked/logged state could have verified as a session in `auth()`
+(index.js:222, gateway-owned — not rampart's middleware/authorize.js); both
+now sign `p:'mailbox'` and require it on verify (mirroring sso.js's existing
+`p:'signin'`), and `auth()` (index.js:233) now refuses any token carrying a
+`p` claim at all, whatever its value. `node --check` clean on
+routes/email-history.js, routes/microsoft.js, routes/gmail.js, index.js;
+`email-history-smoke` 32/32, `backend-smoke` 107/107, `route-shadowing-smoke`
+9/9, `recruiting-routes-mounted` 7/7, `org-scoping-routes-smoke` 13/13. Did
+not touch `test/` (foundry is concurrently writing there). Not committed.

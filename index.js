@@ -232,6 +232,13 @@ function auth(req, res, next) {
   try {
     claims = jwt.verify(token, process.env.JWT_SECRET);
   } catch { return res.status(401).json({ error: 'Invalid token' }); }
+  // R5 (rampart round 2): the mailbox-connect OAuth `state` is a JWT signed
+  // with this same JWT_SECRET (routes/microsoft.js, routes/gmail.js). It now
+  // carries `p:'mailbox'` so it cannot double as a session token here — any
+  // token carrying a `p` claim at all is refused as a session, whatever its
+  // value, so a future purpose-marked token never accidentally becomes valid
+  // here just by being handed to the wrong endpoint.
+  if (claims && claims.p) return res.status(401).json({ error: 'Invalid token' });
   // A session with no organisation on it cannot be scoped. While there is only
   // one org that is harmless (it defaults there anyway), but the moment a
   // second exists, "no org" would silently mean "the first org" — i.e. somebody

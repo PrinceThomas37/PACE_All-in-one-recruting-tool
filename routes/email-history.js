@@ -144,7 +144,12 @@ module.exports = (ctx) => {
       // lead handed to a new BD still shows its history to its new owner.
       if (wants('leads')) {
         try {
-          const LEAD_SELECT = 'id,to_email,from_email,subject,body,status,sent_at,created_at,job_id,contact_id';
+          // sent_by is not shown on screen (normalise() drops it) but it is what
+          // own.canSeeEmail/scopeEmails read for "I sent it" — without it here
+          // the final gate below only ever sees the job side of the rule, so a
+          // BD whose lead was reassigned/recycled loses their own past sends
+          // from Email -> All email the moment they no longer own the lead.
+          const LEAD_SELECT = 'id,to_email,from_email,subject,body,status,sent_at,created_at,job_id,contact_id,sent_by';
           const base = () => {
             let sel = withOrg(supabase.from('emails').select(LEAD_SELECT), req);
             if (req.query.contact_id) sel = sel.eq('contact_id', req.query.contact_id);
