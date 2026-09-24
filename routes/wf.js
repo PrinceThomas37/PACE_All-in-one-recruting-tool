@@ -273,15 +273,35 @@ module.exports = (ctx) => {
       const isAdmin = hasRole(req, 'admin');
       const chain = isAdmin ? null : await reportingChainIds(req.user.id, req.orgId || null);
       const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
-      let q = withOrg(supabase.from('workflow_enrollments')
-        .select('*, workflow:workflow_definitions(id,name,domain), contact:contacts(id,first_name,last_name,email), job:jobs(id,position,assigned_to_bd,created_by,assigned_to,company:companies(name))'), req)
-        .order('created_at', { ascending: false }).limit(500);
-      if (req.query.status) q = q.eq('status', req.query.status);
-      if (req.query.workflow_id) q = q.eq('workflow_id', req.query.workflow_id);
-      if (req.query.job_id) q = q.eq('job_id', req.query.job_id);
-      const { data, error } = await q;
-      if (error) throw error;
-      const rows = (data || []).filter(r => scope.all || !r.job_id || own.canSeeLead(r.job, scope));
+
+      // Rampart review (D-0035 #10): filtering by ownership AFTER `.limit(500)`
+      // silently shorted a non-admin's page — 500 org-wide rows can easily
+      // contain fewer than 500 the viewer may see, or none at all, and nothing
+      // said so. Page through in SQL-ordered batches, applying the ownership
+      // filter per batch, until PAGE_SIZE results are collected or the org's
+      // rows run out. Admin (scope.all) takes the first batch, unchanged.
+      const PAGE_SIZE = 500;
+      const BATCH = 500;
+      const rows = [];
+      let offset = 0;
+      for (;;) {
+        let q = withOrg(supabase.from('workflow_enrollments')
+          .select('*, workflow:workflow_definitions(id,name,domain), contact:contacts(id,first_name,last_name,email), job:jobs(id,position,assigned_to_bd,created_by,assigned_to,company:companies(name))'), req)
+          .order('created_at', { ascending: false }).range(offset, offset + BATCH - 1);
+        if (req.query.status) q = q.eq('status', req.query.status);
+        if (req.query.workflow_id) q = q.eq('workflow_id', req.query.workflow_id);
+        if (req.query.job_id) q = q.eq('job_id', req.query.job_id);
+        const { data, error } = await q;
+        if (error) throw error;
+        for (const r of (data || [])) {
+          if (scope.all || !r.job_id || own.canSeeLead(r.job, scope)) {
+            rows.push(r);
+            if (rows.length >= PAGE_SIZE) break;
+          }
+        }
+        if (rows.length >= PAGE_SIZE || !data || data.length < BATCH) break;
+        offset += BATCH;
+      }
       res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

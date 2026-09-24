@@ -211,11 +211,30 @@ router.post('/jobs/bulk-stage', auth, async (req, res) => {
     // generation silently produces nothing for a freshly re-assigned lead.
     if (stage === 'Unassigned') updates = releaseToPoolUpdate(new Date());
 
+    // Rampart review (D-0035 #4): a plain BD/BD Lead could stage ANY lead id in
+    // the org, not just their own — the org check above stops another COMPANY's
+    // leads, not a COLLEAGUE's. admin and ra_lead are the pool roles (they run
+    // distribution/recycling org-wide, same as `/distribute/*`) and keep the
+    // access they had; bd/bd_lead are narrowed to leads whose `assigned_to_bd`
+    // is in their own reporting-chain scope. A lead outside that scope is
+    // silently excluded, exactly like a foreign-org id — never a 403 that would
+    // confirm which of the pasted ids exist.
+    let allowedIds = job_ids;
+    if (!hasRole(req, 'admin', 'ra_lead')) {
+      const chain = await reportingChainIds(req.user.id, req.orgId || null);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+      let sq = supabase.from('jobs').select('id,assigned_to_bd').in('id', job_ids);
+      if (req.orgId) sq = sq.eq('org_id', req.orgId);
+      const { data: ownRows } = await sq;
+      allowedIds = (ownRows || []).filter(r => own.inScope(r.assigned_to_bd, scope)).map(r => r.id);
+    }
+    if (!allowedIds.length) return res.json({ success: true, updated: 0, stage });
+
     // C-0017 #1: `job_ids` is caller-supplied with no ownership or org check
     // at all — any BD in ANY org could rewrite ANY org's leads. The org
     // condition goes ON the update itself (never check-then-mutate, which is
     // a race and twice the code): a foreign id simply matches zero rows.
-    let uq = supabase.from('jobs').update(updates).in('id', job_ids);
+    let uq = supabase.from('jobs').update(updates).in('id', allowedIds);
     if (req.orgId) uq = uq.eq('org_id', req.orgId);
     const { data: updatedRows, error } = await uq.select('id');
     if (error) throw error;

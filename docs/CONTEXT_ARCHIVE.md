@@ -5982,3 +5982,5 @@ Owner confirmed the RA Lead scope and asked for "request to take over" approved 
 
 ### Round 13d — rampart's review: DO-NOT-SHIP (2026-09-24)
 All cross-company rows verified closed. Two blockers: (1) guild's edit deleted MAX_EMAIL_ATTACH_BYTES in routes/recruiting/outreach.js — every attachment silently dropped (swallowed ReferenceError; no suite caught it); (2) email-history visibleJobIds used canSeeLead (admits creator/pool) instead of owned-lead — RA/RA Lead could read BD bodies. Plus 9 follow-ups (lead-to-job-order steals a client, owner-only gaps on merge/bulk-stage/deletes/parse-jd, DELETE company should stay admin-only, other BDs' contacts at a client, manual opt-out org stamp, POC on /users/:id/job-orders, PUT /jobs wider than D-0020, pre-existing reflected XSS in OAuth callbacks). Merge held; guild, gateway, harbour fixing in parallel. Roadmap R-049 (platform operator role, X9).
+
+- IN FLIGHT (2026-09-24 12:2x UTC): a usage limit stopped the three review-fix agents; resumed. Guild had already restored MAX_EMAIL_ATTACH_BYTES.

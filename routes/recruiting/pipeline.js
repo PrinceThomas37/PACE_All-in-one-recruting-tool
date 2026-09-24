@@ -190,9 +190,25 @@ module.exports = function (app, core) {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: existing } = await withOrg(
-        supabase.from('candidate_pipeline').select('id').eq('id', req.params.id).is('deleted_at', null), req
+        supabase.from('candidate_pipeline').select('id,tagged_by,job_order_id').eq('id', req.params.id).is('deleted_at', null), req
       ).maybeSingle();
       if (!existing) return res.status(404).json({ error: 'Pipeline entry not found' });
+
+      // Rampart review (D-0035 #4), same shape as the submissions delete: a
+      // recruiter may delete only their own tag (tagged_by) or one on a job
+      // they're assigned to; a BD manager needs owner/chain/admin.
+      let allowed = hasRole(req, 'admin');
+      if (!allowed && isRecruiter(req) && !isBDM(req)) {
+        allowed = existing.tagged_by === req.user.id || await recruiterCanTouchJob(req, existing.job_order_id);
+      }
+      if (!allowed && isBDM(req)) {
+        const { data: jo } = await supabase.from('job_orders')
+          .select('bd_manager_id').eq('id', existing.job_order_id).maybeSingle();
+        const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+        allowed = !!jo && chain.includes(jo.bd_manager_id);
+      }
+      if (!allowed) return res.status(403).json({ error: 'Not permitted to delete this pipeline entry.' });
+
       await supabase.from('candidate_pipeline').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }

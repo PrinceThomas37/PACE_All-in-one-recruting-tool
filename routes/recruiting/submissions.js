@@ -235,9 +235,29 @@ module.exports = function (app, core) {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
       const { data: existing } = await withOrg(
-        supabase.from('submissions').select('id').eq('id', req.params.id).is('deleted_at', null), req
+        supabase.from('submissions').select('id,recruiter_id,job_order_id').eq('id', req.params.id).is('deleted_at', null), req
       ).maybeSingle();
       if (!existing) return res.status(404).json({ error: 'Submission not found' });
+
+      // Rampart review (D-0035 #4): any recruiter or BDM in the org could
+      // delete ANY submission — the org check above only stops another
+      // COMPANY's row. A recruiter may delete only one they own
+      // (recruiter_id) or one on a job order they're assigned to
+      // (recruiterCanTouchJob, the same gate PATCH already uses above); a BD
+      // manager needs the same owner/chain/admin test as every other
+      // job-order write.
+      let allowed = hasRole(req, 'admin');
+      if (!allowed && isRecruiter(req) && !isBDM(req)) {
+        allowed = existing.recruiter_id === req.user.id || await recruiterCanTouchJob(req, existing.job_order_id);
+      }
+      if (!allowed && isBDM(req)) {
+        const { data: jo } = await supabase.from('job_orders')
+          .select('bd_manager_id').eq('id', existing.job_order_id).maybeSingle();
+        const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+        allowed = !!jo && chain.includes(jo.bd_manager_id);
+      }
+      if (!allowed) return res.status(403).json({ error: 'Not permitted to delete this submission.' });
+
       await supabase.from('submissions').update({ deleted_at: new Date() }).eq('id', req.params.id);
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }

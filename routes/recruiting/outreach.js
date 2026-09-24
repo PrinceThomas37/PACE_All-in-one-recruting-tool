@@ -143,6 +143,14 @@ async function sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachmen
 // download is silently skipped rather than blocking the whole send. Caps
 // total attached bytes so a send can't blow past provider/API limits.
 //
+// Restored 2026-09-24 (rampart review finding #1): the C-0022 org-scoping
+// edit deleted this constant while the function below still reads it inside
+// a try/catch, so EVERY document lookup threw ReferenceError, was swallowed
+// by the catch, and every attachment silently vanished from candidate and
+// client emails with no error anywhere. A scope error is a runtime error —
+// `node --check` cannot see it, only exercising the function can.
+const MAX_EMAIL_ATTACH_BYTES = 18 * 1024 * 1024;
+//
 // `orgId` is REQUIRED context, not an afterthought (Session 30, C-0022 #1 —
 // critical exfiltration). This took a document id straight from the request
 // body with no org condition at all: any authenticated caller could name

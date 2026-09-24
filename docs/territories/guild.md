@@ -392,8 +392,71 @@ its response; `POST /wf/definitions` never accepts a body-supplied `org_id`
 or files under `'fute'`; and `workflow_step_runs` rows always carry the
 enrollment's `org_id`.
 
+## Session 30, round 2 — rampart's review fixes (2026-09-24)
+
+Rampart reviewed the C-0022 pass and found ten issues in guild's files (two
+blockers, plus eight D-0035 write-gate gaps). All fixed in one pass:
+
+- **BLOCKER, own regression:** `routes/recruiting/outreach.js`'s C-0022 edit
+  deleted `const MAX_EMAIL_ATTACH_BYTES` while `resolveEmailAttachments` still
+  read it inside a `try/catch` — every document lookup threw, was swallowed,
+  and every attachment silently vanished from candidate/client emails.
+  Restored above the function. **Verified by actually exercising the handler**
+  (stubbed supabase/mailbox, captured what `POST /candidates/email` passed to
+  `sendMailboxNewMessage`) rather than trusting `node --check` — a scope error
+  is a runtime error and only running the code finds it. Grepped every other
+  file this session touched for a deleted top-level `const`/`function` still
+  referenced elsewhere; `MAX_EMAIL_ATTACH_BYTES` was the only one.
+- `POST /job-orders/from-lead/:jobId` (job-orders.js): now requires the caller
+  own the LEAD being converted (`assigned_to_bd` in their reporting-chain scope,
+  or admin) — closing the "convert a colleague's Connected lead and take their
+  client" hole — and a body-supplied `bd_manager_id` must be a real user in the
+  caller's own org AND either the caller or someone in their chain.
+- `POST /jobs/bulk-stage` (routes/workflows.js): admin/ra_lead (the pool roles
+  that already run `/distribute/*`) keep unrestricted access; bd/bd_lead are
+  now narrowed to lead ids whose `assigned_to_bd` is in their own chain scope —
+  a lead outside it is silently dropped from the batch, never a 403.
+- `DELETE /submissions/:id` and `DELETE /pipeline/:id`: a recruiter may delete
+  only their own (`recruiter_id`/`tagged_by`) or one on a job they're assigned
+  to (`recruiterCanTouchJob`); BD needs owner/chain/admin, same test as every
+  other job-order write.
+- `POST /job-orders/:id/parse-jd?apply=1`: the WRITE (not the dry-run preview)
+  is now owner/chain/admin-gated, and the returned `job_order` goes through
+  `jobOrderVisibility.stripJobOrderPoc` (currently a no-op since only the owner
+  reaches that line, kept so the response can never disagree with list/detail
+  if the gate ever loosens).
+- `POST /job-orders/:id/recruiters` and `POST /assignment-requests/:id/decide`:
+  both now require the caller own the job order (owner/chain/admin); the
+  recruiters route also verifies every `recruiter_id` in the body is a real
+  user in the caller's own org before upserting `recruiter_assignments`.
+- `GET /users/:id/job-orders`: now runs through `stripJobOrdersPoc` like every
+  other job-order list.
+- `GET /wf/enrollments`: the ownership filter used to run AFTER `.limit(500)`,
+  which could short a non-admin's page arbitrarily (even to zero, if the first
+  500 org rows all belonged to other people). Now pages through in 500-row,
+  order-preserved batches, filtering each batch, until 500 VISIBLE rows are
+  collected or the org's rows run out. Admin (`scope.all`) still takes the
+  first batch, unchanged.
+- **Not touched, flagged instead:** `DELETE /job-orders/:id/recruiters/:rid`
+  is still "any BDM" — the review only named the POST route, and adding an
+  unrequested gate mid-fix felt like the wrong risk; same shape as
+  `POST /job-orders/:id/recruiters` and worth the same fix in a follow-up.
+
+**Verification:** `node --check` on every touched file; grepped the whole
+C-0022 diff for deleted top-level declarations (only the one regression);
+`test/recruiting-routes-mounted.mjs` (7/7), `test/stage-consolidation-smoke.mjs`,
+`test/workflow-gating-smoke.mjs`, `test/lead-stage-permission.mjs`,
+`test/submission-review-smoke.mjs`, `test/org-scoping-routes-smoke.mjs`,
+`test/ownership-smoke.mjs`, `test/candidate-sequence-smoke.mjs`,
+`test/submission-stages-smoke.mjs`, `test/applicants-smoke.mjs`,
+`test/job-candidate-updates-smoke.mjs` — all green. No suite covers
+`bulk-stage`'s ownership narrowing or the new owner gates directly — worth
+pinning by foundry (see handback report). Did not run full `npm test`
+(gateway/harbour mid-edit in the same tree).
+
 ## Session 30 addendum — scripts/territory-map.mjs
 Added `services/job-order-visibility.js` to guild's `own` list (a config
 entry, same as prior sessions' `client-resolve.js`/`lead-fill.js` additions)
 and ran `node scripts/territory-map.mjs` to regenerate `_map.json`/
 `island.html` — 27 files, 6,397 lines now attributed here.
+
