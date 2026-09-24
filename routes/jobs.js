@@ -440,19 +440,22 @@ router.put('/jobs/:id', auth, async (req, res) => {
     const editWindowHours = await getSetting(supabase, 'ra_edit_window_hours');
     const hoursSinceCreation = (new Date() - new Date(existing.created_at)) / 3600000;
     const raCanEdit = isRA && existing.created_by === req.user.id && hoursSinceCreation <= editWindowHours;
-    // C-0021 #8 (D-0020): `hasRole(req, 'bd', 'bd_lead')` used to admit EVERY
-    // bd/bd_lead onto ANY lead's general fields, regardless of who owned it —
-    // only the owner acts. admin/ra_lead keep full edit rights (unchanged);
-    // a bd/bd_lead may still edit their OWN lead, or a lead owned by someone
-    // in their reporting chain — a manager reviewing, per D-0020's "review and
-    // prompt", extended here to "review and edit" for their own team's leads.
-    // canSeeLead reduces to exactly that for a non-chain bd (self-only scope).
+    // Rampart review (2026-09-24, item #9): `own.canSeeLead` also admits a
+    // lead's CREATOR and whoever it is merely ASSIGNED TO for research, and
+    // the pool — sight, not editing rights (D-0020). Using it here let every
+    // `bd`/`bd_lead` in the reporting chain of a lead's *creator* edit a lead
+    // they do not own, which is "review and edit" where D-0020 only grants
+    // "review and prompt". Edit = the OWNER (assigned_to_bd) or their own
+    // managers per the chain, plus admin/ra_lead's full rights, plus the
+    // existing RA-in-window rule. A lead the caller cannot even SEE is a 404,
+    // never a 403 — a 403 would confirm the id exists.
     const scope = await scopeFor(req);
+    if (!hasRole(req, 'admin', 'ra_lead') && !own.canSeeLead(existing, scope)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
     const canEdit = hasRole(req, 'admin', 'ra_lead')
-      || existing.created_by === req.user.id
-      || existing.assigned_to_bd === req.user.id
-      || raCanEdit
-      || own.canSeeLead(existing, scope);
+      || own.inScope(existing.assigned_to_bd, scope)
+      || raCanEdit;
     if (!canEdit) return res.status(403).json({ error: 'Forbidden' });
     if (isRA && !raCanEdit) return res.status(403).json({ error: `Edit window has expired (${editWindowHours} hours)` });
     const { position, location, source, job_url, stage, notes, assigned_to, assigned_to_bd, sending_email_id, salary_range, job_created_date, industry: jobIndustry, research } = req.body;

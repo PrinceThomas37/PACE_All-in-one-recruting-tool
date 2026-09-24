@@ -13,6 +13,18 @@ const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
 const OAUTH_TIMEOUT_MS = 15000;
 
+// Rampart review item #6: every value handed to the OAuth popup used to be
+// hand-interpolated into an inline <script> string — `userEmailId` straight
+// off the (forgeable) `state`, plus error text from Microsoft or our own DB.
+// One builder, JSON.stringify-ing the WHOLE payload at once, so nothing here
+// can ever again be a bare `'${x}'`. `</script>` inside a value cannot close
+// the tag early either (the `<` is escaped), which JSON.stringify alone does
+// not protect against.
+function popupMessage(payload) {
+  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+  return `<script>window.opener&&window.opener.postMessage(${json},'*');window.close();</script>`;
+}
+
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, today, getMailboxSignature, getMicrosoftToken, buildHtmlEmailBody, orgIdFor, MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES } = ctx;
@@ -44,13 +56,23 @@ router.get('/auth/microsoft/connect', async (req, res) => {
     const orgId = orgIdFor({ user: reqUser });
     const slot = await ownedMailboxSlot(orgId, userEmailId);
     if (!slot) return res.status(404).send('Not found');
-    const state = Buffer.from(JSON.stringify({ userEmailId, userId: reqUser.id })).toString('base64');
+    // Rampart review item #6 (pre-existing, HIGH): `state` used to be plain
+    // base64 — readable AND FORGEABLE — and the callback wrote `userEmailId`
+    // straight from it into an inline <script>, so a hand-crafted state was a
+    // reflected-XSS payload on this origin. Signed the same way sso.js already
+    // signs its own OAuth state (JWT_SECRET, the one secret this app already
+    // requires at startup — no new env var). A forged state now fails
+    // verification before any of its fields are ever read, closing both the
+    // XSS and the "org check trusts a forgeable value" gap the same finding
+    // named.
+    const state = jwt.sign({ userEmailId, userId: reqUser.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
     const url = `https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/authorize?client_id=${MS_CLIENT}&response_type=code&redirect_uri=${encodeURIComponent(MS_REDIRECT)}&scope=${encodeURIComponent(MS_SCOPES)}&state=${encodeURIComponent(state)}&prompt=select_account`;
     res.redirect(url);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 router.get('/auth/microsoft/callback', async (req, res) => {
+  let userEmailId = '';
   try {
     const { code, state, error: msError } = req.query;
     // SIGN-IN vs MAILBOX-CONNECT. Both arrive at this one registered redirect
@@ -87,24 +109,34 @@ router.get('/auth/microsoft/callback', async (req, res) => {
       }
     }
 
-    if (msError) return res.send(`<script>window.opener&&window.opener.postMessage({type:'ms_oauth_error',error:'${msError}'},'*');window.close();</script>`);
+    if (msError) return res.send(popupMessage({ type: 'ms_oauth_error', error: String(msError) }));
     if (!code || !state) return res.status(400).send('Missing code or state');
-    const { userEmailId, userId } = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());
-    // C-0016 #3/#4 defence in depth: `state` is base64, not signed, so this is
-    // checked again here rather than trusting that /connect already refused a
-    // foreign slot. A mismatch gets the SAME generic sentence as any other
-    // failure — never the "this slot is for <email>" oracle below, which is
-    // fine to disclose once we already know userId legitimately owns the slot.
+    // Rampart review item #6: `state` is now a signed JWT (see /connect above),
+    // not plain base64 — a forged or tampered state fails verification here,
+    // before any of its fields are ever read or echoed back.
+    let mailboxState;
+    try {
+      mailboxState = jwt.verify(state, process.env.JWT_SECRET);
+    } catch {
+      return res.send(popupMessage({ type: 'ms_oauth_error', error: 'This connection request is no longer valid. Please try again.' }));
+    }
+    const userId = mailboxState.userId;
+    userEmailId = mailboxState.userEmailId;
+    // C-0016 #3/#4 defence in depth: checked again here rather than trusting
+    // that /connect already refused a foreign slot. A mismatch gets the SAME
+    // generic sentence as any other failure — never the "this slot is for
+    // <email>" oracle below, which is fine to disclose once we already know
+    // userId legitimately owns the slot.
     const { data: stateUser } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
     const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org_id').eq('id', userEmailId).maybeSingle();
     if (!slotForOrgCheck || (stateUser && slotForOrgCheck.org_id && stateUser.org_id && slotForOrgCheck.org_id !== stateUser.org_id)) {
-      return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:'This connection request is no longer valid. Please try again.'},'*');window.close();</scr`+`ipt>`);
+      return res.send(popupMessage({ type: 'ms_oauth_error', userEmailId, error: 'This connection request is no longer valid. Please try again.' }));
     }
     // No retry on the code exchange: an OAuth authorization code is single-use,
     // so a replay fails with invalid_grant and buries the real error.
     const tokenRes = await fetchWithTimeout(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, code, redirect_uri: MS_REDIRECT, grant_type: 'authorization_code', scope: MS_SCOPES }) }, { timeoutMs: OAUTH_TIMEOUT_MS });
     const tokens = await tokenRes.json();
-    if (tokens.error) return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:'${tokens.error_description}'},'*');window.close();</scr`+`ipt>`);
+    if (tokens.error) return res.send(popupMessage({ type: 'ms_oauth_error', userEmailId, error: tokens.error_description || tokens.error }));
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
     const profileRes = await fetchWithRetry('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: `Bearer ${tokens.access_token}` } }, { timeoutMs: OAUTH_TIMEOUT_MS });
     const profile = await profileRes.json();
@@ -116,7 +148,7 @@ router.get('/auth/microsoft/callback', async (req, res) => {
     const actualEmail = emailAddress.toLowerCase().trim();
     if (expectedEmail && actualEmail && expectedEmail !== actualEmail) {
       const errMsg = `Wrong account: you logged in as ${emailAddress} but this slot is for ${userEmailRow.email_address}. Please sign out of Microsoft and try again with the correct account.`;
-      return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:${JSON.stringify(errMsg)}},'*');window.close();</scr`+`ipt>`);
+      return res.send(popupMessage({ type: 'ms_oauth_error', userEmailId, error: errMsg }));
     }
 
     // Validation passed — now safe to delete old token and save new one
@@ -126,13 +158,13 @@ router.get('/auth/microsoft/callback', async (req, res) => {
     );
     if (insertErr) {
       console.error('microsoft_tokens insert error:', insertErr);
-      return res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId}',error:'DB save failed: ${insertErr.message}'},'*');window.close();</scr`+`ipt>`);
+      return res.send(popupMessage({ type: 'ms_oauth_error', userEmailId, error: 'DB save failed: ' + insertErr.message }));
     }
     await supabase.from('user_emails').update({ platform: 'Microsoft', is_active: true }).eq('id', userEmailId);
-    res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_success',userEmailId:'${userEmailId}',email:'${emailAddress}'},'*');window.close();</scr`+`ipt>`);
+    res.send(popupMessage({ type: 'ms_oauth_success', userEmailId, email: emailAddress }));
   } catch (err) {
     console.error('Microsoft OAuth callback error:', err);
-    res.send(`<scr`+`ipt>window.opener&&window.opener.postMessage({type:'ms_oauth_error',userEmailId:'${userEmailId||''}',error:'${err.message}'},'*');window.close();</scr`+`ipt>`);
+    res.send(popupMessage({ type: 'ms_oauth_error', userEmailId: userEmailId || '', error: err.message }));
   }
 });
 

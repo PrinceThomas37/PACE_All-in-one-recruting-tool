@@ -85,6 +85,71 @@
 - Unpublishing KEEPS the token, so re-publishing restores the same URL. A link
   already posted to a job board must not silently rotate.
 
+## Session 30, round 2 — rampart's review of C-0021 (items 1-6)
+
+Rampart read every commit and found two blockers plus more; #1 (email-history)
+and items 2-6 below are gateway's (attachment-byte-count regression, item 1 of
+the review, is guild's `routes/recruiting/outreach.js` — not touched here).
+
+- **BLOCKER fixed — `routes/email-history.js`.** `visibleJobIds` (renamed
+  `ownedJobMap`) used `own.canSeeLead` — which admits a lead's CREATOR and
+  whoever it is merely ASSIGNED TO for research, plus the pool — where the
+  actual rule for an email is `canSeeEmail`: sender's own scope, OR the lead
+  is **OWNED** (`assigned_to_bd`) in the viewer's scope. That let an RA read a
+  BD's email body on a lead they only researched, and an RA Lead read the
+  prior BD's mail on a recycled pool lead or on their own RAs' leads — exactly
+  what D-0036 forbids. Now narrows the SQL `job_id IN (...)` set to jobs whose
+  `assigned_to_bd` is `own.inScope`, and runs `own.scopeEmails` over the
+  MERGED, capped rows as the final gate rather than trusting the two
+  SQL-narrowed queries alone (the "no need to re-check" comment removed —
+  narrowing in SQL is the speed optimisation now, not the rule).
+  **Foundry should pin:** as an RA whose `created_by` lead has a BD's cold
+  email on it, `GET /email/history` returns zero rows for that lead's emails;
+  same for an RA Lead against a lead recycled to the pool or owned by an RA
+  under them but not by the RA Lead themself. The existing 32/32
+  `email-history-smoke` still passes unchanged (it didn't cover this).
+- **`POST /companies/:id/merge`** — added `requireClientOwner` on both the
+  source (folded away) and target (absorbing everything) company; admin
+  passes both, same as every other D-0035 write.
+- **`DELETE /companies/:id`** — reverted to admin-only. D-0035 lists edit,
+  documents, email and contacts as owner actions, not delete; the
+  `created_by` fallback (can be an RA) let one person delete a client
+  colleagues still hold live leads on.
+- **`GET /companies/:id/contacts` and `/companies/:id/intake`** — a contact is
+  seen with its lead (D-0020); both now filter the company's leads through
+  `own.canSeeLead(job, scope)` before pulling contacts, so another BD's POCs
+  at the same client no longer show (D-0035/D5).
+- **`PUT /jobs/:id`** — edit rights narrowed from "anything `canSeeLead`
+  admits" to `own.inScope(existing.assigned_to_bd, scope)` (owner or their
+  managers per chain) + admin/ra_lead + the existing RA-edit-window rule.
+  `canSeeLead` also admits a lead's creator/researcher and the pool — sight,
+  not editing (D-0020: review and prompt, not review and edit). A lead the
+  caller cannot even SEE is now a 404 before the edit check runs, never a 403.
+- **Pre-existing HIGH, `routes/microsoft.js` + `routes/gmail.js` OAuth
+  callbacks:** `userEmailId` (and error text) from the base64 `state` was
+  written straight into an inline `<script>` — reflected XSS on the app's
+  origin, and forgeable (the org check added for C-0016 trusted the same
+  unsigned value). `state` is now a **signed JWT** (`jwt.sign(...,
+  process.env.JWT_SECRET, {expiresIn:'15m'})`) — the one secret this app
+  already requires at startup (`config/env.js` `required('JWT_SECRET')`), no
+  new env var; `/connect` signs it, the callback `jwt.verify`s it and answers
+  the same generic failure sentence on any tampering, before any field is
+  ever read. Every popup message in both files now goes through one
+  `popupMessage(payload)` helper that `JSON.stringify`s the whole payload
+  object (never a hand-built `'${x}'`) and escapes `<` so a value cannot close
+  the `<script>` tag early either. Connect/reconnect verified unchanged for a
+  legitimate user (state round-trips through sign → verify with the same
+  shape it always carried: `{userEmailId, userId}`).
+- **X9** — no code change; the owner is getting a `docs/ROADMAP.md` row
+  (D-0030) for the "platform operator role" question. Not gateway's file.
+
+Verified: `node --check` on `routes/email-history.js`, `routes/companies.js`,
+`routes/jobs.js`, `routes/microsoft.js`, `routes/gmail.js` — all clean.
+`email-history-smoke` 32/32, `route-shadowing-smoke` 9/9,
+`org-scoping-routes-smoke` 13/13, `org-scoping-guard-smoke` 14/14,
+`ownership-smoke` 69/69, `scope-jobs-smoke` 14/14, `backend-smoke` 107/107,
+`recruiting-routes-mounted` 7/7 — all green.
+
 ## Log
 - **2026-09-09** — seeded. No work done by an agent yet.
 - **2026-09-09** — fixed `getTimezoneFromLocation` state-code substring bug;
@@ -336,3 +401,4 @@ Verified: `route-shadowing-smoke` (9/9), `recruiting-routes-mounted` (7/7),
 `org-scoping-guard-smoke` fails only on the known-debt snapshot needing the
 update named above (not a new leak). `node --check` clean on every file
 touched.
+

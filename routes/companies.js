@@ -129,10 +129,15 @@ router.put('/companies/:id', auth, async (req, res) => {
 
 router.delete('/companies/:id', auth, async (req, res) => {
   try {
-    // D-0035: deleting a client is an ACTION, gated the same as edit — its
-    // owner or an admin, not "admin only" any more.
-    const co = await requireClientOwner(req, res, req.params.id);
-    if (!co) return;
+    // Rampart review (2026-09-24, item #5): D-0035 lists edit, documents,
+    // email and contacts as owner actions — DELETE is not one of them. An
+    // owner falling back to `companies.created_by` (which can be an RA) let
+    // one person soft-delete a client colleagues still hold live leads on.
+    // Admin-only, as it was before this session's widening.
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin role required.' });
+    const { data: exists } = await withOrg(supabase.from('companies')
+      .select('id').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
+    if (!exists) return res.status(404).json({ error: 'Not found' });
     const { data, error } = await withOrg(supabase.from('companies')
       .update({ deleted_at: new Date() }).eq('id', req.params.id), req).select('id').maybeSingle();
     if (error) throw error;
@@ -242,6 +247,14 @@ router.post('/companies/:id/merge', auth, async (req, res) => {
     const sourceId = (req.body || {}).from;
     const inputError = companyMerge.mergeInputError({ sourceId, targetId: req.params.id });
     if (inputError) return res.status(400).json({ error: inputError });
+    // Rampart review item #2: a merge re-points every job/lead/contact/document
+    // at BOTH companies and then deletes one — gate it the same as any other
+    // D-0035 write. Owner-or-admin on the SOURCE (being folded away) and the
+    // TARGET (absorbing everything); admin passes both.
+    const srcOwned = await requireClientOwner(req, res, sourceId);
+    if (!srcOwned) return;
+    const tgtOwned = await requireClientOwner(req, res, req.params.id);
+    if (!tgtOwned) return;
     const ctx = await mergeContext(req, sourceId, req.params.id);
     if (ctx.error) return res.status(ctx.status).json({ error: ctx.error });
 
@@ -295,7 +308,7 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     const company = co[0];
 
     const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('id,position,created_at,users:users!created_by(name)')
+      .select('id,position,created_at,assigned_to_bd,created_by,assigned_to,users:users!created_by(name)')
       .eq('company_id', company.id).is('deleted_at', null), req)
       .order('created_at', { ascending: false });
     const rows = leads || [];
@@ -306,14 +319,22 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
       lastLeadAt: last && last.created_at, now: new Date(), days,
     });
 
-    // The POCs already known at this client, across all of its leads, newest
-    // first and de-duplicated by address — so a BD picks a name instead of
-    // retyping one PACE already holds.
+    // D-0035/D5 (rampart review #4): a POC belongs to its lead (D-0020), so a
+    // BD sees another BD's client contact only when that BD's leads are in
+    // the viewer's own scope — not every lead at the client. Admin sees all.
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const visibleRows = rows.filter(r => own.canSeeLead(r, scope));
+
+    // The POCs already known at this client, across the leads the viewer may
+    // see, newest first and de-duplicated by address — so a BD picks a name
+    // instead of retyping one PACE already holds.
     let contacts = [];
-    if (rows.length) {
+    if (visibleRows.length) {
       const { data: cs } = await supabase.from('contacts')
         .select('first_name,last_name,email,designation,phone,linkedin,is_primary,created_at')
-        .in('job_id', rows.map(r => r.id)).order('created_at', { ascending: false });
+        .in('job_id', visibleRows.map(r => r.id)).order('created_at', { ascending: false });
       const seen = {};
       (cs || []).forEach(c => {
         const em = (c.email || '').toLowerCase().trim();
@@ -355,8 +376,14 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
 router.get('/companies/:id/contacts', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
-    const { data: jobs } = await withOrg(supabase.from('jobs').select('id').eq('company_id', req.params.id).is('deleted_at', null), req);
-    const jobIds = (jobs || []).map(j => j.id);
+    // D-0035/D5 (rampart review #4): a POC is seen with its lead (D-0020) —
+    // another BD's contacts at the same client are not shown here either.
+    const { data: jobs } = await withOrg(supabase.from('jobs')
+      .select('id,assigned_to_bd,created_by,assigned_to').eq('company_id', req.params.id).is('deleted_at', null), req);
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+    const jobIds = (jobs || []).filter(j => own.canSeeLead(j, scope)).map(j => j.id);
     if (!jobIds.length) return res.json([]);
     const { data: contacts } = await supabase.from('contacts')
       .select('id,first_name,last_name,email,designation,phone,is_primary').in('job_id', jobIds);

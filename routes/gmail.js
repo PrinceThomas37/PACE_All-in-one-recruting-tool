@@ -26,8 +26,18 @@ module.exports = (ctx) => {
     return data;
   }
 
+  // Rampart review item #6 (pre-existing, HIGH, same fault as routes/microsoft.js):
+  // every value here used to be hand-interpolated into an inline <script>
+  // string off a forgeable base64 `state` — reflected XSS on this origin. One
+  // builder, JSON.stringify-ing the WHOLE payload, plus escaping `<` so a
+  // value cannot close the tag early either.
+  function popupMessage(payload) {
+    const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+    return `<script>window.opener&&window.opener.postMessage(${json},'*');window.close();</script>`;
+  }
+
   const notConfiguredPage = (res) =>
-    res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',error:'Gmail is not configured on the server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).'},'*');window.close();</scr` + `ipt>`);
+    res.send(popupMessage({ type: 'google_oauth_error', error: 'Gmail is not configured on the server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).' }));
 
   router.get('/auth/google/connect', async (req, res) => {
     try {
@@ -43,7 +53,10 @@ module.exports = (ctx) => {
       const orgId = orgIdFor({ user: reqUser });
       const slot = await ownedMailboxSlot(orgId, userEmailId);
       if (!slot) return res.status(404).send('Not found');
-      const state = Buffer.from(JSON.stringify({ userEmailId, userId: reqUser.id })).toString('base64');
+      // Signed the same way sso.js signs its own OAuth state (JWT_SECRET, the
+      // one secret this app already requires at startup) — a forged state now
+      // fails verification before any of its fields are read or echoed back.
+      const state = jwt.sign({ userEmailId, userId: reqUser.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
       res.redirect(provider.authorizeUrl(state));
     } catch (err) { res.status(500).send(err.message); }
   });
@@ -93,9 +106,14 @@ module.exports = (ctx) => {
         }
       }
 
-      if (gErr) return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',error:'${gErr}'},'*');window.close();</scr` + `ipt>`);
+      if (gErr) return res.send(popupMessage({ type: 'google_oauth_error', error: String(gErr) }));
       if (!code || !state) return res.status(400).send('Missing code or state');
-      const parsed = JSON.parse(Buffer.from(decodeURIComponent(state), 'base64').toString());
+      let parsed;
+      try {
+        parsed = jwt.verify(state, process.env.JWT_SECRET);
+      } catch {
+        return res.send(popupMessage({ type: 'google_oauth_error', error: 'This connection request is no longer valid. Please try again.' }));
+      }
       userEmailId = parsed.userEmailId; const userId = parsed.userId;
 
       // C-0016 #3/#4 defence in depth — see routes/microsoft.js for the full
@@ -104,11 +122,11 @@ module.exports = (ctx) => {
       const { data: stateUser } = await supabase.from('users').select('org_id').eq('id', userId).maybeSingle();
       const { data: slotForOrgCheck } = await supabase.from('user_emails').select('org_id').eq('id', userEmailId).maybeSingle();
       if (!slotForOrgCheck || (stateUser && slotForOrgCheck.org_id && stateUser.org_id && slotForOrgCheck.org_id !== stateUser.org_id)) {
-        return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:'This connection request is no longer valid. Please try again.'},'*');window.close();</scr` + `ipt>`);
+        return res.send(popupMessage({ type: 'google_oauth_error', userEmailId, error: 'This connection request is no longer valid. Please try again.' }));
       }
 
       const tokens = await provider.exchangeCode(code);
-      if (tokens.error) return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:${JSON.stringify(tokens.error_description || tokens.error)}},'*');window.close();</scr` + `ipt>`);
+      if (tokens.error) return res.send(popupMessage({ type: 'google_oauth_error', userEmailId, error: tokens.error_description || tokens.error }));
       const emailAddress = await provider.getProfileEmail(tokens.access_token);
 
       // Validate the connected Google account matches the slot before writing.
@@ -117,7 +135,7 @@ module.exports = (ctx) => {
       const actual = (emailAddress || '').toLowerCase().trim();
       if (expected && actual && expected !== actual) {
         const msg = `Wrong account: you signed in as ${emailAddress} but this slot is for ${slot.email_address}. Sign out of Google and retry with the correct account.`;
-        return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:${JSON.stringify(msg)}},'*');window.close();</scr` + `ipt>`);
+        return res.send(popupMessage({ type: 'google_oauth_error', userEmailId, error: msg }));
       }
 
       await supabase.from('gmail_tokens').delete().eq('user_email_id', userEmailId);
@@ -126,17 +144,17 @@ module.exports = (ctx) => {
         access_token: tokens.access_token, refresh_token: tokens.refresh_token,
         expires_at: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), updated_at: new Date(),
       });
-      if (insErr) return res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:'DB save failed: ${insErr.message}'},'*');window.close();</scr` + `ipt>`);
+      if (insErr) return res.send(popupMessage({ type: 'google_oauth_error', userEmailId, error: 'DB save failed: ' + insErr.message }));
       if (!tokens.refresh_token) {
         // Google only returns a refresh_token on first consent; prompt=consent
         // forces it, but warn if somehow absent so it can be re-consented.
         console.warn(`[gmail] no refresh_token returned for ${emailAddress} — re-consent may be needed`);
       }
       await supabase.from('user_emails').update({ platform: 'Gmail', is_active: true }).eq('id', userEmailId);
-      res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_success',userEmailId:'${userEmailId}',email:'${emailAddress}'},'*');window.close();</scr` + `ipt>`);
+      res.send(popupMessage({ type: 'google_oauth_success', userEmailId, email: emailAddress }));
     } catch (err) {
       console.error('Google OAuth callback error:', err);
-      res.send(`<scr` + `ipt>window.opener&&window.opener.postMessage({type:'google_oauth_error',userEmailId:'${userEmailId}',error:${JSON.stringify(err.message)}},'*');window.close();</scr` + `ipt>`);
+      res.send(popupMessage({ type: 'google_oauth_error', userEmailId, error: err.message }));
     }
   });
 

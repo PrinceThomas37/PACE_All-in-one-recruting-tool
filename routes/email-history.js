@@ -69,14 +69,23 @@ module.exports = (ctx) => {
     return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
   }
 
-  // The lead ids the viewer may see, org-scoped, or null for "no restriction"
-  // (admin). Used to pull in emails sent by SOMEONE ELSE about a lead the
-  // viewer owns — the other half of canSeeEmail besides "I sent it".
-  async function visibleJobIds(req, scope) {
-    if (scope.all) return null;
+  // The lead ids that make a THIRD PARTY's email visible to this viewer:
+  // canSeeEmail's rule is "I sent it, OR the lead is OWNED (assigned_to_bd) in
+  // my scope" — NOT canSeeLead's wider "created it / was assigned to research
+  // it / pool". Using canSeeLead here was C-0021's review finding #2: it let
+  // an RA read a BD's email body on a lead they merely researched, and let an
+  // RA Lead read the old BD's mail on a recycled pool lead or on their own
+  // RAs' leads — exactly what D-0036 forbids. Also returns the jobsById map so
+  // the caller can run `own.scopeEmails` as the final gate over the merged
+  // rows, rather than trusting the two SQL-narrowed queries alone.
+  async function ownedJobMap(req, scope) {
+    if (scope.all) return { ids: null, jobsById: null };
     const { data } = await withOrg(supabase.from('jobs')
-      .select('id,assigned_to_bd,created_by,assigned_to').is('deleted_at', null), req);
-    return (data || []).filter(j => own.canSeeLead(j, scope)).map(j => j.id);
+      .select('id,assigned_to_bd').is('deleted_at', null), req);
+    const jobsById = new Map();
+    for (const j of (data || [])) jobsById.set(j.id, j);
+    const ids = (data || []).filter(j => own.inScope(j.assigned_to_bd, scope)).map(j => j.id);
+    return { ids, jobsById };
   }
 
   function normalise(row, source) {
@@ -143,13 +152,16 @@ module.exports = (ctx) => {
             return sel;
           };
           let rows = [];
+          let jobsById = null;
           if (scope.all) {
             const { data, error } = await base().order('created_at', { ascending: false }).limit(PER_SOURCE);
             if (error) throw error;
             rows = data || [];
           } else {
             const ownIds = own.queryOwnerIds(scope) || [];
-            const jobIds = await visibleJobIds(req, scope);
+            const owned = await ownedJobMap(req, scope);
+            const jobIds = owned.ids;
+            jobsById = owned.jobsById;
             const queries = [];
             if (ownIds.length) queries.push(base().in('sent_by', ownIds).order('created_at', { ascending: false }).limit(PER_SOURCE));
             for (const part of chunk(jobIds || [], 200)) {
@@ -159,15 +171,15 @@ module.exports = (ctx) => {
             for (const r of results) { if (r.error) throw r.error; rows.push(...(r.data || [])); }
             const byId = new Map();
             for (const r of rows) byId.set(r.id, r);
-            // Each query is already correctly scoped by construction (sent_by
-            // IN the viewer's own ids, or job_id IN leads the viewer may see)
-            // — merging two already-scoped queries and re-capping the total is
-            // the safe order; re-checking ownership per row here would need
-            // refetching every job's ownership fields a second time for no
-            // extra safety, since there is nothing left to filter.
+            // Each query is SQL-narrowed by construction (sent_by IN the
+            // viewer's own ids, or job_id IN leads OWNED in the viewer's
+            // scope) — merged and capped here for speed. `own.scopeEmails` is
+            // still run as the FINAL gate below, because the SQL narrowing is
+            // the speed optimisation, not the rule; the predicate is the rule.
             rows = [...byId.values()]
               .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
               .slice(0, PER_SOURCE);
+            rows = own.scopeEmails(rows, jobsById, scope);
           }
           for (const r of rows) {
             // Render before anything can show it. See the header note.
