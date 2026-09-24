@@ -689,3 +689,86 @@ untouched), `reminder-lead-visibility-smoke` 15/15 (ledger's file, unaffected)
 files. Not committed.
 
 
+
+## R-047 re-review round 2 fixes (2026-09-24) — `routes/ownership-requests.js`, `index.js`
+
+- **R47-1 (blocker) CLOSED — `record_id` no longer reaches a viewer who
+  cannot `canSeeLead` the lead.** `shapeRequest()` in
+  `routes/ownership-requests.js` takes a new `hiddenLeadIds` Set and nulls
+  `record_id` for any `record_kind:'lead'` row whose id is in it —
+  `withheldLeadIds(req, rows, scope)` computes that set FRESH per response
+  (one batched query for every distinct lead id on the page, never per-row),
+  because ownership — and therefore visibility — can move between the ask and
+  any later read. Wired into every response that shapes a request: the POST
+  201, `GET /ownership-requests` (`mine`/`waiting`/`record` all share one
+  `scope`, computed once per request via the reporting chain the same way
+  `/follow-ups` already does it), and approve/decline/cancel. The approver or
+  an admin who can already see the lead is unaffected; only the asker who
+  reached it through the `via_email` door (D-0038) — who was never supposed
+  to learn the lead's id, only whose it is — loses it, including from their
+  own `box=mine` list, which was the actual leak (the duplicate-response
+  fields were already scrubbed in the prior round; the request's own stored
+  `record_id` was the door still open). `computeScope(req)` is a small shared
+  helper for the decision routes; `GET /ownership-requests` computes its own
+  scope inline since it was already fetching `orgUsers`/`isAdmin` there and
+  reuses it for both the `box=record` visibility check and the withholding.
+- **R47-2 CLOSED (reminder-send) / documented-as-intentional (generate).**
+  `POST /emails/reminder-send` (`index.js`) no longer gates on `canTouchJob` —
+  that helper admits the job's creator and researcher as well as its BD
+  owner, which is right for TOUCHING a record but wrong for ACTING as its
+  owner (D-0020): this route queues a send from `job.sending_email_id` under
+  `sent_by = req.user.id`, i.e. it sends AS the owner, so an RA who merely
+  researched the lead could queue a message that goes out under the BD
+  owner's mailbox and identity. It now fetches just `assigned_to_bd`,
+  computes the caller's D-0034 scope (admin → org; else reporting chain via
+  `reportingChainIds`), and requires `ownership.inScope(job.assigned_to_bd,
+  scope)` — owner or their managers, same shared definition `/follow-ups`
+  already uses. A job with no resolvable owner in scope 404s exactly as an
+  unowned job_id would have. **`POST /emails/generate` was checked and left
+  on `canTouchJob` deliberately** — it is a documented exception, not an
+  oversight: it generates INITIAL outreach, which legitimately runs for a
+  pool lead (no owner yet) or a lead an RA/ra_lead researched before
+  distribution assigned it. Comment added in place explaining why the two
+  routes take different gates for the same helper.
+- **R47-3 CLOSED — `resolveLeadByEmail`'s ILIKE is now literal, and both
+  reads are bounded.** The typed email is escaped (`\`, `%`, `_` →
+  backslash-escaped) before the `ilike`, so a `%` or `_` in a pasted address
+  matches itself rather than acting as a wildcard — Postgres/PostgREST's
+  default LIKE/ILIKE escape character is backslash, so this is an exact
+  transform, not a heuristic. Harmless today because the exact-match filter
+  after the query already discards a wildcard's false positives, but it stops
+  that filter being the ONLY thing standing between a crafted address and a
+  much wider candidate set. Both the `contacts` and the `jobs` fetch in that
+  function now carry `.limit(500)`.
+- **R47-4 CLOSED — an unowned client can now actually be approved, and the
+  prior owner is recorded by value.** The `created_by` transfer rung
+  required `record.company.created_by && record.company.created_by ===
+  oldOwner` — a truthy check that can never be satisfied when a client is
+  genuinely unowned (`created_by` null, no live job order or lead ever owned
+  it), so `oldOwner` is also null and every such approval fell through to
+  `revertApproval`, forever. The condition is now `priorCreatedBy ===
+  (oldOwner || null)` (null-to-null included), and the write switches between
+  `.eq('created_by', priorCreatedBy)` and `.is('created_by', null)` because
+  PostgREST does not treat `eq.null` as `IS NULL`. The conditional write
+  itself is unchanged — still guarded by the live value at write time, still
+  reverts if the race is lost. A second, explicit `history.record()` call
+  (`field: 'created_by'`, `from: priorCreatedBy`) fires only when the
+  transfer actually happened, so the original creator's id survives in the
+  record's own history rather than being inferable only from `oldOwner`
+  matching by coincidence.
+- **Not touched (rampart's file):** `services/ownership.js` — `canSeeLead`,
+  `viewScope`, `inScope` are called, not re-derived.
+- **Not touched:** `test/` (foundry is concurrently editing
+  `test/ownership-requests-smoke.mjs`). **Caution for the next reader:** a
+  concurrent process reset `routes/ownership-requests.js` to its pre-edit
+  `HEAD` content mid-session (twice observed — once bringing back a stray
+  `// MUTATION: transfer removed` placeholder, consistent with a mutation-
+  testing harness's mutate/run/restore cycle racing this edit). If this file
+  looks like it lost changes, diff it against this section before assuming
+  the fix was never applied — re-apply rather than build on top blind.
+
+Verified: `node --check` on `index.js` and `routes/ownership-requests.js` —
+clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
+`backend-smoke` 107/107, `org-scoping-routes-smoke` 13/13,
+`test/ownership-requests-smoke.mjs` (foundry's, read-only — not edited)
+48/48 green against these changes. Not committed.

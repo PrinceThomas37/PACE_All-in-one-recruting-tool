@@ -107,6 +107,38 @@ module.exports = (ctx) => {
     return { id, name: (u && u.name) || 'Someone' };
   }
 
+  // The viewer's D-0034 scope, computed the same way every other route in the
+  // app computes it (chain via hierarchy.js, admin sees everything).
+  async function computeScope(req) {
+    const orgId = orgIdFor(req);
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
+    return own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+  }
+
+  // R47-1: the lead's own id (record_id) is exactly the thing D-0038's
+  // duplicate-email door is built to withhold from the asker — a request
+  // "about" a lead resolved from `via_email` must never hand that lead's id
+  // back on the response, in `box=mine`, or anywhere else a request shapes.
+  // The approver/admin who can already SEE the lead is unaffected; only a
+  // viewer who could not see it under `canSeeLead` loses the id. Batched
+  // (one query for every distinct lead id in the page) rather than per-row,
+  // and re-checked fresh here — never trusted from what was stored at ask
+  // time, because ownership (and therefore visibility) can move.
+  async function withheldLeadIds(req, rows, scope) {
+    const ids = [...new Set((rows || []).filter(r => r.record_kind === 'lead').map(r => r.record_id))];
+    if (!ids.length) return new Set();
+    const { data } = await db.forRequest(req).from('jobs')
+      .select('id,assigned_to_bd,created_by,assigned_to,deleted_at').in('id', ids);
+    const byId = new Map((data || []).map(j => [j.id, j]));
+    const hidden = new Set();
+    ids.forEach(id => {
+      const lead = byId.get(id);
+      if (!lead || lead.deleted_at || !own.canSeeLead(lead, scope)) hidden.add(id);
+    });
+    return hidden;
+  }
+
   // A plain, factual sentence from what is STORED on the row — never a
   // re-derivation of who approves (that answer is fixed at request time and
   // lives in approver_id; the reporting chain may since have changed).
@@ -119,15 +151,19 @@ module.exports = (ctx) => {
     return `Nobody owned this when the request was made, so it went to ${approverName}.`;
   }
 
-  function shapeRequest(row, viewer, usersById) {
+  function shapeRequest(row, viewer, usersById, hiddenLeadIds) {
     const decide = own.canDecide({
       request: row, deciderId: viewer.id, deciderRoles: viewer.roles, deciderOrgId: viewer.orgId,
     });
     const cancel = own.canCancel({ request: row, actorId: viewer.id });
+    // R47-1: withhold record_id for a lead the viewer cannot canSeeLead — the
+    // asker who reached this through the via_email door must never learn the
+    // lead's id, however the request is looked at afterwards.
+    const withheldId = row.record_kind === 'lead' && hiddenLeadIds && hiddenLeadIds.has(row.record_id);
     return {
       id: row.id,
       kind: row.record_kind,
-      record_id: row.record_id,
+      record_id: withheldId ? null : row.record_id,
       record_label: row.record_label,
       status: row.status,
       note: row.note || null,
@@ -236,14 +272,24 @@ module.exports = (ctx) => {
     const needle = String(email || '').trim().toLowerCase();
     if (!needle) return null;
     const D = db.forRequest(req);
-    const { data: contacts } = await D.from('contacts').select('id,job_id,email').ilike('email', needle);
+    // R47-3: `needle` is typed by a user, not a pattern — a literal `%` or `_`
+    // in it must match itself, never act as an ILIKE wildcard (Postgres's
+    // default LIKE/ILIKE escape character is backslash, so escaping with `\`
+    // here is exact, not a heuristic). The exact-match filter below already
+    // makes a wildcard harmless today, but this stops it silently WIDENING the
+    // candidate set the moment that filter is ever relaxed. Bounded so a typed
+    // address that happens to match a great many contacts cannot balloon the
+    // read.
+    const escaped = needle.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const { data: contacts } = await D.from('contacts').select('id,job_id,email')
+      .ilike('email', escaped).limit(500);
     const jobIds = [...new Set((contacts || [])
       .filter(c => String(c.email || '').trim().toLowerCase() === needle)
       .map(c => c.job_id).filter(Boolean))];
     if (!jobIds.length) return null;
     const { data: jobs } = await D.from('jobs')
       .select('id,position,stage,assigned_to_bd,created_by,assigned_to,deleted_at,org_id,company_id,assigned_at,created_at,company:companies(id,name)')
-      .in('id', jobIds);
+      .in('id', jobIds).limit(500);
     const candidates = (jobs || []).filter(j => !j.deleted_at && j.assigned_to_bd !== requesterId);
     if (!candidates.length) return null;
     candidates.sort((a, b) => {
@@ -396,7 +442,8 @@ module.exports = (ctx) => {
       }
 
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
-      res.status(201).json({ request: shapeRequest(inserted, viewer, usersById) });
+      const hidden = await withheldLeadIds(req, [inserted], scope);
+      res.status(201).json({ request: shapeRequest(inserted, viewer, usersById, hidden) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -409,6 +456,12 @@ module.exports = (ctx) => {
       const D = db.forRequest(req);
       const { usersById, adminIds } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
+      // R47-1: computed once, used by both the record-visibility check below
+      // and to withhold record_id from any lead-kind row this viewer cannot
+      // canSeeLead (box=mine included — an asker who reached a lead through
+      // via_email must never learn its id back from their own list either).
+      const chainForScope = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chainForScope });
 
       // waiting_count is always answered — it is the approver's badge, not a
       // page-specific number, so a caller reading `mine` still learns it.
@@ -436,8 +489,6 @@ module.exports = (ctx) => {
         if (!record) return res.status(404).json(NOT_FOUND);
         const row = recordRow(kind, record);
         if (!row || row.deleted_at) return res.status(404).json(NOT_FOUND);
-        const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgId);
-        const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
         // Shared-to-see records (client/job order, D-0035) are visible to
         // anyone in the org; a lead follows its own D-0034 visibility.
         const sees = kind === 'lead' ? own.canSeeLead(row, scope) : true;
@@ -449,8 +500,9 @@ module.exports = (ctx) => {
         return res.status(400).json({ error: 'box must be mine, waiting or record' });
       }
 
+      const hidden = await withheldLeadIds(req, rows, scope);
       res.json({
-        requests: rows.map(r => shapeRequest(r, viewer, usersById)),
+        requests: rows.map(r => shapeRequest(r, viewer, usersById, hidden)),
         waiting_count: waitingCount || 0,
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -606,11 +658,24 @@ module.exports = (ctx) => {
         // this client made the previous person its owner. Conditional on
         // `created_by` still matching `oldOwner` for the same race reason as
         // every other write here.
+        //
+        // R47-4: `oldOwner` and `record.company.created_by` are BOTH null for
+        // a genuinely unowned client (created_by never set, no job order or
+        // lead ever owned it) — the original `&&` here required a TRUTHY
+        // created_by, so that exact case could never satisfy it and every
+        // approval of an unowned client's take-over reverted to pending
+        // forever, with no way to ever approve one. The match is now on
+        // equality (null === null included), and the write itself switches
+        // between `.eq()` and `.is()` because Postgres/PostgREST do not treat
+        // `eq.null` as "IS NULL".
         let createdByTransferred = false;
-        if (!jobOrdersMoved && !leadResults.length && record.company.created_by && record.company.created_by === oldOwner) {
-          const { data: coUpd, error: coErr } = await db.forRequest(req).from('companies')
+        const priorCreatedBy = record.company.created_by || null;
+        if (!jobOrdersMoved && !leadResults.length && priorCreatedBy === (oldOwner || null)) {
+          let coQuery = db.forRequest(req).from('companies')
             .update({ created_by: row.requester_id, updated_at: now })
-            .eq('id', companyId).eq('created_by', oldOwner).select('id');
+            .eq('id', companyId);
+          coQuery = priorCreatedBy ? coQuery.eq('created_by', priorCreatedBy) : coQuery.is('created_by', null);
+          const { data: coUpd, error: coErr } = await coQuery.select('id');
           if (coErr) throw coErr;
           createdByTransferred = !!(coUpd && coUpd.length);
         }
@@ -620,6 +685,17 @@ module.exports = (ctx) => {
           // lost its own race — either way, this approval must not report a
           // reassignment that did not happen.
           return await revertApproval("This client's owner changed just as the request was being approved, so nothing moved. Ask again if it is still needed.");
+        }
+        if (createdByTransferred) {
+          // R47-4: the previous creator/owner is recorded explicitly — by
+          // VALUE, not by re-deriving it from `oldOwner` — so the original
+          // creator is never simply lost from the record's own history, even
+          // though nothing here changes who gets CREDIT for having made it.
+          await history.record(req, 'company', companyId, {
+            action: 'ownership_transfer', field: 'created_by',
+            from: priorCreatedBy, to: row.requester_id,
+            note: 'Take-over request approved — this client had no owning job order or lead, so the requester became its new owner (created_by).',
+          });
         }
         await history.record(req, 'company', companyId, {
           action: 'ownership_transfer', field: 'owner',
@@ -635,7 +711,9 @@ module.exports = (ctx) => {
 
       const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
-      res.json({ request: shapeRequest(updated, viewer, usersById), moved });
+      const scope = await computeScope(req);
+      const hidden = await withheldLeadIds(req, [updated], scope);
+      res.json({ request: shapeRequest(updated, viewer, usersById, hidden), moved });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -660,7 +738,9 @@ module.exports = (ctx) => {
 
       const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
-      res.json({ request: shapeRequest(updated, viewer, usersById) });
+      const scope = await computeScope(req);
+      const hidden = await withheldLeadIds(req, [updated], scope);
+      res.json({ request: shapeRequest(updated, viewer, usersById, hidden) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -683,7 +763,9 @@ module.exports = (ctx) => {
 
       const { usersById } = await orgUsers(req);
       const viewer = { id: req.user.id, roles: req.user.roles || req.user.role, orgId };
-      res.json({ request: shapeRequest(updated, viewer, usersById) });
+      const scope = await computeScope(req);
+      const hidden = await withheldLeadIds(req, [updated], scope);
+      res.json({ request: shapeRequest(updated, viewer, usersById, hidden) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

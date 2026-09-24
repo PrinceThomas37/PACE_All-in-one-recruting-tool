@@ -839,11 +839,27 @@ app.post('/emails/reminder-send', auth, async (req, res) => {
     if (!subject || !subject.trim() || !body || !body.trim()) return res.status(400).json({ error: 'Subject and body required' });
     if (!job_id) return res.status(400).json({ error: 'Reminder must be linked to a job to send through the engine' });
 
-    // Org-bound ownership gate: without this a caller could name ANY job_id —
-    // another company's lead — and this route would happily queue a send off
-    // its owner's mailbox, under the caller's own sent_by. canTouchJob already
-    // scopes by org and admits only the job's creator/researcher/BD owner.
-    if (!(await canTouchJob(req, job_id))) return res.status(404).json({ error: 'Reminder must be linked to a job to send through the engine' });
+    // Org-bound ownership gate. This used to be `canTouchJob`, which — besides
+    // scoping by org — admits the job's CREATOR and RESEARCHER as well as its
+    // BD owner. That is right for touching the record, but D-0020 is explicit
+    // that ACTING belongs to the owner (or their reporting chain), never
+    // merely whoever created or researched it: sending from `job.sending_
+    // email_id` under `sent_by = req.user.id` is exactly "the owner's mailbox,
+    // someone else's hand on the send button" (R47-2). `inScope` is the one
+    // shared definition of "owner or their managers" (services/ownership.js);
+    // a job with no resolvable owner in scope answers the same 404 as one
+    // that does not exist.
+    const { data: ownerRow } = await db.forRequest(req).from('jobs')
+      .select('assigned_to_bd').eq('id', job_id).maybeSingle();
+    if (!ownerRow) return res.status(404).json({ error: 'Reminder must be linked to a job to send through the engine' });
+    const isReminderSendAdmin = hasRole(req, 'admin');
+    const reminderSendChain = isReminderSendAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
+    const reminderSendScope = ownership.viewScope({
+      role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: reminderSendChain,
+    });
+    if (!ownership.inScope(ownerRow.assigned_to_bd, reminderSendScope)) {
+      return res.status(404).json({ error: 'Reminder must be linked to a job to send through the engine' });
+    }
 
     // A contact_id must belong to THIS job, org-scoped — otherwise a caller
     // could point a legitimate job_id at a contact on a different (possibly
@@ -1115,6 +1131,16 @@ app.post('/emails/generate', auth, async (req, res) => {
     // body queued a cold email under its OWNER's mailbox and sent_by=caller,
     // whatever company it belonged to. A foreign/unowned id is silently dropped
     // rather than erroring, same shape as the bulk-stage fix (C-0021 round 2).
+    //
+    // R47-2 (reviewed, deliberately unchanged here): `canTouchJob` admits the
+    // job's creator/researcher as well as its owner, which is exactly right
+    // for THIS route and not a gap — the whole point of distribution is that
+    // an RA/ra_lead/admin generates initial outreach for a POOL lead (no
+    // `assigned_to_bd` yet) or for a lead they researched before it was
+    // assigned. `reminder-send` above is a different case: it is a FOLLOW-UP
+    // on an already-owned lead, sent under that owner's identity, which is
+    // acting rather than researching (D-0020) — that is the route that needed
+    // narrowing to `inScope(owner)`, not this one.
     const { data: candidateJobs, error: jErr } = await db.forRequest(req).from('jobs')
       .select('id, position, location, salary_range, research, industry, assigned_to_bd, assigned_at, last_recycled_at, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name), company:companies(name,industry,location), contacts(*)')
       .in('id', rawJobIds);
