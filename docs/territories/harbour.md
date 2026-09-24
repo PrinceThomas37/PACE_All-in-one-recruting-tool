@@ -1,7 +1,65 @@
 # Harbour — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-23 · C-0023 + C-0015 (D-0034 visibility, org boundary)
 
 ## What is true here now
+- **WHO SEES WHICH EMAIL IS `services/ownership.js`, NOT THIS TERRITORY (D-0034).**
+  Harbour's routers call it; they never re-derive it. Pattern in every router:
+  `viewScopeFor(req)` → `own.viewScope({role, roles, userId, chainIds})` with
+  the chain from `hierarchy.js` `reportingChainIds` (admin: no chain, whole org).
+  * **`GET /emails`** = what the viewer's people SENT (`sent_by` in
+    `queryOwnerIds(scope)`, narrowed IN SQL before `.range()`) **plus** what
+    anybody sent about a lead the viewer's people OWN now (`jobs.assigned_to_bd`
+    in scope — a recycled lead's history follows the lead; fetched ids-first so
+    no body is fetched twice), then `own.scopeEmails` as the final gate.
+    Admin: the whole org. **RA Lead: effectively `[]`** — no BD's messages (D4).
+    Every row gains **`is_mine`**; **`can_retry` is now false on a row the
+    caller did not send** (unless admin), because `POST /emails/:id/retry`
+    answers 404 to a non-sender — a Retry button on a report's row would lie.
+    **`?mine=1`** narrows to the caller's own queue — what Send all / Retry act on.
+    Response is still a plain array; `retry_note`, `ai_written`, `ai_will_write`,
+    `sending_email` and the rendered subject/body are unchanged.
+  * **`GET /emails/sender-summary`** (new) → `{ scope, senders:[{id,name,
+    pending,sent,failed}] }`. admin/ra_lead: every sender in the ORG (scope
+    `'org'`) — an RA Lead runs send operations for every BD, so they get the
+    numbers; everyone else: their own view (`'own'`/`'team'`). Numbers only —
+    no subject, body or address. This replaced the RA Lead picker's old data
+    source (every BD's full rows).
+  * `pending-summary` is unchanged in meaning (own queue; admin/ra_lead may
+    name `manager_id`), now org-bound and ORDERED for pagination.
+- **EVERY TENANT READ AND WRITE IN MY ROUTERS GOES THROUGH `db.forRequest(req)`**
+  (org condition on reads, on the UPDATE/DELETE itself, `org_id` stamped on
+  inserts). `routes/warmup.js` is mounted by index.js with a small ctx that
+  has no `db`, so it builds `createDb(supabase)` itself; `emails.js` and
+  `deliverability.js` fall back the same way for test harnesses.
+  * `DELETE /suppression/:id` is ONE conditional statement (`delete().eq(id)`
+    on the org-scoped accessor + `.select('id')`); nothing removed → 404,
+    never a false `success`.
+  * `DELETE /emails/:id`: other org → 404; same org but not yours → 403 with a
+    sentence if you can SEE it, 404 if you cannot; the delete carries
+    `.in('status',['pending','failed'])` so a row the send loop just claimed
+    is not deleted out from under it (→ 409).
+  * `purge-pending`: org-bound fetch AND delete, `.eq('status','pending')` on
+    the delete, `deleted` = rows the DB actually removed, a foreign
+    `manager_id` → 404, senders taken from the matched rows.
+  * `POST /emails` (manual mark-sent, no screen calls it): job must pass
+    `canTouchJob`, contact must be in the org, insert stamped.
+  * `/analytics/templates`: counts are the org's (paginated — it used to stop
+    at 1,000 rows, and its `.in()` of every contact id silently failed and
+    reported 0 replies); the SAMPLE is only from mail the viewer may see
+    (RA Lead → `sample: null`), and now selects `from_email` so `{{sender}}`
+    renders a name instead of blanking.
+  * `/admin/deliverability`: exact head counts (was capped at 1,000 rows),
+    all org-bound. `/admin/domain-health`: this org's domains only.
+- **WARM-UP IS ONE ORGANISATION AT A TIME.** `warmup-engine.js` `sendWave`
+  pairs a mailbox only with partners of the same `org_id` — before this, a
+  warming mailbox at company A sent real mail into company B's opted-in
+  mailbox (measured: 11 of 11 sends crossed orgs in a 3-org scratch tick).
+  Threads, messages and the send log are stamped with the sender's org.
+  `/warmup/:id/*` look the mailbox up org-scoped (404 otherwise);
+  `/warmup/mailboxes` shows a non-admin lead their chain's mailboxes, while
+  the pool readiness figures stay org-wide (they describe the engine's pool).
+  `/warmup/:id/threads` withholds a partner address from another org
+  (historic threads).
 - Two send engines: the **leads** loop (`emails` table, one per 75-105s inside an
   8-hour window in each *lead's* timezone) and **candidate outreach**
   (`candidate_outreach` table, its own queue, weekday evenings + weekends in the
@@ -40,8 +98,36 @@
 - **Never remove the `ORDER BY` from the pending fetch** — `.range()` repeats or
   skips rows without one.
 - Gmail headers are RFC 2047-encoded, split on **character** boundaries.
+- **Keep the `GET /emails` select literal: `db.forRequest(req).from('emails').select(\`*…`**
+  inside `emailRows()`, and keep `renderStoredEmail(e, mailbox)` +
+  `pinnedById[e.sending_email_id]) || e.job?.sending_email` verbatim —
+  `test/sender-identity-smoke.mjs` greps for exactly those shapes.
+- **`test/org-scoping-guard-smoke.mjs` splits handlers on COLUMN-0 `router.`**,
+  so a handler whose only guard lives in a helper (`emailRows`, `viewScopeFor`)
+  reads as unguarded. That is why the pinned-mailbox lookup in `GET /emails`
+  uses `db.forRequest(req)` explicitly. `routes/warmup.js` indents its
+  handlers, so that guard has never scanned it at all.
+- **A mutant that CRASHES is not a mutant that was CAUGHT.** First mutation run
+  here reported 16/16 caught — every copy had failed to `require('express')`.
+  Count a crash as a miss.
 
 ## Open here
+- **Surface must adapt the Email page (C-0026 #2 + this change):** the RA Lead
+  picker must read `GET /emails/sender-summary` (today it groups `GET /emails`,
+  which now returns nothing of BDs'), and the drill-down loses message rows.
+  For a bd_lead, `GET /emails?status=pending` now includes the chain's rows, so
+  "Send all pending (N)" and the Didn't-send panel should count/act on
+  `is_mine` rows (or call with `&mine=1`). Until surface lands it, the RA Lead
+  picker shows zeros and a bd_lead's Send-all count is inflated (sending itself
+  is safe — every send route is `sent_by = me`).
+- **`addToSuppression` (index.js, gateway's) stamps no `org_id`** and
+  `loadSuppressedSet` checks deployment-wide. Every opt-out is filed under the
+  DEFAULT org, so a second org cannot see its own opt-outs (safe direction),
+  and the default org's admin could remove one another org recorded. Needs
+  gateway (stamp) + ledger (is an opt-out per-org or per-deployment?).
+- `/warmup/tick` and `connectedSet` (Microsoft only — Gmail mailboxes read as
+  "not connected" in readiness) are unchanged; the tick is a deployment
+  control (C-0021 X9).
 - **MOSTLY FIXED 2026-09-23 (D-0031), text below kept for history.** Release
   to pending, stop the mailbox on the first auth failure and the error column
   are all shipped. What remains is the Google "Testing" 7-day expiry itself —
@@ -68,3 +154,13 @@
 - **2026-09-23 (Session 29)** — first emails can now be AI-written at send time
   (D-0032/D-0033). `template_variant = 'ai'` marks them, so the Deliverability
   variant comparison shows AI vs templates side by side for free.
+
+- **2026-09-23 (Session 30)** — C-0023 + C-0015 answered (D-0034 + org
+  boundary on emails/deliverability/warmup, cross-org warm-up pairing closed).
+  Verified by a scratch harness (real routers + real `models/` over an
+  in-memory 2-org DB, 50 assertions) with 17 reintroduced bugs, 16 caught; the
+  one miss is removing only the final `scopeEmails` gate while the SQL
+  narrowing stays — defence in depth, and removing both IS caught. Engine
+  check 6/6, and the pre-fix engine fails it. Harness is scratch, not committed
+  — foundry to pin (C-0027 family).
+

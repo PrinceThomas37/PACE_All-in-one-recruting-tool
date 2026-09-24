@@ -65,9 +65,11 @@ function createWarmupEngine(ctx) {
     (msg.internetMessageHeaders || []).find(h => (h.name || '').toLowerCase() === name.toLowerCase())?.value || null;
 
   // Connected + active mailboxes that either warm up or opted in to receive.
+  // Every organisation's — the tick is one deployment-wide job — but a mailbox
+  // is only ever PAIRED with one in its own organisation (see sendWave).
   async function poolMailboxes() {
     const { data: mbs } = await supabase.from('user_emails')
-      .select('id,email_address,display_name,platform,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,is_active')
+      .select('id,org_id,email_address,display_name,platform,warmup_status,warmup_start_date,warmup_days,warmup_pool_opt_in,is_active')
       .eq('is_active', true);
     const list = (mbs || []).filter(m => m.warmup_status === 'warming' || m.warmup_pool_opt_in);
     if (!list.length) return [];
@@ -89,10 +91,14 @@ function createWarmupEngine(ctx) {
     const { data } = await supabase.from('warmup_send_log').select('emails_sent').eq('user_email_id', mailboxId).eq('send_date', todayStr()).maybeSingle();
     return data?.emails_sent || 0;
   }
-  async function bumpWarmupSendLog(mailboxId) {
+  // The warm-up tables carry org_id with a column DEFAULT of the default org, so
+  // a row written without one is silently filed under the wrong customer.
+  const orgStampOf = (mb) => (mb && mb.org_id ? { org_id: mb.org_id } : {});
+
+  async function bumpWarmupSendLog(mailboxId, mb) {
     const cur = await warmupSentToday(mailboxId);
     await supabase.from('warmup_send_log').upsert(
-      { user_email_id: mailboxId, send_date: todayStr(), emails_sent: cur + 1 },
+      { user_email_id: mailboxId, send_date: todayStr(), emails_sent: cur + 1, ...orgStampOf(mb) },
       { onConflict: 'user_email_id,send_date' }
     );
   }
@@ -101,6 +107,7 @@ function createWarmupEngine(ctx) {
   async function sendOpener(from, to, targetExchanges) {
     const { subject, body } = pick(OPENERS);
     const { data: thread, error } = await supabase.from('warmup_threads').insert({
+      ...orgStampOf(from),
       from_mailbox_id: from.id, to_mailbox_id: to.id, subject,
       target_exchanges: targetExchanges, status: targetExchanges > 0 ? 'open' : 'done',
       next_actor_mailbox_id: to.id
@@ -134,8 +141,8 @@ function createWarmupEngine(ctx) {
       exchanges: 1, landed_in: 'unknown',
       next_due_at: new Date(Date.now() + delayMs).toISOString(), updated_at: nowIso()
     }).eq('id', thread.id);
-    await supabase.from('warmup_messages').insert({ thread_id: thread.id, sender_mailbox_id: from.id, graph_message_id: messageId, direction: 'out' });
-    await bumpWarmupSendLog(from.id);
+    await supabase.from('warmup_messages').insert({ ...orgStampOf(from), thread_id: thread.id, sender_mailbox_id: from.id, graph_message_id: messageId, direction: 'out' });
+    await bumpWarmupSendLog(from.id, from);
     return thread.id;
   }
 
@@ -156,7 +163,10 @@ function createWarmupEngine(ctx) {
     let sent = 0;
     const warming = pool.filter(m => m.warmup_status === 'warming');
     for (const mb of warming) {
-      const partners = pool.filter(p => p.id !== mb.id);
+      // Warm-up is a real email into a real inbox, so a partner must be in the
+      // SAME organisation: pairing across customers sent company A's mail into
+      // company B's mailbox and showed each the other's address.
+      const partners = pool.filter(p => p.id !== mb.id && p.org_id === mb.org_id);
       if (!partners.length) continue; // nobody to warm with
       // Cross-domain traffic is the reputation signal that matters; prefer
       // partners on a different domain, fall back to any partner.
@@ -239,8 +249,8 @@ function createWarmupEngine(ctx) {
               next_actor_mailbox_id: done ? null : otherId,
               next_due_at: done ? null : new Date(Date.now() + delayMs).toISOString(), updated_at: nowIso()
             }).eq('id', thread.id);
-            await supabase.from('warmup_messages').insert({ thread_id: thread.id, sender_mailbox_id: mb.id, graph_message_id: ref.id, direction: 'reply' });
-            await bumpWarmupSendLog(mb.id);
+            await supabase.from('warmup_messages').insert({ ...orgStampOf(mb), thread_id: thread.id, sender_mailbox_id: mb.id, graph_message_id: ref.id, direction: 'reply' });
+            await bumpWarmupSendLog(mb.id, mb);
             log.replied++;
           } catch (e) { console.error(`[warmup] gmail reply in thread ${thread.id}: ${e.message}`); }
         }
@@ -293,8 +303,8 @@ function createWarmupEngine(ctx) {
               next_due_at: done ? null : new Date(Date.now() + delayMs).toISOString(),
               updated_at: nowIso()
             }).eq('id', thread.id);
-            await supabase.from('warmup_messages').insert({ thread_id: thread.id, sender_mailbox_id: mb.id, graph_message_id: messageId, direction: 'reply' });
-            await bumpWarmupSendLog(mb.id);
+            await supabase.from('warmup_messages').insert({ ...orgStampOf(mb), thread_id: thread.id, sender_mailbox_id: mb.id, graph_message_id: messageId, direction: 'reply' });
+            await bumpWarmupSendLog(mb.id, mb);
             log.replied++;
           } catch (e) { console.error(`[warmup] reply in thread ${thread.id}: ${e.message}`); }
         }
