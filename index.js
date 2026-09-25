@@ -350,22 +350,19 @@ function getTimezoneFromLocation(location) {
   return 'EST';
 }
 
-let sendWindowCache = { start: 8, end: 16, loadedAt: 0 };
+// The lead engine's sending hours, in each lead's local time. Read through the
+// settings schema (Admin → System Settings / the Email Engine Schedule popup),
+// so the hours an admin types and the hours the send loop obeys are one value
+// (R-055). Cached 60s by config/settings.js. A start that is not before the end
+// would shut sending entirely, so it falls back to the defaults (8-16) rather
+// than silently stopping every email.
 async function getSendWindowHours() {
-  if (Date.now() - sendWindowCache.loadedAt < 60000) {
-    return { start: sendWindowCache.start, end: sendWindowCache.end };
-  }
-  let start = 8;
-  let end = 16;
+  let start = 8, end = 16;
   try {
-    const { data } = await supabase.from('app_settings').select('key,value').in('key', ['send_window_start_hour', 'send_window_end_hour']);
-    (data || []).forEach(r => {
-      const n = parseInt(r.value, 10);
-      if (r.key === 'send_window_start_hour' && !Number.isNaN(n) && n >= 0 && n <= 23) start = n;
-      if (r.key === 'send_window_end_hour' && !Number.isNaN(n) && n >= 1 && n <= 24) end = n;
-    });
+    const s = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_start_hour')));
+    const e = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_end_hour')));
+    if (Number.isFinite(s) && Number.isFinite(e) && s < e) { start = s; end = e; }
   } catch (_) {}
-  sendWindowCache = { start, end, loadedAt: Date.now() };
   return { start, end };
 }
 

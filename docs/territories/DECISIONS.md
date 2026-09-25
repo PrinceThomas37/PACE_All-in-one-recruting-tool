@@ -47,6 +47,27 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0045 · 2026-09-25 · STANDS · AI writes the engine's first emails — switched ON, including today's queued ones; and the send-hours control is made real
+**Their words:** asked *"if i ask you to enable to AI email writing now. will
+all the leads that are assigned today go out with AI emails? or are the emails
+already generated?"* — told: the AI writes at SEND time, so all 84 queued first
+emails would be rewritten just before each goes (~200k of the 400k daily AI
+allowance; a busy free AI means that one goes as its template). Asked "switch it
+on now?" and "shall I fix the send-hours control?" — answered **"Yes"**.
+
+**Done:** live `sys_engine_ai_first_email` = 1 (2026-09-25 ~12:00 UTC).
+**Correction, same day:** the switch's schema default is 1 and no row had ever
+been saved, so it was ALREADY on since D-0033 — I had told the owner it was
+off. Writing the row changed nothing in behaviour; the owner was told plainly.
+No email has ever gone out AI-written (0 rows with `template_variant='ai'` as
+of 12:00 UTC today) — today is its first live run, checked at 13:13 UTC.
+Follow-ups stay templates (D-0033). R-055 (one working "send between" setting)
+taken as approved by the same "Yes" — both questions were open and it was
+the reply to both.
+
+**Re-open when:** AI reply rates vs template (Deliverability → variants) say
+the AI loses, or the daily AI allowance is hit before the queue drains.
+
 ### D-0044 · 2026-09-25 · STANDS · The email timeline is switched ON (leads + clients); the AI summary button stays OFF
 **Their words:** *"Just this lead list. Let me see what it works with current
 data that it has, not just the future"* — then *"Yes"* to: switch on the email

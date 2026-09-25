@@ -860,3 +860,5 @@ which hadn't existed when the first run started — **109/110** both times,
 same single expected failure). Did not touch `routes/companies.js` or
 `tmp_gateway_oreq_scratch.mjs`, both of which appeared mid-session as
 gateway's own in-flight work. Did not commit anything, per instruction.
+
+- 2026-09-25: +`send-hours-smoke.mjs` (15: runs the real `getSendWindowHours` extracted from index.js against an in-memory app_settings; route refusal; Playwright popup). Verified non-vacuous: the old reader (plain keys) fails "what an admin saves is what the send loop obeys". Lesson re-learned: my first reintroduction crashed on a missing variable and printed no SUMMARY — a crash is not a demonstration; write the old code out properly.

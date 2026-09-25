@@ -33,7 +33,7 @@ const require = createRequire(import.meta.url);
 const src = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 
 const START = 'const US_TZ_MAP = {';
-const END_MARK = '\nlet sendWindowCache';
+const END_MARK = '\nasync function getSendWindowHours';
 const startIdx = src.indexOf(START);
 const endIdx = src.indexOf(END_MARK);
 if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) {
