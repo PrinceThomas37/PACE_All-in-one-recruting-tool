@@ -6051,3 +6051,6 @@ Worked directly (not via subagents) on branch `claude/confident-hypatia-l8ma42`.
 
 ### Round 2 — client intelligence designed, not built (2026-09-24)
 Owner: build the client timeline + AI summary first, OFF until they say, and design the token and storage use first; PACE must fit any industry. Measured: 77 stored inbound messages, only 3 tied to a contact (the rest job-board alerts, account mail, unknown senders). Design: `docs/CLIENT_INTEL_DESIGN.md` (gate → file ~2 KB → free facts → rationed incremental AI summary; everything switched off by default; per-company playbook for industry fit). D-0039, R-051 DOING, R-054 new.
+
+### Round 3 — who sees it, and the limit method (2026-09-25)
+Owner: email text and the per-client AI summary are the OWNER's only; a manager gets a team roll-up of changes (D-0040). Limit explained as share-of-allowance ÷ cost-per-summary: 400k/day allowance, busiest real day ~50k, 25% share ÷ 2.5k = 40/day recommended. Design doc updated.
