@@ -47,6 +47,26 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0042 · 2026-09-25 · STANDS · A client summary is made only when the user presses a button, and its cost is capped however long the history is
+**Their words:** *"maybe we can put a button where those summaries should be
+created in the client section. So when the user clicks on it the summary is
+generated, than a summary for every email in the inbox, because re-reading
+every email when a company scales to 100+ managers … a lot of token processing
+can be saved … it should be taken care that a bd clicks to generate summary
+till day on a client with 2 years of email data, it should not over eat the
+tokens and still work fine. Optimization should be key factor."*
+
+**Chosen:** no automatic summaries at all — not on arrival, not on opening.
+A **"Summarise" button** on the client. Every click has a **hard ceiling**
+(~4k tokens in) whatever the history: older history reaches the AI only as
+compact free facts, never as raw email text; only the latest few messages go
+in as text. A repeat click with nothing new costs zero. Supersedes the
+"when someone opens the client" trigger in D-0039's design.
+
+**Re-open when:** users say the capped summary misses something important
+from older history — then add the one-time monthly digests described in the
+design, not a bigger ceiling.
+
 ### D-0041 · 2026-09-25 · STANDS · The summary limit SCALES with the company — per user, driven by activity — and is never sized from test data
 **Their words:** *"Does the summary count depends on the number of users and
 emails and outreach number and active clients and all right. Don't take out
