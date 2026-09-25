@@ -151,6 +151,11 @@ const SETTINGS_SCHEMA = [
     default: 16, min: 1, max: 24,
   },
   {
+    key: 'company_daily_first_emails', label: 'First emails per company per day', unit: 'contacts (0 = no limit)', group: 'Email engine',
+    description: 'How many different people at ONE company may get a first email on the same day. The rest wait and go the next day — nothing is dropped. Follow-ups are not counted.',
+    default: 2, min: 0, max: 20,
+  },
+  {
     key: 'engine_ai_first_email', label: 'AI writes first emails', unit: '1 = on, 0 = off', group: 'Email engine',
     description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",
     default: 1, min: 0, max: 1,

@@ -47,6 +47,21 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0046 · 2026-09-25 · STANDS · Build R-056 (get the job posting in) and cap first emails at 2 contacts per company per day; R-057 later
+**Their words:** *"R-056, and email 2 contacts per company one day. No R-057
+we will build that later. All the intrinsic designs and they need huge
+discussion. Just do this for now."*
+
+**Chosen:** (a) R-056 — give the AI the posting text: a place to paste it on
+each lead, and a description column accepted by the import. (b) R-058 CHANGED
+from "one contact per company per day" to **two**: a third contact at the same
+company waits for the next day. (c) R-057 (mentioning our own matching
+candidates) is deferred — not dropped. Keep both builds plain; deeper design
+(research automation, angles per contact) is a separate conversation.
+
+**Re-open when:** the owner starts the "huge discussion" on email design, or
+2/day proves too many or too few.
+
 ### D-0045 · 2026-09-25 · STANDS · AI writes the engine's first emails — switched ON, including today's queued ones; and the send-hours control is made real
 **Their words:** asked *"if i ask you to enable to AI email writing now. will
 all the leads that are assigned today go out with AI emails? or are the emails

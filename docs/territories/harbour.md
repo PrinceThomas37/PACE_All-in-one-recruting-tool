@@ -168,3 +168,5 @@
   — foundry to pin (C-0027 family).
 
 
+
+- 2026-09-25 (D-0046): **at most N first emails to one company per day** — `services/company-daily-cap.js` (owned here). Setting `company_daily_first_emails` (default 2, 0 = off). First emails only; per company across all its leads and all senders; the day is `emails.sent_at` (UTC date, the same stamp the send path writes). A held email is NOT claimed or failed — it stays pending and goes the next day; progress reads "2 people at this company already emailed today — goes tomorrow". Loader failure → cap off (never stops sending). Known gap: the Pending summary still counts a held email as "ready now" until it is tried.

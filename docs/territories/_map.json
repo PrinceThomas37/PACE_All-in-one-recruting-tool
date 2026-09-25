@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-24",
+  "generated": "2026-09-25",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 333,
-    "lines": 80596,
+    "files": 361,
+    "lines": 89434,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,29 +24,29 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 60,
-      "lines": 24460,
+      "files": 64,
+      "lines": 25893,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1458
+          "n": 1509
+        },
+        {
+          "f": "public/js/12-manager-users.js",
+          "n": 1041
         },
         {
           "f": "public/js/47-page-mailbox.js",
           "n": 1027
         },
         {
-          "f": "public/js/12-manager-users.js",
-          "n": 1018
-        },
-        {
           "f": "public/ui.css",
           "n": 929
         }
       ],
-      "lastTouched": "2026-09-24",
+      "lastTouched": "2026-09-25",
       "openIn": 1,
-      "openOut": 1
+      "openOut": 2
     },
     {
       "id": "gateway",
@@ -72,27 +72,27 @@
         "services/record-history.js",
         "services/record-history-writer.js"
       ],
-      "files": 25,
-      "lines": 8465,
+      "files": 27,
+      "lines": 10098,
       "largest": [
         {
           "f": "index.js",
-          "n": 3611
+          "n": 3867
+        },
+        {
+          "f": "routes/ownership-requests.js",
+          "n": 774
         },
         {
           "f": "routes/jobs.js",
-          "n": 591
-        },
-        {
-          "f": "routes/apply.js",
-          "n": 493
+          "n": 619
         },
         {
           "f": "routes/companies.js",
-          "n": 488
+          "n": 532
         }
       ],
-      "lastTouched": "2026-09-24",
+      "lastTouched": "2026-09-25",
       "openIn": 3,
       "openOut": 1
     },
@@ -114,8 +114,8 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 55,
-      "lines": 3263,
+      "files": 57,
+      "lines": 3448,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -134,7 +134,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-24",
+      "lastTouched": "2026-09-25",
       "openIn": 1,
       "openOut": 0
     },
@@ -164,6 +164,7 @@
         "services/send-progress.js",
         "services/send-retry.js",
         "services/outreach-dedup.js",
+        "services/company-daily-cap.js",
         "services/mailbox-reassign.js",
         "services/lead-recycle.js",
         "warmup-engine.js",
@@ -176,8 +177,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 23,
-      "lines": 4832,
+      "files": 24,
+      "lines": 4903,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -217,6 +218,8 @@
         "services/ai-budget.js",
         "services/outreach-generator.js",
         "services/engine-draft.js",
+        "services/lead-posting.js",
+        "services/client-intel.js",
         "services/candidate-outreach.js",
         "services/morning-briefing.js",
         "match-engine.js",
@@ -236,8 +239,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 22,
-      "lines": 9602,
+      "files": 24,
+      "lines": 10203,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -253,10 +256,10 @@
         },
         {
           "f": "routes/candidate-outreach.js",
-          "n": 1063
+          "n": 1125
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-25",
       "openIn": 0,
       "openOut": 1
     },
@@ -294,27 +297,27 @@
         "lead-ingest.js"
       ],
       "files": 27,
-      "lines": 6397,
+      "lines": 6937,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
-          "n": 793
+          "n": 926
         },
         {
           "f": "routes/recruiting/outreach.js",
-          "n": 625
+          "n": 696
+        },
+        {
+          "f": "routes/wf.js",
+          "n": 476
         },
         {
           "f": "routes/recruiting/analytics.js",
           "n": 451
-        },
-        {
-          "f": "routes/recruiting/candidates.js",
-          "n": 369
         }
       ],
-      "lastTouched": "2026-09-24",
-      "openIn": 2,
+      "lastTouched": "2026-09-25",
+      "openIn": 0,
       "openOut": 1
     },
     {
@@ -341,15 +344,15 @@
         "services/ownership.js"
       ],
       "files": 9,
-      "lines": 1992,
+      "lines": 2367,
       "largest": [
+        {
+          "f": "services/ownership.js",
+          "n": 743
+        },
         {
           "f": "routes/auth.js",
           "n": 425
-        },
-        {
-          "f": "services/ownership.js",
-          "n": 368
         },
         {
           "f": "services/provisioning.js",
@@ -360,9 +363,9 @@
           "n": 198
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-25",
       "openIn": 0,
-      "openOut": 5
+      "openOut": 0
     },
     {
       "id": "foundry",
@@ -380,9 +383,13 @@
         "test/",
         ".github/"
       ],
-      "files": 106,
-      "lines": 20333,
+      "files": 123,
+      "lines": 24265,
       "largest": [
+        {
+          "f": "test/ownership-requests-smoke.mjs",
+          "n": 728
+        },
         {
           "f": "test/candidate-outreach-smoke.mjs",
           "n": 657
@@ -394,14 +401,10 @@
         {
           "f": "test/outreach-generator-smoke.mjs",
           "n": 589
-        },
-        {
-          "f": "test/client-intake-smoke.mjs",
-          "n": 503
         }
       ],
-      "lastTouched": "2026-09-24",
-      "openIn": 2,
+      "lastTouched": "2026-09-25",
+      "openIn": 0,
       "openOut": 0
     },
     {
@@ -426,11 +429,11 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1252,
+      "lines": 1320,
       "largest": [
         {
           "f": "routes/reminders.js",
-          "n": 222
+          "n": 290
         },
         {
           "f": "services/plans.js",
@@ -445,7 +448,7 @@
           "n": 183
         }
       ],
-      "lastTouched": "2026-09-23",
+      "lastTouched": "2026-09-25",
       "openIn": 0,
       "openOut": 0
     }
@@ -600,14 +603,6 @@
       "asks": "`/ai/generate-email` either wired to a real screen or deleted."
     },
     {
-      "id": "C-0003",
-      "from": "rampart",
-      "to": "gateway",
-      "status": "OPEN",
-      "date": "2026-09-09",
-      "asks": "`/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`."
-    },
-    {
       "id": "C-0005",
       "from": "guild",
       "to": "surface",
@@ -640,30 +635,6 @@
       "asks": "a backfill migration to recompute `jobs.timezone` for existing rows written before this session's fix to `getTimezoneFromLocation()` (`index.js`)."
     },
     {
-      "id": "C-0017",
-      "from": "rampart",
-      "to": "guild",
-      "status": "OPEN",
-      "date": "2026-09-09",
-      "asks": "org scoping on `routes/workflows.js` and `routes/lookups.js`. Both are yours per `scripts/territory-map.mjs` (`lookups.js` is in gateway's `not` list and in your `own` list — I mention it because it was handed to me as gateway's, and the map says otherwise)."
-    },
-    {
-      "id": "C-0018",
-      "from": "rampart",
-      "to": "foundry",
-      "status": "OPEN",
-      "date": "2026-09-09",
-      "asks": "two things in `test/`, which is yours."
-    },
-    {
-      "id": "C-0022",
-      "from": "rampart",
-      "to": "guild",
-      "status": "OPEN",
-      "date": "2026-09-23",
-      "asks": "the D-0034 rule on the endpoints below, and org conditions on a large set of recruiting routes that have none. Rule, usage and the 404 shape: see C-0021's header — `services/ownership.js` (`viewScope`, `canSeeSubmission`, `canSeeLead`, `queryOwnerIds`). `hierarchy.js` is yours and stays the one chain walk; nothing here asks you to change it."
-    },
-    {
       "id": "C-0024",
       "from": "rampart",
       "to": "observatory",
@@ -691,7 +662,7 @@
       "id": "C-0027",
       "from": "rampart",
       "to": "foundry",
-      "status": "OPEN",
+      "status": "ANSWERED",
       "date": "2026-09-23",
       "asks": "pin the D-0034 rule, which currently has no committed test. `services/ownership.js` gained `viewScope`, `canSeeLead`, `canSeeContact`, `canSeeEmail`, `canSeeSubmission`, `scopeLeads`, `scopeEmails`, `queryOwnerIds`, `rolesOf`, `inScope`, `isPoolLead`, `POOL_ROLES`. Rampart ran a 32-assertion scratch check built on the live org shape (BD Lead 1 → 25 of 49 leads, 56 of 119 emails; RA Lead 1 → pool + their RAs' research; admin 59/119) and **six reintroduced bugs each failed it** (pool shown to all; email sight via the lead's creator; no-user fails open; `role` read before `roles[]`; bd_lead sees all assigned; bd_lead added to POOL_ROLES). Please make that a committed suite (or extend `test/ownership-smoke.mjs`), including the mutations. The fixture that matters most: **a manager's view is exactly self + chain — never the role's org-wide slice.** Also still wanted: C-0018(b)'s allow-list grep, and `bd_lead`/`director`/`associate_director` entries in `test/helpers/enter-app.mjs`."
     },
@@ -702,6 +673,14 @@
       "status": "ANSWERED",
       "date": "2026-09-23",
       "asks": "key the Generator's Sent list and \"Convert to lead\" on the tracking row's `id`, not its `token`. `public/js/48-page-outreach-gen.js:151-157` (`outreachConvertLead(token)` finds the row by `r.token` and posts `{token}`) and `:765-767` (the button passes `r.token` and compares `g.converting===r.token`). Change to `outreachConvertLead(id)`, `r.id` throughout, and post `{ id: row.id, … }`."
+    },
+    {
+      "id": "C-0029",
+      "from": "surface",
+      "to": "gateway",
+      "status": "OPEN",
+      "date": "2026-09-24",
+      "asks": "an ownership hint on `GET /clients` (and ideally `GET /companies/:id`) so the client drawer can hide its Upload-document/Delete-document controls for a non-owner, the same way `25-workflow-bd.js` now hides \"Edit job\" and the apply-link controls on a job order using its new `poc_visible` field."
     }
   ],
   "unclaimed": []
