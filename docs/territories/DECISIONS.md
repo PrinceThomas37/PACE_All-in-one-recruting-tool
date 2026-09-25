@@ -47,6 +47,22 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0043 · 2026-09-25 · STANDS · The client's Emails tab shows the emails plus a "Generate AI summary" button; saved summaries feed the daily update
+**Their words:** *"So the email section will have the emails of the client
+being shown and generate ai summary button and this AI summary till date is
+created. This data can also be fed to daily updates or summarise if needed."*
+
+**Chosen:** the client page's **Emails** tab holds the timeline (every email to
+and from that client's contacts) with a **Generate AI summary** button above
+it; the summary covers everything to date and is saved. The **daily update**
+(the morning briefing) re-uses what is already saved — the free facts and any
+summary the owner generated — and makes **no new AI call per client**. Same
+visibility rule (D-0040): an owner's daily update may quote their own clients'
+summaries; a manager's team roll-up uses facts only.
+
+**Re-open when:** the owner wants summaries generated automatically for the
+daily update (that would reverse D-0042's button-only rule and costs tokens).
+
 ### D-0042 · 2026-09-25 · STANDS · A client summary is made only when the user presses a button, and its cost is capped however long the history is
 **Their words:** *"maybe we can put a button where those summaries should be
 created in the client section. So when the user clicks on it the summary is

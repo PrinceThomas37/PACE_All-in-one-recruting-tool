@@ -307,3 +307,17 @@ free facts card instead and says why.
 optional **monthly digests**: each finished month of a client's mail is
 summarised once (~1.5k tokens), stored as ~80 words, and never re-read. A
 2-year client costs ~36k tokens once, then nothing. Not built unless needed.
+
+## Where it shows, and the daily update (D-0043, 2026-09-25)
+
+* **Client page → Emails tab**: the timeline, newest first, with **Generate
+  AI summary** at the top. The saved summary shows with its date ("Summary to
+  25 Sep") and the button changes to "Up to date" or "Update summary (3 new
+  emails)".
+* **The daily update re-uses, never re-reads.** The morning briefing
+  (`routes/ai.js` `gatherFacts`) gains a "your clients" section built from the
+  free facts (who replied, who is waiting on you, promises due today) and, for
+  clients the owner has already summarised, one line from the saved summary.
+  **No new AI call per client** — at most the briefing's own single call, as
+  today.
+* A manager's daily update gets the team roll-up (facts only, D-0040).
