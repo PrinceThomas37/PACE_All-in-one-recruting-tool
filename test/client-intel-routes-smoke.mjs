@@ -29,6 +29,7 @@ function q(table) {
   const api = {
     select() { return api; },
     eq(k, v) { st.f.push(r => r[k] === v); return api; },
+    ilike(k, v) { st.f.push(r => String(r[k] || '').toLowerCase() === String(v).toLowerCase()); return api; },
     is(k, v) { st.f.push(r => (r[k] == null) === (v == null)); return api; },
     not(k, op, v) { st.f.push(r => r[k] != null); return api; },
     in(k, vs) { st.f.push(r => vs.includes(r[k])); return api; },
@@ -60,6 +61,13 @@ let aiCalls = 0, aiText = '';
 aiProvider.availability = async () => ({ available: true, reason: null });
 aiProvider.complete = async () => { aiCalls++; return { text: aiText, model: 'stub', usage: { total_tokens: 2100 } }; };
 
+// Stub mailbox: the full original, as the mailbox would return it.
+const mp = require('../services/mail-provider.js');
+let mailFetches = 0;
+mp.createMailProvider = () => ({ forMailbox: () => ({ getMessage: async () => { mailFetches++; return {
+  subject: 'Re: HVAC roles', date: '2026-09-20T10:00:00Z',
+  body_html: '<p>Thanks. What are your rates? I will decide next week.</p><p>On Mon Lisa wrote:</p><blockquote>Here are three profiles.</blockquote><script>alert(1)</script>' }; } }) });
+
 function mount() {
   delete require.cache[require.resolve('../config/settings.js')];
   delete require.cache[require.resolve('../routes/client-intel.js')];
@@ -69,14 +77,15 @@ function mount() {
   });
   const find = (method, path) => router.stack.find(l => l.route && l.route.path === path && l.route.methods[method]).route.stack.slice(-1)[0].handle;
   return {
+    full: (id, mid, user) => call(find('get', '/clients/:id/intel/messages/:mid/full'), id, user, {}, { mid }),
     get: (id, user) => call(find('get', '/clients/:id/intel'), id, user, {}),
     post: (id, user, body) => call(find('post', '/clients/:id/summary'), id, user, body || {}),
   };
 }
-async function call(h, id, user, body) {
+async function call(h, id, user, body, extra) {
   let status = 200, out = null;
   const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
-  await h({ params: { id }, user, orgId: ORG, body }, res);
+  await h({ params: Object.assign({ id }, extra || {}), user, orgId: ORG, body }, res);
   return { status, body: out };
 }
 const setting = (k, v) => { T.app_settings = T.app_settings.filter(r => r.key !== 'sys_' + k); T.app_settings.push({ key: 'sys_' + k, value: String(v) }); };
@@ -88,9 +97,10 @@ T.jobs.push({ id: 'j1', company_id: 'co1', org_id: ORG, deleted_at: null, assign
 T.contacts.push({ id: 'ct1', job_id: 'j1', org_id: ORG, email: 'maria@acme.com', first_name: 'Maria', last_name: 'Lopez' });
 T.users.push({ id: 'u-priya', name: 'Priya' });
 T.emails.push({ id: 'e1', contact_id: 'ct1', org_id: ORG, status: 'sent', to_email: 'maria@acme.com', subject: 'HVAC roles',
-  body: 'Hi Maria, {{sender}} here — three profiles attached.', sent_at: '2026-09-10T10:00:00Z', sending_email_id: 'mb1' });
+  body: 'Hi Maria, {{sender}} here — three profiles attached. ' + 'Details of each candidate follow. '.repeat(120) + 'THE-END-OF-OUR-EMAIL', sent_at: '2026-09-10T10:00:00Z', sending_email_id: 'mb1' });
 T.user_emails.push({ id: 'mb1', email_address: 'priya@ours.com', display_name: 'Priya Shah' });
-T.conversation_messages.push({ id: 'cm1', org_id: ORG, contact_id: 'ct1', company_id: 'co1', direction: 'inbound',
+T.user_emails.push({ id: 'mb-priya', user_id: 'u-priya', email_address: 'priya@ours.com', platform: 'Gmail', is_active: true });
+T.conversation_messages.push({ id: 'cm1', org_id: ORG, contact_id: 'ct1', company_id: 'co1', direction: 'inbound', message_key: 'gm-1', to_email: 'priya@ours.com',
   from_email: 'maria@acme.com', subject: 'Re: HVAC roles', body: 'Thanks. What are your rates? I will decide next week.', sent_at: '2026-09-20T10:00:00Z' });
 
 // ── OFF ────────────────────────────────────────────────────────────────────
@@ -111,6 +121,19 @@ step('the owner sees the timeline — our email and their reply', g.body.owner =
 step('a stored {{sender}} is rendered before it is shown', g.body.timeline.some(m => /Priya Shah here/.test(m.text)) && !g.body.timeline.some(m => /\{\{sender\}\}/.test(m.text)));
 step('the free facts say they are waiting on us', /haven't replied/.test(g.body.facts.summary) && g.body.facts.next_steps[0].id === 'reply', g.body.facts.summary);
 step('with the AI switch off, the page is told so', g.body.ai.enabled === false);
+step('our own sent email is shown IN FULL (not cut at 1,500)', g.body.timeline.some(m => m.direction === 'outbound' && /THE-END-OF-OUR-EMAIL/.test(m.text)));
+step('a stored reply offers "open the full email"', g.body.timeline.some(m => m.id === 'in:cm1' && m.can_open_full));
+let fm = await r.full('co1', 'in:cm1', priya);
+step('the owner can open the full reply from their own mailbox', fm.status === 200 && /Here are three profiles/.test(fm.body.text) && mailFetches === 1, JSON.stringify(fm.body).slice(0, 120));
+step('…as plain text — nothing from the sender\'s HTML can run', !/<script|<p>/.test(fm.body.text));
+fm = await r.full('co1', 'in:cm1', sam);
+step('a manager cannot open it', fm.status === 403 && mailFetches === 1);
+T.user_emails[1].user_id = 'u-other';
+fm = await r.full('co1', 'in:cm1', priya);
+step('a reply that arrived in someone ELSE\'s mailbox is not fetched', fm.status === 409 && fm.body.code === 'not_your_mailbox' && mailFetches === 1);
+T.user_emails[1].user_id = 'u-priya';
+fm = await r.full('co2', 'in:cm1', priya);
+step('an email cannot be opened through a different client', fm.status === 404 && mailFetches === 1);
 const gs = await r.get('co1', sam);
 step('a manager (not the owner) gets NO email text (D-0040)', gs.body.owner === false && !gs.body.timeline && gs.body.owner_name === 'Priya');
 const ga = await r.get('co1', admin);

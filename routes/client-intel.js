@@ -23,6 +23,11 @@ const own = require('../services/ownership');
 const aiProvider = require('../services/ai-provider');
 const settingsConfig = require('../config/settings');
 const { renderStoredEmail } = require('../email-vars');
+const { createMailProvider } = require('../services/mail-provider');
+
+// What the page may show when a person opens one email. The AI still sees at
+// most ci.CAPS.RECENT_MSG_CHARS of it; this is only the reading view.
+const FULL_TEXT_CHARS = 30000;
 
 // Bounded reads: a client's timeline never pulls more than this per source.
 // The fact sheet summarises everything we fetched; the AI sees ≤8 of it.
@@ -31,7 +36,8 @@ const TIMELINE_SHOWN = 200;
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, withOrg, orgStamp } = ctx;
+  const { supabase, auth, hasRole, withOrg, orgStamp, graphMailRequest, getMicrosoftToken, gmailProvider } = ctx;
+  const mail = createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider });
 
   const on = async (key) => Number(await settingsConfig.getSetting(supabase, key)) === 1;
 
@@ -87,7 +93,7 @@ module.exports = (ctx) => {
 
     // Inbound — filed to this client, or from one of its contacts (rows stored
     // before migration 048 carry no company_id yet).
-    const inSel = 'id,from_email,to_email,subject,body,sent_at,direction,facts,contact_id';
+    const inSel = 'id,from_email,to_email,subject,body,sent_at,direction,facts,contact_id,message_key';
     const inboundRows = [];
     const addIn = (rows) => (rows || []).forEach(r => { if (!inboundRows.some(x => x.id === r.id)) inboundRows.push(r); });
     try {
@@ -100,7 +106,7 @@ module.exports = (ctx) => {
         .in('contact_id', contactIds).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
       if (error && /facts/.test(error.message || '')) {
         ({ data } = await withOrg(supabase.from('conversation_messages')
-          .select('id,from_email,to_email,subject,body,sent_at,direction,contact_id')
+          .select('id,from_email,to_email,subject,body,sent_at,direction,contact_id,message_key')
           .in('contact_id', contactIds).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req));
       }
       addIn(data);
@@ -129,12 +135,18 @@ module.exports = (ctx) => {
       .eq('company_id', companyId).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
 
     const toText = (html) => ci.trimStoredText(String(html || ''));
+    // Our OWN sent emails are kept in full already, so the reading view shows
+    // all of it (the owner asked, 2026-09-25). Only the AI's copy is trimmed.
+    const fullText = (html) => ci.fullEmailText(html, FULL_TEXT_CHARS);
     const messages = [];
     inboundRows.forEach(r => messages.push({
       id: 'in:' + r.id, source: 'reply', direction: r.direction || 'inbound', sent_at: r.sent_at,
       from: r.from_email, to: r.to_email, subject: r.subject, text: r.body || '',
       facts: r.facts || ci.factsForMessage(r.body || '', r.sent_at),
       person: nameByEmail[ci.normEmail(r.from_email)] || null,
+      // A reply is stored trimmed; its full original can be fetched from the
+      // mailbox that received it, on request, and is never stored.
+      can_open_full: !!r.message_key,
     }));
     sentRows.forEach(r => {
       if (!r.sent_at) return;
@@ -142,14 +154,14 @@ module.exports = (ctx) => {
       messages.push({
         id: 'out:' + r.id, source: 'outreach', direction: 'outbound', sent_at: r.sent_at,
         from: (mailboxes[r.sending_email_id] || {}).email_address || r.from_email, to: r.to_email,
-        subject: rendered.subject, text: toText(rendered.body), facts: null, person: null,
+        subject: rendered.subject, text: toText(rendered.body), full: fullText(rendered.body), facts: null, person: null,
       });
     });
     (tracked || []).forEach(r => {
       if (!r.sent_at) return;
       messages.push({
         id: 'trk:' + r.id, source: 'client_email', direction: 'outbound', sent_at: r.sent_at,
-        from: r.mailbox_email, to: r.to_email, subject: r.subject, text: toText(r.body), facts: null, person: null,
+        from: r.mailbox_email, to: r.to_email, subject: r.subject, text: toText(r.body), full: fullText(r.body), facts: null, person: null,
       });
     });
     messages.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
@@ -210,10 +222,58 @@ module.exports = (ctx) => {
         ai: { enabled: aiOn, per_user_limit: limit, used_today: used, left_today: Math.max(0, limit - used) },
         timeline: messages.slice(0, TIMELINE_SHOWN).map(m => ({
           id: m.id, source: m.source, direction: m.direction, sent_at: m.sent_at,
-          from: m.from, to: m.to, person: m.person, subject: m.subject, text: m.text,
+          from: m.from, to: m.to, person: m.person, subject: m.subject, text: m.full || m.text,
+          can_open_full: !!m.can_open_full,
           intent: m.facts && m.facts.intent || null,
         })),
         total_messages: messages.length,
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── One reply, in full, fetched live from the mailbox (never stored) ──────
+  // The owner asked for it (2026-09-25). Same doors as the tab — switched on,
+  // the client's owner — plus two more: the email must belong to THIS client,
+  // and the mailbox it arrived in must be the viewer's own (the in-app Inbox
+  // rule: your own mailboxes only). Returned as plain text, so nothing from
+  // the sender's HTML ever runs on the page.
+  router.get('/clients/:id/intel/messages/:mid/full', auth, async (req, res) => {
+    try {
+      if (!(await on('client_intel_enabled'))) return res.status(404).json({ error: 'Not found' });
+      const acc = await readAccess(req, req.params.id);
+      if (acc.status !== 200) return res.status(acc.status === 404 ? 404 : 403).json({ error: 'Only the client\'s owner can read its emails.' });
+      const rowId = String(req.params.mid || '').replace(/^in:/, '');
+      const { data: row } = await withOrg(supabase.from('conversation_messages')
+        .select('id,company_id,contact_id,to_email,message_key,provider,subject,sent_at').eq('id', rowId), req).maybeSingle();
+      if (!row || !row.message_key) return res.status(404).json({ error: 'Not found' });
+      let belongs = row.company_id === req.params.id;
+      if (!belongs && row.contact_id) {
+        const { data: ct } = await withOrg(supabase.from('contacts').select('job_id').eq('id', row.contact_id), req).maybeSingle();
+        if (ct && ct.job_id) {
+          const { data: j } = await withOrg(supabase.from('jobs').select('company_id').eq('id', ct.job_id), req).maybeSingle();
+          belongs = !!(j && j.company_id === req.params.id);
+        }
+      }
+      if (!belongs) return res.status(404).json({ error: 'Not found' });
+      const { data: mbs } = await supabase.from('user_emails')
+        .select('id,user_id,email_address,display_name,platform,is_active')
+        .eq('user_id', req.user.id).ilike('email_address', String(row.to_email || ''));
+      const mb = (mbs || []).find(m => m.is_active !== false);
+      if (!mb) {
+        return res.status(409).json({ code: 'not_your_mailbox', mailbox: row.to_email || null,
+          error: 'This reply arrived in ' + (row.to_email || 'another mailbox') + ', which is not one of yours, so it cannot be opened from here.' });
+      }
+      let msg;
+      try { msg = await mail.forMailbox(mb).getMessage(row.message_key, { blockRemoteImages: true }); }
+      catch (e) {
+        const m = String(e && e.message || '');
+        if (/404|not ?found|ErrorItemNotFound/i.test(m)) return res.status(410).json({ code: 'gone', error: 'This email is no longer in the mailbox (it may have been deleted).' });
+        return res.status(409).json({ code: 'mailbox_error', error: 'The mailbox could not be reached — it may need reconnecting.' });
+      }
+      res.json({
+        subject: msg.subject || row.subject || '', date: msg.date || row.sent_at,
+        from: msg.from || null,
+        text: ci.fullEmailText(msg.body_html || '', FULL_TEXT_CHARS),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

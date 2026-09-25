@@ -298,8 +298,7 @@
             '<div style="font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(who)+' · '+esc(fmtWhen(m.sent_at))+'</div>'+
           '</div>'+
         '</div>'+
-        (open?'<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px;font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(m.text||'')+
-          '<div style="font-size:11px;color:var(--ink3);margin-top:6px;white-space:normal">'+(inbound?'The new part of their email — quoted history and signature are left in the mailbox.':'')+'</div></div>':'')+
+        (open?intelBody(m,inbound):'')+
       '</div>';
     }).join('')||'<div class="dt-empty">No emails with this client yet.</div>';
     return summaryBlock+
@@ -307,6 +306,31 @@
         ' <span style="font-weight:400;color:var(--ink3);font-size:12px">'+(i.total_messages||0)+' in total, newest first</span></div>'+
       rows;
   }
+  // One opened email. A reply shows its stored new part until the person asks
+  // for the whole original, which is fetched from their mailbox on request and
+  // never stored (the owner's call, 2026-09-25).
+  function intelBody(m,inbound){
+    var full=(STATE.clients.fullMail||{})[m.id];
+    var text=full&&full.text?full.text:(m.text||'');
+    var foot='';
+    if(inbound){
+      if(full&&full.loading) foot='Opening the full email from your mailbox…';
+      else if(full&&full.error) foot=esc(full.error);
+      else if(full&&full.text) foot='The full email, straight from your mailbox — not stored in PACE.';
+      else foot='The new part of their email.'+(m.can_open_full?' <button type="button" onclick="event.stopPropagation();clientsOpenFullMail(\''+m.id+'\')" style="border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-decoration:underline">Open the full email</button>':'');
+    }
+    return '<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;max-height:60vh;overflow:auto">'+esc(text)+
+      (foot?'<div style="font-size:11px;color:var(--ink3);margin-top:6px;white-space:normal">'+foot+'</div>':'')+'</div>';
+  }
+  window.clientsOpenFullMail=function(mid){
+    var st=STATE.clients, id=st.selectedId; if(!id) return;
+    st.fullMail=st.fullMail||{};
+    st.fullMail[mid]={loading:true}; paintDetail();
+    apiGet('/clients/'+id+'/intel/messages/'+encodeURIComponent(mid)+'/full').then(function(r){
+      st.fullMail[mid]={text:r.text||''}; paintDetail();
+    }).catch(function(e){ st.fullMail[mid]={error:e.message||'Could not open it.'}; paintDetail(); });
+  };
+
   window.clientsSummarise=function(force){
     var st=STATE.clients, id=st.selectedId; if(!id||st.intelBusy) return;
     st.intelBusy=true; paintDetail();

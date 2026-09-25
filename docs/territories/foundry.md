@@ -21,6 +21,8 @@
   "every company_id table is in the merge list" caught the two 048 tables —
   exactly its job. Full suite 115/116 before that fix.
 
+- 2026-09-25: client-intel-routes-smoke now 27 (full sent text; full reply fetch owner-only, own-mailbox-only, right-client-only, plain text). Full suite 116/116.
+
 ## What is true here now
 - **`npm test` runs 110 suite files** via `test/run-all.mjs` and reports one summary
   (was 105 at the last count in this file; +2 this session —

@@ -35,6 +35,8 @@
   check_promise. Without the cap the same test history measured 232k tokens.
 - `conversation-intel.js`: headlines say "today" instead of "today ago".
 
+- 2026-09-25: `fullEmailText(html)` (pure) — the reading view: everything incl. quoted history as "> " lines, markup stripped. The AI still only sees the capped copy.
+
 ## What is true here now
 - **Every AI call goes through `services/ai-provider.js`** — `complete(supabase,
   {system, prompt, maxTokens, feature, orgId})`. Two wire formats only:

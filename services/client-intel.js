@@ -107,6 +107,24 @@ function trimStoredText(raw) {
   return intel.cleanForStorage(raw, CAPS.STORED_TEXT_CHARS);
 }
 
+// The READING view of a whole email: everything, quoted history included (as
+// "> " lines), as plain text — nothing from the sender's HTML survives to run
+// on the page. Unlike the stored copy, nothing is cut away but the markup.
+function fullEmailText(html, maxChars) {
+  let s = String(html || '');
+  if (/<[a-z!/][\s\S]*>/i.test(s)) {
+    s = s.replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, ' ');
+    s = s.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, inner) =>
+      '\n' + fullEmailText(inner).split('\n').map(l => '> ' + l).join('\n') + '\n');
+    s = s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n');
+    s = s.replace(/<[^>]+>/g, '');
+    s = s.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'");
+  }
+  s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return maxChars ? s.slice(0, maxChars) : s;
+}
+
 // ── 3. FACTS ────────────────────────────────────────────────────────────────
 // Per message, computed ONCE when it is filed and stored beside it (~300
 // bytes). Nothing here is ever re-derived from the inbox.
@@ -435,7 +453,7 @@ function playbookFor(id) { return PLAYBOOKS[id] || PLAYBOOKS.recruiting; }
 module.exports = {
   CAPS, PLAYBOOKS, NOISE_DOMAINS, PUBLIC_DOMAINS,
   estimateTokens, normEmail, domainOf, isPublicDomain, isNoiseSender,
-  gateMessage, trimStoredText, factsForMessage, buildLedger, ledgerText,
+  gateMessage, trimStoredText, fullEmailText, factsForMessage, buildLedger, ledgerText,
   summaryStatus, canGenerate, selectRecent, buildSummaryRequest,
   parseSummary, checkSummary, rulesSummary, labelSteps, coversUntil, playbookFor,
 };

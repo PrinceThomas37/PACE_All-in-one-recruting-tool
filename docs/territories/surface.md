@@ -48,6 +48,8 @@
   client's emails". AI unavailable → `aiSubscribePopup`. Pinned by
   `test/client-intel-ui-smoke.mjs` (10 checks, screenshots via SHOTS).
 
+- 2026-09-25: an opened reply offers "Open the full email" (`clientsOpenFullMail`); our sent emails show in full.
+
 ## What is true here now
 - 48 modules in `public/js/`, ~19,000 lines, loaded in order by `index.html`.
   No build step. Global `window.*` + `STATE`.

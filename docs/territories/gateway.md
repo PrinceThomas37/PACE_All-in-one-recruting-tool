@@ -21,6 +21,8 @@
 - `routes/companies.js` merge: `clear` tables are deleted on the duplicate
   instead of moved.
 
+- 2026-09-25 (owner: "do both"): the timeline shows OUR sent emails in full (up to 30k chars, `ci.fullEmailText`); `GET /clients/:id/intel/messages/:mid/full` fetches ONE reply's full original live from the mailbox it arrived in — owner of the client only, the email must belong to that client, and the mailbox must be the viewer's own (Inbox rule); returned as plain text, never stored.
+
 ## What is true here now
 - `index.js` is 3,175 lines (down from 3,403 — the recruiting workflow channels
   and candidate/client email endpoints moved to `routes/recruiting/outreach.js`).
