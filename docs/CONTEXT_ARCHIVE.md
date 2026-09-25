@@ -6058,3 +6058,5 @@ Owner: email text and the per-client AI summary are the OWNER's only; a manager 
 - 2026-09-25: owner corrected the limit method — it depends on users, outreach and active clients, and the live data is test data. Now per owner per day (default 15), company ceiling = per-user × users capped at 25% of the AI allowance; worked example uses a described company (D-0041).
 
 - 2026-09-25: owner chose a Summarise BUTTON (no automatic summaries) and a cap that holds for a 2-year client (D-0042). Design: each email read by rules once on arrival; a click sends playbook + fixed ≤800-token fact ledger + ≤8 latest messages ≈3.3k tokens max; repeat with nothing new = 0; monthly digests only if the cap proves too lossy.
+
+- 2026-09-25: owner confirmed the Emails tab = timeline + Generate AI summary, and that saved summaries/facts feed the daily update with no extra AI per client (D-0043).
