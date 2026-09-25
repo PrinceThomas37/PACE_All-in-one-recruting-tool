@@ -3102,6 +3102,115 @@ async function runReplySweep() {
   } catch (e) { console.error('[ReplySweep] error:', e.message); return 0; }
 }
 
+// ── CATCH-UP: past replies from each BD's own leads (Session 31) ─────────
+// The owner: "Let me see what it works with current data that it has, not
+// just the future." The live sweep only ever read forward from a window, so
+// replies from before it are not in PACE. This reads them back ONCE per
+// mailbox — and never the whole inbox: it SEARCHES each mailbox only for mail
+// FROM the contacts on leads its owner holds (assigned_to_bd), over the last
+// 90 days. Messages are only FILED (stored, linked to their lead and client,
+// facts noted). Deliberately NO side effects: no stage change, no sequence
+// stop, no suppression — those belong to the live sweep reacting to new mail,
+// and replaying them over old mail would move leads nobody touched.
+// Runs only while `client_intel_enabled` is on. No AI.
+const CATCHUP_DAYS = 90;
+const CATCHUP_CHUNK = 12;            // addresses per search
+const CATCHUP_MAX_PER_MAILBOX = 400; // messages filed per mailbox, at most
+async function catchUpLeadReplies(tokenRow, platform, { days = CATCHUP_DAYS } = {}) {
+  const { data: mb } = await supabase.from('user_emails')
+    .select('id,user_id,org_id,email_address').eq('id', tokenRow.user_email_id).maybeSingle();
+  if (!mb || !mb.user_id) return { mailbox: tokenRow.email_address, filed: 0, reason: 'no_owner' };
+  let lq = supabase.from('jobs').select('id,company_id').eq('assigned_to_bd', mb.user_id).is('deleted_at', null);
+  if (mb.org_id) lq = lq.eq('org_id', mb.org_id);
+  const { data: leads } = await lq;
+  const leadById = {}; (leads || []).forEach(l => { leadById[l.id] = l; });
+  const leadIds = Object.keys(leadById);
+  if (!leadIds.length) return { mailbox: mb.email_address, filed: 0, reason: 'no_leads' };
+  const { data: contacts } = await supabase.from('contacts').select('id,job_id,email').in('job_id', leadIds);
+  const byEmail = {};
+  (contacts || []).forEach(c => {
+    const e = String(c.email || '').trim().toLowerCase();
+    if (e && e.includes('@') && !byEmail[e]) byEmail[e] = c;
+  });
+  const addrs = Object.keys(byEmail);
+  if (!addrs.length) return { mailbox: mb.email_address, filed: 0, reason: 'no_contact_emails' };
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+  const row = Object.assign({}, tokenRow, { org_id: tokenRow.org_id || mb.org_id });
+  let filed = 0, seen = 0, failed = 0, chunks = 0;
+  for (let i = 0; i < addrs.length && seen < CATCHUP_MAX_PER_MAILBOX; i += CATCHUP_CHUNK) {
+    const chunk = addrs.slice(i, i + CATCHUP_CHUNK);
+    chunks++;
+    let messages = [];
+    try {
+      if (platform === 'gmail') {
+        const heads = await gmailProvider.listMessages(tokenRow.user_email_id, {
+          q: `from:(${chunk.join(' OR ')}) newer_than:${days}d`, maxResults: 100,
+        });
+        for (const h of (heads || [])) {
+          try { messages.push(gmailProvider.normalizeMessage(await gmailProvider.getMessage(tokenRow.user_email_id, h.id, { format: 'full' }))); }
+          catch (_) { /* one unreadable message must not end the catch-up */ }
+        }
+      } else {
+        const accessToken = await getMicrosoftToken(tokenRow.user_email_id);
+        const who = chunk.map(a => `from/emailAddress/address eq '${a.replace(/'/g, "''")}'`).join(' or ');
+        const filter = encodeURIComponent(`(${who}) and receivedDateTime ge ${since}`);
+        const data = await graphMailRequest(accessToken, `/me/messages?$top=100&$select=id,subject,from,bodyPreview,body,receivedDateTime,conversationId&$filter=${filter}`);
+        messages = data.value || [];
+      }
+    } catch (e) { failed++; console.error(`[CatchUp] ${tokenRow.email_address}: ${e.message}`); continue; }
+    for (const msg of messages) {
+      if (!msg) continue;
+      seen++;
+      const from = String(msg.from?.emailAddress?.address || '').toLowerCase();
+      const c = byEmail[from];
+      if (!c) continue;
+      if (msg.receivedDateTime && msg.receivedDateTime < since) continue;
+      await storeConversationMessage(msg, {
+        direction: 'inbound', from, tokenRow: row,
+        contactId: c.id, jobId: c.job_id, companyId: (leadById[c.job_id] || {}).company_id || null,
+      });
+      filed++;
+    }
+  }
+  // Every search failed (a dead sign-in, usually): say so, so the caller does
+  // NOT mark this mailbox done — it is retried once the mailbox is reconnected.
+  if (chunks && failed === chunks) return { mailbox: mb.email_address, filed: 0, error: 'mailbox_unreachable' };
+  return { mailbox: mb.email_address, filed, searched: addrs.length };
+}
+async function runClientIntelCatchUp({ force = false } = {}) {
+  if (Number(await settingsConfig.getSetting(supabase, 'client_intel_enabled')) !== 1) return { skipped: 'switched_off' };
+  const [{ data: ms }, { data: gm }] = await Promise.all([
+    supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id'),
+    supabase.from('gmail_tokens').select('user_email_id,email_address,org_id'),
+  ]);
+  const boxes = (ms || []).map(t => ({ t, p: 'microsoft' })).concat((gm || []).map(t => ({ t, p: 'gmail' })));
+  const results = [];
+  let ran = 0;
+  for (const { t, p } of boxes) {
+    const key = 'cis_catchup_' + t.user_email_id;
+    if (!force) {
+      const { data: done } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+      if (done) continue;
+    }
+    if (ran >= 3 && !force) break;   // bounded per tick; the rest go next time
+    ran++;
+    try {
+      const r = await catchUpLeadReplies(t, p);
+      results.push(r);
+      if (r.error) continue;
+      await supabase.from('app_settings').upsert({ key, value: JSON.stringify(Object.assign({ at: new Date().toISOString() }, r)), updated_at: new Date() }, { onConflict: 'key' });
+    } catch (e) { results.push({ mailbox: t.email_address, error: e.message }); }
+  }
+  if (!results.length) return { skipped: 'nothing_to_catch_up' };
+  return { mailboxes: results.length, filed: results.reduce((n, r) => n + (r.filed || 0), 0), results };
+}
+app.post('/admin/client-intel/catch-up', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    res.json(await runClientIntelCatchUp({ force: !!(req.body && req.body.force) }));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Manual trigger (admin) — useful for verifying the loop without waiting for cron.
 app.post('/admin/bounce-sweep', auth, async (req, res) => {
   try {
@@ -3662,6 +3771,15 @@ routeCtx.sendMailboxNewMessage = recruitingOutreach.sendMailboxNewMessage;
 // down after ~15 minutes of no traffic, so an in-process timer stops existing;
 // each queued row carries its own send_after and this drains whatever is due.
 // A late heartbeat therefore delays candidate emails and never skips them.
+// Past replies for the client/lead email timeline — only while its switch is
+// on, once per mailbox, a few mailboxes per tick (see catchUpLeadReplies).
+engineRunner.register('client_intel_catchup', {
+  everyMs: 60 * 60 * 1000,
+  quiet: true,
+  description: "Bring each BD's past replies (last 90 days, their own leads only) into the email timeline",
+  run: () => runClientIntelCatchUp()
+});
+
 engineRunner.register('candidate_outreach_drip', {
   everyMs: 10 * 60 * 1000,
   quiet: true,               // usually finds nothing due — don't log the no-ops

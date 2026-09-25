@@ -82,6 +82,20 @@ function mount() {
     post: (id, user, body) => call(find('post', '/clients/:id/summary'), id, user, body || {}),
   };
 }
+mount.lead = function () {
+  delete require.cache[require.resolve('../config/settings.js')];
+  delete require.cache[require.resolve('../routes/client-intel.js')];
+  const router = require('../routes/client-intel.js')({
+    supabase, auth: (_q, _s, n) => n(), hasRole: (req, r) => (req.user.roles || []).includes(r),
+    withOrg: (query, req) => query.eq('org_id', req.orgId), orgStamp: (req) => ({ org_id: req.orgId }),
+  });
+  const find = (method, path) => router.stack.find(l => l.route && l.route.path === path && l.route.methods[method]).route.stack.slice(-1)[0].handle;
+  return {
+    full: (id, mid, user) => call(find('get', '/leads/:id/intel/messages/:mid/full'), id, user, {}, { mid }),
+    get: (id, user) => call(find('get', '/leads/:id/intel'), id, user, {}),
+    post: (id, user, body) => call(find('post', '/leads/:id/summary'), id, user, body || {}),
+  };
+};
 async function call(h, id, user, body, extra) {
   let status = 200, out = null;
   const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
@@ -168,6 +182,44 @@ step('…and the call still counts against the allowance', aiCalls === 2);
 aiText = '{"summary":"Maria asked to talk on Friday after asking about rates. We have not replied yet.","next_steps":[{"id":"book_call","why":"She asked to talk Friday."}]}';
 p = await r.post('co1', priya);
 step('the per-person daily allowance is enforced', p.status === 409 && p.body.code === 'daily_limit' && aiCalls === 2, JSON.stringify(p.body));
+
+// ── ONE LEAD on the Leads list (Session 31: "just this lead list") ────────
+// A second lead at the SAME company, owned by Sam, with its own contact and
+// reply. The lead view must show only its own lead's mail, never the company's.
+T.jobs.push({ id: 'j2', position: 'Plumber', company_id: 'co1', org_id: ORG, deleted_at: null, assigned_to_bd: 'u-sam', created_at: '2026-09-02' });
+T.jobs[0].position = 'HVAC Tech';
+T.contacts.push({ id: 'ct2', job_id: 'j2', org_id: ORG, email: 'bob@acme.com', first_name: 'Bob' });
+T.users.push({ id: 'u-sam', name: 'Sam' });
+T.conversation_messages.push({ id: 'cm3', org_id: ORG, contact_id: 'ct2', company_id: 'co1', direction: 'inbound', message_key: 'gm-3', to_email: 'sam@ours.com',
+  from_email: 'bob@acme.com', subject: 'Re: plumbers', body: 'BOB-ONLY-TEXT send me resumes', sent_at: '2026-09-21T10:00:00Z' });
+setting('client_intel_ai_per_user_daily', 10);
+{
+  const lr = mount.lead();
+  let lg = await lr.get('j1', priya);
+  const texts = (lg.body.timeline || []).map(m => m.text).join(' ');
+  step('lead: its owner (assigned BD) sees that lead\'s emails', lg.body.owner === true && lg.body.timeline.length === 3, String(lg.body.timeline && lg.body.timeline.length));
+  step('lead: another lead\'s mail at the same company is NOT in it', !/BOB-ONLY-TEXT/.test(texts));
+  lg = await lr.get('j1', sam);
+  step('lead: a manager is not the owner and gets no email text', lg.body.owner === false && !lg.body.timeline && lg.body.owner_name === 'Priya');
+  lg = await lr.get('j2', sam);
+  step('lead: Sam owns his own lead and sees only Bob', lg.body.owner === true && lg.body.timeline.length === 1 && /BOB-ONLY-TEXT/.test(lg.body.timeline[0].text));
+  let lf = await lr.full('j2', 'in:cm1', sam);
+  step('lead: a reply from a different lead cannot be opened through this one', lf.status === 404);
+  lf = await lr.full('j1', 'in:cm1', priya);
+  step('lead: the owner can open the full reply from their mailbox', lf.status === 200 && /Here are three profiles/.test(lf.body.text));
+  aiText = '{"summary":"Maria asked to talk on Friday after asking about rates. We have not replied yet.","next_steps":[{"id":"book_call","why":"She asked to talk Friday."}]}';
+  const before = aiCalls;
+  let lp = await lr.post('j1', sam);
+  step('lead: only the owner may press Summarise', lp.status === 403 && aiCalls === before);
+  lp = await lr.post('j1', priya);
+  const stored = T.app_settings.find(x => x.key === 'lead_summary_j1');
+  step('lead: the summary is saved per lead (app_settings, no migration)', lp.body.saved === true && stored && JSON.parse(stored.value).org_id === ORG, JSON.stringify(lp.body).slice(0, 140));
+  step('lead: it does not touch the client summary table', T.client_summaries.length === 1);
+  lp = await lr.post('j1', priya);
+  step('lead: nothing new → reused, zero tokens', lp.body.reused === true && aiCalls === before + 1);
+  const gone = await lr.get('nope', priya);
+  step('lead: an unknown lead is a 404', gone.status === 404);
+}
 
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

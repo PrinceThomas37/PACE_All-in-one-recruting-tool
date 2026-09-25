@@ -477,3 +477,7 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - The summary is made ONLY by the button. Anything else that wants client state
   (daily update, team roll-up) reads the saved summary / free facts, never calls AI
   per client.
+- **The same engine serves ONE LEAD** (`/leads/:id/intel`, `/leads/:id/summary`) inside the lead's
+  expanded row on the Leads list (`public/js/58-lead-intel.js`). Not a second implementation —
+  `register('/leads','lead')`. Past replies are brought in once per mailbox by the catch-up
+  (`runClientIntelCatchUp` in index.js); do not add another backfill.
