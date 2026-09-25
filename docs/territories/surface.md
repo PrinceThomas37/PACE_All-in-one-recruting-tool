@@ -879,3 +879,5 @@ resulting "Ask to take over" modal after clicking through, showing
 5. `otStatusChip('cancelled')` renders "Withdrawn"; `otStatusChip('withdrawn')`
    (should the server ever send that word) still renders "Withdrawn" too.
 
+
+- 2026-09-25 (R-055): the **Email Engine Schedule** popup (`12-manager-users.js`, opened from the Workflows page) now shows the real sending hours — "Send lead emails between __ and __" in each lead's own time zone (admin edits; ra_lead sees them read-only) — and "Queue the day's follow-ups at (India time)". Removed: the dead "Outreach send time" box and a Timezone picker whose value was never saved. Saving clears `STATE.sysSettings` and calls `loadPendingSummary()`, so the "Send window: …" line re-reads.

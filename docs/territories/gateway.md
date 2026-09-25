@@ -795,3 +795,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 `backend-smoke` 107/107, `org-scoping-routes-smoke` 13/13,
 `test/ownership-requests-smoke.mjs` (foundry's, read-only — not edited)
 48/48 green against these changes. Not committed.
+
+- 2026-09-25 (R-055, owner: "when i changed the send time in admin panel, the wordings don't change"): **the lead engine's sending hours are now ONE setting.** `getSendWindowHours()` (index.js) reads `send_window_start_hour`/`send_window_end_hour` through `config/settings.js` (Admin → System Settings, group Email engine; stored `sys_…`, cached 60s) — it used to read two plain app_settings keys NOTHING wrote, while Admin's "Outreach send time" (`outreach_send_time`) was saved and read by nothing. A start not before the end falls back to 8-16 (never shuts sending); `POST /admin/settings/numbers` refuses that pair in words, checking a one-sided change against the saved other half. `followup_send_time` is unchanged: it is when follow-ups are QUEUED (IST), not sent. Pinned by `test/send-hours-smoke.mjs` (the reader is lifted out of index.js and RUN; reverting to the old reader fails it).

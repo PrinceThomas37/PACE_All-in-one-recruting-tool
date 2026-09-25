@@ -326,54 +326,77 @@ window.saveEmailTemplate=function(key,subjId,bodyId){
   Promise.all(saves).then(function(){showToast('Template saved','success');}).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };
 
-window.openEmailEngineModal=function(){
-  var outreachTime=(STATE.appSettings&&STATE.appSettings['outreach_send_time'])||'08:00';
+// THE EMAIL ENGINE SCHEDULE (R-055). Two things, each labelled for what it
+// really does:
+//   * the SENDING HOURS — the only hours lead emails go out, in each LEAD's own
+//     time zone (settings schema: send_window_start_hour / _end_hour). Every
+//     "Send window: …" line on every screen is read from the same two values.
+//   * the time of day, India time, when follow-ups are QUEUED.
+// It used to offer an "Outreach send time" nothing read and a Timezone picker
+// that was never saved — the owner changed the time and nothing moved.
+function engineHourOpts(sel,from,to){
+  var o='';
+  for(var h=from;h<=to;h++){
+    var lbl=(h%12||12)+':00 '+(h<12||h===24?'AM':'PM');
+    if(h===0)lbl='12:00 AM (midnight)'; if(h===24)lbl='12:00 AM (midnight, end of day)'; if(h===12)lbl='12:00 PM (noon)';
+    o+='<option value="'+h+'"'+(h===sel?' selected':'')+'>'+lbl+'</option>';
+  }
+  return o;
+}
+function renderEmailEngineModal(win){
+  var isAdmin=userHasRole(STATE.user,'admin');
   var followupTime=(STATE.appSettings&&STATE.appSettings['followup_send_time'])||'08:30';
-  var tzOpts=[
-    {val:'Asia/Kolkata',label:'IST — India (UTC+5:30)'},
-    {val:'America/New_York',label:'EST — New York (UTC-5)'},
-    {val:'America/Chicago',label:'CST — Chicago (UTC-6)'},
-    {val:'America/Denver',label:'MST — Denver (UTC-7)'},
-    {val:'America/Los_Angeles',label:'PST — Los Angeles (UTC-8)'}
-  ].map(function(tz){
-    var sel=tz.val==='Asia/Kolkata';
-    return '<option value="'+tz.val+'"'+(sel?' selected':'')+'>'+tz.label+'</option>';
-  }).join('');
+  var dis=isAdmin?'':' disabled';
   STATE.modal='<div class="modal modal-w480">'+
     '<div class="mh"><div class="mt">Email Engine Schedule</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+
-      '<div style="font-size:13px;color:var(--text2);margin-bottom:18px">Set the daily send times for outreach and follow-up emails. The engine runs automatically at these times every day.</div>'+
-      '<div class="fgrp"><label class="flbl">Timezone</label><select class="sel" id="engine-tz">'+tzOpts+'</select></div>'+
-      '<div class="g2">'+
-        '<div class="fgrp"><label class="flbl">Outreach send time</label><input class="inp" type="time" id="admin-outreach-time" value="'+outreachTime+'"/></div>'+
-        '<div class="fgrp"><label class="flbl">Follow-up send time</label><input class="inp" type="time" id="admin-followup-time" value="'+followupTime+'"/></div>'+
+      '<div class="fgrp"><label class="flbl">Send lead emails between</label>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<select class="sel" id="engine-win-start" style="flex:1;min-width:140px"'+dis+'>'+engineHourOpts(win.start,0,23)+'</select>'+
+          '<span style="color:var(--text3)">and</span>'+
+          '<select class="sel" id="engine-win-end" style="flex:1;min-width:140px"'+dis+'>'+engineHourOpts(win.end,1,24)+'</select>'+
+        '</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5">In each <b>lead\'s own time zone</b> — a Texas lead gets it in Texas working hours, a New York lead in New York hours. First emails and follow-ups both wait for these hours.'+
+          (isAdmin?'':' Only an admin can change them.')+'</div>'+
       '</div>'+
-      '<div style="padding:10px 12px;background:var(--amber-l);border-radius:var(--r);font-size:12px;color:var(--amber);margin-top:4px">'+
-        '<strong>Testing:</strong> Use "Run now" to trigger the follow-up engine immediately without waiting for the scheduled time.'+
+      '<div class="fgrp" style="margin-top:14px"><label class="flbl">Queue the day\'s follow-ups at (India time)</label>'+
+        '<input class="inp" type="time" id="admin-followup-time" value="'+followupTime+'"/>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5">Once a day at this time PACE adds the follow-ups that are due to the queue. They are then sent inside the hours above.</div>'+
       '</div>'+
     '</div>'+
     '<div class="mf">'+
-      '<button class="btn btn-outline btn-sm" onclick="runFollowupEngineNow()" style="color:var(--amber);border-color:var(--amber);margin-right:auto">▶ Run now</button>'+
+      '<button class="btn btn-outline btn-sm" onclick="runFollowupEngineNow()" style="margin-right:auto" title="Queue due follow-ups now instead of waiting for the time above">▶ Queue follow-ups now</button>'+
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
       '<button class="btn btn-primary" onclick="saveAdminSendTimes()">Save schedule</button>'+
     '</div>'+
   '</div>';
   render();
+}
+window.openEmailEngineModal=function(){
+  var ps=STATE.pendingSummary&&STATE.pendingSummary.send_window;
+  var fallback={start:(ps&&ps.start!=null)?ps.start:8,end:(ps&&ps.end!=null)?ps.end:16};
+  if(!userHasRole(STATE.user,'admin')){ renderEmailEngineModal(fallback); return; }
+  apiGet('/admin/settings/numbers').then(function(list){
+    var get=function(k,d){ var r=(list||[]).find(function(x){return x.key===k;}); return r&&r.value!=null?Number(r.value):d; };
+    renderEmailEngineModal({start:get('send_window_start_hour',8),end:get('send_window_end_hour',16)});
+  }).catch(function(){ renderEmailEngineModal(fallback); });
 };
 
 window.saveAdminSendTimes=function(){
-  var ot=(document.getElementById('admin-outreach-time')||{}).value||'08:00';
+  var isAdmin=userHasRole(STATE.user,'admin');
   var ft=(document.getElementById('admin-followup-time')||{}).value||'08:30';
-  var saves=[
-    apiPost('/app-settings',{key:'outreach_send_time',value:ot}),
-    apiPost('/app-settings',{key:'followup_send_time',value:ft})
-  ];
+  var st=Number((document.getElementById('engine-win-start')||{}).value);
+  var en=Number((document.getElementById('engine-win-end')||{}).value);
+  if(isAdmin&&!(st<en)){ showToast('The start time must be earlier than the stop time.','warning'); return; }
+  var saves=[apiPost('/app-settings',{key:'followup_send_time',value:ft})];
+  if(isAdmin) saves.push(apiPost('/admin/settings/numbers',{values:{send_window_start_hour:st,send_window_end_hour:en}}));
   Promise.all(saves).then(function(){
     STATE.appSettings=STATE.appSettings||{};
-    STATE.appSettings['outreach_send_time']=ot;
     STATE.appSettings['followup_send_time']=ft;
+    STATE.sysSettings=null;                         // System Settings re-reads
     closeModal();
-    showToast('Send times saved','success');
+    showToast('Schedule saved','success');
+    if(typeof loadPendingSummary==='function') loadPendingSummary();   // every "Send window" line re-reads
   }).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };
 

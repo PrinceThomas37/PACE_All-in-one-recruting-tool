@@ -134,6 +134,22 @@ const SETTINGS_SCHEMA = [
     description: "Each person's own daily allowance, so one busy user cannot use up the team's. Set 0 for none. Re-set this after two weeks of real use from what people actually used.",
     default: 15, min: 0, max: 500,
   },
+  // The lead engine's sending hours (R-055). These are the hours every screen
+  // quotes ("Send window: 8:00 AM – 4:00 PM lead local time") and the ONLY
+  // hours the send loop obeys — a first email and a follow-up alike go out
+  // only inside them, in the LEAD's own time zone. They used to be read from
+  // two app_settings keys nothing ever wrote, while Admin's "Outreach send
+  // time" box saved a value nothing ever read.
+  {
+    key: 'send_window_start_hour', label: 'Lead emails: start sending at', unit: "hour, 0-23 (lead's local time)", group: 'Email engine',
+    description: "Emails to leads go out only from this hour, in each LEAD's own time zone (a Texas lead by Texas time). 8 = 8:00 AM.",
+    default: 8, min: 0, max: 23,
+  },
+  {
+    key: 'send_window_end_hour', label: 'Lead emails: stop sending at', unit: "hour, 1-24 (lead's local time)", group: 'Email engine',
+    description: "No lead email goes out at or after this hour, in the lead's own time zone. 16 = 4:00 PM. Must be later than the start hour.",
+    default: 16, min: 1, max: 24,
+  },
   {
     key: 'engine_ai_first_email', label: 'AI writes first emails', unit: '1 = on, 0 = off', group: 'Email engine',
     description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",

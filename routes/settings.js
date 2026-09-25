@@ -188,6 +188,13 @@ router.post('/admin/settings/numbers', auth, async (req, res) => {
     if (!updates || typeof updates !== 'object' || !Object.keys(updates).length) {
       return res.status(400).json({ error: 'values object with at least one setting required' });
     }
+    // Sending hours are a PAIR: a start that is not before the end would shut
+    // lead sending entirely. Refuse it here, in words, rather than store it.
+    if ('send_window_start_hour' in updates || 'send_window_end_hour' in updates) {
+      const s = Number('send_window_start_hour' in updates ? updates.send_window_start_hour : await numberSettings.getSetting(supabase, 'send_window_start_hour'));
+      const e = Number('send_window_end_hour' in updates ? updates.send_window_end_hour : await numberSettings.getSetting(supabase, 'send_window_end_hour'));
+      if (!(s < e)) return res.status(400).json({ error: 'The start hour must be earlier than the stop hour.', key: 'send_window_end_hour' });
+    }
     const result = await numberSettings.setSettings(supabase, updates);
     if (result.error) return res.status(400).json({ error: result.error, key: result.key });
     const settings = await numberSettings.getAllSettings(supabase);
