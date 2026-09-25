@@ -49,6 +49,7 @@
   `test/client-intel-ui-smoke.mjs` (10 checks, screenshots via SHOTS).
 
 - 2026-09-25: an opened reply offers "Open the full email" (`clientsOpenFullMail`); our sent emails show in full.
+- 2026-09-25 (owner: "just this lead list … current data"): **`58-lead-intel.js`** puts the same Emails block inside a lead's expanded row on the Leads list (`leadIntelSlot(j)` called from `leadExpandHtml`). It fills ONLY its own `#lx-intel-<id>` element and never calls render() (the lead row opens without render — rule 2 in 06-page-leads.js). Cached per lead in `STATE.leadIntel`, painted at once, refreshed on every open. Switched off → the slot is `hidden` and the row is exactly as before. Styles `.lx-intel`/`.lxi-*` in theme.css next to the lead-row block (tokens only). Pinned by `test/lead-intel-ui-smoke.mjs` (12, incl. zero render() calls; screenshots via SHOTS).
 
 ## What is true here now
 - 48 modules in `public/js/`, ~19,000 lines, loaded in order by `index.html`.

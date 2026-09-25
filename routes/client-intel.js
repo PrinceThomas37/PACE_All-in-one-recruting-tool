@@ -59,28 +59,51 @@ module.exports = (ctx) => {
   }
 
   // D-0040: the OWNER reads the email text. Nobody else — not their manager.
-  // A client nobody owns yet is readable by an admin, so it is never invisible.
-  async function readAccess(req, companyId) {
-    const { data: co } = await withOrg(supabase.from('companies')
-      .select('id,name').eq('id', companyId).is('deleted_at', null), req).maybeSingle();
-    if (!co) return { status: 404 };
-    const ownerId = await clientOwnerId(req, companyId);
-    if (ownerId && ownerId === req.user.id) return { status: 200, company: co, ownerId };
-    if (!ownerId && hasRole(req, 'admin')) return { status: 200, company: co, ownerId: null };
+  // A record nobody owns yet is readable by an admin, so it is never invisible.
+  //
+  // TWO KINDS OF SUBJECT, ONE ENGINE (Session 31): a CLIENT (all its leads'
+  // contacts, owner by the client ladder) and a single LEAD (that lead's
+  // contacts, owner = assigned_to_bd — D-0020's definition). The owner asked
+  // for it on the Leads list: "Just this lead list … let me see what it works
+  // with current data" — 48 of the 49 companies were still leads, not clients.
+  async function access(req, kind, id) {
+    let subject, ownerId;
+    if (kind === 'lead') {
+      const { data: j } = await withOrg(supabase.from('jobs')
+        .select('id,position,company_id,assigned_to_bd').eq('id', id).is('deleted_at', null), req).maybeSingle();
+      if (!j) return { status: 404 };
+      let coName = '';
+      if (j.company_id) {
+        const { data: co } = await withOrg(supabase.from('companies').select('name').eq('id', j.company_id), req).maybeSingle();
+        coName = (co && co.name) || '';
+      }
+      subject = { kind, id: j.id, name: [j.position, coName].filter(Boolean).join(' · ') || 'this lead',
+        companyId: null, leadIds: [j.id] };
+      ownerId = own.recordOwnerId('lead', j);
+    } else {
+      const { data: co } = await withOrg(supabase.from('companies')
+        .select('id,name').eq('id', id).is('deleted_at', null), req).maybeSingle();
+      if (!co) return { status: 404 };
+      const { data: leads } = await withOrg(supabase.from('jobs')
+        .select('id').eq('company_id', id).is('deleted_at', null), req);
+      subject = { kind: 'client', id: co.id, name: co.name, companyId: co.id, leadIds: (leads || []).map(l => l.id) };
+      ownerId = await clientOwnerId(req, id);
+    }
+    if (ownerId && ownerId === req.user.id) return { status: 200, subject, ownerId };
+    if (!ownerId && hasRole(req, 'admin')) return { status: 200, subject, ownerId: null };
     let ownerName = null;
     if (ownerId) {
       const { data: u } = await supabase.from('users').select('name').eq('id', ownerId).maybeSingle();
       ownerName = u && u.name;
     }
-    return { status: 403, company: co, ownerName };
+    return { status: 403, subject, ownerName };
   }
 
-  // Every email with this client, from the three places PACE keeps mail, as
+  // Every email with this client or lead, from the places PACE keeps mail, as
   // one list in one shape. Read-only; nothing here sends.
-  async function loadClientMessages(req, companyId) {
-    const { data: leads } = await withOrg(supabase.from('jobs')
-      .select('id').eq('company_id', companyId).is('deleted_at', null), req);
-    const leadIds = (leads || []).map(l => l.id);
+  async function loadMessages(req, subject) {
+    const leadIds = subject.leadIds || [];
+    const companyId = subject.companyId;
     let contacts = [];
     if (leadIds.length) {
       const { data } = await withOrg(supabase.from('contacts')
@@ -96,7 +119,7 @@ module.exports = (ctx) => {
     const inSel = 'id,from_email,to_email,subject,body,sent_at,direction,facts,contact_id,message_key';
     const inboundRows = [];
     const addIn = (rows) => (rows || []).forEach(r => { if (!inboundRows.some(x => x.id === r.id)) inboundRows.push(r); });
-    try {
+    if (companyId) try {
       const { data, error } = await withOrg(supabase.from('conversation_messages').select(inSel)
         .eq('company_id', companyId).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
       if (!error) addIn(data);
@@ -130,9 +153,13 @@ module.exports = (ctx) => {
       (data || []).forEach(m => { mailboxes[m.id] = m; });
     }
     // Outbound, one-off client emails sent from the client page.
-    const { data: tracked } = await withOrg(supabase.from('email_tracking')
-      .select('id,to_email,subject,body,sent_at,mailbox_email')
-      .eq('company_id', companyId).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
+    let tracked = [];
+    if (companyId) {
+      const { data } = await withOrg(supabase.from('email_tracking')
+        .select('id,to_email,subject,body,sent_at,mailbox_email')
+        .eq('company_id', companyId).order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
+      tracked = data || [];
+    }
 
     const toText = (html) => ci.trimStoredText(String(html || ''));
     // Our OWN sent emails are kept in full already, so the reading view shows
@@ -168,14 +195,32 @@ module.exports = (ctx) => {
     return { messages, contacts };
   }
 
-  async function savedSummary(req, companyId) {
+  // A client's summary lives in client_summaries (migration 048). A lead's is
+  // one app_settings row per lead — the same no-migration store as the meters
+  // and dismissals; it holds one small JSON document and nothing else.
+  const leadKey = (id) => 'lead_summary_' + id;
+  async function savedSummary(req, subject) {
     try {
+      if (subject.kind === 'lead') {
+        const { data } = await supabase.from('app_settings').select('value').eq('key', leadKey(subject.id)).maybeSingle();
+        const v = data && JSON.parse(data.value);
+        return v && v.org_id === req.orgId ? v : null;
+      }
       const { data, error } = await withOrg(supabase.from('client_summaries')
         .select('summary,next_steps,engine,model,covers_until,message_count,tokens_used,forced_at,updated_at,created_by')
-        .eq('company_id', companyId), req).maybeSingle();
+        .eq('company_id', subject.id), req).maybeSingle();
       if (error) return null;
       return data || null;
     } catch (_) { return null; }
+  }
+  async function saveSummary(subject, row) {
+    if (subject.kind === 'lead') {
+      const { error } = await supabase.from('app_settings').upsert({
+        key: leadKey(subject.id), value: JSON.stringify(row), updated_at: new Date(),
+      }, { onConflict: 'key' });
+      return { error };
+    }
+    return supabase.from('client_summaries').upsert(Object.assign({ company_id: subject.id }, row), { onConflict: 'company_id' });
   }
 
   // Per person, per day — D-0041. A meter in app_settings, like the AI budget:
@@ -194,19 +239,21 @@ module.exports = (ctx) => {
     } catch (_) { /* a meter is not worth an outage */ }
   }
 
+  // ── the three routes, once for clients and once for leads ─────────────────
+  function register(base, kind) {
   // ── GET the Emails tab ────────────────────────────────────────────────────
-  router.get('/clients/:id/intel', auth, async (req, res) => {
+  router.get(base + '/:id/intel', auth, async (req, res) => {
     try {
       if (!(await on('client_intel_enabled'))) return res.json({ enabled: false });
-      const acc = await readAccess(req, req.params.id);
+      const acc = await access(req, kind, req.params.id);
       if (acc.status === 404) return res.status(404).json({ error: 'Not found' });
       if (acc.status === 403) {
-        // Not an error the page shows as one: it says whose client this is.
+        // Not an error the page shows as one: it says whose record this is.
         return res.json({ enabled: true, owner: false, owner_name: acc.ownerName || null });
       }
-      const { messages } = await loadClientMessages(req, req.params.id);
+      const { messages } = await loadMessages(req, acc.subject);
       const ledger = ci.buildLedger(messages);
-      const saved = await savedSummary(req, req.params.id);
+      const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
       const aiOn = await on('client_intel_ai_enabled');
       const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily'));
@@ -214,7 +261,7 @@ module.exports = (ctx) => {
       const pb = ci.playbookFor('recruiting');
       res.json({
         enabled: true, owner: true,
-        client: { id: acc.company.id, name: acc.company.name },
+        client: { id: acc.subject.id, name: acc.subject.name, kind },
         facts: ci.rulesSummary(ledger, pb),
         ledger,
         summary: saved ? Object.assign({}, saved, { next_steps: ci.labelSteps(saved.next_steps, pb) }) : null,
@@ -237,22 +284,21 @@ module.exports = (ctx) => {
   // and the mailbox it arrived in must be the viewer's own (the in-app Inbox
   // rule: your own mailboxes only). Returned as plain text, so nothing from
   // the sender's HTML ever runs on the page.
-  router.get('/clients/:id/intel/messages/:mid/full', auth, async (req, res) => {
+  router.get(base + '/:id/intel/messages/:mid/full', auth, async (req, res) => {
     try {
       if (!(await on('client_intel_enabled'))) return res.status(404).json({ error: 'Not found' });
-      const acc = await readAccess(req, req.params.id);
-      if (acc.status !== 200) return res.status(acc.status === 404 ? 404 : 403).json({ error: 'Only the client\'s owner can read its emails.' });
+      const acc = await access(req, kind, req.params.id);
+      if (acc.status !== 200) return res.status(acc.status === 404 ? 404 : 403).json({ error: 'Only the owner can read these emails.' });
       const rowId = String(req.params.mid || '').replace(/^in:/, '');
       const { data: row } = await withOrg(supabase.from('conversation_messages')
         .select('id,company_id,contact_id,to_email,message_key,provider,subject,sent_at').eq('id', rowId), req).maybeSingle();
       if (!row || !row.message_key) return res.status(404).json({ error: 'Not found' });
-      let belongs = row.company_id === req.params.id;
+      // It must belong to THIS subject: filed to the client, or from a contact
+      // on one of the subject's leads.
+      let belongs = !!acc.subject.companyId && row.company_id === acc.subject.companyId;
       if (!belongs && row.contact_id) {
         const { data: ct } = await withOrg(supabase.from('contacts').select('job_id').eq('id', row.contact_id), req).maybeSingle();
-        if (ct && ct.job_id) {
-          const { data: j } = await withOrg(supabase.from('jobs').select('company_id').eq('id', ct.job_id), req).maybeSingle();
-          belongs = !!(j && j.company_id === req.params.id);
-        }
+        belongs = !!(ct && (acc.subject.leadIds || []).includes(ct.job_id));
       }
       if (!belongs) return res.status(404).json({ error: 'Not found' });
       const { data: mbs } = await supabase.from('user_emails')
@@ -279,21 +325,21 @@ module.exports = (ctx) => {
   });
 
   // ── POST the button ───────────────────────────────────────────────────────
-  router.post('/clients/:id/summary', auth, async (req, res) => {
+  router.post(base + '/:id/summary', auth, async (req, res) => {
     try {
       if (!(await on('client_intel_enabled')) || !(await on('client_intel_ai_enabled'))) {
         return res.status(409).json({ error: 'AI client summaries are switched off.', code: 'switched_off' });
       }
-      const acc = await readAccess(req, req.params.id);
+      const acc = await access(req, kind, req.params.id);
       if (acc.status === 404) return res.status(404).json({ error: 'Not found' });
       if (acc.status === 403) {
         return res.status(403).json({ error: acc.ownerName
-          ? `This client belongs to ${acc.ownerName}. Only the owner can summarise its emails.`
-          : 'Only the client\'s owner can summarise its emails.' });
+          ? `This ${kind} belongs to ${acc.ownerName}. Only the owner can summarise its emails.`
+          : `Only the ${kind}'s owner can summarise its emails.` });
       }
       const force = !!(req.body && req.body.force);
-      const { messages } = await loadClientMessages(req, req.params.id);
-      const saved = await savedSummary(req, req.params.id);
+      const { messages } = await loadMessages(req, acc.subject);
+      const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
       const pb = ci.playbookFor('recruiting');
       const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily'));
@@ -308,7 +354,7 @@ module.exports = (ctx) => {
       }
 
       const ledger = ci.buildLedger(messages);
-      const request = ci.buildSummaryRequest({ playbook: pb, clientName: acc.company.name, ledger, messages, saved });
+      const request = ci.buildSummaryRequest({ playbook: pb, clientName: acc.subject.name, ledger, messages, saved });
       const availability = await aiProvider.availability(supabase, { feature: 'client_summary', orgId: req.orgId });
       if (!availability.available) {
         // 'ai_' prefixed so it cannot be confused with the PERSON's own daily
@@ -334,7 +380,6 @@ module.exports = (ctx) => {
         return res.json({ rejected: true, violations: check.violations, tokens, facts: ci.rulesSummary(ledger, pb) });
       }
       const row = Object.assign({
-        company_id: req.params.id,
         summary: parsed.summary.slice(0, ci.CAPS.SUMMARY_MAX_CHARS),
         next_steps: parsed.next_steps.slice(0, ci.CAPS.MAX_NEXT_STEPS),
         engine: 'ai', model: out.model || null,
@@ -342,7 +387,7 @@ module.exports = (ctx) => {
         tokens_used: tokens, forced_at: force ? new Date().toISOString() : (saved && saved.forced_at) || null,
         created_by: req.user.id, updated_at: new Date().toISOString(),
       }, orgStamp(req));
-      const { error } = await supabase.from('client_summaries').upsert(row, { onConflict: 'company_id' });
+      const { error } = await saveSummary(acc.subject, row);
       if (error) {
         // A summary we could not save is still shown — once — and said so.
         return res.json({ saved: false, save_error: error.message, tokens,
@@ -353,6 +398,10 @@ module.exports = (ctx) => {
         status: { state: 'up_to_date', new_count: 0 } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
+  }
+
+  register('/clients', 'client');
+  register('/leads', 'lead');
 
   return router;
 };

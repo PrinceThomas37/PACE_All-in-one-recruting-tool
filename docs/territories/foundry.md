@@ -22,6 +22,7 @@
   exactly its job. Full suite 115/116 before that fix.
 
 - 2026-09-25: client-intel-routes-smoke now 27 (full sent text; full reply fetch owner-only, own-mailbox-only, right-client-only, plain text). Full suite 116/116.
+- 2026-09-25: client-intel-routes-smoke now 38 (+11 lead checks; the "another lead's mail stays out" guard verified by setting the lead's companyId — 4 checks fail). +`lead-intel-ui-smoke.mjs` (12, Playwright; the stub must `decodeURIComponent` the path — the page sends `in%3A1`). The catch-up itself has no unit test: it only runs against a real mailbox; reviewed by reading.
 
 ## What is true here now
 - **`npm test` runs 110 suite files** via `test/run-all.mjs` and reports one summary
