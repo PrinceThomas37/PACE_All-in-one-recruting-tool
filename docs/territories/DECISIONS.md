@@ -47,6 +47,31 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0040 · 2026-09-25 · STANDS · Client email text and its AI summary are the OWNER's alone; a manager gets a TEAM roll-up, not individual summaries
+**Their words:** *"1. Only the owner. The manager of a team can get total
+summary of the team. Maybe a change that happened to a user in a team. Not the
+individual AI summary that the owner gets, since sometimes the manager is also
+a owner to his database."* On the daily AI limit: *"I don't know. How should I
+calculate that?"*
+
+**Chosen:**
+* **Email text, the client timeline and the per-client AI summary: the record's
+  OWNER only.** Not their manager, not admin-by-default. This is narrower than
+  D-0034/D-0035 (where a manager may review a report's records) — for email
+  content specifically, the owner is the only reader.
+* **A manager gets a TEAM ROLL-UP**: what changed across their reports' clients
+  (replied, waiting on us N days, promise due, stage moved, went quiet). Built
+  from the free facts only — **no email text is shown to the manager and none
+  is sent to AI for the roll-up**, so the roll-up cannot leak what the owner
+  alone may read. A manager who also owns clients gets the normal owner view
+  for those, and the roll-up for the team's.
+* **The daily limit** is explained to the owner as a method (share of the
+  allowance → number of summaries) with a recommended starting value; it stays
+  an adjustable setting, reviewed on real use. Not yet chosen by the owner.
+
+**Re-open when:** a manager needs to read a report's client email (holiday
+cover, dispute) — that is reassignment (D-0020/D-0036), not a wider read.
+
 ### D-0039 · 2026-09-24 · STANDS · Client email timeline + AI summary: build it first, OFF until the owner says, token use designed first; PACE must fit any industry
 **Their words:** *"Build the client email timeline and AI summary first. Don't
 switch it on till I say. If it's switched on just like that, all the emails will

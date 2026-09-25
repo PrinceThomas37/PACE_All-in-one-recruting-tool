@@ -196,8 +196,40 @@ before selling to a non-recruiting company.
 5. **Playbook** — recruiting preset extracted from today's hard-coded words,
    then 2–3 more presets.
 
-Rampart reviews steps 1–2 (who may read which client's mail follows D-0034/35:
-the owner and their managers see message text; others see only that a
-conversation exists). Deep writes one migration for step 1 (a `company_id`
+Rampart reviews steps 1–2. **Who may read (D-0040): the record's OWNER only** sees
+email text, the timeline and the AI summary. A manager gets a **team roll-up**
+built from the free facts alone (no email text shown, none sent to AI). Deep writes one migration for step 1 (a `company_id`
 and a `facts` column on `conversation_messages`, a `summary` cache table or
 column). **No migration is applied without the owner's fresh go-ahead.**
+
+---
+
+## Who sees what (D-0040, 2026-09-25)
+
+| | owner of the client | their manager | anyone else |
+|---|---|---|---|
+| email text + timeline | ✅ | ❌ | ❌ |
+| AI summary + next steps | ✅ | ❌ | ❌ |
+| team roll-up (facts only) | — | ✅ for their reports | ❌ |
+
+**The team roll-up** is a manager's card: *"This week on your team — Priya:
+Acme replied (waiting 2 days), Beta promised a PO by Friday · Sam: 3 clients
+quiet 14+ days · 2 clients moved to Job order."* Built from layer-3 facts, so
+it costs **no AI by default**. Optionally one AI paragraph per manager per day
+(~2–3k tokens), fed the facts only — never an email's text.
+
+## How the daily limit is worked out
+
+    limit = share of the company's daily AI allowance you are willing to give
+            to summaries  ÷  cost of one summary
+
+* Allowance today: **400,000 tokens/day**. Busiest real day so far: **~50,000**
+  (10 Sep; 38,705 on 24 Sep), so ~350k sits unused on a normal day.
+* One summary ≈ **2,500 tokens** (incremental; 0 when nothing changed).
+* Give summaries **a quarter** of the allowance so resume reading, cold emails
+  and the rest can never be starved: 100,000 ÷ 2,500 = **40 summaries a day**.
+* Sanity check against real work: today 1 lead is Connected and ~78 messages a
+  week arrive (most of it noise the gate will drop), so real use would be a
+  handful a day. 40 is headroom, not a target.
+* The AI card shows used / left for this feature; after two weeks of real use
+  the number is set from what was actually used (× 2 for headroom).
