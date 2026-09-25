@@ -6056,3 +6056,5 @@ Owner: build the client timeline + AI summary first, OFF until they say, and des
 Owner: email text and the per-client AI summary are the OWNER's only; a manager gets a team roll-up of changes (D-0040). Limit explained as share-of-allowance ÷ cost-per-summary: 400k/day allowance, busiest real day ~50k, 25% share ÷ 2.5k = 40/day recommended. Design doc updated.
 
 - 2026-09-25: owner corrected the limit method — it depends on users, outreach and active clients, and the live data is test data. Now per owner per day (default 15), company ceiling = per-user × users capped at 25% of the AI allowance; worked example uses a described company (D-0041).
+
+- 2026-09-25: owner chose a Summarise BUTTON (no automatic summaries) and a cap that holds for a 2-year client (D-0042). Design: each email read by rules once on arrival; a click sends playbook + fixed ≤800-token fact ledger + ≤8 latest messages ≈3.3k tokens max; repeat with nothing new = 0; monthly digests only if the cap proves too lossy.

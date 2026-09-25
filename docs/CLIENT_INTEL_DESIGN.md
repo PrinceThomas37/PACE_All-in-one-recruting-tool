@@ -266,3 +266,44 @@ owner opens most of those: 10 × 30 × 0.15 ≈ **45 summaries/day** ×
 * After two weeks of real use the per-user default is re-set from what was
   actually used (× 2 headroom). The live database today is test data and is
   not used for this.
+
+## The "Summarise" button, and why 2 years of email stays cheap (D-0042, 2026-09-25)
+
+**Supersedes layer 4's trigger.** Nothing is summarised automatically. The
+client page has a **Summarise** button; a summary exists only where someone
+pressed it. At 100+ managers, most clients are never summarised at all, and
+they cost nothing.
+
+**Every email is read by the rules once, when it arrives — never again.** The
+gate files it, the free rules record its facts (layer 3). Pressing the button
+reads those stored small records from our own database, not the inbox.
+
+**What one click sends to the AI — capped, whatever the history:**
+
+| part | how big | where it comes from |
+|---|---|---|
+| the playbook (words, stages, allowed next steps) | ~300 tokens | company settings |
+| the **fact ledger** for the whole history | **≤800 tokens**, fixed | free rules: first/last contact, who is involved, stage changes with dates, open questions, promises still due, how often each side replied, last 5 key events |
+| the **latest messages as text** | **≤8 messages × ≤250 tokens ≈ 2,000** | newest first, quotes and signatures already stripped |
+| the previous summary (if any) | ~200 tokens | stored |
+
+**Hard ceiling ≈ 3,300 tokens in + ~300 out per click.** A client with 5
+emails and a client with 2 years and 900 emails cost about the same: the old
+history arrives as the fact ledger, not as the emails themselves.
+
+**Repeat clicks:**
+* Nothing new since the last summary → the saved one is shown, button reads
+  "Up to date", **0 tokens**.
+* Something new → the previous summary + the ledger + only the NEW messages
+  (still capped at 8). Usually ~1.5–2.5k.
+* "Rewrite anyway" is allowed once a day per client, so a stray double-click
+  never doubles the bill.
+
+**Before the call, the button says what it will cost** from that person's daily
+allowance ("uses 1 of your 15 today"); when the allowance is spent it shows the
+free facts card instead and says why.
+
+**If the capped version ever misses old context** (D-0042's re-open condition):
+optional **monthly digests**: each finished month of a client's mail is
+summarised once (~1.5k tokens), stored as ~80 words, and never re-read. A
+2-year client costs ~36k tokens once, then nothing. Not built unless needed.
