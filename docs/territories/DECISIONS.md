@@ -47,6 +47,20 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0044 · 2026-09-25 · STANDS · The email timeline is switched ON (leads + clients); the AI summary button stays OFF
+**Their words:** *"Just this lead list. Let me see what it works with current
+data that it has, not just the future"* — then *"Yes"* to: switch on the email
+timeline (not the AI button) so the 90-day bring-in of past replies starts.
+
+**Done:** live `app_settings` `sys_client_intel_enabled` = 1 (2026-09-25).
+`sys_client_intel_ai_enabled` has no row, so it stays at its default 0 — the
+"Generate AI summary" button is NOT offered. The catch-up runs on the hourly
+engine tick, once per mailbox, ≤3 mailboxes a tick, last 90 days, only mail
+from contacts on that mailbox owner's own leads, no side effects (#241).
+
+**Re-open when:** the owner says to switch the AI button on (D-0041's per-person
+allowance then applies), or the timeline shows mail that should not be there.
+
 ### D-0043 · 2026-09-25 · STANDS · The client's Emails tab shows the emails plus a "Generate AI summary" button; saved summaries feed the daily update
 **Their words:** *"So the email section will have the emails of the client
 being shown and generate ai summary button and this AI summary till date is
