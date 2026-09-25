@@ -233,3 +233,36 @@ it costs **no AI by default**. Optionally one AI paragraph per manager per day
   handful a day. 40 is headroom, not a target.
 * The AI card shows used / left for this feature; after two weeks of real use
   the number is set from what was actually used (× 2 for headroom).
+
+## The limit scales with the company (D-0041, 2026-09-25 — supersedes the fixed "40")
+
+The owner corrected the method above: the count depends on users, outreach,
+replies and active clients, and today's database is test data. So:
+
+**What drives the number of summaries in a day**
+
+    summaries/day  =  owners  ×  active clients per owner
+                      ×  share of those clients with something NEW that day
+                      ×  opened after the news (at most once — it is cached)
+
+* **Outreach volume** drives it indirectly: more emails out → more replies →
+  more clients with news. Emails with no reply cost nothing.
+* **Tokens per summary** grow a little with how many new messages there are
+  since the last summary (incremental), roughly 1,500 + 400 per new message.
+
+**Worked example — a described company, not our data:** 10 BD users, each
+working 30 active clients, 15% of clients get news on a given day, and the
+owner opens most of those: 10 × 30 × 0.15 ≈ **45 summaries/day** ×
+~2.5k tokens ≈ **110k tokens/day**. The same company at 3 users ≈ 14/day.
+
+**So the setting is per user, not per company:**
+* `client_intel_ai_per_user_daily` — default **15 summaries per owner per day**
+  (30 active clients × 15% news × ~2 for busy days, rounded up).
+* Company ceiling = per-user × number of users, **capped at 25% of the
+  company's daily AI allowance** so resume reading and cold emails can never
+  run short.
+* When a user's allowance is spent, their clients show the free facts card
+  and say so; nobody else is affected.
+* After two weeks of real use the per-user default is re-set from what was
+  actually used (× 2 headroom). The live database today is test data and is
+  not used for this.

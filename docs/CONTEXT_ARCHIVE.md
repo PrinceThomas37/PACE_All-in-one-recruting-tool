@@ -6054,3 +6054,5 @@ Owner: build the client timeline + AI summary first, OFF until they say, and des
 
 ### Round 3 — who sees it, and the limit method (2026-09-25)
 Owner: email text and the per-client AI summary are the OWNER's only; a manager gets a team roll-up of changes (D-0040). Limit explained as share-of-allowance ÷ cost-per-summary: 400k/day allowance, busiest real day ~50k, 25% share ÷ 2.5k = 40/day recommended. Design doc updated.
+
+- 2026-09-25: owner corrected the limit method — it depends on users, outreach and active clients, and the live data is test data. Now per owner per day (default 15), company ceiling = per-user × users capped at 25% of the AI allowance; worked example uses a described company (D-0041).
