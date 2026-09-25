@@ -47,6 +47,20 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0041 · 2026-09-25 · STANDS · The summary limit SCALES with the company — per user, driven by activity — and is never sized from test data
+**Their words:** *"Does the summary count depends on the number of users and
+emails and outreach number and active clients and all right. Don't take out
+test data as an example."*
+
+**Chosen:** no fixed company-wide number. The limit is **per owner per day**
+(each person gets their own allowance, so one busy user cannot use up the
+team's), and the company ceiling is that × the number of users, never more
+than a set share of the company's AI allowance. The live database is early
+test data and is **not** used to size anything — worked examples use a
+described company instead, and real numbers are read only after real use.
+
+**Re-open when:** two weeks of real use show the per-user figure is far off.
+
 ### D-0040 · 2026-09-25 · STANDS · Client email text and its AI summary are the OWNER's alone; a manager gets a TEAM roll-up, not individual summaries
 **Their words:** *"1. Only the owner. The manager of a team can get total
 summary of the team. Maybe a change that happened to a user in a team. Not the
