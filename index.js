@@ -58,6 +58,7 @@ const registerSubscribers = require('./subscribers');
 const { scoreEmailContent, deliverabilityFlags, isOptOutReply } = require('./deliverability');
 const { loadConfig } = require('./config/env');
 const settingsConfig = require('./config/settings');
+const companyDailyCap = require('./services/company-daily-cap');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { orderPendingForSend } = require('./send-queue-order');
@@ -302,7 +303,7 @@ const US_METRO_AREA_TZ = {
   'omaha metropolitan area': 'CST',
   'greater chattanooga': 'EST'
 };
-const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, org_id, template_variant, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
+const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, org_id, template_variant, job:jobs(timezone, company_id, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
 
 // Parses a lead's free-text "location" field into one of the four US lead
 // timezones. Deliberately a PARSE, not a scan: the old version matched any
@@ -512,11 +513,12 @@ async function waitForMailboxSlot(mailboxId, lastSendAtByMailbox, delays) {
   if (remaining > 0) await new Promise(r => setTimeout(r, remaining * 1000));
 }
 
-function buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }) {
+function buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany = 0, sendWindow }) {
   const parts = [];
   if (skippedWindow) parts.push(`${skippedWindow} waiting for send window (${sendWindow.start}:00–${sendWindow.end}:00 lead local)`);
   if (skippedQuota) parts.push(`${skippedQuota} waiting for mailbox daily limit (resumes tomorrow)`);
   if (skippedDomain) parts.push(`${skippedDomain} waiting for domain send spacing (retry soon)`);
+  if (skippedCompany) parts.push(`${skippedCompany} waiting until tomorrow (company already had its first emails today)`);
   return parts.length ? parts.join(' · ') : undefined;
 }
 
@@ -1203,7 +1205,7 @@ app.post('/emails/send-selected', auth, async (req, res) => {
 
     const { data: pendingEmails, error: fetchErr } = await supabase
       .from('emails')
-      .select('id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, job:jobs(timezone, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))')
+      .select('id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, job:jobs(timezone, company_id, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))')
       .eq('sent_by', req.user.id)
       .eq('status', 'pending')
       .in('id', email_ids);
@@ -1216,17 +1218,17 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
     console.log(`[SendSelected] Starting ${totalCount} emails, userId=${userId}`);
-    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
+    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
     const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
     if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
     const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
     for (const jid of uniqueJobIds) await logActivity(jid, null, userId, 'emails_sent', `${sent} email(s) sent via Microsoft`, null, null);
-    const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
+    const deferredTotal = skippedWindow + skippedQuota + skippedDomain + (skippedCompany || 0);
     await setSendProgress(userId, {
       active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       failDetails,
-      deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),
+      deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany, sendWindow }),
       completedAt: new Date().toISOString()
     });
     setTimeout(() => clearSendProgress(userId), 60000);
@@ -1264,17 +1266,17 @@ app.post('/emails/queue-all', auth, async (req, res) => {
       await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
       console.log(`[SendAll] Starting loop for ${totalCount} emails, userId=${userId}`);
-      const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
+      const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(userId, pendingEmails, { autoSend: false });
       const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
       if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
       const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
       for (const jid of uniqueJobIds) await logActivity(jid, null, userId, 'emails_sent', `${sent} email(s) sent via Microsoft`, null, null);
-      const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
+      const deferredTotal = skippedWindow + skippedQuota + skippedDomain + (skippedCompany || 0);
       await setSendProgress(userId, {
         active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
         deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
         failDetails,
-        deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),
+        deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany, sendWindow }),
         completedAt: new Date().toISOString()
       });
       setTimeout(() => clearSendProgress(userId), 300000);
@@ -1835,7 +1837,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   let retrying = 0;
   const sendWindow = await getSendWindowHours();
   const totalCount = pendingEmails.length;
-  let sent = 0, failed = 0, skippedWindow = 0, skippedQuota = 0, skippedDomain = 0, skippedContactStatus = 0, skippedThread = 0, skippedInactive = 0, skippedSuppressed = 0;
+  let sent = 0, failed = 0, skippedWindow = 0, skippedQuota = 0, skippedDomain = 0, skippedContactStatus = 0, skippedThread = 0, skippedInactive = 0, skippedSuppressed = 0, skippedCompany = 0;
   const failDetails = [], sentContactIds = [], sentJobIds = [];
   const startedAt = new Date().toISOString();
 
@@ -1892,6 +1894,16 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     aiFirstEmailOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1
       && await aiProvider.isAvailable(supabase);
   } catch (_) { aiFirstEmailOn = false; }
+  // D-0046: at most N first emails to one company per day. Counts what went
+  // out earlier today (any sender) and is bumped below as this run sends.
+  let companyCap = 0, companySentToday = {};
+  try {
+    companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails')) || 0;
+    if (companyCap > 0) {
+      companySentToday = await companyDailyCap.loadSentToday(supabase,
+        pendingEmails.filter(companyDailyCap.isFirstEmail).map(e => e.job?.company_id), today());
+    }
+  } catch (_) { companyCap = 0; }   // a failed count must never stop sending
   const lastSendAtByMailbox = {};
   const domainTimestamps = {};
   let sendAttempts = 0;
@@ -1920,9 +1932,9 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
 
     const progressBase = {
       active: true, total: totalCount, sent, failed,
-      deferred: skippedWindow + skippedQuota + skippedDomain + skippedContactStatus + skippedThread + skippedInactive,
+      deferred: skippedWindow + skippedQuota + skippedDomain + skippedContactStatus + skippedThread + skippedInactive + skippedCompany,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
-      deferredThread: skippedThread, deferredInactive: skippedInactive,
+      deferredThread: skippedThread, deferredInactive: skippedInactive, deferredCompany: skippedCompany,
       skippedContactStatus,
       retrying, failDetails, startedAt, autoSend
     };
@@ -1956,6 +1968,13 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     if (!isInLeadSendWindow(leadTz, new Date(), sendWindow)) {
       skippedWindow++;
       await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (waiting ${leadTz} send window)` });
+      continue;
+    }
+
+    // Left pending, not claimed: it goes on the first run tomorrow.
+    if (companyDailyCap.capCheck({ email, companyId: email.job?.company_id, counts: companySentToday, cap: companyCap }).blocked) {
+      skippedCompany++;
+      await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (${companyDailyCap.waitSentence(companyCap)})` });
       continue;
     }
 
@@ -2077,6 +2096,9 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         if (!domainTimestamps[domain]) domainTimestamps[domain] = [];
         domainTimestamps[domain].push(Date.now());
       }
+      if (companyDailyCap.isFirstEmail(email) && email.job?.company_id) {
+        companySentToday[email.job.company_id] = (companySentToday[email.job.company_id] || 0) + 1;
+      }
       if (email.contact_id) sentContactIds.push(email.contact_id);
       if (email.job_id) sentJobIds.push(email.job_id);
       sent++;
@@ -2103,7 +2125,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     }
   }
 
-  return { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow };
+  return { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedContactStatus, skippedThread, skippedInactive, skippedSuppressed, skippedCompany, failDetails, sentContactIds, sentJobIds, totalCount, sendWindow };
 }
 
 async function retryDeferredPendingSends() {
@@ -2142,19 +2164,19 @@ async function autoSendForManager(managerId) {
     console.log(`[AutoSend] Starting auto-send of ${totalCount} emails for manager ${managerId}`);
     await setSendProgress(managerId, { active: true, total: totalCount, sent: 0, failed: 0, deferred: 0, current: '', failDetails: [], startedAt: new Date().toISOString(), autoSend: true });
 
-    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(managerId, pendingEmails, { autoSend: true });
+    const { sent, failed, retrying, skippedWindow, skippedQuota, skippedDomain, skippedCompany, failDetails, sentContactIds, sentJobIds, sendWindow } = await processPendingEmailSends(managerId, pendingEmails, { autoSend: true });
 
     const uniqueContactIds = [...new Set(sentContactIds.filter(Boolean))];
     if (uniqueContactIds.length) await supabase.from('contacts').update({ email_sent_at: today() }).in('id', uniqueContactIds);
     const uniqueJobIds = [...new Set(sentJobIds.filter(Boolean))];
     for (const jid of uniqueJobIds) await logActivity(jid, null, managerId, 'emails_sent', `${sent} email(s) auto-sent via Microsoft`, null, null);
 
-    const deferredTotal = skippedWindow + skippedQuota + skippedDomain;
+    const deferredTotal = skippedWindow + skippedQuota + skippedDomain + (skippedCompany || 0);
     await setSendProgress(managerId, {
       active: false, done: true, total: totalCount, sent, failed, retrying, deferred: deferredTotal,
       deferredWindow: skippedWindow, deferredQuota: skippedQuota, deferredDomain: skippedDomain,
       failDetails,
-      deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, sendWindow }),
+      deferredNote: buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skippedCompany, sendWindow }),
       completedAt: new Date().toISOString(), autoSend: true
     });
     setTimeout(() => clearSendProgress(managerId), 300000);

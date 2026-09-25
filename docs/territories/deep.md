@@ -213,3 +213,5 @@ file, so this is 047. **Next migration is 048.**
   left as-is here pending the live count). **No test pins 48**; the only
   table-total pin is `test/models-smoke.mjs:171-172` (`TENANT_TABLES.size === 44`),
   already at the post-047 value. `models-smoke` 53/53 PASS.
+
+- 2026-09-25: no schema change. New numeric setting `company_daily_first_emails` (app_settings `sys_…`, no migration); the posting lives in the existing `jobs.research.jd_raw`. territory-map regenerated (3 orphan services claimed).

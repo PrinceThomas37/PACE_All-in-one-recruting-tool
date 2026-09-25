@@ -378,6 +378,8 @@ function leadExpandHtml(j){
     '<div class="lx-main">'+
       '<div class="lx-head">Contacts</div>'+
       contactRows+
+      // The job posting the AI writes from (59-lead-posting.js, R-056).
+      (window.leadPostingSlot?leadPostingSlot(j):'')+
       // The lead's emails + AI summary (58-lead-intel.js). Draws nothing while
       // it is switched off, and only the lead's owner sees the email text.
       (window.leadIntelSlot?leadIntelSlot(j):'')+

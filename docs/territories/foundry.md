@@ -862,3 +862,5 @@ same single expected failure). Did not touch `routes/companies.js` or
 gateway's own in-flight work. Did not commit anything, per instruction.
 
 - 2026-09-25: +`send-hours-smoke.mjs` (15: runs the real `getSendWindowHours` extracted from index.js against an in-memory app_settings; route refusal; Playwright popup). Verified non-vacuous: the old reader (plain keys) fails "what an admin saves is what the send loop obeys". Lesson re-learned: my first reintroduction crashed on a missing variable and printed no SUMMARY — a crash is not a demonstration; write the old code out properly.
+
+- 2026-09-25: +`posting-and-company-cap-smoke.mjs` (24: pure posting rules; the REAL /jobs/:id/posting handler with an in-memory db; cap decision + loader run on fake tables; send-loop placement by source order). Non-vacuous: `>=`→`>` in the cap fails "a third contact waits"; removing the route's permission check fails "a BD who does not work this lead cannot change its posting". lead-intel-ui-smoke now 15 (+3 posting box, incl. zero render()).

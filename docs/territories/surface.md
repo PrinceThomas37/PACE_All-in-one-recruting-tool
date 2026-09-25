@@ -881,3 +881,5 @@ resulting "Ask to take over" modal after clicking through, showing
 
 
 - 2026-09-25 (R-055): the **Email Engine Schedule** popup (`12-manager-users.js`, opened from the Workflows page) now shows the real sending hours — "Send lead emails between __ and __" in each lead's own time zone (admin edits; ra_lead sees them read-only) — and "Queue the day's follow-ups at (India time)". Removed: the dead "Outreach send time" box and a Timezone picker whose value was never saved. Saving clears `STATE.sysSettings` and calls `loadPendingSummary()`, so the "Send window: …" line re-reads.
+
+- 2026-09-25 (R-056): `59-lead-posting.js` — a "Job posting" box on the expanded lead row (between Contacts and Emails): "The AI only knows the job title" / "✓ The AI has the job posting · N words", and a paste box for the people working the lead. Fills only `#lx-post-<id>`, never render(). Styles `.lx-post`/`.lxp-*` in theme.css.

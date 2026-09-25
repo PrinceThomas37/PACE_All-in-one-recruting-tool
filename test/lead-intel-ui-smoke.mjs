@@ -67,6 +67,7 @@ async function api(route){
       timeline:TIMELINE, total_messages:2 });
   }
   if (m==='GET' && p==='/leads/j1/intel/messages/in:1/full') return reply(route,{ text:'Thanks for reaching out. We are still looking. Can you send two profiles by Thursday?\n\n> Hi Dana, I saw the Project Manager opening…' });
+  if (m==='POST' && p==='/jobs/j1/posting') { const t=JSON.parse(route.request().postData()).text; return reply(route,{ id:'j1', research:{ jd_raw:'Title: Project Manager\n\n'+t }, posting:{ has_posting:t.length>280, chars:t.length, words:t.split(/\s+/).length } }); }
   if (m==='POST' && p==='/leads/j1/summary') { summarised=true; return reply(route,{ saved:true, tokens:900, summary:SUMMARY, status:{ state:'up_to_date', new_count:0 } }); }
   return reply(route, m==='GET'?[]:{});
 }
@@ -132,6 +133,18 @@ try{
   step('afterwards it says "Up to date" (pressing again costs nothing)', /Up to date/.test(t.text) && /costs nothing/.test(t.text));
   step('none of this re-renders the page (the row stays open)', renders===0 && await page.evaluate(()=>document.querySelectorAll('#content tr.lead-exp').length===1), 'renders='+renders);
   await shot('22-lead-emails-summary');
+
+  // THE JOB POSTING BOX (R-056): says the AI only has the title, takes a paste.
+  const post=()=>page.evaluate(()=>{ const el=document.getElementById('lx-post-j1'); return el?el.innerText:null; });
+  let pt=await post();
+  step('posting: the row says the AI only knows the job title', pt!==null && /The AI only knows the job title/.test(pt) && /Paste the job posting/.test(pt), (pt||'').slice(0,80));
+  await page.evaluate(()=>leadPostingEdit('j1',true)); await page.waitForTimeout(100);
+  await page.fill('#lxp-text-j1','We need a Project Manager to run two concurrent commercial builds of 40-60k sq ft. PMP preferred, Procore daily, owner-facing reporting every week. Budget ownership from preconstruction to closeout. You will manage three superintendents and report to the VP of Operations. Salary $110-130k plus vehicle allowance.');
+  if (SHOTS) await page.screenshot({ path:path.join(SHOTS,'23-lead-posting-paste.png') });
+  const rendersP=await page.evaluate(async()=>{ let n=0; const o=window.render; window.render=function(){ n++; return o.apply(this,arguments); }; leadPostingSave('j1'); await new Promise(r=>setTimeout(r,400)); window.render=o; return n; });
+  pt=await post();
+  step('posting: after saving, the row says the AI has it', /The AI has the job posting/.test(pt) && calls.includes('POST /jobs/j1/posting'), (pt||'').slice(0,80));
+  step('posting: saving does not re-render the page', rendersP===0);
 
   // not the owner
   mode='other'; summarised=false;

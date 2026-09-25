@@ -21,6 +21,7 @@ const { fillPatch } = require('../services/lead-fill');
 // D-0034: who may SEE/edit a lead, on top of the role ladder above it. Read
 // services/ownership.js's header before changing any of the scoping below.
 const own = require('../services/ownership');
+const leadPosting = require('../services/lead-posting');
 
 // Lead stage permission matrix for PUT /jobs/:id — pulled out to a pure
 // function (no supabase/Express dependency) so it's directly unit-testable.
@@ -553,6 +554,30 @@ router.patch('/jobs/:id/research', auth, async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Job not found' });
     persistLearnedSkills(data.industry || job.industry, research);
     res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// THE JOB POSTING, pasted on the lead row (R-056, D-0046). Narrower than the
+// research PATCH above on purpose: it writes `research.jd_raw` and nothing
+// else, so the BD who OWNS the lead — the person whose first email the AI is
+// about to write — may fill it in, not only the RA who created the lead.
+// Who: anyone canTouchJob allows (admin in-org, creator, assigned RA,
+// assigned BD) plus an RA Lead. Another org's lead reads as 404.
+router.post('/jobs/:id/posting', auth, async (req, res) => {
+  try {
+    const text = req.body && typeof req.body.text === 'string' ? req.body.text : null;
+    if (text === null) return res.status(400).json({ error: 'text required (send an empty string to clear it)' });
+    const { data: job } = await withOrg(supabase.from('jobs').select('id,position,research').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    if (!hasRole(req, 'ra_lead') && !(await canTouchJob(req, job.id))) {
+      return res.status(403).json({ error: 'Only the people working this lead can add its job posting' });
+    }
+    const research = leadPosting.withPosting(job.research, job.position, text);
+    const { data, error } = await withOrg(supabase.from('jobs').update({ research, updated_at: new Date() }).eq('id', job.id), req)
+      .select('id,position,research').maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Job not found' });
+    res.json({ id: data.id, research: data.research, posting: leadPosting.postingState(data) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

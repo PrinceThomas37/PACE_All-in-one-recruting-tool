@@ -57,7 +57,7 @@ const TERRITORIES = [
           'services/outreach-cycle.js', 'services/send-progress.js', 'services/send-retry.js',
           // The double-send rule. Sits with the send loop that enforces it —
           // routes/reminders.js only READS it to decide what to offer.
-          'services/outreach-dedup.js',
+          'services/outreach-dedup.js', 'services/company-daily-cap.js',
           'services/mailbox-reassign.js', 'services/lead-recycle.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
@@ -67,7 +67,7 @@ const TERRITORIES = [
   { id: 'observatory', name: 'Observatory', role: 'AI & Intelligence', terrain: 'the high peak',
     hue: '#D8CFE8', pos: [-15, -27], height: 22, spread: 12,
     own: ['services/ai-provider.js', 'services/ai-budget.js',
-          'services/outreach-generator.js', 'services/engine-draft.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
+          'services/outreach-generator.js', 'services/engine-draft.js', 'services/lead-posting.js', 'services/client-intel.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
           'match-engine.js', 'conversation-intel.js', 'next-action.js',
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
           // Shared by the public apply page and the "re-write job description"
