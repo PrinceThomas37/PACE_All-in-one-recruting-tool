@@ -197,6 +197,8 @@ function extractCommitments(text, now = Date.now()) {
 // ── The thread reader ───────────────────────────────────────────────────────
 
 const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
+// "today ago" read as a typo on screen; 0 days is just "today".
+const agoText = (n) => (n === 0 ? 'today' : `${fmtDays(n)} ago`);
 
 /**
  * Read a whole thread and say what state it is in.
@@ -246,7 +248,7 @@ function analyzeThread(messages, opts = {}) {
   if (!inbound.length) {
     state = 'awaiting_first_reply';
     waitingOn = 'them';
-    headline = `Sent ${fmtDays(daysSinceOutbound)} ago · no reply yet.`;
+    headline = `Sent ${agoText(daysSinceOutbound)} · no reply yet.`;
   } else if (last.direction === 'inbound') {
     waitingOn = 'you';
     if (intent && intent.id === 'unsubscribe') {
@@ -254,7 +256,7 @@ function analyzeThread(messages, opts = {}) {
       headline = 'They asked to stop being contacted. Do not email again.';
     } else if (intent && intent.id === 'not_interested') {
       state = 'closed_lost';
-      headline = `They said no ${fmtDays(daysSinceInbound)} ago.`;
+      headline = `They said no ${agoText(daysSinceInbound)}.`;
     } else {
       state = 'needs_reply';
       const what = questionPending ? 'They asked a question'
@@ -268,7 +270,7 @@ function analyzeThread(messages, opts = {}) {
     // We spoke last and they had replied before — the ball is with them.
     state = 'awaiting_them';
     waitingOn = 'them';
-    headline = `You replied ${fmtDays(daysSinceOutbound)} ago · waiting on them.`;
+    headline = `You replied ${agoText(daysSinceOutbound)} · waiting on them.`;
   }
 
   const needsReply = state === 'needs_reply';

@@ -24,6 +24,12 @@
 - Pinned by `test/pipeline-tag-membership-smoke.mjs` (real handlers, in-memory
   db; fails when the submission write is removed).
 
+## Session 31 (2026-09-25)
+- (Not guild code, but guild's world:) the client page's Emails tab can now be
+  a timeline + AI summary (`routes/client-intel.js`, off by default). Client
+  ownership for it uses `own.clientOwnerFrom` — job order bd_manager first,
+  then lead assigned_to_bd, then creator — the same ladder as everywhere.
+
 ## What is true here now
 - `bd_recruiter_routes.js` is a **43-line mounter** over
   `routes/recruiting/{job-orders,candidates,submissions,pipeline,lookups,

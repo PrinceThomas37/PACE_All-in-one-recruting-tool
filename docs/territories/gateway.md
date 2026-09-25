@@ -1,6 +1,28 @@
 # Gateway — memory
 > Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
 
+## Session 31 (2026-09-25) — client intelligence
+- **The reply sweep no longer stores every inbound message** (index.js
+  `processInboundMessages`). `clientIntel.gateMessage` keeps a contact or a
+  candidate we emailed, or a reply on a thread PACE started (`emails.
+  conversation_id`), and drops noise (job boards, account mail, no-reply),
+  our own domain and strangers. Measured before: 3 of 77 stored messages were
+  from a lead. Stored text is now ≤1,500 chars; each kept row is stamped with
+  the mailbox's `org_id` (it used to fall back to the default org), its
+  client's `company_id` and its free `facts`. Retries without the 048 columns
+  if they are missing.
+- **`routes/client-intel.js`** (mounted after companies): `GET /clients/:id/
+  intel` and `POST /clients/:id/summary`. OFF = `{enabled:false}` and no email
+  table read. Owner-only (D-0040): the client owner by `own.clientOwnerFrom`;
+  an admin only when nobody owns it. Every stored outreach body goes through
+  `renderStoredEmail`. Per-person meter `cis_used_<user>_<day>` in
+  app_settings (D-0041). AI-unavailable codes are `ai_not_configured` /
+  `ai_daily_limit`, deliberately distinct from the person's `daily_limit`.
+- `routes/companies.js` merge: `clear` tables are deleted on the duplicate
+  instead of moved.
+
+- 2026-09-25 (owner: "do both"): the timeline shows OUR sent emails in full (up to 30k chars, `ci.fullEmailText`); `GET /clients/:id/intel/messages/:mid/full` fetches ONE reply's full original live from the mailbox it arrived in — owner of the client only, the email must belong to that client, and the mailbox must be the viewer's own (Inbox rule); returned as plain text, never stored.
+
 ## What is true here now
 - `index.js` is 3,175 lines (down from 3,403 — the recruiting workflow channels
   and candidate/client email endpoints moved to `routes/recruiting/outreach.js`).

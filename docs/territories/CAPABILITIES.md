@@ -467,3 +467,13 @@ Activity tab (that record's submissions only, inline) and Email → All email
   (`/job-orders/rewrite-jd`, tidies a pasted posting, NO rules fallback — shows
   the "Subscribe to AI" pop-up, `aiSubscribePopup`). Two jobs, two endpoints,
   one pop-up.
+
+## A client's email history and its AI summary (Session 31, D-0039…D-0043)
+- **One implementation:** `routes/client-intel.js` over `services/client-intel.js`
+  (pure). The client page's Emails tab. Reads the three send pipelines + filed
+  replies; owner-only; switched by `client_intel_enabled` / `client_intel_ai_enabled`
+  (both OFF by default). The older `GET /companies/:id/email-activity` list is what
+  the tab shows while the switch is off — retire it once the timeline is on for good.
+- The summary is made ONLY by the button. Anything else that wants client state
+  (daily update, team roll-up) reads the saved summary / free facts, never calls AI
+  per client.

@@ -168,8 +168,11 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   // (migration 037) and the two OAuth token tables that migration 039 gives an
   // org_id — all three registered ahead of being applied, because the registry
   // states what a table IS and the code that touches it degrades safely.
-  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047 add',
-    TENANT_TABLES.size === 44, String(TENANT_TABLES.size));
+  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048 add',
+    TENANT_TABLES.size === 45, String(TENANT_TABLES.size));
+  // Migration 048 — client_summaries, one saved AI/rules summary per client
+  // (D-0042). Org-scoped like every other record of a client.
+  ok('client_summaries is registered as tenant data', TENANT_TABLES.has('client_summaries'));
   // Migration 047 — ownership_requests, the take-over request table (D-0037/
   // R-047). It carries who asked, who currently owns the record, and who
   // decided, all org-scoped.

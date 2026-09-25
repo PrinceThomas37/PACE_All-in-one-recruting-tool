@@ -10,6 +10,7 @@ const { fetchWithRetry, fetchWithTimeout } = require('./http-client');
 const { createRateLimiter, clientIp } = require('./middleware/rate-limit');
 const { createDb } = require('./models');
 const conversationIntel = require('./conversation-intel');
+const clientIntel = require('./services/client-intel');
 
 // Outbound call budgets. Graph and the token endpoint sit on the critical path
 // of the background sweeps, which run in the single web process — an untimed
@@ -2856,13 +2857,18 @@ async function sweepMailboxReplies(tokenRow, ownAddresses) {
 // If the table is missing we stop trying for the rest of the process rather than
 // throwing a caught error per message per sweep.
 let _convStoreDisabled = false;
-async function storeConversationMessage(msg, { direction, from, tokenRow, contactId, candidateId, jobId }) {
+// Migration 048 adds company_id + facts. Until it is applied, the insert is
+// retried without them rather than losing the message.
+let _convIntelCols = true;
+async function storeConversationMessage(msg, { direction, from, tokenRow, contactId, candidateId, jobId, companyId }) {
   if (_convStoreDisabled) return;
   try {
     const raw = msg.body?.content || msg.bodyPreview || '';
-    const body = conversationIntel.cleanForStorage(raw);
+    // 1,500 characters of NEW text (quotes and signature stripped) — D-0039's
+    // storage rule. The full email stays in the mailbox.
+    const body = clientIntel.trimStoredText(raw);
     const intent = conversationIntel.classifyIntent(body);
-    const { error } = await supabase.from('conversation_messages').insert({
+    const row = {
       contact_id: contactId || null,
       candidate_id: candidateId || null,
       job_id: jobId || null,
@@ -2877,7 +2883,23 @@ async function storeConversationMessage(msg, { direction, from, tokenRow, contac
       sent_at: msg.receivedDateTime || new Date().toISOString(),
       intent: intent ? intent.id : null,
       has_question: conversationIntel.hasQuestion(body),
-    });
+    };
+    // Filed to its client, with its free facts noted ONCE, here — the summary
+    // button reads these and never re-reads the inbox (D-0042).
+    // Stamped with the mailbox's company. It used to fall back to the
+    // column default (the first organisation) for everyone, which is wrong the
+    // day a second customer connects a mailbox.
+    if (tokenRow && tokenRow.org_id) row.org_id = tokenRow.org_id;
+    if (_convIntelCols) {
+      row.company_id = companyId || null;
+      row.facts = clientIntel.factsForMessage(body, row.sent_at);
+    }
+    let { error } = await supabase.from('conversation_messages').insert(row);
+    if (error && _convIntelCols && /company_id|facts/.test(error.message || '') && /column/i.test(error.message || '')) {
+      _convIntelCols = false;
+      delete row.company_id; delete row.facts;
+      ({ error } = await supabase.from('conversation_messages').insert(row));
+    }
     if (error) {
       // 23505 = unique violation = we already have this message. Expected.
       if (error.code === '23505') return;
@@ -2923,17 +2945,44 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       candTrk = data || [];
     } catch (_) { /* best-effort */ }
 
-    // Keep the actual message (Step 4). Before this, the only trace of an
-    // inbound reply was contacts.reply_snippet — 280 characters of the FIRST
-    // reply and nothing else, which is not enough to say who owes whom a reply.
-    // Stored regardless of whether the address matches anyone, since an
-    // unmatched reply is still part of the conversation.
-    await storeConversationMessage(msg, {
-      direction: 'inbound', from, tokenRow,
-      contactId: matches?.[0]?.id || null,
-      candidateId: candTrk?.[0]?.candidate_id || null,
-      jobId: matches?.[0]?.job_id || candTrk?.[0]?.job_order_id || null,
+    // Keep the actual message (Step 4) — BUT ONLY IF IT BELONGS TO A LEAD
+    // (Session 31, D-0039). This used to store every inbound message whatever
+    // its sender; measured on the live database, 3 of 77 stored messages were
+    // from a lead's contact and the rest were ZipRecruiter, Glassdoor, Google
+    // account mail, our own colleagues and strangers. The gate is a pure
+    // rule (services/client-intel.js gateMessage): a known contact or
+    // candidate is kept; otherwise it must be a reply on a thread PACE
+    // started, and never noise or our own domain.
+    let threadKnown = false;
+    const threadKey = msg.conversationId || msg.threadId || null;
+    if (!matches?.length && !candTrk?.length && threadKey) {
+      try {
+        const { data: t } = await supabase.from('emails').select('id').eq('conversation_id', threadKey).limit(1);
+        threadKnown = !!(t && t.length);
+      } catch (_) { /* unknown thread */ }
+    }
+    const ownDomains = [...new Set([...ownAddresses].map(a => clientIntel.domainOf(a)).filter(Boolean))];
+    const gate = clientIntel.gateMessage({
+      from, contactMatched: !!matches?.length, candidateMatched: !!candTrk?.length, threadKnown, ownDomains,
     });
+    if (gate.keep) {
+      // Which client it belongs to: the matched contact's lead's company.
+      let companyId = null;
+      const jid = matches?.[0]?.job_id || null;
+      if (jid) {
+        try {
+          const { data: j } = await supabase.from('jobs').select('company_id').eq('id', jid).maybeSingle();
+          companyId = (j && j.company_id) || null;
+        } catch (_) { /* filed without a client; the timeline also reads by contact */ }
+      }
+      await storeConversationMessage(msg, {
+        direction: 'inbound', from, tokenRow,
+        contactId: matches?.[0]?.id || null,
+        candidateId: candTrk?.[0]?.candidate_id || null,
+        jobId: matches?.[0]?.job_id || candTrk?.[0]?.job_order_id || null,
+        companyId,
+      });
+    }
 
     for (const c of (matches || [])) {
       if (c.replied_at) continue; // already recorded
@@ -3344,6 +3393,8 @@ app.use(require('./routes/microsoft')(routeCtx));
 app.use(require('./routes/gmail')({ supabase, auth, hasRole, orgIdFor, provider: gmailProvider }));
 app.use(require('./routes/workflows')(routeCtx));
 app.use(require('./routes/companies')(routeCtx));
+// The client page's Emails tab + "Generate AI summary" (D-0039…D-0043). Ships OFF.
+app.use(require('./routes/client-intel')(routeCtx));
 app.use(require('./routes/reminders')(routeCtx));
 app.use(require('./routes/contacts')(routeCtx));
 app.use(require('./routes/settings')(routeCtx));

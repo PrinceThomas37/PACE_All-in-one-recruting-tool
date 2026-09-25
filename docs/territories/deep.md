@@ -1,6 +1,19 @@
 # Deep — memory
 > Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
 
+## Session 31 (2026-09-25) — migration 048, client intelligence
+- `048_client_intel.sql`: `conversation_messages.company_id` (FK companies, ON
+  DELETE SET NULL) + `facts jsonb`, index `(company_id, sent_at DESC)`; new
+  table `client_summaries` (one row per client, unique company_id, org_id NOT
+  NULL, RLS + service-role policy). Purely additive. Owner's go-ahead
+  2026-09-25 ("Yes, go ahead and build it") after being told exactly this.
+  **APPLIED to the live DB 2026-09-25**, verified after: 2 new columns on
+  conversation_messages, client_summaries 14 columns, RLS on, 1 policy, the 78
+  existing messages untouched. **Next migration is 049.**
+  Registered in `models/tables.js` (45 tenant tables). The company-merge list
+  now carries both (conversation_messages MOVES; client_summaries is CLEARED on
+  the duplicate — `clear: true` in services/company-merge.js).
+
 ## What is true here now
 - Supabase project `teiqievahzhllojvgsku`. **48 tables: 41 tenant, 7 global.**
 - `models/tables.js` is verified against the live schema. A migration adding a

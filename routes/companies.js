@@ -278,8 +278,12 @@ router.post('/companies/:id/merge', auth, async (req, res) => {
     const moved = {};
     for (const t of companyMerge.MERGE_TABLES) {
       if (!ctx.counts[t.table]) { moved[t.table] = 0; continue; }
-      const { error } = await withOrg(supabase.from(t.table)
-        .update({ company_id: ctx.target.id }).eq('company_id', ctx.source.id), req);
+      // `clear` tables (a saved client summary) are removed, not moved — see
+      // services/company-merge.js.
+      const { error } = t.clear
+        ? await withOrg(supabase.from(t.table).delete().eq('company_id', ctx.source.id), req)
+        : await withOrg(supabase.from(t.table)
+          .update({ company_id: ctx.target.id }).eq('company_id', ctx.source.id), req);
       if (error) throw new Error(`moving ${t.plural} failed: ${error.message}`);
       moved[t.table] = ctx.counts[t.table];
     }

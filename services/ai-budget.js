@@ -82,6 +82,10 @@ const FEATURES = {
   engine_first_email_thin: { label: 'Engine first emails (title only)', in: 3000, out: 800, tier: 'fast' },
   import_briefing: { label: 'Daily import briefing', in: 1200, out: 400,  tier: 'fast' },
   lead_ratio:      { label: 'Lead distribution',     in: 1200, out: 400,  tier: 'fast' },
+  // The client summary button (D-0042). The request is capped by
+  // services/client-intel.js at ~3,400 tokens whatever the history; this is
+  // the provider-side ceiling behind that, and the answer is 3-5 sentences.
+  client_summary:  { label: 'Client summary',        in: 3500, out: 450,  tier: 'quality' },
 };
 // An unnamed caller gets the tightest sensible allowance rather than no limit.
 const DEFAULT_FEATURE = { label: 'Other', in: 1000, out: 500, tier: 'fast' };
