@@ -13,6 +13,14 @@
 - `overlay-opacity-smoke` step 2 re-pointed from the removed Connected drawer
   to the Leads Stage dropdown.
 
+## Session 31 (2026-09-25) — client intelligence suites
+- +`client-intel-smoke.mjs` (34, pure; the 2-year cap guard fails when the cap
+  is removed — measured 232k tokens), +`client-intel-routes-smoke.mjs` (20,
+  real handlers, in-memory db, stub AI; the owner-only guard fails when opened
+  up), +`client-intel-ui-smoke.mjs` (10, Playwright). `company-merge-smoke`'s
+  "every company_id table is in the merge list" caught the two 048 tables —
+  exactly its job. Full suite 115/116 before that fix.
+
 ## What is true here now
 - **`npm test` runs 110 suite files** via `test/run-all.mjs` and reports one summary
   (was 105 at the last count in this file; +2 this session —

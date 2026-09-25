@@ -29,6 +29,14 @@ const MERGE_TABLES = [
   { table: 'job_orders',       label: 'job',      plural: 'jobs' },
   { table: 'client_documents', label: 'document', plural: 'documents' },
   { table: 'email_tracking',   label: 'email',    plural: 'emails' },
+  // Migration 048 (client intelligence): replies filed to a client move with it.
+  { table: 'conversation_messages', label: 'reply', plural: 'replies' },
+  // A saved AI summary describes ONE client's emails. After a merge it would
+  // describe only half of them, so the duplicate's summary is CLEARED rather
+  // than moved (there is at most one per client — a move could collide with
+  // the survivor's). The survivor's own summary reads "N new" and is simply
+  // re-generated when its owner next presses the button.
+  { table: 'client_summaries', label: 'saved summary', plural: 'saved summaries', clear: true },
 ];
 
 // What makes a merge impossible, in words the person reading the screen can act
@@ -50,7 +58,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // what is about to move is stated in full — including when nothing will move,
 // which is a legitimate and reassuring answer rather than an error.
 function describePlan(counts, { sourceName, targetName } = {}) {
-  const moving = MERGE_TABLES
+  const moving = MERGE_TABLES.filter(t => !t.clear)
     .map(t => ({ t, n: Number((counts || {})[t.table] || 0) }))
     .filter(x => x.n > 0)
     .map(x => plural(x.n, x.t.label, x.t.plural));
@@ -66,7 +74,7 @@ function describePlan(counts, { sourceName, targetName } = {}) {
 
 // Is there anything to do at all? Used to keep the button honest.
 function totalMoving(counts) {
-  return MERGE_TABLES.reduce((n, t) => n + Number((counts || {})[t.table] || 0), 0);
+  return MERGE_TABLES.filter(t => !t.clear).reduce((n, t) => n + Number((counts || {})[t.table] || 0), 0);
 }
 
 module.exports = { MERGE_TABLES, mergeInputError, describePlan, totalMoving };

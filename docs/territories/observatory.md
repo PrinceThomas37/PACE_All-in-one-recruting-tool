@@ -19,6 +19,22 @@
   15:41–16:24 (6–18 min after their slot: 10-min tick × 6 per tick). Nothing
   was stuck; they were invisible in Pending, which read only `emails`.
 
+## Session 31 (2026-09-25) — client summary (D-0039 … D-0043)
+- **`services/client-intel.js` (PURE)**: gate, 1,500-char filing, per-message
+  facts, the fixed-size fact ledger (≤3,200 chars) for any history, the capped
+  request (≤8 latest emails as text, ≤13,600 chars ≈ 3,400 tokens per click
+  whatever the history), `canGenerate` (nothing new → refused/0 tokens;
+  "rewrite anyway" once a day; per-person allowance), `checkSummary` (next
+  steps only from the playbook; no invented money/%/email address),
+  `rulesSummary` (the free answer), and PLAYBOOKS (recruiting preset, plus
+  services and software starters — R-054).
+- New budget feature `client_summary` (in 3500 / out 450, quality tier).
+- **Measured live on Groq (gpt-oss-120b, reasoning low), 2026-09-25**: a
+  synthetic 310-email, 2-year client → 836 prompt + 204 completion = **1,040
+  tokens**, summary passed the checker and chose reply / send_profiles /
+  check_promise. Without the cap the same test history measured 232k tokens.
+- `conversation-intel.js`: headlines say "today" instead of "today ago".
+
 ## What is true here now
 - **Every AI call goes through `services/ai-provider.js`** — `complete(supabase,
   {system, prompt, maxTokens, feature, orgId})`. Two wire formats only:

@@ -38,6 +38,16 @@
 - Pinned by `test/session31-flows-smoke.mjs` (30 checks, real browser, stub API;
   the scroll and owner guards were verified by reintroducing each bug).
 
+## Session 31 (2026-09-25) — client Emails tab
+- `41-page-clients.js`: loads `GET /clients/:id/intel`; when `enabled:false`
+  the Emails tab is EXACTLY the old list. When on: owner sees a card (saved AI
+  summary + next steps, or the free "Where things stand · from the emails, no
+  AI"), the button ("✨ Generate AI summary" / "Update summary (N new)" /
+  "✓ Up to date" + "Rewrite anyway", with "Uses 1 of your N today"), then every
+  email newest first, expandable. A non-owner reads "Only <owner> can read this
+  client's emails". AI unavailable → `aiSubscribePopup`. Pinned by
+  `test/client-intel-ui-smoke.mjs` (10 checks, screenshots via SHOTS).
+
 ## What is true here now
 - 48 modules in `public/js/`, ~19,000 lines, loaded in order by `index.html`.
   No build step. Global `window.*` + `STATE`.

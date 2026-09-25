@@ -28,6 +28,8 @@ const TENANT_TABLES = new Set([
   'candidate_pipeline',
   'candidates',
   'client_documents',
+  // Added by migration 048 (client intelligence) — one saved summary per client.
+  'client_summaries',
   'companies',
   'contacts',
   // Added by migration 037 (conversation intelligence), applied 2026-08-05.

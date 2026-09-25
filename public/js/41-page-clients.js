@@ -57,6 +57,11 @@
       .catch(function(){ STATE.clients.documents=[]; STATE.clients.docsLoading=false; paintDetail(); });
     apiGet('/companies/'+id+'/contacts').then(function(d){ STATE.clients.contacts=d||[]; paintDetail(); }).catch(function(){ STATE.clients.contacts=[]; });
     apiGet('/companies/'+id+'/email-activity').then(function(d){ STATE.clients.emailActivity=d||[]; paintDetail(); }).catch(function(){ STATE.clients.emailActivity=[]; });
+    // The client email timeline (D-0039…D-0043). Answers {enabled:false} while
+    // it is switched off, and the old list below stays exactly as it was.
+    STATE.clients.intel=null; STATE.clients.intelBusy=false;
+    apiGet('/clients/'+id+'/intel').then(function(d){ STATE.clients.intel=d||{enabled:false}; paintDetail(); })
+      .catch(function(){ STATE.clients.intel={enabled:false}; paintDetail(); });
   }
   // Opening or closing a client changes an OVERLAY, which lives outside
   // #content — so these go through render(), not paint().
@@ -151,7 +156,7 @@
 
     var tabBar='<div class="pgtabs">'+
       [{id:'jobs',label:'Job orders',n:(jobs?jobs.length:0)},
-       {id:'emails',label:'Emails',n:(STATE.clients.emailActivity||[]).length},
+       {id:'emails',label:'Emails',n:(intelOn()&&STATE.clients.intel.owner?STATE.clients.intel.total_messages:(STATE.clients.emailActivity||[]).length)},
        {id:'docs',label:'Documents',n:(docs?docs.length:0)}].map(function(t){
         return '<div class="pgtab'+(tab===t.id?' on':'')+'" data-cltab="'+t.id+'" onclick="clientsTab(\''+t.id+'\')">'+
           t.label+'<span class="pgtab-n">'+t.n+'</span></div>';
@@ -165,7 +170,7 @@
                    minWidth:'620px', empty:'No job orders for this client yet.' })+
       '</div>'+
       '<div class="feed" data-clpanel="emails" style="padding:16px 18px"'+(tab==='emails'?'':' hidden')+'>'+
-        recentEmailsCard(c)+
+        (intelOn()?intelPanel(c):recentEmailsCard(c))+
       '</div>'+
       '<div class="feed" data-clpanel="docs" style="padding:16px 18px"'+(tab==='docs'?'':' hidden')+'>'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
@@ -227,6 +232,104 @@
     });
     Array.prototype.forEach.call(root.querySelectorAll('[data-cltab]'), function(el){
       el.classList.toggle('on', el.getAttribute('data-cltab')===id);
+    });
+  };
+
+  // ── THE CLIENT EMAIL TIMELINE + AI SUMMARY (D-0039 … D-0043) ─────────────
+  function intelOn(){ var i=STATE.clients.intel; return !!(i&&i.enabled); }
+  function fmtWhen(s){ try{ return new Date(s).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
+  function stepsHtml(steps){
+    if(!steps||!steps.length) return '';
+    return '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Suggested next steps</div>'+
+      steps.map(function(s){ return '<div style="font-size:12.5px;margin-bottom:4px"><b>'+esc(s.label||s.id)+'</b>'+(s.why?'<span style="color:var(--ink3)"> — '+esc(s.why)+'</span>':'')+'</div>'; }).join('')+'</div>';
+  }
+  function intelPanel(c){
+    var i=STATE.clients.intel;
+    if(!i.owner){
+      // D-0040: the email text is the client owner's alone.
+      return '<div class="dt-empty">Only '+esc(i.owner_name||'this client\'s owner')+' can read this client\'s emails and their summary.</div>';
+    }
+    var ai=i.ai||{}, st=i.status||{}, sum=i.summary, busy=STATE.clients.intelBusy;
+    var btn='';
+    if(ai.enabled){
+      var label, dis=false;
+      if(busy){ label='Writing the summary…'; dis=true; }
+      else if(st.state==='no_emails'){ label='No emails to summarise yet'; dis=true; }
+      else if(st.state==='up_to_date'){ label='✓ Up to date'; dis=true; }
+      else if(st.state==='new'&&sum){ label='✨ Update summary ('+st.new_count+' new email'+(st.new_count===1?'':'s')+')'; }
+      else { label='✨ Generate AI summary'; }
+      btn='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+        '<button class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="clientsSummarise(false)">'+label+'</button>'+
+        (st.state==='up_to_date'&&!busy?'<button type="button" onclick="clientsSummarise(true)" style="border:0;background:none;padding:0;font:inherit;font-size:12px;color:var(--accent);cursor:pointer">Rewrite anyway</button>':'')+
+        '<span style="font-size:11.5px;color:var(--ink3)">'+(st.state==='up_to_date'?'Nothing new since the last summary — costs nothing.':'Uses 1 of your '+(ai.per_user_limit||0)+' today · '+(ai.left_today||0)+' left')+'</span>'+
+      '</div>';
+    }
+    var summaryBlock;
+    if(sum&&sum.summary){
+      summaryBlock='<div class="card" style="padding:14px 16px;margin-bottom:14px;border-left:3px solid var(--accent)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
+          '<div style="font-weight:700;font-size:13.5px">AI summary to '+esc(fmtWhen(sum.covers_until||sum.updated_at))+'</div>'+
+          '<span style="font-size:11px;color:var(--ink3)">'+esc(sum.message_count||0)+' emails read</span>'+
+        '</div>'+
+        '<div style="font-size:13px;line-height:1.55">'+esc(sum.summary)+'</div>'+
+        stepsHtml(sum.next_steps)+
+        (btn?'<div style="margin-top:12px">'+btn+'</div>':'')+
+      '</div>';
+    } else {
+      // THE FREE VERSION: what shows with AI off, or before anyone presses the
+      // button. Built from rules — no AI, no cost.
+      var f=i.facts||{};
+      summaryBlock='<div class="card" style="padding:14px 16px;margin-bottom:14px">'+
+        '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Where things stand <span style="font-weight:500;font-size:11px;color:var(--ink3)">· from the emails, no AI</span></div>'+
+        '<div style="font-size:13px;line-height:1.55">'+esc(f.summary||'No emails with this client yet.')+'</div>'+
+        stepsHtml(f.next_steps)+
+        (btn?'<div style="margin-top:12px">'+btn+'</div>':'')+
+      '</div>';
+    }
+    var rows=(i.timeline||[]).map(function(m){
+      var open=STATE.clients.openEmail===m.id;
+      var inbound=m.direction==='inbound';
+      var who=inbound?(m.person||m.from||'Them'):'You → '+(m.to||'');
+      return '<div style="border-bottom:1px solid var(--border)">'+
+        '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" onclick="clientsToggleEmail(\''+m.id+'\')">'+
+          '<span title="'+(inbound?'From them':'From us')+'" style="font-size:11px;font-weight:700;color:'+(inbound?'var(--green)':'var(--ink3)')+';width:16px;text-align:center">'+(inbound?'↙':'↗')+'</span>'+
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.subject||'(no subject)')+'</div>'+
+            '<div style="font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(who)+' · '+esc(fmtWhen(m.sent_at))+'</div>'+
+          '</div>'+
+        '</div>'+
+        (open?'<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px;font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(m.text||'')+
+          '<div style="font-size:11px;color:var(--ink3);margin-top:6px;white-space:normal">'+(inbound?'The new part of their email — quoted history and signature are left in the mailbox.':'')+'</div></div>':'')+
+      '</div>';
+    }).join('')||'<div class="dt-empty">No emails with this client yet.</div>';
+    return summaryBlock+
+      '<div style="font-weight:600;font-size:13.5px;margin:4px 0 6px">Every email with '+esc(c.name||'this client')+
+        ' <span style="font-weight:400;color:var(--ink3);font-size:12px">'+(i.total_messages||0)+' in total, newest first</span></div>'+
+      rows;
+  }
+  window.clientsSummarise=function(force){
+    var st=STATE.clients, id=st.selectedId; if(!id||st.intelBusy) return;
+    st.intelBusy=true; paintDetail();
+    apiPost('/clients/'+id+'/summary',{force:!!force}).then(function(r){
+      st.intelBusy=false;
+      var i=st.intel||{};
+      if(r.rejected){
+        showToast('The AI summary did not pass the check (it said something not in the emails), so the free summary is shown.','warning');
+      } else if(r.summary){
+        i.summary=r.summary; i.status=r.status||{state:'up_to_date',new_count:0};
+        if(!r.reused&&i.ai){ i.ai.used_today=(i.ai.used_today||0)+1; i.ai.left_today=Math.max(0,(i.ai.left_today||0)-1); }
+        showToast(r.reused?'Already up to date — nothing new to read':'Summary written','success');
+      }
+      paintDetail();
+    }).catch(function(e){
+      st.intelBusy=false; paintDetail();
+      var code=String(e.message||'');
+      if(code==='ai_not_configured'||code==='ai_daily_limit'){ if(window.aiSubscribePopup) aiSubscribePopup(code.slice(3)); }
+      else if(code==='daily_limit') showToast('You have used all your AI summaries for today. They reset tomorrow.','warning');
+      else if(code==='rewrite_used_today') showToast('"Rewrite anyway" is once a day per client.','info');
+      else if(code==='no_answer'){ if(window.aiSubscribePopup) aiSubscribePopup('no_answer'); }
+      else if(code==='switched_off') showToast('AI client summaries are switched off.','info');
+      else showToast('Could not write the summary: '+code,'error');
     });
   };
 
