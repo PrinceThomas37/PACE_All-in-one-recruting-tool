@@ -4,13 +4,12 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-26 (Session 31 close) · **Repo**:
+**Updated**: 2026-09-26 (Session 32 close) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #244 (`66fca7e`, job posting box +
-2 first emails per company per day). Session 31 merged #233 and #240–#244.
-**Nothing is left unmerged.** **D-0046 is the highest decision id. C-0030 is
-the highest contract id (C-0029, C-0030 OPEN). Next roadmap id `R-060`.**
+to `main` IS the release · **Last merged**: #249 (`1c6f5bc`). Session 32 merged
+#246–#249. **Nothing is left unmerged.** **D-0047 is the highest decision id.
+C-0030 is the highest contract id (only C-0030 OPEN). Next roadmap id `R-060`.**
 
 ---
 
@@ -57,104 +56,94 @@ app; never code or git (`CLAUDE.md`, top).
 Leads engine (import → distribute → **AI-written** first email → template
 follow-ups → reply sweep → recycle), the ATS, the outreach generator, candidate
 outreach, the in-app mailbox, reminders / "needs you today", the public apply
-page, ownership + take-over requests (Sessions 29–30), failed-send retry
-(D-0031), the rewind clock. Billing and self-serve signup built and **off**.
+page, ownership + take-over requests, failed-send retry (D-0031), the rewind
+clock, client/lead email timelines with the AI summary button. Billing and
+self-serve signup built and **off**.
 
-### Session 31 added (all merged, all live)
+### Session 32 added (all merged, all live) — the owner said "do all these" (D-0047)
 
-- **#233** — the owner's 24 Sep list: Connected filters the Leads table with a
-  Convert button per row; job link + AI rewrite on New Job; bulk Add to job
-  (tagging now writes a `Sourced` submission); bulk resume upload; owner shown
-  not chosen; job page lists its candidates with Email about this job;
-  candidate email From picker, no scroll jump, first email goes at once.
-- **Client intelligence (D-0039…D-0045)** — `services/client-intel.js` (pure)
-  + `routes/client-intel.js` serve **`/clients/:id/…` and `/leads/:id/…`**:
-  every email with them (ours in full, their replies as filed; "Open the full
-  email" fetches the original live from the viewer's OWN mailbox), a free
-  "where things stand" card, and a **Generate AI summary** button. **Owner-only**
-  (D-0040; a manager gets a facts roll-up — not built). Per-person daily
-  allowance (D-0041, default 15); a summary only on the button, capped per
-  click however long the history (D-0042; a 2-year test client = 1,040
-  tokens). Lead summaries live in `app_settings` `lead_summary_<id>`; client
-  ones in `client_summaries` (migration 048). The reply sweep now files only
-  real correspondents (`gateMessage`) with `company_id` + free `facts`.
-  A one-time **catch-up** (`runClientIntelCatchUp`, engine job, hourly) pulls
-  90 days of replies from each BD's own leads — ran 2026-09-25: 6 of 8
-  mailboxes done (2 have no leads), found only the 3 replies already stored,
-  because PACE's first outreach went out 2026-09-23.
-- **R-055 (#243)** — **one** sending-hours setting (`send_window_start_hour` /
-  `_end_hour`, default 8–16 in the LEAD's time zone), read by the send loop and
-  every "Send window" line; the Email Engine Schedule popup edits it. The old
-  "Outreach send time" box (read by nothing) and an unsaved Timezone picker are
-  gone. `followup_send_time` (owner set **18:30 IST**) = when follow-ups are
-  QUEUED, not sent.
-- **R-056 (#244)** — a **Job posting** box on each lead row
-  (`59-lead-posting.js`, `POST /jobs/:id/posting`, `services/lead-posting.js`
-  using the AI writer's own thin rule). All 82 live leads were title-only; 80
-  link to LinkedIn/Indeed/SimplyHired/Glassdoor, which PACE cannot read.
-- **R-058 CHANGED (#244)** — at most **2** first emails per company per day
-  (`company_daily_first_emails`, 0 = off); the rest wait a day. First emails
-  only; per company across leads and senders; day = `emails.sent_at` (UTC).
+- **#246 R-037** — a **dead-mailbox warning** on all three dashboards
+  (`services/mailbox-alerts.js`, `GET /mailboxes/alerts`,
+  `60-mailbox-alerts.js`): which mailbox, why in plain words, how many emails
+  wait behind it, Reconnect for its owner. Gmail now records refresh failures
+  too. **Two are dead today:** kristy.scott@fute-global.com (Microsoft withdrew
+  permission, AADSTS65001, since 21 Jul) and probably princethomasfute@gmail.com
+  (no refresh since 24 Sep). **R-050** — the two backup tables are empty and
+  now locked (migration 049); dropping them is offered, not done. **R-039** —
+  both sending domains pass SPF/DKIM/DMARC (futeglobal.com DMARC `p=none`).
+- **#247 R-051 done** — "Your client conversations" card under "needs you
+  today" (`61-client-digest.js`, `GET /client-intel/digest`), plus a manager's
+  **facts-only** team roll-up (D-0040/D-0043: no AI, no email text).
+- **#248 R-006/R-001/R-002** — **Reports now live at the foot of the
+  Dashboard**; the Reports page and nav item are gone. Submissions are counted
+  from **stage history** (`countSubmissionsEver`) — D-0029's under-report is
+  closed on tiles, hot jobs and the report alike. **Time in stage** card
+  (`timeInStage`, stuck = 14+ days).
+- **#249** — retired `/bd-analytics/*` (R-005) and `/ai/generate-email`
+  (R-007); **Integrations card** keeps a typed key across redraws and says when
+  a tested key is unsaved (R-030 — it was wiping the box); model hints derived
+  from the provider table (R-031); **Anthropic quality model was retired**
+  (now `claude-sonnet-4-6`; that account also has **no credit**); **OpenRouter
+  free picker was choosing music models** (fixed, cache versioned);
+  **migration 050** — dropdown words unique per company (R-048); `GET /clients`
+  `can_edit` hides document Upload/Delete from non-owners (C-0029); **record
+  drawer panes were see-through** (5.5% opaque in dark) — now solid.
 
-### Live switches (as set 2026-09-25)
+### Live switches (read from the DB 2026-09-26 — rows that exist)
 
 | setting | value | meaning |
 |---|---|---|
-| `sys_client_intel_enabled` | **1** | email timeline ON (D-0044) |
-| `sys_client_intel_ai_enabled` | *no row → 0* | AI summary button **OFF** until the owner says |
-| `sys_engine_ai_first_email` | **1** | AI writes first emails (**default was already 1** — see D-0045 correction) |
-| `company_daily_first_emails` | *no row → 2* | 2 per company per day |
-| `send_window_*_hour` | *no row → 8 / 16* | lead-local sending hours |
-| `ai_daily_token_cap` / `call_cap` | 400,000 / 400 | org's daily AI allowance (Groq primary) |
+| `sys_client_intel_enabled` | **1** | email timeline ON |
+| `sys_client_intel_ai_enabled` | **1** | AI summary button **ON** (D-0047) |
+| `sys_engine_ai_first_email` | **1** | AI writes first emails |
+| `int_ai_active` | **groq** | Groq leads the chain (gpt-oss-20b / 120b — confirmed working) |
+| `ai_daily_token_cap` / `call_cap` | 400,000 / 400 | org's daily AI allowance |
+| `followup_send_time` | 18:30 | when follow-ups are QUEUED (IST), not sent |
+| *no row* | defaults | `company_daily_first_emails` 2, sending hours 8–16 lead-local |
 
-**⚠ A setting with no row reads its schema DEFAULT.** I told the owner the AI
-first-email switch was off; its default was 1 and it had been on since 23 Sep.
-Read `config/settings.js` defaults before stating what a switch is set to.
+**⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
+read the default before saying what a switch is set to.
 
-**First live AI emails: 2026-09-25, 23 of 23 first emails AI-written**, ~1,700
-tokens each, no errors. Correct and on-rule but samey — thin leads. The fix is
-R-056 (posting text) and later R-057.
+## Migrations — next is **051** · 049 and 050 APPLIED 2026-09-26
 
-## Migrations — next is **049** · 048 APPLIED 2026-09-25
-
-048: `conversation_messages.company_id` + `facts`, table `client_summaries`
-(RLS + service policy; in `models/tables.js`, 45 tenant tables). **Never apply
-one without an explicit, fresh go-ahead.**
+049: RLS + revoke on the two backup tables. 050: `recruiting_lookups` unique
+index is `(org_id, category, lower(value))`. **SQL/migrations are pre-approved
+by the owner (D-0047)** — still state a destructive customer-data change first,
+and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
 
-1. **Read `docs/ROADMAP.md`.** Open, mine: **R-051** remainder (manager's team
-   roll-up + daily-update section, facts only, no extra AI — D-0040/D-0043),
-   R-037 (dashboard warning when a mailbox sign-in fails), R-001/002/005/006/
-   007/008, R-030/031/032, R-048. Waiting on the owner: R-039 (SPF/DKIM/DMARC),
-   R-050 (two unprotected backup tables — needs OK), R-011. Undecided: R-012
-   (the design brief), R-013, R-014, R-049 (operator role — before customer
-   #2), R-052/053/054, **R-057 (owner: "later", after "a huge discussion" on
-   email design — do not start unasked)**.
-2. **Known gap left on purpose:** the Pending banner counts a first email held
-   by the per-company cap as "ready now" until the send run reaches it (the run
-   then says why). Fix if the owner notices; not asked for.
-3. **Watch** whether BDs actually paste postings (R-056) and whether AI emails
-   read better where they do — `emails.template_variant='ai'`, compare bodies.
+1. **The owner deferred four things to "the next chat" (D-0047)** — they are the
+   likely opening ask: **R-057** matching candidates in emails, **R-012** the
+   screen redesign, **R-054** a playbook per industry, **R-053** the contact
+   finder. All need a design conversation first — propose, don't build.
+2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
+   Anthropic key has no credit (harmless — Groq answers); the apply link on
+   "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
+3. Mine, open: **R-032** (38 orphaned files / 2.9 MB — needs the Storage API
+   with a service key; SQL delete is correctly blocked), **R-049** operator role
+   (before customer #2), R-003. **C-0030** (org-scoping debt list) open.
+4. Known gap left on purpose: the Pending banner counts a first email held by
+   the per-company cap as "ready now" until the send run reaches it.
 
-## 🧪 TESTS: 119 SUITES
+## 🧪 TESTS: 126 SUITES
 
 `npm test` — read the COUNT; never pipe into `tail`. `bash
-test/verify-frontend.sh` too. Newest: `client-intel-smoke` (34),
-`client-intel-routes-smoke` (38, clients + leads), `client-intel-ui-smoke`,
-`lead-intel-ui-smoke` (15, incl. the posting box), `send-hours-smoke` (15 — runs
-the real `getSendWindowHours` lifted out of index.js),
-`posting-and-company-cap-smoke` (24). **Every one was re-verified by putting the
-bug back.** One reintroduction CRASHED instead of failing and printed no
-summary — **a crash is not a demonstration; write the old code out properly.**
-`timezone-resolver-smoke` slices index.js between text anchors — moving code
-near `getSendWindowHours` breaks it (its END_MARK is now that function).
+test/verify-frontend.sh` too. Newest: `mailbox-alerts-smoke` (22) + `-ui` (12),
+`client-digest-ui-smoke` (11), `stage-history-reports-smoke` (10, real
+handlers), `reports-smoke` (14, incl. a 390px fit walk), `integration-test-
+honesty-smoke` (12), `lookups-per-org-smoke` (10), `client-docs-ownership-smoke`
+(15), `overlay-opacity-smoke` (14, now opens the record drawer). **Every new
+check was run against the old code and failed there.** Two faults this session
+(see-through drawer, blank-box Integrations card) were found by LOOKING at a
+screenshot of a green suite — take the screenshot.
 
 ## Owner actions outstanding
 
-- Say when to switch on the **AI summary button** (`client_intel_ai_enabled`).
-- Paste job postings on leads (or add a "Job Description" column to imports).
-- R-039, R-050 above. Google sign-in still needs `GOOGLE_CLIENT_ID`/`SECRET`.
+- Reconnect kristy.scott@fute-global.com and princethomasfute@gmail.com.
+- Share the apply link; paste job postings on leads (R-056).
+- Optional: drop the two empty backup tables (say the word). Google sign-in
+  still needs `GOOGLE_CLIENT_ID`/`SECRET`.
 
 ## ⏸ Parked — do NOT re-raise as blocking
 
@@ -168,7 +157,8 @@ request (D-0036–38), documents designed later (R-052), R-057 later (D-0046).
   is **unverified**. Check `app_settings` `cron_last_*` rows in Supabase for
   signs of life; never claim you watched it come up.
 - **Sandbox Node 22, Render Node 26.** Works-here-fails-there → get Node 26.
-- **A guard is vacuous until you watched it fail** — now ten caught.
+- **A guard is vacuous until you watched it fail** — and a green suite is not a
+  screen: look at the screenshot (Session 32 found two faults that way).
 - **Registration order is load-bearing** in every router
   (`route-shadowing-smoke`).
 - **Every reader of a stored email body calls `renderStoredEmail`.**
@@ -179,5 +169,7 @@ request (D-0036–38), documents designed later (R-052), R-057 later (D-0046).
   merge, restart the dev branch from `origin/main`
   (`git checkout -B <branch> origin/main`) before new work.
 - **Secrets live in `app_settings` (`int_*_api_key`)** — never echo them into
-  chat, commits or files.
+  chat, commits or files (query `length(value)`, never `value`).
+- **Hard-coded AI model names expire** — five so far. Check the live
+  `ai_last_test` row's `available_models` before trusting one.
 - **This sandbox cannot measure smoothness** (software compositing).
