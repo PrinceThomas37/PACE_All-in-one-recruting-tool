@@ -6110,3 +6110,24 @@ R-006: the owner's old ask — reports as part of the Dashboard — done by plac
 - **R-032 not done, honestly:** 38 files / 2.9 MB verified unreferenced; the database correctly refuses SQL deletes on storage; the Storage API needs a service key this sandbox lacks. Harmless.
 - **R-008 needs no build:** the one open job order is already published (0 applicants — the link needs sharing). Moved to the owner's lane.
 - **Found from a screenshot, not a test:** the record drawer (client, candidate) was see-through — `.dwr-pane` on the glass `--card`, 5.5% opaque in dark. Now solid; the opacity suite measures it in both themes.
+
+### Session 32 — the thread through it
+The owner handed over the whole "waiting on me" list with one instruction —
+*do not cut corners* — and pre-approved SQL (D-0047). Four PRs (#246–#249)
+cleared R-037, R-039, R-050, R-051, R-006, R-001, R-002, R-005, R-007, R-030,
+R-031, R-048 and C-0029; R-032 was measured and left honestly blocked; R-008
+turned out to need no build.
+
+The lesson is that **the most valuable findings were not on the list.** Asking
+"which Groq model runs?" meant reading the live health record, and that record
+also showed a retired Anthropic model and an OpenRouter picker choosing music
+generators — neither of which any test or screen had ever flagged, because a
+failed AI call degrades silently to the rules writer by design. And two faults
+were found only by *looking at a screenshot of a green suite*: the
+Integrations modal wiping a typed key (which fully explained the owner's
+"Not configured beside Key valid" report — the reported symptom was the true
+one, the first theory about it was not), and the record drawer being 5.5%
+opaque in dark. Both now have guards that fail on the old code. The
+discipline that paid off: answer the question from the live system, then read
+everything else the answer shows you — and never accept "the suite is green"
+as a substitute for looking at the screen.
