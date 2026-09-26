@@ -39,6 +39,8 @@ function renderDashboard(){
   if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
   // A dead mailbox sign-in (R-037): per-user, never for a "view as" preview.
   if(!isViewingOther&&STATE.mailboxAlerts===undefined&&window.loadMailboxAlerts)loadMailboxAlerts();
+  // Client conversations + the manager's facts-only team roll-up (D-0040/D-0043).
+  if(!isViewingOther&&STATE.clientDigest===undefined&&window.loadClientDigest)loadClientDigest();
   // The morning briefing is ORG-WIDE, not per-user — unlike next-actions it
   // reads the same for the viewer and the viewed person, so it must load even
   // while "view as" is open. Gating it on isViewingOther left the card stuck
@@ -290,6 +292,7 @@ function renderRecruiterDashboard(u){
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
+    (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your desk…</div>':'')+
@@ -416,6 +419,7 @@ function renderManagerDashboard(u){
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
+    (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your team\'s desk…</div>':'')+
@@ -547,6 +551,7 @@ function renderIndividualDashboard(u){
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
+    (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
     '<div class="flex gap2 mb4 flex-wrap">'+pickers+'</div>'+

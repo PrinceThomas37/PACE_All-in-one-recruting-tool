@@ -403,5 +403,83 @@ module.exports = (ctx) => {
   register('/clients', 'client');
   register('/leads', 'lead');
 
+  // ── THE DAILY DIGEST + THE TEAM ROLL-UP (D-0040, D-0043) ──────────────────
+  // GET /client-intel/digest — for the dashboard: where each of YOUR live
+  // client conversations stands (with your saved summary's first line), and,
+  // for a manager, the same facts about your reports' conversations with the
+  // wording removed (ci.teamItem). NO AI call: it re-uses the free facts and
+  // the summaries owners already paid for. The same loaders as the Emails tab
+  // (loadMessages / savedSummary / buildLedger), so "waiting on you" means the
+  // same thing on both screens.
+  //
+  // Bounded: only leads where the other side wrote in the last DIGEST_DAYS,
+  // at most DIGEST_MINE of yours and DIGEST_TEAM of your team's, most recent
+  // first — a busy desk costs the same as a quiet one.
+  const DIGEST_DAYS = 60, DIGEST_MINE = 20, DIGEST_TEAM = 40;
+  const { reportingChainIds } = require('../hierarchy')(supabase);
+  router.get('/client-intel/digest', auth, async (req, res) => {
+    try {
+      if (!(await on('client_intel_enabled'))) return res.json({ enabled: false });
+      const isAdmin = hasRole(req, 'admin');
+      const chain = isAdmin ? null : await reportingChainIds(req.user.id, req.orgId);
+      const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+
+      let lq = withOrg(supabase.from('jobs').select('id,position,assigned_to_bd,company:companies(name)')
+        .is('deleted_at', null).not('assigned_to_bd', 'is', null), req);
+      if (!scope.all) lq = lq.in('assigned_to_bd', scope.ownerIds);
+      const { data: leads } = await lq.limit(5000);
+      const leadById = {}; (leads || []).forEach(l => { leadById[l.id] = l; });
+      const leadIds = Object.keys(leadById);
+      const empty = { enabled: true, mine: [], team: [], scope: scope.label };
+      if (!leadIds.length) return res.json(empty);
+
+      // Which of those leads have a live conversation: the other side wrote.
+      const contactLead = {};
+      for (let i = 0; i < leadIds.length; i += 200) {
+        const { data } = await withOrg(supabase.from('contacts').select('id,job_id').in('job_id', leadIds.slice(i, i + 200)), req);
+        (data || []).forEach(c => { contactLead[c.id] = c.job_id; });
+      }
+      const contactIds = Object.keys(contactLead);
+      const since = new Date(Date.now() - DIGEST_DAYS * 864e5).toISOString();
+      const lastIn = {};
+      for (let i = 0; i < contactIds.length; i += 200) {
+        const { data } = await withOrg(supabase.from('conversation_messages').select('contact_id,sent_at')
+          .eq('direction', 'inbound').gte('sent_at', since).in('contact_id', contactIds.slice(i, i + 200)), req);
+        (data || []).forEach(m => {
+          const lid = contactLead[m.contact_id];
+          if (lid && (!lastIn[lid] || m.sent_at > lastIn[lid])) lastIn[lid] = m.sent_at;
+        });
+      }
+      const active = Object.keys(lastIn).sort((a, b) => (lastIn[b] > lastIn[a] ? 1 : -1));
+      const mineIds = active.filter(id => leadById[id].assigned_to_bd === req.user.id).slice(0, DIGEST_MINE);
+      const teamIds = active.filter(id => leadById[id].assigned_to_bd !== req.user.id).slice(0, DIGEST_TEAM);
+      const pb = ci.playbookFor('recruiting');
+
+      const itemFor = async (id, withSummary) => {
+        const l = leadById[id];
+        const name = [l.position, l.company && l.company.name].filter(Boolean).join(' · ') || 'this lead';
+        const subject = { kind: 'lead', id, name, companyId: null, leadIds: [id] };
+        const { messages } = await loadMessages(req, subject);
+        const ledger = ci.buildLedger(messages);
+        // The summary is read ONLY for the owner's own rows (D-0040).
+        const saved = withSummary ? await savedSummary(req, subject) : null;
+        return ci.digestItem({ kind: 'lead', id, name, ownerId: l.assigned_to_bd, ledger, saved, playbook: pb });
+      };
+      const mine = ci.sortDigest(await Promise.all(mineIds.map(id => itemFor(id, true))));
+      let team = [];
+      if (teamIds.length) {
+        const items = await Promise.all(teamIds.map(id => itemFor(id, false)));
+        const ownerIds = [...new Set(items.filter(Boolean).map(i => i.owner_id))];
+        const nameOf = {};
+        if (ownerIds.length) {
+          const { data: people } = await withOrg(supabase.from('users').select('id,name').in('id', ownerIds), req);
+          (people || []).forEach(p => { nameOf[p.id] = p.name; });
+        }
+        team = ci.teamRollup(items, nameOf);
+      }
+      res.json({ enabled: true, mine, team, scope: scope.label });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   return router;
 };

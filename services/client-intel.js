@@ -450,7 +450,90 @@ const PLAYBOOKS = {
 };
 function playbookFor(id) { return PLAYBOOKS[id] || PLAYBOOKS.recruiting; }
 
+// ── 5. THE DAILY DIGEST AND THE TEAM ROLL-UP (D-0040, D-0043) ───────────────
+// The saved summaries and free facts, re-used — NO AI call here, ever.
+//
+// A "conversation" is a lead where the other side has written to us at least
+// once. A lead we emailed and never heard from is not one; that is the
+// follow-up engine's business, and listing every silent lead would bury the
+// few real conversations under hundreds of cold emails.
+
+const DIGEST_STATE_RANK = { needs_reply: 0, awaiting_them: 1, closed_lost: 3, opted_out: 4 };
+const promiseDue = (p, nowDay) => !!(p && p.due && String(p.due).slice(0, 10) <= nowDay);
+
+/**
+ * One row of the OWNER's own digest. The owner may read their own summary,
+ * so the saved summary's first sentence is included.
+ */
+function digestItem({ kind = 'lead', id, name, ownerId = null, ledger, saved = null, playbook, now = Date.now() } = {}) {
+  if (!ledger || ledger.empty || !(ledger.from_them > 0)) return null;
+  const pb = playbook || PLAYBOOKS.recruiting;
+  const nowDay = new Date(now).toISOString().slice(0, 10);
+  const free = rulesSummary(ledger, pb);
+  const firstSentence = (t) => { const m = String(t || '').match(/^[\s\S]*?[.!?](\s|$)/); return (m ? m[0] : String(t || '')).trim().slice(0, 220); };
+  const due = (ledger.promises || []).filter(p => promiseDue(p, nowDay)).length;
+  return {
+    kind, id, name, owner_id: ownerId,
+    state: ledger.state, headline: ledger.headline,
+    days_since_last: ledger.days_since_last,
+    last_contact: ledger.last_contact,
+    needs_you: ledger.state === 'needs_reply' || due > 0,
+    promises_due: due,
+    next_step: free.next_steps[0] || null,
+    // Only when a summary exists and nothing new has arrived since it: a stale
+    // summary describing last week's position would mislead more than none.
+    summary_line: saved && saved.summary && saved.covers_until && String(saved.covers_until).slice(0, 10) >= String(ledger.last_contact)
+      ? firstSentence(saved.summary) : null,
+  };
+}
+
+/**
+ * The same row as a MANAGER may see it (D-0040): facts only. The owner's
+ * summary text, the questions they asked and the promises' wording are all
+ * removed — whether something is waiting and for how long is the manager's
+ * business; what the email said is the owner's.
+ */
+// The thread headline is written TO its owner ("You haven't replied"). Read
+// by a manager, "you" is the wrong person — it is the report who has not.
+function thirdPerson(headline) {
+  return String(headline || '')
+    .replace(/You haven't replied\./g, 'No reply from us yet.')
+    .replace(/^You replied /, 'We replied ');
+}
+
+function teamItem(item) {
+  if (!item) return null;
+  return {
+    kind: item.kind, id: item.id, name: item.name, owner_id: item.owner_id,
+    state: item.state, headline: thirdPerson(item.headline),
+    days_since_last: item.days_since_last, last_contact: item.last_contact,
+    needs_you: item.needs_you, promises_due: item.promises_due,
+  };
+}
+
+function sortDigest(items) {
+  return (items || []).filter(Boolean).slice().sort((a, b) =>
+    (b.needs_you - a.needs_you) ||
+    ((DIGEST_STATE_RANK[a.state] ?? 2) - (DIGEST_STATE_RANK[b.state] ?? 2)) ||
+    ((b.days_since_last || 0) - (a.days_since_last || 0)));
+}
+
+/** Group a manager's team rows by owner, most waiting first. */
+function teamRollup(items, nameOf = {}) {
+  const by = {};
+  (items || []).filter(Boolean).forEach(it => {
+    const k = it.owner_id || 'unowned';
+    (by[k] = by[k] || { owner_id: it.owner_id || null, owner_name: nameOf[it.owner_id] || null, waiting: 0, promises_due: 0, items: [] });
+    by[k].items.push(teamItem(it));
+    if (it.state === 'needs_reply') by[k].waiting++;
+    by[k].promises_due += it.promises_due || 0;
+  });
+  return Object.values(by).map(g => Object.assign(g, { items: sortDigest(g.items) }))
+    .sort((a, b) => (b.waiting - a.waiting) || (b.promises_due - a.promises_due) || String(a.owner_name).localeCompare(String(b.owner_name)));
+}
+
 module.exports = {
+  digestItem, teamItem, thirdPerson, sortDigest, teamRollup,
   CAPS, PLAYBOOKS, NOISE_DOMAINS, PUBLIC_DOMAINS,
   estimateTokens, normEmail, domainOf, isPublicDomain, isNoiseSender,
   gateMessage, trimStoredText, fullEmailText, factsForMessage, buildLedger, ledgerText,
