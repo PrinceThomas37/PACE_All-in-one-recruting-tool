@@ -4,11 +4,13 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-23 (Session 28) · **Repo**:
+**Updated**: 2026-09-26 (Session 31 close) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #229 (`6dce720`, re-import fills missing lead details) — #225 failed-email retry, #226 AI first emails, #227 AI limits card, #228 lead details + import columns + OpenRouter free-model lookup. **Nothing is
-unmerged once it lands.** **D-0033 is the highest decision id** (Session 29: D-0031 retry, D-0032/33 AI first emails).
+to `main` IS the release · **Last merged**: #244 (`66fca7e`, job posting box +
+2 first emails per company per day). Session 31 merged #233 and #240–#244.
+**Nothing is left unmerged.** **D-0046 is the highest decision id. C-0030 is
+the highest contract id (C-0029, C-0030 OPEN). Next roadmap id `R-060`.**
 
 ---
 
@@ -16,312 +18,166 @@ unmerged once it lands.** **D-0033 is the highest decision id** (Session 29: D-0
 
 **This file: current state only. REWRITE it each session, keep it under ~200
 lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
-that ever happened, **append-only — never edited, never summarised away.**
+that ever happened, **append-only**, written **as the work lands** (D-0024) —
+a section per round, the closing synthesis last.
 
-**⚠ THE ARCHIVE IS WRITTEN AS THE WORK LANDS, NOT AT THE END (D-0024).** "End of
-session" is a moment that never announces itself — a rate limit or a closed
-window ends the session instead, and anything not in a file is gone. Append a
-section per round as it completes; only the closing synthesis waits, and it is
-additive, so a session that dies loses the summary and not the facts.
+A **SessionStart hook** injects the working protocol and a **Stop hook** blocks
+finishing with memory unwritten (`node scripts/memory-check.mjs`, D-0027).
 
-If you're picking this up cold: `CLAUDE.md` is the durable source of truth for
-anything this file and the archive don't cover — trust it over an old-looking
-line here.
+## 📋 `docs/ROADMAP.md` — THE LIVE LIST (D-0030)
 
-## 📋 READ `docs/ROADMAP.md` — THE LIVE LIST (D-0030, new this session)
+Every suggestion made to the owner is a row there, **written in the same turn**.
+`PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`; nothing deleted;
+**`CHANGED` keeps both versions.** "What's left?" → read the file, group by who
+is blocked. Mirror every change to artifact **`NQ4HUuMfAWJk34g9Vs5EdQ`**
+(`ArtifactData`; collections `items` = open, `shipped` = finished).
+**⚠ The page shows only three `lane` values — `me`, `owner`, `decide`.** Any
+other lane is INVISIBLE (three rows were, until 2026-09-26). A finished row gets
+`status:"done"` in `items` AND a document in `shipped` (`when`, `ref`, `title`,
+`sub`; `changed` uses `was`/`now`/`why`); lower `ord` = higher on the page.
+**The file wins any disagreement.**
 
-**Every suggestion made to the owner is a row there**, written in the same turn
-it is made. `PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`, nothing ever
-deleted. **`CHANGED` is not `DONE`** — such a row keeps what was proposed, what
-shipped and why it moved.
+## 🧭 `docs/territories/README.md` BEFORE ANY JOB
 
-**When the owner asks "what's left", read that file.** Do not rebuild the list
-from memory or `git log`: a suggestion nobody acted on leaves no trace in
-either. Answer grouped by who is blocked — me, them, or an open question.
-
-Mirror every change to the artifact `NQ4HUuMfAWJk34g9Vs5EdQ` (`ArtifactData`,
-collections `items`/`shipped`, `doc_id` = the row id). **The file wins any
-disagreement.**
-
-## 🧭 READ `docs/territories/README.md` BEFORE STARTING ANY JOB
-
-Nine territories, each a Claude Code subagent with its own border, laws and
-**memory file**: `surface` · `gateway` · `deep` · `harbour` · `observatory` ·
-`guild` · `rampart` · `foundry` · `ledger`, plus **`dispatch`**, the front door.
-
-- **Arrived as a sentence and a screenshot? → `dispatch`.** It reproduces the
-  report, then routes.
-- **`docs/territories/DECISIONS.md` is what the owner already settled.** Check
-  it before proposing anything or calling anything a bug. **D-0030 is the
-  highest id used.** D-0023 in particular: TWO of its three calls went against
-  my advice, so read it before "improving" any of them.
-- **`docs/territories/CAPABILITIES.md` is what PACE can already DO.** Grep it in
-  the owner's words before building. Two live paths to one outcome is the bug.
-- **`docs/territories/INTAKE.md` is how to read the owner.** **Reproduce the
-  sentence, not your hypothesis.**
-- A territory reads its memory FIRST and rewrites it LAST. **The subagent's
-  context dies when it finishes.**
-- A territory never edits another's paths — it opens a request in
-  `_contracts.md`. **C-0020 is the highest id used; C-0019 and C-0020 are now
-  CLOSED.**
-- **`node scripts/territory-map.mjs` after any restructure.** It fails loudly on
-  a file owned by nobody.
+Nine territories + `dispatch`. `DECISIONS.md` = what the owner settled (check
+before proposing); `CAPABILITIES.md` = what PACE already does (grep before
+building); `_contracts.md` = cross-border requests. **`node
+scripts/territory-map.mjs` after adding any file** — it caught three orphaned
+services on 2026-09-25 (`client-intel`, `lead-posting` → observatory;
+`company-daily-cap` → harbour).
 
 ## What PACE is
 
-An **ATS + lead-management platform sold to other companies** (SaaS). Fute Global
-is a customer, not the owner of the product. Full product context and the owner
-relationship are in `CLAUDE.md` — **read it, it is short and load-bearing.**
-
-## 🔑 THE SANDBOX CAN CALL GROQ — USE IT
-
-`api.groq.com` is allowlisted. **Get to the real thing rather than reasoning
-about output you are allowed to look at.** Key: `app_settings` →
-`int_groq_api_key`. Verified models (2026-09-05): `openai/gpt-oss-20b` fast,
-`openai/gpt-oss-120b` quality. **Free tier is 8,000 tokens/minute.**
+A recruiting **ATS + lead-management SaaS**. Fute Global is a customer. The
+owner is the product owner and end user — plain English, screenshots, the live
+app; never code or git (`CLAUDE.md`, top).
 
 ## What is live right now
 
-The **leads engine** (import → distribute → cold email → follow-ups → reply
-sweep → recycle) and the **ATS** (job orders, candidates, pipeline, submissions,
-11 stages). **Outreach generator** (client) and **candidate outreach** (own
-queue, own send window, answer buttons in the email). **In-app mailbox** over
-Graph and Gmail, plus read-only **All email** across all three pipelines.
-**Reminders + "needs you today"**, owner-scoped since Session 24. **The public
-apply page** — publish a job order, get a link, applicants land parsed and
-deduped in the Sourcing review queue (Session 27). **Creating a
-job order** — from a Connected lead, or directly from "+ New Job", which now
-resolves the client, captures its address and requires a POC. Billing and
-self-serve signup are built and **off**.
+Leads engine (import → distribute → **AI-written** first email → template
+follow-ups → reply sweep → recycle), the ATS, the outreach generator, candidate
+outreach, the in-app mailbox, reminders / "needs you today", the public apply
+page, ownership + take-over requests (Sessions 29–30), failed-send retry
+(D-0031), the rewind clock. Billing and self-serve signup built and **off**.
 
-## Migrations — next is **047** · 046 APPLIED 2026-09-23 (email retry columns, D-0031) · 045 APPLIED 2026-09-23
+### Session 31 added (all merged, all live)
 
-**Never apply one to the live DB without an explicit, fresh go-ahead.** A
-migration adding a table with `org_id` must also add it to `models/tables.js`.
-045 added **`record_history`** — one general trail for the record kinds that
-had nowhere to write (job orders, candidates, companies), behind the rewind
-clock. Verified after: 11 columns, RLS on, 1 service-role policy, 3 indexes,
-0 rows. Applied to an EMPTY database, so there is no backfill and no historic
-gap — which is exactly why it was cheap on the day of the production reset.
-044 added `apply_token` / `apply_enabled` / `apply_published_at` / `apply_count`
-to `job_orders` plus two indexes, for the public apply page.
+- **#233** — the owner's 24 Sep list: Connected filters the Leads table with a
+  Convert button per row; job link + AI rewrite on New Job; bulk Add to job
+  (tagging now writes a `Sourced` submission); bulk resume upload; owner shown
+  not chosen; job page lists its candidates with Email about this job;
+  candidate email From picker, no scroll jump, first email goes at once.
+- **Client intelligence (D-0039…D-0045)** — `services/client-intel.js` (pure)
+  + `routes/client-intel.js` serve **`/clients/:id/…` and `/leads/:id/…`**:
+  every email with them (ours in full, their replies as filed; "Open the full
+  email" fetches the original live from the viewer's OWN mailbox), a free
+  "where things stand" card, and a **Generate AI summary** button. **Owner-only**
+  (D-0040; a manager gets a facts roll-up — not built). Per-person daily
+  allowance (D-0041, default 15); a summary only on the button, capped per
+  click however long the history (D-0042; a 2-year test client = 1,040
+  tokens). Lead summaries live in `app_settings` `lead_summary_<id>`; client
+  ones in `client_summaries` (migration 048). The reply sweep now files only
+  real correspondents (`gateMessage`) with `company_id` + free `facts`.
+  A one-time **catch-up** (`runClientIntelCatchUp`, engine job, hourly) pulls
+  90 days of replies from each BD's own leads — ran 2026-09-25: 6 of 8
+  mailboxes done (2 have no leads), found only the 3 replies already stored,
+  because PACE's first outreach went out 2026-09-23.
+- **R-055 (#243)** — **one** sending-hours setting (`send_window_start_hour` /
+  `_end_hour`, default 8–16 in the LEAD's time zone), read by the send loop and
+  every "Send window" line; the Email Engine Schedule popup edits it. The old
+  "Outreach send time" box (read by nothing) and an unsaved Timezone picker are
+  gone. `followup_send_time` (owner set **18:30 IST**) = when follow-ups are
+  QUEUED, not sent.
+- **R-056 (#244)** — a **Job posting** box on each lead row
+  (`59-lead-posting.js`, `POST /jobs/:id/posting`, `services/lead-posting.js`
+  using the AI writer's own thin rule). All 82 live leads were title-only; 80
+  link to LinkedIn/Indeed/SimplyHired/Glassdoor, which PACE cannot read.
+- **R-058 CHANGED (#244)** — at most **2** first emails per company per day
+  (`company_daily_first_emails`, 0 = off); the rest wait a day. First emails
+  only; per company across leads and senders; day = `emails.sent_at` (UTC).
 
-## ⚠ THE SANDBOX IS NODE 22. RENDER IS NODE 26.
+### Live switches (as set 2026-09-25)
 
-A whole class of bug is invisible here — it cost a session once. When something
-works here and fails there, **get the server's Node and re-run before
-theorising**; `nodejs.org/dist` is reachable from this sandbox.
+| setting | value | meaning |
+|---|---|---|
+| `sys_client_intel_enabled` | **1** | email timeline ON (D-0044) |
+| `sys_client_intel_ai_enabled` | *no row → 0* | AI summary button **OFF** until the owner says |
+| `sys_engine_ai_first_email` | **1** | AI writes first emails (**default was already 1** — see D-0045 correction) |
+| `company_daily_first_emails` | *no row → 2* | 2 per company per day |
+| `send_window_*_hour` | *no row → 8 / 16* | lead-local sending hours |
+| `ai_daily_token_cap` / `call_cap` | 400,000 / 400 | org's daily AI allowance (Groq primary) |
 
-## ✅ RECENTLY SHIPPED — full narratives in `CONTEXT_ARCHIVE.md`
+**⚠ A setting with no row reads its schema DEFAULT.** I told the owner the AI
+first-email switch was off; its default was 1 and it had been on since 23 Sep.
+Read `config/settings.js` defaults before stating what a switch is set to.
 
-**Session 28 (#220, #221, #222) — the applicant actually arrives somewhere.**
-The Jobs page was throwing `j is not defined` on every render and **five browser
-suites rendered it and passed** — a crashed page has perfect contrast, three DOM
-nodes and no overflow, so it outscores a working one on every metric they
-collect. `test/page-renders-smoke.mjs` now asks the dumber question (did the
-screen render at all) across **190 screens**. Then applicants became visible —
-Candidates → **Applicants** and a block on each job order, both reading ONE
-queue (`D-0028`) — and accepting one was found, **on the live database**, to
-write only the `candidate_pipeline` tag row while every screen reads
-`submissions.stage`: accepted people were in the database and counted nowhere.
-Import now writes both. Applicants get a receipt, the job owner gets a nudge
-(`services/applicant-notify.js`, from the job owner's mailbox **or nobody**),
-and each is scored against the job they chose. Finally the owner corrected the
-domain — *"adding a candidate to a job is not submission"* — and
-`services/submission-stages.js` became the ONE definition: **`submissions` the
-TABLE is misnamed**, the word had been counted three different ways at once, and
-two of them counted sourced candidates as submissions. `D-0029`, `D-0030`.
+**First live AI emails: 2026-09-25, 23 of 23 first emails AI-written**, ~1,700
+tokens each, no errors. Correct and on-rule but samey — thin leads. The fix is
+R-056 (posting text) and later R-057.
 
-**Session 27 (#217, #218) — the front door, and an honest Sourcing page.**
-Candidate sourcing was CSV-only; eight of the nine steps were already built, so
-the gap was a front door, not a feature. `routes/apply.js` publishes a job order
-at `/apply/<token>`; applicants land parsed and deduped in
-`sourcing_candidates`, inert, **no second import path**. `services/jd-scrub.js`
-was extracted so the JD-rewrite button and the apply page share ONE definition
-of "safe to publish". Then `config/sourcing.js` was rewritten to separate
-**`built`** from **`available`** — six providers had rendered as working cards
-for five sessions with 501s behind them. Also: **OpenRouter's fast model had
-been dead since 2026-07-19** (see the AI trap below). D-0025, D-0026.
+## Migrations — next is **049** · 048 APPLIED 2026-09-25
 
-**Session 26 (#214, #216) — the button that had never worked.** `+ New Job`
-sent `company_id: null`, hard-coded, so **every direct create had always been
-refused**; the convert-from-lead path masked it. The Client box is a typeahead
-and the SERVER resolves the name (`services/client-resolve.js`).
-Then **a job order carries its client (D-0023 — READ IT, two of its three calls
-went against advice)**: a POC is required, the address gets real columns (043),
-and the **21-day company cooldown applies here**.
-⚠ **The cooldown counts leads and a job order creates one, so a client's SECOND
-requirement inside the window is blocked.** The owner chose this knowing it
-would refuse genuine job orders. Do not soften it; D-0023 holds the two fixes.
-`services/company-cooldown.js` is the one definition, replacing three that
-disagreed. `public/js/52-poc-block.js` is the shared POC block — **the RA
-form's older copy is retired into it, never joined by a third.**
-⚠ **A child's top margin COLLAPSES out of an empty wrapper**, so reserve space
-with padding, never margin (a late duplicate-email answer was moving a button
-20px and eating the click).
-**`.gc2/.gc3/.gc4` are column-only grids** — use these, not `.g2`, to convert an
-inline grid; `.g2` also sets a gap and would move every screen.
-
-**Sessions 24-25 (#200, #208-#212).** Ownership defined once
-(`services/ownership.js`); a reminder says who asked and why; merge fields are
-filled by the server then CHECKED; a list is calm and colour is scarce (D-0019);
-theme follows the person (D-0022); D-0012 completed. A float must be OPAQUE
-(`--card` is glass), and the phone's type scale must include its own inputs.
+048: `conversation_messages.company_id` + `facts`, table `client_summaries`
+(RLS + service policy; in `models/tables.js`, 45 tenant tables). **Never apply
+one without an explicit, fresh go-ahead.**
 
 ## ⏭ PICK THIS UP FIRST
 
-**0. `docs/ROADMAP.md` holds the full open list.** What follows is the shape of
-it, not a replacement for reading it.
+1. **Read `docs/ROADMAP.md`.** Open, mine: **R-051** remainder (manager's team
+   roll-up + daily-update section, facts only, no extra AI — D-0040/D-0043),
+   R-037 (dashboard warning when a mailbox sign-in fails), R-001/002/005/006/
+   007/008, R-030/031/032, R-048. Waiting on the owner: R-039 (SPF/DKIM/DMARC),
+   R-050 (two unprotected backup tables — needs OK), R-011. Undecided: R-012
+   (the design brief), R-013, R-014, R-049 (operator role — before customer
+   #2), R-052/053/054, **R-057 (owner: "later", after "a huge discussion" on
+   email design — do not start unasked)**.
+2. **Known gap left on purpose:** the Pending banner counts a first email held
+   by the per-company cap as "ready now" until the send run reaches it (the run
+   then says why). Fix if the owner notices; not asked for.
+3. **Watch** whether BDs actually paste postings (R-056) and whether AI emails
+   read better where they do — `emails.template_variant='ai'`, compare bodies.
 
-**1. The apply page is PROVEN.** A real applicant (John Raya) came through it in
-production, reached the Sourcing queue, and was accepted onto a job — the live
-record was read directly to confirm it, and repaired by SQL where the
-accept-path bug had half-written it. The open question is now volume: it is
-published on **one** job order (`R-008`).
+## 🧪 TESTS: 119 SUITES
 
-**2. D-0014 — the row-level interaction brief. Still the live design work.**
-
-The owner's design ask was **progressive disclosure**, and Session 23 answered
-it with **volume control** (horizons, caps, pagination) before being corrected:
-*"Its not about limiting the number of things that gets accumulated on screen…
-why not just minimilistically reduce elements on screen and shows things when
-clicked."* **Do not answer a density complaint with a filter again.**
-
-What is actually wrong (established by probing a real browser):
-
-1. **The actions are not where the eye is** — marking an email invalid takes a
-   row click, then a contact card inside a drawer.
-2. **A row shows no state and offers no action** — a Jobs row is a checkbox.
-3. **The same gesture has two outcomes** — a lead row opens a DRAWER over its
-   list; a job row LEAVES for `bd_jodetail`. The second is wrong.
-
-**Agreed approach: ONE screen first, then repeat.** **Ask before building any of
-it** — they said the revamp is coming *"in sometime"*.
-
-### Raised this session, not yet decided
-
-- **~1,600 inline font sizes and a comparable number of inline colours in
-  `public/js`.** This is the shared root cause of the last two rounds of phone
-  and theme faults: an inline value cannot be re-themed, re-scaled or
-  re-laid-out. Offered as a session of invisible work on the highest-traffic
-  screens; **the owner has not answered.** Do not start it unasked.
-- **PACE holds almost no contact phone numbers**, so sequence step 3 ("call
-  them") now correctly skips nearly always. Either start capturing numbers at
-  import or redesign that step around email. **Owner has not chosen.**
-- **The recruiter-seeing-a-manager's-reminders report could not be reproduced**
-  on current code, and was stated as such. Ask before treating it as open.
-
-## 🧪 TESTS: 95 SUITES
-
-`npm test` — read the COUNT, not just the exit code, and **never pipe it into
-`tail`** (that takes `tail`'s exit status). `bash test/verify-frontend.sh` too.
-
-The newest exist because reasoning failed, and each measures what a person saw:
-
-- **`apply-page-smoke`** (new, 67) — the public apply page: unknown /
-  malformed / unpublished / filled tokens answering byte-identically, a
-  malformed token never reaching the database, the client's name never
-  published, a failed write never reported as saved, and that an applicant
-  never lands in `candidates`.
-- **`sourcing-honesty-smoke`** (new, 31) — `built` vs `available`, the
-  endpoint's `not_built` refusal, and a real-browser check that **no unbuilt
-  provider sits in a panel offering an action**.
-- **`modal-mobile-smoke`** — 18 pop-ups at 390px in both themes,
-  measuring content past the viewport, content CLIPPED inside the pop-up, and
-  any field squeezed under 90px. An opener that draws nothing is a FAILURE.
-- **`poc-block-shared-smoke`**, **`company-merge-smoke`** — the one
-  contact block in both forms, and the client merge (including a guard that
-  reads the migrations for any table with a `company_id`).
-- **`client-intake-smoke`**, **`new-job-client-smoke`** — the client and
-  POC rules, the routes driven with a **stub database** (so the company really
-  is found-or-created and the rows really are org-stamped), and the real form
-  at 1500px and 390px. Includes the guard that the browser's copy of the POC
-  rule and the server's **still agree, case for case** — a drift there means
-  the form accepts what the server refuses.
-- **`theme-contrast-smoke`** — composites every translucent ancestor; 51 screens
-  x 3 roles x 2 themes, plus logged-out, hovering and opening a row.
-- **`ageing-layout-smoke`** — 16 pages x 5 roles at 20 records and at 2,000.
-- **`overlay-opacity-smoke`** — panel opacity and modal type scale, both widths.
-- **`reminder-clarity-smoke`**, **`ownership-smoke`** — the Session 24 rules.
-
-**⚠ ASSUME YOUR NEW GUARD IS VACUOUS UNTIL YOU HAVE SEEN IT FAIL.** **Seven**
-have now been caught passing while the thing they guarded was broken or
-switched off — two in Session 23, two in Session 24, two in Session 26, one in
-Session 27 (which passed **30/30** with its bug fully reintroduced). That is
-frequent enough to be the default assumption, not a caveat. **Reintroduce the
-bug and watch the test fail**, every time. When one turns out to be vacuous and you keep it
-anyway, label it in the suite as a known limit (there is one such note in
-`overlay-opacity-smoke`) rather than letting its presence read as coverage.
-
-**And a suite only covers the screens it renders** — `theme-contrast-smoke`
-passed clean through twelve transparent panels because it never opened one.
-**Nor does it cover what nobody thought to assert:** Session 26's caret-eating
-redraw was found in a screenshot with 38 green checks on screen. Produce the
-artefact and look at it.
-
-## 🔒 THE APP BYPASSES ITS OWN DATABASE SECURITY
-
-RLS is on all 48 tables, but the server holds the **service-role key**, which is
-exempt from RLS by design. So **org scoping is enforced by application code, not
-by the database.** Use `models/` — `db.forRequest(req).from('candidates')` —
-never a hand-written `supabase.from()` on a tenant table. `rampart` reviews
-anything touching scoping, and **a breach here produces no error message.**
+`npm test` — read the COUNT; never pipe into `tail`. `bash
+test/verify-frontend.sh` too. Newest: `client-intel-smoke` (34),
+`client-intel-routes-smoke` (38, clients + leads), `client-intel-ui-smoke`,
+`lead-intel-ui-smoke` (15, incl. the posting box), `send-hours-smoke` (15 — runs
+the real `getSendWindowHours` lifted out of index.js),
+`posting-and-company-cap-smoke` (24). **Every one was re-verified by putting the
+bug back.** One reintroduction CRASHED instead of failing and printed no
+summary — **a crash is not a demonstration; write the old code out properly.**
+`timezone-resolver-smoke` slices index.js between text anchors — moving code
+near `getSendWindowHours` breaks it (its END_MARK is now that function).
 
 ## Owner actions outstanding
 
-- **Say whether the 39 legitimate follow-up schedules should keep running.**
-  Left running.
-- **The accent is Apple blue (`#0071E3`).** One line in `theme.css` to move it.
-- **`PICKER_CAP` is 15**, so 19 connected leads becomes a search box. Flagged as
-  possibly too eager.
-- Google *sign-in* needs `GOOGLE_CLIENT_ID`/`SECRET` on Render.
-- **Deploys cannot be confirmed from this sandbox** — the agent proxy refuses
-  the Render host (403 on CONNECT), and this was true again in Session 27. The
-  merge lands; whether the service came up clean is **unverified from here**.
-  Say so plainly rather than reporting a deploy as confirmed. Ask the owner, or
-  check Render.
-- **Publish one job order's apply page and post the link somewhere** — the
-  apply page has never been exercised in production (Session 27).
-- **Run the AI health check now that an OpenRouter key exists** (Admin →
-  Integrations). It reads the account's real `/models` list, which is the only
-  way to set a genuinely fast OpenRouter model rather than guessing one — and
-  guessing is what killed this twice. Both tiers currently point at the same
-  quality model deliberately.
+- Say when to switch on the **AI summary button** (`client_intel_ai_enabled`).
+- Paste job postings on leads (or add a "Job Description" column to imports).
+- R-039, R-050 above. Google sign-in still needs `GOOGLE_CLIENT_ID`/`SECRET`.
 
-## ⏸ Parked by the owner — do NOT re-raise as blocking
+## ⏸ Parked — do NOT re-raise as blocking
 
-`docs/territories/DECISIONS.md` is the authority. Notably: pricing stays `null`,
-self-serve signup stays off, no backfill of the 81 wrong lead timezones, **no
-file attachments on candidate email** (D-0012), and **reassignment of ownership
-is deliberately not built** (D-0020).
+`DECISIONS.md` is the authority: pricing `null`, signup off, no timezone
+backfill, no attachments on candidate email (D-0012), reassignment only by
+request (D-0036–38), documents designed later (R-052), R-057 later (D-0046).
 
 ## Traps that will bite you
 
-- **A GUARD IS VACUOUS UNTIL YOU HAVE WATCHED IT FAIL — now three times over.**
-  Session 27's newest test passed **30/30 with its bug fully reintroduced**. Two
-  causes worth carrying into every probe: **`if (!node) continue`** silently
-  counted an unmeasurable case as a pass (**a probe that cannot take its
-  measurement must FAIL**), and it read `node.parentElement` when the control
-  sat one level higher (**never anchor a DOM assertion on a nesting depth**).
-  Before trusting any new guard, put the bug back and watch the right
-  assertions break.
-- **A screenshot sees what a green suite cannot.** A public page reading
-  *"Questions? Email or call ."* shipped past 88 passing suites. Render it and
-  look at it.
-
-- **`*.onrender.com` is blocked from this sandbox.** You cannot verify a deploy
-  by loading the app. Verify the code is on `main` by content, and check
-  `engine_runs` in Supabase. **Do not claim you watched it come up.**
-- **Registration order is load-bearing in every router.** A literal path after a
-  matching `:param` route is DEAD and fails silently with a valid 200.
-- **Every reader of a stored email body must call `renderStoredEmail`.**
-- **A page module must not write `#content`** — register with `UI.registerPage`.
-- **Prefer an edit anchored on the exact text being replaced** over one anchored
-  on a start and an end line. A range edit once silently swallowed two
-  functions; `node --check` passed and so did the suite.
-- **Never `git add -A`** — stage the paths the commit is about. That is how half
-  a feature once reached `main`.
-- **`TEST_USERS` is not the user set** — a five-role sweep skips three real ones.
-- **This sandbox cannot measure smoothness** — headless Chromium composites in
-  software, so a timing assertion passes whatever happens. Judge by layer
-  counts, node counts and pixel diffs; how it FEELS is the owner's call.
+- **`*.onrender.com` is blocked from this sandbox** — a merge lands, a deploy
+  is **unverified**. Check `app_settings` `cron_last_*` rows in Supabase for
+  signs of life; never claim you watched it come up.
+- **Sandbox Node 22, Render Node 26.** Works-here-fails-there → get Node 26.
+- **A guard is vacuous until you watched it fail** — now ten caught.
+- **Registration order is load-bearing** in every router
+  (`route-shadowing-smoke`).
+- **Every reader of a stored email body calls `renderStoredEmail`.**
+- **A lead row opens without `render()`** — anything inside it (`58-lead-intel`,
+  `59-lead-posting`) fills its own element by id, never re-renders.
+- **Never `git add -A`**; never pipe `git push` into `tail`.
+- **A squash-merged branch conflicts with `main` on its own files** — after a
+  merge, restart the dev branch from `origin/main`
+  (`git checkout -B <branch> origin/main`) before new work.
+- **Secrets live in `app_settings` (`int_*_api_key`)** — never echo them into
+  chat, commits or files.
+- **This sandbox cannot measure smoothness** (software compositing).
