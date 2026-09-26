@@ -32,6 +32,7 @@ function q(table) {
     ilike(k, v) { st.f.push(r => String(r[k] || '').toLowerCase() === String(v).toLowerCase()); return api; },
     is(k, v) { st.f.push(r => (r[k] == null) === (v == null)); return api; },
     not(k, op, v) { st.f.push(r => r[k] != null); return api; },
+    gte(k, v) { st.f.push(r => String(r[k] || '') >= String(v)); return api; },
     in(k, vs) { st.f.push(r => vs.includes(r[k])); return api; },
     order(k, o) { st.order = { k, asc: !(o && o.ascending === false) }; return api; },
     limit(n) { st.lim = n; return api; },
@@ -219,6 +220,47 @@ setting('client_intel_ai_per_user_daily', 10);
   step('lead: nothing new → reused, zero tokens', lp.body.reused === true && aiCalls === before + 1);
   const gone = await lr.get('nope', priya);
   step('lead: an unknown lead is a 404', gone.status === 404);
+}
+
+// ── THE DAILY DIGEST + TEAM ROLL-UP (D-0040, D-0043) ───────────────────────
+{
+  // Sam manages Priya.
+  T.users = [
+    { id: 'u-priya', name: 'Priya', org_id: ORG, manager_id: 'u-sam', deleted_at: null },
+    { id: 'u-sam', name: 'Sam', org_id: ORG, manager_id: null, deleted_at: null },
+  ];
+  delete require.cache[require.resolve('../config/settings.js')];
+  delete require.cache[require.resolve('../routes/client-intel.js')];
+  const router = require('../routes/client-intel.js')({
+    supabase, auth: (_q, _s, n) => n(), hasRole: (req, r) => (req.user.roles || []).includes(r),
+    withOrg: (query, req) => query.eq('org_id', req.orgId), orgStamp: (req) => ({ org_id: req.orgId }),
+  });
+  const layer = router.stack.find(l => l.route && l.route.path === '/client-intel/digest');
+  step('digest: GET /client-intel/digest exists', !!layer);
+  const dg = (user) => call(layer.route.stack.slice(-1)[0].handle, null, user, {});
+  const aiBefore = aiCalls;
+  let d = (await dg(priya)).body;
+  step('digest: the owner sees their live conversation', d.enabled && d.mine.length === 1 && d.mine[0].id === 'j1', JSON.stringify(d.mine.map(x => x.id)));
+  step('digest: …with where it stands and the next step', d.mine[0].state === 'needs_reply' && d.mine[0].needs_you && d.mine[0].next_step && d.mine[0].next_step.id === 'reply');
+  step('digest: …and the first line of THEIR saved summary', /Maria asked to talk on Friday/.test(d.mine[0].summary_line || ''), d.mine[0].summary_line);
+  step('digest: someone with no reports gets no team section', d.team.length === 0);
+  d = (await dg(sam)).body;
+  step('digest: a manager sees their own conversation', d.mine.length === 1 && d.mine[0].id === 'j2');
+  step('digest: …and their report\'s, grouped under the report', d.team.length === 1 && d.team[0].owner_name === 'Priya' && d.team[0].items[0].id === 'j1' && d.team[0].waiting === 1);
+  const teamJson = JSON.stringify(d.team);
+  step('digest: the team view is FACTS ONLY — no summary, no email wording (D-0040)',
+    !/Maria asked to talk|rates|Friday/.test(teamJson) && !('summary_line' in d.team[0].items[0]) && !('next_step' in d.team[0].items[0]), teamJson.slice(0, 160));
+  step('digest: a manager never reads "You haven\'t replied" about someone else\'s thread', !/You haven't replied/.test(teamJson) && /No reply from us yet/.test(teamJson));
+  step('digest: drawing it costs no AI call', aiCalls === aiBefore);
+  setting('client_intel_enabled', 0);
+  delete require.cache[require.resolve('../config/settings.js')];
+  delete require.cache[require.resolve('../routes/client-intel.js')];
+  const r2 = require('../routes/client-intel.js')({ supabase, auth: (_q, _s, n) => n(), hasRole: () => false,
+    withOrg: (query, req) => query.eq('org_id', req.orgId), orgStamp: (req) => ({ org_id: req.orgId }) });
+  reads.length = 0;
+  const off = await call(r2.stack.find(l => l.route && l.route.path === '/client-intel/digest').route.stack.slice(-1)[0].handle, null, priya, {});
+  step('digest: switched off → nothing read, nothing shown', off.body.enabled === false && !reads.some(t => ['conversation_messages', 'emails', 'contacts'].includes(t)));
+  setting('client_intel_enabled', 1);
 }
 
 const failed = results.filter(x => !x).length;
