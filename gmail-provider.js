@@ -15,6 +15,7 @@
 // ============================================================================
 
 const { fetchWithRetry } = require('./http-client');
+const { recordRefreshOutcome } = require('./mailbox-health');
 
 const GMAIL_TIMEOUT_MS = 20000;
 const OAUTH_TIMEOUT_MS = 15000;
@@ -82,13 +83,27 @@ function createGmailProvider(ctx) {
     const { data: row, error } = await supabase.from('gmail_tokens').select('*').eq('user_email_id', userEmailId).single();
     if (error || !row) throw new Error('No Gmail token found. Please reconnect this mailbox.');
     if (new Date(row.expires_at).getTime() - Date.now() > 5 * 60 * 1000) return row.access_token;
+    // Every refresh ATTEMPT is recorded on the token row (R-037), the way the
+    // Microsoft path already does, so a dead Google sign-in is a fact the
+    // dashboard can state — not an inference from a stale expiry. Recording is
+    // best-effort and never changes what this function returns or throws.
+    // A network failure throws out of oauthToken and is NOT recorded: it says
+    // nothing about the sign-in itself. Neither is Google's own temporary
+    // outage — only an answer about the credential marks the mailbox dead.
     const refreshed = await oauthToken({ client_id: cfg.clientId, client_secret: cfg.clientSecret, refresh_token: row.refresh_token, grant_type: 'refresh_token' });
-    if (refreshed.error) throw new Error('Gmail token refresh failed: ' + (refreshed.error_description || refreshed.error));
+    if (refreshed.error) {
+      const detail = (refreshed.error + (refreshed.error_description ? ': ' + refreshed.error_description : ''));
+      if (!/^(temporarily_unavailable|server_error|internal_failure)$/.test(String(refreshed.error))) {
+        await recordRefreshOutcome(supabase, 'gmail_tokens', userEmailId, false, detail);
+      }
+      throw new Error('Gmail token refresh failed: ' + (refreshed.error_description || refreshed.error));
+    }
     await supabase.from('gmail_tokens').update({
       access_token: refreshed.access_token,
       expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
       updated_at: new Date(),
     }).eq('user_email_id', userEmailId);
+    await recordRefreshOutcome(supabase, 'gmail_tokens', userEmailId, true, null);
     return refreshed.access_token;
   }
 

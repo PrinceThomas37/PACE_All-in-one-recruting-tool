@@ -215,3 +215,5 @@ file, so this is 047. **Next migration is 048.**
   already at the post-047 value. `models-smoke` 53/53 PASS.
 
 - 2026-09-25: no schema change. New numeric setting `company_daily_first_emails` (app_settings `sys_…`, no migration); the posting lives in the existing `jobs.research.jd_raw`. territory-map regenerated (3 orphan services claimed).
+
+- 2026-09-26: **migration 049 APPLIED** (owner's standing SQL permission, D-0047): `emails_purged_20260910` / `follow_ups_closed_20260910` — both EMPTY and unused — got RLS + a service_role policy and lost every anon/authenticated grant. Verified after: 0 public tables without RLS. Dropping them is offered to the owner, not done. **Next migration 050.**

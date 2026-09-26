@@ -37,6 +37,8 @@ function renderDashboard(){
   // "What needs you today" — loaded once per dashboard visit. A "view as"
   // preview must not fetch the viewer's own queue and label it someone else's.
   if(!isViewingOther&&STATE.nextActions===undefined)loadNextActions();
+  // A dead mailbox sign-in (R-037): per-user, never for a "view as" preview.
+  if(!isViewingOther&&STATE.mailboxAlerts===undefined&&window.loadMailboxAlerts)loadMailboxAlerts();
   // The morning briefing is ORG-WIDE, not per-user — unlike next-actions it
   // reads the same for the viewer and the viewed person, so it must load even
   // while "view as" is open. Gating it on isViewingOther left the card stuck
@@ -286,6 +288,7 @@ function renderRecruiterDashboard(u){
 
     renderMorningBriefingCard()+
 
+    (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
@@ -411,6 +414,7 @@ function renderManagerDashboard(u){
 
     renderMorningBriefingCard()+
 
+    (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
@@ -541,6 +545,7 @@ function renderIndividualDashboard(u){
 
     renderMorningBriefingCard()+
 
+    (window.renderMailboxAlerts?renderMailboxAlerts():'')+
     renderNextActionsCard()+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 

@@ -47,6 +47,34 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0047 · 2026-09-26 · STANDS · AI summary button ON; SQL is pre-approved; do everything "waiting on me"; the undecided four go to the next chat
+**Their words:** *"when to switch on the AI summary button - do it"* ·
+*"Also accept any sql request automatically. I have given you the
+permission."* · *"Do these too"* (the waiting-on-me list: the manager's team
+update + daily-update client section, the mailbox sign-in warning, "a few
+older items") · on SPF/DKIM/DMARC: *"i think we already have"* · on the backup
+tables: *"what all?"* · *"mentioning our own matching candidates …, the screen
+redesign, a playbook per industry, the contact finder — we will do this in the
+next chat."* · *"Do not cut corners."*
+
+**Done / chosen:**
+- `sys_client_intel_ai_enabled` = 1 live (2026-09-26). Allowance stays 15 per
+  person per day (D-0041).
+- **SQL and migrations no longer need a fresh go-ahead each time** — this
+  supersedes the standing "never apply a migration without an explicit, fresh
+  go-ahead" rule for THIS owner. It does not cover deleting customer data the
+  owner has not asked to delete: destructive data changes are still stated
+  first.
+- R-039 verified from real received mail (DNS is blocked from the sandbox):
+  futeglobal.com (Google) SPF/DKIM/DMARC **pass**, DMARC policy `none`;
+  fute-global.com (Microsoft) all **pass**, DMARC `quarantine`.
+- R-050: both backup tables were EMPTY and unused; migration 049 protected them
+  (RLS + service policy, anon grants revoked). Dropping them is offered, not done.
+- R-057, R-012, R-054, R-053 → next chat.
+
+**Re-open when:** the owner withdraws the SQL permission, or a second customer
+arrives (then SQL touching shared tables needs rampart review regardless).
+
 ### D-0046 · 2026-09-25 · STANDS · Build R-056 (get the job posting in) and cap first emails at 2 contacts per company per day; R-057 later
 **Their words:** *"R-056, and email 2 contacts per company one day. No R-057
 we will build that later. All the intrinsic designs and they need huge

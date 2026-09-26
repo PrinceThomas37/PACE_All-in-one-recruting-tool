@@ -481,3 +481,7 @@ Activity tab (that record's submissions only, inline) and Email → All email
   expanded row on the Leads list (`public/js/58-lead-intel.js`). Not a second implementation —
   `register('/leads','lead')`. Past replies are brought in once per mailbox by the catch-up
   (`runClientIntelCatchUp` in index.js); do not add another backfill.
+
+## Warning when a mailbox's sign-in has died (Session 32, R-037)
+- **One implementation:** `services/mailbox-alerts.js` (rule) + `GET /mailboxes/alerts` + the dashboard card (`public/js/60-mailbox-alerts.js`). Sign-in state comes from `mailbox-health.js`, which both providers now write on every refresh attempt.
+- The older per-mailbox "Connected / Sign-in expired" badge in Admin → users reads the same `mailboxConnections` — one source of truth, two places to see it. Do not add a third check.
