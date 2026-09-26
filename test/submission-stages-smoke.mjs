@@ -14,6 +14,7 @@
 
 import {
   isSentToBdm, isSentToClient, isInPipelineOnly, countSubmissions, LADDER, OFF_LADDER,
+  furthestReached, countSubmissionsEver, timeInStage,
 } from '../services/submission-stages.js';
 
 const results = [];
@@ -90,6 +91,45 @@ eq('the ladder is the ATS stage order', LADDER.join('|'), CANON.join('|'));
 step('Not Accepted and On Hold are deliberately off the ladder',
   OFF_LADDER.includes('Not Accepted') && OFF_LADDER.includes('On Hold')
   && !LADDER.includes('Not Accepted') && !LADDER.includes('On Hold'));
+
+// ── FROM HISTORY (R-002): how far they GOT, not where they are now ─────────
+eq('furthest reached reads the whole history', furthestReached(['Not Accepted', 'Sourced', 'Submitted to Client']), 'Submitted to Client');
+eq('nothing on the ladder → null', furthestReached(['On Hold', 'Tagged']), null);
+const ever = countSubmissionsEver([
+  { stage: 'Not Accepted', history: ['Sourced', 'Submitted to BDM', 'Submitted to Client', 'Not Accepted'] },  // rejected by the client
+  { stage: 'Not Accepted', history: ['Sourced', 'Submitted to BDM', 'Not Accepted'] },                       // rejected by BD
+  { stage: 'Submitted to BDM', history: ['Sourced', 'Submitted to BDM'] },                                   // waiting on BD
+  { stage: 'Sourced', history: [] },
+]);
+eq('a client submission later rejected STILL counts as sent to the client', ever.toClient, 1);
+eq('…and every one that reached BD counts as sent to BD', ever.toBdm, 3);
+eq('the two the old count would have lost are reported', ever.recovered, 2);
+eq('"stalled" is still about NOW: only the one waiting on BD', ever.stalled, 1);
+eq('the old count really did lose them (why this exists)', countSubmissions([{ stage: 'Not Accepted' }, { stage: 'Not Accepted' }]).toBdm, 0);
+
+// ── TIME IN STAGE (R-001) ──────────────────────────────────────────────────
+{
+  const now = Date.parse('2026-09-26T00:00:00Z');
+  const rows = timeInStage([
+    { id: 1, stage: 'Submitted to BDM', stage_updated_at: '2026-09-06T00:00:00Z', events: [
+      { new_stage: 'Sourced', created_at: '2026-09-01T00:00:00Z' },
+      { new_stage: 'Submitted to BDM', created_at: '2026-09-06T00:00:00Z' } ] },   // 5 days sourced, 20 days at BDM so far
+    { id: 2, stage: 'Placement', stage_updated_at: '2026-08-01T00:00:00Z', events: [
+      { new_stage: 'Confirmation', created_at: '2026-07-20T00:00:00Z' },            // legacy name
+      { new_stage: 'Placement', created_at: '2026-08-01T00:00:00Z' } ] },
+    { id: 3, stage: 'Sourced', stage_updated_at: '2026-09-24T00:00:00Z', events: [] },  // no history: from stage_updated_at
+  ], { now, normalize: (s) => (s === 'Confirmation' ? 'Joining' : s) });
+  const at = (st) => rows.find(r => r.stage === st) || {};
+  eq('a finished stay is measured to the next change', at('Sourced').typical_days, 5);
+  eq('someone there now is counted', at('Submitted to BDM').now_there, 1);
+  eq('20 days at BDM is STUCK (14+)', at('Submitted to BDM').stuck, 1);
+  eq('…measured "so far" when nobody has left that stage yet', at('Submitted to BDM').typical_from, 'still_there');
+  eq('a row with no history still counts at its current stage', at('Sourced').now_there, 1);
+  eq('a Placement is finished, never "stuck" however long ago', at('Placement').stuck, 0);
+  step('legacy stage names are normalised (Confirmation → Joining)', !!at('Joining').stage && !rows.some(r => r.stage === 'Confirmation'));
+  eq('rows come in ladder order', rows.map(r => r.stage).join('>'), 'Sourced>Submitted to BDM>Joining>Placement');
+  eq('no submissions → no rows, no throw', timeInStage([], { now }).length, 0);
+}
 
 const failed = results.filter(r => !r.ok).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

@@ -24,12 +24,12 @@
 //                handoff. Nobody outside the company has seen this person.
 //   * toClient — `Submitted to Client` onward. The real submission.
 //
-// ⚠ KNOWN LIMIT, recorded in D-0029's "Re-open when": this keys off the stage a
-// candidate is AT NOW, not every stage they ever reached. Somebody submitted to
-// the client and later marked `Not Accepted` stops being counted, which
-// UNDER-reports. Fixing it means reading `submission_activity`'s stage history
-// or adding a `client_submitted_at` column. The bug being fixed here was two
-// screens disagreeing; consistency first.
+// (Was a KNOWN LIMIT, D-0029: counting by the stage a candidate is at NOW
+// dropped anyone submitted and later marked `Not Accepted`. CLOSED in Session
+// 32 (R-002): `countSubmissionsEver` / `furthestReached` below count from
+// `submission_activity`'s stage history, and every screen that counts a
+// submission — dashboard tiles, hot jobs, the report — uses them.
+// `countSubmissions` remains for callers with no history to hand.)
 
 'use strict';
 
@@ -96,8 +96,108 @@ function countSubmissions(rows) {
   return out;
 }
 
+// ── FROM HISTORY, NOT FROM "NOW" (R-002, Session 32) ────────────────────────
+// The known limit above is closed here: `submission_activity` records every
+// stage change (old_stage → new_stage), so how far a candidate GOT is the
+// furthest ladder stage they were ever at — current stage or any recorded one.
+// Somebody submitted to the client and later marked `Not Accepted` is still a
+// client submission; they did leave the building.
+//
+// `stalled` stays keyed to the CURRENT stage on purpose: "handed to BD and
+// not yet with the client" is a statement about now. A candidate BD rejected
+// is not stalled — they are finished.
+
+/** The furthest ladder stage in `stages` (current + history), or null. */
+function furthestReached(stages) {
+  let best = -1;
+  (stages || []).forEach(s => { const i = rank(s); if (i > best) best = i; });
+  return best >= 0 ? LADDER[best] : null;
+}
+
+/**
+ * The two numbers, counted from what each candidate REACHED.
+ * rows: [{ stage, history: [stage, …] }] — history from submission_activity.
+ */
+function countSubmissionsEver(rows) {
+  const out = { toBdm: 0, toClient: 0, stalled: 0, inPipeline: 0, offLadder: 0, total: 0, recovered: 0 };
+  for (const r of (rows || [])) {
+    out.total++;
+    const now = r && r.stage;
+    const reached = furthestReached([now].concat((r && r.history) || []));
+    if (isSentToClient(reached)) {
+      out.toClient++; out.toBdm++;
+      if (!isSentToClient(now)) out.recovered++;   // would have been lost by the old count
+    } else if (isSentToBdm(reached)) {
+      out.toBdm++;
+      if (!isSentToBdm(now)) out.recovered++;
+    } else if (isInPipelineOnly(reached)) out.inPipeline++;
+    else out.offLadder++;
+    if (isSentToBdm(now) && !isSentToClient(now)) out.stalled++;
+  }
+  return out;
+}
+
+// ── TIME IN STAGE (R-001, Session 32) ───────────────────────────────────────
+// How long candidates sit at each stage, across the desk, and which stages
+// go stale. A stage STARTS when a change moves someone into it and ENDS at
+// the next change for that submission; the stage they are in now is still
+// running, measured to `now`. Built only from recorded changes — a row with
+// no history contributes its current stage from `stage_updated_at`.
+const STUCK_DAYS = 14;
+// Finished, not waiting: nobody is "stuck" at a placement or a rejection.
+const FINAL_STAGES = ['Placement', 'Not Accepted'];
+const DAY = 86400000;
+
+function median(xs) {
+  if (!xs.length) return null;
+  const a = xs.slice().sort((x, y) => x - y), m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+/**
+ * subs: [{ id, stage, stage_updated_at, created_at,
+ *          events: [{ new_stage, created_at }] }]   (any order)
+ * normalize: the stage vocabulary's own normaliser (legacy names → current).
+ */
+function timeInStage(subs, { now = Date.now(), normalize = (s) => s, stuckDays = STUCK_DAYS } = {}) {
+  const per = {};
+  const bucket = (st) => (per[st] = per[st] || { stage: st, done: [], current: [] });
+  (subs || []).forEach(s => {
+    const evs = ((s && s.events) || [])
+      .filter(e => e && e.new_stage && Number.isFinite(new Date(e.created_at).getTime()))
+      .map(e => ({ st: normalize(e.new_stage), t: new Date(e.created_at).getTime() }))
+      .filter(e => e.st && e.st !== 'Tagged')
+      .sort((a, b) => a.t - b.t);
+    for (let i = 0; i < evs.length - 1; i++) {
+      const d = (evs[i + 1].t - evs[i].t) / DAY;
+      if (d >= 0) bucket(evs[i].st).done.push(d);
+    }
+    const cur = normalize(s && s.stage);
+    if (!cur) return;
+    const last = evs.length && evs[evs.length - 1].st === cur ? evs[evs.length - 1].t
+      : new Date((s && (s.stage_updated_at || s.created_at)) || now).getTime();
+    const d = (now - last) / DAY;
+    if (Number.isFinite(d) && d >= 0) bucket(cur).current.push(d);
+  });
+  const order = LADDER.concat(OFF_LADDER);
+  return Object.values(per).map(b => ({
+    stage: b.stage,
+    now_there: b.current.length,
+    typical_days: median(b.done.length ? b.done : b.current) == null ? null : Math.round(median(b.done.length ? b.done : b.current) * 10) / 10,
+    typical_from: b.done.length ? 'finished' : 'still_there',
+    samples: b.done.length,
+    final: FINAL_STAGES.includes(b.stage),
+    stuck: FINAL_STAGES.includes(b.stage) ? 0 : b.current.filter(d => d >= stuckDays).length,
+    oldest_days: b.current.length ? Math.floor(Math.max.apply(null, b.current)) : null,
+  })).sort((a, b) => {
+    const ia = order.indexOf(a.stage), ib = order.indexOf(b.stage);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+}
+
 module.exports = {
-  LADDER, OFF_LADDER,
+  LADDER, OFF_LADDER, STUCK_DAYS, FINAL_STAGES,
   isSentToBdm, isSentToClient, isInPipelineOnly,
   countSubmissions, rank,
+  furthestReached, countSubmissionsEver, timeInStage,
 };

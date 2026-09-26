@@ -111,7 +111,6 @@ function renderSidebar(){
   // standalone Reports item is only for people who DON'T have My Team — a plain
   // recruiter or a report-less BD still needs their own numbers somewhere.
   var leadsAnyTeam=!!(window.directReportsOf&&directReportsOf(u.id).length);
-  var canReports=userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','recruiter');
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
 
   // The in-app mailbox. Deliberately NOT role-gated: a connected mailbox is a
@@ -156,7 +155,8 @@ function renderSidebar(){
   // same group. The collapsed rail is ICON-ONLY, so two items sharing an icon
   // are indistinguishable there — which is what "the menu is repeating" was.
   // Expanding it showed different labels, hence "no repeats in full menu".
-  if(canReports&&!leadsAnyTeam)navItems.push({id:"reports",lbl:"Reports",ic:"note",grp:G_INS});
+  // R-006: Reports are part of the Dashboard now (its foot), so the standalone
+  // nav item is gone; goPage('reports') still works and lands there.
   if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_INS});
 
   // De-duplicate: Insights can be pushed twice for an admin who is also an RA

@@ -20,6 +20,28 @@ module.exports = function (app, core) {
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
 
+  // Every recorded stage change for these submissions, grouped per submission
+  // (R-001, R-002). One query per 200 ids, org-scoped. A failure returns an
+  // empty history, which degrades to the old "current stage" count — never an
+  // error on a dashboard.
+  async function stageHistoryFor(req, ids) {
+    const out = {};
+    const list = [...new Set((ids || []).filter(Boolean))];
+    try {
+      for (let i = 0; i < list.length; i += 200) {
+        const { data } = await withOrg(supabase.from('submission_activity')
+          .select('submission_id,old_stage,new_stage,created_at')
+          .in('submission_id', list.slice(i, i + 200)), req);
+        (data || []).forEach(a => { (out[a.submission_id] = out[a.submission_id] || []).push(a); });
+      }
+    } catch (_) { /* history is an improvement, never a requirement */ }
+    return out;
+  }
+  // How far a submission GOT: its current stage and every stage it was ever
+  // moved into or out of, normalised to today's vocabulary.
+  const reachedOf = (s, hist) => subStages.furthestReached(
+    [normalizeStage(s.stage)].concat((hist[s.id] || []).flatMap(a => [a.old_stage, a.new_stage]).filter(Boolean).map(normalizeStage)));
+
   // ==========================================================================
   // ROLE-AWARE RECRUITING DASHBOARD
   // ==========================================================================
@@ -69,6 +91,7 @@ module.exports = function (app, core) {
       if (recruiterView) sq = sq.eq('recruiter_id', uid);
       else if (chain) sq = sq.in('recruiter_id', chain);
       const { data: subs } = await sq;
+      const hist = await stageHistoryFor(req, (subs || []).map(s => s.id));
 
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 86400000);
@@ -86,8 +109,11 @@ module.exports = function (app, core) {
         // first, inflated by doing the work rather than finishing it. Two
         // numbers now, per the owner's call: handed to BD, and sent to client.
         const t = new Date(s.submitted_at || s.created_at);
-        const toBdm = subStages.isSentToBdm(ns);
-        const toClient = subStages.isSentToClient(ns);
+        // Counted from how far they GOT, not where they are now (R-002): a
+        // client submission later marked Not Accepted still went to the client.
+        const reached = reachedOf(s, hist);
+        const toBdm = subStages.isSentToBdm(reached);
+        const toClient = subStages.isSentToClient(reached);
         if (t >= weekAgo) { if (toBdm) week++; if (toClient) weekClient++; }
         if (t >= monthStart) { if (toBdm) month++; if (toClient) monthClient++; }
         if (s.interview_at && new Date(s.interview_at) >= now) {
@@ -235,6 +261,8 @@ module.exports = function (app, core) {
       let P = (pipe || []).filter(p => inWindow(p.tagged_at));
       if (roleFilter) P = P.filter(p => roleFilter === 'bd' ? isBDRole(p.tagged_by) : !isBDRole(p.tagged_by));
 
+      const hist = await stageHistoryFor(req, S.map(s => s.id));
+
       const funnel = {}; STAGES.forEach(s => { funnel[s] = 0; });
       S.forEach(s => { const st = normalizeStage(s.stage); if (funnel[st] !== undefined) funnel[st]++; });
 
@@ -271,11 +299,21 @@ module.exports = function (app, core) {
       // the screen can say both without conflating them.
       S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 });
         const ns2 = normalizeStage(s.stage);
+        const reached2 = reachedOf(s, hist);
         a.pipeline++;
-        if (subStages.isSentToBdm(ns2)) a.submissions++;
-        if (subStages.isSentToClient(ns2)) a.client_submissions++;
+        if (subStages.isSentToBdm(reached2)) a.submissions++;
+        if (subStages.isSentToClient(reached2)) a.client_submissions++;
         if (INTERVIEWED.includes(ns2)) a.interviews++; });
-      const subCounts = subStages.countSubmissions(S.map(x => ({ stage: normalizeStage(x.stage) })));
+      // From history (R-002) — the same rule the dashboard tiles use above.
+      const subCounts = subStages.countSubmissionsEver(S.map(x => ({
+        stage: normalizeStage(x.stage),
+        history: (hist[x.id] || []).flatMap(a => [a.old_stage, a.new_stage]).filter(Boolean).map(normalizeStage),
+      })));
+      // Time in stage across the desk (R-001): which stages go stale.
+      const stage_time = subStages.timeInStage(S.map(x => ({
+        id: x.id, stage: x.stage, stage_updated_at: x.stage_updated_at, created_at: x.created_at,
+        events: hist[x.id] || [],
+      })), { normalize: normalizeStage });
       const hot_jobs = J.filter(j => !closedish(j.status)).map(j => { const a = jobAgg[j.id] || { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 }; return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions: a.submissions, client_submissions: a.client_submissions, pipeline: a.pipeline, interviews: a.interviews, score: a.submissions + a.interviews }; })
         .filter(j => j.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
 
@@ -308,6 +346,8 @@ module.exports = function (app, core) {
         submissions: subCounts.toBdm,
         client_submissions: subCounts.toClient,
         stalled_at_bdm: subCounts.stalled,
+        // Submissions the old "current stage" count would have dropped (R-002).
+        submissions_recovered: subCounts.recovered,
         interviews: funnel['Interview Scheduled'] + funnel['Interview Completed'],
         placements: funnel['Placement'],
         open_jobs: J.filter(j => !closedish(j.status)).length,
@@ -319,6 +359,7 @@ module.exports = function (app, core) {
       res.json({
         role: scoped ? 'recruiter' : 'manager', scope, team_size: scoped ? chain.length : null,
         funnel, stages: STAGES, by_recruiter, by_user, per_user_funnels, hot_jobs, trend, avg_time_to_fill, top_clients, totals,
+        stage_time, stuck_days: subStages.STUCK_DAYS,
         filters: { from: q.from || null, to: q.to || null, role: roleFilter, user_ids: userIds }
       });
     } catch (err) { res.status(500).json({ error: err.message }); }

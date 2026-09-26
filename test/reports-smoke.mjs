@@ -64,20 +64,54 @@ try {
       avg_time_to_fill: 27,
       top_clients: [{ client: 'Acme Construction', count: 8 }, { client: 'Globex', count: 5 }],
       totals: { candidates_added: 20, submissions: 15, interviews: 5, placements: 2, open_jobs: 4, total_jobs: 6, revenue: 12000 },
-      filters: { from: null, to: null, role: null, user_ids: null }
+      filters: { from: null, to: null, role: null, user_ids: null },
+      stuck_days: 14,
+      stage_time: [
+        { stage: 'Sourced', now_there: 3, typical_days: 2, typical_from: 'finished', samples: 9, stuck: 0, final: false },
+        { stage: 'Submitted to BDM', now_there: 4, typical_days: 6.5, typical_from: 'finished', samples: 5, stuck: 2, final: false },
+        { stage: 'Placement', now_there: 2, typical_days: 30, typical_from: 'still_there', samples: 0, stuck: 0, final: true }
+      ]
     };
     STATE.page = 'reports';
     render();
     const html = window.renderReports();
-    // Reports is now a sidebar item built by 04-shell-login.js (shown standalone
-    // to users without the My Team hub), not a DOM-injected [data-rptnav] node.
+    // R-006: Reports live ON the Dashboard now; the standalone nav item is gone.
     const navPresent = Array.prototype.some.call(
       document.querySelectorAll('.sb-nav .nav-item'),
       function(el){ return (el.getAttribute('onclick')||'').indexOf("goPage('reports')") > -1; }
     );
     return { html, navPresent };
   });
-  step('Reports nav item present in sidebar', out.navPresent);
+  step('the standalone Reports nav item is gone (R-006)', !out.navPresent);
+  const onDash = await page.evaluate(async () => {
+    STATE.page = 'dashboard'; render();
+    await new Promise(r => setTimeout(r, 300));
+    const el = document.getElementById('dash-reports');
+    const t = el ? el.innerText : '';
+    // An old link to the Reports page lands on the Dashboard's section.
+    goPage('reports');
+    await new Promise(r => setTimeout(r, 400));
+    return { has: !!el, t, pageAfter: STATE.page };
+  });
+  step('the same report is on the Dashboard (R-006)', onDash.has && /Pipeline funnel/.test(onDash.t) && /Per-person productivity/.test(onDash.t), onDash.t.slice(0, 80));
+  step('an old link to Reports lands on the Dashboard', onDash.pageAfter === 'dashboard');
+  // On a phone the section must fit: anything wider than the screen must sit
+  // inside its own horizontal scroller, never push the page sideways.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.evaluate(async () => { STATE.page = 'dashboard'; render(); await new Promise(r => setTimeout(r, 300)); });
+  const phone = await page.evaluate(() => {
+    const root = document.getElementById('dash-reports'); if (!root) return { missing: true };
+    const vw = document.documentElement.clientWidth; const bad = [];
+    root.querySelectorAll('*').forEach(el => {
+      const r = el.getBoundingClientRect(); if (!r.width || r.right <= vw + 1) return;
+      let p = el.parentElement, scrolled = false;
+      while (p && p !== document.body) { const cs = getComputedStyle(p); if (/(auto|scroll)/.test(cs.overflowX) && p.scrollWidth > p.clientWidth) { scrolled = true; break; } p = p.parentElement; }
+      if (!scrolled) bad.push((el.className || el.tagName) + ' ' + Math.round(r.right) + ' [' + (el.textContent || '').trim().slice(0, 40) + '] in ' + ((el.closest('.card') && el.closest('.card').querySelector('.fw6,h3,b')||{}).textContent || '?'));
+    });
+    return { missing: false, bad: bad.slice(0, 5), n: bad.length };
+  });
+  if (process.env.SHOTS) { const el = await page.$('#dash-reports'); if (el) await el.screenshot({ path: path.join(process.env.SHOTS, '43-dash-reports-390.png') }); }
+  step('on a phone the Reports section fits the screen', !phone.missing && phone.n === 0, JSON.stringify(phone));
   step('Headline tiles render (Placements, Avg time-to-fill, Revenue)', out.html.includes('Placements') && out.html.includes('Avg time-to-fill') && out.html.includes('27 days'));
   step('Revenue formatted as currency', out.html.includes('$12,000'));
   step('Pipeline funnel section', out.html.includes('Pipeline funnel') && out.html.includes('Submitted to Client'));
@@ -86,6 +120,7 @@ try {
   step('Filter bar (period + who)', out.html.includes('Period') && out.html.includes('Recruiters') && out.html.includes('7d'));
   step('Hot jobs card', out.html.includes('Hot jobs') && out.html.includes('Senior Java Developer'));
   step('Top clients section', out.html.includes('Top clients') && out.html.includes('Acme Construction'));
+  step('Time in stage card (R-001): who is stuck where', out.html.includes('Time in stage') && out.html.includes('Stuck 14+ days') && /rep-stuck">2</.test(out.html) && out.html.includes('30 days'));
 
   step('No uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {

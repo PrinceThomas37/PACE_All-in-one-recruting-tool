@@ -23,13 +23,19 @@
   }
   // Reports can be shown either standalone (page 'reports') or as a tab in the
   // My Team hub — a full render() repaints whichever is on screen.
-  function repaintReports(){ if(STATE.page==='reports'||STATE.page==='myteam'){ if(window.render) render(); else paint(); } }
-  function loadReport(){
+  function repaintReports(){ if(STATE.page==='reports'||STATE.page==='myteam'||STATE.page==='dashboard'){ if(window.render) render(); else paint(); } }
+  // `quiet`: the Dashboard loads this in the background; a failure there shows
+  // in the section ("No data yet") instead of a red toast on every visit.
+  function loadReport(quiet){
     STATE.reports.loading = true; repaintReports();
-    apiGet('/reports/recruiting'+reportsQS()).then(function(d){ STATE.reports.data = d||null; STATE.reports.loading = false; repaintReports(); })
-      .catch(function(e){ STATE.reports.loading = false; showToast('Failed to load reports: '+e.message,'error'); repaintReports(); });
+    // Only a report-shaped answer is kept: anything else (an error body, an
+    // empty list from a misrouted request) would crash the drawing — and the
+    // report now sits inside the Dashboard, where a crash takes the page down.
+    apiGet('/reports/recruiting'+reportsQS()).then(function(d){ STATE.reports.data = (d && !Array.isArray(d) && typeof d==='object' && Array.isArray(d.stages)) ? d : null; STATE.reports.loading = false; repaintReports(); })
+      .catch(function(e){ STATE.reports.loading = false; if(quiet!==true) showToast('Failed to load reports: '+e.message,'error'); repaintReports(); });
   }
-  window.reportsReload = loadReport;
+  window.reportsReload = function(){ loadReport(false); };
+  window.reportsLoadQuiet = function(){ loadReport(true); };
 
   function ymd(d){ return d.toISOString().slice(0,10); }
   window.reportsPreset = function(preset){
@@ -51,7 +57,9 @@
   // carries Reports as a tab. paint() sets the page title.)
   var _prevGoPage = window.goPage;
   window.goPage = function(p){
-    if (p === 'reports'){ STATE.page='reports'; STATE.modal=null; render(); loadReport(); return; }
+    // R-006: Reports now live ON the Dashboard. An old link to the standalone
+    // page lands there instead — one place to read them, not two.
+    if (p === 'reports'){ STATE.modal=null; if(window.dashScrollToReports){ dashScrollToReports(); return; } STATE.page='reports'; render(); loadReport(); return; }
     return _prevGoPage.apply(this, arguments);
   };
   function paint(){ if(STATE.page!=='reports') return; paintPageContent(); }
@@ -150,15 +158,38 @@
     var max=Math.max(1,Math.max.apply(null,rows.map(function(r){return r.score;})));
     var body=rows.map(function(j){
       var w=Math.round((j.score/max)*100);
-      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'+
-        '<div style="width:190px;flex-shrink:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
+      // Classes, not inline widths (R-006): 190px + a bar + 200px cannot fit a
+      // phone, and an inline width is out of any stylesheet's reach.
+      return '<div class="rep-hot">'+
+        '<div class="rep-hot-t"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
           '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
-        '<div style="flex:1;background:var(--bg);border-radius:6px;height:18px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:linear-gradient(90deg,var(--accent),#2563eb);border-radius:6px"></div></div>'+
-        '<div style="width:200px;text-align:right;font-size:11.5px;color:var(--text2);flex-shrink:0"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
+        '<div class="rep-hot-bar"><div style="width:'+w+'%;height:100%;background:linear-gradient(90deg,var(--accent),#2563eb);border-radius:6px"></div></div>'+
+        '<div class="rep-hot-s"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
       '</div>';
     }).join('');
     return '<div class="card" style="padding:16px;margin-bottom:14px"><div style="font-weight:600;font-size:14px;margin-bottom:2px">🔥 Hot jobs</div>'+
       '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
+  }
+
+  // TIME IN STAGE (R-001): how long people sit at each stage across the desk,
+  // and how many have been stuck past the threshold. Built by the server from
+  // the stage-change log; finished stages (Placement, Not Accepted) are never
+  // "stuck". A stage nobody has passed through yet says "so far".
+  function timeInStageCard(rows, stuckDays){
+    rows = (rows||[]).filter(function(r){ return r.now_there || r.samples; });
+    if(!rows.length) return '';
+    var days=function(n){ return n==null?'—':(n<1?'under a day':(Math.round(n)+' day'+(Math.round(n)===1?'':'s'))); };
+    var body=rows.map(function(r){
+      return '<tr><td>'+esc(r.stage)+'</td>'+
+        '<td class="num">'+(r.now_there||0)+'</td>'+
+        '<td>'+days(r.typical_days)+(r.typical_from==='still_there'&&r.typical_days!=null?' <span class="rep-muted">so far</span>':'')+'</td>'+
+        '<td class="num">'+(r.final?'<span class="rep-muted">—</span>':(r.stuck?'<b class="rep-stuck">'+r.stuck+'</b>':'0'))+'</td></tr>';
+    }).join('');
+    return '<div class="card" style="padding:16px;margin-bottom:14px">'+
+      '<div style="font-weight:600;font-size:14px;margin-bottom:2px">Time in stage</div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">How long candidates typically sit at each stage, and how many have been there '+(stuckDays||14)+'+ days</div>'+
+      '<div class="dt-wrap"><table class="rep-tis"><thead><tr><th>Stage</th><th class="num">Now there</th><th>Typical time there</th><th class="num">Stuck '+(stuckDays||14)+'+ days</th></tr></thead>'+
+      '<tbody>'+body+'</tbody></table></div></div>';
   }
 
   function miniFunnel(f, stages){
@@ -256,7 +287,10 @@
 
     var body =
       (r.loading?'<div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Updating…</div>':'')+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'+funnelCard(d.funnel,d.stages)+trendCard(d.trend)+'</div>'+
+      // A class, not an inline grid: an inline grid cannot reflow on a phone,
+      // and this one pushed the report ~200px past a 390px screen (R-006).
+      '<div class="rep-2col">'+funnelCard(d.funnel,d.stages)+trendCard(d.trend)+'</div>'+
+      timeInStageCard(d.stage_time, d.stuck_days)+
       hotJobsCard(d.hot_jobs||[])+
       byUserCard(people, d.per_user_funnels||{}, d.stages||[])+
       clientsCard(d.top_clients||[]);

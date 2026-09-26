@@ -2,8 +2,8 @@
   "generated": "2026-09-26",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 367,
-    "lines": 89957,
+    "files": 370,
+    "lines": 90734,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 65,
-      "lines": 26001,
+      "files": 66,
+      "lines": 26186,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 929
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 1,
       "openOut": 2
     },
@@ -73,7 +73,7 @@
         "services/record-history-writer.js"
       ],
       "files": 28,
-      "lines": 10179,
+      "lines": 10257,
       "largest": [
         {
           "f": "index.js",
@@ -92,7 +92,7 @@
           "n": 532
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 3,
       "openOut": 1
     },
@@ -134,7 +134,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 1,
       "openOut": 0
     },
@@ -198,7 +198,7 @@
           "n": 472
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 0,
       "openOut": 0
     },
@@ -241,7 +241,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 24,
-      "lines": 10203,
+      "lines": 10286,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -260,7 +260,7 @@
           "n": 1125
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 0,
       "openOut": 1
     },
@@ -298,7 +298,7 @@
         "lead-ingest.js"
       ],
       "files": 27,
-      "lines": 6937,
+      "lines": 7078,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -309,12 +309,12 @@
           "n": 696
         },
         {
-          "f": "routes/wf.js",
-          "n": 476
+          "f": "routes/recruiting/analytics.js",
+          "n": 492
         },
         {
-          "f": "routes/recruiting/analytics.js",
-          "n": 451
+          "f": "routes/wf.js",
+          "n": 476
         }
       ],
       "lastTouched": "2026-09-25",
@@ -384,8 +384,8 @@
         "test/",
         ".github/"
       ],
-      "files": 125,
-      "lines": 24484,
+      "files": 127,
+      "lines": 24774,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -404,7 +404,7 @@
           "n": 589
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 0,
       "openOut": 0
     },
