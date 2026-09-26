@@ -63,7 +63,7 @@ try {
       trend: [{ week: '7w ago', count: 1 }, { week: '6w ago', count: 3 }, { week: '5w ago', count: 2 }, { week: '4w ago', count: 5 }, { week: '3w ago', count: 4 }, { week: '2w ago', count: 6 }, { week: '1w ago', count: 3 }, { week: 'This wk', count: 4 }],
       avg_time_to_fill: 27,
       top_clients: [{ client: 'Acme Construction', count: 8 }, { client: 'Globex', count: 5 }],
-      totals: { candidates_added: 20, submissions: 15, interviews: 5, placements: 2, open_jobs: 4, total_jobs: 6, revenue: 12000 },
+      totals: { candidates_added: 20, submissions: 15, client_submissions: 5, interviews: 5, placements: 2, open_jobs: 4, total_jobs: 6, revenue: 12000 },
       filters: { from: null, to: null, role: null, user_ids: null },
       stuck_days: 14,
       stage_time: [
@@ -97,6 +97,7 @@ try {
   step('an old link to Reports lands on the Dashboard', onDash.pageAfter === 'dashboard');
   // On a phone the section must fit: anything wider than the screen must sit
   // inside its own horizontal scroller, never push the page sideways.
+  if (process.env.SHOTS) { const vs = page.viewportSize(); await page.setViewportSize({ width: vs.width, height: 3200 }); const el = await page.$('#dash-reports'); if (el) await el.screenshot({ path: path.join(process.env.SHOTS, '43-dash-reports-desktop.png') }); await page.setViewportSize(vs); }
   await page.setViewportSize({ width: 390, height: 900 });
   await page.evaluate(async () => { STATE.page = 'dashboard'; render(); await new Promise(r => setTimeout(r, 300)); });
   const phone = await page.evaluate(() => {
@@ -110,7 +111,7 @@ try {
     });
     return { missing: false, bad: bad.slice(0, 5), n: bad.length };
   });
-  if (process.env.SHOTS) { const el = await page.$('#dash-reports'); if (el) await el.screenshot({ path: path.join(process.env.SHOTS, '43-dash-reports-390.png') }); }
+  if (process.env.SHOTS) { await page.setViewportSize({ width: 390, height: 5200 }); const el = await page.$('#dash-reports'); if (el) await el.screenshot({ path: path.join(process.env.SHOTS, '43-dash-reports-390.png') }); await page.setViewportSize({ width: 390, height: 900 }); }
   step('on a phone the Reports section fits the screen', !phone.missing && phone.n === 0, JSON.stringify(phone));
   step('Headline tiles render (Placements, Avg time-to-fill, Revenue)', out.html.includes('Placements') && out.html.includes('Avg time-to-fill') && out.html.includes('27 days'));
   step('Revenue formatted as currency', out.html.includes('$12,000'));
