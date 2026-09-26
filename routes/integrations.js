@@ -92,7 +92,15 @@ module.exports = (ctx) => {
   router.get('/admin/integrations', auth, async (req, res) => {
     try {
       if (!admin(req, res)) return;
-      res.json(await integrations.getAll(supabase));
+      const out = await integrations.getAll(supabase);
+      // The empty Model box names what REALLY runs (R-031), from the same
+      // table the provider layer reads.
+      (out.categories || []).forEach((c) => (c.items || []).forEach((it) => {
+        if (!it.ai) return;
+        const hint = aiProvider.defaultModelHint(it.id);
+        (it.fields || []).forEach((f) => { if (f.key === 'model' && hint) f.placeholder = hint; });
+      }));
+      res.json(out);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

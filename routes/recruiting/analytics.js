@@ -1,9 +1,7 @@
 // ============================================================================
-// RECRUITING DASHBOARD + REPORTS + the legacy /bd-analytics endpoints.
-// Split out of bd_recruiter_routes.js; logic unchanged.
-//
-// NOTE: /bd-analytics/* is legacy and still un-org-scoped — a known fold-in
-// (CLAUDE.md growth bet 5), deliberately not changed by this move.
+// RECRUITING DASHBOARD + REPORTS.
+// Split out of bd_recruiter_routes.js. The legacy /bd-analytics/* endpoints
+// that used to live here were retired in Session 32 (R-005) — see below.
 // ============================================================================
 
 
@@ -416,76 +414,10 @@ module.exports = function (app, core) {
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // C-0022 #2 (was C-0003, misaddressed): legacy and un-org-scoped — every BD
-  // saw every org's recruiter numbers, blended with no org filter at all. Now
-  // org-scoped, and (matching /reports/recruiting) chain-scoped for anyone
-  // who is not admin — a BD sees their own reporting chain's recruiters, not
-  // the whole desk.
-  app.get('/bd-analytics/recruiters', auth, async (req, res) => {
-    try {
-      if (!isBDM(req)) return res.status(403).json({ error: 'BD Manager only.' });
-      const isAdmin = hasRole(req, 'admin');
-      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
-
-      let sq = withOrg(supabase.from('submissions')
-        .select('recruiter_id, stage, job_order_id').is('deleted_at', null), req);
-      if (chain) sq = sq.in('recruiter_id', chain);
-      const { data: subs } = await sq;
-      let uq = withOrg(supabase.from('users').select('id,name,employee_id,roles,role'), req);
-      if (chain) uq = uq.in('id', chain);
-      const { data: recruiters } = await uq;
-
-      // placement fee per job → revenue attribution for placed submissions
-      const placedJobIds = [...new Set((subs || []).filter(s => s.stage === 'Placement').map(s => s.job_order_id))];
-      const feeByJob = {};
-      if (placedJobIds.length) {
-        const { data: fj } = await withOrg(supabase.from('job_orders')
-          .select('id, placement_fee'), req).in('id', placedJobIds);
-        (fj || []).forEach(j => {
-          const n = parseFloat(String(j.placement_fee || '').replace(/[^0-9.]/g, ''));
-          feeByJob[j.id] = isNaN(n) ? 0 : n;
-        });
-      }
-
-      const isRec = u => (Array.isArray(u.roles) && u.roles.includes('recruiter')) || u.role === 'recruiter';
-      const recMap = {};
-      (recruiters || []).filter(isRec).forEach(u => {
-        recMap[u.id] = { recruiter_id: u.id, name: u.name, employee_id: u.employee_id,
-                         total: 0, submitted_to_bdm: 0, submitted_to_client: 0, interview: 0, offer: 0, placed: 0, rejected: 0, revenue: 0 };
-      });
-      (subs || []).forEach(s => {
-        const r = recMap[s.recruiter_id];
-        if (!r) return;
-        r.total++;
-        const st = normalizeStage(s.stage);
-        if (st === 'Submitted to BDM') r.submitted_to_bdm++;
-        else if (st === 'Submitted to Client') r.submitted_to_client++;
-        else if (st === 'Interview Scheduled') r.interview++;
-        else if (st === 'Offer') r.offer++;
-        else if (st === 'Placement') { r.placed++; r.revenue += feeByJob[s.job_order_id] || 0; }
-        else if (st === 'Not Accepted') r.rejected++;
-      });
-      const rows = Object.values(recMap).map(r => ({
-        ...r, fill_rate: r.total ? Math.round((r.placed / r.total) * 100) : 0
-      })).sort((a, b) => b.placed - a.placed || b.total - a.total);
-      res.json(rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
-
-  // pipeline funnel (counts by stage, optionally for one job order)
-  app.get('/bd-analytics/funnel', auth, async (req, res) => {
-    try {
-      if (!isBDM(req)) return res.status(403).json({ error: 'BD Manager only.' });
-      const isAdmin = hasRole(req, 'admin');
-      const chain = isAdmin ? null : await reportingChainIds(req.user.id, orgIdFor(req));
-      let query = withOrg(supabase.from('submissions').select('stage,recruiter_id').is('deleted_at', null), req);
-      if (req.query.job_order_id) query = query.eq('job_order_id', req.query.job_order_id);
-      if (chain) query = query.in('recruiter_id', chain);
-      const { data } = await query;
-      const counts = {};
-      STAGES.forEach(s => { counts[s] = 0; });
-      (data || []).forEach(s => { const st = normalizeStage(s.stage); if (counts[st] !== undefined) counts[st]++; });
-      res.json({ stages: STAGES, counts });
-    } catch (err) { res.status(500).json({ error: err.message }); }
-  });
+  // /bd-analytics/recruiters and /bd-analytics/funnel were RETIRED in Session
+  // 32 (R-005, ex-C-0003). No screen called either; the recruiter table
+  // counted a submission by CURRENT stage — a third definition beside
+  // services/submission-stages.js — and /reports/recruiting already carries
+  // per-person productivity and the funnel, scoped the same way. Do not bring
+  // them back; extend /reports/recruiting instead.
 };

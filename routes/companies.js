@@ -168,20 +168,38 @@ router.get('/clients', auth, async (req, res) => {
   try {
     if (!isBDlike(req)) return res.status(403).json({ error: 'BD role required.' });
     const { data: jobOrders, error: jErr } = await withOrg(supabase.from('job_orders')
-      .select('id,company_id,status,created_at').is('deleted_at', null).not('company_id', 'is', null), req);
+      .select('id,company_id,status,created_at,bd_manager_id,deleted_at').is('deleted_at', null).not('company_id', 'is', null), req);
     if (jErr) throw jErr;
     const companyIds = [...new Set((jobOrders || []).map(j => j.company_id).filter(Boolean))];
     if (!companyIds.length) return res.json([]);
     const { data: companies, error: cErr } = await withOrg(supabase.from('companies')
-      .select('id,name,industry,location,website').is('deleted_at', null).in('id', companyIds), req);
+      .select('id,name,industry,location,website,created_by').is('deleted_at', null).in('id', companyIds), req);
     if (cErr) throw cErr;
+    // C-0029: `can_edit` per client, so the drawer draws its document
+    // Upload/Delete controls only for someone they will not refuse (Session
+    // 24: never draw a button that will say no). Same ladder as
+    // requireClientOwner — own.clientOwnerFrom — fed in ONE batched lead read
+    // for every client rather than three queries each.
+    const isAdmin = hasRole(req, 'admin');
+    let leads = [];
+    if (!isAdmin) {
+      const { data: lr } = await withOrg(supabase.from('jobs')
+        .select('assigned_to_bd,created_at,company_id,deleted_at').in('company_id', companyIds)
+        .is('deleted_at', null).not('assigned_to_bd', 'is', null), req);
+      leads = lr || [];
+    }
     const countByCompany = {}, openByCompany = {};
     (jobOrders || []).forEach(j => {
       countByCompany[j.company_id] = (countByCompany[j.company_id] || 0) + 1;
       if (!['Filled', 'Closed'].includes(j.status)) openByCompany[j.company_id] = (openByCompany[j.company_id] || 0) + 1;
     });
-    const result = (companies || []).map(c => ({
-      ...c, job_order_count: countByCompany[c.id] || 0, open_job_order_count: openByCompany[c.id] || 0
+    const result = (companies || []).map(({ created_by, ...c }) => ({
+      ...c, job_order_count: countByCompany[c.id] || 0, open_job_order_count: openByCompany[c.id] || 0,
+      can_edit: isAdmin || own.clientOwnerFrom({
+        company: { id: c.id, created_by },
+        jobOrders: (jobOrders || []).filter(j => j.company_id === c.id),
+        leads: leads.filter(l => l.company_id === c.id),
+      }) === req.user.id,
     })).sort((a, b) => (b.job_order_count - a.job_order_count) || a.name.localeCompare(b.name));
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }

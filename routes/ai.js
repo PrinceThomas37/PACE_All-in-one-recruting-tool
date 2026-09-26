@@ -1,9 +1,9 @@
 // ============================================================================
-// AI GENERATION — cold-email drafting + daily import summary.
+// AI GENERATION — the daily briefing (cold-email drafting retired, R-007).
 // ----------------------------------------------------------------------------
 // Extracted from index.js. Mounted via: app.use(require('./routes/ai')(ctx));
 //
-// The provider is NOT chosen here. Both handlers ask services/ai-provider for
+// The provider is NOT chosen here. The handler asks services/ai-provider for
 // text and fall back to the same template/placeholder output they always had
 // when it returns null — which is what an unconfigured deployment, a spent
 // free tier and an unreachable local model all look like from in here.
@@ -16,21 +16,13 @@ module.exports = (ctx) => {
   const router = express.Router();
   const { auth, hasRole, supabase, withOrg, today } = ctx;
 
-router.post('/ai/generate-email', auth, async (req, res) => {
-  try {
-    const { lead, contact, company, template } = req.body;
-    const c = contact || lead || {};
-    const vars = { fn: c.first_name, ln: c.last_name, company: company?.name, ind: company?.industry, pos: c.position || req.body.position, desig: c.designation, loc: company?.location, sender: req.user.name };
-    const fill = (s) => (s || '').replace(/{{(\w+)}}/g, (m, k) => vars[k] || m);
-    const fallback = () => res.json({ subject: fill(template?.subject || 'Opportunity at {{company}}'), body: fill(template?.body || 'Hi {{fn}},') });
-    const prompt = `Write a hyper-personalized cold outreach email for a business development executive at Fute Global LLC.\nContact: ${vars.fn} ${vars.ln || ''}, ${vars.desig || ''} at ${vars.company} (${vars.ind || ''}, ${vars.loc || ''})\nPosition: ${vars.pos || ''}\nFormat:\nSubject: [subject line]\n\n[email body]`;
-    const out = await ai.complete(supabase, { prompt, maxTokens: 600, feature: 'cold_email', orgId: req.orgId });
-    if (!out) return fallback();
-    const text = out.text || '';
-    const subjectMatch = text.match(/Subject:\s*(.+)/i);
-    res.json({ subject: subjectMatch ? subjectMatch[1].trim() : `Opportunity at ${vars.company}`, body: text.replace(/^Subject:.+\n*/im, '').trim() });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// /ai/generate-email was RETIRED in Session 32 (R-007, ex-C-0002). No screen
+// could reach it (its one caller, window.generateAI in the orphaned
+// 12-manager-users.js, was never invoked), it hard-coded one customer's name
+// ("Fute Global LLC") into a prompt sent for every org, it filled {{sender}}
+// from the logged-in user rather than the sending mailbox, and nothing checked
+// what the model wrote. Cold email is the Outreach Generator's job
+// (routes/outreach.js + services/outreach-generator.js) — do not add a second.
 
 // ── THE MORNING BRIEFING ────────────────────────────────────────────────────
 // One or two sentences saying what actually came in today, for the top of the

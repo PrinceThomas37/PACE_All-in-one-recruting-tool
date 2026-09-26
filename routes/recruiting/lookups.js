@@ -146,6 +146,10 @@ module.exports = function (app, core) {
       if (b.sort_order !== undefined) updates.sort_order = parseInt(b.sort_order, 10) || 0;
       const { data, error } = await withOrg(supabase.from('recruiting_lookups').update(updates), req)
         .eq('id', req.params.id).select().maybeSingle();
+      // Renaming onto a word already in this company's list hits the same
+      // unique index as adding one (migration 050: per company) and deserves
+      // the same sentence, not a raw database error.
+      if (error && error.code === '23505') return res.status(409).json({ error: 'That value already exists in this list.' });
       if (error) throw error;
       if (!data) return res.status(404).json({ error: 'Lookup value not found' });
       res.json(data);

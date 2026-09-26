@@ -49,7 +49,7 @@ const INTEGRATIONS = [
     docs: 'https://console.groq.com/keys',
     fields: [
       { key: 'api_key', label: 'API key', placeholder: 'gsk_…' },
-      { key: 'model', label: 'Model (optional)', placeholder: 'llama-3.3-70b-versatile', secret: false, optional: true },
+      { key: 'model', label: 'Model (optional)', placeholder: "Leave blank for PACE's default", secret: false, optional: true },
     ],
     env_fallback: { api_key: 'GROQ_API_KEY' }, test: 'groq',
   },
@@ -59,7 +59,7 @@ const INTEGRATIONS = [
     docs: 'https://openrouter.ai/keys',
     fields: [
       { key: 'api_key', label: 'API key', placeholder: 'sk-or-…' },
-      { key: 'model', label: 'Model (optional)', placeholder: 'meta-llama/llama-3.3-70b-instruct:free', secret: false, optional: true },
+      { key: 'model', label: 'Model (optional)', placeholder: "Leave blank for PACE's default", secret: false, optional: true },
     ],
     env_fallback: { api_key: 'OPENROUTER_API_KEY' }, test: 'openrouter',
   },
@@ -69,7 +69,7 @@ const INTEGRATIONS = [
     docs: 'https://ollama.com/download',
     fields: [
       { key: 'base_url', label: 'Server address', placeholder: 'http://localhost:11434', secret: false },
-      { key: 'model', label: 'Model (optional)', placeholder: 'llama3.1:8b', secret: false, optional: true },
+      { key: 'model', label: 'Model (optional)', placeholder: "Leave blank for PACE's default", secret: false, optional: true },
     ],
     env_fallback: { base_url: 'OLLAMA_BASE_URL' }, test: 'ollama',
   },

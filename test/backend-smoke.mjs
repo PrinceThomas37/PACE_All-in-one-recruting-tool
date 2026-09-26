@@ -99,7 +99,8 @@ try {
   check('GET /analytics/templates → 401 (extracted)', await req('GET', '/analytics/templates'), 401);
   check('GET /admin/deliverability → 401 (extracted)', await req('GET', '/admin/deliverability'), 401);
   check('GET /admin/domain-health → 401 (new, gated)', await req('GET', '/admin/domain-health'), 401);
-  check('POST /ai/generate-email → 401 (extracted)', await req('POST', '/ai/generate-email'), 401);
+  check('POST /ai/generate-email → 404 (retired, R-007)', await req('POST', '/ai/generate-email'), 404);
+  check('POST /ai/generate-summary → 401 (still mounted beside it)', await req('POST', '/ai/generate-summary'), 401);
   check('GET /events/recent → 401 (extracted)', await req('GET', '/events/recent'), 401);
   check('GET /jobs → 401 (extracted)', await req('GET', '/jobs'), 401);
   check('GET /jobs/today-summary → 401 (extracted)', await req('GET', '/jobs/today-summary'), 401);

@@ -103,6 +103,26 @@ try {
     await page.close();
   }
 
+  // ── 2b · the RECORD drawer's panes are opaque too (Session 32) ────────────
+  // `.dwr-pane` (candidate + client record) was painted on the glass --card in
+  // ui.css, a CSS rule step 1's source scan of public/js cannot see, and the
+  // client list read straight through it. Measured, both themes, both panes.
+  for (const theme of ['dark', 'light']) {
+    const page = await open(theme, 1440);
+    const panes = await page.evaluate(async () => {
+      STATE.page = 'clients';
+      STATE.clients = { list: [{ id: 'co1', name: 'Acme', industry: 'x', location: 'y', job_order_count: 1, open_job_order_count: 1, can_edit: true }],
+        loading: false, q: '', selectedId: null, jobOrders: [], documents: [], docsLoading: false, openEmail: null };
+      render();
+      try { clientsOpen('co1'); } catch (e) {}
+      await new Promise(r => setTimeout(r, 400));
+      return [...document.querySelectorAll('.dwr-pane')].map(p => getComputedStyle(p).backgroundColor);
+    });
+    step(`the record drawer rendered its two panes in ${theme} (so the check means something)`, panes.length === 2, JSON.stringify(panes));
+    step(`every record-drawer pane has an opaque ground in ${theme}`, panes.length > 0 && panes.every(c => alphaOf(c) === 1), JSON.stringify(panes));
+    await page.close();
+  }
+
   // ── 3 · the phone type scale includes its own inputs ──────────────────────
   const measure = async (width) => {
     const page = await open('light', width);

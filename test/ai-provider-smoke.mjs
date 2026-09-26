@@ -246,7 +246,7 @@ step('a reasoning model is given headroom above the feature ceiling',
 step('a non-reasoning model on the same provider gets exactly what was asked',
   ai.answerCeiling('groq', 'qwen/qwen3.6-27b', 400) === 400);
 step('another provider is unaffected',
-  ai.answerCeiling('anthropic', 'claude-sonnet-4-20250514', 400) === 400);
+  ai.answerCeiling('anthropic', 'claude-sonnet-4-6', 400) === 400);
 step('the headroom is enough to be worth having', ai.REASONING_HEADROOM >= 256);
 {
   // …and it must reach the wire, not just exist as a function.
@@ -278,6 +278,36 @@ step('an ordinary empty reply still gets the plain sentence',
 step('the diagnose ping is not capped below a reasoning model\'s needs',
   /maxTokens: 256/.test(readFileSync(new URL('../services/ai-provider.js', import.meta.url), 'utf8')),
   '16 was enough for a plain chat model and reported a working one as broken');
+
+// R-031: the empty Model box must name what REALLY runs. The Groq hint read
+// `llama-3.3-70b-versatile` (a retired family) while gpt-oss was in force, and
+// the owner read the grey hint as the model in use.
+for (const id of ['groq', 'anthropic', 'ollama']) {
+  const m = ai.PROVIDERS[id].models;
+  const h = ai.defaultModelHint(id) || '';
+  step(`the ${id} Model hint names the models PACE actually uses`, h.includes(m.fast) && h.includes(m.quality), h);
+}
+step('the OpenRouter hint names no fixed model (its free models are looked up live)',
+  !/:free/.test(ai.defaultModelHint('openrouter') || 'x:free'));
+{
+  const cfg = readFileSync(new URL('../config/integrations.js', import.meta.url), 'utf8');
+  step('config/integrations.js hand-writes no model name as a placeholder',
+    !/placeholder:\s*'[^']*(llama|gpt|claude|qwen|mixtral)[^']*'/i.test(cfg));
+}
+{
+  // Through the REAL route, so a hint computed but never sent would fail.
+  const express = require('express');
+  const app = express();
+  const store = { from: () => { const q = {}; q.select = () => q; q.ilike = async () => ({ data: [] }); q.eq = () => q; q.maybeSingle = async () => ({ data: null }); return q; } };
+  app.use(require('../routes/integrations.js')({ supabase: store, auth: (req, _r, n) => { req.user = { id: 'a', roles: ['admin'] }; n(); }, hasRole: () => true }));
+  const srv = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  const body = await (await fetch(`http://127.0.0.1:${srv.address().port}/admin/integrations`)).json();
+  srv.close();
+  const groq = (body.categories || []).flatMap(c => c.items).find(i => i.id === 'groq');
+  const field = groq && groq.fields.find(f => f.key === 'model');
+  step('GET /admin/integrations sends the real Groq models as the hint',
+    !!field && field.placeholder.includes(ai.PROVIDERS.groq.models.fast), field && field.placeholder);
+}
 
 const failed = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

@@ -63,7 +63,8 @@ we never have to rewrite to grow (see "Growth bets" below).
   - **`routes/recruiting/*` register on `app` directly, not as mounted Routers, so
     REGISTRATION ORDER IS LOAD-BEARING** (`/job-orders/browse` before
     `/job-orders/:id`; `/candidates/check-duplicate` before `/candidates/:id`).
-    `test/recruiting-routes-mounted.mjs` boots the real server and pins all 63.
+    `test/recruiting-routes-mounted.mjs` boots the real server and pins all 62
+    (and that the two retired `/bd-analytics/*` routes stay 404).
   - **REGISTRATION ORDER IS LOAD-BEARING IN EVERY ROUTER, not just those.** It is
     how Express works, not a recruiting quirk: a literal path registered after a
     matching `:param` route is DEAD, and it fails silently because the param
@@ -527,7 +528,12 @@ we never have to rewrite to grow (see "Growth bets" below).
     so that rule never reached them. The Connected-leads drawer, the leads
     filter dropdowns and every zip/company autocomplete were **see-through on a
     phone**: the page behind showed through and the two sets of text overlapped
-    into an unreadable mess. **An inline colour cannot be re-themed — and a
+    into an unreadable mess.
+    **Session 32: the RECORD drawer's panes (`.dwr-pane`, candidate + client)
+    were the same fault in a CSS file** — `var(--card)` in ui.css, measured at
+    **5.5% opaque in dark** and 78% in light. The source scan only reads
+    `public/js`, so it could not see it; `overlay-opacity-smoke` now opens the
+    drawer and measures both panes in both themes. **An inline colour cannot be re-themed — and a
     TOKEN can be inline and still be the wrong token**, which is the sharper
     version of the rule. Anything with `position:fixed`/`absolute` that floats
     over content paints on `--card-solid`.
@@ -929,7 +935,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **62** suites via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **126** suites (Session 32) via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it
@@ -1288,11 +1294,13 @@ Session 9). What that means in practice:
 - **AI IS WIRED IN SIX PLACES AND REACHABLE IN FOUR (audited Session 18).**
   Live: resume parsing, the job-description scrub, the outreach generator,
   lead-distribution advice. **Dead:** the daily import briefing
-  (`/ai/generate-summary` — works, and nothing in the frontend calls it) and
-  cold-email drafting (`/ai/generate-email` — reachable only from the orphaned
-  `12-manager-users.js`, and never invoked even there). Do not repeat "six AI
-  features" without re-checking the UI; the code count and the product count
-  are different numbers.
+  (`/ai/generate-summary` — works, and nothing in the frontend calls it).
+  Cold-email drafting (`/ai/generate-email`) was **deleted in Session 32
+  (R-007)** — unreachable, it hard-coded one customer's name into every org's
+  prompt and filled the sender from the user, not the mailbox; the Outreach
+  Generator is the one cold-email writer. (Client summaries were added in
+  Session 31.) Do not repeat an "N AI features" count without re-checking the
+  UI; the code count and the product count are different numbers.
 
 - **A FALLBACK THAT PROTECTS THE USER MUST NEVER BE INVISIBLE TO THE OPERATOR
   (Session 18, four rounds).** `complete()` returning null is right for a
@@ -1333,6 +1341,16 @@ Session 9). What that means in practice:
     ("unavailable for free") the day the owner connected OpenRouter. OpenRouter
     free models are now LOOKED UP at runtime (`freeModelsFor`, cached 6h) — do
     not reintroduce a fixed `:free` name.**
+    **FOURTH AND FIFTH (Session 32, read off the live `ai_last_test`):
+    Anthropic's quality model `claude-sonnet-4-20250514` was not on that
+    account's own model list (now `claude-sonnet-4-6`, which is), and the
+    runtime OpenRouter lookup ranked Google LYRIA — music generators — first,
+    because "writes text" matched the INPUT side of `text->audio` and a
+    per-clip price reads as zero per token. A lookup is only as good as its
+    filter: `writesOnlyText()` + `pricedAtZero()`, cache versioned. And the
+    Integrations card's grey Model placeholder is now DERIVED
+    (`defaultModelHint`) — a hand-typed one named a retired model and was read
+    as the model in use.**
   * **A PROVIDER'S CATALOGUE IS NOT A LIST OF WRITERS.** Groq returned whisper
     (speech-to-text), orpheus (text-to-speech), prompt-guard/safeguard (safety
     classifiers) and an Arabic-first model alongside the two that can draft an
@@ -1426,8 +1444,8 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      org's manager. Also closed: the `/recruiting-dashboard` aggregate, and the
      single-record long tail on `GET /job-orders/:id` / `GET /candidates/:id` /
      `GET|PUT|DELETE /jobs/:id` (404 instead of leaking a cross-org record).
-     **Still open:** the legacy `/bd-analytics/*` endpoints (un-org-scoped — item 5
-     below), and RLS (slice 3b, next).
+     **Still open (then):** the legacy `/bd-analytics/*` endpoints — org-scoped
+     in Session 30, **deleted in Session 32 (R-005)** — and RLS (slice 3b, next).
    - **Slice 3a DONE** (migration `023`): `org_id` is now `NOT NULL` on all tenant
      tables (safe — every row backfilled + column DEFAULT).
    - **Slice 3b DONE** (migration `039_tenant_isolation`, applied 2026-08-05): RLS
@@ -1868,11 +1886,15 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
    match score (AI when a key is set, rule-based fallback). On-trend differentiator.
 5. **Reporting/analytics** — funnel, time-to-fill, recruiter productivity. We already
    store the data; surfacing it is a sales lever.
-   - **DONE:** a **Reports** page (`39-page-reports.js`, nav item) from one org-scoped
+   - **DONE:** the recruiting report (`39-page-reports.js`) from one org-scoped
      endpoint `GET /reports/recruiting` — headline totals, pipeline funnel, 8-week
      submission trend, recruiter-productivity table (with fill % + placement-fee
-     revenue), avg time-to-fill and top clients. (Legacy `/bd-analytics/*` endpoints
-     still exist, un-org-scoped — fold in later.)
+     revenue), avg time-to-fill, **time in stage** and top clients.
+     **Session 32: it lives at the foot of the DASHBOARD** (R-006) — there is no
+     Reports page or nav item any more, and `goPage('reports')` scrolls there.
+     Submissions are counted from **stage history** (R-002,
+     `countSubmissionsEver`), closing D-0029's under-report. The legacy
+     `/bd-analytics/*` endpoints were **deleted** (R-005).
    - **Hierarchy-scoped DONE (this session):** replaced the old binary "recruiter
      sees own / any BDM sees the whole desk" split with the reporting hierarchy
      above — everyone sees themselves plus everyone under them on the chain
@@ -1880,11 +1902,8 @@ Ordered by "cheapest to do now vs. most painful to retrofit":
      A BD with no reports sees just their own; a BD Lead sees their whole team's.
      Admin is the one exception and always sees the whole org. Response carries
      `scope` (`own`/`team`/`org`) instead of the old binary `role` field.
-     **Still open:** the owner also asked for reports to be *part of the
-     Dashboard* page itself (today it's a separate Reports nav item/page), and
-     for the main Dashboard's own recruiting widgets (`/recruiting-dashboard`)
-     to get the same hierarchy scoping — currently only `/reports/recruiting`
-     (the Reports page) is hierarchy-aware.
+     **Both follow-ups DONE:** `/recruiting-dashboard` became chain-scoped
+     (Session 5) and the report moved onto the Dashboard (Session 32, R-006).
 6. **CSV import/export + a small public API** — buyers need to migrate in and integrate.
 7. **Audit trail everywhere** — generalize the submission activity log; buyers want
    accountability.

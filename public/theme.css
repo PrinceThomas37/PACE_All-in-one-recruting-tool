@@ -267,6 +267,11 @@ table td,table th{border-color:var(--border)!important}
   border-radius:var(--r4);
   box-shadow:var(--sh3);
 }
+/* The record drawer's two panes (candidate, client) float over their list
+   exactly as a modal does, but ui.css paints them on the GLASS --card (.78 in
+   light, .055 in dark) with no blur — so the list behind read straight through
+   them (found in a Session 32 screenshot). A float is opaque. */
+.dwr-pane{background:var(--card-solid)}
 #nav-scrim,.scrim{backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 
 /* The Session-23 horizon parts, restated in the new language. */
@@ -845,3 +850,9 @@ input[type=number],input[type=password],textarea,select,
 .btn-outline,.hz-btn,.hz-count,.hz-pg,.na-act,.am-src,.google-btn,.lx-sel{
   border-color:var(--ctl-brd);
 }
+
+/* R-030: the integration card says which key its Test result is about. */
+.intg-unsaved{font-size:11.5px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--amber-l,#fef3c7);color:var(--amber,#92400e);line-height:1.4}
+
+/* C-0029: why a non-owner sees no Upload/Delete on a client's documents. */
+.cl-doc-note{font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.45}

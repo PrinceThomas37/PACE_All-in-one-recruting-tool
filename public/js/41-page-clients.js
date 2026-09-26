@@ -143,6 +143,11 @@
       ]};
     });
 
+    // C-0029: the server refuses Upload/Delete to anyone but the client's
+    // owner (or admin), so those controls are drawn only for them — never a
+    // button that will say no. `can_edit` absent (an older server) = draw them
+    // and let the named 403 speak, as before.
+    var canEdit=c.can_edit!==false;
     var docRows=(docs||[]).map(function(d){
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)">'+
         '<input type="checkbox" class="ck" '+(sel[d.id]?'checked':'')+' onclick="clientsDocToggle(\''+d.id+'\')">'+
@@ -150,7 +155,7 @@
           '<div style="font-size:13px;font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
           '<div style="font-size:11.5px;color:var(--ink3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+fmtDate(d.uploaded_at)+'</div>'+
         '</div>'+
-        '<span class="kebab" title="Delete" onclick="clientsDeleteDoc(\''+d.id+'\')">'+UI.ic('trash')+'</span>'+
+        (canEdit?'<span class="kebab" title="Delete" onclick="clientsDeleteDoc(\''+d.id+'\')">'+UI.ic('trash')+'</span>':'')+
       '</div>';
     }).join('') || '<div class="dt-empty">No documents yet.</div>';
 
@@ -177,10 +182,12 @@
           '<div style="font-weight:600;font-size:13.5px">Documents'+(selIds.length?' · '+selIds.length+' selected':'')+'</div>'+
           '<div style="display:flex;gap:8px">'+
             (selIds.length?'<button class="btn btn-sm btn-outline" onclick="clientsOpenEmail(\''+c.id+'\',true)">Email selected</button>':'')+
-            '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">'+UI.ic('plus')+'Upload'+
-              '<input type="file" id="client-doc-file" style="display:none" onchange="clientsUploadDoc(this)"></label>'+
+            (canEdit?'<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">'+UI.ic('plus')+'Upload'+
+              '<input type="file" id="client-doc-file" style="display:none" onchange="clientsUploadDoc(this)"></label>':'')+
           '</div>'+
-        '</div>'+ docRows+
+        '</div>'+
+        (canEdit?'':'<div class="cl-doc-note">Only this client\'s owner (or an admin) can add or remove its documents. You can still select and email them.</div>')+
+        docRows+
       '</div>';
 
     var initials=(String(c.name||'?').trim().split(/\s+/).slice(0,2)

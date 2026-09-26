@@ -131,7 +131,13 @@ function renderIntegrationsModal(){
       var t=tests[it.id]; var testHtml='';
       if(t){ testHtml=t.pending
         ?'<span style="font-size:11.5px;color:var(--text3);margin-left:6px">Testing…</span>'
-        :'<span style="font-size:11.5px;margin-left:6px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✓ '+htmlEsc(t.detail||'OK'):'✗ '+htmlEsc(t.error||'failed'))+'</span>'; }
+        :'<span style="font-size:11.5px;margin-left:6px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✓ '+htmlEsc(t.detail||'OK'):'✗ '+htmlEsc(t.error||'failed'))+'</span>'+
+          // R-030: Test checks the key TYPED in the box, which may not be the
+          // one saved. Saying only "✓ Key valid" beside a "Not configured"
+          // badge made the card contradict itself; say which key was tested.
+          (t.ok&&t.typed?'<div class="intg-unsaved">'+(it.configured
+            ?'That was the key typed above — it is not saved yet, so PACE is still using the saved one. Press Save to switch.'
+            :'That was the key typed above — it is not saved yet. Press Save to start using it.')+'</div>':''); }
       var activeToggle=it.verifier
         ?'<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);cursor:pointer;margin-top:2px"><input type="checkbox" '+(it.active_verifier?'checked':'')+' onchange="setActiveVerifier(\''+it.id+'\',this.checked)"> Use this verifier for pre-send checks</label>'
         :(it.ai
@@ -160,7 +166,20 @@ function renderIntegrationsModal(){
     '<div class="mb_">'+cats+'</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Close</button></div>'+
   '</div>';
+  // R-030: this modal is rebuilt as a string on every change (a Test result,
+  // the budget loading, the health check answering), and a rebuilt <input>
+  // is empty. So a key typed and then Tested vanished from its box: the card
+  // said "✓ Key valid", the badge still said "Not configured", and Save
+  // answered "Enter a value first". Carry what is typed — and where the modal
+  // was scrolled to — across the redraw. saveIntegration() empties its own
+  // boxes first, so a key that WAS saved is not put back.
+  var typed={}, box=document.querySelector('#layer .modal'), scroll=box?box.scrollTop:0;
+  document.querySelectorAll('#layer .modal input[id],#layer .modal textarea[id]').forEach(function(el){
+    if(el.type!=='checkbox'&&el.type!=='radio')typed[el.id]=el.value;
+  });
   render();
+  Object.keys(typed).forEach(function(id){ var el=document.getElementById(id); if(el&&el.value!==typed[id])el.value=typed[id]; });
+  box=document.querySelector('#layer .modal'); if(box&&scroll)box.scrollTop=scroll;
 }
 function emailVerifyTester(){
   var r=STATE._emailVerifyResult;
@@ -184,7 +203,14 @@ window.saveIntegration=function(id){
     else if(f.secret===false&&f.value)values[f.key]='';
   });
   if(!Object.keys(values).length){ showToast('Enter a value first','warning'); return; }
-  apiPost('/admin/integrations/'+id,{values:values}).then(function(r){ STATE.integrations=r; showToast('Saved','success'); renderIntegrationsModal(); })
+  apiPost('/admin/integrations/'+id,{values:values}).then(function(r){
+    STATE.integrations=r;
+    // Saved secrets leave the page: empty the boxes so the redraw below does
+    // not carry the key back in (it is shown from now on only as a masked hint).
+    it.fields.forEach(function(f){ var el=document.getElementById('intg-'+id+'-'+f.key); if(el&&f.secret!==false)el.value=''; });
+    // The key just tested is the key just saved: the "not saved yet" note is over.
+    var t=STATE._intgTest&&STATE._intgTest[id]; if(t&&t.typed)t.typed=false;
+    showToast('Saved','success'); renderIntegrationsModal(); })
     .catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
 };
 window.testIntegration=function(id){
@@ -194,7 +220,8 @@ window.testIntegration=function(id){
   if(el&&el.value)body.api_key=el.value;
   if(burl&&burl.value)body.base_url=burl.value;
   STATE._intgTest=STATE._intgTest||{}; STATE._intgTest[id]={pending:true}; renderIntegrationsModal();
-  apiPost('/admin/integrations/'+id+'/test',body).then(function(r){ STATE._intgTest[id]=r; renderIntegrationsModal(); })
+  var typed=!!(body.api_key||body.base_url);
+  apiPost('/admin/integrations/'+id+'/test',body).then(function(r){ STATE._intgTest[id]=Object.assign({},r,{typed:typed}); renderIntegrationsModal(); })
     .catch(function(e){ STATE._intgTest[id]={ok:false,error:(e&&e.message||e)}; renderIntegrationsModal(); });
 };
 function aiBudgetCard(){
