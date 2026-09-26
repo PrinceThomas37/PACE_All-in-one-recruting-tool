@@ -486,3 +486,8 @@ Activity tab (that record's submissions only, inline) and Email → All email
 ## Warning when a mailbox's sign-in has died (Session 32, R-037)
 - **One implementation:** `services/mailbox-alerts.js` (rule) + `GET /mailboxes/alerts` + the dashboard card (`public/js/60-mailbox-alerts.js`). Sign-in state comes from `mailbox-health.js`, which both providers now write on every refresh attempt.
 - The older per-mailbox "Connected / Sign-in expired" badge in Admin → users reads the same `mailboxConnections` — one source of truth, two places to see it. Do not add a third check.
+
+## Recruiting reports — on the Dashboard (Session 32, R-006/R-001/R-002)
+- **One implementation:** `GET /reports/recruiting` (routes/recruiting/analytics.js) drawn by `39-page-reports.js`'s `renderReportsBody()`, injected at the foot of the Dashboard by `05-page-dashboard.js` (`#dash-reports`). **There is no Reports page any more** — the nav item is gone and `goPage('reports')` scrolls to the Dashboard section. Do not bring back a second screen.
+- **What counts as a submission** is `services/submission-stages.js` — `countSubmissionsEver()` from `submission_activity` history (R-002). Dashboard tiles, hot jobs and the report all use it; a fourth count must too.
+- **Time in stage** is `timeInStage()` in the same file, shown as a card in the report (R-001). The per-record version is the rewind panel's `heldFor()`.

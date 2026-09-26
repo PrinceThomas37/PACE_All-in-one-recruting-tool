@@ -55,14 +55,14 @@ function renderDashboard(){
 
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
-  if(isPureRecruiter(u))return renderRecruiterDashboard(u);
+  if(isPureRecruiter(u))return withDashReports(renderRecruiterDashboard(u),isViewingOther);
 
   // Managers get the team dashboard (team roster + the team's recruiting desk,
   // from the live hierarchy-scoped endpoint). Data-driven: a plain "ra"/"bd"
   // who has been given reports also qualifies, not just the manager-ish roles.
   // Not for a "view as" preview — that endpoint answers for whoever is holding
   // the session, so it would show the viewer's numbers under someone else's name.
-  if(!isViewingOther&&(isManagerRole(u)||getTeam(u).length))return renderManagerDashboard(u);
+  if(!isViewingOther&&(isManagerRole(u)||getTeam(u).length))return withDashReports(renderManagerDashboard(u),isViewingOther);
 
   // Everyone else — and every "view as" preview — gets the individual
   // dashboard, which is built on STATE.jobs and filters by the user it is
@@ -72,8 +72,34 @@ function renderDashboard(){
   // reading STATE.leads. That collection was only ever filled by the guest
   // demo's generated data, so for every real login it rendered a wall of
   // zeroes. It went with the demo data.
-  return renderIndividualDashboard(u);
+  return withDashReports(renderIndividualDashboard(u),isViewingOther);
 }
+
+// ── REPORTS, ON THE DASHBOARD (R-006) ─────────────────────────────────────
+// The owner asked for reports to be part of the Dashboard itself rather than a
+// separate screen. This is the SAME report the Reports page and My Team's tab
+// draw (renderReportsBody, 39-page-reports.js; GET /reports/recruiting, already
+// scoped own / team / org) — one implementation, placed at the foot of every
+// dashboard. Loaded once per session, like the page it replaces. Not for a
+// "view as" preview: that endpoint answers for whoever holds the session.
+function withDashReports(html,isViewingOther){
+  var u=STATE.user;
+  if(isViewingOther||!window.renderReportsBody||!userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','recruiter'))return html;
+  STATE.reports=STATE.reports||{loading:false,data:null};
+  if(!STATE.reports.data&&!STATE.reports.loading&&!STATE.reports._dashTried&&window.reportsLoadQuiet){ STATE.reports._dashTried=true; setTimeout(reportsLoadQuiet,0); }
+  // A fault in the report must never take the whole Dashboard down with it.
+  var body;
+  try{ body=renderReportsBody(); }
+  catch(e){ body='<div class="dt-empty">The reports could not be drawn just now.</div>'; }
+  var section='<div id="dash-reports" class="card cp mt4 dash-reports">'+
+    '<div class="fw6 mb3">Reports</div>'+body+'</div>';
+  // Inside the page's own wrapper, so it takes the page's width and padding.
+  return html.replace(/<\/div>\s*$/, section+'</div>');
+}
+window.dashScrollToReports=function(){
+  var go=function(){ var el=document.getElementById('dash-reports'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); };
+  if(STATE.page!=='dashboard'){ goPage('dashboard'); setTimeout(go,150); } else go();
+};
 
 // ── REMINDERS WIDGET (shared: BD + recruiter dashboards) ──────────────
 function renderRemindersWidget(){
@@ -436,7 +462,7 @@ function renderManagerDashboard(u){
     '<div class="card cp mb4">'+
       '<div class="flex jb aic mb3">'+
         '<div><div class="fw6">'+(scope==='org'?'Recruiting pipeline':"Your team's pipeline")+'</div><div class="f12 text3">Submissions by stage'+(scope==='team'?' across your reporting line':'')+'</div></div>'+
-        '<button class="btn btn-outline btn-sm" onclick="goPage(\'reports\')">Full reports →</button>'+
+        '<button class="btn btn-outline btn-sm" onclick="dashScrollToReports()">Full reports ↓</button>'+
       '</div>'+
       '<div class="flex gap2 flex-wrap">'+(stagePills||'<div class="text3 f13">No submissions in this scope yet.</div>')+'</div>'+
     '</div>'+
