@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-25",
+  "generated": "2026-09-26",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 361,
-    "lines": 89434,
+    "files": 367,
+    "lines": 89957,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 64,
-      "lines": 25893,
+      "files": 65,
+      "lines": 26001,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -72,12 +72,12 @@
         "services/record-history.js",
         "services/record-history-writer.js"
       ],
-      "files": 27,
-      "lines": 10098,
+      "files": 28,
+      "lines": 10179,
       "largest": [
         {
           "f": "index.js",
-          "n": 3867
+          "n": 3868
         },
         {
           "f": "routes/ownership-requests.js",
@@ -114,8 +114,8 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 57,
-      "lines": 3448,
+      "files": 58,
+      "lines": 3471,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -165,6 +165,7 @@
         "services/send-retry.js",
         "services/outreach-dedup.js",
         "services/company-daily-cap.js",
+        "services/mailbox-alerts.js",
         "services/mailbox-reassign.js",
         "services/lead-recycle.js",
         "warmup-engine.js",
@@ -177,8 +178,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 24,
-      "lines": 4903,
+      "files": 25,
+      "lines": 4995,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -197,7 +198,7 @@
           "n": 472
         }
       ],
-      "lastTouched": "2026-09-24",
+      "lastTouched": "2026-09-25",
       "openIn": 0,
       "openOut": 0
     },
@@ -383,8 +384,8 @@
         "test/",
         ".github/"
       ],
-      "files": 123,
-      "lines": 24265,
+      "files": 125,
+      "lines": 24484,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",

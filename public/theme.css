@@ -692,6 +692,27 @@ tr.lead-exp > td{padding:0;background:var(--bg3);border-top:0}
 .lxp-text{width:100%;min-height:160px;margin-top:8px;resize:vertical;font-size:13px;line-height:1.5}
 .lxp-actions{display:flex;gap:8px;margin-top:8px}
 
+/* The mailbox sign-in warning on the dashboard (60-mailbox-alerts.js, R-037).
+   One card, amber stripe; drawn only when a mailbox cannot send. */
+.mba-card{
+  background:var(--card-solid,var(--card));border:1px solid var(--ctl-brd,var(--border));
+  border-left:3px solid var(--amber);border-radius:var(--r2);padding:12px 14px;
+}
+.mba-quiet{border-left-color:var(--border);font-size:13px;color:var(--text3)}
+.mba-head{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px}
+.mba-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border)}
+.mba-row:first-of-type{border-top:0}
+.mba-main{flex:1;min-width:220px}
+.mba-mail{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.mba-owner{font-weight:500;color:var(--text2)}
+.mba-tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--amber);background:var(--amber-l);border-radius:999px;padding:1px 7px;margin-left:4px}
+.mba-text{font-size:12.5px;color:var(--text2);margin-top:2px;line-height:1.5}
+.mba-meta{font-size:12px;color:var(--text3);margin-top:3px}
+.mba-held{font-weight:600;color:var(--text2)}
+.mba-ask{font-size:12px;color:var(--text3)}
+.mba-act{flex:none}
+@media (max-width:860px){ .mba-act{width:100%} .mba-act .btn{width:100%;min-height:42px} }
+
 @media (max-width:860px){
   /* Stack, never shrink. The panel lives inside .dt-wrap, which is the
      horizontal scroller — so it must not force that scroller any wider. */

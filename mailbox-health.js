@@ -31,8 +31,14 @@ function deriveTokenStatus(row) {
   return {
     connected: true,
     status,
+    // True only when a refresh attempt was RECORDED as failing — the status
+    // above can also come from the stale-expiry guess, which is only probable.
+    certain: row.refresh_failed === true,
     expires_at: row.expires_at || null,
     last_refresh_at: row.last_refresh_at || row.updated_at || null,
+    // When the sign-in last WORKED: updated_at is written only by a successful
+    // refresh (or a fresh connect); a failed attempt stamps last_refresh_at only.
+    last_ok_at: row.updated_at || null,
     error: row.last_refresh_error || null
   };
 }

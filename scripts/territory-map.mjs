@@ -57,7 +57,7 @@ const TERRITORIES = [
           'services/outreach-cycle.js', 'services/send-progress.js', 'services/send-retry.js',
           // The double-send rule. Sits with the send loop that enforces it —
           // routes/reminders.js only READS it to decide what to offer.
-          'services/outreach-dedup.js', 'services/company-daily-cap.js',
+          'services/outreach-dedup.js', 'services/company-daily-cap.js', 'services/mailbox-alerts.js',
           'services/mailbox-reassign.js', 'services/lead-recycle.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
