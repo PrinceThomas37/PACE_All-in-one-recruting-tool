@@ -53,10 +53,16 @@ const PROVIDERS = {
   anthropic: {
     id: 'anthropic', label: 'Anthropic (Claude)', wire: 'anthropic',
     url: 'https://api.anthropic.com/v1/messages',
-    model: 'claude-sonnet-4-20250514',
+    // FOURTH EXPIRED NAME (Session 32, R-031): the quality tier was
+    // `claude-sonnet-4-20250514`, which is NOT in the model list this very
+    // account returned to the health check on 2026-09-23. Both names below ARE
+    // on that list. (The account also had no credit that day, so neither
+    // failure had shown itself yet.) Re-check against the health card's
+    // "available models", never from memory.
+    model: 'claude-sonnet-4-6',
     // Extraction does not need the big model; prose the customer's prospect
     // will read does. One tier down is typically ~10x cheaper per token.
-    models: { fast: 'claude-haiku-4-5-20251001', quality: 'claude-sonnet-4-20250514' },
+    models: { fast: 'claude-haiku-4-5-20251001', quality: 'claude-sonnet-4-6' },
   },
   groq: {
     id: 'groq', label: 'Groq', wire: 'openai',
@@ -309,19 +315,52 @@ const FREE_CACHE_KEY = 'ai_openrouter_free_models';
 const FREE_CACHE_MS = 6 * 60 * 60 * 1000;
 const NOT_WRITERS = /whisper|orpheus|\btts\b|text-to-speech|embed|rerank|guard|moderat|vision-ocr|image|audio/i;
 
+// ⚠ THE FIRST VERSION PICKED A MUSIC MODEL (found Session 32, R-031). The live
+// cache from 2026-09-23 led with `google/lyria-3-clip-preview` and
+// `google/lyria-3-pro-preview` — Google's music generators — so every
+// fast-tier call through OpenRouter tried a song-writer first and got a 502.
+// Two holes, both closed here:
+//   * "writes text" was `String(out).includes('text')`, and a modality string
+//     reads INPUT->OUTPUT, so `text->audio` passed on its INPUT side. Now the
+//     OUTPUT side must be text and nothing else.
+//   * "free" was prompt+completion priced at zero — which a model billed PER
+//     CLIP or PER REQUEST also is. Now every price the catalogue lists must be
+//     zero, unless OpenRouter itself labels the variant `:free`.
+// The cache is versioned so the poisoned 2026-09-23 list is never used again,
+// not even as the "stale beats none" fallback.
+const FREE_CACHE_VERSION = 2;
+
+// PURE. Does this catalogue row write text, and only text?
+function writesOnlyText(m) {
+  const a = m && m.architecture;
+  if (!a) return true;                        // nothing stated: let the rest decide
+  if (Array.isArray(a.output_modalities) && a.output_modalities.length) {
+    return a.output_modalities.every(x => String(x).toLowerCase() === 'text');
+  }
+  if (typeof a.modality === 'string' && a.modality) {
+    const out = a.modality.includes('->') ? a.modality.split('->').pop() : a.modality;
+    return out.split('+').every(x => x.trim().toLowerCase() === 'text');
+  }
+  return true;
+}
+
+// PURE. Is every price on this row zero? (`:free` is OpenRouter's own label.)
+function pricedAtZero(m) {
+  if (m.id.endsWith(':free')) return true;
+  const p = m.pricing;
+  if (!p || typeof p !== 'object') return false;
+  const vals = Object.values(p).filter(v => v !== undefined && v !== null && v !== '');
+  return vals.length > 0 && vals.every(v => Number(v) === 0);
+}
+
 // PURE. OpenRouter /models rows → free text-writing model ids, best first.
-// "Free" means the catalogue prices both directions at zero (or the id says
-// :free). Ranked by context length, a rough proxy for model size, then id.
+// Ranked by context length, a rough proxy for model size, then id.
 function rankFreeModels(rows) {
-  const zero = (v) => v !== undefined && v !== null && Number(v) === 0;
   return (rows || [])
     .filter(m => m && m.id && !m.id.startsWith('openrouter/'))
-    .filter(m => m.id.endsWith(':free') || (m.pricing && zero(m.pricing.prompt) && zero(m.pricing.completion)))
+    .filter(pricedAtZero)
     .filter(m => !NOT_WRITERS.test(m.id))
-    .filter(m => {
-      const out = m.architecture && (m.architecture.output_modalities || m.architecture.modality);
-      return !out || String(out).includes('text');
-    })
+    .filter(writesOnlyText)
     .sort((a, b) => ((b.context_length || 0) - (a.context_length || 0)) || String(a.id).localeCompare(String(b.id)))
     .map(m => m.id);
 }
@@ -331,6 +370,7 @@ async function freeModelsFor(supabase, entry, now = Date.now(), fetchImpl) {
   try {
     const { data } = await supabase.from('app_settings').select('value').eq('key', FREE_CACHE_KEY).maybeSingle();
     cached = data && data.value ? JSON.parse(data.value) : null;
+    if (cached && cached.v !== FREE_CACHE_VERSION) cached = null;   // written by the old, wrong filter
   } catch (_) { cached = null; }
   if (cached && Array.isArray(cached.ids) && cached.ids.length && now - Date.parse(cached.at) < FREE_CACHE_MS) return cached.ids;
   try {
@@ -342,7 +382,7 @@ async function freeModelsFor(supabase, entry, now = Date.now(), fetchImpl) {
       if (ids.length) {
         try {
           await supabase.from('app_settings').upsert({ key: FREE_CACHE_KEY,
-            value: JSON.stringify({ at: new Date(now).toISOString(), ids: ids.slice(0, 20) }), updated_at: new Date(now) }, { onConflict: 'key' });
+            value: JSON.stringify({ v: FREE_CACHE_VERSION, at: new Date(now).toISOString(), ids: ids.slice(0, 20) }), updated_at: new Date(now) }, { onConflict: 'key' });
         } catch (_) {}
         return ids;
       }
@@ -359,6 +399,22 @@ async function candidateModels(supabase, entry, tier) {
   if (entry.id !== 'openrouter' || entry.model_override) return [fixed];
   const free = await freeModelsFor(supabase, entry);
   return free.length ? free.slice(0, 2) : [fixed];
+}
+
+// What the Model box on the Integrations card should say when it is EMPTY
+// (R-031, Session 32). It used to be a hand-written placeholder in
+// config/integrations.js — Groq's read `llama-3.3-70b-versatile`, a family
+// Groq had retired, while PACE actually ran gpt-oss. The owner read the grey
+// hint as the model in use. Derived from PROVIDERS so it cannot drift again.
+function defaultModelHint(id) {
+  const def = PROVIDERS[id];
+  if (!def) return null;
+  if (id === 'openrouter') return 'Leave blank: PACE picks a free model that is live today';
+  const m = def.models || {};
+  const fast = m.fast || def.model, quality = m.quality || def.model;
+  return fast === quality
+    ? `Leave blank to use ${fast}`
+    : `Leave blank to use ${fast} (quick jobs) and ${quality} (emails)`;
 }
 
 // Which model this provider should use for this kind of work. An admin's
@@ -720,7 +776,7 @@ module.exports = {
   answerCeiling, REASONING_HEADROOM, recordFailure,
   resolveChain, isAvailable, availability, complete, diagnose,
   readRateLimits, recordLimits, getProviderLimits, LIMIT_WINDOWS, LIMITS_KEY,
-  rankFreeModels, freeModelsFor, candidateModels, FREE_CACHE_KEY,
+  rankFreeModels, freeModelsFor, candidateModels, FREE_CACHE_KEY, FREE_CACHE_VERSION, defaultModelHint,
   describeHttpError, getLastError, LAST_ERROR_KEY,
   recordTest, getLastTest, LAST_TEST_KEY, listModels,
   budget,

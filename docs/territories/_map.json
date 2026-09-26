@@ -2,8 +2,8 @@
   "generated": "2026-09-26",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 370,
-    "lines": 90734,
+    "files": 374,
+    "lines": 91148,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,28 +25,28 @@
         "services/view-horizon.js"
       ],
       "files": 66,
-      "lines": 26186,
+      "lines": 26158,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
           "n": 1509
         },
         {
-          "f": "public/js/12-manager-users.js",
-          "n": 1041
-        },
-        {
           "f": "public/js/47-page-mailbox.js",
           "n": 1027
         },
         {
-          "f": "public/ui.css",
+          "f": "public/js/12-manager-users.js",
+          "n": 973
+        },
+        {
+          "f": "public/js/08-page-admin.js",
           "n": 929
         }
       ],
       "lastTouched": "2026-09-27",
       "openIn": 1,
-      "openOut": 2
+      "openOut": 1
     },
     {
       "id": "gateway",
@@ -73,7 +73,7 @@
         "services/record-history-writer.js"
       ],
       "files": 28,
-      "lines": 10257,
+      "lines": 10283,
       "largest": [
         {
           "f": "index.js",
@@ -89,11 +89,11 @@
         },
         {
           "f": "routes/companies.js",
-          "n": 532
+          "n": 550
         }
       ],
       "lastTouched": "2026-09-27",
-      "openIn": 3,
+      "openIn": 2,
       "openOut": 1
     },
     {
@@ -114,8 +114,8 @@
         "schema.sql",
         "scripts/"
       ],
-      "files": 58,
-      "lines": 3471,
+      "files": 59,
+      "lines": 3490,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -241,7 +241,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 24,
-      "lines": 10286,
+      "lines": 10334,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -298,7 +298,7 @@
         "lead-ingest.js"
       ],
       "files": 27,
-      "lines": 7078,
+      "lines": 7014,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -309,15 +309,15 @@
           "n": 696
         },
         {
-          "f": "routes/recruiting/analytics.js",
-          "n": 492
-        },
-        {
           "f": "routes/wf.js",
           "n": 476
+        },
+        {
+          "f": "routes/recruiting/analytics.js",
+          "n": 424
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-27",
       "openIn": 0,
       "openOut": 1
     },
@@ -384,8 +384,8 @@
         "test/",
         ".github/"
       ],
-      "files": 127,
-      "lines": 24774,
+      "files": 130,
+      "lines": 25187,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -594,14 +594,6 @@
       "status": "ANSWERED",
       "date": "2026-09-09",
       "asks": "a decision on the daily import briefing (`/ai/generate-summary`)."
-    },
-    {
-      "id": "C-0002",
-      "from": "surface",
-      "to": "gateway",
-      "status": "OPEN",
-      "date": "2026-09-09",
-      "asks": "`/ai/generate-email` either wired to a real screen or deleted."
     },
     {
       "id": "C-0005",

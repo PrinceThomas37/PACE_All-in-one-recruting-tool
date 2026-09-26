@@ -845,3 +845,9 @@ input[type=number],input[type=password],textarea,select,
 .btn-outline,.hz-btn,.hz-count,.hz-pg,.na-act,.am-src,.google-btn,.lx-sel{
   border-color:var(--ctl-brd);
 }
+
+/* R-030: the integration card says which key its Test result is about. */
+.intg-unsaved{font-size:11.5px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--amber-l,#fef3c7);color:var(--amber,#92400e);line-height:1.4}
+
+/* C-0029: why a non-owner sees no Upload/Delete on a client's documents. */
+.cl-doc-note{font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.45}

@@ -33,14 +33,18 @@ it should render at all when `complete()` returns null.
 **Blocked until answered:** yes — Surface will not build a card against a guessed
 payload shape.
 
-### C-0002 · surface → gateway · OPEN · 2026-09-09
+### C-0002 · surface → gateway · CLOSED 2026-09-26 · 2026-09-09
 **Asks for:** `/ai/generate-email` either wired to a real screen or deleted.
 **Because:** it is reachable only from `12-manager-users.js`, which is orphaned —
 unreachable via nav — and never invokes it even there. Two dead things propping
 each other up.
 **Blocked until answered:** no.
 
-### C-0003 · rampart → gateway · ANSWERED 2026-09-24 (by guild, via C-0022) · 2026-09-09
+**CLOSED 2026-09-26 (R-007).** Deleted, not wired: the route (routes/ai.js,
+observatory's) and `window.generateAI` (surface's). The Outreach Generator is
+the one cold-email writer. `backend-smoke` asserts the 404.
+
+### C-0003 · rampart → gateway · CLOSED 2026-09-26 (retired, R-005) · 2026-09-09
 **Asks for:** `/bd-analytics/*` org-scoped, or retired into `/reports/recruiting`.
 **Because:** it is the last known un-org-scoped surface in the app. Every other
 read is scoped by construction through `models/`.
@@ -55,6 +59,11 @@ their own reporting chain's recruiters, not the whole desk. Not retired: the
 routes are pinned in `test/recruiting-routes-mounted.mjs`, and nothing in
 `public/js` calls them (dead on the frontend, per `CLAUDE.md`), so retiring
 was optional and scoping was the smaller, safer change.
+
+**CLOSED 2026-09-26 (guild, R-005).** Retired after all: the recruiter table
+counted a submission by current stage, a third definition beside
+`services/submission-stages.js`. Both handlers deleted; the mounted-routes
+test now asserts they 404.
 
 ### C-0004 · harbour → deep · CLOSED 2026-09-23 · 2026-09-09
 **Closed by:** migration 046 (`fail_reason`, `fail_kind`, `attempt_count`, `next_attempt_at`), applied 2026-09-23 with the owner's go-ahead (D-0031).
@@ -1031,7 +1040,7 @@ more — observatory's promised follow-up (dropping `token` from `/outreach/sent
 select) is now safe to land. Verified: `node --check`,
 `outreach-generator-smoke.mjs` 138/138.
 
-### C-0029 · surface → gateway · OPEN · 2026-09-24
+### C-0029 · surface → gateway · CLOSED 2026-09-26 · 2026-09-24
 **Asks for:** an ownership hint on `GET /clients` (and ideally `GET /companies/:id`)
 so the client drawer can hide its Upload-document/Delete-document controls for
 a non-owner, the same way `25-workflow-bd.js` now hides "Edit job" and the
@@ -1052,6 +1061,11 @@ attach `owner_name`/`owner_id` unless wanted for a "Client contact: visible to
 the job owner"-style note; `can_edit` alone is enough to hide the buttons.
 **Blocked until answered:** no — the 403 toast is a correct, if less polished,
 fallback in the meantime.
+
+**CLOSED 2026-09-26.** `GET /clients` rows carry `can_edit` (admin, or the
+`own.clientOwnerFrom` ladder names the caller); the drawer hides Upload/Delete
+otherwise and says why. `GET /companies/:id` not extended — the drawer reads
+the list row. Pinned by `test/client-docs-ownership-smoke.mjs`.
 
 ### C-0030 · foundry → gateway/harbour/guild · OPEN · 2026-09-24
 **Asks for:** review the pre-existing, previously-invisible org-scoping debt

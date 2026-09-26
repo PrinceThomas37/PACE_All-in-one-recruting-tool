@@ -2354,7 +2354,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
 
 
 
-// /ai/generate-email + /ai/generate-summary → extracted to routes/ai.js (mounted below).
+// /ai/generate-summary → extracted to routes/ai.js (mounted below). /ai/generate-email was retired (R-007).
 
 // app-settings + outreach-plan → extracted to routes/settings.js (mounted below).
 

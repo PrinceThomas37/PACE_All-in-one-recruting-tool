@@ -502,77 +502,9 @@ window.useManualEmail=function(){
   STATE.mergeLeadId=null;STATE.emailSearch=null;STATE.genEmail=null;render();
 }
 
-window.generateAI=function(){
-  var customInstructions=STATE.aiPrompt||STATE.aiPromptDefault;
-  // resolve recipient from composeContactId
-  if(STATE.composeContactId&&!STATE.mergeLeadId){
-    var parts=STATE.composeContactId.split('|');
-    var cc=STATE.contacts.find(function(c){return c.id===parts[0];});
-    var cj=STATE.jobs.find(function(j){return j.id===parts[1];});
-    if(cc&&cj){
-      STATE.mergeLeadId=null;
-      STATE.manualEmail=cc.email;
-      STATE.manualEmailName=(cc.first_name||'')+' '+(cc.last_name||'');
-      // pass contact+company into AI call directly
-      STATE.aiGenerating=true;render();
-      apiPost('/ai/generate-email',{
-        contact:{first_name:cc.first_name,last_name:cc.last_name,designation:cc.designation,position:cj.position},
-        company:{name:cj.company_name,industry:cj.company_ind,location:cj.location},
-        position:cj.position
-      }).then(function(d){
-        STATE.genEmail={to:(cc.first_name||'')+' '+(cc.last_name||''),email:cc.email,subj:d.subject,body:d.body,lid:null};
-        STATE.aiGenerating=false;render();
-      }).catch(function(e){STATE.aiGenerating=false;showToast('AI error: '+e.message,'error');render();});
-      return;
-    }
-  }
-  var promptEl=document.getElementById("ai-prompt-inp");
-  if(promptEl&&promptEl.value)customInstructions=promptEl.value;
-
-  // Handle manual email — no AI needed
-  if(STATE.manualEmail&&!STATE.mergeLeadId){
-    var subj=STATE.emailSubj.replace(/{{[\w]+}}/g,"");
-    var body=STATE.emailBody.replace(/{{fn}}/g,"").replace(/{{[\w]+}}/g,"");
-    STATE.genEmail={to:STATE.manualEmailName||STATE.manualEmail,email:STATE.manualEmail,subj:subj,body:body,lid:null};
-    render();return;
-  }
-  if(!STATE.mergeLeadId){showToast("Select a recipient first","warning");return;}
-  var ml=STATE.leads.find(function(l){return l.id==STATE.mergeLeadId;});
-  if(!ml){showToast("Selected lead not found","error");return;}
-  var co=STATE.companies.find(function(c){return c.id==ml.coid;})||{name:ml.coName,ind:ml.coInd,loc:ml.coLoc};
-
-  // Show spinner — render() preserves scroll
-  STATE.aiGenerating=true;render();
-
-  // Helper: build a fallback genEmail from template (no AI)
-  function fallbackToTemplate(){
-    STATE.genEmail={to:ml.fn+" "+ml.ln,email:ml.email,subj:fillEmail(STATE.emailSubj,ml,co,STATE.user.name),body:fillEmail(STATE.emailBody,ml,co,STATE.user.name),lid:ml.id};
-    STATE.aiGenerating=false;render();
-  }
-
-  // If running in LIVE (API layer present), call backend proxy. Otherwise fall back to local template fill.
-  if(typeof apiPost==="function"){
-    apiPost("/ai/generate-email",{
-      lead:{first_name:ml.fn,last_name:ml.ln,position:ml.pos,designation:ml.desig,email:ml.email},
-      company:{name:co.name,industry:co.ind,location:co.loc},
-      template:{subject:STATE.emailSubj,body:STATE.emailBody},
-      instructions:customInstructions
-    }).then(function(data){
-      var subj=data.subject||fillEmail(STATE.emailSubj,ml,co,STATE.user.name);
-      var body=data.body||fillEmail(STATE.emailBody,ml,co,STATE.user.name);
-      STATE.genEmail={to:ml.fn+" "+ml.ln,email:ml.email,subj:subj,body:body,lid:ml.id};
-      STATE.aiGenerating=false;render();
-      showToast("Email generated","success");
-    }).catch(function(err){
-      console.error("[generateAI] backend call failed:",err);
-      showToast("AI generation failed — used template instead","warning");
-      fallbackToTemplate();
-    });
-  } else {
-    // Standalone offline mode — just use template fill
-    fallbackToTemplate();
-  }
-};
+// window.generateAI was removed in Session 32 (R-007): it had no caller and
+// its endpoint, /ai/generate-email, was retired. Cold email is the Outreach
+// Generator (48-page-outreach-gen.js).
 
 function resolveComposeRecipient(){
   if(STATE.composeContactId){

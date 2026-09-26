@@ -61,7 +61,6 @@ const ROUTES = [
   ['POST', '/sourcing/import-selected'], ['DELETE', '/sourcing/staged/x'],
   ['POST', '/sourcing/search'],
   ['GET', '/recruiting-dashboard'], ['GET', '/reports/recruiting'], ['GET', '/team/activity'],
-  ['GET', '/bd-analytics/recruiters'], ['GET', '/bd-analytics/funnel'],
   // Extracted from index.js into routes/recruiting/outreach.js. These are the
   // live candidate/client send path and the interview endpoints — the ones
   // where a silent break costs an email that never goes out.
@@ -72,6 +71,13 @@ const ROUTES = [
 
 // Routes whose literal path must win over a sibling :id pattern. Registration
 // order is what makes this work, so it is asserted explicitly.
+// Routes RETIRED on purpose — they must stay gone (404), not quietly return.
+// /bd-analytics/* (R-005, Session 32): unused, and counted a submission by
+// current stage — a third definition beside services/submission-stages.js.
+const RETIRED = [
+  ['GET', '/bd-analytics/recruiters'], ['GET', '/bd-analytics/funnel'],
+];
+
 const LITERAL_BEFORE_PARAM = [
   ['GET', '/job-orders/browse'],
   ['GET', '/candidates/check-duplicate'],
@@ -132,6 +138,11 @@ try {
     if (status === 404) missing.push(`${method} ${p}`);
   }
   ok(`all ${ROUTES.length} recruiting routes are still mounted`, missing.length === 0, missing.join(', '));
+
+  for (const [method, p] of RETIRED) {
+    const status = await req(method, p);
+    ok(`${method} ${p} is retired (404)`, status === 404, String(status));
+  }
 
   for (const [method, p] of LITERAL_BEFORE_PARAM) {
     const status = await req(method, p);

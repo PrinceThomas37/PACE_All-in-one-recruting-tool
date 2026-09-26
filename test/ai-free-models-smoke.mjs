@@ -28,6 +28,27 @@ await t('an empty or broken catalogue yields nothing, never a throw', () => {
   assert.deepEqual(P.rankFreeModels([{}, null]), []);
 });
 
+// R-031 (Session 32): the live cache led with Google's MUSIC models. Rows
+// shaped the way OpenRouter's catalogue describes them.
+const MUSIC = [
+  { id: 'google/lyria-3-clip-preview', pricing: { prompt: '0', completion: '0', request: '0.04' }, context_length: 9000000, architecture: { modality: 'text->audio' } },
+  { id: 'google/lyria-3-pro-preview', pricing: { prompt: '0', completion: '0' }, context_length: 9000000, architecture: { input_modalities: ['text'], output_modalities: ['text', 'audio'] } },
+  { id: 'some/per-image', pricing: { prompt: '0', completion: '0', image: '0.01' }, context_length: 8000000 },
+  { id: 'good/writer:free', pricing: { prompt: '0', completion: '0' }, context_length: 32000, architecture: { modality: 'text+image->text', output_modalities: ['text'] } },
+];
+await t('a text->audio model is not a writer (the modality was matched on its INPUT side)', () => {
+  assert.ok(!P.rankFreeModels([MUSIC[0]]).includes('google/lyria-3-clip-preview'));
+});
+await t('a model that outputs text AND audio is not a writer', () => {
+  assert.deepEqual(P.rankFreeModels([MUSIC[1]]), []);
+});
+await t('zero per-token but priced per request or per image is not free', () => {
+  assert.deepEqual(P.rankFreeModels([MUSIC[0], MUSIC[2]].map(m => ({ ...m, architecture: undefined }))), []);
+});
+await t('a model that READS images but WRITES text still counts', () => {
+  assert.deepEqual(P.rankFreeModels(MUSIC), ['good/writer:free']);
+});
+
 function db(cached) {
   const store = { [P.FREE_CACHE_KEY]: cached ? JSON.stringify(cached) : null };
   return { store, from: () => ({
@@ -45,19 +66,30 @@ await t('fetches and caches the list when there is none', async () => {
   assert.ok(JSON.parse(d.store[P.FREE_CACHE_KEY]).ids.length === 3);
 });
 await t('a fresh cache is used without asking OpenRouter again', async () => {
-  const d = db({ at: new Date(NOW - 60000).toISOString(), ids: ['cached/model:free'] }); const calls = [];
+  const d = db({ at: new Date(NOW - 60000).toISOString(), ids: ['cached/model:free'], v: P.FREE_CACHE_VERSION }); const calls = [];
   assert.deepEqual(await P.freeModelsFor(d, {}, NOW, okFetch(calls)), ['cached/model:free']);
   assert.equal(calls.length, 0);
 });
 await t('a stale cache is refreshed', async () => {
-  const d = db({ at: new Date(NOW - 7 * 3600000).toISOString(), ids: ['old/model:free'] }); const calls = [];
+  const d = db({ at: new Date(NOW - 7 * 3600000).toISOString(), ids: ['old/model:free'], v: P.FREE_CACHE_VERSION }); const calls = [];
   assert.equal((await P.freeModelsFor(d, {}, NOW, okFetch(calls)))[0], 'deepseek/deepseek-chat:free');
   assert.equal(calls.length, 1);
 });
 await t('OpenRouter unreachable → the stale list is still used rather than nothing', async () => {
-  const d = db({ at: new Date(NOW - 7 * 3600000).toISOString(), ids: ['old/model:free'] });
+  const d = db({ at: new Date(NOW - 7 * 3600000).toISOString(), ids: ['old/model:free'], v: P.FREE_CACHE_VERSION });
   const down = async () => { throw new Error('ECONNRESET'); };
   assert.deepEqual(await P.freeModelsFor(d, {}, NOW, down), ['old/model:free']);
+});
+
+await t('the old unversioned cache (it held the music models) is never used — refetched', async () => {
+  const d = db({ at: new Date(NOW - 60000).toISOString(), ids: ['google/lyria-3-clip-preview'] }); const calls = [];
+  const ids = await P.freeModelsFor(d, {}, NOW, okFetch(calls));
+  assert.equal(calls.length, 1); assert.ok(!ids.includes('google/lyria-3-clip-preview'));
+  assert.equal(JSON.parse(d.store[P.FREE_CACHE_KEY]).v, P.FREE_CACHE_VERSION);
+});
+await t('…and not even as the "stale beats none" fallback when OpenRouter is down', async () => {
+  const d = db({ at: new Date(NOW - 7 * 3600000).toISOString(), ids: ['google/lyria-3-clip-preview'] });
+  assert.deepEqual(await P.freeModelsFor(d, {}, NOW, async () => { throw new Error('down'); }), []);
 });
 
 console.log('\nOpenRouter free models — who uses the lookup');
@@ -73,7 +105,7 @@ await t('Groq is untouched — its models stay the configured ones', async () =>
   assert.deepEqual(got, [P.modelFor({ id: 'groq' }, 'quality')]);
 });
 await t('the old hard-coded :free name is no longer what OpenRouter gets when the lookup succeeds', async () => {
-  const d = db({ at: new Date().toISOString(), ids: ['deepseek/deepseek-chat:free', 'qwen/qwen3-235b-a22b:free', 'x:free'] });
+  const d = db({ at: new Date().toISOString(), ids: ['deepseek/deepseek-chat:free', 'qwen/qwen3-235b-a22b:free', 'x:free'], v: P.FREE_CACHE_VERSION });
   assert.deepEqual(await P.candidateModels(d, { id: 'openrouter' }, 'fast'), ['deepseek/deepseek-chat:free', 'qwen/qwen3-235b-a22b:free']);
 });
 
