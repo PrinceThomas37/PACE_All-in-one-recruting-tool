@@ -528,7 +528,12 @@ we never have to rewrite to grow (see "Growth bets" below).
     so that rule never reached them. The Connected-leads drawer, the leads
     filter dropdowns and every zip/company autocomplete were **see-through on a
     phone**: the page behind showed through and the two sets of text overlapped
-    into an unreadable mess. **An inline colour cannot be re-themed — and a
+    into an unreadable mess.
+    **Session 32: the RECORD drawer's panes (`.dwr-pane`, candidate + client)
+    were the same fault in a CSS file** — `var(--card)` in ui.css, measured at
+    **5.5% opaque in dark** and 78% in light. The source scan only reads
+    `public/js`, so it could not see it; `overlay-opacity-smoke` now opens the
+    drawer and measures both panes in both themes. **An inline colour cannot be re-themed — and a
     TOKEN can be inline and still be the wrong token**, which is the sharper
     version of the rule. Anything with `position:fixed`/`absolute` that floats
     over content paints on `--card-solid`.

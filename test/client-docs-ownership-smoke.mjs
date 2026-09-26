@@ -130,7 +130,7 @@ try {
   step('B: a non-owner sees no Upload and no Delete', p2 && !p2.upload && !p2.del, JSON.stringify(p2));
   step('B: …but can still select documents to email', p2 && p2.check);
   step('B: …and is told why the controls are missing', p2 && /Only this client's owner \(or an admin\) can add or remove/.test(p2.text));
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, '45-client-docs-non-owner.png') });
+  if (SHOTS) { await page.waitForTimeout(1200); await page.screenshot({ path: path.join(SHOTS, '45-client-docs-non-owner.png') }); }
   step('B: no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) { step('B: ran without throwing', false, String(e && e.stack || e)); }
 finally { if (browser) await browser.close(); server.close(); }

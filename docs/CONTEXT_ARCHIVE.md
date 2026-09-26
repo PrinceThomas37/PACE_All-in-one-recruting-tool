@@ -6109,3 +6109,4 @@ R-006: the owner's old ask — reports as part of the Dashboard — done by plac
 - **C-0029:** `GET /clients` carries `can_edit`; the documents tab draws Upload/Delete only for the owner or an admin, and says why to everyone else.
 - **R-032 not done, honestly:** 38 files / 2.9 MB verified unreferenced; the database correctly refuses SQL deletes on storage; the Storage API needs a service key this sandbox lacks. Harmless.
 - **R-008 needs no build:** the one open job order is already published (0 applicants — the link needs sharing). Moved to the owner's lane.
+- **Found from a screenshot, not a test:** the record drawer (client, candidate) was see-through — `.dwr-pane` on the glass `--card`, 5.5% opaque in dark. Now solid; the opacity suite measures it in both themes.

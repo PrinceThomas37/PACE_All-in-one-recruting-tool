@@ -267,6 +267,11 @@ table td,table th{border-color:var(--border)!important}
   border-radius:var(--r4);
   box-shadow:var(--sh3);
 }
+/* The record drawer's two panes (candidate, client) float over their list
+   exactly as a modal does, but ui.css paints them on the GLASS --card (.78 in
+   light, .055 in dark) with no blur — so the list behind read straight through
+   them (found in a Session 32 screenshot). A float is opaque. */
+.dwr-pane{background:var(--card-solid)}
 #nav-scrim,.scrim{backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 
 /* The Session-23 horizon parts, restated in the new language. */
