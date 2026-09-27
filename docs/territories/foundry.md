@@ -1,6 +1,19 @@
 # Foundry — memory
-> Last written: 2026-09-24 · R-047 take-over requests pinned, 109/110 (1 known,
-> expected failure — see "Open here")
+> Last written: 2026-09-27 (Session 33) · 127/127 suites
+
+## Session 33 (2026-09-27) — R-012, every list opens in place
+- **127 suites** now: +`row-reveal-smoke.mjs` (45, Playwright, stub API at the
+  Render host like `session31-flows-smoke`; `SHOTS=<dir>` writes desktop/phone,
+  light/dark). Covers Jobs, Candidates and Clients panels, the shared
+  mechanism's refresh-restore rule, and a 390px fit walk. Against `origin/main`
+  (a scratch `git worktree` with node_modules symlinked in) it scores **5/45**.
+- **Two ways a browser test lies, both fixed here before trusting it:**
+  `page.click()` on a missing node throws after 30s and CRASHES the run — one
+  failure reported, every later failure hidden; use an evaluate-click that
+  returns false. And a "still on the same page / drawer not opened" check
+  passes vacuously when the click found nothing to do — pair it with "the
+  panel is there". Three such checks passed on the old code until paired.
+- Full run 127/127, exit 0 (Node 22 sandbox; frontend-only change).
 
 ## Session 31 (2026-09-24)
 - **109 suites** now: +`session31-flows-smoke.mjs` (Playwright, stub API at

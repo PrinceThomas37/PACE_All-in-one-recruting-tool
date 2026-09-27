@@ -255,13 +255,17 @@
       { label:'Source' },
       { label:'Work auth' },
       { label:'Owner' },
-      { label:'Added' },
-      { label:'', w:'120px' }
+      { label:'Added' }
     ];
+    // D-0014/D-0048: a row OPENS IN PLACE (atsRowToggle below) — the same
+    // gesture as Leads, Jobs and Clients. The name used to open the drawer and
+    // the rest of the row did nothing; the drawer is now "Open full record"
+    // inside the panel, and "Add to job" moved in there too — it was a button
+    // on every row, which is the wall of controls D-0014 asked to remove.
     var rows = a.rows.map(function(c){
-      return [
-        { html: UI.check(!!a.sel[c.id], "atsToggleSel('"+c.id+"')") },
-        { html: UI.idCell(c.full_name||'—', c.email||'', "bdOpenCandidate('"+c.id+"')",
+      return { id:c.id, onclick:"atsRowToggle('"+c.id+"',event)", cells:[
+        { html: '<span onclick="event.stopPropagation()">'+UI.check(!!a.sel[c.id], "atsToggleSel('"+c.id+"')")+'</span>' },
+        { html: UI.idCell(c.full_name||'—', c.email||'', null,
                  { verified:!!c.email, badge: c.candidate_code?'<span class="pill mute" style="font-family:var(--mono);font-size:10.5px">'+esc(c.candidate_code)+'</span>':'' }) },
         { html: statusPill(c.applicant_status), cls:'tight' },
         { html: esc(jobTitle(c)) },
@@ -270,13 +274,12 @@
         { html: UI.dash(c.source), cls:'tight' },
         { html: UI.dash(c.work_authorization), cls:'tight' },
         { html: UI.dash(ownerName(c)), cls:'tight' },
-        { html: '<span style="color:var(--ink3)">'+fmtDate(c.created_at)+'</span>', cls:'tight' },
-        { html: '<button class="btn btn-sm btn-outline" onclick="atsAddToJob(\''+c.id+'\')">Add to Job</button>', cls:'tight' }
-      ];
+        { html: '<span style="color:var(--ink3)">'+fmtDate(c.created_at)+'</span>', cls:'tight' }
+      ]};
     });
 
     var table = UI.table({
-      cols: cols, rows: rows, minWidth:'1180px',
+      cols: cols, rows: rows, minWidth:'1060px',
       empty: anyActive
         ? 'No candidates match these filters. <span style="color:var(--accent);cursor:pointer" onclick="atsClearFilters()">Clear them &rarr;</span>'
         : 'No candidates yet. <span style="color:var(--accent);cursor:pointer" onclick="atsOpenNew()">Add the first one &rarr;</span>'
@@ -596,6 +599,100 @@
       .catch(function(e){ showToast('Failed: '+e.message,'error'); });
   };
 
+  // ── A CANDIDATE ROW OPENS IN PLACE (D-0014, D-0048) ──────────────────────
+  // What the columns do not already say: which jobs this person is on and how
+  // far they got, their skills, and the facts checked before a call — plus
+  // "Add to job" and the full record (still the drawer). The mechanism is the
+  // shared rowReveal (03-core-render.js): on demand, one at a time, no render().
+  // Their jobs are fetched when the row opens, painted into their own element
+  // by id, and cached so a reopened row is instant.
+  var _candJobs = {};
+  function candJobItems(h){
+    var norm = window.normalizeStage || function(x){ return x; };
+    var seen = {}, out = [];
+    (h.submissions||[]).forEach(function(s){
+      if (!s.job_order_id || seen[s.job_order_id]) return;
+      seen[s.job_order_id] = 1; out.push({ job:s.job||{}, stage:norm(s.stage)||'—', at:s.created_at });
+    });
+    // Tagged before tagging wrote a submission (Session 31) — the job's own
+    // page calls these "Tagged", so this does too.
+    (h.pipeline||[]).forEach(function(p){
+      if (!p.job_order_id || seen[p.job_order_id]) return;
+      seen[p.job_order_id] = 1; out.push({ job:p.job||{}, stage:'Tagged', at:p.tagged_at });
+    });
+    return out.sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); });
+  }
+  function candJobsHtml(id){
+    var h = _candJobs[id];
+    if (!h) return '<span class="lx-muted">Loading…</span>';
+    if (h.error) return '<span class="lx-muted">Could not load this person\'s jobs — open the full record to see them.</span>';
+    if (!h.items.length) return '<span class="lx-muted">Not on any job yet.</span>';
+    var shown = h.items.slice(0,4);
+    return '<div class="lx-list">'+shown.map(function(it){
+      return '<div class="lx-item"><b>'+esc(it.job.job_title||'Untitled job')+(it.job.client?' · '+esc(it.job.client):'')+'</b>'+
+        '<span>'+esc(it.stage)+'</span></div>';
+    }).join('')+'</div>'+
+    (h.items.length>shown.length ? '<div class="lx-note">and '+(h.items.length-shown.length)+' more — open the full record to see them all.</div>' : '');
+  }
+  function paintCandJobs(id){ var el=document.getElementById('lx-cand-jobs-'+id); if(el) el.innerHTML=candJobsHtml(id); }
+  function loadCandJobs(id, force){
+    var h = _candJobs[id];
+    if (!force && h && !h.error && Date.now()-h.at<60000) return;
+    apiGet('/candidates/'+id+'/history').then(function(r){
+      _candJobs[id] = { items:candJobItems(r||{}), at:Date.now() }; paintCandJobs(id);
+    }).catch(function(){ _candJobs[id] = { error:true, at:Date.now() }; paintCandJobs(id); });
+  }
+  // Somebody was just put on a job — the cached list is stale. Refetch only
+  // what is on screen; everything else refetches when next opened.
+  function candJobsChanged(cids){
+    (cids||[]).forEach(function(id){ delete _candJobs[id]; });
+    var open = window.rowRevealOpenId ? rowRevealOpenId() : null;
+    if (open && (cids||[]).indexOf(open)>-1) loadCandJobs(open, true);
+  }
+  function skillList(s){
+    var arr = Array.isArray(s) ? s : String(s||'').split(/[,;|\n]+/);
+    return arr.map(function(x){ return String(x).trim(); }).filter(Boolean);
+  }
+  function safeUrl(u){ u=String(u||'').trim(); return /^https?:\/\//i.test(u) ? u : ''; }
+  function candRowPanel(c){
+    var skills = skillList(c.skills), shown = skills.slice(0,10);
+    var pay = c.pay_rate ? [c.pay_currency, c.pay_rate].filter(Boolean).join(' ')+(c.pay_type?' · '+c.pay_type:'') : '';
+    var li = safeUrl(c.linkedin_url);
+    function kv(k,v){ return '<div class="lx-kv"><span>'+esc(k)+'</span><b>'+esc(v==null||v===''?'—':String(v))+'</b></div>'; }
+    return '<div class="lx lx-cand">'+
+      '<div class="lx-main">'+
+        '<div class="lx-head">Jobs</div>'+
+        '<div id="lx-cand-jobs-'+esc(c.id)+'">'+candJobsHtml(c.id)+'</div>'+
+        '<div class="lx-head lx-gap">Skills</div>'+
+        (shown.length
+          ? '<div class="lx-chips">'+shown.map(function(s){ return '<span class="lx-chip">'+esc(s)+'</span>'; }).join('')+
+              (skills.length>shown.length ? '<span class="lx-chip">+'+(skills.length-shown.length)+' more</span>' : '')+'</div>'
+          : '<div class="lx-line lx-muted">No skills recorded.</div>')+
+      '</div>'+
+      '<div class="lx-side">'+
+        '<div class="lx-facts">'+
+          kv('Experience', c.experience_years!=null&&c.experience_years!=='' ? c.experience_years+' yrs' : '')+
+          kv('Availability', c.availability||c.notice_period)+
+          kv('Pay', pay)+
+          kv('Employer', c.current_employer)+
+          kv('Résumé', (c.resume_url||c.resume_filename) ? 'On file' : 'None yet')+
+          (li ? '<div class="lx-kv"><span>LinkedIn</span><a class="ld-link" href="'+esc(li)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Profile ↗</a></div>' : '')+
+        '</div>'+
+        '<div class="lx-acts">'+
+          '<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();atsAddToJob(\''+c.id+'\')">'+UI.ic('plus')+'Add to job</button>'+
+          '<button class="btn btn-primary btn-sm lx-open" onclick="event.stopPropagation();bdOpenCandidate(\''+c.id+'\')">Open full record</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+  window.atsRowToggle = function(id, ev){
+    var opened = rowReveal(id, ev, function(){
+      var c = (STATE.ats.rows||[]).find(function(x){ return x.id===id; });
+      return c ? candRowPanel(c) : null;
+    });
+    if (opened) loadCandJobs(id);
+  };
+
   // ── add a candidate to a job — type-to-search the job by id / title / client ─
   window.atsAddToJob = function(cid){
     var c = STATE.ats.rows.find(function(x){ return x.id===cid; }) || {};
@@ -655,13 +752,14 @@
       if (r.already) parts.push(r.already+' already on it');
       if (r.failed||r.not_found) parts.push((r.failed+r.not_found)+' could not be added');
       showToast((job.job_title||'Job')+': '+(parts.join(' · ')||'nothing to add'), (r.failed||r.not_found)?'warning':'success');
+      candJobsChanged(jp.cids);
       STATE.ats._jobPick=null; STATE.ats.sel={}; closeModal();
     }).catch(function(e){ showToast('Failed: '+e.message,'error'); });
   };
   window.atsDoAddToJob = function(cid, jid){
     if(!jid){ showToast('Pick a job','error'); return; }
     apiPost('/pipeline', { candidate_id:cid, job_order_id:jid }).then(function(){
-      showToast('Added to the job','success'); STATE.ats._jobPick=null; closeModal();
+      showToast('Added to the job','success'); candJobsChanged([cid]); STATE.ats._jobPick=null; closeModal();
     }).catch(function(e){
       if (/already tagged/i.test(e.message)) showToast('Candidate already in that pipeline','error');
       else showToast('Failed: '+e.message,'error');

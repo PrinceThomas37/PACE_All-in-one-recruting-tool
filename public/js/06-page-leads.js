@@ -398,28 +398,14 @@ function leadExpandHtml(j){
   '</div>';
 }
 
+// The mechanism is shared by every list (rowReveal, 03-core-render.js, D-0048);
+// this supplies only what a LEAD's panel shows. It looks the lead up afresh
+// each time it is built, so a panel put back after a refresh shows current data.
 window.leadRowToggle=function(id,ev){
-  if(ev&&ev.stopPropagation)ev.stopPropagation();
-  var content=document.getElementById('content'); if(!content)return;
-  var tr=content.querySelector('tr[data-row-id="'+id+'"]'); if(!tr)return;
-
-  var open=content.querySelector('tr.lead-exp');
-  var wasThisOne=open&&open.previousElementSibling===tr;
-  if(open&&open.parentNode)open.parentNode.removeChild(open);
-  content.querySelectorAll('tr.is-open').forEach(function(r){r.classList.remove('is-open');});
-  if(wasThisOne)return;                       // second click closes
-
-  var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
-  if(!j)return;
-
-  var row=document.createElement('tr');
-  row.className='lead-exp';
-  var td=document.createElement('td');
-  td.colSpan=tr.children.length;              // span the real column count
-  td.innerHTML=leadExpandHtml(j);
-  row.appendChild(td);
-  tr.parentNode.insertBefore(row,tr.nextSibling);
-  tr.classList.add('is-open');
+  rowReveal(id, ev, function(){
+    var j=(STATE.jobs||[]).find(function(x){return x.id===id;});
+    return j?leadExpandHtml(j):null;
+  }, 'lead-exp');
 };
 
 function openJob(id){ STATE.detailJob=id; STATE.jobSeqSel=[]; STATE.modal={type:"jobDetail",id:id}; render(); if(typeof loadJobEnrollments==='function')loadJobEnrollments(id); }

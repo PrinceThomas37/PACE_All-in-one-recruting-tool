@@ -63,6 +63,124 @@ window.addEventListener('resize',function(){
   if(window.innerWidth>860&&navOpen())closeNav();
 });
 
+// ── A row that opens in place (D-0014, carried to every list by D-0048) ─────
+// ONE gesture on every record list — Leads, Jobs, Candidates, Clients: click a
+// row and a panel opens DIRECTLY BENEATH it, showing what the record is and
+// the few things you actually do to it. Click it again and it closes; open
+// another and the first one goes. The full record (a drawer or a page) is one
+// explicit button inside the panel — no longer the only door, and no longer
+// what a plain row click does. Before this the same click did three different
+// things: opened a panel (Leads), a side drawer (Candidates, Clients), or left
+// the page altogether (Jobs).
+//
+// The three rules the Leads row was built on (06-page-leads.js) hold for all:
+//   1. BUILT ON DEMAND, ONE AT A TIME. A panel is never part of a table's
+//      html — a hidden panel per row turns a 400-row list into 400 panels,
+//      the growth ageing-layout-smoke exists to catch.
+//   2. NO render(). One <tr> is inserted or removed; scroll, focus and every
+//      other node on the page survive.
+//   3. STATE.page UNTOUCHED. Opening a row is not navigation.
+//
+// `build()` returns the panel's html, or null/'' to open nothing. `cls` is an
+// extra class for the panel row (Leads keeps `lead-exp`, which its test pins).
+var _rowOpen=null;                  // {id, build, cls, page} of the open row
+function _rowTr(id){
+  var c=document.getElementById('content'); if(!c) return null;
+  var sel=(window.CSS&&CSS.escape)?CSS.escape(String(id)):String(id).replace(/["\\]/g,'\\$&');
+  return c.querySelector('tr[data-row-id="'+sel+'"]');
+}
+function _rowInsert(tr, html, cls){
+  var row=document.createElement('tr');
+  row.className='row-exp'+(cls?' '+cls:'');
+  var td=document.createElement('td');
+  td.colSpan=tr.children.length;             // span the real column count
+  td.innerHTML=html;
+  row.appendChild(td);
+  tr.parentNode.insertBefore(row,tr.nextSibling);
+  tr.classList.add('is-open');
+  _rowFit(row);
+}
+// A PANEL FITS THE PART OF THE LIST YOU CAN SEE. On a phone a list is wider
+// than the screen and scrolls sideways in its own box, so a panel as wide as
+// the TABLE put its right half — and its buttons — off screen (measured: a
+// 1,069px panel on a 390px phone). theme.css pins the panel to the left edge
+// of that box (position:sticky; left:0) and caps it at --rx-w, the box's
+// visible width, measured here because no stylesheet can know it. When the
+// list does not scroll sideways (a desktop), nothing is set and nothing moves.
+function _rowFit(row){
+  var td=row&&row.firstElementChild; if(!td) return;
+  var sc=row.parentElement;
+  while(sc&&sc!==document.body){
+    var ox=getComputedStyle(sc).overflowX;
+    if((ox==='auto'||ox==='scroll')&&sc.scrollWidth>sc.clientWidth+1) break;
+    sc=sc.parentElement;
+  }
+  if(!sc||sc===document.body) td.style.removeProperty('--rx-w');
+  else td.style.setProperty('--rx-w', sc.clientWidth+'px');
+}
+// A phone turned sideways changes the box's width under an open panel.
+window.addEventListener('resize',function(){
+  var c=document.getElementById('content');
+  var r=c&&c.querySelector('tr.row-exp'); if(r) _rowFit(r);
+});
+window.rowReveal=function(id, ev, build, cls){
+  if(ev&&ev.stopPropagation) ev.stopPropagation();
+  var c=document.getElementById('content'); if(!c) return false;
+  var tr=_rowTr(id); if(!tr) return false;
+  var open=c.querySelector('tr.row-exp');
+  var wasThisOne=!!open&&open.previousElementSibling===tr;
+  if(open&&open.parentNode) open.parentNode.removeChild(open);
+  c.querySelectorAll('tr.is-open').forEach(function(r){ r.classList.remove('is-open'); });
+  _rowOpen=null;
+  if(wasThisOne) return false;               // second click closes
+  var html=build?build():null;
+  if(!html) return false;
+  _rowInsert(tr, html, cls);
+  _rowOpen={ id:String(id), build:build, cls:cls||'', page:STATE.page };
+  return true;
+};
+// Close whatever row is open, without opening another.
+window.rowRevealClose=function(){
+  var c=document.getElementById('content');
+  if(c){
+    var open=c.querySelector('tr.row-exp'); if(open&&open.parentNode) open.parentNode.removeChild(open);
+    c.querySelectorAll('tr.is-open').forEach(function(r){ r.classList.remove('is-open'); });
+  }
+  _rowOpen=null;
+};
+// A REFRESH MUST NOT SNAP AN OPEN ROW SHUT. When the page region is rewritten
+// on the SAME page — the list reloaded, a status was changed from inside the
+// panel — the panel is put back under its row, rebuilt from current data. If
+// the row is gone (paged away, filtered out, deleted) the panel goes with it.
+// Called by paintPageContent after it writes; a page CHANGE forgets instead.
+function rowRevealRestore(){
+  if(!_rowOpen) return;
+  if(_rowOpen.page!==STATE.page){ _rowOpen=null; return; }
+  var tr=_rowTr(_rowOpen.id);
+  if(!tr){ _rowOpen=null; return; }
+  var nx=tr.nextElementSibling;
+  if(nx&&nx.classList.contains('row-exp')) return;
+  var html=_rowOpen.build?_rowOpen.build():null;
+  if(!html){ _rowOpen=null; return; }
+  _rowInsert(tr, html, _rowOpen.cls);
+}
+// Rebuild the open panel IN PLACE from current data. For a change made inside
+// a panel that the list itself does not show (an apply page going live): the
+// render that follows writes nothing to the list, so nothing else would
+// refresh the panel. Called explicitly by such actions — never from render(),
+// because rebuilding on every repaint would wipe a half-typed box in a panel.
+window.rowRevealRefresh=function(){
+  if(!_rowOpen) return;
+  var tr=_rowTr(_rowOpen.id);
+  if(!tr){ _rowOpen=null; return; }
+  var nx=tr.nextElementSibling;
+  if(!(nx&&nx.classList.contains('row-exp'))) return rowRevealRestore();
+  var html=_rowOpen.build?_rowOpen.build():null;
+  if(html&&nx.firstElementChild) nx.firstElementChild.innerHTML=html;
+};
+function rowRevealForget(){ _rowOpen=null; }
+window.rowRevealOpenId=function(){ return _rowOpen?_rowOpen.id:null; };
+
 // ── Painting: write a region only when it actually changed ──────────────────
 // The app used to rebuild EVERYTHING for every change: `#app.innerHTML =
 // renderApp()`. A mailbox unread badge ticking 24 → 23 therefore destroyed and
@@ -124,6 +242,8 @@ function paintPageContent(){
   if(parts.content===html) return;
   parts.content=html;
   putRegion(c, html, false);
+  // The rewrite took any open row panel with it; put it back (see rowReveal).
+  rowRevealRestore();
 }
 
 function render(){
@@ -158,7 +278,9 @@ function render(){
   // CHANGE still rebuilds wholesale: nothing on screen survives it anyway.
   var standing=_shellFor===STATE.page&&document.getElementById('sidebar')&&
                document.getElementById('content')&&document.getElementById('layer');
-  if(standing) patchShell(); else { root.innerHTML=renderApp(); _shellFor=STATE.page; }
+  // A page change rebuilds wholesale — and forgets any open row, so coming
+  // back to a list later does not pop an old panel open on its first refresh.
+  if(standing) patchShell(); else { root.innerHTML=renderApp(); _shellFor=STATE.page; rowRevealForget(); }
   STATE._rendering=false;
   bindApp();
   startClock();

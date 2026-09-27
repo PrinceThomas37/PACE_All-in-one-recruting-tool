@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-26 (Session 31 close) · **Next id**: `R-060` · **Artifact**:
+**Updated**: 2026-09-27 (Session 33) · **Next id**: `R-060` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -54,6 +54,7 @@ sees it without reading a file.
 | `R-004` | **CHANGED → absorbed into `R-036` (2026-09-23).** Proposed: just an error column. Shipped: the column plus automatic and manual retry, because the owner asked for the retry. Original row: **Record *why* a send failed** — an error column on `emails` (border request `C-0004`). | Open. This is the known, unfixed incident: a dead mailbox sign-in marks emails `failed` one every ~90s with no retry and **no column recording the reason**, so the honest error message dies with the process. |
 | `R-049` | **A "PACE operator" role, separate from a customer's admin** — today any customer's admin can pause sending for EVERY customer, run the background engines, change the shared AI keys and the deployment-wide send times. Fine with one customer; must be split before a second. | Raised by rampart's audit 2026-09-23 (C-0021 X9). A design question for the owner, not built. |
 | `R-032` | **Clean up the orphaned resume files in storage.** | **Checked 2026-09-26, still open — blocked on access, not on work.** Exactly **38 files (2.9 MB)** are referenced by nothing and belong to no existing candidate — all from before the 23 Sep reset; every file uploaded since is in use. The database rightly refuses to delete storage files by SQL (it would leave the bytes behind), and removal through the storage service needs a server key this workspace does not have. Private and harmless; far inside the free 1 GB. |
+| `R-012` | **D-0014 — the row-level interaction brief.** The owner's real design ask was *progressive disclosure*; Session 23 answered it with volume control and was corrected. | **DOING 2026-09-27 (D-0048)** — owner: *"Quickly do R-012"*. The first screen (Leads) was built 2026-09-11 and has been in use since; now carrying the same gesture to Jobs (still leaves the page), Candidates and Clients (open a side drawer): click a row → a panel under it with its state and its few actions, the full record one button away. Earlier status: **The live design work.** Agreed approach: ONE screen first, then repeat. **Ask before building any of it** — they said the revamp is coming "in sometime". |
 
 ## ⏳ PENDING — waiting on the owner
 
@@ -70,7 +71,6 @@ sees it without reading a file.
 | `R-054` | **Make PACE fit any industry — a per-company playbook** (words, lead stages, buying signals, allowed next steps), recruiting as preset #1. First used by the client summary; later the stages and screens themselves (today recruiting-shaped in code — the stage list lives in six places). | Owner asked 2026-09-24 (D-0039). Intelligence part is designed with R-051; the screens/stages part is a larger separate job, before selling to a non-recruiting company. |
 | `R-052` | **Create documents, not only upload them** (owner, 2026-09-24: "We'll design the entire thing later"). | **Parked by the owner.** Starting point when picked up: the formatted-resume generator already in PACE. §2 of the design doc. |
 | `R-053` | **The contact-finder engine: 4 POCs per open job** (2 HR/TA, 2 hiring managers by firm size), into a sequence or the outreach engine. Design §3. | **Needs the owner's call on the data source.** Nothing in PACE calls Apollo today and Apollo's free tier has no API — the people search is a paid plan. The title rules (`pocTargets`) are free and can be built first. |
-| `R-012` | **D-0014 — the row-level interaction brief.** The owner's real design ask was *progressive disclosure*; Session 23 answered it with volume control and was corrected. | **The live design work.** Agreed approach: ONE screen first, then repeat. **Ask before building any of it** — they said the revamp is coming "in sometime". |
 | `R-013` | **~1,600 inline font sizes and a comparable number of inline colours in `public/js`.** | Offered as a session of invisible work; **the owner has not answered.** This is the shared root cause of the last two rounds of phone and theme faults — an inline value cannot be re-themed, re-scaled or re-laid-out. Do not start it unasked. |
 | `R-014` | **PACE holds almost no contact phone numbers**, so sequence step 3 ("call them") correctly skips nearly always. Either start capturing numbers at import, or redesign that step around email. | **Owner has not chosen.** |
 | `R-015` | **Text candidates, not just email (SMS).** | Sketched as a cross-territory journey, never costed. Consent is the gate: SMS consent is not email consent, and the opt-out is a legal one. |
