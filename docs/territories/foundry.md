@@ -1,6 +1,18 @@
 # Foundry — memory
 > Last written: 2026-09-27 (Session 33) · 128 suites after merging #251
 
+## Session 33 (2026-09-27) — R-053 slice 1 suites
+- **131 suites** with these three: +`poc-targets-smoke.mjs` (57, pure; the
+  never-guess-an-email guard fails 56/57 when a market-prior fallback is put
+  back), +`poc-routes-smoke.mjs` (23; the real router on a real Express app
+  over an in-memory db that projects to each select; the "another lead's
+  people never leave the server" guard and the 404 visibility guard each fail
+  22/23 when their bug is reintroduced), +`poc-finder-ui-smoke.mjs` (25,
+  Playwright; its stub builds every answer with the REAL rules, never
+  hand-typed).
+- `innerText` returns CSS-uppercased headings in capitals — a regex for
+  "Contacts" misses "CONTACTS". Match headings case-insensitively.
+
 ## Session 33 (2026-09-27) — R-012, every list opens in place
 - **127 suites** now: +`row-reveal-smoke.mjs` (45, Playwright, stub API at the
   Render host like `session31-flows-smoke`; `SHOTS=<dir>` writes desktop/phone,

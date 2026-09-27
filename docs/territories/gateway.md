@@ -1,6 +1,22 @@
 # Gateway — memory
 > Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
 
+## Session 33 (2026-09-27) — the POC finder's endpoints (R-053 slice 1, D-0049)
+- **`routes/poc.js`**, mounted in index.js **just before `routes/jobs`** (so
+  nothing there can shadow it): `GET /jobs/:id/poc` (the four slots, the
+  people who fit none, the company's learned email format as pattern + domain
+  + count + a made-up example, `can_edit`) and `PUT /jobs/:id/company-size`
+  (`{size}` one of the five bands, `''`/null clears; stored on the COMPANY).
+- **Seeing** = `own.canSeeLead` via the same `scopeFor` as GET /jobs/:id →
+  404 otherwise (a 403 would confirm the lead exists). **Changing** =
+  `canTouchJob` → 403, the same gate as adding a contact.
+- **The format is learned from the company's OTHER leads' addresses too, but
+  only the pattern and a count leave the file** — never another lead's names,
+  emails or ids (the caller may not be allowed to see them, D-0034).
+  poc-routes-smoke asserts it and fails when a debug field is added back.
+- Pinned by `test/poc-routes-smoke.mjs` (23, real router on a real Express app,
+  in-memory db that PROJECTS rows to each select list).
+
 ## Session 31 (2026-09-25) — client intelligence
 - **The reply sweep no longer stores every inbound message** (index.js
   `processInboundMessages`). `clientIntel.gateMessage` keeps a contact or a

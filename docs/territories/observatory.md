@@ -1,5 +1,5 @@
 # Observatory — memory
-> Last written: 2026-09-23 (Session 30, C-0024) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-27 (Session 33, R-053 slice 1) · seeded from `CLAUDE.md` and Session 21
 
 ## Session 33 (2026-09-27) — R-053 design touches `enrichment.js`
 - **`enrichment.js`'s pattern prior is wrong for this owner's market.** It ranks
@@ -9,6 +9,19 @@
   learnable from a real address. The R-053 design (`docs/CONTACT_FINDER_DESIGN.md`
   §5, §8 step 2) learns the format per company and derives the prior from our own
   data. Not built yet — waiting on the owner's answers.
+- **BUILT (slice 1): `services/poc-targets.js`** — pure. `jobFunction(title,
+  industry)` (first match wins; estimating before HR before project before
+  service…; a dealership's estimator/technician reports into
+  collision/service), `pocTargets(job, size)` → 4 slots (the owner's size
+  table; unknown size → '21-50' with `size_known:false`), `contactKind` (at
+  ≤50 people an office manager counts as HR), `fillSlots` (best fit first,
+  one person per slot, the rest returned as `others` — nobody dropped),
+  `learnFormat(contacts, website)` (the domain the PEOPLE use, free-mail never
+  counts, majority format), `emailFor` — **refuses to build an address without
+  a learned format (D-0049); the market prior `flast` is never used to send**.
+  `enrichment.js` is not changed yet; step 2 hands it the learned format.
+  Pinned by `test/poc-targets-smoke.mjs` (57; the never-guess guard fails
+  56/57 when a prior fallback is put back).
 
 
 ## Session 31 (2026-09-24)

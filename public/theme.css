@@ -679,6 +679,33 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
   .lx-kv-ctl .lx-sel{font-size:12.5px;min-height:30px;padding:3px 8px}
 }
 
+/* The POC finder's four slots on a lead row (62-poc-finder.js, R-053). Calm:
+   a filled slot is the ordinary contact row; an empty one is a quiet dashed
+   card naming the title being looked for. No state colour on the list. */
+.lxc-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.lxc-title{margin:0}
+.lxc-count{font-weight:600;color:var(--text2);letter-spacing:0;text-transform:none;margin-left:6px}
+.lxc-group{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin:10px 0 5px}
+.lxc-slot.is-empty{
+  border:1px dashed var(--ctl-brd,var(--border));border-radius:var(--r2);
+  padding:10px 12px;margin-bottom:7px;background:transparent;
+}
+.lxc-want{display:flex;align-items:flex-start;gap:10px}
+.lxc-want > div{flex:1;min-width:0}
+.lxc-mark{flex:none;color:var(--text3);font-size:13px;line-height:19px}
+.lxc-want-t{font-size:13px;font-weight:600;color:var(--text)}
+.lxc-want-s{font-size:11.5px;color:var(--text3);margin-top:2px}
+.lxc-form{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+.lxc-row{display:flex;gap:8px;flex-wrap:wrap}
+.lxc-row .inp{flex:1 1 180px;min-width:0}
+.lxc-note{font-size:11.5px;color:var(--text3);line-height:1.45}
+.lxc-actions{display:flex;gap:8px;flex-wrap:wrap}
+.lxc-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-top:10px}
+.lxc-foot-note{color:var(--text3);flex:1 1 220px}
+@media (min-width:861px){
+  .lxc-size{font-size:12.5px;min-height:30px;padding:3px 8px}
+}
+
 /* The lead's email timeline + summary (58-lead-intel.js). Drawn only when the
    owner has switched client intelligence on; otherwise the slot is hidden and
    the row is exactly as before. Calm by default: neutral cards, one accent

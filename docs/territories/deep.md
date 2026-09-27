@@ -1,6 +1,18 @@
 # Deep — memory
 > Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
 
+## Session 33 (2026-09-27) — migration 051, company size (R-053, D-0049)
+- `051_company_size.sql`: `companies.size_band text`, nullable, CHECK in
+  ('1-20','21-50','51-200','201-1000','1000+') — the one list is
+  services/poc-targets.js `SIZE_IDS`. Additive only; no row changed.
+- Proved first in a rolled-back probe (valid value accepted, 'huge' rejected by
+  the check, no other row touched; column absent afterwards), then **APPLIED to
+  the live DB 2026-09-27** under D-0047's standing SQL permission and verified
+  (column + constraint present). **Next migration is 052.**
+- `scripts/territory-map.mjs`: `services/poc-targets.js` added to observatory's
+  list (it sits beside enrichment.js). No new table, so models/tables.js is
+  unchanged.
+
 ## Session 31 (2026-09-25) — migration 048, client intelligence
 - `048_client_intel.sql`: `conversation_messages.company_id` (FK companies, ON
   DELETE SET NULL) + `facts jsonb`, index `(company_id, sent_at DESC)`; new

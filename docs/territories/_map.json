@@ -2,8 +2,8 @@
   "generated": "2026-09-27",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 377,
-    "lines": 92306,
+    "files": 381,
+    "lines": 93000,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 66,
-      "lines": 26628,
+      "files": 67,
+      "lines": 26855,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -72,12 +72,12 @@
         "services/record-history.js",
         "services/record-history-writer.js"
       ],
-      "files": 28,
-      "lines": 10305,
+      "files": 29,
+      "lines": 10430,
       "largest": [
         {
           "f": "index.js",
-          "n": 3890
+          "n": 3893
         },
         {
           "f": "routes/ownership-requests.js",
@@ -115,8 +115,8 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 60,
-      "lines": 3631,
+      "files": 61,
+      "lines": 3652,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -233,6 +233,7 @@
         "services/jd-scrub.js",
         "company-classifier.js",
         "enrichment.js",
+        "services/poc-targets.js",
         "skill-dictionaries.js",
         "learned-skills.js",
         "routes/ai.js",
@@ -241,8 +242,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 24,
-      "lines": 10334,
+      "files": 25,
+      "lines": 10655,
       "largest": [
         {
           "f": "services/candidate-outreach.js",

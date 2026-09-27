@@ -1,6 +1,37 @@
 # Surface — memory
 > Last written: 2026-09-27 (Session 33) · seeded from `CLAUDE.md` and Session 21
 
+## Session 33 (2026-09-27) — the POC finder's four slots on the lead row (R-053 slice 1, D-0049)
+- **`62-poc-finder.js`** draws "People to reach" inside the lead row panel:
+  two HR slots, two hiring-manager slots, "Also on this lead" for anyone who
+  fits no slot, and a company-size select. The SERVER decides everything
+  (`GET /jobs/:id/poc` → services/poc-targets.js); this file only draws.
+- **The slots REPLACE the plain Contacts list, in the same element**
+  (`#lx-poc-<id>`), once the answer arrives. Until then — or forever, if the
+  server never answers — the plain list shows exactly as before, so the
+  email valid/invalid control is never missing. `leadExpandHtml` calls
+  `leadPocSlot(j, plainHtml)`.
+- **One contact row for both:** `window.leadContactRowHtml(c)` (06-page-leads.js)
+  draws a person with the email-status control; the plain list and every
+  filled slot use it. Never a second copy.
+- **Nobody on the lead disappears:** any contact the last server answer did
+  not place (added a moment ago) is drawn under "Also on this lead".
+- **Add by hand** is an inline form in the empty slot (name, title prefilled
+  with the slot's first title, email). Typing a name fills the email from the
+  company's LEARNED format until the person edits the email; with no learned
+  format the email stays empty and the note says PACE will not guess (D-0049).
+  Saves through the existing `POST /contacts`, then `refreshJobs()` — the row's
+  contact count changes, the list redraws, `rowRevealRestore` puts the panel
+  back, and the slots are re-asked.
+- **`pocEmailFor` is a CHECKED COPY of poc-targets.emailFor** —
+  poc-finder-ui-smoke runs 10 name/format cases through both.
+- Viewers who can see but not work the lead (`can_edit:false`) get the slots
+  with no size select and no Add by hand. Styles `.lxc*` in theme.css
+  (tokens only; the size select is compact on desktop, 16px on a phone).
+- Pinned by `test/poc-finder-ui-smoke.mjs` (25). A heading drawn with
+  `text-transform:uppercase` reads back UPPERCASE from `innerText` — two
+  checks failed on that before they were made case-insensitive.
+
 ## Session 33 (2026-09-27) — every record list opens in place (R-012, D-0048)
 - **ONE gesture, ONE mechanism.** `rowReveal(id, ev, build, cls)` lives in
   `03-core-render.js` next to the render engine (it is the engine's sibling:

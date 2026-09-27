@@ -208,6 +208,12 @@ rule — and a customer with no key still gets rungs R0–R4.
    from existing contacts, with `pocTargets`; adding a person by hand suggests
    the email from the company's learned format and checks the domain. Free.
    *Researchers immediately see who is missing and type less.*
+   **BUILT 2026-09-27 (D-0049).** As built: the slots *replace* the plain
+   contact list on the lead row (every person keeps the valid/invalid control;
+   anyone who fits no slot is listed as "Also on this lead"); the size pick sits
+   under the slots; the email is filled only from a LEARNED format — with none,
+   the form leaves it empty and says PACE will not guess. The domain check is
+   left to the existing classifier on `POST /contacts`.
 2. **Learned formats** — every company's format learned from its real addresses
    (64 of 82 today) and a market-wide prior (first initial + surname) replacing
    `enrichment.js`'s hard-coded ranking.
@@ -226,3 +232,7 @@ rule — and a customer with no key still gets rungs R0–R4.
 | **D2** | When it runs | A button on each lead · automatically for every new lead · both |
 | **D3** | May PACE ever email a *Guess* | Never · only after a verifier says yes · after a person OKs it |
 | **D4** | Company size | A size pick on the lead · an import column · assume small until a paid source exists |
+
+**Answered 2026-09-27 (D-0049):** D1 — the owner will connect an Apollo account
+whose plan allows API use · D2 — both (automatically for new leads, and a
+button) · D3 — never · D4 — a size pick on the lead.
