@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-26",
+  "generated": "2026-09-27",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 374,
-    "lines": 91148,
+    "files": 376,
+    "lines": 91466,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 66,
-      "lines": 26158,
+      "lines": 26163,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -46,7 +46,7 @@
       ],
       "lastTouched": "2026-09-27",
       "openIn": 1,
-      "openOut": 1
+      "openOut": 0
     },
     {
       "id": "gateway",
@@ -73,11 +73,11 @@
         "services/record-history-writer.js"
       ],
       "files": 28,
-      "lines": 10283,
+      "lines": 10305,
       "largest": [
         {
           "f": "index.js",
-          "n": 3868
+          "n": 3890
         },
         {
           "f": "routes/ownership-requests.js",
@@ -93,7 +93,7 @@
         }
       ],
       "lastTouched": "2026-09-27",
-      "openIn": 2,
+      "openIn": 1,
       "openOut": 1
     },
     {
@@ -112,14 +112,15 @@
         "models/",
         "migrations/",
         "schema.sql",
-        "scripts/"
+        "scripts/",
+        "services/storage-orphans.js"
       ],
-      "files": 59,
-      "lines": 3490,
+      "files": 60,
+      "lines": 3631,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 295
+          "n": 297
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -384,8 +385,8 @@
         "test/",
         ".github/"
       ],
-      "files": 130,
-      "lines": 25187,
+      "files": 131,
+      "lines": 25337,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -666,14 +667,6 @@
       "status": "ANSWERED",
       "date": "2026-09-23",
       "asks": "key the Generator's Sent list and \"Convert to lead\" on the tracking row's `id`, not its `token`. `public/js/48-page-outreach-gen.js:151-157` (`outreachConvertLead(token)` finds the row by `r.token` and posts `{token}`) and `:765-767` (the button passes `r.token` and compares `g.converting===r.token`). Change to `outreachConvertLead(id)`, `r.id` throughout, and post `{ id: row.id, … }`."
-    },
-    {
-      "id": "C-0029",
-      "from": "surface",
-      "to": "gateway",
-      "status": "OPEN",
-      "date": "2026-09-24",
-      "asks": "an ownership hint on `GET /clients` (and ideally `GET /companies/:id`) so the client drawer can hide its Upload-document/Delete-document controls for a non-owner, the same way `25-workflow-bd.js` now hides \"Edit job\" and the apply-link controls on a job order using its new `poc_visible` field."
     }
   ],
   "unclaimed": []

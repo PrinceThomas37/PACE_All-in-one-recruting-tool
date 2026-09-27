@@ -6131,3 +6131,9 @@ opaque in dark. Both now have guards that fail on the old code. The
 discipline that paid off: answer the question from the live system, then read
 everything else the answer shows you — and never accept "the suite is green"
 as a substitute for looking at the screen.
+
+# Session 33 — the leftover resumes (2026-09-27)
+
+### Round 1 — "Delete them" (R-032)
+- The owner asked what the 38 files were: 37 resumes/CVs (20 PDF, 12 .docx, 5 .doc) filed under 32 candidates added 17 Jul–17 Sep, plus 1 apply-page resume from 22 Sep — all orphaned when the 23 Sep reset deleted their records by SQL. Personal data about people PACE no longer holds; that, not 2.9 MB, is why they should go. Owner: "Delete them".
+- SQL can't (storage `protect_delete` trigger) and this sandbox has no storage key, so the deletion runs ON THE SERVER as a one-time engine job with three independent guards (unreferenced, owner gone entirely, >1 day old) and fail-closed reads. It runs on the next heartbeat; its marker records counts only.
