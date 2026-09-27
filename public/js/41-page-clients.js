@@ -67,6 +67,71 @@
   // #content — so these go through render(), not paint().
   window.clientsOpen = function(id){ STATE.clients.selectedId=id; STATE.clients.selDocs={}; loadClientDetail(id); render(); };
   window.clientsBack = function(){ STATE.clients.selectedId=null; render(); };
+
+  // ── A CLIENT ROW OPENS IN PLACE (D-0014, D-0048) ─────────────────────────
+  // The client's job orders — open ones first — and the few things done from
+  // the list: email the client (its owner only: the server refuses anyone
+  // else, D-0035, so nobody else is shown the button) and the full record,
+  // which stays the drawer. The mechanism is the shared rowReveal
+  // (03-core-render.js): on demand, one at a time, no render(). The job
+  // orders are fetched when the row opens, painted into their own element by
+  // id, and cached so a reopened row is instant.
+  var _rowJobs={};
+  var CLOSED_JO=['Filled','Closed','Cancelled'];
+  function clientJobsHtml(id){
+    var r=_rowJobs[id];
+    if(!r) return '<span class="lx-muted">Loading…</span>';
+    if(r.error) return '<span class="lx-muted">Could not load this client\'s job orders — open the full record to see them.</span>';
+    if(!r.jobs.length) return '<span class="lx-muted">No job orders yet.</span>';
+    var sorted=r.jobs.slice().sort(function(a,b){
+      var ac=CLOSED_JO.indexOf(a.status)>-1?1:0, bc=CLOSED_JO.indexOf(b.status)>-1?1:0;
+      return (ac-bc)||String(b.created_at||'').localeCompare(String(a.created_at||''));
+    });
+    var shown=sorted.slice(0,5);
+    return '<div class="lx-list">'+shown.map(function(j){
+      var who=j.bd_manager&&j.bd_manager.name;
+      return '<div class="lx-item"><b>'+esc(j.job_title||'Untitled job')+'</b><span>'+esc(j.status||'—')+(who?' · '+esc(who):'')+'</span></div>';
+    }).join('')+'</div>'+
+    (sorted.length>shown.length?'<div class="lx-note">and '+(sorted.length-shown.length)+' more — open the full record to see them all.</div>':'');
+  }
+  function paintClientJobs(id){ var el=document.getElementById('lx-cl-jobs-'+id); if(el) el.innerHTML=clientJobsHtml(id); }
+  function loadClientRowJobs(id){
+    var r=_rowJobs[id];
+    if(r&&!r.error&&Date.now()-r.at<60000) return;
+    apiGet('/companies/'+id+'/job-orders').then(function(d){ _rowJobs[id]={jobs:d||[],at:Date.now()}; paintClientJobs(id); })
+      .catch(function(){ _rowJobs[id]={error:true,at:Date.now()}; paintClientJobs(id); });
+  }
+  function clientRowPanel(c){
+    var web=c.website?(/^https?:/i.test(c.website)?c.website:'https://'+c.website):'';
+    var canEdit=c.can_edit!==false;
+    function kv(k,v){ return '<div class="lx-kv"><span>'+esc(k)+'</span><b>'+esc(v==null||v===''?'—':String(v))+'</b></div>'; }
+    return '<div class="lx lx-client">'+
+      '<div class="lx-main">'+
+        '<div class="lx-head">Job orders</div>'+
+        '<div id="lx-cl-jobs-'+esc(c.id)+'">'+clientJobsHtml(c.id)+'</div>'+
+      '</div>'+
+      '<div class="lx-side">'+
+        '<div class="lx-facts">'+
+          kv('Open job orders', c.open_job_order_count||0)+
+          kv('All time', c.job_order_count||0)+
+          kv('Industry', c.industry)+
+          kv('Location', c.location)+
+          (web?'<div class="lx-kv"><span>Website</span><a class="ld-link" href="'+esc(web)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">'+esc(c.website)+' ↗</a></div>':'')+
+        '</div>'+
+        '<div class="lx-acts">'+
+          (canEdit?'<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();clientsOpenEmail(\''+c.id+'\')">'+UI.ic('mail')+'Email this client</button>':'')+
+          '<button class="btn btn-primary btn-sm lx-open" onclick="event.stopPropagation();clientsOpen(\''+c.id+'\')">Open full record</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+  window.clientsRowToggle=function(id,ev){
+    var opened=rowReveal(id, ev, function(){
+      var c=(STATE.clients.list||[]).find(function(x){ return x.id===id; });
+      return c?clientRowPanel(c):null;
+    });
+    if(opened) loadClientRowJobs(id);
+  };
   window.clientsSearch = function(v){ STATE.clients.q=v; paint(); };
 
   // ── list page ────────────────────────────────────────────────────────────────
@@ -91,8 +156,10 @@
     var totalJos=all.reduce(function(n,c){ return n+(c.job_order_count||0); },0);
     var withOpen=all.filter(function(c){ return c.open_job_order_count>0; }).length;
 
+    // D-0014/D-0048: a row OPENS IN PLACE (clientsRowToggle below) — the same
+    // gesture as Leads, Jobs and Candidates. The drawer is "Open full record".
     var rows=list.map(function(c){
-      return { onclick:"clientsOpen('"+c.id+"')", cells:[
+      return { id:c.id, onclick:"clientsRowToggle('"+c.id+"',event)", cells:[
         { html: UI.idCell(c.name||'—', c.website||'', null) },
         { html: UI.dash(c.industry) },
         { cls:'tight', html: UI.dash(c.location) },
@@ -199,7 +266,9 @@
       sub: [c.industry, c.location].filter(Boolean).join(' · '),
       onclose:'clientsBack()',
       acts:[
-        { icon:'mail',     title:'Email this client', onclick:"clientsOpenEmail('"+c.id+"')" },
+        // Emailing a client is its owner's (D-0035 — the server refuses anyone
+        // else), so nobody else is offered the button (C-0029's rule).
+        canEdit?{ icon:'mail', title:'Email this client', onclick:"clientsOpenEmail('"+c.id+"')" }:null,
         { icon:'mailopen', title:'Email history',     onclick:"clientsTab('emails')" },
         { icon:'doc',      title:'Documents',         onclick:"clientsTab('docs')" },
         { icon:'building', title:'Merge a duplicate in', onclick:"clientsOpenMerge('"+c.id+"')" },
@@ -207,7 +276,7 @@
         // kind — a history that looks different per screen reads as a different
         // feature each time.
         { icon:'rewind',   title:'History — every change, with the date and time', onclick:"openRewind('company','"+c.id+"')" }
-      ],
+      ].filter(Boolean),
       stats:[
         { v:(c.open_job_order_count||0), label:'Open',      icon:'flame' },
         { v:(c.job_order_count||0),      label:'All time',  icon:'doc' },

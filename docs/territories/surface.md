@@ -1,5 +1,62 @@
 # Surface — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-27 (Session 33) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-27) — every record list opens in place (R-012, D-0048)
+- **ONE gesture, ONE mechanism.** `rowReveal(id, ev, build, cls)` lives in
+  `03-core-render.js` next to the render engine (it is the engine's sibling:
+  a DOM change that must NOT re-render). Leads, Jobs, Candidates and Clients
+  all call it; each supplies only its panel html (`leadExpandHtml`,
+  `jobRowPanel`, `candRowPanel`, `clientRowPanel`). `leadRowToggle` is now a
+  thin caller and still tags its panel `lead-exp` (its test pins that class);
+  every panel row carries `row-exp`. The rows themselves need `data-row-id` —
+  `UI.table` emits it for `{id, cells, onclick}` rows; the hand-rolled Jobs
+  table writes it itself.
+- **The same three rules as 11 Sep** (built on demand, one at a time; no
+  render(); `STATE.page` untouched) **plus two new ones:**
+  * **A REFRESH MUST NOT SNAP AN OPEN ROW SHUT.** `paintPageContent()` calls
+    `rowRevealRestore()` after it writes: the open panel is rebuilt from current
+    data under its row (gone if the row is gone). A page CHANGE (render's
+    wholesale branch) calls `rowRevealForget()` so returning to a list later
+    never pops an old panel open. This is what lets "change status from the
+    panel → render()" keep the panel open.
+  * **A change made INSIDE a panel that the list does not show** (an apply
+    page going live) writes nothing to the list html, so nothing restores —
+    the action calls `rowRevealRefresh()` itself. NEVER call it from render():
+    rebuilding a panel on every repaint would wipe a half-typed box (the lead
+    posting textarea lives in a panel).
+- **A PANEL FITS THE PART OF THE LIST YOU CAN SEE.** On a phone a table
+  scrolls sideways in its own box, so a panel as wide as the TABLE put its
+  buttons off screen (measured 1,069px on a 390px phone — the Leads panel had
+  this since 11 Sep and nothing measured it). `_rowFit` measures the nearest
+  sideways-scrolling ancestor and sets `--rx-w` on the panel cell; theme.css
+  pins `.lx` there with `position:sticky;left:0;max-width:var(--rx-w)`. No
+  sideways scroll (desktop) → nothing set, nothing moves. Re-fit on resize.
+- **Each panel fetches its one extra fact on open and paints it by id**
+  (`lx-jo-pipe-<id>` who is on the job by stage; `lx-cand-jobs-<id>` the
+  candidate's jobs from `/candidates/:id/history`; `lx-cl-jobs-<id>` the
+  client's job orders) — cached 60s, never a render(). Stage counts share ONE
+  function with the My Jobs cards (`stageCountsOf`); job status changes share
+  ONE path with the bulk bar (`setJobStatus`).
+- **Never draw a button the server refuses:** job status/copy/publish only when
+  `poc_visible !== false` (owner, their chain, admin — the same set `PUT
+  /job-orders/:id` allows); "Email this client" only when `can_edit !== false`
+  — in the panel AND now in the client drawer's action row, which offered it to
+  everyone while `POST /companies/:id/email` refused non-owners (C-0029's rule,
+  missed there).
+- **Candidates lost the per-row "Add to Job" button** (it is in the panel; the
+  selection bar's bulk Add to job is unchanged) and the name no longer opens
+  the drawer by itself — the whole row does one thing. Owner told plainly.
+- **The Jobs page header is classes now** (`.jobs-head`/`.jobs-tools` in
+  ui.css): on a phone the search box had been squeezed to an unusable pill.
+- Pinned by `test/row-reveal-smoke.mjs` (45 checks, real browser, stub API;
+  SHOTS=<dir> for screenshots). **Run against the old code: 5/45** — the five
+  are "no panel before you click" and preconditions. Two lessons from writing
+  it: a `page.click` on a missing node CRASHES the run and hides every later
+  failure (use an evaluate-click that returns false), and "still on the same
+  page" passes vacuously when the click found nothing — pair every "did not
+  navigate" with "the panel is there".
+- Seen but NOT fixed (not this job): the hand-rolled Jobs table's header row
+  stays light in dark mode, and its status badges lose their pill ground there.
 
 ## Session 31 (2026-09-24) — owner's list, what changed on screen
 - **Leads: the "Select connected leads to convert" bar and chip picker are GONE.**

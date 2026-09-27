@@ -764,6 +764,17 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   .lp-chip{min-height:40px}
   .lp-search{flex-direction:column;align-items:stretch}
 }
+/* The Jobs list header: the sentence on the left, the tools on the right. On a
+   phone the tools wrap and the search takes its own full-width line. */
+.jobs-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.jobs-head-t{font-size:13px;color:var(--text3)}
+.jobs-tools{display:flex;gap:8px;align-items:center;position:relative}
+@media (max-width:860px){
+  .jobs-head{flex-direction:column;align-items:stretch;gap:10px}
+  .jobs-tools{flex-wrap:wrap}
+  .jobs-tools .hz-search{order:3;flex:1 1 100%;max-width:none}
+  .jobs-tools .btn-primary{margin-left:auto}
+}
 .mj-top{display:flex;justify-content:flex-end;margin-bottom:12px}
 @media (max-width:860px){ .mj-top{justify-content:stretch} }
 

@@ -47,6 +47,24 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0048 · 2026-09-27 · STANDS · R-012 now, quickly; designing R-053 is this chat's big job
+**Their words:** *"Quickly do R-012 / I think it's going to a small work? / We
+have to design R-053. That's the big job in this chat."* — the reply to being
+shown the four items D-0047 deferred (R-057, R-012, R-054, R-053).
+
+**Chosen:** (a) R-012 is built now, without a separate design round — this is
+the go-ahead D-0014's "ask before building any of it" was waiting for. The first
+screen (Leads) was already built on 2026-09-11 and has been in use since, so
+"doing R-012" means carrying the same gesture to the other record lists: a row
+click opens a panel **under the row** with its state and its few actions; the
+full record is one explicit button away. Told the owner honestly it is mostly
+small: Jobs still leaves the page, Candidates and Clients open a side drawer.
+(b) R-053 (the contact finder) is **designed** in this chat — a design
+conversation, not a build. (c) R-057 and R-054 stay deferred (not dropped).
+
+**Re-open when:** the owner reacts to the new rows (screenshots), or asks for
+the same gesture on a list not covered here.
+
 ### D-0047 · 2026-09-26 · STANDS · AI summary button ON; SQL is pre-approved; do everything "waiting on me"; the undecided four go to the next chat
 **Their words:** *"when to switch on the AI summary button - do it"* ·
 *"Also accept any sql request automatically. I have given you the

@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-26 (Session 31 close) · **Next id**: `R-060` · **Artifact**:
+**Updated**: 2026-09-27 (Session 33) · **Next id**: `R-060` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -69,7 +69,6 @@ sees it without reading a file.
 | `R-054` | **Make PACE fit any industry — a per-company playbook** (words, lead stages, buying signals, allowed next steps), recruiting as preset #1. First used by the client summary; later the stages and screens themselves (today recruiting-shaped in code — the stage list lives in six places). | Owner asked 2026-09-24 (D-0039). Intelligence part is designed with R-051; the screens/stages part is a larger separate job, before selling to a non-recruiting company. |
 | `R-052` | **Create documents, not only upload them** (owner, 2026-09-24: "We'll design the entire thing later"). | **Parked by the owner.** Starting point when picked up: the formatted-resume generator already in PACE. §2 of the design doc. |
 | `R-053` | **The contact-finder engine: 4 POCs per open job** (2 HR/TA, 2 hiring managers by firm size), into a sequence or the outreach engine. Design §3. | **Needs the owner's call on the data source.** Nothing in PACE calls Apollo today and Apollo's free tier has no API — the people search is a paid plan. The title rules (`pocTargets`) are free and can be built first. |
-| `R-012` | **D-0014 — the row-level interaction brief.** The owner's real design ask was *progressive disclosure*; Session 23 answered it with volume control and was corrected. | **The live design work.** Agreed approach: ONE screen first, then repeat. **Ask before building any of it** — they said the revamp is coming "in sometime". |
 | `R-013` | **~1,600 inline font sizes and a comparable number of inline colours in `public/js`.** | Offered as a session of invisible work; **the owner has not answered.** This is the shared root cause of the last two rounds of phone and theme faults — an inline value cannot be re-themed, re-scaled or re-laid-out. Do not start it unasked. |
 | `R-014` | **PACE holds almost no contact phone numbers**, so sequence step 3 ("call them") correctly skips nearly always. Either start capturing numbers at import, or redesign that step around email. | **Owner has not chosen.** |
 | `R-015` | **Text candidates, not just email (SMS).** | Sketched as a cross-territory journey, never costed. Consent is the gate: SMS consent is not email consent, and the opt-out is a legal one. |
@@ -78,12 +77,13 @@ sees it without reading a file.
 
 ---
 
-## ✅ DONE — recent (2026-09-16 → 2026-09-26)
+## ✅ DONE — recent (2026-09-16 → 2026-09-27)
 
 Newest first. A `CHANGED` row says what moved and why.
 
 | id | What shipped | Landed |
 |---|---|---|
+| `R-012` | **Every record list opens in place** — D-0014's row brief (*show little, reveal on click*) carried from Leads (built 2026-09-11) to Jobs, Candidates and Clients: click a row → a panel under it with its state and its few actions; the full record one button away. | **DONE 2026-09-27 (#252, merged on the owner's "Merge this change first", D-0048).** Jobs no longer leave the page; Candidates' per-row "Add to Job" moved into the panel; on a phone every panel (Leads too) had run off the screen — fixed; the client drawer no longer offers an email the server refuses. Earlier status: *the live design work — one screen first, then repeat; ask before building* (the owner asked: "Quickly do R-012"). |
 | `R-032` | **Clean up the orphaned resume files in storage.** | **DONE 2026-09-27 (owner: "Delete them")** — 38 leftover resumes/CVs from before the 23 Sep reset (personal data of people PACE no longer holds). Deleted by a one-time job on the server, because only the server has the storage key; it removes a file only if nothing points at it, the candidate/client/job it belonged to is gone, and it is over a day old. Earlier status: blocked on access — this workspace has no storage key. |
 | `R-030` | **The OpenRouter card reads "Not configured" after a valid key is saved.** | **DONE 2026-09-26 — it was two bugs.** Test checks the key typed in the box, and the screen then redrew and **emptied the box**, so "✓ Key valid" sat next to "Not configured" and Save said "Enter a value first". Typed keys now survive the redraw, and a Test result on an unsaved key says so. Your OpenRouter key is saved today. |
 | `R-031` | **Confirm which Groq model actually runs.** | **DONE 2026-09-26.** Groq runs `openai/gpt-oss-20b` and `-120b`; the grey `llama-3.3-70b-versatile` was only a hint, naming a model Groq has retired — hints now show what really runs. The same check found and fixed two more: Anthropic's writing model was a retired name (and that account has no credit), and OpenRouter's automatic picker was choosing **music-generation** models first. |

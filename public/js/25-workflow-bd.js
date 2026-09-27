@@ -239,7 +239,10 @@
       var recNames=recs.length?recs.map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).join(', '):'<span style="color:var(--text3)">Unassigned</span>';
       var loc=[j.city,j.state].filter(Boolean).join(', ');
       var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
-      return '<tr style="border-top:1px solid var(--border);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">'+
+      // D-0014/D-0048: the row OPENS IN PLACE — it used to leave the page for
+      // the full job, which made the same click do something different here
+      // than on Leads. The full job is the panel's "Open full job" button.
+      return '<tr data-row-id="'+esc(j.id)+'" style="border-top:1px solid var(--border);cursor:pointer" onclick="bdJobRowToggle(\''+j.id+'\',event)">'+
         '<td style="padding:11px 12px;width:34px" onclick="event.stopPropagation()"><input type="checkbox" '+(jsel[j.id]?'checked':'')+' onclick="event.stopPropagation();bdJobToggleSel(\''+j.id+'\')" style="cursor:pointer;width:15px;height:15px;accent-color:var(--accent)"/></td>'+
         '<td style="padding:11px 12px">'+code(j.job_code)+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+esc(j.lead_code||'')+'</div></td>'+
         '<td style="padding:11px 12px"><div style="font-weight:600;font-size:13.5px">'+esc(j.job_title||'')+'</div></td>'+
@@ -253,9 +256,12 @@
 
     return '<div class="page">'+
       jobsTabBar+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div style="font-size:13px;color:var(--text3)">'+(view==='mine'?'Jobs you manage.':'Every job in the company.')+' Convert a connected lead from the Leads page, or create one here.</div>'+
-        '<div style="display:flex;gap:8px;align-items:center;position:relative">'+
+      // Classes, not inline flex: on a phone the search box was squeezed to
+      // an unusable pill between Filters and + New Job, and an inline style
+      // cannot be re-laid-out by any stylesheet (CLAUDE.md).
+      '<div class="jobs-head">'+
+        '<div class="jobs-head-t">'+(view==='mine'?'Jobs you manage.':'Every job in the company.')+' Convert a connected lead from the Leads page, or create one here.</div>'+
+        '<div class="jobs-tools">'+
           '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();bdToggleFilter()" title="Filters">'+
             '<span style="display:inline-flex;align-items:center;gap:6px">'+
               '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>'+
@@ -301,10 +307,121 @@
   window.bdJobToggleSel=function(id){var s=STATE.bd.jobSel||(STATE.bd.jobSel={});if(s[id])delete s[id];else s[id]=true;render();};
   window.bdJobToggleSelAll=function(){var ids=STATE.bd._jobRowIds||[];var s=STATE.bd.jobSel||(STATE.bd.jobSel={});var allOn=ids.length&&ids.every(function(id){return s[id];});ids.forEach(function(id){if(allOn)delete s[id];else s[id]=true;});render();};
   window.bdJobClearSel=function(){STATE.bd.jobSel={};render();};
-  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,{status:status});})).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status,'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});};
+  // ONE way to change a job's status — the bulk bar and a row's panel both
+  // come through here, so the two cannot drift apart.
+  function setJobStatus(ids,status){ return Promise.all(ids.map(function(id){return apiPut('/job-orders/'+id,{status:status});})); }
+  window.bdBulkStatus=function(status){var s=STATE.bd.jobSel||{};var ids=Object.keys(s).filter(function(k){return s[k];});if(!ids.length||!status)return;setJobStatus(ids,status).then(function(){showToast(ids.length+' job'+(ids.length>1?'s':'')+' set to '+status,'success');STATE.bd.jobSel={};if(window.loadJobOrders)loadJobOrders();}).catch(function(e){showToast('Bulk update failed: '+(e&&e.message||e),'error');});};
   window.bdSetJobFilter=function(k,v){STATE.bd.jobFilter[k]=v;STATE.bd.jobFilterOpen=true;render();};
   window.bdClearJobFilter=function(){STATE.bd.jobFilter={state:"",status:"",job_type:"",priority:"",remote:""};render();};
   window.bdToggleFilter=function(){STATE.bd.jobFilterOpen=!STATE.bd.jobFilterOpen;render();};
+
+  // ── THE JOB ROW OPENS IN PLACE (D-0014, D-0048) ──────────────────────────
+  // What a job IS right now, and the few things done to it from the list: who
+  // is on it and how far they have got, who is recruiting, whether its apply
+  // page is live — and, for its owner, the status. Everything else is on the
+  // full job, one button away. The mechanism is the shared rowReveal
+  // (03-core-render.js): built on demand, one at a time, no render().
+  //
+  // Who is on the job is FETCHED when the row opens and painted into its own
+  // element by id — never a render() — and cached, so reopening is instant.
+  var _rowPipe={};
+  function jobRowPipeHtml(j){
+    var p=_rowPipe[j.id];
+    if(!p) return '<span class="lx-muted">Loading…</span>';
+    if(p.error) return '<span class="lx-muted">Could not load who is on this job — open the full job to see them.</span>';
+    if(!p.total) return '<span class="lx-muted">Nobody on this job yet.</span>';
+    var known=0;
+    var chips=BD_STAGES.filter(function(st){return p.counts[st];}).map(function(st){
+      known+=p.counts[st];
+      return '<span class="lx-chip"><b>'+p.counts[st]+'</b> '+esc(st)+'</span>';
+    }).join('');
+    if(p.total>known) chips+='<span class="lx-chip"><b>'+(p.total-known)+'</b> other</span>';
+    var waiting=p.counts['Submitted to BDM']||0;
+    return '<div class="lx-chips">'+chips+'</div>'+
+      (waiting&&j.poc_visible!==false
+        ? '<div class="lx-note">'+waiting+' waiting for approval — open the full job to review '+(waiting===1?'it':'them')+'.</div>'
+        : '');
+  }
+  function paintJobRowPipe(id){
+    var el=document.getElementById('lx-jo-pipe-'+id), j=joById(id);
+    if(el&&j) el.innerHTML=jobRowPipeHtml(j);
+  }
+  function loadJobRowPipe(id){
+    var p=_rowPipe[id];
+    if(p&&!p.error&&Date.now()-p.at<60000) return;
+    apiGet('/job-orders/'+id+'/submissions').then(function(subs){
+      var c=stageCountsOf(subs||[]);
+      _rowPipe[id]={counts:c.counts,total:c.total,at:Date.now()};
+      paintJobRowPipe(id);
+    }).catch(function(){ _rowPipe[id]={error:true,at:Date.now()}; paintJobRowPipe(id); });
+  }
+  function jobRowFacts(j){
+    var canOwn=j.poc_visible!==false;   // the owner, their manager, or admin (D-0035)
+    var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
+    var opened='—';
+    if(j.created_at){
+      var d=new Date(j.created_at);
+      if(!isNaN(d)){
+        var days=Math.max(0,Math.floor((Date.now()-d.getTime())/86400000));
+        opened=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' · '+(days===0?'today':days===1?'1 day':days+' days');
+      }
+    }
+    // A status the list does not know (an older "Cancelled") stays selected —
+    // a select that silently shows "Active" for it would be a lie.
+    var opts=JOB_STATUSES.slice(); if(j.status&&opts.indexOf(j.status)<0) opts.unshift(j.status);
+    var status=canOwn
+      ? '<select class="lx-sel" aria-label="Status" onclick="event.stopPropagation()" onchange="event.stopPropagation();bdJobSetStatus(\''+j.id+'\',this.value)">'+
+          opts.map(function(s){return '<option value="'+esc(s)+'"'+(j.status===s?' selected':'')+'>'+esc(s)+'</option>';}).join('')+
+        '</select>'
+      : '<b>'+esc(j.status||'—')+'</b>';
+    function kv(k,v){ return '<div class="lx-kv"><span>'+esc(k)+'</span><b>'+esc(v==null||v===''?'—':String(v))+'</b></div>'; }
+    return '<div class="lx-kv lx-kv-ctl"><span>Status</span>'+status+'</div>'+
+      kv('Priority',j.priority)+kv('Openings',j.positions)+kv('Pay',pay)+
+      kv('Job type',j.job_type)+kv('Remote',j.remote)+
+      kv('Owner',j.bd_manager&&j.bd_manager.name)+kv('Opened',opened);
+  }
+  function jobRowPanel(j){
+    var canOwn=j.poc_visible!==false;
+    var recs=(j.recruiters||[]).map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).filter(Boolean);
+    var applyN=j.apply_count||0;
+    // Publishing and copying are the owner's (D-0035) — nobody else is shown
+    // a button the server would refuse.
+    var apply=j.apply_enabled
+      ? '<b>Live</b> · '+applyN+' applicant'+(applyN===1?'':'s')+
+        (canOwn?' <button class="lx-link" onclick="event.stopPropagation();bdCopyApplyLink(\''+j.id+'\')">Copy link</button>':'')
+      : '<span class="lx-muted">Not published</span>'+
+        (canOwn?' <button class="lx-link" onclick="event.stopPropagation();bdSetApplyLink(\''+j.id+'\',true)">Publish</button>':'');
+    return '<div class="lx lx-job">'+
+      '<div class="lx-main">'+
+        '<div class="lx-head">Candidates on this job</div>'+
+        '<div id="lx-jo-pipe-'+esc(j.id)+'">'+jobRowPipeHtml(j)+'</div>'+
+        '<div class="lx-head lx-gap">Recruiters</div>'+
+        '<div class="lx-line">'+(recs.length?esc(recs.join(', ')):'<span class="lx-muted">No recruiter assigned yet.</span>')+'</div>'+
+        '<div class="lx-head lx-gap">Apply page</div>'+
+        '<div class="lx-line">'+apply+'</div>'+
+      '</div>'+
+      '<div class="lx-side">'+
+        '<div class="lx-facts">'+jobRowFacts(j)+'</div>'+
+        '<button class="btn btn-primary btn-sm lx-open" onclick="event.stopPropagation();bdOpenJobOrder(\''+j.id+'\')">Open full job</button>'+
+      '</div>'+
+    '</div>';
+  }
+  window.bdJobRowToggle=function(id,ev){
+    var opened=rowReveal(id, ev, function(){ var j=joById(id); return j?jobRowPanel(j):null; });
+    if(opened) loadJobRowPipe(id);
+  };
+  window.bdJobSetStatus=function(id,status){
+    var j=joById(id); if(!j||!status||j.status===status) return;
+    var was=j.status;
+    setJobStatus([id],status).then(function(){
+      j.status=status;
+      showToast((j.job_title||'Job')+' is now '+status,'success');
+      render();                 // the row's badge moves; the panel is put back
+    }).catch(function(e){
+      showToast('Could not change the status: '+(e&&e.message||e),'error');
+      j.status=was; if(window.rowRevealRefresh) rowRevealRefresh();
+    });
+  };
 
   // ════════════════════════════════════════════════════════════════════════════
   // NEW JOB FORM — tabbed
@@ -826,17 +943,20 @@
       return apiGet('/job-orders/'+j.id+'/submissions').then(function(subs){return {id:j.id,subs:subs||[]};}).catch(function(){return {id:j.id,subs:[]};});
     })).then(function(results){
       var m={};
-      results.forEach(function(r){
-        var counts={},names={};
-        r.subs.forEach(function(s){
-          var _ns=nStage(s.stage);
-          counts[_ns]=(counts[_ns]||0)+1;
-          (names[_ns]=names[_ns]||[]).push((s.candidate&&s.candidate.full_name)||'');
-        });
-        m[r.id]={counts:counts,names:names,total:r.subs.length};
-      });
+      results.forEach(function(r){ m[r.id]=stageCountsOf(r.subs); });
       STATE.bd._jobStageCounts=m; STATE.bd._jobCountsLoading=false; render();
     });
+  }
+  // ONE way to count who is on a job by stage — the My Jobs cards and the
+  // Jobs row panel both read it, so the two cannot disagree about a number.
+  function stageCountsOf(subs){
+    var counts={},names={};
+    (subs||[]).forEach(function(s){
+      var _ns=nStage(s.stage);
+      counts[_ns]=(counts[_ns]||0)+1;
+      (names[_ns]=names[_ns]||[]).push((s.candidate&&s.candidate.full_name)||'');
+    });
+    return {counts:counts,names:names,total:(subs||[]).length};
   }
   window.renderMyJobs=function(){
     if(STATE.bd.loading)return '<div class="page"><div style="text-align:center;padding:60px;color:var(--text3)">Loading…</div></div>';
@@ -1268,9 +1388,24 @@
       }
       showToast(on?'Apply page is live — copy the link and post it anywhere':'Apply page turned off','success');
       render();
+      // The Jobs list does not show the apply state, so the render above
+      // wrote nothing there — an open row panel is rebuilt explicitly.
+      if(window.rowRevealRefresh) rowRevealRefresh();
     }).catch(function(e){showToast('Failed: '+e.message,'error');});
   };
-  window.bdCopyApplyLink=function(){
+  // `jid` is given from a Jobs row panel, which has no link box on screen; the
+  // job's own page passes nothing and copies from its box, as before.
+  window.bdCopyApplyLink=function(jid){
+    var j=jid?joById(jid):null;
+    if(jid){
+      var url=j&&j.apply_enabled&&j.apply_token?(location.origin+'/apply/'+j.apply_token):'';
+      if(!url){showToast('No link yet','error');return;}
+      if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(url).then(function(){showToast('Link copied','success');},
+          function(){showToast('Copy this link: '+url,'info');});
+      } else showToast('Copy this link: '+url,'info');
+      return;
+    }
     var el=document.getElementById('bd-apply-url');
     if(!el||!el.value){showToast('No link yet','error');return;}
     try{
