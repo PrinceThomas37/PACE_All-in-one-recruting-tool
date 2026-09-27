@@ -1,6 +1,16 @@
 # Observatory — memory
 > Last written: 2026-09-23 (Session 30, C-0024) · seeded from `CLAUDE.md` and Session 21
 
+## Session 33 (2026-09-27) — R-053 design touches `enrichment.js`
+- **`enrichment.js`'s pattern prior is wrong for this owner's market.** It ranks
+  `first.last` (0.45) above `flast` (0.20). Measured on the 203 hand-found
+  contacts: **first initial + surname is the most common format (42 companies)**,
+  then `first@` (13), then `first.last@` (10); 64 of 82 companies have a format
+  learnable from a real address. The R-053 design (`docs/CONTACT_FINDER_DESIGN.md`
+  §5, §8 step 2) learns the format per company and derives the prior from our own
+  data. Not built yet — waiting on the owner's answers.
+
+
 ## Session 31 (2026-09-24)
 - **`aiProvider.availability(supabase, {feature, orgId})`** → `{available,
   reason}` with reason `not_configured` or `daily_limit`, estimated like
