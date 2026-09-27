@@ -1,5 +1,5 @@
 # Foundry — memory
-> Last written: 2026-09-27 (Session 33) · 127/127 suites
+> Last written: 2026-09-27 (Session 33) · 128 suites after merging #251
 
 ## Session 33 (2026-09-27) — R-012, every list opens in place
 - **127 suites** now: +`row-reveal-smoke.mjs` (45, Playwright, stub API at the
@@ -13,7 +13,8 @@
   returns false. And a "still on the same page / drawer not opened" check
   passes vacuously when the click found nothing to do — pair it with "the
   panel is there". Three such checks passed on the old code until paired.
-- Full run 127/127, exit 0 (Node 22 sandbox; frontend-only change).
+- Full run 127/127, exit 0 (Node 22 sandbox; frontend-only change). With #251's
+  `storage-orphans-smoke` merged in from a second chat the same day: 128 suites.
 
 ## Session 31 (2026-09-24)
 - **109 suites** now: +`session31-flows-smoke.mjs` (Playwright, stub API at
@@ -888,3 +889,4 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 - 2026-09-26 (R-030/R-031/R-048/C-0029): new `integration-test-honesty-smoke` (12, browser), `lookups-per-org-smoke` (10, real handlers + migration text), `client-docs-ownership-smoke` (15: real `GET /clients` + browser drawer); `ai-provider-smoke` 71 (+6: hints derived from PROVIDERS, through the real route; config carries no model names), `ai-free-models-smoke` 15 (+6 music/per-request/cache-version). Every new check was run against the pre-change code and failed there. Note: in-memory fakes here do NOT project to the select list — "created_by not leaked" is only meaningful on the new code path.
 - 2026-09-26: `overlay-opacity-smoke` 14 (+4: record drawer panes rendered AND opaque, dark + light). Found by looking at a screenshot the suite was green on — the fifth "green suite, broken screen" in this repo.
+- 2026-09-27: +`storage-orphans-smoke.mjs` (23) — each deletion guard alone; runner over a fake bucket + db incl. a live candidate past row 1,000 (paging) and failed read/list/delete all deleting nothing. Mutation-tested: 5 separate breaks each fail it.

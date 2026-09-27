@@ -2,8 +2,8 @@
   "generated": "2026-09-27",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 375,
-    "lines": 92013,
+    "files": 377,
+    "lines": 92306,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -73,11 +73,11 @@
         "services/record-history-writer.js"
       ],
       "files": 28,
-      "lines": 10283,
+      "lines": 10305,
       "largest": [
         {
           "f": "index.js",
-          "n": 3868
+          "n": 3890
         },
         {
           "f": "routes/ownership-requests.js",
@@ -112,14 +112,15 @@
         "models/",
         "migrations/",
         "schema.sql",
-        "scripts/"
+        "scripts/",
+        "services/storage-orphans.js"
       ],
-      "files": 59,
-      "lines": 3490,
+      "files": 60,
+      "lines": 3631,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 295
+          "n": 297
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -384,8 +385,8 @@
         "test/",
         ".github/"
       ],
-      "files": 131,
-      "lines": 25582,
+      "files": 132,
+      "lines": 25712,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",

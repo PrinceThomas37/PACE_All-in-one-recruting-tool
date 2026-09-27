@@ -44,7 +44,9 @@ const TERRITORIES = [
 
   { id: 'deep', name: 'The Deep', role: 'Data & Schema', terrain: 'the mine workings',
     hue: '#7B6CA6', pos: [-26, -6], height: 3, spread: 13,
-    own: ['models/', 'migrations/', 'schema.sql', 'scripts/'], not: [] },
+    own: ['models/', 'migrations/', 'schema.sql', 'scripts/',
+          // What may be deleted from the storage bucket (R-032) — data, not mail or ATS.
+          'services/storage-orphans.js'], not: [] },
 
   { id: 'harbour', name: 'Harbour', role: 'Mail & Delivery', terrain: 'the port',
     hue: '#4E8A7A', pos: [10, 31], height: 2.5, spread: 15,
