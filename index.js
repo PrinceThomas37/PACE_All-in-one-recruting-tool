@@ -3800,6 +3800,28 @@ engineRunner.register('client_intel_catchup', {
   run: () => runClientIntelCatchUp()
 });
 
+// ONE-TIME: remove the resumes the 23 Sep reset left in storage with nothing
+// pointing at them (R-032 — owner: "Delete them"). The rule and its three
+// independent guards live in services/storage-orphans.js. It runs until it
+// succeeds once, writes counts (never file names — they are people's
+// resumes) to `storage_orphan_cleanup_v1`, and is a no-op from then on.
+// A failed read or delete throws, so nothing is marked done and the next tick
+// tries again rather than half-reporting success.
+const storageOrphans = require('./services/storage-orphans');
+engineRunner.register('storage_orphan_cleanup', {
+  everyMs: 6 * 60 * 60 * 1000,
+  quiet: true,
+  description: 'One-time: delete leftover resume files whose candidate, client or job no longer exists',
+  run: async () => {
+    const KEY = 'storage_orphan_cleanup_v1';
+    const { data: done } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
+    if (done) return { skipped: 'already_done' };
+    const r = await storageOrphans.purgeStorageOrphans({ db, storage: supabase.storage });
+    await supabase.from('app_settings').upsert({ key: KEY, value: JSON.stringify(Object.assign({ at: new Date().toISOString() }, r)), updated_at: new Date() }, { onConflict: 'key' });
+    return r;
+  }
+});
+
 engineRunner.register('candidate_outreach_drip', {
   everyMs: 10 * 60 * 1000,
   quiet: true,               // usually finds nothing due — don't log the no-ops
