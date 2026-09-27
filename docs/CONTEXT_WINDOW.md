@@ -4,12 +4,21 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-26 (Session 32 close) · **Repo**:
+**Updated**: 2026-09-27 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #249 (`1c6f5bc`). Session 32 merged
-#246–#249. **Nothing is left unmerged.** **D-0047 is the highest decision id.
-C-0030 is the highest contract id (only C-0030 OPEN). Next roadmap id `R-060`.**
+to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
+**Open: draft PR #252 (R-012) — built, waiting for the owner's look before
+merge.** **D-0048 is the highest decision id. C-0030 is the highest contract id
+(only C-0030 OPEN). Next roadmap id `R-060`.**
+
+### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
+- **R-012 built (PR #252, not merged):** Jobs, Candidates and Clients rows open
+  in place like Leads — one shared `rowReveal` in `03-core-render.js`. Details
+  in `surface.md` (Session 33). `row-reveal-smoke` 45/45 (5/45 on old code);
+  full suite **127/127**. Merge when the owner says so.
+- **R-053 (contact finder) is being DESIGNED with the owner** — the chat's big
+  job. Design, not build. Starting point: `docs/SESSION31_DESIGNS.md` §3.
 
 ---
 
@@ -113,10 +122,9 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
 
-1. **The owner deferred four things to "the next chat" (D-0047)** — they are the
-   likely opening ask: **R-057** matching candidates in emails, **R-012** the
-   screen redesign, **R-054** a playbook per industry, **R-053** the contact
-   finder. All need a design conversation first — propose, don't build.
+1. **Session 33 took two of D-0047's four:** R-012 built (PR #252, awaiting the
+   owner's look), R-053 in design. **R-057** (matching candidates in emails)
+   and **R-054** (a playbook per industry) are still deferred — design first.
 2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
    Anthropic key has no credit (harmless — Groq answers); the apply link on
    "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
@@ -126,7 +134,7 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 4. Known gap left on purpose: the Pending banner counts a first email held by
    the per-company cap as "ready now" until the send run reaches it.
 
-## 🧪 TESTS: 126 SUITES
+## 🧪 TESTS: 127 SUITES
 
 `npm test` — read the COUNT; never pipe into `tail`. `bash
 test/verify-frontend.sh` too. Newest: `mailbox-alerts-smoke` (22) + `-ui` (12),
