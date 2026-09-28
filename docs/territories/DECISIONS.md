@@ -47,6 +47,13 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0053 · 2026-09-28 · OPEN · Teal becomes one option; warm and cool alternatives shown (amends D-0052)
+**Their words:** *"This colour is good we will keep this as an option, Now can you show me a different one, something red and orange and yellowish type too, and then the cooler tone too"*.
+**Status:** Abalone teal (D-0052) is kept as a candidate, not the final pick. Two alternatives were built in the same shape:
+- **Fire opal** (warm): ember #C8421B in light and #FF8A5C in dark, with an amber shimmer. Sheet XcDna3hTTXHYG4zV5crFVK, hero DNgJqmrDuJf7LduH8yTJKK.
+- **Glacier** (cool): sapphire #2F56C9 in light and #86A8FF in dark, with an ice-cyan shimmer. Sheet 79mGuTpDQVyXN3eNbRUJer, hero 8pTEfGZefvU2DhceKkejad.
+**Re-open when:** the owner picks one of the three.
+
 ### D-0052 · 2026-09-28 · STANDS · PACE's signature colour is Abalone teal (amends D-0051's look)
 **Their words:** *"a color palate, that will be our signature… apollo has yellowish…
 slack has purple, zoom has blue, what will be our color scheme"*; picked "Abalone
