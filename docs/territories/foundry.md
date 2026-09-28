@@ -18,6 +18,14 @@
 - A UI test step failed because an EARLIER step in the same run left an Add-by-
   hand form open, which (correctly) hides that slot's buttons — shared page
   state between sections is a hazard; the step now closes it first.
+- **`org-session-gate` failed once in a full run** ("server did not boot on
+  39872", 4/5) and passed alone — **root-caused, not re-run**: a real boot
+  takes ~0.5s here, and the suite used FIXED ports 39871/39872 inside Linux's
+  ephemeral range, where another process's socket can sit. Holding 39872 with
+  a silent listener reproduces the exact failure. It now asks the system for a
+  free port per boot (`freePort()`) and fails at once with the server's own
+  stderr if the child exits. Passes with the old port held. **Never pick a
+  fixed port in 32768–60999 for a test server; listen on 0 and read it back.**
 
 ## Session 33 (2026-09-28) — the contrast probe had TWO blind spots
 The separate task the POC finder session (R-053 slice 2) raised: its probe,

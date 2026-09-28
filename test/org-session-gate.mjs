@@ -23,6 +23,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -52,6 +53,20 @@ function request(port, path, token) {
   });
 }
 
+// A port the system says is free right now. The suite used fixed ports
+// (39871/39872) inside Linux's ephemeral range, so another process's socket
+// could hold one: the server then could not bind, and the suite waited 25s and
+// reported "server did not boot" — seen once in a full run (2026-09-28), and
+// reproduced exactly by holding 39872 with a silent listener.
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.unref();
+    s.on('error', reject);
+    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+  });
+}
+
 async function boot(port, extraEnv) {
   const child = spawn('node', ['index.js'], {
     cwd: ROOT,
@@ -70,9 +85,14 @@ async function boot(port, extraEnv) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.resume();
-  child.stderr.resume();
+  // If the server dies (a port taken after all, a crash on boot), say so at
+  // once with its own last words — not 25 seconds later as "did not boot".
+  let errTail = '', exited = null;
+  child.stderr.on('data', (d) => { errTail = (errTail + d).slice(-600); });
+  child.on('exit', (code) => { exited = code; });
   const deadline = Date.now() + 25000;
   while (Date.now() < deadline) {
+    if (exited !== null) throw new Error(`server exited (code ${exited}) on ${port}: ${errTail.trim().slice(-300)}`);
     try {
       await new Promise((resolve, reject) => {
         const r = http.request({ host: '127.0.0.1', port, path: '/health', method: 'GET', timeout: 3000 },
@@ -92,7 +112,7 @@ const servers = [];
 try {
   // ── Multi-org possible (self-serve on) ────────────────────────────────────
   {
-    const port = 39871;
+    const port = await freePort();
     servers.push(await boot(port, { SELF_SERVE_SIGNUP: 'on' }));
 
     const refused = await request(port, '/users/me', noOrg);
@@ -111,7 +131,7 @@ try {
 
   // ── Today's production shape: one org, self-serve off ─────────────────────
   {
-    const port = 39872;
+    const port = await freePort();
     servers.push(await boot(port, {}));
 
     const legacy = await request(port, '/users/me', noOrg);

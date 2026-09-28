@@ -6187,3 +6187,6 @@ A selector is a claim that something exists. The opened-row scope named a class 
 
 ### Round 3 — merged (2026-09-28)
 Owner: *"yeah merge it"* — #256 squash-merged into `main` (still clean against `fc72f36`; nothing had moved since Round 2). It changes a test and memory files only, so Render's deploy changes nothing on screen; what changed is that every future change is now checked against each element's own text and against the panel under an opened row. The PR subscription and the hourly check-in were stopped on merge.
+
+### Round 8 — main moved (#256), and a flaky-looking suite root-caused (2026-09-28)
+#256 (the contrast-suite fix raised from Round 5, started by the owner from the suggested-task card) merged while this round's PR was being prepared; merged into the branch keeping both sides of the archive, window and foundry memory. The next full run failed `org-session-gate` (4/5, "server did not boot on 39872") though the server code was identical to the run before it that passed. Not re-run and called a flake: a server start takes ~0.5s here, the suite used fixed ports inside the operating system's ephemeral range, and holding 39872 with a silent listener reproduced the exact failure. The suite now takes a free port per start and reports a crashed server's own words at once.
