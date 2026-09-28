@@ -47,6 +47,18 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0051 · 2026-09-28 · STANDS · A public website for PACE: mother of pearl, one flowing line
+**Their words:** *"the theme should be of mother of pearls texture. and PACE should be
+written in a flow"*; then picked "The line keeps flowing", "Book a walkthrough" and
+"Yes, show prices"; *"Build and show me and we will review it together."*
+**Decided:** a static marketing site separate from the app server (D-0001). "Pace" is
+written in one stroke that continues down the page as a thread through Find / Reach /
+Win / Fill / Place. The main action is booking a walkthrough, so sign-up stays off
+(D-0002). Prices will be shown once the owner gives numbers, but card payments stay off
+(D-0003's payment half stands). The site claims only LIVE rows of CAPABILITIES.md.
+First draft: artifact `LC5TTrDdqcEWUhYLb623X8`. Plan: `docs` not yet; see session 33 archive.
+**Re-open when:** the owner reviews the draft and changes direction.
+
 ### D-0050 · 2026-09-28 · STANDS · Apollo is used only when a person presses a button; it also sizes the company (by website and name)
 **Their words** (after saving an Apollo key, with two screenshots of a lead's
 People to reach block): *"this looking for should be automatic using apollo

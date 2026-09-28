@@ -6190,3 +6190,12 @@ Owner: *"yeah merge it"* — #256 squash-merged into `main` (still clean against
 
 ### Round 8 — main moved (#256), and a flaky-looking suite root-caused (2026-09-28)
 #256 (the contrast-suite fix raised from Round 5, started by the owner from the suggested-task card) merged while this round's PR was being prepared; merged into the branch keeping both sides of the archive, window and foundry memory. The next full run failed `org-session-gate` (4/5, "server did not boot on 39872") though the server code was identical to the run before it that passed. Not re-run and called a flake: a server start takes ~0.5s here, the suite used fixed ports inside the operating system's ephemeral range, and holding 39872 with a silent listener reproduced the exact failure. The suite now takes a free port per start and reports a crashed server's own words at once.
+
+## Session 33 — the PACE website, first draft (2026-09-28)
+The owner wants a public website to take PACE to market. Plan agreed (D-0051): mother-of-pearl
+look, "Pace" written in one stroke that becomes a thread through Find/Reach/Win/Fill/Place,
+"Book a walkthrough" as the main action, prices shown once the owner gives numbers, static
+host separate from Render. The owner had no picture in mind ("Build and show me"), so a full
+first-draft page was published as a private artifact (LC5TTrDdqcEWUhYLb623X8) with a review
+panel (pearl strength, replay the name, white/black pearl). Nothing in the app changed. Next:
+the owner's reactions, then prices, then the real `website/` folder + tests.
