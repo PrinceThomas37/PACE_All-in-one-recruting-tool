@@ -6220,3 +6220,13 @@ The owner said the one-line story "is not self explanatory… what about someone
 - Converse: chat bubbles with typing dots.
 - Close: an agreement is signed and stamped, a briefcase shows "1 job, 3 roles", and three people drop in.
 Artifact MfLtaenPL2VaJC5AWmxvX6, built by scratchpad gen4.py.
+
+### Session 33, website round 8: the story plays itself
+The owner asked for a continuous loop instead of a scroll, starting when the section is in view and stopping once passed. Also: a better contact picture, and candidates must not come out of the client.
+Done:
+- The story runs on a timer of about 32s and loops.
+- It starts when at least 55% of the stage is visible, restarts on re-entry, pauses when out of view, and fades between loops.
+- People are now drawn illustrations (hair, face, shirt with collar), with varied skin tones.
+- The three hires fly in from "You" (your recruiters) into a "1 job, 3 roles" row.
+Connectors: Mobbin needs a paid plan, and none of the free connectors (Figma is available) is needed for this.
+Artifact MfLtaenPL2VaJC5AWmxvX6, built by gen5.py.
