@@ -61,6 +61,8 @@ const settingsConfig = require('./config/settings');
 const companyDailyCap = require('./services/company-daily-cap');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
+const { createGmailDelivery, freshFollowup } = require('./services/gmail-delivery');
+const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
 const engineDraft = require('./services/engine-draft');
@@ -1592,22 +1594,13 @@ async function persistGraphIds(emailId, graph) {
 // reached for platform=Gmail mailboxes (dispatched in deliverOutboundEmail).
 // Gmail threads by threadId, which we stash in the same conversation_id column
 // the Graph path uses, so persistGraphIds + later follow-ups thread naturally.
+// When that thread is not in the sending mailbox (the lead's mailbox was
+// switched since its first email), the follow-up goes out fresh with the
+// earlier email quoted — services/gmail-delivery.js, same as Outlook below.
+let gmailDelivery = null;
 async function deliverViaGmail(email, userEmailId, htmlBody, sendingEmail) {
-  const fromAddress = sendingEmail?.email_address || email.from_email || undefined;
-  const isFollowup = email.followup_type === 'fu1' || email.followup_type === 'fu2';
-  let threadId = null;
-  if (isFollowup) {
-    const { data: prior } = await supabase.from('emails')
-      .select('conversation_id').eq('job_id', email.job_id).eq('contact_id', email.contact_id)
-      .not('conversation_id', 'is', null).order('sent_at', { ascending: false }).limit(1).maybeSingle();
-    threadId = prior?.conversation_id || null;
-  }
-  if (isFollowup && threadId) {
-    const r = await gmailProvider.sendThreadReply(userEmailId, { to: email.to_email, subject: email.subject, htmlBody, fromAddress, threadId });
-    return { graphMessageId: r.messageId, conversationId: r.threadId || threadId, inReplyTo: null };
-  }
-  const r = await gmailProvider.sendNewMessage(userEmailId, { to: email.to_email, subject: email.subject, htmlBody, fromAddress });
-  return { graphMessageId: r.messageId, conversationId: r.threadId || null, inReplyTo: null };
+  if (!gmailDelivery) gmailDelivery = createGmailDelivery({ supabase, gmailProvider, buildQuote: buildQuotedChainFromDb });
+  return gmailDelivery.deliver(email, userEmailId, htmlBody, sendingEmail);
 }
 
 async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEmail) {
@@ -1692,9 +1685,10 @@ async function sendFollowupFreshWithQuote(email, userEmailId, htmlBody) {
   try {
     quote = await buildQuotedChainFromDb({ jobId: email.job_id, contactId: email.contact_id, followupType: email.followup_type });
   } catch (_) {}
-  const combinedHtml = quote ? `${htmlBody}<br><br>${quote}` : htmlBody;
-  const subject = (email.subject || '').replace(/^(Re:\s*)+/i, '');
-  return sendMicrosoftNewMessage(userEmailId, { to: email.to_email, subject, htmlBody: combinedHtml });
+  // One builder for both providers (services/gmail-delivery.js), so the
+  // Gmail and Outlook fresh follow-ups cannot drift apart.
+  const fresh = freshFollowup({ subject: email.subject, htmlBody, quote });
+  return sendMicrosoftNewMessage(userEmailId, { to: email.to_email, subject: fresh.subject, htmlBody: fresh.htmlBody });
 }
 
 // Auto-send all pending emails for a specific BD manager (called after assignment)
@@ -3337,6 +3331,12 @@ engineRunner.register('pending_retry', {
 // Restore the emergency-stop state on boot so a pause survives a redeploy.
 loadSendingPaused();
 loadPausedManagers();
+// An email the previous process was part-way through sending when it died is
+// left at 'sending', on no screen. Before this process claims anything, show
+// it under "Didn't send" as "may have gone out" (services/interrupted-sends.js).
+releaseInterruptedSends(supabase).then((n) => {
+  if (n) console.log(`[SendRecovery] ${n} email(s) cut off mid-send moved to "Didn't send" (may have gone out)`);
+}).catch(() => {});
 
 // ══════════════════════════════════════════════════════════════
 // MICROSOFT OAUTH

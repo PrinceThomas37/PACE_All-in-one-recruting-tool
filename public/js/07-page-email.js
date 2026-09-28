@@ -1,4 +1,16 @@
 // ── EMAIL ──────────────────────────────────────
+// The Pending tab's one-line split. Every pending email is in exactly one of
+// these (GET /emails/pending-summary) — "ready now" used to count the ones
+// waiting out a retry and the ones held by the company limit as well.
+function pendingSplitLine(ps){
+  ps=ps||{};
+  var parts=[(ps.ready_now||0)+' ready now', (ps.waiting_window||0)+' waiting for the send window'];
+  if(ps.waiting_retry)parts.push(ps.waiting_retry+' waiting to retry');
+  if(ps.held_company)parts.push(ps.held_company+' held until tomorrow');
+  return parts.join(' · ');
+}
+window.pendingSplitLine=pendingSplitLine;
+
 function loadMySendingStatus(){
   apiGet('/sending/my-status').then(function(s){
     STATE.mySendingPaused=!!(s&&s.paused);
@@ -253,7 +265,7 @@ function renderEmail(){
     return { id:t, label:TAB_LABELS[t]||t, n:n, onclick:"setEmailTab('"+t+"')" };
   }), STATE.emailTab,
     (ps&&ps.total_pending&&STATE.emailTab==='pending'
-      ? '<span style="font-size:12px;color:var(--ink3)">'+((ps.ready_now||0)+' ready now · '+(ps.waiting_window||0)+' waiting for the send window')+'</span>'
+      ? '<span style="font-size:12px;color:var(--ink3)">'+htmlEsc(pendingSplitLine(ps))+'</span>'
       : ''));
 
   // ── PENDING TAB ──
@@ -355,7 +367,12 @@ function renderEmail(){
         var leadTz=(e.job&&e.job.timezone)||'EST';
         var tzRow2=(STATE.pendingSummary&&STATE.pendingSummary.by_timezone||[]).find(function(t){return t.timezone===leadTz;});
         var aiBadge=e.ai_written?'<span class="ai-chip">AI-written</span>':e.ai_will_write?'<span class="ai-chip" title="The template below is the fallback. AI writes this lead\'s own email just before it is sent.">AI writes at send</span>':'';
-        var winBadge=aiBadge+((e.attempt_count>0&&e.retry_note)?'<span class="retry-chip">'+htmlEsc(e.retry_note)+'</span>':(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span style="font-size:10px;padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span style="font-size:10px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>');
+        // Held by the per-company daily limit (D-0046): it is not "Ready now"
+        // and says so, rather than sitting in Pending with no reason.
+        var heldIds=(STATE.pendingSummary&&STATE.pendingSummary.held_ids)||[];
+        var capN=(STATE.pendingSummary&&STATE.pendingSummary.company_daily_cap)||2;
+        var heldChip=heldIds.indexOf(e.id)>=0?'<span class="retry-chip held-chip" title="'+htmlEsc(capN+' '+(capN===1?'person':'people')+' at this company already got a first email today. This one goes tomorrow.')+'">Held · goes tomorrow</span>':'';
+        var winBadge=aiBadge+((e.attempt_count>0&&e.retry_note)?'<span class="retry-chip">'+htmlEsc(e.retry_note)+'</span>':heldChip?heldChip:(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span style="font-size:10px;padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span style="font-size:10px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>');
         return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+'<td style="padding:10px 12px;font-size:13px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+ownerBadge+winBadge+'</div>'+'<div style="font-size:11px;color:var(--text3)">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td style="padding:10px 12px;font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span style="font-size:11px;padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
       }).join('');
       if(!pendingRows)pendingRows='<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--text3)">No pending emails yet.</td></tr>';
@@ -419,7 +436,8 @@ function renderEmail(){
     pendingHtml='<div>'+scheduleBanner+
       failedPanel+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div style="font-size:13px;color:var(--text2)">'+totalRecipients+' email'+(totalRecipients!==1?'s':'')+' ready'+(totalRecipients!==mineCount?' · '+mineCount+' yours':'')+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
+        // "pending", not "ready": what is ready NOW is the split under the tab.
+        '<div style="font-size:13px;color:var(--text2)">'+totalRecipients+' pending email'+(totalRecipients!==1?'s':'')+(totalRecipients!==mineCount?' · '+mineCount+' yours':'')+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
         sendAllBtn+
       '</div>'+
       '<div style="display:flex;gap:14px;align-items:flex-start">'+

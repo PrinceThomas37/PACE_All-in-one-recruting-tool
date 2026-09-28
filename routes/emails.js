@@ -28,6 +28,7 @@ const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
 const { isStaleProgress } = require('../services/send-progress');
 const sendRetry = require('../services/send-retry');
+const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
 const engineDraft = require('../services/engine-draft');
 const own = require('../services/ownership');
@@ -218,7 +219,8 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
 
     // Counts of the caller's own queue — or, for the two roles that operate
     // other people's sending, a named sender's. Never outside the organisation.
-    let query = db.forRequest(req).from('emails').select('id, job:jobs(timezone)').eq('status', 'pending');
+    let query = db.forRequest(req).from('emails')
+      .select('id, attempt_count, next_attempt_at, followup_type, job:jobs(timezone, company_id)').eq('status', 'pending');
     if (hasRole(req, 'admin', 'ra_lead') && req.query.manager_id) {
       query = query.eq('sent_by', req.query.manager_id);
     } else if (!hasRole(req, 'admin', 'ra_lead')) {
@@ -236,13 +238,39 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
       from += 1000;
     }
 
+    // D-0046: first emails already sent today per company, so an email the
+    // company limit is holding is not counted as "ready now". Same rule and
+    // same loader as the send loop. A failed count claims no hold — the page
+    // must never say an email is held when it is not.
+    let companyCap = 0, companySentToday = {};
+    try {
+      companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails')) || 0;
+      if (companyCap > 0) {
+        companySentToday = await companyDailyCap.loadSentToday(db.forRequest(req),
+          rows.filter(companyDailyCap.isFirstEmail).map(r => r.job?.company_id), today());
+      }
+    } catch (_) { companyCap = 0; companySentToday = {}; }
+
+    // Every pending email is in exactly ONE bucket, checked in the order the
+    // send loop checks them: waiting out a retry, held by the company limit,
+    // then the lead's send window. "Ready now" used to count all of them.
+    const now = Date.now();
     const byTz = {};
     let ready_now = 0;
     let waiting_window = 0;
+    let waiting_retry = 0;
+    let held_company = 0;
+    const held_ids = [];
     for (const row of rows) {
       const tz = row.job?.timezone || 'EST';
       if (!byTz[tz]) byTz[tz] = { timezone: tz, pending: 0, ready_now: 0, waiting_window: 0 };
       byTz[tz].pending++;
+      if (!sendRetry.isDue(row, now)) { waiting_retry++; continue; }
+      if (companyDailyCap.capCheck({ email: row, companyId: row.job?.company_id, counts: companySentToday, cap: companyCap }).blocked) {
+        held_company++;
+        held_ids.push(row.id);
+        continue;
+      }
       if (isInLeadSendWindow(tz, new Date(), sendWindow)) {
         byTz[tz].ready_now++;
         ready_now++;
@@ -261,10 +289,18 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
       }));
 
     const winLbl = `${padHour(sendWindow.start)} – ${padHour(sendWindow.end)} lead local time`;
+    // Which rows are held, so each can say so. Only for a queue the caller
+    // may see row by row: their own, or an admin's whole organisation. An RA
+    // Lead gets counts for other people's sending, never their rows (D4).
+    const rowsVisible = hasRole(req, 'admin') || !hasRole(req, 'ra_lead');
     res.json({
       total_pending: rows.length,
       ready_now,
       waiting_window,
+      waiting_retry,
+      held_company,
+      ...(rowsVisible ? { held_ids } : {}),
+      company_daily_cap: companyCap,
       by_timezone,
       send_window: sendWindow,
       send_window_label: winLbl,

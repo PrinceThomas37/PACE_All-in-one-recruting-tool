@@ -1,5 +1,5 @@
 # Deep — memory
-> Last written: 2026-09-28 (Session 33 — migration 054) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33 — territory map: two harbour services) · seeded from `CLAUDE.md` and Session 21
 
 ## Session 33 (2026-09-28, later) — migration 054, a found person outside the four slots (R-068, D-0055)
 - **`054_poc_other_people.sql` APPLIED 2026-09-28** and verified live: widens
@@ -295,3 +295,4 @@ file, so this is 047. **Next migration is 048.**
 
 - 2026-09-27 (R-032, owner: "Delete them"): **`services/storage-orphans.js` (owned here)** + one-time engine job `storage_orphan_cleanup` in index.js. Deletes a `candidate-docs` file only when (1) no record names its path — candidate_documents/client_documents.storage_path, candidates.resume_url/profile_url, sourcing_candidates.resume_url/raw; (2) the candidate / company / published job (`apply_token`) it is filed under does not exist at all — soft-deleted counts as existing; (3) it is >1 day old. Unknown path shapes are kept. Reads are paged past 1,000 rows and any failed read/list/delete THROWS, so nothing is marked done on a partial run. Done-marker `storage_orphan_cleanup_v1` in app_settings holds COUNTS only (file names are people's resumes). Expected on first tick: 38 deleted, 24 kept. `test/storage-orphans-smoke.mjs` (23); five deliberate breaks of the guards each fail it.
 - 2026-09-28 VERIFIED LIVE: `storage_orphan_cleanup` ran 2026-09-27 07:24 UTC — scanned 62, deleted 38 (2,953,489 bytes), kept 24 (all referenced). `candidate-docs` now holds 24 objects; the next tick (09-28 07:28) skipped as already done. R-032 closed.
+- 2026-09-28 (R-069): `scripts/territory-map.mjs` — `services/gmail-delivery.js` and `services/interrupted-sends.js` added to harbour's `own` list; map regenerated (0 unclaimed). No migration: the fixes use migration 046's columns (`attempt_count`, `next_attempt_at`, `fail_kind`, `fail_reason`). Next migration is still 055.

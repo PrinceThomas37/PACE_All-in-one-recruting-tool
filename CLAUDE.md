@@ -289,6 +289,17 @@ we never have to rewrite to grow (see "Growth bets" below).
   `recordSendFailure()` is the only writer of a failure and stores the reason
   (migration 046). Email → Pending shows "Didn't send" with Retry. The text
   below is the history it fixed.
+  **Session 33 (R-069): A GMAIL THREAD ID BELONGS TO ONE MAILBOX.** 14
+  follow-ups replied into threads living in another mailbox (the leads'
+  mailbox was switched after the first email) — Gmail 404 on every try, which
+  the retry rules read as temporary, so Retry could never help. A follow-up
+  whose thread is refused now goes out fresh with the first email quoted
+  (`services/gmail-delivery.js`, same as Outlook) — ONLY on a definite 404,
+  never after a timeout, which may mean it was sent. And a row left at
+  'sending' by a process that died mid-send (on NO screen) is moved at boot
+  to "Didn't send" as "may have gone out" (`services/interrupted-sends.js`).
+  **A retry ladder cannot fix a failure that is a fact about the setup — check
+  what the error IS before trusting "it will retry".**
 - **(was) KNOWN, UNFIXED (as of Session 14): a dead mailbox sign-in destroys
   emails.** An auth failure marks each email `failed` with no retry, one every
   ~90s, and `emails` has no column to record why — so `friendlySendError`'s
@@ -949,7 +960,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **133** suites (Session 33) via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **137** suites (Session 33) via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it

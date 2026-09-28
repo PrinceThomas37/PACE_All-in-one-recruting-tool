@@ -1,5 +1,5 @@
 # Harbour — memory
-> Last written: 2026-09-23 · C-0023 + C-0015 (D-0034 visibility, org boundary)
+> Last written: 2026-09-28 (Session 33, R-069 — why emails sat in Pending / never sent after Retry) · C-0023 + C-0015 (D-0034 visibility, org boundary)
 
 ## What is true here now
 - **WHO SEES WHICH EMAIL IS `services/ownership.js`, NOT THIS TERRITORY (D-0034).**
@@ -89,6 +89,53 @@
   `POST /emails/retry-failed`; refused for `permanent`, and refused when the
   same contact/job/step already has a live twin (`hasLiveTwin`).
 
+- **A GMAIL FOLLOW-UP WHOSE THREAD IS IN ANOTHER MAILBOX GOES OUT FRESH
+  (2026-09-28, R-069).** `services/gmail-delivery.js` (owned here) is how an
+  email leaves a Gmail mailbox; index.js `deliverViaGmail` only delegates. A
+  follow-up replies into the lead's earlier thread (`emails.conversation_id`),
+  and a Gmail thread id belongs to ONE mailbox — so once a lead's sending
+  mailbox is switched after its first email, Gmail answers 404 "Requested
+  entity was not found." to every try, and `classifyFailure` (not knowing the
+  words) called it TEMPORARY: four tries, give up, Retry restarts the same
+  four. Live: 14 first follow-ups (Daniel James's threads, Spencer Brown's
+  mailbox). Now a DEFINITE not-found (`isGmailNotFound`: `err.status === 404`
+  or Google's words) sends a fresh email with the earlier one quoted and "Re:"
+  stripped — exactly what the Outlook path always did. **A timeout or any other
+  error is rethrown, never followed by a fresh copy**: it may mean the reply
+  WAS sent. `freshFollowup()` builds the fresh email for BOTH providers
+  (index.js `sendFollowupFreshWithQuote` uses it), so they cannot drift. A
+  follow-up with NO earlier thread also goes fresh-with-quote now (it used to
+  go as a bare "Re:" with nothing quoted — the fake-threaded shape the Outlook
+  comment already called wrong). `gmail-provider.js` `api()` errors now carry
+  `.status`. Whether a follow-up should instead come from the mailbox that
+  STARTED the conversation is R-070, the owner's call.
+  **Open edge, measured not guessed:** a lead that moved from an OUTLOOK
+  mailbox to a Gmail one would hand Gmail a Graph conversationId as the
+  thread; Google may answer that with a 400 "invalid id" rather than a 404,
+  which this fallback does not catch. Live on 2026-09-28: 0 of 411 stored
+  thread ids are Outlook-style and every lead mailbox is Gmail, so it cannot
+  happen today — fix it with the real error in hand, not a guessed regex.
+- **A SEND CUT OFF MID-FLIGHT IS SHOWN, NOT LOST (2026-09-28).** The loop
+  claims a row (pending → 'sending') before handing it over and writes the
+  answer after; a process that dies in between (deploy, restart, sleep) left it
+  at 'sending' — on no screen, never picked up. `services/interrupted-sends.js`
+  (owned here) runs once at boot: each 'sending' row → `sendRetry.interruptedUpdate`
+  (failed / UNCERTAIN / "may or may not have gone out"), written ONLY if the
+  row is still 'sending', so an overlapping old process's own 'sent' lands and
+  stands. Never retried by itself; a person may Retry after checking Sent.
+- **THE PENDING SUMMARY IS FOUR BUCKETS, IN THE SEND LOOP'S ORDER (2026-09-28).**
+  `GET /emails/pending-summary`: not due (`sendRetry.isDue`) → `waiting_retry`;
+  first email at a company already at today's limit (`companyDailyCap.capCheck`
+  over `loadSentToday(db.forRequest(req), …)` — org-scoped, a test proves
+  another org's sends never hold ours) → `held_company` + `held_ids`; then the
+  window → `ready_now` / `waiting_window`. `held_ids` only for admin or the
+  caller's own queue — an RA Lead gets counts (D4). Also `company_daily_cap`.
+  "Held" means the company is ALREADY full today; a company with room left is
+  not marked held even if it has more waiting than the room (never mislabels a
+  sendable email). Closes the D-0046 known gap ("counts a held email as ready
+  now"). A bd_lead's teammate rows are not in their summary, so those rows
+  keep the old window chip.
+
 ## Fragile — touch with care
 - **Every reader of `emails.body` must call `renderStoredEmail(row, mailbox)`.**
   `test/sender-identity-smoke.mjs` greps for readers and fails on one that does
@@ -172,3 +219,5 @@
 - 2026-09-25 (D-0046): **at most N first emails to one company per day** — `services/company-daily-cap.js` (owned here). Setting `company_daily_first_emails` (default 2, 0 = off). First emails only; per company across all its leads and all senders; the day is `emails.sent_at` (UTC date, the same stamp the send path writes). A held email is NOT claimed or failed — it stays pending and goes the next day; progress reads "2 people at this company already emailed today — goes tomorrow". Loader failure → cap off (never stops sending). Known gap: the Pending summary still counts a held email as "ready now" until it is tried.
 
 - 2026-09-26 (R-037, D-0047): **a dead mailbox sign-in is now visible.** `gmail-provider.getToken` records every refresh attempt via `mailbox-health.recordRefreshOutcome` (it never did — only Microsoft did), except network failures and Google's own `temporarily_unavailable`/`server_error`, which say nothing about the credential. `deriveTokenStatus` gained `certain` (a RECORDED failure vs the stale-expiry guess) and `last_ok_at` (= `updated_at`, written only on success — never show the last failed attempt as "last worked"). `services/mailbox-alerts.js` (PURE, owned here) decides which mailboxes warrant a warning and translates the provider's words (AADSTS65001 → "Microsoft withdrew PACE's permission…"; Gmail `invalid_grant` → the 7-day testing expiry). Live on 2026-09-26: kristy.scott@fute-global.com dead since 21 Jul (consent withdrawn), princethomasfute@gmail.com not refreshed since 24 Sep. Reconnecting deletes + re-inserts the token row, so the flag clears itself.
+
+- 2026-09-28 (R-069, owner: *"Check why some emails are in pending and a couple of them are not getting send after retry"*): read off the live queue — 22 rows. **14** fu1 from spencer.brown@ (Gmail) into threads that live in daniel.james@'s mailbox (same BD user; the leads' mailbox was switched after the 23 Sep first emails) → Gmail 404 forever (5 failed "gave up", 9 pending on their 3rd retry). **1** fu1 stuck at 'sending' since 26 Sep (its own thread; process died mid-send; whether it went is unknowable here). **7** first emails correctly held by D-0046 (each company already had 2 today). Fixed as above (PR #260, not live). Nothing was re-queued by SQL.
