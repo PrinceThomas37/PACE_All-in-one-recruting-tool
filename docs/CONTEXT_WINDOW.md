@@ -4,12 +4,19 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-27 (Session 33, in progress) · **Repo**:
+**Updated**: 2026-09-28 (Session 34, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0048 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-060`.**
+(only C-0030 OPEN). Next roadmap id `R-061`.**
+
+### Session 34 (2026-09-28) — opened with "hi"
+- Live check: heartbeat healthy; R-032's cleanup RAN (38 deleted, 24 in-use kept);
+  the two dead mailboxes are still dead.
+- **R-060 found and put to the owner:** 28 Gmail follow-ups cannot send because the
+  lead's mailbox changed after the first email (details in the archive, Session 34).
+  The R-053 design (contact finder) is still the owner's stated next job.
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
 - **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
