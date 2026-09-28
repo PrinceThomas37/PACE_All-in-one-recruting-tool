@@ -1,5 +1,34 @@
 # Gateway — memory
-> Last written: 2026-09-28 (Session 33, D-0051: "Already added" — one duplicate check in the add-a-person path) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-068 title search + Uncover; R-066 Apollo usage) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — the title search and Uncover (R-068, D-0055); the Apollo limit (R-066, D-0054)
+- **`POST /jobs/:id/poc/people {title}`** — FREE. Apollo people search at the
+  company's domains with the typed title (similar titles on; blank = everyone),
+  50 at a time. Marks each person `on_file` (name on this company's leads),
+  `state` (waiting/added/turned_down on THIS lead) and `free` (looked up before
+  anywhere in the org → uncover costs nothing). LinkedIn only if a real https
+  linkedin.com URL. 404/403/409/400 like the other finder routes.
+- **`POST /jobs/:id/poc/people/uncover {ref}`** — ONE person the user picked.
+  ref must match `/^[A-Za-z0-9_-]{6,64}$/`; already on this lead's suggestions →
+  409 in words. Free when a prior lookup has the surname; else the day's
+  ceiling (409 naming who can raise it — admins are pointed to Admin →
+  Integrations → Apollo) and then `revealPerson` (1 credit, counted on the
+  meter; STOP statuses → 502). Only Apollo's VERIFIED email is Confirmed; else
+  the company's learned format gives a Likely one. Then the SAME "already
+  added" check as Add contact (`lookupExisting` + `findDuplicate`) and the
+  deployment-wide suppression list: either → stored as turned down by PACE
+  (no address) and 409 (the duplicate payload, visibility-aware). Otherwise a
+  `poc_suggestions` row in the first EMPTY slot of the person's kind
+  (firm-aware) or `'other'` (migration 054). **It never writes a contact.**
+- **`GET /admin/apollo/usage`** (admin only) → `{used, limit, min, max,
+  default}` for the Apollo card. The limit is SAVED through
+  `POST /admin/settings/numbers` (one place it lives); `config/settings.js`
+  `poc_apollo_daily_credits` max 1,000 → **10,000** (the owner's test account
+  holds 183.3k). The Apollo registry description now says the limit is set on
+  its card.
+- `/find` passes `cx.targets.firm` to `pickPeople`. `poc-routes-smoke` 99 → 125.
+- ⚠ **Keys and limits are still DEPLOYMENT-WIDE** (`int_<id>_<field>`,
+  `sys_*`) — R-067: every company must bring its own before a second customer.
 
 ## Session 33 (2026-09-28, latest) — "Already added" (D-0051, R-064)
 - **Owner:** *"If the person or the email id already added. A pop-up should come

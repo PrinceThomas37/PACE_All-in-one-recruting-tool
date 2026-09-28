@@ -1,5 +1,31 @@
 # Surface — memory
-> Last written: 2026-09-28 (Session 33, D-0051: the "Already added" pop-up) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, the title search in the POC block; the Apollo card limit) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — "Find anyone at <company>" (R-068) and the Apollo card's daily limit (R-066)
+- **`62-poc-finder.js` `peopleSearch(id, d)`**: drawn only when the caller
+  works the lead AND Apollo is connected. A `<form>` (Enter submits) with the
+  title box + Search (+ Clear once there are results), the server's message
+  line, and a results list (`.lxc-ppl-list`, scrolls in its own box at 360px):
+  name with Apollo's masked hint, title, safe LinkedIn, and either a state
+  ("On file" / "Waiting below" / "On this lead" / "Turned down") or
+  **"Uncover · 1 credit" / "Uncover · free"**. State lives in
+  `C[id].people` ({q, list, msg, loading, uncovering}) because the block is
+  repainted whole after every answer — the typed title survives. Uncover's
+  answer is the lead's payload (the person then shows in their slot or under
+  **"Other people you picked"** — slot 'other', which the slot loop did not
+  draw until this change); a 409 `duplicate` opens `showAlreadyAdded` and the
+  row turns "On file".
+- **`08-page-admin.js` `apolloLimitBlock()`** on the Apollo card: "Credits a day,
+  for everyone", the number box, Save limit, "Used today: N of M"
+  (`GET /admin/apollo/usage`, loaded after the integrations list).
+  `saveApolloLimit()` refuses a non-integer or out-of-range value before
+  sending, then posts to `/admin/settings/numbers` and reloads the figure.
+  ⚠ **Found by the new test, not by reading:** `renderIntegrationsModal()`
+  carries every box's value across a redraw, so an empty box drawn while
+  usage was loading was carried back OVER the real limit (the box read blank).
+  The block draws no box until the numbers arrive. **Any new input in that
+  modal must not render before its value exists.**
+- Styles `.lxc-ppl*`, `.lxc-uncover`, `.intg-apollo-*` in `theme.css`, tokens only.
 
 ## Session 33 (2026-09-28, latest) — the "Already added" pop-up (D-0051, R-064)
 - **`showAlreadyAdded(dup, {onAddAnyway, onClose})`** in `10-page-modals.js` —

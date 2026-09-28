@@ -47,6 +47,26 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0055 · 2026-09-28 · STANDS · Claude never uses the owner's organisation's Apollo account; every customer company brings its own API keys
+**Their words** (asked whether Claude may read their Apollo account's credit balance): *"No I cannot give you the access, its my organization's. there are 183.3k credits left. Now this is just for text [test] … i am testing it within my company. When i see this, i use that particular company's apollo API key to pull out details or any other API keys in the system. All are changeable. Because this is a SAAS product."* — and in the same message: *"I need the people from other job also in this employee search. Maybe a search bar to search for title or similar title and that will search in the employee list from apollo and show us, and we can click on to see and select which contact we want to uncover."*
+
+**Chosen:**
+- **The Apollo connector in Claude's chat is off-limits** — it is the owner's
+  organisation's account. Credit figures come from the owner (183.3k left on
+  2026-09-28, a test account inside their own company) or from PACE's own meter.
+- **Every customer company uses its OWN Apollo key — and its own keys for every
+  other integration.** Measured the same day: **today they are shared across the
+  whole deployment** (`config/integrations.js` stores `int_<id>_<field>` with no
+  company in it), so a second company would see, spend and be able to overwrite
+  the first company's keys. Harmless while there is one company; must change
+  before a second (R-067, with R-049).
+- **A title search inside the POC finder** (R-068): type a title, Apollo lists
+  that company's people with it or a similar title (free), and the user picks
+  whom to uncover (a credit each).
+
+**Re-open when:** the owner wants Claude to read their Apollo account after all,
+or decides a shared operator key should serve customers who have none.
+
 ### D-0054 · 2026-09-28 · STANDS · Apollo credits: one daily number for everyone, set by an admin, and the owner wants it higher
 **Their words:** *"I want to increase the credit usage of the apollo, give the admin to set what's the number of credit that can be used per day for all users. how much of our credit system is apollo's credit system? Give me that number"*
 

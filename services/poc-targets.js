@@ -103,11 +103,85 @@ const INDUSTRY_HEADS = [
     directors: ['Service Director', 'Fixed Operations Director', 'General Manager'] },
 ];
 
+// ── professional firms (R-063, D-0052) ──────────────────────────────────────
+// A law, accounting or architecture firm is not run like a contractor. Measured
+// on the owner's 82 live leads (2026-09-28): 16 are such firms, and for them the
+// generic rules looked for a General Manager (a paralegal's boss), a Controller
+// or CFO (an accounting FIRM's hiring is done by its partners, not by whoever
+// runs its own books) or an Engineering Manager (an architect's) — and read
+// Attorney, Shareholder and Founding Member as nobody. The researchers picked
+// Partner, Managing Partner, Attorney, Principal and Law Firm Administrator.
+//
+// Matched on the lead's INDUSTRY (LinkedIn's categories: "Law Practice",
+// "Legal Services", "Accounting", "Architecture and Planning"). A PRACTICE job
+// (the profession's own work) reports to the firm's practitioners; any other
+// job keeps its function's heads, with the firm's administrator first. Either
+// way the "top of the company" is the firm's own leadership, never a CEO a law
+// firm does not have.
+//   hrFirst: HR titles tried first at firms up to 200 people
+//   hrAdmin: titles that ARE the HR/people function there at ANY size
+//   leaders: practitioner titles that are hiring managers only at this kind of firm
+const FIRMS = [
+  { id: 'law', label: 'a law firm',
+    industry: /\b(law practice|legal services|law firm|legal)\b/i,
+    practice: /\b(paralegal|legal (assistant|secretary)|attorney|lawyer|associate|law clerk|docket\w*|litigation|counsel|legal)\b/i,
+    fnLabel: 'legal',
+    heads: ['Managing Partner', 'Supervising Attorney', 'Managing Attorney', 'Partner'],
+    managers: ['Supervising Attorney', 'Managing Attorney', 'Senior Attorney', 'Partner'],
+    directors: ['Managing Partner', 'Partner', 'Director of Legal Operations'],
+    top: ['Managing Partner', 'Founding Partner', 'Partner', 'Principal'],
+    hrFirst: ['Firm Administrator', 'Legal Administrator', 'Director of Administration'],
+    hrAdmin: /\b(firm|legal|law firm) administrator\b|\bdirector of administration\b/i,
+    leaders: /\b(attorney|counsel|lawyer)\b/i },
+  { id: 'accounting', label: 'an accounting firm',
+    industry: /\b(accounting|cpa firm|certified public accountants?)\b/i,
+    practice: /\b(accountant|accounting|audit\w*|assurance|tax|cpa|advisory|bookkeep\w*)\b/i,
+    fnLabel: 'accounting practice',
+    heads: ['Managing Partner', 'Partner', 'Shareholder', 'Principal'],
+    managers: ['Senior Manager', 'Partner', 'Shareholder'],
+    directors: ['Managing Partner', 'Partner', 'Shareholder', 'Principal'],
+    // A tax job reports to the tax side, an audit job to the audit side.
+    sub: [
+      { match: /\btax\b/i, fnLabel: 'tax practice', heads: ['Tax Partner', 'Tax Manager', 'Director of Tax', 'Partner'], managers: ['Tax Manager', 'Senior Tax Manager', 'Tax Partner'] },
+      { match: /\b(audit\w*|assurance)\b/i, fnLabel: 'audit practice', heads: ['Audit Partner', 'Audit Manager', 'Assurance Partner', 'Partner'], managers: ['Audit Manager', 'Senior Audit Manager', 'Audit Partner'] },
+    ],
+    top: ['Managing Partner', 'Partner', 'Shareholder', 'Owner', 'President'],
+    hrFirst: ['Firm Administrator', 'Director of Firm Administration', 'Practice Manager'],
+    hrAdmin: /\bfirm administrator\b|\bdirector of (firm )?administration\b|\bpractice manager\b/i,
+    leaders: null },
+  { id: 'architecture', label: 'an architecture firm',
+    industry: /\b(architect\w*|architecture and planning|landscape architecture|interior design)\b/i,
+    practice: /\b(architect\w*|designer|landscape|interior|drafter|draftsman|draftsperson|bim|revit|cad|planner|urban design)\b/i,
+    fnLabel: 'architecture',
+    heads: ['Principal', 'Managing Principal', 'Studio Director', 'Design Director'],
+    managers: ['Studio Director', 'Associate Principal', 'Senior Associate'],
+    directors: ['Principal', 'Managing Principal', 'Director of Architecture', 'Partner'],
+    top: ['Principal', 'Founding Principal', 'Partner', 'President', 'Owner'],
+    hrFirst: ['Studio Manager'],
+    hrAdmin: /\bstudio manager\b/i,
+    leaders: null },
+];
+const FIRM_BY_ID = new Map(FIRMS.map(f => [f.id, f]));
+function firmOf(industry) { return FIRMS.find(f => f.industry.test(String(industry || ''))) || null; }
+function firmById(x) { return !x ? null : (typeof x === 'string' ? FIRM_BY_ID.get(x) || null : x); }
+
 function jobFunction(title, industry) {
   const t = String(title || '');
+  const firm = firmOf(industry);
+  if (firm && firm.practice.test(t)) {
+    const sub = (firm.sub || []).find(s => s.match.test(t));
+    return Object.assign({ id: firm.id, label: (sub && sub.fnLabel) || firm.fnLabel,
+      heads: firm.heads, managers: firm.managers, directors: firm.directors },
+      sub ? { heads: sub.heads, managers: sub.managers } : {}, { top: firm.top, firm: firm.id });
+  }
   const fn = FUNCTIONS.find(f => f.match.test(t)) || GENERAL;
   const ov = INDUSTRY_HEADS.find(o => o.industry.test(String(industry || '')) && o.fns.includes(fn.id));
-  return ov ? Object.assign({}, fn, { heads: ov.heads, managers: ov.managers, directors: ov.directors }) : fn;
+  const base = ov ? Object.assign({}, fn, { heads: ov.heads, managers: ov.managers, directors: ov.directors }) : fn;
+  // Any other job at a firm keeps its function's heads (a construction project
+  // manager at a planning firm still reports to the project side), with the
+  // firm's own leadership as "the top of the company". The firm's administrator
+  // is found in an HR slot — at these firms that is who runs hiring.
+  return firm ? Object.assign({}, base, { top: firm.top, firm: firm.id }) : base;
 }
 
 function normalizeSize(s) { return SIZE_IDS.includes(s) ? s : null; }
@@ -169,6 +243,11 @@ function hrSlots(size, fn) {
     const techy = ['engineering', 'it', 'estimating'].includes(fn.id);
     b = [techy ? 'Technical Recruiter' : 'Recruiter', 'Senior Recruiter', 'Talent Acquisition Partner'];
   }
+  // At a law, accounting or architecture firm the people function has its own
+  // names (a law firm's Firm Administrator runs hiring whatever its size), so
+  // they are tried first — up to 200 people; above that HR is a department.
+  const firm = firmById(fn.firm);
+  if (firm && ['1-20', '21-50', '51-200'].includes(size)) a = firm.hrFirst.concat(a);
   return [
     { key: 'hr1', kind: 'hr', titles: uniq(a) },
     { key: 'hr2', kind: 'hr', titles: uniq(b) },
@@ -177,15 +256,20 @@ function hrSlots(size, fn) {
 
 function managerSlots(size, fn) {
   let a, b;
+  // `fn.top` is a professional firm's own leadership (Managing Partner,
+  // Principal…) — a law firm has no CEO or General Manager to look for.
+  const top = fn.top || null;
   if (size === '1-20') {
-    a = ['Owner', 'President', 'CEO', 'Founder'];
-    b = ['Co-Owner', 'Partner', 'Vice President', 'General Manager', fn.heads[0]];
+    a = top ? top.slice() : ['Owner', 'President', 'CEO', 'Founder'];
+    // At a small firm the second person is a practitioner who runs the work
+    // day to day (a supervising attorney, a tax manager, a studio director).
+    b = top ? fn.managers.slice() : ['Co-Owner', 'Partner', 'Vice President', 'General Manager', fn.heads[0]];
   } else if (size === '21-50') {
     a = fn.heads.slice();
-    b = ['President', 'Owner', 'CEO', 'General Manager'];
+    b = top ? top.slice() : ['President', 'Owner', 'CEO', 'General Manager'];
   } else if (size === '51-200') {
     a = fn.heads.slice();
-    b = fn.directors.concat(['Director of Operations', 'General Manager', 'Vice President']);
+    b = top ? fn.directors.concat(top) : fn.directors.concat(['Director of Operations', 'General Manager', 'Vice President']);
   } else {
     a = fn.managers.slice();
     b = fn.directors.slice();
@@ -207,22 +291,36 @@ function pocTargets(job, sizeBand) {
   const used = size || DEFAULT_SIZE;
   const slots = hrSlots(used, fn).concat(managerSlots(used, fn))
     .map(s => Object.assign(s, { label: slotLabel(s.titles) }));
-  return { size: used, size_known: !!size, function: { id: fn.id, label: fn.label }, slots };
+  // `firm`: 'law' | 'accounting' | 'architecture' | null — the kind of firm the
+  // lead's industry says it is, which changes who counts as HR or a leader.
+  const firm = firmOf(job && job.industry);
+  return { size: used, size_known: !!size, function: { id: fn.id, label: fn.label }, firm: firm ? firm.id : null, slots };
 }
 
 // ── putting the people already on file into the slots ───────────────────────
-const HR_WORDS = /\b(hr|h\.r\.|human resources?|human resource|people (ops|operations)|talent|recruit\w*|payroll|personnel|benefits)\b/i;
+// "People", "Culture", employee relations, total rewards… are the HR function
+// under its newer names (R-063: "People and Culture Director" was the one HR
+// person on the owner's leads read as a hiring manager). Checked BEFORE the
+// leader words, so "Chief People Officer" or "People Partner" is HR.
+const HR_WORDS = /\b(hr|h\.r\.|human resources?|human resource|people (ops|operations)|talent|recruit\w*|payroll|personnel|benefits|people (and|&) culture|chief people|head of people|vp,? (of )?people|vice president,? (of )?people|people (partner|manager|director|lead|business partner)|culture (and|&) (engagement|people)|employee (relations|experience|engagement)|total rewards|compensation|learning (and|&) development|staffing coordinator)\b/i;
 // At a small firm the office manager IS the HR department; at a big one an
 // office manager is not who hires.
 const OFFICE_WORDS = /\b(office manager|office admin\w*|administrat\w*|business manager|executive assistant|admin assistant)\b/i;
-const MANAGER_WORDS = /\b(owner|president|ceo|founder|partner|principal|chairman|chief|coo|cfo|cto|cio|vp|vice president|director|head|general manager|manager|superintendent|supervisor|lead)\b/i;
+const MANAGER_WORDS = /\b(owner|president|ceo|founder|partner|principal|chairman|chief|coo|cfo|cto|cio|vp|vice president|director|head|general manager|manager|superintendent|supervisor|lead|shareholder|founding member|managing member)\b/i;
 
-function contactKind(designation, size) {
+// `firm`: the lead's firm type (an id from FIRMS, or null). At a law firm an
+// attorney is the one a paralegal reports to; at a law or accounting firm the
+// Firm Administrator is the people function at ANY size. Elsewhere neither
+// applies — an in-house attorney does not hire an estimator.
+function contactKind(designation, size, firm) {
   const d = String(designation || '');
   if (HR_WORDS.test(d)) return 'hr';
+  const f = firmById(firm);
+  if (f && f.hrAdmin && f.hrAdmin.test(d)) return 'hr';
   const small = size === '1-20' || size === '21-50';
   if (OFFICE_WORDS.test(d)) return small ? 'hr' : 'other';
   if (MANAGER_WORDS.test(d)) return 'manager';
+  if (f && f.leaders && f.leaders.test(d)) return 'manager';
   return 'other';
 }
 
@@ -249,7 +347,7 @@ function fillSlots(targets, contacts) {
   const list = (contacts || []).filter(c => c && c.id);
   const pairs = [];
   list.forEach(c => {
-    const kind = contactKind(c.designation, targets.size);
+    const kind = contactKind(c.designation, targets.size, targets.firm);
     slots.forEach((s, si) => { if (s.kind === kind) pairs.push({ si, c, score: fitScore(c.designation, s) + (c.is_primary ? -0.1 : 0) }); });
   });
   pairs.sort((a, b) => (a.score - b.score) || (a.si - b.si));
@@ -273,7 +371,7 @@ function fillSlots(targets, contacts) {
  *   skip:    slot keys that already have a suggestion waiting
  * Returns [{ slot_key, person }], in slot order.
  */
-function pickPeople(slots, people, exclude, size, skip) {
+function pickPeople(slots, people, exclude, size, skip, firm) {
   const ids = new Set(((exclude && exclude.ids) || []).map(String));
   const names = new Set(((exclude && exclude.names) || []).map(nameKey).filter(Boolean));
   const skipSet = new Set(skip || []);
@@ -282,7 +380,7 @@ function pickPeople(slots, people, exclude, size, skip) {
   (people || []).forEach(p => {
     if (!p || !p.id || !p.first_name || ids.has(String(p.id))) return;
     if (p.last_name && names.has(nameKey(p.first_name + ' ' + p.last_name))) return;
-    const kind = contactKind(p.title, size);
+    const kind = contactKind(p.title, size, firm);
     open.forEach(s => { if (s.kind === kind) pairs.push({ s, p, score: fitScore(p.title, s) }); });
   });
   const order = (slots || []).map(s => s.key);
@@ -387,7 +485,7 @@ function splitName(full) {
 }
 
 module.exports = {
-  SIZE_BANDS, SIZE_IDS, DEFAULT_SIZE, FUNCTIONS, MARKET_PRIOR, FORMATS,
-  jobFunction, normalizeSize, sizeBandFor, sameCompany, pocTargets, contactKind, fitScore, fillSlots, pickPeople,
+  SIZE_BANDS, SIZE_IDS, DEFAULT_SIZE, FUNCTIONS, FIRMS, MARKET_PRIOR, FORMATS,
+  jobFunction, firmOf, normalizeSize, sizeBandFor, sameCompany, pocTargets, contactKind, fitScore, fillSlots, pickPeople,
   detectFormat, normalizeDomain, learnFormat, emailFor, splitName, nameKey,
 };

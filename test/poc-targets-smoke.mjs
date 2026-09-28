@@ -176,6 +176,60 @@ step('WITHOUT a learned format, NO address is built — not even the market prio
 step('a format that needs a surname is not applied to a one-word name', poc.emailFor('Dave', '', { domain: 'x.com', pattern: 'flast' }) === null);
 step('splitting a name keeps first and last', JSON.stringify(poc.splitName('Mary Jane Smith-Jones')) === JSON.stringify({ first: 'Mary', last: 'Smith-Jones' }));
 
+// ── professional firms (R-063, D-0052) — on the owner's REAL leads ────────
+// 16 of 82 live leads (2026-09-28) are law, accounting or architecture firms,
+// and the generic rules looked there for a General Manager, a Controller or an
+// Engineering Manager, and ignored Attorney / Shareholder / Founding Member.
+const law = poc.pocTargets({ position: 'Litigation Paralegal', industry: 'Law Practice' }, null);
+const lawT = (k) => (law.slots.find(s => s.key === k) || {}).titles || [];
+step('firm: a law practice is recognised from its industry', law.firm === 'law' && law.function.label === 'legal', law.firm + ' / ' + law.function.label);
+step('firm: a paralegal\'s hiring manager is a partner or supervising attorney — not a General Manager',
+  lawT('mgr1').includes('Supervising Attorney') && lawT('mgr1').includes('Managing Partner') && !lawT('mgr1').concat(lawT('mgr2')).some(t => /General Manager|CEO/.test(t)), JSON.stringify([lawT('mgr1'), lawT('mgr2')]));
+step('firm: the top of a law firm is its Managing Partner, not a CEO', lawT('mgr2')[0] === 'Managing Partner', lawT('mgr2').join(', '));
+step('firm: at a law firm the Firm Administrator is tried first for HR', lawT('hr1')[0] === 'Firm Administrator', lawT('hr1').join(', '));
+const tax = poc.pocTargets({ position: 'Tax Manager', industry: 'Accounting' }, null);
+const audit = poc.pocTargets({ position: 'Audit Accountant | CPA Firm', industry: 'Accounting' }, null);
+const taxT = (t, k) => (t.slots.find(s => s.key === k) || {}).titles || [];
+step('firm: a tax job at an accounting firm reports to the tax side (Tax Partner) — not a Controller or CFO',
+  tax.firm === 'accounting' && taxT(tax, 'mgr1')[0] === 'Tax Partner' && !taxT(tax, 'mgr1').some(t => /Controller|CFO/.test(t)), taxT(tax, 'mgr1').join(', '));
+step('firm: an audit job reports to the audit side', taxT(audit, 'mgr1')[0] === 'Audit Partner', taxT(audit, 'mgr1').join(', '));
+const arch = poc.pocTargets({ position: 'Project Architect', industry: 'Architecture and Planning' }, null);
+step('firm: an architect reports to a Principal — not an Engineering Manager',
+  arch.firm === 'architecture' && taxT(arch, 'mgr1')[0] === 'Principal' && !taxT(arch, 'mgr1').some(t => /Engineering Manager/.test(t)), taxT(arch, 'mgr1').join(', '));
+const archPm = poc.pocTargets({ position: 'Construction Project Manager', industry: 'Architecture and Planning' }, null);
+step('firm: a NON-practice job at a firm keeps its own function\'s heads (a construction PM is not sent to the office manager)',
+  taxT(archPm, 'mgr1')[0] === 'Director of Operations' && !taxT(archPm, 'mgr1').some(t => /Office Manager|Studio Manager/.test(t)) && taxT(archPm, 'mgr2')[0] === 'Principal',
+  JSON.stringify([taxT(archPm, 'mgr1'), taxT(archPm, 'mgr2')]));
+const tinyLaw = poc.pocTargets({ position: 'Litigation Paralegal', industry: 'Law Practice' }, '1-20');
+step('firm: at a tiny firm the second hiring manager is a practitioner, not a repeat of the partners',
+  taxT(tinyLaw, 'mgr1')[0] === 'Managing Partner' && taxT(tinyLaw, 'mgr2')[0] === 'Supervising Attorney', JSON.stringify([taxT(tinyLaw, 'mgr1'), taxT(tinyLaw, 'mgr2')]));
+const estFirm = poc.pocTargets({ position: 'Junior Estimator', industry: 'Construction' }, null);
+step('firm: a construction lead is untouched (no firm, the same heads as before)',
+  estFirm.firm === null && taxT(estFirm, 'mgr1')[0] === 'Chief Estimator' && taxT(estFirm, 'mgr2').join() === 'President,Owner,CEO,General Manager', JSON.stringify([estFirm.firm, taxT(estFirm, 'mgr2')]));
+step('firm: "Attorney", "Senior Litigation Attorney", "Managing Attorney" are leaders AT A LAW FIRM',
+  ['Attorney', 'Senior Litigation Attorney', 'Managing Attorney'].every(t => poc.contactKind(t, '21-50', 'law') === 'manager'));
+step('firm: …but not at a construction company (an in-house attorney does not hire an estimator)',
+  poc.contactKind('Attorney', '21-50', null) === 'other');
+step('firm: the Firm Administrator is the people function at a law firm at ANY size — even 51-200',
+  poc.contactKind('Law Firm Administrator', '51-200', 'law') === 'hr' && poc.contactKind('Law Firm Administrator', '51-200', null) === 'other');
+step('leaders everywhere: Shareholder, CPA/Shareholder, Founding Member, Managing Member',
+  ['Shareholder', 'CPA/Shareholder', 'Founding Member', 'Managing Member'].every(t => poc.contactKind(t, '21-50') === 'manager'));
+step('…but a "Team Member" or "Board Member" is not a leader', poc.contactKind('Team Member', '21-50') === 'other' && poc.contactKind('Board Member', '21-50') === 'other');
+step('HR under its newer names is HR — never a hiring manager ("People and Culture Director" was the one misread on the live leads)',
+  ['People and Culture Director', 'People & Culture Manager', 'Chief People Officer', 'Head of People', 'VP People', 'People Partner', 'Employee Relations Manager', 'Total Rewards Manager'].every(t => poc.contactKind(t, '21-50') === 'hr'),
+  ['People and Culture Director', 'Chief People Officer', 'People Partner'].map(t => t + '=' + poc.contactKind(t, '21-50')).join(' '));
+step('…and "People Operations Manager", "HR Business Partner" still are', poc.contactKind('People Operations Manager', '21-50') === 'hr' && poc.contactKind('HR Business Partner', '51-200') === 'hr');
+// The real before/after: every one of these is a title on the owner's live leads.
+const liveLaw = ['Attorney', 'Senior Litigation Attorney', 'Managing Attorney'];
+step('on the live leads: the three attorneys at law firms were read as nobody and are now leaders',
+  liveLaw.every(t => poc.contactKind(t, '21-50', 'law') === 'manager'));
+// pickPeople takes the firm too: an attorney found by Apollo can fill a law firm's slot.
+const lawFilled = poc.fillSlots(law, []);
+const lawPicks = poc.pickPeople(lawFilled.slots, [{ id: 'a1', first_name: 'Amy', last_name: 'Cho', title: 'Supervising Attorney' }], null, law.size, [], law.firm);
+step('firm: a supervising attorney Apollo finds fills a law firm\'s hiring-manager slot', lawPicks.length === 1 && lawPicks[0].slot_key === 'mgr1', JSON.stringify(lawPicks.map(x => x.slot_key)));
+step('firm: …and without the firm she would not (the rule is the firm\'s, not everyone\'s)',
+  poc.pickPeople(lawFilled.slots, [{ id: 'a1', first_name: 'Amy', last_name: 'Cho', title: 'Attorney' }], null, law.size, [], null).length === 0);
+
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

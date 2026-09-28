@@ -1,5 +1,15 @@
 # Deep — memory
-> Last written: 2026-09-28 (Session 33 — migration 053) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33 — migration 054) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — migration 054, a found person outside the four slots (R-068, D-0055)
+- **`054_poc_other_people.sql` APPLIED 2026-09-28** and verified live: widens
+  `poc_suggestions_slot_key_check` to `('hr1','hr2','mgr1','mgr2','other')` so
+  somebody uncovered from the POC finder's title search who fits none of the
+  four roles can wait as a suggestion. Additive, idempotent (DROP IF EXISTS +
+  ADD). Proven first in a rolled-back probe (BEGIN → ALTER → an 'other' row
+  accepted, a 'nonsense' one refused → ROLLBACK; the constraint read back
+  unchanged, 0 probe rows left).
+- **Next migration is 055.**
 
 ## Session 33 (2026-09-28) — migration 053, where a company's size came from (D-0050)
 - **`053_company_size_source.sql`** — four nullable columns on `companies`:

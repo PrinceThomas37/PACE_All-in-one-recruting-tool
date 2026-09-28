@@ -1,5 +1,37 @@
 # Observatory — memory
-> Last written: 2026-09-28 (Session 33, R-063 measured on the live leads) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-063 built: professional firms; title search) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — R-063 BUILT: the finder knows law, accounting and architecture firms (D-0052); the title search's Apollo call (R-068)
+- **`poc-targets.js` `FIRMS`** (law / accounting / architecture), matched on the
+  lead's INDUSTRY (`firmOf`). A PRACTICE job (the profession's own work, per
+  firm regex) gets the firm's heads — law: Managing Partner / Supervising
+  Attorney / Managing Attorney / Partner; accounting: Tax Partner… for tax,
+  Audit Partner… for audit, else partners/shareholders; architecture:
+  Principal / Managing Principal / Studio Director. ANY job at a firm gets the
+  firm's own leadership as "the top" (`fn.top`, replacing
+  President/Owner/CEO/GM) — a non-practice job keeps its function's heads (a
+  construction PM at a planning firm still reports to the project side; an
+  earlier draft prepended the firm administrator there and sent that PM to the
+  Office Manager — caught by printing the slots, removed). At 1–20 people the
+  second manager slot is the practitioner (`fn.managers`), not a repeat of the
+  partners. HR at firms ≤200: `hrFirst` (Firm Administrator, Director of
+  (Firm) Administration, Practice Manager, Studio Manager) tried first.
+- **`contactKind(designation, size, firm)`** — firm-aware: `hrAdmin` (firm/legal
+  administrator…) is HR at ANY size at that firm; `leaders` (attorney, counsel,
+  lawyer) are managers ONLY at a law firm. Everywhere: `shareholder`,
+  `founding member`, `managing member` are leaders; HR_WORDS gained People &
+  Culture / Chief People / Head of People / VP People / People Partner /
+  employee relations|experience|engagement / total rewards / compensation /
+  L&D / staffing coordinator. `pocTargets` returns `firm`; `fillSlots` and
+  `pickPeople(…, firm)` pass it. Construction leads are unchanged (pinned).
+- **Measured on the owner's live titles: 6 people now read correctly** — two
+  Attorneys and a Senior Litigation Attorney at law firms, a CPA/Shareholder, a
+  Founding Member (other → leader) and "People and Culture Director" (leader →
+  HR). `poc-targets-smoke` 75 → 95.
+- **`people-apollo.js searchPeople`**: blank titles → the title filter and
+  `include_similar_titles` are OMITTED (not sent empty); keeps Apollo's masked
+  surname as `last_name_hint` ("Sm***h") — never as the name; returns
+  `total` from `pagination.total_entries`. `poc-apollo-smoke` 44 → 49.
 
 ## Session 33 (2026-09-28, latest) — R-063: does the finder read titles right FOR THIS MARKET? (measured, nothing built)
 - The owner asked whether the finder looks for "HR manager or HR generalist" and

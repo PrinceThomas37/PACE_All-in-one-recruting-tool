@@ -49,8 +49,12 @@ to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Alrea
   (D-0053, dropped), and R-066 (D-0054): an admin sets ONE daily Apollo credit
   number for everyone, visibly (today: System Settings only, default 20), plus
   "how much of our credit system is Apollo's" — 1 PACE credit = 1 Apollo credit.
-  The owner STOPPED the run before either build began and before the Apollo
-  connector was called — resume only on their word.**
+  Then (owner, 2026-09-28): **no access to their organisation's Apollo account**
+  (183.3k credits left, a test account) and **every customer company brings its
+  own keys** (D-0055 → R-067: TODAY ALL KEYS ARE DEPLOYMENT-WIDE — fix before a
+  second customer). **BUILT on PR #259, not live:** R-063 (firm-aware finder),
+  R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
+  Uncover; migration 054 applied). `npm test` 136/136.**
 - **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
   it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
   now judges each element's OWN text (it skipped any element with a child) and
@@ -152,7 +156,7 @@ self-serve signup built and **off**.
 **⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
 read the default before saying what a switch is set to.
 
-## Migrations — next is **054** · 053 APPLIED 2026-09-28 (companies.employee_count/size_source/size_checked_at/apollo_org_id) · 052 APPLIED 2026-09-27 (poc_suggestions, re-verified 2026-09-28) · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
+## Migrations — next is **055** · 054 APPLIED 2026-09-28 (poc_suggestions slot 'other') · 053 APPLIED 2026-09-28 (companies.employee_count/size_source/size_checked_at/apollo_org_id) · 052 APPLIED 2026-09-27 (poc_suggestions, re-verified 2026-09-28) · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
 
 049: RLS + revoke on the two backup tables. 050: `recruiting_lookups` unique
 index is `(org_id, category, lower(value))`. **SQL/migrations are pre-approved

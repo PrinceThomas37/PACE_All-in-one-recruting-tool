@@ -1,5 +1,23 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 135 suites · +contact-duplicate-smoke (32) · +already-added-ui-smoke (25)
+> Last written: 2026-09-28 (Session 33) · 136 suites · +poc-people-search-ui-smoke (26)
+
+## Session 33 (2026-09-28, later) — the title search, R-063, the Apollo card
+- **136 suites** (`npm test` 136/136, exit 0): +`poc-people-search-ui-smoke.mjs`
+  (26, Playwright — real Enter key and real mouse clicks; the stub's "already
+  added" 409 is built by the server's own `duplicatePayload`, its slots by the
+  real rules). `poc-routes-smoke` 99 → 125 (title search, Uncover, a law firm,
+  `/admin/apollo/usage`; the fake enforces migration 054's slot rule),
+  `poc-targets-smoke` 75 → 95 (firms, new HR words, leaders),
+  `poc-apollo-smoke` 44 → 49 (blank search omits the title filter; the hint;
+  the total).
+- **Every new server rule was broken on purpose and failed:** always paying for
+  a looked-up person; no daily limit on Uncover; the slot ignoring the firm;
+  keeping Apollo's guessed email; no duplicate check on Uncover; an empty
+  title filter sent. Each named its own failing step.
+- **The browser test found a real bug on its first run** (the Apollo card's
+  limit box drawn blank — see surface). Its first expectation was also wrong
+  (7 credits instead of 8 after two uncovers): **read the count from the
+  test's own data, never type it**, or a correct page reads as broken.
 
 ## Session 33 (2026-09-28, latest) — "Already added" (D-0051)
 - **135 suites** (`npm test` 135/135, exit 0): +`contact-duplicate-smoke.mjs`

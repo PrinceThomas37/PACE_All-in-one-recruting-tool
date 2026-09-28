@@ -92,7 +92,8 @@ window.openIntegrationsModal=function(){
   STATE._intgTest={}; STATE._emailVerifyResult=null; STATE.aiHealth=null;
   STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">Integrations & API Keys</div></div><div class="mb_" style="padding:24px;text-align:center;color:var(--text3)">Loading…</div></div>';
   render();
-  apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); })
+  STATE.apolloUsage=null;
+  apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); loadApolloUsage(); })
     .catch(function(e){ closeModal(); showToast('Failed to load integrations: '+(e&&e.message||e),'error'); });
   // The budget loads alongside: an empty meter is fine, a missing one is not —
   // nobody should paste a key without seeing what it is allowed to spend.
@@ -146,7 +147,7 @@ function renderIntegrationsModal(){
       return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div style="font-weight:600;font-size:13px">'+htmlEsc(it.label)+'</div>'+badge+'</div>'+
         '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">'+htmlEsc(it.description)+(it.docs?' · <a href="'+htmlEsc(it.docs)+'" target="_blank" rel="noopener" style="color:var(--accent)">Get key ↗</a>':'')+'</div>'+
-        fields+activeToggle+
+        fields+activeToggle+(it.id==='apollo'?apolloLimitBlock():'')+
         '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
           '<button class="btn btn-sm btn-primary" onclick="saveIntegration(\''+it.id+'\')">Save</button>'+
           (it.has_test?'<button class="btn btn-sm btn-outline" onclick="testIntegration(\''+it.id+'\')">Test</button>':'')+
@@ -181,6 +182,40 @@ function renderIntegrationsModal(){
   Object.keys(typed).forEach(function(id){ var el=document.getElementById(id); if(el&&el.value!==typed[id])el.value=typed[id]; });
   box=document.querySelector('#layer .modal'); if(box&&scroll)box.scrollTop=scroll;
 }
+// The Apollo card's daily limit (D-0054, R-066): one number for everybody in
+// the company, set here by an admin, beside what today has spent. It is the
+// same System Settings value ("Contact finder"), saved through that screen's
+// own validated write — one number, two ways to reach it, never two numbers.
+function apolloLimitBlock(){
+  var u=STATE.apolloUsage;
+  // No box until the numbers arrive: renderIntegrationsModal() carries every
+  // box's typed value across a redraw, so an empty box drawn while loading
+  // would be "typed" as blank and written back over the real limit.
+  if(!u) return '<div class="intg-apollo-limit"><div class="intg-apollo-label">Credits a day, for everyone</div><div class="intg-apollo-used">Loading today’s usage…</div></div>';
+  var used=u.used||0, limit=u.limit;
+  var line='Used today: <b>'+used+'</b> of '+limit+' · resets at midnight UTC. One credit shows one person’s full name and email, or one company’s size. Searching is free.';
+  return '<div class="intg-apollo-limit">'+
+    '<label class="intg-apollo-label" for="intg-apollo-limit">Credits a day, for everyone</label>'+
+    '<div class="intg-apollo-row">'+
+      '<input class="inp" id="intg-apollo-limit" type="number" inputmode="numeric" min="'+(u&&u.min!=null?u.min:0)+'" max="'+(u&&u.max!=null?u.max:10000)+'" value="'+(limit!=null?limit:'')+'"/>'+
+      '<button class="btn btn-sm btn-outline" onclick="saveApolloLimit()">Save limit</button>'+
+    '</div>'+
+    '<div class="intg-apollo-used">'+line+'</div>'+
+  '</div>';
+}
+function loadApolloUsage(){
+  return apiGet('/admin/apollo/usage').then(function(r){ STATE.apolloUsage=r; renderIntegrationsModal(); }).catch(function(){});
+}
+window.saveApolloLimit=function(){
+  var el=document.getElementById('intg-apollo-limit'); if(!el)return;
+  var n=Number(el.value), u=STATE.apolloUsage||{}, max=u.max!=null?u.max:10000;
+  if(el.value===''||!Number.isInteger(n)||n<0||n>max){ showToast('Enter a whole number from 0 to '+max.toLocaleString('en-US'),'warning'); return; }
+  apiPost('/admin/settings/numbers',{values:{poc_apollo_daily_credits:n}}).then(function(){
+    showToast('Daily Apollo limit saved: '+n+' credit'+(n===1?'':'s')+' a day','success');
+    return loadApolloUsage();
+  }).catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
+};
+
 function emailVerifyTester(){
   var r=STATE._emailVerifyResult;
   var c=r?(r.result==='valid'?'var(--green)':r.result==='invalid'?'var(--red)':r.result==='risky'?'var(--amber)':'var(--text3)'):'var(--text3)';
