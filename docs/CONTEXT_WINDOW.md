@@ -8,8 +8,8 @@
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Already added" pop-up + one duplicate check in the add-a-person path), after #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0051 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-066` (R-060 is open PR #254's, another chat).**
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0054 is the highest decision id. C-0030 is the highest contract id
+(only C-0030 OPEN). Next roadmap id `R-067` (R-060 is open PR #254's, another chat).**
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
 - **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
@@ -45,8 +45,12 @@ to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Alrea
   "publish and merge it"):** one duplicate check in `services/lead-contacts.js`
   (email anywhere = refused; name on this lead/company = asked) +
   `showAlreadyAdded` on Add contact, Add by hand and Accept. `npm test` 135/135.
-  **R-065 asked, undecided:** today a person added to an already-emailed lead
-  gets NO first email; should PACE send it by itself?
+  **Owner's answers (2026-09-28): R-063 YES (D-0052, to build), R-065 NO
+  (D-0053, dropped), and R-066 (D-0054): an admin sets ONE daily Apollo credit
+  number for everyone, visibly (today: System Settings only, default 20), plus
+  "how much of our credit system is Apollo's" — 1 PACE credit = 1 Apollo credit.
+  The owner STOPPED the run before either build began and before the Apollo
+  connector was called — resume only on their word.**
 - **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
   it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
   now judges each element's OWN text (it skipped any element with a child) and
