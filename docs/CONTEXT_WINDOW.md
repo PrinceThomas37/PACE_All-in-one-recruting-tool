@@ -7,7 +7,7 @@
 **Updated**: 2026-09-28 (Session 33, in progress — R-069) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
+to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28 19:54 UTC — R-069: Gmail follow-up fallback, interrupted-send recovery at boot, a truthful Pending tab), after #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
 
@@ -56,7 +56,7 @@ to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNE
   R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
   Uncover; migration 054 applied). `npm test` 136/136.**
 - **R-069 — why emails sat in Pending / never sent after Retry (owner,
-  2026-09-28). PR #260, NOT live.** Live queue, 22 rows: 14 Gmail follow-ups
+  2026-09-28). LIVE (#260 merged 2026-09-28 on "merge it").** Live queue, 22 rows: 14 Gmail follow-ups
   replying into threads that live in ANOTHER mailbox (the leads' mailbox was
   switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
   'sending' (process died mid-send, on no screen); 7 correctly held by the
@@ -187,7 +187,7 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
    (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
    scanned, 38 deleted, 24 kept — every kept file referenced).
-4. **After #260 is live:** the 14 follow-ups need one Retry (Email → Didn't
+4. **#260 is live (2026-09-28):** the follow-ups that gave up (6 by the merge) need one Retry (Email → Didn't
    send) unless their last automatic try fell after the release; the stuck
    Lamons follow-up shows as "may have gone out" — check Spencer's Sent first.
    (The "held counted as ready now" gap is closed by R-069.) R-070 is the
