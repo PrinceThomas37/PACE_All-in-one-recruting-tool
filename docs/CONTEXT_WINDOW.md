@@ -144,9 +144,8 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
    Anthropic key has no credit (harmless — Groq answers); the apply link on
    "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
 3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
-   (org-scoping debt list) open. **R-032 is DONE** — a second chat the same day
-   (#251) deletes the 38 leftover resumes with a one-time server job on the next
-   heartbeat (`services/storage-orphans.js`); check its marker row to confirm.
+   (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
+   scanned, 38 deleted, 24 kept — every kept file referenced).
 4. Known gap left on purpose: the Pending banner counts a first email held by
    the per-company cap as "ready now" until the send run reaches it.
 
