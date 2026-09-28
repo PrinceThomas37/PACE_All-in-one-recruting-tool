@@ -6211,3 +6211,12 @@ The owner picked blue (D-0055, Sapphire #294DA0) and asked to rebuild the story 
 - Converse: a sapphire strand and an ice strand braid back and forth.
 - Close: the strands become one line, a job order appears and three candidate pearls arrive.
 Artifact 8wN783rhM1eLHeaboXzqa1, built by scratchpad gen3.py.
+
+### Session 33, website round 7: a story a stranger can read from pictures
+The owner said the one-line story "is not self explanatory… what about someone outside", and that it must stay infographic, not text or tables. It was rebuilt with universally recognisable pictures:
+- Find: buildings with HIRING flags, and a magnifier ticks them.
+- Enrich: a contact card fills with email, phone and "hiring" rows, then a verified check.
+- Connect: your laptop showing Pace, an envelope flying to the contact, and a clock reading 9:00 AM their time.
+- Converse: chat bubbles with typing dots.
+- Close: an agreement is signed and stamped, a briefcase shows "1 job, 3 roles", and three people drop in.
+Artifact MfLtaenPL2VaJC5AWmxvX6, built by scratchpad gen4.py.
