@@ -47,6 +47,12 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0054 · 2026-09-28 · STANDS · One colour scheme for the website AND the product
+**Their words:** *"these colour schemes will be used in the product also. we cannot have wesite to be a colour and the product to be a different colour, we are going to transfer this same theme to the product too."*
+**Decided:** whichever palette the owner picks (D-0053: teal, fire opal or glacier) becomes the app's colours too. It applies to theme.css, styles.css and ui.css tokens, in both light and dark. The comparison shows each palette on the website opening and on a product screen: artifact 392A27G9pNzRd7xTX7sfQb.
+**Watch for:** the app's contrast rules (theme-contrast-smoke, the calm-colour rule on lists). An accent is scarce on a list, and red must not become the everyday colour. If fire opal is picked, the app's "error/overdue" red needs to move away from the brand ember.
+**Re-open when:** the owner picks the palette. Then plan the app re-skin as its own change.
+
 ### D-0053 · 2026-09-28 · OPEN · Teal becomes one option; warm and cool alternatives shown (amends D-0052)
 **Their words:** *"This colour is good we will keep this as an option, Now can you show me a different one, something red and orange and yellowish type too, and then the cooler tone too"*.
 **Status:** Abalone teal (D-0052) is kept as a candidate, not the final pick. Two alternatives were built in the same shape:
