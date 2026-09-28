@@ -18,6 +18,11 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
   suite **127/127**. Deploy is Render's; unverifiable from this sandbox.
 - **R-053 (contact finder) is being DESIGNED with the owner** — the chat's big
   job. Design, not build. Starting point: `docs/SESSION31_DESIGNS.md` §3.
+- **Contrast guard widened (2026-09-28, separate branch):** `theme-contrast-smoke`
+  now judges each element's OWN text (it skipped any element with a child) and
+  measures the panel under an opened row (its scope named a class that never
+  existed). 12/12, full suite 128/128; nothing unreadable was hiding. Open:
+  the suite still renders screens without data — see `foundry.md`.
 
 ---
 

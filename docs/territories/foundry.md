@@ -1,5 +1,50 @@
 # Foundry — memory
-> Last written: 2026-09-27 (Session 33) · 128 suites after merging #251
+> Last written: 2026-09-28 (Session 33) · 128 suites (none added; theme-contrast-smoke 10 → 12 checks)
+
+## Session 33 (2026-09-28) — the contrast probe had TWO blind spots
+The separate task the POC finder session (R-053 slice 2) raised: its probe,
+copied from `theme-contrast-smoke`, never measured a name sharing its element
+with a span. Fixed there; this is the same fix in the theme suite.
+- **The probe judged LEAF elements only** (`if (el.children.length) continue`),
+  so text sharing its element with a child element — a name beside its title
+  span, a label beside its icon, a heading beside its count badge — was never
+  measured. `CONTRAST_PROBE` now judges each element's OWN text nodes (≥2
+  chars). Threshold 2.2, translucent-ancestor compositing and
+  decline-on-gradient are unchanged. A leaf's own text IS its textContent, so
+  this is a strict superset: at rest it judges **1,056 texts per theme, was
+  979** (+77 mixed; 3 more mixed sit on a gradient and are declined as before).
+- **The "opened row" pass had never measured the opened PANEL.** Its scope
+  named `.lead-expand`, a class that exists nowhere in the app (not in any
+  commit this shallow clone holds, back to 15 Sep). The panel is the shared
+  `tr.row-exp` (`03-core-render.js`, R-012; Leads adds `lead-exp`), so only
+  the row's own cells were ever judged. **Found because the mandated mutation
+  check PASSED**: dark ink on a contact name inside that panel went green under
+  the new probe too. Scope is now `tr.row-exp *`, and a new step per theme
+  asserts the panel is there with text (328 chars). Renaming the class in
+  `_rowInsert` fails it in both themes (0 chars), verified. Suite 10 → 12.
+- **Mutations, each run against BOTH probes with everything else identical**
+  (a scratch copy differing in the one probe line; all restored, `git diff --
+  public/` empty after each):
+  * `.lx-nm{color:#1a1a1a}` (name + Primary chip, opened lead panel) → own-text
+    FAILS dark, "Ada Byron" 1.57:1; leaf-only passes 12/12.
+  * `.pgtab.on:has(> .pgtab-n){color:#1a1a1a}` (tab + count badge, AT REST) →
+    own-text FAILS dark, "All Candidates"/"Review queue" 1.04:1 on 3 roles;
+    leaf-only passes 12/12. (`:has` keeps badge-less tabs — leaves the old
+    rule already measured — out of it, or the A/B proves nothing.)
+- **No real unreadable text was hiding; no stylesheet changed.** Nothing under
+  2.2 at rest, and a one-off diagnostic over POPULATED screens
+  (`row-reveal-smoke`'s stub: Jobs, Candidates, Clients lists + open panels,
+  the full job page, the candidate drawer, a 2-lead Leads list with a row
+  opened) judged **606 texts per theme, 100 of them mixed**. Weakest: 2.61:1
+  dark ("Primary" chip, 9.5px accent on its own tint), 2.4:1 light (the gold
+  "CE" of the rail wordmark), 2.73:1 light (muted grey on the `is-open` row
+  tint). Near-misses, not failures — the first things a raised bar would flag.
+- **OPEN (foundry's own): the suite still renders screens EMPTY** (no backend)
+  plus one lead row. Populated lists, row panels and record drawers have no
+  permanent contrast guard; the sweep above was one-off. `row-reveal-smoke`'s
+  stub is the ready-made way in.
+- Full run **128/128**, exit 0 (Node 22; the change is browser-side code inside
+  `page.evaluate`, so Node 26 was not re-run).
 
 ## Session 33 (2026-09-27) — R-012, every list opens in place
 - **127 suites** now: +`row-reveal-smoke.mjs` (45, Playwright, stub API at the
@@ -90,7 +135,9 @@ mutations on an idle repaint, by node identity) · `mobile-layout-smoke` (16 pag
 `TEST_USERS`, so it did not pick up `bd_lead`/`director`/`associate_director`
 automatically the way `nav-icons-smoke` did; worth widening later, not urgent) ·
 `outreach-ai-quality-smoke` (every `onclick` a page emits is defined in that
-page) · `recruiting-routes-mounted` (all 63) · `models-smoke` ·
+page) · `theme-contrast-smoke` (each element's OWN text on its composited
+ground, under 2.2:1 fails; 51 screens × 3 roles × 2 themes, the login screen,
+and a hovered + opened lead row whose `tr.row-exp` panel must be present) · `recruiting-routes-mounted` (all 63) · `models-smoke` ·
 `org-scoping-routes-smoke` · `morning-briefing-smoke` (the pure writer/checker
 in `services/morning-briefing.js`: no-AI path never apologises and is never
 empty; `checkBriefing` rejects a bare invented integer, a spelled-out one, and

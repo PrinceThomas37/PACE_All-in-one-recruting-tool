@@ -86,8 +86,19 @@ const CONTRAST_PROBE = ({ minRatio, scope }) => {
   const bad = [];
   const els = document.querySelectorAll(scope);
   for (const el of els) {
-    if (el.children.length) continue;                     // leaf text only
-    const txt = (el.textContent || '').trim();
+    // The element's OWN text: the text nodes directly inside it, never its
+    // children's. This used to skip every element that had a child element
+    // ("leaf text only"), and that was a blind spot, not a simplification —
+    // a name sharing its element with a title span
+    // (`<div>Grace Hill<span> · HR Manager</span></div>`), a label beside its
+    // icon, a heading beside its count badge: the text a person reads FIRST
+    // was never measured at all. Session 33 proved it on the POC finder's
+    // found-person name — a hard-coded dark ink passed the leaf-only probe in
+    // dark mode and measured 1.57:1 once own text was judged. Each child is
+    // still judged on its own turn, in its own colour, so nothing is counted
+    // twice, and a leaf's own text IS its textContent, so every element judged
+    // before is judged exactly as before.
+    const txt = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
     if (txt.length < 2) continue;
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) < 0.35) continue;
@@ -193,6 +204,7 @@ try {
     step(`the state pass has a row to drive in ${theme}`, rows > 0, `${rows} rows`);
 
     const stateBad = [];
+    let panelText = 0;
     if (rows > 0) {
       await page.hover('#content tr[data-row-id="j0"]');
       await page.waitForTimeout(120);
@@ -201,9 +213,22 @@ try {
       // ...and opened, which is both `.is-open` AND still hovered.
       await page.click('#content tr[data-row-id="j0"]');
       await page.waitForTimeout(220);
-      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *, #content .lead-expand *' }))
+      // THE PANEL IS WHERE AN OPENED ROW'S TEXT IS. This scope used to name
+      // `.lead-expand`, a class that exists nowhere in the app — the panel is
+      // the `tr.row-exp` every list opens (03-core-render.js, R-012) — so the
+      // "opened" pass measured the row's own cells and never once the
+      // contacts, facts and buttons beneath it. Found in Session 33, when a
+      // deliberate dark ink on a contact's name in that panel passed. It is
+      // asserted present below, so the next rename fails instead of going quiet.
+      panelText = await page.evaluate(() => {
+        const tr = document.querySelector('#content tr[data-row-id="j0"]');
+        const nx = tr && tr.nextElementSibling;
+        return nx && nx.classList.contains('row-exp') ? nx.textContent.trim().length : 0;
+      });
+      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *, #content tr.row-exp *' }))
         stateBad.push(`open: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
     }
+    step(`the opened row's panel is there to measure in ${theme}`, panelText > 0, `${panelText} chars of text`);
     step(`a hovered and an opened row stay readable in ${theme}`,
       stateBad.length === 0, stateBad.slice(0,5).join(' | '));
 

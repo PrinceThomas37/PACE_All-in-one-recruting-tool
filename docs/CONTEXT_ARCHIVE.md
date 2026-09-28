@@ -6146,3 +6146,16 @@ Owner: *"Quickly do R-012 / I think it's going to a small work? / We have to des
 ### Round 2 — R-012 merged (2026-09-27)
 Owner, after the screenshots: *"Merge this change first and then work on the poc finder"* — #252 squash-merged; R-012 moved to DONE in ROADMAP and the artifact. Deploy is Render's auto-deploy from `main`; `*.onrender.com` is blocked from this sandbox, so it is unverified here.
 - **Verified 2026-09-28:** the job ran minutes after #251 deployed (27 Sep 07:24 UTC): 62 scanned, 38 deleted, 24 kept — every kept file referenced; bucket now 24 objects. Marker holds counts only.
+
+# Session 33 — the contrast probe's two blind spots (2026-09-28)
+
+### Round 1 — own text, and the panel nobody measured
+The POC finder session (R-053 slice 2, on its own branch) found that its contrast probe — copied from `test/theme-contrast-smoke.mjs` — judged LEAF elements only, so a person's name sharing its element with a title span was never measured (a hard-coded `#1a1a1a` on it passed in dark, and measured 1.57:1 once own text was judged). It fixed its own copy and raised the theme suite's identical blind spot as a separate task. This is that task.
+- **Rule applied:** `CONTRAST_PROBE` judges each element's own text nodes (≥2 chars); threshold 2.2, translucent-ancestor compositing and decline-on-gradient unchanged. A strict superset of the old rule: at rest 1,056 texts per theme judged, was 979.
+- **It surfaced no real failure** — not at rest, and not in a one-off populated sweep (`row-reveal-smoke`'s stub; 606 texts per theme, 100 of them mixed; weakest 2.4:1). No stylesheet changed.
+- **The mandated mutation check is what found the second blind spot.** Dark ink on a contact's name inside an opened Leads row PASSED under the new probe: the "opened" pass's scope named `.lead-expand`, a class that has not existed in the app in any commit this clone holds; the panel is `tr.row-exp`. The pass had measured the row's cells and never the panel beneath them. Scope fixed, plus a presence step per theme (renaming the panel class fails it). Then, with files identical but for the one probe line: name + chip in the panel → own-text FAILS (1.57:1), leaf-only passes 12/12; active tab + count badge at rest → own-text FAILS (1.04:1, three roles), leaf-only passes 12/12.
+- `theme-contrast-smoke` 12/12; `npm test` **128/128**, exit 0.
+- **Still open (foundry):** the suite renders screens without data, so populated lists, row panels and record drawers have no permanent contrast guard.
+
+### The thread through this one
+A selector is a claim that something exists. The opened-row scope named a class the app never had, and a CSS selector that matches nothing is not an error — it is an empty list, which a contrast probe reads as "nothing unreadable". It sat green for at least two weeks under a step titled "an opened row stays readable". It was found only because the task demanded a deliberate break, and the break went green: **a mutation check that passes is not a failed step, it is the finding.** Hence the new presence step — the guard now fails when the thing it measures is absent, not only when it is ugly.
