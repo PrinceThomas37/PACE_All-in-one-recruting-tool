@@ -47,6 +47,16 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0055 · 2026-09-28 · STANDS · PACE is blue: Sapphire #294DA0 (closes D-0053; applies to the product per D-0054)
+**Their words:** *"go with blue, i like that colour scheme, easy for eyes and market standard, we dont want to use any trandemarked blue, so be sure of that. so create the site with blue tone"*.
+**Decided:**
+- **White pearl:** sapphire #294DA0 on #F3F6FA, contrast 7.3:1.
+- **Black pearl:** periwinkle #86A8FF on #0A101C, contrast 8.2:1.
+- **Shimmer:** ice cyan #3BB3D9 in light and #6FD3EA in dark.
+**The trademark check, and its limits.** The first blue, #2F56C9, sat almost on top of Gmail's #0B57D0 and Atlassian's #0052CC (colour distance ΔE 4-5, which is near-identical to the eye). I measured the distance from about 30 well-known brand blues, including Zoom, LinkedIn, Facebook, Microsoft, Salesforce, IBM, PayPal and Bootstrap/Ceipal. #294DA0 is ≥11 ΔE from every one of them, clearly different side by side. This is not legal advice. Single-colour trademarks are rare (Tiffany blue is the famous one). What is protected in practice is a colour used as part of a name or logo, so the distinct hex plus the PACE wordmark and ice shimmer is what keeps us clear. A lawyer's clearance search before launch is still worth doing.
+Site: artifact 8pTEfGZefvU2DhceKkejad. The app re-skin is a separate, later change.
+**Re-open when:** a clearance search flags a clash, or the owner wants to revisit.
+
 ### D-0054 · 2026-09-28 · STANDS · One colour scheme for the website AND the product
 **Their words:** *"these colour schemes will be used in the product also. we cannot have wesite to be a colour and the product to be a different colour, we are going to transfer this same theme to the product too."*
 **Decided:** whichever palette the owner picks (D-0053: teal, fire opal or glacier) becomes the app's colours too. It applies to theme.css, styles.css and ui.css tokens, in both light and dark. The comparison shows each palette on the website opening and on a product screen: artifact 392A27G9pNzRd7xTX7sfQb.
