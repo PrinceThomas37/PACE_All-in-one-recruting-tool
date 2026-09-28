@@ -37,6 +37,9 @@ const MERGE_TABLES = [
   // the survivor's). The survivor's own summary reads "N new" and is simply
   // re-generated when its owner next presses the button.
   { table: 'client_summaries', label: 'saved summary', plural: 'saved summaries', clear: true },
+  // Migration 052 (the POC finder): people found for a lead record the lead's
+  // company too, so they move with it — the leads they belong to move above.
+  { table: 'poc_suggestions', label: 'suggested contact', plural: 'suggested contacts' },
 ];
 
 // What makes a merge impossible, in words the person reading the screen can act

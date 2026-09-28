@@ -228,6 +228,41 @@ function fillSlots(targets, contacts) {
   return { slots, others: list.filter(c => !taken.has(c.id)).map(c => c.id) };
 }
 
+/**
+ * For each EMPTY slot, the best person from a people search (Apollo) — one
+ * whose title makes them the right KIND for the slot (HR / hiring manager),
+ * best title fit first; never somebody already on the lead, already
+ * suggested or turned down for it, and never one person for two slots.
+ *   slots:   from fillSlots (contact_id null = empty)
+ *   people:  [{ id, first_name, last_name, title }]
+ *   exclude: { ids: [source ids already suggested or rejected],
+ *              names: ['First Last', …] of the people already on the lead }
+ *   skip:    slot keys that already have a suggestion waiting
+ * Returns [{ slot_key, person }], in slot order.
+ */
+function pickPeople(slots, people, exclude, size, skip) {
+  const ids = new Set(((exclude && exclude.ids) || []).map(String));
+  const names = new Set(((exclude && exclude.names) || []).map(nameKey).filter(Boolean));
+  const skipSet = new Set(skip || []);
+  const open = (slots || []).filter(s => !s.contact_id && !skipSet.has(s.key));
+  const pairs = [];
+  (people || []).forEach(p => {
+    if (!p || !p.id || !p.first_name || ids.has(String(p.id))) return;
+    if (p.last_name && names.has(nameKey(p.first_name + ' ' + p.last_name))) return;
+    const kind = contactKind(p.title, size);
+    open.forEach(s => { if (s.kind === kind) pairs.push({ s, p, score: fitScore(p.title, s) }); });
+  });
+  const order = (slots || []).map(s => s.key);
+  pairs.sort((a, b) => (a.score - b.score) || (order.indexOf(a.s.key) - order.indexOf(b.s.key)));
+  const usedSlot = new Set(), usedPerson = new Set(), out = [];
+  pairs.forEach(x => {
+    if (usedSlot.has(x.s.key) || usedPerson.has(x.p.id)) return;
+    usedSlot.add(x.s.key); usedPerson.add(x.p.id);
+    out.push({ slot_key: x.s.key, person: x.p });
+  });
+  return out.sort((a, b) => order.indexOf(a.slot_key) - order.indexOf(b.slot_key));
+}
+
 // ── the company's email format ──────────────────────────────────────────────
 // Ids match enrichment.js PATTERNS where they overlap, so a format learned here
 // can be handed to it.
@@ -270,10 +305,15 @@ function normalizeDomain(input) {
  * website and its staff mail often differ); free-mail addresses never count.
  * The FORMAT is the majority among addresses on that domain; ties go to the
  * market prior's order. `learned_from` is how many real addresses agree.
+ * An address that BOUNCED (email_status invalid/deactivated) teaches nothing —
+ * it may be somebody's wrong guess at the format, and learning from it would
+ * repeat the mistake on every new name (design §6 rule 5).
  */
+const DEAD_STATUSES = new Set(['invalid', 'deactivated']);
 function learnFormat(contacts, website) {
   const byDomain = {};
   (contacts || []).forEach(c => {
+    if (c && DEAD_STATUSES.has(String(c.email_status || '').toLowerCase())) return;
     const d = normalizeDomain(c && c.email);
     if (!d || FREE_MAIL.test(d)) return;
     (byDomain[d] = byDomain[d] || []).push(c);
@@ -315,6 +355,6 @@ function splitName(full) {
 
 module.exports = {
   SIZE_BANDS, SIZE_IDS, DEFAULT_SIZE, FUNCTIONS, MARKET_PRIOR, FORMATS,
-  jobFunction, normalizeSize, pocTargets, contactKind, fitScore, fillSlots,
+  jobFunction, normalizeSize, pocTargets, contactKind, fitScore, fillSlots, pickPeople,
   detectFormat, normalizeDomain, learnFormat, emailFor, splitName, nameKey,
 };

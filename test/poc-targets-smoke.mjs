@@ -109,6 +109,49 @@ step('the domain is the one its PEOPLE use, not just the website', learned.domai
 const freeOnly = poc.learnFormat([{ first_name: 'Cy', last_name: 'Fox', email: 'cfox@gmail.com' }], 'acme.com');
 step('a free-mail address never teaches a company format', freeOnly.pattern === null && freeOnly.domain === 'acme.com', JSON.stringify(freeOnly));
 step('the market prior is first initial + surname (measured 2026-09-27)', poc.MARKET_PRIOR === 'flast');
+// A bounced address may be somebody's wrong guess at the format — it teaches nothing (design §6 rule 5).
+const bounced = poc.learnFormat([
+  { first_name: 'John', last_name: 'Smith', email: 'john.smith@bnc.com', email_status: 'invalid' },
+  { first_name: 'Ann', last_name: 'Lee', email: 'ann.lee@bnc.com', email_status: 'deactivated' },
+  { first_name: 'Bo', last_name: 'Ray', email: 'bray@bnc.com', email_status: 'valid' },
+], 'bnc.com');
+step('a BOUNCED address never teaches the format (2 dead first.last vs 1 live flast → flast)',
+  bounced.pattern === 'flast' && bounced.learned_from === 1, JSON.stringify(bounced));
+step('…and when every address there bounced, no format is learned at all',
+  poc.learnFormat([{ first_name: 'John', last_name: 'Smith', email: 'jsmith@dead.com', email_status: 'invalid' }], 'dead.com').pattern === null);
+step('an out-of-office reply is not a bounce — that address still teaches',
+  poc.learnFormat([{ first_name: 'John', last_name: 'Smith', email: 'jsmith@ooo.com', email_status: 'out_of_office' }], 'ooo.com').pattern === 'flast');
+
+// ── picking people from a search for the EMPTY slots (slice 2) ─────────────
+const tg = poc.pocTargets({ position: 'Junior Estimator', industry: 'Construction' }, '21-50');
+const slotsNow = poc.fillSlots(tg, [
+  { id: 'm', first_name: 'Maria', last_name: 'Lopez', designation: 'HR Manager' },   // fills hr1
+]).slots;
+const found = [
+  { id: 'p1', first_name: 'Olivia', last_name: 'Stone', title: 'Office Manager' },
+  { id: 'p2', first_name: 'Dave', last_name: '', title: 'Chief Estimator' },          // surname hidden
+  { id: 'p3', first_name: 'Eve', last_name: 'Park', title: 'Estimating Manager' },
+  { id: 'p4', first_name: 'Maria', last_name: 'Lopez', title: 'HR Manager' },         // already on the lead
+  { id: 'p5', first_name: 'Pat', last_name: 'Nobody', title: 'Warehouse Associate' }, // neither
+  { id: 'p6', first_name: 'Carl', last_name: 'Boss', title: 'President' },
+];
+const picked = poc.pickPeople(slotsNow, found, { ids: [], names: ['Maria Lopez'] }, tg.size, []);
+const pk = (k) => (picked.find(x => x.slot_key === k) || {}).person || {};
+step('a FILLED slot gets nobody', !picked.some(x => x.slot_key === 'hr1'), JSON.stringify(picked.map(x => x.slot_key)));
+step('the best title fit takes an empty slot (office manager → HR 2 at 20–50)', pk('hr2').id === 'p1', pk('hr2').id);
+step('the function head beats a lesser title (chief estimator over estimating manager)', pk('mgr1').id === 'p2', pk('mgr1').id);
+step('the owner/president slot gets the president', pk('mgr2').id === 'p6', pk('mgr2').id);
+step('somebody already on the lead is never picked', !picked.some(x => x.person.id === 'p4'));
+step('nobody outside HR or management is picked', !picked.some(x => x.person.id === 'p5'));
+step('one person, one slot', new Set(picked.map(x => x.person.id)).size === picked.length);
+step('the order is slot order', picked.map(x => x.slot_key).join() === 'hr2,mgr1,mgr2', picked.map(x => x.slot_key).join());
+const again = poc.pickPeople(slotsNow, found, { ids: ['p2', 'p6'], names: ['Maria Lopez'] }, tg.size, []);
+step('somebody suggested or turned down before is never picked again — the next best fit is',
+  !again.some(x => ['p2', 'p6'].includes(x.person.id)) && (again.find(x => x.slot_key === 'mgr1') || {}).person.id === 'p3', JSON.stringify(again.map(x => [x.slot_key, x.person.id])));
+const waitingSkip = poc.pickPeople(slotsNow, found, { ids: [], names: ['Maria Lopez'] }, tg.size, ['hr2', 'mgr2']);
+step('a slot with somebody already waiting is left alone', waitingSkip.map(x => x.slot_key).join() === 'mgr1', waitingSkip.map(x => x.slot_key).join());
+step('no people, or nothing open → nobody', poc.pickPeople(slotsNow, [], null, tg.size).length === 0 &&
+  poc.pickPeople(slotsNow.map(x => Object.assign({}, x, { contact_id: 'z' })), found, null, tg.size).length === 0);
 
 // ── D-0049: a guess is never emailed ───────────────────────────────────────
 step('with a learned format, a new name gets its address', poc.emailFor('Dave', 'Reed', { domain: 'acmebuild.com', pattern: 'flast' }) === 'dreed@acmebuild.com');

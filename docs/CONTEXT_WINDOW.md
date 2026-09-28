@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-27 (Session 33, in progress) · **Repo**:
+**Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
@@ -19,11 +19,19 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
 - **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
   owner answered (D-0049: Apollo with API — they will connect it; runs
   automatically AND on a button; a guess is NEVER emailed; size picked on the
-  lead), and slice 1 is BUILT** — the four slots on the lead row, the rules
+  lead), and slices 1 AND 2 are BUILT on PR #253 (draft, waiting for the
+  owner's OK to merge)** — slice 1: the four slots on the lead row, the rules
   (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
-  Next slices: Apollo "Find the rest" (switches on when the key is saved),
-  then the posting/website readers, then the automatic run with a daily
-  credit ceiling.
+  **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
+  one lookup per person (a credit, never retried) in
+  `services/people-apollo.js`; found people wait in `poc_suggestions`
+  (**migration 052, applied + re-verified live**) until Accept / Not this
+  person; Accept goes through `services/lead-contacts.js` (the ONE add-contact
+  path, `POST /contacts` uses it too); daily ceiling = System Settings
+  `poc_apollo_daily_credits` (20). **Does nothing live until the owner saves
+  an Apollo key whose plan includes API access** (their current plan refused
+  people search on 2026-09-27). Next slices: the posting/website readers
+  (free), then the automatic run for new leads.
 
 ---
 
@@ -118,7 +126,7 @@ self-serve signup built and **off**.
 **⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
 read the default before saying what a switch is set to.
 
-## Migrations — next is **052** · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
+## Migrations — next is **053** · 052 APPLIED 2026-09-27 (poc_suggestions, re-verified 2026-09-28) · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
 
 049: RLS + revoke on the two backup tables. 050: `recruiting_lookups` unique
 index is `(org_id, category, lower(value))`. **SQL/migrations are pre-approved
@@ -127,8 +135,10 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
 
-1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 in
-   design. **R-057** (matching candidates in emails)
+1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
+   1–2 built on PR #253 — **merge only on the owner's approval**, then remind
+   them to connect Apollo (Admin → Integrations; the Test button now says
+   whether the key can search people). **R-057** (matching candidates in emails)
    and **R-054** (a playbook per industry) are still deferred — design first.
 2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
    Anthropic key has no credit (harmless — Groq answers); the apply link on
@@ -140,10 +150,12 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 4. Known gap left on purpose: the Pending banner counts a first email held by
    the per-company cap as "ready now" until the send run reaches it.
 
-## 🧪 TESTS: 131 SUITES
+## 🧪 TESTS: 132 SUITES
 
 `npm test` — read the COUNT; never pipe into `tail`. `bash
-test/verify-frontend.sh` too. Newest: `mailbox-alerts-smoke` (22) + `-ui` (12),
+test/verify-frontend.sh` too. Newest: `poc-apollo-smoke` (33), `poc-routes-
+smoke` (73, a fake Apollo + migration 052's rules), `poc-finder-ui-smoke` (50,
+incl. light/dark contrast of the found cards); `mailbox-alerts-smoke` (22) + `-ui` (12),
 `client-digest-ui-smoke` (11), `stage-history-reports-smoke` (10, real
 handlers), `reports-smoke` (14, incl. a 390px fit walk), `integration-test-
 honesty-smoke` (12), `lookups-per-org-smoke` (10), `client-docs-ownership-smoke`

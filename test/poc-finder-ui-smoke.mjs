@@ -15,6 +15,13 @@
 //   * `pocEmailFor` in the page is a checked copy of poc-targets.emailFor;
 //   * someone who can see but not work the lead gets no controls;
 //   * the block fits a 390px phone.
+//   * SLICE 2: "Find the rest" is drawn ONLY when the server would do it
+//     (Apollo connected, a slot open with nobody waiting, the caller works the
+//     lead); found people show in their slot with how sure the email is
+//     (Confirmed / Likely / none — never a guess); Accept puts them on the lead
+//     as an ordinary contact with the email control; Not this person takes
+//     them off and they do not come back; a LinkedIn link is only ever a real
+//     https linkedin.com address; only an admin is told how to connect Apollo.
 // SHOTS=<dir> writes screenshots.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -70,6 +77,44 @@ const contacts = [
   { id:'c5', job_id:'j3', first_name:'Raj', last_name:'Patel', designation:'Operations Manager', email:'rpatel@viewonly.com', is_primary:true, email_status:'valid' },
 ];
 const CAN_EDIT = { j1:true, j2:true, j3:false };
+// Slice 2: the fake Apollo, and the people it has already found.
+const FINDER = { apollo:false, is_admin:false, used:0, limit:20 };
+const APOLLO = {
+  co2: [
+    { id:'ap-grace', first_name:'Grace', last_name:'Hill', title:'HR Manager', verified:'grace.hill@newcomech.com' },
+    // Apollo holds only a guess for him → no email; and a link that is not a link
+    { id:'ap-omar', first_name:'Omar', last_name:'Diaz', title:'Office Manager', verified:null, linkedin_url:'javascript:alert(1)' },
+    { id:'ap-tom', first_name:'Tom', last_name:'Reyes', title:'Service Manager', verified:'treyes@newcomech.com', linkedin_url:'https://www.linkedin.com/in/tomreyes' },
+  ],
+  co1: [ { id:'ap-kim', first_name:'Kim', last_name:'Park', title:'Co-Owner', verified:null } ],
+};
+// One found earlier on the lead this user may only look at.
+const suggs = [
+  { id:'s-ro', job_id:'j3', slot_key:'hr1', first_name:'Rita', last_name:'Viewer', title:'HR Manager', email:null, email_confidence:null, email_source:null,
+    source:'apollo', source_ref:'ap-rita', linkedin_url:null, status:'suggested' },
+];
+let findDelay = 0;
+// "Find the rest", the way routes/poc.js decides it: the REAL pickPeople picks
+// who goes in which empty slot; a Likely address only from a learned format;
+// otherwise Apollo's verified one; otherwise none.
+function stubFind(id){
+  const j = jobs.find(x => x.id === id), co = companies[j.company_id];
+  const cs = contacts.filter(c => c.job_id === id);
+  const sameCo = contacts.filter(c => jobs.find(x => x.id === c.job_id).company_id === j.company_id);
+  const t = poc.pocTargets({ position:j.position, industry:j.industry }, co.size_band);
+  const f = poc.fillSlots(t, cs), fmt = poc.learnFormat(sameCo, co.website);
+  const mine = suggs.filter(x => x.job_id === id);
+  const picks = poc.pickPeople(f.slots, APOLLO[co.id] || [],
+    { ids: mine.map(x => x.source_ref), names: sameCo.map(c => c.first_name+' '+c.last_name) }, t.size,
+    mine.filter(x => x.status === 'suggested').map(x => x.slot_key));
+  picks.forEach(({ slot_key, person }) => {
+    let email = poc.emailFor(person.first_name, person.last_name, fmt), conf = email ? 'likely' : null, src = email ? 'format' : null;
+    if (!email && person.verified) { email = person.verified; conf = 'confirmed'; src = 'apollo'; FINDER.used++; }
+    suggs.push({ id:'s-'+person.id, job_id:id, slot_key, first_name:person.first_name, last_name:person.last_name, title:person.title,
+      email, email_confidence:conf, email_source:src, source:'apollo', source_ref:person.id, linkedin_url:person.linkedin_url||null, status:'suggested' });
+  });
+  return { added:picks.length, message: picks.length ? `Found ${picks.length} ${picks.length===1?'person':'people'} — accept the ones you want on this lead.` : 'Nobody new to suggest.' };
+}
 // The payload GET /jobs/:id/poc returns — assembled with the REAL rules, the
 // same way routes/poc.js does (that file's own test pins the route itself).
 function pocPayload(id){
@@ -83,6 +128,9 @@ function pocPayload(id){
     function:t.function, slots:f.slots.map(s => ({ key:s.key, kind:s.kind, label:s.label, titles:s.titles, contact_id:s.contact_id })),
     others:f.others, found:f.slots.filter(s => s.contact_id).length,
     format:{ domain:fmt.domain, pattern:fmt.pattern, learned_from:fmt.learned_from, example:fmt.pattern ? poc.emailFor('Jane','Smith',fmt) : null },
+    suggestions: suggs.filter(x => x.job_id === id && x.status === 'suggested').map(x => ({ id:x.id, slot_key:x.slot_key, first_name:x.first_name,
+      last_name:x.last_name, title:x.title, email:x.email, email_confidence:x.email_confidence, email_source:x.email_source, source:x.source, linkedin_url:x.linkedin_url })),
+    finder:{ apollo:FINDER.apollo, credits:{ used:FINDER.used, limit:FINDER.limit }, is_admin:FINDER.is_admin },
     can_edit:CAN_EDIT[id] };
 }
 function rawJobs(){
@@ -105,6 +153,19 @@ async function api(route){
   if (m==='PUT' && (hit = p.match(/^\/jobs\/([^/]+)\/company-size$/))) {
     const j = jobs.find(x => x.id === hit[1]); companies[j.company_id].size_band = body.size || null;
     return reply(route, pocPayload(hit[1]));
+  }
+  if (m==='POST' && (hit = p.match(/^\/jobs\/([^/]+)\/poc\/find$/))) {
+    await new Promise(r => setTimeout(r, findDelay));
+    const result = stubFind(hit[1]);
+    return reply(route, Object.assign(pocPayload(hit[1]), { result }));
+  }
+  if (m==='POST' && (hit = p.match(/^\/jobs\/([^/]+)\/poc\/suggestions\/([^/]+)\/(accept|reject)$/))) {
+    const sg = suggs.find(x => x.id === hit[2] && x.job_id === hit[1]);
+    if (!sg || sg.status !== 'suggested') return reply(route, { error:'Somebody has already decided on this person.' }, 409);
+    if (hit[3] === 'reject') { sg.status = 'rejected'; return reply(route, pocPayload(hit[1])); }
+    const c = { id:'c-'+sg.source_ref, job_id:hit[1], first_name:sg.first_name, last_name:sg.last_name, designation:sg.title, email:sg.email, is_primary:false, email_status:'valid' };
+    contacts.push(c); sg.status = 'accepted';
+    return reply(route, Object.assign(pocPayload(hit[1]), { contact:{ id:c.id }, already_on_lead:false }));
   }
   if (m==='POST' && p==='/contacts') {
     const c = Object.assign({ id:'new'+calls.length, email_status:'valid' }, body); contacts.push(c);
@@ -159,6 +220,8 @@ try{
   step('each person keeps the valid/invalid email control', slots.selects === 3, String(slots.selects));
   step('the slots arrived without a render() — the table is the same node', slots.sameTable === true);
   step('the size is shown as not set, and why it matters', /company size/i.test(slots.text) && /Assuming 20–50/.test(slots.text));
+  step('with Apollo not connected there is NO "Find the rest" — never a button the server would refuse', !/Find the rest/.test(slots.text));
+  step('…and a non-admin is not told to connect it (they cannot)', !/Connect Apollo/.test(slots.text));
   await shot('poc-slots-desktop');
 
   // ── 2. the size pick ────────────────────────────────────────────────────
@@ -217,9 +280,124 @@ try{
   await page.waitForTimeout(1000);
   const ro = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j3'); if(!b) return { missing:true };
     return { missing:false, lxc: !!b.querySelector('.lxc'), size: !!b.querySelector('select.lxc-size'),
-      add: [...b.querySelectorAll('button')].some(x=>/Add by hand/.test(x.textContent)) }; });
+      add: [...b.querySelectorAll('button')].some(x=>/Add by hand/.test(x.textContent)),
+      found: /Rita Viewer/.test(b.innerText),
+      answer: [...b.querySelectorAll('button')].some(x=>/Accept|Not this person|Find the rest/.test(x.textContent)) }; });
   step('a viewer who does not work the lead sees the slots', !ro.missing && ro.lxc);
   step('…but no size pick and no Add by hand', !ro.missing && !ro.size && !ro.add, JSON.stringify(ro));
+  step('…sees a person found for it, but cannot accept or turn them down', !ro.missing && ro.found && !ro.answer, JSON.stringify(ro));
+
+  // ── 6b. slice 2: Find the rest, Accept, Not this person ─────────────────
+  FINDER.apollo = true;
+  pocDelay = 50; findDelay = 500;
+  await page.evaluate(()=>{ STATE.leadPoc = {}; });
+  await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');
+  await page.waitForTimeout(400);
+  const btn0 = await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); return !!b; });
+  step('with Apollo connected and slots open, "Find the rest" is offered', btn0);
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(150);
+  const busy = await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j2 .lxc-find'); return b ? { text:b.textContent, disabled:b.disabled } : null; });
+  step('while it looks, the button says so and cannot be pressed twice', !!busy && /Looking/.test(busy.text) && busy.disabled === true, JSON.stringify(busy));
+  await page.waitForTimeout(700);
+  const findCall = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p)).pop();
+  step('it asks the server for THIS lead', !!findCall && findCall.p === '/jobs/j2/poc/find');
+  const fnd = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return { missing:true };
+    const cards=[...b.querySelectorAll('.lxc-slot.is-found')];
+    return { missing:false, text:b.innerText, cards:cards.length,
+      confirmed:b.querySelectorAll('.lxc-conf.is-confirmed').length, likely:b.querySelectorAll('.lxc-conf.is-likely').length,
+      noEmail:cards.filter(c=>/No email/.test(c.innerText)).length,
+      find:[...b.querySelectorAll('button')].some(x=>/Find the rest/.test(x.textContent)),
+      links:[...b.querySelectorAll('.lxc-found-src a')].map(a=>({ href:a.getAttribute('href'), rel:a.getAttribute('rel'), target:a.getAttribute('target') })),
+      jsLink: !!b.querySelector('a[href^="javascript"]'),
+      accept:[...b.querySelectorAll('.lxc-found-acts button')].filter(x=>/Accept/.test(x.textContent)).length }; });
+  step('three people found, each in the slot they were found for', !fnd.missing && fnd.cards === 3, String(fnd.cards));
+  step('the answer is said in a sentence, and the count reads "3 to review"', /Found 3 people/.test(fnd.text) && /3 to review/i.test(fnd.text));
+  step('each email says how sure it is: 2 Confirmed, 1 with no email (Apollo only had a guess)', fnd.confirmed === 2 && fnd.noEmail === 1 && fnd.likely === 0, JSON.stringify(fnd));
+  step('the guess itself never reaches the page', !/omar\.diaz@|odiaz@/i.test(fnd.text));
+  step('every slot now has somebody or somebody waiting, so the button is gone', fnd.find === false);
+  step('a real LinkedIn address becomes a safe link; a "javascript:" one never becomes a link',
+    fnd.links.length === 1 && fnd.links[0].href === 'https://www.linkedin.com/in/tomreyes' && /noopener/.test(fnd.links[0].rel) && fnd.links[0].target === '_blank' && !fnd.jsLink, JSON.stringify(fnd.links));
+  step('each can be accepted', fnd.accept === 3, String(fnd.accept));
+  step('the credits line shows what today has cost', /Apollo: 2 of 20 credits used today/.test(fnd.text), (fnd.text.match(/Apollo:[^\n]*/)||[''])[0]);
+  if (SHOTS) { await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(b) b.scrollIntoView({block:'start'}); }); await page.waitForTimeout(150); }
+  await shot('poc-found-desktop');
+  // A found person exists only after "Find the rest", so the app-wide theme
+  // suite never draws one (CLAUDE.md: a palette has states). Measured here, in
+  // both themes, the way that suite does it: every translucent ground under
+  // the text composited down to what the eye really sees.
+  for (const theme of ['light', 'dark']) {
+    const bad = await page.evaluate((theme)=>{
+      document.documentElement.setAttribute('data-theme', theme);
+      const parse=(c)=>{ const m=String(c).match(/rgba?\(([^)]+)\)/); if(!m) return null; const p=m[1].split(',').map(x=>parseFloat(x.trim())); return { r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1 }; };
+      const lin=(v)=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); };
+      const lum=(c)=>0.2126*lin(c.r)+0.7152*lin(c.g)+0.0722*lin(c.b);
+      const over=(f,b)=>({ r:f.r*f.a+b.r*(1-f.a), g:f.g*f.a+b.g*(1-f.a), b:f.b*f.a+b.b*(1-f.a), a:1 });
+      const ground=(el)=>{ const st=[]; for(let n=el;n&&n!==document.documentElement;n=n.parentElement){ const cs=getComputedStyle(n);
+          if(cs.backgroundImage&&cs.backgroundImage!=='none') return null; const c=parse(cs.backgroundColor); if(c&&c.a>0){ st.push(c); if(c.a===1) break; } }
+        let acc=parse(getComputedStyle(document.documentElement).backgroundColor)||{r:255,g:255,b:255,a:1}; if(acc.a===0) acc={r:255,g:255,b:255,a:1};
+        for(let i=st.length-1;i>=0;i--) acc=over(st[i],acc); return acc; };
+      const out=[]; let judged=0;
+      document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-found *, #lx-poc-j2 .lxc-msg, #lx-poc-j2 .lxc-credits').forEach(el=>{
+        // The element's OWN text — a name shares its element with the title
+        // span, and judging leaves only would never measure the name.
+        const t=[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(); if(t.length<2) return;
+        const cs=getComputedStyle(el), fg=parse(cs.color), bg=ground(el); if(!fg||!bg) return; judged++;
+        const c=over(fg,bg), a=lum(c), b=lum(bg), r=(Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+        if(r<2.2) out.push(t.slice(0,24)+' '+Math.round(r*100)/100);
+      });
+      return { judged, out };
+    }, theme);
+    step(`found-person cards are readable in ${theme} (every text ≥ 2.2:1, ${bad.judged} measured)`, bad.judged >= 12 && bad.out.length === 0, bad.out.join(' | '));
+  }
+  await page.evaluate(()=>document.documentElement.setAttribute('data-theme','light'));
+
+  // Accept Grace.
+  await page.evaluate(()=>{ const card=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-found')].find(c=>/Grace Hill/.test(c.innerText));
+    const b=card && [...card.querySelectorAll('button')].find(x=>/Accept/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(1200);
+  const accCall = calls.filter(c => c.m==='POST' && /\/accept$/.test(c.p)).pop();
+  step('Accept asks the server to add THAT person to THIS lead', !!accCall && accCall.p === '/jobs/j2/poc/suggestions/s-ap-grace/accept', accCall && accCall.p);
+  const acc = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return { missing:true };
+    const filled=[...b.querySelectorAll('.lxc-slot.is-filled')].find(c=>/Grace Hill/.test(c.innerText));
+    return { missing:false, text:b.innerText, filled:!!filled, control: !!(filled && filled.querySelector('select.lx-sel')),
+      stillCard: [...b.querySelectorAll('.lxc-slot.is-found')].some(c=>/Grace Hill/.test(c.innerText)) }; });
+  step('she is now on the lead as an ordinary contact — with the email control', acc.filled && acc.control && !acc.stillCard, JSON.stringify({ filled:acc.filled, control:acc.control, stillCard:acc.stillCard }));
+  step('"2 of 4 found · 2 to review"', /2 of 4 found/i.test(acc.text) && /2 to review/i.test(acc.text), (acc.text.match(/\d of 4 found[^\n]*/i)||[''])[0]);
+
+  // Not this person: Omar.
+  await page.evaluate(()=>{ const card=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-found')].find(c=>/Omar Diaz/.test(c.innerText));
+    const b=card && [...card.querySelectorAll('button')].find(x=>/Not this person/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(500);
+  const rej = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? { text:b.innerText,
+    find:[...b.querySelectorAll('button')].some(x=>/Find the rest/.test(x.textContent)) } : null; });
+  step('"Not this person" takes him off, and his slot is open again', !!rej && !/Omar Diaz/.test(rej.text) && /Looking for:/.test(rej.text));
+  step('…so "Find the rest" is offered again', !!rej && rej.find === true);
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(900);
+  const again = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? b.innerText : ''; });
+  step('asked again, the person turned down does not come back', !/Omar Diaz/.test(again) && /Nobody new/.test(again), (again.match(/Nobody new[^\n]*/)||[''])[0]);
+
+  // A Likely address, from the company's own format.
+  await clickEl('#content tr[data-row-id="j1"] td:nth-child(3)');
+  await page.waitForTimeout(400);
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j1 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(900);
+  const lk = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j1'); if(!b) return { missing:true };
+    const card=[...b.querySelectorAll('.lxc-slot.is-found')].find(c=>/Kim Park/.test(c.innerText));
+    return { missing:false, card: card ? card.innerText : '', likely: !!(card && card.querySelector('.lxc-conf.is-likely')) }; });
+  step('an address built from the company\'s own format is marked Likely, and says so',
+    lk.likely && /kpark@acmebuild\.com/.test(lk.card) && /built from their format \(first initial \+ surname\)/.test(lk.card), lk.card);
+
+  // Only an admin is told how to connect Apollo.
+  FINDER.apollo = false; FINDER.is_admin = true;
+  await page.evaluate(()=>{ STATE.leadPoc = {}; });
+  await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');
+  await page.waitForTimeout(400);
+  const adm = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? b.innerText : ''; });
+  step('an admin with Apollo not connected is told where to connect it', /Connect Apollo in Admin → Integrations/.test(adm));
+  FINDER.apollo = true; FINDER.is_admin = false;
+  await page.evaluate(()=>{ STATE.leadPoc = {}; });
 
   // ── 7. phone ────────────────────────────────────────────────────────────
   await page.setViewportSize({ width:390, height:900 });
@@ -228,6 +406,9 @@ try{
   const fit = await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j1 .lxc'); if(!b) return { missing:true };
     const r=b.getBoundingClientRect(); return { missing:false, left:Math.round(r.left), right:Math.round(r.right), vw:window.innerWidth }; });
   step('on a 390px phone the block fits the screen', !fit.missing && fit.left>=0 && fit.right<=fit.vw, fit.missing?'missing':`${fit.left}→${fit.right} of ${fit.vw}`);
+  const acts = await page.evaluate(()=>{ const bs=[...document.querySelectorAll('#lx-poc-j1 .lxc-found-acts button')];
+    return { n:bs.length, worst: Math.max(0, ...bs.map(b=>Math.round(b.getBoundingClientRect().right))), vw:window.innerWidth }; });
+  step('…and so do Accept / Not this person on a found person\'s card', acts.n === 2 && acts.worst <= acts.vw, JSON.stringify(acts));
   if (SHOTS) { await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j1'); if(b) b.scrollIntoView({block:'start'}); }); await page.waitForTimeout(150); }
   await shot('poc-slots-phone');
 

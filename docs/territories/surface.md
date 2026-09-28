@@ -1,5 +1,36 @@
 # Surface — memory
-> Last written: 2026-09-27 (Session 33) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-053 slice 2) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — "Find the rest" and found-person cards (R-053 slice 2, D-0049)
+- **`62-poc-finder.js`** now draws, in each slot, the people Apollo found for
+  it: name · title, the address with ONE chip for how sure it is
+  (**Confirmed** = Apollo verified it · **Likely** = built from the company's
+  own format · no chip + "No email" = PACE will not guess one), a source line,
+  and **Accept / Not this person**. A suggestion for a slot filled by hand
+  meanwhile still shows under it — a suggestion never vanishes unanswered.
+- **"Find the rest" is drawn ONLY when the server would do it**: Apollo
+  connected, a slot with nobody on it AND nobody waiting, and `can_edit`.
+  While in flight it reads "Looking…" and is disabled. The answer's sentence
+  shows under the heading (`.lxc-msg`); the heading adds "· N to review".
+- Accept → the server adds the contact → `refreshJobs()` (STATE.contacts is
+  what the slots read) → repaint from the answer already in hand. A 409 (the
+  server decided — already decided, or on another lead at the company) shows
+  its sentence and re-asks the server. Not this person → repaint from the
+  answer. **Never render()** — paints only `#lx-poc-<id>`.
+- Foot line: "Apollo: N of M credits used today…" when connected; when not,
+  **only an admin** is told "Connect Apollo in Admin → Integrations" (nobody
+  else can act on it).
+- **A LinkedIn link is only ever a real `https://…linkedin.com/` address**
+  (`safeLinkedIn`), `target=_blank rel="noopener noreferrer"` — the URL is
+  third-party data; a `javascript:` value never becomes a link.
+- Styles `.lxc-find/.lxc-msg/.lxc-slot.is-found/.lxc-found*/.lxc-conf/
+  .lxc-credits` in theme.css: calm — one 3px accent stripe, at most ONE
+  tinted chip per card, tokens only.
+- **The found cards exist only after a find, so the app-wide contrast suite
+  never draws them** — poc-finder-ui-smoke measures them itself in light AND
+  dark (≥2.2:1, the theme suite's compositing). Pinned by
+  `test/poc-finder-ui-smoke.mjs` (**50**); three screen rules reintroduced
+  (button without Apollo, unsafe link, note to non-admins) each fail it.
 
 ## Session 33 (2026-09-27) — the POC finder's four slots on the lead row (R-053 slice 1, D-0049)
 - **`62-poc-finder.js`** draws "People to reach" inside the lead row panel:

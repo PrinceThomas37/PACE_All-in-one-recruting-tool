@@ -18,10 +18,19 @@
 // calls render() either: it paints only its own element, #lx-poc-<id>. Until
 // the server answers — or if it never does — the plain contact list shows, as
 // before, inside that same element.
+//
+// SLICE 2 — "Find the rest" asks Apollo for people in the EMPTY slots. What it
+// finds is a SUGGESTION, drawn in the slot it was found for, with its email's
+// confidence (Confirmed: Apollo verified it · Likely: built from the company's
+// own format · none: PACE will not guess one) and two answers: Accept (it
+// becomes an ordinary contact through the server's one add-contact path) or
+// Not this person (never suggested for this lead again). The button is drawn
+// only when the server would do it: Apollo connected, a slot open with nobody
+// waiting in it, and the caller works the lead.
 // ============================================================================
 (function(){
   'use strict';
-  var C = STATE.leadPoc || (STATE.leadPoc = {});   // lead id → { data, busy }
+  var C = STATE.leadPoc || (STATE.leadPoc = {});   // lead id → { data, busy, finding, acting, msg }
   var adding = {};                                  // lead id → slot key whose form is open
   function esc(s){ return htmlEsc(s); }
   function el(id){ return document.getElementById('lx-poc-'+id); }
@@ -81,8 +90,16 @@
     cs.forEach(function(c){ byId[c.id] = c; });
     var shown = {};
     function person(cid){ var c = byId[cid]; if(!c) return ''; shown[cid] = 1; return leadContactRowHtml(c); }
+    var sugs = d.suggestions || [];
     function slot(s){
-      if (s.contact_id && byId[s.contact_id]) return '<div class="lxc-slot is-filled">'+person(s.contact_id)+'</div>';
+      var mine = sugs.filter(function(x){ return x.slot_key===s.key; });
+      var filled = s.contact_id && byId[s.contact_id];
+      if (filled || mine.length){
+        // Somebody found for a slot that was filled by hand meanwhile still
+        // shows under it — a suggestion never vanishes without an answer.
+        return (filled ? '<div class="lxc-slot is-filled">'+person(s.contact_id)+'</div>' : '')+
+          mine.map(function(x){ return found(id, x, d); }).join('');
+      }
       return '<div class="lxc-slot is-empty">'+
         '<div class="lxc-want"><span class="lxc-mark" aria-hidden="true">○</span>'+
           '<div><div class="lxc-want-t">Looking for: '+esc(s.label)+'</div>'+
@@ -98,7 +115,14 @@
     // Everybody on the lead is shown somewhere — including someone added a
     // moment ago whom the last answer from the server has not placed yet.
     var rest = cs.filter(function(c){ return !shown[c.id]; });
-    var found = d.slots.filter(function(s){ return s.contact_id && byId[s.contact_id]; }).length;
+    var nFound = d.slots.filter(function(s){ return s.contact_id && byId[s.contact_id]; }).length;
+    var st = C[id], fin = d.finder || {};
+    var waitingKeys = {}; sugs.forEach(function(x){ waitingKeys[x.slot_key] = 1; });
+    var openSlots = d.slots.filter(function(s){ return !s.contact_id && !waitingKeys[s.key]; }).length;
+    // Drawn only when the server would do it (never a button it would refuse).
+    var findBtn = (d.can_edit && fin.apollo && openSlots)
+      ? '<button type="button" class="btn btn-outline btn-sm lxc-find"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\')">'+(st.finding?'Looking…':'Find the rest')+'</button>'
+      : '';
     var sizeCtl = d.can_edit
       ? '<select class="lx-sel lxc-size" aria-label="Company size" onclick="event.stopPropagation()" onchange="event.stopPropagation();leadPocSize(\''+id+'\',this.value)">'+
           '<option value=""'+(d.size_known?'':' selected')+'>Not set</option>'+
@@ -107,8 +131,11 @@
       : '<b>'+esc(d.size_known ? (sizeLabel(d)+' people') : 'not set')+'</b>';
     return '<div class="lxc">'+
       '<div class="lxc-top">'+
-        '<div class="lx-head lxc-title">People to reach <span class="lxc-count">'+found+' of 4 found</span></div>'+
+        '<div class="lx-head lxc-title">People to reach <span class="lxc-count">'+nFound+' of 4 found'+
+          (sugs.length ? ' · '+sugs.length+' to review' : '')+'</span></div>'+
+        findBtn+
       '</div>'+
+      (st.msg ? '<div class="lxc-msg'+(st.msgErr?' is-err':'')+'" role="status">'+esc(st.msg)+'</div>' : '')+
       '<div class="lxc-group">HR</div>'+hrHtml+
       '<div class="lxc-group">Hiring managers</div>'+mgHtml+
       (rest.length ? '<div class="lxc-group">Also on this lead</div>'+rest.map(function(c){ return '<div class="lxc-slot is-filled">'+leadContactRowHtml(c)+'</div>'; }).join('') : '')+
@@ -119,6 +146,47 @@
           : d.size==='1-20'
             ? 'At a company this small the owner usually does the hiring.'
             : 'Looking for the '+esc(d.function.label)+' side at a company this size.')+'</span>'+
+      '</div>'+
+      finderFoot(d)+
+    '</div>';
+  }
+  function finderFoot(d){
+    var fin = d.finder || {};
+    if (fin.apollo){
+      var c = fin.credits || {};
+      return '<div class="lxc-credits">Apollo: '+(c.used||0)+' of '+(c.limit||0)+' credit'+(c.limit===1?'':'s')+' used today · an email built from the company’s own format costs nothing</div>';
+    }
+    // Only an admin can connect it, so only an admin is told how.
+    return fin.is_admin ? '<div class="lxc-credits">Connect Apollo in Admin → Integrations and PACE can find the people still missing here.</div>' : '';
+  }
+
+  // A person found and waiting for a yes or no.
+  var FORMAT_SHORT = { 'flast':'first initial + surname', 'first.last':'first.last', 'first':'first name', 'firstlast':'firstlast',
+    'firstl':'first name + initial', 'first_last':'first_last', 'f.last':'initial.surname', 'last':'surname' };
+  function safeLinkedIn(u){ return /^https:\/\/([a-z0-9-]+\.)*linkedin\.com\//i.test(String(u||'')) ? String(u) : null; }
+  function found(id, x, d){
+    var st = C[id], busy = st.acting === x.id;
+    var name = [x.first_name, x.last_name].filter(Boolean).join(' ');
+    var chip = x.email_confidence==='confirmed' ? '<span class="lxc-conf is-confirmed" title="Apollo verified this address">Confirmed</span>'
+      : x.email_confidence==='likely' ? '<span class="lxc-conf is-likely" title="Built from the company’s own email format, learned from real addresses there">Likely</span>'
+      : '';
+    var fmt = d.format && d.format.pattern ? (FORMAT_SHORT[d.format.pattern]||d.format.pattern) : null;
+    var why = x.email_confidence==='confirmed' ? 'email verified by Apollo'
+      : x.email_confidence==='likely' ? 'email built from their format'+(fmt?' ('+esc(fmt)+')':'')+' — likely, not checked'
+      : 'no email PACE can stand behind — it will not guess one';
+    var li = safeLinkedIn(x.linkedin_url);
+    return '<div class="lxc-slot is-found">'+
+      '<div class="lxc-found">'+
+        '<div class="lxc-found-main">'+
+          '<div class="lxc-found-name">'+esc(name)+(x.title?'<span class="lxc-found-title"> · '+esc(x.title)+'</span>':'')+'</div>'+
+          '<div class="lxc-found-mail">'+(x.email ? '<span class="lxc-mail">'+esc(x.email)+'</span>' : '<span class="lx-muted">No email</span>')+chip+'</div>'+
+          '<div class="lxc-found-src">Found on Apollo · '+why+
+            (li ? ' · <a href="'+esc(li)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">LinkedIn</a>' : '')+'</div>'+
+        '</div>'+
+        (d.can_edit ? '<div class="lxc-found-acts">'+
+          '<button type="button" class="btn btn-primary btn-sm"'+(st.acting?' disabled':'')+' onclick="event.stopPropagation();leadPocAccept(\''+id+'\',\''+esc(x.id)+'\')">'+(busy&&st.actingWhat==='accept'?'Adding…':'Accept')+'</button>'+
+          '<button type="button" class="btn btn-outline btn-sm"'+(st.acting?' disabled':'')+' onclick="event.stopPropagation();leadPocReject(\''+id+'\',\''+esc(x.id)+'\')">Not this person</button>'+
+        '</div>' : '')+
       '</div>'+
     '</div>';
   }
@@ -181,6 +249,57 @@
       return (typeof refreshJobs==='function' ? refreshJobs() : Promise.resolve());
     }).then(function(){ C[id] && (C[id].busy = false); load(id); })
       .catch(function(err){ showToast('Could not add: '+(err && err.message || err),'error'); });
+  };
+
+  // ── slice 2: find, accept, turn down ─────────────────────────────────────
+  function answer(id, d, msg, isErr){
+    var st = C[id] || (C[id] = {});
+    if (d && d.slots) st.data = d;
+    st.msg = msg || null; st.msgErr = !!isErr;
+    paint(id);
+  }
+  window.leadPocFind = function(id){
+    var st = C[id]; if (!st || !st.data || st.finding) return;
+    st.finding = true; st.msg = null; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/find', {}).then(function(d){
+      st.finding = false;
+      answer(id, d, d && d.result && d.result.message);
+    }).catch(function(err){
+      st.finding = false;
+      answer(id, null, (err && err.message) || String(err), true);
+    });
+  };
+  window.leadPocAccept = function(id, sid){
+    var st = C[id]; if (!st || st.acting) return;
+    st.acting = sid; st.actingWhat = 'accept'; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/suggestions/'+encodeURIComponent(sid)+'/accept', {}).then(function(d){
+      st.acting = null;
+      if (d && d.slots) st.data = d;
+      st.msg = null;
+      showToast(d && d.already_on_lead ? 'Already on this lead — linked' : 'Added to the lead','success');
+      // The lead list reloads (a new contact), which puts the open row back;
+      // then this block is painted from the answer already in hand.
+      return (typeof refreshJobs==='function' ? refreshJobs() : Promise.resolve()).then(function(){ paint(id); });
+    }).catch(function(err){
+      st.acting = null;
+      // A 409 means the server decided (already decided, or on another lead
+      // at this company) — re-ask it so the block shows the truth.
+      answer(id, null, (err && err.message) || String(err), true);
+      st.busy = false; load(id);
+    });
+  };
+  window.leadPocReject = function(id, sid){
+    var st = C[id]; if (!st || st.acting) return;
+    st.acting = sid; st.actingWhat = 'reject'; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/suggestions/'+encodeURIComponent(sid)+'/reject', {}).then(function(d){
+      st.acting = null;
+      answer(id, d, null);
+      showToast('Taken off — PACE will not suggest them for this lead again','success');
+    }).catch(function(err){
+      st.acting = null;
+      answer(id, null, (err && err.message) || String(err), true);
+      st.busy = false; load(id);
+    });
   };
 
   window.leadPocSize = function(id, value){

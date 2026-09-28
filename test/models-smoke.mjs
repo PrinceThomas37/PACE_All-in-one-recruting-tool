@@ -168,8 +168,11 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   // (migration 037) and the two OAuth token tables that migration 039 gives an
   // org_id — all three registered ahead of being applied, because the registry
   // states what a table IS and the code that touches it degrades safely.
-  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048 add',
-    TENANT_TABLES.size === 45, String(TENANT_TABLES.size));
+  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048/052 add',
+    TENANT_TABLES.size === 46, String(TENANT_TABLES.size));
+  // Migration 052 — poc_suggestions, people the POC finder found for a lead
+  // and waiting to be accepted (R-053). APPLIED 2026-09-28 before its code merged.
+  ok('poc_suggestions (migration 052) is a tenant table', TENANT_TABLES.has('poc_suggestions') && !GLOBAL_TABLES.has('poc_suggestions'));
   // Migration 048 — client_summaries, one saved AI/rules summary per client
   // (D-0042). Org-scoped like every other record of a client.
   ok('client_summaries is registered as tenant data', TENANT_TABLES.has('client_summaries'));

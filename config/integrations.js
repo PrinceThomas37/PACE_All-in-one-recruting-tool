@@ -93,8 +93,8 @@ const INTEGRATIONS = [
   },
   {
     id: 'apollo', category: 'Contact database', label: 'Apollo.io',
-    description: 'Find POC contacts + emails and enrich companies (used by the future auto-sourcing engine).',
-    docs: 'https://apolloio.github.io/apollo-api-docs/',
+    description: 'Finds the people to reach on a lead — "Find the rest" in the POC finder. Needs a plan with API access and a master API key. Searching is free; each email looked up costs one credit, capped per day in System Settings.',
+    docs: 'https://docs.apollo.io/docs/create-api-key',
     fields: [{ key: 'api_key', label: 'API key' }], test: 'apollo',
   },
 ];

@@ -1,5 +1,44 @@
 # Observatory — memory
-> Last written: 2026-09-27 (Session 33, R-053 slice 1) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-053 slice 2 — Apollo) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — PACE now calls Apollo: `services/people-apollo.js` (R-053 slice 2, D-0049)
+- **The first code in PACE that calls Apollo** (CLAUDE.md's "Apollo is a key
+  slot" note was true until now; the Sourcing page's Apollo row is still a
+  different, unbuilt use). Two calls, nothing else:
+  * `searchPeople({key, domains, titles, perPage})` → POST
+    `/api/v1/mixed_people/api_search` — **free, no emails**, needs a plan with
+    API access + a master key (the owner's plan refused it 2026-09-27).
+    Titles capped at 25, `include_similar_titles`, page size clamped to 100,
+    several domains (website + the mail domain its people use).
+    **A hidden surname (`last_name_obfuscated`) is read as HIDDEN** —
+    `last_name:''`, `last_name_masked:true` — never as a name.
+  * `revealPerson({key, id})` → POST `/api/v1/people/match` by Apollo's id,
+    `reveal_personal_emails:false`, `reveal_phone_number:false` (a phone is 8
+    credits). **One credit when an email comes back. NEVER retried** — a retry
+    after a timeout can spend a second credit on the same person.
+    `email_verified` is true ONLY for Apollo's `verified`; `extrapolated`,
+    `guessed`, `unverified`… are guesses and D-0049 drops them.
+  * `checkPeopleSearch({key})` — the Integrations card's Test (free).
+- **The key rides in the `X-Api-Key` header, never a URL** (a URL ends up in
+  logs; the old Integrations test put it in the query string).
+- **Every refusal is a sentence** (`describeApolloError`): 401 key, 403/plan/
+  master-key, 429 rate limit, 422, 5xx, unreachable — never a bare code.
+- No db, no clock; `fetchImpl` injectable. The caller (routes/poc.js) owns
+  credits, the ceiling and what is stored.
+- **`services/poc-targets.js` gained `pickPeople(slots, people, exclude, size,
+  skip)`** — for each EMPTY slot the best person from a search whose title
+  makes them the right KIND (HR / manager), best title fit first; never
+  somebody already on file (by name), already suggested or turned down (by
+  source id), never one person for two slots; `skip` = slots with somebody
+  already waiting. Same `contactKind`/`fitScore` as `fillSlots`.
+- **`learnFormat` ignores a BOUNCED address** (`email_status`
+  invalid/deactivated): it may be somebody's wrong guess at the format, and
+  learning from it repeats the mistake on every new name (design §6 rule 5).
+  `out_of_office` still teaches. Callers now select `email_status` on the
+  sibling-lead contacts too.
+- Pinned by `test/poc-apollo-smoke.mjs` (**33**, a fake fetch; fails 28/33
+  with a guess marked verified, 30/33 with the key in the URL) and
+  `test/poc-targets-smoke.mjs` (**71**: pickPeople cases + three bounce cases).
 
 ## Session 33 (2026-09-27) — R-053 design touches `enrichment.js`
 - **`enrichment.js`'s pattern prior is wrong for this owner's market.** It ranks
