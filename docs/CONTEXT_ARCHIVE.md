@@ -6202,3 +6202,12 @@ the owner's reactions, then prices, then the real `website/` folder + tests.
 
 ### Session 33, website round 5: signature colour
 The owner said drafts E and F had "no soul" and asked for a signature colour scheme like Slack purple or Zoom blue. They picked **Abalone teal**, and it must work in both white and black pearl (D-0052). Palette sheet: artifact BHWRkRzij3EZwLeaEHRCaN. Mobbin was tried and refused because it needs a paid plan. Next: re-skin Layout A's opening in teal.
+
+### Session 33, website round 6: story middle rebuilt around one line
+The owner picked blue (D-0055, Sapphire #294DA0) and asked to rebuild the story middle. New concept: the brand line itself tells the story.
+- Find: it sweeps across a field of companies and lights three.
+- Enrich: one company becomes a pearl, and the line orbits it with four facts.
+- Connect: "Pace" and the client, joined by the line.
+- Converse: a sapphire strand and an ice strand braid back and forth.
+- Close: the strands become one line, a job order appears and three candidate pearls arrive.
+Artifact 8wN783rhM1eLHeaboXzqa1, built by scratchpad gen3.py.
