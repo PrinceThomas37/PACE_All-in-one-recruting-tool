@@ -6145,3 +6145,4 @@ Owner: *"Quickly do R-012 / I think it's going to a small work? / We have to des
 
 ### Round 2 — R-012 merged (2026-09-27)
 Owner, after the screenshots: *"Merge this change first and then work on the poc finder"* — #252 squash-merged; R-012 moved to DONE in ROADMAP and the artifact. Deploy is Render's auto-deploy from `main`; `*.onrender.com` is blocked from this sandbox, so it is unverified here.
+- **Verified 2026-09-28:** the job ran minutes after #251 deployed (27 Sep 07:24 UTC): 62 scanned, 38 deleted, 24 kept — every kept file referenced; bucket now 24 objects. Marker holds counts only.
