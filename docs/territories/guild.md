@@ -1,5 +1,15 @@
 # Guild — memory
-> Last written: 2026-09-24 · R-047 round 2: enroll gate closed (R47-1/R47-5)
+> Last written: 2026-09-28 · Session 33: poc_suggestions joins the company merge
+
+## Session 33 (2026-09-28) — a merged company takes its found contacts with it
+- **`services/company-merge.js` MERGE_TABLES gained `poc_suggestions`**
+  (migration 052 — people the POC finder found for a lead; they record the
+  lead's company). A MOVE, not a clear: the leads they belong to move in the
+  same merge, so the suggestions follow. The plan sentence names them
+  ("… 3 suggested contacts will move …"). Found by company-merge-smoke, which
+  scans the migrations for every `company_id` column — the list stays the ONE
+  place a new company-pointing table is added. No route change: the merge
+  route walks the list.
 
 ## Session 31 (2026-09-24)
 - **Tagging now puts the candidate ON the job.** `POST /pipeline` (and the new

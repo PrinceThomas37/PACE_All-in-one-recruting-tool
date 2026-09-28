@@ -3531,6 +3531,9 @@ app.use(require('./routes/deliverability')(routeCtx));
 app.use(require('./routes/mailbox-alerts')(routeCtx));
 app.use(require('./routes/ai')(routeCtx));
 app.use(require('./routes/events')(routeCtx));
+// The POC finder (R-053): a lead's four people-to-reach slots and the
+// company-size pick. Before routes/jobs so nothing there can shadow it.
+app.use(require('./routes/poc')(routeCtx));
 app.use(require('./routes/jobs')(routeCtx));
 app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));

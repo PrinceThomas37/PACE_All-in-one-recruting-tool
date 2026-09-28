@@ -18,7 +18,7 @@
 // Behaviour today is unchanged (one org; 3,123 contacts, 0 with a null org_id).
 // ============================================================================
 const express = require('express');
-const { classifyEmailDeliverability } = require('../email-validation');
+const { addLeadContact } = require('../services/lead-contacts');
 const { EVENTS, emit } = require('../events');
 
 module.exports = (ctx) => {
@@ -30,12 +30,10 @@ router.post('/contacts', auth, async (req, res) => {
     const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary } = req.body;
     if (!job_id || !first_name) return res.status(400).json({ error: 'job_id and first_name required' });
     if (!(await canTouchJob(req, job_id))) return res.status(403).json({ error: 'Forbidden' });
-    // org_id is stamped by the models layer — no orgStamp(req) spread needed.
-    const contactRow = { job_id, first_name, last_name: last_name || '', designation, email, phone, linkedin, is_primary: !!is_primary };
-    if (email) { try { contactRow.email_status = await classifyEmailDeliverability(email); } catch (_) {} }
-    const { data, error } = await db.forRequest(req).from('contacts').insert(contactRow).select().single();
-    if (error) throw error;
-    await logActivity(job_id, data.id, req.user.id, 'contact_added', `Contact added: ${first_name} ${last_name || ''}`.trim(), null, null);
+    // The one way a person is added to a lead — the POC finder's Accept uses
+    // the same function (services/lead-contacts.js).
+    const data = await addLeadContact({ db, req, logActivity,
+      fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary } });
     res.status(201).json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

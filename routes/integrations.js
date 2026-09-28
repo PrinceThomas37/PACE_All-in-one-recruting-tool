@@ -12,6 +12,7 @@ const aiBudget = require('../services/ai-budget');
 const aiProvider = require('../services/ai-provider');
 const { verifyEmailAddress } = require('../email-verify');
 const httpClient = require('../http-client');
+const peopleApollo = require('../services/people-apollo');
 
 // Thin adapter over the shared client, keeping this file's (url, ms, options)
 // argument order so the provider tests below are unchanged. No retry: these are
@@ -75,8 +76,12 @@ async function testProvider(id, key, extra = {}) {
       return r.ok ? { ok: true, detail: r.data?.data?.plan_name ? `Plan: ${r.data.data.plan_name}` : 'Key valid' } : { ok: false, error: r.data?.errors?.[0]?.details || 'Invalid key' };
     }
     if (id === 'apollo') {
-      const r = await pingJson(`https://api.apollo.io/v1/auth/health?api_key=${encodeURIComponent(key)}`);
-      return (r.ok && (r.data?.is_logged_in || r.data?.logged_in)) ? { ok: true, detail: 'Key valid' } : { ok: false, error: 'Invalid key' };
+      // The question that matters is not "is the key valid" but "can it do
+      // the POC finder's job" — a valid key on a plan without API access
+      // answers the first yes and fails every real search (the owner's plan
+      // on 2026-09-27 did exactly that). People search is free, so ask it.
+      const r = await peopleApollo.checkPeopleSearch({ key });
+      return r.ok ? { ok: true, detail: 'Key valid · people search allowed' } : { ok: false, error: r.error };
     }
     return { ok: true, detail: 'Saved — no automated test for this provider' };
   } catch (e) {

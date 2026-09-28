@@ -95,10 +95,18 @@ try{
   await waitForLogin(page); await enterApp(page,'bd');
   const shot=async(n)=>{ if(SHOTS) await page.screenshot({ path:path.join(SHOTS,n+'.png') }); };
   const intel=()=>page.evaluate(()=>{ const el=document.getElementById('lx-intel-j1'); return el?{ hidden:el.hidden, text:el.innerText }:null; });
+  // Close the row through the app's OWN mechanism (03-core-render.js,
+  // rowRevealClose). Removing the panel's DOM by hand left rowReveal still
+  // believing j1 was open, so a repaint in the gap put the panel back and the
+  // click below then CLOSED it: an intermittent null in the full suite
+  // (reproduced 2026-09-28 by forcing that repaint). Then wait for the block
+  // rather than sleeping a fixed time.
   const openRow=async()=>{
-    await page.evaluate(()=>{ document.querySelectorAll('#content tr.lead-exp').forEach(r=>r.remove()); document.querySelectorAll('#content tr.is-open').forEach(r=>r.classList.remove('is-open')); });
+    await page.evaluate(()=>{ if (window.rowRevealClose) rowRevealClose(); });
     await page.evaluate(SEED); await page.waitForTimeout(300);
-    await page.click('#content tr[data-row-id="j1"]'); await page.waitForTimeout(400);
+    await page.click('#content tr[data-row-id="j1"]');
+    await page.waitForSelector('#lx-intel-j1', { state:'attached', timeout:5000 }).catch(()=>{});
+    await page.waitForTimeout(400);
   };
 
   // OFF

@@ -47,6 +47,34 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0049 · 2026-09-27 · STANDS · The POC finder (R-053): Apollo with API as the source; runs automatically and on a button; a guess is never emailed; size is picked on the lead
+**Their words** (answers to the four design questions in
+`docs/CONTACT_FINDER_DESIGN.md` §9): *"I will connect the Apollo account which
+allows API integration."* · When it runs: *"Both"* · May PACE email a guess:
+*"Never"* · Company size: *"A size pick on the lead"*. Earlier the same day:
+*"Merge this change first and then work on the poc finder."*
+
+**Chosen:**
+- **D1 — source:** the owner will connect an Apollo account whose plan allows API
+  use. The one they have today does not (a People API Search was refused on
+  2026-09-27). So the paid rung (R5) is **Apollo**, keyed in Admin →
+  Integrations; the free rungs (people PACE knows, the posting, the website, the
+  company's email format) still run first and cost nothing.
+- **D2 — when:** **both** — automatically for new leads *and* a "Find the rest"
+  button on every lead. Automatic runs spend Apollo credits, so they are held to
+  a daily credit ceiling set in Admin (a setting, not a constant).
+- **D3 — a guessed address is NEVER emailed.** Only *Confirmed* (published by
+  the company, or returned verified by Apollo) or *Likely* (built from the
+  company's own format, learned from a real address there) may send.
+- **D4 — company size:** a size pick on the lead (five bands), remembered for the
+  company. Until picked, "under ~50" is assumed.
+
+**Not decided (asked when it matters):** the daily credit ceiling's number, and
+whether Apollo may reveal emails automatically or only on the button.
+
+**Re-open when:** the Apollo key is connected and its first real results are
+seen, or credits run out faster than the ceiling expects.
+
 ### D-0048 · 2026-09-27 · STANDS · R-012 now, quickly; designing R-053 is this chat's big job
 **Their words:** *"Quickly do R-012 / I think it's going to a small work? / We
 have to design R-053. That's the big job in this chat."* — the reply to being

@@ -335,34 +335,38 @@ function bindJobsControls(){}
 // ══════════════════════════════════════════════════════════════════════════
 var LEAD_ES_LABELS={valid:'Valid',invalid:'Invalid',deactivated:'Deactivated',out_of_office:'Out of office'};
 
-function leadExpandHtml(j){
-  var cs=(typeof jobContacts==='function'?jobContacts(j.id):[])||[];
+// ONE person on a lead, as a row with the email-status control. Shared by the
+// plain contact list below and the POC finder's slots (62-poc-finder.js), so a
+// person looks — and is marked valid/invalid — the same way in both.
+window.leadContactRowHtml=function(c){
   var esOpts=function(sel){
     return ['valid','invalid','deactivated','out_of_office'].map(function(k){
       return '<option value="'+k+'"'+(sel===k?' selected':'')+'>'+LEAD_ES_LABELS[k]+'</option>';
     }).join('');
   };
+  var nm=((c.first_name||'')+' '+(c.last_name||'')).trim()||'—';
+  var es=c.email_status||'valid';
+  return '<div class="lx-contact">'+
+    '<div class="lx-who">'+
+      '<div class="lx-nm">'+escHtml(nm)+(c.is_primary?'<span class="lx-primary">Primary</span>':'')+'</div>'+
+      '<div class="lx-sub">'+escHtml(c.designation||'—')+
+        (c.email?' · <span class="lx-mail">'+escHtml(c.email)+'</span>':'')+'</div>'+
+    '</div>'+
+    // THE CONTROL THE OWNER COULD NOT FIND. Same handler the drawer uses —
+    // one implementation, two places to reach it, never two copies.
+    (c.email
+      ? '<label class="lx-es"><span>Email</span>'+
+          '<select class="lx-sel" onchange="event.stopPropagation();changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml(nm)+'\')">'+
+            esOpts(es)+
+          '</select>'+
+        '</label>'
+      : '<span class="lx-noemail">No email</span>')+
+  '</div>';
+};
 
-  var contactRows=cs.length?cs.map(function(c){
-    var nm=((c.first_name||'')+' '+(c.last_name||'')).trim()||'—';
-    var es=c.email_status||'valid';
-    return '<div class="lx-contact">'+
-      '<div class="lx-who">'+
-        '<div class="lx-nm">'+escHtml(nm)+(c.is_primary?'<span class="lx-primary">Primary</span>':'')+'</div>'+
-        '<div class="lx-sub">'+escHtml(c.designation||'—')+
-          (c.email?' · <span class="lx-mail">'+escHtml(c.email)+'</span>':'')+'</div>'+
-      '</div>'+
-      // THE CONTROL THE OWNER COULD NOT FIND. Same handler the drawer uses —
-      // one implementation, two places to reach it, never two copies.
-      (c.email
-        ? '<label class="lx-es"><span>Email</span>'+
-            '<select class="lx-sel" onchange="event.stopPropagation();changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml(nm)+'\')">'+
-              esOpts(es)+
-            '</select>'+
-          '</label>'
-        : '<span class="lx-noemail">No email</span>')+
-    '</div>';
-  }).join(''):'<div class="lx-empty">No contacts on this lead yet.</div>';
+function leadExpandHtml(j){
+  var cs=(typeof jobContacts==='function'?jobContacts(j.id):[])||[];
+  var contactRows=cs.length?cs.map(leadContactRowHtml).join(''):'<div class="lx-empty">No contacts on this lead yet.</div>';
 
   var when=j.assigned_at?new Date(j.assigned_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):null;
   var facts=[
@@ -376,8 +380,12 @@ function leadExpandHtml(j){
 
   return '<div class="lx">'+
     '<div class="lx-main">'+
-      '<div class="lx-head">Contacts</div>'+
-      contactRows+
+      // The POC finder's four slots (62-poc-finder.js, R-053). Until its answer
+      // arrives — or if it never does — the plain contact list is what shows,
+      // exactly as before; the slots then take its place in the same element.
+      (window.leadPocSlot
+        ? leadPocSlot(j, '<div class="lx-head">Contacts</div>'+contactRows)
+        : '<div class="lx-head">Contacts</div>'+contactRows)+
       // The job posting the AI writes from (59-lead-posting.js, R-056).
       (window.leadPostingSlot?leadPostingSlot(j):'')+
       // The lead's emails + AI summary (58-lead-intel.js). Draws nothing while

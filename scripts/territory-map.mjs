@@ -33,7 +33,10 @@ const TERRITORIES = [
           // The rewind button's history. It spans leads AND recruiting, so it
           // belongs to the territory that owns the shared files rather than to
           // either domain — the same reasoning that makes index.js gateway's.
-          'services/record-history.js', 'services/record-history-writer.js'],
+          'services/record-history.js', 'services/record-history-writer.js',
+          // The one way a person is added to a lead (POST /contacts and the POC
+          // finder's Accept) — beside routes/contacts.js, which it came out of.
+          'services/lead-contacts.js'],
     not: ['routes/recruiting/', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'routes/mailbox.js', 'routes/emails.js', 'routes/warmup.js',
@@ -75,7 +78,7 @@ const TERRITORIES = [
           // Shared by the public apply page and the "re-write job description"
           // button, so the two cannot disagree about what is safe to publish.
           'services/jd-scrub.js',
-          'company-classifier.js', 'enrichment.js', 'skill-dictionaries.js',
+          'company-classifier.js', 'enrichment.js', 'services/poc-targets.js', 'services/people-apollo.js', 'skill-dictionaries.js',
           'learned-skills.js', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'services/next-action-dismissals.js'],

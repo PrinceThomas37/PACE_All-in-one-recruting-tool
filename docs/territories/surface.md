@@ -1,5 +1,67 @@
 # Surface — memory
-> Last written: 2026-09-27 (Session 33) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-053 slice 2) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — "Find the rest" and found-person cards (R-053 slice 2, D-0049)
+- **`62-poc-finder.js`** now draws, in each slot, the people Apollo found for
+  it: name · title, the address with ONE chip for how sure it is
+  (**Confirmed** = Apollo verified it · **Likely** = built from the company's
+  own format · no chip + "No email" = PACE will not guess one), a source line,
+  and **Accept / Not this person**. A suggestion for a slot filled by hand
+  meanwhile still shows under it — a suggestion never vanishes unanswered.
+- **"Find the rest" is drawn ONLY when the server would do it**: Apollo
+  connected, a slot with nobody on it AND nobody waiting, and `can_edit`.
+  While in flight it reads "Looking…" and is disabled. The answer's sentence
+  shows under the heading (`.lxc-msg`); the heading adds "· N to review".
+- Accept → the server adds the contact → `refreshJobs()` (STATE.contacts is
+  what the slots read) → repaint from the answer already in hand. A 409 (the
+  server decided — already decided, or on another lead at the company) shows
+  its sentence and re-asks the server. Not this person → repaint from the
+  answer. **Never render()** — paints only `#lx-poc-<id>`.
+- Foot line: "Apollo: N of M credits used today…" when connected; when not,
+  **only an admin** is told "Connect Apollo in Admin → Integrations" (nobody
+  else can act on it).
+- **A LinkedIn link is only ever a real `https://…linkedin.com/` address**
+  (`safeLinkedIn`), `target=_blank rel="noopener noreferrer"` — the URL is
+  third-party data; a `javascript:` value never becomes a link.
+- Styles `.lxc-find/.lxc-msg/.lxc-slot.is-found/.lxc-found*/.lxc-conf/
+  .lxc-credits` in theme.css: calm — one 3px accent stripe, at most ONE
+  tinted chip per card, tokens only.
+- **The found cards exist only after a find, so the app-wide contrast suite
+  never draws them** — poc-finder-ui-smoke measures them itself in light AND
+  dark (≥2.2:1, the theme suite's compositing). Pinned by
+  `test/poc-finder-ui-smoke.mjs` (**50**); three screen rules reintroduced
+  (button without Apollo, unsafe link, note to non-admins) each fail it.
+
+## Session 33 (2026-09-27) — the POC finder's four slots on the lead row (R-053 slice 1, D-0049)
+- **`62-poc-finder.js`** draws "People to reach" inside the lead row panel:
+  two HR slots, two hiring-manager slots, "Also on this lead" for anyone who
+  fits no slot, and a company-size select. The SERVER decides everything
+  (`GET /jobs/:id/poc` → services/poc-targets.js); this file only draws.
+- **The slots REPLACE the plain Contacts list, in the same element**
+  (`#lx-poc-<id>`), once the answer arrives. Until then — or forever, if the
+  server never answers — the plain list shows exactly as before, so the
+  email valid/invalid control is never missing. `leadExpandHtml` calls
+  `leadPocSlot(j, plainHtml)`.
+- **One contact row for both:** `window.leadContactRowHtml(c)` (06-page-leads.js)
+  draws a person with the email-status control; the plain list and every
+  filled slot use it. Never a second copy.
+- **Nobody on the lead disappears:** any contact the last server answer did
+  not place (added a moment ago) is drawn under "Also on this lead".
+- **Add by hand** is an inline form in the empty slot (name, title prefilled
+  with the slot's first title, email). Typing a name fills the email from the
+  company's LEARNED format until the person edits the email; with no learned
+  format the email stays empty and the note says PACE will not guess (D-0049).
+  Saves through the existing `POST /contacts`, then `refreshJobs()` — the row's
+  contact count changes, the list redraws, `rowRevealRestore` puts the panel
+  back, and the slots are re-asked.
+- **`pocEmailFor` is a CHECKED COPY of poc-targets.emailFor** —
+  poc-finder-ui-smoke runs 10 name/format cases through both.
+- Viewers who can see but not work the lead (`can_edit:false`) get the slots
+  with no size select and no Add by hand. Styles `.lxc*` in theme.css
+  (tokens only; the size select is compact on desktop, 16px on a phone).
+- Pinned by `test/poc-finder-ui-smoke.mjs` (25). A heading drawn with
+  `text-transform:uppercase` reads back UPPERCASE from `innerText` — two
+  checks failed on that before they were made case-insensitive.
 
 ## Session 33 (2026-09-27) — every record list opens in place (R-012, D-0048)
 - **ONE gesture, ONE mechanism.** `rowReveal(id, ev, build, cls)` lives in

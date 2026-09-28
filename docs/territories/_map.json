@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-27",
+  "generated": "2026-09-28",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 377,
-    "lines": 92306,
+    "files": 388,
+    "lines": 94898,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 66,
-      "lines": 26628,
+      "files": 67,
+      "lines": 27000,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -40,8 +40,8 @@
           "n": 973
         },
         {
-          "f": "public/ui.css",
-          "n": 940
+          "f": "public/theme.css",
+          "n": 954
         }
       ],
       "lastTouched": "2026-09-27",
@@ -70,14 +70,15 @@
         "config/",
         "engine-runs.js",
         "services/record-history.js",
-        "services/record-history-writer.js"
+        "services/record-history-writer.js",
+        "services/lead-contacts.js"
       ],
-      "files": 28,
-      "lines": 10305,
+      "files": 30,
+      "lines": 10820,
       "largest": [
         {
           "f": "index.js",
-          "n": 3890
+          "n": 3893
         },
         {
           "f": "routes/ownership-requests.js",
@@ -115,12 +116,12 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 60,
-      "lines": 3631,
+      "files": 62,
+      "lines": 3737,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 297
+          "n": 300
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -233,6 +234,8 @@
         "services/jd-scrub.js",
         "company-classifier.js",
         "enrichment.js",
+        "services/poc-targets.js",
+        "services/people-apollo.js",
         "skill-dictionaries.js",
         "learned-skills.js",
         "routes/ai.js",
@@ -241,8 +244,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 24,
-      "lines": 10334,
+      "files": 26,
+      "lines": 10823,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -385,8 +388,8 @@
         "test/",
         ".github/"
       ],
-      "files": 132,
-      "lines": 25712,
+      "files": 136,
+      "lines": 26822,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
