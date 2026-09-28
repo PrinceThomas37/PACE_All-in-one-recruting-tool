@@ -166,8 +166,10 @@ const SETTINGS_SCHEMA = [
   // first, so this ceiling is only ever spent where PACE has no other way.
   {
     key: 'poc_apollo_daily_credits', label: 'Apollo credits a day for the contact finder', unit: 'credits (0 = none)', group: 'Contact finder',
-    description: "The most Apollo credits \"Find the rest\" may spend in one day, across everyone. One credit looks up one person's full name and work email; an email PACE can build from the company's own format costs nothing and is used first. At 0 nothing is spent: PACE still suggests the people Apollo shows by full name, with an email only where the company's format gives one.",
-    default: 20, min: 0, max: 1000,
+    description: "The most Apollo credits the contact finder may spend in one day, across everyone (Search contact, Uncover, and company size). One credit shows one person's full name and work email, or one company's size; searching is free, and an email PACE can build from the company's own format costs nothing. Also set on the Apollo card in Admin → Integrations. At 0 nothing is spent.",
+    // Raised from 1,000 on 2026-09-28 (D-0054: "I want to increase the credit
+    // usage of the apollo") — the owner's test account alone holds 183.3k.
+    default: 20, min: 0, max: 10000,
   },
 ];
 

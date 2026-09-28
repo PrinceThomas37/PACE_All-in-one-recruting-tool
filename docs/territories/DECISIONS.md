@@ -47,6 +47,65 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0055 · 2026-09-28 · STANDS · Claude never uses the owner's organisation's Apollo account; every customer company brings its own API keys
+**Their words** (asked whether Claude may read their Apollo account's credit balance): *"No I cannot give you the access, its my organization's. there are 183.3k credits left. Now this is just for text [test] … i am testing it within my company. When i see this, i use that particular company's apollo API key to pull out details or any other API keys in the system. All are changeable. Because this is a SAAS product."* — and in the same message: *"I need the people from other job also in this employee search. Maybe a search bar to search for title or similar title and that will search in the employee list from apollo and show us, and we can click on to see and select which contact we want to uncover."*
+
+**Chosen:**
+- **The Apollo connector in Claude's chat is off-limits** — it is the owner's
+  organisation's account. Credit figures come from the owner (183.3k left on
+  2026-09-28, a test account inside their own company) or from PACE's own meter.
+- **Every customer company uses its OWN Apollo key — and its own keys for every
+  other integration.** Measured the same day: **today they are shared across the
+  whole deployment** (`config/integrations.js` stores `int_<id>_<field>` with no
+  company in it), so a second company would see, spend and be able to overwrite
+  the first company's keys. Harmless while there is one company; must change
+  before a second (R-067, with R-049).
+- **A title search inside the POC finder** (R-068): type a title, Apollo lists
+  that company's people with it or a similar title (free), and the user picks
+  whom to uncover (a credit each).
+
+**Re-open when:** the owner wants Claude to read their Apollo account after all,
+or decides a shared operator key should serve customers who have none.
+
+### D-0054 · 2026-09-28 · STANDS · Apollo credits: one daily number for everyone, set by an admin, and the owner wants it higher
+**Their words:** *"I want to increase the credit usage of the apollo, give the admin to set what's the number of credit that can be used per day for all users. how much of our credit system is apollo's credit system? Give me that number"*
+
+**Chosen:** the daily Apollo credit ceiling stays ONE number shared by every user
+of the company account (it already is: the meter is per organisation per day),
+and an ADMIN sets it — somewhere an admin will find it. Today it lives only in
+System Settings ("Contact finder", default 20/day). **Not built yet:** the owner
+stopped the run before the work began (R-066). The question "how much of our
+credit system is Apollo's" is answered from the code — every PACE credit is one
+Apollo credit — and from Apollo's own figures only if the owner allows reading
+their Apollo account.
+
+**Re-open when:** the owner wants per-user limits instead of one shared number.
+
+### D-0053 · 2026-09-28 · DECLINED · No automatic first email for a person added to a lead that was already emailed
+**Their words** (asked plainly after D-0051): *"People added to a lead that was already emailed: should they get their first email automatically?- No"*
+
+**Chosen:** today's behaviour stays. A person added after a lead's first round —
+by hand, or accepted from the POC finder — gets NO automatic email; someone
+emails them by hand. First emails are generated only when a lead is assigned.
+R-065 is DROPPED.
+
+**Re-open when:** the owner asks for it, or people added later are found sitting
+un-emailed in numbers.
+
+### D-0052 · 2026-09-28 · STANDS · The POC finder learns how law, accounting and architecture firms are run (R-063)
+**Their words:** *"The contact finder at law, accounting and architecture firms: should it look for the right people there? - Yes"*
+
+**Chosen:** build R-063 as re-scoped (see ROADMAP): at law, accounting and
+architecture firms the finder looks for the firm's own leaders — Managing
+Partner, Partner, Supervising/Managing Attorney, Shareholder, Principal, Studio
+Director, Firm Administrator — instead of General Manager / Controller /
+Engineering Manager, and recognises Attorney, Shareholder and Founding Member
+titles as leaders. Rules only; no Apollo cost. **Not started yet:** the owner
+stopped the run before building began; it resumes on their word.
+
+**Re-open when:** another firm type (e.g. engineering consultancies, medical
+practices) shows the same mismatch.
+
 ### D-0051 · 2026-09-28 · STANDS · "Already added": a pop-up whenever a person or an email address is already in PACE
 **Their words** (answering whether PACE should queue a first email for someone
 accepted onto an already-emailed lead): *"I do think that happens. If the person

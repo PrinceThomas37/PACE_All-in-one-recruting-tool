@@ -79,6 +79,9 @@ function normalizePerson(p) {
     // Some plans mask surnames in search results ("Sm***h"); the full one
     // only comes back from enrichment.
     last_name_masked: !last && !!p.last_name_obfuscated,
+    // Apollo's own masked form ("Sm***h"), shown as-is so a person can tell
+    // two Johns apart before paying to uncover one.
+    last_name_hint: !last && p.last_name_obfuscated ? String(p.last_name_obfuscated).slice(0, 40) : null,
     title: p.title || '',
     linkedin_url: p.linkedin_url || null,
     has_email: p.has_email !== false,
@@ -94,22 +97,24 @@ async function searchPeople({ key, domain, domains, titles, perPage = 25, fetchI
   if (!key) return { ok: false, status: 0, error: 'Apollo is not connected — add its key in Admin → Integrations.' };
   const orgDomains = Array.from(new Set([].concat(domains || [], domain || []).filter(Boolean)));
   if (!orgDomains.length) return { ok: false, status: 0, error: 'This company has no website or email domain to search by.' };
+  // No titles = everybody Apollo knows at the company (the title search's
+  // blank box). The title filter and its "similar titles" switch are then left
+  // out entirely rather than sent empty.
+  const wanted = (titles || []).map(t => String(t || '').trim()).filter(Boolean).slice(0, 25);
+  const body = { q_organization_domains_list: orgDomains, page: 1, per_page: Math.min(Math.max(1, perPage), 100) };
+  if (wanted.length) Object.assign(body, { person_titles: wanted, include_similar_titles: true });
   let r;
   try {
-    r = await post('/mixed_people/api_search', key, {
-      q_organization_domains_list: orgDomains,
-      person_titles: (titles || []).slice(0, 25),
-      include_similar_titles: true,
-      page: 1,
-      per_page: Math.min(Math.max(1, perPage), 100),
-    }, fetchImpl);
+    r = await post('/mixed_people/api_search', key, body, fetchImpl);
   } catch (e) {
     return { ok: false, status: 0, error: 'Could not reach Apollo from the PACE server — ' + (e && e.message || e) };
   }
   if (!r.ok) return { ok: false, status: r.status, error: describeApolloError(r.status, r.data) };
   const list = (r.data && (r.data.people || r.data.contacts)) || [];
   const people = list.map(normalizePerson).filter(p => p.id && p.first_name);
-  return { ok: true, status: r.status, people };
+  const d = r.data || {};
+  const total = Number((d.pagination && d.pagination.total_entries) != null ? d.pagination.total_entries : d.total_entries);
+  return { ok: true, status: r.status, people, total: Number.isFinite(total) ? total : null };
 }
 
 /** One person's full name + work email. Uses a credit when an email is found. */

@@ -55,6 +55,22 @@ step('a full surname is kept', (r1.people.find(p => p.id === 'a2') || {}).last_n
 step('"has no email" is kept, so no credit is spent looking for one', (r1.people.find(p => p.id === 'a2') || {}).has_email === false && dave.has_email === true);
 step('a row with no id or no first name is dropped', !r1.people.some(p => !p.id || !p.first_name));
 
+// The title search (R-068): a blank box means "everybody Apollo knows there" —
+// the title filter and its similar-titles switch are left OUT, never sent
+// empty (an empty filter is not the same request on every API).
+const all = fakeApollo({ status: 200, body: { people: [{ id: 'b1', first_name: 'Ann', last_name_obfuscated: 'Sm***h', title: 'Project Manager' }], pagination: { total_entries: 137 } } });
+const rAll = await apollo.searchPeople({ key: KEY, domains: ['acme.com'], titles: [], perPage: 50, fetchImpl: all.fetchImpl });
+const cAll = all.calls[0] || {};
+step('title search, blank box: no title filter is sent at all', !('person_titles' in cAll.body) && !('include_similar_titles' in cAll.body) && cAll.body.per_page === 50, JSON.stringify(cAll.body));
+const blanks = fakeApollo({ status: 200, body: { people: [] } });
+await apollo.searchPeople({ key: KEY, domains: ['acme.com'], titles: ['  ', ''], fetchImpl: blanks.fetchImpl });
+step('title search, blank strings count as blank', !('person_titles' in blanks.calls[0].body), JSON.stringify(blanks.calls[0].body));
+const typed = fakeApollo({ status: 200, body: { people: [] } });
+await apollo.searchPeople({ key: KEY, domains: ['acme.com'], titles: [' Project Manager '], fetchImpl: typed.fetchImpl });
+step('title search, a typed title: sent trimmed, with similar titles ON', JSON.stringify(typed.calls[0].body.person_titles) === '["Project Manager"]' && typed.calls[0].body.include_similar_titles === true);
+step('Apollo\'s masked surname is kept as a hint ("Sm***h"), never as the name', rAll.people[0].last_name === '' && rAll.people[0].last_name_hint === 'Sm***h', JSON.stringify(rAll.people[0]));
+step('the total Apollo reports is passed on (so the page can say "50 of 137")', rAll.total === 137 && r1.total === null, String(rAll.total) + ' / ' + String(r1.total));
+
 const none = fakeApollo({ status: 200, body: { people: [] } });
 const noKey = await apollo.searchPeople({ key: '', domains: ['acme.com'], titles: ['CEO'], fetchImpl: none.fetchImpl });
 step('no key: a sentence saying where to add it, and Apollo is never called', !noKey.ok && /Admin → Integrations/.test(noKey.error) && none.calls.length === 0, noKey.error);

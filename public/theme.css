@@ -738,6 +738,33 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-found-acts{display:flex;gap:8px;flex-wrap:wrap;flex:none}
 .lxc-credits{font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.45}
 
+/* "Find anyone at <company>" — the title search in the People to reach block
+   (R-068). The results list scrolls inside its own box so fifty people never
+   push the rest of the lead off the screen; each row wraps on a phone. */
+.lxc-ppl{margin-top:12px}
+.lxc-ppl-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lxc-ppl-bar .inp{flex:1 1 220px;min-width:0}
+.lxc-ppl-list{margin-top:8px;max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+.lxc-ppl-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)}
+.lxc-ppl-row:last-child{border-bottom:0}
+.lxc-ppl-main{flex:1;min-width:0}
+.lxc-ppl-name{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.lxc-ppl-title{font-size:12px;color:var(--text2);margin-top:1px;overflow-wrap:anywhere}
+.lxc-ppl-title a{color:var(--accent);font-weight:600;text-decoration:none}
+.lxc-ppl-state{font-size:11.5px;color:var(--text3);white-space:nowrap;flex:none}
+.lxc-uncover{flex:none;white-space:nowrap}
+@media (max-width:560px){
+  .lxc-ppl-row{flex-wrap:wrap}
+  .lxc-uncover{width:100%}
+}
+
+/* The Apollo card's daily credit limit (Admin → Integrations, R-066). */
+.intg-apollo-limit{margin-top:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px}
+.intg-apollo-label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px}
+.intg-apollo-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.intg-apollo-row .inp{width:140px;max-width:100%}
+.intg-apollo-used{font-size:11.5px;color:var(--text2);margin-top:6px;line-height:1.45}
+
 /* "Already added" (owner, 2026-09-28) — the pop-up every add-a-person path
    shows when that person or address is already in PACE (10-page-modals.js
    showAlreadyAdded). Calm: a neutral card for the person, no state colour —

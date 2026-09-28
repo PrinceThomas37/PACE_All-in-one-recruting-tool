@@ -124,6 +124,12 @@
     var hr = d.slots.filter(function(s){ return s.kind==='hr'; });
     var mg = d.slots.filter(function(s){ return s.kind==='manager'; });
     var hrHtml = hr.map(slot).join(''), mgHtml = mg.map(slot).join('');
+    // People uncovered from the title search who fit none of the four roles
+    // (slot 'other', R-068) wait here, with the same Accept / Not this person.
+    var otherSugs = sugs.filter(function(x){ return x.slot_key==='other'; });
+    var otherHtml = otherSugs.length
+      ? '<div class="lxc-group">Other people you picked</div>'+otherSugs.map(function(x){ return found(id, x, d); }).join('')
+      : '';
     // Everybody on the lead is shown somewhere — including someone added a
     // moment ago whom the last answer from the server has not placed yet.
     var rest = cs.filter(function(c){ return !shown[c.id]; });
@@ -154,7 +160,9 @@
       (st.msg ? '<div class="lxc-msg'+(st.msgErr?' is-err':'')+'" role="status">'+esc(st.msg)+'</div>' : '')+
       '<div class="lxc-group">HR</div>'+hrHtml+
       '<div class="lxc-group">Hiring managers</div>'+mgHtml+
+      otherHtml+
       (rest.length ? '<div class="lxc-group">Also on this lead</div>'+rest.map(function(c){ return '<div class="lxc-slot is-filled">'+leadContactRowHtml(c)+'</div>'; }).join('') : '')+
+      peopleSearch(id, d)+
       '<div class="lxc-foot">'+
         '<span>Company size:</span> '+sizeCtl+lookupBtn+
         '<span class="lxc-foot-note">'+sizeNote(d)+'</span>'+
@@ -162,6 +170,53 @@
       finderFoot(d)+
     '</div>';
   }
+  // ── "Find anyone at <company>" — the title search (R-068, D-0055) ─────────
+  // Owner: "a search bar to search for title or similar title and that will
+  // search in the employee list from apollo and show us, and we can click on
+  // to see and select which contact we want to uncover". The search is free;
+  // Uncover spends one credit on the ONE person picked (free when PACE looked
+  // them up before). Drawn only when the server would do it: Apollo connected
+  // and the caller works the lead. What was typed lives in state, because
+  // this block is repainted whole after every answer.
+  var STATE_WORD = { waiting:'Waiting below', added:'On this lead', turned_down:'Turned down' };
+  function peopleSearch(id, d){
+    var fin = d.finder || {};
+    if (!d.can_edit || !fin.apollo) return '';
+    var ps = C[id].people || {};
+    var company = d.company_name || 'this company';
+    var rows = (ps.list || []).map(function(p){
+      var name = p.first_name+' '+(p.last_masked ? (p.last_name ? p.last_name : '•••') : (p.last_name||''));
+      var li = safeLinkedIn(p.linkedin_url);
+      var right;
+      if (p.on_file) right = '<span class="lxc-ppl-state">On file</span>';
+      else if (p.state) right = '<span class="lxc-ppl-state">'+esc(STATE_WORD[p.state]||p.state)+'</span>';
+      else {
+        var busy = ps.uncovering === p.ref;
+        right = '<button type="button" class="btn btn-outline btn-sm lxc-uncover"'+(ps.uncovering?' disabled':'')+
+          ' onclick="event.stopPropagation();leadPocUncover(\''+id+'\',\''+esc(p.ref)+'\')">'+
+          (busy ? 'Uncovering…' : 'Uncover · '+(p.free ? 'free' : '1 credit'))+'</button>';
+      }
+      return '<div class="lxc-ppl-row">'+
+        '<div class="lxc-ppl-main"><div class="lxc-ppl-name">'+esc(name.trim())+'</div>'+
+          '<div class="lxc-ppl-title">'+esc(p.title||'No title listed')+
+            (li ? ' · <a href="'+esc(li)+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">LinkedIn</a>' : '')+'</div></div>'+
+        right+
+      '</div>';
+    }).join('');
+    return '<div class="lxc-ppl">'+
+      '<div class="lxc-group">Find anyone at '+esc(company)+'</div>'+
+      '<form class="lxc-ppl-bar" onsubmit="event.preventDefault();event.stopPropagation();leadPocPeople(\''+id+'\')">'+
+        '<input id="lxc-ppl-q-'+esc(id)+'" class="inp" type="search" maxlength="100" autocomplete="off" '+
+          'placeholder="Job title, e.g. Project Manager (blank = everyone)" value="'+esc(ps.q||'')+'" onclick="event.stopPropagation()">'+
+        '<button type="submit" class="btn btn-primary btn-sm"'+(ps.loading?' disabled':'')+'>'+(ps.loading?'Searching…':'Search')+'</button>'+
+        (ps.list ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();leadPocPeopleClear(\''+id+'\')">Clear</button>' : '')+
+      '</form>'+
+      (ps.msg ? '<div class="lxc-msg'+(ps.msgErr?' is-err':'')+'" role="status">'+esc(ps.msg)+'</div>' : '')+
+      (rows ? '<div class="lxc-ppl-list">'+rows+'</div>' : '')+
+      (!ps.list ? '<div class="lxc-note">Searching is free and includes similar titles. Uncover shows a person’s full name and email for one credit, and only for the people you pick.</div>' : '')+
+    '</div>';
+  }
+
   // What the size line says: where the size came from, and what it means.
   function sizeNote(d){
     var from = d.size_source==='apollo' && d.employee_count
@@ -341,6 +396,46 @@
       st.busy = false; load(id);
     });
   };
+  // The title search (R-068). Free: nothing is stored and no credit moves.
+  window.leadPocPeople = function(id){
+    var st = C[id]; if (!st || !st.data) return;
+    var ps = st.people || (st.people = {});
+    if (ps.loading) return;
+    var inp = document.getElementById('lxc-ppl-q-'+id);
+    ps.q = String(inp && inp.value || '').trim();
+    ps.loading = true; ps.msg = null; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/people', { title: ps.q }).then(function(r){
+      ps.loading = false; ps.list = (r && r.people) || []; ps.msg = (r && r.message) || null; ps.msgErr = false;
+      if (r && r.credits && st.data.finder) st.data.finder.credits = r.credits;
+      paint(id);
+    }).catch(function(err){
+      ps.loading = false; ps.msg = (err && err.message) || String(err); ps.msgErr = true; paint(id);
+    });
+  };
+  window.leadPocPeopleClear = function(id){ var st = C[id]; if (!st) return; st.people = {}; paint(id); };
+  // Uncover ONE person: a credit (none when looked up before). They then wait
+  // above with Accept / Not this person, like anyone the finder found.
+  window.leadPocUncover = function(id, ref){
+    var st = C[id]; if (!st || !st.data) return;
+    var ps = st.people || (st.people = {});
+    if (ps.uncovering) return;
+    ps.uncovering = ref; ps.msg = null; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/people/uncover', { ref: ref }).then(function(d){
+      ps.uncovering = null;
+      if (d && d.slots) st.data = d;
+      (ps.list||[]).forEach(function(p){ if (p.ref === ref) p.state = 'waiting'; });
+      ps.msg = (d && d.result && d.result.message) || null; ps.msgErr = false;
+      paint(id);
+    }).catch(function(err){
+      ps.uncovering = null;
+      // Already in PACE: the same pop-up Add contact shows. PACE has turned
+      // them down for this lead itself, so the row reads "On file" from now on.
+      var dup = err && err.body && err.body.duplicate;
+      if (dup){ (ps.list||[]).forEach(function(p){ if (p.ref === ref) p.on_file = true; }); paint(id); showAlreadyAdded(dup); return; }
+      ps.msg = (err && err.message) || String(err); ps.msgErr = true; paint(id);
+    });
+  };
+
   window.leadPocReject = function(id, sid){
     var st = C[id]; if (!st || st.acting) return;
     st.acting = sid; st.actingWhat = 'reject'; paint(id);

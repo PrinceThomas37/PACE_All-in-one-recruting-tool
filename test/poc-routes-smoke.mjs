@@ -72,7 +72,8 @@ const tables = {
 let seq = 0;
 // migration 052, as rules the fake refuses by
 function pocCheck(r) {
-  if (!['hr1', 'hr2', 'mgr1', 'mgr2'].includes(r.slot_key)) return 'slot_key';
+  // migration 054: a person picked from the title search may sit outside the four slots
+  if (!['hr1', 'hr2', 'mgr1', 'mgr2', 'other'].includes(r.slot_key)) return 'slot_key';
   if (!r.first_name || r.first_name.length > 100) return 'first_name';
   if (!['apollo', 'website', 'posting'].includes(r.source)) return 'source';
   if (r.email_confidence != null && !['confirmed', 'likely'].includes(r.email_confidence)) return 'email_confidence';
@@ -552,6 +553,93 @@ try {
   step('the last Apollo answer is kept, and the last failure separately', !!lastCall && !!lastErr && JSON.parse(lastErr.value).ok === false,
     (lastCall && lastCall.value) + ' | ' + (lastErr && lastErr.value));
   step('…and neither ever holds the key', !String(lastCall && lastCall.value).includes('test-key') && !String(lastErr && lastErr.value).includes('test-key'));
+
+  // ── the title search + Uncover (R-068, D-0055) ─────────────────────────
+  // A LAW firm (R-063 at the same time): an attorney is a hiring manager there.
+  tables.companies.push({ id: 'co11', org_id: ORG, name: 'Lakeview Law', website: 'https://lakeviewlaw.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'j11', org_id: ORG, company_id: 'co11', position: 'Litigation Paralegal', industry: 'Law Practice', stage: 'Assigned',
+    created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  tables.contacts.push({ id: 'c11', org_id: ORG, job_id: 'j11', first_name: 'Rita', last_name: 'Moss', designation: 'Office Manager', email: 'rmoss@lakeviewlaw.com', email_status: 'valid', is_primary: true, phone: null });
+  const LAW_PEOPLE = [
+    { id: 'ap-att1', first_name: 'Omar', last_name: '', last_name_masked: true, last_name_hint: 'Ch***n', title: 'Senior Litigation Attorney', has_email: true },
+    { id: 'ap-rita', first_name: 'Rita', last_name: 'Moss', title: 'Office Manager', has_email: true },
+    { id: 'ap-dave', first_name: 'Dave', last_name: '', last_name_masked: true, title: 'Director of Estimating', has_email: true },
+    { id: 'ap-clerk', first_name: 'Pat', last_name: 'Nguyen', title: 'Docketing Clerk', has_email: true, linkedin_url: 'javascript:alert(1)' },
+    { id: 'ap-opt', first_name: 'Olga', last_name: 'Out', title: 'Paralegal', has_email: true },
+    { id: 'ap-att3', first_name: 'Ava', last_name: 'Lee', title: 'Attorney', has_email: true },
+  ];
+  SEARCH = () => ({ ok: true, status: 200, people: LAW_PEOPLE, total: 42 });
+  const nS = apolloCalls.search.length, mS = meter(), rS = apolloCalls.reveal.length;
+  const ps = await call('POST', '/jobs/j11/poc/people', 'bd1', { title: '  Attorney ' });
+  const asked = apolloCalls.search[nS] || {};
+  step('title search: Apollo is asked for the typed title, at the company\'s own domain, 50 at a time',
+    ps.status === 200 && JSON.stringify(asked.titles) === '["Attorney"]' && JSON.stringify(asked.domains) === '["lakeviewlaw.com"]' && asked.perPage === 50,
+    ps.status + ' ' + JSON.stringify(asked));
+  step('title search is FREE: no credit, no lookup', meter() === mS && apolloCalls.reveal.length === rS);
+  const pp = (ref) => (ps.body.people || []).find(x => x.ref === ref) || {};
+  step('a hidden surname shows as Apollo\'s own hint, marked hidden', pp('ap-att1').last_name === 'Ch***n' && pp('ap-att1').last_masked === true, JSON.stringify(pp('ap-att1')));
+  step('somebody already on file at the company is marked "on file"', pp('ap-rita').on_file === true && !pp('ap-att1').on_file);
+  step('somebody PACE looked up before (for any lead) is marked free to uncover', pp('ap-dave').free === true && !pp('ap-att1').free);
+  step('a LinkedIn link that is not a real linkedin.com address is dropped', pp('ap-clerk').linkedin_url === null);
+  step('the answer says how many, of how many', /6 of 42 people at Lakeview Law with a title like “Attorney”/.test(ps.body.message), ps.body.message);
+  const blank = await call('POST', '/jobs/j11/poc/people', 'bd1', { title: '' });
+  step('a blank box lists everybody Apollo knows there (no title sent)', blank.status === 200 && JSON.stringify(apolloCalls.search[apolloCalls.search.length - 1].titles) === '[]' && /Apollo knows at Lakeview Law — type a title to narrow it/.test(blank.body.message), blank.body && blank.body.message);
+  const longT = await call('POST', '/jobs/j11/poc/people', 'bd1', { title: 'x'.repeat(101) });
+  const ps403 = await call('POST', '/jobs/j11/poc/people', 'lead1', { title: 'Attorney' });
+  const ps404 = await call('POST', '/jobs/j11/poc/people', 'bd2', { title: 'Attorney' });
+  const psX = await call('POST', '/jobs/j11/poc/people', 'admX', { title: 'Attorney' });
+  step('title search: 400 for a 101-character title, 403 for someone who only sees the lead, 404 for someone who cannot, 404 for another company',
+    longT.status === 400 && ps403.status === 403 && ps404.status === 404 && psX.status === 404, [longT.status, ps403.status, ps404.status, psX.status].join(','));
+
+  // Uncover: one credit for ONE picked person.
+  await settings.setSettings(supabase, { poc_apollo_daily_credits: meter() + 3 });
+  REVEAL['ap-att1'] = { ok: true, status: 200, first_name: 'Omar', last_name: 'Chen', title: 'Senior Litigation Attorney', email: 'omar.chen@lakeviewlaw.com', email_verified: true };
+  const m2 = meter(), rv2 = apolloCalls.reveal.length;
+  const u1 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-att1' });
+  const omar = tables.poc_suggestions.find(x => x.job_id === 'j11' && x.source_ref === 'ap-att1');
+  step('Uncover looks up THAT person — one credit', u1.status === 200 && meter() === m2 + 1 && JSON.stringify(apolloCalls.reveal.slice(rv2)) === '["ap-att1"]', u1.status + ' ' + (u1.body && (u1.body.error || u1.body.result && u1.body.result.message)));
+  step('…they wait in a hiring-manager slot: at a LAW firm an attorney is a leader (R-063)', omar && omar.slot_key === 'mgr1' && omar.status === 'suggested', JSON.stringify(omar));
+  step('…with Apollo\'s verified email as Confirmed', omar && omar.email === 'omar.chen@lakeviewlaw.com' && omar.email_confidence === 'confirmed');
+  step('…and the page is told plainly what it cost', /Uncovered Omar Chen with an email Apollo verified — 1 credit/.test(u1.body.result.message), u1.body.result.message);
+  step('THE UNCOVER WROTE NO CONTACT — they still wait for Accept', !tables.contacts.some(c => c.first_name === 'Omar'));
+  const u1b = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-att1' });
+  step('uncovering the same person again is refused, and costs nothing', u1b.status === 409 && /waiting below/.test(u1b.body.error) && meter() === m2 + 1, u1b.body && u1b.body.error);
+  REVEAL['ap-clerk'] = { ok: true, status: 200, first_name: 'Pat', last_name: 'Nguyen', title: 'Docketing Clerk', email: 'pat@gmail.com', email_verified: false, email_status: 'guessed' };
+  const u2 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-clerk' });
+  const pat = tables.poc_suggestions.find(x => x.job_id === 'j11' && x.source_ref === 'ap-clerk');
+  step('somebody outside the four roles waits under "other" (migration 054)', u2.status === 200 && pat && pat.slot_key === 'other', JSON.stringify(pat));
+  step('…Apollo\'s GUESSED email is dropped; the company\'s own format gives a Likely one', pat && pat.email === 'pnguyen@lakeviewlaw.com' && pat.email_confidence === 'likely' && pat.email_source === 'format', JSON.stringify(pat && [pat.email, pat.email_confidence]));
+  const lawPoc = await call('GET', '/jobs/j11/poc', 'bd1');
+  step('…and the lead\'s answer carries them, ready for Accept', lawPoc.status === 200 && lawPoc.body.suggestions.some(x => x.slot_key === 'other' && x.first_name === 'Pat'));
+  const m3 = meter(), rv3 = apolloCalls.reveal.length;
+  const u3 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-dave' });
+  step('somebody looked up before costs NOTHING to uncover (no lookup, no credit)', apolloCalls.reveal.length === rv3 && meter() === m3, 'reveals +' + (apolloCalls.reveal.length - rv3));
+  step('…and when they turn out to be ALREADY IN PACE (Dave is a contact on another lead), the answer is the "Already added" pop-up',
+    u3.status === 409 && u3.body.duplicate && u3.body.duplicate.match === 'email' && /the Junior Estimator lead at Acme Builders/.test(u3.body.error), u3.status + ' ' + (u3.body && u3.body.error));
+  const daveRow = tables.poc_suggestions.find(x => x.job_id === 'j11' && x.source_ref === 'ap-dave');
+  step('…PACE turns them down for this lead itself, keeping no address', daveRow && daveRow.status === 'rejected' && daveRow.decided_by == null && daveRow.email === null, JSON.stringify(daveRow));
+  REVEAL['ap-opt'] = { ok: true, status: 200, first_name: 'Olga', last_name: 'Out', title: 'Paralegal', email: 'optout@gamma.com', email_verified: true };
+  const u4 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-opt' });
+  const olga = tables.poc_suggestions.find(x => x.job_id === 'j11' && x.source_ref === 'ap-opt');
+  step('somebody who opted out anywhere is never added, and is kept without an address', u4.status === 409 && /asked not to be emailed/.test(u4.body.error) && olga && olga.status === 'rejected' && olga.email === null, (u4.body && u4.body.error) + ' ' + JSON.stringify(olga));
+  await settings.setSettings(supabase, { poc_apollo_daily_credits: meter() });
+  const rv5 = apolloCalls.reveal.length;
+  const u5 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: 'ap-att3' });
+  const u5a = await call('POST', '/jobs/j11/poc/people/uncover', 'adm', { ref: 'ap-att3' });
+  step('past the day\'s limit Uncover spends nothing and says who can raise it',
+    u5.status === 409 && /used up/.test(u5.body.error) && /An admin can raise the daily limit/.test(u5.body.error) &&
+    u5a.status === 409 && /Admin → Integrations → Apollo/.test(u5a.body.error) && apolloCalls.reveal.length === rv5, (u5.body && u5.body.error) + ' | ' + (u5a.body && u5a.body.error));
+  const badRef = await call('POST', '/jobs/j11/poc/people/uncover', 'bd1', { ref: '../etc' });
+  const u403 = await call('POST', '/jobs/j11/poc/people/uncover', 'lead1', { ref: 'ap-att3' });
+  const u404 = await call('POST', '/jobs/j11/poc/people/uncover', 'bd2', { ref: 'ap-att3' });
+  step('Uncover: 400 for a made-up reference, 403 for someone who only sees the lead, 404 for someone who cannot',
+    badRef.status === 400 && u403.status === 403 && u404.status === 404, [badRef.status, u403.status, u404.status].join(','));
+
+  // The Apollo card's figure (R-066): today's use and the limit, admin only.
+  const us = await call('GET', '/admin/apollo/usage', 'adm');
+  const us403 = await call('GET', '/admin/apollo/usage', 'bd1');
+  step('the admin sees today\'s Apollo use and the limit (0 – 10,000)', us.status === 200 && us.body.used === meter() && us.body.limit === meter() && us.body.max === 10000 && us.body.min === 0, JSON.stringify(us.body));
+  step('…nobody else does (403)', us403.status === 403);
 
   step('no write broke migration 052\'s own rules', dbRefused.length === 0, dbRefused.join(', '));
 } catch (e) {
