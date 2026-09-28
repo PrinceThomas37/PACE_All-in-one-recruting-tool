@@ -2,7 +2,14 @@
 // APOLLO, FOR THE POC FINDER (R-053, D-0049) — the paid rung of the ladder
 // (docs/CONTACT_FINDER_DESIGN.md §5, R5). Nothing else in PACE calls Apollo.
 //
-// TWO CALLS, AND WHAT EACH COSTS (Apollo's own docs, 2026-09):
+// THREE CALLS, AND WHAT EACH COSTS (Apollo's own docs, 2026-09):
+//   * Organization Enrichment  GET /api/v1/organizations/enrich?domain= — one
+//     company's record by its website: employee count, industry, founded
+//     year, LinkedIn, location. EXACTLY 1 credit when Apollo finds the
+//     company, 0 when it does not (Apollo's own tool description,
+//     2026-09-28). A GET, and still NEVER retried — a retry after a timeout
+//     can be charged twice. Used for the company-size band (owner, 2026-09-28:
+//     "make apollo search for employee size using company name and website").
 //   * People API Search  POST /api/v1/mixed_people/api_search — finds people
 //     at a company by title. Uses NO credits. Returns no email. Needs a plan
 //     that includes it: the owner's plan on 2026-09-27 refused it outright
@@ -34,14 +41,25 @@ async function post(path, key, body, fetchImpl) {
   return { ok: res.ok, status: res.status, data };
 }
 
-// Apollo's own words, turned into what to do about them.
-function describeApolloError(status, data) {
+async function get(pathAndQuery, key, fetchImpl) {
+  const res = await fetchWithTimeout(BASE + pathAndQuery, {
+    method: 'GET',
+    headers: { 'Cache-Control': 'no-cache', 'X-Api-Key': key },
+  }, { timeoutMs: TIMEOUT_MS, fetchImpl });
+  let data = null;
+  try { data = await res.json(); } catch (_) { data = null; }
+  return { ok: res.ok, status: res.status, data };
+}
+
+// Apollo's own words, turned into what to do about them. `what` names the
+// thing that was refused ("people search", "company lookups").
+function describeApolloError(status, data, what) {
   const raw = String((data && (data.error || data.message || (data.errors && data.errors[0]))) || '').toLowerCase();
   if (status === 401 || /invalid (api )?key|unauthori[sz]ed/.test(raw)) {
     return 'Apollo did not accept the key — check it in Admin → Integrations.';
   }
   if (status === 403 || /not (included|accessible)|upgrade|plan|master api key/.test(raw)) {
-    return 'This Apollo plan or key does not allow people search — it needs a plan with API access and a master API key.';
+    return 'This Apollo plan or key does not allow ' + (what || 'people search') + ' — it needs a plan with API access and a master API key.';
   }
   if (status === 429 || /rate limit|too many/.test(raw)) {
     return 'Apollo is rate-limiting this key right now — try again in a few minutes.';
@@ -118,10 +136,56 @@ async function revealPerson({ key, id, fetchImpl } = {}) {
   };
 }
 
+/**
+ * One company's record, by its website domain. 1 credit when found, 0 when
+ * not. `found:false` is an ANSWER (Apollo does not know it), not an error.
+ */
+async function enrichOrganization({ key, domain, fetchImpl } = {}) {
+  if (!key) return { ok: false, status: 0, error: 'Apollo is not connected — add its key in Admin → Integrations.' };
+  const d = String(domain || '').trim().toLowerCase();
+  if (!d) return { ok: false, status: 0, error: 'This company has no website to look it up by.' };
+  let r;
+  try {
+    r = await get('/organizations/enrich?domain=' + encodeURIComponent(d), key, fetchImpl);
+  } catch (e) {
+    return { ok: false, status: 0, error: 'Could not reach Apollo from the PACE server — ' + (e && e.message || e) };
+  }
+  if (r.status === 404) return { ok: true, status: 404, found: false };
+  if (!r.ok) return { ok: false, status: r.status, error: describeApolloError(r.status, r.data, 'company lookups') };
+  const o = (r.data && r.data.organization) || null;
+  if (!o || !o.id) return { ok: true, status: r.status, found: false };
+  const n = Number(o.estimated_num_employees);
+  return {
+    ok: true, status: r.status, found: true,
+    org: {
+      id: String(o.id), name: o.name || '', domain: o.primary_domain || d, website: o.website_url || null,
+      // Apollo's ESTIMATE. Absent or 0 means it does not know — never "0 people".
+      employees: Number.isFinite(n) && n > 0 ? Math.round(n) : null,
+      industry: o.industry || null, founded_year: o.founded_year || null, linkedin_url: o.linkedin_url || null,
+      city: o.city || null, state: o.state || null, country: o.country || null,
+    },
+  };
+}
+
+/**
+ * What an Apollo call did, for the one diagnostics row the routes keep
+ * (app_settings `apollo_last_call` / `apollo_last_error`) — so a failure the
+ * owner saw can be read from the database instead of being transcribed.
+ * NEVER carries the key. `at` comes from the caller (no clock here).
+ */
+function callRecord(call, result, at) {
+  const r = result || {};
+  const out = { at: at || null, call, ok: !!r.ok, status: r.status == null ? null : r.status };
+  if (r.error) out.error = String(r.error).slice(0, 300);
+  if (r.found !== undefined) out.found = !!r.found;
+  if (Array.isArray(r.people)) out.people = r.people.length;
+  return out;
+}
+
 /** Can this key search people? Used by the Integrations card's Test. Free. */
 async function checkPeopleSearch({ key, fetchImpl } = {}) {
   const r = await searchPeople({ key, domain: 'apollo.io', titles: ['CEO'], perPage: 1, fetchImpl });
   return r.ok ? { ok: true } : { ok: false, error: r.error, status: r.status };
 }
 
-module.exports = { searchPeople, revealPerson, checkPeopleSearch, describeApolloError, normalizePerson, BASE };
+module.exports = { searchPeople, revealPerson, enrichOrganization, checkPeopleSearch, callRecord, describeApolloError, normalizePerson, BASE };

@@ -8,9 +8,13 @@
 //        company's email format, whether Apollo is connected and today's
 //        credits, and whether the caller may change anything.
 //   PUT  /jobs/:id/company-size                — the size pick, remembered for
-//        the COMPANY.
-//   POST /jobs/:id/poc/find                    — "Find the rest": asks Apollo
-//        for people in the EMPTY slots and stores them as suggestions.
+//        the COMPANY (source 'manual' — Apollo never overwrites it).
+//   POST /jobs/:id/company-size/lookup         — ask Apollo for the company's
+//        size by its website (1 credit when found, 0 when not).
+//   POST /jobs/:id/poc/find                    — "Search contacts" (every
+//        empty slot) or "Search contact" on one slot (`slot_key`): looks the
+//        company's size up first when nobody has set it, then asks Apollo for
+//        people in the EMPTY slots and stores them as suggestions.
 //   POST /jobs/:id/poc/suggestions/:sid/accept — the person becomes a contact
 //        on the lead, through the same code as "Add contact".
 //   POST /jobs/:id/poc/suggestions/:sid/reject — "Not this person": never
@@ -76,7 +80,7 @@ module.exports = (ctx) => {
     let company = null;
     if (lead.company_id) {
       const { data } = await db.forRequest(req).from('companies')
-        .select('id,name,website,size_band').eq('id', lead.company_id).maybeSingle();
+        .select('id,name,website,size_band,employee_count,size_source,size_checked_at,apollo_org_id').eq('id', lead.company_id).maybeSingle();
       company = data || null;
     }
     const { data: contacts } = await db.forRequest(req).from('contacts')
@@ -118,6 +122,80 @@ module.exports = (ctx) => {
     } catch (_) { /* a meter is not worth an outage */ }
   }
 
+  // The last thing Apollo said, kept so a failure somebody saw can be read
+  // from the database instead of being transcribed: `apollo_last_call`, plus
+  // `apollo_last_error`, which keeps the last FAILURE after later successes.
+  // Never the key. Best-effort — a note must never be why a search fails.
+  async function noteApollo(call, result) {
+    try {
+      const rec = peopleApollo.callRecord(call, result, new Date().toISOString());
+      const rows = [{ key: 'apollo_last_call', value: JSON.stringify(rec), updated_at: new Date() }];
+      if (!rec.ok) rows.push({ key: 'apollo_last_error', value: JSON.stringify(rec), updated_at: new Date() });
+      await db.global.from('app_settings').upsert(rows, { onConflict: 'key' });
+    } catch (_) { /* best-effort */ }
+  }
+
+  async function creditBudget(req) {
+    const orgId = orgIdFor(req);
+    return { orgId, used: await creditsUsed(orgId), limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits') };
+  }
+
+  // ── the company's size, from Apollo (owner, 2026-09-28) ─────────────────
+  // Found by the company's WEBSITE — the record is exact — and then the NAME
+  // is checked (poc.sameCompany): a website belonging to a parent group, or
+  // one typed wrong at import, would hand back somebody else's headcount, and
+  // a wrong size looks for the wrong people. A size somebody PICKED is never
+  // overwritten. 1 credit when Apollo finds the company, 0 when it does not;
+  // a company Apollo did not know is not asked again for 30 days unless a
+  // person presses "Look up with Apollo" themselves.
+  const RECHECK_MS = 30 * 86400000;
+  async function lookupSize(req, cx, key, budget, force) {
+    const co = cx.company;
+    if (!co) return { status: 'no_company' };
+    if (co.size_band && co.size_source === 'manual') return { status: 'manual', sentence: 'The company size was picked by hand — PACE leaves it as it is.' };
+    if (co.size_band && !force) return { status: 'known' };
+    if (!force && co.size_checked_at && (Date.now() - new Date(co.size_checked_at).getTime()) < RECHECK_MS) return { status: 'checked_recently' };
+    const domains = [poc.normalizeDomain(co.website), cx.format.domain].filter((d, i, a) => d && a.indexOf(d) === i);
+    if (!domains.length) return { status: 'no_domain', sentence: 'Company size: PACE needs the company’s website to look it up.' };
+    if (budget.used >= budget.limit) {
+      return { status: 'no_credits', sentence: `Company size not looked up — today's ${budget.limit} Apollo credit${budget.limit === 1 ? ' is' : 's are'} used up.` };
+    }
+    let hit = null, failed = null;
+    for (const d of domains) {
+      const r = await apollo.enrichOrganization({ key, domain: d });
+      await noteApollo('company_lookup', r);
+      if (!r.ok) { failed = r; break; }
+      if (r.found) {
+        hit = Object.assign({ asked: d }, r.org);
+        budget.used++;                             // 1 credit — only when found
+        await recordCredits(budget.orgId, budget.used);
+        break;
+      }
+    }
+    if (failed) return { status: 'error', http: failed.status, sentence: 'Company size: ' + failed.error };
+    const stamp = { size_checked_at: new Date(), updated_at: new Date() };
+    if (!hit) {
+      await db.forRequest(req).from('companies').update(stamp).eq('id', co.id);
+      return { status: 'not_found', sentence: `Apollo does not know ${domains[0]} — pick the company size yourself.` };
+    }
+    if (!poc.sameCompany(co.name, hit.name)) {
+      await db.forRequest(req).from('companies').update(stamp).eq('id', co.id);
+      return { status: 'no_match', sentence: `Apollo’s record for ${hit.asked} is “${hit.name}”, not ${co.name}, so the size was left for you to pick.` };
+    }
+    const patch = Object.assign({}, stamp, { apollo_org_id: String(hit.id).slice(0, 100) });
+    const band = poc.sizeBandFor(hit.employees);
+    if (!band) {
+      await db.forRequest(req).from('companies').update(patch).eq('id', co.id);
+      return { status: 'no_size', sentence: `Apollo knows ${co.name} but not how many people work there — pick the size yourself.` };
+    }
+    Object.assign(patch, { size_band: band, employee_count: hit.employees, size_source: 'apollo' });
+    const { error } = await db.forRequest(req).from('companies').update(patch).eq('id', co.id);
+    if (error) throw error;
+    const label = (poc.SIZE_BANDS.find(b => b.id === band) || {}).label || band;
+    return { status: 'set', band, employees: hit.employees,
+      sentence: `Company size from Apollo: about ${hit.employees.toLocaleString('en-US')} people (${label}).` };
+  }
+
   async function finderState(req) {
     const apolloOn = await integrations.isConfigured(supabase, 'apollo');
     return {
@@ -142,6 +220,11 @@ module.exports = (ctx) => {
       company_name: (cx.company && cx.company.name) || null,
       size: cx.targets.size,
       size_known: cx.targets.size_known,
+      // Where the size came from ('manual' / 'apollo' / null), Apollo's
+      // estimate, and when Apollo was last asked.
+      size_source: (cx.company && cx.company.size_source) || null,
+      employee_count: (cx.company && cx.company.employee_count) || null,
+      size_checked_at: (cx.company && cx.company.size_checked_at) || null,
       sizes: poc.SIZE_BANDS,
       function: cx.targets.function,
       slots: cx.filled.slots.map(s => ({ key: s.key, kind: s.kind, label: s.label, titles: s.titles, contact_id: s.contact_id })),
@@ -181,13 +264,37 @@ module.exports = (ctx) => {
       const size = raw === null || raw === '' ? null : poc.normalizeSize(raw);
       if (raw != null && raw !== '' && !size) return res.status(400).json({ error: 'Pick one of the listed sizes.' });
       const { error } = await db.forRequest(req).from('companies')
-        .update({ size_band: size, updated_at: new Date() }).eq('id', lead.company_id);
+        .update({ size_band: size, size_source: size ? 'manual' : null, updated_at: new Date() }).eq('id', lead.company_id);
       if (error) throw error;
       res.json(await payload(req, lead));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
-  // ── "Find the rest" ─────────────────────────────────────────────────────
+  // "Look up with Apollo" beside the size pick — asked for by a person, so it
+  // asks even when Apollo said "not known" recently; never over a picked size.
+  router.post('/jobs/:id/company-size/lookup', auth, async (req, res) => {
+    try {
+      const lead = await visibleLead(req, req.params.id);
+      if (!lead) return res.status(404).json({ error: 'Not found' });
+      if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can change it.' });
+      if (!lead.company_id) return res.status(409).json({ error: 'This lead has no company to size.' });
+      const key = await integrations.getSecret(supabase, 'apollo');
+      if (!key) return res.status(409).json({ error: notConnected(req) });
+      const budget = await creditBudget(req);
+      const sz = await lookupSize(req, await leadContext(req, lead), key, budget, true);
+      if (sz.status === 'error') return res.status(502).json({ error: sz.sentence });
+      res.json(Object.assign(await payload(req, lead),
+        { result: { size: sz.status, message: sz.sentence || null, credits: { used: budget.used, limit: budget.limit } } }));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  function notConnected(req) {
+    return hasRole(req, 'admin')
+      ? 'Apollo is not connected yet — add its key in Admin → Integrations.'
+      : 'Apollo is not connected yet — ask an admin to add its key in Admin → Integrations.';
+  }
+
+  // ── "Search contacts" / "Search contact" ────────────────────────────────
   // Only the EMPTY slots, and only those with nobody already waiting. The
   // search is free; a credit is spent on a person only when nothing free can
   // do the job — Apollo hid their surname, or PACE has no format to build
@@ -198,20 +305,35 @@ module.exports = (ctx) => {
       if (!lead) return res.status(404).json({ error: 'Not found' });
       if (!(await canTouchJob(req, lead.id))) return res.status(403).json({ error: 'Only the people working this lead can look for people on it.' });
       const key = await integrations.getSecret(supabase, 'apollo');
-      if (!key) {
-        return res.status(409).json({ error: hasRole(req, 'admin')
-          ? 'Apollo is not connected yet — add its key in Admin → Integrations.'
-          : 'Apollo is not connected yet — ask an admin to add its key in Admin → Integrations.' });
-      }
+      if (!key) return res.status(409).json({ error: notConnected(req) });
+      // One slot ("Search contact" on it) or every empty one ("Search contacts").
+      const only = req.body && req.body.slot_key ? String(req.body.slot_key) : null;
+      if (only && !['hr1', 'hr2', 'mgr1', 'mgr2'].includes(only)) return res.status(400).json({ error: 'Unknown slot.' });
+      const budget = await creditBudget(req);
 
-      const cx = await leadContext(req, lead);
+      // The size decides which titles to look for, so an unknown size is
+      // looked up FIRST (the same click — the owner wants Apollo used only
+      // when a button is pressed). A picked size is never touched.
+      let cx = await leadContext(req, lead);
+      let sizeNote = null;
+      if (!cx.targets.size_known) {
+        const sz = await lookupSize(req, cx, key, budget, false);
+        if (sz.status === 'error' && sz.http === 401) return res.status(502).json({ error: sz.sentence });
+        sizeNote = sz.sentence || null;
+        if (sz.status === 'set') cx = await leadContext(req, lead);
+      }
+      const noted = (msg) => [sizeNote, msg].filter(Boolean).join(' ');
+
       const { data: prior } = await db.forRequest(req).from('poc_suggestions')
         .select('slot_key,source,source_ref,status').eq('job_id', lead.id);
       const waitingSlots = (prior || []).filter(p => p.status === 'suggested').map(p => p.slot_key);
-      const open = cx.filled.slots.filter(s => !s.contact_id && !waitingSlots.includes(s.key));
-      const reply = async (result) => res.json(Object.assign(await payload(req, lead), { result }));
+      const open = cx.filled.slots.filter(s => !s.contact_id && !waitingSlots.includes(s.key) && (!only || s.key === only));
+      const reply = async (result) => res.json(Object.assign(await payload(req, lead),
+        { result: Object.assign({ credits: { used: budget.used, limit: budget.limit } }, result) }));
       if (!open.length) {
-        return reply({ added: 0, message: 'Every slot already has somebody, or somebody waiting for you to look at.' });
+        return reply({ added: 0, message: noted(only
+          ? 'That slot already has somebody, or somebody waiting for you to look at.'
+          : 'Every slot already has somebody, or somebody waiting for you to look at.') });
       }
 
       const site = poc.normalizeDomain(cx.company && cx.company.website);
@@ -222,22 +344,21 @@ module.exports = (ctx) => {
 
       const titles = open.reduce((all, s) => all.concat(s.titles), []).filter((t, i, a) => a.indexOf(t) === i);
       const search = await apollo.searchPeople({ key, domains, titles, perPage: 25 });
-      if (!search.ok) return res.status(502).json({ error: search.error });
+      await noteApollo('people_search', search);
+      if (!search.ok) return res.status(502).json({ error: noted(search.error) });
 
       const onFile = cx.contacts.concat(cx.siblings);
+      // Slots NOT being searched are skipped exactly like slots with somebody waiting.
+      const skip = waitingSlots.concat(only ? cx.filled.slots.map(s => s.key).filter(k => k !== only) : []);
       const picks = poc.pickPeople(cx.filled.slots, search.people, {
         ids: (prior || []).filter(p => p.source === 'apollo' && p.source_ref).map(p => p.source_ref),
         names: onFile.map(c => [c.first_name, c.last_name].filter(Boolean).join(' ')),
-      }, cx.targets.size, waitingSlots);
+      }, cx.targets.size, skip);
       if (!picks.length) {
-        return reply({ added: 0, message: search.people.length
-          ? `Apollo knows people at ${(cx.company && cx.company.name) || domains[0]}, but nobody new in the roles still open.`
-          : `Apollo has nobody at ${domains[0]} in the roles still open.` });
+        return reply({ added: 0, message: noted(search.people.length
+          ? `Apollo knows people at ${(cx.company && cx.company.name) || domains[0]}, but nobody new in ${only ? 'that role' : 'the roles still open'}.`
+          : `Apollo has nobody at ${domains[0]} in ${only ? 'that role' : 'the roles still open'}.`) });
       }
-
-      const orgId = orgIdFor(req);
-      const limit = await settings.getSetting(supabase, 'poc_apollo_daily_credits');
-      let used = await creditsUsed(orgId);
 
       // A person already looked up for ANOTHER lead is never paid for twice.
       const pickIds = picks.map(x => String(x.person.id));
@@ -271,15 +392,16 @@ module.exports = (ctx) => {
         }
         const needsCredit = !p.last || (!p.email && person.has_email);
         if (needsCredit) {
-          if (stopped || used >= limit) {
+          if (stopped || budget.used >= budget.limit) {
             // Without a credit a hidden surname cannot even be named: leave
             // them for another day rather than store half a person.
             if (!p.last) { out.held_for_credits++; continue; }
           } else {
             const r = await apollo.revealPerson({ key, id: person.id });
+            await noteApollo('person_lookup', r);
             if (r.ok) {
-              used++;
-              await recordCredits(orgId, used);
+              budget.used++;
+              await recordCredits(budget.orgId, budget.used);
               p.first = r.first_name || p.first; p.last = r.last_name || p.last;
               p.title = r.title || p.title; p.linkedin = r.linkedin_url || p.linkedin;
               if (!p.email) {
@@ -343,7 +465,9 @@ module.exports = (ctx) => {
         if (row.status === 'suggested') out.added++;
       }
 
+      const limit = budget.limit;
       const bits = [];
+      if (sizeNote) bits.push(sizeNote);
       bits.push(out.added ? `Found ${out.added} ${out.added === 1 ? 'person' : 'people'} — accept the ones you want on this lead.` : 'Nobody new to suggest.');
       if (out.already_known) bits.push(`${out.already_known} already on file at this company.`);
       if (out.opted_out) bits.push(`${out.opted_out} left out — asked not to be emailed.`);
@@ -352,7 +476,7 @@ module.exports = (ctx) => {
         : `${out.held_for_credits} more need an Apollo credit to see their full name, and today's ${limit} ${limit === 1 ? 'is' : 'are'} used up.`);
       else if (stopped) bits.push(stopped);
       if (out.failed) bits.push(`Apollo could not look up ${out.failed}.`);
-      return reply(Object.assign(out, { credits: { used, limit }, message: bits.join(' ') }));
+      return reply(Object.assign(out, { credits: { used: budget.used, limit: budget.limit }, message: bits.join(' ') }));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

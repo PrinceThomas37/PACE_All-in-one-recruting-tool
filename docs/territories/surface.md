@@ -1,5 +1,32 @@
 # Surface — memory
-> Last written: 2026-09-28 (Session 33, R-053 slice 2) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, D-0050: Search contact buttons, size from Apollo, the Leads ×) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — "Search contact" in every empty slot; size from Apollo; the Leads × (D-0050)
+- **The Leads search box's × did nothing when only a search was typed** (owner:
+  *"The cross button do not work"*). It was "Clear all filters": cleared
+  stage/industry/date but NOT `STATE.jobsFilter.search`, and was drawn `.off`
+  (`pointer-events:none` in ui.css) whenever only a search was active — so it
+  could not even be clicked, including after the client-conversations card
+  (61-client-digest.js) fills the search in. Now `clearFilters` clears the
+  search too, the icon is on when `anyActive || f.search`, and its title is
+  "Clear search and filters". Candidates' × already cleared its search; the
+  Inbox's is "Clear search" and was right. `test/leads-search-clear-smoke.mjs`
+  (11) clicks with a REAL mouse — `element.click()` ignores pointer-events and
+  would pass on the broken code (5/11 on the old code).
+- **62-poc-finder.js:** "Find the rest" is now **"Search contacts"** (every
+  empty slot, top right), and every empty slot has its own **"Search contact"**
+  (primary) beside "Add by hand" → `POST /jobs/:id/poc/find {slot_key}`. One
+  search at a time (`st.finding`/`st.findingSlot`; "Searching…" on the pressed
+  button, the rest disabled). An open Add-by-hand form hides its slot's buttons.
+- **"Look up with Apollo"** (an `.lx-link`) beside the Company size select, only
+  while no size is set → `POST /jobs/:id/company-size/lookup`. The size note is
+  `sizeNote(d)`: "From Apollo: about N people." when `size_source==='apollo'`;
+  "Apollo had no size for this company." when checked and still unknown.
+- Styles: `.lxc-want > .lxc-want-acts` (the `> div` rule grows the text column,
+  so the actions need the more specific selector or they stretch); ≤560px the
+  actions drop under the text. poc-finder-ui-smoke (**58**) now also asserts
+  one-slot searches send `slot_key`, the lookup flow, and a 390px fit of a
+  slot's two buttons.
 
 ## Session 33 (2026-09-28) — "Find the rest" and found-person cards (R-053 slice 2, D-0049)
 - **`62-poc-finder.js`** now draws, in each slot, the people Apollo found for

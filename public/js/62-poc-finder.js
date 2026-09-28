@@ -19,7 +19,11 @@
 // the server answers — or if it never does — the plain contact list shows, as
 // before, inside that same element.
 //
-// SLICE 2 — "Find the rest" asks Apollo for people in the EMPTY slots. What it
+// SLICE 2 — "Search contacts" (every empty slot, top right) or "Search
+// contact" (one slot, in the slot — owner, 2026-09-28: the Looking-for rows
+// are filled from Apollo "only when a button is click 'search contact'") asks
+// Apollo for people in the EMPTY slots, looking the company's size up first
+// when nobody has set it. What it
 // finds is a SUGGESTION, drawn in the slot it was found for, with its email's
 // confidence (Confirmed: Apollo verified it · Likely: built from the company's
 // own format · none: PACE will not guess one) and two answers: Accept (it
@@ -91,6 +95,7 @@
     var shown = {};
     function person(cid){ var c = byId[cid]; if(!c) return ''; shown[cid] = 1; return leadContactRowHtml(c); }
     var sugs = d.suggestions || [];
+    var st = C[id], fin = d.finder || {};
     function slot(s){
       var mine = sugs.filter(function(x){ return x.slot_key===s.key; });
       var filled = s.contact_id && byId[s.contact_id];
@@ -100,11 +105,18 @@
         return (filled ? '<div class="lxc-slot is-filled">'+person(s.contact_id)+'</div>' : '')+
           mine.map(function(x){ return found(id, x, d); }).join('');
       }
+      // "Search contact" for THIS slot, drawn only when the server would do it.
+      var busyHere = st.finding && st.findingSlot === s.key;
+      var searchOne = (d.can_edit && fin.apollo && adding[id]!==s.key)
+        ? '<button type="button" class="btn btn-primary btn-sm lxc-search-one"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\',\''+s.key+'\')">'+(busyHere?'Searching…':'Search contact')+'</button>'
+        : '';
       return '<div class="lxc-slot is-empty">'+
         '<div class="lxc-want"><span class="lxc-mark" aria-hidden="true">○</span>'+
           '<div><div class="lxc-want-t">Looking for: '+esc(s.label)+'</div>'+
           '<div class="lxc-want-s">Nobody in this role on the lead yet.</div></div>'+
+          '<div class="lxc-want-acts">'+searchOne+
           (d.can_edit && adding[id]!==s.key ? '<button type="button" class="btn btn-outline btn-sm" onclick="event.stopPropagation();leadPocAdd(\''+id+'\',\''+s.key+'\')">Add by hand</button>' : '')+
+          '</div>'+
         '</div>'+
         (adding[id]===s.key ? form(id, s, d) : '')+
       '</div>';
@@ -116,12 +128,16 @@
     // moment ago whom the last answer from the server has not placed yet.
     var rest = cs.filter(function(c){ return !shown[c.id]; });
     var nFound = d.slots.filter(function(s){ return s.contact_id && byId[s.contact_id]; }).length;
-    var st = C[id], fin = d.finder || {};
     var waitingKeys = {}; sugs.forEach(function(x){ waitingKeys[x.slot_key] = 1; });
     var openSlots = d.slots.filter(function(s){ return !s.contact_id && !waitingKeys[s.key]; }).length;
     // Drawn only when the server would do it (never a button it would refuse).
     var findBtn = (d.can_edit && fin.apollo && openSlots)
-      ? '<button type="button" class="btn btn-outline btn-sm lxc-find"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\')">'+(st.finding?'Looking…':'Find the rest')+'</button>'
+      ? '<button type="button" class="btn btn-outline btn-sm lxc-find"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\')">'+(st.finding&&!st.findingSlot?'Searching…':'Search contacts')+'</button>'
+      : '';
+    // Apollo can size the company (1 credit when found, 0 when not) — offered
+    // only while nobody has set a size.
+    var lookupBtn = (d.can_edit && fin.apollo && !d.size_known)
+      ? '<button type="button" class="lx-link lxc-lookup"'+(st.sizing?' disabled':'')+' onclick="event.stopPropagation();leadPocLookupSize(\''+id+'\')">'+(st.sizing?'Looking up…':'Look up with Apollo')+'</button>'
       : '';
     var sizeCtl = d.can_edit
       ? '<select class="lx-sel lxc-size" aria-label="Company size" onclick="event.stopPropagation()" onchange="event.stopPropagation();leadPocSize(\''+id+'\',this.value)">'+
@@ -140,15 +156,23 @@
       '<div class="lxc-group">Hiring managers</div>'+mgHtml+
       (rest.length ? '<div class="lxc-group">Also on this lead</div>'+rest.map(function(c){ return '<div class="lxc-slot is-filled">'+leadContactRowHtml(c)+'</div>'; }).join('') : '')+
       '<div class="lxc-foot">'+
-        '<span>Company size:</span> '+sizeCtl+
-        '<span class="lxc-foot-note">'+(!d.size_known
-          ? 'Assuming 20–50 people until it is set — it decides which titles to look for.'
-          : d.size==='1-20'
-            ? 'At a company this small the owner usually does the hiring.'
-            : 'Looking for the '+esc(d.function.label)+' side at a company this size.')+'</span>'+
+        '<span>Company size:</span> '+sizeCtl+lookupBtn+
+        '<span class="lxc-foot-note">'+sizeNote(d)+'</span>'+
       '</div>'+
       finderFoot(d)+
     '</div>';
+  }
+  // What the size line says: where the size came from, and what it means.
+  function sizeNote(d){
+    var from = d.size_source==='apollo' && d.employee_count
+      ? 'From Apollo: about '+Number(d.employee_count).toLocaleString('en-US')+' people. ' : '';
+    if (!d.size_known){
+      return (d.size_checked_at ? 'Apollo had no size for this company. ' : '')+
+        'Assuming 20–50 people until it is set — it decides which titles to look for.';
+    }
+    return from + (d.size==='1-20'
+      ? 'At a company this small the owner usually does the hiring.'
+      : 'Looking for the '+esc(d.function.label)+' side at a company this size.');
   }
   function finderFoot(d){
     var fin = d.finder || {};
@@ -258,14 +282,26 @@
     st.msg = msg || null; st.msgErr = !!isErr;
     paint(id);
   }
-  window.leadPocFind = function(id){
+  // slotKey: one slot ("Search contact" in it); none: every empty slot.
+  window.leadPocFind = function(id, slotKey){
     var st = C[id]; if (!st || !st.data || st.finding) return;
-    st.finding = true; st.msg = null; paint(id);
-    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/find', {}).then(function(d){
-      st.finding = false;
+    st.finding = true; st.findingSlot = slotKey || null; st.msg = null; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/poc/find', slotKey ? { slot_key: slotKey } : {}).then(function(d){
+      st.finding = false; st.findingSlot = null;
       answer(id, d, d && d.result && d.result.message);
     }).catch(function(err){
-      st.finding = false;
+      st.finding = false; st.findingSlot = null;
+      answer(id, null, (err && err.message) || String(err), true);
+    });
+  };
+  window.leadPocLookupSize = function(id){
+    var st = C[id]; if (!st || !st.data || st.sizing) return;
+    st.sizing = true; st.msg = null; paint(id);
+    apiPost('/jobs/'+encodeURIComponent(id)+'/company-size/lookup', {}).then(function(d){
+      st.sizing = false;
+      answer(id, d, d && d.result && d.result.message);
+    }).catch(function(err){
+      st.sizing = false;
       answer(id, null, (err && err.message) || String(err), true);
     });
   };

@@ -102,6 +102,40 @@ const nothing = fakeApollo({ status: 200, body: {} });
 const vn = await apollo.revealPerson({ key: '', id: 'a1', fetchImpl: nothing.fetchImpl });
 step('no key: no lookup is made', !vn.ok && nothing.calls.length === 0);
 
+// ── a company, by its website (2026-09-28) ────────────────────────────────
+const o1 = fakeApollo({ status: 200, body: { organization: { id: 'org-1', name: 'Saylor Consulting', primary_domain: 'saylorconsulting.com',
+  estimated_num_employees: 35, industry: 'architecture & planning', founded_year: 1998, linkedin_url: 'https://linkedin.com/company/saylor', city: 'San Francisco', state: 'California' } } });
+const en = await apollo.enrichOrganization({ key: KEY, domain: 'SaylorConsulting.com', fetchImpl: o1.fetchImpl });
+const oc = o1.calls[0] || {};
+step('a company lookup is a GET to Organization Enrichment, by domain', oc.opts && oc.opts.method === 'GET' &&
+  oc.url === 'https://api.apollo.io/api/v1/organizations/enrich?domain=saylorconsulting.com', oc.url);
+step('…with the key in the header, never the URL', oc.opts && oc.opts.headers['X-Api-Key'] === KEY && !oc.url.includes(KEY));
+step('…and the answer is the record: name, id and Apollo\'s employee ESTIMATE', en.ok && en.found && en.org.id === 'org-1' && en.org.name === 'Saylor Consulting' &&
+  en.org.employees === 35 && en.org.industry && en.org.founded_year === 1998, JSON.stringify(en));
+for (const [what, answer] of [['a 404', { status: 404, body: { error: 'not found' } }], ['an empty record', { status: 200, body: { organization: {} } }], ['no record', { status: 200, body: {} }]]) {
+  const f = fakeApollo(answer);
+  const r = await apollo.enrichOrganization({ key: KEY, domain: 'nobody.com', fetchImpl: f.fetchImpl });
+  step(`${what} means "Apollo does not know it" — an answer, not an error`, r.ok === true && r.found === false, JSON.stringify(r));
+}
+const z = fakeApollo({ status: 200, body: { organization: { id: 'org-2', name: 'Tiny', estimated_num_employees: 0 } } });
+const zr = await apollo.enrichOrganization({ key: KEY, domain: 'tiny.com', fetchImpl: z.fetchImpl });
+step('an estimate of 0 is "not known", never "0 people"', zr.found && zr.org.employees === null, JSON.stringify(zr.org));
+const oFail = fakeApollo({ status: 500 });
+await apollo.enrichOrganization({ key: KEY, domain: 'acme.com', fetchImpl: oFail.fetchImpl });
+step('a failed company lookup is made ONCE — never retried (a retry can be charged twice)', oFail.calls.length === 1, 'calls=' + oFail.calls.length);
+const oPlan = fakeApollo({ status: 403, body: { error: 'not accessible with this api_key on a free plan' } });
+const op = await apollo.enrichOrganization({ key: KEY, domain: 'acme.com', fetchImpl: oPlan.fetchImpl });
+step('a plan refusal names what was refused — company lookups', !op.ok && /does not allow company lookups/.test(op.error), op.error);
+const oNone = fakeApollo({ status: 200, body: {} });
+const on1 = await apollo.enrichOrganization({ key: KEY, domain: '', fetchImpl: oNone.fetchImpl });
+const on2 = await apollo.enrichOrganization({ key: '', domain: 'acme.com', fetchImpl: oNone.fetchImpl });
+step('no website or no key: a sentence, and Apollo is never called', !on1.ok && !on2.ok && oNone.calls.length === 0);
+
+// ── the record kept for diagnosis ─────────────────────────────────────────
+const rec = apollo.callRecord('company_lookup', { ok: false, status: 403, error: 'refused', key: KEY }, '2026-09-28T10:00:00Z');
+step('the diagnostics record says what happened — and never carries the key',
+  rec.call === 'company_lookup' && rec.ok === false && rec.status === 403 && rec.error === 'refused' && !JSON.stringify(rec).includes(KEY), JSON.stringify(rec));
+
 // ── the Integrations card's Test ──────────────────────────────────────────
 const okCheck = fakeApollo({ status: 200, body: { people: [{ id: 'x', first_name: 'Tim', title: 'CEO' }] } });
 const ck = await apollo.checkPeopleSearch({ key: KEY, fetchImpl: okCheck.fetchImpl });

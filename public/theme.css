@@ -709,6 +709,14 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
    3px accent stripe and at most ONE tinted chip (how sure the email is) —
    four suggestions on a lead must not turn the panel into a colour chart. */
 .lxc-find{flex:none}
+/* (.lxc-want > div grows the text; the buttons beside it must not grow.) */
+.lxc-want > .lxc-want-acts{display:flex;gap:8px;flex-wrap:wrap;flex:none;justify-content:flex-end}
+@media (max-width:560px){
+  .lxc-want{flex-wrap:wrap}
+  .lxc-want > .lxc-want-acts{flex-basis:100%;justify-content:flex-start;padding-left:23px}
+}
+.lxc-lookup{padding-left:2px}
+.lxc-lookup[disabled]{opacity:.55;cursor:default}
 .lxc-msg{font-size:12px;color:var(--text2);line-height:1.45;margin:4px 0 6px}
 .lxc-msg.is-err{color:var(--text)}
 .lxc-slot.is-found{

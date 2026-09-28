@@ -15,13 +15,15 @@
 //   * `pocEmailFor` in the page is a checked copy of poc-targets.emailFor;
 //   * someone who can see but not work the lead gets no controls;
 //   * the block fits a 390px phone.
-//   * SLICE 2: "Find the rest" is drawn ONLY when the server would do it
+//   * SLICE 2: "Search contacts" (all empty slots) and "Search contact" (in
+//     one slot — it sends only that slot) are drawn ONLY when the server would do it
 //     (Apollo connected, a slot open with nobody waiting, the caller works the
 //     lead); found people show in their slot with how sure the email is
 //     (Confirmed / Likely / none — never a guess); Accept puts them on the lead
 //     as an ordinary contact with the email control; Not this person takes
 //     them off and they do not come back; a LinkedIn link is only ever a real
-//     https linkedin.com address; only an admin is told how to connect Apollo.
+//     https linkedin.com address; only an admin is told how to connect Apollo;
+//     "Look up with Apollo" sizes the company and says where the size came from.
 // SHOTS=<dir> writes screenshots.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -94,10 +96,12 @@ const suggs = [
     source:'apollo', source_ref:'ap-rita', linkedin_url:null, status:'suggested' },
 ];
 let findDelay = 0;
-// "Find the rest", the way routes/poc.js decides it: the REAL pickPeople picks
+// "Search contacts", the way routes/poc.js decides it: the REAL pickPeople picks
 // who goes in which empty slot; a Likely address only from a learned format;
 // otherwise Apollo's verified one; otherwise none.
-function stubFind(id){
+// Apollo's (made-up) headcounts, for "Look up with Apollo".
+const APOLLO_SIZE = { co2: 35 };
+function stubFind(id, slotKey){
   const j = jobs.find(x => x.id === id), co = companies[j.company_id];
   const cs = contacts.filter(c => c.job_id === id);
   const sameCo = contacts.filter(c => jobs.find(x => x.id === c.job_id).company_id === j.company_id);
@@ -106,7 +110,8 @@ function stubFind(id){
   const mine = suggs.filter(x => x.job_id === id);
   const picks = poc.pickPeople(f.slots, APOLLO[co.id] || [],
     { ids: mine.map(x => x.source_ref), names: sameCo.map(c => c.first_name+' '+c.last_name) }, t.size,
-    mine.filter(x => x.status === 'suggested').map(x => x.slot_key));
+    mine.filter(x => x.status === 'suggested').map(x => x.slot_key)
+      .concat(slotKey ? ['hr1','hr2','mgr1','mgr2'].filter(k => k !== slotKey) : []));
   picks.forEach(({ slot_key, person }) => {
     let email = poc.emailFor(person.first_name, person.last_name, fmt), conf = email ? 'likely' : null, src = email ? 'format' : null;
     if (!email && person.verified) { email = person.verified; conf = 'confirmed'; src = 'apollo'; FINDER.used++; }
@@ -128,6 +133,7 @@ function pocPayload(id){
     function:t.function, slots:f.slots.map(s => ({ key:s.key, kind:s.kind, label:s.label, titles:s.titles, contact_id:s.contact_id })),
     others:f.others, found:f.slots.filter(s => s.contact_id).length,
     format:{ domain:fmt.domain, pattern:fmt.pattern, learned_from:fmt.learned_from, example:fmt.pattern ? poc.emailFor('Jane','Smith',fmt) : null },
+    size_source: co.size_source || null, employee_count: co.employee_count || null, size_checked_at: co.size_checked_at || null,
     suggestions: suggs.filter(x => x.job_id === id && x.status === 'suggested').map(x => ({ id:x.id, slot_key:x.slot_key, first_name:x.first_name,
       last_name:x.last_name, title:x.title, email:x.email, email_confidence:x.email_confidence, email_source:x.email_source, source:x.source, linkedin_url:x.linkedin_url })),
     finder:{ apollo:FINDER.apollo, credits:{ used:FINDER.used, limit:FINDER.limit }, is_admin:FINDER.is_admin },
@@ -156,8 +162,15 @@ async function api(route){
   }
   if (m==='POST' && (hit = p.match(/^\/jobs\/([^/]+)\/poc\/find$/))) {
     await new Promise(r => setTimeout(r, findDelay));
-    const result = stubFind(hit[1]);
+    const result = stubFind(hit[1], body && body.slot_key);
     return reply(route, Object.assign(pocPayload(hit[1]), { result }));
+  }
+  if (m==='POST' && (hit = p.match(/^\/jobs\/([^/]+)\/company-size\/lookup$/))) {
+    const j = jobs.find(x => x.id === hit[1]), co = companies[j.company_id], n = APOLLO_SIZE[co.id];
+    co.size_checked_at = new Date().toISOString();
+    if (n) { co.size_band = poc.sizeBandFor(n); co.employee_count = n; co.size_source = 'apollo'; }
+    return reply(route, Object.assign(pocPayload(hit[1]), { result: { message: n
+      ? 'Company size from Apollo: about '+n+' people (20–50).' : 'Apollo does not know this company — pick the company size yourself.' } }));
   }
   if (m==='POST' && (hit = p.match(/^\/jobs\/([^/]+)\/poc\/suggestions\/([^/]+)\/(accept|reject)$/))) {
     const sg = suggs.find(x => x.id === hit[2] && x.job_id === hit[1]);
@@ -220,7 +233,8 @@ try{
   step('each person keeps the valid/invalid email control', slots.selects === 3, String(slots.selects));
   step('the slots arrived without a render() — the table is the same node', slots.sameTable === true);
   step('the size is shown as not set, and why it matters', /company size/i.test(slots.text) && /Assuming 20–50/.test(slots.text));
-  step('with Apollo not connected there is NO "Find the rest" — never a button the server would refuse', !/Find the rest/.test(slots.text));
+  step('with Apollo not connected there is NO "Search contact(s)" — never a button the server would refuse', !/Search contact/.test(slots.text));
+  step('…and no "Look up with Apollo" either', !/Look up with Apollo/.test(slots.text));
   step('…and a non-admin is not told to connect it (they cannot)', !/Connect Apollo/.test(slots.text));
   await shot('poc-slots-desktop');
 
@@ -282,32 +296,40 @@ try{
     return { missing:false, lxc: !!b.querySelector('.lxc'), size: !!b.querySelector('select.lxc-size'),
       add: [...b.querySelectorAll('button')].some(x=>/Add by hand/.test(x.textContent)),
       found: /Rita Viewer/.test(b.innerText),
-      answer: [...b.querySelectorAll('button')].some(x=>/Accept|Not this person|Find the rest/.test(x.textContent)) }; });
+      answer: [...b.querySelectorAll('button')].some(x=>/Accept|Not this person|Search contact|Look up with Apollo/.test(x.textContent)) }; });
   step('a viewer who does not work the lead sees the slots', !ro.missing && ro.lxc);
   step('…but no size pick and no Add by hand', !ro.missing && !ro.size && !ro.add, JSON.stringify(ro));
   step('…sees a person found for it, but cannot accept or turn them down', !ro.missing && ro.found && !ro.answer, JSON.stringify(ro));
 
-  // ── 6b. slice 2: Find the rest, Accept, Not this person ─────────────────
+  // ── 6b. slice 2: Search contacts, Accept, Not this person ──────────────
   FINDER.apollo = true;
   pocDelay = 50; findDelay = 500;
   await page.evaluate(()=>{ STATE.leadPoc = {}; });
   await clickEl('#content tr[data-row-id="j2"] td:nth-child(3)');
   await page.waitForTimeout(400);
-  const btn0 = await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); return !!b; });
-  step('with Apollo connected and slots open, "Find the rest" is offered', btn0);
-  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  // (Section 4 left j2's "Add by hand" form open; an open form hides its slot's buttons.)
+  await page.evaluate(()=>{ if (window.leadPocAdd) leadPocAdd('j2', null); });
+  await page.waitForTimeout(100);
+  const btn0 = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return null;
+    return { all: [...b.querySelectorAll('button')].some(x=>/^Search contacts$/.test(x.textContent.trim())),
+      perSlot: [...b.querySelectorAll('.lxc-slot.is-empty')].map(sl=>[...sl.querySelectorAll('button')].some(x=>/^Search contact$/.test(x.textContent.trim()))) }; });
+  step('with Apollo connected and slots open, "Search contacts" is offered at the top', !!btn0 && btn0.all, JSON.stringify(btn0));
+  step('…and every empty slot has its own "Search contact"', !!btn0 && btn0.perSlot.length === 3 && btn0.perSlot.every(Boolean), JSON.stringify(btn0 && btn0.perSlot));
+  if (SHOTS) { await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(b) b.scrollIntoView({block:'start'}); }); await page.waitForTimeout(150); }
+  await shot('poc-search-buttons-desktop');
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/^Search contacts$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(150);
   const busy = await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j2 .lxc-find'); return b ? { text:b.textContent, disabled:b.disabled } : null; });
-  step('while it looks, the button says so and cannot be pressed twice', !!busy && /Looking/.test(busy.text) && busy.disabled === true, JSON.stringify(busy));
+  step('while it searches, the button says so and cannot be pressed twice', !!busy && /Searching/.test(busy.text) && busy.disabled === true, JSON.stringify(busy));
   await page.waitForTimeout(700);
   const findCall = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p)).pop();
-  step('it asks the server for THIS lead', !!findCall && findCall.p === '/jobs/j2/poc/find');
+  step('it asks the server for THIS lead, every empty slot', !!findCall && findCall.p === '/jobs/j2/poc/find' && !(findCall.body && findCall.body.slot_key), JSON.stringify(findCall && findCall.body));
   const fnd = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return { missing:true };
     const cards=[...b.querySelectorAll('.lxc-slot.is-found')];
     return { missing:false, text:b.innerText, cards:cards.length,
       confirmed:b.querySelectorAll('.lxc-conf.is-confirmed').length, likely:b.querySelectorAll('.lxc-conf.is-likely').length,
       noEmail:cards.filter(c=>/No email/.test(c.innerText)).length,
-      find:[...b.querySelectorAll('button')].some(x=>/Find the rest/.test(x.textContent)),
+      find:[...b.querySelectorAll('button')].some(x=>/Search contact/.test(x.textContent)),
       links:[...b.querySelectorAll('.lxc-found-src a')].map(a=>({ href:a.getAttribute('href'), rel:a.getAttribute('rel'), target:a.getAttribute('target') })),
       jsLink: !!b.querySelector('a[href^="javascript"]'),
       accept:[...b.querySelectorAll('.lxc-found-acts button')].filter(x=>/Accept/.test(x.textContent)).length }; });
@@ -315,14 +337,14 @@ try{
   step('the answer is said in a sentence, and the count reads "3 to review"', /Found 3 people/.test(fnd.text) && /3 to review/i.test(fnd.text));
   step('each email says how sure it is: 2 Confirmed, 1 with no email (Apollo only had a guess)', fnd.confirmed === 2 && fnd.noEmail === 1 && fnd.likely === 0, JSON.stringify(fnd));
   step('the guess itself never reaches the page', !/omar\.diaz@|odiaz@/i.test(fnd.text));
-  step('every slot now has somebody or somebody waiting, so the button is gone', fnd.find === false);
+  step('every slot now has somebody or somebody waiting, so no search button is left', fnd.find === false);
   step('a real LinkedIn address becomes a safe link; a "javascript:" one never becomes a link',
     fnd.links.length === 1 && fnd.links[0].href === 'https://www.linkedin.com/in/tomreyes' && /noopener/.test(fnd.links[0].rel) && fnd.links[0].target === '_blank' && !fnd.jsLink, JSON.stringify(fnd.links));
   step('each can be accepted', fnd.accept === 3, String(fnd.accept));
   step('the credits line shows what today has cost', /Apollo: 2 of 20 credits used today/.test(fnd.text), (fnd.text.match(/Apollo:[^\n]*/)||[''])[0]);
   if (SHOTS) { await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(b) b.scrollIntoView({block:'start'}); }); await page.waitForTimeout(150); }
   await shot('poc-found-desktop');
-  // A found person exists only after "Find the rest", so the app-wide theme
+  // A found person exists only after a search, so the app-wide theme
   // suite never draws one (CLAUDE.md: a palette has states). Measured here, in
   // both themes, the way that suite does it: every translucent ground under
   // the text composited down to what the eye really sees.
@@ -370,18 +392,49 @@ try{
     const b=card && [...card.querySelectorAll('button')].find(x=>/Not this person/.test(x.textContent)); if(b) b.click(); });
   await page.waitForTimeout(500);
   const rej = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? { text:b.innerText,
-    find:[...b.querySelectorAll('button')].some(x=>/Find the rest/.test(x.textContent)) } : null; });
+    find:[...b.querySelectorAll('button')].some(x=>/^Search contacts$/.test(x.textContent.trim())) } : null; });
   step('"Not this person" takes him off, and his slot is open again', !!rej && !/Omar Diaz/.test(rej.text) && /Looking for:/.test(rej.text));
-  step('…so "Find the rest" is offered again', !!rej && rej.find === true);
-  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  step('…so "Search contacts" is offered again', !!rej && rej.find === true);
+  // Search just that slot, from inside it.
+  const nFind = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p)).length;
+  await page.evaluate(()=>{ const sl=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-empty')][0];
+    const b=sl && [...sl.querySelectorAll('button')].find(x=>/^Search contact$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(900);
+  const oneCall = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p));
+  step('a slot\'s own "Search contact" searches THAT slot only', oneCall.length === nFind + 1 && oneCall[oneCall.length-1].body && oneCall[oneCall.length-1].body.slot_key === 'hr2',
+    JSON.stringify(oneCall[oneCall.length-1] && oneCall[oneCall.length-1].body));
   const again = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? b.innerText : ''; });
   step('asked again, the person turned down does not come back', !/Omar Diaz/.test(again) && /Nobody new/.test(again), (again.match(/Nobody new[^\n]*/)||[''])[0]);
+
+  // The company's size, from Apollo.
+  const lk0 = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? [...b.querySelectorAll('button')].some(x=>/Look up with Apollo/.test(x.textContent)) : null; });
+  step('with no size set, "Look up with Apollo" sits beside the size pick', lk0 === true, String(lk0));
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/Look up with Apollo/.test(x.textContent)); if(b) b.click(); });
+  await page.waitForTimeout(600);
+  const sized = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return null; const sel=b.querySelector('select.lxc-size');
+    return { text:b.innerText, value: sel ? sel.value : null, link: [...b.querySelectorAll('button')].some(x=>/Look up with Apollo/.test(x.textContent)) }; });
+  const lkCall = calls.filter(c => c.m==='POST' && /\/company-size\/lookup$/.test(c.p)).pop();
+  step('it asks the server to look THIS company up', !!lkCall && lkCall.p === '/jobs/j2/company-size/lookup');
+  step('the size is filled in, and says it came from Apollo', !!sized && sized.value === '21-50' && /From Apollo: about 35 people/.test(sized.text), sized && (sized.text.match(/Company size[^\n]*\n?[^\n]*/)||[''])[0]);
+  step('…and the look-up link goes (a size is set now)', !!sized && sized.link === false);
+  if (SHOTS) { await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j2 .lxc-foot'); if(b) b.scrollIntoView({block:'center'}); }); await page.waitForTimeout(150); }
+  await shot('poc-size-from-apollo-desktop');
+  // On a phone the slot's two buttons drop under the text and stay on screen.
+  await page.setViewportSize({ width:390, height:900 });
+  await page.waitForTimeout(300);
+  const phoneBtns = await page.evaluate(()=>{ const sl=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-empty')][0]; if(!sl) return null;
+    const bs=[...sl.querySelectorAll('button')]; return { n:bs.length, right: Math.max(0, ...bs.map(x=>Math.round(x.getBoundingClientRect().right))),
+      left: Math.min(9999, ...bs.map(x=>Math.round(x.getBoundingClientRect().left))), vw:window.innerWidth }; });
+  step('on a phone, an empty slot\'s Search contact / Add by hand stay on screen', !!phoneBtns && phoneBtns.n === 2 && phoneBtns.left >= 0 && phoneBtns.right <= phoneBtns.vw, JSON.stringify(phoneBtns));
+  if (SHOTS) { await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-empty')][0]; if(b) b.scrollIntoView({block:'center'}); }); await page.waitForTimeout(150); }
+  await shot('poc-search-phone');
+  await page.setViewportSize({ width:1440, height:1000 });
+  await page.waitForTimeout(200);
 
   // A Likely address, from the company's own format.
   await clickEl('#content tr[data-row-id="j1"] td:nth-child(3)');
   await page.waitForTimeout(400);
-  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j1 button')].find(x=>/Find the rest/.test(x.textContent)); if(b) b.click(); });
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j1 button')].find(x=>/^Search contacts$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(900);
   const lk = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j1'); if(!b) return { missing:true };
     const card=[...b.querySelectorAll('.lxc-slot.is-found')].find(c=>/Kim Park/.test(c.innerText));

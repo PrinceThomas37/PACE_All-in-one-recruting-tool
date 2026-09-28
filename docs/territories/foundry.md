@@ -1,5 +1,31 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 132 suites · theme-contrast-smoke 10 → 12 checks (#256)
+> Last written: 2026-09-28 (Session 33) · 133 suites · theme-contrast-smoke 10 → 12 checks (#256)
+
+## Session 33 (2026-09-28, later) — the Leads × and Apollo company lookups
+- **133 suites**: +`leads-search-clear-smoke.mjs` (11, Playwright). **It clicks
+  with a REAL mouse** (`page.mouse.click` at the element's centre, plus
+  `elementFromPoint` to report what is really under the pointer): the broken ×
+  had `pointer-events:none`, which `element.click()` from script ignores — a
+  script click would have passed on the broken code. 5/11 against the old code,
+  reproducing the owner's report exactly (the box still read
+  "mmills@saylorconsulting.com" after the click).
+- Grown: poc-routes-smoke **94** (size-first, one-slot search, manual never
+  overwritten, not-found free + 30-day window, name mismatch, ceiling, gates,
+  diagnostics without the key), poc-apollo-smoke **44** (company lookup),
+  poc-targets-smoke **75** (bands at every edge, same-company cases),
+  poc-finder-ui-smoke **58** (Search contact per slot sends `slot_key`, Look up
+  with Apollo, a 390px fit of the slot buttons).
+- A UI test step failed because an EARLIER step in the same run left an Add-by-
+  hand form open, which (correctly) hides that slot's buttons — shared page
+  state between sections is a hazard; the step now closes it first.
+- **`org-session-gate` failed once in a full run** ("server did not boot on
+  39872", 4/5) and passed alone — **root-caused, not re-run**: a real boot
+  takes ~0.5s here, and the suite used FIXED ports 39871/39872 inside Linux's
+  ephemeral range, where another process's socket can sit. Holding 39872 with
+  a silent listener reproduces the exact failure. It now asks the system for a
+  free port per boot (`freePort()`) and fails at once with the server's own
+  stderr if the child exits. Passes with the old port held. **Never pick a
+  fixed port in 32768–60999 for a test server; listen on 0 and read it back.**
 
 ## Session 33 (2026-09-28) — the contrast probe had TWO blind spots
 The separate task the POC finder session (R-053 slice 2) raised: its probe,

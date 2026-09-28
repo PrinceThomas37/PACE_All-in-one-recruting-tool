@@ -1,5 +1,38 @@
 # Gateway — memory
-> Last written: 2026-09-28 (Session 33, R-053 slice 2) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, D-0050: size from Apollo, one-slot search) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — company size from Apollo; "Search contact" on one slot (D-0050)
+- **`POST /jobs/:id/poc/find` takes `{slot_key}`** (hr1/hr2/mgr1/mgr2, else 400)
+  — "Search contact" in one slot: only that slot's titles are asked of Apollo
+  and every other slot is passed to `pickPeople` as `skip`.
+- **The size is looked up FIRST in the same click when nobody has set one**
+  (`lookupSize`, non-forced), then the lead context is re-read so the search
+  uses the right titles. A 401 on that lookup stops the request; any other
+  lookup failure becomes a sentence in the result and the people search runs.
+- **`POST /jobs/:id/company-size/lookup`** — the "Look up with Apollo" button;
+  forced (asks even if Apollo said "not known" recently). Same gates: 404
+  unseeable, 403 without canTouchJob, 409 no key (`notConnected()`), 502 an
+  Apollo refusal as its sentence.
+- **`lookupSize` rules:** a size with `size_source='manual'` is NEVER
+  overwritten (the PUT now stamps 'manual', or null when cleared); domains =
+  the website, then the learned email domain; the day's ceiling is checked
+  first; **1 credit only when Apollo finds the company** (its own tool
+  description: 0 when not found); a found record under a DIFFERENT name
+  (`poc.sameCompany`) is not used; unknown/0 employees sets nothing; "not
+  found"/"different name"/"no size" stamp `size_checked_at` and are not asked
+  again for 30 days unless forced. Sets `size_band`, `employee_count`,
+  `size_source='apollo'`, `apollo_org_id`.
+- **`creditBudget(req)`** is one mutable `{orgId, used, limit}` shared by the
+  size lookup and the person lookups of one request — they spend from the same
+  daily ceiling.
+- **`noteApollo(call, result)`** writes `app_settings` `apollo_last_call` every
+  call and `apollo_last_error` on a failure (`peopleApollo.callRecord` — never
+  the key), best-effort. **routes/integrations.js** records the Apollo "Test"
+  the same way (`call:'key_test'`) — read them to diagnose "I pressed it and…".
+- GET payload adds `size_source`, `employee_count`, `size_checked_at`.
+- poc-routes-smoke **94**; seven new bugs reintroduced one at a time
+  (overwrite a picked size, charge a not-found, skip the name check, skip the
+  30-day window, skip the ceiling, ignore slot_key, skip size-first) each fail.
 
 ## Session 33 (2026-09-28) — "Find the rest": Apollo suggestions on a lead (R-053 slice 2, D-0049)
 - **`routes/poc.js` grew three endpoints** (same seeing/changing gates as

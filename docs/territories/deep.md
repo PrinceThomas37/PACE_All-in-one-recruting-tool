@@ -1,5 +1,19 @@
 # Deep — memory
-> Last written: 2026-09-28 (Session 33, R-053 slice 2 — migration 052) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33 — migration 053) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — migration 053, where a company's size came from (D-0050)
+- **`053_company_size_source.sql`** — four nullable columns on `companies`:
+  `employee_count` INTEGER (CHECK ≥ 0; Apollo's ESTIMATE), `size_source` TEXT
+  (CHECK manual/apollo — a picked size is never overwritten by Apollo),
+  `size_checked_at` TIMESTAMPTZ (when Apollo was last asked; a company it did
+  not know is not asked again for 30 days), `apollo_org_id` TEXT (≤100; so a
+  later feature, e.g. its job postings, need not pay to find the company again).
+- Proved in a rolled-back probe (valid write accepted; `size_source='guess'`
+  and `employee_count=-1` refused; columns absent after rollback), then
+  **APPLIED live 2026-09-28** (D-0047) and verified: 4 columns, 3 CHECKs, 0 rows
+  with values. No company had a size yet (0 of 82), so nothing to backfill.
+- `companies` is already registered; no models/tables.js change.
+- **Next migration is 054.**
 
 ## Session 33 (2026-09-28) — migration 052, `poc_suggestions` (R-053 slice 2, D-0049)
 - **`052_poc_suggestions.sql`** — people the POC finder found for a lead,
