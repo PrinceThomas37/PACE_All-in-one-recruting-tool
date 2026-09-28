@@ -7,7 +7,7 @@
 **Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
+to `main` IS the release · **Last merged**: #256 (the contrast suite, 2026-09-28), after #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0049 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-060`.**
 
@@ -19,8 +19,8 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
 - **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
   owner answered (D-0049: Apollo with API — they will connect it; runs
   automatically AND on a button; a guess is NEVER emailed; size picked on the
-  lead), and slices 1 AND 2 are BUILT on PR #253 (draft, waiting for the
-  owner's OK to merge)** — slice 1: the four slots on the lead row, the rules
+  lead), and slices 1 AND 2 are BUILT and MERGED (#253,
+  2026-09-28)** — slice 1: the four slots on the lead row, the rules
   (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
   **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
   one lookup per person (a credit, never retried) in
@@ -32,6 +32,13 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
   an Apollo key whose plan includes API access** (their current plan refused
   people search on 2026-09-27). Next slices: the posting/website readers
   (free), then the automatic run for new leads.
+- **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
+  it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
+  now judges each element's OWN text (it skipped any element with a child) and
+  measures the panel under an opened row (its scope named a class that never
+  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
+  was hiding. Open: the suite still renders screens without data — see
+  `foundry.md`.
 
 ---
 
