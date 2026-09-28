@@ -160,6 +160,15 @@ const SETTINGS_SCHEMA = [
     description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",
     default: 1, min: 0, max: 1,
   },
+  // The POC finder's paid rung (R-053, D-0049). Searching Apollo for names is
+  // free; revealing one person's work email costs one credit. An address PACE
+  // can build from the company's own learned format costs nothing and is used
+  // first, so this ceiling is only ever spent where PACE has no other way.
+  {
+    key: 'poc_apollo_daily_credits', label: 'Apollo credits a day for the contact finder', unit: 'credits (0 = none)', group: 'Contact finder',
+    description: "The most Apollo credits \"Find the rest\" may spend in one day, across everyone. One credit looks up one person's full name and work email; an email PACE can build from the company's own format costs nothing and is used first. At 0 nothing is spent: PACE still suggests the people Apollo shows by full name, with an email only where the company's format gives one.",
+    default: 20, min: 0, max: 1000,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));

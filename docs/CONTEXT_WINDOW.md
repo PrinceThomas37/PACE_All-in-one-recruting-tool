@@ -4,11 +4,11 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-27 (Session 33, in progress) · **Repo**:
+**Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0048 is the highest decision id. C-0030 is the highest contract id
+to `main` IS the release · **Last merged**: #253 (`fc72f36`, the POC finder, 2026-09-28).
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0049 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-060`.**
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
@@ -16,13 +16,28 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
   place like Leads — one shared `rowReveal` in `03-core-render.js`. Details in
   `surface.md` (Session 33). `row-reveal-smoke` 45/45 (5/45 on old code); full
   suite **127/127**. Deploy is Render's; unverifiable from this sandbox.
-- **R-053 (contact finder) is being DESIGNED with the owner** — the chat's big
-  job. Design, not build. Starting point: `docs/SESSION31_DESIGNS.md` §3.
-- **Contrast guard widened (2026-09-28, separate branch):** `theme-contrast-smoke`
+- **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
+  owner answered (D-0049: Apollo with API — they will connect it; runs
+  automatically AND on a button; a guess is NEVER emailed; size picked on the
+  lead), and slices 1 AND 2 are BUILT and MERGED (#253,
+  2026-09-28)** — slice 1: the four slots on the lead row, the rules
+  (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
+  **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
+  one lookup per person (a credit, never retried) in
+  `services/people-apollo.js`; found people wait in `poc_suggestions`
+  (**migration 052, applied + re-verified live**) until Accept / Not this
+  person; Accept goes through `services/lead-contacts.js` (the ONE add-contact
+  path, `POST /contacts` uses it too); daily ceiling = System Settings
+  `poc_apollo_daily_credits` (20). **Does nothing live until the owner saves
+  an Apollo key whose plan includes API access** (their current plan refused
+  people search on 2026-09-27). Next slices: the posting/website readers
+  (free), then the automatic run for new leads.
+- **Contrast guard widened (2026-09-28, PR #256, draft):** `theme-contrast-smoke`
   now judges each element's OWN text (it skipped any element with a child) and
   measures the panel under an opened row (its scope named a class that never
-  existed). 12/12, full suite 128/128; nothing unreadable was hiding. Open:
-  the suite still renders screens without data — see `foundry.md`.
+  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
+  was hiding. Open: the suite still renders screens without data — see
+  `foundry.md`.
 
 ---
 
@@ -117,7 +132,7 @@ self-serve signup built and **off**.
 **⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
 read the default before saying what a switch is set to.
 
-## Migrations — next is **051** · 049 and 050 APPLIED 2026-09-26
+## Migrations — next is **053** · 052 APPLIED 2026-09-27 (poc_suggestions, re-verified 2026-09-28) · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
 
 049: RLS + revoke on the two backup tables. 050: `recruiting_lookups` unique
 index is `(org_id, category, lower(value))`. **SQL/migrations are pre-approved
@@ -126,23 +141,26 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
 
-1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 in
-   design. **R-057** (matching candidates in emails)
+1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
+   1–2 built on PR #253 — **merge only on the owner's approval**, then remind
+   them to connect Apollo (Admin → Integrations; the Test button now says
+   whether the key can search people). **R-057** (matching candidates in emails)
    and **R-054** (a playbook per industry) are still deferred — design first.
 2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
    Anthropic key has no credit (harmless — Groq answers); the apply link on
    "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
 3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
-   (org-scoping debt list) open. **R-032 is DONE** — a second chat the same day
-   (#251) deletes the 38 leftover resumes with a one-time server job on the next
-   heartbeat (`services/storage-orphans.js`); check its marker row to confirm.
+   (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
+   scanned, 38 deleted, 24 kept — every kept file referenced).
 4. Known gap left on purpose: the Pending banner counts a first email held by
    the per-company cap as "ready now" until the send run reaches it.
 
-## 🧪 TESTS: 128 SUITES
+## 🧪 TESTS: 132 SUITES
 
 `npm test` — read the COUNT; never pipe into `tail`. `bash
-test/verify-frontend.sh` too. Newest: `mailbox-alerts-smoke` (22) + `-ui` (12),
+test/verify-frontend.sh` too. Newest: `poc-apollo-smoke` (33), `poc-routes-
+smoke` (73, a fake Apollo + migration 052's rules), `poc-finder-ui-smoke` (50,
+incl. light/dark contrast of the found cards); `mailbox-alerts-smoke` (22) + `-ui` (12),
 `client-digest-ui-smoke` (11), `stage-history-reports-smoke` (10, real
 handlers), `reports-smoke` (14, incl. a 390px fit walk), `integration-test-
 honesty-smoke` (12), `lookups-per-org-smoke` (10), `client-docs-ownership-smoke`

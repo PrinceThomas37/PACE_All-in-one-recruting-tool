@@ -736,6 +736,12 @@ we never have to rewrite to grow (see "Growth bets" below).
   Monster, CareerBuilder, Dice, LinkedIn are **names on cards**, and
   `POST /sourcing/search` answers 501 for all of them. Do not describe any of
   them as integrated, and do not quote a vendor's free tier from memory.
+  **UPDATE (Session 33, R-053 slice 2): the POC finder now CALLS Apollo** —
+  `services/people-apollo.js` is the only file that does (people search, free;
+  one lookup per person, a credit, never retried; key in the `X-Api-Key`
+  header, never a URL). The Sourcing page's Apollo row (finding CANDIDATES) is
+  still unbuilt and still says so. It needs a plan with API access and a
+  master key — the owner's plan on 2026-09-27 had neither.
   **There is no LinkedIn API that searches people by job title and location**,
   for us or anyone; Recruiter System Connect surfaces data for candidates an
   ATS already holds, partner approval runs 3-6 months at <10% acceptance, and
@@ -943,7 +949,7 @@ we never have to rewrite to grow (see "Growth bets" below).
   delays jobs but never skips them. Before adding anything that polls the server
   on a schedule, ask what it does to instance hours. Cold starts (~30-60s) are a
   normal consequence of this and are why outbound timeouts are generous.
-- **Tests: `npm test`** runs all **128** suites (Session 33) via `test/run-all.mjs` and reports
+- **Tests: `npm test`** runs all **132** suites (Session 33) via `test/run-all.mjs` and reports
   one summary. It judges by **exit code**, not by grepping stdout — the suites
   print results in two different formats, so a stdout grep silently mis-reports
   whole suites as failures. **Read the count, not just the exit code**: piping it

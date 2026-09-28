@@ -1,5 +1,53 @@
 # Deep — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-053 slice 2 — migration 052) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — migration 052, `poc_suggestions` (R-053 slice 2, D-0049)
+- **`052_poc_suggestions.sql`** — people the POC finder found for a lead,
+  waiting for a person's yes or no. The finder NEVER writes `contacts` itself
+  (the send engine emails a lead's contacts), so this is where a found person
+  waits. Columns: id, org_id NOT NULL (default = the default org, the 022/042
+  pattern), job_id FK jobs **ON DELETE CASCADE**, company_id FK companies SET
+  NULL, slot_key CHECK hr1/hr2/mgr1/mgr2, first_name 1–100, last_name, title,
+  email, email_confidence CHECK confirmed/likely, email_source CHECK
+  apollo/format, source NOT NULL CHECK apollo/**website/posting** (the free
+  rungs still to build — allowed now so they need no migration), source_ref,
+  linkedin_url, status DEFAULT 'suggested' CHECK suggested/accepted/rejected,
+  contact_id FK contacts SET NULL, created_by, decided_by, decided_at,
+  created_at.
+- **D-0049 IS ENFORCED BY THE TABLE, not only the route:**
+  `(email IS NULL) = (email_confidence IS NULL)` — no address is stored
+  without 'confirmed' (Apollo verified it) or 'likely' (the company's own
+  learned format). Plus `(status='suggested') = (decided_at IS NULL)`.
+- **Unique `(job_id, source, source_ref) WHERE source_ref IS NOT NULL`** — one
+  person from one source once per lead, which is ALSO what keeps a turned-down
+  person from ever coming back. Index `(org_id, job_id, status)`. RLS + policy
+  `service_all_poc_suggestions` (the 039 shape).
+- **`status='rejected'` with `decided_by` NULL means PACE turned it down
+  itself** — opted out anywhere, already on file at the company, or put on
+  another lead there before Accept. No address is kept for an opted-out person.
+- Proved in a rolled-back probe, **APPLIED live 2026-09-27** (D-0047) and
+  **re-verified 2026-09-28 before its code merged**: 20 columns, RLS on, 1
+  policy, 3 indexes, 13 CHECKs incl. both D-0049 ones, 0 rows.
+- Registered in `models/tables.js` → **TENANT_TABLES = 46** (models-smoke pins
+  the number and names the table).
+- **A table with `company_id` must join `services/company-merge.js`
+  MERGE_TABLES** — company-merge-smoke scans the migrations and failed on this
+  one until it did (guild's file; added there, guild memory updated).
+- The Apollo credit meter needs no migration: `app_settings` key
+  `poc_credits_<org>_<YYYY-MM-DD>` (the AI meter's shape).
+- **Next migration is 053.**
+
+## Session 33 (2026-09-27) — migration 051, company size (R-053, D-0049)
+- `051_company_size.sql`: `companies.size_band text`, nullable, CHECK in
+  ('1-20','21-50','51-200','201-1000','1000+') — the one list is
+  services/poc-targets.js `SIZE_IDS`. Additive only; no row changed.
+- Proved first in a rolled-back probe (valid value accepted, 'huge' rejected by
+  the check, no other row touched; column absent afterwards), then **APPLIED to
+  the live DB 2026-09-27** under D-0047's standing SQL permission and verified
+  (column + constraint present). **Next migration is 052.**
+- `scripts/territory-map.mjs`: `services/poc-targets.js` added to observatory's
+  list (it sits beside enrichment.js). No new table, so models/tables.js is
+  unchanged.
 
 ## Session 31 (2026-09-25) — migration 048, client intelligence
 - `048_client_intel.sql`: `conversation_messages.company_id` (FK companies, ON

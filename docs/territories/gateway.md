@@ -1,5 +1,80 @@
 # Gateway — memory
-> Last written: 2026-09-09 · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-053 slice 2) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28) — "Find the rest": Apollo suggestions on a lead (R-053 slice 2, D-0049)
+- **`routes/poc.js` grew three endpoints** (same seeing/changing gates as
+  slice 1 — 404 if the lead is unseeable, 403 without `canTouchJob`):
+  * `POST /jobs/:id/poc/find` — searches Apollo for people in the EMPTY slots
+    that have nobody waiting (free), picks one per slot with the pure
+    `pickPeople`, and stores them in `poc_suggestions`. **A credit is spent on
+    a person only when nothing free works**: Apollo hid their surname, or PACE
+    has no learned format to build their address. Order per person: reuse a
+    lookup already made for another lead (never pay twice) → Likely address
+    from the company's own format (free) → reveal (1 credit, only under the
+    day's ceiling) → Confirmed only if Apollo says `verified`, else the format,
+    else no address. 401/403/429 on a reveal STOP the run; one person failing
+    does not. Answers the fresh payload plus `result` (added,
+    held_for_credits, already_known, opted_out, failed, credits, a sentence).
+  * `POST /jobs/:id/poc/suggestions/:sid/accept` — **claims the row first**
+    (update where status='suggested', 0 rows → 409), then adds the contact
+    through **`services/lead-contacts.js` `addLeadContact`** — the ONE add-a-
+    person-to-a-lead path, which `POST /contacts` now calls too (CAPABILITIES:
+    two live paths to one outcome is the bug). The activity line records the
+    source ("…from the POC finder (Apollo, email confirmed by Apollo)").
+    Somebody already on THIS lead is linked, not duplicated; somebody put on
+    ANOTHER lead at the company meanwhile → PACE rejects the suggestion itself
+    and answers 409 "one conversation per person", naming no lead (D-0034).
+    A failed insert puts the suggestion back to 'suggested'.
+  * `POST /jobs/:id/poc/suggestions/:sid/reject` — "Not this person"; sticks.
+  * `GET /jobs/:id/poc` now also returns `suggestions` (waiting ones) and
+    `finder` `{apollo, credits:{used,limit}, is_admin}`.
+- **Opted out = never suggested, checked deployment-wide** with
+  `db.crossOrg('suppression_list')` — the same scope as the send path's
+  `loadSuppressedSet`; the caller learns only a COUNT, never whose.
+- **People on the company's other leads are excluded twice**: before picking
+  (so an on-file person cannot take a slot from a new one) and after a lookup
+  (a hidden surname can only be recognised once revealed; recorded as
+  PACE-rejected so it is never paid for again).
+- **The credit meter** is `app_settings` `poc_credits_<org>_<day>` via
+  `db.global`, best-effort, counted on every answered lookup (over-counting is
+  the safe direction for a ceiling). The ceiling is the new schema setting
+  **`poc_apollo_daily_credits`** (group "Contact finder", default 20, 0 = no
+  credits) in `config/settings.js` — Admin → System Settings draws it with no
+  frontend work.
+- `ctx.apollo` lets a test hand in a fake Apollo; production uses
+  `services/people-apollo.js` (observatory's).
+- **`routes/integrations.js` Apollo "Test" now asks the question that
+  matters** — `checkPeopleSearch` (free) — instead of `/v1/auth/health?api_key=`
+  (key in a URL, and "valid key" said nothing: the owner's plan on 2026-09-27
+  had a valid key and no API search). `config/integrations.js` Apollo
+  description + docs link updated to say what it is now used for.
+- ⚠ **Integration keys are per DEPLOYMENT, not per org** (app_settings
+  `int_apollo_api_key`, like the AI keys). The meter is per org, the key is
+  not — revisit before a second customer connects their own Apollo (design §5
+  says R5 is "bring your own key").
+- Pinned by `test/poc-routes-smoke.mjs` (**73**; a fake Apollo; the fake table
+  enforces migration 052's CHECKs and unique index). Eight bugs reintroduced
+  one at a time — guess kept as Confirmed, no ceiling, no suppression, no
+  reuse, no gate, no on-file exclusion, no one-conversation check, no
+  after-lookup check — each fails it. The on-file one first passed VACUOUSLY
+  (a second check hid it); the fixture now makes an on-file person the best
+  fit for the open slot, so the exclusion decides the outcome.
+
+## Session 33 (2026-09-27) — the POC finder's endpoints (R-053 slice 1, D-0049)
+- **`routes/poc.js`**, mounted in index.js **just before `routes/jobs`** (so
+  nothing there can shadow it): `GET /jobs/:id/poc` (the four slots, the
+  people who fit none, the company's learned email format as pattern + domain
+  + count + a made-up example, `can_edit`) and `PUT /jobs/:id/company-size`
+  (`{size}` one of the five bands, `''`/null clears; stored on the COMPANY).
+- **Seeing** = `own.canSeeLead` via the same `scopeFor` as GET /jobs/:id →
+  404 otherwise (a 403 would confirm the lead exists). **Changing** =
+  `canTouchJob` → 403, the same gate as adding a contact.
+- **The format is learned from the company's OTHER leads' addresses too, but
+  only the pattern and a count leave the file** — never another lead's names,
+  emails or ids (the caller may not be allowed to see them, D-0034).
+  poc-routes-smoke asserts it and fails when a debug field is added back.
+- Pinned by `test/poc-routes-smoke.mjs` (23, real router on a real Express app,
+  in-memory db that PROJECTS rows to each select list).
 
 ## Session 31 (2026-09-25) — client intelligence
 - **The reply sweep no longer stores every inbound message** (index.js

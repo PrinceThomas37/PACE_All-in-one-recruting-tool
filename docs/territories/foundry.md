@@ -1,5 +1,5 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 128 suites (none added; theme-contrast-smoke 10 → 12 checks)
+> Last written: 2026-09-28 (Session 33) · 132 suites · theme-contrast-smoke 10 → 12 checks (#256)
 
 ## Session 33 (2026-09-28) — the contrast probe had TWO blind spots
 The separate task the POC finder session (R-053 slice 2) raised: its probe,
@@ -44,7 +44,55 @@ with a span. Fixed there; this is the same fix in the theme suite.
   permanent contrast guard; the sweep above was one-off. `row-reveal-smoke`'s
   stub is the ready-made way in.
 - Full run **128/128**, exit 0 (Node 22; the change is browser-side code inside
-  `page.evaluate`, so Node 26 was not re-run).
+  `page.evaluate`, so Node 26 was not re-run). #253 (the POC finder) merged to
+  `main` while #256 was in review — conflicts only in memory files — and on the
+  merged tree: **132/132**, theme-contrast 12/12, poc-finder-ui 50/50. The
+  finder's slot cards need the server, and this suite aborts all network, so
+  here the panel draws the plain contact list; `poc-finder-ui-smoke` measures
+  the cards themselves with the same own-text rule.
+
+## Session 33 (2026-09-28) — R-053 slice 2 suites, one race fixed
+- **132 suites**: +`poc-apollo-smoke.mjs` (33, pure, a fake fetch). Grown:
+  `poc-routes-smoke` 23→**73** (a fake Apollo; the fake table enforces
+  migration 052's CHECKs + unique index and records any refused write),
+  `poc-targets-smoke` 57→**71**, `poc-finder-ui-smoke` 25→**50**,
+  `models-smoke` (TENANT_TABLES **46**, names poc_suggestions).
+- **company-merge-smoke earned its keep**: it scans the migrations for every
+  table with a `company_id` and failed until poc_suggestions joined the merge
+  list. models-smoke's hard-coded 45 failed the same run — the count is a
+  deliberate tripwire, bumped with a named assertion.
+- **A guard can pass vacuously because a SECOND check covers for it.**
+  Removing the on-file exclusion before picking still passed 69/69: the
+  after-lookup check caught the same people. Fixed by making an on-file person
+  the BEST fit for the open slot, so the first check decides who gets it.
+  Every slice-2 guard was then reintroduced one at a time (8 route, 2 module,
+  3 screen, 2 contrast) and each fails.
+- **The contrast probe judged LEAF elements only** (copied from
+  theme-contrast-smoke) — so a person's NAME, which shares its element with a
+  title span, was never measured; a hard-coded dark ink on it passed. The
+  poc-finder probe now judges each element's OWN text nodes. **theme-contrast-
+  smoke has the same blind spot** — raised as a separate task, not widened
+  into this PR. (Closed 2026-09-28 by #256 — see the section above.)
+- **`lead-intel-ui-smoke` failed once in a full run (a null `.text`) and
+  passed 5/5 alone — not a flake, a race in the test.** Its `openRow` removed
+  the open panel by DOM surgery while rowReveal (R-012) still believed j1 was
+  open; any repaint in the gap put the panel back and the next click CLOSED
+  it. Reproduced deterministically by forcing `rowRevealRefresh()` in the gap
+  (same error); fixed by closing through `rowRevealClose()` and waiting for
+  the block instead of a fixed sleep; the forced-repaint run then passes.
+  **Reset app state through the app's own API, never by removing its DOM.**
+
+## Session 33 (2026-09-27) — R-053 slice 1 suites
+- **131 suites** with these three: +`poc-targets-smoke.mjs` (57, pure; the
+  never-guess-an-email guard fails 56/57 when a market-prior fallback is put
+  back), +`poc-routes-smoke.mjs` (23; the real router on a real Express app
+  over an in-memory db that projects to each select; the "another lead's
+  people never leave the server" guard and the 404 visibility guard each fail
+  22/23 when their bug is reintroduced), +`poc-finder-ui-smoke.mjs` (25,
+  Playwright; its stub builds every answer with the REAL rules, never
+  hand-typed).
+- `innerText` returns CSS-uppercased headings in capitals — a regex for
+  "Contacts" misses "CONTACTS". Match headings case-insensitively.
 
 ## Session 33 (2026-09-27) — R-012, every list opens in place
 - **127 suites** now: +`row-reveal-smoke.mjs` (45, Playwright, stub API at the

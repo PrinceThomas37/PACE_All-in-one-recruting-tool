@@ -52,6 +52,8 @@ const TENANT_TABLES = new Set([
   // Migration 047 — take-over requests (D-0036/D-0037). Written 2026-09-24;
   // must be APPLIED before the routes that read it are merged.
   'ownership_requests',
+  // Migration 052 — people the POC finder found, waiting to be accepted (R-053).
+  'poc_suggestions',
   'recruiter_assignments',
   'recruiting_lookups',
   'reminders',
