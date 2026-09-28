@@ -4,12 +4,12 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
+**Updated**: 2026-09-28 (Session 33, in progress — R-069) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Already added" pop-up + one duplicate check in the add-a-person path), after #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0054 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-067` (R-060 is open PR #254's, another chat).**
+to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
+(only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
 - **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
@@ -52,9 +52,20 @@ to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Alrea
   Then (owner, 2026-09-28): **no access to their organisation's Apollo account**
   (183.3k credits left, a test account) and **every customer company brings its
   own keys** (D-0055 → R-067: TODAY ALL KEYS ARE DEPLOYMENT-WIDE — fix before a
-  second customer). **BUILT on PR #259, not live:** R-063 (firm-aware finder),
+  second customer). **LIVE (#259, merged by the owner 2026-09-28):** R-063 (firm-aware finder),
   R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
   Uncover; migration 054 applied). `npm test` 136/136.**
+- **R-069 — why emails sat in Pending / never sent after Retry (owner,
+  2026-09-28). PR #260, NOT live.** Live queue, 22 rows: 14 Gmail follow-ups
+  replying into threads that live in ANOTHER mailbox (the leads' mailbox was
+  switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
+  'sending' (process died mid-send, on no screen); 7 correctly held by the
+  2-a-day company limit but shown as "ready now". Fixed in harbour's
+  `services/gmail-delivery.js` (fresh email + quote, ONLY on a definite 404),
+  `services/interrupted-sends.js` (boot: 'sending' → Didn't send, "may have
+  gone out") and `pending-summary` (four buckets + "Held · goes tomorrow").
+  `send-recovery-smoke` 58; 15/15 deliberate breaks caught; 137/137. **R-070 asked:**
+  should a follow-up come from the mailbox that STARTED the conversation?
 - **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
   it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
   now judges each element's OWN text (it skipped any element with a child) and
@@ -176,13 +187,18 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
    (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
    scanned, 38 deleted, 24 kept — every kept file referenced).
-4. Known gap left on purpose: the Pending banner counts a first email held by
-   the per-company cap as "ready now" until the send run reaches it.
+4. **After #260 is live:** the 14 follow-ups need one Retry (Email → Didn't
+   send) unless their last automatic try fell after the release; the stuck
+   Lamons follow-up shows as "may have gone out" — check Spencer's Sent first.
+   (The "held counted as ready now" gap is closed by R-069.) R-070 is the
+   owner's call.
 
-## 🧪 TESTS: 133 SUITES
+## 🧪 TESTS: 137 SUITES
 
 `npm test` — read the COUNT; never pipe into `tail`. `bash
-test/verify-frontend.sh` too. Newest: `leads-search-clear-smoke` (11, a REAL
+test/verify-frontend.sh` too. Newest: `send-recovery-smoke` (58: the Gmail
+fallback against a fake Google, the boot sweep, the real emails router over two
+orgs, the Pending tab in a browser), `leads-search-clear-smoke` (11, a REAL
 mouse click), `poc-apollo-smoke` (44), `poc-routes-smoke` (94, a fake Apollo +
 migration 052's rules), `poc-finder-ui-smoke` (58, incl. light/dark contrast
 of the found cards); `mailbox-alerts-smoke` (22) + `-ui` (12),

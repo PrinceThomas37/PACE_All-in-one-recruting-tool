@@ -238,6 +238,9 @@ function renderPendingScheduleBanner(){
   if(!ps||!ps.total_pending)return '';
   var ready=ps.ready_now||0;
   var wait=ps.waiting_window||0;
+  var retrying=ps.waiting_retry||0;
+  var held=ps.held_company||0;
+  var cap=ps.company_daily_cap||2;
   var winLbl=ps.send_window_label||'8:00 – 16:00 lead local time';
   var tzRows=(ps.by_timezone||[]).filter(function(t){return t.waiting_window>0;}).map(function(t){
     return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">'+
@@ -254,7 +257,11 @@ function renderPendingScheduleBanner(){
       '<strong>'+ps.total_pending+'</strong> pending total · '+
       '<span style="color:var(--green);font-weight:600">'+ready+' ready to send now</span>'+
       (wait?' · <span style="color:#b45309;font-weight:600">'+wait+' waiting for send window</span>':'')+
+      (retrying?' · <span style="font-weight:600">'+retrying+' waiting to retry</span>':'')+
+      (held?' · <span style="font-weight:600">'+held+' held until tomorrow</span>':'')+
       '<br><span style="font-size:12px">Send window: '+htmlEsc(winLbl)+'.</span>'+
+      (retrying?'<br><span style="font-size:12px">Waiting to retry: a send failed and PACE tries again by itself — each row says when.</span>':'')+
+      (held?'<br><span style="font-size:12px">Held until tomorrow: the company already got its '+cap+' first email'+(cap===1?'':'s')+' today (First emails per company per day, in Admin → System Settings). Nothing is dropped.</span>':'')+
     '</div>'+
     (tzRows?'<div style="font-size:12px;margin-top:8px">'+tzRows+'</div>':'')+
     retryBtn+

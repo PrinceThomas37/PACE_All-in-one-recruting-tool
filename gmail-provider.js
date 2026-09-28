@@ -119,7 +119,14 @@ function createGmailProvider(ctx) {
         console.warn(`[gmail] ${reason} on ${path} — retry ${attempt} in ${delayMs}ms`),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error?.message || `Gmail API ${res.status}`);
+    if (!res.ok) {
+      // The status rides on the error so a caller can tell "Gmail refused
+      // this" (a 404 thread) from "it never answered" without reading
+      // Google's wording (services/gmail-delivery.js).
+      const err = new Error(data?.error?.message || `Gmail API ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
     return data;
   }
 

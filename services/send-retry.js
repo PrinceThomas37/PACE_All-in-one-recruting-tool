@@ -106,6 +106,21 @@ function manualRetryUpdate() {
   return { status: 'pending', attempt_count: 0, next_attempt_at: null, fail_kind: null, fail_reason: null };
 }
 
+// A send that was cut off after the loop claimed it (status 'sending') — the
+// process died between handing it to Gmail/Outlook and writing the answer
+// (services/interrupted-sends.js). The provider may have accepted it, so it
+// is UNCERTAIN: shown under "Didn't send", never retried by itself.
+const INTERRUPTED_REASON = 'Sending was interrupted — PACE restarted in the middle of sending it, so it may or may not have gone out.';
+function interruptedUpdate(email) {
+  return {
+    status: 'failed',
+    attempt_count: (Number(email && email.attempt_count) || 0) + 1,
+    next_attempt_at: null,
+    fail_kind: KIND.UNCERTAIN,
+    fail_reason: INTERRUPTED_REASON,
+  };
+}
+
 // Would retrying this row email somebody twice? A failed cold email's lead may
 // have been re-generated since (failed rows never block regeneration — see
 // services/outreach-cycle.js), so its twin may already be queued or sent.
@@ -145,7 +160,7 @@ function describeRetry(email, now = Date.now()) {
 }
 
 module.exports = {
-  MAX_ATTEMPTS, BACKOFF_MINUTES, KIND,
+  MAX_ATTEMPTS, BACKOFF_MINUTES, KIND, INTERRUPTED_REASON,
   isAuthFailure, classifyFailure, nextAttemptAt, failureUpdate,
-  canRetryByHand, manualRetryUpdate, hasLiveTwin, isDue, describeRetry,
+  canRetryByHand, manualRetryUpdate, interruptedUpdate, hasLiveTwin, isDue, describeRetry,
 };
