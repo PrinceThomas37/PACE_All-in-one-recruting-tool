@@ -215,7 +215,12 @@ function renderJobs(){
   });
   var stageSummary=UI.strip(stripItems);
 
-  var clearFilters="STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];"+
+  // The × beside the search box clears the SEARCH too. It used to clear only
+  // stage/industry/date and was drawn switched off (pointer-events:none) when a
+  // search was the only thing active — so with a search typed, or one filled
+  // in by the client-conversations card, the × did nothing at all (owner,
+  // 2026-09-28: "The cross button do not work").
+  var clearFilters="STATE.jobsFilter.search='';STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];"+
     "STATE.jobsFilter.dateRange='all';STATE.jobsFilter.dateFrom='';STATE.jobsFilter.dateTo='';"+
     "STATE.openDrop=null;STATE.leadsPage=0;render()";
 
@@ -250,7 +255,7 @@ function renderJobs(){
       search:{ value:f.search||'', placeholder:'Search leads, companies, contacts…',
                oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
       icons:[
-        { icon:'x', title:'Clear all filters', onclick:clearFilters, off:!anyActive }
+        { icon:'x', title:'Clear search and filters', onclick:clearFilters, off:!(anyActive||f.search) }
       ],
       right:
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+

@@ -47,6 +47,39 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0050 · 2026-09-28 · STANDS · Apollo is used only when a person presses a button; it also sizes the company (by website and name)
+**Their words** (after saving an Apollo key, with two screenshots of a lead's
+People to reach block): *"this looking for should be automatic using apollo
+key, but only when a button is click 'search contact'"* · *"Can you also make
+apollo search for employee size using company name and website. What all can we
+get from apollo from what all information we have?"* Earlier the same day:
+*"what guardrail are we creating that it do not eat away everything."*
+
+**Chosen:**
+- **Apollo is spent only on a click.** Each empty "Looking for" slot has its own
+  **Search contact** button (that slot only); **Search contacts** at the top
+  searches every empty slot; **Look up with Apollo** sizes the company. Nothing
+  calls Apollo when a lead is opened, imported or assigned. This answers
+  D-0049's open question ("whether Apollo may reveal emails automatically or
+  only on the button" — **only on the button**) and narrows D-0049 D2: the
+  automatic run for new leads, when built, uses the FREE rungs only.
+- **Company size from Apollo**, looked up by the company's WEBSITE and checked
+  against its NAME (a record under a different name is not used). It runs as the
+  first step of a search when nobody has picked a size, or on its own button.
+  **A size picked by hand is never overwritten.** 1 credit when Apollo finds the
+  company, 0 when it does not; counted against the same daily ceiling (20).
+- Found people still wait for **Accept** — nothing reaches a lead, and so
+  nothing can be emailed, until a person says yes (design §6 rule 2). Offered
+  to the owner as a choice to change.
+
+**Not built, and why:** a search by company NAME alone (for a company with no
+website) — every one of the 82 companies has a website today, a name search
+costs credits and can return a same-named stranger. Re-open when leads start
+arriving without websites.
+
+**Re-open when:** the owner wants found people to skip Accept, wants Apollo to
+run without a click, or name-only lookups become necessary.
+
 ### D-0049 · 2026-09-27 · STANDS · The POC finder (R-053): Apollo with API as the source; runs automatically and on a button; a guess is never emailed; size is picked on the lead
 **Their words** (answers to the four design questions in
 `docs/CONTACT_FINDER_DESIGN.md` §9): *"I will connect the Apollo account which

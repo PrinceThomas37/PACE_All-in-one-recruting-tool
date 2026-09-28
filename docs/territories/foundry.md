@@ -1,5 +1,23 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 132 suites
+> Last written: 2026-09-28 (Session 33) · 133 suites
+
+## Session 33 (2026-09-28, later) — the Leads × and Apollo company lookups
+- **133 suites**: +`leads-search-clear-smoke.mjs` (11, Playwright). **It clicks
+  with a REAL mouse** (`page.mouse.click` at the element's centre, plus
+  `elementFromPoint` to report what is really under the pointer): the broken ×
+  had `pointer-events:none`, which `element.click()` from script ignores — a
+  script click would have passed on the broken code. 5/11 against the old code,
+  reproducing the owner's report exactly (the box still read
+  "mmills@saylorconsulting.com" after the click).
+- Grown: poc-routes-smoke **94** (size-first, one-slot search, manual never
+  overwritten, not-found free + 30-day window, name mismatch, ceiling, gates,
+  diagnostics without the key), poc-apollo-smoke **44** (company lookup),
+  poc-targets-smoke **75** (bands at every edge, same-company cases),
+  poc-finder-ui-smoke **58** (Search contact per slot sends `slot_key`, Look up
+  with Apollo, a 390px fit of the slot buttons).
+- A UI test step failed because an EARLIER step in the same run left an Add-by-
+  hand form open, which (correctly) hides that slot's buttons — shared page
+  state between sections is a hazard; the step now closes it first.
 
 ## Session 33 (2026-09-28) — R-053 slice 2 suites, one race fixed
 - **132 suites**: +`poc-apollo-smoke.mjs` (33, pure, a fake fetch). Grown:

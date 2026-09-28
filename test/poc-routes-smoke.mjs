@@ -17,7 +17,13 @@
 //     finder NEVER writes a contact itself; somebody turned down, on file at
 //     the company, or opted out anywhere is never suggested; a person looked
 //     up for another lead is never paid for twice; Accept goes through the
-//     one add-contact path and Not-this-person sticks. The fake table enforces
+//     one add-contact path and Not-this-person sticks.
+//   * The company's size from Apollo (2026-09-28): looked up FIRST when unknown
+//     (the same click), by website, checked by name; 1 credit only when found;
+//     a picked size is never overwritten; "not known" is not asked (or paid
+//     for) again for 30 days unless a person presses Look up; the ceiling
+//     holds. "Search contact" on one slot searches that slot only. The last
+//     Apollo answer is kept for diagnosis — never the key. The fake table enforces
 //     migration 052's own CHECK rules and unique index, so a row the real
 //     database would refuse fails here too.
 //
@@ -160,9 +166,12 @@ const auth = (req, res, next) => { const u = USERS[req.headers['x-user']]; if (!
 const apolloCalls = { search: [], reveal: [] };
 let SEARCH = () => ({ ok: true, status: 200, people: [] });
 const REVEAL = {};
+// Company lookups by domain; anything not listed is "Apollo does not know it" (0 credits).
+const ENRICH = {};
 const apollo = {
   async searchPeople(a) { apolloCalls.search.push(a); return SEARCH(a); },
   async revealPerson(a) { apolloCalls.reveal.push(a.id); return REVEAL[a.id] || { ok: false, status: 404, error: 'Apollo could not find them.' }; },
+  async enrichOrganization(a) { (apolloCalls.enrich = apolloCalls.enrich || []).push(a.domain); return ENRICH[a.domain] || { ok: true, status: 200, found: false }; },
 };
 const activity = [];
 const logActivity = async (jobId, contactId, userId, type, text) => { activity.push({ jobId, contactId, userId, type, text }); };
@@ -406,6 +415,101 @@ try {
     created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
   const nd = await call('POST', '/jobs/j5/poc/find', 'bd1');
   step('a company with no website and no known address says what to add (409)', nd.status === 409 && /website/.test(nd.body.error), nd.body && nd.body.error);
+
+  // ── the company's size, from Apollo (2026-09-28) ─────────────────────────
+  const enrichN = () => (apolloCalls.enrich || []).length;
+  const co = (id) => tables.companies.find(c => c.id === id);
+  tables.companies.push({ id: 'co7', org_id: ORG, name: 'Saylor Consulting Group', website: 'https://www.saylorconsulting.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'j7', org_id: ORG, company_id: 'co7', position: 'Cost Manager / Field Contract Administrator', industry: 'Architecture and Planning',
+    stage: 'Assigned', created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  ENRICH['saylorconsulting.com'] = { ok: true, status: 200, found: true, org: { id: 'org-saylor', name: 'Saylor Consulting', employees: 35, industry: 'Architecture & Planning' } };
+  SEARCH = (a) => (a.domains || []).includes('saylorconsulting.com') ? { ok: true, status: 200, people: [
+    { id: 'ap-hana', first_name: 'Hana', last_name: 'Reyes', title: 'HR Manager', has_email: true },
+    { id: 'ap-otto', first_name: 'Otto', last_name: 'Park', title: 'Office Manager', has_email: true },
+    { id: 'ap-cal', first_name: 'Cal', last_name: 'Brooks', title: 'Director of Operations', has_email: true },
+  ] } : { ok: true, status: 200, people: [] };
+  REVEAL['ap-hana'] = { ok: true, status: 200, first_name: 'Hana', last_name: 'Reyes', title: 'HR Manager', email: 'hreyes@saylorconsulting.com', email_verified: true };
+  const m0 = meter(), e0 = enrichN(), s0 = apolloCalls.search.length;
+  const badSlot = await call('POST', '/jobs/j7/poc/find', 'bd1', { slot_key: 'boss' });
+  step('an unknown slot is refused (400)', badSlot.status === 400, String(badSlot.status));
+  const one = await call('POST', '/jobs/j7/poc/find', 'bd1', { slot_key: 'hr1' });
+  step('with no size set, the SAME click looks the company up first — by its website',
+    one.status === 200 && JSON.stringify((apolloCalls.enrich || []).slice(e0)) === '["saylorconsulting.com"]', one.status + ' ' + JSON.stringify((apolloCalls.enrich || []).slice(e0)));
+  step('…Apollo’s 35 people becomes 20–50, marked as Apollo’s, with its count and id',
+    co('co7').size_band === '21-50' && co('co7').employee_count === 35 && co('co7').size_source === 'apollo' && co('co7').apollo_org_id === 'org-saylor' && !!co('co7').size_checked_at,
+    JSON.stringify(co('co7')));
+  step('…and the page is told, in a sentence', one.body.size_known === true && one.body.size_source === 'apollo' && one.body.employee_count === 35 &&
+    /^Company size from Apollo: about 35 people \(20–50\)\./.test(one.body.result.message), one.body.result && one.body.result.message);
+  step('a company found costs ONE credit (Hana’s email needed a second)', meter() === m0 + 2, 'meter +' + (meter() - m0));
+  const askOne = apolloCalls.search[s0] || {};
+  const hr1 = one.body.slots.find(x => x.key === 'hr1');
+  step('"Search contact" on one slot asks Apollo for THAT slot’s titles only',
+    JSON.stringify(askOne.titles) === JSON.stringify(hr1.titles), JSON.stringify(askOne.titles));
+  step('…and fills that slot only', one.body.suggestions.length === 1 && one.body.suggestions[0].slot_key === 'hr1' && one.body.suggestions[0].first_name === 'Hana',
+    JSON.stringify(one.body.suggestions.map(x => [x.slot_key, x.first_name])));
+  const all = await call('POST', '/jobs/j7/poc/find', 'bd1');
+  step('searching again does not look the size up again (it is known now)', enrichN() === e0 + 1, String(enrichN() - e0));
+  step('"Search contacts" then fills the other empty slots', all.status === 200 && all.body.suggestions.some(x => x.first_name === 'Otto') && all.body.suggestions.some(x => x.first_name === 'Cal'),
+    JSON.stringify(all.body.suggestions.map(x => [x.slot_key, x.first_name])));
+
+  // A size somebody picked is never overwritten.
+  await call('PUT', '/jobs/j7/company-size', 'bd1', { size: '51-200' });
+  step('a size picked by hand is marked as picked', co('co7').size_source === 'manual' && co('co7').size_band === '51-200');
+  const eM = enrichN();
+  const man = await call('POST', '/jobs/j7/company-size/lookup', 'bd1');
+  step('"Look up with Apollo" leaves a picked size alone — and does not ask Apollo', man.status === 200 && co('co7').size_band === '51-200' && enrichN() === eM && /picked by hand/.test(man.body.result.message),
+    man.body && man.body.result && man.body.result.message);
+
+  // Apollo does not know the company: 0 credits, and not asked again for a while.
+  tables.companies.push({ id: 'co8', org_id: ORG, name: 'Quiet Co', website: 'quiet.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'j8', org_id: ORG, company_id: 'co8', position: 'Estimator', industry: 'Construction', stage: 'Assigned',
+    created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  const m1 = meter(), e1 = enrichN();
+  const nf = await call('POST', '/jobs/j8/company-size/lookup', 'bd1');
+  step('a company Apollo does not know costs nothing, and says so', nf.status === 200 && meter() === m1 && /does not know quiet\.com/.test(nf.body.result.message) && co('co8').size_band == null && !!co('co8').size_checked_at,
+    nf.body && nf.body.result && nf.body.result.message);
+  step('…and the page can say Apollo had no size', nf.body.size_known === false && !!nf.body.size_checked_at);
+  await call('POST', '/jobs/j8/poc/find', 'bd1');
+  step('a search soon after does not ask Apollo about that company again', enrichN() === e1 + 1, String(enrichN() - e1));
+  await call('POST', '/jobs/j8/company-size/lookup', 'bd1');
+  step('…but a person pressing "Look up with Apollo" does ask again', enrichN() === e1 + 2, String(enrichN() - e1));
+
+  // The website finds a record, the name says it is somebody else.
+  tables.companies.push({ id: 'co9', org_id: ORG, name: 'Northwind Builders', website: 'nwb.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'j9', org_id: ORG, company_id: 'co9', position: 'Estimator', industry: 'Construction', stage: 'Assigned',
+    created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  ENRICH['nwb.com'] = { ok: true, status: 200, found: true, org: { id: 'org-sg', name: 'Southgate Holdings', employees: 5000 } };
+  const mm = await call('POST', '/jobs/j9/company-size/lookup', 'bd1');
+  step('a record under a DIFFERENT name is not used — the size is left for a person', mm.status === 200 && co('co9').size_band == null && co('co9').employee_count == null &&
+    /Southgate Holdings/.test(mm.body.result.message), mm.body && mm.body.result && mm.body.result.message);
+
+  // The day's ceiling holds for company lookups too.
+  tables.companies.push({ id: 'co10', org_id: ORG, name: 'Capped Co', website: 'capped.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'j10', org_id: ORG, company_id: 'co10', position: 'Estimator', industry: 'Construction', stage: 'Assigned',
+    created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  await settings.setSettings(supabase, { poc_apollo_daily_credits: meter() });
+  const eC = enrichN();
+  const cap = await call('POST', '/jobs/j10/company-size/lookup', 'bd1');
+  step('past the day’s ceiling the company is not looked up', cap.status === 200 && enrichN() === eC && /used up/.test(cap.body.result.message), cap.body && cap.body.result && cap.body.result.message);
+
+  // Who may press it.
+  const lk403 = await call('POST', '/jobs/j7/company-size/lookup', 'lead1');
+  const lk404 = await call('POST', '/jobs/j7/company-size/lookup', 'bd2');
+  const lkX = await call('POST', '/jobs/j7/company-size/lookup', 'admX');
+  step('"Look up with Apollo": 403 for someone who only sees the lead, 404 for someone who cannot, 404 for another company',
+    lk403.status === 403 && lk404.status === 404 && lkX.status === 404, [lk403.status, lk404.status, lkX.status].join(','));
+  const keyRow = tables.app_settings.find(x => x.key === 'int_apollo_api_key');
+  tables.app_settings.splice(tables.app_settings.indexOf(keyRow), 1);
+  const nok = await call('POST', '/jobs/j8/company-size/lookup', 'bd1');
+  tables.app_settings.push(keyRow);
+  step('with no key it says who can connect Apollo (409)', nok.status === 409 && /Apollo is not connected/.test(nok.body.error), nok.body && nok.body.error);
+
+  // What Apollo last said is kept for diagnosis — never the key.
+  const lastCall = tables.app_settings.find(x => x.key === 'apollo_last_call');
+  const lastErr = tables.app_settings.find(x => x.key === 'apollo_last_error');
+  step('the last Apollo answer is kept, and the last failure separately', !!lastCall && !!lastErr && JSON.parse(lastErr.value).ok === false,
+    (lastCall && lastCall.value) + ' | ' + (lastErr && lastErr.value));
+  step('…and neither ever holds the key', !String(lastCall && lastCall.value).includes('test-key') && !String(lastErr && lastErr.value).includes('test-key'));
 
   step('no write broke migration 052\'s own rules', dbRefused.length === 0, dbRefused.join(', '));
 } catch (e) {

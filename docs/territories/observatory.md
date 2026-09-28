@@ -1,5 +1,29 @@
 # Observatory — memory
-> Last written: 2026-09-28 (Session 33, R-053 slice 2 — Apollo) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, D-0050: company lookups) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, later) — Apollo company lookups; size bands; same-company check (D-0050)
+- **`people-apollo.js` `enrichOrganization({key, domain})`** → GET
+  `/api/v1/organizations/enrich?domain=` (key in `X-Api-Key`). **1 credit when
+  found, 0 when not** (Apollo's own MCP tool description, read 2026-09-28 — the
+  docs site is blocked from the sandbox). A 404 or an empty record is
+  `{ok:true, found:false}` — an answer, not an error. Returns `{id, name,
+  domain, website, employees (null for 0/absent — never "0 people"), industry,
+  founded_year, linkedin_url, city, state, country}`. **Never retried** even
+  though it is a GET (a retry after a timeout can be charged twice).
+  `describeApolloError(status, data, what)` now names what was refused
+  ("company lookups" vs "people search").
+- **`callRecord(call, result, at)`** — the diagnostics row shape (call, ok,
+  status, error, found, people count); never the key; the clock comes from the
+  caller.
+- **Apollo's documented costs (checked 2026-09-28, not from memory):** people
+  search free; person lookup 1 credit per email (phone 8 — never asked for);
+  company enrichment 1 if found / 0 if not; organization search by name and
+  organization job postings "consume credits" (number not confirmed). Field
+  `departmental_head_count` could NOT be confirmed — nothing relies on it.
+- **`poc-targets.js`:** `sizeBandFor(count)` (≤20 / ≤50 / ≤200 / ≤1000 / more;
+  unknown → null) and `sameCompany(ours, theirs)` (legal suffixes and filler
+  ignored; first real word equal, same letters run together, or one name inside
+  the other). poc-targets-smoke **75**, poc-apollo-smoke **44**.
 
 ## Session 33 (2026-09-28) — PACE now calls Apollo: `services/people-apollo.js` (R-053 slice 2, D-0049)
 - **The first code in PACE that calls Apollo** (CLAUDE.md's "Apollo is a key

@@ -122,6 +122,20 @@ step('…and when every address there bounced, no format is learned at all',
 step('an out-of-office reply is not a bounce — that address still teaches',
   poc.learnFormat([{ first_name: 'John', last_name: 'Smith', email: 'jsmith@ooo.com', email_status: 'out_of_office' }], 'ooo.com').pattern === 'flast');
 
+// ── the company's size from Apollo's employee estimate (2026-09-28) ────────
+const bands = [[1,'1-20'],[20,'1-20'],[21,'21-50'],[50,'21-50'],[51,'51-200'],[200,'51-200'],[201,'201-1000'],[1000,'201-1000'],[1001,'1000+'],[250000,'1000+']];
+step('an employee estimate lands in the right band at every edge', bands.every(([n, b]) => poc.sizeBandFor(n) === b),
+  bands.map(([n]) => n + ':' + poc.sizeBandFor(n)).join(' '));
+step('an unknown, zero or nonsense estimate is "not known", never a size',
+  [null, undefined, 0, -3, 'many', NaN].every(x => poc.sizeBandFor(x) === null));
+const same = [['Saylor Consulting Group', 'Saylor Consulting'], ['KB Home', 'KBHome'], ['The Walsh Group', 'Walsh Construction'],
+  ['Café Núñez LLC', 'Cafe Nunez'], ['Smith & Sons Inc.', 'Smith and Sons']];
+step('the same company under a slightly different name is recognised', same.every(([a, b]) => poc.sameCompany(a, b)),
+  same.filter(([a, b]) => !poc.sameCompany(a, b)).map(x => x.join(' ~ ')).join(' | '));
+const diff = [['Northwind Builders', 'Southgate Holdings'], ['Acme Builders', 'Zenith Construction'], ['', 'Anything'], ['Group Inc', 'LLC']];
+step('a different company is NOT taken for ours (and an empty name never matches)', diff.every(([a, b]) => !poc.sameCompany(a, b)),
+  diff.filter(([a, b]) => poc.sameCompany(a, b)).map(x => x.join(' ~ ')).join(' | '));
+
 // ── picking people from a search for the EMPTY slots (slice 2) ─────────────
 const tg = poc.pocTargets({ position: 'Junior Estimator', industry: 'Construction' }, '21-50');
 const slotsNow = poc.fillSlots(tg, [

@@ -192,7 +192,18 @@ module.exports = (ctx) => {
       if (!integrations.BY_ID.has(req.params.id)) return res.status(404).json({ error: 'Unknown integration' });
       const key = (req.body && req.body.api_key) || await integrations.getSecret(supabase, req.params.id, 'api_key');
       const base_url = (req.body && req.body.base_url) || await integrations.getSecret(supabase, req.params.id, 'base_url');
-      res.json(await testProvider(req.params.id, key, { base_url }));
+      const result = await testProvider(req.params.id, key, { base_url });
+      // Apollo's answer is kept (never the key) beside the POC finder's own
+      // calls, so "I pressed Test and it said…" can be read from the database.
+      if (req.params.id === 'apollo') {
+        try {
+          const rec = peopleApollo.callRecord('key_test', { ok: !!result.ok, error: result.error }, new Date().toISOString());
+          const rows = [{ key: 'apollo_last_call', value: JSON.stringify(rec), updated_at: new Date() }];
+          if (!rec.ok) rows.push({ key: 'apollo_last_error', value: JSON.stringify(rec), updated_at: new Date() });
+          await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
+        } catch (_) { /* best-effort */ }
+      }
+      res.json(result);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

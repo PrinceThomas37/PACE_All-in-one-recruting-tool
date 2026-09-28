@@ -112,6 +112,39 @@ function jobFunction(title, industry) {
 
 function normalizeSize(s) { return SIZE_IDS.includes(s) ? s : null; }
 
+// Apollo's employee ESTIMATE → one of the five bands. Unknown, 0 or nonsense
+// → null: "we could not tell" is never the same answer as a size.
+function sizeBandFor(count) {
+  const n = Number(count);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n <= 20) return '1-20';
+  if (n <= 50) return '21-50';
+  if (n <= 200) return '51-200';
+  if (n <= 1000) return '201-1000';
+  return '1000+';
+}
+
+// Is Apollo's record the same company as ours? The WEBSITE finds the record;
+// the NAME is the check that it is the right one — a website that belongs to
+// a parent group, or one typed wrong at import, returns somebody else's
+// headcount, and a size taken from the wrong company picks the wrong people
+// to email. Legal suffixes and filler words are ignored; the first real word
+// agreeing, one name inside the other, or the same letters run together
+// ("KBHome" / "KB Home") all count as the same company.
+const NAME_NOISE = new Set(['inc', 'incorporated', 'llc', 'ltd', 'limited', 'co', 'corp', 'corporation',
+  'company', 'group', 'the', 'and', 'of', 'plc', 'lp', 'llp', 'pllc', 'pc', 'holdings']);
+function nameTokens(s) {
+  return String(s || '').toLowerCase().replace(/&/g, ' and ').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w && !NAME_NOISE.has(w));
+}
+function sameCompany(ours, theirs) {
+  const a = nameTokens(ours), b = nameTokens(theirs);
+  if (!a.length || !b.length) return false;
+  if (a[0] === b[0] || a.join('') === b.join('')) return true;
+  const A = new Set(a), B = new Set(b);
+  return a.every(w => B.has(w)) || b.every(w => A.has(w));
+}
+
 // ── the four slots ──────────────────────────────────────────────────────────
 function uniq(list) { const seen = {}; return list.filter(x => { const k = String(x).toLowerCase(); if (seen[k]) return false; seen[k] = 1; return true; }); }
 function slotLabel(titles) { return titles.length > 1 ? `${titles[0]} or ${titles[1]}` : (titles[0] || ''); }
@@ -355,6 +388,6 @@ function splitName(full) {
 
 module.exports = {
   SIZE_BANDS, SIZE_IDS, DEFAULT_SIZE, FUNCTIONS, MARKET_PRIOR, FORMATS,
-  jobFunction, normalizeSize, pocTargets, contactKind, fitScore, fillSlots, pickPeople,
+  jobFunction, normalizeSize, sizeBandFor, sameCompany, pocTargets, contactKind, fitScore, fillSlots, pickPeople,
   detectFormat, normalizeDomain, learnFormat, emailFor, splitName, nameKey,
 };
