@@ -7,7 +7,7 @@
 **Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #256 (the contrast suite, 2026-09-28), after #253 (`fc72f36`, the POC finder).
+to `main` IS the release · **Last merged**: #257 (`464a1df`, D-0050: Search contact per slot, size from Apollo, the Leads ×), after #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0050 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-063` (R-060 is open PR #254's, another chat).**
 
@@ -31,7 +31,7 @@ to `main` IS the release · **Last merged**: #256 (the contrast suite, 2026-09-2
   `poc_apollo_daily_credits` (20). **The owner saved an Apollo key 2026-09-28
   10:57 UTC; no search pressed yet** (read `apollo_last_call` /
   `apollo_last_error` in app_settings to see what Apollo last said).
-  **Then D-0050 (on a branch, waiting for the owner's OK):** "Search contact"
+  **Then D-0050 (LIVE, #257 merged 2026-09-28):** "Search contact"
   in every empty slot, "Search contacts" at the top, company size from Apollo
   by website + name (migration 053 applied), Apollo ONLY on a click; and the
   Leads search × fixed. Next slices: the posting/website readers (free), then
@@ -148,8 +148,8 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
    1–2 live (#253); the D-0050 round (Search contact per slot, size from
-   Apollo, the Leads ×) is on its own PR — **merge only on the owner's
-   approval**. Watch the first real Apollo search with them. **R-057** (matching candidates in emails)
+   Apollo, the Leads ×) is LIVE too (#257). **Watch the first real Apollo
+   search with the owner** — read `apollo_last_call` / `apollo_last_error`. **R-057** (matching candidates in emails)
    and **R-054** (a playbook per industry) are still deferred — design first.
 2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
    Anthropic key has no credit (harmless — Groq answers); the apply link on
