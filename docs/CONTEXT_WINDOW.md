@@ -7,7 +7,7 @@
 **Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #257 (`464a1df`, D-0050: Search contact per slot, size from Apollo, the Leads ×), after #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
+to `main` IS the release · **Last merged**: #258 (`6d2bd20`, D-0051: the "Already added" pop-up + one duplicate check in the add-a-person path), after #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0051 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-066` (R-060 is open PR #254's, another chat).**
 
@@ -41,10 +41,10 @@ to `main` IS the release · **Last merged**: #257 (`464a1df`, D-0050: Search con
   for us?". Measured on the live leads: HR titles are traditional (1 of 54 HR
   contacts is "People & Culture"); the real gap is law/accounting/architecture
   firms (16 of 82 leads) → **R-063 re-scoped, owner's call.**
-  **"Already added" pop-up BUILT, not live (R-064, D-0051, PR #258):** one
-  duplicate check in `services/lead-contacts.js` (email anywhere = refused;
-  name on this lead/company = asked) + `showAlreadyAdded` on Add contact, Add
-  by hand and Accept. `npm test` 135/135. Waiting for the owner's "publish".
+  **"Already added" pop-up LIVE (R-064, D-0051, #258 merged 2026-09-28 on
+  "publish and merge it"):** one duplicate check in `services/lead-contacts.js`
+  (email anywhere = refused; name on this lead/company = asked) +
+  `showAlreadyAdded` on Add contact, Add by hand and Accept. `npm test` 135/135.
   **R-065 asked, undecided:** today a person added to an already-emailed lead
   gets NO first email; should PACE send it by itself?
 - **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
