@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-28 (Session 33) · **Next id**: `R-063` (R-060 is PR #254's, another chat) · **Artifact**:
+**Updated**: 2026-09-28 (Session 33) · **Next id**: `R-064` (R-060 is PR #254's, another chat) · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -63,6 +63,7 @@ sees it without reading a file.
 | `R-057` | **Say something true from OUR side: matching candidates we already hold** (e.g. "we have 3 HVAC lead installers within 30 miles of Greer"), counted by the match engine; stated only when the count is real. | PENDING — owner 2026-09-25: "we will build that later" (D-0046). |
 | `R-061` | **Show what Apollo knows about a company on the lead and the client** — industry, founding year, headquarters, main phone, LinkedIn page — which come back with the same 1-credit company lookup that now fills the size (D-0050). Needs those few fields stored (a small migration). | PENDING — suggested 2026-09-28; the owner's call. |
 | `R-062` | **More leads from companies you already work: their other open jobs, from Apollo** (Organization Job Postings). A company PACE is already talking to that is hiring for three more roles is three warmer leads. Apollo charges credits for it (number not confirmed); would run only on a button, per D-0050. | PENDING — suggested 2026-09-28; the owner's call. |
+| `R-063` | **Find HR people and hiring managers by what they do, not only by their title** (owner, 2026-09-28: *"is the system particularly looking for HR manager or HR generalist? what if their title in that firm is different, can it search by responsibility?"*). Measured the same day: PACE's title reader (`contactKind`), run over 26 real HR titles, read 10 right, **read 10 as hiring managers** (People & Culture Manager, Head of People, Chief People Officer, VP People, People Partner, Employee Experience Manager, Culture & Engagement Lead, Employee Relations Manager, Learning & Development Manager, Total Rewards Manager) and **did not recognise 6** (People & Culture Coordinator, Onboarding Specialist, Staffing Coordinator, Workforce Coordinator, Compensation Analyst; Office Coordinator at a small firm). And the Apollo search is cast by title, so a person whose title Apollo does not count as "similar" never comes back at all. **Apollo's API has no "people in the HR department" filter** (its spec, checked 2026-09-28: titles + similar titles, seniority, keywords, company; department exists only as a paid-plan count of a COMPANY's staff). Proposed: (1) under ~200 employees, one free search for everyone Apollo knows at the company, picked by meaning; (2) above that, a much wider HR title list; (3) the reader learns the modern HR words — People, Culture, Onboarding, Workforce, Compensation, Total Rewards — but not "Customer Onboarding/Experience" (sales and support jobs), and an HR person is never offered as a hiring manager; (4) a hiring manager must head the job's own team or the company, never an unrelated department. **No extra credits** — searching is free; 1 credit per revealed email and the daily ceiling are unchanged. | PENDING — suggested 2026-09-28; the owner's call. |
 
 ## ⏳ PENDING — nobody has decided
 
