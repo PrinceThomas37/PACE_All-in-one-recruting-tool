@@ -7,7 +7,7 @@
 **Updated**: 2026-09-28 (Session 33, in progress) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
+to `main` IS the release · **Last merged**: #256 (the contrast suite, 2026-09-28), after #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0050 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-063` (R-060 is open PR #254's, another chat).**
 
@@ -36,6 +36,13 @@ to `main` IS the release · **Last merged**: #250 (`07b2741`, Session 32 close).
   by website + name (migration 053 applied), Apollo ONLY on a click; and the
   Leads search × fixed. Next slices: the posting/website readers (free), then
   the automatic run for new leads (free rungs only, D-0050).
+- **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
+  it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
+  now judges each element's OWN text (it skipped any element with a child) and
+  measures the panel under an opened row (its scope named a class that never
+  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
+  was hiding. Open: the suite still renders screens without data — see
+  `foundry.md`.
 
 ---
 

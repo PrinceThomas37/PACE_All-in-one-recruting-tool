@@ -516,6 +516,14 @@ we never have to rewrite to grow (see "Growth bets" below).
     themes). **`theme-contrast-smoke.mjs` now HOVERS a row and OPENS one** —
     51 screens at rest never saw this colour once, because a colour that only
     exists under the pointer is invisible to a screenshot of a page at rest.
+    **Session 33: that OPENED pass had never measured the panel** — its scope
+    named `.lead-expand`, a class that exists nowhere in the app, so only the
+    row's own cells were judged; it now names `tr.row-exp` and asserts the
+    panel is there. **And the probe judged LEAF elements only**, so a name
+    beside its title span, a label beside its icon, a heading beside its count
+    badge were never measured; it now judges each element's OWN text nodes.
+    **A selector that matches nothing is not an error — it is an empty list,
+    and a contrast probe reads an empty list as "nothing unreadable".**
     Same class: `--glass-brd` is a white highlight at 72% alpha, right on a
     glass pane over the glow and **nothing at all on a white card** — the
     email-status dropdown rendered in light as the bare word "Valid". A
