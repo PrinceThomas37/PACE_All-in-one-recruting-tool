@@ -47,6 +47,24 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0052 · 2026-09-28 · STANDS · PACE's signature colour is Abalone teal (amends D-0051's look)
+**Their words:** *"a color palate, that will be our signature… apollo has yellowish…
+slack has purple, zoom has blue, what will be our color scheme"*; picked "Abalone
+teal" from four options; then *"one colour scheme should go with both dark and white
+theme. mother of pearls has both"*.
+**Why:** the owner judged the pastel-grey pearl drafts (E, F) as having "no soul". A
+brand needs one ownable colour. Teal comes from real abalone shell, and no named rival
+owns it (Bullhorn is orange, Ceipal is blue).
+**Decided:** it is the same teal hue in both themes, tuned per surface:
+- **White pearl:** teal #0E7C7B on #F6F4EF, contrast 4.56:1.
+- **Black pearl:** teal #3FB8AE on #0C1417, contrast 7.69:1.
+- **Violet shimmer partner:** #7B6CD9 in light and #9D8FF0 in dark. It is decorative
+  only in light, because 3.83:1 is too low for text.
+- **Mother of pearl remains the surface.** Teal goes on the logo, buttons, the flowing
+  line and the pearl highlights.
+**Re-open when:** the owner rejects teal after seeing it on the real hero, or a
+trademark or rival clash turns up.
+
 ### D-0051 · 2026-09-28 · STANDS · A public website for PACE: mother of pearl, one flowing line
 **Their words:** *"the theme should be of mother of pearls texture. and PACE should be
 written in a flow"*; then picked "The line keeps flowing", "Book a walkthrough" and

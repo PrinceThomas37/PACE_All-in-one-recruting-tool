@@ -6199,3 +6199,6 @@ host separate from Render. The owner had no picture in mind ("Build and show me"
 first-draft page was published as a private artifact (LC5TTrDdqcEWUhYLb623X8) with a review
 panel (pearl strength, replay the name, white/black pearl). Nothing in the app changed. Next:
 the owner's reactions, then prices, then the real `website/` folder + tests.
+
+### Session 33, website round 5: signature colour
+The owner said drafts E and F had "no soul" and asked for a signature colour scheme like Slack purple or Zoom blue. They picked **Abalone teal**, and it must work in both white and black pearl (D-0052). Palette sheet: artifact BHWRkRzij3EZwLeaEHRCaN. Mobbin was tried and refused because it needs a paid plan. Next: re-skin Layout A's opening in teal.
