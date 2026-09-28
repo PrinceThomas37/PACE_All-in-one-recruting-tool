@@ -738,6 +738,16 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-found-acts{display:flex;gap:8px;flex-wrap:wrap;flex:none}
 .lxc-credits{font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.45}
 
+/* "Already added" (owner, 2026-09-28) — the pop-up every add-a-person path
+   shows when that person or address is already in PACE (10-page-modals.js
+   showAlreadyAdded). Calm: a neutral card for the person, no state colour —
+   it is information, not a fault. */
+.dup-msg{font-size:14px;line-height:1.5;color:var(--text);margin:0}
+.dup-person{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px}
+.dup-name{font-size:13.5px;font-weight:600;color:var(--text)}
+.dup-sub{font-size:12.5px;color:var(--text2);margin-top:2px;overflow-wrap:anywhere}
+.dup-where{font-size:12.5px;color:var(--text2);margin-top:10px}
+
 /* The lead's email timeline + summary (58-lead-intel.js). Drawn only when the
    owner has switched client intelligence on; otherwise the slot is hidden and
    the row is exactly as before. Calm by default: neutral cards, one accent

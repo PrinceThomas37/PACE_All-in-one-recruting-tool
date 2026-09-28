@@ -44,15 +44,32 @@ window.submitAddContact=function(jid){
   var fn=document.getElementById('ac-fn').value.trim();
   if(!fn){showToast('First name is required','error');return;}
   var existing=jobContacts(jid);
-  apiPost('/contacts',{job_id:jid,first_name:fn,
+  sendAddContact(jid,{job_id:jid,first_name:fn,
     last_name:document.getElementById('ac-ln').value.trim(),
     designation:document.getElementById('ac-desig').value.trim(),
     email:document.getElementById('ac-email').value.trim(),
     phone:document.getElementById('ac-phone').value.trim(),
     linkedin:document.getElementById('ac-linkedin').value.trim(),
     is_primary:existing.length===0
-  }).then(function(){showToast('Contact added','success');STATE.modal={type:'jobDetail',id:jid};return refreshJobs();}).catch(function(e){showToast('Failed: '+e.message,'error');});
+  });
 };
+// Already added? The server refuses (409 + `duplicate`) and this shows the
+// same pop-up as the POC finder. The form is a modal the pop-up replaces, so
+// the typed values are kept here for "Add anyway"; closing goes back to the
+// lead, where the person already is.
+function sendAddContact(jid,body){
+  apiPost('/contacts',body).then(function(){showToast('Contact added','success');STATE.modal={type:'jobDetail',id:jid};return refreshJobs();}).catch(function(e){
+    var dup=e&&e.body&&e.body.duplicate;
+    if(dup){
+      showAlreadyAdded(dup,{
+        onAddAnyway:dup.can_add_anyway?function(){sendAddContact(jid,Object.assign({},body,{allow_same_name:true}));}:null,
+        onClose:function(){STATE.modal={type:'jobDetail',id:jid};render();}
+      });
+      return;
+    }
+    showToast('Failed: '+e.message,'error');
+  });
+}
 window.deleteContact=function(cid){
   if(!confirm('Delete this contact?'))return;
   apiDelete('/contacts/'+cid).then(function(){showToast('Contact deleted','success');return refreshJobs();}).catch(function(e){showToast('Failed: '+e.message,'error');});

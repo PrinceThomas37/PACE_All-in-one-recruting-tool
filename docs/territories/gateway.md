@@ -1,5 +1,44 @@
 # Gateway — memory
-> Last written: 2026-09-28 (Session 33, D-0050: size from Apollo, one-slot search) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, D-0051: "Already added" — one duplicate check in the add-a-person path) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, latest) — "Already added" (D-0051, R-064)
+- **Owner:** *"If the person or the email id already added. A pop-up should come
+  like that they are already added kinda."* Measured first: **`POST /contacts`
+  had NO duplicate check at all** (the same person could go on a lead twice, or
+  on a second lead at the firm — and the send engine emails every contact on a
+  lead). Live data had 0 repeats (205 contacts), so this is prevention.
+- **The check lives in the ONE add path, `services/lead-contacts.js`:**
+  `addLeadContact` now calls `lookupExisting` (org-scoped: everybody on the live
+  leads at this company + anybody in the org with the same address, via an
+  ILIKE whose `%`/`_` are backslash-escaped, then an EXACT lower-case compare —
+  the compare is what decides) and the PURE `findDuplicate`. **Same email on any
+  live lead in the org → refused** (`DuplicateContactError`, no "add anyway");
+  **same first+last name on this lead or another lead at this company → asked**
+  (refused unless `allowSameName`). A first name alone, or the same name at an
+  unrelated firm, is nobody. A contact on a DELETED lead does not count.
+- **409 body = `duplicatePayload(dup, {visible, lead})`** — `{ error, duplicate:
+  { match, where: this_lead|company|elsewhere, title, message, can_add_anyway,
+  person, lead } }`. **The other lead is named only if the caller may SEE it**
+  (`ownership.canSeeLead` over `viewScope` — `routes/contacts.js` builds it from
+  `ctx.ownership` + `reportingChainIds`; `routes/poc.js` from its own
+  `scopeFor`); otherwise "a colleague's lead", `person:null`, `lead:null`.
+  `duplicateResponse` falls back to the not-visible payload if its own company
+  lookup throws — a 409 is never turned into a 500.
+- **`POST /contacts` takes `allow_same_name: true`** (the pop-up's "Add anyway").
+  It can never push a repeated ADDRESS through.
+- **Accept (`routes/poc.js`) now uses the same `lookupExisting` +
+  `findDuplicate`** instead of its own sibling-lead scan: on this lead → linked
+  as before, and the 200 carries a `duplicate` ("…is already on this lead, so
+  nothing new was added.", OK only); anywhere else (this company OR another
+  company with the same address — the second is new) → PACE turns the
+  suggestion down itself and answers 409 with the payload. A race caught by
+  `addLeadContact` itself is handled the same way. Pinned: `poc-routes-smoke`
+  99, `contact-duplicate-smoke` 32 (new).
+- **NOT built — R-065:** a person added to an ALREADY-EMAILED lead gets no first
+  email (first emails are generated only on assignment, `LEAD_ASSIGNED` →
+  `generateEmailsForJobs`; `/emails/generate` skips contacts already outreached
+  in the cycle, so re-running it would email only the new person). Asked the
+  owner; not decided.
 
 ## Session 33 (2026-09-28, later) — company size from Apollo; "Search contact" on one slot (D-0050)
 - **`POST /jobs/:id/poc/find` takes `{slot_key}`** (hr1/hr2/mgr1/mgr2, else 400)

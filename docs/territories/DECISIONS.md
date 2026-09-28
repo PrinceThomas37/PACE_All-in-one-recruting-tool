@@ -47,6 +47,39 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0051 · 2026-09-28 · STANDS · "Already added": a pop-up whenever a person or an email address is already in PACE
+**Their words** (answering whether PACE should queue a first email for someone
+accepted onto an already-emailed lead): *"I do think that happens. If the person
+or the email id already added. A pop-up should come like that they are already
+added kinda."*
+
+**Chosen (the pop-up is theirs; the two strengths are my design, shown to them
+for a reaction):**
+- Every way a person is added — **Add contact** on a lead, the POC finder's
+  **Add by hand**, and its **Accept** — goes through ONE check
+  (`services/lead-contacts.js`), and the answer is ONE pop-up
+  (`showAlreadyAdded`).
+- **The same email address anywhere in PACE (this company's account) is
+  refused** — "Already added", with who and where, and only **OK**. One address
+  is one person; a second row would be a second cold email to someone PACE is
+  already talking to.
+- **The same first + last name on this lead, or on another lead at the same
+  company, is asked** — "Already added? Is this the same person?" with **Don't
+  add / Add anyway**. Two people can share a name; the person adding decides.
+- The pop-up names a colleague's lead only if the person looking may see it
+  (D-0034); otherwise it says "a colleague's lead".
+
+**Not decided — the question it was answering:** whether PACE should queue the
+first email by itself for somebody added to a lead that was already emailed.
+Measured the same day: **today it does NOT** — initial emails are generated only
+when a lead is assigned; a person added afterwards gets nothing until someone
+emails them by hand. *"I do think that happens"* reads either as "it should" or
+as "I believe it already does", and it sends real email under a real person's
+name, so it is asked again plainly rather than built on a guess (R-065).
+
+**Re-open when:** the owner wants a name match refused outright (or not asked
+at all), wants duplicates checked across imports as well, or answers R-065.
+
 ### D-0050 · 2026-09-28 · STANDS · Apollo is used only when a person presses a button; it also sizes the company (by website and name)
 **Their words** (after saving an Apollo key, with two screenshots of a lead's
 People to reach block): *"this looking for should be automatic using apollo
