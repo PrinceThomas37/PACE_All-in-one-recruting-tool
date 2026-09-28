@@ -98,6 +98,17 @@ function q(table) {
     eq(k, v) { st.filters.push(r => r[k] === v); return api; },
     is(k, v) { st.filters.push(r => (r[k] == null) === (v == null)); return api; },
     in(k, vs) { st.filters.push(r => vs.includes(r[k])); return api; },
+    // Postgres ILIKE: % and _ are wildcards unless backslash-escaped.
+    ilike(k, pat) {
+      let re = '';
+      for (let i = 0; i < pat.length; i++) {
+        const ch = pat[i];
+        if (ch === '\\' && i + 1 < pat.length) { re += pat[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); continue; }
+        re += ch === '%' ? '.*' : ch === '_' ? '.' : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+      const rx = new RegExp('^' + re + '$', 'i');
+      st.filters.push(r => rx.test(String(r[k] == null ? '' : r[k]))); return api;
+    },
     order() { return api; },
     limit(n) { st.limit = n; return api; },
     update(p) { st.op = 'update'; st.payload = p; return api; },
@@ -336,6 +347,37 @@ try {
   const dupRow = tables.poc_suggestions.find(x => x.id === daveJ2.id);
   step('…PACE turned that suggestion down itself (no person named as the decider)', dupRow.status === 'rejected' && dupRow.decided_by == null && !!dupRow.decided_at);
   step('…without naming the other lead', !/j1|Junior Estimator/.test(dup.text));
+  step('…and the answer carries the "already added" pop-up, with nothing from that lead in it',
+    dup.body.duplicate && dup.body.duplicate.where === 'company' && dup.body.duplicate.can_add_anyway === false &&
+    dup.body.duplicate.person === null && dup.body.duplicate.lead === null, JSON.stringify(dup.body.duplicate));
+
+  // "Already added" (owner, 2026-09-28) — the SAME check as "Add contact":
+  // an address already on a lead at ANOTHER company is one person too.
+  tables.companies.push({ id: 'co2', org_id: ORG, name: 'Beta Corp', website: 'beta.com', size_band: null, deleted_at: null });
+  tables.jobs.push({ id: 'jB', org_id: ORG, company_id: 'co2', position: 'Controller', industry: 'Construction', stage: 'Assigned',
+    created_by: 'bd1', assigned_to: null, assigned_to_bd: 'bd1', deleted_at: null });
+  tables.contacts.push({ id: 'cB', org_id: ORG, job_id: 'jB', first_name: 'Robin', last_name: 'Vale', designation: 'CFO', email: 'robin.vale@acmebuild.com', email_status: 'valid', is_primary: true, phone: null });
+  const mk = (id, first, last, email, slot) => {
+    tables.poc_suggestions.push({ id, org_id: ORG, job_id: 'j1', company_id: 'co1', slot_key: slot, first_name: first, last_name: last, title: 'HR Generalist',
+      email, email_confidence: email ? 'confirmed' : null, email_source: email ? 'apollo' : null, source: 'apollo', source_ref: 'ap-' + id,
+      linkedin_url: null, status: 'suggested', created_by: 'bd1', decided_by: null, decided_at: null, contact_id: null, created_at: new Date().toISOString() });
+    return id;
+  };
+  const beforeX = tables.contacts.length;
+  const sx = mk('sg-robin', 'Rob', 'Vale', 'Robin.Vale@acmebuild.com', 'hr1');
+  const ax = await call('POST', `/jobs/j1/poc/suggestions/${sx}/accept`, 'bd1');
+  step('Accept refuses somebody whose address is already on a lead at ANOTHER company (409)',
+    ax.status === 409 && ax.body.duplicate && ax.body.duplicate.match === 'email' && ax.body.duplicate.where === 'elsewhere' && tables.contacts.length === beforeX, ax.status + ' ' + ax.text);
+  step('…naming it, because this caller works that lead', /the Controller lead at Beta Corp/.test(ax.body.error), ax.body && ax.body.error);
+  const sxRow = tables.poc_suggestions.find(x => x.id === sx);
+  step('…and PACE turned the suggestion down itself', sxRow.status === 'rejected' && sxRow.decided_by == null && !!sxRow.decided_at, JSON.stringify(sxRow));
+  const sm = mk('sg-maria2', 'Maria', 'Lopez', null, 'hr2');
+  const beforeM = tables.contacts.filter(c => c.job_id === 'j1').length;
+  const am = await call('POST', `/jobs/j1/poc/suggestions/${sm}/accept`, 'bd1');
+  step('Accepting somebody ALREADY on this lead adds nobody — and says so in the pop-up',
+    am.status === 200 && am.body.already_on_lead === true && tables.contacts.filter(c => c.job_id === 'j1').length === beforeM &&
+    am.body.duplicate && am.body.duplicate.where === 'this_lead' && am.body.duplicate.can_add_anyway === false &&
+    /Maria Lopez is already on this lead, so nothing new was added/.test(am.body.duplicate.message), am.status + ' ' + JSON.stringify(am.body.duplicate));
 
   // Who may do it.
   const waitingJ2 = tables.poc_suggestions.find(x => x.job_id === 'j2' && x.status === 'suggested');

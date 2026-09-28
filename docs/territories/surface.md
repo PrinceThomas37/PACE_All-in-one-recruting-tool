@@ -1,5 +1,34 @@
 # Surface — memory
-> Last written: 2026-09-28 (Session 33, D-0050: Search contact buttons, size from Apollo, the Leads ×) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, D-0051: the "Already added" pop-up) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, latest) — the "Already added" pop-up (D-0051, R-064)
+- **`showAlreadyAdded(dup, {onAddAnyway, onClose})`** in `10-page-modals.js` —
+  the ONE pop-up for a repeated person. It draws the server's `duplicate`
+  (`title`, `message`, `person`, `lead`) as a `.modal` string in `STATE.modal`
+  (so `overlayWrap` puts it over the page and `theme.css` paints it
+  `--card-solid`). **Buttons follow `can_add_anyway`:** an address match gets
+  only **OK**; a name match gets **Don't add / Add anyway** — and only if the
+  caller passed `onAddAnyway`. `dupClose` / `dupAddAnyway` run the stored
+  callbacks. Styles `.dup-msg/.dup-person/.dup-name/.dup-sub/.dup-where` in
+  `theme.css`, tokens only.
+- **`22-api.js` `apiFetch` now puts `status` and the JSON `body` on the thrown
+  Error** — a 409 used to reach the page as a bare message, so a structured
+  answer (`duplicate`) was unreadable. Every existing catch still reads
+  `e.message`, unchanged.
+- Wired: **Add contact** (`24-jobs-wired.js` `submitAddContact` →
+  `sendAddContact(jid, body)`, which keeps the typed body for "Add anyway"
+  because the pop-up replaces the form modal; OK/Don't add go back to the
+  lead's detail); the finder's **Add by hand** (`leadPocSave(id, allowSame)` —
+  the inline form stays underneath, so "Don't add" keeps what was typed); the
+  finder's **Accept** (a 409 `duplicate` is the pop-up, not a red line in the
+  block; a 200 with `already_on_lead` is the pop-up, not "Added to the lead").
+- ⚠ **`06-page-leads.js` still declares its own `submitAddContact`** — a global
+  function that `24-jobs-wired.js`'s `window.submitAddContact` replaces at load.
+  Dead while that order holds; its failure path would show the server's
+  sentence in a toast, not the pop-up. Not touched (surface cleanup).
+- Pinned by `already-added-ui-smoke` (25, new): real mouse clicks, geometry
+  (covers the viewport, is what a click hits), opaque panel + ≥4.5:1 text in
+  light and dark, 390px bottom sheet with ≥40px buttons.
 
 ## Session 33 (2026-09-28, later) — "Search contact" in every empty slot; size from Apollo; the Leads × (D-0050)
 - **The Leads search box's × did nothing when only a search was typed** (owner:

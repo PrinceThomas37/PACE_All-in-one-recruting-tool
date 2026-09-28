@@ -1,5 +1,29 @@
 # Observatory — memory
-> Last written: 2026-09-28 (Session 33, D-0050: company lookups) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-28 (Session 33, R-063 measured on the live leads) · seeded from `CLAUDE.md` and Session 21
+
+## Session 33 (2026-09-28, latest) — R-063: does the finder read titles right FOR THIS MARKET? (measured, nothing built)
+- The owner asked whether the finder looks for "HR manager or HR generalist" and
+  can "search by responsibility". **Apollo's People API has no person-level
+  department filter** (its spec, via the Apollo connector's schema: titles +
+  `include_similar_titles`, `person_seniorities`, `q_keywords`, company filters;
+  `organization_department_or_subdepartment_counts` is a COMPANY filter and a
+  paid-plan one). The earlier third-party `departmentIds` note is not real.
+- `contactKind` over 26 invented modern HR titles: 10 right, 10 read as
+  MANAGERS (every "People"/"Culture" title; "People Partner" because `partner`
+  is a manager word), 6 missed. **But over the owner's REAL 205 contact titles:
+  53 read as HR, and only ONE HR person is misread ("People and Culture
+  Director").** Generic reasoning overstated it; the market is traditional.
+- **The real gap is firm TYPE, not HR vocabulary.** 11 of 82 live leads are law
+  or accounting firms and 5 architecture. `jobFunction` sends a paralegal to
+  GENERAL/admin (heads: General Manager / Operations Manager / Office Manager),
+  a Tax Manager or Audit Accountant to finance (Controller / CFO — a company's
+  own books, not a CPA firm's partners), a Project Architect to engineering
+  (Engineering Manager). And `contactKind` reads **Attorney, Managing Attorney,
+  Shareholder, CPA/Shareholder, Founding Member, Member, Of Counsel** as
+  `other` — ignored. The researchers picked Partner / Managing Partner /
+  Attorney / Principal / Law Firm Administrator there. `INDUSTRY_HEADS` (the
+  automotive override) is exactly the shape a fix takes. **R-063 re-scoped to
+  this; the owner's call.**
 
 ## Session 33 (2026-09-28, later) — Apollo company lookups; size bands; same-company check (D-0050)
 - **`people-apollo.js` `enrichOrganization({key, domain})`** → GET

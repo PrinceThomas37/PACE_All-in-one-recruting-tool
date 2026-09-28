@@ -253,26 +253,38 @@
   };
   window.leadPocEmailEdited = function(id){ emailTouched[id] = true; };
 
-  window.leadPocSave = function(id){
+  // allowSame: the person pressed "Add anyway" on a same-NAME pop-up.
+  window.leadPocSave = function(id, allowSame){
     var n = document.getElementById('lxc-name-'+id), t = document.getElementById('lxc-title-'+id), e = document.getElementById('lxc-email-'+id);
     var nm = splitName(n && n.value);
     if (!nm.first){ showToast('A name is needed','error'); if(n) n.focus(); return; }
     var email = String(e && e.value || '').trim();
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showToast('That email does not look right','error'); if(e) e.focus(); return; }
     var existing = contactsOf(id);
-    apiPost('/contacts', {
+    var body = {
       job_id: id, first_name: nm.first, last_name: nm.last,
       designation: String(t && t.value || '').trim() || null,
       email: email || null,
       is_primary: existing.length === 0
-    }).then(function(){
+    };
+    if (allowSame) body.allow_same_name = true;
+    apiPost('/contacts', body).then(function(){
       adding[id] = null;
       showToast('Added to the lead','success');
       // The lead list reloads (the row's contact count changes, so the list
       // redraws and the open row is put back); then the slots are re-asked.
       return (typeof refreshJobs==='function' ? refreshJobs() : Promise.resolve());
     }).then(function(){ C[id] && (C[id].busy = false); load(id); })
-      .catch(function(err){ showToast('Could not add: '+(err && err.message || err),'error'); });
+      .catch(function(err){
+        // Already added: the pop-up says who and where. The form stays open
+        // underneath, so "Don't add" leaves what was typed in place.
+        var dup = err && err.body && err.body.duplicate;
+        if (dup){
+          showAlreadyAdded(dup, { onAddAnyway: dup.can_add_anyway ? function(){ window.leadPocSave(id, true); } : null });
+          return;
+        }
+        showToast('Could not add: '+(err && err.message || err),'error');
+      });
   };
 
   // ── slice 2: find, accept, turn down ─────────────────────────────────────
@@ -312,15 +324,20 @@
       st.acting = null;
       if (d && d.slots) st.data = d;
       st.msg = null;
-      showToast(d && d.already_on_lead ? 'Already on this lead — linked' : 'Added to the lead','success');
+      // Already on this lead: nothing new was added — the pop-up says so.
+      if (d && d.already_on_lead && d.duplicate) showAlreadyAdded(d.duplicate);
+      else showToast('Added to the lead','success');
       // The lead list reloads (a new contact), which puts the open row back;
       // then this block is painted from the answer already in hand.
       return (typeof refreshJobs==='function' ? refreshJobs() : Promise.resolve()).then(function(){ paint(id); });
     }).catch(function(err){
       st.acting = null;
-      // A 409 means the server decided (already decided, or on another lead
-      // at this company) — re-ask it so the block shows the truth.
-      answer(id, null, (err && err.message) || String(err), true);
+      // A 409 means the server decided (already decided, or already in PACE
+      // on another lead) — re-ask it so the block shows the truth. An
+      // "already added" answer is a pop-up, the same one Add contact shows.
+      var dup = err && err.body && err.body.duplicate;
+      if (dup){ showAlreadyAdded(dup); answer(id, null, null); }
+      else answer(id, null, (err && err.message) || String(err), true);
       st.busy = false; load(id);
     });
   };

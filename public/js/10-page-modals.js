@@ -615,6 +615,36 @@ function overlayWrap(inner){
   if(!inner)return"";                       // a renderer that found no record
   return'<div class="overlay" onclick="overlayClick(event)">'+inner+'</div>';
 }
+// "ALREADY ADDED" (owner, 2026-09-28: "If the person or the email id already
+// added. A pop-up should come like that they are already added."). The server
+// decides (services/lead-contacts.js) and answers with a `duplicate` —
+// { title, message, can_add_anyway, person, lead } — and every add-a-person
+// path shows it here, the same way: Add contact on a lead, the POC finder's
+// add-by-hand, and its Accept. An ADDRESS match only says so (OK); a NAME
+// match asks, and "Add anyway" is the person's call (opts.onAddAnyway).
+var DUP_CB={};
+window.showAlreadyAdded=function(dup,opts){
+  if(!dup)return;
+  opts=opts||{};
+  DUP_CB={anyway:opts.onAddAnyway||null,close:opts.onClose||null};
+  var p=dup.person,l=dup.lead;
+  var card=p?'<div class="dup-person"><div class="dup-name">'+htmlEsc(p.name||'')+'</div>'+
+    (p.title?'<div class="dup-sub">'+htmlEsc(p.title)+'</div>':'')+
+    (p.email?'<div class="dup-sub">'+htmlEsc(p.email)+'</div>':'')+'</div>':'';
+  var where=l?'<div class="dup-where">On the '+htmlEsc(l.position||'untitled')+' lead'+(l.company?' at '+htmlEsc(l.company):'')+'</div>':'';
+  var anyway=!!(dup.can_add_anyway&&DUP_CB.anyway);
+  STATE.modal='<div class="modal modal-w480 dup-modal" role="alertdialog" aria-labelledby="dup-t">'+
+    '<div class="mh"><div class="mt" id="dup-t">'+htmlEsc(dup.title||'Already added')+'</div></div>'+
+    '<div class="mb_"><p class="dup-msg">'+htmlEsc(dup.message||'')+'</p>'+card+where+'</div>'+
+    '<div class="mf">'+(anyway
+      ?'<button class="btn btn-outline" onclick="dupClose()">Don\'t add</button><button class="btn btn-primary" onclick="dupAddAnyway()">Add anyway</button>'
+      :'<button class="btn btn-primary" onclick="dupClose()">OK</button>')+'</div>'+
+  '</div>';
+  render();
+};
+window.dupClose=function(){var f=DUP_CB.close;DUP_CB={};STATE.modal=null;if(f)f();else render();};
+window.dupAddAnyway=function(){var f=DUP_CB.anyway;DUP_CB={};STATE.modal=null;render();if(f)f();};
+
 function renderModal(){
   if(STATE.modal&&STATE.modal.type==="jobDetail")return overlayWrap(renderJobDetailModal());
   if(STATE.modal&&STATE.modal.type==="addJob")return overlayWrap(renderAddJobModal());

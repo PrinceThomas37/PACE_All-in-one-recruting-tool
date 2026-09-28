@@ -7,7 +7,7 @@
 // ════════════════════════════════════════════════
 var IS_FILE=window.location.protocol==='file:';
 var API_URL=(function(){var h=window.location.hostname;if(h===''||h==='localhost'||h.indexOf('127.')===0)return'https://fute-lms-backend.onrender.com';if(h.indexOf('onrender.com')>=0)return'';return'https://fute-lms-backend.onrender.com';})();
-function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;});});}
+function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok){var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
 function apiGet(p){return apiFetch('GET',p);}
 function apiPost(p,b){return apiFetch('POST',p,b);}
 function apiPut(p,b){return apiFetch('PUT',p,b);}

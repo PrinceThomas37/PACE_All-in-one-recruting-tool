@@ -1,5 +1,26 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 133 suites · theme-contrast-smoke 10 → 12 checks (#256)
+> Last written: 2026-09-28 (Session 33) · 135 suites · +contact-duplicate-smoke (32) · +already-added-ui-smoke (25)
+
+## Session 33 (2026-09-28, latest) — "Already added" (D-0051)
+- **135 suites** (`npm test` 135/135, exit 0): +`contact-duplicate-smoke.mjs`
+  (32 — the pure rules + the REAL `routes/contacts.js` over a projecting fake
+  db) and +`already-added-ui-smoke.mjs` (25, Playwright — its stub's 409s are
+  built by the server's own `duplicatePayload`, never hand-typed).
+  `poc-routes-smoke` 94 → 99 (Accept against an address at ANOTHER company;
+  Accept of somebody already on the lead). Its fake db gained `ilike`
+  (Postgres semantics: `%`/`_` wildcards, backslash escapes).
+- **Every guard was broken on purpose.** Server: no email check, name always
+  allowed, name counted at unrelated firms, lead always "visible", deleted
+  leads counted — each failed. UI: error body dropped from `apiFetch`, "Add
+  anyway" never offered, Accept-of-existing toasting "Added", pop-up without
+  `.modal` (transparent) — each failed.
+- **One guard was VACUOUS on the first try, and the reason is general:** "a
+  typed `_` is not a wildcard" passed with the escape REMOVED, because an exact
+  lower-case compare runs after the ILIKE and makes the escape unobservable in
+  the OUTCOME. Defense in depth hides the outer layer from an outcome test. The
+  fix asserts the PATTERN actually sent (`ilikes` records every ILIKE, and the
+  test expects `a\_b@…`). **When a rule has two layers, test each layer where it
+  acts, not only the result.**
 
 ## Session 33 (2026-09-28, later) — the Leads × and Apollo company lookups
 - **133 suites**: +`leads-search-clear-smoke.mjs` (11, Playwright). **It clicks

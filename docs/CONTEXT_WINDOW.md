@@ -8,8 +8,8 @@
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #257 (`464a1df`, D-0050: Search contact per slot, size from Apollo, the Leads ×), after #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0050 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-064` (R-060 is open PR #254's, another chat).**
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0051 is the highest decision id. C-0030 is the highest contract id
+(only C-0030 OPEN). Next roadmap id `R-066` (R-060 is open PR #254's, another chat).**
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
 - **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
@@ -37,11 +37,16 @@ to `main` IS the release · **Last merged**: #257 (`464a1df`, D-0050: Search con
   Leads search × fixed. Next slices: the posting/website readers (free), then
   the automatic run for new leads (free rungs only, D-0050).
   **Owner, 2026-09-28: "the POC finder is working fine"** — then asked whether
-  it can find HR by responsibility rather than title. Measured gaps (modern
-  "People"/"Culture" HR titles read as hiring managers; Onboarding/Workforce/
-  Staffing missed; Apollo's API has no person department filter) → **R-063
-  offered, owner's call.** Still unanswered: auto-queue the first email for a
-  person accepted onto an already-emailed lead, or wait?
+  it can find HR by responsibility rather than title, and "how is it relevant
+  for us?". Measured on the live leads: HR titles are traditional (1 of 54 HR
+  contacts is "People & Culture"); the real gap is law/accounting/architecture
+  firms (16 of 82 leads) → **R-063 re-scoped, owner's call.**
+  **"Already added" pop-up BUILT, not live (R-064, D-0051, PR #258):** one
+  duplicate check in `services/lead-contacts.js` (email anywhere = refused;
+  name on this lead/company = asked) + `showAlreadyAdded` on Add contact, Add
+  by hand and Accept. `npm test` 135/135. Waiting for the owner's "publish".
+  **R-065 asked, undecided:** today a person added to an already-emailed lead
+  gets NO first email; should PACE send it by itself?
 - **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
   it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
   now judges each element's OWN text (it skipped any element with a child) and

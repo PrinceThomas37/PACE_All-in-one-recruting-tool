@@ -43,7 +43,7 @@ const own = require('../services/ownership');
 const integrations = require('../config/integrations');
 const settings = require('../config/settings');
 const peopleApollo = require('../services/people-apollo');
-const { addLeadContact } = require('../services/lead-contacts');
+const { addLeadContact, lookupExisting, findDuplicate, duplicateResponse, duplicatePayload } = require('../services/lead-contacts');
 const { createDb } = require('../models');
 
 // Apollo refusals that mean "stop asking today", as opposed to one person
@@ -499,33 +499,29 @@ module.exports = (ctx) => {
 
       // D-0049 at the last step too: an address travels only with a confidence.
       const email = s.email && (s.email_confidence === 'confirmed' || s.email_confidence === 'likely') ? s.email : null;
-      const isThem = (c) =>
-        (email && String(c.email || '').toLowerCase() === email.toLowerCase()) ||
-        (!!s.last_name && poc.nameKey((c.first_name || '') + ' ' + (c.last_name || '')) === poc.nameKey(s.first_name + ' ' + s.last_name));
-      const { data: onLead } = await db.forRequest(req).from('contacts')
-        .select('id,first_name,last_name,email').eq('job_id', lead.id);
-      const same = (onLead || []).find(isThem);
+      // Already added? The SAME check as "Add contact" (services/lead-contacts.js):
+      // the address anywhere in the org, the name on this lead or at this company.
+      const person = { first_name: s.first_name, last_name: s.last_name || '', email };
+      const found = await lookupExisting({ db, req, jobId: lead.id, companyId: lead.company_id || null, email });
+      const dup = findDuplicate(person, found.people, { jobId: lead.id, companyId: lead.company_id || null });
+      const same = dup && dup.where === 'this_lead' ? dup.contact : null;
+      const scope = await scopeFor(req);
+      const turnDown = () => db.forRequest(req).from('poc_suggestions')
+        .update({ status: 'rejected', decided_at: new Date() }).eq('id', s.id).eq('status', 'suggested');
+      const refusal = async (d) => {
+        try { return await duplicateResponse({ db, req, dup: d, job: found.jobs[d.contact.job_id] || d.job || null, canSee: (j) => own.canSeeLead(j, scope) }); }
+        catch (_) { return duplicatePayload(d, { visible: false }); }
+      };
 
-      // One person, one conversation (design §6 rule 4). Somebody put on
-      // ANOTHER lead at this company since this suggestion was made is not
-      // added a second time — two people from one firm emailing the same HR
-      // manager about two roles reads as disorganised, and is how complaints
-      // start. PACE turns the suggestion down itself (decided_by stays empty)
-      // and says so, without naming the other lead: the caller may not be
-      // allowed to see it (D-0034).
-      if (!same && lead.company_id) {
-        const { data: sibs } = await db.forRequest(req).from('jobs')
-          .select('id').eq('company_id', lead.company_id).is('deleted_at', null).limit(50);
-        const ids = (sibs || []).map(x => x.id).filter(x => x !== lead.id);
-        if (ids.length) {
-          const { data: theirs } = await db.forRequest(req).from('contacts')
-            .select('first_name,last_name,email').in('job_id', ids).limit(300);
-          if ((theirs || []).some(isThem)) {
-            await db.forRequest(req).from('poc_suggestions')
-              .update({ status: 'rejected', decided_at: new Date() }).eq('id', s.id).eq('status', 'suggested');
-            return res.status(409).json({ error: 'Already on file at this company, on another lead — PACE keeps one conversation per person, so they have been taken off this list.' });
-          }
-        }
+      // One person, one conversation (design §6 rule 4). Somebody on ANOTHER
+      // lead — at this company, or anywhere with this address — is not added a
+      // second time: two people from one firm emailing the same HR manager
+      // about two roles reads as disorganised, and is how complaints start.
+      // PACE turns the suggestion down itself (decided_by stays empty) and
+      // says so — naming the other lead only if the caller may see it (D-0034).
+      if (dup && !same) {
+        await turnDown();
+        return res.status(409).json(await refusal(dup));
       }
 
       // Claim it before adding, so two clicks (or two people) cannot add one person twice.
@@ -540,15 +536,21 @@ module.exports = (ctx) => {
         try {
           const how = s.source === 'apollo' ? 'Apollo' : s.source;
           contact = await addLeadContact({
-            db, req, logActivity,
+            db, req, logActivity, companyId: lead.company_id || null,
             fields: {
               job_id: lead.id, first_name: s.first_name, last_name: s.last_name || '',
               designation: s.title || null, email, linkedin: s.linkedin_url || null,
-              is_primary: !(onLead || []).length,
+              is_primary: !found.people.some(p => p.job_id === lead.id),
             },
             activityText: `Contact added from the POC finder (${how}${email ? ', email ' + (s.email_confidence === 'confirmed' ? 'confirmed by ' + how : 'built from the company’s format') : ''}): ${[s.first_name, s.last_name].filter(Boolean).join(' ')}`,
           });
         } catch (e) {
+          if (e && e.code === 'duplicate_contact') {
+            // Added by somebody else in the moment since the check above.
+            await db.forRequest(req).from('poc_suggestions')
+              .update({ status: 'rejected', decided_by: null, decided_at: new Date() }).eq('id', s.id);
+            return res.status(409).json(await refusal(e.duplicate));
+          }
           // Put the suggestion back — a person who was not added was not accepted.
           await db.forRequest(req).from('poc_suggestions')
             .update({ status: 'suggested', decided_by: null, decided_at: null }).eq('id', s.id);
@@ -556,7 +558,19 @@ module.exports = (ctx) => {
         }
       }
       await db.forRequest(req).from('poc_suggestions').update({ contact_id: contact.id }).eq('id', s.id);
-      res.json(Object.assign(await payload(req, lead), { contact: { id: contact.id }, already_on_lead: !!same }));
+      // Already on this lead: nothing new was added, and the page says so in
+      // the same pop-up "Add contact" shows (no "add anyway" — Accept is not
+      // typing a new person, it is recognising one).
+      let already = null;
+      if (same) {
+        const who = [same.first_name, same.last_name].filter(Boolean).join(' ') || 'This person';
+        already = Object.assign(duplicatePayload(dup).duplicate, {
+          title: 'Already added', can_add_anyway: false,
+          message: `${who} is already on this lead, so nothing new was added.`,
+        });
+      }
+      res.json(Object.assign(await payload(req, lead), { contact: { id: contact.id }, already_on_lead: !!same },
+        already ? { duplicate: already } : {}));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

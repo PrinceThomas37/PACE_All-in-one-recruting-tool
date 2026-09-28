@@ -18,24 +18,44 @@
 // Behaviour today is unchanged (one org; 3,123 contacts, 0 with a null org_id).
 // ============================================================================
 const express = require('express');
-const { addLeadContact } = require('../services/lead-contacts');
+const { addLeadContact, duplicateResponse, duplicatePayload } = require('../services/lead-contacts');
 const { EVENTS, emit } = require('../events');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { db, auth, hasRole, canTouchJob, logActivity, isPermanentFollowupBlock } = ctx;
+  const { db, auth, hasRole, canTouchJob, logActivity, isPermanentFollowupBlock, ownership, reportingChainIds, orgIdFor } = ctx;
+
+  // May this caller SEE that lead? The same rule as GET /jobs/:id (D-0034) —
+  // the "already added" pop-up names a colleague's lead only when it is.
+  async function canSeeLead(req, job) {
+    if (!ownership || !job) return false;
+    const isAdmin = hasRole(req, 'admin');
+    const chain = isAdmin || !reportingChainIds ? null : await reportingChainIds(req.user.id, orgIdFor ? orgIdFor(req) : req.orgId);
+    return ownership.canSeeLead(job, ownership.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain }));
+  }
 
 router.post('/contacts', auth, async (req, res) => {
   try {
-    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary } = req.body;
+    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, allow_same_name } = req.body;
     if (!job_id || !first_name) return res.status(400).json({ error: 'job_id and first_name required' });
     if (!(await canTouchJob(req, job_id))) return res.status(403).json({ error: 'Forbidden' });
     // The one way a person is added to a lead — the POC finder's Accept uses
-    // the same function (services/lead-contacts.js).
-    const data = await addLeadContact({ db, req, logActivity,
+    // the same function (services/lead-contacts.js), and so the same
+    // "already added" check: the same email anywhere is refused; the same name
+    // on this lead or at this company is asked, and `allow_same_name` is the
+    // person's "Add anyway".
+    const data = await addLeadContact({ db, req, logActivity, allowSameName: allow_same_name === true,
       fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary } });
     res.status(201).json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err && err.code === 'duplicate_contact') {
+      let body;
+      try { body = await duplicateResponse({ db, req, dup: err.duplicate, job: err.duplicate.job, canSee: (job) => canSeeLead(req, job) }); }
+      catch (_) { body = duplicatePayload(err.duplicate, { visible: false }); }
+      return res.status(409).json(body);
+    }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.put('/contacts/:id', auth, async (req, res) => {
