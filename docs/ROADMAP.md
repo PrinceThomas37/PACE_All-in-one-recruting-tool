@@ -5,7 +5,7 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-27 (Session 33) · **Next id**: `R-060` · **Artifact**:
+**Updated**: 2026-09-28 (Session 34) · **Next id**: `R-061` · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
@@ -58,6 +58,7 @@ sees it without reading a file.
 
 | id | What I asked for | Where it stands |
 |---|---|---|
+| `R-060` | **Follow-ups whose lead changed mailbox cannot send on Gmail — fix them.** When a lead's first email went out from one mailbox and the lead was later moved to another, the follow-up tries to reply inside a conversation that only exists in the FIRST mailbox. Gmail refuses ("Requested entity was not found"); PACE treats that as a passing hiccup, retries three times, then marks it failed. Outlook mailboxes already fall back to a fresh email; Gmail ones do not. **Proposed:** send the follow-up from the mailbox that sent the first email (same conversation, same person — the prospect never gets "following up on my note" from a stranger); if that mailbox is disconnected, send from the new one as a fresh email with the original quoted beneath (what Outlook already does); stop retrying this refusal; re-queue the ones that failed. | **Found 2026-09-28 reading the live queue, asked the owner.** 28 follow-ups affected, all Gmail: Spencer Brown's queue holding leads first emailed by Daniel James (2 failed, 13 retrying and failing), and Lisa Anderson's holding leads first emailed by Prince Thomas (13, not yet attempted — they will fail the same way). Same owner in both pairs (BD Lead 2; BD Lead 1). **Nothing was sent twice and nothing is lost** — a failed follow-up can be re-queued once fixed. |
 | `R-011` | **Look at the new "stalled at BDM" number.** | **Deferred by the owner 2026-09-23 — "not now".** Still true, still worth a look once there is production data to look at. |
 | `R-008` | **Publish the apply link on more than one job.** | **Moved to you 2026-09-26 — nothing to build.** Every open job order has its link: the one live req ("Office Manager/ Bookkeeper") is published, with 0 applicants so far. Growing it now means **sharing that link** (a job board, LinkedIn post, email) and publishing each new req as it comes in. |
 | `R-057` | **Say something true from OUR side: matching candidates we already hold** (e.g. "we have 3 HVAC lead installers within 30 miles of Greer"), counted by the match engine; stated only when the count is real. | PENDING — owner 2026-09-25: "we will build that later" (D-0046). |
