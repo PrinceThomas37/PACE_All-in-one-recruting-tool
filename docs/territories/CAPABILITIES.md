@@ -446,14 +446,39 @@ Activity tab (that record's submissions only, inline) and Email → All email
 
 - **Re-import a file to fill in missing lead details** — Leads → Import Excel; existing leads get their blanks filled (job link, website, salary, extra columns, contact phone/LinkedIn), nothing overwritten. `services/lead-fill.js`, `POST /jobs/fill-missing`. (Session 29, R-045)
 
-## Putting candidates on a job — one or many (Session 31)
-- **One implementation:** `tagOne()` in `routes/recruiting/pipeline.js`, behind
-  `POST /pipeline` (one) and `POST /pipeline/bulk` (many). Writes the tag AND a
-  `Sourced` submission — "on a job" means a submissions row (Session 28).
+## Putting candidates on a job — one or many (Session 31; rebuilt Session 34, R-075, D-0057)
+- **One implementation:** `core.addCandidateToJob` in `services/recruiting-core.js`
+  (loaded with `loadCandidateFor` / `loadJobOrderFor`, both org-scoped). It is
+  behind `POST /pipeline` (one), `POST /pipeline/bulk` (many), `POST /submissions`
+  (the direct API add), the sourcing/applicant import (`POST /sourcing/staged/:id/import`,
+  `/sourcing/import-selected`) and the deprecated `POST /pipeline/:id/promote`.
+  **ON A JOB = a `submissions` row at `Sourced`** (no `submitted_at`, D-0029) plus
+  the sourcing-details row beside it (`candidate_pipeline`: rates, employer,
+  availability, notice, CTC, source, notes). Idempotent — adding somebody already
+  there is `already`, and a half-membership (a legacy tag with no submission) is healed.
+- **"Tagged" is a word for the candidate database, never a step inside a job.**
+  A pipeline row has NO state of its own: its stage IS its submission's, and every
+  response carries `stage` (`pipeline_status` is an alias of it, kept only for older
+  screens). The old Pipeline vocabulary (Contacted, Interested, Shortlisted, Moved to
+  Submission, Not Interested) is gone; `PATCH /pipeline/:id/status` answers 410.
 - Entry points: Candidates → tick → **Add to job**; a row's **Add to Job**; the
-  job's **+ Add Candidate** search; the bulk resume upload with a job context.
-  The applicant import has its own writer of the same row (`submissionRowFor`)
-  — do not add a third.
+  job's **+ Add Candidate** search; the bulk resume upload with a job context;
+  Best matches → **+ Add**; importing an applicant / a sourced person onto a job.
+- **Not yet through it:** the candidate-email queue's "add to pipeline" box
+  (`routes/candidate-outreach.js`, harbour — C-0033). **A new way of adding somebody
+  to a job calls the helper; it never inserts into `submissions` or `candidate_pipeline`.**
+
+## Changing the stage of several candidates at once (Session 34, R-077)
+- **`POST /submissions/bulk-stage`** `{ids:[submission ids], stage, sub_stage?, note?,
+  rejection_reason?, interview_*?, reminder_*?}` → `{moved, refused:[{id, reason}], stage}`.
+  Up to 200; a refused row never spoils the rest; whole-request problems are 4xx.
+- **It is the same function as the single move** (`moveSubmissions` in
+  `routes/recruiting/submissions.js`, rules in `services/submission-stages.js`
+  `moveRefusal`) — recruiters move a candidate only up to "Submitted to BDM", per row,
+  in both. A stage is per (person, JOB): `GET /submissions?candidate_ids=a,b,c` answers
+  "which jobs are these people on?" so a Candidates-page group move can ask which job.
+- Screens that use it: none yet (surface — C-0032). The stage modal still fans out
+  one `PATCH /submissions/:id/stage` per person.
 
 ## Adding many candidates from resumes at once (Session 31)
 - `public/js/57-bulk-resume.js` (`atsOpenBulkUpload(jobCtx?)`). **No server path

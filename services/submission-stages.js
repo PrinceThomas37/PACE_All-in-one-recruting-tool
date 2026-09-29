@@ -166,6 +166,8 @@ function timeInStage(subs, { now = Date.now(), normalize = (s) => s, stuckDays =
     const evs = ((s && s.events) || [])
       .filter(e => e && e.new_stage && Number.isFinite(new Date(e.created_at).getTime()))
       .map(e => ({ st: normalize(e.new_stage), t: new Date(e.created_at).getTime() }))
+      // 'Tagged' is not a stage inside a job (D-0057). Nothing writes it any more;
+      // this only keeps OLD history rows (a promotion's old_stage) out of the clock.
       .filter(e => e.st && e.st !== 'Tagged')
       .sort((a, b) => a.t - b.t);
     for (let i = 0; i < evs.length - 1; i++) {
