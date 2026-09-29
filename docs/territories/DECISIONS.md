@@ -47,6 +47,46 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0057 · 2026-09-29 · STANDS · Each company uses its own Apollo key; a company without keys buys the version where PACE provides them
+**Their words** (asked R-067): *"Yes , every company will have their own Apollo API. If they don't they will subscribe to our lead generation version where we provide the API keys and integration. I think we already have it . A little tweak for other organisations too is needed."*
+
+**Chosen:**
+- Integration keys — Apollo first, the same shape for every other key — belong to
+  ONE company: used only for that company, and no other company can see, spend or
+  overwrite them.
+- A company with no keys of its own subscribes to the **"lead generation" version**,
+  where PACE supplies the keys and the integration.
+- Measured 2026-09-29: `services/plans.js` has **no plan that provides keys**
+  (Free, Starter, Pro — "the full engine — including PACE finding its own leads and
+  candidates", Business, Internal), and keys are deployment-wide today
+  (`int_<id>_<field>`). So the "little tweak" is: per-company keys + a plan feature
+  for PACE-provided keys, used ONLY when the company has none. Which plan carries it
+  (Pro? a new one?) is confirmed with the owner when it is built.
+- This answers D-0055's "Re-open when … a shared operator key should serve customers
+  who have none": yes, but only through that plan.
+
+**Re-open when:** the provided-keys plan is priced, or a provider's terms turn out not
+to allow one account's key to serve several customers (check Apollo's API terms
+before selling it).
+
+### D-0056 · 2026-09-29 · STANDS · A follow-up goes from the mailbox that sent the first email
+**Their words** (asked R-070): *"Yes, follow ups should happen from first from email ID."*
+
+**Chosen:**
+- A follow-up (fu1, fu2) is sent from the mailbox that sent that person's FIRST
+  email, so the prospect sees one conversation from one person — even when the
+  lead's sending mailbox was switched afterwards (the live case: Daniel James →
+  Spencer Brown on 14 leads).
+- Only when that mailbox can no longer send (disconnected, inactive, dead sign-in)
+  does it fall back to the lead's current mailbox, with the first email quoted —
+  R-069's path.
+- The sender rule still holds: name and signature come from the mailbox that
+  actually sends.
+
+**Re-open when:** a mailbox is retired on purpose and the owner wants its threads
+handed to someone else, or a customer asks for follow-ups from the lead's current
+owner instead.
+
 ### D-0055 · 2026-09-28 · STANDS · Claude never uses the owner's organisation's Apollo account; every customer company brings its own API keys
 **Their words** (asked whether Claude may read their Apollo account's credit balance): *"No I cannot give you the access, its my organization's. there are 183.3k credits left. Now this is just for text [test] … i am testing it within my company. When i see this, i use that particular company's apollo API key to pull out details or any other API keys in the system. All are changeable. Because this is a SAAS product."* — and in the same message: *"I need the people from other job also in this employee search. Maybe a search bar to search for title or similar title and that will search in the employee list from apollo and show us, and we can click on to see and select which contact we want to uncover."*
 

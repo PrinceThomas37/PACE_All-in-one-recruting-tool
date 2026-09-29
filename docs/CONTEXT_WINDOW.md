@@ -8,7 +8,7 @@
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28 19:54 UTC — R-069: Gmail follow-up fallback, interrupted-send recovery at boot, a truthful Pending tab), after #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0057 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
 
 ### Session 33 (2026-09-27 → 28) — CLOSED. Everything below is LIVE (main `eae789f`).
@@ -139,9 +139,13 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
    `a8c74d7b`, `d97cd608`, `88b78245`, `d0797893`) should have gone 09-29. Still the OWNER's to
    Retry: 6 given-up follow-ups (`4e975312`, `6c8e8b61`, `73ba0003`, `9ecdeaf0`, `cb67e3c4`,
    `fdf61e53`) and the uncertain Lamons one (`f51c7f63` — check Spencer's Sent first).
-3. **Owner decisions pending:** R-070 (should a follow-up come from the mailbox that STARTED
-   the conversation?) and R-067 (each company's own API keys + daily limits — today every key
-   is deployment-wide; must be fixed before a second customer).
+3. **Owner DECIDED 2026-09-29 — build these next:** **R-070 / D-0056** — a follow-up goes
+   from the mailbox that sent the FIRST email (fall back to the lead's current mailbox + quote
+   only when that one cannot send); **R-067 / D-0057** — every company's own Apollo (and other)
+   keys, and a plan feature where PACE supplies keys for companies that have none (no plan
+   does today; confirm which plan with the owner; check Apollo's terms on shared keys).
+   The owner said follow-ups looked "still pending" 2026-09-28 evening — they were outside
+   their leads' sending hours; the owner will check them themselves.
 4. Deferred, design first: R-057 (matching candidates in emails), R-054 (a playbook per
    industry); POC finder next slices (posting/website readers, automatic run for new leads —
    free rungs only, D-0050). Mine, open: R-049 operator role, R-003, C-0030.
