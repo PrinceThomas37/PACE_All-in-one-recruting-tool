@@ -3760,6 +3760,9 @@ app.use(require('./routes/outreach-generator')({
   ...routeCtx, loadSuppressedSet, withOrg, orgStamp, logActivity,
   recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
   sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
+  // The ONE "which of my mailboxes sends" rule (R-087) — see routes/recruiting/outreach.js.
+  sendingMailboxFor: recruitingOutreach.sendingMailboxFor,
+  ownSendingMailboxes: recruitingOutreach.ownSendingMailboxes,
   // Sending with a sequence attached enrolls the new lead through the SAME
   // engine the Sequence tab drives — there is no second enrollment path.
   wfEngine,
@@ -3777,6 +3780,9 @@ const candidateOutreach = require('./routes/candidate-outreach')({
   recruiterSendingMailbox: recruitingOutreach.recruiterSendingMailbox,
   sendMailboxNewMessage: recruitingOutreach.sendMailboxNewMessage,
   connectedMailboxById: recruitingOutreach.connectedMailboxById,
+  // The ONE "which of my mailboxes sends" rule (R-087) — this router used to keep its own copy.
+  sendingMailboxFor: recruitingOutreach.sendingMailboxFor,
+  ownSendingMailboxes: recruitingOutreach.ownSendingMailboxes,
 });
 app.use(candidateOutreach.router);
 

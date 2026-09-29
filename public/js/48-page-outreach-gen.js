@@ -31,7 +31,7 @@
   var LS_HIST='pace_outreach_gen_history';
 
   function blankForm(){
-    return { outreach_type:'first', contact_first_name:'', contact_title:'', company:'',
+    return { outreach_type:'first', mailbox_id:'', contact_first_name:'', contact_title:'', company:'',
              location:'', to:'', no_agencies:false, no_agencies_text:'', notes:'',
              job_title:'', job_description:'', sender_title:'',
              // Where the recipient came from: a record already in PACE, or typed
@@ -91,7 +91,7 @@
     var g=G();
     if(g.sender||g.senderLoading) return;
     g.senderLoading=true;
-    apiGet('/outreach/sender').then(function(r){
+    apiGet('/outreach/sender'+(g.form&&g.form.mailbox_id?'?mailbox_id='+encodeURIComponent(g.form.mailbox_id):'')).then(function(r){
       g.sender=r; g.senderLoading=false; render();
     }).catch(function(){ g.senderLoading=false; g.sender={mailbox:null,company_name:'',sender:{}}; render(); });
   };
@@ -121,6 +121,16 @@
     STATE.composeSide='clients'; STATE.composeContext=null; STATE.composeReminderId=null;
     STATE.emailTab='compose'; STATE.page='email'; STATE.modal=null;
     render();
+  };
+
+  // R-087: send from a different one of MY mailboxes. The draft's wording carries
+  // the sender's name and its signature is theirs, so the draft is cleared rather
+  // than left saying one person over another's From line (the Session 14 bug).
+  window.outreachGenFrom=function(v){
+    var g=collectDom(), had=!!g.draft;
+    g.form.mailbox_id=v||''; g.draft=null; g.edits={}; g.variantId=null; g.sentOk=null;
+    g.error=had?'You changed who this sends as, so the draft was cleared — the wording carries the sender\'s name. Generate it again.':null;
+    g.sender=null; loadOutreachSender(); render();
   };
 
   window.outreachRecipMode=function(m){
@@ -230,7 +240,7 @@
     var g=G(), f=g.form;
     g.angleLoading[id]=true; render();
     return apiPost('/outreach/generate-angle',{
-      angle:id, outreach_type:f.outreach_type,
+      angle:id, outreach_type:f.outreach_type, mailbox_id:f.mailbox_id||undefined,
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
       company:f.company, location:f.location,
       no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
@@ -340,7 +350,7 @@
 
     g.loading=true; g.error=null; g.sentOk=null; render();
     apiPost('/outreach/generate',{
-      outreach_type:f.outreach_type,
+      outreach_type:f.outreach_type, mailbox_id:f.mailbox_id||undefined,
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
       company:f.company, location:f.location,
       no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
@@ -381,7 +391,7 @@
     g.sending=true; g.error=null; render();
     var f=g.form;
     apiPost('/outreach/send',{
-      to:to, subject:cur.subject, body:cur.email,
+      to:to, subject:cur.subject, body:cur.email, mailbox_id:f.mailbox_id||undefined,
       // Choosing a sequence is what turns this into a lead — see the note on
       // the picker below. Sending without one deliberately creates nothing.
       sequence_id:g.sequenceId||'',
@@ -461,6 +471,13 @@
           (s.ai?'Drafted by the AI writer.':'Drafted by the built-in rules writer — no API key is configured, so this costs nothing.')+
         '</div>'+
       '</div>'+
+      // R-087: choose which of MY mailboxes this leaves from. The draft names its sender
+      // (identity sentence, signature), so changing it clears the draft (outreachGenFrom).
+      ((s.mailboxes&&s.mailboxes.length>1)
+        ?'<select id="og-from" class="sel" aria-label="Send from which mailbox" style="max-width:280px" onchange="outreachGenFrom(this.value)">'+
+            s.mailboxes.map(function(m){ var on=(G().form.mailbox_id||'')===m.id||(!G().form.mailbox_id&&s.mailbox&&s.mailbox.id===m.id);
+              return '<option value="'+esc(m.id)+'"'+(on?' selected':'')+'>'+esc((m.display_name?m.display_name+' <'+m.email+'>':m.email))+'</option>'; }).join('')+
+          '</select>':'')+
     '</div>';
   }
 

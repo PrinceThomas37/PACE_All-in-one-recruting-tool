@@ -532,6 +532,8 @@
           (docIds.length?'<div style="font-size:11.5px;color:var(--text3);margin-top:2px">'+docIds.length+' document'+(docIds.length>1?'s':'')+' will be attached.</div>':'')+
         '</div>'+
         '<div style="padding:16px 20px">'+
+          // R-087: which of MY mailboxes it leaves from. The page names an id; the server checks it is mine.
+          (window.FromPick?FromPick.slot('client-em-from'):'')+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>'+
             toField+'</div>'+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
@@ -635,7 +637,7 @@
     var body=(document.getElementById('client-em-body')||{}).value||d.body;
     if(!to.trim()){ showToast('Recipient email required','error'); return; }
     showToast('Sending…','info');
-    apiPost('/companies/'+d.companyId+'/email', { to:to, subject:subject, body:body, document_ids:d.documentIds||[] })
+    apiPost('/companies/'+d.companyId+'/email', { to:to, subject:subject, body:body, document_ids:d.documentIds||[], mailbox_id:(window.FromPick&&FromPick.value('client-em-from'))||undefined })
       .then(function(){ showToast('Email sent','success'); closeModal(); })
       .catch(function(e){
         if(/no_connected_mailbox/.test(e.message)) showToast('No connected mailbox — connect one under Email','error');

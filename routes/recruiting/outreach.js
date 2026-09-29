@@ -226,6 +226,56 @@ async function connectedMailboxById(id) {
   return tok ? mb : null;
 }
 
+// ── WHICH OF MY MAILBOXES SENDS (R-087, generalised from candidate outreach) ──
+// Owner: "For any email that goes out there should be an option to choose from
+// email ID." A person may hold several connected mailboxes. The page NAMES an id;
+// the SERVER checks it is one of the caller's OWN connected, active mailboxes and
+// refuses anything else exactly as if it did not exist — a From address chosen
+// by the browser alone would be an identity chosen by the browser. No id at all
+// means the default (their primary), the same as before. ONE implementation:
+// candidate outreach and the outreach generator take it from here too.
+async function ownSendingMailboxes(req) {
+  const { data: rows } = await supabase.from('user_emails')
+    .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
+    .eq('user_id', req.user.id).order('is_primary', { ascending: false });
+  const org = req.orgId || null;
+  const mine = (rows || []).filter(m => m.is_active !== false && (!org || !m.org_id || m.org_id === org));
+  if (!mine.length) return [];
+  const ids = mine.map(m => m.id);
+  const [{ data: ms }, { data: gm }] = await Promise.all([
+    supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
+    supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+  ]);
+  const live = new Set([...(ms || []), ...(gm || [])].map(t => t.user_email_id));
+  return mine.filter(m => live.has(m.id));
+}
+// A requested id that is not one of yours answers null — the caller then refuses.
+async function sendingMailboxFor(req, requestedId) {
+  const want = String(requestedId == null ? '' : requestedId).trim();
+  if (!want) return recruiterSendingMailbox(req.user.id);
+  const own = await ownSendingMailboxes(req);
+  return own.find(m => m.id === want) || null;
+}
+// What a route answers when there is no mailbox to send from: asked for one that
+// is not yours (404, the same as a mailbox that does not exist) or has none at all.
+function noMailboxReply(res, requestedId) {
+  return String(requestedId == null ? '' : requestedId).trim()
+    ? res.status(404).json({ error: 'That mailbox is not one you can send from.' })
+    : res.status(409).json({ error: 'no_connected_mailbox' });
+}
+// The From picker's list. A literal path, registered here above any /me/:param.
+app.get('/me/sending-mailboxes', auth, async (req, res) => {
+  try {
+    const own = await ownSendingMailboxes(req);
+    const def = await recruiterSendingMailbox(req.user.id);
+    res.json({
+      mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
+        platform: m.platform || 'Microsoft', is_primary: !!m.is_primary })),
+      default_id: def ? def.id : null,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 function buildCandidateVars({ candidate, job_order }) {
   const first = (candidate?.full_name || '').trim().split(/\s+/)[0] || 'there';
   return {
@@ -341,8 +391,8 @@ app.post('/candidates/email', auth, async (req, res) => {
     if (!recipients.length) return res.status(400).json({ error: 'No recipients.' });
     if (!subject) return res.status(400).json({ error: 'Subject is required.' });
 
-    const mailbox = await recruiterSendingMailbox(req.user.id);
-    if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+    const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+    if (!mailbox) return noMailboxReply(res, b.mailbox_id);
 
     const signature = await filledSignature(mailbox, req.user.id);
     const suppressed = await loadSuppressedSet(recipients.map(r => r.email).filter(Boolean));
@@ -399,8 +449,8 @@ app.post('/companies/:id/email', auth, async (req, res) => {
     if (!to || !emailSyntaxValid(to)) return res.status(400).json({ error: 'A valid recipient email is required.' });
     if (!subject) return res.status(400).json({ error: 'Subject is required.' });
 
-    const mailbox = await recruiterSendingMailbox(req.user.id);
-    if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+    const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+    if (!mailbox) return noMailboxReply(res, b.mailbox_id);
 
     const suppressed = await loadSuppressedSet([to]);
     if (suppressed.has(to.toLowerCase())) return res.status(409).json({ error: 'This address has opted out of email from us.' });
@@ -458,6 +508,21 @@ function buildInterviewInviteText(sub, candidate, job, role) {
   }
   const ivs = Array.isArray(sub.interviewers) ? sub.interviewers.filter(Boolean) : [];
   if (ivs.length) lines.push('Interviewer' + (ivs.length > 1 ? 's' : '') + ': ' + ivs.join(', '));
+  // R-086 (owner: "the interview confirmation email should go with job details"):
+  // the candidate gets what the role is, not only when to show up. Only facts the
+  // job order actually holds — nothing is filled in on its behalf, and no pay
+  // figure is stated (a candidate confirmation is not the place to quote one).
+  if (role === 'candidate') {
+    const about = [];
+    const where = [job.city, job.state].filter(Boolean).join(', ');
+    if (where) about.push('Location: ' + where);
+    if (job.job_type) about.push('Job type: ' + job.job_type);
+    const rem = String(job.remote || '').trim();
+    if (/^(remote|hybrid|on.?site)$/i.test(rem)) about.push('Work setting: ' + rem);
+    const desc = String(job.job_description || '').replace(/\s+/g, ' ').trim();
+    if (desc) about.push('About the role: ' + (desc.length > 600 ? desc.slice(0, 597).replace(/\s+\S*$/, '') + '…' : desc));
+    if (about.length) lines.push('', 'The role', ...about);
+  }
   lines.push('', 'Please let us know if you have any questions or need to reschedule.', '', 'Best regards');
   return lines.join('\n');
 }
@@ -472,7 +537,7 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
     if (!wantCandidate && !wantBd) return res.status(400).json({ error: 'Pick at least one recipient.' });
 
     let subQ = supabase.from('submissions')
-      .select('id, org_id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email), job:job_orders(id,job_title,client,city,state,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
+      .select('id, org_id, interview_at, interview_location, interview_type, interview_platform, interview_link, interview_address, interviewers, candidate_id, job_order_id, candidate:candidates(id,full_name,email), job:job_orders(id,job_title,client,city,state,job_type,remote,job_description,company:companies(name), bd_manager:users!bd_manager_id(id,name,email))')
       .eq('id', req.params.id);
     if (req.orgId) subQ = subQ.eq('org_id', req.orgId);
     const { data: sub, error } = await subQ.single();
@@ -489,8 +554,8 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
       targets.push({ email: bd.email, role: 'bd_manager', candidate_id: null });
     }
 
-    const mailbox = await recruiterSendingMailbox(req.user.id);
-    if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+    const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+    if (!mailbox) return noMailboxReply(res, b.mailbox_id);
     const signature = await filledSignature(mailbox, req.user.id);
     const subject = 'Interview scheduled: ' + (candidate.full_name || 'Candidate') + ' — ' + (job.job_title || 'Role');
     const orgId = req.orgId || null;
@@ -501,7 +566,10 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
       const inviteText = buildInterviewInviteText(sub, candidate, job, t.role);
         const htmlBody = injectTrackPixel(buildHtmlEmailBody(inviteText, signature), token);
       try {
-        await sendMicrosoftNewMessage(mailbox.id, { to: t.email, subject, htmlBody });
+        // By the mailbox's own platform. This line used to call Microsoft
+        // directly, so for a Gmail mailbox the invite failed every time — one
+        // reason "no email went to the candidate" (R-086).
+        await sendMailboxNewMessage(mailbox, { to: t.email, subject, htmlBody });
         await supabase.from('email_tracking').insert({
           token, channel: 'interview', candidate_id: t.candidate_id, job_order_id: sub.job_order_id,
           to_email: t.email, subject, body: inviteText,
@@ -691,5 +759,5 @@ on(EVENTS.CANDIDATE_UNSUBSCRIBED, (e) => exitCandidateSequences(e.payload.candid
 // is the first taker: it resolves the same assigned mailbox and dispatches by
 // the same platform rules, which is why a Gmail user's generated email behaves
 // exactly like their candidate email does.
-return { recruiterSendingMailbox, sendMailboxNewMessage, connectedMailboxById };
+return { recruiterSendingMailbox, sendMailboxNewMessage, connectedMailboxById, ownSendingMailboxes, sendingMailboxFor, noMailboxReply, buildInterviewInviteText };
 };

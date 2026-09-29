@@ -322,10 +322,11 @@
                 '<input id="stg-iv-people" class="sel" placeholder="e.g. Jane Smith, Raj Patel" value="'+esc(ivPeople0)+'"></div>'+
               '<div style="margin-top:11px;font-size:11.5px;color:var(--text2);font-weight:600">Email these details to:</div>'+
               '<div style="display:flex;gap:16px;margin-top:5px">'+
-                '<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-cand"> Candidate</label>'+
+                '<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-cand" checked> Candidate</label>'+
                 '<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-bd"> BD Manager</label>'+
               '</div>'+
-              '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format &amp; interviewers are added automatically. Sent (and open-tracked) from your connected mailbox.'+
+              (window.FromPick?'<div style="margin-top:9px">'+FromPick.slot('stg-iv-from')+'</div>':'')+
+              '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
                 (group?' <b>These details go on every person you move, and each one gets their own email.</b>':'')+'</div>'+
             '</div>':'')+
           (newStage==='Not Accepted'?
@@ -498,6 +499,7 @@
       payload.interviewers = people.length ? people : undefined;
       notifyCand = !!(document.getElementById('stg-iv-notify-cand')||{}).checked;
       notifyBd = !!(document.getElementById('stg-iv-notify-bd')||{}).checked;
+      mv.fromId = (window.FromPick && FromPick.value('stg-iv-from')) || '';   // read now: the window is replaced before the invites go
     }
     if (remOn && val('stg-rem-date')) { payload.reminder_date = val('stg-rem-date'); payload.reminder_note = val('stg-rem-note') || undefined; }
 
@@ -522,7 +524,7 @@
       if (notifyBd) recips.push('bd_manager');
       if (recips.length) {
         updated.forEach(function(s){
-          apiPost('/submissions/'+s.id+'/interview-invite', { recipients: recips })
+          apiPost('/submissions/'+s.id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined })
             .then(function(r){ if (r && r.sent) showToast(r.sent+' interview invite'+(r.sent>1?'s':'')+' sent','success'); })
             .catch(function(e){
               if (/no_connected_mailbox/.test(e.message)) showToast('Interview saved — connect a mailbox to email the invite','error');
@@ -605,7 +607,7 @@
         return;
       }
       var id = ids[i++];
-      apiPost('/submissions/'+id+'/interview-invite', { recipients: recips })
+      apiPost('/submissions/'+id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined })
         .then(function(r){ mv.invites.sent += (r && r.sent) ? r.sent : 0; })
         .catch(function(e){
           mv.invites.failed++;

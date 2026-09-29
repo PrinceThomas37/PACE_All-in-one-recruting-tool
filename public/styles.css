@@ -544,3 +544,10 @@ tr.sel-row td{background:var(--accent-l)}
 .win-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .win-chip .wt{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .win-chip .wx{width:22px;height:22px;border:0;background:transparent;border-radius:6px;cursor:pointer;color:var(--text3);font-size:15px;line-height:1;padding:0;flex:none}
+
+/* ── "From" picker (10b-from-picker.js, R-087) ── */
+.from-slot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--text2);margin-bottom:12px}
+.from-lbl{font-size:11px;color:var(--text2)}
+.from-sel{flex:1;min-width:180px;max-width:100%}
+.from-note{font-size:12px;color:var(--text3)}
+.from-none{color:var(--amber)}
