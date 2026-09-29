@@ -47,6 +47,23 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0058 · 2026-09-29 · STANDS · PACE gets windows: minimise, maximise and close — for compose and for other windows too
+**Their words** (answering the read-back of their handwritten notes): *"Screenshot for apollo usage I wil give you later. Leave anytime can be. You have enough context for that. Yes, it's minimize and maximise windows in PACE. For compose and also for other windows too."*
+
+**Chosen:**
+- **R-078 + R-079 are one feature, and it is decided:** a compose window can be
+  minimised (parked, like Gmail/Outlook), maximised and closed — and so can
+  PACE's other windows (records such as client details, reminders, messages).
+  The missing word in note 9 was "maximise". Compose comes first.
+- **D-0057's reading stands.** The unreadable phrase in note 5 ("any time can
+  be used"?) does not change it — the owner: *"Leave anytime can be. You have
+  enough context for that."*
+- **R-074 waits on the owner:** they will send the Apollo credit-usage
+  screenshot later.
+
+**Re-open when:** the owner finds parked windows getting in the way of the
+page behind them, or wants a window to open somewhere other than over the page.
+
 ### D-0057 · 2026-09-29 · STANDS · Inside a job everyone starts at Sourced; "Tagged" belongs to the candidate database, not to a job
 **Their words** (handwritten notes, photographed and sent 2026-09-29): *"A candidate when added to job from the candidate section or directly gets into Sourced stage. Tagged is for the database. Inside a job the stage starts from Sourced. Tagged is like when added the candidate to the database or added. any time can be used"* — the last four words are my best reading of the handwriting, not certain.
 
