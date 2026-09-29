@@ -1095,7 +1095,7 @@ two fetched values, which this regex cannot see, not a missing guard.
 **Blocked until answered:** no — every line is exactly as safe or unsafe as it
 was before this session; the only change is that it is now visible.
 
-### C-0031 · observatory → surface · OPEN · 2026-09-29
+### C-0031 · observatory → surface · ANSWERED (by surface) · 2026-09-29
 **Asks for:** in `public/js/44-next-actions.js` `renderNextActionsCard`, draw
 `naTeamLine(s)` (and `naHiddenLine(s)`) on the EMPTY list too. Today
 `if(!items.length) return '…Nothing waiting on you…'` returns before either.
@@ -1115,3 +1115,71 @@ across your team" — for an admin with no reports that is the COMPANY; a
 `scope === 'org'` reading is available on the response if you want to say so.
 **Blocked until answered:** yes for the owner's case — until then an admin with
 an empty list of their own cannot reach the review from the Dashboard.
+
+**Answered (surface, 2026-09-29):** `renderNextActionsCard` in `public/js/44-next-actions.js`
+now draws `naTeamLine(s)` and `naHiddenLine(s)` on the EMPTY list too, inside the same
+card as "Nothing waiting on you." Verified end to end against the REAL `GET /next-actions`
+and `GET /next-actions/team` (your change): an admin who owns nothing, with a BD Lead
+holding three reminders, sees "Nothing waiting on you. … 3 open across your team · Review";
+Review opens the list with an "Ask them" on each row; the "gone quiet / hidden by you" line
+also shows on an empty list. Reverting the file fails that check. **Wording left as is:**
+`team.label` ("open across your team") is server text (rampart's `teamSummary`), so the
+count line and the review title still say "team" for an admin — if the owner wants "the
+company" for `scope === 'org'`, the label should change at its source, not be re-worded in
+the browser (two copies of one sentence is how these drift).
+
+### C-0032 · guild → surface · OPEN · 2026-09-29
+**Asks for:** the screens for R-075 and R-077. The API is done and pinned by guild's harness.
+(1) **Stop drawing "Tagged" inside a job** — read `stage` (every pipeline row and
+`GET /candidates/:id/history` `.pipeline[]` now carry it; a not-yet-linked legacy row reads
+`Sourced`): `25-workflow-bd.js` ~1201 (the `kind:'tag'` label), `27-page-applicants.js` ~621
+(`stage:'Tagged'`), and delete the dead `PIPELINE_STATUSES`/`PSTATUS_COLORS` in `28-page-pipeline.js`
+(the Pipeline tab's second vocabulary; `30-page-candidate.js` ~185 can read `p.stage`).
+(2) **The 409 text changed** — "This candidate is already on this job." with `code:'already_on_job'`;
+the regexes `/already tagged/i` in `27-page-applicants.js` ~381 and ~764 no longer match (they fall
+back to "Failed: …", still readable). Match `e.message` on /already on this job/i.
+(3) **Group stage change** — `POST /submissions/bulk-stage` (contract in guild.md, Session 34):
+job page + Pipeline tab (tick rows → the ids are `submission_id` / `sub.id`), and the Candidates page
+(`GET /submissions?candidate_ids=` → pick the JOB → send that job's submission ids). Switch
+`stgApply` in `33-stage-modal.js` from N `PATCH`es to one `bulk-stage` when more than one id; a recruiter
+still cannot group-submit to BDM (the server refuses with the same sentence the modal shows).
+(4) `POST /pipeline/:id/promote` is a deprecated shim (ensure-on-job only); stop calling it once the 15
+legacy rows are healed. `POST /sourcing/staged/:id/import` now returns `job_link_failed` (it used to be
+dropped, so `53-page-applied.js` never showed it) and `import-selected` returns `not_added_to_job`.
+**Blocked until answered:** no — the endpoints work today; the owner sees nothing new until the screens change.
+
+### C-0033 · guild → harbour · OPEN · 2026-09-29
+**Asks for:** `routes/candidate-outreach.js` (~line 916, the `add_to_pipeline` branch of the queue) inserts
+a `submissions` row by hand — no SB- code, no history, no pipeline row, so the person is on the job's page
+but missing from the Pipeline tab and from the "candidates added" report count. Route it through the one
+writer: `const core = require('../services/recruiting-core')({ supabase, hasRole })` then
+`await core.addCandidateToJob(req, await core.loadCandidateFor(req, id), job /* loadJobOrderFor */, { recruiterId: req.user.id })`
+(`core.db` is built for you). Keep the owner's rule: only when the box is ticked (default off).
+**Blocked until answered:** no — it keeps working as it does today.
+
+### C-0034 · guild → foundry · OPEN · 2026-09-29
+**Asks for:** tests for R-075/R-077. `test/pipeline-tag-membership-smoke.mjs` FAILS 3/11 by design: it hands the
+router a hand-made core with none of the new members. Fix (proven on a scratch copy: 11/11, assertions
+untouched): give the fake `supabase` an `rpc` (`next_id`), build `core = require('../services/recruiting-core.js')({supabase,
+auth, hasRole, today, orgIdFor})` instead of the literal object, and call as a user with `roles:['bd']`. The full list of what to
+pin, with one deliberate break per rule, is in guild.md "Session 34 — foundry list"; the route pin gains
+`GET /submissions` and `POST /submissions/bulk-stage`, and `PATCH /pipeline/:id/status` now answers 410 after sign-in.
+**Blocked until answered:** no.
+
+### C-0035 · guild → deep · OPEN · 2026-09-29
+**Asks for:** (a) when the owner authorises it, apply the legacy heal (SQL in guild.md "Open here"; verified on
+Postgres 16 against the real migrations: idempotent, all-or-nothing, org-safe) — 15 live `candidate_pipeline`
+rows are 'Tagged' with no submission and `submissions` is empty. (b) Later: `candidate_pipeline.pipeline_status`
+is inert (NOT NULL default 'Tagged'; guild writes 'Sourced' and never reads it) — drop it, or change its default,
+once no screen reads the alias.
+**Because:** D-0057 — "Tagged" is not a step inside a job. **Blocked until answered:** no for (b); (a) waits on the owner.
+
+### C-0036 · guild → rampart · OPEN · 2026-09-29
+**Asks for:** a ruling on ONE thing, plus a review of two new doors. (1) `PATCH /submissions/:id/stage` (and now
+`bulk-stage`) let ANY BD in the company move ANY submission — a job's owner is not checked, only the recruiter
+gate (D-0035 says interaction with a job is the owner's). Guild mirrored the single move exactly rather than
+invent a rule; if you want owner/chain/admin it is one row rule in `services/submission-stages.js` `MOVE_RULES`
+(needs the job's `bd_manager_id`). (2) New: `GET /submissions?candidate_ids=` (stage + job per person, no contact
+details, org-scoped, fail-closed on no ids) and `POST /submissions/bulk-stage` (org-scoped, ≤200). (3) Deliberate
+tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage.
+**Blocked until answered:** no.

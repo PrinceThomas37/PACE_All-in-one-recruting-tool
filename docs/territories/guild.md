@@ -1,5 +1,90 @@
 # Guild — memory
-> Last written: 2026-09-28 · Session 33: poc_suggestions joins the company merge
+> Last written: 2026-09-29 · Session 34: one add-to-job writer (Sourced), Tagged out of jobs, group stage move
+
+## Session 34 (2026-09-29) — "Tagged is for the database" (R-075, D-0057) and the group stage move (R-077)
+Owner's notes: *"A candidate when added to job from the candidate section or directly gets into Sourced stage. Tagged is for the database. Inside a job the stage starts from Sourced."* and *"There is no option to change the stage of the candidate by multiple selection in the candidate or the job section."*
+
+**R-059's claim, checked.** `tagOne()` (Session 31) DID create a Sourced submission for every NEW tag (pinned, ran green). The 15 live rows were tagged on 24 Sep BEFORE that deployed, so they only ever became *visible* (the job page merges tag-only rows and labelled them "Tagged"); `submissions` is still empty. Nobody has tagged since.
+
+### What is true now
+- **ONE WRITER for "on a job": `core.addCandidateToJob(req, cand, jobOrder, opts)`** in `services/recruiting-core.js`. Found FIVE hand-written writers, no two alike: the tag button (`tagOne`), `POST /submissions` (stamped `submitted_at`, pipeline row said "Moved to Submission"), the sourcing import (pipeline row with NO `org_id`, submission unlinked, no history, job id never org-checked), `POST /pipeline/:id/promote` (took `req.body.stage` unvalidated — a recruiter could promote straight to Placement, law 3 bypassed), and harbour's candidate-email queue (`routes/candidate-outreach.js`, still hand-written — C-0033).
+  * ON A JOB = a `submissions` row at `Sourced` (SB- code, `recruiter_id`, org-stamped, **no `submitted_at`**, D-0029) + the sourcing-details row beside it (`candidate_pipeline`), linked both ways, + a `created` null→Sourced history row.
+  * **Idempotent:** finds the membership FIRST, so re-adding burns no SB-/PL- codes; `already` is not an error; a half-membership (legacy tag, no submission) is written. **Takes ROWS** loaded by `loadCandidateFor`/`loadJobOrderFor` (org-scoped) and refuses a row whose `org_id` is another company's. A failed details row is `warning`; a failed submission throws.
+  * Callers: `POST /pipeline`, `POST /pipeline/bulk` (who is already on the job is read for the whole batch, not per person), `POST /submissions`, `POST /sourcing/staged/:id/import` + `/import-selected`, the `promote` shim. **A new way of adding somebody calls it.**
+- **A pipeline row has no state.** Its stage IS its submission's. `pipelineView(row)` → `stage` (Sourced when unlinked) and `pipeline_status` overwritten with the same value (alias, for old screens). The column is written `'Sourced'` and never read (NOT NULL default 'Tagged' — deep drops it later, C-0035). `PATCH /pipeline/:id/status` → **410** (kept as a route so the pins and a stale cached tab get a sentence); `PATCH /pipeline/:id` **400s** a `pipeline_status` instead of ignoring it; `POST /pipeline/:id/promote` is a **deprecated shim** (ensure-on-job, idempotent, refuses any stage but Sourced). Delete it and the 410 route when surface stops calling promote and the legacy rows are healed (move both pins to `RETIRED`).
+- **LAW 3 IS A FUNCTION now:** `submissionStages.moveRefusal / requestRefusal` — an ORDERED rule list (role → not_assigned → recruiter_target → with_bd → details → reason → no_change), the order the single move always checked in; `RECRUITER_STAGES`, `ENTRY_STAGE`, `NOT_ACCEPTED` exported. `level:'request'` rules refuse a whole group up front; `level:'row'` rules refuse one row. (The old "only BD may move INTO Submitted to Client" rule was unreachable once the role rule existed — removed rather than left as decoration.)
+- **R-077: `moveSubmissions` in `routes/recruiting/submissions.js` IS the stage move.** `PATCH /submissions/:id/stage` = it called with one row; `POST /submissions/bulk-stage` = it called with ≤200. It judges each row, then ONE update per 100 rows, ONE history insert, ONE reminder insert, one `SUBMISSION_ADVANCED` per moved row. A refused row is reported and never spoils the rest; a failed chunk is refused as a chunk (the single move still 500s on a failed write, as before).
+- **`GET /submissions?candidate_ids=a,b,c`** — each person's live submissions per job (id, stage normalised, sub_stage, job code/title/client/status); fail-closed (no ids → nothing), ≤200, no contact details, org-scoped, jobs deleted are dropped. It is the Candidates page's "which job?" read.
+- `core.readByIds(ids, run)` reads a list of ids 100 at a time and, if the database refuses a chunk (ONE malformed id does that), asks again id by id — otherwise 100 good ids read as "not found", which looks exactly like a normal answer. Use it for any batch by id.
+- `core.db` is now built by the core (`deps.db || createDb(supabase)`): **`index.js` has never passed a `db` to `bd_recruiter_routes`** (its header claimed it did), so every route module's `db` was `undefined` and unused. New code here uses `db.forRequest(req)`.
+- `logSubmissionActivity(..., req)` org-stamps through models/ and now LOGS a failed write (R-002 counts from this table); `logSubmissionActivities(rows, req)` is the batch form.
+- The partial success is finally REPORTED: the import route returned only the candidate, so `job_link_failed` was computed and dropped (`53-page-applied.js` reads it) — it is now on the response; `import-selected` adds `not_added_to_job`.
+- Wording: the team feed (`/team/activity`) says "Added to a job" (not "Added a submission", D-0029; not "Tagged to a job", D-0057); the 409 says "This candidate is already on this job." (`code:'already_on_job'`).
+
+### Deliberate behaviour changes (say so when asked)
+1. A role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage — the single move let them go to ANY stage except Submitted to Client. 2. `promote` no longer takes a stage (it used to create a submission at any stage). 3. `POST /submissions` no longer stamps `submitted_at`, and a `recruiter_id` must be in the caller's company. 4. A group move refuses somebody already at the stage (the single move never has). 5. The 409 text above (surface's `/already tagged/i` regexes stop matching — C-0032).
+
+### API contract for surface (C-0032)
+- **`POST /submissions/bulk-stage`** body `{ids:[submission ids], stage, sub_stage?, note?, rejection_reason?, interview_at/_type/_platform/_link/_address/_location?, interviewers?, reminder_date?, reminder_note?}` → **200 `{moved:[ids], refused:[{id, reason}], stage}`** (`moved` and `refused` are in the order sent; together they account for every distinct id). `reason` is a plain sentence (unknown/foreign/deleted/malformed ids all read "…could not be found on a job — they may have been removed."; "Not assigned to this job order."; "…with the BD team now…"; `Already at "Screening".`; "…could not be saved… try again."). **4xx `{error}` for the whole request:** 400 invalid stage / no ids / >200 / Not Accepted without `rejection_reason` / a recruiter group-submitting to BDM ("one at a time"); 403 a role that may not make this move (recruiter → beyond BDM; ra).
+- **`GET /submissions?candidate_ids=a,b,c`** → `{submissions:[{id, candidate_id, job_order_id, stage, sub_stage, recruiter_id, job:{id, job_code, job_title, client, status}}]}` (403 for a role that is neither BD nor recruiter; 400 over 200).
+- **Pipeline rows** (`GET /job-orders/:id/pipeline`, `POST /pipeline` 201, `PATCH /pipeline/:id`, `GET /candidates/:id/history` `.pipeline[]`) all carry **`stage`**; `pipeline_status` is the same value (alias). `POST /pipeline` → 201 row, or **409 `{error:'This candidate is already on this job.', code:'already_on_job', healed}`**; `POST /pipeline/bulk` → `{added, already, healed, not_found, failed, errors}`. `PATCH /pipeline/:id/status` → 410; `PATCH /pipeline/:id {pipeline_status}` → 400 `code:'no_pipeline_status'`; `POST /pipeline/:id/promote` `{stage:'Sourced'}` → `{pipeline_id, submission, already}` (400 for any other stage).
+
+### Foundry list (C-0034) — pin each, and make each fail once on purpose (all 49 breaks below were run against scratch scenarios and CAUGHT)
+*Membership (R-075):* a single add, a bulk add, a direct add and an import each write: a Sourced submission with an SB- code and NO `submitted_at`; the pipeline row written `'Sourced'` (break: `'Tagged'`); both rows org-stamped from the CALLER (break: raw insert → default company); linked both ways (break each direction); a `created` null→Sourced history row (break: remove it). Re-adding → 409 `already_on_job`, no new rows, no SB/PL codes spent (break: skip the find-first); a legacy tag with no submission is HEALED on re-add (break: remove the link step); the roster lists a legacy row as `stage:'Sourced'` (break: drop `pipelineView`); `/candidates/:id/history` pipeline entries carry stage. Cross-company: a foreign job id or candidate id → 404 for single, direct and bulk — *isolate each* (own candidate + foreign job; foreign candidate + own job) or one hides the other; the import onto a foreign job saves the person and returns `job_link_failed` and writes nothing (break: pass a raw `{id}`); the helper throws on a row from another company. `promote` with `stage:'Placement'`/`'Submitted to BDM'` → 400 and nothing written (break: remove the check); `PATCH /pipeline/:id/status` 410; `PATCH /pipeline/:id {pipeline_status}` 400 (break: ignore it). One malformed id in a bulk list must not sink its neighbours (break: `readByIds` without the per-id retry). `recruiter_id` from another company → 400. The team feed never says "Tagged"/"Added a submission".
+*Stage moves (R-077):* the rule matrix through `moveRefusal` (each rule removed in turn must fail a named case): role, not_assigned, recruiter_target (LAW 3: recruiter → Submitted to Client/Offer/Placement/Not Accepted/On Hold refused), with_bd, details (recruiter → BDM needs a comment), reason (Not Accepted), no_change (bulk only), precedence (unassigned before stage). Bulk: cap 200 (201 → 400, exactly 200 → 200); the same sentence for unknown/foreign/deleted/malformed ids (id probing — break: read outside the caller's company); one history row per moved person, none for a refused one (break: write none / write for planned rows); reminders only for who moved (a case where a row passes judgement but its write fails); `bdm_approved_by/_at` + action `bdm_approved`; chunking (150 rows, second chunk fails → 100 moved, 50 refused once each, no history for them); a row deleted mid-move is refused, never counted; a failed write is a 200 with every row refused for a group, a 500 for the single. Parity: the SAME sentence and status from the single move and the group move for not_assigned / with_bd / recruiter_target. `GET /submissions`: per-person per-job, normalised stage, foreign/deleted/deleted-job rows absent, no ids → `[]`, >200 → 400, role gate. Registration order: `bulk-stage` and `GET /submissions` above every `/submissions/:id…` (route-shadowing-smoke covers the scan; add the two routes to the pin).
+
+### Found, NOT fixed (open)
+- **Removing somebody from the Pipeline tab (✕, `DELETE /pipeline/:id`) removes only the sourcing row — their submission stays**, so they vanish from the tab and stay on the job page, board and counts. No screen deletes a submission at all. Since Session 31, not new. Recommendation: soft-delete both while the submission is still below "Submitted to BDM", refuse (409, "move them to Not Accepted instead") beyond it. Needs the owner's word — it decides what "remove" means after progress.
+- The stage move never stamps `submitted_at`/`submitted_by` when somebody reaches Submitted to BDM/Client, so the Reports 8-week trend dates by `created_at` for rows made by the helper. (R-002's counts are from history and unaffected.)
+- A pipeline row and its submission each carry rate/employer/availability/notice; editing one does not update the other (the two now START equal).
+- BD stage moves are not owner-gated (C-0036). ROADMAP/DECISIONS rows for R-075/R-077 are the orchestrator's.
+
+### Verification
+Scratch harness (session scratchpad, NOT in `test/`): the REAL routers through the REAL mounter and models/ over an in-memory PostgREST that enforces the partial unique indexes, defaults `org_id` like the live column, refuses malformed uuids like Postgres and PROJECTS rows to each route's select — membership **73/73**, group/single stage move **93/93**, **49/49 deliberate breaks caught** (first table run caught 32/37: three crashed instead of failing by name, one could not tell "planned" from "moved", one mutated a line a request-level check masks — all fixed; a later cross-tenant case showed the candidate check hiding the job-order check). Full `node test/run-all.mjs` before the memory work: **136/137** — the one failure `pipeline-tag-membership-smoke` (3/11) by design (hand-made core; fixed on a scratch copy to 11/11 with assertions untouched).
+
+### Open here — the legacy heal (SQL, NOT RUN; owner's go-ahead needed; deep applies it, C-0035)
+Verified on a throwaway **Postgres 16** built from the repo's real migrations (011–025): all 15 live-shape rows get a Sourced submission dated at `tagged_at`, owned by whoever tagged them, filed under their OWN org; a pair that already had a live submission is only linked; a soft-deleted pipeline row and a soft-deleted submission on the same pair are left alone/don't block; a NULL `tagged_by` works; another company's row keeps its company; SB counter advances by exactly the rows created; a second run changes nothing (table + counter fingerprints byte-identical); a duplicate code mid-run leaves nothing half-applied. Run PREVIEW, then FIX, then CHECK (the editor shows only the last result set). No `submission_activity` backfill on purpose: the 15 legacy `tagged` rows already read "Added to a job" in the team feed and a second line per person would double them.
+```sql
+-- PREVIEW (read-only). Expect 15 rows: all 'Tagged', submission_id empty.
+SELECT cp.pipeline_code, cp.candidate_id, cp.job_order_id, cp.pipeline_status, cp.tagged_at, cp.tagged_by, cp.org_id
+  FROM candidate_pipeline cp WHERE cp.deleted_at IS NULL AND cp.submission_id IS NULL ORDER BY cp.tagged_at, cp.id;
+
+-- FIX (one transaction; safe to re-run)
+BEGIN;
+UPDATE candidate_pipeline cp SET submission_id = s.id, pipeline_status = 'Sourced', updated_at = now()
+  FROM submissions s
+ WHERE cp.deleted_at IS NULL AND cp.submission_id IS NULL AND s.deleted_at IS NULL
+   AND s.candidate_id = cp.candidate_id AND s.job_order_id = cp.job_order_id AND s.org_id = cp.org_id;
+UPDATE submissions s SET pipeline_id = cp.id
+  FROM candidate_pipeline cp
+ WHERE cp.deleted_at IS NULL AND cp.submission_id = s.id AND s.deleted_at IS NULL AND s.pipeline_id IS NULL;
+DO $$
+DECLARE r RECORD; new_id uuid;
+BEGIN
+  FOR r IN SELECT cp.* FROM candidate_pipeline cp
+            WHERE cp.deleted_at IS NULL AND cp.submission_id IS NULL ORDER BY cp.tagged_at, cp.id
+  LOOP
+    INSERT INTO submissions (org_id, submission_code, candidate_id, job_order_id, recruiter_id, submitted_by,
+                             stage, stage_updated_at, created_at, revision_status,
+                             bill_rate, pay_rate, employer_name, availability, notice_period, notes, pipeline_id)
+    VALUES (r.org_id, next_id('SB'), r.candidate_id, r.job_order_id, r.tagged_by, r.tagged_by,
+            'Sourced', r.tagged_at, r.tagged_at, 'N/A',
+            r.bill_rate, r.pay_rate, r.employer_name, r.availability, r.notice_period, r.notes, r.id)
+    RETURNING id INTO new_id;
+    UPDATE candidate_pipeline SET submission_id = new_id, pipeline_status = 'Sourced', updated_at = now() WHERE id = r.id;
+  END LOOP;
+END $$;
+UPDATE candidate_pipeline SET pipeline_status = 'Sourced' WHERE deleted_at IS NULL AND pipeline_status <> 'Sourced';
+COMMIT;
+
+-- CHECK (on the live data expect 0, 0, 0, 0 and 15)
+SELECT (SELECT count(*) FROM candidate_pipeline WHERE deleted_at IS NULL AND submission_id IS NULL) AS still_unlinked,
+       (SELECT count(*) FROM candidate_pipeline WHERE deleted_at IS NULL AND pipeline_status <> 'Sourced') AS still_saying_a_retired_word,
+       (SELECT count(*) FROM candidate_pipeline cp JOIN submissions s ON s.id = cp.submission_id WHERE s.pipeline_id IS DISTINCT FROM cp.id) AS links_that_do_not_agree,
+       (SELECT count(*) FROM submissions WHERE stage = 'Sourced' AND submitted_at IS NOT NULL) AS wrongly_stamped_as_submitted,
+       (SELECT count(*) FROM submissions WHERE deleted_at IS NULL) AS people_now_on_a_job;
+```
+Once it has run: remove this block, drop the `promote` shim and the 410 route, and ask deep to drop `candidate_pipeline.pipeline_status`.
 
 ## Session 33 (2026-09-28) — a merged company takes its found contacts with it
 - **`services/company-merge.js` MERGE_TABLES gained `poc_suggestions`**
@@ -45,8 +130,9 @@
   `routes/recruiting/{job-orders,candidates,submissions,pipeline,lookups,
   sourcing,analytics,outreach}.js`. Shared helpers are built once in
   `services/recruiting-core.js` (+ `services/candidate-fields.js`).
-- **63 routes are pinned** by `test/recruiting-routes-mounted.mjs`, which boots
-  the real server.
+- **62 routes are pinned** by `test/recruiting-routes-mounted.mjs`, which boots
+  the real server (Session 34 added `GET /submissions` and `POST /submissions/bulk-stage`,
+  not pinned yet — C-0034).
 - **11 ATS stages** since Session 6: Sourced, Screening, Submitted to BDM,
   Submitted to Client, Interview Scheduled, Interview Completed, Offer, Joining,
   Placement, Not Accepted, On Hold. `Joining` was "Confirmation"; `Not Accepted`
@@ -665,5 +751,3 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 - 2026-09-26 (R-005, closes C-0003): **`/bd-analytics/recruiters` and `/bd-analytics/funnel` DELETED** from `routes/recruiting/analytics.js`. Nothing in `public/js` called either (C-0022 had org+chain-scoped them in Session 30, which made them safe but not useful). Reason to delete rather than keep: the recruiter table counted a submission by CURRENT stage — a third definition beside `services/submission-stages.js`, the exact drift D-0029 exists to stop — and `/reports/recruiting` already carries per-person productivity and the funnel with the same scoping. `test/recruiting-routes-mounted.mjs` now pins 62 live routes AND asserts both retired paths answer 404 (verified: restoring the handlers turns it 7/9). **Extend `/reports/recruiting`; do not bring a second analytics surface back.**
 
 - 2026-09-26 (R-048): `PATCH /admin/recruiting-lookups/:id` now answers a rename onto an existing word with the same friendly 409 as `POST` ("That value already exists in this list.") instead of a raw 500. Uniqueness is per company since migration 050 (deep). `test/lookups-per-org-smoke.mjs` (10) runs the real handlers against a table enforcing the 050 index; verified — the old PATCH fails it.
-
-> **IN PROGRESS — Session 34 (2026-09-29), written by the orchestrator while guild's run is live:** R-075 (one add-to-job path that lands a person at Sourced; the Pipeline tab's state becomes the submission's stage; legacy SQL for the 15 'Tagged' rows drafted, NOT run) and R-077 (`POST /submissions/bulk-stage`). Edits so far: `services/applicants.js`, `services/recruiting-core.js`, `services/submission-stages.js` (saved to the branch as WIP), and the routes (`pipeline`, `sourcing`, `submissions`, `analytics`, `candidates`, `bd_recruiter_routes.js`); resumed ~15:40 UTC after the second limit stop, still editing. Guild's own account replaces this line when the run reports.

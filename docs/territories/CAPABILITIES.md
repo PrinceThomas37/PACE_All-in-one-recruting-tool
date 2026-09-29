@@ -182,6 +182,13 @@ it. `GET /reminders` also returns `compose` (address, role, company, read from
 the reminder's own contact + job rows) — **do not resolve a reminder's
 recipient out of `STATE.contacts`**, which only holds the leads this user's
 `GET /jobs` returned.
+**One way to close, one way to email (R-071).** Closing a reminder is ONE step,
+`reminderClosed(id)` in `public/js/10-page-modals.js`, called from every
+server-confirmed close — Dismiss/Remove, the Email page's out-of-office card,
+Compose → Send, "Needs you today" Done — so no screen keeps a row another screen
+closed. Emailing from a reminder is ONE path, `composeReminderEmail()`; the
+Dashboard card has no Send of its own (it used to open web Gmail with a body
+signed "Fute Global LLC", around the engine — removed).
 
 ### Knowing whose work a record is
 **Status:** LIVE · owner `rampart` (the rule) · `services/ownership.js`
