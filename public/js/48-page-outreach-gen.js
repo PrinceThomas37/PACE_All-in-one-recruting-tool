@@ -97,6 +97,31 @@
   };
 
   // ── the recipient half of the composer ────────────────────────────────────
+  // THE ONE WAY ANY "Email" BUTTON OPENS THE COMPOSER ADDRESSED TO SOMEBODY
+  // (R-084, R-083). Owner: "there is no way [to carry] the information of the
+  // email ID as clicked … it's prevalent overall in the system, like in some
+  // place it's there, but mostly it's missing." The lead drawer's Email button
+  // set a legacy field this composer never reads, so it landed on an empty "Send
+  // to". Every entry point calls THIS, with what it knows about the person:
+  //   {id, name, email, title, company, location, job_id, job_title}
+  // It starts a fresh draft (a half-written email for somebody else must not
+  // follow the click), fills the same fields a picked contact fills, and opens
+  // Email → Compose → Clients. Nothing is sent and nothing is saved by opening it.
+  window.outreachComposeTo=function(c){
+    c=c||{};
+    var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sentOk=null;
+    g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={};
+    g.angleLoading={}; g.angleInfo={}; g.rewrites={}; g.recipResults=null;
+    var f=g.form, nm=String(c.name||'').trim();
+    f.to=c.email||''; f.contact_first_name=nm.split(/\s+/)[0]||''; f.contact_title=c.title||'';
+    f.company=c.company||''; f.location=c.location||''; f.job_title=c.job_title||'';
+    f.pickedContactId=c.id||null; f.pickedJobId=c.job_id||null;
+    g.recipMode='existing'; g.recipQuery=nm||c.email||'';
+    STATE.composeSide='clients'; STATE.composeContext=null; STATE.composeReminderId=null;
+    STATE.emailTab='compose'; STATE.page='email'; STATE.modal=null;
+    render();
+  };
+
   window.outreachRecipMode=function(m){
     var g=collectDom(); g.recipMode=m;
     if(m==='new'){ g.form.pickedContactId=null; g.form.pickedJobId=null; }
