@@ -3,7 +3,10 @@
 // ----------------------------------------------------------------------------
 // Mounted from index.js with a single line:
 //
-//     require('./bd_recruiter_routes')(app, { supabase, db, auth, hasRole, today });
+//     require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor });
+//
+// (No `db` is passed: services/recruiting-core.js builds the org-scoped models/
+// layer itself from `supabase`, so every route module gets `core.db` either way.)
 //
 // This file used to BE all ~65 recruiting routes plus every helper they share:
 // one 2,140-line closure. It is now just the mounter. The routes live in
