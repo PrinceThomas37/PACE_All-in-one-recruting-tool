@@ -195,9 +195,96 @@ function timeInStage(subs, { now = Date.now(), normalize = (s) => s, stuckDays =
   });
 }
 
+// ── WHERE EVERYONE STARTS, AND WHO MAY MOVE THEM (R-075 / R-077, D-0057) ─────
+// The owner: *"A candidate when added to job from the candidate section or
+// directly gets into Sourced stage. Tagged is for the database. Inside a job
+// the stage starts from Sourced."* So there is ONE entry stage, named here, and
+// every way of putting a person on a job starts them at it.
+const ENTRY_STAGE = LADDER[0];                 // 'Sourced'
+const NOT_ACCEPTED = OFF_LADDER[0];            // 'Not Accepted' — always carries its reason
+// The stage only a BD Manager may move somebody INTO (the client hand-off).
+const BDM_GATED_STAGE = LADDER[CLIENT_INDEX];  // 'Submitted to Client'
+const TO_BDM = LADDER[BDM_INDEX];              // 'Submitted to BDM'
+// Law 3, as data: a pure recruiter moves a candidate only WITHIN these stages —
+// up to and including "Submitted to BDM". BD owns everything after.
+const RECRUITER_STAGES = LADDER.slice(0, BDM_INDEX + 1);
+
+// LAW 3 IS A FUNCTION, NOT A PARAGRAPH. "Recruiters move a candidate only up to
+// Submitted to BDM; BD owns every later stage" used to be an inline if-chain in
+// one route handler, so the second door (a group move) would have had to copy
+// it — and a copied rule drifts. This is the one definition; the single move
+// and the group move both ask it, per row, and get the same answer and the same
+// words.
+//
+// The rules are an ORDERED LIST because precedence is behaviour: when two
+// apply, the user is told about the first. The order is the order the single
+// move has always checked them in. `level` says what a rule needs to know:
+//   'request' — only who is asking and where they want to move somebody, so a
+//               group move can refuse the WHOLE request up front instead of
+//               returning the same sentence two hundred times;
+//   'row'     — something about this particular submission.
+const MOVE_RULES = [
+  { id: 'role', level: 'request', status: 403,
+    test: c => !c.isBDM && !c.isRecruiter,
+    say: () => 'Not permitted.' },
+  { id: 'not_assigned', level: 'row', status: 403,
+    test: c => c.recruiterScoped && !c.assigned,
+    say: () => 'Not assigned to this job order.' },
+  { id: 'recruiter_target', level: 'request', status: 403,
+    test: c => c.recruiterScoped && !RECRUITER_STAGES.includes(c.to),
+    say: () => 'Recruiters can move candidates up to "Submitted to BDM" — the BD team owns the stages after that.' },
+  { id: 'with_bd', level: 'row', status: 403,
+    test: c => c.recruiterScoped && !RECRUITER_STAGES.includes(c.from),
+    say: () => 'This candidate is with the BD team now — only a BD Manager can change this stage.' },
+  { id: 'details', level: 'request', status: 400,
+    test: c => c.recruiterScoped && c.to === TO_BDM && !(c.details && String(c.details.comment || '').trim()),
+    // A group move carries no per-person details, and the hand-off form is one
+    // person at a time (the stage modal says the same), so the sentence differs.
+    say: c => c.bulk
+      ? 'Submit candidates to the BD Manager one at a time — each needs its own submission details.'
+      : 'Submission details with a comment are required to submit to the BD Manager.' },
+  // (The old fifth rule — "only a BD Manager can move somebody INTO Submitted
+  // to Client" — is now carried by the two above it: a recruiter is refused by
+  // `recruiter_target`, and anyone who is neither recruiter nor BD by `role`.
+  // Keeping it as a separate rule would have left one that can never fire, and
+  // a rule no test can make fail is decoration.)
+  { id: 'reason', level: 'request', status: 400,
+    test: c => c.to === NOT_ACCEPTED && !String(c.reason || '').trim(),
+    say: () => 'Please add the reason.' },
+  // Group move only: somebody already there is not "moved", and writing a
+  // Screening → Screening row into their history (and firing an event) for each
+  // of them would bury the real changes. The single move has never refused this.
+  { id: 'no_change', level: 'row', status: 409,
+    test: c => !!c.bulk && c.from === c.to && (c.fromSubStage || null) === (c.subStage || null),
+    say: c => 'Already at "' + c.to + '".' },
+];
+
+function judge(ctx, levels) {
+  const c = Object.assign({}, ctx);
+  c.recruiterScoped = !!c.isRecruiter && !c.isBDM;
+  for (const r of MOVE_RULES) {
+    if (levels && !levels.includes(r.level)) continue;
+    if (r.test(c)) return { rule: r.id, status: r.status, message: r.say(c) };
+  }
+  return null;
+}
+
+/**
+ * May this person make this move on this submission? null = yes.
+ * ctx: { isBDM, isRecruiter, assigned, from, to, fromSubStage, subStage,
+ *        reason, details, bulk } — `from`/`to` already normalised, `assigned`
+ * whether the submission's job order is one a recruiter is assigned to.
+ */
+function moveRefusal(ctx) { return judge(ctx, null); }
+
+/** Only the rules that do not depend on the row — for refusing a whole group move. */
+function requestRefusal(ctx) { return judge(ctx, ['request']); }
+
 module.exports = {
   LADDER, OFF_LADDER, STUCK_DAYS, FINAL_STAGES,
+  ENTRY_STAGE, RECRUITER_STAGES, BDM_GATED_STAGE, NOT_ACCEPTED,
   isSentToBdm, isSentToClient, isInPipelineOnly,
   countSubmissions, rank,
   furthestReached, countSubmissionsEver, timeInStage,
+  moveRefusal, requestRefusal,
 };
