@@ -378,7 +378,13 @@
         (open?intelBody(m,inbound):'')+
       '</div>';
     }).join('')||'<div class="dt-empty">No emails with this client yet.</div>';
-    return summaryBlock+
+    // R-085: our own replies are read live from the caller's mailbox; when that
+    // could not be done, say so instead of presenting half a conversation as whole.
+    var ss=i.sent_side, sideNote='';
+    if(ss&&!ss.ok) sideNote='<div style="font-size:12px;color:var(--ink3);margin:0 0 8px">'+(ss.reason==='no_mailbox'
+      ?'Connect your mailbox so PACE can read the emails you sent — replies you write there are not in this list.'
+      :'PACE could not read your sent mail just now, so replies you wrote yourself may be missing here and from the summary. Try again in a minute.')+'</div>';
+    return sideNote+summaryBlock+
       '<div style="font-weight:600;font-size:13.5px;margin:4px 0 6px">Every email with '+esc(c.name||'this client')+
         ' <span style="font-weight:400;color:var(--ink3);font-size:12px">'+(i.total_messages||0)+' in total, newest first</span></div>'+
       rows;
