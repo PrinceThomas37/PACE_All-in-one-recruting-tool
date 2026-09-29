@@ -222,9 +222,10 @@ module.exports = function (app, core) {
     }
     if (!plan.length) return { moved: [], refused, rows: [] };
 
-    // 2. ONE UPDATE for every accepted row — the change is identical for all of
+    // 2. ONE PATCH for every accepted row — the change is identical for all of
     //    them (stage, sub-stage, interview details, reason), so it is written
-    //    once. A new stage resets the sub-stage unless one is supplied.
+    //    once (per hundred rows). A new stage resets the sub-stage unless one
+    //    is supplied.
     const now = new Date();
     const updates = { stage: to, stage_updated_at: now, sub_stage: b.sub_stage || null };
     if (b.interview_at !== undefined) updates.interview_at = b.interview_at || null;
@@ -243,20 +244,35 @@ module.exports = function (app, core) {
       action = 'bdm_approved';
     }
 
-    const { data: done, error } = await scoped.from('submissions')
-      .update(updates).in('id', plan.map(s => s.id)).is('deleted_at', null).select(o.select || 'id');
-    if (error) {
-      if (o.single) throw error;
-      // Nothing was written: say so for every row rather than 500 the request.
-      plan.forEach(s => refused.push({ id: s.id, reason: 'The change could not be saved, so nothing was moved. Please try again.', status: 500, rule: 'write_failed' }));
-      return { moved: [], refused, rows: [] };
+    // (A hundred ids at a time: a long `.in()` is a long URL, and 200 of them on
+    // an UPDATE is ~8KB. A chunk that fails is refused as a chunk — it never
+    // takes the other chunks with it.)
+    const doneRows = [], writeFailed = [];
+    const planIds = plan.map(s => s.id);
+    for (let i = 0; i < planIds.length; i += 100) {
+      const chunk = planIds.slice(i, i + 100);
+      const { data: done, error } = await scoped.from('submissions')
+        .update(updates).in('id', chunk).is('deleted_at', null).select(o.select || 'id');
+      if (error) {
+        // The single move has always answered a failed write with a 500.
+        if (o.single) throw error;
+        writeFailed.push(...chunk);
+        continue;
+      }
+      doneRows.push(...(done || []));
     }
-    const doneRows = done || [];
+    // Rows whose write failed: say so, row by row, rather than 500 the request.
+    // They were not written, so they get no history and no reminder either.
+    const failedSet = new Set(writeFailed);
+    plan.filter(s => failedSet.has(s.id)).forEach(s => refused.push({
+      id: s.id, reason: 'The change could not be saved, so nothing was moved. Please try again.', status: 500, rule: 'write_failed',
+    }));
     const doneIds = new Set(doneRows.map(r => r.id));
     const moved = plan.filter(s => doneIds.has(s.id));
     // Read back fewer rows than we meant to write: somebody removed them in
-    // between. Say so — never count them as moved.
-    plan.filter(s => !doneIds.has(s.id)).forEach(s => refused.push({
+    // between. Say so — never count them as moved. (Not the rows whose write
+    // FAILED — those already have their own sentence above.)
+    plan.filter(s => !doneIds.has(s.id) && !failedSet.has(s.id)).forEach(s => refused.push({
       id: s.id, reason: 'This candidate was removed from the job before the move could be saved.', status: 409, rule: 'vanished',
     }));
 
