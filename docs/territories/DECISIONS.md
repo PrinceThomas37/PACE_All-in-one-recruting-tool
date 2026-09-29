@@ -47,6 +47,17 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0059 · 2026-09-29 · STANDS · D-0056 means the "Your team" card
+**Their words:** *"Yes, the Your team block is the one"* — answering which Dashboard block D-0056 removes.
+
+**Chosen:** the Dashboard's **"Your team"** card goes — the list of people who
+report to you, with "Open team view →" (both its forms: the roster, and "No one
+reports to you yet"). Nothing else on the Dashboard moves: the Reports section
+at its foot, "Your team's pipeline", "Your team's conversations" and "Needs you
+today" all stay. The team view lives on the My Team page (`R-072`).
+
+**Re-open when:** the owner wants a small team summary back on the Dashboard.
+
 ### D-0058 · 2026-09-29 · STANDS · PACE gets windows: minimise, maximise and close — for compose and for other windows too
 **Their words** (answering the read-back of their handwritten notes): *"Screenshot for apollo usage I wil give you later. Leave anytime can be. You have enough context for that. Yes, it's minimize and maximise windows in PACE. For compose and also for other windows too."*
 
