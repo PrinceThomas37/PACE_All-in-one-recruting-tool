@@ -1,74 +1,34 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md`. That is enough to start work.**
-> History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
-> reasoning behind a past decision.
+> **Read this file, then `CLAUDE.md` (now ~19 KB — the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
+> History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-09-29 22:57 UTC (end of Session 34 — handed to a fresh chat to save tokens) · **Repo**:
-`PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render,
-auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28, R-069).
-**Highest ids:** decision D-0060 · contract C-0036 · next roadmap id `R-089`.
+**Updated**: 2026-09-30 (end of Session 35 round 1) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28, R-069).
+**Highest ids:** decision D-0061 · contract C-0036 · next roadmap id `R-089` · next migration `055`.
 
-## ⏸ SESSION 35 STARTS HERE — the owner's rules for this round
+## ⏸ SESSION 35 — the lot is BUILT on branch `ccr-bed70da8-ctoaet`, draft PR #262 (NOT merged, NOT live)
 
-1. **D-0060: no helper agent is started or resumed without the owner's say-so, in their own words.**
-   Session 34's one message fanned out into ~10 agent runs (320k–670k tokens each, up to three at
-   once, some killed by the usage limit and re-run cold) and used two of the owner's usage limits.
-   Before any agent: say what it is for and roughly what it costs, and wait for a yes.
-2. **Spend tokens like they are the owner's money — they are.** Read only what the next step needs:
-   this file, the ROADMAP rows of the lot below, DECISIONS D-0056–D-0060, and the ONE territory memory
-   (and contract) for the files being touched. Run targeted suites while working; ONE full run
-   (`node test/run-all.mjs`, read the count) before merge, plus Node 26 per CLAUDE.md.
-3. **R-088 is the owner's call, open:** cheaper ways of working — (1) small, clear fixes done directly
-   without an agent; (2) trim `CLAUDE.md` (~140 KB, read by every message and every agent) down to the
-   rules, moving the history to the archive; (3) agents on lower effort with targeted tests. Ask which
-   they want before any big job.
+**The owner's rules, standing:** D-0060 — no helper agent is started or resumed without their say-so in their own words (this whole round used none). Read only what the next step needs. R-088 is DONE (D-0061): small fixes directly, `CLAUDE.md` trimmed, agents on low effort.
 
-## The lot in flight — branch `ccr-bed70da8-ctoaet`, draft PR #262 (NOT for merge yet)
-
-The owner's handwritten notes of 29 Sep, morning (R-071–R-079) and evening (R-083–R-087), one batch.
-The ROADMAP row is the detail; this is the state.
-
-| id | Ask | State |
+| id | What | State |
 |---|---|---|
-| R-071 | A finished reminder leaves the Dashboard | **Done on the branch** (surface + observatory + ledger) |
-| R-072 | "Your team" card off the Dashboard (D-0056/D-0059) | **Done on the branch** |
-| R-076 | Apply links dead since 22 Sep (a select named `job_orders.owner_id`) | **Done on the branch** — after release: open the link, send one test application |
-| R-075 | Inside a job everyone starts at Sourced (D-0057) | **Backend done** (guild). Screens half built (C-0032). 15 legacy rows wait on the owner (C-0035) |
-| R-077 | Change many candidates' stage at once | **Backend done** (`POST /submissions/bulk-stage`, `GET /submissions?candidate_ids=`). Screens half built |
-| R-078 / R-079 | Minimise / maximise / close windows (D-0058) | **Not started** — three runs died or were stopped before changing anything |
-| R-073 | "Needs you today" rows that do the task | Not started — after the windows; dispatch's map is in the row |
-| R-074 | Where the Apollo credits went | Waiting on the owner's screenshot; PACE's side counted (39 on 28 Sep) |
-| R-083 | Email a POC just added to a lead | Noted, not started |
-| R-084 | Email buttons forget who was clicked — "mostly missing" across PACE | Noted, not started (overlaps R-073's lead-drawer find) |
-| R-085 | The AI summary misses our own replies | Noted, not started |
-| R-086 | Interview confirmation email to the candidate (phone too, with job details) | Noted, not started |
-| R-087 | Choose the From address on every email | Noted, not started |
+| R-071/072/076 | reminder leaves Dashboard · "Your team" card off · apply links (Session 34) | on the branch; after release open an apply link and send one test application |
+| R-075 + R-077 | Sourced inside a job; change many stages at once — screens (C-0032) | **done**; the 15 legacy rows **healed on the live DB 2026-09-30** (C-0035 (a)) |
+| R-078/R-079 | minimise / full screen / close windows, tray, records park | **done** (`10a-window-dock.js`) |
+| R-073 | Needs-you-today rows do the task | **done** |
+| R-083/R-084 | Write button on every contact; Email opens addressed | **done** (`outreachComposeTo`) |
+| R-085 | AI summary reads our replies (live Sent folder) | **done** — needs a real mailbox to see; sandbox proves it only against a fake |
+| R-086/R-087 | interview confirmation (Gmail bug, default ticked, job details) · From picker everywhere | **done** |
+| R-074 | Apollo credits | **answered** (ROADMAP row): the big batches are not PACE; PACE = 1 credit per lookup; suggestion left with the owner |
 
-**Waiting on the owner:** R-088 (how to work cheaper) · the 15 legacy "Tagged" rows (C-0035 — SQL written
-and verified on a throwaway Postgres, **NOT run**; text in `guild.md` Session 34) · R-082 (what "remove from
-a job" means once someone has moved along) · R-080 · R-081 · R-074's screenshot.
+**Tests:** `node test/run-all.mjs` — 145/146 before the last fix; the one red (`scope-outreach-pickers-smoke`, a test ctx missing the new mailbox rule) is fixed and passes 35/35; **one clean full run + Node 26 (CLAUDE.md) still owed before any merge.** New suites, each verified by deliberate breaks: `stage-group-move-smoke` 29, `window-dock-smoke` 26, `email-carries-person-smoke` 11, `needs-you-today-does-smoke` 16, `sent-side-smoke` 20, `from-mailbox-smoke` 17, `from-picker-smoke` 12. `npm install` first (`node_modules` is not in git).
 
-**Half-done work, and where it is:**
-- `public/js/33-stage-modal.js` (WIP `08955fd`): the group stage move — `openStageModal(idOrIds, …)`,
-  `stgApplyGroup` over bulk-stage, per-person results, legacy rows without a submission. It stopped at
-  "the Teams button guard, the note wording for a group, and the footer". Still to do for C-0032: the job
-  page / Pipeline tab / Candidates page ("which job?") wiring, no "Tagged" inside a job, the
-  `/already tagged/i` regexes, the import messages. Contract: `_contracts.md` C-0032; API: `guild.md` Session 34.
-- Tests (WIP `08955fd`, foundry): `test/helpers/fake-postgrest.mjs` + `test/helpers/schema-from-migrations.mjs`
-  (+ their smokes), `pipeline-tag-membership-smoke` rebuilt on the real core (not re-run yet), three
-  tree-scanning suites now skip `.claude/`. Still to do: the "what foundry should pin" lists in `surface.md`,
-  `gateway.md` (R-076), `guild.md` (C-0034) and `observatory.md` — each item names its deliberate break.
-- **Session 34's scratch proofs** (dispatch, observatory, gateway, guild and surface harnesses, with their
-  breaks and the legacy SQL checks) are in `docs/handoff/session-34-harnesses.tar.gz`. Extract to a scratch
-  directory — never into `test/` — and delete the tarball once they have become tests.
-- Last full suite: **136/137** on Node 22; the red one is `pipeline-tag-membership-smoke` (being rebuilt).
-  `npm install` first — `node_modules` is not in git.
-- Border follow-ups open: C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`),
-  C-0036 (rampart — BD stage moves are not owner-gated; review bulk-stage and `GET /submissions` scoping).
+**Waiting on the owner (all in ROADMAP, plain-English rows):** R-080 (switch a contact back from out-of-office on the return date) · R-081 (a "what last went wrong" line on Admin for the apply page and the resume reader) · R-082 (what "remove from a job" means once someone has moved along) · the Apollo suggestion under R-074 (state the credit cost before the click; count company sizing against the daily limit — today's limit is 100) · **when to merge #262** (it is big: nothing in it is live).
 
-**Suggested order once the owner says go:** finish C-0032 (the screens) → foundry pins this round →
-the windows (R-078/R-079) → R-073 + R-084 (they share the compose window) → R-083, R-086, R-087, R-085.
+**Known limits, said plainly:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; candidate-row `mailto:` links still open the computer's mail program; a window that repaints itself while parked must call `Dock.updateParked` (surface.md).
+**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done by the new suites), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves are not owner-gated; review `bulk-stage` and `GET /submissions` scoping).
+
+**Suggested next, once the owner says go:** a real-browser look at the new windows/From picker on a phone (screenshots for the owner) → Node 26 run → merge #262 on their word → then the R-080/R-081/R-082 answers. Session 34's scratch proofs are still in `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 

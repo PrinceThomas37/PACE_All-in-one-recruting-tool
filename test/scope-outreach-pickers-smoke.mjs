@@ -104,6 +104,9 @@ const ctx = {
   getMailboxSignature: async () => '', loadSuppressedSet: async () => new Set(),
   recruiterSendingMailbox: async (id) => ({ id: 'mb_' + id, email_address: id + '@acme.com', display_name: id, platform: 'Microsoft' }),
   sendMailboxNewMessage: async () => ({}), logActivity: async () => {},
+  // R-087: the shared "which of my mailboxes sends" rule the router is handed. The default (no id) is the assigned mailbox.
+  sendingMailboxFor: async (req, id) => id ? null : ({ id: 'mb_' + req.user.id, email_address: req.user.id + '@acme.com', display_name: req.user.id, platform: 'Microsoft' }),
+  ownSendingMailboxes: async () => [],
   wfEngine: { enroll: async (o) => { enrolled.push(o); return { id: 'en' + enrolled.length, next_step_due_date: null }; } },
 };
 const app = express(); app.use(express.json()); app.use(require(ROUTER)(ctx));
