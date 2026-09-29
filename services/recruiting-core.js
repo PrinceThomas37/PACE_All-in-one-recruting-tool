@@ -173,6 +173,30 @@ module.exports = function createRecruitingCore(deps) {
     } catch (e) { console.error('[submission_activity] history write failed:', e && e.message); }
   }
 
+  // Read rows for a list of ids, a hundred at a time (a long `.in()` is a long
+  // URL). ONE MALFORMED ID MAKES THE DATABASE REFUSE THE WHOLE CHUNK, and the
+  // caller would then read a hundred good ids as "not found" — a failure that
+  // looks exactly like a normal answer. So when a chunk is refused it is asked
+  // again one id at a time and whatever answers is kept; only the bad id is lost.
+  // `run(chunk)` builds the query and returns it (awaitable → {data, error}).
+  async function readByIds(ids, run, size) {
+    const list = [...new Set((ids || []).filter(Boolean))];
+    const step = size || 100;
+    const out = [];
+    for (let i = 0; i < list.length; i += step) {
+      const chunk = list.slice(i, i + step);
+      const { data, error } = await run(chunk);
+      if (!error) { out.push(...(data || [])); continue; }
+      for (const id of chunk) {
+        try {
+          const r = await run([id]);
+          if (!r.error) out.push(...(r.data || []));
+        } catch (_) { /* that id is unreadable — it is reported as not found */ }
+      }
+    }
+    return out;
+  }
+
   // recruiter scoping: which job_order ids is this recruiter assigned to?
   async function assignedJobOrderIds(userId) {
     const { data } = await supabase.from('recruiter_assignments')
@@ -446,7 +470,7 @@ module.exports = function createRecruitingCore(deps) {
     // roles + scoping
     isBDM, isRecruiter, assignedJobOrderIds, recruiterCanTouchJob, reportingChainIds,
     // shared writes
-    nextId, logSubmissionActivity, logSubmissionActivities,
+    nextId, logSubmissionActivity, logSubmissionActivities, readByIds,
     // putting somebody on a job (R-075) — the ONE writer, and how to load what it takes
     loadJobOrderFor, loadCandidateFor, addCandidateToJob, pipelineView,
     findMemberSubmission, findMemberPipeline,
