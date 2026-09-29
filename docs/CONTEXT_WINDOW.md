@@ -4,75 +4,30 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-28 (Session 33, in progress — R-069) · **Repo**:
+**Updated**: 2026-09-28 (Session 33 CLOSED — the next chat starts here) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
 to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28 19:54 UTC — R-069: Gmail follow-up fallback, interrupted-send recovery at boot, a truthful Pending tab), after #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
 **#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
 (only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
 
-### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
-- **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
-  place like Leads — one shared `rowReveal` in `03-core-render.js`. Details in
-  `surface.md` (Session 33). `row-reveal-smoke` 45/45 (5/45 on old code); full
-  suite **127/127**. Deploy is Render's; unverifiable from this sandbox.
-- **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
-  owner answered (D-0049: Apollo with API — they will connect it; runs
-  automatically AND on a button; a guess is NEVER emailed; size picked on the
-  lead), and slices 1 AND 2 are LIVE (#253 merged 2026-09-28 on "okay publish
-  it")** — slice 1: the four slots on the lead row, the rules
-  (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
-  **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
-  one lookup per person (a credit, never retried) in
-  `services/people-apollo.js`; found people wait in `poc_suggestions`
-  (**migration 052, applied + re-verified live**) until Accept / Not this
-  person; Accept goes through `services/lead-contacts.js` (the ONE add-contact
-  path, `POST /contacts` uses it too); daily ceiling = System Settings
-  `poc_apollo_daily_credits` (20). **The owner saved an Apollo key 2026-09-28
-  10:57 UTC; no search pressed yet** (read `apollo_last_call` /
-  `apollo_last_error` in app_settings to see what Apollo last said).
-  **Then D-0050 (LIVE, #257 merged 2026-09-28):** "Search contact"
-  in every empty slot, "Search contacts" at the top, company size from Apollo
-  by website + name (migration 053 applied), Apollo ONLY on a click; and the
-  Leads search × fixed. Next slices: the posting/website readers (free), then
-  the automatic run for new leads (free rungs only, D-0050).
-  **Owner, 2026-09-28: "the POC finder is working fine"** — then asked whether
-  it can find HR by responsibility rather than title, and "how is it relevant
-  for us?". Measured on the live leads: HR titles are traditional (1 of 54 HR
-  contacts is "People & Culture"); the real gap is law/accounting/architecture
-  firms (16 of 82 leads) → **R-063 re-scoped, owner's call.**
-  **"Already added" pop-up LIVE (R-064, D-0051, #258 merged 2026-09-28 on
-  "publish and merge it"):** one duplicate check in `services/lead-contacts.js`
-  (email anywhere = refused; name on this lead/company = asked) +
-  `showAlreadyAdded` on Add contact, Add by hand and Accept. `npm test` 135/135.
-  **Owner's answers (2026-09-28): R-063 YES (D-0052, to build), R-065 NO
-  (D-0053, dropped), and R-066 (D-0054): an admin sets ONE daily Apollo credit
-  number for everyone, visibly (today: System Settings only, default 20), plus
-  "how much of our credit system is Apollo's" — 1 PACE credit = 1 Apollo credit.
-  Then (owner, 2026-09-28): **no access to their organisation's Apollo account**
-  (183.3k credits left, a test account) and **every customer company brings its
-  own keys** (D-0055 → R-067: TODAY ALL KEYS ARE DEPLOYMENT-WIDE — fix before a
-  second customer). **LIVE (#259, merged by the owner 2026-09-28):** R-063 (firm-aware finder),
-  R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
-  Uncover; migration 054 applied). `npm test` 136/136.**
-- **R-069 — why emails sat in Pending / never sent after Retry (owner,
-  2026-09-28). LIVE (#260 merged 2026-09-28 on "merge it").** Live queue, 22 rows: 14 Gmail follow-ups
-  replying into threads that live in ANOTHER mailbox (the leads' mailbox was
-  switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
-  'sending' (process died mid-send, on no screen); 7 correctly held by the
-  2-a-day company limit but shown as "ready now". Fixed in harbour's
-  `services/gmail-delivery.js` (fresh email + quote, ONLY on a definite 404),
-  `services/interrupted-sends.js` (boot: 'sending' → Didn't send, "may have
-  gone out") and `pending-summary` (four buckets + "Held · goes tomorrow").
-  `send-recovery-smoke` 58; 15/15 deliberate breaks caught; 137/137. **R-070 asked:**
-  should a follow-up come from the mailbox that STARTED the conversation?
-- **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
-  it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
-  now judges each element's OWN text (it skipped any element with a child) and
-  measures the panel under an opened row (its scope named a class that never
-  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
-  was hiding. Open: the suite still renders screens without data — see
-  `foundry.md`.
+### Session 33 (2026-09-27 → 28) — CLOSED. Everything below is LIVE (main `eae789f`).
+- **R-012** (#252): Jobs / Candidates / Clients rows open in place like Leads (`rowReveal`).
+- **R-053 POC finder** (#253, #257): four slots per lead (`services/poc-targets.js`), Apollo
+  people search free + one lookup per person = 1 credit, never retried
+  (`services/people-apollo.js`); found people wait in `poc_suggestions` for Accept / Not this
+  person; company size from Apollo; Apollo ONLY on a click (D-0050).
+- **R-064** (#258, D-0051): one duplicate check in the add-a-person path
+  (`services/lead-contacts.js`) + the "Already added" pop-up.
+- **R-063 / R-066 / R-068** (#259, merged by the OWNER on GitHub): finder knows law /
+  accounting / architecture firms; the Apollo daily credit limit on its card (1 PACE credit =
+  1 Apollo credit, max 10,000); title search + Uncover (migration 054).
+- **R-069** (#260): a Gmail follow-up whose thread lives in ANOTHER mailbox goes out fresh with
+  the first email quoted (`services/gmail-delivery.js`, only on a definite 404); a row stuck at
+  'sending' moves at boot to Didn't send as "may have gone out" (`services/interrupted-sends.js`);
+  Pending says why each email waits. Verified live: 7 of 8 follow-ups sent via the new path.
+- Decisions D-0048 … D-0055 — read `DECISIONS.md`. **D-0055: the owner does NOT share their
+  organisation's Apollo account — never call the Apollo connector.**
 
 ---
 
@@ -176,22 +131,22 @@ and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
 
-1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
-   1–2 live (#253); the D-0050 round (Search contact per slot, size from
-   Apollo, the Leads ×) is LIVE too (#257). **Watch the first real Apollo
-   search with the owner** — read `apollo_last_call` / `apollo_last_error`. **R-057** (matching candidates in emails)
-   and **R-054** (a playbook per industry) are still deferred — design first.
-2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
-   Anthropic key has no credit (harmless — Groq answers); the apply link on
-   "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
-3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
-   (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
-   scanned, 38 deleted, 24 kept — every kept file referenced).
-4. **#260 is live (2026-09-28):** the follow-ups that gave up (6 by the merge) need one Retry (Email → Didn't
-   send) unless their last automatic try fell after the release; the stuck
-   Lamons follow-up shows as "may have gone out" — check Spencer's Sent first.
-   (The "held counted as ready now" gap is closed by R-069.) R-070 is the
-   owner's call.
+1. **Open draft PR #261** (docs only, branch `claude/resume-previous-session-7npy0y`): the
+   session-33 memory. Let the next work ride on it, or merge it when the owner says so.
+2. **Finish verifying R-069 (read-only SQL, no re-queueing without the owner's say-so):**
+   the skaeng.com follow-up (`438936f6…`, EST lead, 4th try) should have gone 2026-09-29 via the
+   new path; the 7 first emails held by the company limit (`ca6e198e`, `201ec72c`, `676f774c`,
+   `a8c74d7b`, `d97cd608`, `88b78245`, `d0797893`) should have gone 09-29. Still the OWNER's to
+   Retry: 6 given-up follow-ups (`4e975312`, `6c8e8b61`, `73ba0003`, `9ecdeaf0`, `cb67e3c4`,
+   `fdf61e53`) and the uncertain Lamons one (`f51c7f63` — check Spencer's Sent first).
+3. **Owner decisions pending:** R-070 (should a follow-up come from the mailbox that STARTED
+   the conversation?) and R-067 (each company's own API keys + daily limits — today every key
+   is deployment-wide; must be fixed before a second customer).
+4. Deferred, design first: R-057 (matching candidates in emails), R-054 (a playbook per
+   industry); POC finder next slices (posting/website readers, automatic run for new leads —
+   free rungs only, D-0050). Mine, open: R-049 operator role, R-003, C-0030.
+5. Small, noted in `harbour.md`: a row sent after earlier failures keeps a stale
+   `fail_kind`/`fail_reason`; the Outlook→Gmail thread-id edge (0 of 411 today).
 
 ## 🧪 TESTS: 137 SUITES
 
@@ -212,6 +167,8 @@ screenshot of a green suite — take the screenshot.
 
 ## Owner actions outstanding
 
+- Email → Didn't send: Retry the 6 follow-ups that gave up (3 orbiss.us, peakengr.com,
+  gouldconstruction.com, wightco.com); for the Lamons one check Spencer Brown's Sent first.
 - Reconnect kristy.scott@fute-global.com and princethomasfute@gmail.com.
 - Share the apply link; paste job postings on leads (R-056).
 - Optional: drop the two empty backup tables (say the word). Google sign-in
