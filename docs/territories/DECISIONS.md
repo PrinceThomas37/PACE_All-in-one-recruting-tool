@@ -47,6 +47,27 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0060 · 2026-09-29 · STANDS · No helper agent runs without the owner's say-so
+**Their words:** *"Do not continue those agents before my saying. I think those agents are eating a lot of token. By now I have exhausted 2 session token on a single message that I gave you this morning."*
+
+**Chosen:** no territory agent is started or resumed until the owner says so, in
+their own words. That includes the three runs they stopped at ~17:10 UTC
+(foundry, surface on C-0032, the windows job), whose partial work is saved in WIP
+commit `08955fd`. The territories still OWN their paths (D-0008 stands for who
+owns what); what changes is WHEN work runs — on the owner's go-ahead, not mine.
+While work is paused, nothing wakes the session on a timer (no hourly PR
+check-ins; PR #262's activity subscription is off).
+
+**Why:** this morning's one message (the nine handwritten asks) fanned out into
+about ten agent runs — several at once, some cut off by the usage limit and run
+again. Each run first reads CLAUDE.md (~140 KB) plus its own memory (up to
+90 KB) and then runs the full suite; measured runs used ~320k–670k tokens each.
+The owner's plan limit was reached twice.
+
+**Re-open when:** the owner says to resume, or picks a cheaper way of working
+(`R-088`).
+
+
 ### D-0059 · 2026-09-29 · STANDS · D-0056 means the "Your team" card
 **Their words:** *"Yes, the Your team block is the one"* — answering which Dashboard block D-0056 removes.
 

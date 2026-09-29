@@ -1,5 +1,7 @@
 # PACE — where things stand *right now*
 
+> **⚠ 2026-09-29 22:51 UTC — WORK IS PAUSED BY THE OWNER (D-0060).** No agent is started or resumed until the owner says so. Stopped mid-run: foundry, surface on C-0032, the windows job (partial work in WIP commit `08955fd`, not for merge). New asks R-083–R-087 are noted, not started. Waiting on the owner: R-088 (cheaper ways to work), R-082, the 15 Tagged rows (C-0035), R-080, R-081. PR #262: activity subscription and hourly check-ins are off while paused.
+
 > **Read this file, then `CLAUDE.md`. That is enough to start work.**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
