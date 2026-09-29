@@ -181,7 +181,7 @@ import { join } from 'node:path';
 const root = new URL('..', import.meta.url).pathname;
 const walk = (dir, out = []) => {
   for (const f of readdirSync(dir)) {
-    if (f === 'node_modules' || f === '.git' || f === 'test') continue;
+    if (f === 'node_modules' || f === '.git' || f === '.claude' || f === 'test') continue;   // .claude = agents' worktrees, not product code
     const full = join(dir, f);
     if (statSync(full).isDirectory()) walk(full, out);
     else if (f.endsWith('.js')) out.push(full);

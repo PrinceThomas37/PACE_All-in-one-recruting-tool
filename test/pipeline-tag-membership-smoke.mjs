@@ -52,25 +52,25 @@ function q(table) {
   }
   return api;
 }
-const supabase = { from: q };
+// `rpc` answers the SB-/PL- code counter (`next_id`) that the real core calls.
+const supabase = { from: q, rpc: async (_n, a) => ({ data: a.p_prefix + '-' + (++seq), error: null }) };
 
 // ── mount the real router on a fake app ────────────────────────────────────
 const handlers = {};
 const app = new Proxy({}, { get: (_, m) => (path, ...fns) => { handlers[m.toUpperCase() + ' ' + path] = fns[fns.length - 1]; } });
 const ORG = 'org-a';
-require('../routes/recruiting/pipeline.js')(app, {
-  supabase, auth: (_r, _s, n) => n(), hasRole: () => false,
-  orgIdFor: (req) => req.orgId, orgStamp: (req) => ({ org_id: req.orgId }),
-  withOrg: (query, req) => query.eq('org_id', req.orgId),
-  isBDM: () => true, isRecruiter: () => false, recruiterCanTouchJob: async () => true,
-  nextId: async (p) => p + '-' + (++seq),
-  logSubmissionActivity: async (...a) => { tables.submission_activity.push(a); },
-  SUBMISSION_SELECT: '*', STAGES: [], normalizeStage: (x) => x,
-});
+// The router is handed the REAL core, exactly as bd_recruiter_routes.js does.
+// This used to pass a hand-made object, so every member the core grew afterwards
+// (loadJobOrderFor, addCandidateToJob, readByIds ...) was missing here and the
+// suite failed 3/11 with "loadJobOrderFor is not a function". A fake that has to
+// be hand-extended is a fake that goes stale (Session 34, C-0034).
+const hasRole = (req, ...roles) => roles.some(r => (req.user.roles || []).includes(r));
+const core = require('../services/recruiting-core.js')({ supabase, auth: (_r, _s, n) => n(), hasRole, today: () => '2026-09-29', orgIdFor: (req) => req.orgId });
+require('../routes/recruiting/pipeline.js')(app, core);
 async function call(key, body) {
   let status = 200, out = null;
   const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
-  await handlers[key]({ body, user: { id: 'u1' }, orgId: ORG, params: {} }, res);
+  await handlers[key]({ body, user: { id: 'u1', role: 'bd', roles: ['bd'] }, orgId: ORG, params: {} }, res);
   return { status, body: out };
 }
 

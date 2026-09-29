@@ -33,7 +33,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SKIP_DIRS = new Set(['node_modules', '.git', 'public', 'test', 'migrations', 'docs']);
+// .claude/ holds agents' git worktrees — whole second checkouts, often mid-edit.
+// Scanning one would judge somebody else's work-in-progress as this tree's routes.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.claude', 'public', 'test', 'migrations', 'docs']);
 
 const results = [];
 const step = (name, ok, detail = '') => {
