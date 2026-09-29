@@ -29,9 +29,10 @@ function reminderWhy(r){
   // a row rendered before that response lands, and it never invents a source.
   if(r.source&&r.source.why)return r.source;
   var t=r.reminder_type||'manual';
-  // PACE never reads an auto-reply to set this: somebody marks a contact out of
-  // office (the email-status control), and that is what creates the reminder.
-  if(t==='ooo_return')return{label:'Back from leave',why:'Someone marked them out of office until this date, so PACE held the follow-up until they were back.'};
+  // The reader is always the person who marked the contact out of office (that
+  // control creates this reminder for them). This is a copy of the sentence in
+  // services/reminder-source.js and must match it character for character.
+  if(t==='ooo_return')return{label:'Back from leave',why:'You marked them out of office until this date, which created this reminder. PACE sends them no automatic follow-ups until their status is set back to Valid.'};
   if(t==='bd_touch'||t==='reminder')return{label:'Sequence step',why:'An outreach sequence reached a step that asks you to do something.'};
   if(t==='recruiter_task')return{label:'Sequence task',why:'A candidate sequence reached a recruiter task.'};
   if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};
@@ -65,6 +66,10 @@ window.reminderClosed=function(rid){
   // out now — the server has already said yes, so waiting on a re-read to show
   // it would be a lie about a fact we hold — then re-read to reconcile.
   var na=STATE.nextActions;
+  // Never loaded (undefined): there is no copy on screen to correct, and the
+  // Dashboard reads it fresh the first time it draws. Reading it here would also
+  // hand a "view as" preview the VIEWER's own queue (see renderDashboard).
+  if(na===undefined){render();return;}
   if(na&&na.items){
     var kept=na.items.filter(function(it){return it.reminder_id!==rid;});
     if(kept.length!==na.items.length){

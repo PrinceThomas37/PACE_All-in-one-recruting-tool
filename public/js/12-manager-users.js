@@ -894,12 +894,9 @@ window.submitUserDetailSave=function(existingId){
   }).catch(function(e){showToast('Failed: '+e.message,'error');});
 };
 
-window.dismissReminder=function(rid){
-  apiFetch('PATCH','/reminders/'+rid,{status:'sent'}).then(function(){
-    STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent'}):r;});
-    render();
-  }).catch(function(e){showToast('Failed: '+e.message,'error');});
-};
+// dismissReminder is defined in 10-page-modals.js, beside the buttons that call
+// it. It used to live here TWICE — a server-backed copy and, 55 lines below, a
+// browser-only one that silently replaced it (R-071). Do not define it here.
 
 window.viewAs=function(uid){
   var target=STATE.users.find(function(u){return u.id===uid});
@@ -948,25 +945,10 @@ window.editReminder=function(rid){
   STATE.modal=renderSetReminderModal(r.lid||null,r.lid?null:r.email);
   render();
 }
-window.dismissReminder=function(rid){
-  STATE.reminders=STATE.reminders.filter(function(r){return r.id!==rid});
-  showToast("Reminder removed","info");render();
-}
-window.sendReminderEmail=function(rid){
-  var r=STATE.reminders.find(function(x){return x.id===rid});
-  if(!r)return;
-  var subj="Following up, hope you're back!";
-  var body="Hi "+((r.contact_name||r.name||"").split(" ")[0]||"there")+",\n\nHope you had a great break! I wanted to follow up on my earlier message.\n\nWould you have 15 minutes for a quick call this week?\n\nWarm regards,\n"+STATE.user.name+"\nFute Global LLC";
-  var plt=STATE.user.plt||"Gmail";
-  window.open(plt==="Gmail"
-    ?"https://mail.google.com/mail/?view=cm&to="+encodeURIComponent(r.email)+"&su="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body)
-    :"https://outlook.live.com/mail/0/deeplink/compose?to="+encodeURIComponent(r.email)+"&subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body),"_blank");
-  STATE.reminders=STATE.reminders.map(function(x){return x.id===rid?Object.assign({},x,{status:"sent"}):x;});
-  showToast("Follow-up email opened","success");render();
-}
-window.sendAllDue=function(){
-  var today=todayIST();
-  var due=STATE.reminders.filter(function(r){return r.user_id===STATE.user.id&&r.status==="pending"&&r.return_date<=today});
-  due.forEach(function(r){sendReminderEmail(r.id);});
-}
+// Removed (R-071): a second dismissReminder (browser-only), sendReminderEmail
+// and sendAllDue. The last two opened web Gmail/Outlook with a canned body
+// signed "Fute Global LLC" — one customer's name in every org's mail — around
+// the send engine, the merge-field check and the double-send rule, and marked
+// the reminder done in the browser only. A reminder is emailed through
+// composeReminderEmail() (03-core-render.js) and closed by the server.
 

@@ -57,27 +57,46 @@ function renderMorningBriefingCard(){
 // Ranking and thread-reading live server-side (next-action.js /
 // conversation-intel.js) so the browser only renders.
 function loadNextActions(force){
-  if(STATE._naLoading)return;
+  if(STATE._naLoading){
+    // A forced read arrived while one is already in flight — a reminder was
+    // just closed, say. That read may have been answered BEFORE the close, so
+    // ignoring this request would put the closed row back on screen. Read again
+    // once it lands (R-071); the flag is one bit, so a burst costs one re-read.
+    if(force)STATE._naAgain=true;
+    return;
+  }
   if(STATE.nextActions&&!force)return;
   STATE._naLoading=true;
   apiGet('/next-actions').then(function(r){
-    STATE.nextActions=r||{items:[]};
     STATE._naLoading=false;
+    if(STATE._naAgain){STATE._naAgain=false;loadNextActions(true);return;}
+    STATE.nextActions=r||{items:[]};
     scheduleRender();
   }).catch(function(){
+    STATE._naLoading=false;
+    if(STATE._naAgain){STATE._naAgain=false;loadNextActions(true);return;}
     // Never let this blank a dashboard — it is an assistive card, not the page.
     STATE.nextActions={_error:true,items:[]};
-    STATE._naLoading=false;
     scheduleRender();
   });
 }
-window.refreshNextActions=function(){STATE.nextActions=null;loadNextActions(true);render();};
+// `quiet` re-reads WITHOUT blanking the card first. The Refresh button and
+// "try again" want the "Working out…" state; a reminder that has just been
+// closed does not — the row is already gone and the card should not flicker.
+window.refreshNextActions=function(quiet){
+  if(quiet!==true)STATE.nextActions=null;
+  loadNextActions(true);
+  render();
+};
 
 window.naDone=function(reminderId,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   apiPost('/next-actions/'+encodeURIComponent(reminderId)+'/done',{}).then(function(){
     showToast('Marked done','success');
-    STATE.nextActions=null;loadNextActions(true);
+    // Same step as every other close (dismissReminder, Compose → Send). This
+    // used to re-read only THIS list, so the Reminders card on the same screen
+    // kept "Due now · Send" for the row you had just finished (R-071).
+    reminderClosed(reminderId);
   }).catch(function(e){showToast('Could not update: '+(e&&e.message||e),'error');});
 };
 
@@ -113,12 +132,20 @@ window.naOpen=function(kind,entityType,entityId,jobId){
   goPage('leads');
 };
 
+// Every kind next-action.js can emit has a label HERE. `stage_suggested` (a
+// candidate's reply that reads as interest — "worth moving them forward?") had
+// none, so it fell through to `nudge` and drew "No reply yet" over a candidate
+// who HAD replied, and the count chips left it out entirely (Session 34).
 var NA_KIND={
-  reply_due:      {lbl:'Reply due',    bg:'#fee2e2', fg:'#b91c1c'},
-  commitment_due: {lbl:'They promised',bg:'#fef3c7', fg:'#92400e'},
-  reminder_due:   {lbl:'Reminder',     bg:'#e0e7ff', fg:'#3730a3'},
-  nudge:          {lbl:'No reply yet', bg:'#f1f5f9', fg:'#475569'}
+  reply_due:       {lbl:'Reply due',           bg:'#fee2e2', fg:'#b91c1c'},
+  commitment_due:  {lbl:'They promised',       bg:'#fef3c7', fg:'#92400e'},
+  reminder_due:    {lbl:'Reminder',            bg:'#e0e7ff', fg:'#3730a3'},
+  nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569'},
+  stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534'}
 };
+// A kind this file does not know says so neutrally. The old fallback was `nudge`,
+// which asserts something specific and false about every kind added later.
+var NA_KIND_UNKNOWN={lbl:'Needs a look',bg:'#f1f5f9',fg:'#475569'};
 
 function renderNextActionsCard(){
   var s=STATE.nextActions;
@@ -146,16 +173,28 @@ function renderNextActionsCard(){
   }
   var items=s.items||[];
   if(!items.length){
-    return '<div class="card cp mb4" style="display:flex;align-items:center;gap:10px">'+
-      '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-      '<div style="font-size:13.5px;font-weight:600">Nothing waiting on you.</div>'+
-      '<div style="font-size:12px;color:var(--text3)">No unanswered replies or due reminders.</div>'+
+    // An EMPTY list still draws the two lines beneath it (C-0031, R-071).
+    // /next-actions is now each person's OWN work — admin included — and what
+    // sits beneath them arrives only as the `team` count behind "Review". This
+    // branch used to return before either line, so an admin who owns nothing on
+    // the list (the owner) saw "Nothing waiting on you." with no count and no
+    // way into the review: the BD Lead's open reminders vanished from their
+    // Dashboard. The same hole hid a manager's team count whenever their own
+    // list happened to be empty.
+    return '<div class="card mb4" style="padding:0;overflow:hidden">'+
+      '<div class="cp" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+        '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
+        '<div style="font-size:13.5px;font-weight:600">Nothing waiting on you.</div>'+
+        '<div style="font-size:12px;color:var(--text3)">No unanswered replies or due reminders.</div>'+
+      '</div>'+
+      naTeamLine(s)+
+      naHiddenLine(s)+
     '</div>';
   }
 
   var show=STATE.naExpanded?items:items.slice(0,5);
   var rows=show.map(function(it){
-    var k=NA_KIND[it.kind]||NA_KIND.nudge;
+    var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
     // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
     // Only reminders used to have a Done button, so reply_due, commitment_due,
     // nudge and stage_suggested could not be dismissed AT ALL — which is how a
@@ -213,6 +252,7 @@ function renderNextActionsCard(){
           chip(bk.commitment_due,'promised','#92400e')+
           chip(bk.reminder_due,'reminders','#3730a3')+
           chip(bk.nudge,'to chase','#475569')+
+          chip(bk.stage_suggested,'interested','#166534')+
         '</div>'+
       '</div>'+
       '<button onclick="refreshNextActions()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">Refresh</button>'+

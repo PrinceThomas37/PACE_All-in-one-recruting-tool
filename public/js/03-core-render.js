@@ -717,9 +717,13 @@ window.sendReminderViaEngine=function(){
   apiPost('/emails/reminder-send',{reminder_id:STATE.composeReminderId,contact_id:contactId,job_id:jobId,to_email:to,subject:subject,body:body}).then(function(){
     showToast('Reminder queued — the engine will send it shortly','success');
     var rid=STATE.composeReminderId;
-    if(rid)STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent'}):r;});
     STATE.composeContext=null;STATE.composeReminderId=null;STATE.composeSubj='';STATE.composeBody='';STATE.composeContactId=null;STATE.composeCompanyId=null;STATE.composeReminderTo=null;STATE.genEmail=null;
-    STATE.page='reminders';render();
+    STATE.page='reminders';
+    // The server closed the reminder in the same request. This used to flip its
+    // status in STATE.reminders and stop there, so "Needs you today" kept the
+    // row until the session ended (R-071) — one step now, shared by every close.
+    if(rid)reminderClosed(rid);
+    render();
   }).catch(function(e){showToast('Send failed: '+(e&&e.message||e),'error');});
 };
 

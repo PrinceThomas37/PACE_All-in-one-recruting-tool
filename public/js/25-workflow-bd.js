@@ -63,6 +63,25 @@
   function code(t){return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>';}
   function badge(st){var c={Active:"var(--green)","On Hold":"var(--amber)",Filled:"var(--accent)",Closed:"var(--text3)"}[st]||"var(--text3)";return '<span style="font-size:11px;font-weight:700;color:'+c+';background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">'+esc(st)+'</span>';}
 
+  // ── IS THE APPLY PAGE REALLY OPEN? (R-076) ─────────────────────────────────
+  // "Live" and "Anyone with this link can apply" were said from `apply_enabled`
+  // alone. The public page ALSO needs the job to be Active/Open (loadJob() in
+  // routes/apply.js), so a job put On Hold kept saying "Live · Copy link" over a
+  // link that answers "This role is no longer open". Decided HERE, once, and
+  // read by the Jobs row panel, the job page and the publish toast — never
+  // re-derived at a call site. It is a CHECKED COPY of that server rule: a job
+  // with no status at all counts as open, exactly as the server treats it.
+  //   on   — the link is switched on            live — a visitor would get the page
+  //   held — switched on, page shut (the job's status is why)
+  function applyPageState(j){
+    var on=!!(j&&j.apply_enabled);
+    var status=String((j&&j.status)||'').trim();
+    var open=!status||/^(active|open)$/i.test(status);
+    return{on:on,live:on&&open,held:on&&!open,status:status,
+      note:'The link is switched on, but the page stays closed while this job is '+status+'. It opens again when the job is Active.'};
+  }
+  window.bdApplyPageState=applyPageState;
+
   // ── API loaders ────────────────────────────────────────────────────────────
   function loadJobOrders(){
     STATE.bd.loading=true;render();
@@ -384,11 +403,15 @@
     var canOwn=j.poc_visible!==false;
     var recs=(j.recruiters||[]).map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).filter(Boolean);
     var applyN=j.apply_count||0;
+    var ap=applyPageState(j);
     // Publishing and copying are the owner's (D-0035) — nobody else is shown
-    // a button the server would refuse.
-    var apply=j.apply_enabled
-      ? '<b>Live</b> · '+applyN+' applicant'+(applyN===1?'':'s')+
-        (canOwn?' <button class="lx-link" onclick="event.stopPropagation();bdCopyApplyLink(\''+j.id+'\')">Copy link</button>':'')
+    // a button the server would refuse. "Live" only when a visitor would really
+    // get the page (applyPageState); a switched-on link on a job that is On Hold
+    // says so plainly instead.
+    var apply=ap.on
+      ? '<b>'+(ap.live?'Live':'Switched on, page closed')+'</b> · '+applyN+' applicant'+(applyN===1?'':'s')+
+        (canOwn?' <button class="lx-link" onclick="event.stopPropagation();bdCopyApplyLink(\''+j.id+'\')">Copy link</button>':'')+
+        (ap.held?'<div class="lx-note">'+esc(ap.note)+'</div>':'')
       : '<span class="lx-muted">Not published</span>'+
         (canOwn?' <button class="lx-link" onclick="event.stopPropagation();bdSetApplyLink(\''+j.id+'\',true)">Publish</button>':'');
     return '<div class="lx lx-job">'+
@@ -1079,12 +1102,15 @@
     // link's live/off state and the applicant count when it is on; they just
     // get no controls to change it.
     var canOwn=j.poc_visible!==false;
-    var applyOn=!!j.apply_enabled, applyTok=j.apply_token||'', applyN=j.apply_count||0;
+    var ap=applyPageState(j);
+    var applyOn=ap.on, applyTok=j.apply_token||'', applyN=j.apply_count||0;
     var applyUrl=applyTok?(location.origin+'/apply/'+applyTok):'';
     var applyBlock='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
         '<div style="font-weight:600;font-size:13px">Apply link'+
-          (applyOn?' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· live</span>':'')+
+          // "live" only when the public page would really open (R-076).
+          (ap.live?' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· live</span>':'')+
+          (ap.held?' <span style="font-size:11px;color:var(--amber);font-weight:600">· switched on, page closed</span>':'')+
           (applyN?' <span style="font-size:11px;color:var(--text3);font-weight:500">· '+applyN+' applicant'+(applyN===1?'':'s')+'</span>':'')+
         '</div>'+
         (canOwn?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
@@ -1095,8 +1121,10 @@
         '</div>':'')+
       '</div>'+
       (applyOn
-        ? (canOwn?'<input id="bd-apply-url" readonly value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>':'')
+        ? (canOwn?'<input id="bd-apply-url" readonly'+(ap.held?' data-held="1"':'')+' value="'+esc(applyUrl)+'" onclick="this.select()" style="width:100%;box-sizing:border-box;font-size:12px;padding:7px 9px;border:1px solid var(--ctl-brd,var(--border));border-radius:7px;background:var(--card-solid,var(--card));color:var(--text)">'+
+          (ap.held
+            ? '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">'+esc(ap.note)+' The address stays the same.</div>'
+            : '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">Anyone with this link can apply. Their resume is parsed and they land in Sourcing for review — nothing is added to the candidate database until you import them. The client\'s name is never shown on the page.</div>'):'')
         : (canOwn?'<div style="font-size:12.5px;color:var(--text3)">Publish a page anyone can apply on, then post the link wherever you like — a job board, LinkedIn, WhatsApp, your website. Applicants arrive already parsed and scored, in the Sourcing review queue.</div>':''))+
     '</div>';
 
@@ -1386,7 +1414,12 @@
         STATE.bd.jobOrders[idx].apply_token=r.token||null;
         if(r.applicants!=null)STATE.bd.jobOrders[idx].apply_count=r.applicants;
       }
-      showToast(on?'Apply page is live — copy the link and post it anywhere':'Apply page turned off','success');
+      // "is live" only when the public page would open (R-076): switching the
+      // link on for a job that is On Hold does not make the page reachable.
+      var apNow=idx>-1?applyPageState(STATE.bd.jobOrders[idx]):null;
+      if(!on) showToast('Apply page turned off','success');
+      else if(apNow&&apNow.held) showToast('Apply link switched on — the page stays closed until this job is Active again','warning');
+      else showToast('Apply page is live — copy the link and post it anywhere','success');
       render();
       // The Jobs list does not show the apply state, so the render above
       // wrote nothing there — an open row panel is rebuilt explicitly.
@@ -1400,20 +1433,24 @@
     if(jid){
       var url=j&&j.apply_enabled&&j.apply_token?(location.origin+'/apply/'+j.apply_token):'';
       if(!url){showToast('No link yet','error');return;}
+      // A copy of a link whose page is shut says so — it is the one moment the
+      // recruiter is about to paste it somewhere (R-076).
+      var copied=applyPageState(j).held?'Link copied — it opens once this job is Active again':'Link copied';
       if(navigator.clipboard&&navigator.clipboard.writeText){
-        navigator.clipboard.writeText(url).then(function(){showToast('Link copied','success');},
+        navigator.clipboard.writeText(url).then(function(){showToast(copied,'success');},
           function(){showToast('Copy this link: '+url,'info');});
       } else showToast('Copy this link: '+url,'info');
       return;
     }
     var el=document.getElementById('bd-apply-url');
     if(!el||!el.value){showToast('No link yet','error');return;}
+    var copiedHere=el.getAttribute('data-held')?'Link copied — it opens once this job is Active again':'Link copied';
     try{
       el.select();
       if(navigator.clipboard&&navigator.clipboard.writeText){
-        navigator.clipboard.writeText(el.value).then(function(){showToast('Link copied','success');},
+        navigator.clipboard.writeText(el.value).then(function(){showToast(copiedHere,'success');},
           function(){showToast('Press Ctrl/Cmd+C to copy','info');});
-      } else { document.execCommand('copy'); showToast('Link copied','success'); }
+      } else { document.execCommand('copy'); showToast(copiedHere,'success'); }
     }catch(e){showToast('Press Ctrl/Cmd+C to copy','info');}
   };
 
