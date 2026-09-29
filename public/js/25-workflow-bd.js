@@ -1226,7 +1226,14 @@
           nextStages.map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
         '</select>';
       } else {
-        stageHtml='<span style="font-size:11px;font-weight:700;color:var(--text3)">Tagged</span>';
+        // Inside a job everybody starts at Sourced (D-0057) — "Tagged" is not a
+        // step. This row is somebody added before a stage was recorded for each
+        // person; moving them adds the missing half first (stageMoveUnlinked).
+        stageHtml='<span style="font-size:11px;font-weight:700;color:'+(STAGE_COLORS.Sourced||'var(--text3)')+'">Sourced</span>';
+        moveHtml='<select class="sel" style="font-size:11px;padding:3px 6px;max-width:120px" onchange="bdMoveTagged(\''+jid+'\',\''+r.cid+'\',this.value)">'+
+          '<option value="">Move…</option>'+
+          BD_STAGES.filter(function(x){return x!=='Sourced';}).map(function(x){return '<option value="'+x+'">'+x+'</option>';}).join("")+
+        '</select>';
       }
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
         '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleCandSel(\''+r.cid+'\')" style="cursor:pointer">'+
@@ -1244,6 +1251,7 @@
         '<div style="font-weight:600;font-size:14px">Candidates on this job ('+roster.length+')</div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
           (roster.length?'<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleCandSelAll(\''+jid+'\')" style="cursor:pointer"> All</label>':'')+
+          (picked.length&&window.stageGroupSelect?stageGroupSelect(picked.length,'bdMoveGroup(\''+jid+'\',this.value);this.value=\'\''):'')+
           '<button class="btn btn-sm btn-outline" onclick="atsOpenBulkUpload({jobId:\''+jid+'\',jobTitle:'+esc(JSON.stringify((joById(jid)||{}).job_title||''))+'})">Upload resumes</button>'+
           '<button class="btn btn-sm btn-primary"'+(picked.length?'':dis)+' onclick="bdEmailSelected(\''+jid+'\')">✉ Email about this job'+(picked.length?' ('+picked.length+')':'')+'</button>'+
           '<button class="btn btn-sm btn-outline"'+(pickedSubs?'':dis)+' onclick="bdStartSequence(\''+jid+'\')">▶ Start sequence'+(pickedSubs?' ('+pickedSubs+')':'')+'</button>'+
@@ -1252,6 +1260,36 @@
       (picked.length?'':'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Tick candidates, then email them about this job (you see every email before it goes) or start a sequence.</div>')+
     '</div>';
   }
+  // Change the stage of everybody ticked on this job — one window, one request
+  // (POST /submissions/bulk-stage), an answer per person. A ticked person with no
+  // stage yet is said plainly in that window, never skipped silently.
+  function reloadJobRoster(jid){
+    return loadSubmissions(jid).then(function(subs){ STATE.bd.submissions=subs; })
+      .then(function(){ return loadJobPipeline(jid); }).catch(function(){});
+  }
+  window.bdMoveGroup=function(jid,stage){
+    if(!stage)return;
+    var j=joById(jid)||{};
+    stageOpenGroup({ jobId:jid, jobTitle:j.job_title||'', stage:stage,
+      rowsNow:function(){
+        var s=STATE.bd.candSel||{};
+        return jobRoster(jid).filter(function(r){return s[r.cid];}).map(function(r){
+          return { cid:r.cid, name:(r.cand&&r.cand.full_name)||'',
+            sub:r.kind==='sub'?{id:r.sub.id,stage:r.sub.stage,sub_stage:r.sub.sub_stage||null}:null };
+        });
+      },
+      reload:function(){ return reloadJobRoster(jid); },
+      onDone:function(){ reloadJobRoster(jid).then(function(){ render(); }); }
+    });
+  };
+  window.bdMoveTagged=function(jid,cid,stage){
+    if(!stage)return;
+    var j=joById(jid)||{};
+    var row=jobRoster(jid).filter(function(r){return r.cid===cid;})[0]||{};
+    stageMoveUnlinked({ cid:cid, name:(row.cand&&row.cand.full_name)||'', jobId:jid, jobTitle:j.job_title||'', stage:stage,
+      reload:function(){ return reloadJobRoster(jid); },
+      onDone:function(){ reloadJobRoster(jid).then(function(){ render(); }); } });
+  };
   window.bdToggleCandSel=function(cid){ var s=STATE.bd.candSel||(STATE.bd.candSel={}); if(s[cid])delete s[cid]; else s[cid]=true; render(); };
   window.bdToggleCandSelAll=function(jid){
     var roster=jobRoster(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
@@ -1373,7 +1411,7 @@
   // The tag rows too, so a candidate tagged before tagging wrote a submission
   // is still on the job's page. Not waited for — it only ever adds rows.
   function loadJobPipeline(joId){
-    apiGet('/job-orders/'+joId+'/pipeline').then(function(rows){
+    return apiGet('/job-orders/'+joId+'/pipeline').then(function(rows){
       STATE.bd.jobPipeline=rows||[]; scheduleRender();
     }).catch(function(){ STATE.bd.jobPipeline=[]; });
   }

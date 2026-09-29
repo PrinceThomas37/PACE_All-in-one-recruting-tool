@@ -213,8 +213,11 @@
   function importPayload(extra){ var s=STATE.sourcing; return Object.assign({ force:s.force, job_order_id:s.tagJob||undefined }, extra||{}); }
 
   window.srcImportOne = function(id){
-    apiPost('/sourcing/staged/'+id+'/import', importPayload()).then(function(){
-      showToast('Imported to database','success'); delete STATE.sourcing.sel[id]; loadStaged();
+    apiPost('/sourcing/staged/'+id+'/import', importPayload()).then(function(r){
+      // Saved as a candidate either way; adding to the job is a second write that can fail alone.
+      if (r && r.job_link_failed) showToast('Imported to the database, but not added to the job: '+r.job_link_failed,'error');
+      else showToast('Imported to database','success');
+      delete STATE.sourcing.sel[id]; loadStaged();
     }).catch(function(e){
       if (/possible_duplicate/i.test(e.message)){
         if (confirm('This looks like a duplicate of an existing candidate. Import as a new candidate anyway?')){
@@ -227,7 +230,8 @@
     var ids = Object.keys(STATE.sourcing.sel).filter(function(k){ return STATE.sourcing.sel[k]; });
     if (!ids.length) return;
     apiPost('/sourcing/import-selected', importPayload({ ids:ids })).then(function(r){
-      showToast('Imported '+r.imported+(r.skipped?' · '+r.skipped+' skipped (duplicates)':''),'success');
+      showToast('Imported '+r.imported+(r.skipped?' · '+r.skipped+' skipped (duplicates)':'')+
+        (r.not_added_to_job?' · '+r.not_added_to_job+' saved but not added to the job':''), r.not_added_to_job?'error':'success');
       STATE.sourcing.sel={}; loadStaged();
     }).catch(function(e){ showToast('Failed: '+e.message,'error'); });
   };
