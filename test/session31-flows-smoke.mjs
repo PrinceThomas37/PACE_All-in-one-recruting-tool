@@ -233,8 +233,9 @@ try{
   // ── 5. JOB PAGE: everyone on the job, and "Email about this job" ─────────
   await page.evaluate((job)=>{ STATE.bd.jobOrders=[job]; bdOpenJobOrder('jo1'); }, JOB);
   await page.waitForTimeout(700);
-  const roster = await page.evaluate(()=>{ const t=document.getElementById('content').innerText; return { head:(t.match(/Candidates on this job \((\d+)\)/)||[])[1], tagged:(t.match(/Tagged/g)||[]).length }; });
-  step('the job page lists the submission AND the two tagged-only candidates', roster.head==='3' && roster.tagged===2, JSON.stringify(roster));
+  const roster = await page.evaluate(()=>{ const t=document.getElementById('content').innerText; return { head:(t.match(/Candidates on this job \((\d+)\)/)||[])[1], tagged:(t.match(/Tagged/g)||[]).length, sourced:(t.match(/Sourced/g)||[]).length }; });
+  // D-0057: inside a job everybody starts at Sourced — the two people added before a stage was recorded read Sourced, never Tagged.
+  step('the job page lists the submission AND the two added-only candidates, none of them called Tagged', roster.head==='3' && roster.tagged===0 && roster.sourced>=2, JSON.stringify(roster));
   await page.evaluate(()=>{ bdToggleCandSel('c0'); bdToggleCandSel('c1'); });
   await page.waitForTimeout(150);
   await shot('08-job-candidates');
