@@ -1183,3 +1183,5 @@ invent a rule; if you want owner/chain/admin it is one row rule in `services/sub
 details, org-scoped, fail-closed on no ids) and `POST /submissions/bulk-stage` (org-scoped, ≤200). (3) Deliberate
 tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage.
 **Blocked until answered:** no.
+
+**C-0035 (a) — CLOSED 2026-09-29 (Session 35):** applied on the live database with the owner's yes. Preview 15 rows; after the FIX: 0 unlinked, 0 retired-word, 0 disagreeing links; submissions 52 → 67. (b) remains OPEN.
