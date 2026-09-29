@@ -6232,3 +6232,18 @@ Owner: *"Check why some emails are in pending and a couple of them are not getti
 **Fixed (PR #260, not live):** `services/gmail-delivery.js` — on a DEFINITE not-found only (404 status, or Google's words; `gmail-provider` errors now carry `.status`), a Gmail follow-up goes out fresh with the first email quoted and "Re:" removed, via one `freshFollowup()` shared with Outlook; a timeout is rethrown, never followed by a second copy. `services/interrupted-sends.js` — at boot, rows left at 'sending' become failed / uncertain ("may or may not have gone out — check Sent before retrying"), written only if still 'sending'. `GET /emails/pending-summary` — four buckets in the send loop's order (waiting to retry → held by the company limit → window), `held_ids` for the row chip (never to an RA Lead), and the Pending tab + banner say it in words ("Held · goes tomorrow").
 - Tests: new `send-recovery-smoke` 58 (real modules, the real Gmail adapter against a fake Google, the real emails router over two orgs, a real browser). 15 deliberate breaks, 15 caught; `npm test` 137/137 — after the test itself was fixed twice (a throwing mutant crashed the suite instead of failing a check; a destructuring default does not apply to `null`).
 - **Not done, deliberately:** nothing was re-queued. After the release the 14 follow-ups need one Retry (unless their last automatic try falls after it), and the stuck one appears under Didn't send for someone to check Spencer's Sent folder first. Offered **R-070**: send a follow-up from the mailbox that started the conversation — the owner's call.
+
+
+# Session 34 — the owner's handwritten notes (2026-09-29)
+
+### Round 1 — "Can you read all these 3 pages?"
+The owner sent three photographed pages of handwritten notes. All legible except one phrase (page 2: "any time can be used"?) and one missing word (page 3: "close, minimize or ___ it"). Nine asks, each now a row:
+- **R-071** a finished reminder stays on the Dashboard (not reproduced yet).
+- **R-072** the team view off the Dashboard — **D-0056**; which block is being confirmed ("Your team" card vs the Reports section, which My Team also shows).
+- **R-073** "Needs you today" rows that do the task (e.g. email once an out-of-office ends) — today a row only opens, completes or snoozes (`naOpen`/`naDone`/`naSnooze`).
+- **R-074** where the Apollo credits went — the screenshot the note refers to did not arrive; D-0055 rules out reading the Apollo account, so the comparison is the screenshot against PACE's own meter and uncovered people.
+- **R-075** inside a job everyone starts at Sourced, "Tagged" is a database word — **D-0057**; the job page still shows "Tagged" for pipeline-only rows and `28-page-pipeline.js`'s status list starts at it.
+- **R-076** an apply link switched off and on stays dead — not reproduced; the POST reuses the token and sets `apply_enabled`, so the fault is elsewhere; the public page also requires the job's status to be Open/Active (a lead, unconfirmed).
+- **R-077** change the stage of several candidates at once (leads have it, candidates do not).
+- **R-078** a minimise button on the compose window; **R-079** PACE as a desktop of windows that can be parked and reopened (proposed: a bottom tray, compose first).
+Read back to the owner in plain English; nothing built. Also corrected: `R-069` still read "not live" in `ROADMAP.md` though #260 merged on 2026-09-28 (`eae789f`) and the artifact already said so — the file was behind the artifact; now DONE.

@@ -47,6 +47,34 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0057 · 2026-09-29 · STANDS · Inside a job everyone starts at Sourced; "Tagged" belongs to the candidate database, not to a job
+**Their words** (handwritten notes, photographed and sent 2026-09-29): *"A candidate when added to job from the candidate section or directly gets into Sourced stage. Tagged is for the database. Inside a job the stage starts from Sourced. Tagged is like when added the candidate to the database or added. any time can be used"* — the last four words are my best reading of the handwriting, not certain.
+
+**Chosen:**
+- Adding a person to a job — from the Candidates page or on the job itself —
+  puts them at **Sourced**, the first of the eleven stages (the D-0029 ladder is
+  unchanged).
+- **"Tagged" is not a step inside a job.** It describes a person being in the
+  candidate database.
+- Today the job page still labels some people "Tagged" (pipeline-only rows,
+  `25-workflow-bd.js`), and the pipeline's own status list
+  (`28-page-pipeline.js`) begins with "Tagged". `R-075` carries the change.
+  The reading was sent back to the owner on 2026-09-29.
+
+**Re-open when:** the owner wants a step before Sourced inside a job (a
+"considering" or shortlist state), or the reading above turns out to be wrong.
+
+### D-0056 · 2026-09-29 · STANDS · The team view comes off the Dashboard; My Team is its own page
+**Their words** (handwritten notes, photographed and sent 2026-09-29): *"My team view (the big column view) in dashboard is not required. Remove that, My Team has a tab for itself"*
+
+**Chosen:** the Dashboard stops drawing the team view; it lives on the My Team
+page only (`R-072`). **Which block** is being confirmed with the owner: my
+reading is the "Your team" card (the people reporting to you, with "Open team
+view →"), not the Reports section at the foot of the Dashboard (R-006), which
+My Team also shows.
+
+**Re-open when:** the owner wants a small team summary back on the Dashboard.
+
 ### D-0055 · 2026-09-28 · STANDS · Claude never uses the owner's organisation's Apollo account; every customer company brings its own API keys
 **Their words** (asked whether Claude may read their Apollo account's credit balance): *"No I cannot give you the access, its my organization's. there are 183.3k credits left. Now this is just for text [test] … i am testing it within my company. When i see this, i use that particular company's apollo API key to pull out details or any other API keys in the system. All are changeable. Because this is a SAAS product."* — and in the same message: *"I need the people from other job also in this employee search. Maybe a search bar to search for title or similar title and that will search in the employee list from apollo and show us, and we can click on to see and select which contact we want to uncover."*
 

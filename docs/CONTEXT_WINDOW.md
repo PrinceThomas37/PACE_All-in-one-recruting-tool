@@ -4,12 +4,19 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-28 (Session 33, in progress — R-069) · **Repo**:
+**Updated**: 2026-09-29 (Session 34 — the owner's handwritten notes, R-071–R-079) · **Repo**:
 `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
 `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
+to `main` IS the release · **Last merged**: #260 (`eae789f`, squash-merged 2026-09-28 19:54 UTC — R-069), after #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
+**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0057 is the highest decision id. C-0030 is the highest contract id
+(only C-0030 OPEN). Next roadmap id `R-080` (R-060 is open PR #254's, another chat).**
+
+### Session 34 (2026-09-29) — the owner's handwritten notes
+- Nine asks from three photographed pages → **R-071–R-079** (ROADMAP +
+  artifact), **D-0056** (team view off the Dashboard) and **D-0057** (inside a
+  job everyone starts at Sourced; "Tagged" is a database word). Read back to
+  the owner; **nothing built yet** — waiting on their confirmation of the
+  reading, and on the Apollo screenshot the notes mention (it did not arrive).
 
 ### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
 - **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
@@ -56,7 +63,7 @@ to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNE
   R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
   Uncover; migration 054 applied). `npm test` 136/136.**
 - **R-069 — why emails sat in Pending / never sent after Retry (owner,
-  2026-09-28). PR #260, NOT live.** Live queue, 22 rows: 14 Gmail follow-ups
+  2026-09-28). PR #260, merged 2026-09-28 (`eae789f`).** Live queue, 22 rows: 14 Gmail follow-ups
   replying into threads that live in ANOTHER mailbox (the leads' mailbox was
   switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
   'sending' (process died mid-send, on no screen); 7 correctly held by the
