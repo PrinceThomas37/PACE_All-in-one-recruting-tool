@@ -440,6 +440,7 @@
       acts:   acts,
       stats:  stats,
       onclose:'cpClose()',
+      onmin:  "Dock.parkDrawer('candidate')",
       onprev: sib.prev ? "bdOpenCandidate('"+sib.prev+"')" : '',
       onnext: sib.next ? "bdOpenCandidate('"+sib.next+"')" : '',
       onmenu: "atsOpenEdit('"+c.id+"')",

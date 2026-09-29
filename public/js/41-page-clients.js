@@ -265,6 +265,7 @@
       name: c.name||'Client',
       sub: [c.industry, c.location].filter(Boolean).join(' · '),
       onclose:'clientsBack()',
+      onmin:  "Dock.parkDrawer('client')",
       acts:[
         // Emailing a client is its owner's (D-0035 — the server refuses anyone
         // else), so nobody else is offered the button (C-0029's rule).
