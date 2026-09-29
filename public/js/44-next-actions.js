@@ -250,7 +250,7 @@ function renderNextActionsCard(){
         '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">'+
           chip(bk.reply_due,'to reply','#b91c1c')+
           chip(bk.commitment_due,'promised','#92400e')+
-          chip(bk.reminder_due,'reminders','#3730a3')+
+          chip(bk.reminder_due,bk.reminder_due===1?'reminder':'reminders','#3730a3')+
           chip(bk.nudge,'to chase','#475569')+
           chip(bk.stage_suggested,'interested','#166534')+
         '</div>'+
