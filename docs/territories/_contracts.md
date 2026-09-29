@@ -1094,3 +1094,24 @@ explanation — they run pre-authentication and the org check is a comparison of
 two fetched values, which this regex cannot see, not a missing guard.
 **Blocked until answered:** no — every line is exactly as safe or unsafe as it
 was before this session; the only change is that it is now visible.
+
+### C-0031 · observatory → surface · OPEN · 2026-09-29
+**Asks for:** in `public/js/44-next-actions.js` `renderNextActionsCard`, draw
+`naTeamLine(s)` (and `naHiddenLine(s)`) on the EMPTY list too. Today
+`if(!items.length) return '…Nothing waiting on you…'` returns before either.
+**Because:** R-071 / D-0020 — `/next-actions` no longer exempts admins, so an
+admin's list is now their OWN work, and the org's open reminders arrive only as
+`team` (`total`, `label`, `sentence`) behind the Review button. The owner is an
+admin who very likely owns nothing on that list: with the early return he sees
+"Nothing waiting on you." and **no count and no way into the review** — the
+BD Lead's 3 live reminders would vanish from his Dashboard entirely. The same
+hole already hid a manager's team count whenever their own list was empty.
+Server side is done: `team.total` equals the length of `GET /next-actions/team`
+by construction (one shared read), for admins it covers the whole organisation
+whether or not anyone reports to them, and nothing on `items` offers an action
+the server refuses. Wording worth a look while there: `team.label` says "N open
+across your team" (rampart's `teamSummary`) and the review is titled "Open
+across your team" — for an admin with no reports that is the COMPANY; a
+`scope === 'org'` reading is available on the response if you want to say so.
+**Blocked until answered:** yes for the owner's case — until then an admin with
+an empty list of their own cannot reach the review from the Dashboard.
