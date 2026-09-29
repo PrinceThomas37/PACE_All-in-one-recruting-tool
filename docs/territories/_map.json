@@ -1,9 +1,9 @@
 {
-  "generated": "2026-09-28",
+  "generated": "2026-09-29",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 397,
-    "lines": 98065,
+    "files": 411,
+    "lines": 102393,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,28 +24,28 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 67,
-      "lines": 27304,
+      "files": 69,
+      "lines": 28460,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1644
+          "n": 1719
         },
         {
           "f": "public/js/47-page-mailbox.js",
-          "n": 1027
+          "n": 1036
         },
         {
           "f": "public/theme.css",
-          "n": 999
+          "n": 1000
         },
         {
-          "f": "public/js/12-manager-users.js",
-          "n": 973
+          "f": "public/js/08-page-admin.js",
+          "n": 964
         }
       ],
-      "lastTouched": "2026-09-28",
-      "openIn": 1,
+      "lastTouched": "2026-09-29",
+      "openIn": 2,
       "openOut": 0
     },
     {
@@ -74,11 +74,11 @@
         "services/lead-contacts.js"
       ],
       "files": 30,
-      "lines": 11356,
+      "lines": 11519,
       "largest": [
         {
           "f": "index.js",
-          "n": 3893
+          "n": 3899
         },
         {
           "f": "routes/poc.js",
@@ -93,7 +93,7 @@
           "n": 619
         }
       ],
-      "lastTouched": "2026-09-28",
+      "lastTouched": "2026-09-29",
       "openIn": 1,
       "openOut": 1
     },
@@ -136,8 +136,8 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-09-28",
-      "openIn": 1,
+      "lastTouched": "2026-09-29",
+      "openIn": 2,
       "openOut": 0
     },
     {
@@ -202,8 +202,8 @@
           "n": 472
         }
       ],
-      "lastTouched": "2026-09-27",
-      "openIn": 0,
+      "lastTouched": "2026-09-29",
+      "openIn": 1,
       "openOut": 0
     },
     {
@@ -225,6 +225,7 @@
         "services/engine-draft.js",
         "services/lead-posting.js",
         "services/client-intel.js",
+        "services/sent-side.js",
         "services/candidate-outreach.js",
         "services/morning-briefing.js",
         "match-engine.js",
@@ -246,8 +247,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 26,
-      "lines": 11023,
+      "files": 27,
+      "lines": 11222,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -263,10 +264,10 @@
         },
         {
           "f": "routes/candidate-outreach.js",
-          "n": 1125
+          "n": 1102
         }
       ],
-      "lastTouched": "2026-09-28",
+      "lastTouched": "2026-09-29",
       "openIn": 0,
       "openOut": 1
     },
@@ -304,7 +305,7 @@
         "lead-ingest.js"
       ],
       "files": 27,
-      "lines": 7017,
+      "lines": 7639,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -312,20 +313,20 @@
         },
         {
           "f": "routes/recruiting/outreach.js",
-          "n": 696
+          "n": 764
+        },
+        {
+          "f": "services/recruiting-core.js",
+          "n": 484
         },
         {
           "f": "routes/wf.js",
           "n": 476
-        },
-        {
-          "f": "routes/recruiting/analytics.js",
-          "n": 424
         }
       ],
-      "lastTouched": "2026-09-28",
+      "lastTouched": "2026-09-29",
       "openIn": 0,
-      "openOut": 1
+      "openOut": 6
     },
     {
       "id": "rampart",
@@ -371,7 +372,7 @@
         }
       ],
       "lastTouched": "2026-09-25",
-      "openIn": 0,
+      "openIn": 1,
       "openOut": 0
     },
     {
@@ -390,8 +391,8 @@
         "test/",
         ".github/"
       ],
-      "files": 141,
-      "lines": 28673,
+      "files": 152,
+      "lines": 30850,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -410,8 +411,8 @@
           "n": 590
         }
       ],
-      "lastTouched": "2026-09-28",
-      "openIn": 0,
+      "lastTouched": "2026-09-29",
+      "openIn": 1,
       "openOut": 0
     },
     {
@@ -436,7 +437,7 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1320,
+      "lines": 1331,
       "largest": [
         {
           "f": "routes/reminders.js",
@@ -455,7 +456,7 @@
           "n": 183
         }
       ],
-      "lastTouched": "2026-09-25",
+      "lastTouched": "2026-09-29",
       "openIn": 0,
       "openOut": 0
     }
@@ -672,6 +673,46 @@
       "status": "ANSWERED",
       "date": "2026-09-23",
       "asks": "key the Generator's Sent list and \"Convert to lead\" on the tracking row's `id`, not its `token`. `public/js/48-page-outreach-gen.js:151-157` (`outreachConvertLead(token)` finds the row by `r.token` and posts `{token}`) and `:765-767` (the button passes `r.token` and compares `g.converting===r.token`). Change to `outreachConvertLead(id)`, `r.id` throughout, and post `{ id: row.id, … }`."
+    },
+    {
+      "id": "C-0032",
+      "from": "guild",
+      "to": "surface",
+      "status": "OPEN",
+      "date": "2026-09-29",
+      "asks": "the screens for R-075 and R-077. The API is done and pinned by guild's harness. (1) **Stop drawing \"Tagged\" inside a job** — read `stage` (every pipeline row and `GET /candidates/:id/history` `.pipeline[]` now carry it; a not-yet-linked legacy row reads `Sourced`): `25-workflow-bd.js` ~1201 (the `kind:'tag'` label), `27-page-applicants.js` ~621 (`stage:'Tagged'`), and delete the dead `PIPELINE_STATUSES`/`PSTATUS_COLORS` in `28-page-pipeline.js` (the Pipeline tab's second vocabulary; `30-page-candidate.js` ~185 can read `p.stage`). (2) **The 409 text changed** — \"This candidate is already on this job.\" with `code:'already_on_job'`; the regexes `/already tagged/i` in `27-page-applicants.js` ~381 and ~764 no longer match (they fall back to \"Failed: …\", still readable). Match `e.message` on /already on this job/i. (3) **Group stage change** — `POST /submissions/bulk-stage` (contract in guild.md, Session 34): job page + Pipeline tab (tick rows → the ids are `submission_id` / `sub.id`), and the Candidates page (`GET /submissions?candidate_ids=` → pick the JOB → send that job's submission ids). Switch `stgApply` in `33-stage-modal.js` from N `PATCH`es to one `bulk-stage` when more than one id; a recruiter still cannot group-submit to BDM (the server refuses with the same sentence the modal shows). (4) `POST /pipeline/:id/promote` is a deprecated shim (ensure-on-job only); stop calling it once the 15 legacy rows are healed. `POST /sourcing/staged/:id/import` now returns `job_link_failed` (it used to be dropped, so `53-page-applied.js` never showed it) and `import-selected` returns `not_added_to_job`."
+    },
+    {
+      "id": "C-0033",
+      "from": "guild",
+      "to": "harbour",
+      "status": "OPEN",
+      "date": "2026-09-29",
+      "asks": "`routes/candidate-outreach.js` (~line 916, the `add_to_pipeline` branch of the queue) inserts a `submissions` row by hand — no SB- code, no history, no pipeline row, so the person is on the job's page but missing from the Pipeline tab and from the \"candidates added\" report count. Route it through the one writer: `const core = require('../services/recruiting-core')({ supabase, hasRole })` then `await core.addCandidateToJob(req, await core.loadCandidateFor(req, id), job /* loadJobOrderFor */, { recruiterId: req.user.id })` (`core.db` is built for you). Keep the owner's rule: only when the box is ticked (default off)."
+    },
+    {
+      "id": "C-0034",
+      "from": "guild",
+      "to": "foundry",
+      "status": "OPEN",
+      "date": "2026-09-29",
+      "asks": "tests for R-075/R-077. `test/pipeline-tag-membership-smoke.mjs` FAILS 3/11 by design: it hands the router a hand-made core with none of the new members. Fix (proven on a scratch copy: 11/11, assertions untouched): give the fake `supabase` an `rpc` (`next_id`), build `core = require('../services/recruiting-core.js')({supabase, auth, hasRole, today, orgIdFor})` instead of the literal object, and call as a user with `roles:['bd']`. The full list of what to pin, with one deliberate break per rule, is in guild.md \"Session 34 — foundry list\"; the route pin gains `GET /submissions` and `POST /submissions/bulk-stage`, and `PATCH /pipeline/:id/status` now answers 410 after sign-in."
+    },
+    {
+      "id": "C-0035",
+      "from": "guild",
+      "to": "deep",
+      "status": "OPEN",
+      "date": "2026-09-29",
+      "asks": "(a) when the owner authorises it, apply the legacy heal (SQL in guild.md \"Open here\"; verified on Postgres 16 against the real migrations: idempotent, all-or-nothing, org-safe) — 15 live `candidate_pipeline` rows are 'Tagged' with no submission and `submissions` is empty. (b) Later: `candidate_pipeline.pipeline_status` is inert (NOT NULL default 'Tagged'; guild writes 'Sourced' and never reads it) — drop it, or change its default, once no screen reads the alias."
+    },
+    {
+      "id": "C-0036",
+      "from": "guild",
+      "to": "rampart",
+      "status": "OPEN",
+      "date": "2026-09-29",
+      "asks": "a ruling on ONE thing, plus a review of two new doors. (1) `PATCH /submissions/:id/stage` (and now `bulk-stage`) let ANY BD in the company move ANY submission — a job's owner is not checked, only the recruiter gate (D-0035 says interaction with a job is the owner's). Guild mirrored the single move exactly rather than invent a rule; if you want owner/chain/admin it is one row rule in `services/submission-stages.js` `MOVE_RULES` (needs the job's `bd_manager_id`). (2) New: `GET /submissions?candidate_ids=` (stage + job per person, no contact details, org-scoped, fail-closed on no ids) and `POST /submissions/bulk-stage` (org-scoped, ≤200). (3) Deliberate tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage."
     }
   ],
   "unclaimed": []

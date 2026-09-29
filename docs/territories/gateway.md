@@ -1,5 +1,9 @@
 # Gateway — memory
-> Last written: 2026-09-29 (Session 33, R-076 — the public apply page was dead: wrong column in `loadJob`; `apply_last_error`) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-30 (Session 35, ctx for the shared mailbox rule) · earlier: 2026-09-29 (Session 33, R-076)
+
+## Session 35 (2026-09-30) — `index.js` hands the shared mailbox rule to two routers (R-087)
+`routeCtx` for candidate-outreach and outreach-generator now includes `sendingMailboxFor` / `ownSendingMailboxes` (from `routes/recruiting/outreach.js`, harbour). No route was added or reordered here; `GET /me/sending-mailboxes` is registered in the recruiting outreach block — a literal path, and there is no `/me/:param` route to shadow it. See harbour.md.
+
 
 ## Session 33 (2026-09-29) — R-076: an apply link that stayed dead (`routes/apply.js`)
 - **Owner:** *"Once the job link is turned off, next time we turn it on the link do not get activated."* It was never the switch. **`loadJob` selected `job_orders.owner_id`, a column that table has never had** — that name lives on `candidates` (migration 012); a job order's owner is `bd_manager_id` (migration 011, D-0035, `services/job-order-visibility.js`). PostgREST refuses the WHOLE query for one unknown column (42703), `data` came back null exactly as it does for a clean miss, and `loadJob` never read `error` — so **every apply link served "This role is no longer open" from #222 (22 Sep) until this fix**, and production recorded 0 applications.

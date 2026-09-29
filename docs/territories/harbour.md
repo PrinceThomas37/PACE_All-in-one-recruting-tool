@@ -1,5 +1,12 @@
 # Harbour — memory
-> Last written: 2026-09-28 (Session 33, R-069 — why emails sat in Pending / never sent after Retry) · C-0023 + C-0015 (D-0034 visibility, org boundary)
+> Last written: 2026-09-30 (Session 35, R-087 one From rule; R-086 interview confirmation) · earlier: 2026-09-28 (Session 33, R-069)
+
+## Session 35 (2026-09-30) — ONE "which of my mailboxes sends" rule (R-087) and the interview confirmation (R-086)
+Written by the orchestrator (the owner ruled out helper agents, D-0060); the files are `routes/recruiting/outreach.js`, `routes/candidate-outreach.js`, `routes/outreach-generator.js`, `index.js` ctx.
+- **`ownSendingMailboxes(req)` / `sendingMailboxFor(req, id)` live in `routes/recruiting/outreach.js` and are handed to candidate outreach and the generator through `index.js`.** The page NAMES a mailbox id; the server checks it is one of the caller's OWN connected, active mailboxes (else 404 — indistinguishable from nonexistent) — never a free From address. No id = the primary, as before. `POST /companies/:id/email`, `POST /candidates/email`, `POST /submissions/:id/interview-invite` and the generator's `/outreach/{sender,generate,generate-angle,send}` all take `mailbox_id`. `GET /me/sending-mailboxes` is the picker's list. candidate-outreach's private copy was deleted — two copies of an identity rule is how they drift. The generator's old header comment ("sending address is NOT a user choice") was rewritten to the checked-id rule.
+- **The interview invite called `sendMicrosoftNewMessage` directly**, so a Gmail mailbox failed every time — one of the reasons no confirmation reached candidates. It now dispatches by platform (`sendMailboxNewMessage`). The candidate's copy carries the role (place, job type, work setting, a 600-char description — no pay figure, no invented fields); the BD manager's does not. The stage window ticks "Candidate" by default (a phone interview is confirmed too; untick to skip).
+- Pinned: `test/from-mailbox-smoke.mjs` (17, router mounted against a fake db and spy senders; fails with three deliberate breaks) and `test/from-picker-smoke.mjs` (12, browser).
+- **Known limits:** the reminder compose has its own From field (`composeFromEmailId`) and was not moved onto this rule; the leads engine's automatic sends use the lead's assigned mailbox by design.
 
 ## What is true here now
 - **WHO SEES WHICH EMAIL IS `services/ownership.js`, NOT THIS TERRITORY (D-0034).**

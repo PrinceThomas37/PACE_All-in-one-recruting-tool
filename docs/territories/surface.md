@@ -1,7 +1,13 @@
 # Surface — memory
-> Last written: 2026-09-29 (Session 34 — R-071 a closed reminder leaves every screen, R-072, R-076 label, C-0031) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-30 (Session 35 — group stage move screens, windows, addressed email, rows that do the task, From picker) · earlier: 2026-09-29 (Session 34)
 
 ## Session 35 (2026-09-30) — the group stage move screens (C-0032, R-077/R-075) and windows (R-078/R-079, D-0058)
+
+**Also Session 35 — email opens addressed, rows that do the task, the From picker (R-084/R-083, R-073, R-087):**
+- **`outreachComposeTo({id,name,email,title,company,location,job_id,job_title,outreach_type})` in `48-page-outreach-gen.js` is the ONE way any "Email" button opens the composer addressed to somebody.** The lead drawer's button set a field the composer never read (landed on an empty "Send to"). Every contact row (`leadContactRowHtml` — the lead row AND the POC finder's slots) now has a **✉ Write** button when there is an address. `test/email-carries-person-smoke.mjs` (11).
+- **"Needs you today" rows do the task (`44-next-actions.js` `naAct`):** Reply (mailbox searched to that person), Follow up / Chase (the addressed composer as a follow-up), Write (the reminder's own composer), Move to… (the stage window on their submission for that job); a candidate is answered in the mailbox, never the client composer; no address = says so. Nothing is sent. `test/needs-you-today-does-smoke.mjs` (16).
+- **`10b-from-picker.js` (`FromPick.slot/value`)** is the shared "From" row for the client email window and the interview block; it fills itself by DOM id (never a render). One mailbox is a plain "From x", none says to connect one. The generator's own sender card offers the choice and CLEARS the draft when it changes (the wording names the sender). `test/from-picker-smoke.mjs` (12).
+- The interview block of the stage window ticks **Candidate** by default; `.stg-*` and `.win-*` styles are in `styles.css`, `.win-*` phone rules in `mobile.css`.
 
 **Group stage move — LIVE ON THE BRANCH (PR #262), pinned by `test/stage-group-move-smoke.mjs` (29 checks, real browser; fails with each of three deliberate breaks).**
 - `33-stage-modal.js` (finished from the Session 34 WIP): `openStageModal(idOrIds, stage, onDone, opts)` — more than one id sends ONE `POST /submissions/bulk-stage` and draws a per-person result panel (moved / refused with the server's own sentence / "Not included" for ticked people with no stage on the job). `stageGroupSelect(count, onchange)` is the ONE "Change stage…" control (a stage the caller cannot use is greyed WITH its reason — "one at a time" for a recruiter's Submitted-to-BDM, "BD team only"), `stageOpenGroup` (job page + Pipeline tab) and `stageMoveUnlinked` (one person with no submission: `POST /pipeline/bulk` first — the one add path — then the ordinary move). The `.stg-*` styles never existed and are now in `styles.css` (tokens only).

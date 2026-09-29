@@ -1,5 +1,12 @@
 # Observatory — memory
-> Last written: 2026-09-29 (Session 34, R-071: an admin's "Needs you today" is their own work, D-0020) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-30 (Session 35, R-085 sent side; R-073 rows carry an address) · earlier: 2026-09-29 (Session 34, R-071)
+
+## Session 35 (2026-09-30) — the summary reads OUR replies (R-085) and "Needs you today" rows carry who to write to (R-073)
+- **`services/sent-side.js` (new, pure of I/O) reads the Sent folder of the caller's OWN mailboxes, live, when the Emails tab or the summary is asked for** (`routes/client-intel.js` `loadMessages(req, subject, {live:true})`). Replies typed in the in-app mailbox or straight from Gmail/Outlook were stored nowhere PACE reads and nothing is mirrored into Postgres, so the summary saw them write and never saw us answer. Search is by contact address; only mail actually ADDRESSED to that person counts (Gmail's search is loose); what PACE already sent (same subject, same person, within 30 min) is not counted twice; drafts skipped; ≤3 mailboxes × ≤5 addresses, ≤8 bodies per read; 5-minute per-person cache; 9-second timeout.
+- **A failure is REPORTED, never read as "nothing was sent":** the response carries `sent_side:{ok, reason:'no_mailbox'|'unreadable'|'partial'|'slow', …}` and both timelines say so on screen. A failure is never cached. The daily digest does NOT read the mailbox (a busy desk costs the same as a quiet one).
+- **`next-action.js` items now carry `email`** (threads and reminders; the reminders select adds `contact.email`) so a row can DO the task (surface's `naAct`). Pure function; `next-action-smoke` 49/49.
+- Pinned: `test/sent-side-smoke.mjs` (20; fails with four deliberate breaks).
+
 
 ## Session 34 (2026-09-29) — R-071: admins are no longer exempt from D-0020 (`routes/next-actions.js`)
 - **The owner's sentence:** *"Once the reminders are complete it doesn't go off

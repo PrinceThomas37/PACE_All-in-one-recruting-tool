@@ -35,6 +35,8 @@ explicit. `26-boot.js` must always load last — it starts the app.
 | `08-page-admin.js` | Admin panel + Deliverability dashboard |
 | `09-page-workflows.js` | Workflow engine UI (definitions, builder, enrollments) |
 | `10-page-modals.js` | Reminders, mail-merge modal, profile, add lead, add/edit user, toast/modal shells |
+| `10a-window-dock.js` | Windows: Minimise / Full screen / Close on every modal, the tray of parked windows, record drawers that park (R-078/R-079) |
+| `10b-from-picker.js` | The "From" picker — choose which of MY mailboxes an email leaves from (R-087) |
 | `11-bind-and-actions.js` | Event binding + global action functions |
 | `12-manager-users.js` | Manager Users administration functions |
 | `13-pagination-mailmerge-actions.js` | Pagination + mail-merge actions |
