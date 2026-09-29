@@ -1,89 +1,74 @@
 # PACE — where things stand *right now*
 
-> **⚠ 2026-09-29 22:51 UTC — WORK IS PAUSED BY THE OWNER (D-0060).** No agent is started or resumed until the owner says so. Stopped mid-run: foundry, surface on C-0032, the windows job (partial work in WIP commit `08955fd`, not for merge). New asks R-083–R-087 are noted, not started. Waiting on the owner: R-088 (cheaper ways to work), R-082, the 15 Tagged rows (C-0035), R-080, R-081. PR #262: activity subscription and hourly check-ins are off while paused.
-
 > **Read this file, then `CLAUDE.md`. That is enough to start work.**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
 > reasoning behind a past decision.
 
-**Updated**: 2026-09-29 (Session 34 — the owner's handwritten notes, R-071–R-079) · **Repo**:
-`PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
-`teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #260 (`eae789f`, squash-merged 2026-09-28 19:54 UTC — R-069), after #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0057 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-080` (R-060 is open PR #254's, another chat).**
+**Updated**: 2026-09-29 22:57 UTC (end of Session 34 — handed to a fresh chat to save tokens) · **Repo**:
+`PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render,
+auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28, R-069).
+**Highest ids:** decision D-0060 · contract C-0036 · next roadmap id `R-089`.
 
-### Session 34 (2026-09-29) — the owner's handwritten notes
-- Nine asks from three photographed pages → **R-071–R-079** (ROADMAP +
-  artifact), **D-0056** (team view off the Dashboard) and **D-0057** (inside a
-  job everyone starts at Sourced; "Tagged" is a database word). Read back to
-  the owner; **nothing built yet** — waiting on their confirmation of the
-  reading, and on the Apollo screenshot the notes mention (it did not arrive).
+## ⏸ SESSION 35 STARTS HERE — the owner's rules for this round
 
-### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
-- **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
-  place like Leads — one shared `rowReveal` in `03-core-render.js`. Details in
-  `surface.md` (Session 33). `row-reveal-smoke` 45/45 (5/45 on old code); full
-  suite **127/127**. Deploy is Render's; unverifiable from this sandbox.
-- **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
-  owner answered (D-0049: Apollo with API — they will connect it; runs
-  automatically AND on a button; a guess is NEVER emailed; size picked on the
-  lead), and slices 1 AND 2 are LIVE (#253 merged 2026-09-28 on "okay publish
-  it")** — slice 1: the four slots on the lead row, the rules
-  (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
-  **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
-  one lookup per person (a credit, never retried) in
-  `services/people-apollo.js`; found people wait in `poc_suggestions`
-  (**migration 052, applied + re-verified live**) until Accept / Not this
-  person; Accept goes through `services/lead-contacts.js` (the ONE add-contact
-  path, `POST /contacts` uses it too); daily ceiling = System Settings
-  `poc_apollo_daily_credits` (20). **The owner saved an Apollo key 2026-09-28
-  10:57 UTC; no search pressed yet** (read `apollo_last_call` /
-  `apollo_last_error` in app_settings to see what Apollo last said).
-  **Then D-0050 (LIVE, #257 merged 2026-09-28):** "Search contact"
-  in every empty slot, "Search contacts" at the top, company size from Apollo
-  by website + name (migration 053 applied), Apollo ONLY on a click; and the
-  Leads search × fixed. Next slices: the posting/website readers (free), then
-  the automatic run for new leads (free rungs only, D-0050).
-  **Owner, 2026-09-28: "the POC finder is working fine"** — then asked whether
-  it can find HR by responsibility rather than title, and "how is it relevant
-  for us?". Measured on the live leads: HR titles are traditional (1 of 54 HR
-  contacts is "People & Culture"); the real gap is law/accounting/architecture
-  firms (16 of 82 leads) → **R-063 re-scoped, owner's call.**
-  **"Already added" pop-up LIVE (R-064, D-0051, #258 merged 2026-09-28 on
-  "publish and merge it"):** one duplicate check in `services/lead-contacts.js`
-  (email anywhere = refused; name on this lead/company = asked) +
-  `showAlreadyAdded` on Add contact, Add by hand and Accept. `npm test` 135/135.
-  **Owner's answers (2026-09-28): R-063 YES (D-0052, to build), R-065 NO
-  (D-0053, dropped), and R-066 (D-0054): an admin sets ONE daily Apollo credit
-  number for everyone, visibly (today: System Settings only, default 20), plus
-  "how much of our credit system is Apollo's" — 1 PACE credit = 1 Apollo credit.
-  Then (owner, 2026-09-28): **no access to their organisation's Apollo account**
-  (183.3k credits left, a test account) and **every customer company brings its
-  own keys** (D-0055 → R-067: TODAY ALL KEYS ARE DEPLOYMENT-WIDE — fix before a
-  second customer). **LIVE (#259, merged by the owner 2026-09-28):** R-063 (firm-aware finder),
-  R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
-  Uncover; migration 054 applied). `npm test` 136/136.**
-- **R-069 — why emails sat in Pending / never sent after Retry (owner,
-  2026-09-28). PR #260, merged 2026-09-28 (`eae789f`).** Live queue, 22 rows: 14 Gmail follow-ups
-  replying into threads that live in ANOTHER mailbox (the leads' mailbox was
-  switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
-  'sending' (process died mid-send, on no screen); 7 correctly held by the
-  2-a-day company limit but shown as "ready now". Fixed in harbour's
-  `services/gmail-delivery.js` (fresh email + quote, ONLY on a definite 404),
-  `services/interrupted-sends.js` (boot: 'sending' → Didn't send, "may have
-  gone out") and `pending-summary` (four buckets + "Held · goes tomorrow").
-  `send-recovery-smoke` 58; 15/15 deliberate breaks caught; 137/137. **R-070 asked:**
-  should a follow-up come from the mailbox that STARTED the conversation?
-- **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
-  it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
-  now judges each element's OWN text (it skipped any element with a child) and
-  measures the panel under an opened row (its scope named a class that never
-  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
-  was hiding. Open: the suite still renders screens without data — see
-  `foundry.md`.
+1. **D-0060: no helper agent is started or resumed without the owner's say-so, in their own words.**
+   Session 34's one message fanned out into ~10 agent runs (320k–670k tokens each, up to three at
+   once, some killed by the usage limit and re-run cold) and used two of the owner's usage limits.
+   Before any agent: say what it is for and roughly what it costs, and wait for a yes.
+2. **Spend tokens like they are the owner's money — they are.** Read only what the next step needs:
+   this file, the ROADMAP rows of the lot below, DECISIONS D-0056–D-0060, and the ONE territory memory
+   (and contract) for the files being touched. Run targeted suites while working; ONE full run
+   (`node test/run-all.mjs`, read the count) before merge, plus Node 26 per CLAUDE.md.
+3. **R-088 is the owner's call, open:** cheaper ways of working — (1) small, clear fixes done directly
+   without an agent; (2) trim `CLAUDE.md` (~140 KB, read by every message and every agent) down to the
+   rules, moving the history to the archive; (3) agents on lower effort with targeted tests. Ask which
+   they want before any big job.
 
----
+## The lot in flight — branch `ccr-bed70da8-ctoaet`, draft PR #262 (NOT for merge yet)
+
+The owner's handwritten notes of 29 Sep, morning (R-071–R-079) and evening (R-083–R-087), one batch.
+The ROADMAP row is the detail; this is the state.
+
+| id | Ask | State |
+|---|---|---|
+| R-071 | A finished reminder leaves the Dashboard | **Done on the branch** (surface + observatory + ledger) |
+| R-072 | "Your team" card off the Dashboard (D-0056/D-0059) | **Done on the branch** |
+| R-076 | Apply links dead since 22 Sep (a select named `job_orders.owner_id`) | **Done on the branch** — after release: open the link, send one test application |
+| R-075 | Inside a job everyone starts at Sourced (D-0057) | **Backend done** (guild). Screens half built (C-0032). 15 legacy rows wait on the owner (C-0035) |
+| R-077 | Change many candidates' stage at once | **Backend done** (`POST /submissions/bulk-stage`, `GET /submissions?candidate_ids=`). Screens half built |
+| R-078 / R-079 | Minimise / maximise / close windows (D-0058) | **Not started** — three runs died or were stopped before changing anything |
+| R-073 | "Needs you today" rows that do the task | Not started — after the windows; dispatch's map is in the row |
+| R-074 | Where the Apollo credits went | Waiting on the owner's screenshot; PACE's side counted (39 on 28 Sep) |
+| R-083 | Email a POC just added to a lead | Noted, not started |
+| R-084 | Email buttons forget who was clicked — "mostly missing" across PACE | Noted, not started (overlaps R-073's lead-drawer find) |
+| R-085 | The AI summary misses our own replies | Noted, not started |
+| R-086 | Interview confirmation email to the candidate (phone too, with job details) | Noted, not started |
+| R-087 | Choose the From address on every email | Noted, not started |
+
+**Waiting on the owner:** R-088 (how to work cheaper) · the 15 legacy "Tagged" rows (C-0035 — SQL written
+and verified on a throwaway Postgres, **NOT run**; text in `guild.md` Session 34) · R-082 (what "remove from
+a job" means once someone has moved along) · R-080 · R-081 · R-074's screenshot.
+
+**Half-done work, and where it is:**
+- `public/js/33-stage-modal.js` (WIP `08955fd`): the group stage move — `openStageModal(idOrIds, …)`,
+  `stgApplyGroup` over bulk-stage, per-person results, legacy rows without a submission. It stopped at
+  "the Teams button guard, the note wording for a group, and the footer". Still to do for C-0032: the job
+  page / Pipeline tab / Candidates page ("which job?") wiring, no "Tagged" inside a job, the
+  `/already tagged/i` regexes, the import messages. Contract: `_contracts.md` C-0032; API: `guild.md` Session 34.
+- Tests (WIP `08955fd`, foundry): `test/helpers/fake-postgrest.mjs` + `test/helpers/schema-from-migrations.mjs`
+  (+ their smokes), `pipeline-tag-membership-smoke` rebuilt on the real core (not re-run yet), three
+  tree-scanning suites now skip `.claude/`. Still to do: the "what foundry should pin" lists in `surface.md`,
+  `gateway.md` (R-076), `guild.md` (C-0034) and `observatory.md` — each item names its deliberate break.
+- **Session 34's scratch proofs** (dispatch, observatory, gateway, guild and surface harnesses, with their
+  breaks and the legacy SQL checks) are in `docs/handoff/session-34-harnesses.tar.gz`. Extract to a scratch
+  directory — never into `test/` — and delete the tarball once they have become tests.
+- Last full suite: **136/137** on Node 22; the red one is `pipeline-tag-membership-smoke` (being rebuilt).
+  `npm install` first — `node_modules` is not in git.
+- Border follow-ups open: C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`),
+  C-0036 (rampart — BD stage moves are not owner-gated; review bulk-stage and `GET /submissions` scoping).
+
+**Suggested order once the owner says go:** finish C-0032 (the screens) → foundry pins this round →
+the windows (R-078/R-079) → R-073 + R-084 (they share the compose window) → R-083, R-086, R-087, R-085.
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
@@ -184,6 +169,8 @@ by the owner (D-0047)** — still state a destructive customer-data change first
 and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
+
+**Session 35 first: the top of this file** (the lot, paused under D-0060). The items below are older and still open.
 
 1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
    1–2 live (#253); the D-0050 round (Search contact per slot, size from
