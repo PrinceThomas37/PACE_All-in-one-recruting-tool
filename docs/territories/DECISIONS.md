@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0061 · 2026-09-30 · STANDS · Work cheaper (R-088 yes), heal the 15 old rows, and the order of the rest
+**Their words:** *"yes do R-088"* · *"15 old 'Tagged' candidate rows (C-0035) … yes"* · then, for the order: finish the stage-change screens myself without agents, rebuild the failing test and re-run everything once, then windows (R-078/R-079), "Needs you today" rows that do the task (R-073), emailing a contact you just added (R-083), email buttons forgetting who was clicked (R-084), the AI summary missing our own replies (R-085), the interview confirmation email (R-086), choosing the From address on every email (R-087). And, about Apollo: *"one click sometimes consumes a lot of apollo credit, i think our credit and their credit system is not the same."*
+**Chosen:** all three of R-088's ways: small fixes done directly, `CLAUDE.md` trimmed to the rules (full text kept in `docs/CLAUDE_MD_FULL_SESSION34.md`), helpers on low effort with targeted tests. The 15 legacy rows were healed on the live database the same day (C-0035 (a) closed). D-0060 stands.
+**Re-open when:** a rule that was trimmed out of `CLAUDE.md` is needed and nobody could find it — then the fix is a better pointer, not a longer file.
+
 ### D-0060 · 2026-09-29 · STANDS · No helper agent runs without the owner's say-so
 **Their words:** *"Do not continue those agents before my saying. I think those agents are eating a lot of token. By now I have exhausted 2 session token on a single message that I gave you this morning."*
 
