@@ -100,6 +100,59 @@ window.naDone=function(reminderId,ev){
   }).catch(function(e){showToast('Could not update: '+(e&&e.message||e),'error');});
 };
 
+// ── DOING THE TASK FROM THE ROW (R-073) ────────────────────────────────────
+// Reads the row's item back the same way naSnooze does.
+function naItemOf(btn){
+  var row=btn&&btn.closest?btn.closest('[data-na-item]'):null;
+  if(!row)return null;
+  try{ return JSON.parse(decodeURIComponent(row.getAttribute('data-na-item'))); }catch(e){ return null; }
+}
+// What each row's button does, and why it is that path and not another:
+//  * Reply (they wrote to us): their messages, in PACE's own mailbox, searched
+//    down to that person — the reply is written where the conversation lives.
+//  * Chase / Follow up on a lead's contact: the composer, already addressed
+//    (outreachComposeTo — R-084), as a follow-up.
+//  * Write on a reminder: the reminder's own composer when the page has the
+//    reminder (its double-send guard and template stay in charge), else the same
+//    addressed composer.
+//  * A candidate's thread is answered in the mailbox too: the client composer is
+//    the wrong writer for a candidate.
+// Nothing is sent from here — every path opens something you read first.
+window.naAct=function(btn,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var it=naItemOf(btn); if(!it){showToast('Could not read that row','error');return;}
+  if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
+  var isCand=it.entity_type==='candidate';
+  if(it.kind==='reply_due'||isCand){
+    STATE.mailbox=STATE.mailbox||{};STATE.mailbox.q=it.email;
+    return goPage('mailbox');
+  }
+  if(it.kind==='reminder_due'&&it.reminder_id&&(STATE.reminders||[]).some(function(r){return r.id===it.reminder_id;})&&window.composeReminderEmail){
+    return composeReminderEmail(it.reminder_id,it.entity_id);
+  }
+  if(!window.outreachComposeTo){showToast('The email screen is not loaded yet — try again in a moment','error');return;}
+  outreachComposeTo({id:it.entity_type==='contact'?it.entity_id:null,name:it.title,email:it.email,
+    company:it.subtitle||'',job_id:it.job_id||null,outreach_type:'followup'});
+};
+// "Replied — interested": moving them forward is the task. The stage is the
+// person's choice (the queue only suggests, it never asserts which); the choice
+// opens the ordinary stage window on that person's submission for that job.
+function naMoveStageSelect(){
+  var opts='<option value="">Move to…</option>'+(window.ATS_STAGE_LIST||[]).map(function(st){return '<option value="'+htmlEsc(st)+'">'+htmlEsc(st)+'</option>';}).join('');
+  return '<select class="sel na-act na-act-do" aria-label="Move this candidate to a stage" onclick="event.stopPropagation()" onchange="naMoveStage(this,event)">'+opts+'</select>';
+}
+window.naMoveStage=function(sel,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var it=naItemOf(sel),stage=sel.value; sel.value='';
+  if(!it||!stage)return;
+  if(!it.job_id||!window.stageSubmissionFor){showToast('Open the candidate to move them','warning');return;}
+  window.stageSubmissionFor(it.entity_id,it.job_id).then(function(row){
+    if(!row){showToast('They are not on that job with a stage yet — open the candidate to add them','warning');return;}
+    var people={};people[row.id]={name:it.title,stage:row.stage,sub_stage:row.sub_stage||null,cid:it.entity_id};
+    openStageModal(row.id,stage,function(){refreshNextActions(true);},{people:people,jobId:it.job_id,jobTitle:it.subtitle||''});
+  }).catch(function(e){showToast('Could not look up their job: '+((e&&e.message)||e),'error');});
+};
+
 // Snooze one item. Reads the item off the row (see the payload note above),
 // so the request carries the exact fact being dismissed and the server can
 // fingerprint it.
@@ -207,11 +260,16 @@ function renderNextActionsCard(){
     // why it is a fingerprinted snooze and not a delete: a queue you can empty
     // with a click tells you nothing, so the snooze is void the moment a new
     // message lands on the thread.
-    var acts=it.reminder_id
+    // R-073 (owner: "no option to do the task … just information is mentioned"):
+    // the row itself does the work — see naAct below for what each does.
+    var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write'}[it.kind]||'';
+    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:'Write a follow-up',reminder_due:'Write the email this reminder is for'}[it.kind])+'">'+doLbl+'</button>'
+      :(it.kind==='stage_suggested'?naMoveStageSelect():'');
+    var acts=doAct+(it.reminder_id
       ?'<button class="na-act" onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done">Done</button>'
       :'<button class="na-act" onclick="naSnooze(this,\'today\',event)" title="Hide until tomorrow. Comes back if they reply.">Not today</button>'+
        '<button class="na-act na-act-quiet" onclick="naSnooze(this,\'week\',event)" title="Hide for a week. Comes back if they reply.">1w</button>'+
-       '<button class="na-act na-act-quiet" onclick="naSnooze(this,\'drop\',event)" title="Stop asking about this. Still comes back if they reply.">Drop</button>';
+       '<button class="na-act na-act-quiet" onclick="naSnooze(this,\'drop\',event)" title="Stop asking about this. Still comes back if they reply.">Drop</button>');
     // The whole item rides on the row as data. naSnooze() reads it back rather
     // than being handed a dozen positional arguments through an onclick string,
     // where a quote in a company name would break the attribute.
@@ -220,7 +278,8 @@ function renderNextActionsCard(){
       job_id:it.job_id||null, reminder_id:it.reminder_id||null,
       last_activity_at:it.last_activity_at||null,
       overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
-      state:it.state||null, title:it.title||''
+      state:it.state||null, title:it.title||'',
+      email:it.email||null, subtitle:it.subtitle||null
     }));
     return '<div data-na-item="'+payload+'" '+
       'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+

@@ -116,6 +116,7 @@
     f.to=c.email||''; f.contact_first_name=nm.split(/\s+/)[0]||''; f.contact_title=c.title||'';
     f.company=c.company||''; f.location=c.location||''; f.job_title=c.job_title||'';
     f.pickedContactId=c.id||null; f.pickedJobId=c.job_id||null;
+    if(c.outreach_type==='followup') f.outreach_type='followup';   // R-073: chasing somebody we already wrote to
     g.recipMode='existing'; g.recipQuery=nm||c.email||'';
     STATE.composeSide='clients'; STATE.composeContext=null; STATE.composeReminderId=null;
     STATE.emailTab='compose'; STATE.page='email'; STATE.modal=null;

@@ -317,7 +317,7 @@ module.exports = (ctx) => {
         supabase.from('reminders')
           .select('id,user_id,return_date,note,contact_name,company_name,contact_id,job_id,status,'
             + 'job:jobs(id,position,location,industry,company:companies(name,industry,location)),'
-            + 'contact:contacts(id,first_name,last_name,designation)')
+            + 'contact:contacts(id,first_name,last_name,designation,email)')
           .eq('status', 'pending'),
         req
       );
