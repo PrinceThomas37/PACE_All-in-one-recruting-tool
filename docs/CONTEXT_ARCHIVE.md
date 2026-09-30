@@ -6335,3 +6335,5 @@ Owner sent photos of two handwritten pages and said *"act only [on] notes taking
 - (round 8 addendum 2) Third handwritten page recorded, notes only: R-097 (Needs you today = today's things only), R-098 (say why each suggestion shows + owner-defined rules; the owner asked 'on what basis are these suggestions?' — to be answered in plain words when planned), R-099 (Client conversations is crowded/duplicates; define its decision logic). R-098 and R-099 are one design pass. Nothing built.
 
 - (round 8 addendum 3) Owner asked for ONE priority-sorted list of everything open, adding the four held items. Added R-100 (RA Team view), R-101 (Reports/Dashboard audit), R-102 (UTC vs local days); R-080 already existed. The sorted order now sits at the top of ROADMAP.md ('PRIORITY ORDER'): R-091, R-092, R-097, R-093, R-094, R-095, R-100, R-101, R-098+R-099, R-080, R-102, R-096. Notes only; nothing built.
+
+- (round 8 addendum 4) D-0065: owner answered the two open questions — a day follows each person's own (device) time zone (R-102), and 'today' in Needs you today is that date on the user's clock (R-097). Still notes only; nothing built.

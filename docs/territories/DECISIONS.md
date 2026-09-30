@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0065 · 2026-09-30 · STANDS · A "day" is the user's own day
+**Their words:** R-102 *"should a 'day' follow each person's own time zone? — yes, system timing"* · R-097 *"what counts as 'today'? — that date according to system of the user"*.
+**Chosen:** every "today / this week / last 7 days" in PACE follows the viewing person's own time zone (their device clock), not the server's UTC. "Needs you today" shows what is dated today on that clock. Supersedes the UTC-days note in R-089 / `services/bd-insights.js` (`dayKey` becomes per-request). Built with R-095 (interview time zones).
+**Re-open when:** a report must be identical for two people in different zones (a team total), then it needs one declared zone.
+
 ### D-0064 · 2026-09-30 · STANDS · The handwritten-notes batch: what the owner confirmed
 **Their words:** R-092 *"when candidate is submitted to BDM or to client, a send email option should be there with submission details. I need that"* · R-096 *"this can be a different thing to develop itself"* · R-091 "the first thing shown" — *"yes"* · R-095 *"All time zones. Our product should be used worldwide."* — and *"Plan these, not act."*
 **Chosen:** R-091/092/093/094/095 are planned together (plan in the chat, rows in the ROADMAP); nothing built until the owner's green signal. R-096 (Boolean search) is its own separate project. Interview time zones: the full world list, not a short list.
