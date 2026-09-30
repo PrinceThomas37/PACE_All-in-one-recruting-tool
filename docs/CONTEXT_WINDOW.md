@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-09-30 (end of Session 35, round 5) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
-**Highest ids:** decision D-0064 · contract C-0036 · next roadmap id `R-100` · next migration `055`.
+**Highest ids:** decision D-0064 · contract C-0036 · next roadmap id `R-103` · next migration `055`.
 
 ## ✅ SESSION 35 — EVERYTHING IS MERGED AND LIVE (PRs #262–#265). Nothing is waiting on a branch.
 
@@ -21,7 +21,7 @@
 3. A real lead's Emails tab with a connected mailbox (Sent-folder reading only proven against a fake mailbox).
 4. Windows and the From picker on a phone.
 
-**NEW (2026-09-30 evening): the owner's handwritten notes are R-091…R-096 in the ROADMAP (P1: resume first/preview/download, submission email step; P2: CC row, job candidate search, interview time zone; P3: Boolean search). Notes only — NOTHING built; the owner gives the green signal.** Third page added: R-097/098/099 (dashboard noise — Needs you today, its rules, Client conversations). Next roadmap id `R-100`.
+**NEW (2026-09-30 evening): the owner's handwritten notes are R-091…R-096 in the ROADMAP (P1: resume first/preview/download, submission email step; P2: CC row, job candidate search, interview time zone; P3: Boolean search). Notes only — NOTHING built; the owner gives the green signal.** Third page added: R-097/098/099 (dashboard noise — Needs you today, its rules, Client conversations). **The ONE sorted to-do list is the 'PRIORITY ORDER' section at the top of docs/ROADMAP.md (R-091…R-102).** Next roadmap id `R-103`.
 
 **Owner said: WAIT for their green signal before starting any of these.** Choices offered, awaiting their pick: (a) the same one-calculation fix for the **RA Team** view (still computed in the browser); (b) audit **Reports / Dashboard** numbers against Lead Insights; (c) a documentation-only correction of any repo notes still calling the first batch "not live" (this rewrite does most of it); (d) R-080 (switch an out-of-office contact back on the return date) — still their call; (e) the UTC-vs-local-day question (a one-line change in `dayKey`, `services/bd-insights.js`).
 

@@ -5,11 +5,30 @@
 > onto it. If the two disagree, **this file wins** and the artifact gets
 > corrected.
 
-**Updated**: 2026-09-29 (Session 34) · **Next id**: `R-100` (R-060 is PR #254's, another chat) · **Artifact**:
+**Updated**: 2026-09-29 (Session 34) · **Next id**: `R-103` (R-060 is PR #254's, another chat) · **Artifact**:
 `NQ4HUuMfAWJk34g9Vs5EdQ` (collections `items`, `shipped`; one document per row,
 `doc_id` = the row id, so marking one thing done is a one-document `update`)
 
 ---
+
+## ▶ PRIORITY ORDER — what to do next (owner asked for one sorted list, 2026-09-30)
+
+Nothing below is started; each waits for the owner's green signal. Top to bottom:
+
+| # | Row | What | Size |
+|---|---|---|---|
+| 1 | R-091 (P1) | Candidate opens on the resume; preview works; no refreshing | medium (cause first) |
+| 2 | R-092 (P1) | Send-email step with submission details at Submitted to BDM / to client | medium-large |
+| 3 | R-097 (P1) | Dashboard "Needs you today" = today's things only | small |
+| 4 | R-093 (P2) | Email CC takes several addresses | small |
+| 5 | R-094 (P2) | Search box inside a job's candidates | small-medium |
+| 6 | R-095 (P2) | Interview time zone — every zone (with R-102) | medium |
+| 7 | R-100 (P2) | RA Team view: one server calculation | medium |
+| 8 | R-101 (P2) | Audit Reports + Dashboard numbers | medium (audit first) |
+| 9 | R-098 + R-099 (P2) | Why each suggestion shows + owner-set rules; Client conversations slimmed (one design pass) | medium-large |
+| 10 | R-080 (P3) | Out-of-office contacts switch back on their return date | small |
+| 11 | R-102 (P3) | UTC vs local days (with #6) | small |
+| 12 | R-096 (P3) | Boolean search — its own separate project | large |
 
 ## ⚠ HOW THIS FILE IS MAINTAINED (D-0030 — read before editing)
 
@@ -84,6 +103,9 @@ sees it without reading a file.
 | `R-097` | **P1 — Dashboard "Needs you today" shows only what belongs to TODAY, not the whole pile** (owner's handwritten notes, 2026-09-30, third page: *"There is a lot of information on the dashboard. For example the Need you today should show the things for that day, not the full thing"*). Today it lists everything outstanding, which is the noise. Smallest of the three, and the first thing seen every morning. | **PENDING — ready to plan/build.** Existing list rule applies (a horizon and an exit); "today" must be defined (due today + new today + what slipped from yesterday?) — one small question for the owner. |
 | `R-098` | **P2 — Say WHY each "Needs you today" suggestion is shown, and let the owner set the rules for which ones appear** (notes: *"I think since this Needs you today column was built earlier, it takes old data to create the suggestion, and on what basis are these suggestions? We should be able to define these metrics on which suggestions are shown, thus reducing the noise."*). Three parts: (a) answer the question in plain words — what each suggestion is built from and how old that data can be; (b) show the reason on each row; (c) settings the owner controls (which kinds of suggestion, how old is too old, how many). Builds on conversation intelligence and the next-action queue. | **PENDING — needs a short design first** (the settings are per person vs per company is an open question — D-0022 says preferences live per user). |
 | `R-099` | **P2 — "Client conversations" feels crowded and similar to "Needs you today"** (notes: *"Also, 'client conversation' feels similar, crowded. May be designed on old logic and capability. We have to define this decision logic also."*). Work out what it shows and why, what it duplicates from Needs you today, and either merge, slim or re-purpose it; write its decision rules down like R-098's. | **PENDING — needs the same design pass as R-098** (do them together). |
+| `R-100` | **P2 — RA Team view: one calculation, like the BD views** (carried from 2026-09-30, after R-089). The RA Team view in Lead Insights is still added up in the browser, so it can disagree with the personal view and with the BD Team view. Same cure as R-089: one server calculation, the browser only draws it. | **PENDING — owner gave the list; nothing built.** |
+| `R-101` | **P2 — Audit the Reports and Dashboard numbers against Lead Insights** (carried from 2026-09-30; the owner's original complaint: *"the reports and insights I think are not tuned and connected well"*). Find every number that is counted twice by different code, list where they disagree, and point them at the one calculation. | **PENDING — starts as a read-only audit that produces a list; nothing built.** |
+| `R-102` | **P3 — Days: UTC or each person's local day?** (carried from 2026-09-30). Lead Insights counts days on the server's clock (UTC); a person in India or the US West Coast sees "today" change at the wrong hour. A one-line change in `dayKey` (`services/bd-insights.js`) once the owner chooses whose clock. Best done WITH R-095 (time zones), because both need a per-person time zone. | **PENDING — owner's call; do alongside R-095.** |
 | `R-082` | **What should "remove from a job" do once someone has moved along?** (found by guild, 2026-09-29, while building R-075). Today the ✕ on a job's Pipeline tab takes the person off that tab only — they stay on the job page, the board and the counts — and no screen can take them off a job completely. Proposal: before they are submitted to the BD manager, removing takes them off the job completely; after that, removing is refused and the screen suggests "Not Accepted" instead, so the record of how far they got survives. | **CHANGED 2026-09-30 (owner): not "remove" but REJECT.** The Pipeline ✕ is replaced by **Reject** (BD only), which moves the person to Not Accepted and asks for a reason from a fixed list — Out of budget · Travel issue · Did not like the company · Skills do not match · Over qualified · Not interested · Other (typed) — stored at the front of `rejection_reason` so it can be counted. They stay on the job with the reason. `reject-reason-smoke` (9). *Earlier:* **PENDING — the owner's call.** Asked 2026-09-29. Nothing changes until they choose (the half-removal is not new — it has been so since Session 31). |
 | `R-081` | **Show what last went wrong, on the Admin page** (suggested 2026-09-29, from the R-076 fix). PACE now writes down why the public job page last failed (`apply_last_error`), and it already writes down why a resume last failed to read (`resume_parse_last_error`) — but no screen shows either, so today only someone querying the database can see them. The AI already has a health card on Admin that does exactly this. Proposal: one small "last failure" line per feature beside it, with the time and a plain-English reason, so a broken apply page or resume reader is noticed in a day, not a week. | **DROPPED 2026-09-30 by the owner ("do not build R-081").** *Earlier:* **PENDING — suggested 2026-09-29; the owner's call.** Small (screen + one read endpoint), no new storage. |
 | `R-080` | **When an out-of-office return date passes, switch the contact back so their follow-ups resume** (suggested 2026-09-29, found while reproducing R-071). Today a contact marked Out of office stays that way forever: nothing resets it on the return date, so PACE's automatic follow-ups to that person stay paused until someone marks them Valid by hand. Proposal: on the return date, set them back to Valid (and say so on the reminder), or ask the owner of the reminder with one click. | **PENDING — suggested 2026-09-29; the owner's call.** |
