@@ -1,34 +1,30 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md` (now ~19 KB — the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
+> **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-09-30 (end of Session 35 round 1) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28, R-069).
-**Highest ids:** decision D-0061 · contract C-0036 · next roadmap id `R-089` · next migration `055`.
+**Updated**: 2026-09-30 (end of Session 35, round 5) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
+**Highest ids:** decision D-0062 · contract C-0036 · next roadmap id `R-090` · next migration `055`.
 
-## ⏸ SESSION 35 — the lot is BUILT on branch `ccr-bed70da8-ctoaet`, draft PR #262 (NOT merged, NOT live)
+## ✅ SESSION 35 — EVERYTHING IS MERGED AND LIVE (PRs #262–#265). Nothing is waiting on a branch.
 
-**The owner's rules, standing:** D-0060 — no helper agent is started or resumed without their say-so in their own words (this whole round used none). Read only what the next step needs. R-088 is DONE (D-0061): small fixes directly, `CLAUDE.md` trimmed, agents on low effort.
+**Owner's standing rules:** D-0060 no helper agent without their say-so in their own words (this session used none); read only what the next step needs; D-0062 merge their approved PRs without asking again; they never read code or use GitHub — give them the running app, screenshots, plain English. Dev branch `ccr-bed70da8-ctoaet` is restarted from `origin/main` after each merge (permission given).
 
-| id | What | State |
-|---|---|---|
-| R-071/072/076 | reminder leaves Dashboard · "Your team" card off · apply links (Session 34) | on the branch; after release open an apply link and send one test application |
-| R-075 + R-077 | Sourced inside a job; change many stages at once — screens (C-0032) | **done**; the 15 legacy rows **healed on the live DB 2026-09-30** (C-0035 (a)) |
-| R-078/R-079 | minimise / full screen / close windows, tray, records park | **done** (`10a-window-dock.js`) |
-| R-073 | Needs-you-today rows do the task | **done** |
-| R-083/R-084 | Write button on every contact; Email opens addressed | **done** (`outreachComposeTo`) |
-| R-085 | AI summary reads our replies (live Sent folder) | **done** — needs a real mailbox to see; sandbox proves it only against a fake |
-| R-086/R-087 | interview confirmation (Gmail bug, default ticked, job details) · From picker everywhere | **done** |
-| R-074 | Apollo credits | **answered** (ROADMAP row): the big batches are not PACE; PACE = 1 credit per lookup; suggestion left with the owner |
+**Shipped this session (all live after Render deploys):** stage-change screens + group stage move (R-075/077) · windows: minimise / full screen / close + tray (R-078/079) · "Needs you today" rows do the task (R-073) · Write/Email buttons address the person (R-083/084) · AI summary reads our replies from the live Sent folder (R-085) · From-mailbox picker on every email (R-087) · interview confirmation fix (R-086) · 15 legacy "Tagged" rows healed on the live DB (C-0035 a) · Apollo cost shown before the click (sizing already counted against the daily limit of 100) · candidate email addresses open PACE, not the computer's mail program · **Reject with a reason replaces "remove from a job"** (R-082, D-0062) · **Lead Insights (#264, #265, R-089):** emails were read from a column that does not exist (always 0) — fixed; one pure calculation `services/bd-insights.js` feeds personal and Team views (`GET /insights/bd/:id`, `GET /insights/bd-team`); 7/30 days include today (UTC days); "Response rate" now = real replies (`contacts.replied_at`), Replied % column added.
+**Dropped by the owner:** R-081 (a "what last went wrong" line on Admin) — "No do not build R-081".
 
-**Tests:** `node test/run-all.mjs` — 145/146 before the last fix; the one red (`scope-outreach-pickers-smoke`, a test ctx missing the new mailbox rule) is fixed and passes 35/35; **one clean full run + Node 26 (CLAUDE.md) still owed before any merge.** New suites, each verified by deliberate breaks: `stage-group-move-smoke` 29, `window-dock-smoke` 26, `email-carries-person-smoke` 11, `needs-you-today-does-smoke` 16, `sent-side-smoke` 20, `from-mailbox-smoke` 17, `from-picker-smoke` 12. `npm install` first (`node_modules` is not in git).
+**Tests:** full `node test/run-all.mjs` was 150/150 on Node 22 and on Node 26 (tarball at `/tmp/claude-0/bk/node-v26.10.0-linux-x64` — gone with the sandbox; fetch `nodejs.org/dist/v26.10.0/...`). New suites this session: stage-group-move 29, window-dock 26, email-carries-person 11, needs-you-today-does 16, sent-side 20, from-mailbox 17, from-picker 12, candidate-email-in-pace 5, reject-reason 9, insights-numbers 17, insights-screens 13. `npm install` first (`node_modules` is not in git).
 
-**Waiting on the owner (all in ROADMAP, plain-English rows):** R-080 (switch a contact back from out-of-office on the return date) · R-081 (a "what last went wrong" line on Admin for the apply page and the resume reader) · R-082 (what "remove from a job" means once someone has moved along) · the Apollo suggestion under R-074 (state the credit cost before the click; count company sizing against the daily limit — today's limit is 100) · **when to merge #262** (it is big: nothing in it is live).
+**Owner-side checks not yet done (I cannot do them from the sandbox):**
+1. Live Lead Insights: emails ≈ 311 (matches the Email page), 7-day tile = sum of the chart bars, Replied % vs Conv % differ, personal = Team for the same person.
+2. Send a test application through an apply link (dead since 22 Sep; I can send one if told).
+3. A real lead's Emails tab with a connected mailbox (Sent-folder reading only proven against a fake mailbox).
+4. Windows and the From picker on a phone.
 
-**Known limits, said plainly:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; candidate-row `mailto:` links still open the computer's mail program; a window that repaints itself while parked must call `Dock.updateParked` (surface.md).
-**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done by the new suites), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves are not owner-gated; review `bulk-stage` and `GET /submissions` scoping).
+**Choices offered to the owner, awaiting their pick:** (a) the same one-calculation fix for the **RA Team** view (still computed in the browser); (b) audit **Reports / Dashboard** numbers against Lead Insights; (c) a documentation-only correction of any repo notes still calling the first batch "not live" (this rewrite does most of it); (d) R-080 (switch an out-of-office contact back on the return date) — still their call; (e) the UTC-vs-local-day question (a one-line change in `dayKey`, `services/bd-insights.js`).
 
-**Suggested next, once the owner says go:** a real-browser look at the new windows/From picker on a phone (screenshots for the owner) → Node 26 run → merge #262 on their word → then the R-080/R-081/R-082 answers. Session 34's scratch proofs are still in `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
+**Known limits:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; a window that repaints itself while parked must call `Dock.updateParked` (surface.md). **Before a second customer: R-067** (per-company API keys — today they are deployment-wide).
+**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves not owner-gated; review `bulk-stage` and `GET /submissions` scoping). Session 34's scratch proofs: `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
