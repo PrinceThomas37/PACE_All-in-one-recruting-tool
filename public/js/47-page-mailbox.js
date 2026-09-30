@@ -430,6 +430,21 @@
     if(m.compose.sig) loadSignature();
     paintComposeModal();
   };
+  // "Email this person" from anywhere in PACE (owner, 2026-09-30: the email links on
+  // candidate rows opened the computer's mail program instead of PACE). Opens the
+  // in-app New message window already addressed, loading the person's mailboxes
+  // first if the Mailbox page has not been visited yet. Sends nothing.
+  window.mbComposeTo=function(to,subject){
+    var m=M();
+    var go=function(){
+      if(!m.activeId){ showToast('Connect a mailbox first — Email → Accounts','warning'); return; }
+      mbCompose(to);
+      if(subject&&m.compose&&!m.compose.subject){ m.compose.subject=subject; paintComposeModal(); }
+    };
+    if(m.activeId) return go();
+    apiGet('/mailbox/accounts').then(function(d){ m.accounts=d||[]; pickAccount(m.accounts); go(); })
+      .catch(function(e){ showToast('Could not load your mailboxes: '+((e&&e.message)||e),'error'); });
+  };
   window.mbComposeField=function(k,v){ var m=M(); if(m.compose) m.compose[k]=v; };
   window.mbComposeSetSig=function(on){
     var m=M(); if(!m.compose)return;

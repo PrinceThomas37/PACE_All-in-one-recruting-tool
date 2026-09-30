@@ -72,7 +72,8 @@ try {
   // 1. Email + Title columns
   step('Table has an Email column header', /<th[^>]*>Email<\/th>/.test(html));
   step('Table has a Title column header', /<th[^>]*>Title<\/th>/.test(html));
-  step('Candidate email rendered as a mailto link', html.includes('mailto:sent@x.com'));
+  // Owner, 2026-09-30: the address opens PACE's own New message window, never the computer's mail program.
+  step('Candidate email is a link that opens PACE (no mailto:)', html.includes('sent@x.com') && html.includes('mbComposeTo(') && !html.includes('mailto:'));
   step('Candidate current title rendered', html.includes('Foreman') && html.includes('Welder'));
 
   // 2. Added vs Submitted

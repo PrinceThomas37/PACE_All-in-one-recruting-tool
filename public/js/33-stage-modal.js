@@ -79,6 +79,10 @@
   // enforces it, this is only so a screen can say so up front.
   var RECRUITER_STAGES = ['Sourced','Screening','Submitted to BDM'];
   var TO_BDM = 'Submitted to BDM';
+  // The reasons for rejecting somebody on a job (owner, 2026-09-30). The chosen one is stored at
+  // the front of `rejection_reason`, so it can be counted.
+  var REJECT_REASONS = ['Out of budget','Travel issue','Did not like the company','Skills do not match','Over qualified','Not interested','Other'];
+  window.ATS_REJECT_REASONS = REJECT_REASONS;
   function recruiterScoped(){
     var u = STATE.user;
     return userHasRole(u,'recruiter') && !userHasAnyRole(u,'admin','bd','bd_lead');
@@ -329,9 +333,14 @@
               '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
                 (group?' <b>These details go on every person you move, and each one gets their own email.</b>':'')+'</div>'+
             '</div>':'')+
+          // Rejecting is a choice from a fixed list, not free typing (owner, 2026-09-30) —
+          // so the reasons can be counted later. "Other" asks for the words.
           (newStage==='Not Accepted'?
-            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Reason (required)</label>'+
-            '<textarea id="stg-reject" class="sel" style="min-height:56px;resize:vertical" placeholder="Client feedback, withdrew, no-show, accepted elsewhere…"></textarea></div>':'')+
+            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Why is '+(group?'this group':'this candidate')+' being rejected? (required)</label>'+
+            '<select id="stg-reject-type" class="sel" onchange="var t=document.getElementById(\'stg-reject\');if(t)t.placeholder=(this.value===\'Other\'?\'Type the reason (required)\':\'Anything to add? (optional)\')">'+
+              '<option value="">— pick a reason —</option>'+REJECT_REASONS.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
+            '</select>'+
+            '<textarea id="stg-reject" class="sel" style="min-height:48px;resize:vertical;margin-top:6px" placeholder="Anything to add? (optional)"></textarea></div>':'')+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Note <span style="color:var(--red)">*</span></label>'+
             '<textarea id="stg-note" class="sel" style="min-height:56px;resize:vertical" placeholder="'+(group?'Why are these candidates moving? One note is saved on each person’s history.':'Why is this candidate moving? (call summary, feedback, next step…)')+'"></textarea></div>'+
           '<label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:8px">'+
@@ -474,9 +483,10 @@
     if (!note) { showToast('Please add a note describing this stage change','error'); var nEl=document.getElementById('stg-note'); if(nEl)nEl.focus(); return; }
     var payload = { stage: mv.stage, sub_stage: val('stg-sub') || undefined, note: note };
     if (mv.stage === 'Not Accepted') {
-      var rr = val('stg-reject');
-      if (!rr.trim()) { showToast('Please add the reason','error'); return; }
-      payload.rejection_reason = rr.trim();
+      var rt = val('stg-reject-type'), rr = val('stg-reject').trim();
+      if (!rt) { showToast('Please pick why they are being rejected','error'); return; }
+      if (rt === 'Other' && !rr) { showToast('Please type the reason','error'); var rEl=document.getElementById('stg-reject'); if(rEl)rEl.focus(); return; }
+      payload.rejection_reason = rt + (rr ? ': ' + rr : '');
     }
     if (document.getElementById('stg-iv-at')) {
       payload.interview_at = val('stg-iv-at') || undefined;

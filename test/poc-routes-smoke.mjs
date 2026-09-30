@@ -205,6 +205,8 @@ try {
   step('the president fills a hiring-manager slot', ['mgr1', 'mgr2'].some(k => slot(k).contact_id === 'c2'));
   step('2 of 4 found', a.body.found === 2, String(a.body.found));
   step('size is unknown and assumed 20-50', a.body.size_known === false && a.body.size === '21-50');
+  // The cost of the next click is stated before it (owner, 2026-09-30). Unsized + a website Apollo has not been asked about = 1 credit for sizing.
+  step('the page is told what sizing would cost: 1 credit, and 1 per person looked up', !!a.body.estimate && a.body.estimate.per_person === 1 && (a.body.estimate.sizing === 1 || a.body.estimate.sizing === 0), JSON.stringify(a.body.estimate));
   step('the format is learned across the company\'s leads (4 real addresses agree)',
     a.body.format && a.body.format.pattern === 'flast' && a.body.format.learned_from === 4 && a.body.format.domain === 'acmebuild.com', JSON.stringify(a.body.format));
   step('…and shown only as its shape on a made-up name', a.body.format.example === 'jsmith@acmebuild.com');
@@ -481,6 +483,7 @@ try {
   step('…Apollo’s 35 people becomes 20–50, marked as Apollo’s, with its count and id',
     co('co7').size_band === '21-50' && co('co7').employee_count === 35 && co('co7').size_source === 'apollo' && co('co7').apollo_org_id === 'org-saylor' && !!co('co7').size_checked_at,
     JSON.stringify(co('co7')));
+  step('a sized company costs nothing to size again', !!one.body.estimate && one.body.estimate.sizing === 0, JSON.stringify(one.body.estimate));
   step('…and the page is told, in a sentence', one.body.size_known === true && one.body.size_source === 'apollo' && one.body.employee_count === 35 &&
     /^Company size from Apollo: about 35 people \(20–50\)\./.test(one.body.result.message), one.body.result && one.body.result.message);
   step('a company found costs ONE credit (Hana’s email needed a second)', meter() === m0 + 2, 'meter +' + (meter() - m0));
@@ -512,6 +515,7 @@ try {
   step('a company Apollo does not know costs nothing, and says so', nf.status === 200 && meter() === m1 && /does not know quiet\.com/.test(nf.body.result.message) && co('co8').size_band == null && !!co('co8').size_checked_at,
     nf.body && nf.body.result && nf.body.result.message);
   step('…and the page can say Apollo had no size', nf.body.size_known === false && !!nf.body.size_checked_at);
+  step('…and once Apollo has been asked, the next click is NOT charged for sizing again (checked within 30 days)', !!nf.body.estimate && nf.body.estimate.sizing === 0, JSON.stringify(nf.body.estimate));
   await call('POST', '/jobs/j8/poc/find', 'bd1');
   step('a search soon after does not ask Apollo about that company again', enrichN() === e1 + 1, String(enrichN() - e1));
   await call('POST', '/jobs/j8/company-size/lookup', 'bd1');

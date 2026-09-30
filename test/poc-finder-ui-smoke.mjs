@@ -311,13 +311,19 @@ try{
   await page.evaluate(()=>{ if (window.leadPocAdd) leadPocAdd('j2', null); });
   await page.waitForTimeout(100);
   const btn0 = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(!b) return null;
-    return { all: [...b.querySelectorAll('button')].some(x=>/^Search contacts$/.test(x.textContent.trim())),
-      perSlot: [...b.querySelectorAll('.lxc-slot.is-empty')].map(sl=>[...sl.querySelectorAll('button')].some(x=>/^Search contact$/.test(x.textContent.trim()))) }; });
+    return { all: [...b.querySelectorAll('button')].some(x=>/^Search contacts( ·.*)?$/.test(x.textContent.trim())),
+      perSlot: [...b.querySelectorAll('.lxc-slot.is-empty')].map(sl=>[...sl.querySelectorAll('button')].some(x=>/^Search contact( ·.*)?$/.test(x.textContent.trim()))) }; });
   step('with Apollo connected and slots open, "Search contacts" is offered at the top', !!btn0 && btn0.all, JSON.stringify(btn0));
+  // R-074 follow-up (owner, 2026-09-30): the cost is stated BEFORE the click.
+  const costs = await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j2'); if(!b) return null;
+    return { all:(([...b.querySelectorAll('.lxc-find')][0])||{}).textContent||'', one:(([...b.querySelectorAll('.lxc-search-one')][0])||{}).textContent||'',
+      tip:(([...b.querySelectorAll('.lxc-find')][0])||{}).title||'' }; });
+  step('the top button says the most a click can cost, before it is pressed', !!costs && /up to 3 credits/.test(costs.all), JSON.stringify(costs));
+  step('a slot\'s own button says it too, and the tooltip explains that searching is free', !!costs && /up to 1 credit/.test(costs.one) && /Searching is free/.test(costs.tip));
   step('…and every empty slot has its own "Search contact"', !!btn0 && btn0.perSlot.length === 3 && btn0.perSlot.every(Boolean), JSON.stringify(btn0 && btn0.perSlot));
   if (SHOTS) { await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); if(b) b.scrollIntoView({block:'start'}); }); await page.waitForTimeout(150); }
   await shot('poc-search-buttons-desktop');
-  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/^Search contacts$/.test(x.textContent.trim())); if(b) b.click(); });
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j2 button')].find(x=>/^Search contacts( ·.*)?$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(150);
   const busy = await page.evaluate(()=>{ const b=document.querySelector('#lx-poc-j2 .lxc-find'); return b ? { text:b.textContent, disabled:b.disabled } : null; });
   step('while it searches, the button says so and cannot be pressed twice', !!busy && /Searching/.test(busy.text) && busy.disabled === true, JSON.stringify(busy));
@@ -392,13 +398,13 @@ try{
     const b=card && [...card.querySelectorAll('button')].find(x=>/Not this person/.test(x.textContent)); if(b) b.click(); });
   await page.waitForTimeout(500);
   const rej = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j2'); return b ? { text:b.innerText,
-    find:[...b.querySelectorAll('button')].some(x=>/^Search contacts$/.test(x.textContent.trim())) } : null; });
+    find:[...b.querySelectorAll('button')].some(x=>/^Search contacts( ·.*)?$/.test(x.textContent.trim())) } : null; });
   step('"Not this person" takes him off, and his slot is open again', !!rej && !/Omar Diaz/.test(rej.text) && /Looking for:/.test(rej.text));
   step('…so "Search contacts" is offered again', !!rej && rej.find === true);
   // Search just that slot, from inside it.
   const nFind = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p)).length;
   await page.evaluate(()=>{ const sl=[...document.querySelectorAll('#lx-poc-j2 .lxc-slot.is-empty')][0];
-    const b=sl && [...sl.querySelectorAll('button')].find(x=>/^Search contact$/.test(x.textContent.trim())); if(b) b.click(); });
+    const b=sl && [...sl.querySelectorAll('button')].find(x=>/^Search contact( ·.*)?$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(900);
   const oneCall = calls.filter(c => c.m==='POST' && /\/poc\/find$/.test(c.p));
   step('a slot\'s own "Search contact" searches THAT slot only', oneCall.length === nFind + 1 && oneCall[oneCall.length-1].body && oneCall[oneCall.length-1].body.slot_key === 'hr2',
@@ -434,7 +440,7 @@ try{
   // A Likely address, from the company's own format.
   await clickEl('#content tr[data-row-id="j1"] td:nth-child(3)');
   await page.waitForTimeout(400);
-  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j1 button')].find(x=>/^Search contacts$/.test(x.textContent.trim())); if(b) b.click(); });
+  await page.evaluate(()=>{ const b=[...document.querySelectorAll('#lx-poc-j1 button')].find(x=>/^Search contacts( ·.*)?$/.test(x.textContent.trim())); if(b) b.click(); });
   await page.waitForTimeout(900);
   const lk = await page.evaluate(()=>{ const b=document.getElementById('lx-poc-j1'); if(!b) return { missing:true };
     const card=[...b.querySelectorAll('.lxc-slot.is-found')].find(c=>/Kim Park/.test(c.innerText));

@@ -400,7 +400,7 @@
     function opt(k, v, o){ return (v==null||v==='') ? '' : UI.kv(k, v, o); }
     function money(v){ return v==null||v==='' ? '' : v; }
     var fields =
-      UI.kv('Email', c.email ? '<a href="mailto:'+esc(c.email)+'" style="color:var(--accent)">'+esc(c.email)+'</a>'+
+      UI.kv('Email', c.email ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(c.email).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE" style="color:var(--accent)">'+esc(c.email)+'</a>'+
               '<span class="verified" style="margin-left:5px;vertical-align:-2px">'+UI.ic('verified')+'</span>' : '',
             { html:true, placeholder:'No email on file' }) +
       UI.kv('Phone number', c.phone, { placeholder:'—' }) +
