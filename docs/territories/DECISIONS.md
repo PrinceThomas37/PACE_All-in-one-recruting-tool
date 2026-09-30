@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0064 · 2026-09-30 · STANDS · The handwritten-notes batch: what the owner confirmed
+**Their words:** R-092 *"when candidate is submitted to BDM or to client, a send email option should be there with submission details. I need that"* · R-096 *"this can be a different thing to develop itself"* · R-091 "the first thing shown" — *"yes"* · R-095 *"All time zones. Our product should be used worldwide."* — and *"Plan these, not act."*
+**Chosen:** R-091/092/093/094/095 are planned together (plan in the chat, rows in the ROADMAP); nothing built until the owner's green signal. R-096 (Boolean search) is its own separate project. Interview time zones: the full world list, not a short list.
+**Re-open when:** the owner changes the order or scope.
+
 ### D-0063 · 2026-09-30 · STANDS · Sentry yes; the Apollo connector is another organisation's; keep sending from people's own mailboxes
 **Their words:** *"Yes do this: [Sentry] shows real errors from a running app … could replace the dropped R-081"* · *"the key in PACE is of a different organisation, I think I have told you this before"* (the Apollo connector is a different account from PACE's Apollo key) · asked whether Resend could send PACE's email.
 **Chosen:** (1) Sentry error reporting built (R-090), off until `SENTRY_DSN` is set, nothing personal sent. (2) The Apollo connector is NOT used to read PACE's credit usage — it is a different account, so it would say nothing about PACE's key (PACE's own meter stays the source). (3) No change to how email is sent: PACE already sends through each person's own connected Microsoft OR Gmail mailbox; Resend is not wired in (it would mean a new sending identity, reply capture and a paid service per customer). Re-open Resend only for PACE's own system mail (sign-up/invite), never for recruiter outreach.
