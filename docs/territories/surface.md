@@ -1146,3 +1146,5 @@ resulting "Ask to take over" modal after clicking through, showing
 ## Session 35, round 2 (2026-09-30)
 - **The Apollo cost is on the button** (`62-poc-finder.js` `costText`, server `estimate` in `routes/poc.js`): "up to N credits" = sizing (0/1) + one per person searched; tooltip says searching is free and how many are left today. Sizing was already counted against the daily limit.
 - **A candidate's email address opens PACE**, not `mailto:`: `mbComposeTo(email)` (47-page-mailbox.js) opens the New message window (a window — it minimises). Pipeline row + candidate record. `test/candidate-email-in-pace-smoke.mjs`. Do not reintroduce a `mailto:` for a person PACE holds.
+
+- **Lead Insights draws the server's numbers (R-089, 2026-09-30):** `16-insights.js` `bdTeamData()` / `bdStatsFromServer()` read `GET /insights/bd-team` (cached 60 s); the admin BD Team, Team overview and drill-down do NO arithmetic on leads or emails — **do not reintroduce a browser-side calculation for these figures** (it is how 0 sat beside 311). `test/insights-screens-smoke.mjs` gives the browser no leads at all to prove it. The RA Team view is still computed in the browser.

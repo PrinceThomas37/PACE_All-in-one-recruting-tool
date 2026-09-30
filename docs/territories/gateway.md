@@ -1,6 +1,9 @@
 # Gateway — memory
 > Last written: 2026-09-30 (Session 35, ctx for the shared mailbox rule) · earlier: 2026-09-29 (Session 33, R-076)
 
+## Session 35, round 5 (2026-09-30) — the ONE insights calculation (R-089)
+`services/bd-insights.js` (pure) + `routes/workflows.js` `loadBdSummary()`/`fetchAll()`; new literal `GET /insights/bd-team`, registered ABOVE `/insights/bd/:userId`. Paged reads (PostgREST caps a request at 1,000 rows, so a count past that was silently cut), errors thrown not swallowed, `emails.sent_by` (there is no `assigned_to`). Days are UTC calendar days — the one clock; change `dayKey` in the service to move it. Pinned by `test/insights-numbers-smoke.mjs`, whose fake knows the LIVE `emails` column list and answers 42703 like Postgres.
+
 ## Session 35 (2026-09-30) — `index.js` hands the shared mailbox rule to two routers (R-087)
 `routeCtx` for candidate-outreach and outreach-generator now includes `sendingMailboxFor` / `ownSendingMailboxes` (from `routes/recruiting/outreach.js`, harbour). No route was added or reordered here; `GET /me/sending-mailboxes` is registered in the recruiting outreach block — a literal path, and there is no `/me/:param` route to shadow it. See harbour.md.
 

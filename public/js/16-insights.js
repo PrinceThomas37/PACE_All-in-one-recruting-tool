@@ -1,3 +1,32 @@
+// ── THE TEAM NUMBERS COME FROM THE SERVER (owner, 2026-09-30) ──────────────────────────
+// Three screens used to work these out in the browser from whatever lists the page had loaded,
+// in a different time zone from the server, and disagreed with the personal report (0 emails
+// beside 311). `GET /insights/bd-team` answers for everybody in scope with the SAME calculation
+// the personal report uses (services/bd-insights.js); these helpers only fetch it and reshape it.
+// Nothing below does arithmetic on leads or emails.
+function bdTeamData(){
+  var t=STATE.bdTeamInsights;
+  var stale=t&&t.data&&!t.loading&&(Date.now()-t.at>60000);
+  if(!t||stale){
+    STATE.bdTeamInsights=Object.assign({},t||{},{loading:true});
+    apiGet('/insights/bd-team').then(function(d){STATE.bdTeamInsights={data:d,at:Date.now()};render();})
+      .catch(function(e){STATE.bdTeamInsights={error:(e&&e.message)||'Could not load',at:Date.now()};render();});
+  }
+  return STATE.bdTeamInsights;
+}
+function bdStatsFromServer(t){
+  var people=(t&&t.data&&t.data.people)||[];
+  return people.map(function(p){
+    return {bd:{id:p.id,name:p.name,role:p.role},total:p.total_all,today:p.total_today,week:p.total_week,month:p.total_month,
+      conv:p.converted,pos:p.positive,sent:p.emails_sent,replied:p.replied,replyRate:p.reply_rate,convRate:p.conv_rate,_p:p};
+  }).sort(function(a,b){return b.convRate-a.convRate;});
+}
+function bdTeamStatus(t){
+  if(!t||t.loading&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Loading the team\u2019s numbers\u2026</div>';
+  if(t.error&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--red);font-size:13px">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.bdTeamInsights=null;render();return false">try again</a></div>';
+  return '';
+}
+
 // ════════════════════════════════════════════════
 // INSIGHTS TAB — RA activity + RA Lead team view
 // ════════════════════════════════════════════════
@@ -13,36 +42,16 @@ function renderInsights(){
 
   // Admin BD Team view
   if(isAdmin&&insightsTeam==='bd'&&!selectedRA){
-    var allBDs=STATE.users.filter(function(x){return userHasRole(x,'bd')||userHasRole(x,'bd_lead');});
-    var allJobs=STATE.jobs;
-    function jAtBD(j){return j.assigned_at?new Date(j.assigned_at).toISOString().slice(0,10):'';}
-    var nowBD=new Date();var todayStrBD=todayIST();
-    function dAgoBD(n){var d=new Date(nowBD.getTime()+5.5*3600000);d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);}
-    var weekAgoBD=dAgoBD(6),monthAgoBD=dAgoBD(29);   // same windows as the server: 7 / 30 calendar days INCLUDING today
-
-    var bdStats=allBDs.map(function(bd){
-      var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===bd.id;});
-      var convJ=bdJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';});
-      var posJ=bdJobs.filter(function(j){return j.stage==='Positive';});
-      // C-0026 #4: `emails` has no `assigned_to` column (only `sent_by`) — this
-      // always counted zero. `STATE.emails` was also always empty (fetched as
-      // `?status=queued`, a status this app never writes); `STATE.sentEmails`
-      // (`?status=sent`) is the array that actually holds sent rows.
-      var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===bd.id;});
-      var todayJ=bdJobs.filter(function(j){return jAtBD(j)===todayStrBD;});
-      var weekJ=bdJobs.filter(function(j){return jAtBD(j)>=weekAgoBD;});
-      var monthJ=bdJobs.filter(function(j){return jAtBD(j)>=monthAgoBD;});
-      var convRate=bdJobs.length?Math.round(convJ.length/bdJobs.length*100):0;
-      return{bd:bd,total:bdJobs.length,today:todayJ.length,week:weekJ.length,month:monthJ.length,conv:convJ.length,pos:posJ.length,sent:sentE.length,convRate:convRate};
-    }).sort(function(a,b){return b.convRate-a.convRate;});
-
+    var tBD=bdTeamData();
+    var bdStats=bdStatsFromServer(tBD);
+    var allBDs=bdStats.map(function(r){return r.bd;});
     var leaderBD=bdStats.find(function(r){return r.total>0&&r.convRate>0;})||(bdStats.find(function(r){return r.total>0;})||null);
     var leaderBannerBD=leaderBD?
       '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
         '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
           '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
           '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leaderBD.bd.name)+'</div>'+
-          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leaderBD.convRate+'% conversion \u00b7 '+leaderBD.month+' leads this month</div></div>'+
+          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leaderBD.convRate+'% conversion \u00b7 '+leaderBD.month+' leads in 30 days</div></div>'+
         '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leaderBD.convRate+'%</div><div style="font-size:11px;opacity:.78">conversion</div></div>'+
       '</div>':'';
 
@@ -59,7 +68,8 @@ function renderInsights(){
         '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600">'+r.month+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.sent+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--green)">'+r.pos+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convRate+'%</td>'+
+        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)" title="Leads where a contact has replied">'+r.replyRate+'%</td>'+
+      '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convRate+'%</td>'+
       '</tr>';
     }).join('');
 
@@ -81,17 +91,18 @@ function renderInsights(){
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
         '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px">BD Manager performance</div>'+
-        (allBDs.length?
+        (bdTeamStatus(tBD)||(allBDs.length?
           '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
             '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">BD Manager</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Today</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Week</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Month</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Sent</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">7 days</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">30 days</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Sent (30d)</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Positive</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Replied %</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
           '</tr></thead><tbody>'+lbRowsBD+'</tbody></table></div>':
-          '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers in the system yet.</div>')+
+          '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers in the system yet.</div>'))+
       '</div></div>';
   }
 
@@ -122,7 +133,7 @@ function renderInsights(){
         '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
           '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer this month</div>'+
           '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leader.ra.name)+'</div>'+
-          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.month+' leads this month \u00b7 '+leader.assignPct+'% assigned</div></div>'+
+          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.month+' leads in 30 days \u00b7 '+leader.assignPct+'% assigned</div></div>'+
         '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leader.month+'</div><div style="font-size:11px;opacity:.78">leads</div></div>'+
       '</div>':'';
 
@@ -167,8 +178,8 @@ function renderInsights(){
           '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
             '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Research Analyst</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Today</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Week</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Month</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">7 days</th>'+
+            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">30 days</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Dups</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Assign %</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
@@ -346,7 +357,7 @@ function renderBDInsights(){
   var e7=d.last_7_emails||{};
   var e7keys=Object.keys(e7).sort();
   var e7max=Math.max(1,Math.max.apply(null,e7keys.map(function(k){return e7[k];})));
-  var todayStr=todayIST();
+  var todayStr=e7keys[e7keys.length-1];   // the last bar IS today, by the server's own clock
   var emailChart=e7keys.map(function(k){
     var val=e7[k]; var pct=Math.round(val/e7max*100);
     var isT=k===todayStr;
@@ -502,30 +513,15 @@ function renderBDLeadInsights(){ return '<div class="page">'+renderTeamInsightsB
 function renderTeamInsightsBody(){
   var u=STATE.user;
   var selectedBD=STATE.bdLeadSelectedBD||null;
-  var allJobs=STATE.jobs;
-  function jAt(j){return j.assigned_at?new Date(j.assigned_at).toISOString().slice(0,10):'';}
-  var now=new Date(); var todayStr=todayIST();
-  function dAgo(n){var d=new Date(now.getTime()+5.5*3600000);d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);}
-  var weekAgo=dAgo(7),monthAgo=dAgo(30);
 
   // ── Drill-down: individual BD Manager ──
   if(selectedBD){
-    var bdUser=STATE.users.find(function(x){return x.id===selectedBD;});
-    if(!bdUser)return'<div style="padding:40px;text-align:center;color:var(--text3)">Not found</div>';
-    var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===selectedBD;});
-    var convJ=bdJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';});
-    var posJ=bdJobs.filter(function(j){return j.stage==='Positive';});
-    var negJ=bdJobs.filter(function(j){return j.stage==='Negative'||j.stage==='No Response';});
-    var todayJ=bdJobs.filter(function(j){return jAt(j)===todayStr;});
-    var weekJ=bdJobs.filter(function(j){return jAt(j)>=weekAgo;});
-    var monthJ=bdJobs.filter(function(j){return jAt(j)>=monthAgo;});
-    // C-0026 #4: same fix as the admin BD-team view above — `sent_by`, not the
-    // nonexistent `assigned_to`, and the arrays that are actually populated.
-    var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===selectedBD;});
-    var pendE=(STATE.pendingEmails||[]).filter(function(e){return e.sent_by===selectedBD;});
+    var tDrill=bdTeamData(); var row=bdStatsFromServer(tDrill).filter(function(r){return r.bd.id===selectedBD;})[0];
+    if(!row)return bdTeamStatus(tDrill)||'<div style="padding:40px;text-align:center;color:var(--text3)">Not in your team</div>';
+    var P=row._p;
     var stgColors={Connected:'var(--green)','In Discussion':'var(--accent)',Positive:'var(--teal)',Assigned:'var(--text3)','No Response':'var(--amber)',Negative:'var(--red)',Future:'var(--purple)','Out of Office':'var(--amber)'};
     var stgRows=['Connected','In Discussion','Positive','Assigned','No Response','Negative','Future','Out of Office'].map(function(s){
-      var cnt=bdJobs.filter(function(j){return j.stage===s;}).length; if(!cnt)return'';
+      var cnt=(P.by_stage||{})[s]||0; if(!cnt)return'';
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border2)">'+
         '<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:'+(stgColors[s]||'var(--text3)')+'"></div><span style="font-size:13px;color:var(--text2)">'+s+'</span></div>'+
         '<span style="font-size:13px;font-weight:700;color:'+(stgColors[s]||'var(--text)')+'">'+cnt+'</span></div>';
@@ -533,11 +529,11 @@ function renderTeamInsightsBody(){
     return ''+
       '<div class="ph"><div class="flex aic gap3">'+
         '<button onclick="STATE.bdLeadSelectedBD=null;render()" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer">\u2190</button>'+
-        av(bdUser,'40')+
-        '<div><div class="ptitle" style="margin:0">'+htmlEsc(bdUser.name)+'</div><div class="psub" style="margin:0">BD Manager performance</div></div>'+
+        av(row.bd,'40')+
+        '<div><div class="ptitle" style="margin:0">'+htmlEsc(row.bd.name)+'</div><div class="psub" style="margin:0">BD Manager performance</div></div>'+
       '</div></div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
-        [['Today',todayJ.length,'var(--accent)'],['This Week',weekJ.length,'var(--teal)'],['This Month',monthJ.length,'var(--purple)'],['Converted',convJ.length,'var(--green)']].map(function(s){
+        [['Today',P.total_today,'var(--accent)'],['Last 7 days',P.total_week,'var(--teal)'],['Last 30 days',P.total_month,'var(--purple)'],['Converted',P.converted,'var(--green)']].map(function(s){
           return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:'+s[2]+'">'+s[1]+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">'+s[0]+'</div></div>';
         }).join('')+
       '</div>'+
@@ -545,10 +541,10 @@ function renderTeamInsightsBody(){
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
           '<div style="font-weight:700;font-size:13px;margin-bottom:10px">Email pipeline</div>'+
           '<div style="display:flex;gap:10px;margin-bottom:10px">'+
-            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--green)">'+sentE.length+'</div><div style="font-size:11px;color:var(--text3)">Sent</div></div>'+
-            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--amber)">'+pendE.length+'</div><div style="font-size:11px;color:var(--text3)">Pending</div></div>'+
+            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--green)">'+P.emails_sent+'</div><div style="font-size:11px;color:var(--text3)">Sent (30 days)</div></div>'+
+            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--amber)">'+P.emails_pending+'</div><div style="font-size:11px;color:var(--text3)">Pending</div></div>'+
           '</div>'+
-          '<div style="font-size:12px;color:var(--text3)">Conv: <strong style="color:var(--green)">'+(bdJobs.length?Math.round(convJ.length/bdJobs.length*100):0)+'%</strong> \u00b7 Positive: <strong style="color:var(--teal)">'+posJ.length+'</strong> \u00b7 Negative: <strong style="color:var(--red)">'+negJ.length+'</strong></div>'+
+          '<div style="font-size:12px;color:var(--text3)">Conv: <strong style="color:var(--green)">'+P.conv_rate+'%</strong> \u00b7 Replied: <strong style="color:var(--teal)">'+P.replied+' ('+P.reply_rate+'%)</strong> \u00b7 Positive: <strong style="color:var(--teal)">'+P.positive+'</strong> \u00b7 Negative: <strong style="color:var(--red)">'+P.negative+'</strong></div>'+
         '</div>'+
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
           '<div style="font-weight:700;font-size:13px;margin-bottom:10px">Stage breakdown</div>'+
@@ -562,28 +558,16 @@ function renderTeamInsightsBody(){
   // transitive) filtered to BD/BD Lead — so a lead sees everyone under them, not
   // just their first-level reports. Reparenting is admin-only (Admin → user →
   // Reporting Hierarchy); this is a read-only performance view.
-  var myBDs=reportingSubtree(u.id).filter(function(x){return userHasAnyRole(x,'bd','bd_lead');});
-  var bdStats=myBDs.map(function(bd){
-    var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===bd.id;});
-    var convJ=bdJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';});
-    var posJ=bdJobs.filter(function(j){return j.stage==='Positive';});
-    // C-0026 #4: same fix as above — `sent_by`, not the nonexistent
-    // `assigned_to`, and `STATE.sentEmails` rather than the always-empty
-    // `STATE.emails` (fetched as `?status=queued`, a status never written).
-    var sentE=(STATE.sentEmails||[]).filter(function(e){return e.sent_by===bd.id;});
-    var todayJ=bdJobs.filter(function(j){return jAt(j)===todayStr;});
-    var weekJ=bdJobs.filter(function(j){return jAt(j)>=weekAgo;});
-    var monthJ=bdJobs.filter(function(j){return jAt(j)>=monthAgo;});
-    var convRate=bdJobs.length?Math.round(convJ.length/bdJobs.length*100):0;
-    return{bd:bd,total:bdJobs.length,today:todayJ.length,week:weekJ.length,month:monthJ.length,conv:convJ.length,pos:posJ.length,sent:sentE.length,convRate:convRate};
-  }).sort(function(a,b){return b.convRate-a.convRate;});
+  var tTeam=bdTeamData();
+  var bdStats=bdStatsFromServer(tTeam);
+  var myBDs=bdStats.map(function(r){return r.bd;});
   var leader=bdStats.find(function(r){return r.total>0&&r.convRate>0;})||(bdStats.find(function(r){return r.total>0;})||null);
   var leaderBanner=leader?
     '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
       '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
         '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
         '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leader.bd.name)+'</div>'+
-        '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.convRate+'% conversion \u00b7 '+leader.month+' leads this month</div></div>'+
+        '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.convRate+'% conversion \u00b7 '+leader.month+' leads in 30 days</div></div>'+
       '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leader.convRate+'%</div><div style="font-size:11px;opacity:.78">conversion</div></div>'+
     '</div>':'';
   var teamTotal=bdStats.reduce(function(s,r){return s+r.total;},0);
@@ -598,6 +582,7 @@ function renderTeamInsightsBody(){
       '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600">'+r.month+'</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.sent+'</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--green)">'+r.pos+'</td>'+
+      '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)" title="Leads where a contact has replied">'+r.replyRate+'%</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convRate+'%</td>'+
     '</tr>';
   }).join('');
@@ -613,17 +598,18 @@ function renderTeamInsightsBody(){
     '</div>'+
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
       '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px">BD Manager performance <span style="font-size:11px;font-weight:400;color:var(--text3)">click a row for detail</span></div>'+
-      (myBDs.length?
+      (bdTeamStatus(tTeam)||(myBDs.length?
         '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
           '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">BD Manager</th>'+
           '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Today</th>'+
-          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Week</th>'+
-          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Month</th>'+
-          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Sent</th>'+
+          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">7 days</th>'+
+          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">30 days</th>'+
+          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Sent (30d)</th>'+
           '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Positive</th>'+
+          '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Replied %</th>'+
           '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
         '</tr></thead><tbody>'+lbRows+'</tbody></table></div>':
-        '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers report to you yet.<br><br>An admin sets reporting lines on the Admin → user page.</div>')+
+        '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers report to you yet.<br><br>An admin sets reporting lines on the Admin → user page.</div>'))+
     '</div>';
 }
 

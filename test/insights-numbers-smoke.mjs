@@ -15,12 +15,13 @@ const results = []; const step = (n, ok, d = '') => { results.push(!!ok); consol
 
 const EMAIL_COLS = ['id','contact_id','job_id','to_email','subject','body','platform','sent_by','status','sent_at','created_at','from_email','followup_type','follow_up_id','graph_message_id','conversation_id','in_reply_to_graph_message_id','template_variant','sending_email_id','org_id','attempt_count','next_attempt_at','fail_kind','fail_reason'];
 const JOB_COLS = ['id','stage','industry','position','assigned_at','assigned_to_bd','deleted_at','org_id','company_id'];
-const COLS = { emails: EMAIL_COLS, jobs: JOB_COLS };
+const USER_COLS = ['id','name','email','role','is_active','deleted_at','roles','org_id','manager_id'];
+const COLS = { emails: EMAIL_COLS, jobs: JOB_COLS, users: USER_COLS };
 const ORG = 'org-a', ME = 'bd-lead-1';
 const DAY = 86400000, now = Date.now();
 const iso = (n) => new Date(now - n * DAY).toISOString();
 const D = {
-  jobs: [], emails: [],
+  jobs: [], emails: [], users: [],
 };
 // 110 leads: 15 assigned 5 days ago, 22 three days ago, 48 two days ago, 25 exactly SEVEN days ago (the eighth calendar day the old tile wrongly included)
 const addLeads = (n, daysAgo, stage) => { for (let i = 0; i < n; i++) D.jobs.push({ id: 'j' + D.jobs.length, assigned_to_bd: ME, org_id: ORG, deleted_at: null, stage: stage || 'Assigned', assigned_at: iso(daysAgo), position: 'x', industry: 'x', company: null }); };
@@ -36,11 +37,13 @@ function q(table) {
   const st = { f: [] };
   const check = (col) => { if (!COLS[table].includes(col)) throw Object.assign(new Error(`column ${table}.${col} does not exist`), { code: '42703' }); };
   const api = {
-    select(list) { String(list || '').replace(/\w+:\w+\([^)]*\)/g, '').split(',').map(s => s.trim()).filter(s => s && !s.includes(':') && !s.includes('(')).forEach(c => { try { check(c); } catch (e) { st.err = e; } }); return api; },
+    select(list) { String(list || '').replace(/(\w+:)?\w+\([^)]*\)/g, '').split(',').map(s => s.trim()).filter(s => s && !s.includes(':') && !s.includes('(')).forEach(c => { try { check(c); } catch (e) { st.err = e; } }); return api; },
     eq(k, v) { try { check(k); } catch (e) { st.err = e; } st.f.push(r => r[k] === v); return api; },
     is(k, v) { st.f.push(r => (r[k] == null) === (v == null)); return api; },
     gte(k, v) { try { check(k); } catch (e) { st.err = e; } st.f.push(r => String(r[k] || '') >= String(v)); return api; },
-    then(a, b) { const err = st.err || (failNext && failNext === table && Object.assign(new Error('boom'), { code: 'X' })); if (err) return Promise.resolve({ data: null, error: { code: err.code, message: err.message } }).then(a, b); return Promise.resolve({ data: D[table].filter(r => st.f.every(f => f(r))), error: null }).then(a, b); },
+    order() { return api; },
+    range(a, b) { st.range = [a, b]; return api; },
+    then(a, b) { const err = st.err || (failNext && failNext === table && Object.assign(new Error('boom'), { code: 'X' })); if (err) return Promise.resolve({ data: null, error: { code: err.code, message: err.message } }).then(a, b); let rows = D[table].filter(r => st.f.every(f => f(r))); if (st.range) rows = rows.slice(st.range[0], st.range[1] + 1); return Promise.resolve({ data: rows, error: null }).then(a, b); },
   };
   return api;
 }
@@ -48,7 +51,9 @@ const supabase = { from: q };
 const routes = {};
 const router = require('../routes/workflows.js')({ supabase, auth: (_q, _s, n) => n(), hasRole: (req, ...r) => r.some(x => (req.user.roles || []).includes(x)),
   today: () => new Date().toISOString().slice(0, 10), logActivity() {}, INDUSTRIES: [], normInd: (x) => x, userOrgId: async () => ORG,
-  withOrg: (qq) => qq, reportingChainIds: async () => [] });
+  withOrg: (qq) => qq,
+  // the real rule (hierarchy.js): me + everyone under me on manager_id
+  reportingChainIds: async (id) => { const out = new Set([id]); const q = [id]; while (q.length) { const c = q.shift(); D.users.filter(u => u.manager_id === c).forEach(u => { if (!out.has(u.id)) { out.add(u.id); q.push(u.id); } }); } return [...out]; } });
 const h = router.stack.find(l => l.route && l.route.path === '/insights/bd/:userId').route.stack.slice(-1)[0].handle;
 async function call() { let status = 200, out = null; const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
   await h({ params: { userId: ME }, user: { id: ME, role: 'bd_lead', roles: ['bd_lead'] }, orgId: ORG }, res); return { status, body: out }; }
@@ -71,5 +76,49 @@ step('a failed email read FAILS the report (500) — never a plausible zero', ba
 failNext = 'jobs';
 const bad2 = await call();
 step('a failed leads read FAILS it too', bad2.status === 500, String(bad2.status));
+
+// ═══ ONE SOURCE: the team report gives each person EXACTLY their personal numbers ═══
+failNext = null;
+const OTHER = 'bd-2', OUTSIDER = 'bd-3', BOSS = 'lead-x';
+D.users.push({ id: ME, name: 'BD Lead 1', role: 'bd_lead', roles: ['bd_lead'], org_id: ORG, manager_id: BOSS, deleted_at: null },
+  { id: OTHER, name: 'BD 2', role: 'bd', roles: ['bd'], org_id: ORG, manager_id: ME, deleted_at: null },
+  { id: OUTSIDER, name: 'BD 3', role: 'bd', roles: ['bd'], org_id: ORG, manager_id: 'nobody', deleted_at: null },
+  { id: BOSS, name: 'Boss', role: 'director', roles: ['director'], org_id: ORG, manager_id: null, deleted_at: null });
+for (let i = 0; i < 10; i++) D.jobs.push({ id: 'k' + i, assigned_to_bd: OTHER, org_id: ORG, deleted_at: null, stage: i < 2 ? 'Connected' : 'Assigned', assigned_at: iso(1), position: 'x', industry: 'x', company: null });
+for (let i = 0; i < 5; i++) D.emails.push({ id: 'x' + i, sent_by: OTHER, org_id: ORG, status: 'sent', created_at: iso(1), sent_at: iso(1) });
+const teamH = router.stack.find(l => l.route && l.route.path === '/insights/bd-team').route.stack.slice(-1)[0].handle;
+async function callTeam(user) { let status = 200, out = null; const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
+  await teamH({ params: {}, user, orgId: ORG }, res); return { status, body: out }; }
+const personalOf = async (id) => { let out; const res = { status() { return res; }, json(j) { out = j; return res; } };
+  await h({ params: { userId: id }, user: { id: ME, role: 'admin', roles: ['admin'] }, orgId: ORG }, res); return out; };
+
+const admin = { id: 'adm', role: 'admin', roles: ['admin'] };
+const t = await callTeam(admin);
+const names = ((t.body || {}).people || []).map(x => x.name).sort().join(',');
+step('admin: the team report lists every BD in the company', names === 'BD 2,BD 3,BD Lead 1', names);
+const meInTeam = ((t.body || {}).people || []).find(x => x.id === ME);
+const mePersonal = await personalOf(ME);
+const keys = ['total_all', 'total_week', 'total_month', 'emails_sent', 'emails_sent_today', 'emails_pending', 'emails_failed', 'conv_rate', 'reply_rate', 'replied'];
+step('the team report and the personal report give the SAME number for every figure (one calculation)', !!meInTeam && keys.every(k => meInTeam[k] === mePersonal[k]), keys.filter(k => !meInTeam || meInTeam[k] !== mePersonal[k]).join(',') || 'all equal');
+const tl = await callTeam({ id: ME, role: 'bd_lead', roles: ['bd_lead'] });
+const tlNames = ((tl.body || {}).people || []).map(x => x.name).join(',');
+step('a lead sees the BDs under them — not themselves, not anyone outside their line', tlNames === 'BD 2' && tl.body.scope === 'team', tlNames);
+step('…and their numbers are the real ones (10 leads, 5 emails)', (tl.body.people[0] || {}).total_all === 10 && tl.body.people[0].emails_sent === 5);
+
+// ═══ REPLY RATE is replies, not "moved to Connected" ═══
+const repliedIds = D.jobs.filter(j => j.assigned_to_bd === ME).slice(0, 11).map(j => j.id);
+D.jobs.filter(j => repliedIds.includes(j.id)).forEach(j => { j.contacts = [{ replied_at: iso(2) }]; });   // 11 of 110 replied (10%)
+const rr = await personalOf(ME);
+step('reply rate = leads with a recorded reply / leads (11 of 110 = 10%), independent of stage', rr.replied === 11 && rr.reply_rate === 10 && rr.response_rate === 10, rr.replied + ' / ' + rr.reply_rate + '%');
+step('…while "conversion" is still the stage-based figure (6 of 110 = 5%) — the two are no longer the same number', rr.conv_rate === 5 && rr.reply_rate !== rr.conv_rate, rr.conv_rate + '% vs ' + rr.reply_rate + '%');
+
+// ═══ more than 1,000 rows: a page boundary must not silently cut the count ═══
+for (let i = 0; i < 1200; i++) D.emails.push({ id: 'big' + i, sent_by: OTHER, org_id: ORG, status: 'sent', created_at: iso(2), sent_at: iso(2) });
+const big = await personalOf(OTHER);
+step('1,205 sent emails are all counted (PostgREST caps a request at 1,000 rows)', big.emails_sent === 1205, String(big.emails_sent));
+failNext = 'users';
+const badT = await callTeam(admin);
+step('a failed read fails the team report too (500), never an empty team', badT.status === 500, String(badT.status));
+
 console.log('\n' + results.filter(Boolean).length + '/' + results.length + ' passed');
 process.exit(results.every(Boolean) ? 0 : 1);
