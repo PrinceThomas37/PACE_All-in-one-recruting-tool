@@ -1,6 +1,9 @@
 # Deep — memory
 > Last written: 2026-09-30 (Session 35 — C-0035 (a) applied live; territory map: sent-side) · earlier: 2026-09-28 (Session 33)
 
+## Session 35, round 5 (2026-09-30)
+`services/bd-insights.js` added to gateway in `scripts/territory-map.mjs`. No migration.
+
 ## Session 35 (2026-09-30) — the 15 legacy "Tagged" rows healed on the live database (C-0035 (a))
 Applied guild's verified SQL through the Supabase connector on the owner's yes: preview 15 rows → one transaction → check `0 / 0 / 0`, submissions 52 → 67. (b) — dropping the inert `candidate_pipeline.pipeline_status` — stays open until no screen reads the alias. `services/sent-side.js` was added to observatory in `scripts/territory-map.mjs`. **No migration this session** (the next number is 055).
 
