@@ -1,4 +1,5 @@
 require('dotenv').config();
+const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
@@ -3894,5 +3895,6 @@ setTimeout(() => {
 }, 60 * 1000);
 
 // ── START ──────────────────────────────────────────────────────
+errorReport.attachErrorHandler(app); // after every route, so a throw in any of them is reported
 app.listen(PORT, () => console.log(`PACE API v3.0.0 running on port ${PORT}`));
 module.exports = app;

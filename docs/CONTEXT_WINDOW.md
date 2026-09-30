@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-09-30 (end of Session 35, round 5) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
-**Highest ids:** decision D-0062 · contract C-0036 · next roadmap id `R-090` · next migration `055`.
+**Highest ids:** decision D-0063 · contract C-0036 · next roadmap id `R-091` · next migration `055`.
 
 ## ✅ SESSION 35 — EVERYTHING IS MERGED AND LIVE (PRs #262–#265). Nothing is waiting on a branch.
 
@@ -22,6 +22,8 @@
 4. Windows and the From picker on a phone.
 
 **Choices offered to the owner, awaiting their pick:** (a) the same one-calculation fix for the **RA Team** view (still computed in the browser); (b) audit **Reports / Dashboard** numbers against Lead Insights; (c) a documentation-only correction of any repo notes still calling the first batch "not live" (this rewrite does most of it); (d) R-080 (switch an out-of-office contact back on the return date) — still their call; (e) the UTC-vs-local-day question (a one-line change in `dayKey`, `services/bd-insights.js`).
+
+**R-090 Sentry error reporter: BUILT in PR (not merged, not reporting).** Needs `SENTRY_DSN` added in Render, then a one-time Slack link inside Sentry. D-0063.
 
 **Known limits:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; a window that repaints itself while parked must call `Dock.updateParked` (surface.md). **Before a second customer: R-067** (per-company API keys — today they are deployment-wide).
 **Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves not owner-gated; review `bulk-stage` and `GET /submissions` scoping). Session 34's scratch proofs: `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
