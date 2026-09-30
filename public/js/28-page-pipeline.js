@@ -209,7 +209,8 @@
         '<td style="padding:8px 9px;white-space:nowrap">'+
           statusMark+
           '<button class="btn btn-sm btn-outline" onclick="plOpenEdit(\''+p.id+'\')">Edit</button>'+
-          ' <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="plRemove(\''+p.id+'\')">✕</button>'+
+          // Reject, not remove (owner, 2026-09-30): they stay on the job with the reason, at Not Accepted.
+          (isBDM(u)?' <button class="btn btn-sm btn-outline" style="color:var(--red)" title="Reject this candidate for this job — they stay on the record, with the reason" onclick="plMove(\''+p.id+'\',\''+(p.submission_id||'')+'\',\'Not Accepted\')">Reject</button>':'')+
         '</td>'+
       '</tr>';
     }).join('');
@@ -353,11 +354,6 @@
   // this flow would break interview invitations silently — nothing on screen
   // would say so. See CAPABILITIES.md "Emailing a candidate about a job".
 
-  window.plRemove = function(id){
-    if (!confirm('Remove this candidate from the pipeline?')) return;
-    apiDelete('/pipeline/'+id).then(function(){ showToast('Removed from pipeline','info'); bdReloadPipeline(); })
-      .catch(function(e){ showToast('Failed: '+e.message,'error'); });
-  };
 
   // ── edit snapshot fields ────────────────────────────────────────────────────
   window.plOpenEdit = function(id){

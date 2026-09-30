@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0062 · 2026-09-30 · STANDS · R-082: reject, don't remove; R-081 dropped; merge PR #263 without asking
+**Their words:** *"No do not build R-081. For R-082 - give an option to reject the candidate to a user in a job not remove them. Sub options like out of budget, travel issue, did not like the company, skills do not match, over qualified, not interested, other with type column … merge it all after this edit, no need for my permission, merge this change."*
+**Chosen:** the Pipeline ✕ becomes **Reject** (BD), moving the person to Not Accepted with a required reason from that list ("Other" is typed). R-081 is dropped. **The owner authorised merging this PR (#263) without further permission — for this change only.**
+**Re-open when:** they want the reasons reported on (they are stored to be counted), or want recruiters to reject too.
+
 ### D-0061 · 2026-09-30 · STANDS · Work cheaper (R-088 yes), heal the 15 old rows, and the order of the rest
 **Their words:** *"yes do R-088"* · *"15 old 'Tagged' candidate rows (C-0035) … yes"* · then, for the order: finish the stage-change screens myself without agents, rebuild the failing test and re-run everything once, then windows (R-078/R-079), "Needs you today" rows that do the task (R-073), emailing a contact you just added (R-083), email buttons forgetting who was clicked (R-084), the AI summary missing our own replies (R-085), the interview confirmation email (R-086), choosing the From address on every email (R-087). And, about Apollo: *"one click sometimes consumes a lot of apollo credit, i think our credit and their credit system is not the same."*
 **Chosen:** all three of R-088's ways: small fixes done directly, `CLAUDE.md` trimmed to the rules (full text kept in `docs/CLAUDE_MD_FULL_SESSION34.md`), helpers on low effort with targeted tests. The 15 legacy rows were healed on the live database the same day (C-0035 (a) closed). D-0060 stands.

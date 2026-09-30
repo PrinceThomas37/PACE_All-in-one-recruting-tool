@@ -119,14 +119,14 @@ try {
   });
   await page.waitForTimeout(150);
   const rejectHtml = await page.evaluate(() => STATE.modal || '');
-  step('Not Accepted stage shows a required reason field', rejectHtml.includes('Reason (required)'));
+  step('Not Accepted stage shows a required reason picker', rejectHtml.includes('stg-reject-type') && rejectHtml.includes('(required)'));
   step('Stage modal header shows current → target confirmation', /Submitted to Client[\s\S]*→[\s\S]*Not Accepted/.test(rejectHtml), 'header did not show current→target');
 
   // Note is required on EVERY stage change: with a reason but no note, blocked on the note.
   const noteGuard = await page.evaluate(() => {
     window.__toastMsgs = [];
     const _orig = window.showToast; window.showToast = (m) => { window.__toastMsgs.push(m); };
-    document.getElementById('stg-reject').value = 'Client passed';
+    document.getElementById('stg-reject-type').value = 'Skills do not match';
     document.getElementById('stg-note').value = '';
     stgApply();
     window.showToast = _orig;
@@ -139,10 +139,10 @@ try {
     window.__toastMsgs = [];
     const _orig = window.showToast; window.showToast = (m) => { window.__toastMsgs.push(m); };
     document.getElementById('stg-note').value = 'Sharing client feedback';
-    document.getElementById('stg-reject').value = '';
+    document.getElementById('stg-reject-type').value = '';
     stgApply();
     window.showToast = _orig;
-    return window.__toastMsgs.some(m => /add the reason/i.test(m));
+    return window.__toastMsgs.some(m => /pick why/i.test(m));
   });
   step('Moving to Not Accepted without a reason is blocked', rejectGuard);
   await page.evaluate(() => { closeModal(); STATE.user.role = 'recruiter'; STATE.user.roles = ['recruiter']; });
