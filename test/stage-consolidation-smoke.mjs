@@ -86,26 +86,35 @@ try {
   step('Modal shows current → target for a promoted row', /Screening[\s\S]*→[\s\S]*Interview Scheduled/.test(promotedModal));
   await page.evaluate(() => closeModal());
 
-  // plMove on an UN-PROMOTED row promotes (stubbed) then opens the modal.
+  // plMove on a row with no submission (added before a stage was recorded, D-0057):
+  // it is added properly through the ONE add path (POST /pipeline/bulk — the retired
+  // /pipeline/:id/promote shim is no longer called), its submission is read back,
+  // and the SAME shared stage modal opens for the chosen stage.
   const promoteFlow = await page.evaluate(async () => {
     const calls = [];
-    const _post = window.apiPost;
+    const _post = window.apiPost, _get = window.apiGet;
     window.apiPost = function(p, b){
       calls.push({ p, b });
-      if (/\/pipeline\/plUn\/promote$/.test(p)) {
-        return Promise.resolve({ pipeline_id: 'plUn', submission: { id: 'subNew', job_order_id: 'job1', stage: 'Sourced', candidate: { id: 'candB', full_name: 'Tagged Person' } } });
-      }
+      if (/^\/pipeline\/bulk$/.test(p)) return Promise.resolve({ added: 0, already: 0, linked: 1, failed: 0, not_found: 0 });
       return _post.apply(this, arguments);
+    };
+    window.apiGet = function(p){
+      if (/^\/submissions\?candidate_ids=/.test(p)) {
+        return Promise.resolve({ submissions: [{ id: 'subNew', candidate_id: 'candB', job_order_id: 'job1', stage: 'Sourced', sub_stage: null }] });
+      }
+      return _get.apply(this, arguments);
     };
     const _reload = window.bdReloadPipeline; window.bdReloadPipeline = function(){};
     STATE.modal = null;
     plMove('plUn', '', 'Submitted to Client');
-    await new Promise(r => setTimeout(r, 250));
-    window.apiPost = _post; window.bdReloadPipeline = _reload;
+    await new Promise(r => setTimeout(r, 350));
+    window.apiPost = _post; window.apiGet = _get; window.bdReloadPipeline = _reload;
     return { calls, modal: STATE.modal || '' };
   });
-  step('Un-promoted row promotes via /pipeline/:id/promote', promoteFlow.calls.some(c => /\/pipeline\/plUn\/promote$/.test(c.p) && c.b && c.b.stage === 'Sourced'));
-  step('After promote, the shared stage modal opens for the chosen stage', promoteFlow.modal.includes('Submitted to Client') && promoteFlow.modal.includes('stg-note'));
+  step('A row with no stage yet is added through the one add path (POST /pipeline/bulk), never the retired promote shim',
+    promoteFlow.calls.some(c => /^\/pipeline\/bulk$/.test(c.p) && c.b && JSON.stringify(c.b.candidate_ids) === '["candB"]' && c.b.job_order_id === 'job1') &&
+    !promoteFlow.calls.some(c => /\/promote$/.test(c.p)));
+  step('After the add, the shared stage modal opens for the chosen stage', promoteFlow.modal.includes('Submitted to Client') && promoteFlow.modal.includes('stg-note'));
   await page.evaluate(() => closeModal());
 
   step('No JS page errors', pageErrors.length === 0, pageErrors.join('; ').slice(0, 300));

@@ -95,8 +95,12 @@ const { execSync } = require('node:child_process');
 const root = new URL('..', import.meta.url).pathname;
 const readerFiles = execSync(
   // scripts/ is excluded: the one-off repair tool rewrites names INTO tokens,
-  // which is the opposite job.
-  "grep -rl \"from('emails')\" --include=*.js . | grep -v node_modules | grep -v '^./test/' | grep -v '^./scripts/'",
+  // which is the opposite job. .claude/ is excluded too: an agent's git worktree
+  // is a whole second checkout (its own scripts/ and test/) living INSIDE this
+  // directory, and this scan read one — "./.claude/worktrees/<id>/scripts/
+  // repair-pending-sender-names.js renders the stored body" failed a green tree
+  // (Session 34). A worktree is not product code.
+  "grep -rl \"from('emails')\" --include=*.js . | grep -v node_modules | grep -v '^./.claude/' | grep -v '^./test/' | grep -v '^./scripts/'",
   { cwd: root, encoding: 'utf8' }
 ).trim().split('\n').filter(Boolean);
 const bodyReaders = readerFiles.filter((f) => {

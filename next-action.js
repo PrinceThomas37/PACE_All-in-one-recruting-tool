@@ -79,6 +79,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
+        email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
         job_id: t.job_id || null, owner_id: t.owner_id || null,
         reason: a.headline,
         state: a.state,
@@ -114,6 +115,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
           entity_type: t.entity_type, entity_id: t.entity_id,
           title: t.name || t.email || 'Unknown',
           subtitle: t.company || null,
+          email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
           job_id: t.job_id || null, owner_id: t.owner_id || null,
           reason: a.headline,
           state: a.state,
@@ -137,6 +139,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
+        email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
         job_id: t.job_id || null, owner_id: t.owner_id || null,
         reason: `They said "${c.phrase}" — that was ${fmtDays(late)} ago.`,
         state: a.state,
@@ -160,6 +163,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         entity_type: t.entity_type, entity_id: t.entity_id,
         title: t.name || t.email || 'Unknown',
         subtitle: t.company || null,
+        email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
         job_id: t.job_id || null, owner_id: t.owner_id || null,
         reason: `${a.intent.label} — currently at "${t.stage}". Worth moving them forward?`,
         state: a.state,
@@ -193,6 +197,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
       reminder_id: r.id,
       title: r.contact_name || 'Reminder',
       subtitle: r.company_name || null,
+      email: (r.contact && r.contact.email) || null,
       job_id: r.job_id || null, owner_id: r.user_id || null,
       reason: r.note || (late > 0 ? `Reminder was due ${fmtDays(late)} ago.` : 'Reminder due today.'),
       state: 'reminder',

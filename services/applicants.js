@@ -15,6 +15,8 @@
 
 'use strict';
 
+const { ENTRY_STAGE } = require('./submission-stages');
+
 function obj(row) {
   const raw = row && row.raw;
   return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : null;
@@ -109,22 +111,109 @@ function sourceLabel(provider) {
 // whole candidate-on-job pipeline. A submission is a candidate sent to the
 // CLIENT, and nothing here has been sent anywhere, so the row carries NO
 // `submitted_at` and is not counted as a submission by anything.
-function submissionRowFor(cand, jobOrderId, userId) {
+//
+// `extra` (optional, R-075): what a caller may set that the candidate record
+// cannot say — `recruiterId` (whose candidate-on-this-job it is, when that is
+// not the person clicking), `snapshot` (rate / employer / availability overrides
+// typed in the add form), `submitted_rate`, `notes`, `revision_status`. A call
+// with three arguments builds exactly the row it always did.
+const SNAPSHOT_KEYS = ['bill_rate', 'pay_rate', 'employer_name', 'availability', 'notice_period'];
+
+function submissionRowFor(cand, jobOrderId, userId, extra) {
   if (!cand || !cand.id || !str(jobOrderId)) return null;
   const c = cand || {};
+  const x = extra || {};
+  const snap = x.snapshot || {};
+  const pick = (k, fallback) => (snap[k] !== undefined ? snap[k] : (fallback || null));
+  const row = {
+    candidate_id: c.id,
+    job_order_id: str(jobOrderId),
+    recruiter_id: x.recruiterId || userId || null,
+    stage: ENTRY_STAGE,
+    revision_status: str(x.revision_status) || 'N/A',
+    employer_name: pick('employer_name', c.current_employer),
+    bill_rate: pick('bill_rate', c.bill_rate),
+    pay_rate: pick('pay_rate', c.pay_rate),
+    availability: pick('availability', c.availability),
+    notice_period: pick('notice_period', c.notice_period),
+    submitted_by: userId || null,
+  };
+  if (x.submitted_rate) row.submitted_rate = x.submitted_rate;
+  if (x.notes) row.notes = x.notes;
+  return row;
+}
+
+
+// THE SOURCING DETAILS THAT TRAVEL WITH SOMEBODY ON A JOB (R-075, D-0057).
+//
+// `candidate_pipeline` began as Ceipal's "tagging" bucket — a person was TAGGED
+// to a job, then PROMOTED into a submission — with its own status list (Tagged,
+// Contacted, Interested, Screening, Shortlisted, Moved to Submission, Not
+// Interested, Rejected) beside the eleven stages. The owner's answer: *"Tagged
+// is for the database. Inside a job the stage starts from Sourced."* So inside a
+// job there is ONE vocabulary, the eleven stages, and a person's state is the
+// stage of their submission.
+//
+// What the row keeps is what it was always good for: the bill/pay rate,
+// employer, availability, notice period, CTC, source and notes captured when
+// somebody was put on the job. Its `pipeline_status` column (NOT NULL, default
+// 'Tagged') is now inert: it is written as the entry stage, never read for
+// meaning, and never sent to a screen — `pipelineView` answers with the
+// submission's stage instead. Dropping the column is deep's, later.
+const PIPELINE_DETAIL_KEYS = ['work_auth_snap', 'bill_rate', 'pay_rate', 'employer_name', 'availability',
+  'notice_period', 'current_ctc', 'source', 'notes'];
+
+/** The sourcing-details row for one person on one job. Null without both ids. */
+function pipelineRowFor(cand, jobOrderId, userId, details) {
+  if (!cand || !cand.id || !str(jobOrderId)) return null;
+  const c = cand || {};
+  const d = details || {};
+  const pick = (k, fallback) => (d[k] !== undefined ? d[k] : (fallback || null));
   return {
     candidate_id: c.id,
     job_order_id: str(jobOrderId),
-    recruiter_id: userId || null,
-    stage: 'Sourced',
-    revision_status: 'N/A',
-    employer_name: c.current_employer || null,
-    bill_rate: c.bill_rate || null,
-    pay_rate: c.pay_rate || null,
-    availability: c.availability || null,
-    notice_period: c.notice_period || null,
-    submitted_by: userId || null,
+    // Never the legacy word. The column is inert; the truth is the submission.
+    pipeline_status: ENTRY_STAGE,
+    work_auth_snap: pick('work_auth_snap', c.work_authorization),
+    bill_rate: pick('bill_rate', c.bill_rate),
+    pay_rate: pick('pay_rate', c.pay_rate),
+    employer_name: pick('employer_name', c.current_employer),
+    availability: pick('availability', c.availability),
+    notice_period: pick('notice_period', c.notice_period),
+    current_ctc: pick('current_ctc', c.current_ctc),
+    source: pick('source', c.source),
+    notes: d.notes || null,
+    tagged_by: userId || null,
   };
 }
 
-module.exports = { appliedJobId, appliedJob, isApplication, forJob, sourceLabel, SOURCE_LABELS, submissionRowFor };
+/**
+ * A person's stage inside a job, read off a pipeline row. It is the stage of
+ * the linked submission; a row not yet linked to one (the 15 that pre-date
+ * Session 31) is on the job at the entry stage — never "Tagged".
+ * `normalize` is the stage vocabulary's own (legacy names → current).
+ */
+function pipelineStageOf(row, normalize) {
+  const n = typeof normalize === 'function' ? normalize : (s => s);
+  const sub = row && row.submission;
+  const st = sub && str(sub.stage);
+  return (st && n(st)) || ENTRY_STAGE;
+}
+
+/**
+ * What a screen receives for a pipeline row: the row, plus `stage`, and with
+ * `pipeline_status` overwritten by that same stage so an older screen that still
+ * reads the old key can never draw "Tagged" or "Moved to Submission". New code
+ * reads `stage`; the alias goes when the last reader does.
+ */
+function pipelineView(row, normalize) {
+  if (!row) return row;
+  const stage = pipelineStageOf(row, normalize);
+  return Object.assign({}, row, { stage, pipeline_status: stage });
+}
+
+module.exports = {
+  appliedJobId, appliedJob, isApplication, forJob, sourceLabel, SOURCE_LABELS,
+  submissionRowFor, pipelineRowFor, pipelineStageOf, pipelineView,
+  SNAPSHOT_KEYS, PIPELINE_DETAIL_KEYS,
+};

@@ -29,12 +29,64 @@ function reminderWhy(r){
   // a row rendered before that response lands, and it never invents a source.
   if(r.source&&r.source.why)return r.source;
   var t=r.reminder_type||'manual';
-  if(t==='ooo_return')return{label:'Back from leave',why:'Their auto-reply said they were away until this date.'};
+  // The reader is always the person who marked the contact out of office (that
+  // control creates this reminder for them). This is a copy of the sentence in
+  // services/reminder-source.js and must match it character for character.
+  if(t==='ooo_return')return{label:'Back from leave',why:'You marked them out of office until this date, which created this reminder. PACE sends them no automatic follow-ups until their status is set back to Valid.'};
   if(t==='bd_touch'||t==='reminder')return{label:'Sequence step',why:'An outreach sequence reached a step that asks you to do something.'};
   if(t==='recruiter_task')return{label:'Sequence task',why:'A candidate sequence reached a recruiter task.'};
   if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};
   return{label:'Added by you',why:'You added this reminder yourself.'};
 }
+
+// ── CLOSING A REMINDER (R-071) ─────────────────────────────────────────────
+// The owner: "Once the reminders are complete it doesn't go off from the
+// dashboard." Four faults, and the last two were ONE mistake: a close updated
+// the list it was clicked on and left the other one on screen — the Reminders
+// card kept "Due now · Send" after Done on "Needs you today", and "Needs you
+// today" kept the row after Compose → Send. The first two were worse: a second
+// `window.dismissReminder` later in 12-manager-users.js silently replaced this
+// one with a browser-only filter, so Dismiss and Remove never reached the
+// server and the row came back on the next load.
+//
+// So there is ONE step for "the server has closed this reminder", and EVERY
+// server-confirmed close calls it — dismissReminder below, the Compose → Send
+// handler (03-core-render.js sendReminderViaEngine) and naDone (44-next-
+// actions.js). It never runs on a click alone: only on the server's yes.
+//
+// dismissReminder lives HERE, beside the buttons that call it (the Reminders
+// page, its Upcoming table, and the Email page's out-of-office card). A handler
+// defined in another file is one a same-named global can replace unseen.
+window.reminderClosed=function(rid){
+  if(!rid)return;
+  // Every screen that lists reminders reads this: the Reminders page, the
+  // Dashboard card, the rail badge, the Email page's out-of-office card.
+  STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent'}):r;});
+  // "Needs you today" is a separate list with its own copy of the row. Take it
+  // out now — the server has already said yes, so waiting on a re-read to show
+  // it would be a lie about a fact we hold — then re-read to reconcile.
+  var na=STATE.nextActions;
+  // Never loaded (undefined): there is no copy on screen to correct, and the
+  // Dashboard reads it fresh the first time it draws. Reading it here would also
+  // hand a "view as" preview the VIEWER's own queue (see renderDashboard).
+  if(na===undefined){render();return;}
+  if(na&&na.items){
+    var kept=na.items.filter(function(it){return it.reminder_id!==rid;});
+    if(kept.length!==na.items.length){
+      var by=Object.assign({},(na.summary&&na.summary.by_kind)||{});
+      if(by.reminder_due)by.reminder_due--;
+      STATE.nextActions=Object.assign({},na,{items:kept,summary:Object.assign({},na.summary,{total:kept.length,by_kind:by})});
+    }
+  }
+  refreshNextActions(true);
+};
+window.dismissReminder=function(rid){
+  apiFetch('PATCH','/reminders/'+rid,{status:'sent'}).then(function(){
+    reminderClosed(rid);
+    showToast('Reminder dismissed','success');
+  }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');});
+};
+
 // The email trail behind a task, and why a send may not be on offer.
 // `outreach` comes from GET /reminders (services/outreach-dedup.js) — the page
 // never recomputes the rule, it reports it.

@@ -366,6 +366,10 @@ window.leadContactRowHtml=function(c){
           '</select>'+
         '</label>'
       : '<span class="lx-noemail">No email</span>')+
+    // Write to them from the row itself — the finder adds people and until now
+    // there was nothing to do with one once added (R-083). Opens the composer
+    // addressed to this person (sendEmailToContact -> outreachComposeTo).
+    (c.email?'<button type="button" class="btn btn-sm btn-outline lx-mailbtn" onclick="event.stopPropagation();sendEmailToContact(\''+c.id+'\')" title="Write an email to '+escHtml(nm)+'">✉ Write</button>':'')+
   '</div>';
 };
 
@@ -714,14 +718,18 @@ function deleteContact(cid){
     showToast("Failed to delete contact: "+e.message,"error");
   });
 }
+// The ONE "Email this person" entry for a lead's contacts (R-084/R-083): the
+// lead drawer's button, the lead row's contact list and the POC finder's slots
+// all come here. It opens the composer ALREADY ADDRESSED — name, address, title,
+// company, the role — through outreachComposeTo (48-page-outreach-gen.js).
 function sendEmailToContact(cid){
-  var c=STATE.contacts.find(function(x){return x.id===cid;}); if(!c) return;
+  var c=(STATE.contacts||[]).find(function(x){return x.id===cid;}); if(!c) return;
+  if(!c.email){ showToast("This contact has no email address yet","warning"); return; }
   var j=jobById(c.job_id)||{};
-  STATE.composeContactId=cid+'|'+(j.id||'');
-  STATE.composeCompanyId=j.company_id||null;
-  STATE.composeContext=null;STATE.composeReminderId=null;
-  STATE.manualEmail=null;STATE.genEmail=null;STATE.emailTab='compose';STATE.showAIPanel=false;
-  STATE.page="email"; STATE.modal=null; showToast("Compose email to "+c.first_name,"info"); render();
+  if(!window.outreachComposeTo){ showToast("The email screen is not loaded yet — try again in a moment","error"); return; }
+  outreachComposeTo({ id:c.id, name:((c.first_name||"")+" "+(c.last_name||"")).trim(), email:c.email,
+    title:c.designation||"", company:j.company_name||"", location:j.location||"", job_id:j.id||c.job_id||null, job_title:j.position||"" });
 }
+window.sendEmailToContact=sendEmailToContact;
 function closeModal(){ STATE.modal=null; render(); }
 

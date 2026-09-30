@@ -1,5 +1,5 @@
 # Ledger — memory
-> Last written: 2026-09-24 · R-047 B2 (reminders could read any lead by id)
+> Last written: 2026-09-29 · R-071 (the out-of-office reminder blamed an auto-reply)
 
 ## What is true here now
 - Billing is **built and payments are switched off** (Session 11).
@@ -35,6 +35,21 @@
   The rule is the exported pure `activityRowFor(row, scope, senderName)`.
 
 ## Fragile — touch with care
+- **A reminder's "why" is a claim about the past — check the WRITER before
+  wording it (R-071).** `ooo_return` said *"Their auto-reply said they were
+  away… so PACE held the follow-up until they were back"*; both halves false.
+  Facts, verified 2026-09-29: the ONLY writer is `PATCH /contacts/:id/
+  email-status` (a person picks "Out of office" + types a date); PACE never
+  reads an auto-reply to set it (`conversation-intel` only LABELS a thread).
+  The reminder's `user_id` is that person, `GET /reminders` is own-only and
+  nothing reassigns a reminder, so the reader is always the one who did it —
+  hence "You". **The hold:** while a contact is `out_of_office`, scheduled
+  fu1/fu2 are withheld (queued row deleted, schedule reset, left `active`) but
+  a SEQUENCE email step is SKIPPED and the sequence moves on
+  (`workflow-engine.js` "done / skipped → move on"); nothing lifts the status
+  on the date (no sweep/trigger reads `ooo_until`; marking the reminder done
+  does not touch the contact) — logged as R-080, owner undecided, do not build.
+  Surface mirrors the sentence in `public/js/10-page-modals.js` `reminderWhy`.
 - **`routes/reminders.js`: an EMBEDDED JOIN IS NOT ORG-FILTERED (R-047 B2).**
   `db.forRequest` scopes `reminders`; the `job:jobs(...)` / `contact:contacts(...)`
   embeds in `GET /reminders` are not. `POST /reminders` used to take any
@@ -89,6 +104,32 @@
   null `body` as *"sent before PACE kept a copy"*. It must render `body_note`
   when `body_visible === false`. Needs a surface contract (not opened by me —
   the orchestrator limited my `_contracts.md` edit to C-0025's status line).
+- **Three more untrue sentences in `services/reminder-source.js`, found in the
+  R-071 audit and deliberately NOT changed (coordinator: keep R-071 to one
+  sentence). None is on a live row today (all 3 live reminders are
+  `ooo_return`):** `bd_touch` generic says *"the emails went out"* — the
+  executor never checks, and a skipped email step still advances (propose:
+  *"…for this contact. The emails in a sequence are automatic; this step is
+  not."*, matching the resolved sentence); `manager_prompt` says *"Somebody you
+  report to"* and labels *"Asked by your manager"* — an ADMIN may prompt anyone
+  (`routes/next-actions.js` bypasses the chain; propose label *"Asked by your
+  manager or admin"*, still matches the test's `/manager/i`); `UNKNOWN_SOURCE`
+  says the row *"predates the record"*, but it is only reached by a NON-EMPTY
+  unrecognised type (null → `manual`), i.e. a row that does carry a record.
+- **`sequenceContext` (routes/reminders.js) can name the WRONG sequence.** It
+  keys by contact:job and the last enrollment wins; `workflow_enrollments` is
+  unique only per (workflow, active), so two sequences or an old + new
+  enrollment collide, and a sequence with NO task step can be named. Fix: drop
+  the name on a collision, and never name a workflow without a bd_touch/reminder
+  step. Also `POST /reminders` passes any `reminder_type` through (own list
+  only, so it can only mislead its author) — allow-list `manual`/`meeting`.
+- **Guild's stage-move reminder (`routes/recruiting/submissions.js`) writes no
+  `reminder_type`** → read as `manual` / "You added this reminder yourself",
+  which is TRUE (the person typed the date). `CAPABILITIES.md` ~176 still says
+  `ooo_return` comes "from an out-of-office auto-reply" and that all writers
+  set a type — shared file, reported, not edited.
+- **Unpinned (R-071):** nothing asserts the OOO sentence never claims an
+  auto-reply, or that surface's copy equals mine — foundry.
 - **Unpinned:** no committed test covers `activityRowFor` or the route. A
   18-assertion scratch check (fake supabase through the real `db` layer) passed
   and caught all six reintroduced bugs; foundry should commit it (see C-0025
@@ -117,3 +158,10 @@
   14-assertion scratch check (pure rule + POST handler on a fake db) passes and
   FAILS with the `canSeeLead` clause or the `canTouchJob` gate removed.
   **Unpinned:** foundry should commit it.
+- **2026-09-29** — R-071: `ooo_return` "why" rewritten to *"You marked them
+  out of office until this date, which created this reminder. PACE sends them
+  no automatic follow-ups until their status is set back to Valid."* Label
+  unchanged. Header comment corrected. Verified: `node --check` OK;
+  reminder-clarity 51/51, ownership 69/69. Lesson: the brief's own example
+  sentence ("…so PACE held the follow-up until they were back") was still
+  false. Trace the half of a sentence nobody questioned, too.

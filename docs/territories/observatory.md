@@ -1,5 +1,85 @@
 # Observatory — memory
-> Last written: 2026-09-28 (Session 33, R-063 built: professional firms; title search) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-30 (Session 35, R-085 sent side; R-073 rows carry an address) · earlier: 2026-09-29 (Session 34, R-071)
+
+## Session 35 (2026-09-30) — the summary reads OUR replies (R-085) and "Needs you today" rows carry who to write to (R-073)
+- **`services/sent-side.js` (new, pure of I/O) reads the Sent folder of the caller's OWN mailboxes, live, when the Emails tab or the summary is asked for** (`routes/client-intel.js` `loadMessages(req, subject, {live:true})`). Replies typed in the in-app mailbox or straight from Gmail/Outlook were stored nowhere PACE reads and nothing is mirrored into Postgres, so the summary saw them write and never saw us answer. Search is by contact address; only mail actually ADDRESSED to that person counts (Gmail's search is loose); what PACE already sent (same subject, same person, within 30 min) is not counted twice; drafts skipped; ≤3 mailboxes × ≤5 addresses, ≤8 bodies per read; 5-minute per-person cache; 9-second timeout.
+- **A failure is REPORTED, never read as "nothing was sent":** the response carries `sent_side:{ok, reason:'no_mailbox'|'unreadable'|'partial'|'slow', …}` and both timelines say so on screen. A failure is never cached. The daily digest does NOT read the mailbox (a busy desk costs the same as a quiet one).
+- **`next-action.js` items now carry `email`** (threads and reminders; the reminders select adds `contact.email`) so a row can DO the task (surface's `naAct`). Pure function; `next-action-smoke` 49/49.
+- Pinned: `test/sent-side-smoke.mjs` (20; fails with four deliberate breaks).
+
+
+## Session 34 (2026-09-29) — R-071: admins are no longer exempt from D-0020 (`routes/next-actions.js`)
+- **The owner's sentence:** *"Once the reminders are complete it doesn't go off
+  from the dashboard."* One of five causes (the other four are surface's page
+  faults): `GET /next-actions` did `isAdmin ? {mine: everything, team: []} :
+  splitByOwner(...)`, so an admin's list carried EVERY user's reminders, each
+  with a Done that `closeRefusal` correctly refuses. Live: the 3 pending
+  reminders all belong to a BD Lead; the owner is one of 3 admins.
+- **DECISIONS checked first:** nothing newer than D-0020 puts other people's
+  tasks on an admin's list. D-0021's admin exception is the BRIEFING; D-0034's
+  is SEEING ("extends D-0020 from acting to seeing"). The code comment calling
+  the list exemption "the exception the app already makes everywhere else" was
+  an engineering note, never an owner decision.
+- **What is true now:**
+  * **The list is the caller's own, for every role.** Non-admins are narrowed IN
+    SQL (`.eq('assigned_to_bd'|'recruiter_id'|'user_id', me)` — was
+    `.in(chain)`); admin still reads the org and is narrowed IN CODE to own +
+    UNOWNED (`ownership.isMine` hands a null owner to the viewer, and a reply on
+    an Unassigned-pool lead must be on somebody's list). Deliberately not an
+    `.or('x.eq.me,x.is.null')`: the sandbox cannot run PostgREST, dispatch's
+    fake treats `.or` as a no-op, and that filter failing renders a plausible
+    empty list.
+  * **Narrowed BEFORE ranking, not after.** `buildNextActions` keeps the top
+    `limit` and counts stale nudges/overflow; ranked org-wide, colleagues'
+    items pushed an admin's own off the end and put the org's "gone quiet" and
+    "N more" under a personal list. So `stale_nudges`, `snoozed` and
+    `overflow` are now the caller's own for managers too (they were chain-wide).
+    `splitByOwner(after.items, …)` stays on the OUTPUT as the guarantee.
+  * **The count and the review are ONE read — `openBeneath(req, view, cols)`.**
+    The count used to be built from the list's items (replies, nudges,
+    promises) while the review can only show and prompt REMINDERS: "14 open"
+    opened onto 3 rows. Now `team.total === GET /next-actions/team`'s length by
+    construction (same filters, order, limit 200; only the columns differ). It
+    counts all PENDING reminders beneath you, due or not — "open" is the word
+    both screens use. Team CONVERSATIONS live in the client digest.
+  * **`oversight(req)`**: admin → the whole org (`neq me`), reports or not;
+    else the chain minus self. Admin is read via `ownership.rolesOf` (exactly as
+    `hasRole`) — the three ad-hoc `roles.includes||role===` copies are gone.
+  * **Done can no longer "succeed" without closing.** An ownerless reminder is
+    closable by the rule but the write was scoped `user_id = me` → 0 rows →
+    `{success:true}`. Now scoped to the row's real owner state and it answers
+    409 with a sentence if nothing changed. `openBeneath` drops ownerless rows
+    explicitly, and prompting about one is a 400 ("nobody to ask").
+- **Proof:** scratch harness `scratchpad/obs-r071/na-harness.cjs` — the REAL
+  router compiled from source over dispatch's `repro/fake-supabase.cjs`, driven
+  over HTTP as admin / director / BD Lead / BD: **21/21**. Four deliberate breaks
+  compiled from mutated source, each failing its own checks: admin exemption
+  back (15/21 — reproduces the report: `r1:403:pending`), narrowing after the
+  ranking (19/21), the old silent Done (19/21), count drifting from the review
+  (19/21). The harness first caught a real hole: the fake's `neq` keeps a NULL
+  owner where SQL's `<>` drops it, so the review listed an ownerless reminder
+  whose "Ask them" is refused — now filtered in code, not left to NULL
+  semantics.
+- **Raised C-0031 (surface):** the page returns early on an empty list and never
+  draws the team line, so an admin who owns nothing sees "Nothing waiting on
+  you." with no count and no Review — the owner's likely case. Server side done.
+- **For R-073 (row actions, later):** a row's actions must come from the SERVER's
+  rule, never re-derived in the page — every item on `items` is now the
+  caller's own or unowned, so "act" is always allowed there and "prompt" lives
+  only on the review. Only reminders are promptable (`/:reminderId/prompt`); a
+  thread item has no reminder id, so prompting a reply/nudge needs a new prompt
+  shape. `reminder_type` (`ooo_return`, `bd_touch`, `manager_prompt`…) and
+  `contact_id`/`job_id` on the item are what a per-kind action would key on;
+  `routes/reminders.js` already returns a `compose` block per reminder (ledger)
+  — reuse it rather than rebuild it here.
+- **Still open here:** admin's org-wide thread fetch is still capped at 300
+  jobs / 300 contacts / 300 submissions / 200 reminders, UNORDERED, so in a big
+  org an admin's own rows can fall outside the fetch (pre-existing; production
+  is 82 leads). The fix is own + pool as two narrowed queries. `teamSummary`'s
+  "open across your team" reads oddly for an admin with no reports (rampart's
+  wording; noted in C-0031). A deleted user's reminders stay on the admin's
+  review with nobody able to close them — D-0020's "Re-open when"
+  (reassignment), not built.
 
 ## Session 33 (2026-09-28, later) — R-063 BUILT: the finder knows law, accounting and architecture firms (D-0052); the title search's Apollo call (R-068)
 - **`poc-targets.js` `FIRMS`** (law / accounting / architecture), matched on the
@@ -568,3 +648,5 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
   * **Anthropic quality `claude-sonnet-4-20250514` was NOT in that account's own model list** (the 4th expired hard-coded name). Now `claude-sonnet-4-6` (on the list); haiku-4-5 stays (on the list). The account also has **no credit** ("credit balance is too low") — it cannot answer until funded, independent of the name.
   * **OpenRouter's free-model picker led with Google LYRIA (music generators).** `rankFreeModels` matched `includes('text')` on a modality string that reads INPUT->OUTPUT (so `text->audio` passed), and "free" was prompt+completion = 0 (a per-clip/per-request price also reads that way). Now `writesOnlyText()` requires the OUTPUT side to be text only, and `pricedAtZero()` requires EVERY listed price to be zero unless the id is `:free`. The cache is versioned (`FREE_CACHE_VERSION` 2) so the poisoned 2026-09-23 list is never reused, not even as the stale fallback. `ai-free-models-smoke` 15 — six new checks, all fail on the old code.
   * `defaultModelHint(id)` (pure, exported) — what the Integrations card's empty Model box says; derived from PROVIDERS so it cannot drift (the Groq placeholder read a retired Llama name and the owner read it as the model in use).
+
+- 2026-09-29 (Session 34, R-071): admins lose their exemption from the D-0020 split in `/next-actions`; count and review become one read (`openBeneath`); Done can no longer report success without closing. Full account at the top of this file ("Session 34").

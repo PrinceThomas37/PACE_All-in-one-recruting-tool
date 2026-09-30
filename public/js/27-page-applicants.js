@@ -239,6 +239,9 @@
         // be one row, one picker, one click, twelve times over.
         '<button class="btn btn-sm btn-primary" onclick="atsAddSelectedToJob()">'+UI.ic('plus')+'Add to job</button>'+
         '<button class="btn btn-sm btn-outline" onclick="atsSequenceSelected()">'+UI.ic('send')+'Add to email sequence</button>'+
+        // R-077: change the stage of the whole selection. A stage belongs to a
+        // person ON A JOB, so this asks which job first (atsMoveSelected).
+        (window.stageGroupSelect ? stageGroupSelect(selIds.length, 'atsMoveSelected(this.value);this.value=\'\'') : '')+
         '<button class="btn btn-sm btn-outline" onclick="atsClearSel()">Clear</button>'+
       '</div>' : '';
 
@@ -378,7 +381,7 @@
     var ctx = STATE.ats._jobCtx; if(!ctx) return;
     apiPost('/pipeline', { candidate_id:cid, job_order_id:ctx.jobId }).then(function(){ atsAfterJobAdd(ctx); })
       .catch(function(e){
-        if (/already tagged/i.test(e.message)) showToast('Already on this job','error');
+        if (/already (tagged|on this job)/i.test(e.message)) showToast('Already on this job','error');
         else showToast('Failed: '+e.message,'error');
       });
   };
@@ -614,11 +617,11 @@
       if (!s.job_order_id || seen[s.job_order_id]) return;
       seen[s.job_order_id] = 1; out.push({ job:s.job||{}, stage:norm(s.stage)||'—', at:s.created_at });
     });
-    // Tagged before tagging wrote a submission (Session 31) — the job's own
-    // page calls these "Tagged", so this does too.
+    // Added before a stage was recorded for each person: the server reads such a
+    // row as Sourced (D-0057 — "Tagged" is not a step inside a job).
     (h.pipeline||[]).forEach(function(p){
       if (!p.job_order_id || seen[p.job_order_id]) return;
-      seen[p.job_order_id] = 1; out.push({ job:p.job||{}, stage:'Tagged', at:p.tagged_at });
+      seen[p.job_order_id] = 1; out.push({ job:p.job||{}, stage:norm(p.stage)||'Sourced', at:p.tagged_at });
     });
     return out.sort(function(a,b){ return String(b.at||'').localeCompare(String(a.at||'')); });
   }
@@ -703,6 +706,67 @@
     if (!ids.length){ showToast('Select candidates first','error'); return; }
     atsPickJobFor(ids, ids.length+' candidate'+(ids.length===1?'':'s'));
   };
+  // ── change the stage of the ticked people (R-077) ─────────────────────────
+  // A stage is a person's place ON A JOB, so this first asks the server which
+  // jobs the ticked people are on (GET /submissions?candidate_ids=), goes
+  // straight in when there is only one, and otherwise asks which. Ticked people
+  // who are not on the chosen job are named in the window with the button to add
+  // them (stage Sourced) — never dropped without a word.
+  function atsNameOf(cid){ var c=(STATE.ats.rows||[]).find(function(x){ return x.id===cid; }); return (c&&c.full_name)||''; }
+  window.atsMoveSelected = function(stage, jidPick){
+    if (!stage) return;
+    var cids = Object.keys(STATE.ats.sel).filter(function(k){ return STATE.ats.sel[k]; });
+    if (!cids.length){ showToast('Tick the candidates you want to move first','error'); return; }
+    return apiGet('/submissions?candidate_ids='+encodeURIComponent(cids.join(','))).then(function(d){
+      var byJob = {}, order = [];
+      ((d&&d.submissions)||[]).forEach(function(sb){
+        if (!sb.job_order_id) return;
+        var g = byJob[sb.job_order_id];
+        if (!g){ g = byJob[sb.job_order_id] = { id:sb.job_order_id, job:sb.job||{}, subs:[] }; order.push(g); }
+        g.subs.push(sb);
+      });
+      STATE.ats._movePick = { stage:stage, cids:cids, jobs:order };
+      if (!order.length){ showToast('None of the '+cids.length+' people you ticked are on a job yet — use “Add to job” first.','error'); return; }
+      var pick = jidPick && byJob[jidPick];
+      if (pick || order.length===1){ atsMoveOnJob((pick||order[0]).id); return; }
+      atsRenderMovePick();
+    }).catch(function(e){ showToast('Could not look up their jobs: '+((e&&e.message)||e),'error'); });
+  };
+  function atsRenderMovePick(){
+    var mp = STATE.ats._movePick; if(!mp) return;
+    var rows = mp.jobs.map(function(g){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:6px;cursor:pointer" onclick="atsMoveOnJob(\''+g.id+'\')">'+
+        '<div><div style="font-weight:600;font-size:13px">'+esc(g.job.job_title||'Job')+' '+code(g.job.job_code||'')+'</div>'+
+        '<div style="font-size:11px;color:var(--text3)">'+esc(g.job.client||'')+' · '+g.subs.length+' of the '+mp.cids.length+' you ticked '+(g.subs.length===1?'is':'are')+' on it</div></div>'+
+        '<span class="btn btn-sm btn-primary">Move here</span></div>';
+    }).join('');
+    STATE.modal =
+      '<div class="modal modal-w560" onclick="event.stopPropagation()">'+
+        '<div class="stg-hd"><div style="font-weight:700;font-size:16px">Which job?</div>'+
+          '<div class="stg-job">A stage belongs to a person on a job. Moving '+mp.cids.length+' people to '+esc(mp.stage)+'.</div></div>'+
+        '<div class="stg-bd">'+rows+'</div>'+
+        '<div class="stg-ft"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>'+
+      '</div>';
+    render();
+  }
+  window.atsMoveOnJob = function(jid){
+    var mp = STATE.ats._movePick; if(!mp) return;
+    var g = mp.jobs.find(function(x){ return x.id===jid; }); if(!g) return;
+    var people = {}, on = {};
+    g.subs.forEach(function(sb){
+      on[sb.candidate_id] = 1;
+      people[sb.id] = { name:atsNameOf(sb.candidate_id), stage:sb.stage, sub_stage:sb.sub_stage||null, cid:sb.candidate_id };
+    });
+    var missing = mp.cids.filter(function(c){ return !on[c]; }).map(function(c){ return { cid:c, name:atsNameOf(c) }; });
+    var jobTitle = g.job.job_title || '';
+    openStageModal(g.subs.map(function(sb){ return sb.id; }), mp.stage, function(){ candJobsChanged(mp.cids); }, {
+      people:people, jobId:jid, jobTitle:jobTitle, ticked:mp.cids.length,
+      missing:missing, missingKind:'absent',
+      // After they are added: look again and open the move with everybody in it.
+      afterFix:function(){ return atsMoveSelected(mp.stage, jid); }
+    });
+  };
+
   // The ONE job picker, for one candidate or many. `cids` is always a list.
   window.atsPickJobFor = function(cids, name){
     apiGet('/job-orders').then(function(jobs){
@@ -761,7 +825,7 @@
     apiPost('/pipeline', { candidate_id:cid, job_order_id:jid }).then(function(){
       showToast('Added to the job','success'); candJobsChanged([cid]); STATE.ats._jobPick=null; closeModal();
     }).catch(function(e){
-      if (/already tagged/i.test(e.message)) showToast('Candidate already in that pipeline','error');
+      if (/already (tagged|on this job)/i.test(e.message)) showToast('Candidate already in that pipeline','error');
       else showToast('Failed: '+e.message,'error');
     });
   };

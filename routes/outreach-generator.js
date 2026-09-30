@@ -17,9 +17,12 @@
 //     prose polish. A deployment with no AI provider still gets emails, and so
 //     does one whose free tier ran out mid-afternoon.
 //
-// The sending address is NOT a user choice: it is the outreach mailbox already
-// assigned to the caller (recruiterSendingMailbox). Letting the page name a
-// From address would let anyone send as anyone.
+// The sending address is not a free choice. By default it is the outreach mailbox
+// already assigned to the caller (recruiterSendingMailbox). Since R-087 the page
+// may NAME one of the caller's OWN connected mailboxes (`mailbox_id`), and the
+// server checks it (sendingMailboxFor): anything that is not theirs is refused as
+// if it did not exist. A From address the browser could set freely would let
+// anyone send as anyone; an id checked against the caller's own list cannot.
 // ============================================================================
 
 const express = require('express');
@@ -38,7 +41,7 @@ module.exports = (ctx) => {
   const router = express.Router();
   const {
     supabase, auth, today, buildHtmlEmailBody, getMailboxSignature,
-    loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage,
+    loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage, sendingMailboxFor, ownSendingMailboxes,
     withOrg, orgStamp, logActivity, wfEngine, hasRole, orgIdFor, canTouchJob,
   } = ctx;
   // The ONE chain walk in PACE (D-0034) — never a second copy here.
@@ -118,12 +121,20 @@ module.exports = (ctx) => {
   // instead of letting someone write an email they cannot send).
   router.get('/outreach/sender', auth, async (req, res) => {
     try {
-      const [mailbox, companyName] = await Promise.all([
-        recruiterSendingMailbox(req.user.id),
-        orgCompanyName(req)
+      // R-087: the page may name which of the caller's OWN mailboxes it wants to
+      // see the identity and signature of; the server checks it is theirs.
+      const wantId = req.query && req.query.mailbox_id;
+      const [mailbox, companyName, own] = await Promise.all([
+        sendingMailboxFor(req, wantId),
+        orgCompanyName(req),
+        ownSendingMailboxes(req)
       ]);
+      if (!mailbox && String(wantId || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
       res.json({
+        // Every mailbox this person may send from — the "From" picker.
+        mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
+          platform: m.platform || 'Microsoft', is_primary: !!m.is_primary })),
         company_name: companyName,
         // Whether an AI writer is configured is the provider's question now, not
         // this file's. Two branches merged cleanly into a break here: #159
@@ -154,8 +165,9 @@ module.exports = (ctx) => {
       // Resolve the mailbox BEFORE drafting: the draft has to be signed by
       // whoever is going to send it, and the page never gets to say who that is.
       const [companyName, mailbox] = await Promise.all([
-        orgCompanyName(req), recruiterSendingMailbox(req.user.id)
+        orgCompanyName(req), sendingMailboxFor(req, (req.body || {}).mailbox_id)
       ]);
+      if (!mailbox && String((req.body || {}).mailbox_id || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
       // Whether the body signs itself depends on whether a signature will be
       // appended — so the draft on screen is exactly what the recipient gets.
@@ -305,8 +317,9 @@ module.exports = (ctx) => {
       if (!(await aiProvider.isAvailable(supabase))) return res.status(409).json({ error: 'ai_unavailable' });
 
       const [companyName, mailbox] = await Promise.all([
-        orgCompanyName(req), recruiterSendingMailbox(req.user.id)
+        orgCompanyName(req), sendingMailboxFor(req, (req.body || {}).mailbox_id)
       ]);
+      if (!mailbox && String((req.body || {}).mailbox_id || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
       const draftOpts = { companyName, omitSignOff: !!signatureHtml.trim() };
@@ -654,8 +667,10 @@ module.exports = (ctx) => {
       if (!subject) return res.status(400).json({ error: 'Subject is required.' });
       if (!bodyText.trim()) return res.status(400).json({ error: 'The email body is empty.' });
 
-      const mailbox = await recruiterSendingMailbox(req.user.id);
-      if (!mailbox) return res.status(409).json({ error: 'no_connected_mailbox' });
+      const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+      if (!mailbox) return String(b.mailbox_id || '').trim()
+        ? res.status(404).json({ error: 'That mailbox is not one you can send from.' })
+        : res.status(409).json({ error: 'no_connected_mailbox' });
 
       const suppressed = await loadSuppressedSet([to]);
       if (suppressed.has(to.toLowerCase())) {

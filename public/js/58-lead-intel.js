@@ -84,7 +84,14 @@
         (open?'<div class="lxi-body">'+esc(text)+(foot?'<div class="lxi-foot">'+foot+'</div>':'')+'</div>':'')+
       '</div>';
     }).join('')||'<div class="lxi-note">No emails with this lead yet.</div>';
-    node.innerHTML='<div class="lx-head">Emails <span class="lxi-count">'+(d.total_messages||0)+'</span></div>'+card+rows+
+    // R-085: our own replies are read live from the caller's mailbox. When that
+    // could not be done, SAY SO — a list and a summary missing our side must not
+    // look complete.
+    var ss=d.sent_side, sideNote='';
+    if(ss&&!ss.ok) sideNote='<div class="lxi-note">'+(ss.reason==='no_mailbox'
+      ?'Connect your mailbox so PACE can read the emails you sent — replies you write there are not in this list.'
+      :'PACE could not read your sent mail just now, so replies you wrote yourself may be missing here and from the summary. Try again in a minute.')+'</div>';
+    node.innerHTML='<div class="lx-head">Emails <span class="lxi-count">'+(d.total_messages||0)+'</span></div>'+sideNote+card+rows+
       (tl.length>5&&!st.all?'<button type="button" class="lxi-link" onclick="event.stopPropagation();leadIntelAll(\''+id+'\')">Show all '+tl.length+' emails</button>':'');
   }
 

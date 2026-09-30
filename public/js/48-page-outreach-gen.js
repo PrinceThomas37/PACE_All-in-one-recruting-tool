@@ -31,7 +31,7 @@
   var LS_HIST='pace_outreach_gen_history';
 
   function blankForm(){
-    return { outreach_type:'first', contact_first_name:'', contact_title:'', company:'',
+    return { outreach_type:'first', mailbox_id:'', contact_first_name:'', contact_title:'', company:'',
              location:'', to:'', no_agencies:false, no_agencies_text:'', notes:'',
              job_title:'', job_description:'', sender_title:'',
              // Where the recipient came from: a record already in PACE, or typed
@@ -91,12 +91,48 @@
     var g=G();
     if(g.sender||g.senderLoading) return;
     g.senderLoading=true;
-    apiGet('/outreach/sender').then(function(r){
+    apiGet('/outreach/sender'+(g.form&&g.form.mailbox_id?'?mailbox_id='+encodeURIComponent(g.form.mailbox_id):'')).then(function(r){
       g.sender=r; g.senderLoading=false; render();
     }).catch(function(){ g.senderLoading=false; g.sender={mailbox:null,company_name:'',sender:{}}; render(); });
   };
 
   // ── the recipient half of the composer ────────────────────────────────────
+  // THE ONE WAY ANY "Email" BUTTON OPENS THE COMPOSER ADDRESSED TO SOMEBODY
+  // (R-084, R-083). Owner: "there is no way [to carry] the information of the
+  // email ID as clicked … it's prevalent overall in the system, like in some
+  // place it's there, but mostly it's missing." The lead drawer's Email button
+  // set a legacy field this composer never reads, so it landed on an empty "Send
+  // to". Every entry point calls THIS, with what it knows about the person:
+  //   {id, name, email, title, company, location, job_id, job_title}
+  // It starts a fresh draft (a half-written email for somebody else must not
+  // follow the click), fills the same fields a picked contact fills, and opens
+  // Email → Compose → Clients. Nothing is sent and nothing is saved by opening it.
+  window.outreachComposeTo=function(c){
+    c=c||{};
+    var g=G(); g.form=blankForm(); g.draft=null; g.error=null; g.sentOk=null;
+    g.adjustment=''; g.overCapAsked=false; g.variantId=null; g.edits={};
+    g.angleLoading={}; g.angleInfo={}; g.rewrites={}; g.recipResults=null;
+    var f=g.form, nm=String(c.name||'').trim();
+    f.to=c.email||''; f.contact_first_name=nm.split(/\s+/)[0]||''; f.contact_title=c.title||'';
+    f.company=c.company||''; f.location=c.location||''; f.job_title=c.job_title||'';
+    f.pickedContactId=c.id||null; f.pickedJobId=c.job_id||null;
+    if(c.outreach_type==='followup') f.outreach_type='followup';   // R-073: chasing somebody we already wrote to
+    g.recipMode='existing'; g.recipQuery=nm||c.email||'';
+    STATE.composeSide='clients'; STATE.composeContext=null; STATE.composeReminderId=null;
+    STATE.emailTab='compose'; STATE.page='email'; STATE.modal=null;
+    render();
+  };
+
+  // R-087: send from a different one of MY mailboxes. The draft's wording carries
+  // the sender's name and its signature is theirs, so the draft is cleared rather
+  // than left saying one person over another's From line (the Session 14 bug).
+  window.outreachGenFrom=function(v){
+    var g=collectDom(), had=!!g.draft;
+    g.form.mailbox_id=v||''; g.draft=null; g.edits={}; g.variantId=null; g.sentOk=null;
+    g.error=had?'You changed who this sends as, so the draft was cleared — the wording carries the sender\'s name. Generate it again.':null;
+    g.sender=null; loadOutreachSender(); render();
+  };
+
   window.outreachRecipMode=function(m){
     var g=collectDom(); g.recipMode=m;
     if(m==='new'){ g.form.pickedContactId=null; g.form.pickedJobId=null; }
@@ -204,7 +240,7 @@
     var g=G(), f=g.form;
     g.angleLoading[id]=true; render();
     return apiPost('/outreach/generate-angle',{
-      angle:id, outreach_type:f.outreach_type,
+      angle:id, outreach_type:f.outreach_type, mailbox_id:f.mailbox_id||undefined,
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
       company:f.company, location:f.location,
       no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
@@ -314,7 +350,7 @@
 
     g.loading=true; g.error=null; g.sentOk=null; render();
     apiPost('/outreach/generate',{
-      outreach_type:f.outreach_type,
+      outreach_type:f.outreach_type, mailbox_id:f.mailbox_id||undefined,
       contact_first_name:f.contact_first_name, contact_title:f.contact_title,
       company:f.company, location:f.location,
       no_agencies:!!f.no_agencies, no_agencies_text:f.no_agencies_text,
@@ -355,7 +391,7 @@
     g.sending=true; g.error=null; render();
     var f=g.form;
     apiPost('/outreach/send',{
-      to:to, subject:cur.subject, body:cur.email,
+      to:to, subject:cur.subject, body:cur.email, mailbox_id:f.mailbox_id||undefined,
       // Choosing a sequence is what turns this into a lead — see the note on
       // the picker below. Sending without one deliberately creates nothing.
       sequence_id:g.sequenceId||'',
@@ -435,6 +471,13 @@
           (s.ai?'Drafted by the AI writer.':'Drafted by the built-in rules writer — no API key is configured, so this costs nothing.')+
         '</div>'+
       '</div>'+
+      // R-087: choose which of MY mailboxes this leaves from. The draft names its sender
+      // (identity sentence, signature), so changing it clears the draft (outreachGenFrom).
+      ((s.mailboxes&&s.mailboxes.length>1)
+        ?'<select id="og-from" class="sel" aria-label="Send from which mailbox" style="max-width:280px" onchange="outreachGenFrom(this.value)">'+
+            s.mailboxes.map(function(m){ var on=(G().form.mailbox_id||'')===m.id||(!G().form.mailbox_id&&s.mailbox&&s.mailbox.id===m.id);
+              return '<option value="'+esc(m.id)+'"'+(on?' selected':'')+'>'+esc((m.display_name?m.display_name+' <'+m.email+'>':m.email))+'</option>'; }).join('')+
+          '</select>':'')+
     '</div>';
   }
 

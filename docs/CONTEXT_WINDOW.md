@@ -1,80 +1,34 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md`. That is enough to start work.**
-> History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the
-> reasoning behind a past decision.
+> **Read this file, then `CLAUDE.md` (now ~19 KB — the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
+> History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-09-28 (Session 33, in progress — R-069) · **Repo**:
-`PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**:
-`teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging
-to `main` IS the release · **Last merged**: #259 (`c2a0e74`, merged by the OWNER on GitHub 2026-09-28 17:02 UTC — R-063 firm-aware finder, R-066 the Apollo limit on its card, R-068 title search + Uncover; files identical to the tested head), after #258 (`6d2bd20`, D-0051: the "Already added" pop-up), #257 (`464a1df`, D-0050), #256 (the contrast suite) and #253 (`fc72f36`, the POC finder).
-**#252 (R-012) merged 2026-09-27 on the owner's "Merge this change first".** **D-0055 is the highest decision id. C-0030 is the highest contract id
-(only C-0030 OPEN). Next roadmap id `R-071` (R-060 is open PR #254's, another chat).**
+**Updated**: 2026-09-30 (end of Session 35 round 1) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #260 (`eae789f`, 2026-09-28, R-069).
+**Highest ids:** decision D-0061 · contract C-0036 · next roadmap id `R-089` · next migration `055`.
 
-### Session 33 so far (2026-09-27) — D-0048: "Quickly do R-012 … design R-053"
-- **R-012 DONE (#252, merged):** Jobs, Candidates and Clients rows open in
-  place like Leads — one shared `rowReveal` in `03-core-render.js`. Details in
-  `surface.md` (Session 33). `row-reveal-smoke` 45/45 (5/45 on old code); full
-  suite **127/127**. Deploy is Render's; unverifiable from this sandbox.
-- **R-053 (the POC finder): designed (`docs/CONTACT_FINDER_DESIGN.md`), the
-  owner answered (D-0049: Apollo with API — they will connect it; runs
-  automatically AND on a button; a guess is NEVER emailed; size picked on the
-  lead), and slices 1 AND 2 are LIVE (#253 merged 2026-09-28 on "okay publish
-  it")** — slice 1: the four slots on the lead row, the rules
-  (`services/poc-targets.js`), `routes/poc.js`, migration 051 (applied).
-  **Slice 2 (2026-09-28): "Find the rest"** — Apollo people search (free) +
-  one lookup per person (a credit, never retried) in
-  `services/people-apollo.js`; found people wait in `poc_suggestions`
-  (**migration 052, applied + re-verified live**) until Accept / Not this
-  person; Accept goes through `services/lead-contacts.js` (the ONE add-contact
-  path, `POST /contacts` uses it too); daily ceiling = System Settings
-  `poc_apollo_daily_credits` (20). **The owner saved an Apollo key 2026-09-28
-  10:57 UTC; no search pressed yet** (read `apollo_last_call` /
-  `apollo_last_error` in app_settings to see what Apollo last said).
-  **Then D-0050 (LIVE, #257 merged 2026-09-28):** "Search contact"
-  in every empty slot, "Search contacts" at the top, company size from Apollo
-  by website + name (migration 053 applied), Apollo ONLY on a click; and the
-  Leads search × fixed. Next slices: the posting/website readers (free), then
-  the automatic run for new leads (free rungs only, D-0050).
-  **Owner, 2026-09-28: "the POC finder is working fine"** — then asked whether
-  it can find HR by responsibility rather than title, and "how is it relevant
-  for us?". Measured on the live leads: HR titles are traditional (1 of 54 HR
-  contacts is "People & Culture"); the real gap is law/accounting/architecture
-  firms (16 of 82 leads) → **R-063 re-scoped, owner's call.**
-  **"Already added" pop-up LIVE (R-064, D-0051, #258 merged 2026-09-28 on
-  "publish and merge it"):** one duplicate check in `services/lead-contacts.js`
-  (email anywhere = refused; name on this lead/company = asked) +
-  `showAlreadyAdded` on Add contact, Add by hand and Accept. `npm test` 135/135.
-  **Owner's answers (2026-09-28): R-063 YES (D-0052, to build), R-065 NO
-  (D-0053, dropped), and R-066 (D-0054): an admin sets ONE daily Apollo credit
-  number for everyone, visibly (today: System Settings only, default 20), plus
-  "how much of our credit system is Apollo's" — 1 PACE credit = 1 Apollo credit.
-  Then (owner, 2026-09-28): **no access to their organisation's Apollo account**
-  (183.3k credits left, a test account) and **every customer company brings its
-  own keys** (D-0055 → R-067: TODAY ALL KEYS ARE DEPLOYMENT-WIDE — fix before a
-  second customer). **LIVE (#259, merged by the owner 2026-09-28):** R-063 (firm-aware finder),
-  R-066 (the limit on the Apollo card, max 10,000), R-068 (title search +
-  Uncover; migration 054 applied). `npm test` 136/136.**
-- **R-069 — why emails sat in Pending / never sent after Retry (owner,
-  2026-09-28). PR #260, NOT live.** Live queue, 22 rows: 14 Gmail follow-ups
-  replying into threads that live in ANOTHER mailbox (the leads' mailbox was
-  switched Daniel James → Spencer Brown) → Gmail 404 forever; 1 stuck at
-  'sending' (process died mid-send, on no screen); 7 correctly held by the
-  2-a-day company limit but shown as "ready now". Fixed in harbour's
-  `services/gmail-delivery.js` (fresh email + quote, ONLY on a definite 404),
-  `services/interrupted-sends.js` (boot: 'sending' → Didn't send, "may have
-  gone out") and `pending-summary` (four buckets + "Held · goes tomorrow").
-  `send-recovery-smoke` 58; 15/15 deliberate breaks caught; 137/137. **R-070 asked:**
-  should a follow-up come from the mailbox that STARTED the conversation?
-- **Contrast guard widened (#256, merged 2026-09-28 on the owner's "yeah merge
-  it"; tests and memory only, nothing on screen changed):** `theme-contrast-smoke`
-  now judges each element's OWN text (it skipped any element with a child) and
-  measures the panel under an opened row (its scope named a class that never
-  existed). 12/12; full suite 132/132 with #253 merged in; nothing unreadable
-  was hiding. Open: the suite still renders screens without data — see
-  `foundry.md`.
+## ⏸ SESSION 35 — the lot is BUILT on branch `ccr-bed70da8-ctoaet`, draft PR #262 (NOT merged, NOT live)
 
----
+**The owner's rules, standing:** D-0060 — no helper agent is started or resumed without their say-so in their own words (this whole round used none). Read only what the next step needs. R-088 is DONE (D-0061): small fixes directly, `CLAUDE.md` trimmed, agents on low effort.
+
+| id | What | State |
+|---|---|---|
+| R-071/072/076 | reminder leaves Dashboard · "Your team" card off · apply links (Session 34) | on the branch; after release open an apply link and send one test application |
+| R-075 + R-077 | Sourced inside a job; change many stages at once — screens (C-0032) | **done**; the 15 legacy rows **healed on the live DB 2026-09-30** (C-0035 (a)) |
+| R-078/R-079 | minimise / full screen / close windows, tray, records park | **done** (`10a-window-dock.js`) |
+| R-073 | Needs-you-today rows do the task | **done** |
+| R-083/R-084 | Write button on every contact; Email opens addressed | **done** (`outreachComposeTo`) |
+| R-085 | AI summary reads our replies (live Sent folder) | **done** — needs a real mailbox to see; sandbox proves it only against a fake |
+| R-086/R-087 | interview confirmation (Gmail bug, default ticked, job details) · From picker everywhere | **done** |
+| R-074 | Apollo credits | **answered** (ROADMAP row): the big batches are not PACE; PACE = 1 credit per lookup; suggestion left with the owner |
+
+**Tests:** `node test/run-all.mjs` — 145/146 before the last fix; the one red (`scope-outreach-pickers-smoke`, a test ctx missing the new mailbox rule) is fixed and passes 35/35; **one clean full run + Node 26 (CLAUDE.md) still owed before any merge.** New suites, each verified by deliberate breaks: `stage-group-move-smoke` 29, `window-dock-smoke` 26, `email-carries-person-smoke` 11, `needs-you-today-does-smoke` 16, `sent-side-smoke` 20, `from-mailbox-smoke` 17, `from-picker-smoke` 12. `npm install` first (`node_modules` is not in git).
+
+**Waiting on the owner (all in ROADMAP, plain-English rows):** R-080 (switch a contact back from out-of-office on the return date) · R-081 (a "what last went wrong" line on Admin for the apply page and the resume reader) · R-082 (what "remove from a job" means once someone has moved along) · the Apollo suggestion under R-074 (state the credit cost before the click; count company sizing against the daily limit — today's limit is 100) · **when to merge #262** (it is big: nothing in it is live).
+
+**Known limits, said plainly:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; candidate-row `mailto:` links still open the computer's mail program; a window that repaints itself while parked must call `Dock.updateParked` (surface.md).
+**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done by the new suites), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves are not owner-gated; review `bulk-stage` and `GET /submissions` scoping).
+
+**Suggested next, once the owner says go:** a real-browser look at the new windows/From picker on a phone (screenshots for the owner) → Node 26 run → merge #262 on their word → then the R-080/R-081/R-082 answers. Session 34's scratch proofs are still in `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
@@ -175,6 +129,8 @@ by the owner (D-0047)** — still state a destructive customer-data change first
 and prove a schema change in a rolled-back probe (see 050's archive entry).
 
 ## ⏭ PICK THIS UP FIRST
+
+**Session 35 first: the top of this file** (the lot, paused under D-0060). The items below are older and still open.
 
 1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
    1–2 live (#253); the D-0050 round (Search contact per slot, size from

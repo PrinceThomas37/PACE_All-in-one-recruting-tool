@@ -36,7 +36,8 @@
 // four places that create reminders:
 //   index.js wfReminderExecutor          → step.channel ('bd_touch' | 'reminder')
 //   routes/recruiting/outreach.js        → 'recruiter_task'
-//   routes/contacts.js (OOO auto-reply)  → 'ooo_return'
+//   routes/contacts.js (a person marks   → 'ooo_return'
+//     a contact Out of office — PACE never reads an auto-reply to do this)
 //   public/js/10-page-modals.js          → 'manual' | 'meeting'
 //   routes/next-actions.js (D-0020)      → 'manager_prompt'
 const SOURCES = {
@@ -54,7 +55,17 @@ const SOURCES = {
   },
   ooo_return: {
     label: 'Back from leave',
-    why: 'Their auto-reply said they were away until this date, so PACE held the follow-up until they were back.'
+    // R-071 (2026-09-29). This used to say an AUTO-REPLY caused it and that PACE
+    // "held the follow-up until they were back" — both false. The only writer is
+    // PATCH /contacts/:id/email-status, when a person picks "Out of office" and
+    // types a date, and the reminder is created for THAT person (user_id =
+    // caller; GET /reminders is own-only; nothing reassigns a reminder), so the
+    // reader is always the one who did it. And nothing lifts the stop on the
+    // date: no sweep reads ooo_until, marking this done does not touch the
+    // contact, and a sequence email that falls due meanwhile is SKIPPED, not
+    // held (workflow-engine: "done / skipped → move on"). Held only in the sense
+    // that nothing automatic goes until someone sets the contact back to Valid.
+    why: 'You marked them out of office until this date, which created this reminder. PACE sends them no automatic follow-ups until their status is set back to Valid.'
   },
   meeting: {
     label: 'Meeting',

@@ -1,5 +1,9 @@
 # Deep — memory
-> Last written: 2026-09-28 (Session 33 — territory map: two harbour services) · seeded from `CLAUDE.md` and Session 21
+> Last written: 2026-09-30 (Session 35 — C-0035 (a) applied live; territory map: sent-side) · earlier: 2026-09-28 (Session 33)
+
+## Session 35 (2026-09-30) — the 15 legacy "Tagged" rows healed on the live database (C-0035 (a))
+Applied guild's verified SQL through the Supabase connector on the owner's yes: preview 15 rows → one transaction → check `0 / 0 / 0`, submissions 52 → 67. (b) — dropping the inert `candidate_pipeline.pipeline_status` — stays open until no screen reads the alias. `services/sent-side.js` was added to observatory in `scripts/territory-map.mjs`. **No migration this session** (the next number is 055).
+
 
 ## Session 33 (2026-09-28, later) — migration 054, a found person outside the four slots (R-068, D-0055)
 - **`054_poc_other_people.sql` APPLIED 2026-09-28** and verified live: widens

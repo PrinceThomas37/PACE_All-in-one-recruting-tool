@@ -182,6 +182,13 @@ it. `GET /reminders` also returns `compose` (address, role, company, read from
 the reminder's own contact + job rows) — **do not resolve a reminder's
 recipient out of `STATE.contacts`**, which only holds the leads this user's
 `GET /jobs` returned.
+**One way to close, one way to email (R-071).** Closing a reminder is ONE step,
+`reminderClosed(id)` in `public/js/10-page-modals.js`, called from every
+server-confirmed close — Dismiss/Remove, the Email page's out-of-office card,
+Compose → Send, "Needs you today" Done — so no screen keeps a row another screen
+closed. Emailing from a reminder is ONE path, `composeReminderEmail()`; the
+Dashboard card has no Send of its own (it used to open web Gmail with a body
+signed "Fute Global LLC", around the engine — removed).
 
 ### Knowing whose work a record is
 **Status:** LIVE · owner `rampart` (the rule) · `services/ownership.js`
@@ -446,14 +453,39 @@ Activity tab (that record's submissions only, inline) and Email → All email
 
 - **Re-import a file to fill in missing lead details** — Leads → Import Excel; existing leads get their blanks filled (job link, website, salary, extra columns, contact phone/LinkedIn), nothing overwritten. `services/lead-fill.js`, `POST /jobs/fill-missing`. (Session 29, R-045)
 
-## Putting candidates on a job — one or many (Session 31)
-- **One implementation:** `tagOne()` in `routes/recruiting/pipeline.js`, behind
-  `POST /pipeline` (one) and `POST /pipeline/bulk` (many). Writes the tag AND a
-  `Sourced` submission — "on a job" means a submissions row (Session 28).
+## Putting candidates on a job — one or many (Session 31; rebuilt Session 34, R-075, D-0057)
+- **One implementation:** `core.addCandidateToJob` in `services/recruiting-core.js`
+  (loaded with `loadCandidateFor` / `loadJobOrderFor`, both org-scoped). It is
+  behind `POST /pipeline` (one), `POST /pipeline/bulk` (many), `POST /submissions`
+  (the direct API add), the sourcing/applicant import (`POST /sourcing/staged/:id/import`,
+  `/sourcing/import-selected`) and the deprecated `POST /pipeline/:id/promote`.
+  **ON A JOB = a `submissions` row at `Sourced`** (no `submitted_at`, D-0029) plus
+  the sourcing-details row beside it (`candidate_pipeline`: rates, employer,
+  availability, notice, CTC, source, notes). Idempotent — adding somebody already
+  there is `already`, and a half-membership (a legacy tag with no submission) is healed.
+- **"Tagged" is a word for the candidate database, never a step inside a job.**
+  A pipeline row has NO state of its own: its stage IS its submission's, and every
+  response carries `stage` (`pipeline_status` is an alias of it, kept only for older
+  screens). The old Pipeline vocabulary (Contacted, Interested, Shortlisted, Moved to
+  Submission, Not Interested) is gone; `PATCH /pipeline/:id/status` answers 410.
 - Entry points: Candidates → tick → **Add to job**; a row's **Add to Job**; the
-  job's **+ Add Candidate** search; the bulk resume upload with a job context.
-  The applicant import has its own writer of the same row (`submissionRowFor`)
-  — do not add a third.
+  job's **+ Add Candidate** search; the bulk resume upload with a job context;
+  Best matches → **+ Add**; importing an applicant / a sourced person onto a job.
+- **Not yet through it:** the candidate-email queue's "add to pipeline" box
+  (`routes/candidate-outreach.js`, harbour — C-0033). **A new way of adding somebody
+  to a job calls the helper; it never inserts into `submissions` or `candidate_pipeline`.**
+
+## Changing the stage of several candidates at once (Session 34, R-077)
+- **`POST /submissions/bulk-stage`** `{ids:[submission ids], stage, sub_stage?, note?,
+  rejection_reason?, interview_*?, reminder_*?}` → `{moved, refused:[{id, reason}], stage}`.
+  Up to 200; a refused row never spoils the rest; whole-request problems are 4xx.
+- **It is the same function as the single move** (`moveSubmissions` in
+  `routes/recruiting/submissions.js`, rules in `services/submission-stages.js`
+  `moveRefusal`) — recruiters move a candidate only up to "Submitted to BDM", per row,
+  in both. A stage is per (person, JOB): `GET /submissions?candidate_ids=a,b,c` answers
+  "which jobs are these people on?" so a Candidates-page group move can ask which job.
+- Screens that use it: none yet (surface — C-0032). The stage modal still fans out
+  one `PATCH /submissions/:id/stage` per person.
 
 ## Adding many candidates from resumes at once (Session 31)
 - `public/js/57-bulk-resume.js` (`atsOpenBulkUpload(jobCtx?)`). **No server path
@@ -510,3 +542,9 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **One implementation: `services/lead-contacts.js` `addLeadContact`** (gateway), used by `POST /contacts` (Add contact on a lead, the POC finder's Add by hand) and the POC finder's Accept. **It refuses a repeated EMAIL anywhere in the org** and **asks about a repeated NAME on this lead or at this company** (`allow_same_name` = "Add anyway").
 - **One pop-up: `showAlreadyAdded()`** in `public/js/10-page-modals.js` (surface) draws the server's `duplicate` answer — who, where (a colleague's lead is named only if you may see it), and OK or Don't add / Add anyway.
 - **Not covered:** lead imports and "create a lead with its first contact" (`routes/jobs.js`, `routes/lead-sources.js`, the outreach generator's `createLeadFromOutreach`) insert contacts directly — a NEW lead cannot already hold the person, but the same address on ANOTHER lead is not checked there. Before adding another way to put a person on a lead, route it through `addLeadContact`.
+
+## Changing many people's stage at once (Session 35, R-077 — on the branch, PR #262)
+- **One implementation:** `POST /submissions/bulk-stage` (guild) — the same rule as moving one person, an answer per person. **One window:** `openStageModal(ids, …)` in `public/js/33-stage-modal.js` and the ONE control `stageGroupSelect`. Started from the job page roster, the job's Pipeline tab, or the Candidates page (which asks WHICH JOB first via `GET /submissions?candidate_ids=`). Someone with no stage yet is added through `POST /pipeline/bulk` (the one add path), never left out silently. Do not add a fourth way to change many stages.
+
+## Windows you can minimise, bring back and close (Session 35, R-078/R-079, D-0058 — on the branch)
+- **`public/js/10a-window-dock.js`** decorates every modal with a title bar (Minimise / Full screen / Close) and keeps a tray of parked windows at the bottom of the screen; the candidate and client records park too. **A new window gets it for free**; one that paints itself asynchronously must call `Dock.updateParked(kind, html)` first (see `surface.md`). Do not build a second "minimise" for one screen.

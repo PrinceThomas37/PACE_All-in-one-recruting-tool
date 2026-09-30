@@ -21,9 +21,19 @@
 // ============================================================================
 
 const matchEngine = require('../match-engine');
+const applicants = require('./applicants');
+const subStages = require('./submission-stages');
+const { createDb } = require('../models');
 
 module.exports = function createRecruitingCore(deps) {
   const { supabase, hasRole } = deps;
+  // The org-scoped data layer (models/). index.js has never handed one to
+  // bd_recruiter_routes (the mounter's own header says it does), so build it
+  // here from the client we DO get — createDb is a stateless wrapper. Every new
+  // query in this territory goes through it (law 7): `db.forRequest(req)`
+  // scopes reads and mutations to the caller's org and stamps inserts, so a
+  // forgotten `.eq('org_id')` is not a way to leak or misfile a row.
+  const db = deps.db || createDb(supabase);
 
   // ── Multi-tenant ──────────────────────────────────────────────────────────
   // Stamp new rows with the caller's org. Returns {} when there is no org
@@ -140,13 +150,51 @@ module.exports = function createRecruitingCore(deps) {
     return data;
   }
 
-  async function logSubmissionActivity(submissionId, jobOrderId, recruiterId, action, oldStage, newStage, note) {
+  // The stage-change trail. R-002 COUNTS SUBMISSIONS FROM THIS TABLE, so a row
+  // that does not land is a number that is quietly too low — it stays non-fatal
+  // (losing one trail entry beats losing the save it describes) but no longer
+  // silent: a failed write is logged, where before an `{error}` result was
+  // simply dropped. Pass `req` and the row is org-stamped through models/;
+  // without it (older callers) the column default applies, as it always did.
+  async function logSubmissionActivity(submissionId, jobOrderId, recruiterId, action, oldStage, newStage, note, req) {
+    return logSubmissionActivities([{
+      submission_id: submissionId, job_order_id: jobOrderId, recruiter_id: recruiterId,
+      action, old_stage: oldStage || null, new_stage: newStage || null, note: note || null
+    }], req);
+  }
+  // Many rows, one write — a group stage move of two hundred is one insert,
+  // not two hundred.
+  async function logSubmissionActivities(rows, req) {
+    if (!rows || !rows.length) return;
     try {
-      await supabase.from('submission_activity').insert({
-        submission_id: submissionId, job_order_id: jobOrderId, recruiter_id: recruiterId,
-        action, old_stage: oldStage || null, new_stage: newStage || null, note: note || null
-      });
-    } catch (_) { /* non-fatal */ }
+      const q = req ? db.forRequest(req).from('submission_activity') : supabase.from('submission_activity');
+      const { error } = await q.insert(rows);
+      if (error) console.error('[submission_activity] history write failed:', error.message);
+    } catch (e) { console.error('[submission_activity] history write failed:', e && e.message); }
+  }
+
+  // Read rows for a list of ids, a hundred at a time (a long `.in()` is a long
+  // URL). ONE MALFORMED ID MAKES THE DATABASE REFUSE THE WHOLE CHUNK, and the
+  // caller would then read a hundred good ids as "not found" — a failure that
+  // looks exactly like a normal answer. So when a chunk is refused it is asked
+  // again one id at a time and whatever answers is kept; only the bad id is lost.
+  // `run(chunk)` builds the query and returns it (awaitable → {data, error}).
+  async function readByIds(ids, run, size) {
+    const list = [...new Set((ids || []).filter(Boolean))];
+    const step = size || 100;
+    const out = [];
+    for (let i = 0; i < list.length; i += step) {
+      const chunk = list.slice(i, i + step);
+      const { data, error } = await run(chunk);
+      if (!error) { out.push(...(data || [])); continue; }
+      for (const id of chunk) {
+        try {
+          const r = await run([id]);
+          if (!r.error) out.push(...(r.data || []));
+        } catch (_) { /* that id is unreadable — it is reported as not found */ }
+      }
+    }
+    return out;
   }
 
   // recruiter scoping: which job_order ids is this recruiter assigned to?
@@ -191,6 +239,191 @@ module.exports = function createRecruitingCore(deps) {
   // editable submission display fields (the Submissions grid)
   const SUBMISSION_FIELDS = ['revision_status','bill_rate','pay_rate','employer_name','availability','notice_period','submitted_rate','notes','sub_stage','interview_at','interview_location'];
 
+  // ── PUTTING SOMEBODY ON A JOB — THE ONE WRITER (R-075, D-0057) ─────────────
+  //
+  // The owner: *"A candidate when added to job from the candidate section or
+  // directly gets into Sourced stage. Tagged is for the database. Inside a job
+  // the stage starts from Sourced."*
+  //
+  // Before this, five different pieces of code each decided for themselves what
+  // "on a job" meant — the tag button, the direct add, the sourcing import, the
+  // pipeline "promote" and the candidate-email queue — and no two wrote the same
+  // rows. One stamped `submitted_at` on a person nobody had submitted; one wrote
+  // the pipeline row with NO org_id (so it filed under the default company);
+  // one made a submission with no code and no history; one let a recruiter
+  // create a submission at ANY stage. CLAUDE.md's rule for exactly this:
+  // "two live paths to one outcome is the bug".
+  //
+  // So membership is written HERE and nowhere else. ON A JOB = A `submissions`
+  // ROW at `Sourced` (Session 28's rule, D-0029: a row for somebody who has been
+  // ADDED, not sent anywhere — so NO `submitted_at`), plus the sourcing-details
+  // row beside it (`candidate_pipeline`: rates, employer, availability, notice,
+  // CTC, source, notes). The submission is the membership and the only state;
+  // the pipeline row's own status column is inert (see services/applicants.js).
+  //
+  // The contract, so a caller cannot get it wrong:
+  //   * IDEMPOTENT. Somebody already on the job is `already`, never a duplicate,
+  //     never an error — and if only HALF of the membership exists (the 15 rows
+  //     tagged before Session 31 have a pipeline row and no submission) the
+  //     missing half is written: adding somebody to a job they appear to be on
+  //     heals it.
+  //   * IT TAKES ROWS, NOT IDS, and refuses one from another company. The
+  //     callers load the candidate and the job order through `loadCandidateFor`
+  //     / `loadJobOrderFor` (org-scoped); this checks the `org_id` they carry
+  //     as well, so a caller that forgot to scope is refused rather than
+  //     writing across companies. (The sourcing import forgot, and would have.)
+  //   * A partial write is REPORTED. The submission is the membership: if it
+  //     cannot be written the call throws. If only the details row fails, the
+  //     person IS on the job and the result carries `warning`.
+  //   * Codes are only spent on real inserts — the existing membership is
+  //     looked up first, so re-adding a hundred people burns no SB-/PL- numbers.
+  //
+  // A NEW WAY OF ADDING SOMEBODY TO A JOB CALLS THIS. It does not insert into
+  // `submissions` or `candidate_pipeline` itself.
+  const PIPELINE_SELECT =
+    '*, candidate:candidates(id,candidate_code,full_name,email,phone,work_authorization,' +
+    'current_title,headline,skills,city,state,country,current_location,experience_years,' +
+    'availability,notice_period,current_ctc,bill_rate,pay_rate,source,resume_url), ' +
+    'tagger:users!tagged_by(id,name,employee_id), ' +
+    'submission:submissions!candidate_pipeline_submission_id_fkey(id,submission_code,stage,sub_stage)';
+  const MEMBER_CAND_COLS = 'id,org_id,work_authorization,bill_rate,pay_rate,current_employer,availability,notice_period,current_ctc,source';
+  // Enough of an existing row to decide "already there" and to link the halves.
+  const MEMBER_SUB_COLS = 'id,candidate_id,job_order_id,pipeline_id,stage,sub_stage,submission_code,recruiter_id';
+  const MEMBER_PL_COLS = 'id,candidate_id,job_order_id,submission_id';
+
+  /** The job order, if it is alive AND in the caller's company; otherwise null. */
+  async function loadJobOrderFor(req, id) {
+    if (!id) return null;
+    const { data } = await db.forRequest(req).from('job_orders')
+      .select('id,org_id,job_title,job_code,status,bd_manager_id')
+      .eq('id', id).is('deleted_at', null).maybeSingle();
+    return data || null;
+  }
+  /** The candidate, if alive AND in the caller's company; otherwise null. */
+  async function loadCandidateFor(req, id) {
+    if (!id) return null;
+    const { data } = await db.forRequest(req).from('candidates')
+      .select(MEMBER_CAND_COLS).eq('id', id).is('deleted_at', null).maybeSingle();
+    return data || null;
+  }
+  async function findMemberSubmission(scoped, candidateId, jobOrderId, cols) {
+    const { data, error } = await scoped.from('submissions').select(cols || SUBMISSION_SELECT)
+      .eq('candidate_id', candidateId).eq('job_order_id', jobOrderId).is('deleted_at', null).maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+  async function findMemberPipeline(scoped, candidateId, jobOrderId, cols) {
+    const { data, error } = await scoped.from('candidate_pipeline').select(cols || PIPELINE_SELECT)
+      .eq('candidate_id', candidateId).eq('job_order_id', jobOrderId).is('deleted_at', null).maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+
+  /**
+   * Put one candidate on one job at the entry stage.
+   *   cand      — a row from loadCandidateFor (has org_id, and the snapshot columns)
+   *   jobOrder  — a row from loadJobOrderFor
+   *   opts.recruiterId  whose candidate-on-this-job it is (default: the caller)
+   *   opts.details      the add form's sourcing details (PIPELINE_DETAIL_KEYS);
+   *                     they seed BOTH rows so the two cannot start out disagreeing
+   *   opts.submission   { submitted_rate, revision_status } — submission-only fields
+   *   opts.existing     { submission, pipeline } already read by a batch caller
+   *   opts.note         goes on the history row
+   * Returns { status: 'added'|'already', healed, created:{submission,pipeline},
+   *           submission, pipeline, warning }.
+   */
+  async function addCandidateToJob(req, cand, jobOrder, opts) {
+    const o = opts || {};
+    if (!cand || !cand.id) throw new Error('addCandidateToJob needs a candidate row');
+    if (!jobOrder || !jobOrder.id) throw new Error('addCandidateToJob needs a job order row');
+    const org = orgIdFor(req);
+    if (org && ((cand.org_id && cand.org_id !== org) || (jobOrder.org_id && jobOrder.org_id !== org))) {
+      throw new Error('That candidate or job order is not in your company.');
+    }
+    const scoped = db.forRequest(req);
+    const userId = (req.user && req.user.id) || null;
+    const recruiterId = o.recruiterId || userId;
+    const d = o.details || {};
+
+    const pre = o.existing || null;
+    let sub = pre ? (pre.submission || null) : await findMemberSubmission(scoped, cand.id, jobOrder.id);
+    let pl = pre ? (pre.pipeline || null) : await findMemberPipeline(scoped, cand.id, jobOrder.id);
+    const wasMember = !!(sub || pl);
+    const created = { submission: false, pipeline: false };
+
+    // 1. THE MEMBERSHIP — a submission at the entry stage, no submitted_at.
+    if (!sub) {
+      const snapshot = {};
+      applicants.SNAPSHOT_KEYS.forEach(k => { if (d[k] !== undefined) snapshot[k] = d[k]; });
+      const row = applicants.submissionRowFor(cand, jobOrder.id, userId,
+        Object.assign({ recruiterId, snapshot, notes: d.notes }, o.submission || {}));
+      row.submission_code = await nextId('SB');
+      if (pl) row.pipeline_id = pl.id;
+      const { data, error } = await scoped.from('submissions').insert(row).select(SUBMISSION_SELECT).single();
+      if (error) {
+        if (error.code !== '23505') throw error;
+        // Somebody put them on this job a moment ago. That is "already", not a failure.
+        sub = await findMemberSubmission(scoped, cand.id, jobOrder.id);
+        if (!sub) throw error;
+      } else { sub = data; created.submission = true; }
+    }
+
+    // 2. THE SOURCING DETAILS — beside it, linked to it.
+    let warning = null;
+    if (!pl) {
+      try {
+        const prow = applicants.pipelineRowFor(cand, jobOrder.id, userId, d);
+        prow.pipeline_code = await nextId('PL');
+        prow.submission_id = sub.id;
+        const { data, error } = await scoped.from('candidate_pipeline').insert(prow).select(PIPELINE_SELECT).single();
+        if (error) {
+          if (error.code !== '23505') throw error;
+          pl = await findMemberPipeline(scoped, cand.id, jobOrder.id);
+        } else { pl = data; created.pipeline = true; }
+      } catch (e) {
+        // The person is on the job; only their sourcing details are missing.
+        warning = 'Added to the job, but the sourcing details were not saved: ' + ((e && e.message) || 'unknown error');
+      }
+    }
+
+    // 3. LINK THE TWO HALVES, in both directions, only where a link is missing
+    //    or wrong (a link that is already right is not rewritten).
+    if (pl && sub) {
+      try {
+        if (pl.submission_id !== sub.id) {
+          // Also retires the legacy status word the row may still carry.
+          await scoped.from('candidate_pipeline')
+            .update({ submission_id: sub.id, pipeline_status: subStages.ENTRY_STAGE, updated_at: new Date() }).eq('id', pl.id);
+          pl.submission_id = sub.id;
+        }
+        if (sub.pipeline_id !== pl.id) {
+          await scoped.from('submissions').update({ pipeline_id: pl.id }).eq('id', sub.id);
+          sub.pipeline_id = pl.id;
+        }
+        pl.submission = { id: sub.id, submission_code: sub.submission_code, stage: sub.stage, sub_stage: sub.sub_stage || null };
+      } catch (e) {
+        warning = warning || ('Added to the job, but the two records could not be linked: ' + ((e && e.message) || 'unknown error'));
+      }
+    }
+
+    // 4. THE TRAIL — the job's history begins at the entry stage. Only for a
+    //    membership we just wrote; an existing one already has its own.
+    if (created.submission) {
+      await logSubmissionActivity(sub.id, jobOrder.id, recruiterId, 'created', null, subStages.ENTRY_STAGE, o.note || null, req);
+    }
+
+    return {
+      status: wasMember ? 'already' : 'added',
+      healed: wasMember && (created.submission || created.pipeline),
+      created, submission: sub, pipeline: pl, warning,
+    };
+  }
+
+  // What a screen receives for a pipeline row: the row, plus its `stage` (the
+  // submission's; Sourced when none is linked yet), with the inert legacy
+  // `pipeline_status` overwritten by that same stage. See services/applicants.js.
+  function pipelineView(row) { return applicants.pipelineView(row, normalizeStage); }
+
   // ── Job order shape ───────────────────────────────────────────────────────
   const JOB_ORDER_SELECT =
     '*, company:companies(id,name,industry,location), ' +
@@ -226,17 +459,22 @@ module.exports = function createRecruitingCore(deps) {
 
   return {
     // passthrough of the raw deps every route module needs
-    supabase, db: deps.db, auth: deps.auth, hasRole, today: deps.today,
+    supabase, db, auth: deps.auth, hasRole, today: deps.today,
     // multi-tenant
     orgIdFor, orgStamp, withOrg,
     // relevance
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     // stages
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
+    ENTRY_STAGE: subStages.ENTRY_STAGE, RECRUITER_STAGES: subStages.RECRUITER_STAGES,
     // roles + scoping
     isBDM, isRecruiter, assignedJobOrderIds, recruiterCanTouchJob, reportingChainIds,
     // shared writes
-    nextId, logSubmissionActivity,
+    nextId, logSubmissionActivity, logSubmissionActivities, readByIds,
+    // putting somebody on a job (R-075) — the ONE writer, and how to load what it takes
+    loadJobOrderFor, loadCandidateFor, addCandidateToJob, pipelineView,
+    findMemberSubmission, findMemberPipeline,
+    PIPELINE_SELECT, MEMBER_CAND_COLS, MEMBER_SUB_COLS, MEMBER_PL_COLS,
     // submission shape
     SUBMISSION_SELECT, SUBMISSION_FIELDS,
     // job order shape

@@ -265,6 +265,7 @@
       name: c.name||'Client',
       sub: [c.industry, c.location].filter(Boolean).join(' · '),
       onclose:'clientsBack()',
+      onmin:  "Dock.parkDrawer('client')",
       acts:[
         // Emailing a client is its owner's (D-0035 — the server refuses anyone
         // else), so nobody else is offered the button (C-0029's rule).
@@ -377,7 +378,13 @@
         (open?intelBody(m,inbound):'')+
       '</div>';
     }).join('')||'<div class="dt-empty">No emails with this client yet.</div>';
-    return summaryBlock+
+    // R-085: our own replies are read live from the caller's mailbox; when that
+    // could not be done, say so instead of presenting half a conversation as whole.
+    var ss=i.sent_side, sideNote='';
+    if(ss&&!ss.ok) sideNote='<div style="font-size:12px;color:var(--ink3);margin:0 0 8px">'+(ss.reason==='no_mailbox'
+      ?'Connect your mailbox so PACE can read the emails you sent — replies you write there are not in this list.'
+      :'PACE could not read your sent mail just now, so replies you wrote yourself may be missing here and from the summary. Try again in a minute.')+'</div>';
+    return sideNote+summaryBlock+
       '<div style="font-weight:600;font-size:13.5px;margin:4px 0 6px">Every email with '+esc(c.name||'this client')+
         ' <span style="font-weight:400;color:var(--ink3);font-size:12px">'+(i.total_messages||0)+' in total, newest first</span></div>'+
       rows;
@@ -525,6 +532,8 @@
           (docIds.length?'<div style="font-size:11.5px;color:var(--text3);margin-top:2px">'+docIds.length+' document'+(docIds.length>1?'s':'')+' will be attached.</div>':'')+
         '</div>'+
         '<div style="padding:16px 20px">'+
+          // R-087: which of MY mailboxes it leaves from. The page names an id; the server checks it is mine.
+          (window.FromPick?FromPick.slot('client-em-from'):'')+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>'+
             toField+'</div>'+
           '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
@@ -628,7 +637,7 @@
     var body=(document.getElementById('client-em-body')||{}).value||d.body;
     if(!to.trim()){ showToast('Recipient email required','error'); return; }
     showToast('Sending…','info');
-    apiPost('/companies/'+d.companyId+'/email', { to:to, subject:subject, body:body, document_ids:d.documentIds||[] })
+    apiPost('/companies/'+d.companyId+'/email', { to:to, subject:subject, body:body, document_ids:d.documentIds||[], mailbox_id:(window.FromPick&&FromPick.value('client-em-from'))||undefined })
       .then(function(){ showToast('Email sent','success'); closeModal(); })
       .catch(function(e){
         if(/no_connected_mailbox/.test(e.message)) showToast('No connected mailbox — connect one under Email','error');

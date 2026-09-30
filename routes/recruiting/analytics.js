@@ -399,10 +399,15 @@ module.exports = function (app, core) {
       (sa || []).forEach(r => {
         const cand = r.submission && r.submission.candidate && r.submission.candidate.full_name;
         const job = r.job && (r.job.job_title || r.job.job_code);
-        let detail = r.action === 'created' ? 'Added a submission' :
-          r.action === 'promoted' ? 'Promoted to a submission' :
+        // The words follow the owner's two corrections. D-0029: putting somebody
+        // on a job is NOT a submission ("Added a submission" said it was).
+        // D-0057: "Tagged" is a word for the candidate database, not a step in a
+        // job. `tagged` rows are old history (the add used to be logged that
+        // way); `promoted` rows carry the retired stage "Tagged" as their
+        // old_stage, so they read by where the person went, never from it.
+        let detail = (r.action === 'created' || r.action === 'tagged') ? 'Added to a job' :
+          r.action === 'promoted' ? (r.new_stage ? ('Moved to ' + r.new_stage) : 'Moved on') :
           r.action === 'bdm_approved' ? 'BDM approved' :
-          r.action === 'tagged' ? 'Tagged to a job' :
           (r.old_stage && r.new_stage ? ('Moved ' + r.old_stage + ' → ' + r.new_stage) : (r.new_stage || r.action || 'Updated'));
         feed.push({ at: r.created_at, kind: 'submission', action: r.action, detail, candidate: cand || null, job: job || null, note: r.note || null });
       });

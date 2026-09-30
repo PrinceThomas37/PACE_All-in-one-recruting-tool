@@ -47,6 +47,88 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0061 · 2026-09-30 · STANDS · Work cheaper (R-088 yes), heal the 15 old rows, and the order of the rest
+**Their words:** *"yes do R-088"* · *"15 old 'Tagged' candidate rows (C-0035) … yes"* · then, for the order: finish the stage-change screens myself without agents, rebuild the failing test and re-run everything once, then windows (R-078/R-079), "Needs you today" rows that do the task (R-073), emailing a contact you just added (R-083), email buttons forgetting who was clicked (R-084), the AI summary missing our own replies (R-085), the interview confirmation email (R-086), choosing the From address on every email (R-087). And, about Apollo: *"one click sometimes consumes a lot of apollo credit, i think our credit and their credit system is not the same."*
+**Chosen:** all three of R-088's ways: small fixes done directly, `CLAUDE.md` trimmed to the rules (full text kept in `docs/CLAUDE_MD_FULL_SESSION34.md`), helpers on low effort with targeted tests. The 15 legacy rows were healed on the live database the same day (C-0035 (a) closed). D-0060 stands.
+**Re-open when:** a rule that was trimmed out of `CLAUDE.md` is needed and nobody could find it — then the fix is a better pointer, not a longer file.
+
+### D-0060 · 2026-09-29 · STANDS · No helper agent runs without the owner's say-so
+**Their words:** *"Do not continue those agents before my saying. I think those agents are eating a lot of token. By now I have exhausted 2 session token on a single message that I gave you this morning."*
+
+**Chosen:** no territory agent is started or resumed until the owner says so, in
+their own words. That includes the three runs they stopped at ~17:10 UTC
+(foundry, surface on C-0032, the windows job), whose partial work is saved in WIP
+commit `08955fd`. The territories still OWN their paths (D-0008 stands for who
+owns what); what changes is WHEN work runs — on the owner's go-ahead, not mine.
+While work is paused, nothing wakes the session on a timer (no hourly PR
+check-ins; PR #262's activity subscription is off).
+
+**Why:** this morning's one message (the nine handwritten asks) fanned out into
+about ten agent runs — several at once, some cut off by the usage limit and run
+again. Each run first reads CLAUDE.md (~140 KB) plus its own memory (up to
+90 KB) and then runs the full suite; measured runs used ~320k–670k tokens each.
+The owner's plan limit was reached twice.
+
+**Re-open when:** the owner says to resume, or picks a cheaper way of working
+(`R-088`).
+
+
+### D-0059 · 2026-09-29 · STANDS · D-0056 means the "Your team" card
+**Their words:** *"Yes, the Your team block is the one"* — answering which Dashboard block D-0056 removes.
+
+**Chosen:** the Dashboard's **"Your team"** card goes — the list of people who
+report to you, with "Open team view →" (both its forms: the roster, and "No one
+reports to you yet"). Nothing else on the Dashboard moves: the Reports section
+at its foot, "Your team's pipeline", "Your team's conversations" and "Needs you
+today" all stay. The team view lives on the My Team page (`R-072`).
+
+**Re-open when:** the owner wants a small team summary back on the Dashboard.
+
+### D-0058 · 2026-09-29 · STANDS · PACE gets windows: minimise, maximise and close — for compose and for other windows too
+**Their words** (answering the read-back of their handwritten notes): *"Screenshot for apollo usage I wil give you later. Leave anytime can be. You have enough context for that. Yes, it's minimize and maximise windows in PACE. For compose and also for other windows too."*
+
+**Chosen:**
+- **R-078 + R-079 are one feature, and it is decided:** a compose window can be
+  minimised (parked, like Gmail/Outlook), maximised and closed — and so can
+  PACE's other windows (records such as client details, reminders, messages).
+  The missing word in note 9 was "maximise". Compose comes first.
+- **D-0057's reading stands.** The unreadable phrase in note 5 ("any time can
+  be used"?) does not change it — the owner: *"Leave anytime can be. You have
+  enough context for that."*
+- **R-074 waits on the owner:** they will send the Apollo credit-usage
+  screenshot later.
+
+**Re-open when:** the owner finds parked windows getting in the way of the
+page behind them, or wants a window to open somewhere other than over the page.
+
+### D-0057 · 2026-09-29 · STANDS · Inside a job everyone starts at Sourced; "Tagged" belongs to the candidate database, not to a job
+**Their words** (handwritten notes, photographed and sent 2026-09-29): *"A candidate when added to job from the candidate section or directly gets into Sourced stage. Tagged is for the database. Inside a job the stage starts from Sourced. Tagged is like when added the candidate to the database or added. any time can be used"* — the last four words are my best reading of the handwriting, not certain.
+
+**Chosen:**
+- Adding a person to a job — from the Candidates page or on the job itself —
+  puts them at **Sourced**, the first of the eleven stages (the D-0029 ladder is
+  unchanged).
+- **"Tagged" is not a step inside a job.** It describes a person being in the
+  candidate database.
+- Today the job page still labels some people "Tagged" (pipeline-only rows,
+  `25-workflow-bd.js`), and the pipeline's own status list
+  (`28-page-pipeline.js`) begins with "Tagged". `R-075` carries the change.
+  The reading was sent back to the owner on 2026-09-29.
+
+**Re-open when:** the owner wants a step before Sourced inside a job (a
+"considering" or shortlist state), or the reading above turns out to be wrong.
+
+### D-0056 · 2026-09-29 · STANDS · The team view comes off the Dashboard; My Team is its own page
+**Their words** (handwritten notes, photographed and sent 2026-09-29): *"My team view (the big column view) in dashboard is not required. Remove that, My Team has a tab for itself"*
+
+**Chosen:** the Dashboard stops drawing the team view; it lives on the My Team
+page only (`R-072`). **Which block** is being confirmed with the owner: my
+reading is the "Your team" card (the people reporting to you, with "Open team
+view →"), not the Reports section at the foot of the Dashboard (R-006), which
+My Team also shows.
+
+**Re-open when:** the owner wants a small team summary back on the Dashboard.
+
 ### D-0055 · 2026-09-28 · STANDS · Claude never uses the owner's organisation's Apollo account; every customer company brings its own API keys
 **Their words** (asked whether Claude may read their Apollo account's credit balance): *"No I cannot give you the access, its my organization's. there are 183.3k credits left. Now this is just for text [test] … i am testing it within my company. When i see this, i use that particular company's apollo API key to pull out details or any other API keys in the system. All are changeable. Because this is a SAAS product."* — and in the same message: *"I need the people from other job also in this employee search. Maybe a search bar to search for title or similar title and that will search in the employee list from apollo and show us, and we can click on to see and select which contact we want to uncover."*
 

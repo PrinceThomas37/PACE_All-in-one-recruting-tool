@@ -6,9 +6,8 @@
 
 (function () {
 
-  var PIPELINE_STATUSES = ['Tagged','Contacted','Interested','Screening','Shortlisted','Moved to Submission','Not Interested','Rejected'];
-  var PSTATUS_COLORS = { 'Tagged':'var(--text3)','Contacted':'#6b7280','Interested':'#2563eb','Screening':'var(--amber)',
-    'Shortlisted':'#7c3aed','Moved to Submission':'var(--green)','Not Interested':'#9ca3af','Rejected':'var(--red)' };
+  // (The pipeline's own second stage vocabulary — Tagged/Contacted/Interested… — was
+  // retired with D-0057: a person on a job has ONE stage, their submission's.)
 
   if (STATE.bd) { STATE.bd.pipeline = STATE.bd.pipeline || []; STATE.bd.view = STATE.bd.view || {}; STATE.bd.plSel = STATE.bd.plSel || {}; }
 
@@ -157,7 +156,7 @@
     var allOn = rows.length && rows.every(function(p){ return sel[p.id]; });
     var head = '<th style="padding:8px 9px"><input id="pl-chk-all" type="checkbox" '+(allOn?'checked':'')+' onclick="plToggleSelAll()"></th>'+
       ['Pipeline ID','Candidate Name','Title','Match','Stage','Work Auth','Mobile','Email','Location','Country','Exp','Source','Resume',
-      'Bill Rate','Pay Rate','Employer','Availability','Notice','Current CTC','Tagged By','Tagged On','']
+      'Bill Rate','Pay Rate','Employer','Availability','Notice','Current CTC','Added By','Added On','']
       .map(function(h){ return '<th style="text-align:left;padding:8px 9px;font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">'+h+'</th>'; }).join('');
 
     var body = rows.map(function(p){
@@ -255,13 +254,30 @@
     if (recruiterScoped && ['Sourced','Screening','Submitted to BDM'].indexOf(stage) < 0){
       showToast('You can take a candidate up to "Submitted to BDM" — the BD team owns the later stages','error'); render(); return;
     }
-    apiPost('/pipeline/'+pipelineId+'/promote', { stage:'Sourced' }).then(function(r){
-      var sub = r && r.submission; if(!sub){ showToast('Could not promote candidate','error'); return; }
-      STATE.bd.submissions = STATE.bd.submissions || [];
-      if(!STATE.bd.submissions.some(function(x){ return x.id===sub.id; })) STATE.bd.submissions.push(sub);
-      if (stage === sub.stage){ showToast('Promoted to submission','success'); bdReloadPipeline(); return; }
-      openStageModal(sub.id, stage, function(){ bdReloadPipeline(); });
-    }).catch(function(e){ showToast('Failed: '+e.message,'error'); });
+    // Nobody on a job is "un-staged" any more (D-0057); a row with no submission is
+    // somebody added before a stage was recorded. Adding them again writes the
+    // missing half (the same POST /pipeline/bulk as everywhere), then the ordinary move.
+    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId, j = joById(jid) || {};
+    var row = (STATE.bd.pipeline||[]).filter(function(x){ return x.id===pipelineId; })[0] || {};
+    var c = row.candidate || {};
+    stageMoveUnlinked({ cid: row.candidate_id || c.id, name: c.full_name || '', jobId: jid, jobTitle: j.job_title || '', stage: stage,
+      reload: function(){ return loadPipeline(jid).then(function(){ render(); }); },
+      onDone: function(){ bdReloadPipeline(); } });
+  };
+  // Change the stage of everybody ticked — one window, one request, an answer per person.
+  window.plMoveGroup = function(stage){
+    if (!stage) return;
+    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId, j = joById(jid) || {};
+    stageOpenGroup({ jobId: jid, jobTitle: j.job_title || '', stage: stage,
+      rowsNow: function(){
+        return plSelectedRows().map(function(p){
+          var c = p.candidate || {};
+          return { cid: p.candidate_id || c.id, name: c.full_name || '',
+            sub: p.submission ? { id: p.submission.id, stage: p.submission.stage, sub_stage: p.submission.sub_stage || null } : null };
+        });
+      },
+      reload: function(){ return loadPipeline(jid).then(function(){ render(); }); },
+      onDone: function(){ bdReloadPipeline(); } });
   };
   // ── multi-select + bulk actions (ported from the old Submissions tab) ───────
   function plCurrentRows(){
@@ -284,7 +300,9 @@
       // description now travels inside that email as a formatted panel instead
       // of the attachment this flow sent. The owner found the duplication, not
       // the system; see CAPABILITIES.md "Emailing a candidate about a job".
+      (window.stageGroupSelect ? stageGroupSelect(count, 'plMoveGroup(this.value);this.value=\'\'') : '')+
       '<button class="btn btn-sm btn-outline" onclick="plClearSel()">Clear</button>'+
+      (window.stageGroupHint && stageGroupHint() ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--text3)">'+esc(stageGroupHint())+'</div>' : '')+
     '</div>';
   }
   // Repaint ONLY the checkboxes + the bulk bar in place — never a full render() —

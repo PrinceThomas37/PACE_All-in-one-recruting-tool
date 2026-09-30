@@ -17,6 +17,24 @@
 // They cannot close somebody else's task. Ownership is defined once, in
 // services/ownership.js — read that file before changing any scoping here.
 //
+// ADMINS INCLUDED (R-071, 2026-09-29). Admins used to be exempt from the split,
+// so an admin's list carried EVERY user's reminders, each with a Done button
+// that closeRefusal() correctly refuses — "This reminder belongs to somebody
+// else…", and the row stayed. The owner reported it as "Once the reminders are
+// complete it doesn't go off from the dashboard". D-0020 has no admin
+// exception for the to-do list ("nobody else's daily list carries your work");
+// D-0021's admin exception is about the BRIEFING, and D-0034's is about SEEING.
+// What an admin gets that a manager does not is BREADTH OF OVERSIGHT: their
+// count and review cover the whole organisation, because the company is their
+// desk — whether or not anybody reports to them on manager_id.
+//
+// THE COUNT AND THE REVIEW ARE ONE READ (`openBeneath`). The count used to be
+// built from the list's own items — replies, nudges and promises included —
+// while the review screen behind it can only show (and prompt on) reminders, so
+// "14 open across your team" opened onto 3 rows. D-0020: "on that screen they
+// can see the item". Your team's CONVERSATIONS have their own home in the
+// client digest (routes/client-intel.js), which is built for that.
+//
 // DEGRADES BY DESIGN: conversation_messages arrives with migration 037. Until it
 // is applied, threads fall back to what already exists (contacts.replied_at +
 // reply_snippet + the emails table), so the queue is thinner but still correct
@@ -48,6 +66,41 @@ module.exports = (ctx) => {
     return out;
   }
 
+  // Admin is read EXACTLY the way middleware/authorize.js hasRole reads it
+  // (ownership.rolesOf), because here it decides whose work a person may review
+  // and prompt — a boundary is read one way or it is two boundaries.
+  const isAdminReq = (req) => ownership.rolesOf(req.user || {}).includes('admin');
+
+  // WHAT THE VIEWER OVERSEES — never what is on their own list.
+  //   admin     → the whole organisation (`others: null`), reports or not
+  //   everyone  → their reporting chain minus themselves (hierarchy.js, the
+  //               one breadth-first walk in PACE)
+  async function oversight(req) {
+    if (isAdminReq(req)) return { isAdmin: true, others: null, label: 'org' };
+    const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+    const others = (chain || []).filter(id => id !== req.user.id);
+    return { isAdmin: false, others, label: others.length ? 'team' : 'own' };
+  }
+
+  // The team's OPEN reminders. The ONLY reader behind both the count on the
+  // daily list and the review screen, so the two can never disagree about how
+  // many there are: same filters, same order, same limit — only the columns
+  // differ. `null` means there is nobody beneath the viewer.
+  //
+  // A reminder NOBODY owns is dropped here explicitly: it is nobody's team's
+  // work (it sits on an admin's OWN list, where Done closes it), and "Ask
+  // them" on it has nobody to ask. SQL's `<>` already skips a NULL owner, but
+  // a rule that holds only by NULL semantics is one a test double disagrees
+  // with — which is exactly how this line was found.
+  const TEAM_LIMIT = 200;
+  async function openBeneath(req, view, columns) {
+    if (!view.isAdmin && !view.others.length) return null;
+    let q = withOrg(supabase.from('reminders').select(columns).eq('status', 'pending'), req);
+    q = view.isAdmin ? q.neq('user_id', req.user.id) : q.in('user_id', view.others);
+    const { data } = await q.order('return_date').limit(TEAM_LIMIT);
+    return (data || []).filter(r => r.user_id);
+  }
+
   router.get('/next-actions', auth, async (req, res) => {
     try {
       // Reading conversations and ranking them is the differentiator, so it is
@@ -59,14 +112,27 @@ module.exports = (ctx) => {
         return res.json({ items: [], summary: summarize([]), scope: 'none', locked: feature.body });
       }
 
-      const org = orgIdFor(req);
-      const isAdmin = (req.user.roles || []).includes('admin') || req.user.role === 'admin';
-      const chain = isAdmin ? null : await reportingChainIds(req.user.id, org);
-      const scope = isAdmin ? 'org' : (chain && chain.length > 1 ? 'team' : 'own');
+      const me = req.user.id;
+      const view = await oversight(req);
+      const isAdmin = view.isAdmin;
+      // `scope` names what the TEAM block covers; the LIST is always the
+      // caller's own. Same vocabulary as before: 'org' | 'team' | 'own'.
+      const scope = view.label;
 
-      // ── Leads side: contacts on jobs owned by the caller (or their chain) ──
+      // ── THE LIST IS WHAT YOU OWN (D-0020) — admin included ────────────────
+      // Everyone but admin is narrowed IN SQL to their own rows, so every
+      // .limit() below is spent on work that can reach their list. Admin reads
+      // the org as before and is narrowed in code (below, before ranking) to
+      // their own rows PLUS the unowned ones — ownership.js hands an item nobody
+      // owns to the viewer, and admin is the one role whose fetch contains them
+      // (a reply on an Unassigned-pool lead must be on SOMEBODY's list). An
+      // `.or(eq,is.null)` would narrow admin in SQL too, but nothing in this
+      // sandbox can run PostgREST, and that filter failing reads as an empty,
+      // perfectly plausible "Nothing waiting on you" (CLAUDE.md, Session 28).
+      //
+      // ── Leads side: contacts on jobs the caller owns ──────────────────────
       let jobQ = withOrg(supabase.from('jobs').select('id,position,stage,assigned_to_bd,company:companies(name)'), req);
-      if (!isAdmin && chain) jobQ = jobQ.in('assigned_to_bd', chain);
+      if (!isAdmin) jobQ = jobQ.eq('assigned_to_bd', me);
       const { data: jobs } = await jobQ.limit(MAX_THREAD_PEOPLE);
       const jobById = new Map((jobs || []).map(j => [j.id, j]));
 
@@ -149,7 +215,7 @@ module.exports = (ctx) => {
         };
       });
 
-      // ── Candidates side: submissions the caller (or their chain) owns ─────
+      // ── Candidates side: submissions the caller owns ──────────────────────
       // Mirrors the contacts block above. Before this, /next-actions only ever
       // looked at BD leads — a recruiter's own candidate conversations never
       // appeared in "needs you today" at all, even though conversation-intel.js
@@ -160,7 +226,7 @@ module.exports = (ctx) => {
           .is('deleted_at', null),
         req
       );
-      if (!isAdmin && chain) subQ = subQ.in('recruiter_id', chain);
+      if (!isAdmin) subQ = subQ.eq('recruiter_id', me);
       const { data: subs } = await subQ.limit(MAX_THREAD_PEOPLE);
       const candIds = [...new Set((subs || []).map(s => s.candidate_id).filter(Boolean))];
 
@@ -236,10 +302,9 @@ module.exports = (ctx) => {
         });
       }
 
-      // ── Reminders ─────────────────────────────────────────────────────────
-      // Still fetched across the chain — a manager's TEAM COUNT is built from
-      // the same rows — but `splitByOwner` below keeps everything that is not
-      // theirs out of the list itself.
+      // ── Reminders: the caller's own ───────────────────────────────────────
+      // The TEAM COUNT no longer comes from these rows — it is `openBeneath`,
+      // the same read the review screen makes.
       //
       // The job and contact come along so the stored note can be RENDERED. That
       // note carries merge fields written in the recruiting vocabulary
@@ -252,13 +317,22 @@ module.exports = (ctx) => {
         supabase.from('reminders')
           .select('id,user_id,return_date,note,contact_name,company_name,contact_id,job_id,status,'
             + 'job:jobs(id,position,location,industry,company:companies(name,industry,location)),'
-            + 'contact:contacts(id,first_name,last_name,designation)')
+            + 'contact:contacts(id,first_name,last_name,designation,email)')
           .eq('status', 'pending'),
         req
       );
-      if (!isAdmin && chain) remQ = remQ.in('user_id', chain);
+      if (!isAdmin) remQ = remQ.eq('user_id', me);
       const { data: remRows } = await remQ.limit(200);
-      const reminders = (remRows || []).map(r => {
+
+      // NARROWED BEFORE RANKING, not after. The ranking keeps the top `limit`
+      // and counts the stale nudges and the overflow; done on the whole org it
+      // let colleagues' items push an admin's own off the end — "Nothing
+      // waiting on you" over a due reminder of their own — and put the org's
+      // "gone quiet" count and "N more" under the admin's personal list.
+      const ownThreads = threads.filter(t => ownership.isMine(t, me));
+      const ownRemRows = (remRows || []).filter(r => ownership.isMine({ owner_id: r.user_id }, me));
+
+      const reminders = ownRemRows.map(r => {
         if (!r.note) return r;
         const vars = r.job
           ? buildEmailVars({ job: r.job, contact: r.contact, senderDisplayName: req.user.name || '' })
@@ -268,7 +342,7 @@ module.exports = (ctx) => {
 
       const now = Date.now();
       const built = buildNextActions({
-        threads,
+        threads: ownThreads,
         reminders: reminders || [],
         now,
         limit: Number(req.query.limit) || 50,
@@ -289,14 +363,19 @@ module.exports = (ctx) => {
 
       const after = dismissals.applyDismissals(built, store, now);
 
-      // ── OWNERSHIP (D-0020) ───────────────────────────────────────────────
-      // The list is what the caller OWNS. What merely sits beneath them is
-      // counted and reviewable, never mixed in. Admin is the exception the app
-      // already makes everywhere else: the whole org is their desk, so nothing
-      // is "somebody else's" to them.
-      const { mine, team } = isAdmin
-        ? { mine: after.items, team: [] }
-        : ownership.splitByOwner(after.items, req.user.id);
+      // ── OWNERSHIP (D-0020) — for EVERY role, admin included ───────────────
+      // The list is what the caller OWNS. The inputs were narrowed above; this
+      // split runs on the OUTPUT and is the guarantee — a future change to a
+      // fetch cannot put somebody else's row, and its refusable Done button,
+      // back on this list. Anything it holds back is dropped, never shown.
+      // (Admin used to be exempt here: "the whole org is their desk, so nothing
+      // is somebody else's to them". The Done button disagreed — see header.)
+      const { mine } = ownership.splitByOwner(after.items, req.user.id);
+
+      // What is open beneath the caller: a COUNT, from the very rows the review
+      // screen lists. For an admin that is the whole organisation.
+      const beneath = await openBeneath(req, view, 'id,user_id');
+      const team = (beneath || []).map(r => ({ owner_id: r.user_id }));
       const teamBlock = ownership.teamSummary(team, await namesFor(req, team));
 
       res.json({
@@ -369,11 +448,24 @@ module.exports = (ctx) => {
       if (!row) return res.status(404).json({ error: 'Reminder not found' });
       const refusal = ownership.closeRefusal(row, req.user.id);
       if (refusal) return res.status(403).json({ error: refusal, can_prompt: true });
-      const { error } = await withOrg(
+      // The rule lets the owner close it, and lets ANYONE close a reminder nobody
+      // owns. The write must match whichever of those it was: scoped to
+      // `user_id = me` alone it matched zero rows on an ownerless reminder and
+      // still answered success — the silent no-op D-0020 exists to end, on the
+      // one kind of row an admin's list can carry that is not strictly theirs.
+      let upd = withOrg(
         supabase.from('reminders').update({ status: 'sent', updated_at: new Date() })
           .eq('id', req.params.reminderId), req
-      ).eq('user_id', req.user.id);
+      );
+      upd = row.user_id ? upd.eq('user_id', req.user.id) : upd.is('user_id', null);
+      const { data: closed, error } = await upd.select('id');
       if (error) throw error;
+      // Nothing changed means it moved under us (reassigned, deleted). Say so —
+      // "Marked done" over an unchanged row is how this list lost the owner's
+      // trust in the first place.
+      if (!closed || !closed.length) {
+        return res.status(409).json({ error: 'This reminder changed before it could be closed. Refresh and try again.' });
+      }
       res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -382,24 +474,15 @@ module.exports = (ctx) => {
   // The review screen behind a manager's team count. Read-only by construction:
   // it returns rows and who owns each, and the only write it leads to is the
   // prompt below.
+  // An admin's is the whole organisation, whether or not anybody reports to them.
   router.get('/next-actions/team', auth, async (req, res) => {
     try {
-      const org = orgIdFor(req);
-      const isAdmin = (req.user.roles || []).includes('admin') || req.user.role === 'admin';
-      const chain = isAdmin ? null : await reportingChainIds(req.user.id, org);
-      const others = (chain || []).filter(id => id !== req.user.id);
-      if (!isAdmin && !others.length) return res.json({ items: [], people: [], total: 0 });
-
-      let q = withOrg(
-        supabase.from('reminders')
-          .select('id,user_id,return_date,note,contact_name,company_name,job_id,'
-            + 'job:jobs(id,position,company:companies(name)),'
-            + 'contact:contacts(id,first_name,last_name)')
-          .eq('status', 'pending'),
-        req
-      );
-      q = isAdmin ? q.neq('user_id', req.user.id) : q.in('user_id', others);
-      const { data: rows } = await q.order('return_date').limit(200);
+      const view = await oversight(req);
+      const rows = await openBeneath(req, view,
+        'id,user_id,return_date,note,contact_name,company_name,job_id,'
+          + 'job:jobs(id,position,company:companies(name)),'
+          + 'contact:contacts(id,first_name,last_name)');
+      if (!rows) return res.json({ items: [], people: [], total: 0 });
 
       const items = (rows || []).map(r => {
         const vars = r.job
@@ -436,11 +519,17 @@ module.exports = (ctx) => {
       if (row.user_id === req.user.id) {
         return res.status(400).json({ error: 'This one is already yours — no need to ask yourself.' });
       }
+      // Nobody owns it, so there is nobody to ask — and copying its empty owner
+      // would drop an anonymous "pick this up" on every admin's list. It sits
+      // on an admin's own list instead, where Done closes it.
+      if (!row.user_id) {
+        return res.status(400).json({ error: 'Nobody owns this reminder, so there is nobody to ask.' });
+      }
 
       // Only somebody the owner reports to may prompt them. Without this, any
       // colleague could drop tasks on anyone's morning.
       const org = orgIdFor(req);
-      const isAdmin = (req.user.roles || []).includes('admin') || req.user.role === 'admin';
+      const isAdmin = isAdminReq(req);
       const chain = isAdmin ? null : await reportingChainIds(req.user.id, org);
       if (!isAdmin && !(chain || []).includes(row.user_id)) {
         return res.status(403).json({ error: 'You can only ask somebody on your own team to pick something up.' });

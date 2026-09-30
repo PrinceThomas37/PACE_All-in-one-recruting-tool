@@ -361,3 +361,14 @@
 @media (max-width:860px){
   .login-wrap{padding:16px}
 }
+
+/* Windows (10a-window-dock.js): finger-sized buttons, and the tray of parked
+   windows across the bottom of the phone screen (the rail is off-canvas here). */
+@media (max-width:860px){
+  .win-bar{min-height:44px}
+  .win-b button{width:40px;height:40px;font-size:18px}
+  #win-tray{left:8px;right:8px;max-width:none;bottom:calc(8px + env(safe-area-inset-bottom));flex-wrap:nowrap;overflow-x:auto}
+  .win-chip{flex:none;padding:8px 6px 8px 12px}
+  .win-chip .wx{width:32px;height:32px}
+  .overlay.win-max .modal{height:100dvh;max-height:100dvh!important}
+}

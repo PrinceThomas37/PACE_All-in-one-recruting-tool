@@ -20,6 +20,7 @@ module.exports = function (app, core) {
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
     isBDM, isRecruiter, assignedJobOrderIds, recruiterCanTouchJob, reportingChainIds,
     nextId, logSubmissionActivity,
+    loadJobOrderFor, addCandidateToJob,
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
   const { CANDIDATE_FIELDS, CANDIDATE_SELECT, pickCandidateFields,
@@ -238,41 +239,26 @@ module.exports = function (app, core) {
     await supabase.from('sourcing_candidates')
       .update({ status: 'imported', imported_candidate_id: cand.id, imported_at: new Date() }).eq('id', staged.id);
     if (opts.job_order_id) {
-      try {
-        await supabase.from('candidate_pipeline').insert({
-          pipeline_code: await nextId('PL'), candidate_id: cand.id, job_order_id: opts.job_order_id,
-          pipeline_status: 'Tagged', work_auth_snap: cand.work_authorization || null, source: provider, tagged_by: userId
-        });
-      } catch (_) { /* already tagged / non-fatal */ }
-
-      // AND A SUBMISSION, BECAUSE THAT IS WHAT "ON THE JOB" MEANS EVERYWHERE
-      // ELSE (Session 28, round 3).
+      // R-075 — PUTTING SOMEBODY ON A JOB IS ONE WRITER. This used to insert a
+      // `candidate_pipeline` row (status 'Tagged', with NO org_id — so it filed
+      // under the default company) and then, separately, a submission with no
+      // link back to it and no history. `core.addCandidateToJob` writes both at
+      // Sourced, linked, org-stamped, with the job's trail, and never stamps a
+      // `submitted_at` (D-0029: adding is not submitting).
       //
-      // Importing with a job used to write ONLY the `candidate_pipeline` row
-      // above. But the job order's own Candidates list, the pipeline board, the
-      // funnel and every report read `submissions.stage` — so an applicant the
-      // owner had explicitly added to a job landed in the database, counted
-      // nowhere, and the job page kept reading "Candidates (0)". Verified on the
-      // live record: candidate created, pipeline row created, **zero
-      // submissions**. The owner reported it as "its not added as candidate to
-      // the job", which was exactly right.
-      //
-      // `Sourced` is the first ATS stage and the same one a manual add uses —
-      // this is not a new kind of membership, it is the existing one.
+      // The job order was loaded by the route INSIDE THE CALLER'S COMPANY
+      // (`opts.jobOrder`); null means it is not theirs or does not exist, and
+      // the candidate is still saved — reported, never rolled back or hidden:
+      // the candidate is real, adding them to the job is a second write that can
+      // fail on its own, and calling a half-success a clean one is how "Added"
+      // appeared over a job reading Candidates (0).
+      if (!opts.jobOrder) {
+        return { candidate: cand, job_link_failed: 'That job could not be found, so they were not added to it.' };
+      }
       try {
-        const subRow = applicants.submissionRowFor(cand, opts.job_order_id, userId);
-        // NO `submitted_at` (D-0029). Adding somebody to a job is membership,
-        // not a submission — stamping a submission date on a `Sourced` row is
-        // the same mistake as counting it, written into the record itself.
-        const { error: subErr } = await supabase.from('submissions').insert(Object.assign(subRow, {
-          submission_code: await nextId('SB'),
-        }, orgStamp(req)));
-        // 23505 is "already on this job" — a second import of the same person
-        // is not an error, and must never undo the import that just succeeded.
-        if (subErr && subErr.code !== '23505') throw subErr;
+        const r = await addCandidateToJob(req, cand, opts.jobOrder, { recruiterId: userId });
+        if (r.warning) return { candidate: cand, job_link_failed: r.warning };
       } catch (e) {
-        // A submission that did not land must be VISIBLE, not swallowed. The
-        // candidate is already saved, so this is reported and never rolled back.
         return { candidate: cand, job_link_failed: (e && e.message) || 'could not add to the job' };
       }
     }
@@ -289,9 +275,17 @@ module.exports = function (app, core) {
       if (staged.status === 'imported') return res.status(409).json({ error: 'Already imported.' });
       const b = req.body || {};
       if (b.job_order_id && !(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
-      const result = await importStagedCandidate(staged, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id, req);
+      // The job order, inside THE CALLER'S company (null = not theirs / not
+      // there). It was never checked here before, so a job id from another
+      // company was written to.
+      const jobOrder = b.job_order_id ? await loadJobOrderFor(req, b.job_order_id) : null;
+      const result = await importStagedCandidate(staged, { force: !!b.force, job_order_id: b.job_order_id || null, jobOrder }, req.user.id, req);
       if (result.duplicate) return res.status(409).json({ error: 'possible_duplicate', duplicates: result.matches });
-      res.status(201).json(result.candidate);
+      // THE PARTIAL SUCCESS MUST REACH THE SCREEN. This answered with the bare
+      // candidate, so `job_link_failed` — which the applicant screen reads to say
+      // "Saved to candidates, but not added to the job" — was computed and then
+      // dropped, and the page reported a clean "Added".
+      res.status(201).json(Object.assign({}, result.candidate, result.job_link_failed ? { job_link_failed: result.job_link_failed } : {}));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -302,17 +296,21 @@ module.exports = function (app, core) {
       const ids = Array.isArray(b.ids) ? b.ids : [];
       if (!ids.length) return res.status(400).json({ error: 'ids required' });
       if (b.job_order_id && !(await recruiterCanTouchJob(req, b.job_order_id))) return res.status(403).json({ error: 'Not assigned to this job order.' });
+      const jobOrder = b.job_order_id ? await loadJobOrderFor(req, b.job_order_id) : null;
       const { data: staged } = await withOrg(
         supabase.from('sourcing_candidates').select('*').in('id', ids).eq('status', 'new'), req
       );
-      let imported = 0, skipped = 0;
+      let imported = 0, skipped = 0, notAddedToJob = 0;
       for (const s of (staged || [])) {
         try {
-          const r = await importStagedCandidate(s, { force: !!b.force, job_order_id: b.job_order_id || null }, req.user.id, req);
-          if (r.duplicate) skipped++; else imported++;
+          const r = await importStagedCandidate(s, { force: !!b.force, job_order_id: b.job_order_id || null, jobOrder }, req.user.id, req);
+          if (r.duplicate) skipped++;
+          else { imported++; if (r.job_link_failed) notAddedToJob++; }
         } catch (_) { skipped++; }
       }
-      res.json({ imported, skipped, total: (staged || []).length });
+      // `not_added_to_job`: imported as candidates, but the add to the job did
+      // not land — counted, so a batch cannot read as a clean success.
+      res.json({ imported, skipped, total: (staged || []).length, not_added_to_job: notAddedToJob });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

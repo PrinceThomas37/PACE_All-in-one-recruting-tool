@@ -60,6 +60,7 @@ module.exports = (ctx) => {
   const {
     supabase, auth, today, withOrg, orgStamp, buildHtmlEmailBody, getMailboxSignature,
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage, connectedMailboxById,
+    ownSendingMailboxes, sendingMailboxFor,
     loadMailboxDelivState, warmupLimit, settingsConfig,
     isSendingPaused, isManagerPaused,
     getTimezoneFromLocation, LEAD_TZ_IANA, friendlySendError, logActivity,
@@ -89,36 +90,12 @@ module.exports = (ctx) => {
     } catch (_) { return ''; }
   }
 
-  // ── WHICH MAILBOX SENDS (Session 31) ─────────────────────────────────────
-  // The owner holds three connected mailboxes and could only ever send from
-  // whichever one the database happened to list first. The page may now CHOOSE
-  // — but only among the caller's OWN connected, active mailboxes. The rule
-  // that a From address is never chosen by the client still holds in the form
-  // that matters: the page names an id, the server checks it is one of yours,
-  // and anything else is refused exactly as if it did not exist.
-  async function ownSendingMailboxes(req) {
-    const { data: rows } = await supabase.from('user_emails')
-      .select('id,org_id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
-      .eq('user_id', req.user.id).order('is_primary', { ascending: false });
-    const org = req.orgId || null;
-    const mine = (rows || []).filter(m => m.is_active !== false && (!org || !m.org_id || m.org_id === org));
-    if (!mine.length) return [];
-    const ids = mine.map(m => m.id);
-    const [{ data: ms }, { data: gm }] = await Promise.all([
-      supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
-      supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
-    ]);
-    const live = new Set([...(ms || []), ...(gm || [])].map(t => t.user_email_id));
-    return mine.filter(m => live.has(m.id));
-  }
-  // A requested id that is not one of yours answers null — the caller then
-  // refuses. No id at all means the default (the same one as always).
-  async function sendingMailboxFor(req, requestedId) {
-    const want = txt(requestedId);
-    if (!want) return recruiterSendingMailbox(req.user.id);
-    const own = await ownSendingMailboxes(req);
-    return own.find(m => m.id === want) || null;
-  }
+  // ── WHICH MAILBOX SENDS (Session 31; ONE rule since R-087) ──────────────────
+  // `ownSendingMailboxes` / `sendingMailboxFor` come from routes/recruiting/
+  // outreach.js — the page names an id, the server checks it is one of the
+  // caller's OWN connected, active mailboxes, anything else is refused as if it
+  // did not exist. This file kept its own copy until every email path needed
+  // the same choice; two copies of an identity rule is how they drift.
 
   // ⚠ THE PREVIEW AND THE QUEUE MUST READ THE BRIEF THE SAME WAY.
   // They did not. The preview built its input without a `brief` at all, so

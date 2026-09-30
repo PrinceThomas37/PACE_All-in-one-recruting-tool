@@ -423,6 +423,9 @@
   window.mbCompose=function(prefillTo){
     var m=M();
     if(!m.activeId){ showToast('Connect a mailbox first','warning'); return; }
+    // One new message at a time: a draft parked in the tray comes back rather than
+    // being silently replaced by an empty one.
+    if(window.Dock&&Dock.restoreKind('mailCompose')) return;
     m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false };
     if(m.compose.sig) loadSignature();
     paintComposeModal();
@@ -464,8 +467,8 @@
   function paintComposeModal(){
     var m=M(); var c=m.compose; if(!c)return;
     var from=(m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{};
-    STATE.modal=
-      '<div class="modal modal-w640" onclick="event.stopPropagation()">'+
+    var html=
+      '<div class="modal modal-w640" data-win="mailCompose" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">New message</div>'+
           '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
@@ -484,8 +487,14 @@
           '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
       '</div>';
+    // Minimised (10a-window-dock.js): a repaint from a signature or an attachment
+    // finishing must update the parked window, never open it over the page.
+    if(window.Dock&&Dock.updateParked('mailCompose',html))return;
+    STATE.modal=html;
     render();
   }
+  // Closing the parked window's chip discards the draft with it — no ghost.
+  if(window.Dock) Dock.onDiscard('mailCompose',function(){ M().compose=null; });
   function field(id,label,ph,val,oninput){
     return '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+'</label>'+
       '<input id="'+id+'" class="sel" placeholder="'+escAttr(ph)+'" value="'+escAttr(val||'')+'" oninput="'+oninput+'"></div>';

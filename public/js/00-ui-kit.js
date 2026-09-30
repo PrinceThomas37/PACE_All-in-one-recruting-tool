@@ -228,6 +228,7 @@ window.UI = (function () {
     }).join('');
     var nav = '<div class="dwr-nav">'+
       '<div title="Close"'+(o.onclose?' onclick="'+o.onclose+'"':'')+'>'+ic('x')+'</div>'+
+      (o.onmin?'<div title="Minimise" aria-label="Minimise" onclick="'+o.onmin+'">–</div>':'')+
       (o.onprev?'<div title="Previous" onclick="'+o.onprev+'">'+ic('left')+'</div>':'')+
       (o.onnext?'<div title="Next" onclick="'+o.onnext+'">'+ic('right')+'</div>':'')+
     '</div>';

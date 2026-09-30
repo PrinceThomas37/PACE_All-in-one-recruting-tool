@@ -24,6 +24,7 @@ const aiProvider = require('../services/ai-provider');
 const settingsConfig = require('../config/settings');
 const { renderStoredEmail } = require('../email-vars');
 const { createMailProvider } = require('../services/mail-provider');
+const sentSide = require('../services/sent-side');
 
 // What the page may show when a person opens one email. The AI still sees at
 // most ci.CAPS.RECENT_MSG_CHARS of it; this is only the reading view.
@@ -101,7 +102,34 @@ module.exports = (ctx) => {
 
   // Every email with this client or lead, from the places PACE keeps mail, as
   // one list in one shape. Read-only; nothing here sends.
-  async function loadMessages(req, subject) {
+  // OUR SIDE, READ LIVE (R-085) — see services/sent-side.js. Cached for a few
+  // minutes per person and lead so opening the tab twice is one read, and bounded
+  // by a timeout so a slow mailbox can never hang the tab; a failure is reported
+  // in `sent_side`, never treated as "nothing was sent".
+  const SENT_TTL_MS = 5 * 60 * 1000, SENT_TIMEOUT_MS = 9000;
+  const sentCache = new Map();
+  async function ourSide(req, subject, contacts, messages, force) {
+    const key = req.user.id + '|' + (subject.companyId || '') + '|' + (subject.leadIds || []).join(',');
+    const hit = sentCache.get(key);
+    if (!force && hit && Date.now() - hit.at < SENT_TTL_MS) return hit.value;
+    let value;
+    try {
+      const { data: rows } = await supabase.from('user_emails')
+        .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
+      const have = messages.filter(m => m.direction === 'outbound').map(m => ({ sent_at: m.sent_at, subject: m.subject, to: m.to }));
+      value = await Promise.race([
+        sentSide.readOurSide({
+          mail, mailboxes: rows || [], addresses: contacts.map(c => c.email), have,
+          trim: (html) => ci.trimStoredText(String(html || '')), full: (html) => ci.fullEmailText(html, FULL_TEXT_CHARS),
+        }),
+        new Promise(resolve => setTimeout(() => resolve({ messages: [], ok: false, reason: 'slow', mailboxes_read: 0, mailboxes_failed: 0 }), SENT_TIMEOUT_MS)),
+      ]);
+    } catch (_) { value = { messages: [], ok: false, reason: 'unreadable', mailboxes_read: 0, mailboxes_failed: 0 }; }
+    if (value.ok) sentCache.set(key, { at: Date.now(), value });   // never cache a failure — try again next time
+    return value;
+  }
+
+  async function loadMessages(req, subject, opts) {
     const leadIds = subject.leadIds || [];
     const companyId = subject.companyId;
     let contacts = [];
@@ -191,8 +219,17 @@ module.exports = (ctx) => {
         from: r.mailbox_email, to: r.to_email, subject: r.subject, text: toText(r.body), full: fullText(r.body), facts: null, person: null,
       });
     });
+    // Our replies written in the in-app mailbox or straight from Gmail/Outlook
+    // (R-085). Only when asked (the Emails tab, the summary) — the daily digest
+    // stays on what PACE already holds, so a busy desk costs the same as a quiet one.
+    let sent_side = null;
+    if (opts && opts.live) {
+      const r = await ourSide(req, subject, contacts, messages, !!opts.force);
+      r.messages.forEach(m => messages.push(m));
+      sent_side = { ok: r.ok, reason: r.reason, mailboxes_read: r.mailboxes_read, added: r.messages.length };
+    }
     messages.sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at));
-    return { messages, contacts };
+    return { messages, contacts, sent_side };
   }
 
   // A client's summary lives in client_summaries (migration 048). A lead's is
@@ -251,7 +288,7 @@ module.exports = (ctx) => {
         // Not an error the page shows as one: it says whose record this is.
         return res.json({ enabled: true, owner: false, owner_name: acc.ownerName || null });
       }
-      const { messages } = await loadMessages(req, acc.subject);
+      const { messages, sent_side } = await loadMessages(req, acc.subject, { live: true });
       const ledger = ci.buildLedger(messages);
       const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
@@ -274,6 +311,7 @@ module.exports = (ctx) => {
           intent: m.facts && m.facts.intent || null,
         })),
         total_messages: messages.length,
+        sent_side,
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -338,7 +376,7 @@ module.exports = (ctx) => {
           : `Only the ${kind}'s owner can summarise its emails.` });
       }
       const force = !!(req.body && req.body.force);
-      const { messages } = await loadMessages(req, acc.subject);
+      const { messages, sent_side } = await loadMessages(req, acc.subject, { live: true, force });
       const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
       const pb = ci.playbookFor('recruiting');
@@ -393,7 +431,7 @@ module.exports = (ctx) => {
         return res.json({ saved: false, save_error: error.message, tokens,
           summary: Object.assign({}, row, { next_steps: ci.labelSteps(row.next_steps, pb) }) });
       }
-      res.json({ saved: true, tokens, used_messages: request.used_messages,
+      res.json({ saved: true, tokens, used_messages: request.used_messages, sent_side,
         summary: Object.assign({}, row, { next_steps: ci.labelSteps(row.next_steps, pb) }),
         status: { state: 'up_to_date', new_count: 0 } });
     } catch (err) { res.status(500).json({ error: err.message }); }

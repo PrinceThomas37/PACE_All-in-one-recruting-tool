@@ -15,7 +15,7 @@ module.exports = function (app, core) {
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
     isBDM, isRecruiter, assignedJobOrderIds, recruiterCanTouchJob, reportingChainIds,
-    nextId, logSubmissionActivity,
+    nextId, logSubmissionActivity, pipelineView,
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
   // A candidate record had no trail at all: a phone number or an owner could
@@ -148,9 +148,15 @@ module.exports = function (app, core) {
       if (!(await requireOwnCandidate(req, res, req.params.id))) return;
       const cid = req.params.id;
       const JOB = 'job:job_orders(id,job_code,job_title,client)';
-      const { data: pipeline } = await supabase.from('candidate_pipeline')
-        .select('id,pipeline_code,pipeline_status,job_order_id,tagged_at,submission_id,' + JOB)
+      // R-075: a pipeline row has no state of its own — its stage is its
+      // submission's, so that is joined here and every row leaves with `stage`
+      // (Sourced for a legacy tag with no submission yet). `pipeline_status`
+      // comes back carrying that same stage, never "Tagged".
+      const { data: pipelineRaw } = await supabase.from('candidate_pipeline')
+        .select('id,pipeline_code,pipeline_status,job_order_id,tagged_at,submission_id,' +
+                'submission:submissions!candidate_pipeline_submission_id_fkey(id,stage,sub_stage),' + JOB)
         .eq('candidate_id', cid).is('deleted_at', null).order('tagged_at', { ascending: false });
+      const pipeline = (pipelineRaw || []).map(pipelineView);
       const { data: submissions } = await supabase.from('submissions')
         .select('id,submission_code,stage,job_order_id,submitted_at,created_at,bdm_approved_at,pipeline_id,revision_status,' + JOB)
         .eq('candidate_id', cid).is('deleted_at', null).order('created_at', { ascending: false });

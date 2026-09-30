@@ -182,7 +182,7 @@
       var j=x.job||{}, p=x.pipe, s=x.sub;
       return '<tr style="border-top:1px solid var(--border)">'+
         '<td style="padding:9px 10px;font-size:12.5px"><span style="cursor:pointer;color:var(--accent);font-weight:600" onclick="bdOpenSubmissions(\''+j.id+'\')">'+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||''))+'</span><div style="font-size:11px;color:var(--text3)">'+esc(j.client||'')+'</div></td>'+
-        '<td style="padding:9px 10px;font-size:12px">'+(p?code(p.pipeline_code||'')+' <span style="color:var(--text3)">'+esc(p.pipeline_status||'')+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
+        '<td style="padding:9px 10px;font-size:12px">'+(p?code(p.pipeline_code||'')+' <span style="color:var(--text3)">'+esc(p.stage||p.pipeline_status||'')+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
         '<td style="padding:9px 10px;font-size:12px">'+(s?code(s.submission_code||'')+' <span style="color:var(--text3)">'+esc(s.stage||'')+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
         '<td style="padding:9px 10px;white-space:nowrap">'+
           '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Open</button>'+
@@ -440,6 +440,7 @@
       acts:   acts,
       stats:  stats,
       onclose:'cpClose()',
+      onmin:  "Dock.parkDrawer('candidate')",
       onprev: sib.prev ? "bdOpenCandidate('"+sib.prev+"')" : '',
       onnext: sib.next ? "bdOpenCandidate('"+sib.next+"')" : '',
       onmenu: "atsOpenEdit('"+c.id+"')",

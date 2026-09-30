@@ -101,12 +101,34 @@ window.dashScrollToReports=function(){
   if(STATE.page!=='dashboard'){ goPage('dashboard'); setTimeout(go,150); } else go();
 };
 
-// ── REMINDERS WIDGET (shared: BD + recruiter dashboards) ──────────────
+// ── REMINDERS WIDGET (shared: BD + recruiter + individual dashboards) ─────────
+// The same rows the Reminders page draws, in brief, and ONE way to act on them.
+//
+// "Compose email" opens the composer through composeReminderEmail() — the route
+// that queues through the send engine (POST /emails/reminder-send), fills the
+// merge fields on the server, applies the double-send rule and CLOSES the
+// reminder there. This card used to have its own Send and "Send all due": they
+// opened web Gmail/Outlook with a canned body signed "Fute Global LLC" (one
+// customer's name in every org's mail), went around all of that, and marked the
+// reminder done in the browser only — so it came back on the next load (R-071).
+// Those two are gone; two paths to one outcome is the bug.
+//
+// A send the server would refuse is not OFFERED (`compose.can_send`, from
+// GET /reminders): the row says why instead, in the server's own words.
+//
+// Field names are the ones GET /reminders returns — contact_name, company_name,
+// compose.* — not the `name`/`company` this card used to read, which do not
+// exist, so every name line was blank and the company line held the address.
+// The due wording is reminderDue() (10-page-modals.js), the Reminders page's own:
+// "Overdue by 2 days", never "Due today" over a two-day-old row.
+var DASH_REM_MAX=5;   // due rows drawn; the rest are counted and one click away
 function renderRemindersWidget(){
       var today=todayIST();
-      var myR=STATE.reminders.filter(function(r){return r.user_id===STATE.user.id&&r.status==="pending";});
+      var myR=(STATE.reminders||[]).filter(function(r){return r.user_id===STATE.user.id&&r.status==="pending";});
       var due=myR.filter(function(r){return r.return_date<=today;});
-      var upcoming=myR.filter(function(r){return r.return_date>today;}).slice(0,4);
+      var allUpcoming=myR.filter(function(r){return r.return_date>today;});
+      var upcoming=allUpcoming.slice(0,4);
+      var dueShown=due.slice(0,DASH_REM_MAX);
       if(!myR.length)return '<div class="card cp mt4">'+
         '<div class="flex jb aic mb3">'+
           '<div><div class="fw6">Reminders</div><div class="f12 text3">No reminders set</div></div>'+
@@ -115,38 +137,54 @@ function renderRemindersWidget(){
         '<div style="padding:16px 0;text-align:center;font-size:13px;color:var(--text3)">Set reminders to follow up with contacts at the right time.</div>'+
       '</div>';
 
-      var dueRows=due.map(function(r){
-        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
-          '<div style="width:7px;height:7px;border-radius:50%;background:var(--amber);flex-shrink:0"></div>'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.name)+'</div>'+
-            '<div class="f12 text3">'+htmlEsc(r.company||r.email||"")+'</div>'+
+      var dueRows=dueShown.map(function(r){
+        var cmp=r.compose||{};
+        var d=reminderDue(r);
+        var toEmail=cmp.to_email||r.email||'';
+        var contactId=cmp.contact_id||(r.contact&&r.contact.id)||r.contact_id||'';
+        // Same gate as the Reminders page: an address, and the server has not said no.
+        var canSend=!!toEmail&&cmp.can_send!==false;
+        var about=[cmp.company||r.company_name||'',cmp.position||(r.job&&r.job.position)||''].filter(Boolean).join(' · ');
+        // Why there is no button — only ever from what the server said about this row.
+        var why=canSend?'':(cmp.blocked_sentence||(!toEmail?'No email on record.':'Not linked to a lead, so PACE cannot send from it.'));
+        return '<div class="dash-rem">'+
+          '<div class="dash-rem-main">'+
+            '<div class="dash-rem-name">'+htmlEsc(r.contact_name||cmp.to_name||'Reminder')+'</div>'+
+            '<div class="dash-rem-sub">'+htmlEsc(about||toEmail)+'</div>'+
+            (why?'<div class="dash-rem-why">'+htmlEsc(why)+'</div>':'')+
           '</div>'+
-          '<span style="font-size:11px;padding:2px 7px;background:var(--amber);color:#fff;border-radius:10px;white-space:nowrap">Due today</span>'+
-          '<button class="btn btn-sm" style="background:var(--amber);color:#fff;white-space:nowrap" onclick="sendReminderEmail(\''+r.id+'\')">'+ico("send",12)+' Send</button>'+
+          '<div class="dash-rem-acts">'+
+            '<span class="rem-pill dash-rem-chip '+(d.state==='overdue'?'is-overdue':'is-today')+'">'+htmlEsc(d.label)+'</span>'+
+            (canSend?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+contactId+'\')">'+ico("send",12)+' Compose email</button>':'')+
+          '</div>'+
         '</div>';
       }).join("");
 
       var upcomingRows=upcoming.map(function(r){
-        var days=Math.ceil((new Date(r.return_date)-new Date(today))/86400000);
-        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
-          '<div style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0"></div>'+
-          '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.name)+'</div>'+
-            '<div class="f12 text3">'+htmlEsc(r.return_date||'')+(r.reminder_time?' · '+r.reminder_time+' IST':'')+(r.note?' · '+htmlEsc(r.note):'')+'</div>'+
+        var d=reminderDue(r);
+        var cmp=r.compose||{};
+        return '<div class="dash-rem">'+
+          '<div class="dash-rem-main">'+
+            '<div class="dash-rem-name">'+htmlEsc(r.contact_name||cmp.to_name||'Reminder')+'</div>'+
+            '<div class="dash-rem-sub">'+htmlEsc(r.return_date||'')+(r.reminder_time?' · '+htmlEsc(String(r.reminder_time).slice(0,5))+' IST':'')+(r.note?' · '+htmlEsc(r.note):'')+'</div>'+
           '</div>'+
-          '<span style="font-size:11px;padding:2px 8px;background:'+(days<=3?"var(--red-l)":"var(--accent-l)")+';color:'+(days<=3?"var(--red)":"var(--accent)")+';border-radius:10px;white-space:nowrap">'+days+' day'+(days!==1?"s":"")+'</span>'+
+          '<div class="dash-rem-acts"><span class="rem-pill dash-rem-chip '+(d.days<=3?'is-soon':'is-later')+'">'+htmlEsc(d.label)+'</span></div>'+
         '</div>';
       }).join("");
+
+      // A list that hides rows says how many (D-0013).
+      var hiddenDue=due.length-dueShown.length;
+      var more=(hiddenDue>0||allUpcoming.length>upcoming.length)
+        ? '<div class="dash-rem-more">'+(hiddenDue>0?hiddenDue+' more due · ':'')+'<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all '+myR.length+' reminders</button></div>'
+        : '';
 
       return '<div class="card cp mt4">'+
         '<div class="flex jb aic mb3">'+
           '<div>'+
             '<div class="fw6">Reminders</div>'+
-            '<div class="f12 text3">'+due.length+' due · '+upcoming.length+' upcoming</div>'+
+            '<div class="f12 text3">'+due.length+' due · '+allUpcoming.length+' upcoming</div>'+
           '</div>'+
           '<div class="flex gap2">'+
-            (due.length?'<button class="btn btn-sm" style="background:var(--amber);color:#fff" onclick="sendAllDue()">Send all due ('+due.length+')</button>':"")+
             '<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all</button>'+
           '</div>'+
         '</div>'+
@@ -154,7 +192,7 @@ function renderRemindersWidget(){
         dueRows+
         (upcoming.length?'<div style="margin:'+(due.length?"12px":"0")+'px 0 8px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Upcoming</div>':"")+
         upcomingRows+
-        (myR.length>5?'<div style="padding-top:10px;text-align:center"><button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all '+myR.length+' reminders</button></div>':"")+
+        more+
       '</div>';
 }
 
@@ -356,9 +394,9 @@ function renderRecruiterDashboard(u){
 
 // ── MANAGER / TEAM DASHBOARD ───────────────────────────────────────────
 // For anyone who leads a desk or people (isManagerRole). Built on the real,
-// now hierarchy-scoped /recruiting-dashboard endpoint plus the corrected team
-// roster (direct reports on users.manager_id). Replaces the legacy lead-gen
-// dashboard for these roles, which read the dead STATE.leads seed data.
+// now hierarchy-scoped /recruiting-dashboard endpoint. Replaces the legacy
+// lead-gen dashboard for these roles, which read the dead STATE.leads seed
+// data. The team roster is NOT drawn here — it is the My Team page (R-072).
 var SCOPE_LABEL={own:'Your desk',team:"Your team's desk",org:'Org-wide · all desks'};
 function renderManagerDashboard(u){
   recDashboardLoad();
@@ -367,32 +405,14 @@ function renderManagerDashboard(u){
   var interviews=(bs['Interview Scheduled']||0)+(bs['Interview Completed']||0);
   var loading=!d._at&&!d.empty;
   var scope=d.scope||'team';
-  var team=getTeam(u); // direct reports
-  var subtreeSize=reportingSubtree(u.id).length;
 
   var hour=new Date().getHours();
   var greet=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
 
-  // Team roster — the full reporting subtree (direct + transitive), rendered as
-  // the nested org tree so a lead sees everyone under them, not just first-level
-  // reports. Scrolls if it's tall. The team's real work numbers live below and on
-  // the My Team page.
-  var teamRows='<div style="max-height:320px;overflow:auto">'+
-    team.slice().sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
-      .map(function(t){return renderOrgSubtree(t.id,{click:'none'});}).join('')+
-    '</div>';
-  var teamCard=team.length?
-    '<div class="card cp mb4">'+
-      '<div class="flex jb aic mb3">'+
-        '<div><div class="fw6">Your team</div><div class="f12 text3">'+team.length+' direct report'+(team.length===1?'':'s')+' · '+subtreeSize+' in your reporting line</div></div>'+
-        '<button class="btn btn-outline btn-sm" onclick="goPage(\'myteam\')">Open team view →</button>'+
-      '</div>'+
-      teamRows+
-    '</div>'
-  :'<div class="card cp mb4">'+
-      '<div class="fw6" style="margin-bottom:2px">Your team</div>'+
-      '<div class="f13 text3" style="padding:8px 0">No one reports to you yet. An admin sets reporting lines on the Admin → user page.</div>'+
-    '</div>';
+  // There used to be a "Your team" card here — the org-tree roster with "Open
+  // team view →", or "No one reports to you yet". The owner asked for it gone
+  // (R-072, D-0056/D-0059): the team view lives on the My Team page, which has
+  // its own nav item. Nothing else on this dashboard changed.
 
   var stagePills=Object.keys(bs).map(function(s){
     var cnt=bs[s];if(!cnt)return"";
@@ -466,8 +486,6 @@ function renderManagerDashboard(u){
       '</div>'+
       '<div class="flex gap2 flex-wrap">'+(stagePills||'<div class="text3 f13">No submissions in this scope yet.</div>')+'</div>'+
     '</div>'+
-
-    teamCard+
 
     '<div class="card cp mb4">'+
       '<div class="flex jb aic mb3">'+

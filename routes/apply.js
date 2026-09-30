@@ -31,6 +31,15 @@
 //     page is presented as the RECRUITING ORG hiring, which is also the honest
 //     thing to say, since the recruiter is who the applicant will hear from.
 //
+// A FIFTH RULE, LEARNED HERE (R-076): A FAILED QUERY IS NOT A MISS.
+//  5. Rule 3 makes every miss answer identically — which is exactly what let a
+//     BROKEN lookup pass for "this role is closed" for a week: the select named
+//     a column job_orders does not have (owner_id), PostgREST refused the whole
+//     query, `data` came back null like any miss, and a published, active job
+//     read as dead while nothing anywhere said why. The public answer stays the
+//     same; the failure is recorded under app_settings `apply_last_error` (see
+//     describeFailure / noteFailure) where an operator can read it.
+//
 // NOTHING HERE REACHES THE REAL CANDIDATE DATABASE. Applicants land in
 // `sourcing_candidates`, inert, exactly like a CSV row. A recruiter reviews and
 // imports. That is deliberate: a public form that wrote straight into the ATS
@@ -55,6 +64,52 @@ const MAX_RESUME_BYTES = 3 * 1024 * 1024;
 const DB_TIMEOUT_MS = 4000;
 const notify = require('../services/applicant-notify');
 
+// One row, overwritten: "why did the last thing on this page fail", not a
+// history. Same key shape and reasoning as resume_parse_last_error / ai_last_error.
+const LAST_ERROR_KEY = 'apply_last_error';
+const RECORD_TIMEOUT_MS = 1500;
+
+// ── WHAT A SETTLED QUERY ACTUALLY SAID ───────────────────────────────────────
+// withTimeout() (inside the router) flattens three different outcomes into
+// things a caller is inclined to read as "no row": a supabase result carrying an
+// `error` has `data: null` — identical to a clean miss; a promise that REJECTED
+// comes back as null; one that TIMED OUT comes back as undefined. R-076 was
+// exactly the first: the job lookup named a column job_orders does not have,
+// PostgREST refused the whole query (42703), `data` was null, and the page said
+// "This role is no longer open" about a job that was published and active.
+//
+// PURE. null = the query ran (whatever it found, including nothing); otherwise
+// the reason, as {code, message}.
+function queryFailure(r, ms) {
+  if (r === undefined) return { code: 'timeout', message: 'no answer within ' + (ms || DB_TIMEOUT_MS) + 'ms' };
+  if (r === null) return { code: 'rejected', message: 'the query threw instead of answering' };
+  if (r.error) return r.error;
+  return null;
+}
+
+// The record, PURE and deliberately narrow — exactly {at, code, message, where}:
+//   * THE TOKEN IS THE SECRET, so nothing token-shaped is ever written. The scrub
+//     is by SHAPE (the 16-64 hex loadJob accepts), not by remembering to pass the
+//     token in, and it runs BEFORE the length clip so a token straddling the cut
+//     cannot leave a readable half behind.
+//   * `code` and `message` only. PostgREST's `details` echoes the failing ROW
+//     (an applicant's name, email and phone) and has no place in a settings row.
+//   * `where` is always a literal from this file, never anything from the request.
+const TOKEN_SHAPED = /[a-f0-9]{16,64}/gi;
+function describeFailure(where, err, now) {
+  const e = err && typeof err === 'object' ? err : { message: err };
+  const clean = (v, n) => String(v == null ? '' : v)
+    .replace(TOKEN_SHAPED, '[token]').replace(/\s+/g, ' ').trim().slice(0, n);
+  const code = e.code != null && e.code !== '' ? e.code
+    : (e.name && e.name !== 'Error' ? e.name : 'unknown');
+  return {
+    at: (now instanceof Date ? now : new Date()).toISOString(),
+    code: clean(code, 40) || 'unknown',
+    message: clean(e.message, 300),
+    where: String(where),
+  };
+}
+
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, applyLimiter } = ctx;
@@ -69,6 +124,26 @@ module.exports = (ctx) => {
 
   const txt = (v) => String(v == null ? '' : v).trim();
 
+  // Records a failure where an operator can read it (describeFailure() says what
+  // is, and is not, kept). FIRE-AND-FORGET: bounded at 1.5s and never awaited,
+  // because recording must not be the reason a stranger's request fails or slows.
+  // During a database outage the record is itself a write to the failing
+  // database, so at most ONE is in flight at a time — a burst of failing
+  // requests must not become a burst of writes.
+  let recording = false;
+  function noteFailure(where, err) {
+    if (recording) return;
+    try {
+      recording = true;
+      const done = () => { recording = false; };
+      withTimeout(supabase.from('app_settings').upsert({
+        key: LAST_ERROR_KEY,
+        value: JSON.stringify(describeFailure(where, err)),
+        updated_at: new Date(),
+      }, { onConflict: 'key' }), RECORD_TIMEOUT_MS).then(done, done);
+    } catch (_) { recording = false; }   // even a broken client must not reach the caller
+  }
+
   // Sends the two messages an application should produce. Fire-and-forget:
   // every await inside is bounded and every failure is swallowed, because the
   // caller has already answered the applicant.
@@ -81,7 +156,11 @@ module.exports = (ctx) => {
     const send = ctx.sendMailboxNewMessage;
     if (typeof resolveMailbox !== 'function' || typeof send !== 'function') return;
 
-    const ownerId = job.owner_id || job.created_by;
+    // A job order's owner is its bd_manager_id (D-0035, services/job-order-
+    // visibility.js); created_by is only who typed it in, the fallback for a job
+    // nobody owns yet. There is NO job_orders.owner_id — that name exists on
+    // `candidates` alone, and selecting it here (R-076) took down every apply link.
+    const ownerId = job.bd_manager_id || job.created_by;
     if (!ownerId) return;
 
     let mailbox = null;
@@ -176,13 +255,26 @@ module.exports = (ctx) => {
     // A malformed token is rejected before any query, so a scanner walking the
     // URL space costs us nothing at all.
     if (!/^[a-f0-9]{16,64}$/i.test(txt(token))) return null;
+    // EVERY NAME IN THIS LIST MUST EXIST ON job_orders — one that does not fails
+    // the WHOLE query (PostgREST 42703), not just that field. R-076: this used to
+    // ask for `owner_id`, which job_orders never had; the owner is `bd_manager_id`.
+    // Every field the handlers READ must also be asked for here: a field that is
+    // not selected is not an error, it is `undefined` — which is how the applicant
+    // counter (`apply_count`) was going to write "1" for every application.
     const r = await withTimeout(supabase.from('job_orders')
       .select('id,org_id,job_code,job_title,city,state,country,remote,job_type,' +
               'job_description,posting_description,client,end_client,client_manager,' +
               'primary_skills,secondary_skills,exp_min,exp_max,' +
-              'pay_cur,pay_min,pay_max,status,apply_enabled,apply_token,owner_id,created_by')
+              'pay_cur,pay_min,pay_max,status,apply_enabled,apply_token,apply_count,' +
+              'bd_manager_id,created_by')
       .eq('apply_token', token).maybeSingle());
-    const job = r && r.data;
+    // A FAILED query and "no such row" both leave `data` null, and the public
+    // must not be able to tell either from any other miss (rule 3) — so the
+    // answer below is the same null. The difference is kept for whoever has to
+    // find out why a published job reads as closed (rule 5).
+    const failed = queryFailure(r);
+    if (failed) { noteFailure('job lookup', failed); return null; }
+    const job = r.data;
     if (!job) return null;
     // Unpublished or closed reads exactly like "never existed".
     if (!job.apply_enabled) return null;
@@ -340,7 +432,12 @@ module.exports = (ctx) => {
           '<div style="padding-top:18px;border-top:1px solid #e2e8f0">' +
           '<div style="font-size:15px;font-weight:600;margin:0 0 14px">Apply</div>' + form + '</div>' + script,
       }));
-    } catch (_) { gonePage(res); }
+    } catch (err) {
+      // Same answer as any miss — but an exception while DRAWING a published
+      // job's page is a bug, not a closed role, and must not vanish (rule 5).
+      noteFailure('GET /apply/:token', err);
+      gonePage(res);
+    }
   });
 
   // ── POST /apply/:token ────────────────────────────────────────────────────
@@ -380,7 +477,12 @@ module.exports = (ctx) => {
       // failure must never cost us the file.
       const up = await withTimeout(supabase.storage.from(DOC_BUCKET)
         .upload(path, buffer, { contentType: txt(b.content_type) || 'application/octet-stream', upsert: false }), 8000);
-      if (up === undefined || (up && up.error)) {
+      // queryFailure(), not `up === undefined || up.error`: an upload that THREW
+      // comes back as null, which that condition read as success — an
+      // application staged against a file that was never stored (rule 2).
+      const upFailed = queryFailure(up, 8000);
+      if (upFailed) {
+        noteFailure('resume upload', upFailed);
         return fail(503, 'We could not save your resume just now. Please try again in a minute.');
       }
 
@@ -448,15 +550,25 @@ module.exports = (ctx) => {
       const ins = await withTimeout(supabase.from('sourcing_candidates').insert(row).select('id').single());
       // RULE 2. If the row did not land, say so. An applicant who is told
       // "thanks, we have it" when we do not will never apply again.
-      if (ins === undefined || (ins && ins.error) || !(ins && ins.data)) {
+      // (Recorded too, rule 5: the first real application is the first time this
+      // insert has ever run against production, so a schema fault would otherwise
+      // read to the applicant, and to us, as nothing more than "try again".)
+      const insFailed = queryFailure(ins) ||
+        (ins.data ? null : { code: 'no_row', message: 'the insert answered without a row' });
+      if (insFailed) {
+        noteFailure('application insert', insFailed);
         return res.status(200).json({ received: false, error: 'We could not save that just now. Please try again in a minute.' });
       }
 
       // Best-effort counter for the recruiter's "12 applicants" badge. It must
       // never be the reason an application fails, so it is fire-and-forget.
+      // (Read-modify-write off the count loadJob fetched, so two applicants in the
+      // same instant can both write N+1. Accepted: it is a badge, not a ledger.)
       try {
-        await withTimeout(supabase.from('job_orders')
+        const bumped = await withTimeout(supabase.from('job_orders')
           .update({ apply_count: (job.apply_count || 0) + 1 }).eq('id', job.id), 1500);
+        const bumpFailed = queryFailure(bumped, 1500);
+        if (bumpFailed) noteFailure('apply_count update', bumpFailed);
       } catch (_) { /* a wrong badge is not worth a failed application */ }
 
       const who = await orgName(job.org_id);
@@ -483,10 +595,17 @@ module.exports = (ctx) => {
           '<p style="margin:0;font-size:14px;color:#64748b">You can close this page.</p>' +
           '</div></div>',
       });
-    } catch (_) {
+    } catch (err) {
+      // The applicant is told the truth (rule 2); the operator is told why (rule 5).
+      noteFailure('POST /apply/:token', err);
       return res.status(200).json({ received: false, error: 'We could not save that just now. Please try again in a minute.' });
     }
   });
 
   return router;
 };
+
+// The two pure rules are callable, so a test can pin them directly rather than
+// by grepping this file for text (which cannot tell a live rule from a dead one).
+module.exports.queryFailure = queryFailure;
+module.exports.describeFailure = describeFailure;

@@ -269,7 +269,8 @@ try{
   step('Candidates: one click opens a panel under that row', c0.panels===1 && c0.underIt);
   step('Candidates: …not the drawer, and not navigation', c0.underIt && !drawerOpen && c0.page==='applicants');
   step('Candidates: the jobs they are on, with the stage', /HVAC Service Technician/.test(c0.text) && /Submitted to BDM/.test(c0.text), c0.text.replace(/\s+/g,' ').slice(0,200));
-  step('Candidates: a tagged-only job is shown as Tagged, and a job is listed once', /Estimator/.test(c0.text) && /Tagged/.test(c0.text) && (c0.text.match(/HVAC Service Technician/g)||[]).length===1);
+  // D-0057: inside a job everybody starts at Sourced — a person added before a stage was recorded reads Sourced, never "Tagged".
+  step('Candidates: an added-only job reads Sourced (never Tagged), and a job is listed once', /Estimator/.test(c0.text) && /Sourced/.test(c0.text) && !/Tagged/.test(c0.text) && (c0.text.match(/HVAC Service Technician/g)||[]).length===1);
   step('Candidates: skills and the facts the columns do not already show', /EPA 608/.test(c0.text) && /6 yrs/.test(c0.text) && /2 weeks/.test(c0.text) && /USD 32/.test(c0.text));
   const cBtns = await page.evaluate(()=>[...document.querySelectorAll('#content tr.row-exp button')].map(b=>b.textContent.trim()));
   step('Candidates: "Add to job" and "Open full record" are in the panel',
