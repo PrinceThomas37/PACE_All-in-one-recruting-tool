@@ -18,7 +18,7 @@ function renderInsights(){
     function jAtBD(j){return j.assigned_at?new Date(j.assigned_at).toISOString().slice(0,10):'';}
     var nowBD=new Date();var todayStrBD=todayIST();
     function dAgoBD(n){var d=new Date(nowBD.getTime()+5.5*3600000);d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);}
-    var weekAgoBD=dAgoBD(7),monthAgoBD=dAgoBD(30);
+    var weekAgoBD=dAgoBD(6),monthAgoBD=dAgoBD(29);   // same windows as the server: 7 / 30 calendar days INCLUDING today
 
     var bdStats=allBDs.map(function(bd){
       var bdJobs=allJobs.filter(function(j){return j.assigned_to_bd===bd.id;});
@@ -413,7 +413,7 @@ function renderBDInsights(){
     // ── Top 4 stat cards ──
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
       [
-        ['Emails Sent',d.emails_sent,'var(--teal)','this month'],
+        ['Emails Sent',d.emails_sent,'var(--teal)','last 30 days'],
         ['Leads Assigned',d.total_all,'var(--accent)','total'],
         ['Converted',d.converted,'var(--green)','Connected + In Discussion'],
         ['Conv Rate',d.conv_rate+'%','var(--green)','of total leads']
@@ -432,7 +432,7 @@ function renderBDInsights(){
       '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">'+
         [
           ['Sent today',d.emails_sent_today,'var(--green)'],
-          ['Sent (month)',d.emails_sent,'var(--teal)'],
+          ['Sent (30 days)',d.emails_sent,'var(--teal)'],
           ['Pending',d.emails_pending,'var(--amber)'],
           ['Failed',d.emails_failed,'var(--red)'],
           ['Response rate',d.response_rate+'%','var(--accent)']
@@ -453,11 +453,11 @@ function renderBDInsights(){
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
         '<div style="font-size:24px;font-weight:700;color:var(--teal)">'+d.total_week+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads this week</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads, last 7 days</div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
         '<div style="font-size:24px;font-weight:700;color:var(--purple)">'+d.total_month+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads this month</div>'+
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads, last 30 days</div>'+
       '</div>'+
     '</div>'+
 
