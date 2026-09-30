@@ -192,7 +192,7 @@
         '<td style="padding:8px 9px">'+statusSel+'</td>'+
         '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.work_auth_snap||c.work_authorization||'—')+'</td>'+
         '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.phone||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+(c.email?'<a href="mailto:'+esc(c.email)+'" style="color:var(--accent)">'+esc(c.email)+'</a>':'—')+'</td>'+
+        '<td style="padding:8px 9px;font-size:12px">'+(c.email?'<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(c.email).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE" style="color:var(--accent)">'+esc(c.email)+'</a>':'—')+'</td>'+
         '<td style="padding:8px 9px;font-size:12px">'+esc(candLoc(c))+'</td>'+
         '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.country||'—')+'</td>'+
         '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.experience_years!=null?c.experience_years:'—')+'</td>'+
