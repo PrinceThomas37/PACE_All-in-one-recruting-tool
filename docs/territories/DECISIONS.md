@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0063 · 2026-09-30 · STANDS · Sentry yes; the Apollo connector is another organisation's; keep sending from people's own mailboxes
+**Their words:** *"Yes do this: [Sentry] shows real errors from a running app … could replace the dropped R-081"* · *"the key in PACE is of a different organisation, I think I have told you this before"* (the Apollo connector is a different account from PACE's Apollo key) · asked whether Resend could send PACE's email.
+**Chosen:** (1) Sentry error reporting built (R-090), off until `SENTRY_DSN` is set, nothing personal sent. (2) The Apollo connector is NOT used to read PACE's credit usage — it is a different account, so it would say nothing about PACE's key (PACE's own meter stays the source). (3) No change to how email is sent: PACE already sends through each person's own connected Microsoft OR Gmail mailbox; Resend is not wired in (it would mean a new sending identity, reply capture and a paid service per customer). Re-open Resend only for PACE's own system mail (sign-up/invite), never for recruiter outreach.
+**Re-open when:** a customer cannot connect a mailbox, or PACE needs to mail people who have no mailbox connected to it.
+
 ### D-0062 · 2026-09-30 · STANDS · R-082: reject, don't remove; R-081 dropped; merge PR #263 without asking
 **Their words:** *"No do not build R-081. For R-082 - give an option to reject the candidate to a user in a job not remove them. Sub options like out of budget, travel issue, did not like the company, skills do not match, over qualified, not interested, other with type column … merge it all after this edit, no need for my permission, merge this change."*
 **Chosen:** the Pipeline ✕ becomes **Reject** (BD), moving the person to Not Accepted with a required reason from that list ("Other" is typed). R-081 is dropped. **The owner authorised merging this PR (#263) without further permission — for this change only.**
