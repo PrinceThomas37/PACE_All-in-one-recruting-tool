@@ -6337,3 +6337,5 @@ Owner sent photos of two handwritten pages and said *"act only [on] notes taking
 - (round 8 addendum 3) Owner asked for ONE priority-sorted list of everything open, adding the four held items. Added R-100 (RA Team view), R-101 (Reports/Dashboard audit), R-102 (UTC vs local days); R-080 already existed. The sorted order now sits at the top of ROADMAP.md ('PRIORITY ORDER'): R-091, R-092, R-097, R-093, R-094, R-095, R-100, R-101, R-098+R-099, R-080, R-102, R-096. Notes only; nothing built.
 
 - (round 8 addendum 4) D-0065: owner answered the two open questions — a day follows each person's own (device) time zone (R-102), and 'today' in Needs you today is that date on the user's clock (R-097). Still notes only; nothing built.
+
+- (round 8 close) Owner: merge the notes PR and let the next chat read the right file and work the priority list. Added a 'NEXT SESSION — START HERE' block at the top of CONTEXT_WINDOW.md pointing at ROADMAP § PRIORITY ORDER; the owner's 'merge … and work on these changes as priority' is the green signal to begin R-091.

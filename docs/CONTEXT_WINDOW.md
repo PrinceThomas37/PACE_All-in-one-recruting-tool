@@ -6,6 +6,13 @@
 **Updated**: 2026-09-30 (end of Session 35, round 5) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
 **Highest ids:** decision D-0065 · contract C-0036 · next roadmap id `R-103` · next migration `055`.
 
+## ▶ NEXT SESSION — START HERE (owner's instruction, 2026-09-30)
+
+1. Read this file (top section), then **`docs/ROADMAP.md` § "PRIORITY ORDER"** — the one sorted to-do list (R-091 … R-102). Work it **top to bottom, in that order**; the owner decided every open question already (D-0064, D-0065 in `docs/territories/DECISIONS.md`).
+2. Start with **R-091** (candidate opens on the resume), then **R-092** (send-email step on Submitted to BDM / to client), then **R-097** (Needs you today = today on the user's own clock). Reproduce a problem before fixing it; each item gets its own test that fails when the fix is reverted, a screenshot for the owner, and a small PR.
+3. Standing rules: no helper agents without the owner's words (D-0060); plain English, no code shown; owner-approved PRs are merged by me only on their say-so. **The owner has said "go" for this list** — no further green signal is needed to begin R-091.
+4. The daily Sentry report (routine `trig_01TFL3dY7C9jDaTXmZR55Jee`, 07:47 ET) should have arrived; if it names an error, that comes first.
+
 ## ✅ SESSION 35 — EVERYTHING IS MERGED AND LIVE (PRs #262–#265). Nothing is waiting on a branch.
 
 **Owner's standing rules:** D-0060 no helper agent without their say-so in their own words (this session used none); read only what the next step needs; D-0062 merge their approved PRs without asking again; they never read code or use GitHub — give them the running app, screenshots, plain English. Dev branch `ccr-bed70da8-ctoaet` is restarted from `origin/main` after each merge (permission given).
