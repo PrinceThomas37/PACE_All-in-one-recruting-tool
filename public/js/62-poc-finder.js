@@ -88,6 +88,17 @@
     'f.last':'initial.surname', 'last':'surname only'
   };
 
+  // The most a click can spend, said on the button (owner, 2026-09-30). Sizing
+  // the company (0 or 1) plus one lookup per person searched for; free searching
+  // is never charged. When less is left today than that, say what will happen.
+  function costText(d, people){
+    var e = d.estimate || {}, fin = d.finder || {}, c = fin.credits || {};
+    var n = (e.sizing || 0) + people * (e.per_person || 1);
+    var left = Math.max(0, (c.limit || 0) - (c.used || 0));
+    var t = n ? 'up to ' + n + ' credit' + (n === 1 ? '' : 's') : 'free';
+    return { label: t, title: 'Searching is free. Apollo credits are spent only to size the company'+(e.sizing?' (1, this lead is not sized yet)':'')+' and to look up each person found — at most '+n+' for this click, '+left+' left today.'+(n > left ? ' Only '+left+' are left, so it will stop there.' : '') };
+  }
+
   // ── drawing ───────────────────────────────────────────────────────────────
   function inner(id){
     var d = C[id].data, cs = contactsOf(id), byId = {};
@@ -108,7 +119,7 @@
       // "Search contact" for THIS slot, drawn only when the server would do it.
       var busyHere = st.finding && st.findingSlot === s.key;
       var searchOne = (d.can_edit && fin.apollo && adding[id]!==s.key)
-        ? '<button type="button" class="btn btn-primary btn-sm lxc-search-one"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\',\''+s.key+'\')">'+(busyHere?'Searching…':'Search contact')+'</button>'
+        ? '<button type="button" class="btn btn-primary btn-sm lxc-search-one"'+(st.finding?' disabled':'')+' title="'+esc(costText(d,1).title)+'" onclick="event.stopPropagation();leadPocFind(\''+id+'\',\''+s.key+'\')">'+(busyHere?'Searching…':'Search contact')+' <span class="lxc-cost">· '+costText(d,1).label+'</span></button>'
         : '';
       return '<div class="lxc-slot is-empty">'+
         '<div class="lxc-want"><span class="lxc-mark" aria-hidden="true">○</span>'+
@@ -138,12 +149,12 @@
     var openSlots = d.slots.filter(function(s){ return !s.contact_id && !waitingKeys[s.key]; }).length;
     // Drawn only when the server would do it (never a button it would refuse).
     var findBtn = (d.can_edit && fin.apollo && openSlots)
-      ? '<button type="button" class="btn btn-outline btn-sm lxc-find"'+(st.finding?' disabled':'')+' onclick="event.stopPropagation();leadPocFind(\''+id+'\')">'+(st.finding&&!st.findingSlot?'Searching…':'Search contacts')+'</button>'
+      ? '<button type="button" class="btn btn-outline btn-sm lxc-find"'+(st.finding?' disabled':'')+' title="'+esc(costText(d,openSlots).title)+'" onclick="event.stopPropagation();leadPocFind(\''+id+'\')">'+(st.finding&&!st.findingSlot?'Searching…':'Search contacts')+' <span class="lxc-cost">· '+costText(d,openSlots).label+'</span></button>'
       : '';
     // Apollo can size the company (1 credit when found, 0 when not) — offered
     // only while nobody has set a size.
     var lookupBtn = (d.can_edit && fin.apollo && !d.size_known)
-      ? '<button type="button" class="lx-link lxc-lookup"'+(st.sizing?' disabled':'')+' onclick="event.stopPropagation();leadPocLookupSize(\''+id+'\')">'+(st.sizing?'Looking up…':'Look up with Apollo')+'</button>'
+      ? '<button type="button" class="lx-link lxc-lookup"'+(st.sizing?' disabled':'')+' onclick="event.stopPropagation();leadPocLookupSize(\''+id+'\')">'+(st.sizing?'Looking up…':'Look up with Apollo')+' <span class="lxc-cost">· up to 1 credit</span></button>'
       : '';
     var sizeCtl = d.can_edit
       ? '<select class="lx-sel lxc-size" aria-label="Company size" onclick="event.stopPropagation()" onchange="event.stopPropagation();leadPocSize(\''+id+'\',this.value)">'+

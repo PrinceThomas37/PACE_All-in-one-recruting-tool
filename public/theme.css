@@ -997,3 +997,5 @@ input[type=number],input[type=password],textarea,select,
 
 /* C-0029: why a non-owner sees no Upload/Delete on a client's documents. */
 .cl-doc-note{font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.45}
+
+.lxc-cost{font-weight:500;opacity:.8}

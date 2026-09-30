@@ -196,6 +196,22 @@ module.exports = (ctx) => {
       sentence: `Company size from Apollo: about ${hit.employees.toLocaleString('en-US')} people (${label}).` };
   }
 
+  // WHAT A CLICK CAN COST, STATED BEFORE IT IS PRESSED (owner, 2026-09-30, after
+  // the Apollo screenshot: "one click sometimes consumes a lot"). Searching for
+  // people is free; a credit is spent (a) once to size the company when nobody has
+  // and Apollo has not been asked in 30 days, and (b) on each person who has to
+  // be looked up. Sizing already counts against the daily ceiling (lookupSize).
+  // `sizing` is exactly what the next click will spend on that; `per_person` is
+  // the most one found person can cost. The page adds them up for the button.
+  function sizingCost(cx) {
+    const co = cx.company;
+    if (!co || co.size_band) return 0;                       // sized already, or picked by hand
+    const domains = [poc.normalizeDomain(co.website), cx.format.domain].filter(Boolean);
+    if (!domains.length) return 0;
+    if (co.size_checked_at && (Date.now() - new Date(co.size_checked_at).getTime()) < RECHECK_MS) return 0;
+    return 1;
+  }
+
   async function finderState(req) {
     const apolloOn = await integrations.isConfigured(supabase, 'apollo');
     return {
@@ -242,6 +258,7 @@ module.exports = (ctx) => {
         example: cx.format.pattern ? poc.emailFor('Jane', 'Smith', cx.format) : null,
       },
       finder: await finderState(req),
+      estimate: { sizing: sizingCost(cx), per_person: 1 },
       can_edit: await canTouchJob(req, lead.id),
     };
   }
