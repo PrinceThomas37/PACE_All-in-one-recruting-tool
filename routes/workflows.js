@@ -72,14 +72,25 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
       .eq('assigned_to_bd', targetId)
       .is('deleted_at', null);
     if (req.orgId) bjq = bjq.eq('org_id', req.orgId);
-    const { data: jobs } = await bjq;
+    const { data: jobs, error: jobsErr } = await bjq;
+    // A failed read must FAIL, never read as "no leads": every number on this page
+    // is derived from these rows.
+    if (jobsErr) throw jobsErr;
 
     const allJobs = jobs || [];
     function jAt(j) { return j.assigned_at ? j.assigned_at.slice(0, 10) : ''; }
 
+    // ONE definition of the windows, so the tiles and the 7-day chart cannot
+    // disagree (owner, 2026-09-30: "Leads this week 110" over a chart summing to
+    // 85). "Last 7 days" = today and the six days before it — exactly the seven
+    // bars; "last 30 days" = today and the 29 before. The old cut-off was
+    // `today - 7`, which is EIGHT calendar days, so a whole extra day of leads
+    // (25) was in the tile and not in the chart.
+    const dayKey = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
+    const weekFrom = dayKey(6), monthFrom = dayKey(29);
     const todayJobs  = allJobs.filter(j => jAt(j) === todayStr);
-    const weekJobs   = allJobs.filter(j => jAt(j) >= weekAgo.toISOString().split('T')[0]);
-    const monthJobs  = allJobs.filter(j => jAt(j) >= monthAgo.toISOString().split('T')[0]);
+    const weekJobs   = allJobs.filter(j => jAt(j) >= weekFrom);
+    const monthJobs  = allJobs.filter(j => jAt(j) >= monthFrom);
 
     // Funnel stages
     const convStages    = ['Connected', 'In Discussion'];
@@ -94,12 +105,17 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
     const assigned   = allJobs.filter(j => j.stage === 'Assigned');
 
     // Emails
+    // `emails` has NO `assigned_to` column — the person an email belongs to is
+    // `sent_by` (the admin Team view was fixed for this in C-0026 #4; this route
+    // was not). The read errored, the error was ignored, and every email number on
+    // this page was a confident 0 beside 311 sent on the Email page.
     let eq2 = supabase.from('emails')
       .select('id,status,created_at,sent_at')
-      .eq('assigned_to', targetId)
-      .gte('created_at', monthAgo.toISOString());
+      .eq('sent_by', targetId)
+      .gte('created_at', new Date(monthFrom + 'T00:00:00Z').toISOString());
     if (req.orgId) eq2 = eq2.eq('org_id', req.orgId);
-    const { data: emails } = await eq2;
+    const { data: emails, error: emailsErr } = await eq2;
+    if (emailsErr) throw emailsErr;
 
     const allEmails   = emails || [];
     const sentEmails  = allEmails.filter(e => e.status === 'sent');
