@@ -56,129 +56,80 @@ router.get('/insights/ra/:userId', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── BD / lead insights: ONE calculation, two doors (owner, 2026-09-30) ─────────────────
+// Every number comes from services/bd-insights.js `summarise()`. The personal report and the
+// team report below both call it, and no screen does its own arithmetic on leads or emails any
+// more — that is how "0 emails sent" sat beside 311 on the Email page. Days are UTC calendar
+// days (one clock, here). PostgREST returns at most 1,000 rows a request, so both reads page
+// (ordered by id, or a page repeats/skips rows) rather than silently stop at a thousand.
+const bdInsights = require('../services/bd-insights');
+async function fetchAll(make) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    // A failed read must FAIL: every figure is derived from these rows, and "no rows" is a
+    // perfectly plausible thing to misreport.
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+async function loadBdSummary(req, bdId, now) {
+  const w = bdInsights.windows(now);
+  const jobs = await fetchAll(() => {
+    let q = supabase.from('jobs')
+      .select('id,stage,industry,assigned_at,company:companies(industry),contacts(replied_at)')
+      .eq('assigned_to_bd', bdId).is('deleted_at', null).order('id');
+    if (req.orgId) q = q.eq('org_id', req.orgId);
+    return q;
+  });
+  jobs.forEach(j => { j.replied = (j.contacts || []).some(c => c && c.replied_at); });
+  // `emails` has no `assigned_to`: an email belongs to whoever sent it (`sent_by`).
+  const emails = await fetchAll(() => {
+    let q = supabase.from('emails').select('id,status,created_at,sent_at')
+      .eq('sent_by', bdId).gte('created_at', new Date(w.monthFrom + 'T00:00:00Z').toISOString()).order('id');
+    if (req.orgId) q = q.eq('org_id', req.orgId);
+    return q;
+  });
+  return bdInsights.summarise({ jobs, emails, now });
+}
+
+// The team report. Registered ABOVE the `:userId` route (a literal path must never sit below a
+// param route of its prefix). Admin: every BD in the company. Anyone else: the BDs under them
+// on the reporting chain (never themselves, never anyone outside it).
+router.get('/insights/bd-team', auth, async (req, res) => {
+  try {
+    const isBd = (u) => ['bd', 'bd_lead'].includes(u.role) || (Array.isArray(u.roles) && u.roles.some(r => ['bd', 'bd_lead'].includes(r)));
+    const users = await fetchAll(() => {
+      let uq = supabase.from('users').select('id,name,role,roles,manager_id').is('deleted_at', null).order('id');
+      if (req.orgId) uq = uq.eq('org_id', req.orgId);
+      return uq;
+    });
+    let pool = users.filter(isBd);
+    let scope = 'org';
+    if (!hasRole(req, 'admin')) {
+      const chain = new Set(await reportingChainIds(req.user.id, req.orgId || null));
+      pool = pool.filter(u => chain.has(u.id) && u.id !== req.user.id);
+      scope = 'team';
+    }
+    pool = pool.slice(0, 60);
+    const now = new Date();
+    const people = [];
+    for (let i = 0; i < pool.length; i += 6) {
+      const part = await Promise.all(pool.slice(i, i + 6).map(async u =>
+        Object.assign({ id: u.id, name: u.name, role: u.role }, await loadBdSummary(req, u.id, now))));
+      people.push(...part);
+    }
+    res.json({ scope, windows: bdInsights.windows(now), people });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/insights/bd/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;
     if (!(await inCallerScope(req, targetId))) return res.status(404).json({ error: 'Not found' });
-
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(now); monthAgo.setDate(monthAgo.getDate() - 30);
-
-    // Jobs assigned to this BD Manager
-    let bjq = supabase.from('jobs')
-      .select('id,stage,industry,position,assigned_at,company:companies(name,industry)')
-      .eq('assigned_to_bd', targetId)
-      .is('deleted_at', null);
-    if (req.orgId) bjq = bjq.eq('org_id', req.orgId);
-    const { data: jobs, error: jobsErr } = await bjq;
-    // A failed read must FAIL, never read as "no leads": every number on this page
-    // is derived from these rows.
-    if (jobsErr) throw jobsErr;
-
-    const allJobs = jobs || [];
-    function jAt(j) { return j.assigned_at ? j.assigned_at.slice(0, 10) : ''; }
-
-    // ONE definition of the windows, so the tiles and the 7-day chart cannot
-    // disagree (owner, 2026-09-30: "Leads this week 110" over a chart summing to
-    // 85). "Last 7 days" = today and the six days before it — exactly the seven
-    // bars; "last 30 days" = today and the 29 before. The old cut-off was
-    // `today - 7`, which is EIGHT calendar days, so a whole extra day of leads
-    // (25) was in the tile and not in the chart.
-    const dayKey = (n) => { const d = new Date(now); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
-    const weekFrom = dayKey(6), monthFrom = dayKey(29);
-    const todayJobs  = allJobs.filter(j => jAt(j) === todayStr);
-    const weekJobs   = allJobs.filter(j => jAt(j) >= weekFrom);
-    const monthJobs  = allJobs.filter(j => jAt(j) >= monthFrom);
-
-    // Funnel stages
-    const convStages    = ['Connected', 'In Discussion'];
-    const positiveStage = ['Positive'];
-    const negStages     = ['Negative', 'No Response'];
-    const oooStage      = ['Out of Office'];
-    const converted  = allJobs.filter(j => convStages.includes(j.stage));
-    const positive   = allJobs.filter(j => positiveStage.includes(j.stage));
-    const negative   = allJobs.filter(j => negStages.includes(j.stage));
-    const ooo        = allJobs.filter(j => oooStage.includes(j.stage));
-    const future     = allJobs.filter(j => j.stage === 'Future');
-    const assigned   = allJobs.filter(j => j.stage === 'Assigned');
-
-    // Emails
-    // `emails` has NO `assigned_to` column — the person an email belongs to is
-    // `sent_by` (the admin Team view was fixed for this in C-0026 #4; this route
-    // was not). The read errored, the error was ignored, and every email number on
-    // this page was a confident 0 beside 311 sent on the Email page.
-    let eq2 = supabase.from('emails')
-      .select('id,status,created_at,sent_at')
-      .eq('sent_by', targetId)
-      .gte('created_at', new Date(monthFrom + 'T00:00:00Z').toISOString());
-    if (req.orgId) eq2 = eq2.eq('org_id', req.orgId);
-    const { data: emails, error: emailsErr } = await eq2;
-    if (emailsErr) throw emailsErr;
-
-    const allEmails   = emails || [];
-    const sentEmails  = allEmails.filter(e => e.status === 'sent');
-    const pendEmails  = allEmails.filter(e => e.status === 'pending');
-    const failEmails  = allEmails.filter(e => e.status === 'failed');
-
-    // Last 7 days — emails sent per day
-    const last7emails = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now); d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      last7emails[key] = sentEmails.filter(e => (e.sent_at || e.created_at || '').slice(0, 10) === key).length;
-    }
-
-    // Last 7 days — leads assigned per day
-    const last7leads = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now); d.setDate(d.getDate() - i);
-      const key = d.toISOString().split('T')[0];
-      last7leads[key] = allJobs.filter(j => jAt(j) === key).length;
-    }
-
-    // Stage breakdown
-    const stageBreakdown = {};
-    allJobs.forEach(j => { stageBreakdown[j.stage || 'Unknown'] = (stageBreakdown[j.stage || 'Unknown'] || 0) + 1; });
-
-    // Industry breakdown from company data
-    const industryBreakdown = {};
-    allJobs.forEach(j => {
-      const ind = (j.company && j.company.industry) || j.industry || 'Unknown';
-      industryBreakdown[ind] = (industryBreakdown[ind] || 0) + 1;
-    });
-
-    const convRate     = allJobs.length ? Math.round(converted.length / allJobs.length * 100) : 0;
-    const responseRate = allJobs.length ? Math.round((converted.length + positive.length) / allJobs.length * 100) : 0;
-
-    res.json({
-      // Volume
-      total_all: allJobs.length,
-      total_today: todayJobs.length,
-      total_week: weekJobs.length,
-      total_month: monthJobs.length,
-      // Funnel
-      assigned: assigned.length,
-      positive: positive.length,
-      converted: converted.length,
-      negative: negative.length,
-      ooo: ooo.length,
-      future: future.length,
-      conv_rate: convRate,
-      response_rate: responseRate,
-      // Emails
-      emails_sent: sentEmails.length,
-      emails_sent_today: sentEmails.filter(e => (e.sent_at || e.created_at || '').slice(0, 10) === todayStr).length,
-      emails_pending: pendEmails.length,
-      emails_failed: failEmails.length,
-      // Charts
-      last_7_emails: last7emails,
-      last_7_leads: last7leads,
-      // Breakdowns
-      by_stage: stageBreakdown,
-      by_industry: industryBreakdown,
-    });
+    res.json(await loadBdSummary(req, targetId, new Date()));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

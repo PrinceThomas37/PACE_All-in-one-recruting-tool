@@ -36,7 +36,7 @@ const TERRITORIES = [
           'services/record-history.js', 'services/record-history-writer.js',
           // The one way a person is added to a lead (POST /contacts and the POC
           // finder's Accept) — beside routes/contacts.js, which it came out of.
-          'services/lead-contacts.js'],
+          'services/lead-contacts.js', 'services/bd-insights.js'],
     not: ['routes/recruiting/', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'routes/mailbox.js', 'routes/emails.js', 'routes/warmup.js',
