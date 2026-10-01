@@ -170,6 +170,7 @@ let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
 const { isRecyclable } = require('./services/lead-recycle');
 const oooReturn = require('./services/ooo-return');
+const followupSender = require('./services/followup-sender');
 const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
 // Ollama). Returns null when none is usable, and every caller has a rules
@@ -1862,8 +1863,16 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       (ovr || []).forEach(r => { if (r.sending_email_id) overrideByEmailId[r.id] = r.sending_email_id; });
     }
   } catch (_) { /* column absent -> no overrides */ }
+  // R-070 / D-0067: an automatic follow-up leaves from the mailbox that sent the FIRST email, when that
+  // mailbox is still active and connected (else the lead's current one, as before). It rides the same
+  // per-email override the rotation uses, so quota, warm-up, signature and threading all follow it.
+  const pinnedMailboxes = {};
+  try {
+    const pins = await followupSender.resolveFollowupPins(supabase, pendingEmails, overrideByEmailId);
+    Object.keys(pins).forEach(id => { overrideByEmailId[id] = pins[id].id; pinnedMailboxes[pins[id].id] = pins[id]; });
+  } catch (_) { /* no pins: nothing changes */ }
   const overrideMailboxIds = [...new Set(Object.values(overrideByEmailId))];
-  const overrideMailboxes = {};
+  const overrideMailboxes = Object.assign({}, pinnedMailboxes);
   if (overrideMailboxIds.length) {
     try {
       const { data: mbs } = await supabase.from('user_emails')

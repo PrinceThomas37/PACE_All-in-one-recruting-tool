@@ -1019,3 +1019,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 - 2026-10-01 (R-080): `index.js` engine job `ooo_return` (6-hourly) → `services/ooo-return.js` `runOooReturnSweep` through `db.crossOrg('contacts')`; `reminder-source.js` `ooo_return` explanation updated. R-095: `services/interview-time.js`.
 - 2026-10-01 (R-099): `routes/client-intel.js` `GET /client-intel/digest` leaves out conversations the caller ticked completed (same `na_dismiss_<userId>` store as /next-actions, via `services/next-action-dismissals.js`; `completionItem` in `services/client-intel.js`), adds `complete` to each of the caller's own rows and a `completed` count. Per person; the team roll-up is untouched.
+
+- 2026-10-01 (R-070): `index.js` send loop — `followupSender.resolveFollowupPins(...)` feeds `overrideByEmailId` / `overrideMailboxes` before the override mailbox ids are collected. `services/followup-sender.js`.
