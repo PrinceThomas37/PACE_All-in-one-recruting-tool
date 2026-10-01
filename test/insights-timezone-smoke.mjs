@@ -45,4 +45,12 @@ step('the personal route: ?tz=Asia/Kolkata → 1 today; no tz → 4', (await per
 step('the personal route: ?tz=America/Los_Angeles → 3 today', (await personal('America/Los_Angeles')).total_today === 3);
 const team = (await call('/insights/bd-team', { query: { tz: 'Asia/Kolkata' } })).body;
 step('the team route honours it too, and echoes the zone and the viewer\'s today', team && team.windows.tz === 'Asia/Kolkata' && team.windows.today === '2026-10-02' && team.people[0].total_today === 1, JSON.stringify(team && team.windows));
+
+// ── GET /stats: the real "response rate" (R-104) and the viewer's days (R-105) ─────────────────────
+D.jobs.forEach((j, i) => { j.created_by = 'me'; j.created_at = j.assigned_at; j.contacts = [i === 0 ? { id: 'c0', email_sent_at: '2026-10-01T10:00:00Z', replied_at: '2026-10-01T11:00:00Z' } : i < 3 ? { id: 'c' + i, email_sent_at: '2026-10-01T10:00:00Z', replied_at: null } : { id: 'c' + i }]; });
+const statsOf = async (query) => (await call('/stats', { query })).body;
+const st = await statsOf({ period: 'monthly', tz: 'UTC' });
+step('/stats: 4 leads, 3 emailed, 1 replied → response rate is the REPLY share, 25% (it used to say 75%, the emailed share)', st.total === 4 && st.emailed === 3 && st.replied === 1 && st.responseRate === 25, JSON.stringify(st));
+const stD = await statsOf({ period: 'daily', tz: 'Asia/Kolkata' });
+step('/stats: "daily" is the viewer\'s day — in Kolkata (already 2 Oct) only the 18:45 UTC lead is today', stD.total === 1 && stD.dateFrom === '2026-10-02' && stD.tz === 'Asia/Kolkata', JSON.stringify(stD));
 console.log('\nSUMMARY: ' + results.filter(Boolean).length + '/' + results.length + ' passed'); process.exit(results.every(Boolean) ? 0 : 1);

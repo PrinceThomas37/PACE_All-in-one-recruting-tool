@@ -64,7 +64,7 @@ require('../routes/recruiting/analytics.js')(app, {
   isBDM: (req) => hasRole(req, 'admin', 'bd', 'bd_lead'), isRecruiter: (req) => hasRole(req, 'recruiter'),
   reportingChainIds: async (id) => [id, 'u-r'], assignedJobOrderIds: async () => [], logSubmissionActivity: async () => {},
 });
-const call = async (key, user) => { let out, status = 200; const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } }; await routes[key]({ user, orgId: ORG, query: {} }, res); return { status, body: out }; };
+const call = async (key, user, query) => { let out, status = 200; const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } }; await routes[key]({ user, orgId: ORG, query: query || {} }, res); return { status, body: out }; };
 const admin = { id: 'u-adm', roles: ['admin'] };
 
 let r = await call('GET /reports/recruiting', admin);
@@ -84,6 +84,22 @@ step('another organisation\'s history was not read (no Placement appears)', !st.
 r = await call('GET /recruiting-dashboard', admin);
 step('dashboard tiles agree: 1 sent to client this month', r.body.client_submissions_month === 1, JSON.stringify(Object.fromEntries(Object.entries(r.body).filter(([k]) => /sub/.test(k)))));
 step('dashboard tiles agree: 2 sent to BD this month', r.body.submissions_month === 2, String(r.body.submissions_month));
+
+// ── the viewer's own days and weeks (R-105, D-0065) ──────────────────────────
+// The clock is pinned to noon UTC on the 15th. A: 13th (this week). B: the 8th, exactly 7×24 h ago —
+// the old week counted it (an eight-day week), a week of seven calendar days does not. C: 00:30 on the
+// 1st in Kolkata = 19:00 UTC on the last day of the previous month — the viewer's month, not the server's.
+const Y = new Date(FIXED).getUTCFullYear(), M = new Date(FIXED).getUTCMonth();
+const sub = (id, iso) => ({ id, org_id: ORG, stage: 'Submitted to BDM', job_order_id: 'jo1', recruiter_id: 'u-r', created_at: iso, submitted_at: iso, stage_updated_at: iso, deleted_at: null });
+T.submissions = [sub('A', new Date(FIXED - 2 * 864e5).toISOString()), sub('B', new Date(FIXED - 7 * 864e5).toISOString()), sub('C', new Date(Date.UTC(Y, M, 0, 19, 0, 0)).toISOString())];
+T.submission_activity = [];
+const dUtc = (await call('GET /recruiting-dashboard', admin, {})).body, dIst = (await call('GET /recruiting-dashboard', admin, { tz: 'Asia/Kolkata' })).body;
+step('the week is seven calendar days — a submission exactly 7×24 h ago is NOT in it (it used to be)', dUtc.submissions_week === 1 && dIst.submissions_week === 1, dUtc.submissions_week + '/' + dIst.submissions_week);
+step('this month is the VIEWER\'s: UTC counts 2, Kolkata (already the 1st) counts 3', dUtc.submissions_month === 2 && dIst.submissions_month === 3, dUtc.submissions_month + '/' + dIst.submissions_month);
+const first = new Date(Date.UTC(Y, M, 1)).toISOString().slice(0, 10);
+const rUtc = (await call('GET /reports/recruiting', admin, { from: first, to: first })).body, rIst = (await call('GET /reports/recruiting', admin, { from: first, to: first, tz: 'Asia/Kolkata' })).body;
+const tot = (b) => (b.by_user || []).reduce((n, u) => n + u.total, 0);
+step('a report for "the 1st" is cut at the viewer\'s midnight: UTC finds none, Kolkata finds C', tot(rUtc) === 0 && tot(rIst) === 1, tot(rUtc) + '/' + tot(rIst));
 
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

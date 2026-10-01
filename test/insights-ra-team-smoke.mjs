@@ -31,6 +31,13 @@ step('assigned % and converted % are over everything created; duplicates counted
 step('"7 days" is seven calendar days including today, never eight', Object.keys(u.last_7).length === 7 && Object.values(u.last_7).reduce((a, b) => a + b, 0) === u.week);
 step('a plain created_date column is not shifted', ra.summarise({ jobs: [{ id: 'x', stage: 'Assigned', created_date: '2026-10-01' }], now: FIXED, tz: 'Asia/Kolkata' }).week === 1);
 
+
+// ── the Dashboard's periods (R-106): the same rows cut four ways, one calculation ──────────────────
+const pj = ra.summarise({ jobs: JOBS.map((j, i) => Object.assign({}, j, { industry: i % 2 ? 'Energy' : 'Healthcare' })), now: FIXED, tz: 'UTC' }).periods;
+step('periods: daily 2 (the two leads of 1 Oct), weekly 4, monthly (calendar October) 2, quarterly 5', pj.daily.total === 2 && pj.weekly.total === 4 && pj.monthly.total === 2 && pj.quarterly.total === 5, JSON.stringify(Object.fromEntries(Object.entries(pj).map(([k, v]) => [k, v.total]))));
+step('periods carry the breakdowns the card draws (stage, industry, duplicates, converted %)', pj.weekly.by_stage.Assigned === 1 && pj.weekly.by_industry.Healthcare >= 1 && pj.weekly.dups === 1 && pj.weekly.converted === 2 && pj.weekly.convRate === 50, JSON.stringify(pj.weekly));
+step('periods follow the viewer\'s zone: Kolkata daily is 1, not 2', ra.summarise({ jobs: JOBS, now: FIXED, tz: 'Asia/Kolkata' }).periods.daily.total === 1);
+
 // ── the routes ───────────────────────────────────────────────────────────────
 const USERS = [
   { id: 'lead', name: 'RA Lead', role: 'ra_lead', roles: ['ra_lead'], manager_id: null, org_id: 'o' },

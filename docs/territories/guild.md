@@ -760,3 +760,5 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 - 2026-10-01 (R-095): `routes/recruiting/outreach.js` — `POST /submissions/:id/interview-invite` reads `interview_tz`, `buildInterviewInviteText(…, tz)` states the time via `services/interview-time.js`. No column for the zone (no migration).
 
 - 2026-10-01 (R-092, D-0066): `routes/recruiting/outreach.js` — `GET /submissions/:id/submission-email/options` + `POST /submissions/:id/submission-email` and `services/submission-email.js` (see the archive "Session 36, round 5"). Rules to keep: résumés only from THIS candidate; no list = latest résumé, empty list = none; the client copy is BD-only; sent after the move is saved; `cc` is passed through `sendMailboxNewMessage`.
+
+- 2026-10-01 (R-105): `routes/recruiting/analytics.js` — `/recruiting-dashboard` week/month (and a recruiter's jobs-assigned) and `/reports/recruiting` + activity-feed `from`/`to` use the viewer's zone via `services/viewer-time.js` (`?tz=`); the week is 7 calendar days (was 7×24 h = 8). The Reports 8-week `trend` buckets are unchanged.

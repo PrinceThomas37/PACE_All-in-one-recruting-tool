@@ -43,7 +43,7 @@
     STATE.reports = STATE.reports || { loading:false, data:null };
     if(STATE.reports.data || STATE.reports.loading) return;
     STATE.reports.loading = true;
-    apiGet('/reports/recruiting').then(function(d){ STATE.reports.data=d||null; STATE.reports.loading=false; if(STATE.page==='myteam') paint(); })
+    apiGet(withTz('/reports/recruiting')).then(function(d){ STATE.reports.data=d||null; STATE.reports.loading=false; if(STATE.page==='myteam') paint(); })
       .catch(function(){ STATE.reports.loading=false; if(STATE.page==='myteam') paint(); });
   }
 

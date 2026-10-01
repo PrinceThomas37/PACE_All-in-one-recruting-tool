@@ -31,7 +31,7 @@
     // Only a report-shaped answer is kept: anything else (an error body, an
     // empty list from a misrouted request) would crash the drawing — and the
     // report now sits inside the Dashboard, where a crash takes the page down.
-    apiGet('/reports/recruiting'+reportsQS()).then(function(d){ STATE.reports.data = (d && !Array.isArray(d) && typeof d==='object' && Array.isArray(d.stages)) ? d : null; STATE.reports.loading = false; repaintReports(); })
+    apiGet(withTz('/reports/recruiting'+reportsQS())).then(function(d){ STATE.reports.data = (d && !Array.isArray(d) && typeof d==='object' && Array.isArray(d.stages)) ? d : null; STATE.reports.loading = false; repaintReports(); })
       .catch(function(e){ STATE.reports.loading = false; if(quiet!==true) showToast('Failed to load reports: '+e.message,'error'); repaintReports(); });
   }
   window.reportsReload = function(){ loadReport(false); };
