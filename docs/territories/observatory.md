@@ -650,3 +650,5 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
   * `defaultModelHint(id)` (pure, exported) — what the Integrations card's empty Model box says; derived from PROVIDERS so it cannot drift (the Groq placeholder read a retired Llama name and the owner read it as the model in use).
 
 - 2026-09-29 (Session 34, R-071): admins lose their exemption from the D-0020 split in `/next-actions`; count and review become one read (`openBeneath`); Done can no longer report success without closing. Full account at the top of this file ("Session 34").
+
+- 2026-10-01 (R-099, D-0066): `services/client-intel.js` `completionItem(it)` is the one definition of what a "completed" tick on a client conversation is recorded against (`client_conversation:lead:<id>`, fingerprinted by `last_contact` + state); `GET /client-intel/digest` (routes/client-intel.js) filters my conversations through `services/next-action-dismissals.js` and returns `complete` on each row and a `completed` count. No AI call is involved.

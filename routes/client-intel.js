@@ -25,6 +25,7 @@ const settingsConfig = require('../config/settings');
 const { renderStoredEmail } = require('../email-vars');
 const { createMailProvider } = require('../services/mail-provider');
 const sentSide = require('../services/sent-side');
+const dismissals = require('../services/next-action-dismissals');
 
 // What the page may show when a person opens one email. The AI still sees at
 // most ci.CAPS.RECENT_MSG_CHARS of it; this is only the reading view.
@@ -503,7 +504,17 @@ module.exports = (ctx) => {
         const saved = withSummary ? await savedSummary(req, subject) : null;
         return ci.digestItem({ kind: 'lead', id, name, ownerId: l.assigned_to_bd, ledger, saved, playbook: pb });
       };
-      const mine = ci.sortDigest(await Promise.all(mineIds.map(id => itemFor(id, true))));
+      // A conversation the person ticked "completed" (R-099, D-0066) leaves the list until the other
+      // side writes again — the same fingerprinted snooze as "Needs you today" (it is NOT a delete).
+      let store = {};
+      try {
+        const { data: sv } = await supabase.from('app_settings').select('value').eq('key', dismissals.settingsKey(req.user.id)).maybeSingle();
+        if (sv && sv.value) store = dismissals.prune(typeof sv.value === 'string' ? JSON.parse(sv.value) : sv.value, Date.now());
+      } catch (_) { store = {}; }   // a store that cannot be read only makes the list noisier — the safe direction
+      const mineAll = ci.sortDigest(await Promise.all(mineIds.map(id => itemFor(id, true)))).filter(Boolean);
+      const mine = mineAll.filter(it => !dismissals.isDismissed(store, ci.completionItem(it), Date.now()))
+        // the browser echoes this back to POST /next-actions/dismiss, so it never builds the item itself
+        .map(it => Object.assign({}, it, { complete: ci.completionItem(it) }));
       let team = [];
       if (teamIds.length) {
         const items = await Promise.all(teamIds.map(id => itemFor(id, false)));
@@ -515,7 +526,7 @@ module.exports = (ctx) => {
         }
         team = ci.teamRollup(items, nameOf);
       }
-      res.json({ enabled: true, mine, team, scope: scope.label });
+      res.json({ enabled: true, mine, team, scope: scope.label, completed: mineAll.length - mine.length });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

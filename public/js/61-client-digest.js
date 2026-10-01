@@ -15,7 +15,7 @@
 (function(){
   'use strict';
   function esc(s){ return htmlEsc(s); }
-  var LIMIT=6;
+  var LIMIT=3;   // the top three, then "See all" (D-0066)
 
   window.loadClientDigest=function(force){
     if(STATE._cdLoading) return;
@@ -36,11 +36,30 @@
     goPage('leads');
   };
 
-  function row(it, mine){
+  // The checkbox: this conversation is dealt with. It is a snooze that returns when they write again
+  // (the same store as "Needs you today"), never a delete. The item recorded against is the server's.
+  window.clientDigestComplete=function(chk, idx, ev){
+    if(ev&&ev.stopPropagation) ev.stopPropagation();
+    var it=((STATE.clientDigest||{}).mine||[])[idx];
+    if(!it||!it.complete){ chk.checked=false; return; }
+    chk.disabled=true;
+    var rowEl=chk.closest?chk.closest('.cd-row'):null; if(rowEl) rowEl.style.opacity='.45';
+    apiPost('/next-actions/dismiss',{item:it.complete,scope:'drop'}).then(function(){
+      showToast('Marked completed — it comes back only if they write again','success');
+      loadClientDigest(true);
+    }).catch(function(e){
+      chk.checked=false; chk.disabled=false; if(rowEl) rowEl.style.opacity='';
+      showToast('Could not mark that completed: '+((e&&e.message)||e),'error');
+    });
+  };
+
+  function row(it, mine, idx){
     var badge=it.state==='needs_reply'?'<span class="cd-chip">waiting on '+(mine?'you':'reply')+'</span>'
       :(it.promises_due?'<span class="cd-chip">promise due</span>':'');
+    var tick=(mine&&it.complete)
+      ?'<label class="cd-tick" onclick="event.stopPropagation()" title="Completed — hides this until they write again"><input type="checkbox" onclick="clientDigestComplete(this,'+idx+',event)" aria-label="Mark completed"></label>':'';
     return '<div class="cd-row" onclick="clientDigestOpen(\''+esc(it.name).replace(/'/g,'&#39;')+'\')">'+
-      '<div class="cd-name">'+esc(it.name)+badge+'</div>'+
+      '<div class="cd-name">'+tick+esc(it.name)+badge+'</div>'+
       '<div class="cd-line">'+esc(it.headline||'')+'</div>'+
       (mine&&it.summary_line?'<div class="cd-sum">'+esc(it.summary_line)+'</div>':'')+
       (mine&&it.next_step?'<div class="cd-next">Next: <b>'+esc(it.next_step.label)+'</b></div>':'')+
@@ -58,8 +77,8 @@
     if(mine.length){
       var open=!!STATE._cdAllMine, shown=open?mine:mine.slice(0,LIMIT);
       out+='<div class="cd-sec"><div class="cd-head">Your client conversations <span>'+mine.length+'</span></div>'+
-        shown.map(function(it){ return row(it,true); }).join('')+
-        (mine.length>LIMIT&&!open?'<button type="button" class="lxi-link" onclick="STATE._cdAllMine=true;scheduleRender()">Show all '+mine.length+'</button>':'')+
+        shown.map(function(it,i){ return row(it,true,i); }).join('')+
+        (mine.length>LIMIT?'<button type="button" class="lxi-link" onclick="STATE._cdAllMine='+(open?'false':'true')+';scheduleRender()">'+(open?'Show the top '+LIMIT:'See all '+mine.length)+'</button>':'')+
       '</div>';
     }
     if(team.length){

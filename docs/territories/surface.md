@@ -1158,3 +1158,5 @@ resulting "Ask to take over" modal after clicking through, showing
 - 2026-10-01 (R-095): stage window interview form has a Time zone picker (`ivZoneSelect`, `ivZonedToInstant`, `ivOffsetMin` in `33-stage-modal.js`); `stgApply` saves the converted instant and passes `interview_tz` to both `interview-invite` calls (`mv.ivTz`). R-080: the `ooo_return` reminder's explanation (`10-page-modals.js`) now says PACE switches the contact back itself.
 
 - 2026-10-01 (R-092): `33-stage-modal.js` `subEmailHtml/Load/Read/Send` — an "Email these submission details" section in the recruiter's Submit-to-BD-Manager window and the "Submitted to Client" stage window (single move). Read before the window closes, sent after the move is saved. Reuses the address chips (`window.mbChipField`, `47-page-mailbox.js`).
+
+- 2026-10-01 (R-098/R-099): Needs you today (`44-next-actions.js`: `NA_TOP = 3`, "See all N", `naComplete`) and Client conversations (`61-client-digest.js`: `LIMIT = 3`, `clientDigestComplete`) show the top three with a "See all" and a per-row "completed" checkbox (`.cd-tick`, theme.css). The browser posts the item the server gave it for a client conversation.
