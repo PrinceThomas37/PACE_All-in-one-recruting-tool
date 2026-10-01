@@ -11,21 +11,37 @@
 
 ---
 
-## ▶ PRIORITY ORDER — what to do next (rewritten 2026-10-01 after the owner's handwritten notes)
+## ▶ PRIORITY ORDER — the FULL open list, sorted (rewritten 2026-10-01 at the owner's request: "all 35 … sort along with these")
 
-The 2026-09-30 list (R-091 … R-106, R-080, R-070) is **all built and merged** (Session 36). What is left, top to bottom. **Tokens** are rough estimates (Session 36's measured rate: ~14k tokens ≈ 1% of the owner's weekly allowance); **model / effort** is my recommendation, not a rule. Owner had ~7% left until Monday 2 PM, so only rows 1–2 fit before then.
+**Correction:** the earlier "35 pending" was a word count and wrong. Read row by row there are **25 genuinely open rows + 3 whose status needs checking** (R-071, R-072, R-076 — probably finished in #262 — and R-053 is part-live). The 2026-09-30 list (R-091 … R-106, R-080, R-070) is built and merged. **Tokens** are my rough estimates (Session 36's measured rate: ~14k tokens ≈ 1% of the owner's weekly allowance); **model · effort** is a recommendation (Opus·high only where schema, scoping or secrets change). Owner had ~7% left until Monday 2 PM.
 
-| # | Row | What | Tokens (est.) | Model · effort |
-|---|---|---|---|---|
-| 1 | R-110 (P1) | In a job: résumé pane loads from Supabase directly (error on screen) → use PACE's reader; open on Résumé; job candidate search | 15–25k | Sonnet · medium |
-| 2 | R-108 + R-111 (P2/P3) | Mailbox: opened email in a bigger box (+ full screen); raw `&lt;` / `&#39;` in preview lines | 8–15k | Sonnet · low |
-| 3 | R-109 (P2) | Several emails / phones per candidate — design chat first, then build (schema change → migration 055) | chat 5k · build 50–80k | chat Sonnet · low; build **Opus · high** |
-| 4 | R-107 (P2) | ARCHITECTURE.md — first pass from existing notes, then data flows and layering | 10–15k · full 25–40k | Sonnet · low (pass 1), medium (full) |
-| 5 | R-096 (P3) | Boolean search on Candidates — design in plain words first, then build (server-side, who-sees-what) | chat 8k · build 50–90k | chat Sonnet · low; build **Opus · high** |
-| 6 | (chore) | Tidy this file: rows still under "waiting" that are DONE; R-071/072/076 status check | 5–10k | Sonnet · low |
-| 7 | R-067 (before a SECOND customer) | Per-company API keys | 80–150k | **Opus · high** |
+| # | Row | What | Tokens (est.) | Model · effort | Needs from owner |
+|---|---|---|---|---|---|
+| 1 | R-110 (P1) | In a job: résumé pane fetches from Supabase directly (error shown) → PACE's reader; open on Résumé; job candidate search | 15–25k | Sonnet · medium | nothing |
+| 2 | R-108 + R-111 | Mailbox opened email in a bigger box + full screen; raw `&lt;` `&#39;` in preview lines | 8–15k | Sonnet · low | nothing (judge how it feels) |
+| 3 | R-109 (+ R-014) | Several emails/phones per candidate; decide phone capture at the same time | chat 5k · build 50–80k | chat Sonnet·low; build Opus·high | design answers; migration go |
+| 4 | chore | Tidy this file; check R-071/072/076/053 status against #262 and later | 5–10k | Sonnet · low | nothing |
+| 5 | R-107 | ARCHITECTURE.md | 10–15k first pass · 25–40k full | Sonnet · low→medium | go |
+| 6 | R-096 | Boolean search on Candidates | chat 8k · build 50–90k | chat Sonnet·low; build Opus·high | design answers |
+| 7 | R-067 | Per-company API keys (before a SECOND customer) | 80–150k | Opus · high | go |
+| 8 | R-049 | A "PACE operator" role separate from a customer admin (before a second customer) | 30–60k | Opus · high | design yes |
+| 9 | R-016 | CSV import for candidates (mapping screen + undo) | 40–70k | Sonnet · high | go |
+| 10 | R-053 | Contact finder: remaining slices (4 POCs per open job) | 30–60k | Sonnet · high | check what is live first |
+| 11 | R-004 | A dead mailbox sign-in marks emails "failed" (known, unfixed) | 10–20k | Sonnet · medium | nothing |
+| 12 | R-003 | `job_order_id` column on `sourcing_candidates` + backfill | 15–25k | Opus · medium | migration go |
+| 13 | R-061 | Show what Apollo knows about a company on lead/client | 15–25k | Sonnet · medium | yes (uses credits) |
+| 14 | R-062 | More leads from a company's other open jobs (Apollo) | 20–35k | Sonnet · medium | yes (uses credits) |
+| 15 | R-057 | Say "we hold N matching candidates" in outreach (only when true) | 20–40k | Sonnet · medium | "later" (D-0046) |
+| 16 | R-013 | ~1,600 inline font sizes / colours → classes (invisible work) | 100k+ (a session) | Sonnet · medium | answer |
+| 17 | R-017 | Charge for extra seats | 5–10k once priced | Sonnet · low | the price |
+| 18 | R-054 | Per-company playbook (fit any industry) | 100k+ · design first | Opus · high | design |
+| 19 | R-052 | Create documents, not only upload | large · parked | Opus · high | design |
+| 20 | R-015 | SMS to candidates (consent/opt-out is a legal gate) | large · parked | Opus · high | decision |
+| 21 | R-011 | Look at the "stalled at BDM" number | 0 | — | owner looks (deferred) |
+| 22 | R-008 | Apply link on more than one job | 0 | — | nothing to build, owner's |
+| 23 | R-074 | Apollo credits — answered from screenshot | 0 | — | record only |
 
-**Why Opus on 3, 5, 7:** they change what is stored or who may see what (schema, scoping, secrets) — a mistake there is costly and silent. Opus spends the allowance faster than Sonnet, so use it only where it earns it. Everything else is a screen fix or writing: Sonnet.
+(Rows 1–2 are the owner's 2026-10-01 reports; R-110 is a re-report of R-094/R-091. Rows 1–6 together ≈ 15% of a weekly allowance; rows 7–8 ≈ 11% more — rough.)
 
 ## ⚠ HOW THIS FILE IS MAINTAINED (D-0030 — read before editing)
 
