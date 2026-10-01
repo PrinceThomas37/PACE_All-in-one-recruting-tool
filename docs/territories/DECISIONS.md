@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0066 · 2026-10-01 · STANDS · R-080, R-092, R-098/099: what the owner answered
+**Their words:** R-080 *"yes it should change back once emailing is completed"* · R-092 *"yes it should be able to attach resume"* · R-098/099 *"can do both, only top 3 priority shows and then a button to see all and a check box to check which shows that it's completed."* (And: *"Keep Boolean search to later part."*)
+**Chosen:** (1) R-080 — an out-of-office contact switches back to Valid BY ITSELF on the return date, so follow-ups resume (no click). (2) R-092 — the submission email can attach the résumé. (3) R-098 + R-099 — "Needs you today" and "Client conversations" each show only the TOP 3 by priority, with a button to see all, and each row has a checkbox that marks it completed (a completed row leaves the list; it is a snooze, not a delete, and comes back if they reply). This replaces the proposed owner-defined rules/settings. Boolean search (R-096) stays last.
+**Re-open when:** the automatic switch-back emails someone who should have stayed quiet; or the owner wants the top-N changed.
+
 ### D-0065 · 2026-09-30 · STANDS · A "day" is the user's own day
 **Their words:** R-102 *"should a 'day' follow each person's own time zone? — yes, system timing"* · R-097 *"what counts as 'today'? — that date according to system of the user"*.
 **Chosen:** every "today / this week / last 7 days" in PACE follows the viewing person's own time zone (their device clock), not the server's UTC. "Needs you today" shows what is dated today on that clock. Supersedes the UTC-days note in R-089 / `services/bd-insights.js` (`dayKey` becomes per-request). Built with R-095 (interview time zones).

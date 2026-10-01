@@ -1057,3 +1057,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-01: +`resume-first-smoke.mjs` (20: patient reader, endpoint incl. inline-vs-attachment, drawer in a real browser), +`needs-you-today-day-smoke.mjs` (9, two time zones), +`email-cc-chips-smoke.mjs` (13), +`job-candidate-search-smoke.mjs` (12). Each was run with its fix reverted and failed. Lesson (again): a guard on "Send keeps the last typed address" passed with the fix removed because a repaint blurred the input and committed it by accident — assert on a callable the test can spy on, not on a side-effect that has another cause.
 
 - 2026-10-01: +`insights-timezone-smoke.mjs` (11: pure windows/summarise in UTC / Los Angeles / Kolkata at one pinned instant, both routes honour `?tz=`; Date is pinned so it holds on any day) and a zone step in `insights-screens-smoke` (14). Both fail with the zone ignored.
+
+- 2026-10-01: +`insights-ra-team-smoke.mjs` (13: pure calculation in UTC and Kolkata at a pinned instant, both routes incl. scope, and the table in a real browser fed a server row that contradicts the jobs the browser holds). Fails with the week rule or the drawing broken.

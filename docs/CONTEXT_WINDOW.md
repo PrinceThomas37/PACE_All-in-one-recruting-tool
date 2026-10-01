@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-10-01 (Session 36) · **Last merged**: #271 (`28dce9a`, R-102; before it #269 `58d0d15`) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
-**Highest ids:** decision D-0065 · contract C-0036 · next roadmap id `R-103` · next migration `055`.
+**Highest ids:** decision D-0066 · contract C-0036 · next roadmap id `R-107` · next migration `055`.
 
 ## ▶ NEXT SESSION — START HERE (updated 2026-10-01, Session 36)
 

@@ -33,26 +33,65 @@ module.exports = (ctx) => {
     return own.inScope(targetId, scope);
   }
 
+// ── RA insights: ONE calculation (R-100), the viewer's own days (R-102) ─────────────────────
+// services/ra-insights.js holds the definitions. The personal report below and the team table
+// (`/insights/ra-team`) both call it; the browser no longer adds up leads.
+const raInsights = require('../services/ra-insights');
+router.get('/insights/ra-team', auth, async (req, res) => {
+  try {
+    const isRa = (u) => u.role === 'ra' || (Array.isArray(u.roles) && u.roles.includes('ra'));
+    const users = await fetchAll(() => {
+      let uq = supabase.from('users').select('id,name,role,roles,manager_id').is('deleted_at', null).order('id');
+      if (req.orgId) uq = uq.eq('org_id', req.orgId);
+      return uq;
+    });
+    let pool = users.filter(isRa);
+    let scope = 'org';
+    if (!hasRole(req, 'admin')) {
+      const chain = new Set(await reportingChainIds(req.user.id, req.orgId || null));
+      pool = pool.filter(u => chain.has(u.id) && u.id !== req.user.id);
+      scope = 'team';
+    }
+    pool = pool.slice(0, 60);
+    const now = new Date();
+    const tz = bdInsights.validZone((req.query || {}).tz);
+    const people = [];
+    for (let i = 0; i < pool.length; i += 6) {
+      const part = await Promise.all(pool.slice(i, i + 6).map(async u => {
+        const jobs = await fetchAll(() => {
+          let q = supabase.from('jobs').select('id,stage,is_duplicate,created_at,created_date')
+            .eq('created_by', u.id).is('deleted_at', null).order('id');
+          if (req.orgId) q = q.eq('org_id', req.orgId);
+          return q;
+        });
+        return Object.assign({ id: u.id, name: u.name, role: u.role }, raInsights.summarise({ jobs, now, tz }));
+      }));
+      people.push(...part);
+    }
+    res.json({ scope, windows: bdInsights.windows(now, tz), people });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/insights/ra/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;
     if (!(await inCallerScope(req, targetId))) return res.status(404).json({ error: 'Not found' });
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(now); monthAgo.setDate(monthAgo.getDate() - 30);
-    let jq = supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date').eq('created_by', targetId).is('deleted_at', null).gte('created_at', monthAgo.toISOString());
-    if (req.orgId) jq = jq.eq('org_id', req.orgId);
-    const { data: jobs, error } = await jq;
-    if (error) throw error;
-    const all = jobs || [];
-    const todayJobs = all.filter(j => j.created_date === todayStr);
-    const weekJobs = all.filter(j => new Date(j.created_at) >= weekAgo);
-    const last7 = {};
-    for (let i = 6; i >= 0; i--) { const d = new Date(now); d.setDate(d.getDate() - i); const key = d.toISOString().split('T')[0]; last7[key] = all.filter(j => j.created_date === key).length; }
+    const w = bdInsights.windows(now, (req.query || {}).tz);
+    // read a day and a half before the 30-day window so a zone ahead of UTC is not short; the
+    // calculation trims to the viewer's own window
+    const from = new Date(Date.parse(w.monthFrom + 'T00:00:00Z') - 36 * 3600e3).toISOString();
+    const jobs = await fetchAll(() => {
+      let jq = supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date')
+        .eq('created_by', targetId).is('deleted_at', null).gte('created_at', from).order('id');
+      if (req.orgId) jq = jq.eq('org_id', req.orgId);
+      return jq;
+    });
+    const s = raInsights.summarise({ jobs, now, tz: w.tz });
+    const inMonth = jobs.filter(j => bdInsights.dayOf(j.created_at || j.created_date, w.tz) >= w.monthFrom);
     // INDUSTRIES + normInd come from ctx (shared single source of truth).
     function breakdown(arr, field) { const map = {}; arr.forEach(j => { const raw = j[field] || ''; const v = field === 'industry' ? normInd(raw) : (raw || 'Unknown'); map[v] = (map[v] || 0) + 1; }); return map; }
-    res.json({ total_month: all.length, total_week: weekJobs.length, total_today: todayJobs.length, duplicates: all.filter(j => j.is_duplicate).length, last_7_days: last7, by_industry: breakdown(all,'industry'), by_timezone: breakdown(all,'timezone'), by_freshness: breakdown(all,'freshness'), by_stage: breakdown(all,'stage') });
+    res.json({ total_month: s.month, total_week: s.week, total_today: s.today, duplicates: inMonth.filter(j => j.is_duplicate).length, last_7_days: s.last_7, by_industry: breakdown(inMonth, 'industry'), by_timezone: breakdown(inMonth, 'timezone'), by_freshness: breakdown(inMonth, 'freshness'), by_stage: breakdown(inMonth, 'stage') });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

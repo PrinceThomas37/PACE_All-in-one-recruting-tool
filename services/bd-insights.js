@@ -128,4 +128,4 @@ function summarise({ jobs, emails, now, tz }) {
   };
 }
 
-module.exports = { summarise, windows, dayKey, validZone, localDay, CONVERTED, POSITIVE, NEGATIVE, OOO };
+module.exports = { summarise, windows, dayKey, validZone, localDay, dayOf, CONVERTED, POSITIVE, NEGATIVE, OOO };

@@ -27,6 +27,31 @@ function bdTeamStatus(t){
   return '';
 }
 
+// The RA Team table: same arrangement as the BD one (R-100). `GET /insights/ra-team` runs
+// services/ra-insights.js for every Research Analyst in scope; this only fetches and reshapes.
+function raTeamData(){
+  var t=STATE.raTeamInsights;
+  var stale=t&&t.data&&!t.loading&&(Date.now()-t.at>60000);
+  if(!t||stale){
+    STATE.raTeamInsights=Object.assign({},t||{},{loading:true});
+    apiGet('/insights/ra-team'+insightsTzQ()).then(function(d){STATE.raTeamInsights={data:d,at:Date.now()};render();})
+      .catch(function(e){STATE.raTeamInsights={error:(e&&e.message)||'Could not load',at:Date.now()};render();});
+  }
+  return STATE.raTeamInsights;
+}
+function raStatsFromServer(t){
+  var people=(t&&t.data&&t.data.people)||[];
+  return people.map(function(p){
+    var u=(STATE.users||[]).find(function(x){return x.id===p.id;})||{id:p.id,name:p.name,role:p.role};
+    return {ra:u,total:p.total,today:p.today,week:p.week,month:p.month,dups:p.dups,assigned:p.assigned,assignPct:p.assignPct,conv:p.conv,convPct:p.convPct};
+  }).sort(function(a,b){return b.month-a.month;});
+}
+function raTeamStatus(t){
+  if(!t||t.loading&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Loading the team\u2019s numbers\u2026</div>';
+  if(t.error&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--red);font-size:13px">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.raTeamInsights=null;render();return false">try again</a></div>';
+  return '';
+}
+
 // ════════════════════════════════════════════════
 // INSIGHTS TAB — RA activity + RA Lead team view
 // ════════════════════════════════════════════════
@@ -108,24 +133,11 @@ function renderInsights(){
 
   // If RA Lead and no RA selected, show RA team overview (mirrors BD Lead layout)
   if(isRALead&&!selectedRA){
-    var ras=STATE.users.filter(function(x){return x.role==='ra';});
-    var now=new Date();
-    var todayStr=todayIST();
-    function raDaysAgo(n){var d=new Date(now.getTime()+5.5*3600000);d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);}
-    var weekAgo=raDaysAgo(7),monthAgo=raDaysAgo(30);
-
-    var raStats=ras.map(function(ra){
-      var raJobs=STATE.jobs.filter(function(j){return j.created_by===ra.id;});
-      var todayJ=raJobs.filter(function(j){return j.created_date===todayStr;});
-      var weekJ=raJobs.filter(function(j){return j.created_date>=weekAgo;});
-      var monthJ=raJobs.filter(function(j){return j.created_date>=monthAgo;});
-      var dups=raJobs.filter(function(j){return j.is_duplicate;}).length;
-      var assigned=raJobs.filter(function(j){return j.stage!=='Unassigned';}).length;
-      var conv=raJobs.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';}).length;
-      var assignPct=raJobs.length?Math.round(assigned/raJobs.length*100):0;
-      var convPct=raJobs.length?Math.round(conv/raJobs.length*100):0;
-      return{ra:ra,total:raJobs.length,today:todayJ.length,week:weekJ.length,month:monthJ.length,dups:dups,assigned:assigned,assignPct:assignPct,conv:conv,convPct:convPct};
-    }).sort(function(a,b){return b.month-a.month;});
+    var rt=raTeamData();
+    var raWait=raTeamStatus(rt);
+    if(raWait)return '<div class="page"><div class="ph"><div class="ptitle">Insights</div></div>'+raWait+'</div>';
+    var raStats=raStatsFromServer(rt);
+    var ras=raStats;
 
     var leader=raStats.find(function(r){return r.month>0;})||null;
     var leaderBanner=leader?
@@ -275,7 +287,7 @@ window.loadRAInsights=function(raId){
   STATE.insightsSelectedRA=raId;
   STATE.insightsData=null;
   render();
-  apiGet('/insights/ra/'+raId).then(function(d){
+  apiGet('/insights/ra/'+raId+insightsTzQ()).then(function(d){
     STATE.insightsData=d;render();
   }).catch(function(e){showToast('Could not load insights: '+e.message,'error');});
 };
@@ -284,7 +296,7 @@ window.loadRAInsights=function(raId){
 function loadMyInsights(){
   var u=STATE.user;
   if(u&&u.role==='ra'){
-    apiGet('/insights/ra/'+u.id).then(function(d){STATE.insightsData=d;render();}).catch(function(){});
+    apiGet('/insights/ra/'+u.id+insightsTzQ()).then(function(d){STATE.insightsData=d;render();}).catch(function(){});
   }
 }
 
