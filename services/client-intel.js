@@ -487,6 +487,14 @@ function digestItem({ kind = 'lead', id, name, ownerId = null, ledger, saved = n
   };
 }
 
+// What a "completed" tick is recorded AGAINST (R-099, D-0066). The dismissal store
+// (services/next-action-dismissals.js) keys on kind:type:id and fingerprints the last
+// activity and the state, so a new inbound message makes the conversation reappear.
+// The browser and the digest route both call this — one definition, not two copies.
+function completionItem(it) {
+  return { kind: 'client_conversation', entity_type: 'lead', entity_id: it && it.id, last_activity_at: (it && it.last_contact) || '', state: (it && it.state) || '' };
+}
+
 /**
  * The same row as a MANAGER may see it (D-0040): facts only. The owner's
  * summary text, the questions they asked and the promises' wording are all
@@ -533,6 +541,7 @@ function teamRollup(items, nameOf = {}) {
 }
 
 module.exports = {
+  completionItem,
   digestItem, teamItem, thirdPerson, sortDigest, teamRollup,
   CAPS, PLAYBOOKS, NOISE_DOMAINS, PUBLIC_DOMAINS,
   estimateTokens, normEmail, domainOf, isPublicDomain, isNoiseSender,

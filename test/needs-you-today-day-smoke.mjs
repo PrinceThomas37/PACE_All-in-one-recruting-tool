@@ -39,8 +39,9 @@ try{
       STATE.naShowOlder=false; STATE.viewingUser=null;
       STATE.nextActions={ items, summary:{by_kind:{}} };
       const html1 = renderNextActionsCard();
-      STATE.naShowOlder=true;
+      STATE.naShowOlder=true; STATE.naExpanded=true;   // all of them: "See all" (D-0066 shows only the top 3 otherwise)
       const html2 = renderNextActionsCard();
+      STATE.naExpanded=false;
       STATE.naShowOlder=false;
       STATE.nextActions={ items: items.filter(i=>/old/.test(i.entity_id)), summary:{by_kind:{}} };
       const html3 = renderNextActionsCard();

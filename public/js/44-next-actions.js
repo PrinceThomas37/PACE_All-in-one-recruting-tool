@@ -176,6 +176,31 @@ window.naSnooze=function(btn,scope,ev){
   });
 };
 
+// The checkbox: "this is completed" (R-098, D-0066). A reminder is marked DONE (a real change on a real
+// record). Anything else is the fingerprinted snooze that returns only if they write again — never a
+// delete (services/next-action-dismissals.js). On failure the box un-ticks and says so.
+window.naComplete=function(chk,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  var item=naItemOf(chk);
+  if(!item){ chk.checked=false; return; }
+  var row=chk.closest?chk.closest('[data-na-item]'):null;
+  chk.disabled=true; if(row)row.style.opacity='.45';
+  var undo=function(e){
+    chk.checked=false; chk.disabled=false; if(row)row.style.opacity='';
+    showToast('Could not mark that completed: '+((e&&e.message)||e),'error');
+  };
+  if(item.reminder_id){
+    apiPost('/next-actions/'+encodeURIComponent(item.reminder_id)+'/done',{}).then(function(){
+      showToast('Marked completed','success'); reminderClosed(item.reminder_id);
+    }).catch(undo);
+    return;
+  }
+  apiPost('/next-actions/dismiss',{item:item,scope:'drop'}).then(function(){
+    showToast('Marked completed — it comes back only if they reply','success');
+    STATE.nextActions=null; loadNextActions(true);
+  }).catch(undo);
+};
+
 window.naOpen=function(kind,entityType,entityId,jobId){
   // Jump to the thing the action is about. Leads live behind the job, so a
   // contact action opens its job — that is where the reply is answered.
@@ -286,7 +311,8 @@ function renderNextActionsCard(){
     '</div>';
   }
 
-  var show=STATE.naExpanded?items:items.slice(0,5);
+  var NA_TOP=3;   // the top three by priority, then "See all" (D-0066)
+  var show=STATE.naExpanded?items:items.slice(0,NA_TOP);
   var rows=show.map(function(it){
     var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
     // ── EVERY ROW HAS AN EXIT (Session 23) ──────────────────────────────────
@@ -325,6 +351,7 @@ function renderNextActionsCard(){
     return '<div data-na-item="'+payload+'" '+
       'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
+      '<label class="cd-tick" onclick="event.stopPropagation()" title="Completed'+(it.reminder_id?'':' — hides this until they reply')+'"><input type="checkbox" onclick="naComplete(this,event)" aria-label="Mark completed"></label>'+
       '<span style="flex:none;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'">'+k.lbl+'</span>'+
       '<div style="flex:1;min-width:0">'+
         '<div style="font-size:13.5px;font-weight:600">'+htmlEsc(it.title||'')+
@@ -356,7 +383,7 @@ function renderNextActionsCard(){
         '</div>'+
       '</div>'+
       '<button onclick="refreshNextActions()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">Refresh</button>'+
-      (items.length>5?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show less':'Show all '+items.length)+'</button>':'')+
+      (items.length>NA_TOP?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show the top '+NA_TOP:'See all '+items.length)+'</button>':'')+
     '</div>'+
     rows+
     naOlderLine(olderCount)+
