@@ -160,6 +160,13 @@ a{color:inherit;text-decoration:none}
 .sel{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:7px 11px;color:var(--text);outline:none;cursor:pointer;width:100%;transition:border-color .12s;font-size:13.5px}
 .sel:focus{border-color:var(--accent)}
 .sel option{background:#fff}
+/* Address chips (R-093): one box, each address a removable chip. */
+.chipf{display:flex;flex-wrap:wrap;gap:4px;align-items:center;flex:1;min-width:0;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:4px 8px;cursor:text;transition:border-color .12s}
+.chipf:focus-within{border-color:var(--accent)}
+.chipf-c{display:inline-flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 3px 1px 9px;font-size:12px;max-width:100%;overflow-wrap:anywhere}
+.chipf-c.bad{border-color:var(--red);color:var(--red)}
+.chipf-c button{border:0;background:none;color:var(--text3);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.chipf-in{flex:1;min-width:120px;border:0;outline:0;background:transparent;color:var(--text);font-size:13px;padding:3px 0}
 .txta{background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:8px 11px;color:var(--text);outline:none;width:100%;resize:vertical;font-size:13.5px;line-height:1.6}
 .txta:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(30,122,60,.12)}
 .flbl{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px}

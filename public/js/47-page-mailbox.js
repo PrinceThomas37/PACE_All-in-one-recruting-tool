@@ -384,6 +384,7 @@
   window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paint(); };
 
   window.mbSendComposer=function(){
+    mbChipFlush();
     var m=M(); var c=m.composer; if(!c||!m.message||c.sending)return;
     // Read straight from the DOM as well as STATE: oninput keeps STATE current,
     // but reading here means a send can never lose a last keystroke.
@@ -489,8 +490,8 @@
           '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          field('mb-c-to','To','someone@company.com',c.to,'mbComposeField(\'to\',this.value)')+
-          field('mb-c-cc','Cc <span style="color:var(--text3)">(optional)</span>','',c.cc,'mbComposeField(\'cc\',this.value)')+
+          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To <span style="color:var(--text3)">(press Enter or comma after each address)</span></label>'+chipField('mb-c-to','to',c.to,'mbComposeField','someone@company.com')+'</div>'+
+          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cc <span style="color:var(--text3)">(optional — add as many as you like)</span></label>'+chipField('mb-c-cc','cc',c.cc,'mbComposeField','')+'</div>'+
           field('mb-c-subject','Subject','',c.subject,'mbComposeField(\'subject\',this.value)')+
           '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+
             '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
@@ -510,12 +511,69 @@
   }
   // Closing the parked window's chip discards the draft with it — no ghost.
   if(window.Dock) Dock.onDiscard('mailCompose',function(){ M().compose=null; });
+  // ── ADDRESS CHIPS (R-093) ─────────────────────────────────────────────────
+  // Owner: "once one email is added into the CC row … there is no option to add
+  // another". The box always took a comma-separated list, but nothing said so.
+  // Now each address becomes a chip: type it, press Enter / comma / semicolon
+  // (or just click away) and it is added; × removes one; Backspace on an empty
+  // box takes the last one back. The real value stays in a hidden input with the
+  // same id the old text box had, so every reader of `#mb-c-to` / `#mb-comp-cc`
+  // keeps working and the server still gets "a@x.com, b@y.com".
+  function chipOk(a){ return /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/.test(a) || /<[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+>\s*$/.test(a); }
+  function chipHtml(a){
+    return '<span class="chipf-c'+(chipOk(a)?'':' bad')+'" data-a="'+escAttr(a)+'">'+esc(a)+
+      '<button type="button" tabindex="-1" aria-label="Remove '+escAttr(a)+'" onclick="mbChipRm(this,event)">&times;</button></span>';
+  }
+  function chipList(v){ return String(v||'').split(/[,;\n]+/).map(function(x){return x.trim();}).filter(Boolean); }
+  // cb = name of the state setter (mbCompField | mbComposeField), key = to | cc
+  function chipField(id,key,value,cb,ph){
+    return '<div class="chipf" data-chipf data-cb="'+cb+'" data-k="'+key+'" onclick="this.querySelector(\'.chipf-in\').focus()">'+
+      '<input type="hidden" id="'+id+'" value="'+escAttr(chipList(value).join(', '))+'">'+
+      chipList(value).map(chipHtml).join('')+
+      '<input type="text" class="chipf-in" autocomplete="off" placeholder="'+escAttr(chipList(value).length?'add another…':(ph||''))+'" '+
+        'onkeydown="mbChipKey(event,this)" oninput="mbChipInput(this)" onblur="mbChipCommit(this)">'+
+    '</div>';
+  }
+  function chipSync(box){
+    var list=Array.prototype.map.call(box.querySelectorAll('.chipf-c'),function(c){return c.getAttribute('data-a');});
+    var v=list.join(', ');
+    box.querySelector('input[type=hidden]').value=v;
+    var cb=window[box.getAttribute('data-cb')]; if(cb) cb(box.getAttribute('data-k'),v);
+    var inp=box.querySelector('.chipf-in'); if(inp && !inp.value) inp.placeholder=list.length?'add another…':'';
+  }
+  window.mbChipCommit=function(inp){
+    var box=inp.closest('.chipf'); if(!box)return;
+    var parts=chipList(inp.value); inp.value='';
+    if(!parts.length)return;
+    parts.forEach(function(a){
+      var have=Array.prototype.some.call(box.querySelectorAll('.chipf-c'),function(c){return c.getAttribute('data-a').toLowerCase()===a.toLowerCase();});
+      if(have)return;
+      inp.insertAdjacentHTML('beforebegin',chipHtml(a));
+    });
+    chipSync(box);
+  };
+  window.mbChipKey=function(e,inp){
+    if(e.key==='Enter'||e.key===','||e.key===';'){ e.preventDefault(); mbChipCommit(inp); return; }
+    if(e.key==='Backspace' && !inp.value){
+      var box=inp.closest('.chipf'); var cs=box.querySelectorAll('.chipf-c');
+      if(cs.length){ cs[cs.length-1].remove(); chipSync(box); }
+    }
+  };
+  window.mbChipInput=function(inp){ if(/[,;\n]/.test(inp.value)) mbChipCommit(inp); };   // a pasted list
+  window.mbChipRm=function(btn,e){
+    if(e){ e.stopPropagation(); }
+    var box=btn.closest('.chipf'); btn.parentNode.remove(); if(box) chipSync(box);
+  };
+  // Anything typed but not yet committed counts — a send must never lose it.
+  window.mbChipFlush=function(){ Array.prototype.forEach.call(document.querySelectorAll('.chipf-in'),function(i){ if(i.value) mbChipCommit(i); }); };
+
   function field(id,label,ph,val,oninput){
     return '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+'</label>'+
       '<input id="'+id+'" class="sel" placeholder="'+escAttr(ph)+'" value="'+escAttr(val||'')+'" oninput="'+oninput+'"></div>';
   }
 
   window.mbSendCompose=function(){
+    mbChipFlush();
     var m=M(); var c=m.compose; if(!c||c.sending)return;
     ['to','cc','subject','body'].forEach(function(k){
       var el=document.getElementById('mb-c-'+k); if(el) c[k]=el.value;
@@ -1014,14 +1072,13 @@
       // To — editable everywhere. A forward starts empty; a reply is prefilled.
       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
         '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">To</label>'+
-        '<input id="mb-comp-to" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.to||'')+'" '+
-          'placeholder="'+(fwd?'someone@company.com':'')+'" oninput="mbCompField(\'to\',this.value)">'+
+        chipField('mb-comp-to','to',c.to,'mbCompField',fwd?'someone@company.com':'')+
         (c.showCc?'':'<button class="btn btn-xs btn-ghost" onclick="mbCompToggleCc()">Add Cc</button>')+
       '</div>'+
       (c.showCc
         ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
             '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">Cc</label>'+
-            '<input id="mb-comp-cc" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.cc||'')+'" oninput="mbCompField(\'cc\',this.value)">'+
+            chipField('mb-comp-cc','cc',c.cc,'mbCompField','')+
           '</div>'
         : '')+
 

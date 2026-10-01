@@ -47,10 +47,11 @@
     else if (STATE.page==='bd_kanban') back.joId = v.kanbanJoId;
     else if (STATE.page==='bd_jodetail') back.joId = v.joId;
     Promise.all([ apiGet('/candidates/'+id), apiGet('/candidates/'+id+'/history'),
-      apiGet('/candidates/'+id+'/notes').catch(emptyArr), apiGet('/candidates/'+id+'/documents').catch(emptyArr),
+      apiGet('/candidates/'+id+'/notes').catch(emptyArr), loadDocs(id),
       apiGet('/candidates/'+id+'/email-activity').catch(emptyArr) ]).then(function(r){
       var hist = r[1] || { pipeline:[], submissions:[], activity:[] };
-      STATE.bd.profile = { id:id, candidate:r[0]||{}, history:hist, notes:r[2]||[], documents:r[3]||[], emailActivity:r[4]||[], selJob:null, noteTab:'applicant_reference', back:back };
+      dropResumeFile(STATE.bd.profile);
+      STATE.bd.profile = { id:id, candidate:r[0]||{}, history:hist, notes:r[2]||[], documents:(r[3]||{}).docs||[], docsError:!!(r[3]||{}).failed, emailActivity:r[4]||[], selJob:null, noteTab:'applicant_reference', back:back };
       // make sure jobs referenced by the history are navigable
       STATE.bd = STATE.bd || {}; STATE.bd.jobOrders = STATE.bd.jobOrders || [];
       (hist.pipeline||[]).concat(hist.submissions||[]).forEach(function(x){
@@ -63,11 +64,13 @@
       // if we never left the page in the first place.
       STATE.bd.profileOpen = true;
       render();
+      cpLoadResume();
     }).catch(function(e){ showToast('Failed to load candidate: '+e.message,'error'); });
   };
   window.cpClose = function(){
     if (!STATE.bd) return;
     STATE.bd.profileOpen = false;
+    dropResumeFile(STATE.bd.profile);
     STATE.bd.profile = null;
     render();
   };
@@ -81,7 +84,84 @@
     }).catch(function(){});
   };
   window.cpReloadNotes = function(){ var p=STATE.bd.profile; if(!p)return; apiGet('/candidates/'+p.id+'/notes').then(function(d){ p.notes=d||[]; render(); }).catch(function(){}); };
-  window.cpReloadDocs  = function(){ var p=STATE.bd.profile; if(!p)return; apiGet('/candidates/'+p.id+'/documents').then(function(d){ p.documents=d||[]; render(); }).catch(function(){}); };
+  window.cpReloadDocs  = function(){ var p=STATE.bd.profile; if(!p)return; loadDocs(p.id).then(function(r){ p.documents=r.docs; p.docsError=r.failed; render(); cpLoadResume(); }); };
+
+  // ── the résumé (R-091) ─────────────────────────────────────────────────────
+  function resumeDocOf(pr){ return (pr.documents||[]).find(function(d){ return d.doc_type==='resume'; }); }
+  function isPdfDoc(d){ return !!d && (/\.pdf$/i.test(d.filename||'') || /pdf/i.test(d.content_type||'')); }
+  var RESUME_NOTE = 'color:var(--text3);font-size:12.5px;padding:14px';
+
+  // What the Resume card shows right now: the preview and a Download when the
+  // file has arrived, the extracted text when it is not a PDF (or while the
+  // file is still coming), and a plain sentence with Try again when it failed.
+  function resumeInner(pr){
+    var d = resumeDocOf(pr), c = pr.candidate || {};
+    var f = (d && pr.resumeFile && pr.resumeFile.docId === d.id) ? pr.resumeFile : null;
+    var ready = !!(f && f.state === 'ready');
+    var action = '';
+    if (d && ready) action = '<a class="btn btn-sm btn-outline" data-cpresume-dl href="'+esc(f.url)+'" download="'+esc(d.filename||'resume')+'">Download</a>';
+    else if (d && f && f.state === 'failed') action = '<button class="btn btn-sm btn-outline" onclick="cpLoadResume(true)">Try again</button>';
+    else if (d) action = '<span class="btn btn-sm btn-outline" style="opacity:.6;pointer-events:none">Preparing…</span>';
+    var body;
+    if (d && ready && isPdfDoc(d)) {
+      body = '<iframe data-cpresume-frame src="'+esc(f.url)+'" style="width:100%;height:520px;border:1px solid var(--border);border-radius:8px;background:#fff"></iframe>';
+    } else if (c.resume_text) {
+      body = '<div style="max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap">'+esc(c.resume_text)+'</div>';
+    } else if (d && f && f.state === 'failed') {
+      body = '<div style="'+RESUME_NOTE+'">The résumé could not be loaded just now'+(f.msg?' ('+esc(f.msg)+')':'')+'. Press Try again.</div>';
+    } else if (d && ready) {
+      body = '<div style="'+RESUME_NOTE+'">A preview is only available for PDF files — use Download to open “'+esc(d.filename||'the résumé')+'”.</div>';
+    } else if (d) {
+      body = '<div style="'+RESUME_NOTE+'">Loading the résumé…</div>';
+    } else {
+      body = '<div style="'+RESUME_NOTE+'">The documents could not be loaded just now. <a href="#" onclick="cpReloadDocs();return false" style="color:var(--accent)">Try again</a></div>';
+    }
+    return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+             '<div style="font-weight:600;font-size:14px">Resume</div>'+action+'</div>'+body;
+  }
+  function paintResume(){
+    var pr = STATE.bd && STATE.bd.profile;
+    var el = document.querySelector('[data-cpresume]');
+    if (pr && el) el.innerHTML = resumeInner(pr);
+  }
+  function dropResumeFile(pr){
+    if (pr && pr.resumeFile && pr.resumeFile.url) { try { URL.revokeObjectURL(pr.resumeFile.url); } catch(e){} }
+    if (pr) pr.resumeFile = null;
+  }
+  // Fetches the file through PACE (it needs the bearer token, which an iframe
+  // or a plain link cannot send) and keeps it for the life of the drawer.
+  window.cpLoadResume = function(force){
+    var pr = STATE.bd && STATE.bd.profile;
+    var d = pr && resumeDocOf(pr);
+    if (!d) return;
+    var cur = pr.resumeFile;
+    if (cur && cur.docId === d.id && !force && (cur.state === 'ready' || cur.state === 'loading')) return;
+    dropResumeFile(pr);
+    var mine = pr.resumeFile = { docId:d.id, state:'loading' };
+    paintResume();
+    fetch(API_URL+'/candidates/'+encodeURIComponent(pr.id)+'/documents/'+encodeURIComponent(d.id)+'/file',
+          { headers:{ Authorization:'Bearer '+STATE.token } })
+      .then(function(r){
+        if (r.ok) return r.blob();
+        return r.json().catch(function(){ return {}; }).then(function(b){ throw new Error(b.error || ('HTTP '+r.status)); });
+      })
+      .then(function(blob){
+        if (pr.resumeFile !== mine) return;           // another file, or the drawer closed
+        mine.url = URL.createObjectURL(blob); mine.state = 'ready'; paintResume();
+      })
+      .catch(function(e){
+        if (pr.resumeFile !== mine) return;
+        mine.state = 'failed'; mine.msg = e.message; paintResume();
+      });
+  };
+  // The document list is what says a résumé exists at all, so one hiccup there
+  // must not hide it: ask twice, and if both fail say so on the Resume card.
+  function loadDocs(id){
+    var url = '/candidates/'+id+'/documents';
+    return apiGet(url).catch(function(){
+      return new Promise(function(res){ setTimeout(res, 600); }).then(function(){ return apiGet(url); });
+    }).then(function(d){ return { docs:d||[], failed:false }; }, function(){ return { docs:[], failed:true }; });
+  }
 
   // ── the drawer is an overlay, not a page ──────────────────────────────────
   // Registered with the kit so the shell draws it above #content. There is no
@@ -259,31 +339,15 @@
         docRows+
       '</div>';
 
-    // Resume preview — candidates enter the system by resume, so the profile
-    // shows it inline: PDFs render in an embedded viewer; Word/other formats
-    // fall back to the extracted resume text (candidates.resume_text) or a
-    // download link when no text was captured.
-    var resumeDoc = docs.find(function(d){ return d.doc_type==='resume' && d.url; });
-    var isPdf = resumeDoc && (/(\.pdf)$/i.test(resumeDoc.filename||'') || /pdf/i.test(resumeDoc.content_type||''));
-    var resumeCard = '';
-    if (resumeDoc || c.resume_text) {
-      var body;
-      if (resumeDoc && isPdf) {
-        body = '<iframe src="'+esc(resumeDoc.url)+'" style="width:100%;height:520px;border:1px solid var(--border);border-radius:8px;background:#fff"></iframe>';
-      } else if (c.resume_text) {
-        body = '<div style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap">'+esc(c.resume_text)+'</div>';
-      } else {
-        body = '<div style="padding:14px;color:var(--text3);font-size:12.5px">Preview not available for this file type — <a href="'+esc(resumeDoc.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">open “'+esc(resumeDoc.filename)+'”</a> instead.</div>';
-      }
-      resumeCard =
-        '<div class="card" style="padding:16px;margin-bottom:16px">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-            '<div style="font-weight:600;font-size:14px">Resume</div>'+
-            (resumeDoc?'<a class="btn btn-sm btn-outline" href="'+esc(resumeDoc.url)+'" target="_blank" rel="noopener" download>Download</a>':'')+
-          '</div>'+
-          body+
-        '</div>';
-    }
+    // Resume — candidates enter the system by resume, so it is the FIRST thing
+    // the profile shows (R-091). The bytes come through PACE (cpLoadResume),
+    // not a signed link made while the list loaded, so a bad second no longer
+    // means "refresh until it appears". The card is its own region
+    // (data-cpresume) so the load can paint it without rebuilding the drawer.
+    var resumeDoc = resumeDocOf(pr);
+    var resumeCard = (resumeDoc || c.resume_text || pr.docsError)
+      ? '<div class="card" style="padding:16px;margin-bottom:16px" data-cpresume>'+resumeInner(pr)+'</div>'
+      : '';
 
     // Email activity — tracked sends and whether the candidate opened them.
     var ea = pr.emailActivity || [];
@@ -338,7 +402,7 @@
     // rebuild the DOM (so a half-typed note survives a click on "Jobs"), and
     // the résumé iframe is not torn down and refetched every time you look
     // away from it.
-    var tabKey = pr.tab || 'activity';
+    var tabKey = pr.tab || ((resumeDoc || c.resume_text) ? 'resume' : 'activity');
     var counts = {
       activity: (h.activity||[]).length,
       jobs: jobs.length,
@@ -347,12 +411,12 @@
       docs: (pr.documents||[]).length
     };
     var TABS = [
+      { id:'resume',   label:'Resume'                       },
       { id:'activity', label:'Activity',  n:counts.activity },
       { id:'jobs',     label:'Jobs',      n:counts.jobs     },
       { id:'emails',   label:'Emails',    n:counts.emails   },
       { id:'notes',    label:'Notes',     n:counts.notes    },
-      { id:'docs',     label:'Documents', n:counts.docs     },
-      { id:'resume',   label:'Resume'                       }
+      { id:'docs',     label:'Documents', n:counts.docs     }
     ];
     var tabBar = '<div class="pgtabs">'+TABS.map(function(t){
       var n = (t.n===0||t.n) ? '<span class="pgtab-n">'+t.n+'</span>' : '';

@@ -7,6 +7,7 @@ const { parseResume } = require('../../resume-parser');
 const entitlements = require('../../services/entitlements');
 const createCandidateFields = require('../../services/candidate-fields');
 const { makeRecorder } = require('../../services/record-history-writer');
+const { fetchStored, docContentType } = require('../../services/doc-fetch');
 
 module.exports = function (app, core) {
   const {
@@ -321,6 +322,38 @@ module.exports = function (app, core) {
         return Object.assign({}, d, { url });
       }));
       res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // The file itself, through PACE (R-091). The screen cannot hand a bearer
+  // token to an <iframe> or a plain link, and the signed link made above can
+  // come back empty on a bad second — so the résumé is read here, patiently,
+  // and the browser turns the bytes into a preview and a Download.
+  app.get('/candidates/:id/documents/:docId/file', auth, async (req, res) => {
+    try {
+      if (!(await requireOwnCandidate(req, res, req.params.id))) return;
+      const { data: doc } = await supabase.from('candidate_documents')
+        .select('id,filename,content_type,storage_path')
+        .eq('id', req.params.docId).eq('candidate_id', req.params.id).is('deleted_at', null).maybeSingle();
+      if (!doc || !doc.storage_path) return res.status(404).json({ error: 'Document not found' });
+      const got = await fetchStored(supabase.storage, DOC_BUCKET, doc.storage_path);
+      if (!got.ok) {
+        return res.status(got.missing ? 404 : 503).json({
+          error: got.missing ? 'This file is no longer in storage.' : 'The file could not be read just now. Please try again.' });
+      }
+      const name = String(doc.filename || 'resume').replace(/[\r\n"]/g, '_');
+      // Only a PDF is ever shown inline. Anything else a user uploaded (an .html
+      // renamed to look like a résumé, say) is sent as a download, never run
+      // from PACE's own address.
+      const type = docContentType(doc);
+      const inline = /^application\/pdf/i.test(type);
+      res.set({
+        'Content-Type': inline ? 'application/pdf' : 'application/octet-stream',
+        'Content-Disposition': (inline ? 'inline' : 'attachment') + '; filename="' + name.replace(/[^\x20-\x7e]/g, '_') + '"',
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff'
+      });
+      res.send(got.buffer);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
