@@ -756,3 +756,5 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 - 2026-10-01 (R-102): `routes/workflows.js` (guild's) — `/insights/bd/:userId` and `/insights/bd-team` take `?tz=<IANA zone>` and pass it to `services/bd-insights.js`; the monthly email read starts 36 h early and `summarise` trims it to the viewer's window. See gateway.md for the calculation; `test/insights-timezone-smoke.mjs`.
 
 - 2026-10-01 (R-100/R-101): `routes/workflows.js` RA insights rebuilt on `services/ra-insights.js` (see gateway.md). The audit of `routes/recruiting/analytics.js` (`/recruiting-dashboard`, `/reports/recruiting`) found their windows cut on the server's UTC clock and a 7×24 h week — follow-ups R-105; submission counts there agree (both go through `services/submission-stages.js`).
+
+- 2026-10-01 (R-095): `routes/recruiting/outreach.js` — `POST /submissions/:id/interview-invite` reads `interview_tz`, `buildInterviewInviteText(…, tz)` states the time via `services/interview-time.js`. No column for the zone (no migration).

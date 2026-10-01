@@ -24,6 +24,7 @@ const { fillTemplate } = require('../../email-vars');
 const { emailSyntaxValid } = require('../../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
 const { fillSignatureHtml } = require('../../email-signature');
+const interviewTime = require('../../services/interview-time');
 const { clientOwnerFrom } = require('../../services/ownership');
 
 module.exports = function (app, ctx) {
@@ -479,9 +480,9 @@ app.post('/companies/:id/email', auth, async (req, res) => {
 function firstNameOf(name) { return String(name || '').trim().split(/\s+/)[0] || 'there'; }
 
 // Build the interview-invitation message (plain text; buildHtmlEmailBody wraps it).
-function buildInterviewInviteText(sub, candidate, job, role) {
-  const dt = sub.interview_at ? new Date(sub.interview_at) : null;
-  const when = dt ? dt.toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'To be confirmed';
+function buildInterviewInviteText(sub, candidate, job, role, tz) {
+  // The time is stated in the zone the scheduler picked, with the zone spelled out (R-095).
+  const when = interviewTime.formatInterview(sub.interview_at, tz);
   const type = sub.interview_type || (sub.interview_link ? 'virtual' : (sub.interview_address ? 'in_person' : ''));
   const lines = [];
   lines.push('Hi ' + firstNameOf(role === 'candidate' ? candidate.full_name : (job.bd_manager && job.bd_manager.name)) + ',', '');
@@ -554,6 +555,7 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
       targets.push({ email: bd.email, role: 'bd_manager', candidate_id: null });
     }
 
+    const ivTz = interviewTime.validZone(b.interview_tz);
     const mailbox = await sendingMailboxFor(req, b.mailbox_id);
     if (!mailbox) return noMailboxReply(res, b.mailbox_id);
     const signature = await filledSignature(mailbox, req.user.id);
@@ -563,7 +565,7 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
     for (const t of targets) {
       if (!emailSyntaxValid(t.email)) { results.push({ email: t.email, role: t.role, status: 'skipped', reason: 'invalid_email' }); continue; }
       const token = newTrackToken();
-      const inviteText = buildInterviewInviteText(sub, candidate, job, t.role);
+      const inviteText = buildInterviewInviteText(sub, candidate, job, t.role, ivTz);
         const htmlBody = injectTrackPixel(buildHtmlEmailBody(inviteText, signature), token);
       try {
         // By the mailbox's own platform. This line used to call Microsoft

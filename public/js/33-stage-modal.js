@@ -69,6 +69,48 @@
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function isInterviewStage(st){ return /^Interview/.test(st); }
   // ISO timestamp → value for a <input type="datetime-local"> (local time).
+  // ── interview time zones (R-095, owner: "All time zones. Our product should be used worldwide.") ──
+  // The scheduler types a wall time and picks the zone it is in; the instant sent to the server is
+  // that wall time read in THAT zone, and the invite email states the time in the same zone.
+  var IV_ZONES = null;
+  function ivMyZone(){ try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } }
+  // Minutes east of UTC that `zone` is at the instant `ms` (a whole number of seconds).
+  function ivOffsetMin(zone, ms){
+    var f = new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var p = {}; f.formatToParts(new Date(ms)).forEach(function(x){ p[x.type] = x.value; });
+    var asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour === 24 ? 0 : +p.hour, +p.minute, +p.second);
+    return Math.round((asUtc - ms) / 60000);
+  }
+  function ivOffsetLabel(min){ var a = Math.abs(min); return 'UTC' + (min < 0 ? '-' : '+') + String(Math.floor(a / 60)).padStart(2, '0') + ':' + String(a % 60).padStart(2, '0'); }
+  // 'YYYY-MM-DDTHH:mm' read in `zone` -> an ISO instant (null if it cannot be read).
+  window.ivZonedToInstant = function(wall, zone){
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall || ''); if (!m) return null;
+    var guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    try {
+      var o1 = ivOffsetMin(zone, guess), t = guess - o1 * 60000, o2 = ivOffsetMin(zone, t);
+      if (o2 !== o1) t = guess - o2 * 60000;          // the wall time straddles a clock change
+      return new Date(t).toISOString();
+    } catch (e) { return null; }
+  };
+  function ivZoneList(){
+    if (IV_ZONES) return IV_ZONES;
+    var z = [];
+    try { z = Intl.supportedValuesOf('timeZone').slice(); } catch (e) { /* older browser: the short list below */ }
+    if (!z.length) z = ['America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Toronto','Europe/London','Europe/Berlin','Asia/Dubai','Asia/Kolkata','Asia/Singapore','Asia/Tokyo','Australia/Sydney','Pacific/Auckland'];
+    if (z.indexOf('UTC') < 0) z.unshift('UTC');
+    var mine = ivMyZone(); if (z.indexOf(mine) < 0) z.unshift(mine);
+    var now = Date.now() - (Date.now() % 1000);
+    IV_ZONES = z.map(function(id){ var o = 0; try { o = ivOffsetMin(id, now); } catch (e) {} return { id: id, off: o }; })
+      .sort(function(a, b){ return a.off - b.off || (a.id < b.id ? -1 : 1); });
+    return IV_ZONES;
+  }
+  function ivZoneSelect(){
+    var mine = ivMyZone();
+    return '<select id="stg-iv-tz" class="sel">' + ivZoneList().map(function(z){
+      return '<option value="' + esc(z.id) + '"' + (z.id === mine ? ' selected' : '') + '>(' + ivOffsetLabel(z.off) + ') ' + esc(z.id.replace(/_/g, ' ')) + '</option>';
+    }).join('') + '</select>';
+  }
+
   function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
 
   // ── Who may move whom — said BEFORE it is refused ───────────────────────────
@@ -299,6 +341,7 @@
               '<div class="gc2" style="gap:10px">'+
                 '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Date &amp; time</label>'+
                   '<input id="stg-iv-at" type="datetime-local" class="sel" value="'+esc(ivAt0)+'"></div>'+
+                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Time zone</label>'+ivZoneSelect()+'</div>'+
                 '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Format</label>'+
                   '<select id="stg-iv-type" class="sel" onchange="stgIvTypeToggle()">'+
                     ['in_person|In person','virtual|Virtual','phone|Phone'].map(function(o){ var kv=o.split('|'); return '<option value="'+kv[0]+'"'+(ivType0===kv[0]?' selected':'')+'>'+kv[1]+'</option>'; }).join('')+
@@ -489,7 +532,10 @@
       payload.rejection_reason = rt + (rr ? ': ' + rr : '');
     }
     if (document.getElementById('stg-iv-at')) {
-      payload.interview_at = val('stg-iv-at') || undefined;
+      // The wall time is in the zone picked, not the browser's: send the real instant, and keep the
+      // zone for the invite email so it can say which clock the time is on (R-095).
+      mv.ivTz = val('stg-iv-tz') || ivMyZone();
+      payload.interview_at = window.ivZonedToInstant(val('stg-iv-at'), mv.ivTz) || undefined;
       var ivType = val('stg-iv-type') || undefined;
       payload.interview_type = ivType;
       var loc = '';
@@ -534,7 +580,7 @@
       if (notifyBd) recips.push('bd_manager');
       if (recips.length) {
         updated.forEach(function(s){
-          apiPost('/submissions/'+s.id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined })
+          apiPost('/submissions/'+s.id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined, interview_tz: mv.ivTz || undefined })
             .then(function(r){ if (r && r.sent) showToast(r.sent+' interview invite'+(r.sent>1?'s':'')+' sent','success'); })
             .catch(function(e){
               if (/no_connected_mailbox/.test(e.message)) showToast('Interview saved — connect a mailbox to email the invite','error');
@@ -617,7 +663,7 @@
         return;
       }
       var id = ids[i++];
-      apiPost('/submissions/'+id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined })
+      apiPost('/submissions/'+id+'/interview-invite', { recipients: recips, mailbox_id: mv.fromId || undefined, interview_tz: mv.ivTz || undefined })
         .then(function(r){ mv.invites.sent += (r && r.sent) ? r.sent : 0; })
         .catch(function(e){
           mv.invites.failed++;
