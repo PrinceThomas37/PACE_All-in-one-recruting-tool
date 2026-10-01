@@ -565,6 +565,7 @@
     var box=btn.closest('.chipf'); btn.parentNode.remove(); if(box) chipSync(box);
   };
   // Anything typed but not yet committed counts — a send must never lose it.
+  window.mbChipField=chipField;   // reused by the submission-email section (33-stage-modal.js)
   window.mbChipFlush=function(){ Array.prototype.forEach.call(document.querySelectorAll('.chipf-in'),function(i){ if(i.value) mbChipCommit(i); }); };
 
   function field(id,label,ph,val,oninput){

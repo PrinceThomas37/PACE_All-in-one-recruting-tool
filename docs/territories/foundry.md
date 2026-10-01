@@ -1061,3 +1061,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-01: +`insights-ra-team-smoke.mjs` (13: pure calculation in UTC and Kolkata at a pinned instant, both routes incl. scope, and the table in a real browser fed a server row that contradicts the jobs the browser holds). Fails with the week rule or the drawing broken.
 
 - 2026-10-01: +`interview-timezone-smoke.mjs` (13, browser set to Kolkata, NY summer/winter, Auckland) and 4 zone steps in `from-mailbox-smoke` (21); +`ooo-return-smoke.mjs` (15: pure rule, the real sweep over a fake table incl. a status changed between read and write, a failed read, and 1,234 rows across pages — which caught a skipping-pages bug). Reverting the conversion / the zone / the paging each fails them.
+
+- 2026-10-01: +`submission-email-smoke.mjs` (30: the words, the server rules incl. foreign document / foreign mailbox / foreign org / role, and both windows in a real browser incl. "a failed move sends nothing"). A fake-db detail worth keeping: the fake must honour `.limit()` or "latest résumé" returns everything.

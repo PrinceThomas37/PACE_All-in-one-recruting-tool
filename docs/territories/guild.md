@@ -758,3 +758,5 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 - 2026-10-01 (R-100/R-101): `routes/workflows.js` RA insights rebuilt on `services/ra-insights.js` (see gateway.md). The audit of `routes/recruiting/analytics.js` (`/recruiting-dashboard`, `/reports/recruiting`) found their windows cut on the server's UTC clock and a 7×24 h week — follow-ups R-105; submission counts there agree (both go through `services/submission-stages.js`).
 
 - 2026-10-01 (R-095): `routes/recruiting/outreach.js` — `POST /submissions/:id/interview-invite` reads `interview_tz`, `buildInterviewInviteText(…, tz)` states the time via `services/interview-time.js`. No column for the zone (no migration).
+
+- 2026-10-01 (R-092, D-0066): `routes/recruiting/outreach.js` — `GET /submissions/:id/submission-email/options` + `POST /submissions/:id/submission-email` and `services/submission-email.js` (see the archive "Session 36, round 5"). Rules to keep: résumés only from THIS candidate; no list = latest résumé, empty list = none; the client copy is BD-only; sent after the move is saved; `cc` is passed through `sendMailboxNewMessage`.

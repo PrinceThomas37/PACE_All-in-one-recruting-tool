@@ -1156,3 +1156,5 @@ resulting "Ask to take over" modal after clicking through, showing
 - 2026-10-01 (R-100): the RA Team table in `16-insights.js` draws `GET /insights/ra-team` (`raTeamData`, 60 s cache, loading/error panel) — no arithmetic on leads in the browser; `+5.5 h` offset removed there. `todayIST()` (`01-constants.js`) is still India-forced for the Dashboard/Leads/Email — R-103.
 
 - 2026-10-01 (R-095): stage window interview form has a Time zone picker (`ivZoneSelect`, `ivZonedToInstant`, `ivOffsetMin` in `33-stage-modal.js`); `stgApply` saves the converted instant and passes `interview_tz` to both `interview-invite` calls (`mv.ivTz`). R-080: the `ooo_return` reminder's explanation (`10-page-modals.js`) now says PACE switches the contact back itself.
+
+- 2026-10-01 (R-092): `33-stage-modal.js` `subEmailHtml/Load/Read/Send` — an "Email these submission details" section in the recruiter's Submit-to-BD-Manager window and the "Submitted to Client" stage window (single move). Read before the window closes, sent after the move is saved. Reuses the address chips (`window.mbChipField`, `47-page-mailbox.js`).
