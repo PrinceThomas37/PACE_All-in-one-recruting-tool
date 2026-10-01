@@ -2,7 +2,7 @@
 //
 // `email_tracking` recorded who, what subject, when, opened and replied — and
 // never the email itself, so PACE could not answer "what did we actually say to
-// this client?". Migration 042 adds `body`, all six send paths write it, and
+// this client?". Migration 042 adds `body`, all seven send paths write it, and
 // these two screens open it.
 //
 // The candidate profile toggles `hidden` rather than re-rendering: the drawer is
@@ -40,7 +40,7 @@ const step = (name, ok, detail = '') => {
 // ── every send path records the text ───────────────────────────────────────
 const src = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const SENDERS = [
-  ['routes/recruiting/outreach.js', 4],   // candidate_sequence, candidate, client, interview
+  ['routes/recruiting/outreach.js', 5],   // candidate_sequence, candidate, client, interview, submission (R-092)
   ['routes/outreach-generator.js', 1],    // the outreach generator
   ['routes/candidate-outreach.js', 1],    // the candidate drip
 ];
@@ -53,7 +53,7 @@ for (const [file, want] of SENDERS) {
   step(`${file}: every email_tracking insert records the body`,
     inserts.length === want && withBody === want, `${withBody}/${inserts.length} of an expected ${want}`);
 }
-step('all six send paths record it', bodied === 6, String(bodied));
+step('all seven send paths record it', bodied === 7, String(bodied));
 step('the client read endpoint returns the body',
   /\.select\('id,to_email,subject,body,/.test(src('routes/companies.js')));
 step('migration 042 exists and is additive',

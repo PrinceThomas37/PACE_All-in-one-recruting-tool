@@ -376,6 +376,7 @@
               '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
                 (group?' <b>These details go on every person you move, and each one gets their own email.</b>':'')+'</div>'+
             '</div>':'')+
+          (newStage === 'Submitted to Client' && !group && !recruiterScoped() ? subEmailHtml('client') : '')+
           // Rejecting is a choice from a fixed list, not free typing (owner, 2026-09-30) —
           // so the reasons can be counted later. "Other" asks for the words.
           (newStage==='Not Accepted'?
@@ -403,6 +404,7 @@
         '</div>'+
       '</div>';
     render();
+    if (newStage === 'Submitted to Client' && !group && !recruiterScoped()) subEmailLoad('client', ids[0]);
   };
 
   // ── The pieces of a group move that are not the form ────────────────────────
@@ -562,6 +564,13 @@
     // More than one person: ONE request, and a per-person answer (below).
     if (mv.group) { stgApplyGroup(mv, payload, notifyCand, notifyBd); return; }
 
+    // The submission email (R-092) is read now, while the window is still on screen, and sent
+    // only once the move has been saved.
+    if (mv.stage === 'Submitted to Client') {
+      mv.subEmail = window.subEmailRead('client');
+      if (mv.subEmail && mv.subEmail.error) { showToast(mv.subEmail.error,'error'); mv.subEmail = null; return; }
+    }
+
     var updated = [], failed = 0;
     var finish = function(){
       closeModal();
@@ -588,6 +597,7 @@
             });
         });
       }
+      if (mv.subEmail && updated[0] && !failed) subEmailSend(updated[0].id, mv.subEmail);
       if (mv.onDone) mv.onDone(updated, movedInfo(mv, updated.map(function(s){ return s.id; }), []));
       STATE._stageMove = null;
       render();
@@ -784,12 +794,14 @@
               '<div id="sbdm-fmt-status" style="font-size:11.5px;color:var(--green);margin-top:7px"></div>'+
             '</div>'+
           '</div>'+
+          '<div style="padding:0 20px">'+subEmailHtml('bdm')+'</div>'+
           '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
             '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
             '<button class="btn btn-primary" onclick="sbdmSubmit()">Submit to BD Manager</button>'+
           '</div>'+
         '</div>';
       render();
+      subEmailLoad('bdm', subId);
     }).catch(function(e){ showToast('Could not load candidate: '+e.message,'error'); });
   };
 
@@ -825,17 +837,22 @@
     };
     if (!details.first_name || !details.email) { showToast('First name and email are required','error'); return; }
     if (!details.comment) { showToast('The submission comment is important — please add it','error'); return; }
+    var email = window.subEmailRead('bdm');
+    if (email && email.error) { showToast(email.error,'error'); return; }
 
     // Record which resume files ride along with the packet so the BDM's
     // submission view can point straight at them.
     if (st.formattedName) details.formatted_resume = st.formattedName + '_Submission.doc';
     if (st.file) details.original_resume = st.file.name;
 
-    var patchStage = function(){
+    var patchStage = function(uploaded){
+      var upIds = (Array.isArray(uploaded) ? uploaded : []).map(function(r){ return r && r.id; }).filter(Boolean);
+      if (email && email.attach_doc_ids === undefined && upIds.length) email.attach_doc_ids = upIds;
       apiPatch('/submissions/'+st.subId+'/stage', { stage:'Submitted to BDM', submission_details: details, note: details.comment })
         .then(function(s){
           closeModal();
           showToast('Submitted to the BD Manager','success');
+          if (email) subEmailSend(s.id || st.subId, email);
           if (STATE.bd && STATE.bd.submissions) {
             STATE.bd.submissions = STATE.bd.submissions.map(function(x){ return x.id===s.id ? s : x; });
           }
@@ -862,8 +879,95 @@
       var fName = (st.formattedName || details.first_name || 'candidate').replace(/[^A-Za-z0-9 _-]/g,'').trim().replace(/\s+/g,'_') || 'candidate';
       uploads.push(uploadDoc(fName + '_Submission.doc', 'application/msword', window.atsFormattedDocDataUri(st.formattedHtml)));
     }
-    if (!uploads.length) { patchStage(); return; }
+    if (!uploads.length) { patchStage([]); return; }
     Promise.all(uploads).then(patchStage).catch(function(e){ showToast('Resume upload failed: '+(e.message||e),'error'); });
+  };
+
+
+  // ── EMAIL THE SUBMISSION DETAILS (R-092, D-0066) ───────────────────────────
+  // Offered when a candidate is handed to the BD Manager (recruiter window) and when the BD
+  // Manager sends them to the client (stage window). The form is read BEFORE the window closes,
+  // and the email is sent only AFTER the move has been saved, so a failed move never emails
+  // anybody. The words and the attachment rules live on the server (services/submission-email.js).
+  window.subEmailNoop = function(){};
+  function seIdFor(kind){ return kind === 'client' ? 'the client' : 'the BD Manager'; }
+  window.subEmailHtml = function(kind){
+    var lbl = 'font-size:11px;color:var(--text2);display:block;margin:9px 0 3px';
+    return '<div id="se-box" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0">'+
+      '<label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer">'+
+        '<input type="checkbox" id="se-on" onchange="subEmailToggle()"> Email these submission details to '+seIdFor(kind)+'</label>'+
+      '<div id="se-body" style="display:none">'+
+        '<label style="'+lbl+'">To</label>'+
+        '<input id="se-to" class="sel" list="se-sugg" autocomplete="off" placeholder="name@company.com"><datalist id="se-sugg"></datalist>'+
+        '<label style="'+lbl+'">Cc <span style="color:var(--text3)">(optional — Enter or comma after each)</span></label>'+
+        (window.mbChipField ? mbChipField('se-cc','cc','','subEmailNoop','') : '<input id="se-cc" class="sel">')+
+        '<label style="'+lbl+'">A note above the details <span style="color:var(--text3)">(optional)</span></label>'+
+        '<textarea id="se-note" class="sel" style="min-height:54px;resize:vertical" placeholder="e.g. Strong fit — available from 1 Nov."></textarea>'+
+        '<div id="se-docs" style="margin-top:9px;font-size:12.5px;color:var(--text3)">'+
+          (kind === 'client' ? 'Looking for the résumé…' :
+            '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text)"><input type="checkbox" id="se-attach" checked> Attach the résumé file(s) from this submission</label>')+
+        '</div>'+
+        (window.FromPick ? '<div style="margin-top:9px">'+FromPick.slot('se-from')+'</div>' : '')+
+        '<div style="font-size:11px;color:var(--text3);margin-top:6px">Sent from your connected mailbox after the move is saved. The candidate’s details and the submission comment are added for you.</div>'+
+      '</div></div>';
+  };
+  window.subEmailToggle = function(){
+    var on = (document.getElementById('se-on')||{}).checked, b = document.getElementById('se-body');
+    if (b) b.style.display = on ? '' : 'none';
+  };
+  // Fills the suggestions (and, for the client copy, the résumé list) once the window is on screen.
+  window.subEmailLoad = function(kind, subId){
+    var tries = 0;
+    (function go(){
+      if (!document.getElementById('se-to')) { if (tries++ < 40) setTimeout(go, 50); return; }
+      apiGet('/submissions/'+encodeURIComponent(subId)+'/submission-email/options?kind='+kind).then(function(r){
+        var dl = document.getElementById('se-sugg'), to = document.getElementById('se-to');
+        if (dl) dl.innerHTML = (r.suggestions||[]).map(function(s){ return '<option value="'+esc(s.email)+'">'+esc((s.name?s.name+' · ':'')+s.role)+'</option>'; }).join('');
+        // The email starts UNTICKED. Only the internal hand-off is ticked for you, and only when the
+        // job's BD manager is known; sending a candidate to a CLIENT is always a deliberate tick.
+        if (to && !to.value && r.suggestions && r.suggestions[0] && kind === 'bdm') {
+          to.value = r.suggestions[0].email;
+          var on = document.getElementById('se-on'); if (on) { on.checked = true; subEmailToggle(); }
+        }
+        var docs = document.getElementById('se-docs');
+        if (docs && kind === 'client') {
+          var list = r.documents || [];
+          docs.innerHTML = list.length
+            ? '<div style="color:var(--text);margin-bottom:4px">Attach the résumé:</div>'+list.map(function(d,i){
+                return '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text)"><input type="checkbox" class="se-doc" value="'+esc(d.id)+'"'+(i===0?' checked':'')+'> '+esc(d.filename||'résumé')+'</label>'; }).join('')
+            : 'No résumé on file for this candidate, so none will be attached.';
+        }
+      }).catch(function(){
+        var docs = document.getElementById('se-docs'); if (docs && kind === 'client') docs.textContent = 'Could not look up the résumé just now.';
+      });
+    })();
+  };
+  // The form's values as the request body, or null when "email" is unticked, or {error} to refuse.
+  window.subEmailRead = function(kind, uploadedIds){
+    if (!document.getElementById('se-on') || !document.getElementById('se-on').checked) return null;
+    if (window.mbChipFlush) mbChipFlush();
+    var to = ((document.getElementById('se-to')||{}).value||'').trim();
+    if (!to) return { error: 'Who should the email go to? Add an address, or untick the email option.' };
+    var body = { kind: kind, to: to, cc: ((document.getElementById('se-cc')||{}).value||'').trim(),
+      note: ((document.getElementById('se-note')||{}).value||'').trim(),
+      mailbox_id: (window.FromPick && FromPick.value('se-from')) || undefined };
+    if (kind === 'client') {
+      body.attach_doc_ids = Array.prototype.map.call(document.querySelectorAll('.se-doc:checked'), function(x){ return x.value; });
+    } else if (!((document.getElementById('se-attach')||{}).checked)) {
+      body.attach_doc_ids = [];
+    } else if (uploadedIds && uploadedIds.length) {
+      body.attach_doc_ids = uploadedIds;       // the files uploaded in this submission; else the server uses the latest résumé
+    }
+    return body;
+  };
+  window.subEmailSend = function(subId, body){
+    if (!body || body.error) return Promise.resolve(null);
+    return apiPost('/submissions/'+encodeURIComponent(subId)+'/submission-email', body).then(function(r){
+      showToast('Submission emailed to '+r.to+(r.attached && r.attached.length ? ' with the résumé attached' : ''),'success'); return r;
+    }).catch(function(e){
+      var m = (e && e.message) || '';
+      showToast(/no_connected_mailbox/.test(m) ? 'Moved — connect a mailbox to email the submission' : ('Moved, but the email was not sent: '+m),'error'); return null;
+    });
   };
 
 })();

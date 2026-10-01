@@ -25,6 +25,7 @@ const { emailSyntaxValid } = require('../../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
 const { fillSignatureHtml } = require('../../email-signature');
 const interviewTime = require('../../services/interview-time');
+const submissionEmail = require('../../services/submission-email');
 const { clientOwnerFrom } = require('../../services/ownership');
 
 module.exports = function (app, ctx) {
@@ -140,12 +141,12 @@ async function recruiterSendingMailbox(recruiterId) {
 // Dispatch a fresh outbound message by the mailbox's connected platform —
 // the Microsoft/Gmail counterpart to sendMicrosoftNewMessage alone. Both
 // providers return a message + thread/conversation id in the same shape.
-async function sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments }) {
+async function sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments, cc }) {
   if (mailbox.platform === 'Gmail') {
-    const r = await gmailProvider.sendNewMessage(mailbox.id, { to, subject, htmlBody, attachments, fromAddress: mailbox.email_address });
+    const r = await gmailProvider.sendNewMessage(mailbox.id, { to, cc, subject, htmlBody, attachments, fromAddress: mailbox.email_address });
     return { graphMessageId: r.messageId, conversationId: r.threadId || null, inReplyTo: null };
   }
-  return sendMicrosoftNewMessage(mailbox.id, { to, subject, htmlBody, attachments });
+  return sendMicrosoftNewMessage(mailbox.id, { to, cc, subject, htmlBody, attachments });
 }
 
 // Resolve document_ids (from candidate_documents or client_documents) into
@@ -590,6 +591,120 @@ app.post('/submissions/:id/interview-invite', auth, async (req, res) => {
       );
     }
     res.json({ mailbox: mailbox.email_address, sent: sentCount, results });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── THE SUBMISSION EMAIL (R-092, D-0066) ───────────────────────────────────────
+// When a candidate is handed to the BD manager ('bdm') or sent to the client ('client'), the
+// sender can email the submission details — with the résumé attached. Sent AFTER the stage move
+// has succeeded (the window calls this once the move is saved), from the sender's own chosen
+// mailbox, tracked like every other candidate mail. The words come from
+// services/submission-email.js and only from what the submission holds.
+const SUB_EMAIL_SELECT = 'id, org_id, stage, submission_details, candidate_id, job_order_id, recruiter_id, ' +
+  'candidate:candidates(id,full_name,email,phone,city,state,current_location,current_title,current_employer,work_authorization,availability), ' +
+  'job:job_orders(id,job_title,job_code,client,company_id,bd_manager:users!bd_manager_id(id,name,email))';
+async function loadSubmissionForEmail(req, id) {
+  let q = supabase.from('submissions').select(SUB_EMAIL_SELECT).eq('id', id).is('deleted_at', null);
+  if (req.orgId) q = q.eq('org_id', req.orgId);
+  const { data } = await q.maybeSingle();
+  return data || null;
+}
+const SUB_EMAIL_KINDS = ['bdm', 'client'];
+
+// Who it could go to, and which résumés could ride along. Literal path — registered above any /submissions/:id/:param.
+app.get('/submissions/:id/submission-email/options', auth, async (req, res) => {
+  try {
+    const kind = String(req.query.kind || '');
+    if (!SUB_EMAIL_KINDS.includes(kind)) return res.status(400).json({ error: 'kind must be bdm or client.' });
+    const sub = await loadSubmissionForEmail(req, req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Submission not found' });
+    const job = sub.job || {}, bd = job.bd_manager || {};
+    const suggestions = [];
+    if (kind === 'bdm' && bd.email) suggestions.push({ email: bd.email, name: bd.name || '', role: 'BD manager' });
+    if (kind === 'client' && job.company_id) {
+      // People we already know at this client: contacts on its leads, newest first.
+      let cq = supabase.from('jobs').select('id, contacts(first_name,last_name,email,email_status)')
+        .eq('company_id', job.company_id).is('deleted_at', null).order('created_at', { ascending: false }).limit(20);
+      if (req.orgId) cq = cq.eq('org_id', req.orgId);
+      const { data: leads } = await cq;
+      const seen = new Set();
+      (leads || []).forEach(l => (l.contacts || []).forEach(c => {
+        const e = String(c.email || '').trim(); const k = e.toLowerCase();
+        if (!e || seen.has(k) || ['invalid', 'deactivated'].includes(String(c.email_status || '').toLowerCase())) return;
+        seen.add(k); suggestions.push({ email: e, name: [c.first_name, c.last_name].filter(Boolean).join(' '), role: 'Client contact' });
+      }));
+    }
+    let dq = supabase.from('candidate_documents').select('id,filename,doc_type,uploaded_at')
+      .eq('candidate_id', sub.candidate_id).eq('doc_type', 'resume').is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(10);
+    if (req.orgId) dq = dq.eq('org_id', req.orgId);
+    const { data: docs } = await dq;
+    res.json({ kind, suggestions: suggestions.slice(0, 12), documents: docs || [], candidate: (sub.candidate || {}).full_name || '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Send it. Body: { kind, to, cc?, note?, attach_doc_ids?, mailbox_id? }
+app.post('/submissions/:id/submission-email', auth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const kind = String(b.kind || '');
+    if (!SUB_EMAIL_KINDS.includes(kind)) return res.status(400).json({ error: 'kind must be bdm or client.' });
+    // The client copy is the BD team's to send; the BDM copy belongs to whoever submitted.
+    if (kind === 'client' && !hasRole(req, 'admin', 'bd', 'bd_lead', 'associate_director', 'director')) {
+      return res.status(403).json({ error: 'Only the BD team sends a submission to the client.' });
+    }
+    const sub = await loadSubmissionForEmail(req, req.params.id);
+    if (!sub) return res.status(404).json({ error: 'Submission not found' });
+    const toList = submissionEmail.parseAddresses(b.to, emailSyntaxValid);
+    if (!toList.length) return res.status(400).json({ error: 'Who is this going to? Add a valid email address.' });
+    const to = toList[0];
+    const cc = submissionEmail.parseAddresses([].concat(toList.slice(1), submissionEmail.parseAddresses(b.cc, emailSyntaxValid)), emailSyntaxValid);
+    const mailbox = await sendingMailboxFor(req, b.mailbox_id);
+    if (!mailbox) return noMailboxReply(res, b.mailbox_id);
+
+    // Résumés: the ones the sender ticked, else the candidate's latest. Org-scoped; a foreign id reads as absent.
+    let ids = Array.isArray(b.attach_doc_ids) ? b.attach_doc_ids.filter(x => typeof x === 'string').slice(0, 5) : [];
+    if (b.attach_doc_ids === undefined) {   // nothing said → the latest résumé; an empty list means "attach nothing"
+      let lq = supabase.from('candidate_documents').select('id').eq('candidate_id', sub.candidate_id).eq('doc_type', 'resume')
+        .is('deleted_at', null).order('uploaded_at', { ascending: false }).limit(1);
+      if (req.orgId) lq = lq.eq('org_id', req.orgId);
+      const { data: latest } = await lq;
+      ids = (latest || []).map(r => r.id);
+    }
+    // Only documents that belong to THIS candidate (a foreign candidate's résumé must never ride along).
+    let attachments = [];
+    if (ids.length) {
+      let mq = supabase.from('candidate_documents').select('id').eq('candidate_id', sub.candidate_id).in('id', ids).is('deleted_at', null);
+      if (req.orgId) mq = mq.eq('org_id', req.orgId);
+      const { data: mine } = await mq;
+      attachments = await resolveEmailAttachments('candidate_documents', (mine || []).map(r => r.id), req.orgId || null);
+    }
+    if (ids.length && !attachments.length) return res.status(409).json({ error: 'The résumé could not be attached just now, so nothing was sent. Please try again.' });
+
+    const signature = await filledSignature(mailbox, req.user.id);
+    const job = sub.job || {}, bd = job.bd_manager || {};
+    const mail = submissionEmail.buildSubmissionEmail({
+      kind, sub, candidate: sub.candidate, job, note: String(b.note || '').slice(0, 2000),
+      toName: kind === 'bdm' ? bd.name : '', senderName: mailbox.display_name || '', attachmentCount: attachments.length,
+    });
+    const token = newTrackToken();
+    const htmlBody = injectTrackPixel(buildHtmlEmailBody(mail.text, signature), token);
+    try {
+      await sendMailboxNewMessage(mailbox, { to, cc: cc.length ? cc : undefined, subject: mail.subject, htmlBody, attachments });
+    } catch (e) {
+      return res.status(502).json({ error: friendlySendError ? friendlySendError(e.message) : e.message });
+    }
+    try {
+      await supabase.from('email_tracking').insert({
+        token, channel: 'submission', candidate_id: sub.candidate_id, job_order_id: sub.job_order_id,
+        to_email: to, subject: mail.subject, body: mail.text, sent_by: req.user.id, mailbox_email: mailbox.email_address || null,
+        ...(req.orgId ? { org_id: req.orgId } : {})
+      });
+      const { data: sendLog } = await supabase.from('email_send_log').select('id,emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
+      await supabase.from('email_send_log').upsert(
+        { user_email_id: mailbox.id, send_date: today(), emails_sent: (sendLog?.emails_sent || 0) + 1 },
+        { onConflict: 'user_email_id,send_date' });
+    } catch (_) { /* the mail already went; bookkeeping must not turn that into an error */ }
+    res.json({ sent: true, to, cc, attached: attachments.map(a => a.filename), mailbox: mailbox.email_address });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
