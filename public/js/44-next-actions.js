@@ -200,6 +200,44 @@ var NA_KIND={
 // which asserts something specific and false about every kind added later.
 var NA_KIND_UNKNOWN={lbl:'Needs a look',bg:'#f1f5f9',fg:'#475569'};
 
+// ── TODAY MEANS THE USER'S OWN DAY (R-097, D-0065) ───────────────────────────
+// "Needs you today" listed everything outstanding, which is the noise the owner
+// described: "the Need you today should show the things for that day, not the
+// full thing". An item belongs to today when its date — the day a reminder or
+// promise falls due, else the day of the latest message — is today ON THE
+// VIEWER'S OWN CLOCK (their device, not the server's UTC). Everything older is
+// not deleted and not hidden silently: it is counted under the list with a
+// button that shows it. An item with no readable date is kept in today's list —
+// never hide what cannot be dated.
+function naDayKey(v){
+  if(!v)return null;
+  var str=String(v);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str))return str;            // a date, not a moment: take it as written
+  var d=new Date(str);
+  if(isNaN(d.getTime()))return null;
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+window.naSplitToday=function(items,now){
+  var t=naLocalIso(now);
+  var today=[],older=[];
+  (items||[]).forEach(function(it){
+    var k=naDayKey(it.due_at||it.last_activity_at);
+    (k&&t&&k<t?older:today).push(it);
+  });
+  return {today:today,older:older};
+};
+function naLocalIso(now){
+  var d=new Date(now||Date.now());
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function naOlderLine(n){
+  if(!n)return '';
+  return '<div class="na-hidden">'+
+    '<span>'+(STATE.naShowOlder?n+' older item'+(n===1?'':'s')+' shown below, from before today':n+' older item'+(n===1?'':'s')+' still open, from before today')+'</span>'+
+    '<button class="na-act na-act-quiet" onclick="STATE.naShowOlder='+(STATE.naShowOlder?'false':'true')+';render()" title="Nothing is deleted — older items just stay out of today\'s list">'+(STATE.naShowOlder?'Hide older':'Show older')+'</button>'+
+  '</div>';
+}
+
 function renderNextActionsCard(){
   var s=STATE.nextActions;
   // Per-user queue: never fetched while previewing someone else's dashboard
@@ -224,7 +262,9 @@ function renderNextActionsCard(){
         '<div class="briefing-sub"><a href="#" onclick="refreshNextActions();return false;">try again</a></div>'+
       '</div></div>';
   }
-  var items=s.items||[];
+  var split=naSplitToday(s.items||[]);
+  var olderCount=split.older.length;
+  var items=STATE.naShowOlder?(s.items||[]):split.today;
   if(!items.length){
     // An EMPTY list still draws the two lines beneath it (C-0031, R-071).
     // /next-actions is now each person's OWN work — admin included — and what
@@ -237,9 +277,10 @@ function renderNextActionsCard(){
     return '<div class="card mb4" style="padding:0;overflow:hidden">'+
       '<div class="cp" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-        '<div style="font-size:13.5px;font-weight:600">Nothing waiting on you.</div>'+
-        '<div style="font-size:12px;color:var(--text3)">No unanswered replies or due reminders.</div>'+
+        '<div style="font-size:13.5px;font-weight:600">'+(olderCount?'Nothing new for today.':'Nothing waiting on you.')+'</div>'+
+        '<div style="font-size:12px;color:var(--text3)">'+(olderCount?'Nothing arrived or came due today.':'No unanswered replies or due reminders.')+'</div>'+
       '</div>'+
+      naOlderLine(olderCount)+
       naTeamLine(s)+
       naHiddenLine(s)+
     '</div>';
@@ -295,8 +336,8 @@ function renderNextActionsCard(){
     '</div>';
   }).join('');
 
-  var sum=s.summary||{by_kind:{}};
-  var bk=sum.by_kind||{};
+  var bk={};
+  items.forEach(function(i){bk[i.kind]=(bk[i.kind]||0)+1;});
   function chip(n,label,color){
     if(!n)return '';
     return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:'+color+'">'+n+' '+label+'</span>';
@@ -318,6 +359,7 @@ function renderNextActionsCard(){
       (items.length>5?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show less':'Show all '+items.length)+'</button>':'')+
     '</div>'+
     rows+
+    naOlderLine(olderCount)+
     naTeamLine(s)+
     naHiddenLine(s)+
   '</div>';

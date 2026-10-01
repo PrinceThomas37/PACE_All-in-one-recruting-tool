@@ -113,46 +113,10 @@
   function paintPipelinePage(){ if(STATE.page!=='bd_pipeline') return; paintPageContent(); }
   UI.registerPage('bd_pipeline', function(){ return renderPipelinePage(); });
 
-  // ── the page ──────────────────────────────────────────────────────────────
-  window.renderPipelinePage = function(){
-    var u = STATE.user;
-    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
-    var j = joById(jid);
-    if (!j) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">Job not found.</div></div>';
-    // "Best matches" ranks the WHOLE candidate database against this job, which
-    // the browser can't do (it only ever holds this job's pipeline) — so that
-    // view is server-scored and rendered separately.
-    if (STATE.bd.plMatchView === jid) return renderMatchesView(j, u);
-    var rows = (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; });
-    // Match scoring: best-fit candidates float to the top by default (the whole
-    // point of the feature), with a toggle back to "recently added".
-    var sortMode = STATE.bd.plSort || 'match';
-    if (sortMode === 'match' && window.matchScoreValue){
-      rows = rows.slice().sort(function(a,b){ return matchScoreValue(b.candidate||{}, j) - matchScoreValue(a.candidate||{}, j); });
-    }
-
-    // Job details FIRST — what a recruiter needs to actually work the req:
-    // description, pay, location, work auth, skills, experience. Visible to
-    // everyone (not just BD), unlike the separate "Job details" tab which
-    // also carries BD-only controls (assign recruiter, approvals, posting JD).
-    var jobCard = renderJobSummaryCard(j);
-
-    var tabs =
-      '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Candidates ('+rows.length+')</div>'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plOpenMatches(\''+j.id+'\')">Best matches</div>'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
-        (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
-      '</div>';
-
-    // multi-select bulk bar (ported from the old Submissions tab): sequence
-    // the promoted candidates, or email the JD to the selected ones. Wrapped in a
-    // stable #pl-bulkbar container so toggling a checkbox can repaint JUST the bar
-    // (via plRepaintSelection) instead of re-rendering the whole page — which was
-    // resetting the scroll position to the top on every checkbox click.
-    var sel = STATE.bd.plSel || {};
-    var bulkBar = '<div id="pl-bulkbar">'+plBulkBarInner(rows.filter(function(p){ return sel[p.id]; }).length)+'</div>';
-
+  // The table alone, so a search can repaint it in place (the search box lives
+  // OUTSIDE it and keeps focus while you type).
+  function plTableHtml(rows, j){
+    var u = STATE.user, sel = STATE.bd.plSel || {};
     var allOn = rows.length && rows.every(function(p){ return sel[p.id]; });
     var head = '<th style="padding:8px 9px"><input id="pl-chk-all" type="checkbox" '+(allOn?'checked':'')+' onclick="plToggleSelAll()"></th>'+
       ['Pipeline ID','Candidate Name','Title','Match','Stage','Work Auth','Mobile','Email','Location','Country','Exp','Source','Resume',
@@ -214,8 +178,96 @@
         '</td>'+
       '</tr>';
     }).join('');
-    if (!rows.length) body = '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidates on this job yet. '+
-      '<span style="color:var(--accent);cursor:pointer" onclick="plOpenAdd(\''+j.id+'\')">Add a candidate →</span></td></tr>';
+    if (!rows.length) body = (STATE.bd.plQ
+      ? '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidate on this job matches “'+esc(STATE.bd.plQ)+'”. <span style="color:var(--accent);cursor:pointer" onclick="plSearchClear()">Clear the search</span></td></tr>'
+      : '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidates on this job yet. '+
+        '<span style="color:var(--accent);cursor:pointer" onclick="plOpenAdd(\''+j.id+'\')">Add a candidate →</span></td></tr>');
+
+    return '<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1560px">'+
+        '<thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>';
+  }
+
+  // ── search inside the job (R-094) ─────────────────────────────────────────
+  // Owner: "an option to search candidate when a job is opened … the user has to
+  // scroll a lot to look for candidate". Every word typed must appear somewhere
+  // on the person's row (name, code, title, email, phone, place, skills, source,
+  // employer, stage); case does not matter. The list is already in the browser —
+  // this narrows what is DRAWN, never what the caller may see.
+  function plHay(p){
+    var c = p.candidate || {};
+    var sk = Array.isArray(c.skills) ? c.skills.join(' ') : (c.skills || '');
+    return [c.full_name, c.candidate_code, p.pipeline_code, c.current_title, c.headline, c.email, c.phone,
+      c.city, c.state, c.country, c.current_location, p.source, c.source, p.employer_name, c.current_employer, sk,
+      p.submission && p.submission.stage, p.submission && p.submission.sub_stage].filter(Boolean).join(' ').toLowerCase();
+  }
+  window.plFilterRows = function(rows, q){
+    var terms = String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return rows;
+    return rows.filter(function(p){ var h = plHay(p); return terms.every(function(t){ return h.indexOf(t) >= 0; }); });
+  };
+  // This job's rows in the order the screen shows them (match or recent), narrowed by the search.
+  function plVisibleRows(j){
+    var rows = (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===j.id; });
+    if ((STATE.bd.plSort || 'match') === 'match' && window.matchScoreValue){
+      rows = rows.slice().sort(function(a,b){ return matchScoreValue(b.candidate||{}, j) - matchScoreValue(a.candidate||{}, j); });
+    }
+    return window.plFilterRows(rows, STATE.bd.plQ);
+  }
+  function plCountLine(shown, total){
+    return STATE.bd.plQ ? 'Showing '+shown+' of '+total+' on this job' : '';
+  }
+  window.plSearch = function(v){
+    STATE.bd.plQ = String(v||'');
+    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId, j = joById(jid); if (!j) return;
+    var total = (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; }).length;
+    var rows = plVisibleRows(j);
+    var host = document.getElementById('pl-table'); if (host) host.innerHTML = plTableHtml(rows, j);
+    var cnt = document.getElementById('pl-qcount'); if (cnt) cnt.textContent = plCountLine(rows.length, total);
+    plRepaintSelection();
+  };
+  window.plSearchClear = function(){
+    STATE.bd.plQ = '';
+    var el = document.getElementById('pl-q'); if (el) el.value = '';
+    plSearch('');
+  };
+
+  // ── the page ──────────────────────────────────────────────────────────────
+  window.renderPipelinePage = function(){
+    var u = STATE.user;
+    var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
+    var j = joById(jid);
+    if (!j) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">Job not found.</div></div>';
+    // "Best matches" ranks the WHOLE candidate database against this job, which
+    // the browser can't do (it only ever holds this job's pipeline) — so that
+    // view is server-scored and rendered separately.
+    if (STATE.bd.plMatchView === jid) return renderMatchesView(j, u);
+    // Match scoring: best-fit candidates float to the top by default (the whole
+    // point of the feature), with a toggle back to "recently added".
+    var sortMode = STATE.bd.plSort || 'match';
+    var total = (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; }).length;
+    var rows = plVisibleRows(j);
+
+    // Job details FIRST — what a recruiter needs to actually work the req:
+    // description, pay, location, work auth, skills, experience. Visible to
+    // everyone (not just BD), unlike the separate "Job details" tab which
+    // also carries BD-only controls (assign recruiter, approvals, posting JD).
+    var jobCard = renderJobSummaryCard(j);
+
+    var tabs =
+      '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Candidates ('+total+')</div>'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plOpenMatches(\''+j.id+'\')">Best matches</div>'+
+        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
+        (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
+      '</div>';
+
+    // multi-select bulk bar (ported from the old Submissions tab): sequence
+    // the promoted candidates, or email the JD to the selected ones. Wrapped in a
+    // stable #pl-bulkbar container so toggling a checkbox can repaint JUST the bar
+    // (via plRepaintSelection) instead of re-rendering the whole page — which was
+    // resetting the scroll position to the top on every checkbox click.
+    var sel = STATE.bd.plSel || {};
+    var bulkBar = '<div id="pl-bulkbar">'+plBulkBarInner(rows.filter(function(p){ return sel[p.id]; }).length)+'</div>';
 
     return '<div class="page">'+
       (window.navBar?navBar():'')+
@@ -230,13 +282,18 @@
       '</div>'+
       jobCard+
       tabs+bulkBar+
-      (rows.length ? '<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:8px;font-size:12px">'+
+      (total ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px">'+
+          '<input id="pl-q" class="sel" type="search" style="max-width:340px" placeholder="Search this job’s candidates — name, skill, title, place…" value="'+esc(STATE.bd.plQ||'')+'" oninput="plSearch(this.value)" autocomplete="off">'+
+          '<span id="pl-qcount" style="color:var(--text3)">'+esc(plCountLine(rows.length,total))+'</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
         '<span style="color:var(--text3)">Sort by</span>'+
         ['match','recent'].map(function(m){ var on=sortMode===m;
           return '<button class="btn btn-sm '+(on?'btn-primary':'btn-outline')+'" onclick="plSetSort(\''+m+'\')">'+(m==='match'?'Best match':'Recently added')+'</button>'; }).join('')+
+        '</div>'+
       '</div>' : '')+
-      '<div class="card" style="padding:0;overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:1560px">'+
-        '<thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>'+
+      '<div id="pl-table">'+plTableHtml(rows, j)+'</div>'+
     '</div>';
   };
 
@@ -281,9 +338,11 @@
       onDone: function(){ bdReloadPipeline(); } });
   };
   // ── multi-select + bulk actions (ported from the old Submissions tab) ───────
+  // The rows on screen: with a search active, "select all" and every bulk action
+  // see only what is shown, never people the search has hidden.
   function plCurrentRows(){
     var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
-    return (STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; });
+    return window.plFilterRows((STATE.bd.pipeline||[]).filter(function(p){ return p.job_order_id===jid; }), STATE.bd.plQ);
   }
   function plSelectedRows(){ var sel=STATE.bd.plSel||{}; return plCurrentRows().filter(function(p){ return sel[p.id]; }); }
   // The selection bulk-bar html (empty when nothing is selected).

@@ -43,14 +43,16 @@ function findChromium(){
   if(b && fs.existsSync(path.join(b,'chromium'))) return path.join(b,'chromium');
   return 'chromium';
 }
+// "Needs you today" lists what is dated today (R-097), so these rows are dated now.
+const NOW_ISO = new Date().toISOString();
 const ITEMS = [
-  { kind:'reply_due', entity_type:'contact', entity_id:'c1', title:'Sam Lee', subtitle:'Acme Builders', email:'sam@acme.test', job_id:'j1', reason:'Sam wrote 2 days ago and is waiting on you.', priority:90, overdue_days:2, last_activity_at:'2026-09-27T10:00:00Z' },
-  { kind:'nudge', entity_type:'contact', entity_id:'c2', title:'Dana Cruz', subtitle:'Northwind', email:'dana@northwind.test', job_id:'j2', reason:'No reply in 9 days.', priority:40, overdue_days:9, last_activity_at:'2026-09-20T10:00:00Z' },
-  { kind:'commitment_due', entity_type:'contact', entity_id:'c4', title:'Pat Wu', subtitle:'Globex', email:'pat@globex.test', job_id:'j4', reason:'Pat said "next week" — that was 6 days ago.', priority:60, overdue_days:6, last_activity_at:'2026-09-23T10:00:00Z' },
+  { kind:'reply_due', entity_type:'contact', entity_id:'c1', title:'Sam Lee', subtitle:'Acme Builders', email:'sam@acme.test', job_id:'j1', reason:'Sam wrote 2 days ago and is waiting on you.', priority:90, overdue_days:2, last_activity_at:NOW_ISO },
+  { kind:'nudge', entity_type:'contact', entity_id:'c2', title:'Dana Cruz', subtitle:'Northwind', email:'dana@northwind.test', job_id:'j2', reason:'No reply in 9 days.', priority:40, overdue_days:9, last_activity_at:NOW_ISO },
+  { kind:'commitment_due', entity_type:'contact', entity_id:'c4', title:'Pat Wu', subtitle:'Globex', email:'pat@globex.test', job_id:'j4', reason:'Pat said "next week" — that was 6 days ago.', priority:60, overdue_days:6, last_activity_at:NOW_ISO },
   { kind:'reminder_due', entity_type:'contact', entity_id:'c3', reminder_id:'r1', title:'Lee Ann', subtitle:'Initech', email:'leeann@initech.test', job_id:'j3', reason:'Welcome back — follow up.', priority:75, overdue_days:1, last_activity_at:null },
-  { kind:'stage_suggested', entity_type:'candidate', entity_id:'cand1', title:'Robin Hood', subtitle:'Estimator', email:'robin@example.test', job_id:'jo9', reason:'Interested — currently at "Screening". Worth moving them forward?', priority:50, overdue_days:0, last_activity_at:'2026-09-28T10:00:00Z' },
-  { kind:'reply_due', entity_type:'candidate', entity_id:'cand2', title:'Maya Ito', subtitle:'Foreman', email:'maya@example.test', job_id:'jo8', reason:'Maya replied and is waiting.', priority:80, overdue_days:1, last_activity_at:'2026-09-28T09:00:00Z' },
-  { kind:'nudge', entity_type:'contact', entity_id:'c9', title:'No Address', subtitle:'Hooli', email:null, job_id:'j9', reason:'No reply in 10 days.', priority:30, overdue_days:10, last_activity_at:'2026-09-19T10:00:00Z' },
+  { kind:'stage_suggested', entity_type:'candidate', entity_id:'cand1', title:'Robin Hood', subtitle:'Estimator', email:'robin@example.test', job_id:'jo9', reason:'Interested — currently at "Screening". Worth moving them forward?', priority:50, overdue_days:0, last_activity_at:NOW_ISO },
+  { kind:'reply_due', entity_type:'candidate', entity_id:'cand2', title:'Maya Ito', subtitle:'Foreman', email:'maya@example.test', job_id:'jo8', reason:'Maya replied and is waiting.', priority:80, overdue_days:1, last_activity_at:NOW_ISO },
+  { kind:'nudge', entity_type:'contact', entity_id:'c9', title:'No Address', subtitle:'Hooli', email:null, job_id:'j9', reason:'No reply in 10 days.', priority:30, overdue_days:10, last_activity_at:NOW_ISO },
 ];
 const calls=[];
 function reply(route, body, status=200){ return route.fulfill({ status, contentType:'application/json', body:JSON.stringify(body) }); }

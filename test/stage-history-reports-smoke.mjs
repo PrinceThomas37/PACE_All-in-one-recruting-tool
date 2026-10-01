@@ -11,6 +11,11 @@ const require = createRequire(import.meta.url);
 const results = [];
 const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };
 
+// "This month" is judged by the real calendar, and daysAgo(2) lands in LAST month on the 1st-2nd of a
+// month — this suite failed on 1 Oct for exactly that reason, with no code change. Pin the clock to
+// noon on the 15th of the current month so the fixtures mean what they say on every day of the year.
+const RealDate = Date, _b = new RealDate(), FIXED = RealDate.UTC(_b.getUTCFullYear(), _b.getUTCMonth(), 15, 12);
+globalThis.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(FIXED); } static now() { return FIXED; } };
 const ORG = 'o1';
 const now = Date.now();
 const daysAgo = (n) => new Date(now - n * 864e5).toISOString();

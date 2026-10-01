@@ -425,7 +425,10 @@ try {
   await page.evaluate(() => window.mbSelectFolder('f-inbox'));
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 3, { timeout: 5000 });
   await page.evaluate(() => window.mbCompose());
-  await page.waitForSelector('#mb-c-to', { timeout: 5000 });
+  // To/Cc are address chips now (R-093): the real value rides in a hidden input with the old id,
+  // and the visible control is the chip box.
+  await page.waitForSelector('#mb-c-to', { state: 'attached', timeout: 5000 });
+  await page.waitForSelector('[data-chipf][data-k="to"] .chipf-in', { timeout: 5000 });
   step('Compose opens with To / Cc / Subject / Message',
     await page.evaluate(() => !!(document.getElementById('mb-c-to') && document.getElementById('mb-c-cc')
       && document.getElementById('mb-c-subject') && document.getElementById('mb-c-body'))));
