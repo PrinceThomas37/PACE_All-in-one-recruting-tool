@@ -205,7 +205,7 @@ function recDashboardLoad(){
   var fresh=STATE._recDash&&(Date.now()-STATE._recDash._at<60000);
   if(fresh)return;
   STATE._recDashLoading=true;
-  apiGet('/recruiting-dashboard').then(function(d){
+  apiGet(withTz('/recruiting-dashboard')).then(function(d){
     d=d||{};d._at=Date.now();
     STATE._recDash=d;STATE._recDashLoading=false;
     if(STATE.page==='dashboard')render();
@@ -507,27 +507,31 @@ function renderManagerDashboard(u){
 // Real lead stages (Unassigned/Assigned/Connected/In Discussion/Rejected/
 // Future), not the old demo "Positive/Negative" vocabulary from STATE.leads.
 var LEAD_STAGE_COLORS=window.LEAD_STAGE_COLORS;
-function jobsInPeriod(jobs,p){
-  var now=new Date();
-  return jobs.filter(function(j){
-    var ds=j.created_date||(j.created_at||'').slice(0,10);
-    if(!ds)return false;
-    var d=new Date(ds);
-    if(p==="daily")return ds===todayIST();
-    if(p==="weekly"){var w=new Date(now);w.setDate(w.getDate()-7);return d>=w;}
-    if(p==="monthly")return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
-    if(p==="quarterly"){var q=new Date(now);q.setMonth(q.getMonth()-3);return d>=q;}
-    return true;
-  });
+// R-106 (D-0065): every figure on this card — the banner, the industry bars, the stage pills — comes
+// from the server's ONE RA calculation (GET /insights/ra/:id → `periods`, services/ra-insights.js), cut
+// at the viewer's own midnight. This screen used to add up whatever jobs the page happened to hold, in a
+// different time zone and with an eight-day "week". It only draws now; a list of recent leads below is
+// still the browser's, because a list is not a number.
+function raDashFor(u){
+  var c=STATE._raDash=STATE._raDash||{};
+  var e=c[u.id];
+  var stale=e&&e.data&&!e.loading&&(Date.now()-e.at>60000);
+  if(!e||stale){
+    c[u.id]=Object.assign({},e||{},{loading:true});
+    apiGet(withTz('/insights/ra/'+encodeURIComponent(u.id))).then(function(d){c[u.id]={data:d,at:Date.now()};scheduleRender();})
+      .catch(function(err){c[u.id]={error:(err&&err.message)||'Could not load',at:Date.now()};scheduleRender();});
+  }
+  return c[u.id];
 }
 function renderIndividualDashboard(u){
   var period=STATE.period||'weekly';
   var myJobs=getMyJobs(u);
-  var pl=jobsInPeriod(myJobs,period);
-  var total=pl.length;
-  var dups=pl.filter(function(j){return j.is_duplicate;}).length;
-  var converted=pl.filter(function(j){return j.stage==='Connected'||j.stage==='In Discussion';}).length;
-  var convRate=total?Math.round(converted/total*100):0;
+  var rd=raDashFor(u);
+  var P=rd&&rd.data&&rd.data.periods&&rd.data.periods[period];
+  var ready=!!P;
+  P=P||{total:0,dups:0,converted:0,convRate:0,by_stage:{},by_industry:{}};
+  var total=P.total,dups=P.dups,converted=P.converted,convRate=P.convRate;
+  var shown=function(v,suffix){return ready?(v+(suffix||'')):(rd&&rd.error?'\u2014':'\u2026');};
 
   var hour=new Date().getHours();
   var greet=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
@@ -538,9 +542,7 @@ function renderIndividualDashboard(u){
   }).join("");
 
   // industry breakdown — real job.industry field, same one the Leads page uses
-  var indMap={};
-  pl.forEach(function(j){var ind=j.industry||j.company_ind||'';if(ind)indMap[ind]=(indMap[ind]||0)+1;});
-  var indArr=Object.entries(indMap).sort(function(a,b){return b[1]-a[1]}).slice(0,7);
+  var indArr=Object.entries(P.by_industry||{}).sort(function(a,b){return b[1]-a[1]}).slice(0,7);
   var maxI=indArr.length?indArr[0][1]:1;
   var indRows=indArr.map(function(e){
     var pct=Math.round(e[1]/maxI*100);
@@ -553,7 +555,7 @@ function renderIndividualDashboard(u){
 
   // stage pills — real lead stages
   var stagePills=Object.keys(LEAD_STAGE_COLORS).map(function(s){
-    var cnt=pl.filter(function(j){return j.stage===s;}).length;
+    var cnt=(P.by_stage||{})[s]||0;
     if(!cnt)return"";
     return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
       '<div style="font-family:var(--display);font-size:22px;font-weight:700;color:'+LEAD_STAGE_COLORS[s]+'">'+cnt+'</div>'+
@@ -581,13 +583,13 @@ function renderIndividualDashboard(u){
       '<div class="banner-name">'+greet+', '+u.name.split(" ")[0]+' 👋</div>'+
       '<div class="banner-sub">'+roleLabel(u.role)+'</div>'+
       '<div class="banner-stats">'+
-        '<div><div class="bstat-val">'+total+'</div><div class="bstat-lbl">Leads this period</div></div>'+
+        '<div><div class="bstat-val">'+shown(total)+'</div><div class="bstat-lbl">Leads this period</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+converted+'</div><div class="bstat-lbl">Connected</div></div>'+
+        '<div><div class="bstat-val">'+shown(converted)+'</div><div class="bstat-lbl">Connected</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+convRate+'%</div><div class="bstat-lbl">Conversion rate</div></div>'+
+        '<div><div class="bstat-val">'+shown(convRate,'%')+'</div><div class="bstat-lbl">Conversion rate</div></div>'+
         '<div style="width:1px;background:rgba(255,255,255,.25);align-self:stretch"></div>'+
-        '<div><div class="bstat-val">'+dups+'</div><div class="bstat-lbl">Duplicates</div></div>'+
+        '<div><div class="bstat-val">'+shown(dups)+'</div><div class="bstat-lbl">Duplicates</div></div>'+
       '</div>'+
     '</div>'+
 

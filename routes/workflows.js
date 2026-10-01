@@ -37,6 +37,7 @@ module.exports = (ctx) => {
 // services/ra-insights.js holds the definitions. The personal report below and the team table
 // (`/insights/ra-team`) both call it; the browser no longer adds up leads.
 const raInsights = require('../services/ra-insights');
+const viewerTime = require('../services/viewer-time');
 router.get('/insights/ra-team', auth, async (req, res) => {
   try {
     const isRa = (u) => u.role === 'ra' || (Array.isArray(u.roles) && u.roles.includes('ra'));
@@ -80,9 +81,10 @@ router.get('/insights/ra/:userId', auth, async (req, res) => {
     const w = bdInsights.windows(now, (req.query || {}).tz);
     // read a day and a half before the 30-day window so a zone ahead of UTC is not short; the
     // calculation trims to the viewer's own window
-    const from = new Date(Date.parse(w.monthFrom + 'T00:00:00Z') - 36 * 3600e3).toISOString();
+    // …and back 90 days, so the Dashboard's quarterly cut (R-106) comes from the same read
+    const from = new Date(Date.parse(bdInsights.dayKey(now, 89, w.tz) + 'T00:00:00Z') - 36 * 3600e3).toISOString();
     const jobs = await fetchAll(() => {
-      let jq = supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date')
+      let jq = supabase.from('jobs').select('id,stage,freshness,industry,timezone,is_duplicate,created_at,created_date,company:companies(industry)')
         .eq('created_by', targetId).is('deleted_at', null).gte('created_at', from).order('id');
       if (req.orgId) jq = jq.eq('org_id', req.orgId);
       return jq;
@@ -91,7 +93,7 @@ router.get('/insights/ra/:userId', auth, async (req, res) => {
     const inMonth = jobs.filter(j => bdInsights.dayOf(j.created_at || j.created_date, w.tz) >= w.monthFrom);
     // INDUSTRIES + normInd come from ctx (shared single source of truth).
     function breakdown(arr, field) { const map = {}; arr.forEach(j => { const raw = j[field] || ''; const v = field === 'industry' ? normInd(raw) : (raw || 'Unknown'); map[v] = (map[v] || 0) + 1; }); return map; }
-    res.json({ total_month: s.month, total_week: s.week, total_today: s.today, duplicates: inMonth.filter(j => j.is_duplicate).length, last_7_days: s.last_7, by_industry: breakdown(inMonth, 'industry'), by_timezone: breakdown(inMonth, 'timezone'), by_freshness: breakdown(inMonth, 'freshness'), by_stage: breakdown(inMonth, 'stage') });
+    res.json({ total_month: s.month, total_week: s.week, total_today: s.today, duplicates: inMonth.filter(j => j.is_duplicate).length, last_7_days: s.last_7, by_industry: breakdown(inMonth, 'industry'), by_timezone: breakdown(inMonth, 'timezone'), by_freshness: breakdown(inMonth, 'freshness'), by_stage: breakdown(inMonth, 'stage'), periods: s.periods });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -176,24 +178,28 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
 router.get('/stats', auth, async (req, res) => {
   try {
     const { period } = req.query;
+    // The viewer's own days and weeks (R-105, D-0065) — services/viewer-time.js is the one definition.
     const now = new Date();
-    let dateFrom;
-    if (period === 'daily') dateFrom = today();
-    else if (period === 'weekly') { const w = new Date(now); w.setDate(w.getDate()-7); dateFrom = w.toISOString().split('T')[0]; }
-    else if (period === 'quarterly') { const q = new Date(now); q.setMonth(q.getMonth()-3); dateFrom = q.toISOString().split('T')[0]; }
-    else { const m = new Date(now.getFullYear(), now.getMonth(), 1); dateFrom = m.toISOString().split('T')[0]; }
-    let query = supabase.from('jobs').select('id,stage,created_by,assigned_to,contacts(id,email_sent_at)').is('deleted_at', null).gte('created_at', dateFrom + 'T00:00:00Z');
+    const w = viewerTime.windowsFor(now, req.query.tz);
+    const dateFrom = period === 'daily' ? w.today : period === 'weekly' ? w.weekFrom : period === 'quarterly' ? w.quarterFrom : w.monthStart;
+    // read from a day and a half earlier (a zone ahead of UTC starts its day before UTC does); trimmed below
+    const readFrom = new Date(Date.parse(dateFrom + 'T00:00:00Z') - 36 * 3600e3).toISOString();
+    let query = supabase.from('jobs').select('id,stage,created_by,assigned_to,created_at,contacts(id,email_sent_at,replied_at)').is('deleted_at', null).gte('created_at', readFrom);
     // C-0017 #6: unscoped even for admin — one customer's volume blended with
     // every other's. Admin is scoped to THEIR org, never the deployment.
     if (req.orgId) query = query.eq('org_id', req.orgId);
     if (!hasRole(req, 'admin')) query = query.or(`created_by.eq.${req.user.id},assigned_to.eq.${req.user.id}`);
-    const { data, error } = await query;
+    const { data: raw, error } = await query;
     if (error) throw error;
+    const data = (raw || []).filter(j => bdInsights.dayOf(j.created_at, w.tz) >= dateFrom);
     const total = data.length;
     const emailed = data.filter(j => (j.contacts || []).some(c => c.email_sent_at)).length;
+    // "Response rate" is the share of leads where somebody REPLIED — the same definition as Lead Insights
+    // (R-089). It used to be the share that was emailed, which is a different number under the same name.
+    const replied = data.filter(j => (j.contacts || []).some(c => c.replied_at)).length;
     const byStage = {};
     data.forEach(j => { byStage[j.stage] = (byStage[j.stage] || 0) + 1; });
-    res.json({ total, emailed, responseRate: total ? Math.round(emailed/total*100) : 0, byStage, period: period || 'monthly', dateFrom });
+    res.json({ total, emailed, replied, responseRate: total ? Math.round(replied/total*100) : 0, byStage, period: period || 'monthly', dateFrom, tz: w.tz });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

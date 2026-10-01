@@ -6,6 +6,8 @@
 
 
 const subStages = require('../../services/submission-stages');
+const viewerTime = require('../../services/viewer-time');
+const bdInsights = require('../../services/bd-insights');
 
 module.exports = function (app, core) {
   const {
@@ -92,8 +94,10 @@ module.exports = function (app, core) {
       const hist = await stageHistoryFor(req, (subs || []).map(s => s.id));
 
       const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 86400000);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      // The viewer's own days (R-105, D-0065; `?tz=`): the week is seven calendar days including
+      // today, the month is the calendar month so far — both cut at THEIR midnight, not the server's.
+      const vt = viewerTime.windowsFor(now, req.query && req.query.tz);
+      const dayV = (v) => bdInsights.dayOf(v, vt.tz);
       const byStage = {};
       STAGES.forEach(s => { byStage[s] = 0; });
       let week = 0, month = 0, weekClient = 0, monthClient = 0;
@@ -106,14 +110,14 @@ module.exports = function (app, core) {
         // Monday reported ten submissions — the metric a buyer asks about
         // first, inflated by doing the work rather than finishing it. Two
         // numbers now, per the owner's call: handed to BD, and sent to client.
-        const t = new Date(s.submitted_at || s.created_at);
+        const t = dayV(s.submitted_at || s.created_at);
         // Counted from how far they GOT, not where they are now (R-002): a
         // client submission later marked Not Accepted still went to the client.
         const reached = reachedOf(s, hist);
         const toBdm = subStages.isSentToBdm(reached);
         const toClient = subStages.isSentToClient(reached);
-        if (t >= weekAgo) { if (toBdm) week++; if (toClient) weekClient++; }
-        if (t >= monthStart) { if (toBdm) month++; if (toClient) monthClient++; }
+        if (t >= vt.weekFrom) { if (toBdm) week++; if (toClient) weekClient++; }
+        if (t >= vt.monthStart) { if (toBdm) month++; if (toClient) monthClient++; }
         if (s.interview_at && new Date(s.interview_at) >= now) {
           upcoming.push({ submission_id: s.id, candidate: (s.candidate && s.candidate.full_name) || '', job_order_id: s.job_order_id, interview_at: s.interview_at, interview_location: s.interview_location || null });
         }
@@ -139,13 +143,12 @@ module.exports = function (app, core) {
       // can surface the desk's hottest jobs first)
       let jobsAssigned, topJobs;
       if (recruiterView) {
-        const quarterAgo = new Date(now.getTime() - 90 * 86400000);
         jobsAssigned = { week: 0, month: 0, quarter: 0, total: jobIds.length };
         (jobs || []).forEach(j => {
-          const t = new Date(assignedAtByJob[j.id] || j.created_at);
-          if (t >= weekAgo) jobsAssigned.week++;
-          if (t >= monthStart) jobsAssigned.month++;
-          if (t >= quarterAgo) jobsAssigned.quarter++;
+          const t = dayV(assignedAtByJob[j.id] || j.created_at);
+          if (t >= vt.weekFrom) jobsAssigned.week++;
+          if (t >= vt.monthStart) jobsAssigned.month++;
+          if (t >= vt.quarterFrom) jobsAssigned.quarter++;
         });
 
         // team-wide submissions on my jobs (not just mine) → activity ranking
@@ -219,8 +222,9 @@ module.exports = function (app, core) {
 
       // ── optional filters (no param ⇒ same response as before) ──────────────
       const q = req.query || {};
-      const fromT = q.from ? new Date(q.from + 'T00:00:00').getTime() : null;
-      const toT = q.to ? new Date(q.to + 'T23:59:59').getTime() : null;
+      // "1–7 Oct" means the viewer's 1 Oct 00:00 to 7 Oct 23:59:59 in THEIR zone (`?tz=`), not the server's (R-105).
+      const fromT = q.from ? viewerTime.dayStartMs(q.from, q.tz) : null;
+      const toT = q.to ? viewerTime.dayEndMs(q.to, q.tz) : null;
       const roleFilter = (q.role === 'bd' || q.role === 'recruiter') ? q.role : null;
       let userIds = null;
       if (q.user_ids) {
@@ -377,8 +381,10 @@ module.exports = function (app, core) {
         if (!chain.includes(targetId)) return res.status(403).json({ error: 'Not on your team.' });
       }
       const limit = Math.min(parseInt(req.query.limit, 10) || 60, 200);
-      const fromT = req.query.from ? new Date(req.query.from + 'T00:00:00').toISOString() : null;
-      const toT = req.query.to ? new Date(req.query.to + 'T23:59:59').toISOString() : null;
+      const fromMs = req.query.from ? viewerTime.dayStartMs(req.query.from, req.query.tz) : null;
+      const toMs = req.query.to ? viewerTime.dayEndMs(req.query.to, req.query.tz) : null;
+      const fromT = fromMs != null ? new Date(fromMs).toISOString() : null;
+      const toT = toMs != null ? new Date(toMs).toISOString() : null;
 
       let saq = withOrg(supabase.from('submission_activity')
         .select('id,action,old_stage,new_stage,note,created_at,submission_id,submission:submissions!submission_id(candidate:candidates!candidate_id(full_name)),job:job_orders!job_order_id(job_title,job_code)')

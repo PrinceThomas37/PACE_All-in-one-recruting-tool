@@ -1067,3 +1067,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-01: +`top-three-complete-smoke.mjs` (12: both lists show three, See all, tick posts the right item, a failed tick un-ticks, a reminder is DONE not snoozed) and 4 completion steps in `client-intel-routes-smoke` (53: the row carries its item, a completed conversation leaves, comes back when they write again, per person). Reverting the cut or the wiring fails them.
 
 - 2026-10-01: +`followup-sender-smoke.mjs` (15: pure rule, the real resolver over a fake db — handed-over lead, Gmail, gone/off/already-right mailbox, explicit choice, first email/reminder, failed read, 450 follow-ups across pages).
+
+- 2026-10-01: +`viewer-day-ui-smoke.mjs` (11, two browsers in different zones, the clock pinned) and steps in `stage-history-reports-smoke` (+3), `insights-timezone-smoke` (+2: `/stats`), `insights-ra-team-smoke` (+3: periods). Lesson kept: when a route's fixtures change meaning (a "this month" fixture), pin `Date` rather than depend on the day the suite runs.
