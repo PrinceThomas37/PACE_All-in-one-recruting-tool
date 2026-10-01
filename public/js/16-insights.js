@@ -9,7 +9,7 @@ function bdTeamData(){
   var stale=t&&t.data&&!t.loading&&(Date.now()-t.at>60000);
   if(!t||stale){
     STATE.bdTeamInsights=Object.assign({},t||{},{loading:true});
-    apiGet('/insights/bd-team').then(function(d){STATE.bdTeamInsights={data:d,at:Date.now()};render();})
+    apiGet('/insights/bd-team'+insightsTzQ()).then(function(d){STATE.bdTeamInsights={data:d,at:Date.now()};render();})
       .catch(function(e){STATE.bdTeamInsights={error:(e&&e.message)||'Could not load',at:Date.now()};render();});
   }
   return STATE.bdTeamInsights;
@@ -288,11 +288,16 @@ function loadMyInsights(){
   }
 }
 
+// A day is the viewer's own day (R-102, D-0065): tell the server which zone this browser is in.
+function insightsTzQ(){
+  try{ var z=Intl.DateTimeFormat().resolvedOptions().timeZone; return z?'?tz='+encodeURIComponent(z):''; }catch(e){ return ''; }
+}
+
 // ── BD Manager: load own insights ──────────────────────────────
 function loadBDInsights(){
   var u=STATE.user;
   if(!u)return;
-  apiGet('/insights/bd/'+u.id).then(function(d){STATE.bdInsightsData=d;render();}).catch(function(){});
+  apiGet('/insights/bd/'+u.id+insightsTzQ()).then(function(d){STATE.bdInsightsData=d;render();}).catch(function(){});
 }
 // Personal | Team toggle on the Lead Insights page.
 window.switchLeadInsights=function(view){STATE.bdInsightsView=view;render();};
