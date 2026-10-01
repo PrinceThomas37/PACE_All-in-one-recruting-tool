@@ -895,8 +895,8 @@
     var lbl = 'font-size:11px;color:var(--text2);display:block;margin:9px 0 3px';
     return '<div id="se-box" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0">'+
       '<label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer">'+
-        '<input type="checkbox" id="se-on" checked onchange="subEmailToggle()"> Email these submission details to '+seIdFor(kind)+'</label>'+
-      '<div id="se-body">'+
+        '<input type="checkbox" id="se-on" onchange="subEmailToggle()"> Email these submission details to '+seIdFor(kind)+'</label>'+
+      '<div id="se-body" style="display:none">'+
         '<label style="'+lbl+'">To</label>'+
         '<input id="se-to" class="sel" list="se-sugg" autocomplete="off" placeholder="name@company.com"><datalist id="se-sugg"></datalist>'+
         '<label style="'+lbl+'">Cc <span style="color:var(--text3)">(optional — Enter or comma after each)</span></label>'+
@@ -923,7 +923,12 @@
       apiGet('/submissions/'+encodeURIComponent(subId)+'/submission-email/options?kind='+kind).then(function(r){
         var dl = document.getElementById('se-sugg'), to = document.getElementById('se-to');
         if (dl) dl.innerHTML = (r.suggestions||[]).map(function(s){ return '<option value="'+esc(s.email)+'">'+esc((s.name?s.name+' · ':'')+s.role)+'</option>'; }).join('');
-        if (to && !to.value && r.suggestions && r.suggestions[0] && kind === 'bdm') to.value = r.suggestions[0].email;
+        // The email starts UNTICKED. Only the internal hand-off is ticked for you, and only when the
+        // job's BD manager is known; sending a candidate to a CLIENT is always a deliberate tick.
+        if (to && !to.value && r.suggestions && r.suggestions[0] && kind === 'bdm') {
+          to.value = r.suggestions[0].email;
+          var on = document.getElementById('se-on'); if (on) { on.checked = true; subEmailToggle(); }
+        }
         var docs = document.getElementById('se-docs');
         if (docs && kind === 'client') {
           var list = r.documents || [];

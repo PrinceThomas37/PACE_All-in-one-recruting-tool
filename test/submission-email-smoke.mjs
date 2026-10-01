@@ -128,13 +128,13 @@ try {
 
   // (a) the stage window for "Submitted to Client"
   await ev(() => openStageModal('s1', 'Submitted to Client', null));
-  await page.waitForSelector('.se-doc', { timeout: 5000 });
-  const win = await ev(() => ({ on: document.getElementById('se-on').checked, docs: [...document.querySelectorAll('.se-doc')].map(x => x.value + ':' + x.checked), cc: !!document.querySelector('#se-box [data-chipf]'), from: !!document.getElementById('se-from') }));
-  step('"Submitted to Client" window offers the email: résumés listed, the newest ticked, Cc chips, a From picker', win.on && win.docs.join() === 'd-new:true,d-old:false' && win.cc && win.from, JSON.stringify(win));
-  await ev(() => { document.getElementById('stg-note').value = 'Sent'; stgApply(); });
+  await page.waitForSelector('.se-doc', { state: 'attached', timeout: 5000 });
+  const win = await ev(() => ({ on: !document.getElementById('se-on').checked, docs: [...document.querySelectorAll('.se-doc')].map(x => x.value + ':' + x.checked), cc: !!document.querySelector('#se-box [data-chipf]'), from: !!document.getElementById('se-from') }));
+  step('"Submitted to Client" window offers the email UNTICKED (sending to a client is a deliberate tick): résumés listed, the newest ticked, Cc chips, a From picker', win.on && win.docs.join() === 'd-new:true,d-old:false' && win.cc && win.from, JSON.stringify(win));
+  await ev(() => { document.getElementById('se-on').checked = true; subEmailToggle(); document.getElementById('stg-note').value = 'Sent'; stgApply(); });
   await page.waitForTimeout(200);
   let c = await ev(() => window.__calls);
-  step('no address typed → refused up front; neither the move nor an email happened', c.length === 0);
+  step('ticked but no address typed → refused up front; neither the move nor an email happened', c.length === 0);
   await ev(() => { document.getElementById('se-to').value = 'dana@acme.test'; document.getElementById('se-note').value = 'Strong fit'; stgApply(); });
   await page.waitForTimeout(300);
   c = await ev(() => window.__calls);
@@ -142,28 +142,28 @@ try {
   step('the move is saved FIRST, then the email goes (kind=client, the ticked résumé, the note)', patchI === 0 && postI === 1 && c[postI].b.kind === 'client' && c[postI].b.to === 'dana@acme.test' && c[postI].b.attach_doc_ids.join() === 'd-new' && c[postI].b.note === 'Strong fit', JSON.stringify(c));
   // a failed move sends nothing
   await ev(() => { window.__calls = []; window.__patchFails = true; openStageModal('s1', 'Submitted to Client', null); });
-  await page.waitForSelector('.se-doc', { timeout: 5000 });
-  await ev(() => { document.getElementById('stg-note').value = 'Sent'; document.getElementById('se-to').value = 'dana@acme.test'; stgApply(); });
+  await page.waitForSelector('.se-doc', { state: 'attached', timeout: 5000 });
+  await ev(() => { document.getElementById('se-on').checked = true; document.getElementById('stg-note').value = 'Sent'; document.getElementById('se-to').value = 'dana@acme.test'; stgApply(); });
   await page.waitForTimeout(300);
   c = await ev(() => window.__calls);
   step('if the move fails, NO email is sent', c.some(x => x.m === 'PATCH') && !c.some(x => /submission-email/.test(x.u || '')));
   // unticked → no email
   await ev(() => { window.__calls = []; window.__patchFails = false; closeModal(); openStageModal('s1', 'Submitted to Client', null); });
-  await page.waitForSelector('.se-doc', { timeout: 5000 });
-  await ev(() => { document.getElementById('se-on').checked = false; document.getElementById('stg-note').value = 'Sent'; stgApply(); });
+  await page.waitForSelector('.se-doc', { state: 'attached', timeout: 5000 });
+  await ev(() => { document.getElementById('se-to').value = 'dana@acme.test'; document.getElementById('stg-note').value = 'Sent'; stgApply(); });
   await page.waitForTimeout(300);
   c = await ev(() => window.__calls);
-  step('email unticked → the move happens, no email', c.some(x => x.m === 'PATCH') && !c.some(x => /submission-email/.test(x.u || '')));
+  step('email left unticked → the move happens, no email (even with an address typed)', c.some(x => x.m === 'PATCH') && !c.some(x => /submission-email/.test(x.u || '')));
   // other stages do not show it
   await ev(() => { closeModal(); openStageModal('s1', 'Offer', null); });
   step('other stages do not offer it', await ev(() => !document.getElementById('se-box')));
 
   // (b) the recruiter's "Submit to BD Manager" window
   await ev(() => { window.__calls = []; closeModal(); STATE.user = Object.assign({}, STATE.user); openSubmitToBDMModal('s1', null, { candidateId: 'c1', name: 'Sarah Chen' }); });
-  await page.waitForSelector('#se-to', { timeout: 5000 });
+  await page.waitForSelector('#se-to', { state: 'attached', timeout: 5000 });
   await page.waitForFunction(() => document.getElementById('se-to').value === 'neil@ours.com', null, { timeout: 5000 }).catch(() => {});
-  const bw = await ev(() => ({ to: document.getElementById('se-to').value, attach: document.getElementById('se-attach').checked }));
-  step('"Submit to BD Manager" offers the email, To already filled with the job\'s BD manager, résumé ticked', bw.to === 'neil@ours.com' && bw.attach, JSON.stringify(bw));
+  const bw = await ev(() => ({ to: document.getElementById('se-to').value, on: document.getElementById('se-on').checked, attach: document.getElementById('se-attach').checked }));
+  step('"Submit to BD Manager" offers the email, ticked for you once the job\'s BD manager is known (To filled), résumé ticked', bw.to === 'neil@ours.com' && bw.on && bw.attach, JSON.stringify(bw));
   await ev(() => { document.getElementById('sbdm-first').value = 'Sarah'; document.getElementById('sbdm-email').value = 'sarah@x.test'; document.getElementById('sbdm-comment').value = 'Strong estimator'; sbdmSubmit(); });
   await page.waitForTimeout(400);
   c = await ev(() => window.__calls);
