@@ -65,7 +65,10 @@ const SOURCES = {
     // contact, and a sequence email that falls due meanwhile is SKIPPED, not
     // held (workflow-engine: "done / skipped → move on"). Held only in the sense
     // that nothing automatic goes until someone sets the contact back to Valid.
-    why: 'You marked them out of office until this date, which created this reminder. PACE sends them no automatic follow-ups until their status is set back to Valid.'
+    // R-080 / D-0066 (2026-10-01) CHANGED THE LAST SENTENCE: `ooo_return` in
+    // services/ooo-return.js (daily sweep, index.js) now sets them back to Valid
+    // when the date arrives, so the stop no longer needs a person.
+    why: 'You marked them out of office until this date, which created this reminder. On this date PACE sets them back to Valid by itself, so automatic follow-ups can resume (anything that fell due while they were away was skipped, not saved up).'
   },
   meeting: {
     label: 'Meeting',

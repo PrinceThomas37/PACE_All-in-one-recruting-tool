@@ -169,6 +169,7 @@ let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 // resolves to the FIRST org's data.
 require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
 const { isRecyclable } = require('./services/lead-recycle');
+const oooReturn = require('./services/ooo-return');
 const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
 // Ollama). Returns null when none is usable, and every caller has a rules
@@ -2633,6 +2634,20 @@ async function runLeadRecycleSweep() {
   } catch (err) { console.error('[LeadRecycle] Error:', err.message); return { ...log, error: err.message }; }
 }
 
+// ══════════════════════════════════════════════════════════════
+// OUT OF OFFICE ENDS ON THE RETURN DATE (R-080, D-0066) — a contact marked
+// "Out of office until <date>" goes back to Valid once that date arrives, so
+// the automatic follow-ups to them resume. Decision logic: services/ooo-return.js.
+// A row that has meanwhile become invalid/deactivated is not touched (the read
+// asks only for 'out_of_office').
+// ══════════════════════════════════════════════════════════════
+async function runOooReturnSweep() {
+  const log = await oooReturn.runOooReturnSweep({ contacts: () => db.crossOrg('contacts'), logActivity });
+  if (log.error) console.error('[OooReturn] Error:', log.error);
+  else console.log(`[OooReturn] Checked: ${log.checked}, switched back to Valid: ${log.switched}`);
+  return log;
+}
+
 app.post('/leads/recycle/run', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'Admin only' });
@@ -3321,6 +3336,12 @@ engineRunner.register('lead_recycle', {
   everyMs: 24 * 60 * 60 * 1000,
   description: 'Return Assigned leads with no reply after the configured threshold (default 30 days) to Unassigned for redistribution',
   run: () => runLeadRecycleSweep()
+});
+
+engineRunner.register('ooo_return', {
+  everyMs: 6 * 60 * 60 * 1000,
+  description: 'Set contacts marked Out of office back to Valid once their return date arrives, so automatic follow-ups resume',
+  run: () => runOooReturnSweep()
 });
 
 engineRunner.register('pending_retry', {

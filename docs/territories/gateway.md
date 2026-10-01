@@ -1016,3 +1016,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - 2026-10-01 (R-102, D-0065): **Lead Insights days follow the viewer.** `services/bd-insights.js` `windows(now, tz)` / `summarise({tz})` (+`validZone`, `localDay`); `routes/workflows.js` `/insights/bd/:userId` and `/insights/bd-team` read `?tz=<IANA zone>` (absent/unknown → UTC) and the windows echo `tz`. The emails read starts 36 h before the month so a zone ahead of UTC is not short; `summarise` trims it. `test/insights-timezone-smoke.mjs`.
 
 - 2026-10-01 (R-100): `services/ra-insights.js` + `routes/workflows.js` `GET /insights/ra-team` (new, above the `:userId` route) and `GET /insights/ra/:userId` rebuilt on it; both take `?tz=`. Team route reads each RA's jobs (id, stage, is_duplicate, created_at, created_date) paged — fine for now, revisit past ~20k jobs per RA. R-101 audit: `docs/AUDIT_NUMBERS_R101.md` (nothing changed by it).
+
+- 2026-10-01 (R-080): `index.js` engine job `ooo_return` (6-hourly) → `services/ooo-return.js` `runOooReturnSweep` through `db.crossOrg('contacts')`; `reminder-source.js` `ooo_return` explanation updated. R-095: `services/interview-time.js`.

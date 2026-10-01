@@ -32,7 +32,7 @@ function reminderWhy(r){
   // The reader is always the person who marked the contact out of office (that
   // control creates this reminder for them). This is a copy of the sentence in
   // services/reminder-source.js and must match it character for character.
-  if(t==='ooo_return')return{label:'Back from leave',why:'You marked them out of office until this date, which created this reminder. PACE sends them no automatic follow-ups until their status is set back to Valid.'};
+  if(t==='ooo_return')return{label:'Back from leave',why:'You marked them out of office until this date, which created this reminder. On this date PACE sets them back to Valid by itself, so automatic follow-ups can resume (anything that fell due while they were away was skipped, not saved up).'};
   if(t==='bd_touch'||t==='reminder')return{label:'Sequence step',why:'An outreach sequence reached a step that asks you to do something.'};
   if(t==='recruiter_task')return{label:'Sequence task',why:'A candidate sequence reached a recruiter task.'};
   if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};

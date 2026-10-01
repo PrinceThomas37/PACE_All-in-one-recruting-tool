@@ -1059,3 +1059,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-01: +`insights-timezone-smoke.mjs` (11: pure windows/summarise in UTC / Los Angeles / Kolkata at one pinned instant, both routes honour `?tz=`; Date is pinned so it holds on any day) and a zone step in `insights-screens-smoke` (14). Both fail with the zone ignored.
 
 - 2026-10-01: +`insights-ra-team-smoke.mjs` (13: pure calculation in UTC and Kolkata at a pinned instant, both routes incl. scope, and the table in a real browser fed a server row that contradicts the jobs the browser holds). Fails with the week rule or the drawing broken.
+
+- 2026-10-01: +`interview-timezone-smoke.mjs` (13, browser set to Kolkata, NY summer/winter, Auckland) and 4 zone steps in `from-mailbox-smoke` (21); +`ooo-return-smoke.mjs` (15: pure rule, the real sweep over a fake table incl. a status changed between read and write, a failed read, and 1,234 rows across pages — which caught a skipping-pages bug). Reverting the conversion / the zone / the paging each fails them.

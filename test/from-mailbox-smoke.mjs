@@ -135,6 +135,18 @@ sent.length = 0;
 r = await call('POST /submissions/:id/interview-invite', { params: { id: 'sub1' }, body: { recipients: ['candidate'], mailbox_id: 'mb-theirs' } });
 step('an invite from a mailbox that is not yours is refused before anything is sent', r.status === 404 && sent.length === 0);
 
+// ── the interview time says WHICH clock it is on (R-095) ─────────────────────
+const inviteHtml = async (tz) => { sent.length = 0; const body = { recipients: ['candidate'], mailbox_id: 'mb-gmail' }; if (tz) body.interview_tz = tz;
+  await call('POST /submissions/:id/interview-invite', { params: { id: 'sub1' }, body }); return (sent[0] || {}).html || ''; };
+const kol = await inviteHtml('Asia/Kolkata');
+step('invite: 14:00 UTC picked in Kolkata reads 7:30 PM India Standard Time (UTC+05:30)', /7:30 PM India Standard Time/.test(kol) && /UTC\+05:30/.test(kol), kol.replace(/<[^>]+>/g, ' ').match(/Date & time:[^\n]{0,90}/) + '');
+const ny = await inviteHtml('America/New_York');
+step('invite: the same instant in New York reads 10:00 AM Eastern Daylight Time', /10:00 AM Eastern Daylight Time/.test(ny), ny.replace(/<[^>]+>/g, ' ').match(/Date & time:[^\n]{0,90}/) + '');
+const none = await inviteHtml();
+step('invite: no zone given says UTC plainly — never a bare time', /2:00 PM Coordinated Universal Time/.test(none));
+const bogus = await inviteHtml('Mars/Olympus');
+step('invite: an unknown zone is treated as UTC, not an error', /Coordinated Universal Time/.test(bogus));
+
 const pass = results.filter(Boolean).length;
 console.log('\n' + pass + '/' + results.length + ' passed');
 process.exit(pass === results.length ? 0 : 1);

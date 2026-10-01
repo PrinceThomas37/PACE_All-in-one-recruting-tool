@@ -1154,3 +1154,5 @@ resulting "Ask to take over" modal after clicking through, showing
 - 2026-10-01 (R-102): `16-insights.js` `insightsTzQ()` adds `?tz=<browser zone>` to `/insights/bd-team` and `/insights/bd/:id`. The RA Team view is still computed in the browser (+5.5 h India offset) — R-100.
 
 - 2026-10-01 (R-100): the RA Team table in `16-insights.js` draws `GET /insights/ra-team` (`raTeamData`, 60 s cache, loading/error panel) — no arithmetic on leads in the browser; `+5.5 h` offset removed there. `todayIST()` (`01-constants.js`) is still India-forced for the Dashboard/Leads/Email — R-103.
+
+- 2026-10-01 (R-095): stage window interview form has a Time zone picker (`ivZoneSelect`, `ivZonedToInstant`, `ivOffsetMin` in `33-stage-modal.js`); `stgApply` saves the converted instant and passes `interview_tz` to both `interview-invite` calls (`mv.ivTz`). R-080: the `ooo_return` reminder's explanation (`10-page-modals.js`) now says PACE switches the contact back itself.
