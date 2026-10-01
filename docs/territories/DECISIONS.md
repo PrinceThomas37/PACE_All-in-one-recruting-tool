@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0067 · 2026-10-01 · STANDS · A follow-up comes from the mailbox that sent the first email (R-070)
+**Their words:** *"R-070 - yes."* (to: *"Should a follow-up come from the mailbox that sent the first email?"*)
+**Chosen:** an automatic follow-up (fu1/fu2) leaves from the mailbox that sent the FIRST email to that contact, found by the first email's from-address, when that mailbox is still active and connected. If it is not, the follow-up goes from the lead's current mailbox as before — it never stalls. An explicit per-email choice (sequence rotation) always wins. First emails and reminders are not affected.
+**Re-open when:** a person wants the follow-up to come from whoever owns the lead now, or a mailbox owner objects to a colleague's follow-ups leaving from their address.
+
 ### D-0066 · 2026-10-01 · STANDS · R-080, R-092, R-098/099: what the owner answered
 **Their words:** R-080 *"yes it should change back once emailing is completed"* · R-092 *"yes it should be able to attach resume"* · R-098/099 *"can do both, only top 3 priority shows and then a button to see all and a check box to check which shows that it's completed."* (And: *"Keep Boolean search to later part."*)
 **Chosen:** (1) R-080 — an out-of-office contact switches back to Valid BY ITSELF on the return date, so follow-ups resume (no click). (2) R-092 — the submission email can attach the résumé. (3) R-098 + R-099 — "Needs you today" and "Client conversations" each show only the TOP 3 by priority, with a button to see all, and each row has a checkbox that marks it completed (a completed row leaves the list; it is a snooze, not a delete, and comes back if they reply). This replaces the proposed owner-defined rules/settings. Boolean search (R-096) stays last.
