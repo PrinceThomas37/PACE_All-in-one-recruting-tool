@@ -59,8 +59,8 @@ router.get('/insights/ra/:userId', auth, async (req, res) => {
 // ── BD / lead insights: ONE calculation, two doors (owner, 2026-09-30) ─────────────────
 // Every number comes from services/bd-insights.js `summarise()`. The personal report and the
 // team report below both call it, and no screen does its own arithmetic on leads or emails any
-// more — that is how "0 emails sent" sat beside 311 on the Email page. Days are UTC calendar
-// days (one clock, here). PostgREST returns at most 1,000 rows a request, so both reads page
+// more — that is how "0 emails sent" sat beside 311 on the Email page. A day is the VIEWER'S
+// day (R-102, D-0065): the browser sends `?tz=<IANA zone>`, absent/unknown means UTC. PostgREST returns at most 1,000 rows a request, so both reads page
 // (ordered by id, or a page repeats/skips rows) rather than silently stop at a thousand.
 const bdInsights = require('../services/bd-insights');
 async function fetchAll(make) {
@@ -75,8 +75,8 @@ async function fetchAll(make) {
   }
   return out;
 }
-async function loadBdSummary(req, bdId, now) {
-  const w = bdInsights.windows(now);
+async function loadBdSummary(req, bdId, now, tz) {
+  const w = bdInsights.windows(now, tz);
   const jobs = await fetchAll(() => {
     let q = supabase.from('jobs')
       .select('id,stage,industry,assigned_at,company:companies(industry),contacts(replied_at)')
@@ -88,11 +88,11 @@ async function loadBdSummary(req, bdId, now) {
   // `emails` has no `assigned_to`: an email belongs to whoever sent it (`sent_by`).
   const emails = await fetchAll(() => {
     let q = supabase.from('emails').select('id,status,created_at,sent_at')
-      .eq('sent_by', bdId).gte('created_at', new Date(w.monthFrom + 'T00:00:00Z').toISOString()).order('id');
+      .eq('sent_by', bdId).gte('created_at', new Date(Date.parse(w.monthFrom + 'T00:00:00Z') - 36 * 3600e3).toISOString())   // a zone ahead of UTC starts its month up to 14h before UTC does; the extra day is trimmed by summarise().order('id');
     if (req.orgId) q = q.eq('org_id', req.orgId);
     return q;
   });
-  return bdInsights.summarise({ jobs, emails, now });
+  return bdInsights.summarise({ jobs, emails, now, tz: w.tz });
 }
 
 // The team report. Registered ABOVE the `:userId` route (a literal path must never sit below a
@@ -115,13 +115,14 @@ router.get('/insights/bd-team', auth, async (req, res) => {
     }
     pool = pool.slice(0, 60);
     const now = new Date();
+    const tz = bdInsights.validZone((req.query || {}).tz);
     const people = [];
     for (let i = 0; i < pool.length; i += 6) {
       const part = await Promise.all(pool.slice(i, i + 6).map(async u =>
-        Object.assign({ id: u.id, name: u.name, role: u.role }, await loadBdSummary(req, u.id, now))));
+        Object.assign({ id: u.id, name: u.name, role: u.role }, await loadBdSummary(req, u.id, now, tz))));
       people.push(...part);
     }
-    res.json({ scope, windows: bdInsights.windows(now), people });
+    res.json({ scope, windows: bdInsights.windows(now, tz), people });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -129,7 +130,7 @@ router.get('/insights/bd/:userId', auth, async (req, res) => {
   try {
     const targetId = req.params.userId;
     if (!(await inCallerScope(req, targetId))) return res.status(404).json({ error: 'Not found' });
-    res.json(await loadBdSummary(req, targetId, new Date()));
+    res.json(await loadBdSummary(req, targetId, new Date(), bdInsights.validZone((req.query || {}).tz)));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

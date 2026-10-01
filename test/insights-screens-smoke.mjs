@@ -25,11 +25,11 @@ const summary = (o) => Object.assign({ total_all:110,total_today:0,total_week:85
 const ME='u-lead', R1='u-bd2';
 const TEAM = { scope:'team', windows:{}, people:[Object.assign({id:R1,name:'BD Two',role:'bd'}, summary({total_all:40,total_today:3,total_week:12,total_month:40,converted:8,conv_rate:20,replied:14,reply_rate:35,emails_sent:123,emails_pending:2,by_stage:{Assigned:30,Connected:8,Negative:2}}))] };
 const calls=[]; const rep=(r,b)=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(b)});
-let browser; const errs=[];
+let browser; const errs=[]; const tzSeen=[];
 try{
   browser=await chromium.launch({executablePath:findChromium(),headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']});
   const ctx=await browser.newContext({viewport:{width:1300,height:1600}});
-  await ctx.route('**',r=>{ const u=r.request().url(); if(u.startsWith(BASE)) return r.continue(); if(u.startsWith(API)){ const p=new URL(u).pathname; calls.push(p);
+  await ctx.route('**',r=>{ const u=r.request().url(); if(u.startsWith(BASE)) return r.continue(); if(u.startsWith(API)){ const p=new URL(u).pathname; calls.push(p); if(p.indexOf('/insights/')===0) tzSeen.push(new URL(u).searchParams.get('tz'));
     if(p==='/insights/bd/'+ME) return rep(r,summary()); if(p==='/insights/bd-team') return rep(r,TEAM); return rep(r,r.request().method()==='GET'?[]:{}); } return r.abort(); });
   const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
   await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,{id:ME,name:'BD Lead 1',role:'bd_lead',roles:['bd_lead']});
@@ -50,6 +50,7 @@ try{
   await ev(()=>{ STATE.bdInsightsView='team'; render(); });
   await page.waitForFunction(()=>/BD Two/.test(document.getElementById('content').innerText),null,{timeout:8000}).catch(()=>{});
   const t2 = await ev(()=>{ const rows=[...document.querySelectorAll('#content tbody tr')].map(r=>r.innerText.replace(/\s+/g,' ').trim()); return { rows, text:document.getElementById('content').innerText.replace(/\s+/g,' ') }; });
+  step('the browser tells the server which time zone it is in (a day is the viewer\'s day, R-102)', tzSeen.length>=1 && tzSeen.every(z=>z && z.length>0), JSON.stringify(tzSeen));
   step('team: asks the server once for the whole team', calls.filter(c=>c==='/insights/bd-team').length>=1);
   step('team: the row is the server\'s — 3 today, 12 in 7 days, 40 in 30 days, 123 sent, 35% replied, 20% converted', t2.rows.some(r=>/BD Two/.test(r) && /\b3\b/.test(r) && /\b12\b/.test(r) && /\b40\b/.test(r) && /\b123\b/.test(r) && /35%/.test(r) && /20%/.test(r)), JSON.stringify(t2.rows));
   step('team: the headline reads 40 leads and 123 emails from the same data', /40 leads/.test(t2.text) && /123 emails sent/.test(t2.text), t2.text.slice(0,120));

@@ -25,16 +25,35 @@ const POSITIVE = ['Positive'];
 const NEGATIVE = ['Negative', 'No Response'];
 const OOO = ['Out of Office'];
 
-const dayOf = (iso) => (iso ? String(iso).slice(0, 10) : '');
-function dayKey(now, n) { const d = new Date(now); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); }
+// A DAY IS THE VIEWER'S OWN DAY (R-102, D-0065). The browser sends its IANA zone
+// (`?tz=Asia/Kolkata`); an absent or unknown zone is UTC, which is what every figure used before.
+// "Today", "this week" and the 7-day chart all cut at that person's midnight, so a recruiter in
+// India and a manager in California looking at the same lead each see their own calendar.
+function validZone(tz) {
+  if (!tz || typeof tz !== 'string' || tz.length > 64) return 'UTC';
+  try { new Intl.DateTimeFormat('en-CA', { timeZone: tz }); return tz; } catch (_) { return 'UTC'; }
+}
+function localDay(t, tz) {
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: validZone(tz), year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+// A column holding a plain date ("2026-10-01") is already a day; a timestamp is cut at the viewer's midnight.
+const dayOf = (v, tz) => (!v ? '' : (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v) : localDay(v, tz)));
+function dayKey(now, n, tz) {
+  const [y, m, d] = localDay(now, tz).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
+}
 
-// The three windows, derived once.
-function windows(now) {
+// The windows, derived once.
+function windows(now, tz) {
+  const z = validZone(tz);
   return {
-    today: dayKey(now, 0),
-    weekFrom: dayKey(now, 6),
-    monthFrom: dayKey(now, 29),
-    last7: [6, 5, 4, 3, 2, 1, 0].map(n => dayKey(now, n)),
+    tz: z,
+    today: dayKey(now, 0, z),
+    weekFrom: dayKey(now, 6, z),
+    monthFrom: dayKey(now, 29, z),
+    last7: [6, 5, 4, 3, 2, 1, 0].map(n => dayKey(now, n, z)),
   };
 }
 const pct = (n, d) => (d ? Math.round(n / d * 100) : 0);
@@ -44,20 +63,23 @@ const pct = (n, d) => (d ? Math.round(n / d * 100) : 0);
  * @param {object[]} o.jobs         the BD's leads: { id, stage, industry, assigned_at, company?:{industry}, replied?:boolean }
  * @param {object[]} o.emails       the BD's emails (sent_by = them) from the last 30 days: { status, created_at, sent_at }
  * @param {Date|number} o.now
+ * @param {string}   [o.tz]         the viewer's IANA time zone; absent/unknown = UTC
  */
-function summarise({ jobs, emails, now }) {
-  const w = windows(now);
+function summarise({ jobs, emails, now, tz }) {
+  const z = validZone(tz);
+  const w = windows(now, z);
   const all = jobs || [];
-  const at = (j) => dayOf(j.assigned_at);
+  const at = (j) => dayOf(j.assigned_at, z);
   const inStages = (list) => all.filter(j => list.includes(j.stage));
 
   const converted = inStages(CONVERTED);
   const positive = inStages(POSITIVE);
   const replied = all.filter(j => j.replied);
 
-  const mail = emails || [];
+  // The caller reads a little extra either side of the month; the window itself is the viewer's last 30 days.
+  const mail = (emails || []).filter(e => dayOf(e.created_at || e.sent_at, z) >= w.monthFrom);
   const sent = mail.filter(e => e.status === 'sent');
-  const sentDay = (e) => dayOf(e.sent_at || e.created_at);
+  const sentDay = (e) => dayOf(e.sent_at || e.created_at, z);
   const sentInMonth = sent.filter(e => sentDay(e) >= w.monthFrom);
 
   const last7emails = {}, last7leads = {};
@@ -106,4 +128,4 @@ function summarise({ jobs, emails, now }) {
   };
 }
 
-module.exports = { summarise, windows, dayKey, CONVERTED, POSITIVE, NEGATIVE, OOO };
+module.exports = { summarise, windows, dayKey, validZone, localDay, CONVERTED, POSITIVE, NEGATIVE, OOO };
