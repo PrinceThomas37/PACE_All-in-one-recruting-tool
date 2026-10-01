@@ -11,24 +11,21 @@
 
 ---
 
-## ▶ PRIORITY ORDER — what to do next (owner asked for one sorted list, 2026-09-30)
+## ▶ PRIORITY ORDER — what to do next (rewritten 2026-10-01 after the owner's handwritten notes)
 
-**Owner said go (2026-09-30). 2026-10-01: rows 1, 3, 4, 5 are BUILT (R-091, R-097, R-093, R-094 — marked DONE below); R-092 was skipped for size and is next.** Top to bottom:
+The 2026-09-30 list (R-091 … R-106, R-080, R-070) is **all built and merged** (Session 36). What is left, top to bottom. **Tokens** are rough estimates (Session 36's measured rate: ~14k tokens ≈ 1% of the owner's weekly allowance); **model / effort** is my recommendation, not a rule. Owner had ~7% left until Monday 2 PM, so only rows 1–2 fit before then.
 
-| # | Row | What | Size |
-|---|---|---|---|
-| 1 | R-091 (P1) | Candidate opens on the resume; preview works; no refreshing | medium (cause first) |
-| 2 | R-092 (P1) | Send-email step with submission details at Submitted to BDM / to client | medium-large |
-| 3 | R-097 (P1) | Dashboard "Needs you today" = today's things only | small |
-| 4 | R-093 (P2) | Email CC takes several addresses | small |
-| 5 | R-094 (P2) | Search box inside a job's candidates | small-medium |
-| 6 | R-095 (P2) | Interview time zone — every zone (with R-102) | medium |
-| 7 | R-100 (P2) | RA Team view: one server calculation | medium |
-| 8 | R-101 (P2) | Audit Reports + Dashboard numbers | medium (audit first) |
-| 9 | R-098 + R-099 (P2) | Why each suggestion shows + owner-set rules; Client conversations slimmed (one design pass) | medium-large |
-| 10 | R-080 (P3) | Out-of-office contacts switch back on their return date | small |
-| 11 | R-102 (P3) | UTC vs local days — **DONE for Lead Insights 2026-10-01**; the rest rides R-095/100/101 | small |
-| 12 | R-096 (P3) | Boolean search — its own separate project | large |
+| # | Row | What | Tokens (est.) | Model · effort |
+|---|---|---|---|---|
+| 1 | R-110 (P1) | In a job: résumé pane loads from Supabase directly (error on screen) → use PACE's reader; open on Résumé; job candidate search | 15–25k | Sonnet · medium |
+| 2 | R-108 + R-111 (P2/P3) | Mailbox: opened email in a bigger box (+ full screen); raw `&lt;` / `&#39;` in preview lines | 8–15k | Sonnet · low |
+| 3 | R-109 (P2) | Several emails / phones per candidate — design chat first, then build (schema change → migration 055) | chat 5k · build 50–80k | chat Sonnet · low; build **Opus · high** |
+| 4 | R-107 (P2) | ARCHITECTURE.md — first pass from existing notes, then data flows and layering | 10–15k · full 25–40k | Sonnet · low (pass 1), medium (full) |
+| 5 | R-096 (P3) | Boolean search on Candidates — design in plain words first, then build (server-side, who-sees-what) | chat 8k · build 50–90k | chat Sonnet · low; build **Opus · high** |
+| 6 | (chore) | Tidy this file: rows still under "waiting" that are DONE; R-071/072/076 status check | 5–10k | Sonnet · low |
+| 7 | R-067 (before a SECOND customer) | Per-company API keys | 80–150k | **Opus · high** |
+
+**Why Opus on 3, 5, 7:** they change what is stored or who may see what (schema, scoping, secrets) — a mistake there is costly and silent. Opus spends the allowance faster than Sonnet, so use it only where it earns it. Everything else is a screen fix or writing: Sonnet.
 
 ## ⚠ HOW THIS FILE IS MAINTAINED (D-0030 — read before editing)
 
