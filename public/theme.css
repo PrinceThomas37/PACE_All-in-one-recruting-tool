@@ -816,6 +816,9 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxi-rowtxt{min-width:0;display:flex;flex-direction:column}
 .lxi-rowtxt b{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lxi-rowtxt span{font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* R-110 — the opens line under a sent email. Calm by default; colour only when it was opened. */
+.lxi-open{color:var(--text3)}
+.lxi-open.yes{color:var(--green)}
 .lxi-body{
   padding:4px 12px 10px 42px;font-size:12.5px;line-height:1.55;color:var(--text);
   white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;

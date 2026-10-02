@@ -93,6 +93,7 @@ function activityRowFor(row, scope, senderName) {
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, db, auth, orgIdFor, pixelLimiter } = ctx;
+  const openTracking = ctx.openTracking || require('../services/open-tracking')({ supabase });
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
   // Public tracking pixel — the recipient's email client requests this when the
@@ -106,18 +107,10 @@ module.exports = (ctx) => {
     // pixel still returns — we just stop paying for the read+write.
     const withinLimit = pixelLimiter ? pixelLimiter.consume(`pixel:${clientIp(req)}`).allowed : true;
     try {
-      if (token && withinLimit) {
-        const { data } = await supabase.from('email_tracking')
-          .select('id,open_count,opened_at').eq('token', token).maybeSingle();
-        if (data) {
-          const now = new Date();
-          await supabase.from('email_tracking').update({
-            open_count: (data.open_count || 0) + 1,
-            opened_at: data.opened_at || now,
-            last_open_at: now
-          }).eq('id', data.id);
-        }
-      }
+      // Not every request is the recipient opening it — the sender reading their
+      // own Sent folder, a scanner, an early prefetch. services/open-tracking.js
+      // sorts them; only a recipient-looking one counts as an open.
+      if (token && withinLimit) await openTracking.recordOpen({ token, ip: clientIp(req), ua: req.get('user-agent') });
     } catch (_) { /* a tracking failure must never break the pixel */ }
     res.set('Content-Type', 'image/gif');
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');

@@ -145,6 +145,9 @@ app.use('/auth/sso/for-domain', createRateLimiter({ name: 'sso-domain', windowMs
 // which is a worse outcome than an uncounted open. The limiter is passed in and
 // used to skip the DB write instead.
 const pixelLimiter = createRateLimiter({ name: 'pixel', windowMs: 60 * 1000, max: 120 });
+// Open tracking (R-110, D-0068): sorts a pixel hit into sender / machine / early /
+// recipient, and decides which leads emails carry a pixel. services/open-tracking.js.
+const openTracking = require('./services/open-tracking')({ supabase });
 
 // The public apply page. Generous enough that a real applicant never sees it —
 // loading the page, then posting once, is two requests — and tight enough that
@@ -257,6 +260,9 @@ function auth(req, res, next) {
   }
   req.user = claims;
   req.orgId = orgIdFor(req);
+  // So that their OWN opens of what they sent are not counted as the recipient's
+  // (services/open-tracking.js). Not awaited; throttled; never throws.
+  openTracking.noteSenderIp(claims.id, req.ip);
   next();
 }
 
@@ -308,7 +314,7 @@ const US_METRO_AREA_TZ = {
   'omaha metropolitan area': 'CST',
   'greater chattanooga': 'EST'
 };
-const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, org_id, template_variant, job:jobs(timezone, company_id, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
+const PENDING_EMAIL_JOB_SELECT = 'id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, attempt_count, next_attempt_at, org_id, sent_by, template_variant, job:jobs(timezone, company_id, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))';
 
 // Parses a lead's free-text "location" field into one of the four US lead
 // timezones. Deliberately a PARSE, not a scan: the old version matched any
@@ -1615,7 +1621,12 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   const filledSig = fillSignatureHtml(signatureHtml, senderIdentity);
   email = { ...email, ...renderStoredEmail(email, sendingEmail) };
   const subject = email.subject;
-  const htmlBody = buildHtmlEmailBody(email.body, filledSig);
+  let htmlBody = buildHtmlEmailBody(email.body, filledSig);
+  // Open tracking (R-110): only where it is switched on for this sender, and only
+  // in the copy that is SENT — the stored body never carries the pixel, so a
+  // preview or a quoted follow-up never loads it.
+  const trackToken = await openTracking.prepareLeadTracking({ email, sendingEmail });
+  if (trackToken) htmlBody = injectTrackPixel(htmlBody, trackToken);
   // Provider dispatch: Gmail mailboxes go through the Gmail adapter; everything
   // else keeps the exact Microsoft Graph path unchanged.
   const platform = (sendingEmail?.platform || 'Microsoft').toLowerCase();
@@ -3541,7 +3552,7 @@ const routeCtx = {
   loadAllJobs, JOB_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
   getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache,
-  pixelLimiter,
+  pixelLimiter, openTracking,
   // The in-app mailbox (routes/mailbox.js) reads and writes real mailboxes
   // through the SAME provider calls the outreach engine sends with — there is
   // deliberately no second send path.

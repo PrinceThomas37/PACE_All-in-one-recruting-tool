@@ -25,6 +25,7 @@ const settingsConfig = require('../config/settings');
 const { renderStoredEmail } = require('../email-vars');
 const { createMailProvider } = require('../services/mail-provider');
 const sentSide = require('../services/sent-side');
+const openTrackingLib = require('../services/open-tracking');
 const dismissals = require('../services/next-action-dismissals');
 
 // What the page may show when a person opens one email. The AI still sees at
@@ -175,6 +176,19 @@ module.exports = (ctx) => {
         .order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
       sentRows = data || [];
     }
+    // Opens (R-110): only emails sent with a pixel have a tracking row. No row =
+    // no claim either way — the tab says nothing rather than "not opened".
+    const opensByEmail = {};
+    if (sentRows.length) {
+      try {
+        const { data: trk } = await withOrg(supabase.from('email_tracking')
+          .select('email_id,open_count,opened_at,last_open_at').in('email_id', sentRows.map(r => r.id)), req);
+        (trk || []).forEach(t => {
+          const cur = opensByEmail[t.email_id];
+          if (!cur || (t.open_count || 0) > (cur.open_count || 0)) opensByEmail[t.email_id] = t;
+        });
+      } catch (_) { /* the columns arrive with migration 055; before it, no opens are shown */ }
+    }
     const mbIds = [...new Set(sentRows.map(r => r.sending_email_id).filter(Boolean))];
     const mailboxes = {};
     if (mbIds.length) {
@@ -209,6 +223,7 @@ module.exports = (ctx) => {
       const rendered = renderStoredEmail(r, mailboxes[r.sending_email_id] || null);
       messages.push({
         id: 'out:' + r.id, source: 'outreach', direction: 'outbound', sent_at: r.sent_at, message_id: r.graph_message_id || null,
+        opens: opensByEmail[r.id] ? openTrackingLib.readLevel(opensByEmail[r.id]) : null,
         from: (mailboxes[r.sending_email_id] || {}).email_address || r.from_email, to: r.to_email,
         subject: rendered.subject, text: toText(rendered.body), full: fullText(rendered.body), facts: null, person: null,
       });
@@ -309,6 +324,7 @@ module.exports = (ctx) => {
           id: m.id, source: m.source, direction: m.direction, sent_at: m.sent_at,
           from: m.from, to: m.to, person: m.person, subject: m.subject, text: m.full || m.text,
           can_open_full: !!m.can_open_full,
+          opens: m.opens || null,
           intent: m.facts && m.facts.intent || null,
         })),
         total_messages: messages.length,

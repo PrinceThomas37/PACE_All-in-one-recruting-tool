@@ -548,3 +548,10 @@ Activity tab (that record's submissions only, inline) and Email → All email
 
 ## Windows you can minimise, bring back and close (Session 35, R-078/R-079, D-0058 — on the branch)
 - **`public/js/10a-window-dock.js`** decorates every modal with a title bar (Minimise / Full screen / Close) and keeps a tray of parked windows at the bottom of the screen; the candidate and client records park too. **A new window gets it for free**; one that paints itself asynchronously must call `Dock.updateParked(kind, html)` first (see `surface.md`). Do not build a second "minimise" for one screen.
+
+## Seeing whether the person opened your email (Session 37, R-110, D-0068 — on the branch, migration 055 not yet applied)
+- **A tiny invisible image in the email** tells PACE when the recipient's mail app shows it. On a lead's Emails tab each sent email says *"opened 2× · 3 h ago"* (green), *"likely read"* if they came back to it a minute or more later, or *"not opened yet"* — and says nothing at all for an email that was sent without tracking.
+- **Only the recipient's opens count.** Yours (from a network you've signed in to PACE from), scanners and bots, and the first two minutes after sending are set aside and tallied. This is a good guess, not a read receipt: some mail apps never load images, and opening your own copy from a phone or Gmail can still count. The tooltip says so.
+- **Who is tracked:** leads emails from the people listed in the `open_tracking_users` setting (BD Lead 1 to start; `"all"` for everyone). Candidate emails, interview invites and BD-manager sends were already tracked and now follow the same recipient-only rule.
+- Code: `services/open-tracking.js`, `routes/tracking.js` (the pixel), `routes/client-intel.js` (the timeline), `public/js/58-lead-intel.js`.
+
