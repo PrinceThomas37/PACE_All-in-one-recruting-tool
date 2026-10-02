@@ -117,7 +117,7 @@ module.exports = (ctx) => {
     try {
       const { data: rows } = await supabase.from('user_emails')
         .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
-      const have = messages.filter(m => m.direction === 'outbound').map(m => ({ sent_at: m.sent_at, subject: m.subject, to: m.to }));
+      const have = messages.filter(m => m.direction === 'outbound').map(m => ({ sent_at: m.sent_at, subject: m.subject, to: m.to, message_id: m.message_id || null }));
       value = await Promise.race([
         sentSide.readOurSide({
           mail, mailboxes: rows || [], addresses: contacts.map(c => c.email), have,
@@ -170,7 +170,7 @@ module.exports = (ctx) => {
     let sentRows = [];
     if (contactIds.length) {
       const { data } = await withOrg(supabase.from('emails')
-        .select('id,to_email,subject,body,sent_at,status,sending_email_id,from_email,contact_id')
+        .select('id,to_email,subject,body,sent_at,status,sending_email_id,from_email,contact_id,graph_message_id')
         .in('contact_id', contactIds).eq('status', 'sent')
         .order('sent_at', { ascending: false }).limit(PER_SOURCE_LIMIT), req);
       sentRows = data || [];
@@ -208,7 +208,7 @@ module.exports = (ctx) => {
       if (!r.sent_at) return;
       const rendered = renderStoredEmail(r, mailboxes[r.sending_email_id] || null);
       messages.push({
-        id: 'out:' + r.id, source: 'outreach', direction: 'outbound', sent_at: r.sent_at,
+        id: 'out:' + r.id, source: 'outreach', direction: 'outbound', sent_at: r.sent_at, message_id: r.graph_message_id || null,
         from: (mailboxes[r.sending_email_id] || {}).email_address || r.from_email, to: r.to_email,
         subject: rendered.subject, text: toText(rendered.body), full: fullText(rendered.body), facts: null, person: null,
       });

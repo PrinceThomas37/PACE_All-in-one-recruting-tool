@@ -12,7 +12,10 @@
   'use strict';
   var C = STATE.leadIntel || (STATE.leadIntel = {});   // id -> { data, open:{}, full:{}, all, busy }
   function esc(s){ return htmlEsc(s); }
-  function when(s){ try{ return new Date(s).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
+  // A leads-engine send carries a DATE with no time ("2026-10-02"). new Date() reads
+  // that as midnight UTC, which is the evening of the day before for anyone in the
+  // Americas — so show a date-only value as the day it names, in UTC.
+  function when(s){ try{ var dayOnly=/^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); return new Date(s).toLocaleDateString('en-GB',dayOnly?{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}:{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
   function el(id){ return document.getElementById('lx-intel-'+id); }
 
   window.leadIntelSlot = function(j){

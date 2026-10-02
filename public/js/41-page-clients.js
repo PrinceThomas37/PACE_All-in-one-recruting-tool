@@ -314,7 +314,8 @@
 
   // ── THE CLIENT EMAIL TIMELINE + AI SUMMARY (D-0039 … D-0043) ─────────────
   function intelOn(){ var i=STATE.clients.intel; return !!(i&&i.enabled); }
-  function fmtWhen(s){ try{ return new Date(s).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
+  // Same rule as the lead Emails tab (58-lead-intel.js): a date with no time names its own day.
+  function fmtWhen(s){ try{ var dayOnly=/^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); return new Date(s).toLocaleDateString('en-GB',dayOnly?{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}:{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
   function stepsHtml(steps){
     if(!steps||!steps.length) return '';
     return '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Suggested next steps</div>'+

@@ -81,6 +81,48 @@ const box = (id, platform) => ({ id, email_address: id + '@ours.com', platform }
   step('a lead with no contact address has nothing to look for — and that is fine, not a failure', d.ok === true && d.messages.length === 0);
 }
 
+// ═══ part 1b — a send PACE stored with only a DATE (R-109, 2026-10-02) ═════
+// Alta Environmental: two emails showed as FOUR on a lead's Emails tab. PACE's
+// own record has `sent_at` = '2026-10-02' (a date, no time); the Sent folder has
+// the real 13:42 time; the half-hour rule could never join them.
+{
+  const SUBJ = 'Principal Civil Engineer candidates for Alta Environmental';
+  const to = 'miles.reed@altaei.com';
+  const haveDay = [{ sent_at: '2026-10-02', subject: SUBJ, to, message_id: null }];
+  step('THE BUG: the Sent-folder copy of a date-only send is the SAME email, not a second one',
+    ss.alreadyHave(item('x1', SUBJ, '2026-10-02T13:42:23Z', to), haveDay) === true);
+  step('…at any hour of that UTC day, including the first and last minutes',
+    ss.alreadyHave(item('x1', SUBJ, '2026-10-02T00:05:00Z', to), haveDay) && ss.alreadyHave(item('x1', SUBJ, '2026-10-02T23:58:00Z', to), haveDay));
+  step('…but not the day before or the day after (a different email with the same subject)',
+    !ss.alreadyHave(item('x1', SUBJ, '2026-10-01T13:42:00Z', to), haveDay) && !ss.alreadyHave(item('x1', SUBJ, '2026-10-03T13:42:00Z', to), haveDay));
+  step('…and not a different subject, a "Re:" reply, or another person on the same day',
+    !ss.alreadyHave(item('x1', 'Something else', '2026-10-02T13:42:00Z', to), haveDay)
+    && !ss.alreadyHave(item('x1', 'Re: ' + SUBJ, '2026-10-02T13:42:00Z', to), haveDay)
+    && !ss.alreadyHave(item('x1', SUBJ, '2026-10-02T13:42:00Z', 'felicia.martinez@altaei.com'), haveDay));
+  step('the provider\'s own message id is an exact match whatever the dates say',
+    ss.alreadyHave(item('1a0cf6fc784a', 'edited subject', '2026-12-25T10:00:00Z', to), [{ sent_at: '2026-10-02', subject: SUBJ, to, message_id: '1a0cf6fc784a' }]) === true
+    && ss.alreadyHave(item('other', SUBJ, '2026-12-25T10:00:00Z', to), [{ sent_at: '2026-10-02', subject: SUBJ, to, message_id: '1a0cf6fc784a' }]) === false);
+  step('a stored send WITH a time still uses the half-hour rule (nothing loosened)',
+    ss.alreadyHave(item('x1', SUBJ, '2026-10-02T13:50:00Z', to), [{ sent_at: '2026-10-02T13:42:00Z', subject: SUBJ, to }]) === true
+    && ss.alreadyHave(item('x1', SUBJ, '2026-10-02T20:00:00Z', to), [{ sent_at: '2026-10-02T13:42:00Z', subject: SUBJ, to }]) === false);
+  const { mail } = fakeMail({ g1: { items: [item('1a0cf6fc784a', SUBJ, '2026-10-02T13:42:23Z', to)] } });
+  const r = await ss.readOurSide({ mail, mailboxes: [box('g1', 'Gmail')], addresses: [to], have: haveDay, trim, full: trim });
+  step('end to end: the reader adds nothing for a send PACE already holds', r.messages.length === 0 && r.ok === true, JSON.stringify(r.messages.map(m => m.id)));
+}
+{
+  // The date SHOWN: "2026-10-02" is a day, not midnight UTC (the evening of 1 Oct in Chicago).
+  const { readFileSync } = await import('node:fs');
+  const grab = (file, name) => { const m = readFileSync(new URL('../public/js/' + file, import.meta.url), 'utf8').match(new RegExp('function ' + name + '\\(s\\)\\{.*\\}\\s*\\n')); return m ? new Function('return (' + m[0].trim() + ')')() : null; };
+  const prevTz = process.env.TZ; process.env.TZ = 'America/Chicago';
+  try {
+    for (const [file, fn] of [['58-lead-intel.js', 'when'], ['41-page-clients.js', 'fmtWhen']]) {
+      const f = grab(file, fn);
+      step(file + ': a date-only send reads as its own day for a viewer in Chicago', !!f && f('2026-10-02') === '02 Oct 2026', f ? f('2026-10-02') : 'function not found');
+      step(file + ': a real timestamp is still shown in the viewer\'s own day', !!f && f('2026-10-02T03:30:00Z') === '01 Oct 2026', f ? f('2026-10-02T03:30:00Z') : '');
+    }
+  } finally { if (prevTz === undefined) delete process.env.TZ; else process.env.TZ = prevTz; }
+}
+
 // ═══ part 2 — the route ═══════════════════════════════════════════════════
 const ORG = 'org-a';
 const T = { app_settings: [], companies: [], jobs: [], job_orders: [], contacts: [], users: [], conversation_messages: [], emails: [], email_tracking: [], client_summaries: [], user_emails: [] };
