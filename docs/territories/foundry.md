@@ -1069,3 +1069,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-01: +`followup-sender-smoke.mjs` (15: pure rule, the real resolver over a fake db — handed-over lead, Gmail, gone/off/already-right mailbox, explicit choice, first email/reminder, failed read, 450 follow-ups across pages).
 
 - 2026-10-01: +`viewer-day-ui-smoke.mjs` (11, two browsers in different zones, the clock pinned) and steps in `stage-history-reports-smoke` (+3), `insights-timezone-smoke` (+2: `/stats`), `insights-ra-team-smoke` (+3: periods). Lesson kept: when a route's fixtures change meaning (a "this month" fixture), pin `Date` rather than depend on the day the suite runs.
+
+- 2026-10-02 (R-107): `import-columns-smoke.mjs` grew to 23 — behaviour tests for `ImportColumns.checkContacts` using the real shifted sheet (job title in Email, address in Phone), proven to FAIL with the check removed, plus wiring pins on the preview warning, the Import confirm and the `invalidEmails` result line. Open: `needs-you-today-day-smoke` fails on a clean checkout from 2 Oct (pins 1 Oct, the card reads the real clock) — R-108, pin `Date`.

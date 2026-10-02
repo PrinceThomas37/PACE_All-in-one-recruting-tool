@@ -135,7 +135,32 @@
     return out;
   }
 
-  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, isSerialColumn: isSerialColumn, mapRow: mapRow };
+  // A contact whose "email" is not an email address can never be emailed — the
+  // server flags it invalid and the send loop skips it, silently. Found live
+  // 2026-10-02: a sheet whose columns sat one place off its headers imported 70
+  // contacts with the JOB TITLE in Email and the real address in Phone; the
+  // leads were assigned, generated nothing, and nobody was told why until
+  // someone went looking. So the preview now says it BEFORE the import:
+  // how many contacts have no usable address, and whether an address is
+  // sitting in another column (which means the columns are shifted, not that
+  // the address is missing). PURE; takes rows already run through mapRow.
+  var EMAIL_ADDR_RE = /^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/;
+  function isEmailAddress(v) { return EMAIL_ADDR_RE.test(String(v == null ? '' : v).trim()); }
+  function checkContacts(mappedRows) {
+    var contacts = 0, withoutAddress = 0, looksShifted = 0;
+    (mappedRows || []).forEach(function (r) {
+      if (!r || !(r.firstName || r.email)) return; // not a contact row (groupImportRows skips it too)
+      contacts++;
+      if (isEmailAddress(r.email)) return;
+      withoutAddress++;
+      var others = ['phone', 'designation', 'firstName', 'lastName', 'linkedin'].map(function (k) { return r[k]; });
+      Object.keys(r._extra || {}).forEach(function (k) { others.push(r._extra[k]); });
+      if (others.some(isEmailAddress)) looksShifted++;
+    });
+    return { contacts: contacts, withoutAddress: withoutAddress, looksShifted: looksShifted };
+  }
+
+  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, isSerialColumn: isSerialColumn, mapRow: mapRow, isEmailAddress: isEmailAddress, checkContacts: checkContacts };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ImportColumns = api;
 })(typeof window !== 'undefined' ? window : this);
