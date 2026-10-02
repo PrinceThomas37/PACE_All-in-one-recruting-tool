@@ -1167,3 +1167,5 @@ resulting "Ask to take over" modal after clicking through, showing
 
 
 - 2026-10-02 (R-109): a date-only value (`YYYY-MM-DD`, a leads-engine send) is formatted in UTC so it names its own day — `58-lead-intel.js` `when` and `41-page-clients.js` `fmtWhen` (new Date('2026-10-02') is midnight UTC = the evening of 1 Oct in the Americas). Guard: `sent-side-smoke.mjs` runs both functions under TZ=America/Chicago.
+
+- 2026-10-02 (R-110): `58-lead-intel.js` `opensChip`/`ago` draw "· opened 2× · 3 h ago" (green), "· likely read ·", "· not opened yet" after the date on a SENT row, only when `m.opens` is present (null = no claim); `.lxi-open` in `theme.css`. Tooltip says it is a good guess, not a read receipt.

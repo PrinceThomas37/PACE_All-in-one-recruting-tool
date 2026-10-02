@@ -18,6 +18,28 @@
   function when(s){ try{ var dayOnly=/^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); return new Date(s).toLocaleDateString('en-GB',dayOnly?{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}:{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
   function el(id){ return document.getElementById('lx-intel-'+id); }
 
+  // "3 h ago" — only for the opens line, so a person reads when it last happened.
+  function ago(iso){
+    var t=new Date(iso).getTime(); if(!isFinite(t)) return '';
+    var m=Math.max(0,Math.round((Date.now()-t)/60000));
+    if(m<2) return 'just now';
+    if(m<60) return m+' min ago';
+    var h=Math.round(m/60); if(h<48) return h+' h ago';
+    return Math.round(h/24)+' days ago';
+  }
+  // R-110 — did the PERSON open it? Drawn only for emails sent with a tracking
+  // pixel (no tracking = say nothing, never "not opened"). An open here is the
+  // recipient's, judged by the server: your own opens, scanners and the first two
+  // minutes are not counted. It is a good guess, not a read receipt, and the
+  // tooltip says so.
+  var OPEN_NOTE='Counted when the person\u2019s mail app loads the email\u2019s tiny image. Your own opens, scanners and the first two minutes after sending are left out. A good guess, not a read receipt \u2014 some mail apps never load images.';
+  function opensChip(m){
+    var o=m.opens; if(!o) return '';
+    if(!o.opened) return ' <span class="lxi-open" title="'+esc(OPEN_NOTE)+'">\u00b7 not opened yet</span>';
+    var t=(o.likely_read?'likely read \u00b7 ':'')+'opened'+(o.count>1?' '+o.count+'\u00d7':'')+(o.last_at?' \u00b7 '+ago(o.last_at):'');
+    return ' <span class="lxi-open yes" title="'+esc(OPEN_NOTE)+'">\u00b7 '+esc(t)+'</span>';
+  }
+
   window.leadIntelSlot = function(j){
     var id = j.id;
     setTimeout(function(){ load(id); }, 0);
@@ -82,7 +104,7 @@
       return '<div class="lxi-row">'+
         '<div class="lxi-rowhead" onclick="event.stopPropagation();leadIntelToggle(\''+id+'\',\''+m.id+'\')">'+
           '<span class="lxi-dir '+(inbound?'in':'out')+'">'+(inbound?'↙':'↗')+'</span>'+
-          '<div class="lxi-rowtxt"><b>'+esc(m.subject||'(no subject)')+'</b><span>'+esc(inbound?(m.person||m.from||'Them'):'You → '+(m.to||''))+' · '+esc(when(m.sent_at))+'</span></div>'+
+          '<div class="lxi-rowtxt"><b>'+esc(m.subject||'(no subject)')+'</b><span>'+esc(inbound?(m.person||m.from||'Them'):'You → '+(m.to||''))+' · '+esc(when(m.sent_at))+(inbound?'':opensChip(m))+'</span></div>'+
         '</div>'+
         (open?'<div class="lxi-body">'+esc(text)+(foot?'<div class="lxi-foot">'+foot+'</div>':'')+'</div>':'')+
       '</div>';

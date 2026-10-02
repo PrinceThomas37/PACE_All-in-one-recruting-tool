@@ -45,7 +45,11 @@ const TIMELINE=[
   { id:'in:1', direction:'inbound', sent_at:iso(3), from:'dana@northwind.test', person:'Dana Ruiz', subject:'Re: Project Manager role',
     text:'Thanks for reaching out. We are still looking. Can you send two profiles by Thursday?', can_open_full:true },
   { id:'out:1', direction:'outbound', sent_at:iso(9), from:'bd@ours.test', to:'dana@northwind.test', subject:'Project Manager role',
-    text:'Hi Dana, I saw the Project Manager opening at Northwind. We place construction PMs — want to see resumes?' },
+    text:'Hi Dana, I saw the Project Manager opening at Northwind. We place construction PMs — want to see resumes?',
+    opens:{ opened:true, likely_read:true, count:3, first_at:new Date(now-9*DAY+3600000).toISOString(), last_at:new Date(now-4*3600000).toISOString() } },
+  { id:'out:2', direction:'outbound', sent_at:iso(8), from:'bd@ours.test', to:'dana@northwind.test', subject:'Following up on Project Manager',
+    text:'Hi Dana, a quick follow-up.', opens:{ opened:false, likely_read:false, count:0, first_at:null, last_at:null } },
+  { id:'out:3', direction:'outbound', sent_at:iso(7), from:'bd@ours.test', to:'dana@northwind.test', subject:'A note sent without tracking', text:'No pixel on this one.', opens:null },
 ];
 const SUMMARY={ summary:'Dana Ruiz at Northwind said on the 22nd they are still hiring the Project Manager and asked for two profiles by Thursday. We have not sent them yet.',
   next_steps:[{ id:'send_profiles', label:'Send candidate profiles', why:'Dana asked for two by Thursday.' }],
@@ -120,6 +124,12 @@ try{
   t=await intel();
   step('on: the free "where things stand" card, no AI used', t && !t.hidden && /Where things stand/i.test(t.text) && /from the emails, no AI/.test(t.text), (t&&t.text||'').slice(0,120));
   step('on: the lead\'s emails are listed', /Re: Project Manager role/.test(t.text) && /Project Manager role/.test(t.text));
+  // R-110 — did the PERSON open it? Said only where an email was tracked.
+  const rowLines=await page.evaluate(()=>{ const o={}; document.querySelectorAll('#lx-intel-j1 .lxi-row').forEach(r=>{ const b=r.querySelector('.lxi-rowtxt b'), sp=r.querySelector('.lxi-rowtxt span'); if(b) o[b.innerText]=sp?sp.innerText:''; }); return o; });
+  step('on: a sent email that was opened says so — likely read, three times, and when', /likely read/.test(rowLines['Project Manager role']||'') && /opened 3×/.test(rowLines['Project Manager role']||'') && /4 h ago/.test(rowLines['Project Manager role']||''), JSON.stringify(rowLines['Project Manager role']));
+  step('on: a tracked email that was not opened says "not opened yet"', /not opened yet/.test(rowLines['Following up on Project Manager']||''), JSON.stringify(rowLines['Following up on Project Manager']));
+  step('on: an email with no tracking makes NO claim — neither opened nor not opened', rowLines['A note sent without tracking']!==undefined && !/opened/.test(rowLines['A note sent without tracking']), JSON.stringify(rowLines['A note sent without tracking']));
+  step('on: their reply never carries an opens line', rowLines['Re: Project Manager role']!==undefined && !/opened/.test(rowLines['Re: Project Manager role']), JSON.stringify(rowLines['Re: Project Manager role']));
   step('on: the button says what it will cost', /Generate AI summary/.test(t.text) && /Uses 1 of your 15 today/.test(t.text));
   await page.evaluate(()=>leadIntelToggle('j1','in:1')); await page.waitForTimeout(150);
   t=await intel();

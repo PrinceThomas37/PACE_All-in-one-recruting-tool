@@ -197,5 +197,26 @@ failList = false; T.user_emails.length = 0;
 g = await mount().get('j1', priya);
 step('a person with no mailbox connected is told to connect one, not shown an empty Sent folder', g.body.sent_side && g.body.sent_side.ok === false && g.body.sent_side.reason === 'no_mailbox');
 
+// ═══ part 3 — opens on a lead's sent emails (R-110) ════════════════════════
+{
+  failList = false; sentItems = [];
+  T.user_emails.push({ id: 'mb-priya', user_id: 'u-priya', email_address: 'priya@ours.com', platform: 'Gmail', is_active: true });
+  const sentRow = (id, subject) => ({ id, org_id: ORG, contact_id: 'ct1', to_email: 'maria@acme.com', subject, body: 'Hi', sent_at: '2026-10-02', status: 'sent', sending_email_id: 'mb-priya', from_email: 'priya@ours.com', graph_message_id: 'gm-' + id });
+  T.emails.push(sentRow('em1', 'HVAC roles'), sentRow('em2', 'Another note'), sentRow('em3', 'Third note'));
+  T.email_tracking.push(
+    { email_id: 'em1', org_id: ORG, token: 'SECRET-TOKEN', open_count: 2, opened_at: '2026-10-02T14:00:00Z', last_open_at: '2026-10-02T15:30:00Z' },
+    { email_id: 'em3', org_id: ORG, token: 'SECRET-TOKEN-2', open_count: 0, opened_at: null, last_open_at: null });
+  const g3 = await mount().get('j1', priya);
+  const tl = g3.body.timeline || [];
+  const byId = (id) => tl.find(m => m.id === 'out:' + id);
+  step('a leads email sent with a pixel carries its opens — opened, twice, likely read', !!byId('em1') && byId('em1').opens && byId('em1').opens.opened === true && byId('em1').opens.count === 2 && byId('em1').opens.likely_read === true, JSON.stringify(byId('em1') && byId('em1').opens));
+  step('…one that was tracked and not opened says "not opened" (opened:false)', byId('em3') && byId('em3').opens && byId('em3').opens.opened === false);
+  step('…one sent WITHOUT a pixel makes no claim at all (null, never "not opened")', byId('em2') && byId('em2').opens === null);
+  step('the tracking token and the provider message id never reach the browser', !/SECRET-TOKEN/.test(JSON.stringify(g3.body)) && !/gm-em1/.test(JSON.stringify(g3.body)));
+  T.email_tracking.length = 0;
+  const g4 = await mount().get('j1', priya);
+  step('before the migration (or with no tracking at all) the tab works exactly as it did', (g4.body.timeline || []).filter(m => m.source === 'outreach').every(m => m.opens === null));
+}
+
 console.log('\n' + results.filter(Boolean).length + '/' + results.length + ' passed');
 process.exit(results.every(Boolean) ? 0 : 1);
