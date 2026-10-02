@@ -3,8 +3,11 @@
 > **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-10-01 (Session 36) · **Last merged**: #279 (`7d55e6c`, R-103…R-106; Session 36 merged #269, #271, #273–#276, #278, #279) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
-**Highest ids:** decision D-0067 · contract C-0036 · next roadmap id `R-107` · next migration `055`.
+**Updated**: 2026-10-01 (Session 36) · **Last merged**: #283 (`28a9534`, R-107 import warns on contacts with no usable email; 2 Oct, Session 37) · earlier: #279 (`7d55e6c`, R-103…R-106) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release · **Last merged**: #265 (`4984854`, 2026-09-30, Lead Insights).
+**Highest ids:** decision D-0067 · contract C-0036 · next roadmap id `R-109` · next migration `055`.
+
+## ▶ SESSION 37 (2026-10-02) — live-data fix + R-107 merged
+Owner double-assigned a day's import. By hand on live data (guarded SQL, each step approved): 7 + 27 un-emailed leads returned to Unassigned; the 34 leads' 70 contacts had a shifted import sheet (title in Email, real address in Phone) — repaired, leads re-assigned by the owner, emails now generating. **#283 merged:** the import preview warns about contacts with no usable address, Import asks first, the result line states how many won't be emailed. **Open:** R-108 (`needs-you-today-day-smoke` fails from 2 Oct — pins 1 Oct); offered, not built: show a "no emails generated" failure to the RA Lead right after Assign (today it only lives in `send_progress_<bd>`); the owner's "delete all managers" left BD Lead 2's emails and 2 older BD Lead 1 emails — not explained, run not logged. Detail: `docs/CONTEXT_ARCHIVE.md` § Session 37.
 
 ## ▶ NEXT SESSION — START HERE (2026-10-01, end of Session 36)
 
