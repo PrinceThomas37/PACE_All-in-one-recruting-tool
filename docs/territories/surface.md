@@ -1162,3 +1162,6 @@ resulting "Ask to take over" modal after clicking through, showing
 - 2026-10-01 (R-098/R-099): Needs you today (`44-next-actions.js`: `NA_TOP = 3`, "See all N", `naComplete`) and Client conversations (`61-client-digest.js`: `LIMIT = 3`, `clientDigestComplete`) show the top three with a "See all" and a per-row "completed" checkbox (`.cd-tick`, theme.css). The browser posts the item the server gave it for a client conversation.
 
 - 2026-10-01 (R-103/R-106): `todayIST()` = the device's own day (`localDayKey`, `withTz`, `viewerTz` in `01-constants.js`); the individual dashboard draws `periods[period]` from `/insights/ra/:id` (`raDashFor`; "…" loading, "—" failed); `jobsInPeriod` deleted; dashboard/Reports calls send `?tz=`.
+
+- 2026-10-02 (R-107): the import preview/confirm now check that contacts have a usable email before anything is stored — `55-import-columns.js` `isEmailAddress`/`checkContacts` (pure: counts contacts with no valid address and those where an address sits in another column = shifted sheet); `14-mailmerge-engine.js` `importAddressCheck`/`importAddressWarning` (red box in the preview, a `confirm()` on Import, and the server's `invalidEmails` in the result). Rules live in `checkContacts`; the UI only draws them. Tests: `import-columns-smoke.mjs`.
+

@@ -71,6 +71,35 @@ t('the preview files the whole column by what it holds', () => {
   assert.equal(C.columnField('LinkedIn URL', []), 'linkedin', 'no values: the name decides');
 });
 
+console.log('\nImport columns — contacts nobody can email (2026-10-02)');
+// THE SHEET: data one column to the right of its headings. 70 contacts imported
+// with the job title as the "email" and the real address in Phone; the leads
+// were assigned, generated nothing, and no screen said why.
+const shiftedRow = { Company: 'Hawes CPA', Position: 'Staff Accountant', 'First Name': '', 'Last Name': 'Michael', Designation: 'Hawes', Email: 'President', Phone: 'michaelh@hawescpa.net' };
+const goodRow = { Company: 'NTMWD', Position: 'Accountant', 'First Name': 'Sherrie', 'Last Name': 'Kraus', Designation: 'Talent Acquisition Specialist', Email: 'skraus@ntmwd.com', Phone: '' };
+t('THE BUG: a shifted sheet is caught, and called shifted — not just "missing"', () => {
+  const r = C.checkContacts([C.mapRow(shiftedRow), C.mapRow(shiftedRow), C.mapRow(goodRow)]);
+  assert.deepEqual(r, { contacts: 3, withoutAddress: 2, looksShifted: 2 });
+});
+t('a clean sheet raises nothing', () => {
+  assert.deepEqual(C.checkContacts([C.mapRow(goodRow)]), { contacts: 1, withoutAddress: 0, looksShifted: 0 });
+});
+t('a contact with no address at all is counted, but is not called shifted', () => {
+  const r = C.checkContacts([C.mapRow({ ...goodRow, Email: '' })]);
+  assert.deepEqual(r, { contacts: 1, withoutAddress: 1, looksShifted: 0 });
+});
+t('rows that are not contacts (no name, no email) are not counted', () => {
+  assert.deepEqual(C.checkContacts([C.mapRow({ Company: 'X', Position: 'Y' }), null]), { contacts: 0, withoutAddress: 0, looksShifted: 0 });
+});
+t('an address in an unrecognised column still counts as "sitting elsewhere"', () => {
+  const r = C.checkContacts([C.mapRow({ 'First Name': 'Ann', Email: 'Partner', 'Work Mail 2': 'ann@firm.com' })]);
+  assert.equal(r.looksShifted, 1);
+});
+t('what counts as an address: plain, and nothing a job title could pass for', () => {
+  for (const ok of ['a@b.com', ' a.b+c@sub.firm.co.uk ']) assert.equal(C.isEmailAddress(ok), true, ok);
+  for (const bad of ['', null, 'Administrative Assistant', 'a@b', 'a b@c.com', '@c.com']) assert.equal(C.isEmailAddress(bad), false, String(bad));
+});
+
 console.log('\nImport columns — wiring');
 const mm = readFileSync(new URL('../public/js/14-mailmerge-engine.js', import.meta.url), 'utf8');
 const jobs = readFileSync(new URL('../routes/jobs.js', import.meta.url), 'utf8');
@@ -82,6 +111,13 @@ t('the importer uses the new matcher and sends job_url and the extras', () => {
   assert.match(mm, /payload\.import_extra=g\.extra;/);
   assert.match(html, /\/js\/55-import-columns\.js/);
   assert.match(mm, /ImportColumns\.columnField\(c,STATE\.importPreview\)/, 'the preview judges columns by their values');
+});
+t('the preview warns before import, Import asks first, and the result says how many cannot be emailed', () => {
+  assert.match(mm, /var addrCheck=importAddressCheck\(mapped\);/, 'the preview checks');
+  assert.match(mm, /importAddressWarning\(addrCheck\)\)\+'<\/div>'/, 'the preview shows the warning');
+  assert.match(mm, /if\(addrCheck\.withoutAddress&&!confirm\(importAddressWarning\(addrCheck\)/, 'Import asks first');
+  assert.match(mm, /if\(res\.invalidEmails\)summary\+=/, 'the result states the count the server already returns');
+  assert.match(jobs, /invalidEmails: invalidContacts/, 'the server still sends that count');
 });
 t('the bulk endpoint stores the extras on the lead, bounded', () => {
   assert.match(jobs, /function cleanImportExtra/);

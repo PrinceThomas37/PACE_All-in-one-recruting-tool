@@ -367,6 +367,7 @@ function renderImportModal(rows, sheetName){
     if(exists)dupeCnt++;
   });
   var newJobs=groups.length-dupeCnt;
+  var addrCheck=importAddressCheck(mapped);
 
   var colRows=cols.map(function(c){
     var kl=c.toLowerCase().replace(/[\s_\-\.]/g,"");
@@ -401,6 +402,7 @@ function renderImportModal(rows, sheetName){
       '</div>'+
       (dupeCnt?'<div style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--amber)">'+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist. They won\'t be added again, but anything they are missing (job link, website, salary, extra columns) will be filled in from this file. Nothing already on them is changed.</div>':'')+
       (skippedRows?'<div style="padding:8px 12px;background:var(--bg);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--text3)">'+skippedRows+' row'+(skippedRows>1?'s':'')+' skipped (no company/name).</div>':'')+
+      (addrCheck.withoutAddress?'<div style="padding:10px 12px;background:var(--red-l,#fef2f2);border:1px solid var(--red,#dc2626);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--red,#dc2626)">'+htmlEsc(importAddressWarning(addrCheck))+'</div>':'')+
       '<div class="fw5 f13 mb2">Column mapping</div>'+
       '<div class="tbl-wrap mb4" style="max-height:180px;overflow-y:auto">'+
         '<table><thead><tr><th>Your column</th><th>Maps to</th></tr></thead>'+
@@ -426,6 +428,18 @@ function renderImportModal(rows, sheetName){
         :(dupeCnt?'<button class="btn btn-primary" onclick="confirmImport()">Fill in missing details</button>':'<button class="btn btn-primary" disabled style="opacity:.5;cursor:not-allowed">Nothing new to import</button>'))+
     '</div>'+
   '</div>';
+}
+
+// Contacts whose Email is not an address are never emailed (the server flags
+// them invalid on import). Say so BEFORE the import, not after the leads have
+// been assigned and nothing went out. Rules live in ImportColumns.checkContacts.
+function importAddressCheck(mapped){
+  return window.ImportColumns&&window.ImportColumns.checkContacts?window.ImportColumns.checkContacts(mapped):{contacts:0,withoutAddress:0,looksShifted:0};
+}
+function importAddressWarning(c){
+  var s=c.withoutAddress+' of '+c.contacts+' contact'+(c.contacts>1?'s':'')+' in this file '+(c.withoutAddress>1?'have':'has')+' no valid email address and will never be emailed.';
+  if(c.looksShifted)s+=' In '+c.looksShifted+' of them an email address is sitting in a different column — the columns in your file look shifted against their headings. Fix the file and import again.';
+  return s;
 }
 
 // ── Drop C helpers ──────────────────────────────
@@ -509,6 +523,10 @@ function renderImportProgressModal(done,total,logLines,finished,summary){
 window.confirmImport=function(){
   if(!STATE.importPreview||!STATE.importPreview.length){closeModal();return;}
   var mapped=STATE.importPreview.map(function(r){return mapCol(r,COL_MAP);});
+  // A shifted sheet imports "fine" and then nothing sends — ask first. Cancel
+  // leaves the preview open so the file can be fixed and re-chosen.
+  var addrCheck=importAddressCheck(mapped);
+  if(addrCheck.withoutAddress&&!confirm(importAddressWarning(addrCheck)+'\n\nImport anyway?'))return;
   var groups=groupImportRows(mapped);
   STATE.importPreview=null;
 
@@ -676,10 +694,15 @@ window.doImportProcess=function(toProcess,dupEmailMap){
     // Single bulk API call
     apiPost('/jobs/bulk',{jobs:jobPayloads}).then(function(res){
       var summary=res.imported+' job'+(res.imported!==1?'s':'')+' imported, '+res.contacts+' contacts created.';
+      // The server already counts addresses it flagged invalid; the result used
+      // to say nothing about them, so a batch that could not be emailed looked
+      // identical to one that could.
+      if(res.invalidEmails)summary+=' '+res.invalidEmails+' of them '+(res.invalidEmails>1?'have':'has')+' no valid email address and will not be emailed.';
       var logs=[
         '\u2713 Batch complete',
         'Jobs imported: '+res.imported,
         'Contacts created: '+res.contacts,
+        (res.invalidEmails?'\u26a0 Contacts with no valid email (will not be emailed): '+res.invalidEmails:''),
         (Object.keys(dupEmailMap).length?' Flagged as duplicates: '+toProcess.filter(function(g){return g.contacts.some(function(c){return c.email&&dupEmailMap[c.email.toLowerCase().trim()];});}).length:'')
       ].filter(Boolean);
       STATE.modal=renderImportProgressModal(res.imported,res.imported,logs,true,summary);
