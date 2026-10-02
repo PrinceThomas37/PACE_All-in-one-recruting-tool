@@ -34,18 +34,45 @@ const SAME_MESSAGE_MS = 30 * 60 * 1000;
 const norm = (s) => String(s || '').trim().toLowerCase();
 const normSubject = (s) => String(s || '').replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+// A leads-engine send is stored with a DATE only (`emails.sent_at` is a `date`,
+// written as the UTC day of the send) — no time of day. Found 2026-10-02: the
+// half-hour rule below could never match a midnight-UTC date to the real send
+// time, so every leads email showed TWICE on a lead's Emails tab — once from
+// PACE's record, once from the sender's Sent folder — and the date-only copy
+// read as the previous day to anyone west of Greenwich.
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isDateOnly = (s) => DATE_ONLY_RE.test(String(s || '').trim());
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 // Is this sent item already represented by a message PACE stored (the leads
-// engine's own send, a tracked client email)? Same subject to the same address
-// within half an hour = the same message seen twice.
+// engine's own send, a tracked client email)? Three ways to be the same message:
+//   1. the provider's own message id, kept on the row when it was sent (exact);
+//   2. a stored send with a real time: same subject, same address, within half an hour;
+//   3. a stored send with only a DATE: same subject, same address, and the real
+//      send falls on that UTC day (the day PACE wrote). The subject must match
+//      exactly (a "Re:" is a different email), because a whole day is a wide window.
 function alreadyHave(item, have) {
   const subj = normSubject(item.subject), at = Date.parse(item.date || '');
+  const rawSubj = String(item.subject || '').replace(/\s+/g, ' ').trim().toLowerCase();
   const toList = [].concat(item.to || [], item.cc || []).map(a => norm(a && a.email)).filter(Boolean);
-  return (have || []).some(h => {
-    if (normSubject(h.subject) !== subj) return false;
-    const ht = Date.parse(h.sent_at || '');
-    if (!Number.isFinite(at) || !Number.isFinite(ht) || Math.abs(at - ht) > SAME_MESSAGE_MS) return false;
+  const sameAddress = (h) => {
     const hto = norm(h.to);
     return !hto || toList.length === 0 || toList.includes(hto) || hto.split(/[,;\s]+/).some(x => toList.includes(x));
+  };
+  return (have || []).some(h => {
+    if (h.message_id && item.id && String(h.message_id) === String(item.id)) return true;
+    if (!Number.isFinite(at)) return false;
+    if (isDateOnly(h.sent_at)) {
+      const dayStart = Date.parse(String(h.sent_at).trim() + 'T00:00:00Z');
+      const hSubj = String(h.subject || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (hSubj !== rawSubj) return false;
+      // Half an hour of slack either side: the day is stamped when the send starts.
+      return at >= dayStart - SAME_MESSAGE_MS && at < dayStart + DAY_MS + SAME_MESSAGE_MS && sameAddress(h);
+    }
+    if (normSubject(h.subject) !== subj) return false;
+    const ht = Date.parse(h.sent_at || '');
+    if (!Number.isFinite(ht) || Math.abs(at - ht) > SAME_MESSAGE_MS) return false;
+    return sameAddress(h);
   });
 }
 
@@ -109,4 +136,4 @@ async function readOurSide({ mail, mailboxes, addresses, have, trim, full }) {
   return { messages, ok, reason: ok ? null : (read === 0 ? 'unreadable' : 'partial'), mailboxes_read: read, mailboxes_failed: failed };
 }
 
-module.exports = { readOurSide, alreadyHave, normSubject, FOLDER, MAX_MAILBOXES, MAX_ADDRESSES, PER_SEARCH, MAX_BODIES };
+module.exports = { readOurSide, alreadyHave, isDateOnly, normSubject, FOLDER, MAX_MAILBOXES, MAX_ADDRESSES, PER_SEARCH, MAX_BODIES };

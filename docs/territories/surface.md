@@ -1165,3 +1165,5 @@ resulting "Ask to take over" modal after clicking through, showing
 
 - 2026-10-02 (R-107): the import preview/confirm now check that contacts have a usable email before anything is stored — `55-import-columns.js` `isEmailAddress`/`checkContacts` (pure: counts contacts with no valid address and those where an address sits in another column = shifted sheet); `14-mailmerge-engine.js` `importAddressCheck`/`importAddressWarning` (red box in the preview, a `confirm()` on Import, and the server's `invalidEmails` in the result). Rules live in `checkContacts`; the UI only draws them. Tests: `import-columns-smoke.mjs`.
 
+
+- 2026-10-02 (R-109): a date-only value (`YYYY-MM-DD`, a leads-engine send) is formatted in UTC so it names its own day — `58-lead-intel.js` `when` and `41-page-clients.js` `fmtWhen` (new Date('2026-10-02') is midnight UTC = the evening of 1 Oct in the Americas). Guard: `sent-side-smoke.mjs` runs both functions under TZ=America/Chicago.

@@ -1023,3 +1023,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - 2026-10-01 (R-070): `index.js` send loop — `followupSender.resolveFollowupPins(...)` feeds `overrideByEmailId` / `overrideMailboxes` before the override mailbox ids are collected. `services/followup-sender.js`.
 
 - 2026-10-01 (R-104/R-105/R-106): `services/viewer-time.js` (viewer's today/week/month/quarter + `dayStartMs/dayEndMs`); `GET /stats` reply-share `responseRate` + `?tz=`; `GET /insights/ra/:id` returns `periods` (from `services/ra-insights.js`, 90 days read).
+
+- 2026-10-02 (R-109): `routes/client-intel.js` selects `graph_message_id` on the leads-engine sent rows and hands it to the Sent-folder de-dup as `message_id` (internal only — the timeline mapping is explicit, the id is not returned to the browser).
