@@ -667,7 +667,12 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
    each body gets a generous fixed height and scrolls inside itself rather than
    being auto-sized. */
 .mb-body{height:420px;background:#fff}
-.mb-body.short{height:260px}
+.mb-body.short{height:clamp(340px,64vh,760px)}
+/* R-108: the message in a long thread was a 260px postage stamp. In a thread it
+   now takes most of the screen; "Expand" takes nearly all of it. Heights are a
+   CLASS on the existing box (never part of the iframe's own HTML), so toggling
+   it does not rewrite the sandboxed frame. */
+.mb-body.tall{height:calc(100vh - 150px);height:calc(100dvh - 150px);min-height:420px}
 /* ONE message on screen and no reply box open: the body fills the pane and is
    the ONLY thing that scrolls. Two nested scrollers meant a wheel over the
    message scrolled the text, reached its end and then jerked the whole pane —

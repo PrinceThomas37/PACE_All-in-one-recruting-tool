@@ -267,20 +267,7 @@ const isFenceLine = (line) => /^-{10,}$/.test(String(line || '').trim());
 
 const oneLine = (v) => txt(v).replace(/\s+/g, ' ');
 
-function decodeEntities(s) {
-  return String(s || '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"').replace(/&(?:#39|apos|rsquo|lsquo);/gi, "'")
-    .replace(/&(?:rdquo|ldquo);/gi, '"').replace(/&(?:ndash|mdash);/gi, '-')
-    .replace(/&bull;/gi, '•')
-    .replace(/&#(\d{2,5});/g, (m, n) => {
-      const c = Number(n);
-      return (c >= 32 && c <= 0x2122) ? String.fromCharCode(c) : ' ';
-    })
-    // &amp; LAST, or "&amp;lt;" decodes twice and turns into a tag.
-    .replace(/&amp;/gi, '&');
-}
+const { decodeEntities } = require('./html-entities');
 
 // The description as a candidate would read it: tags gone, bullets normalised,
 // blank runs collapsed, length capped on a boundary that is never mid-word.

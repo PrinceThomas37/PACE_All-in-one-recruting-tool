@@ -45,6 +45,7 @@ const { buildNextActions, summarize } = require('../next-action');
 const entitlements = require('../services/entitlements');
 const dismissals = require('../services/next-action-dismissals');
 const ownership = require('../services/ownership');
+const { decodeEntities } = require('../services/html-entities');
 const { fillTemplate, buildEmailVars } = require('../email-vars');
 
 module.exports = (ctx) => {
@@ -198,7 +199,7 @@ module.exports = (ctx) => {
             messages.push({ direction: 'outbound', sent_at: e.sent_at || e.created_at, body: e.subject || '' });
           }
           if (c.replied_at) {
-            messages.push({ direction: 'inbound', sent_at: c.replied_at, body: c.reply_snippet || '' });
+            messages.push({ direction: 'inbound', sent_at: c.replied_at, body: decodeEntities(c.reply_snippet || '') });
           }
         }
 

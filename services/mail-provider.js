@@ -34,6 +34,8 @@
 //   ctx = { graphMailRequest, getMicrosoftToken, gmailProvider }
 // ============================================================================
 
+const { decodeEntities } = require('./html-entities');
+
 // ── Canonical folder kinds ──────────────────────────────────────────────────
 // The six every mail client has, plus 'custom' for a user's own folders. The UI
 // sorts and icons by KIND, never by name, so a mailbox in another language or
@@ -255,7 +257,8 @@ function normalizeGmailMessage(m, { folderId } = {}) {
     // sorts by; the Date header is sender-supplied and can be anything.
     date: m.internalDate ? new Date(Number(m.internalDate)).toISOString()
         : (h.date ? new Date(h.date).toISOString() : null),
-    preview: (m.snippet || '').slice(0, 300),
+    // Gmail HTML-escapes its snippet; the screen escapes again (R-111).
+    preview: decodeEntities(m.snippet || '').slice(0, 300),
     unread: labels.includes('UNREAD'),
     flagged: labels.includes('STARRED'),
     has_attachments: gmailHasAttachment(m.payload),

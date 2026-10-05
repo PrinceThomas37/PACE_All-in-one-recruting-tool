@@ -555,3 +555,5 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Who is tracked:** leads emails from the people listed in the `open_tracking_users` setting (BD Lead 1 to start; `"all"` for everyone). Candidate emails, interview invites and BD-manager sends were already tracked and now follow the same recipient-only rule.
 - Code: `services/open-tracking.js`, `routes/tracking.js` (the pixel), `routes/client-intel.js` (the timeline), `public/js/58-lead-intel.js`.
 
+
+- **Read a long email conversation comfortably (R-112, 2026-10-05):** in the in-app Mailbox the opened message in a multi-message thread takes ~64% of the window, with an **Expand message / Shrink message** button for nearly full height. Gmail previews show real characters (R-111).

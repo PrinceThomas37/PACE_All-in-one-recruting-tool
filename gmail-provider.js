@@ -16,6 +16,7 @@
 
 const { fetchWithRetry } = require('./http-client');
 const { recordRefreshOutcome } = require('./mailbox-health');
+const { decodeEntities } = require('./services/html-entities');
 
 const GMAIL_TIMEOUT_MS = 20000;
 const OAUTH_TIMEOUT_MS = 15000;
@@ -289,7 +290,7 @@ function createGmailProvider(ctx) {
       subject: headers.subject || '',
       from: { emailAddress: { address: addr, name: fromRaw.replace(/<[^>]*>/, '').trim() } },
       receivedDateTime: received,
-      bodyPreview: (raw.snippet || content).slice(0, 500),
+      bodyPreview: (raw.snippet ? decodeEntities(raw.snippet) : content).slice(0, 500),
       body: { contentType: text ? 'text' : 'html', content },
       internetMessageHeaders: Object.entries(headers).map(([name, value]) => ({ name, value })),
       _provider: 'gmail',

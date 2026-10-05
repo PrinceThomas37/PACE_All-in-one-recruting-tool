@@ -120,7 +120,7 @@
       // Whether the body box is the short in-thread size is a CLASS, applied
       // here rather than baked into #mb-open's html — otherwise the thread
       // arriving would rewrite the iframe just to make it shorter.
-      setClass(document.querySelector('#mb-open .mb-body'), 'mb-body'+(p.short?' short':''));
+      setClass(document.querySelector('#mb-open .mb-body'), 'mb-body'+(p.short?' short':'')+(p.tall?' tall':''));
       setClass(document.getElementById('mb-thread'), 'mb-thread'+(p.solo?' solo':''));
     }
     // A region we expected was missing — fall back to a whole draw rather than
@@ -262,7 +262,13 @@
   window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
   window.mbSelectFolder=function(id){ var m=M(); if(m.folderId===id)return; m.folderId=id; loadMessages(); };
   window.mbOpen=function(id){ loadMessage(id); };
-  window.mbBack=function(){ var m=M(); m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; paint(); };
+  // R-108: read a message in a long thread at (nearly) full screen height. Only a
+  // class changes — see paint() — so the sandboxed frame is not rewritten.
+  window.mbToggleTall=function(){
+    var m=M(); m.bodyTall=!m.bodyTall; paint();
+    if(m.bodyTall){ var o=document.getElementById('mb-open'); if(o&&o.scrollIntoView) o.scrollIntoView({block:'start'}); }
+  };
+  window.mbBack=function(){ var m=M(); m.bodyTall=false; m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; paint(); };
   window.mbLoadMore=function(){ var m=M(); if(m.nextCursor) loadMessages(m.nextCursor); };
   window.mbRefresh=function(){ var m=M(); m.crm={}; loadMessages(); refreshUnread(true); };
   window.mbSearch=function(v){
@@ -717,6 +723,7 @@
     for(var i=0;i<thread.length;i++){ if(thread[i].id===x.id){ at=i; break; } }
     if(at<0){ thread=[x]; at=0; }
     p.short=thread.length>1;
+    p.tall=p.short&&!!m.bodyTall;   // R-108: the reader's own "Expand" choice
     // ONE SCROLLBAR, not two. A single-message conversation with no reply box
     // open lets the body fill the pane and scroll inside itself; the pane does
     // not scroll at all. Before this the pane scrolled AND the 420px body
@@ -909,6 +916,7 @@
         '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
+        (hasOthers?'<button class="btn btn-sm btn-outline" title="Make the open message taller, to read it without scrolling inside it" onclick="mbToggleTall()">'+(M().bodyTall?'Shrink message':'Expand message')+'</button>':'')+
         '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
       '</div>';
   }
