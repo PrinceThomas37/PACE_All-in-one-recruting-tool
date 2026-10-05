@@ -134,5 +134,30 @@ t('only http(s) links are ever made clickable', () => {
   assert.doesNotMatch(leads, /href="'\+escAttr\(j\.job_url\)/);
 });
 
+// ── a SECOND email / phone per person (R-114 stage 2, R-014, D-0070) ──────────
+console.log('\nSecond email and phone');
+t('"Email 2", "Alternate Email", "Secondary Email" are the person\'s EXTRA email — never the main', () => {
+  for (const c of ['Email 2', 'Alternate Email', 'Alternative Email', 'Secondary Email', 'Other Email', 'Alt Email']) assert.equal(C.fieldFor(c), 'email2', c);
+  for (const c of ['Email', 'Email ID', 'Work Email', 'POC Email']) assert.equal(C.fieldFor(c), 'email', c);
+});
+t('"Phone 2", "Alternate Phone", "Work Phone", "Mobile 2" are the EXTRA phone; "Phone", "Mobile", "Cell" stay the main', () => {
+  for (const c of ['Phone 2', 'Alternate Phone', 'Alternate Phone Number', 'Secondary Phone', 'Work Phone', 'Office Phone', 'Mobile 2']) assert.equal(C.fieldFor(c), 'phone2', c);
+  for (const c of ['Phone', 'Mobile', 'Cell', 'Phone Number', 'Contact No']) assert.equal(C.fieldFor(c), 'phone', c);
+});
+t('a row with both a main and a second column keeps BOTH, in their own fields', () => {
+  const r = C.mapRow({ 'First Name': 'A', 'Email': 'a@x.com', 'Alternate Email': 'b@y.com', 'Mobile': '555-111-2222', 'Work Phone': '555-333-4444' });
+  assert.equal(r.email, 'a@x.com'); assert.equal(r.email2, 'b@y.com'); assert.equal(r.phone, '555-111-2222'); assert.equal(r.phone2, '555-333-4444');
+});
+t('a sheet that ONLY has the alternate column: that one IS the email / number', () => {
+  const r = C.mapRow({ 'First Name': 'A', 'Alternate Email': 'b@y.com', 'Work Phone': '555-333-4444' });
+  assert.equal(r.email, 'b@y.com'); assert.equal(r.phone, '555-333-4444'); assert.equal(r.email2, undefined); assert.equal(r.phone2, undefined);
+});
+t('the preview names them in plain words', () => { assert.equal(C.label('email2'), 'extra email'); assert.equal(C.label('phone2'), 'extra phone'); assert.equal(C.label('firstName'), 'firstName'); });
+t('the importer hands the server the second address/number as extras, and shows what was tidied', () => {
+  const eng = readFileSync(new URL('../public/js/14-mailmerge-engine.js', import.meta.url), 'utf8');
+  assert.match(eng, /extra_emails:r\.email2/); assert.match(eng, /extra_phones:r\.phone2/);
+  assert.match(eng, /res\.contactFixesNote/);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

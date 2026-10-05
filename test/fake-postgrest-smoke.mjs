@@ -262,6 +262,17 @@ await section('uuid columns, rpc, failure injection', async () => {
   step('onQuery can make a query HANG (it never settles)', raced === 'still waiting', raced);
 });
 
+// ── jsonb containment (.contains) — added for R-114's "this address is somebody's EXTRA" lookups ──
+await section('contains', async () => {
+  const db = createFakeDb({ tables: { people: [
+    { id: 'p1', extra_emails: ['a@x.com', 'b@x.com'] }, { id: 'p2', extra_emails: ['b@x.com'] }, { id: 'p3', extra_emails: [] }, { id: 'p4', extra_emails: null },
+  ] } });
+  const ids = async (v) => ((await db.supabase.from('people').select('id').contains('extra_emails', v)).data || []).map(r => r.id).sort().join(',');
+  step('contains: rows whose list holds the value', await ids(['b@x.com']) === 'p1,p2');
+  step('contains: every value asked for must be held', await ids(['a@x.com', 'b@x.com']) === 'p1');
+  step('contains: an empty list and NULL never match', await ids(['zzz@x.com']) === '');
+});
+
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

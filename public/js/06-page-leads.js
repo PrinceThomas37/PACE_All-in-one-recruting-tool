@@ -343,6 +343,27 @@ var LEAD_ES_LABELS={valid:'Valid',invalid:'Invalid',deactivated:'Deactivated',ou
 // ONE person on a lead, as a row with the email-status control. Shared by the
 // plain contact list below and the POC finder's slots (62-poc-finder.js), so a
 // person looks — and is marked valid/invalid — the same way in both.
+// Several emails / phone numbers on a lead's contact (R-114 stage 2, D-0070): the same control as the
+// candidate header — a LIVE place, each gesture saved at once through PUT /contacts/:id, the list reloaded.
+// One scope per contact, registered once; the contact is looked up fresh each time.
+window.leadContactCp=function(c, kind){
+  if(!window.CP||!c||!c.id) return '';
+  var scope='lc'+String(c.id).replace(/[^a-zA-Z0-9]/g,'');
+  if(!CP.has(scope)) CP.register(scope,{
+    model:function(){ return (STATE.contacts||[]).find(function(x){return x.id===c.id;})||null; },
+    rerender:function(){ if(window.rowRevealRefresh) rowRevealRefresh(); else render(); },
+    save:function(patch){
+      apiPut('/contacts/'+c.id, patch)
+        .then(function(){ showToast('Saved','success'); })
+        .catch(function(e){ showToast((e&&e.message)||'Could not save','error'); })
+        .then(function(){ return refreshJobs(); })
+        // the open panel is NOT rebuilt by the list reload when it is already on screen — rebuild it from the fresh data
+        .then(function(){ if(window.rowRevealRefresh) rowRevealRefresh(); });
+    }
+  });
+  return CP.extras(scope, kind);
+};
+
 window.leadContactRowHtml=function(c){
   var esOpts=function(sel){
     return ['valid','invalid','deactivated','out_of_office'].map(function(k){
@@ -355,7 +376,10 @@ window.leadContactRowHtml=function(c){
     '<div class="lx-who">'+
       '<div class="lx-nm">'+escHtml(nm)+(c.is_primary?'<span class="lx-primary">Primary</span>':'')+'</div>'+
       '<div class="lx-sub">'+escHtml(c.designation||'—')+
-        (c.email?' · <span class="lx-mail">'+escHtml(c.email)+'</span>':'')+'</div>'+
+        (c.email?' · <span class="lx-mail">'+escHtml(c.email)+'</span>':'')+
+        (c.phone?' · <span class="lx-tel">\u260e '+escHtml(c.phone)+'</span>':'')+'</div>'+
+      // more emails / numbers for this person — extras under the main, "Make main", "+ add another"
+      '<div class="lx-cp" onclick="event.stopPropagation()">'+leadContactCp(c,'email')+leadContactCp(c,'phone')+'</div>'+
     '</div>'+
     // THE CONTROL THE OWNER COULD NOT FIND. Same handler the drawer uses —
     // one implementation, two places to reach it, never two copies.

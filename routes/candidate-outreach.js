@@ -29,6 +29,7 @@ const aiProvider = require('../services/ai-provider');
 const gen = require('../services/candidate-outreach');
 const matchEngine = require('../match-engine');
 const { emailSyntaxValid } = require('../email-validation');
+const contactPoints = require('../services/contact-points');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml } = require('../email-signature');
 const { renderStoredEmail } = require('../email-vars');
@@ -789,7 +790,7 @@ module.exports = (ctx) => {
       if (!job && angle !== 'nurture') return res.status(400).json({ error: 'That angle needs a job. Pick one, or use "Keeping in touch".' });
 
       const { data: candidates } = await withOrg(supabase.from('candidates')
-        .select('id,full_name,first_name,email,current_title,current_location,city,state,skills,experience_years')
+        .select('id,full_name,first_name,email,extra_emails,current_title,current_location,city,state,skills,experience_years')
         .in('id', ids).is('deleted_at', null), req);
 
       const companyName = await orgCompanyName(req);
@@ -800,7 +801,9 @@ module.exports = (ctx) => {
       // feature is affordable. Same loader the preview uses.
       const brief = briefFor(job);
 
-      const suppressed = await loadSuppressedSet((candidates || []).map(c => c.email).filter(Boolean));
+      // ALL of a person's addresses are checked, not only the main one (D-0070): somebody who
+      // opted out on one address must not be emailed on another.
+      const suppressed = await loadSuppressedSet([...new Set((candidates || []).flatMap(c => contactPoints.allEmails(c).map(contactPoints.normEmail)))]);
       const ranked = job ? matchEngine.rankCandidates(candidates || [], job, {}) : [];
       const reasonsFor = {};
       ranked.forEach(r => { reasonsFor[r.candidate_id] = r.reasons || []; });
@@ -812,7 +815,7 @@ module.exports = (ctx) => {
       for (const c of (candidates || [])) {
         const to = txt(c.email);
         if (!to || !emailSyntaxValid(to)) { skipped.push({ candidate_id: c.id, name: c.full_name, reason: 'no_valid_email' }); continue; }
-        if (suppressed.has(to.toLowerCase())) { skipped.push({ candidate_id: c.id, name: c.full_name, reason: 'opted_out' }); continue; }
+        if (contactPoints.firstSuppressed(c, suppressed)) { skipped.push({ candidate_id: c.id, name: c.full_name, reason: 'opted_out' }); continue; }
 
         const input = { candidate: c, job, brief, reasons: reasonsFor[c.id] || [], outreach_type: job ? 'job' : 'nurture' };
         const variant = gen.rulesVariants(input, opts).find(v => v.id === angle);
@@ -969,7 +972,15 @@ module.exports = (ctx) => {
     if (!due || !due.length) return { sent: 0, skipped: 0, failed: 0 };
 
     const win = await candidateWindow();
-    const suppressed = await loadSuppressedSet(due.map(r => r.to_email).filter(Boolean));
+    // A queued row went to whichever address was the main when it was queued. The person may
+    // have opted out since — on that address or on another of theirs — so every address they
+    // have is checked, not only the one on the row (D-0070).
+    const { data: dueCands } = await supabase.from('candidates')
+      .select('id,email,extra_emails').in('id', [...new Set(due.map(r => r.candidate_id).filter(Boolean))]);
+    const candById = {};
+    (dueCands || []).forEach(c => { candById[c.id] = c; });
+    const addrsOf = (row) => contactPoints.allEmails({ email: row.to_email, extra_emails: contactPoints.allEmails(candById[row.candidate_id] || {}) }).map(contactPoints.normEmail);
+    const suppressed = await loadSuppressedSet([...new Set(due.flatMap(addrsOf))]);
     const delivState = await loadMailboxDelivState([...new Set(due.map(r => r.mailbox_id).filter(Boolean))]);
     const [warmupStart, warmupStep] = await Promise.all([
       settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
@@ -987,7 +998,7 @@ module.exports = (ctx) => {
         // genuine sends through in a burst.
         if (sent > 0) await sleep(DRIP_MIN_MS + Math.floor(Math.random() * (DRIP_MAX_MS - DRIP_MIN_MS)));
         if (isManagerPaused && isManagerPaused(row.sent_by)) { deferred++; continue; }
-        if (suppressed.has(String(row.to_email || '').toLowerCase())) {
+        if (addrsOf(row).some(a => suppressed.has(a))) {
           await supabase.from('candidate_outreach')
             .update({ status: 'skipped', fail_reason: 'recipient opted out' }).eq('id', row.id);
           skipped++; continue;

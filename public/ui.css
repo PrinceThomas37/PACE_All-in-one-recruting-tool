@@ -944,3 +944,35 @@ select.na-act-do{padding:4px 6px;max-width:132px}
   .rw-meta,.rw-sub,.rw-btn{ font-size:13px }
   .rw-note{ font-size:14px }
 }
+
+/* ── Several emails / phone numbers per person (R-114, D-0070; 26a-contact-points.js) ──
+   The extras sit UNDER the main input as quiet rows: the main stays the star, the
+   extras are a short list with two small actions each. Classes, not inline styles,
+   so the phone scale and every palette reach them. No glass, no transitions. */
+.cp-extras{margin-top:6px;display:flex;flex-direction:column;gap:6px}
+.cp-row{display:flex;align-items:center;gap:6px;min-width:0}
+.cp-row .sel{flex:1;min-width:0}
+.cp-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.cp-val a{color:var(--accent);text-decoration:none}
+.cp-link,.cp-add{background:none;border:0;padding:3px 4px;font:inherit;font-size:12px;font-weight:600;color:var(--accent);cursor:pointer;white-space:nowrap}
+.cp-add{align-self:flex-start;font-weight:500}
+.cp-x{background:none;border:0;padding:3px 6px;font:inherit;font-size:13px;line-height:1;color:var(--text3);cursor:pointer}
+@media (hover:hover) and (pointer:fine){
+  .cp-link:hover,.cp-add:hover{text-decoration:underline}
+  .cp-x:hover{color:var(--red)}
+}
+.cp-found{border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;background:var(--bg);margin:0 0 14px}
+.cp-found-h{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:6px;letter-spacing:.2px}
+.cp-found label{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;min-width:0}
+.cp-found label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cp-found-n{font-size:11px;color:var(--text3);margin-top:6px}
+/* inside a lead's contact row the control is quieter still: it is one line of a list, not a form */
+.lx-cp{display:flex;flex-wrap:wrap;column-gap:14px;margin-top:2px}
+.lx-cp .cp-extras{margin-top:2px;gap:2px}
+.lx-cp .cp-val{font-size:12px}
+.lx-cp .cp-add{padding:2px 0;font-size:11.5px}
+.lx-tel{white-space:nowrap}
+@media (max-width:860px){
+  .cp-link,.cp-add,.cp-x{min-height:36px;display:inline-flex;align-items:center}
+  .cp-val{font-size:15px}
+}

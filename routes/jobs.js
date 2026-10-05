@@ -16,6 +16,7 @@ const express = require('express');
 const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, titleSimilarity } = require('../jd-parser');
 const { annotateContactEmailStatus } = require('../email-validation');
+const contactPoints = require('../services/contact-points');
 const { getSetting } = require('../config/settings');
 const { fillPatch } = require('../services/lead-fill');
 // D-0034: who may SEE/edit a lead, on top of the role ladder above it. Read
@@ -309,11 +310,17 @@ router.post('/jobs/bulk', auth, async (req, res) => {
     const { data: insertedJobs, error: jobErr } = await supabase.from('jobs').insert(jobRows).select('id');
     if (jobErr) throw jobErr;
     const contactRows = [];
+    // What the tidy-up changed in the sheet's contacts (an address that sat in the Phone column, several
+    // numbers in one cell…) — counted so the import can SAY so; nothing is repaired silently (R-014, D-0070).
+    const contactFixes = {};
     insertedJobs.forEach((job, idx) => {
       const contacts = filteredJobs[idx].contacts || [];
-      contacts.forEach((c, ci) => {
-        if (!c.first_name && !c.email) return;
-        contactRows.push({ job_id: job.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email || null, phone: c.phone || null, linkedin: c.linkedin || null, is_primary: ci === 0, ...orgStamp(req) });
+      contacts.forEach((raw, ci) => {
+        if (!raw.first_name && !raw.email) return;
+        const t = contactPoints.tidyImportedContact(raw);
+        t.fixes.forEach(f => { contactFixes[f] = (contactFixes[f] || 0) + 1; });
+        const c = t.contact;
+        contactRows.push({ job_id: job.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email || null, phone: c.phone || null, extra_emails: c.extra_emails || [], extra_phones: c.extra_phones || [], linkedin: c.linkedin || null, is_primary: ci === 0, ...orgStamp(req) });
       });
     });
     if (contactRows.length) {
@@ -323,7 +330,8 @@ router.post('/jobs/bulk', auth, async (req, res) => {
       await supabase.from('contacts').insert(contactRows);
     }
     const invalidContacts = contactRows.filter(c => c.email_status === 'invalid').length;
-    res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped });
+    res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped,
+      contactFixes, contactFixesNote: contactPoints.describeImportFixes(contactFixes) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -420,7 +428,7 @@ router.post('/jobs', auth, async (req, res) => {
     }).select().single();
     if (error) throw error;
     if (Array.isArray(contacts) && contacts.length) {
-      const rows = contacts.map((c, i) => ({ job_id: job.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email || null, phone: c.phone || null, linkedin: c.linkedin || null, is_primary: i === 0, ...orgStamp(req) }));
+      const rows = contacts.map((raw, i) => { const c = contactPoints.tidyImportedContact(raw).contact; return { job_id: job.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email || null, phone: c.phone || null, extra_emails: c.extra_emails || [], extra_phones: c.extra_phones || [], linkedin: c.linkedin || null, is_primary: i === 0, ...orgStamp(req) }; });
       try { await annotateContactEmailStatus(rows); } catch (_) {}
       await supabase.from('contacts').insert(rows);
     }

@@ -348,7 +348,7 @@
   // additionally tag the candidate to that job after creating (or to search an
   // existing candidate to add), so there is a single consistent form.
   window.atsOpenNew = function(jobCtx){
-    STATE.ats.editId = null; STATE.ats.dupMatches = []; STATE.ats._resumeStash = null;
+    STATE.ats.editId = null; STATE.ats.dupMatches = []; STATE.ats._resumeStash = null; STATE.ats._found = [];
     STATE.ats._jobCtx = (jobCtx && jobCtx.jobId) ? jobCtx : null;
     STATE.ats._jobTagQ = ''; STATE.ats._jobTagPool = [];
     STATE.ats.form = { applicant_status:'New lead', source:'Manual', pay_currency:'USD' };
@@ -357,12 +357,52 @@
   window.atsOpenEdit = function(id){
     STATE.ats._jobCtx = null; STATE.ats._jobTagQ = ''; STATE.ats._jobTagPool = [];
     var c = STATE.ats.rows.find(function(x){ return x.id===id; });
-    if(!c){ apiGet('/candidates/'+id).then(function(d){ STATE.ats.editId=id; STATE.ats.dupMatches=[]; STATE.ats._resumeStash=null; STATE.ats.form=Object.assign({},d); showApplicantModal(); }).catch(function(e){ showToast('Failed: '+e.message,'error'); }); return; }
-    STATE.ats.editId = id; STATE.ats.dupMatches = []; STATE.ats._resumeStash = null; STATE.ats.form = Object.assign({}, c);
+    if(!c){ apiGet('/candidates/'+id).then(function(d){ STATE.ats.editId=id; STATE.ats.dupMatches=[]; STATE.ats._resumeStash=null; STATE.ats._found=[]; STATE.ats.form=Object.assign({},d); showApplicantModal(); }).catch(function(e){ showToast('Failed: '+e.message,'error'); }); return; }
+    STATE.ats.editId = id; STATE.ats.dupMatches = []; STATE.ats._resumeStash = null; STATE.ats._found = []; STATE.ats.form = Object.assign({}, c);
     showApplicantModal();
   };
 
   window.atsFormSet = function(k,v){ STATE.ats.form[k]=v; };
+
+  // Several emails / phone numbers (R-114, D-0070): the form holds a MAIN (`email`, `phone`)
+  // and extras (`extra_emails`, `extra_phones`); 26a-contact-points.js draws the extras under
+  // the main and owns "+ add another", "Make main" and ✕.
+  if (window.CP) CP.register('ats', { model:function(){ return STATE.ats.form; }, rerender:function(){ showApplicantModal(); } });
+  function cpx(kind){ return window.CP ? CP.extras('ats', kind) : ''; }
+
+  // What a résumé held beyond the main: offered, ticked, and only added when the user saves
+  // with the tick still on — never silently (D-0070).
+  function foundFrom(contacts){
+    var f = STATE.ats.form, out = [];
+    function have(kind, v){
+      var n = CP.norm(kind, v);
+      var key = kind==='email' ? 'extra_emails' : 'extra_phones', main = kind==='email' ? 'email' : 'phone';
+      return CP.norm(kind, f[main])===n || (f[key]||[]).some(function(x){ return CP.norm(kind,x)===n; });
+    }
+    ((contacts&&contacts.emails)||[]).forEach(function(v){ if(v && !have('email',v)) out.push({ kind:'email', value:v, on:true }); });
+    ((contacts&&contacts.phones)||[]).forEach(function(v){ if(v && !have('phone',v)) out.push({ kind:'phone', value:v, on:true }); });
+    return out;
+  }
+  window.atsFoundTick = function(i, on){ var it=(STATE.ats._found||[])[i]; if(it) it.on=!!on; };
+  function foundHtml(){
+    var list = STATE.ats._found || [];
+    if (!list.length) return '';
+    return '<div class="cp-found">'+
+      '<div class="cp-found-h">ALSO FOUND IN THE RÉSUMÉ</div>'+
+      list.map(function(it,i){
+        return '<label><input type="checkbox"'+(it.on?' checked':'')+' onchange="atsFoundTick('+i+',this.checked)"><span>'+esc(it.value)+'</span>'+
+          '<span style="color:var(--text3);font-size:11px;flex:none">'+(it.kind==='email'?'extra email':'extra phone')+'</span></label>';
+      }).join('')+
+      '<div class="cp-found-n">Ticked ones are saved as extras with this candidate. Untick any you do not want.</div>'+
+    '</div>';
+  }
+  // The extras to send: the form's own, plus every found one still ticked.
+  function extrasPayload(kind){
+    var key = kind==='email' ? 'extra_emails' : 'extra_phones';
+    var mine = (STATE.ats.form[key]||[]).filter(function(v){ return String(v||'').trim(); });
+    var picked = (STATE.ats._found||[]).filter(function(it){ return it.kind===kind && it.on; }).map(function(it){ return it.value; });
+    return mine.concat(picked);
+  }
   window.atsZipPick = function(place){
     STATE.ats.form.zip = place.zip || STATE.ats.form.zip;
     STATE.ats.form.city = place.city || STATE.ats.form.city;
@@ -426,6 +466,7 @@
           if (form[k]===undefined || form[k]===null || form[k]==='') form[k]=flds[k];
         });
         if (r.resume_text) form.resume_text = r.resume_text;
+        STATE.ats._found = window.CP ? foundFrom(r.contacts) : [];
         showApplicantModal();
         showToast(r.used_ai?'Parsed with AI — review the filled fields':'Parsed (basic mode — no AI key). Review the filled fields','success');
       })
@@ -443,7 +484,7 @@
   function fld(label, inner, req){
     return '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+(req?' <span style="color:var(--red)">*</span>':'')+'</label>'+inner+'</div>';
   }
-  function inp(key, ph){ return '<input class="sel" value="'+esc(STATE.ats.form[key]||'')+'" placeholder="'+(ph||'')+'" oninput="atsFormSet(\''+key+'\',this.value)">'; }
+  function inp(key, ph, attrs){ return '<input class="sel" value="'+esc(STATE.ats.form[key]||'')+'" placeholder="'+(ph||'')+'"'+(attrs?' '+attrs:'')+' oninput="atsFormSet(\''+key+'\',this.value)">'; }
   function sel(key, opts, blank){
     var list = (blank?['']:[]).concat(opts);
     return '<select class="sel" onchange="atsFormSet(\''+key+'\',this.value)">'+
@@ -495,7 +536,7 @@
         STATE.ats.dupMatches.map(function(m){
           return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px">'+
             '<div style="font-size:12.5px"><b>'+esc(m.full_name)+'</b> '+code(m.candidate_code||'')+
-              '<div style="font-size:11px;color:var(--text3)">'+esc(m.email||'')+(m.phone?' · '+esc(m.phone):'')+(m.current_title?' · '+esc(m.current_title):'')+'</div></div>'+
+              '<div style="font-size:11px;color:var(--text3)">'+esc([m.email].concat(m.extra_emails||[]).filter(Boolean).join(', '))+(m.phone||(m.extra_phones||[]).length?' · '+esc([m.phone].concat(m.extra_phones||[]).filter(Boolean).join(', ')):'')+(m.current_title?' · '+esc(m.current_title):'')+'</div></div>'+
             '<button class="btn btn-sm btn-outline" onclick="atsOpenEdit(\''+m.id+'\')">Open</button>'+
           '</div>';
         }).join('')+
@@ -513,10 +554,15 @@
         '<div style="padding:18px 20px;max-height:66vh;overflow-y:auto">'+
           jobTag+
           dup+
-          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">'+
+          // right under the title, where the main email and phone are — a panel at the foot of a long form is a panel nobody sees
+          foundHtml()+
+          // .gc3 is the kit's three-column grid and mobile.css folds it to one column on a phone —
+          // the inline three-column grid this used to be could not fold, so on a phone the Mobile
+          // column ran off the screen (and the extras under each field had no room at all).
+          '<div class="gc3" style="gap:12px">'+
             fld('Full Name', inp('full_name','Jane Doe'), true)+
-            fld('Email', inp('email','jane@example.com'))+
-            fld('Mobile', inp('phone','(555) 123-4567'))+
+            fld('Email (main)', inp('email','jane@example.com','data-cp-main="ats-email"')+cpx('email'))+
+            fld('Mobile (main)', inp('phone','(555) 123-4567','data-cp-main="ats-phone"')+cpx('phone'))+
             fld('Work Authorization', sel('work_authorization', lk('work_authorization',WORK_AUTH), true))+
             fld('Source', sel('source', lk('source',SOURCES), true))+
             fld('Candidate Status', sel('applicant_status', lk('applicant_status',APPLICANT_STATUSES)))+
@@ -562,6 +608,8 @@
     var payload = Object.assign({}, f); if (force) payload.force = true;
     // Never send an owner from this form — the server stamps the creator.
     delete payload.owner_id; delete payload.owner; delete payload.creator;
+    // The extras: the form's own plus any résumé finds still ticked (D-0070).
+    payload.extra_emails = extrasPayload('email'); payload.extra_phones = extrasPayload('phone');
 
     if (STATE.ats.editId){
       var editId = STATE.ats.editId;
@@ -589,7 +637,7 @@
     }).catch(function(e){
       // 409 possible_duplicate → surface matches, keep the form open (warn-and-offer)
       if (/possible_duplicate/i.test(e.message)){
-        apiGet('/candidates/check-duplicate?full_name='+encodeURIComponent(f.full_name||'')+'&email='+encodeURIComponent(f.email||'')+'&phone='+encodeURIComponent(f.phone||''))
+        apiGet('/candidates/check-duplicate?full_name='+encodeURIComponent(f.full_name||'')+'&email='+encodeURIComponent(f.email||'')+'&phone='+encodeURIComponent(f.phone||'')+'&extra_emails='+encodeURIComponent(payload.extra_emails.join(','))+'&extra_phones='+encodeURIComponent(payload.extra_phones.join(';')))
           .then(function(r){ STATE.ats.dupMatches = (r&&r.duplicates)||[]; showApplicantModal(); showToast('Possible duplicate found — review below','info'); })
           .catch(function(){ STATE.ats.dupMatches=[{full_name:f.full_name,candidate_code:'',email:f.email,phone:f.phone}]; showApplicantModal(); });
       } else showToast('Failed: '+e.message,'error');

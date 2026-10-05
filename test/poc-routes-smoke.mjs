@@ -99,6 +99,7 @@ function q(table) {
     eq(k, v) { st.filters.push(r => r[k] === v); return api; },
     is(k, v) { st.filters.push(r => (r[k] == null) === (v == null)); return api; },
     in(k, vs) { st.filters.push(r => vs.includes(r[k])); return api; },
+    contains(k, vs) { st.filters.push(r => Array.isArray(r[k]) && vs.every(v => r[k].includes(v))); return api; },   // jsonb @> (extra_emails)
     // Postgres ILIKE: % and _ are wildcards unless backslash-escaped.
     ilike(k, pat) {
       let re = '';

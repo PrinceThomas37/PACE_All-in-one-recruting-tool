@@ -19,11 +19,13 @@
 // ============================================================================
 const express = require('express');
 const { addLeadContact, duplicateResponse, duplicatePayload } = require('../services/lead-contacts');
+const contactPoints = require('../services/contact-points');
+const { classifyEmailDeliverability } = require('../email-validation');
 const { EVENTS, emit } = require('../events');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { db, auth, hasRole, canTouchJob, logActivity, isPermanentFollowupBlock, ownership, reportingChainIds, orgIdFor } = ctx;
+  const { db, auth, hasRole, canTouchJob, logActivity, isPermanentFollowupBlock, ownership, reportingChainIds, orgIdFor, loadSuppressedSet } = ctx;
 
   // May this caller SEE that lead? The same rule as GET /jobs/:id (D-0034) —
   // the "already added" pop-up names a colleague's lead only when it is.
@@ -36,7 +38,7 @@ module.exports = (ctx) => {
 
 router.post('/contacts', auth, async (req, res) => {
   try {
-    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, allow_same_name } = req.body;
+    const { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, allow_same_name, extra_emails, extra_phones } = req.body;
     if (!job_id || !first_name) return res.status(400).json({ error: 'job_id and first_name required' });
     if (!(await canTouchJob(req, job_id))) return res.status(403).json({ error: 'Forbidden' });
     // The one way a person is added to a lead — the POC finder's Accept uses
@@ -45,9 +47,10 @@ router.post('/contacts', auth, async (req, res) => {
     // on this lead or at this company is asked, and `allow_same_name` is the
     // person's "Add anyway".
     const data = await addLeadContact({ db, req, logActivity, allowSameName: allow_same_name === true,
-      fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary } });
+      fields: { job_id, first_name, last_name, designation, email, phone, linkedin, is_primary, extra_emails, extra_phones } });
     res.status(201).json(data);
   } catch (err) {
+    if (err && err.code === 'bad_contact_point') return res.status(400).json({ error: err.message });
     if (err && err.code === 'duplicate_contact') {
       let body;
       try { body = await duplicateResponse({ db, req, dup: err.duplicate, job: err.duplicate.job, canSee: (job) => canSeeLead(req, job) }); }
@@ -60,12 +63,37 @@ router.post('/contacts', auth, async (req, res) => {
 
 router.put('/contacts/:id', auth, async (req, res) => {
   try {
-    const existing = await db.forRequest(req).from('contacts').byId(req.params.id, 'job_id');
+    const existing = await db.forRequest(req).from('contacts').byId(req.params.id, 'job_id,email,phone,extra_emails,extra_phones,email_status');
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (!(await canTouchJob(req, existing.job_id))) return res.status(403).json({ error: 'Forbidden' });
     const fields = ['first_name','last_name','designation','email','phone','linkedin','is_primary','email_status','ooo_until'];
     const updates = { updated_at: new Date() };
     fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+    // Several emails / phones (D-0070): the extras are cleaned and stored; a typed phone must be a phone;
+    // extras the form did not send are left alone.
+    if (updates.phone && !contactPoints.looksLikePhone(updates.phone)) return res.status(400).json({ error: '"' + updates.phone + '" does not look like a phone number.' });
+    const cp = contactPoints.normaliseForWrite(req.body, existing);
+    if (cp.rejected.length) {
+      const r = cp.rejected[0];
+      return res.status(400).json({ error: r.reason === 'too_many'
+        ? 'A person can have at most ' + contactPoints.MAX_EXTRAS + ' extra ' + (r.kind === 'phone' ? 'phone numbers' : 'email addresses') + '.'
+        : '"' + r.value + '" does not look like ' + (r.kind === 'phone' ? 'a phone number.' : 'an email address.') });
+    }
+    Object.assign(updates, cp.columns);
+    // THE SAFETY RULE: an address that opted out can never be made the main one.
+    const newMain = updates.email !== undefined ? contactPoints.normEmail(updates.email) : '';
+    if (updates.email !== undefined && newMain && newMain !== contactPoints.normEmail(existing.email)) {
+      if (loadSuppressedSet) {
+        const sup = await loadSuppressedSet([newMain]);
+        if (sup.has(newMain)) return res.status(409).json({ error: 'That address opted out of email from us, so it cannot be the main address.', code: 'address_opted_out' });
+      }
+      // Switching to a different address: an "invalid" mark belongs to the OLD address (it bounced or its domain
+      // is dead) — the new one is judged on its own, so a good second address brings the person back into the
+      // follow-ups. Out of office / deactivated belong to the PERSON and stay.
+      if (updates.email_status === undefined && existing.email_status === 'invalid') {
+        try { updates.email_status = await classifyEmailDeliverability(newMain); } catch (_) {}
+      }
+    }
     const { data, error } = await db.forRequest(req).from('contacts').update(updates).eq('id', req.params.id).select().single();
     if (error) throw error;
     if (req.body.email_status !== undefined && isPermanentFollowupBlock(req.body.email_status)) {

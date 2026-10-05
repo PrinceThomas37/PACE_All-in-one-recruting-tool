@@ -378,7 +378,7 @@ function renderImportModal(rows, sheetName){
     var status=isSerial?
       '<span style="color:var(--text3)">ignored \u2014 PACE numbers records itself</span>':
       field?
-      '<span style="color:var(--green);font-weight:500">\u2192 '+field+'</span>'+
+      '<span style="color:var(--green);font-weight:500">\u2192 '+(window.ImportColumns&&ImportColumns.label?ImportColumns.label(field):field)+'</span>'+
         (field==='jobUrl'&&named==='linkedin'?' <span style="color:var(--text3)">(these are job postings, not LinkedIn profiles)</span>':''):
       '<span style="color:var(--text3)">kept as an extra detail</span>';
     return '<tr><td style="padding:5px 10px;font-size:12.5px">'+htmlEsc(c)+'</td><td style="padding:5px 10px">'+status+'</td></tr>';
@@ -490,6 +490,9 @@ function groupImportRows(mapped){
         designation:(r.designation||"").trim(),
         email:(r.email||"").trim(),
         phone:(r.phone||"").trim(),
+        // a second address / number, if the sheet has one (R-114, D-0070) — the server cleans and stores them
+        extra_emails:r.email2?[(r.email2||"").trim()]:[],
+        extra_phones:r.phone2?[(r.phone2||"").trim()]:[],
         linkedin:(r.linkedin||"").trim()
       });
     }
@@ -698,6 +701,8 @@ window.doImportProcess=function(toProcess,dupEmailMap){
       // to say nothing about them, so a batch that could not be emailed looked
       // identical to one that could.
       if(res.invalidEmails)summary+=' '+res.invalidEmails+' of them '+(res.invalidEmails>1?'have':'has')+' no valid email address and will not be emailed.';
+      // What the server tidied in the sheet's contacts (R-014): said, never done silently.
+      if(res.contactFixesNote)summary+=' Tidied: '+res.contactFixesNote+'.';
       var logs=[
         '\u2713 Batch complete',
         'Jobs imported: '+res.imported,

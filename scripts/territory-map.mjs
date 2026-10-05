@@ -109,6 +109,10 @@ const TERRITORIES = [
           // D-0035: the one place a job order's client-POC fields are named,
           // so list/detail/browse in routes/recruiting/job-orders.js agree.
           'services/job-order-visibility.js',
+          // One MAIN email/phone per person plus extras (R-114, D-0070): the cleaning, the
+          // duplicate comparison, the switch of the main and the opt-out rule. Candidates and
+          // lead contacts both call it; the send paths in harbour call firstSuppressed().
+          'services/contact-points.js',
           // Interview times in the candidate's zone (R-095), and the one reader of a
           // candidate's stored document (the résumé read through PACE, R-091).
           'services/interview-time.js', 'services/doc-fetch.js',

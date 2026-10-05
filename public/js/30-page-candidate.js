@@ -37,6 +37,22 @@
 
   // ── data ─────────────────────────────────────────────────────────────────────
   function emptyArr(){ return []; }
+  // Several emails / phone numbers on the header (R-114, D-0070). A LIVE place: each gesture
+  // ("+ add another", "Make main", ✕) is saved at once through the same PUT the Edit window uses,
+  // then the profile reloads. The server refuses an address that opted out as the main.
+  if (window.CP) CP.register('prof', {
+    model: function(){ return STATE.bd && STATE.bd.profile && STATE.bd.profile.candidate; },
+    rerender: function(){ render(); },
+    save: function(patch){
+      var c = STATE.bd && STATE.bd.profile && STATE.bd.profile.candidate; if (!c) return;
+      apiPut('/candidates/'+c.id, patch)
+        .then(function(){ showToast('Saved','success'); })
+        .catch(function(e){ showToast(e.message || 'Could not save','error'); })
+        .then(function(){ if (window.bdReloadCandidateProfile) window.bdReloadCandidateProfile(); });
+    }
+  });
+  function cpx(kind){ return window.CP ? CP.extras('prof', kind) : ''; }
+
   window.bdOpenCandidate = function(id){
     if(!id) return;
     // Remember where the profile was opened FROM so Back returns to that job
@@ -467,7 +483,9 @@
       UI.kv('Email', c.email ? '<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(c.email).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE" style="color:var(--accent)">'+esc(c.email)+'</a>'+
               '<span class="verified" style="margin-left:5px;vertical-align:-2px">'+UI.ic('verified')+'</span>' : '',
             { html:true, placeholder:'No email on file' }) +
-      UI.kv('Phone number', c.phone, { placeholder:'—' }) +
+      UI.kv('More emails', cpx('email'), { html:true, placeholder:'' }) +
+      UI.kv('Phone number', c.phone ? esc(c.phone) : '', { html:true, placeholder:'—' }) +
+      UI.kv('More numbers', cpx('phone'), { html:true, placeholder:'' }) +
       UI.kv('Location', loc(c)) +
       opt('Work authorization', c.work_authorization) +
       opt('Experience', c.experience_years!=null ? c.experience_years+' yrs' : '') +

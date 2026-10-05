@@ -101,6 +101,7 @@ function q(table) {
     eq(k, v) { st.filters.push(r => r[k] === v); return api; },
     is(k, v) { st.filters.push(r => (r[k] == null) === (v == null)); return api; },
     in(k, vs) { st.filters.push(r => vs.includes(r[k])); return api; },
+    contains(k, vs) { st.filters.push(r => Array.isArray(r[k]) && vs.every(v => r[k].includes(v))); return api; },   // jsonb @> (extra_emails)
     ilike(k, pat) {
       ilikes.push(table + ':' + k + ':' + pat);
       let re = '';
@@ -215,7 +216,7 @@ try {
   step('another company\'s (org\'s) people never count (201) and never leak', l.status === 201 && !/Secret|Other Co|jX/.test(l.text), l.text);
   step('every accepted add wrote one history line', activity.filter(x => x.type === 'contact_added').length === 6, String(activity.length));
   step('the fake database really projected the new lookups',
-    selects.some(s => s === 'contacts:id,first_name,last_name,email,designation,job_id') && selects.some(s => s.startsWith('jobs:id,company_id,position,stage')), selects.slice(-4).join(' | '));
+    selects.some(s => s === 'contacts:id,first_name,last_name,email,extra_emails,designation,job_id') && selects.some(s => s.startsWith('jobs:id,company_id,position,stage')), selects.slice(-4).join(' | '));
   const m = await add('lead1', { job_id: 'j1', first_name: 'Zed', last_name: 'Zee', email: 'zed@acmebuild.com' });
   step('the gate is unchanged: someone who cannot work the lead may not add to it (403)', m.status === 403, String(m.status));
 } catch (e) {

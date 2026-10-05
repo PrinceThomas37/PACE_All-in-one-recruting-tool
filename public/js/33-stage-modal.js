@@ -774,7 +774,7 @@
               fld('sbdm-last','Applicant Last Name',last,'',true)+
               fld('sbdm-email','Applicant Email Address',c.email,'',true)+
               fld('sbdm-mobile','Mobile Number',c.phone,'')+
-              fld('sbdm-home','Home Phone',c.alt_phone,'N/A')+
+              fld('sbdm-home','Home Phone',(c.extra_phones||[])[0],'N/A')+
               fld('sbdm-auth','Work Authorization',c.work_authorization,'N/A')+
               fld('sbdm-loc','Current Location',c.current_location||locFallback,'City, State')+
               fld('sbdm-reloc','Relocation','','Willing to relocate to…')+

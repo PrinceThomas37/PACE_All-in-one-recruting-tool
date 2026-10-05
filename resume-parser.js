@@ -14,6 +14,7 @@
 
 const { SKILL_DICTIONARIES } = require('./skill-dictionaries');
 const aiProvider = require('./services/ai-provider');
+const contactPoints = require('./services/contact-points');
 
 // Lazy requires so a missing optional dep degrades to "unsupported file type"
 // instead of crashing boot.
@@ -253,7 +254,14 @@ async function parseResume(buffer, filename, store, orgId) {
   const rules = parseResumeRules(text);
   // AI wins where it answered; rules fill the gaps (and are the whole answer without a key)
   const fields = Object.assign({}, rules, ai || {});
-  return { fields, used_ai: !!ai, text: text.slice(0, MAX_TEXT_CHARS) };
+  // EVERY email and phone in the document (D-0070), the chosen main first. The
+  // form offers the rest as extras for the user to confirm — never added silently.
+  const found = contactPoints.extractContactPoints(text);
+  const contacts = {
+    emails: contactPoints.allEmails({ email: fields.email, extra_emails: found.emails }),
+    phones: contactPoints.allPhones({ phone: fields.phone, extra_phones: found.phones }),
+  };
+  return { fields, used_ai: !!ai, text: text.slice(0, MAX_TEXT_CHARS), contacts };
 }
 
 module.exports = { parseResume, parseResumeRules, extractResumeText, describePdfFailure };

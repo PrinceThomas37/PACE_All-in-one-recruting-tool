@@ -22,6 +22,7 @@
 const { EVENTS, on } = require('../../events');
 const { fillTemplate } = require('../../email-vars');
 const { emailSyntaxValid } = require('../../email-validation');
+const contactPoints = require('../../services/contact-points');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../../email-tracking');
 const { fillSignatureHtml } = require('../../email-signature');
 const interviewTime = require('../../services/interview-time');
@@ -314,8 +315,9 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
   const { candidate, job_order, submission } = context;
   const cfg = step.config || {};
   if (!candidate?.email || !emailSyntaxValid(candidate.email)) return { outcome: 'skipped', detail: { reason: 'no_candidate_email' } };
-  const suppressed = await loadSuppressedSet([candidate.email]);
-  if (suppressed.has(String(candidate.email).toLowerCase())) return { outcome: 'skipped', detail: { reason: 'suppressed' } };
+  // every address the person has, not just the main (D-0070)
+  const suppressed = await loadSuppressedSet(contactPoints.allEmails(candidate).map(contactPoints.normEmail));
+  if (contactPoints.firstSuppressed(candidate, suppressed)) return { outcome: 'skipped', detail: { reason: 'suppressed' } };
   const recruiterId = submission?.recruiter_id || enrollment.enrolled_by;
   if (isSendingPaused() || isManagerPaused(recruiterId)) return { outcome: 'defer', detail: { reason: 'paused' } };
   // Rotation: prefer this enrollment's chosen "from" mailbox (if active +
@@ -397,14 +399,22 @@ app.post('/candidates/email', auth, async (req, res) => {
     if (!mailbox) return noMailboxReply(res, b.mailbox_id);
 
     const signature = await filledSignature(mailbox, req.user.id);
-    const suppressed = await loadSuppressedSet(recipients.map(r => r.email).filter(Boolean));
+    // A recipient that carries a candidate_id is checked on ALL of that person's addresses (D-0070).
+    const candIds = [...new Set(recipients.map(r => r.candidate_id).filter(Boolean))];
+    const { data: candRows } = candIds.length
+      ? await withOrg(supabase.from('candidates').select('id,email,extra_emails').in('id', candIds), req)
+      : { data: [] };
+    const candById = {};
+    (candRows || []).forEach(c => { candById[c.id] = c; });
+    const addrsOf = (r) => contactPoints.allEmails({ email: r.email, extra_emails: contactPoints.allEmails(candById[r.candidate_id] || {}) }).map(contactPoints.normEmail);
+    const suppressed = await loadSuppressedSet([...new Set(recipients.flatMap(addrsOf))]);
     const orgId = req.orgId || null;
     const attachments = await resolveEmailAttachments('candidate_documents', b.document_ids, orgId);
     const results = [];
     for (const r of recipients) {
       const to = String(r.email || '').trim();
       if (!to || !emailSyntaxValid(to)) { results.push({ email: to, status: 'skipped', reason: 'invalid_email' }); continue; }
-      if (suppressed.has(to.toLowerCase())) { results.push({ email: to, status: 'skipped', reason: 'suppressed' }); continue; }
+      if (addrsOf(r).some(a => suppressed.has(a))) { results.push({ email: to, status: 'skipped', reason: 'suppressed' }); continue; }
       const token = newTrackToken();
       const htmlBody = injectTrackPixel(buildHtmlEmailBody(bodyText, signature), token);
       try {

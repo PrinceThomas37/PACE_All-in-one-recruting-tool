@@ -2,8 +2,8 @@
   "generated": "2026-10-05",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 443,
-    "lines": 106098,
+    "files": 450,
+    "lines": 107357,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 69,
-      "lines": 29031,
+      "files": 70,
+      "lines": 29307,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -44,7 +44,7 @@
           "n": 974
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 2,
       "openOut": 0
     },
@@ -120,12 +120,12 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 65,
-      "lines": 3849,
+      "files": 66,
+      "lines": 3906,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 315
+          "n": 319
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -140,7 +140,7 @@
           "n": 171
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 2,
       "openOut": 0
     },
@@ -211,7 +211,7 @@
           "n": 472
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 1,
       "openOut": 0
     },
@@ -257,7 +257,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 27,
-      "lines": 11246,
+      "lines": 11265,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -273,10 +273,10 @@
         },
         {
           "f": "routes/candidate-outreach.js",
-          "n": 1102
+          "n": 1113
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 0,
       "openOut": 1
     },
@@ -303,6 +303,7 @@
         "services/company-merge.js",
         "services/lead-fill.js",
         "services/job-order-visibility.js",
+        "services/contact-points.js",
         "services/interview-time.js",
         "services/doc-fetch.js",
         "bd_recruiter_routes.js",
@@ -315,8 +316,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 29,
-      "lines": 7888,
+      "files": 30,
+      "lines": 8121,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -324,11 +325,11 @@
         },
         {
           "f": "routes/recruiting/outreach.js",
-          "n": 881
+          "n": 891
         },
         {
           "f": "services/recruiting-core.js",
-          "n": 484
+          "n": 486
         },
         {
           "f": "routes/wf.js",
@@ -402,8 +403,8 @@
         "test/",
         ".github/"
       ],
-      "files": 172,
-      "lines": 32823,
+      "files": 176,
+      "lines": 33497,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -422,7 +423,7 @@
           "n": 590
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 1,
       "openOut": 0
     },
