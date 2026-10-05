@@ -85,6 +85,10 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   step('splitPhones: several numbers in one cell, junk dropped', same(cp.splitPhones('(555) 123-4567 / 555.987.6543; N/A | call me'), ['(555) 123-4567', '555.987.6543']));
   const shifted = cp.tidyImportedContact({ first_name: 'A', email: 'Senior Recruiter', phone: 'a.b@acme.com', designation: '' });
   step('tidy: Email is not an address but Phone holds one → it is the email; the text becomes the title', shifted.contact.email === 'a.b@acme.com' && shifted.contact.phone === '' && shifted.contact.designation === 'Senior Recruiter' && same(shifted.fixes, ['email_from_phone']), JSON.stringify(shifted));
+  const row = cp.tidyImportedContact({ first_name: '', last_name: 'Kristin', designation: 'Abrams', email: 'Director of Operations', phone: 'kristin.abrams@acme.com' });
+  step('tidy: a WHOLE ROW one column off is put back in order (first name, last name, title, email)', row.contact.first_name === 'Kristin' && row.contact.last_name === 'Abrams' && row.contact.designation === 'Director of Operations' && row.contact.email === 'kristin.abrams@acme.com' && row.contact.phone === '' && same(row.fixes, ['row_shifted']), JSON.stringify(row));
+  const okName = cp.tidyImportedContact({ first_name: 'Kristin', last_name: 'Abrams', designation: 'Director', email: 'Director of Operations', phone: 'k@acme.com' });
+  step('tidy: with a first name present it is NOT a whole-row shift (only the email is rescued)', okName.contact.first_name === 'Kristin' && okName.contact.last_name === 'Abrams' && okName.contact.designation === 'Director' && okName.contact.email === 'k@acme.com' && same(okName.fixes, ['email_from_phone']), JSON.stringify(okName));
   const keepTitle = cp.tidyImportedContact({ email: 'Senior Recruiter', phone: 'a.b@acme.com', designation: 'VP' });
   step('tidy: an existing title is never overwritten', keepTitle.contact.designation === 'VP');
   const second = cp.tidyImportedContact({ email: 'a@x.com', phone: 'b@y.com' });
@@ -95,7 +99,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   step('tidy: "N/A" is not a phone → left empty, and counted', na.contact.phone === '' && same(na.fixes, ['phone_not_a_phone']));
   const clean = cp.tidyImportedContact({ email: 'a@x.com', phone: '+1 (555) 123-4567', extra_emails: ['b@x.com'] });
   step('tidy: a clean contact changes nothing and reports nothing', clean.contact.phone === '+1 (555) 123-4567' && same(clean.contact.extra_emails, ['b@x.com']) && clean.fixes.length === 0);
-  step('describeImportFixes: plain sentences, empty when nothing was fixed', cp.describeImportFixes({}) === '' && /2 contacts had the email address in the Phone column/.test(cp.describeImportFixes({ email_from_phone: 2 })) && /1 had several numbers/.test(cp.describeImportFixes({ phones_split: 1 })));
+  step('describeImportFixes: plain sentences, empty when nothing was fixed', cp.describeImportFixes({}) === '' && /2 contacts had the email address in the Phone column/.test(cp.describeImportFixes({ email_from_phone: 2 })) && /1 had several numbers/.test(cp.describeImportFixes({ phones_split: 1 })) && /3 contacts came from rows whose columns were one place out/.test(cp.describeImportFixes({ row_shifted: 3 })));
 }
 
 // ── a résumé ────────────────────────────────────────────────────────────────

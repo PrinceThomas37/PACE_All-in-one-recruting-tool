@@ -190,6 +190,8 @@ function splitPhones(v) {
 
 // One imported lead contact, tidied BEFORE it is stored. Returns { contact, fixes } — `fixes` is
 // what changed, so the import can SAY so (nothing is repaired silently):
+//   row_shifted            the first name was empty, the Email cell was not an address and the Phone cell held one →
+//                          the whole row is one column off; name, title and email are put back in order
 //   email_from_phone       the Email cell was not an address but the Phone cell held one → it is the
 //                          email now; the non-address text that sat in Email becomes the title if
 //                          the title is empty (the sheet was shifted a column)
@@ -205,10 +207,17 @@ function tidyImportedContact(c) {
   let extraE = asList(c.extra_emails).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
   let extraP = asList(c.extra_phones).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
 
+  let firstName = c.first_name, lastName = c.last_name;
   const addr = phone.match(EMAIL_ANYWHERE);
   if (addr) {
     phone = phone.replace(addr[0], ' ').replace(/^[\s,;|/&]+|[\s,;|/&]+$/g, '').trim();
-    if (!emailSyntaxValid(email)) {
+    const blank = (v) => !String(v == null ? '' : v).trim();
+    if (!emailSyntaxValid(email) && blank(firstName) && !blank(lastName) && !blank(designation) && email) {
+      // THE WHOLE ROW IS ONE COLUMN OFF (the live data, 2026-10-05: 80 contacts exactly like this): the first name sits in
+      // "last name", the last name in "title", the job title in "email", the address in "phone". Put each back.
+      firstName = lastName; lastName = designation; designation = email; email = addr[0].toLowerCase();
+      fixes.push('row_shifted');
+    } else if (!emailSyntaxValid(email)) {
       if (email && !String(designation == null ? '' : designation).trim()) designation = email;
       email = addr[0].toLowerCase();
       fixes.push('email_from_phone');
@@ -226,7 +235,7 @@ function tidyImportedContact(c) {
   extraE = extraE.filter(function (x) { return emailSyntaxValid(x); });
   const e = cleanEmailList(extraE, email), p = cleanPhoneList(extraP, phone);
   return {
-    contact: Object.assign({}, c, { email: email, phone: phone, designation: designation, extra_emails: e.list, extra_phones: p.list }),
+    contact: Object.assign({}, c, { first_name: firstName, last_name: lastName, email: email, phone: phone, designation: designation, extra_emails: e.list, extra_phones: p.list }),
     fixes: fixes,
   };
 }
@@ -235,6 +244,7 @@ function tidyImportedContact(c) {
 function describeImportFixes(counts) {
   counts = counts || {};
   const out = [];
+  if (counts.row_shifted) out.push(counts.row_shifted + ' contact' + (counts.row_shifted > 1 ? 's' : '') + ' came from rows whose columns were one place out (the name, title and email were each in the next column) — put back in order');
   if (counts.email_from_phone) out.push(counts.email_from_phone + ' contact' + (counts.email_from_phone > 1 ? 's' : '') + ' had the email address in the Phone column (the sheet looks shifted) — it is now their email');
   if (counts.extra_email_from_phone) out.push(counts.extra_email_from_phone + ' had a second email address in the Phone column — kept as an extra email');
   if (counts.phones_split) out.push(counts.phones_split + ' had several numbers in one cell — the first is the main, the rest are extras');

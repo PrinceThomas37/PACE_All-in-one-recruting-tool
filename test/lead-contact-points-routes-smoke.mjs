@@ -148,6 +148,7 @@ try {
       { first_name: 'Many', last_name: 'Numbers', designation: 'VP', email: 'many@acme.com', phone: '(555) 111-2222 / 555.333.4444' },
       { first_name: 'No', last_name: 'Number', designation: 'TA', email: 'nonumber@acme.com', phone: 'N/A' },
       { first_name: 'Second', last_name: 'Address', designation: 'HR', email: 'second@acme.com', phone: 'second.other@acme.com', extra_phones: ['(555) 222-3333'] },
+      { first_name: '', last_name: 'Kristin', designation: 'Abrams', email: 'Director of Operations', phone: 'kristin.abrams@acme.com' },
       { first_name: 'Plain', last_name: 'Good', designation: 'CEO', email: 'plain@acme.com', phone: '+1 (555) 999-0000', extra_emails: ['plain2@acme.com'] },
     ] }] });
     step('the import answers 201', r.status === 201, r.status + ' ' + J(r.body).slice(0, 220));
@@ -162,7 +163,9 @@ try {
     step('a SECOND address in the Phone column is kept as an extra email, the real email untouched; extra numbers carried', second && second.email === 'second@acme.com' && J(second.extra_emails) === '["second.other@acme.com"]' && J(second.extra_phones) === '["(555) 222-3333"]', J(second));
     const plain = by('Plain');
     step('a clean row is stored exactly as it was (phone kept, extra email kept)', plain && plain.email === 'plain@acme.com' && plain.phone === '+1 (555) 999-0000' && J(plain.extra_emails) === '["plain2@acme.com"]');
-    step('the response COUNTS what was tidied', r.body && r.body.contactFixes && r.body.contactFixes.email_from_phone === 1 && r.body.contactFixes.phones_split === 1 && r.body.contactFixes.phone_not_a_phone === 1 && r.body.contactFixes.extra_email_from_phone === 1, J(r.body && r.body.contactFixes));
+    const whole = fake.tables.contacts.find(c => c.email === 'kristin.abrams@acme.com');
+    step('A WHOLE ROW ONE COLUMN OFF (the 80 live ones) is stored in order: name, title and email each back in its own field', whole && whole.first_name === 'Kristin' && whole.last_name === 'Abrams' && whole.designation === 'Director of Operations' && !whole.phone && whole.email_status === 'valid', J(whole));
+    step('the response COUNTS what was tidied', r.body && r.body.contactFixes && r.body.contactFixes.email_from_phone === 1 && r.body.contactFixes.row_shifted === 1 && r.body.contactFixes.phones_split === 1 && r.body.contactFixes.phone_not_a_phone === 1 && r.body.contactFixes.extra_email_from_phone === 1, J(r.body && r.body.contactFixes));
     step('…and SAYS it in a sentence (nothing is repaired silently)', r.body && /had the email address in the Phone column/.test(r.body.contactFixesNote) && /several numbers in one cell/.test(r.body.contactFixesNote), r.body && r.body.contactFixesNote);
     step('the shifted contact is NOT counted as "no valid email" any more', r.body && r.body.invalidEmails === 0, J(r.body && r.body.invalidEmails));
   }
