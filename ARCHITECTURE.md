@@ -71,6 +71,7 @@ A shared file has one owner (`index.js` is gateway's). foundry and rampart revie
 | "today" is the viewer's own day | `services/viewer-time.js` |
 | long lists: a horizon and an exit | `services/view-horizon.js` |
 | who a reminder came from | `services/reminder-source.js` |
+| one MAIN email/phone per person + extras; the opt-out rule across ALL of a person's addresses | `services/contact-points.js` |
 | turning HTML entities back into text | `services/html-entities.js` |
 | reading a conversation (needs-you-today queue) | `conversation-intel.js` |
 | error reporting to Sentry | `services/error-report.js` |

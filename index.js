@@ -3601,7 +3601,7 @@ app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 app.use(require('./routes/org-domains')(routeCtx));
 app.use(require('./routes/plans')(routeCtx));
 
-require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor });
+require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor, loadSuppressedSet });
 
 // ── Event-bus subscribers (the "react" half of the spherical structure) ─────
 // Registered after the work functions above exist; emitters elsewhere just

@@ -460,6 +460,8 @@ module.exports = function createRecruitingCore(deps) {
   return {
     // passthrough of the raw deps every route module needs
     supabase, db, auth: deps.auth, hasRole, today: deps.today,
+    // the ONE opt-out lookup (index.js) — a candidate's address is checked against it before it can become the main (D-0070)
+    loadSuppressedSet: deps.loadSuppressedSet,
     // multi-tenant
     orgIdFor, orgStamp, withOrg,
     // relevance

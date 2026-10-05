@@ -557,3 +557,5 @@ Activity tab (that record's submissions only, inline) and Email → All email
 
 
 - **Read a long email conversation comfortably (R-112, 2026-10-05):** in the in-app Mailbox the opened message in a multi-message thread takes ~64% of the window, with an **Expand message / Shrink message** button for nearly full height. Gmail previews show real characters (R-111).
+
+- **Several emails and phone numbers per candidate (R-114 stage 1, 2026-10-05, branch — not live):** one MAIN email and phone plus extras; make an extra the main with one click; "+ add another" in Add Candidate, Edit Candidate and the candidate's header; a résumé upload offers every other email/phone it found (ticked, saved only if still ticked); duplicates are caught on ANY address/number; every email goes to the MAIN only; an address that opted out can never be the main and a person who opted out on ANY address is not emailed on another. Lead contacts (stage 2) not built.

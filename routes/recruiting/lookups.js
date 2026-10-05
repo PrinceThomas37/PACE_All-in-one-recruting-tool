@@ -51,8 +51,8 @@ module.exports = function (app, core) {
         });
       }
 
-      const { fields, used_ai, text } = await parseResume(buffer, b.filename, supabase, req.orgId);
-      res.json({ fields, used_ai, resume_text: text });
+      const { fields, used_ai, text, contacts } = await parseResume(buffer, b.filename, supabase, req.orgId);
+      res.json({ fields, used_ai, resume_text: text, contacts });
     } catch (err) {
       // The recruiter gets the sentence; the record keeps what the library
       // actually said, so a failure nobody can reproduce is still diagnosable

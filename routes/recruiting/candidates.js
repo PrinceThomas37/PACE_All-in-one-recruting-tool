@@ -6,6 +6,7 @@
 const { parseResume } = require('../../resume-parser');
 const entitlements = require('../../services/entitlements');
 const createCandidateFields = require('../../services/candidate-fields');
+const contactPoints = require('../../services/contact-points');
 const { makeRecorder } = require('../../services/record-history-writer');
 const { fetchStored, docContentType } = require('../../services/doc-fetch');
 
@@ -16,7 +17,7 @@ module.exports = function (app, core) {
     hasRequirementColumns, applyDerivedJobFields, persistScores, invalidateJobScores,
     STAGES, STAGE_ALIASES, normalizeStage, BDM_GATED_STAGE,
     isBDM, isRecruiter, assignedJobOrderIds, recruiterCanTouchJob, reportingChainIds,
-    nextId, logSubmissionActivity, pipelineView,
+    nextId, logSubmissionActivity, pipelineView, loadSuppressedSet,
     JOB_ORDER_SELECT, JOB_FIELDS, JOB_DATE_FIELDS, pickJobFields,
   } = core;
   // A candidate record had no trail at all: a phone number or an owner could
@@ -27,6 +28,16 @@ module.exports = function (app, core) {
                              'availability', 'notice_period', 'bill_rate', 'pay_rate'];
   const { CANDIDATE_FIELDS, CANDIDATE_SELECT, pickCandidateFields,
           normName, normEmail, normPhone, findCandidateDuplicates } = createCandidateFields(core);
+
+  // A typed address or number that is not one, or more extras than a person can
+  // sensibly have, is said out loud — never quietly dropped (D-0070: nothing is
+  // added or lost silently).
+  function contactProblem(rejected) {
+    const r = (rejected || [])[0];
+    if (!r) return null;
+    if (r.reason === 'too_many') return 'A person can have at most ' + contactPoints.MAX_EXTRAS + ' extra ' + (r.kind === 'phone' ? 'phone numbers' : 'email addresses') + '.';
+    return '"' + r.value + '" does not look like ' + (r.kind === 'phone' ? 'a phone number.' : 'an email address.');
+  }
 
   // A candidate id from another org must read exactly like one that does not
   // exist — the same 404-not-403 shape as GET /candidates/:id below. Every
@@ -94,7 +105,9 @@ module.exports = function (app, core) {
     try {
       const dups = await findCandidateDuplicates({
         full_name: req.query.full_name, email: req.query.email,
-        phone: req.query.phone, excludeId: req.query.exclude_id, req
+        phone: req.query.phone, excludeId: req.query.exclude_id,
+        // "a@x.com,b@y.com" — every address and number the form holds (D-0070)
+        extra_emails: req.query.extra_emails, extra_phones: req.query.extra_phones, req
       });
       res.json({ duplicate: dups.length > 0, duplicates: dups });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -183,13 +196,17 @@ module.exports = function (app, core) {
 
       // Duplicate catch — name + (email or phone). Warn-and-offer: unless `force`,
       // return the matches (409) so the UI can offer "open existing" over a copy.
+      const cp = contactPoints.normaliseForWrite(b, {});
+      const bad = contactProblem(cp.rejected);
+      if (bad) return res.status(400).json({ error: bad });
       if (!b.force) {
-        const dups = await findCandidateDuplicates({ full_name: b.full_name, email: b.email, phone: b.phone, req });
+        const dups = await findCandidateDuplicates({ full_name: b.full_name, email: b.email, phone: b.phone,
+          extra_emails: cp.columns.extra_emails, extra_phones: cp.columns.extra_phones, req });
         if (dups.length) return res.status(409).json({ error: 'possible_duplicate', duplicates: dups });
       }
 
       const code = await nextId('CN');
-      const row = Object.assign(pickCandidateFields(b), {
+      const row = Object.assign(pickCandidateFields(b), cp.columns, {
         candidate_code: code,
         applicant_status: b.applicant_status || 'New lead',
         // The owner is whoever creates the record (Session 31, the owner's
@@ -223,6 +240,20 @@ module.exports = function (app, core) {
       const reqOrg = orgIdFor(req);
       if (!prior || (reqOrg && prior.org_id && prior.org_id !== reqOrg)) {
         return res.status(404).json({ error: 'Candidate not found' });
+      }
+      // Several emails / phones (D-0070). Extras the form did not send are left alone.
+      const cp = contactPoints.normaliseForWrite(b, prior);
+      const bad = contactProblem(cp.rejected);
+      if (bad) return res.status(400).json({ error: bad });
+      Object.assign(updates, cp.columns);
+      // THE SAFETY RULE: an address that opted out can never be made the main one —
+      // otherwise one click puts a person who said stop back on the send list.
+      if (updates.email !== undefined && contactPoints.normEmail(updates.email) !== contactPoints.normEmail(prior.email)) {
+        const nextMain = contactPoints.normEmail(updates.email);
+        if (nextMain && loadSuppressedSet) {
+          const sup = await loadSuppressedSet([nextMain]);
+          if (sup.has(nextMain)) return res.status(409).json({ error: 'That address opted out of email from us, so it cannot be the main address.', code: 'address_opted_out' });
+        }
       }
       const { data, error } = await supabase.from('candidates')
         .update(updates).eq('id', req.params.id).select(CANDIDATE_SELECT).single();

@@ -1027,3 +1027,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - 2026-10-02 (R-109): `routes/client-intel.js` selects `graph_message_id` on the leads-engine sent rows and hands it to the Sent-folder de-dup as `message_id` (internal only — the timeline mapping is explicit, the id is not returned to the browser).
 
 - 2026-10-02 (R-110): `index.js` creates ONE `openTracking` (next to `pixelLimiter`), calls `openTracking.noteSenderIp(claims.id, req.ip)` (not awaited, throttled, never throws) in `auth`, injects the pixel in `deliverOutboundEmail`, and shares `openTracking` on `routeCtx`; `routes/tracking.js` `GET /o/:token` delegates to `recordOpen` and still ALWAYS returns the gif. `routes/client-intel.js` attaches `opens` (`readLevel`) to each leads email in the timeline; the token and provider message id never leave the server.
+
+- 2026-10-05 (R-114): `index.js` passes `loadSuppressedSet` into `bd_recruiter_routes` (one extra dep) so the candidate routes can refuse an opted-out main; `services/recruiting-core.js` passes it through. No route added, none reordered.
