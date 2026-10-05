@@ -34,6 +34,9 @@ try{
     const ctx=await browser.newContext({ timezoneId: tz }); await ctx.route('**',r=>r.request().url().startsWith(BASE)?r.continue():r.abort());
     const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
     await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,'bd');
+    // R-108: the card also reads the REAL clock, so without this the suite passed on 1 Oct and
+    // failed from 2 Oct on. Pin the page's clock to NOW, as the other date suites do.
+    await page.evaluate((t)=>{ const R=Date; window.Date=class extends R{ constructor(...a){ if(a.length) super(...a); else super(t); } static now(){ return t; } }; }, NOW);
     const out = await page.evaluate(({items,now})=>{
       const sp = naSplitToday(items, now);
       STATE.naShowOlder=false; STATE.viewingUser=null;

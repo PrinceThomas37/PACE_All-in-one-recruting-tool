@@ -36,7 +36,10 @@ const TERRITORIES = [
           'services/record-history.js', 'services/record-history-writer.js',
           // The one way a person is added to a lead (POST /contacts and the POC
           // finder's Accept) — beside routes/contacts.js, which it came out of.
-          'services/lead-contacts.js', 'services/bd-insights.js'],
+          'services/lead-contacts.js', 'services/bd-insights.js',
+          // The insights numbers beside bd-insights, the viewer's-own-day helper both
+          // read (D-0065), and the Sentry reporter (R-090).
+          'services/ra-insights.js', 'services/viewer-time.js', 'services/error-report.js'],
     not: ['routes/recruiting/', 'routes/ai.js', 'routes/outreach-generator.js',
           'routes/candidate-outreach.js', 'routes/next-actions.js',
           'routes/mailbox.js', 'routes/emails.js', 'routes/warmup.js',
@@ -67,6 +70,12 @@ const TERRITORIES = [
           // How a Gmail email leaves (a follow-up whose thread is in another
           // mailbox goes fresh), and the boot sweep for sends cut off mid-flight.
           'services/gmail-delivery.js', 'services/interrupted-sends.js',
+          // A follow-up leaves from the mailbox that sent the first email (D-0067);
+          // the recipient-only open pixel (D-0068); the out-of-office switch-back
+          // sweep (R-080); the submission email; the one decoder for the HTML
+          // entities Gmail leaves in previews (R-111).
+          'services/followup-sender.js', 'services/open-tracking.js', 'services/ooo-return.js',
+          'services/submission-email.js', 'services/html-entities.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
           'routes/emails.js', 'routes/warmup.js', 'routes/deliverability.js'],
@@ -100,6 +109,9 @@ const TERRITORIES = [
           // D-0035: the one place a job order's client-POC fields are named,
           // so list/detail/browse in routes/recruiting/job-orders.js agree.
           'services/job-order-visibility.js',
+          // Interview times in the candidate's zone (R-095), and the one reader of a
+          // candidate's stored document (the résumé read through PACE, R-091).
+          'services/interview-time.js', 'services/doc-fetch.js',
           'bd_recruiter_routes.js',
           'workflow-engine.js', 'routes/workflows.js', 'routes/wf.js',
           'routes/lookups.js', 'hierarchy.js', 'lead-sources/',

@@ -68,6 +68,9 @@ we never have to rewrite to grow (see "Growth bets" below).
 
 ## The stack
 
+**The map is `ARCHITECTURE.md`** (what is where, who owns it, the "one home" for each business rule, and the
+stop-and-ask rule). This file is the rules; that one is the map — read it when you do not know where something belongs.
+
 - **Backend:** Node/Express. `index.js` = the sales/lead engine (leads, send loop, follow-ups, mailbox sweeps);
   `routes/*.js` + `routes/recruiting/*.js` = the ATS (registered on `app` directly); shared helpers in
   `services/`. **Frontend:** plain `<script>` files `public/js/NN-*.js` loaded in order by `public/index.html`;
