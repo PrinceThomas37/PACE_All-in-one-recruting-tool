@@ -231,7 +231,7 @@ module.exports = function createRecruitingCore(deps) {
   // creates a submission and reads it back with the same shape. Another
   // cross-section reference the original file only got away with via hoisting.
   const SUBMISSION_SELECT =
-    '*, candidate:candidates(id,candidate_code,full_name,email,phone,work_authorization,' +
+    '*, candidate:candidates(id,candidate_code,full_name,email,phone,extra_emails,extra_phones,work_authorization,' +
     'city,state,country,current_location,experience_years,source,resume_url,current_title), ' +
     'recruiter:users!recruiter_id(id,name,employee_id), ' +
     'submitter:users!submitted_by(id,name,employee_id)';
@@ -281,7 +281,7 @@ module.exports = function createRecruitingCore(deps) {
   // A NEW WAY OF ADDING SOMEBODY TO A JOB CALLS THIS. It does not insert into
   // `submissions` or `candidate_pipeline` itself.
   const PIPELINE_SELECT =
-    '*, candidate:candidates(id,candidate_code,full_name,email,phone,work_authorization,' +
+    '*, candidate:candidates(id,candidate_code,full_name,email,phone,extra_emails,extra_phones,work_authorization,' +
     'current_title,headline,skills,city,state,country,current_location,experience_years,' +
     'availability,notice_period,current_ctc,bill_rate,pay_rate,source,resume_url), ' +
     'tagger:users!tagged_by(id,name,employee_id), ' +

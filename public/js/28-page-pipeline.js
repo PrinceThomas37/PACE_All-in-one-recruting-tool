@@ -196,14 +196,32 @@
   function plHay(p){
     var c = p.candidate || {};
     var sk = Array.isArray(c.skills) ? c.skills.join(' ') : (c.skills || '');
-    return [c.full_name, c.candidate_code, p.pipeline_code, c.current_title, c.headline, c.email, c.phone,
+    var xe = Array.isArray(c.extra_emails) ? c.extra_emails.join(' ') : '';
+    var xp = Array.isArray(c.extra_phones) ? c.extra_phones.join(' ') : '';
+    return [c.full_name, c.candidate_code, p.pipeline_code, c.current_title, c.headline, c.email, xe, c.phone, xp,
       c.city, c.state, c.country, c.current_location, p.source, c.source, p.employer_name, c.current_employer, sk,
       p.submission && p.submission.stage, p.submission && p.submission.sub_stage].filter(Boolean).join(' ').toLowerCase();
   }
-  window.plFilterRows = function(rows, q){
+  // A number is found however it was typed: "555 111 2222", "(555) 111-2222" and "5551112222" are one number,
+  // so a term that is mostly digits is also looked for in the row's numbers with the punctuation taken out.
+  function plDigits(p){
+    var c = p.candidate || {};
+    return [c.phone].concat(Array.isArray(c.extra_phones) ? c.extra_phones : []).map(function(n){ return String(n||'').replace(/\D/g,''); }).join(' ');
+  }
+  window.plMatch = function(p, q){
     var terms = String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return rows;
-    return rows.filter(function(p){ var h = plHay(p); return terms.every(function(t){ return h.indexOf(t) >= 0; }); });
+    if (!terms.length) return true;
+    var h = plHay(p), d = null;
+    return terms.every(function(t){
+      if (h.indexOf(t) >= 0) return true;
+      var td = t.replace(/\D/g,'');
+      if (td.length >= 3 && td.length >= t.length - 2){ if (d === null) d = plDigits(p); return d.indexOf(td) >= 0; }
+      return false;
+    });
+  };
+  window.plFilterRows = function(rows, q){
+    if (!String(q||'').trim()) return rows;
+    return rows.filter(function(p){ return window.plMatch(p, q); });
   };
   // This job's rows in the order the screen shows them (match or recent), narrowed by the search.
   function plVisibleRows(j){

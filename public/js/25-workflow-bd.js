@@ -1208,11 +1208,21 @@
     });
     return rows;
   }
-  function seqCandidatesCard(jid){
-    var roster=jobRoster(jid);
+  // The job page's own candidate list can be searched (the owner, 5 Oct: by first name, full name, email or phone).
+  // It uses the Pipeline page's matcher (plMatch, 28-page-pipeline.js) so the two boxes never disagree: name, code,
+  // title, skills, place, stage — and email/phone, including a person's extra ones, however a number is typed.
+  function rosterAsPl(r){
+    return { candidate:r.cand||{}, pipeline_code:r.pl&&r.pl.pipeline_code, submission:r.sub||(r.pl&&r.pl.submission),
+      source:(r.sub&&r.sub.source)||(r.pl&&r.pl.source), employer_name:(r.sub&&r.sub.employer_name)||(r.pl&&r.pl.employer_name) };
+  }
+  function jobRosterVisible(jid){
+    var q=STATE.bd.rosterQ||'', all=jobRoster(jid);
+    return q.trim()?all.filter(function(r){return plMatch(rosterAsPl(r),q);}):all;
+  }
+  function rosterCountLine(shown,total){ return (STATE.bd.rosterQ||'').trim()?'Showing '+shown+' of '+total+' on this job':''; }
+  function rosterRowsHtml(jid,roster){
     var sel=STATE.bd.candSel||(STATE.bd.candSel={});
-    var picked=roster.filter(function(r){return sel[r.cid];});
-    var pickedSubs=picked.filter(function(r){return r.kind==='sub';}).length;
+    var total=jobRoster(jid).length;
     var rows=roster.map(function(r){
       var c=r.cand||{}; var on=!!sel[r.cid];
       var stageHtml, moveHtml='';
@@ -1239,16 +1249,27 @@
         '<input type="checkbox" '+(on?'checked':'')+' onclick="bdToggleCandSel(\''+r.cid+'\')" style="cursor:pointer">'+
         '<div style="flex:1;min-width:0">'+
           '<span style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(r.cid||'')+'\')">'+esc(c.full_name||'Candidate')+'</span> '+code(c.candidate_code||'')+
-          '<div style="font-size:11px;color:var(--text3)">'+esc([c.current_title||c.headline,c.email||'no email on file'].filter(Boolean).join(' · '))+'</div>'+
+          '<div style="font-size:11px;color:var(--text3)">'+esc([c.current_title||c.headline,c.email||'no email on file',c.phone].filter(Boolean).join(' · '))+'</div>'+
         '</div>'+
         stageHtml+moveHtml+
       '</div>';
-    }).join('')||'<div style="font-size:12.5px;color:var(--text3);padding:6px 2px">No candidates on this job yet. Add them from Candidates — tick several and use “Add to job”.</div>';
+    }).join('')||(total
+      ?'<div style="font-size:12.5px;color:var(--text3);padding:6px 2px">No candidate on this job matches “'+esc(STATE.bd.rosterQ||'')+'”. <span style="color:var(--accent);cursor:pointer" onclick="bdRosterSearchClear()">Clear the search</span></div>'
+      :'<div style="font-size:12.5px;color:var(--text3);padding:6px 2px">No candidates on this job yet. Add them from Candidates — tick several and use “Add to job”.</div>');
+    return rows;
+  }
+  function seqCandidatesCard(jid){
+    var all=jobRoster(jid);
+    var roster=jobRosterVisible(jid);
+    var sel=STATE.bd.candSel||(STATE.bd.candSel={});
+    var picked=all.filter(function(r){return sel[r.cid];});
+    var pickedSubs=picked.filter(function(r){return r.kind==='sub';}).length;
+    var rows=rosterRowsHtml(jid,roster);
     var allOn=roster.length&&roster.every(function(r){return sel[r.cid];});
     var dis=' disabled style="opacity:.45;cursor:default"';
     return '<div class="card" style="padding:16px;margin-bottom:16px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
-        '<div style="font-weight:600;font-size:14px">Candidates on this job ('+roster.length+')</div>'+
+        '<div style="font-weight:600;font-size:14px">Candidates on this job ('+all.length+')</div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
           (roster.length?'<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleCandSelAll(\''+jid+'\')" style="cursor:pointer"> All</label>':'')+
           (picked.length&&window.stageGroupSelect?stageGroupSelect(picked.length,'bdMoveGroup(\''+jid+'\',this.value);this.value=\'\''):'')+
@@ -1256,7 +1277,12 @@
           '<button class="btn btn-sm btn-primary"'+(picked.length?'':dis)+' onclick="bdEmailSelected(\''+jid+'\')">✉ Email about this job'+(picked.length?' ('+picked.length+')':'')+'</button>'+
           '<button class="btn btn-sm btn-outline"'+(pickedSubs?'':dis)+' onclick="bdStartSequence(\''+jid+'\')">▶ Start sequence'+(pickedSubs?' ('+pickedSubs+')':'')+'</button>'+
         '</div>'+
-      '</div>'+rows+
+      '</div>'+
+      (all.length>1?'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
+        '<input id="jr-q" class="sel" type="search" style="flex:1 1 220px;max-width:340px" placeholder="Search name, email or phone…" value="'+esc(STATE.bd.rosterQ||'')+'" oninput="bdRosterSearch(this.value)" autocomplete="off" aria-label="Search this job’s candidates">'+
+        '<span id="jr-qcount" style="font-size:11.5px;color:var(--text3)">'+esc(rosterCountLine(roster.length,all.length))+'</span>'+
+      '</div>':'')+
+      '<div id="jr-rows">'+rows+'</div>'+
       (picked.length?'':'<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Tick candidates, then email them about this job (you see every email before it goes) or start a sequence.</div>')+
     '</div>';
   }
@@ -1290,9 +1316,23 @@
       reload:function(){ return reloadJobRoster(jid); },
       onDone:function(){ reloadJobRoster(jid).then(function(){ render(); }); } });
   };
+  // Typing narrows the list in place — only the rows are rewritten, so the box keeps the cursor.
+  window.bdRosterSearch=function(v){
+    STATE.bd.rosterQ=String(v||'');
+    var jid=STATE.bd.view&&STATE.bd.view.joId; if(!jid) return;
+    var vis=jobRosterVisible(jid), host=document.getElementById('jr-rows');
+    if(host) host.innerHTML=rosterRowsHtml(jid,vis);
+    var cnt=document.getElementById('jr-qcount'); if(cnt) cnt.textContent=rosterCountLine(vis.length,jobRoster(jid).length);
+  };
+  window.bdRosterSearchClear=function(){
+    STATE.bd.rosterQ='';
+    var el=document.getElementById('jr-q'); if(el) el.value='';
+    bdRosterSearch('');
+  };
   window.bdToggleCandSel=function(cid){ var s=STATE.bd.candSel||(STATE.bd.candSel={}); if(s[cid])delete s[cid]; else s[cid]=true; render(); };
   window.bdToggleCandSelAll=function(jid){
-    var roster=jobRoster(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
+    // "All" means everybody SHOWN: with a search typed it must never tick people the owner cannot see.
+    var roster=jobRosterVisible(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
     var allOn=roster.length&&roster.every(function(r){return s[r.cid];});
     roster.forEach(function(r){ if(allOn)delete s[r.cid]; else s[r.cid]=true; });
     render();
@@ -1417,6 +1457,7 @@
   }
 
   window.bdOpenJobOrder=function(id){
+    if(STATE.bd.view.joId!==id) STATE.bd.rosterQ='';
     STATE.bd.view.joId=id;
     // Applicants are fetched alongside the submissions, and deliberately NOT
     // waited for: somebody applying through the public link must never be able
