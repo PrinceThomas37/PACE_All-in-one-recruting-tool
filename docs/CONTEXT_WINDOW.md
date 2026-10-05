@@ -4,7 +4,7 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-10-05 (Session 38) · **Last merged to `main`**: #289 (`38bdc2e`, R-114 several emails/phones) after #288 (`88d83c8`) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release.
-**Highest ids:** decision D-0068 · contract C-0036 · next roadmap id `R-120` · next migration `057`.
+**Highest ids:** decision D-0068 · contract C-0036 · next roadmap id `R-121` · next migration `057`.
 
 ## ▶ SESSION 38 (2026-10-05) — START HERE
 **MERGED: #288** (squash `88d83c8`, on the owner's "Okay merge 288"; full suite 166/166 on Node 22 AND Node 26): R-111 Gmail previews show real text (`services/html-entities.js`), R-112 the opened email in a long thread is big + an **Expand message** button, R-108 stale test fixed, R-115 `ARCHITECTURE.md` pass 1, roadmap + roadmap page tidied, ten orphan files claimed. Live after the Render deploy (unverified from the sandbox — ask the owner to hard-refresh, open a long thread, click Expand message).
