@@ -79,6 +79,8 @@ function test(row, f) {
     case 'in': return !isNil(a) && (f.val || []).some(v => !isNil(v) && S(v) === S(a));
     case 'like': return !isNil(a) && likeToRe(String(f.val), false).test(String(a));
     case 'ilike': return !isNil(a) && likeToRe(String(f.val), true).test(String(a));
+    // jsonb / array containment (PostgREST `cs`, supabase-js .contains): the column holds EVERY value asked for.
+    case 'cs': { if (!Array.isArray(a)) return false; const want = Array.isArray(f.val) ? f.val : [f.val]; return want.every(w => a.some(x => S(x) === S(w))); }
     default: throw new Error('fake-postgrest: unsupported filter operator "' + f.op + '"');
   }
 }
@@ -206,6 +208,7 @@ export function createFakeDb(opts = {}) {
       is: (c, v) => add({ col: c, op: 'is', val: v }),
       in: (c, vs) => add({ col: c, op: 'in', val: Array.isArray(vs) ? vs : [vs] }),
       like: (c, v) => add({ col: c, op: 'like', val: v }), ilike: (c, v) => add({ col: c, op: 'ilike', val: v }),
+      contains: (c, v) => add({ col: c, op: 'cs', val: v }),
       not: (c, op, v) => {
         let val = v;
         if (op === 'in' && typeof v === 'string') val = v.replace(/^\(|\)$/g, '').split(',').map(s => s.trim().replace(/^"|"$/g, ''));

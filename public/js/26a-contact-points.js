@@ -113,6 +113,8 @@
     KINDS: KINDS, swap: swap, norm: norm,
 
     register: function(scope, cfg){ scopes[scope] = cfg; },
+    // a place that is drawn many times (one per contact row) registers ONCE — a repeat would reset its state
+    has: function(scope){ return !!scopes[scope]; },
 
     // The block to place UNDER the main input / value.
     extras: function(scope, kind){

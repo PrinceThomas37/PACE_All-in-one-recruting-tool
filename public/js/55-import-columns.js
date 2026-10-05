@@ -39,6 +39,12 @@
     ['lastName', ['lastname', 'lname', 'last', 'surname', 'familyname'], ['lastname', 'surname', 'familyname']],
     ['designation', ['designation', 'title', 'contacttitle', 'currenttitle', 'pocdesignation', 'poctitle'],
       ['designation', 'contacttitle', 'currenttitle']],
+    // A SECOND address / number for the same person (R-114, D-0070) — filed BEFORE email/phone so that
+    // "Alternate Email" is not read as the main email. mapRow promotes it to the main if the sheet has no other.
+    ['email2', ['email2', 'emailid2', 'secondaryemail', 'alternateemail', 'alternativeemail', 'altemail', 'otheremail', 'personalemail', 'emailtwo', 'email2address'],
+      ['secondaryemail', 'alternateemail', 'alternativeemail', 'altemail', 'otheremail', 'email2']],
+    ['phone2', ['phone2', 'mobile2', 'cell2', 'phonenumber2', 'secondaryphone', 'alternatephone', 'alternativephone', 'altphone', 'otherphone', 'phonetwo', 'workphone', 'officephone', 'homephone', 'directphone'],
+      ['secondaryphone', 'alternatephone', 'alternativephone', 'altphone', 'otherphone', 'phone2', 'mobile2', 'workphone', 'officephone', 'homephone', 'directphone']],
     ['email', ['email', 'emailid', 'emailaddress', 'mail', 'pocemail', 'contactemail', 'workemail'], ['email']],
     ['phone', ['phone', 'mobile', 'phonenumber', 'contactno', 'contactnumber', 'contact', 'cell', 'telephone', 'pocphone'],
       ['phone', 'mobile', 'contactno', 'contactnumber', 'telephone']],
@@ -132,6 +138,9 @@
       if (f && !out[f]) out[f] = val;
       else out._extra[String(col).trim().slice(0, 80)] = val.slice(0, 500);
     });
+    // A sheet that only has "Alternate Email" / "Work Phone" has no other: that one IS the person's email / number.
+    if (!out.email && out.email2) { out.email = out.email2; delete out.email2; }
+    if (!out.phone && out.phone2) { out.phone = out.phone2; delete out.phone2; }
     return out;
   }
 
@@ -160,7 +169,10 @@
     return { contacts: contacts, withoutAddress: withoutAddress, looksShifted: looksShifted };
   }
 
-  var api = { FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, isSerialColumn: isSerialColumn, mapRow: mapRow, isEmailAddress: isEmailAddress, checkContacts: checkContacts };
+  // What the preview calls a field (the others read fine as they are).
+  function label(field) { return field === 'email2' ? 'extra email' : field === 'phone2' ? 'extra phone' : field; }
+
+  var api = { label: label, FIELDS: FIELDS, normKey: normKey, fieldFor: fieldFor, valueField: valueField, columnField: columnField, isProfileUrl: isProfileUrl, isSerialColumn: isSerialColumn, mapRow: mapRow, isEmailAddress: isEmailAddress, checkContacts: checkContacts };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ImportColumns = api;
 })(typeof window !== 'undefined' ? window : this);

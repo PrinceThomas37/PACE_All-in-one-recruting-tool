@@ -66,6 +66,7 @@ const { createGmailDelivery, freshFollowup } = require('./services/gmail-deliver
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
+const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
 const outreachGen = require('./services/outreach-generator');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
@@ -726,7 +727,7 @@ app.get('/api/version', (req, res) => res.json({
 // ══════════════════════════════════════════════════════════════
 // JOBS
 // ══════════════════════════════════════════════════════════════
-const JOB_SELECT = `*, research, company:companies(id,name,website,industry,location), contacts(id,job_id,first_name,last_name,designation,email,phone,linkedin,is_primary,email_status,ooo_until,email_sent_at,email_platform), creator:users!created_by(id,name,employee_id), assignee:users!assigned_to(id,name,employee_id), bd_assignee:users!assigned_to_bd(id,name,employee_id), sending_email:user_emails!sending_email_id(id,email_address,display_name)`;
+const JOB_SELECT = `*, research, company:companies(id,name,website,industry,location), contacts(id,job_id,first_name,last_name,designation,email,phone,extra_emails,extra_phones,linkedin,is_primary,email_status,ooo_until,email_sent_at,email_platform), creator:users!created_by(id,name,employee_id), assignee:users!assigned_to(id,name,employee_id), bd_assignee:users!assigned_to_bd(id,name,employee_id), sending_email:user_emails!sending_email_id(id,email_address,display_name)`;
 
 // The jobs list is by far the largest recurring payload (all jobs + nested
 // contacts, polled by every open tab), so it dominated Supabase egress. Cache
@@ -1855,13 +1856,16 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   const statusContactIds = [...new Set(pendingEmails.map(e => e.contact_id).filter(Boolean))];
   const contactStatusById = {};
   if (statusContactIds.length) {
-    const { data: statusContacts } = await supabase.from('contacts').select('id,email,email_status').in('id', statusContactIds);
+    const { data: statusContacts } = await supabase.from('contacts').select('id,email,extra_emails,email_status').in('id', statusContactIds);
     (statusContacts || []).forEach(c => { contactStatusById[c.id] = c; });
   }
 
   // Opt-out / suppression set + per-mailbox warm-up/auto-pause state. Both are
   // best-effort: absent table/columns => empty => no behaviour change.
-  const suppressed = await loadSuppressedSet([...new Set(pendingEmails.map(e => (e.to_email || '').toLowerCase()).filter(Boolean))]);
+  // ALL of a contact's addresses are checked, not just the one on the email (D-0070): somebody who opted out on one
+  // address must not be emailed on another.
+  const suppressed = await loadSuppressedSet([...new Set(pendingEmails.map(e => (e.to_email || '').toLowerCase()).filter(Boolean)
+    .concat(Object.values(contactStatusById).flatMap(c => contactPoints.allEmails(c).map(contactPoints.normEmail))))]);
 
   // Per-email sending-mailbox override (sequence "from"-mailbox rotation).
   // Best-effort: a NULL/absent column (migration 008 not applied) => no
@@ -1973,7 +1977,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       continue;
     }
 
-    if (suppressed.has((email.to_email || '').toLowerCase())) {
+    if (contactPoints.suppressedFor(contactStatusById[email.contact_id], email.to_email, suppressed)) {
       skippedSuppressed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || email.from_email || '—', error: 'Recipient is on the opt-out / suppression list — not sent' });
       await recordSendFailure(email, 'suppression', 'Recipient is on the opt-out / suppression list — not sent');
@@ -3548,7 +3552,7 @@ const routeCtx = {
   MS_TENANT, MS_CLIENT, MS_SECRET, MS_REDIRECT, MS_SCOPES,
   logActivity, INDUSTRIES, normInd,
   canTouchJob, isPermanentFollowupBlock, requireRole,
-  addToSuppression, warmupLimit,
+  addToSuppression, warmupLimit, loadSuppressedSet,
   loadAllJobs, JOB_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
   getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache,
@@ -3651,8 +3655,8 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   const meta = enrollment.metadata || {};
   const allowAnyStage = cfg.any_stage || meta.any_stage;
   if (!allowAnyStage && job.stage !== 'Assigned') return { outcome: 'skipped', detail: { reason: 'stage', stage: job.stage } };
-  const suppressed = await loadSuppressedSet([contact.email]);
-  if (suppressed.has(String(contact.email).toLowerCase())) return { outcome: 'skipped', detail: { reason: 'suppressed' } };
+  const suppressed = await loadSuppressedSet(contactPoints.allEmails(contact).map(contactPoints.normEmail));   // every address (D-0070)
+  if (contactPoints.suppressedFor(contact, contact.email, suppressed)) return { outcome: 'skipped', detail: { reason: 'suppressed' } };
 
   // Rotation: prefer this enrollment's assigned "from" mailbox over the job's
   // default. Falls back to the job mailbox when none was chosen / it's gone.

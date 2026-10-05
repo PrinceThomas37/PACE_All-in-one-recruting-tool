@@ -132,6 +132,16 @@ function firstSuppressed(row, set) {
   return hit ? normEmail(hit) : '';
 }
 
+// The send-time question for ONE email: is the address it is going to, OR any other address of the person
+// it is for, on the opt-out list? Returns the address that opted out, or ''. `contact` may be null (an email
+// to somebody with no contact record) — then only the address on the email is checked.
+function suppressedFor(contact, toEmail, set) {
+  if (!set || !set.size) return '';
+  const to = normEmail(toEmail);
+  if (to && set.has(to)) return to;
+  return firstSuppressed(contact || {}, set);
+}
+
 // ── what a résumé yields ────────────────────────────────────────────────────
 const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const PHONE_IN_TEXT = /(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b/g;
@@ -154,6 +164,82 @@ function extractContactPoints(text) {
     if (n.length === 10 && !pSeen.has(n)) { pSeen.add(n); phones.push(v); }
   });
   return { emails: emails.slice(0, MAX_EXTRAS + 1), phones: phones.slice(0, MAX_EXTRAS + 1) };
+}
+
+// ── phone numbers and the lead import (R-014, D-0070 stage 2) ───────────────
+// The live data showed the import's weak spot: of 921 lead contacts, 80 had a real email
+// address in the PHONE column (and a non-address in Email — a sheet shifted one column), and
+// 230 held something in Phone that is not a number. A phone field must hold a phone.
+const EMAIL_ANYWHERE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+
+// One phone number as a person writes it: digits, spaces, ( ) + - . and an optional extension.
+function looksLikePhone(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s || s.indexOf('@') > -1) return false;
+  const body = s.replace(/\s*(?:ext\.?|extension|x)\s*\.?\s*\d+\s*$/i, '');
+  if (!/^[\d\s().+\-]+$/.test(body)) return false;
+  const n = digits(body);
+  return n >= 7 && n <= 15;
+}
+
+// "555-123-4567 / (555) 987-6543" → both. Anything in the cell that is not a number is dropped.
+function splitPhones(v) {
+  return String(v == null ? '' : v).split(/[\n;|/&]|,\s|\sor\s/i)
+    .map(function (x) { return x.trim(); }).filter(looksLikePhone);
+}
+
+// One imported lead contact, tidied BEFORE it is stored. Returns { contact, fixes } — `fixes` is
+// what changed, so the import can SAY so (nothing is repaired silently):
+//   email_from_phone       the Email cell was not an address but the Phone cell held one → it is the
+//                          email now; the non-address text that sat in Email becomes the title if
+//                          the title is empty (the sheet was shifted a column)
+//   extra_email_from_phone the Phone cell held a SECOND address → kept as an extra email
+//   phones_split           the Phone cell held several numbers → the first is the main, the rest extras
+//   phone_not_a_phone      the Phone cell held no number at all ("N/A", a name) → left empty
+function tidyImportedContact(c) {
+  c = c || {};
+  const fixes = [];
+  let email = String(c.email == null ? '' : c.email).trim();
+  let phone = String(c.phone == null ? '' : c.phone).trim();
+  let designation = c.designation;
+  let extraE = asList(c.extra_emails).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
+  let extraP = asList(c.extra_phones).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
+
+  const addr = phone.match(EMAIL_ANYWHERE);
+  if (addr) {
+    phone = phone.replace(addr[0], ' ').replace(/^[\s,;|/&]+|[\s,;|/&]+$/g, '').trim();
+    if (!emailSyntaxValid(email)) {
+      if (email && !String(designation == null ? '' : designation).trim()) designation = email;
+      email = addr[0].toLowerCase();
+      fixes.push('email_from_phone');
+    } else if (normEmail(addr[0]) !== normEmail(email)) {
+      extraE.push(addr[0]);
+      fixes.push('extra_email_from_phone');
+    }
+  }
+  if (phone) {
+    const nums = splitPhones(phone);
+    if (!nums.length) { phone = ''; fixes.push('phone_not_a_phone'); }
+    else { phone = nums[0]; if (nums.length > 1) { extraP = nums.slice(1).concat(extraP); fixes.push('phones_split'); } }
+  }
+  extraP = extraP.reduce(function (acc, x) { return acc.concat(splitPhones(x)); }, []);
+  extraE = extraE.filter(function (x) { return emailSyntaxValid(x); });
+  const e = cleanEmailList(extraE, email), p = cleanPhoneList(extraP, phone);
+  return {
+    contact: Object.assign({}, c, { email: email, phone: phone, designation: designation, extra_emails: e.list, extra_phones: p.list }),
+    fixes: fixes,
+  };
+}
+
+// A sentence for the import result — empty when nothing was fixed.
+function describeImportFixes(counts) {
+  counts = counts || {};
+  const out = [];
+  if (counts.email_from_phone) out.push(counts.email_from_phone + ' contact' + (counts.email_from_phone > 1 ? 's' : '') + ' had the email address in the Phone column (the sheet looks shifted) — it is now their email');
+  if (counts.extra_email_from_phone) out.push(counts.extra_email_from_phone + ' had a second email address in the Phone column — kept as an extra email');
+  if (counts.phones_split) out.push(counts.phones_split + ' had several numbers in one cell — the first is the main, the rest are extras');
+  if (counts.phone_not_a_phone) out.push(counts.phone_not_a_phone + ' had something in the Phone column that is not a number — left empty');
+  return out.join('; ');
 }
 
 // Everything a write needs, in one call. `src` is what the form sent, `prior` the
@@ -183,5 +269,6 @@ function normaliseForWrite(src, prior) {
 module.exports = {
   MAX_EXTRAS, normEmail, normPhone,
   cleanEmailList, cleanPhoneList, allEmails, allPhones, sharesContactPoint,
-  makeMain, firstSuppressed, extractContactPoints, normaliseForWrite,
+  makeMain, firstSuppressed, suppressedFor, extractContactPoints, normaliseForWrite,
+  looksLikePhone, splitPhones, tidyImportedContact, describeImportFixes,
 };

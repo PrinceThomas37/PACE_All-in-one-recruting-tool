@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0071 · 2026-10-05 · STANDS · Stage 2 (lead contacts + phones at import) ships in the SAME merge as stage 1 (R-114)
+**Their words:** *"Do the Stage 1 screenshots feel right? - Yes"* · *"Should Stage 2 … go in this same merge, - Same merge, Do this now."*
+**Chosen:** one PR (#289), one migration (056, which already carries the lead-contact columns), one go from the owner to apply it BEFORE merging. The leads sending engine keeps sending to `contacts.email` (the main) and now also honours a person-level opt-out across all of a contact's addresses.
+**Re-open when:** the leads engine misbehaves after the merge (then stage 2 can be reverted on its own: it touches `routes/contacts.js`, `routes/jobs.js`, `index.js`, `services/lead-contacts.js`).
+
 ### D-0070 · 2026-10-05 · STANDS · Several emails and phone numbers per person: one MAIN you can switch, extras kept (R-114, R-014)
 **Their words:** on which address emails go to — *"Option to tick the email which email is primary, or a small option when clicked the emails turns primary."* · duplicates, résumé upload, where to add/edit — *"Recommended"* (each) · phones at import — *"Both candidates and leads."*
 **Chosen:** (1) A person has ONE main email and ONE main phone plus any number of extras; the recruiter makes an extra the main with a tick or a small "make primary" click. Every email goes to the MAIN address only (candidate outreach batches too). (2) A candidate counts as a duplicate when the name matches and ANY of their emails/phones matches ANY of the other person's. (3) A résumé upload reads every email and phone it finds: the first becomes the main, the rest appear as extras ticked for the user to confirm before saving — nothing is added silently. (4) Add Candidate, Edit Candidate and the candidate's header all carry the same small "+ add another" control. (5) The same main-plus-extras applies to lead contacts, and phone numbers are captured at lead import — for BOTH candidates and leads (so R-014 is answered: capture phones, do not redesign the call step around email).

@@ -67,6 +67,37 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   step('opt-out: nobody suppressed → empty', cp.firstSuppressed(row, new Set(['z@x.com'])) === '' && cp.firstSuppressed(row, new Set()) === '' && cp.firstSuppressed(row, null) === '');
 }
 
+// the leads engine's question: the address on the email, or ANY other address of the same person
+{
+  const sup = new Set(['stopped@x.com']);
+  const ct = { email: 'a@x.com', extra_emails: ['stopped@x.com'] };
+  step('send-time: a contact whose EXTRA address opted out is suppressed even though the email is going to the main', cp.suppressedFor(ct, 'a@x.com', sup) === 'stopped@x.com');
+  step('send-time: the address on the email itself opting out is caught with no contact record at all', cp.suppressedFor(null, 'Stopped@X.com', sup) === 'stopped@x.com');
+  step('send-time: nobody opted out → empty', cp.suppressedFor(ct, 'a@x.com', new Set(['z@x.com'])) === '' && cp.suppressedFor(ct, 'a@x.com', new Set()) === '');
+}
+
+// ── phones and the lead import (R-014) ──────────────────────────────────────
+{
+  const ok = ['(555) 123-4567', '+1 555.123.4567', '555 123 4567', '+91 98765 43210', '555-123-4567 ext 22', '555-123-4567 x22'];
+  const no = ['', 'N/A', 'jane@x.com', '12345', 'call me', '555-1234 5678 9999 1111', null, undefined];
+  step('looksLikePhone: real numbers in every common shape (country code, dots, extension)', ok.every(cp.looksLikePhone), ok.filter(x => !cp.looksLikePhone(x)).join(' | '));
+  step('looksLikePhone: an address, a word, too few digits, nothing — NOT a phone', no.every(x => !cp.looksLikePhone(x)), no.filter(cp.looksLikePhone).join(' | '));
+  step('splitPhones: several numbers in one cell, junk dropped', same(cp.splitPhones('(555) 123-4567 / 555.987.6543; N/A | call me'), ['(555) 123-4567', '555.987.6543']));
+  const shifted = cp.tidyImportedContact({ first_name: 'A', email: 'Senior Recruiter', phone: 'a.b@acme.com', designation: '' });
+  step('tidy: Email is not an address but Phone holds one → it is the email; the text becomes the title', shifted.contact.email === 'a.b@acme.com' && shifted.contact.phone === '' && shifted.contact.designation === 'Senior Recruiter' && same(shifted.fixes, ['email_from_phone']), JSON.stringify(shifted));
+  const keepTitle = cp.tidyImportedContact({ email: 'Senior Recruiter', phone: 'a.b@acme.com', designation: 'VP' });
+  step('tidy: an existing title is never overwritten', keepTitle.contact.designation === 'VP');
+  const second = cp.tidyImportedContact({ email: 'a@x.com', phone: 'b@y.com' });
+  step('tidy: a valid email AND an address in Phone → the second is an extra, the main is untouched', second.contact.email === 'a@x.com' && same(second.contact.extra_emails, ['b@y.com']) && same(second.fixes, ['extra_email_from_phone']));
+  const many = cp.tidyImportedContact({ email: 'a@x.com', phone: '(555) 123-4567 / 555.987.6543', extra_phones: ['(555) 222-3333'] });
+  step('tidy: several numbers → first is the main, the rest and any sent extras are extras (no repeats)', many.contact.phone === '(555) 123-4567' && same(many.contact.extra_phones, ['555.987.6543', '(555) 222-3333']) && same(many.fixes, ['phones_split']), JSON.stringify(many.contact));
+  const na = cp.tidyImportedContact({ email: 'a@x.com', phone: 'N/A' });
+  step('tidy: "N/A" is not a phone → left empty, and counted', na.contact.phone === '' && same(na.fixes, ['phone_not_a_phone']));
+  const clean = cp.tidyImportedContact({ email: 'a@x.com', phone: '+1 (555) 123-4567', extra_emails: ['b@x.com'] });
+  step('tidy: a clean contact changes nothing and reports nothing', clean.contact.phone === '+1 (555) 123-4567' && same(clean.contact.extra_emails, ['b@x.com']) && clean.fixes.length === 0);
+  step('describeImportFixes: plain sentences, empty when nothing was fixed', cp.describeImportFixes({}) === '' && /2 contacts had the email address in the Phone column/.test(cp.describeImportFixes({ email_from_phone: 2 })) && /1 had several numbers/.test(cp.describeImportFixes({ phones_split: 1 })));
+}
+
 // ── a résumé ────────────────────────────────────────────────────────────────
 {
   const text = 'JANE DOE\njane@home.com | (555) 123-4567\nAlso: Jane.Doe@work.io, cell +1 555.987.6543, jane@home.com.\nFax 555-000-1';

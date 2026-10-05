@@ -13,6 +13,8 @@
 // it cannot correct, and it cannot undo.
 // ============================================================================
 
+const contactPoints = require('./contact-points');
+
 const JOB_FIELDS = ['job_url', 'salary_range', 'location', 'industry', 'job_created_date'];
 const CONTACT_FIELDS = ['phone', 'linkedin', 'designation', 'last_name'];
 
@@ -70,6 +72,8 @@ function fillPatch(existing, incoming) {
       // Nor a job posting: only a person's profile belongs in a contact's
       // LinkedIn (the "LinkedIn URL" column that held job links, 2026-09-23).
       if (f === 'linkedin' && !/linkedin\.com\/(in|pub)\//i.test(txt(ic[f]))) continue;
+      // A phone field holds a phone — never an email address or a word (R-014: 230 live contacts held one).
+      if (f === 'phone' && !contactPoints.looksLikePhone(txt(ic[f]))) continue;
       patch[f] = txt(ic[f]).slice(0, 500);
     }
     if (Object.keys(patch).length) { out.contacts.push({ id: c.id, patch }); out.filled.push(...Object.keys(patch).map(k => 'contact:' + k)); }
