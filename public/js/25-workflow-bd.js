@@ -1219,6 +1219,19 @@
     var q=STATE.bd.rosterQ||'', all=jobRoster(jid);
     return q.trim()?all.filter(function(r){return plMatch(rosterAsPl(r),q);}):all;
   }
+  // The job page shows ten people at a time (the owner, 6 Oct) — a roster of 50 is a page
+  // you scroll for ever. The page index lives in STATE.bd.rosterPage and is clamped here, so a
+  // search that shrinks the list never strands anyone on an empty page 5.
+  var ROSTER_PAGE=10;
+  function jobRosterPage(jid){
+    var vis=jobRosterVisible(jid);
+    var pg=UI.clampPage(STATE.bd.rosterPage||0,vis.length,ROSTER_PAGE);
+    STATE.bd.rosterPage=pg;
+    return vis.slice(pg*ROSTER_PAGE,(pg+1)*ROSTER_PAGE);
+  }
+  function rosterPagerHtml(jid){
+    return UI.pager(jobRosterVisible(jid).length,STATE.bd.rosterPage||0,'bdRosterGoPage(%d)',ROSTER_PAGE);
+  }
   function rosterCountLine(shown,total){ return (STATE.bd.rosterQ||'').trim()?'Showing '+shown+' of '+total+' on this job':''; }
   function rosterRowsHtml(jid,roster){
     var sel=STATE.bd.candSel||(STATE.bd.candSel={});
@@ -1260,7 +1273,7 @@
   }
   function seqCandidatesCard(jid){
     var all=jobRoster(jid);
-    var roster=jobRosterVisible(jid);
+    var roster=jobRosterPage(jid);
     var sel=STATE.bd.candSel||(STATE.bd.candSel={});
     var picked=all.filter(function(r){return sel[r.cid];});
     var pickedSubs=picked.filter(function(r){return r.kind==='sub';}).length;
@@ -1271,7 +1284,7 @@
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">'+
         '<div class="fs-14" style="font-weight:600">Candidates on this job ('+all.length+')</div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-          (roster.length?'<label class="fs-12 c-text2" style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleCandSelAll(\''+jid+'\')" style="cursor:pointer"> All</label>':'')+
+          (roster.length?'<label class="fs-12 c-text2" style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" '+(allOn?'checked':'')+' onclick="bdToggleCandSelAll(\''+jid+'\')" style="cursor:pointer"> '+(jobRosterVisible(jid).length>ROSTER_PAGE?'This page':'All')+'</label>':'')+
           (picked.length&&window.stageGroupSelect?stageGroupSelect(picked.length,'bdMoveGroup(\''+jid+'\',this.value);this.value=\'\''):'')+
           '<button class="btn btn-sm btn-outline" onclick="atsOpenBulkUpload({jobId:\''+jid+'\',jobTitle:'+esc(JSON.stringify((joById(jid)||{}).job_title||''))+'})">Upload resumes</button>'+
           '<button class="btn btn-sm btn-primary"'+(picked.length?'':dis)+' onclick="bdEmailSelected(\''+jid+'\')">✉ Email about this job'+(picked.length?' ('+picked.length+')':'')+'</button>'+
@@ -1283,6 +1296,7 @@
         '<span id="jr-qcount" class="fs-11_5 c-text3">'+esc(rosterCountLine(roster.length,all.length))+'</span>'+
       '</div>':'')+
       '<div id="jr-rows">'+rows+'</div>'+
+      '<div id="jr-pager">'+rosterPagerHtml(jid)+'</div>'+
       (picked.length?'':'<div class="fs-11_5 c-text3" style="margin-top:8px">Tick candidates, then email them about this job (you see every email before it goes) or start a sequence.</div>')+
     '</div>';
   }
@@ -1320,8 +1334,10 @@
   window.bdRosterSearch=function(v){
     STATE.bd.rosterQ=String(v||'');
     var jid=STATE.bd.view&&STATE.bd.view.joId; if(!jid) return;
+    STATE.bd.rosterPage=0;
     var vis=jobRosterVisible(jid), host=document.getElementById('jr-rows');
-    if(host) host.innerHTML=rosterRowsHtml(jid,vis);
+    if(host) host.innerHTML=rosterRowsHtml(jid,jobRosterPage(jid));
+    var pg=document.getElementById('jr-pager'); if(pg) pg.innerHTML=rosterPagerHtml(jid);
     var cnt=document.getElementById('jr-qcount'); if(cnt) cnt.textContent=rosterCountLine(vis.length,jobRoster(jid).length);
   };
   window.bdRosterSearchClear=function(){
@@ -1329,10 +1345,11 @@
     var el=document.getElementById('jr-q'); if(el) el.value='';
     bdRosterSearch('');
   };
+  window.bdRosterGoPage=function(i){ STATE.bd.rosterPage=i; render(); };
   window.bdToggleCandSel=function(cid){ var s=STATE.bd.candSel||(STATE.bd.candSel={}); if(s[cid])delete s[cid]; else s[cid]=true; render(); };
   window.bdToggleCandSelAll=function(jid){
     // "All" means everybody SHOWN: with a search typed it must never tick people the owner cannot see.
-    var roster=jobRosterVisible(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
+    var roster=jobRosterPage(jid), s=STATE.bd.candSel||(STATE.bd.candSel={});
     var allOn=roster.length&&roster.every(function(r){return s[r.cid];});
     roster.forEach(function(r){ if(allOn)delete s[r.cid]; else s[r.cid]=true; });
     render();
@@ -1457,7 +1474,7 @@
   }
 
   window.bdOpenJobOrder=function(id){
-    if(STATE.bd.view.joId!==id) STATE.bd.rosterQ='';
+    if(STATE.bd.view.joId!==id){ STATE.bd.rosterQ=''; STATE.bd.rosterPage=0; }
     STATE.bd.view.joId=id;
     // Applicants are fetched alongside the submissions, and deliberately NOT
     // waited for: somebody applying through the public link must never be able

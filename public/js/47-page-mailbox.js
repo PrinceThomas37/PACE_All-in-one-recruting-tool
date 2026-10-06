@@ -38,7 +38,9 @@
     // — anything typed but not in STATE is lost the moment anything else
     // repaints. oninput writes through; nothing repaints per keystroke.
     composer:null, sigHtml:null, sigLoading:false,
-    unread:0, error:null
+    unread:0, error:null,
+    sel:{},            // ticked messages: id → true (the bulk bar acts on these)
+    labels:{}, labelMenu:null, _pages:1
   };
   var M = function(){ return STATE.mailbox; };
 
@@ -99,7 +101,12 @@
     var ok=true;
     ok = put('mb-tabs', p.tabs, _regs.tabs) && ok;
     ok = put('mb-toolbar', p.toolbar, _regs.toolbar) && ok;
+    ok = put('mb-bulk', p.bulk, _regs.bulk) && ok;
+    // The list is replaced as a whole element, so its scroll position is carried across by hand —
+    // ticking the 20th message must not throw you back to the first.
+    var oldList=document.getElementById('mb-list'), keepTop=oldList?oldList.scrollTop:0;
     ok = putOuter('mb-list', p.list, _regs.list) && ok;
+    if(keepTop){ var newList=document.getElementById('mb-list'); if(newList&&newList!==oldList) newList.scrollTop=keepTop; }
     // Write a class ONLY when it changes. Assigning the same className still
     // sets the attribute, which invalidates style on an ancestor of the message
     // body — and an out-of-process sandboxed iframe answers that by re-rastering
@@ -155,50 +162,161 @@
     loadFolders();
   }
 
+  // ── REMEMBERING WHAT WAS JUST ON SCREEN (the owner, 6 Oct: switching folders and messages is slow) ──
+  // Every list and every body is still a live read of the real mailbox — nothing is stored anywhere but
+  // this tab's memory. What changed: a screen the person has just seen is shown AT ONCE when they come
+  // back to it, and refreshed behind it, instead of blanking and waiting for the mail provider again.
+  //   * a folder/search list is shown from memory and quietly re-read when it is older than 15s;
+  //   * an opened message is kept (40 of them) — a message does not change, so it is not re-fetched;
+  //     hovering a row for a moment fetches it ahead of the click;
+  //   * the folder list (counts) is kept per mailbox and re-read behind the screen.
+  // Any action (archive, delete, label, mark read) updates or drops what it touches, so a remembered
+  // screen is never the one that still shows a message you deleted.
+  var LIST_TTL=15000, MSG_MAX=40;
+  var _lc={}, _mc={}, _mcOrder=[], _tc={}, _fc={}, _inflight={}, _hoverT=null;
+  function lkey(){ var m=M(); return [m.activeId,m.folderId||'',m.q||''].join('|'); }
+  function mkey(id){ return M().activeId+':'+id; }
+  function mcPut(acct,id,msg){
+    var k=acct+':'+id; if(!_mc[k]) _mcOrder.push(k); _mc[k]=msg;
+    while(_mcOrder.length>MSG_MAX){ delete _mc[_mcOrder.shift()]; }
+  }
+  function listCachePut(){
+    var m=M(); if(!m.activeId||m.messages===null) return;
+    _lc[lkey()]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
+  }
+  function cacheDropAccount(acct){
+    Object.keys(_lc).forEach(function(k){ if(k.indexOf(acct+'|')===0) delete _lc[k]; });
+    delete _fc[acct];
+  }
+  function cacheForget(acct,id){ delete _mc[acct+':'+id]; }
+  function hasSel(){ return Object.keys(M().sel||{}).length>0; }
+  function enc(x){ return encodeURIComponent(x); }
+
+  function pickFolderId(folders){
+    var inbox=(folders||[]).filter(function(f){return f.kind==='inbox';})[0];
+    return (inbox&&inbox.id)||((folders||[])[0]&&folders[0].id)||null;
+  }
+
   function loadFolders(){
     var m=M(); if(!m.activeId)return;
-    m.foldersLoading=true; m.folders=null; m.error=null; paint();
-    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/folders').then(function(d){
+    var acct=m.activeId, hit=_fc[acct];
+    m.error=null; m.sel={};
+    if(hit){
+      m.folders=hit.folders; m.foldersLoading=false; m.folderId=pickFolderId(hit.folders);
+      paint(); loadMessages(); ensureLabels();
+      if(Date.now()-hit.at>30000) fetchFolders(acct,true);   // counts, quietly
+      return;
+    }
+    m.foldersLoading=true; m.folders=null; paint();
+    fetchFolders(acct,false);
+  }
+  function fetchFolders(acct,quiet){
+    apiGet('/mailbox/'+enc(acct)+'/folders').then(function(d){
+      _fc[acct]={at:Date.now(),folders:d||[]};
+      var m=M(); if(m.activeId!==acct) return;
       m.folders=d||[]; m.foldersLoading=false;
-      var inbox=m.folders.filter(function(f){return f.kind==='inbox';})[0];
-      m.folderId=(inbox&&inbox.id)||(m.folders[0]&&m.folders[0].id)||null;
-      paint();
-      loadMessages();
+      if(!quiet){ m.folderId=pickFolderId(m.folders); paint(); loadMessages(); ensureLabels(); }
+      else paint();
     }).catch(function(e){
-      m.foldersLoading=false; m.folders=[]; m.error=e.message; paint();
+      var m=M(); if(m.activeId!==acct) return;
+      m.foldersLoading=false; if(!quiet){ m.folders=[]; } m.error=quiet?m.error:e.message; paint();
     });
+  }
+
+  function listPath(cursor){
+    var m=M();
+    var p='/mailbox/'+enc(m.activeId)+'/messages?limit=25';
+    if(m.folderId) p+='&folder='+enc(m.folderId);
+    if(m.q) p+='&q='+enc(m.q);
+    if(cursor) p+='&cursor='+enc(cursor);
+    return p;
   }
 
   function loadMessages(cursor){
     var m=M(); if(!m.activeId)return;
-    m.listLoading=true;
-    if(!cursor){ m.messages=null; m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; }
-    paint();
-    var p='/mailbox/'+encodeURIComponent(m.activeId)+'/messages?limit=25';
-    if(m.folderId) p+='&folder='+encodeURIComponent(m.folderId);
-    if(m.q) p+='&q='+encodeURIComponent(m.q);
-    if(cursor) p+='&cursor='+encodeURIComponent(cursor);
-    apiGet(p).then(function(d){
-      // Appending on "load more", replacing otherwise.
+    var key=lkey();
+    if(!cursor){
+      m.sel={}; m.labelMenu=null; m._pages=1;
+      m.selectedId=null; m.message=null; m.thread=null; m.threadId=null;
+      var hit=_lc[key];
+      if(hit){
+        // Seen a moment ago: show it now, re-read it behind the screen if it has aged.
+        m.messages=hit.messages.slice(); m.nextCursor=hit.nextCursor;
+        m.crm=Object.assign(m.crm||{},hit.crm||{});
+        m.listLoading=false; m.error=null; paint();
+        if(Date.now()-hit.at>=LIST_TTL) fetchList(key,null,true);
+        return;
+      }
+      m.messages=null;
+    }
+    m.listLoading=true; paint();
+    fetchList(key,cursor,false);
+  }
+
+  function fetchList(key,cursor,quiet){
+    var m=M(), acct=m.activeId;
+    apiGet(listPath(cursor)).then(function(d){
+      if(M().activeId!==acct || lkey()!==key) return;          // they moved on while this was in flight
+      if(quiet){
+        // Replace what is on screen only while nothing has been done with it — a list the person
+        // is ticking, paging or reading is never rewritten under their hands.
+        var untouched=(m._pages||1)===1 && !hasSel();
+        if(untouched){
+          m.messages=d.messages||[]; m.nextCursor=d.next_cursor||null;
+          m.crm=Object.assign(m.crm||{}, d.crm||{});
+          paint();
+        }
+        _lc[key]={at:Date.now(),messages:(d.messages||[]).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},m.crm||{})};
+        return;
+      }
       m.messages=cursor?(m.messages||[]).concat(d.messages||[]):(d.messages||[]);
       m.nextCursor=d.next_cursor||null;
+      if(cursor) m._pages=(m._pages||1)+1;
       m.crm=Object.assign(m.crm||{}, d.crm||{});
       m.listLoading=false; m.error=null;
+      if(!cursor) _lc[key]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
       paint();
     }).catch(function(e){
+      if(M().activeId!==acct || lkey()!==key) return;
+      if(quiet) return;                                          // a failed refresh behind the screen says nothing
       m.listLoading=false; m.error=e.message;
       if(!cursor) m.messages=[];
       paint();
     });
   }
 
+  // One fetch per message at a time, shared by "open" and "hover ahead".
+  function fetchMessage(acct,id,images){
+    var k=acct+':'+id+(images?':img':'');
+    if(_inflight[k]) return _inflight[k];
+    var path='/mailbox/'+enc(acct)+'/messages/'+enc(id)+(images?'?images=show':'');
+    var pr=apiGet(path).then(function(d){ delete _inflight[k]; if(!images) mcPut(acct,id,d); return d; },
+      function(e){ delete _inflight[k]; throw e; });
+    _inflight[k]=pr; return pr;
+  }
+  window.mbHover=function(id){
+    clearTimeout(_hoverT);
+    try{ if(!(window.matchMedia&&matchMedia('(hover:hover) and (pointer:fine)').matches)) return; }catch(e){ return; }
+    var acct=M().activeId; if(!acct) return;
+    _hoverT=setTimeout(function(){ if(!_mc[acct+':'+id]) fetchMessage(acct,id,false).catch(function(){}); },180);
+  };
+  window.mbHoverEnd=function(){ clearTimeout(_hoverT); };
+
   function loadMessage(id){
-    var m=M();
-    m.selectedId=id; m.message=null; m.msgLoading=true;
-    m.showImages=false; m.composer=null;
+    var m=M(), acct=m.activeId;
+    m.selectedId=id; m.showImages=false; m.composer=null;
+    var hit=_mc[acct+':'+id];
+    if(hit){                                    // a message does not change: show it, no round trip
+      m.message=hit; m.msgLoading=false; m.error=null;
+      m.crm=Object.assign(m.crm||{}, hit.crm||{});
+      paint();
+      if(hit.unread) markRead(id, true, true);
+      loadThread(hit);
+      return;
+    }
+    m.message=null; m.msgLoading=true;
     paint();
-    var p='/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id);
-    apiGet(p).then(function(d){
+    fetchMessage(acct,id,false).then(function(d){
       if(m.selectedId!==id)return; // the user moved on while this was in flight
       m.message=d; m.msgLoading=false;
       m.crm=Object.assign(m.crm||{}, d.crm||{});
@@ -221,13 +339,17 @@
   // other. That keeps ONE code path for opening mail (and for marking it read)
   // instead of a second, quieter one that would drift out of step.
   function loadThread(msg){
-    var m=M();
+    var m=M(), acct=m.activeId;
     var tid=msg&&msg.thread_id;
     if(!tid){ m.thread=null; m.threadId=null; return; }
     if(m.threadId===tid && m.thread) return;   // already have it
-    m.threadId=tid; m.thread=null;
-    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/threads/'+encodeURIComponent(tid))
+    m.threadId=tid;
+    var th=_tc[acct+':'+tid];
+    if(th){ m.thread=th; paint(); return; }
+    m.thread=null;
+    apiGet('/mailbox/'+enc(acct)+'/threads/'+enc(tid))
       .then(function(list){
+        _tc[acct+':'+tid]=list||[];
         if(m.threadId!==tid)return;
         m.thread=list||[];
         paint();
@@ -243,6 +365,8 @@
     var m=M();
     (m.messages||[]).forEach(function(x){ if(x.id===id) x.unread=!read; });
     if(m.message&&m.message.id===id) m.message.unread=!read;
+    var cm=_mc[m.activeId+':'+id]; if(cm) cm.unread=!read;
+    listCachePut();
     if(!quiet) paint();
     apiPatch('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id),{read:!!read})
       .then(function(){ refreshUnread(true); })
@@ -255,10 +379,162 @@
     var m=M();
     m.messages=(m.messages||[]).filter(function(x){return x.id!==id;});
     if(m.selectedId===id){ m.selectedId=null; m.message=null; }
+    if(m.sel) delete m.sel[id];
+    cacheForget(m.activeId,id); cacheDropAccount(m.activeId); listCachePut();   // other folders' counts and lists are now older than this action
     paint(); refreshUnread(true);
   }
 
   // ── actions ────────────────────────────────────────────────────────────────
+  // ── select many ───────────────────────────────────────────────────────────
+  function visibleRows(){
+    var m=M(), all=m.messages||[];
+    return (m.filter==='unread')?all.filter(function(x){return x.unread;}):all;
+  }
+  function selectHead(rows){
+    var m=M(), sel=m.sel||{};
+    var all=rows.length&&rows.every(function(r){return sel[r.id];});
+    return '<label class="mb-selhead"><input type="checkbox" '+(all?'checked ':'')+'onclick="mbSelAll()" aria-label="Select all loaded emails"> '+
+      '<span>Select all '+rows.length+' loaded</span></label>';
+  }
+  function renderBulkBar(){
+    var m=M(), n=Object.keys(m.sel||{}).length;
+    if(!n) return '';
+    var dis=m.bulkBusy?' disabled':'';
+    return '<div class="mb-bulk">'+
+      '<span class="mb-bulk-n">'+n+' selected</span>'+
+      '<button class="btn btn-sm btn-outline"'+dis+' onclick="mbBulk(\'archive\')">Archive</button>'+
+      '<button class="btn btn-sm btn-danger"'+dis+' title="Moves them to Trash — still recoverable in your mailbox" onclick="mbBulk(\'trash\')">Delete</button>'+
+      '<button class="btn btn-sm btn-outline"'+dis+' onclick="mbBulk(\'read\')">Mark read</button>'+
+      '<button class="btn btn-sm btn-outline"'+dis+' onclick="mbBulk(\'unread\')">Mark unread</button>'+
+      '<button class="btn btn-sm btn-outline"'+dis+' onclick="mbLabelMenu()">Label…</button>'+
+      '<button class="btn btn-sm btn-outline"'+dis+' onclick="mbSelClear()">Clear</button>'+
+      (m.bulkBusy?'<span class="mb-bulk-wait">Working…</span>':'')+
+    '</div>';
+  }
+  window.mbSel=function(id,ev){
+    if(ev&&ev.stopPropagation) ev.stopPropagation();
+    var m=M(); m.sel=m.sel||{};
+    if(m.sel[id]) delete m.sel[id]; else m.sel[id]=true;
+    paint();
+  };
+  window.mbSelAll=function(){
+    var m=M(), rows=visibleRows(); m.sel=m.sel||{};
+    var all=rows.length&&rows.every(function(r){return m.sel[r.id];});
+    if(all) m.sel={}; else rows.forEach(function(r){ m.sel[r.id]=true; });
+    paint();
+  };
+  window.mbSelClear=function(){ M().sel={}; paint(); };
+
+  // One request per 50, in order; each message is answered on its own, so a failure names itself
+  // and the rest still happen. Delete is a MOVE to Trash — said out loud, as everywhere here.
+  function bulkRequest(acct,ids,action,labelId){
+    var chunks=[]; for(var i=0;i<ids.length;i+=50) chunks.push(ids.slice(i,i+50));
+    var results=[];
+    return chunks.reduce(function(p,chunk){
+      return p.then(function(){
+        return apiPost('/mailbox/'+enc(acct)+'/bulk',{ids:chunk,action:action,label_id:labelId||undefined})
+          .then(function(r){ results=results.concat((r&&r.results)||[]); });
+      });
+    },Promise.resolve()).then(function(){ return results; });
+  }
+  function applyLocal(acct,okIds,action,labelId){
+    var m=M(), set={}; okIds.forEach(function(id){ set[id]=1; });
+    function touch(x){
+      if(!x||!set[x.id]) return;
+      if(action==='read') x.unread=false; else if(action==='unread') x.unread=true;
+      else if(action==='label'){ x.label_ids=(x.label_ids||[]).filter(function(l){return l!==labelId;}).concat([labelId]); }
+      else if(action==='unlabel'){ x.label_ids=(x.label_ids||[]).filter(function(l){return l!==labelId;}); }
+    }
+    (m.messages||[]).forEach(touch); touch(m.message);
+    okIds.forEach(function(id){ touch(_mc[acct+':'+id]); });
+    if(action==='trash'||action==='archive'){
+      m.messages=(m.messages||[]).filter(function(x){return !set[x.id];});
+      if(m.selectedId&&set[m.selectedId]){ m.selectedId=null; m.message=null; }
+      okIds.forEach(function(id){ cacheForget(acct,id); delete m.sel[id]; });
+    }
+  }
+  window.mbBulk=function(action,labelId,idsOverride){
+    var m=M(), acct=m.activeId;
+    var ids=idsOverride||Object.keys(m.sel||{});
+    if(!ids.length||m.bulkBusy) return Promise.resolve();
+    m.bulkBusy=true; paint();
+    return bulkRequest(acct,ids,action,labelId).then(function(results){
+      if(M().activeId!==acct){ return; }
+      var okIds=results.filter(function(r){return r.ok;}).map(function(r){return r.id;});
+      var failed=results.length-okIds.length;
+      applyLocal(acct,okIds,action,labelId);
+      cacheDropAccount(acct); listCachePut();
+      m.bulkBusy=false;
+      var n=okIds.length;
+      var msg={ trash:'Moved '+n+' to Trash — still recoverable in your mailbox', archive:'Archived '+n,
+        read:'Marked '+n+' as read', unread:'Marked '+n+' as unread', label:'Labelled '+n, unlabel:'Label removed from '+n }[action]||('Done for '+n);
+      if(failed) showToast(msg+' · '+failed+' could not be changed — try those again','warning');
+      else showToast(msg,'success');
+      render(); refreshUnread(true);
+    }).catch(function(e){
+      m.bulkBusy=false; render(); showToast('That did not go through: '+((e&&e.message)||e),'error');
+    });
+  };
+
+  // The label picker: ✓ on every picked email, – on some, empty on none; one click flips it for them all.
+  window.mbLabelMenu=function(ids){
+    var m=M(); ids=ids||Object.keys(m.sel||{});
+    if(!ids.length) return;
+    ensureLabels();
+    m.labelMenu={ids:ids.slice(),busy:false,err:null}; render();
+    setTimeout(function(){ var i=document.getElementById('mb-newlabel'); if(i&&i.focus) i.focus(); },30);
+  };
+  window.mbLabelClose=function(){ var m=M(); if(!m.labelMenu) return; m.labelMenu=null; render(); };
+  function labelState(labelId){
+    var m=M(), ids=(m.labelMenu&&m.labelMenu.ids)||[];
+    var rows=ids.map(function(id){
+      return (m.messages||[]).filter(function(x){return x.id===id;})[0] || (m.message&&m.message.id===id?m.message:null) || _mc[m.activeId+':'+id] || {label_ids:[]};
+    });
+    var have=rows.filter(function(r){return (r.label_ids||[]).indexOf(labelId)>=0;}).length;
+    return have===0?'none':(have===rows.length?'all':'some');
+  }
+  window.mbLabelToggle=function(labelId){
+    var m=M(); if(!m.labelMenu||m.labelMenu.busy) return;
+    var st=labelState(labelId), ids=m.labelMenu.ids.slice();
+    m.labelMenu.busy=true; render();
+    mbBulk(st==='all'?'unlabel':'label',labelId,ids).then(function(){ if(m.labelMenu){ m.labelMenu.busy=false; render(); } });
+  };
+  window.mbLabelCreate=function(){
+    var m=M(); if(!m.labelMenu||m.labelMenu.busy) return;
+    var inp=document.getElementById('mb-newlabel'); var name=inp?String(inp.value||'').trim():'';
+    if(!name){ m.labelMenu.err='Give the label a name'; render(); return; }
+    var acct=m.activeId, ids=m.labelMenu.ids.slice();
+    m.labelMenu.busy=true; m.labelMenu.err=null; render();
+    apiPost('/mailbox/'+enc(acct)+'/labels',{name:name}).then(function(l){
+      m.labels[acct]=(m.labels[acct]||[]).filter(function(x){return x.id!==l.id;}).concat([{id:l.id,name:l.name||name}]);
+      return mbBulk('label',l.id,ids);
+    }).then(function(){ if(m.labelMenu){ m.labelMenu.busy=false; render(); } })
+    .catch(function(e){ if(m.labelMenu){ m.labelMenu.busy=false; m.labelMenu.err=(e&&e.message)||'Could not create it'; render(); } });
+  };
+  function drawLabelMenu(){
+    var m=M();
+    if(STATE.page!=='mailbox'||!m.labelMenu) return '';
+    var list=labelList(), n=m.labelMenu.ids.length;
+    var rows=list.length?list.map(function(l){
+      var st=labelState(l.id);
+      return '<button class="mb-lm-row" '+(m.labelMenu.busy?'disabled ':'')+'onclick="mbLabelToggle(\''+escAttr(l.id)+'\')">'+
+        '<span class="mb-lm-box st-'+st+'">'+(st==='all'?'✓':(st==='some'?'–':''))+'</span>'+
+        '<span class="mb-lm-name">'+esc(l.name)+'</span></button>';
+    }).join(''):'<div class="mb-lm-empty">No labels yet — make the first one below.</div>';
+    return '<div class="overlay" onclick="mbLabelClose()">'+
+      '<div class="modal mb-lm" role="dialog" aria-label="Label emails" onclick="event.stopPropagation()">'+
+        '<div class="mb-lm-h"><b>Label '+n+' email'+(n===1?'':'s')+'</b>'+
+          '<button class="btn btn-outline btn-sm" onclick="mbLabelClose()">Done</button></div>'+
+        '<div class="mb-lm-list">'+rows+'</div>'+
+        '<div class="mb-lm-new"><input id="mb-newlabel" class="sel" maxlength="60" placeholder="New label…" '+
+          'onkeydown="if(event.key===\'Enter\'){mbLabelCreate()}">'+
+          '<button class="btn btn-primary btn-sm" '+(m.labelMenu.busy?'disabled ':'')+'onclick="mbLabelCreate()">Create & apply</button></div>'+
+        (m.labelMenu.err?'<div class="mb-lm-err">'+esc(m.labelMenu.err)+'</div>':'')+
+      '</div></div>';
+  }
+  UI.registerOverlay('mb-labels',drawLabelMenu);
+  document.addEventListener('keydown',function(ev){ if(ev.key==='Escape'&&M().labelMenu) mbLabelClose(); });
+
   window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
   window.mbSelectFolder=function(id){ var m=M(); if(m.folderId===id)return; m.folderId=id; loadMessages(); };
   window.mbOpen=function(id){ loadMessage(id); };
@@ -270,7 +546,7 @@
   };
   window.mbBack=function(){ var m=M(); m.bodyTall=false; m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; paint(); };
   window.mbLoadMore=function(){ var m=M(); if(m.nextCursor) loadMessages(m.nextCursor); };
-  window.mbRefresh=function(){ var m=M(); m.crm={}; loadMessages(); refreshUnread(true); };
+  window.mbRefresh=function(){ var m=M(); m.crm={}; delete _lc[lkey()]; delete _fc[m.activeId]; loadMessages(); fetchFolders(m.activeId,true); refreshUnread(true); };
   window.mbSearch=function(v){
     var m=M(); if(m.q===v)return; m.q=v; loadMessages();
   };
@@ -284,7 +560,7 @@
   window.mbShowImages=function(){
     var m=M(); if(!m.message)return;
     m.showImages=true; m.msgLoading=true; paint();
-    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(m.message.id)+'?images=show')
+    fetchMessage(m.activeId,m.message.id,true)
       .then(function(d){ m.message=d; m.msgLoading=false; paint(); })
       .catch(function(e){ m.msgLoading=false; showToast('Could not load images: '+e.message,'error'); paint(); });
   };
@@ -693,6 +969,7 @@
     return '<div class="mb" id="mb-root">'+
       '<div id="mb-tabs" style="flex:none">'+p.tabs+'</div>'+
       '<div id="mb-toolbar" style="flex:none">'+p.toolbar+'</div>'+
+      '<div id="mb-bulk" style="flex:none">'+p.bulk+'</div>'+
       '<div class="mb-panes'+(p.reading?' reading':'')+'" id="mb-panes">'+
         p.list+
         p.reader+
@@ -709,6 +986,7 @@
       reading:!!m.selectedId,
       tabs:renderMbTabs(),
       toolbar:renderTopBar(readable),
+      bulk:renderBulkBar(),
       list:renderList(),
       shape:readerShape()
     };
@@ -851,7 +1129,7 @@
     if(m.listLoading&&m.messages===null) body='<div class="dt-empty">Loading messages…</div>';
     else if(m.error&&!all.length)        body='<div class="dt-empty" style="color:var(--red)">'+esc(m.error)+'</div>';
     else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'”':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
-    else body=rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
+    else body=selectHead(rows)+rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
 
     return '<div class="mb-list'+(wide?' wide':'')+'" id="mb-list">'+
       body+
@@ -859,6 +1137,40 @@
         ? '<div style="padding:12px;text-align:center"><button class="btn btn-sm btn-outline" onclick="mbLoadMore()"'+(m.listLoading?' disabled':'')+'>'+(m.listLoading?'Loading…':'Load more')+'</button></div>'
         : '')+
     '</div>';
+  }
+
+  // ── LABELS (Gmail labels / Outlook categories) ────────────────────────────────
+  function labelList(){
+    var m=M(); var l=(m.labels&&m.labels[m.activeId])||[];
+    var seen={}; l.forEach(function(x){ seen[x.id]=1; });
+    // Outlook applies a category by NAME, and its master list may be unreadable — so the names the
+    // loaded messages already carry are offered too.
+    var extra=[];
+    (m.messages||[]).concat(m.message?[m.message]:[]).forEach(function(x){
+      (x.label_ids||[]).forEach(function(id){ if(!seen[id]&&(m.accounts||[]).some(function(a){return a.id===m.activeId&&a.platform!=='Gmail';})){ seen[id]=1; extra.push({id:id,name:id}); } });
+    });
+    return l.concat(extra);
+  }
+  function labelName(id){
+    var l=labelList().filter(function(x){return x.id===id;})[0];
+    return l?l.name:'';
+  }
+  function labelChips(ids,max){
+    ids=(ids||[]); if(!ids.length) return '';
+    var named=ids.map(function(id){ return {id:id,name:labelName(id)}; }).filter(function(x){return x.name;});
+    if(!named.length) return '';
+    var shown=named.slice(0,max||2), more=named.length-shown.length;
+    return '<div class="mb-lbls">'+shown.map(function(x){ return '<span class="mb-lbl">'+esc(x.name)+'</span>'; }).join('')+
+      (more>0?'<span class="mb-lbl mb-lbl-more">+'+more+'</span>':'')+'</div>';
+  }
+  function ensureLabels(){
+    var m=M(), acct=m.activeId; if(!acct) return;
+    m.labels=m.labels||{};
+    if(m.labels[acct]) return;
+    m.labels[acct]=[];                                   // asked once; an unreadable list is "no list"
+    apiGet('/mailbox/'+enc(acct)+'/labels').then(function(d){
+      m.labels[acct]=d||[]; paint();
+    }).catch(function(){ /* labels are a nicety — the inbox works without the list */ });
   }
 
   // The initials block that identifies a correspondent at a glance.
@@ -876,7 +1188,10 @@
     var outbound=folder&&(folder.kind==='sent'||folder.kind==='drafts');
     var party=outbound?((x.to||[])[0]||{}):(x.from||{});
     var partyEmail=party.email||'';
-    return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+'" onclick="mbOpen(\''+escAttr(x.id)+'\')">'+
+    var picked=!!((m.sel||{})[x.id]);
+    return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+(picked?' picked':'')+'" onclick="mbOpen(\''+escAttr(x.id)+'\')" '+
+      'onmouseenter="mbHover(\''+escAttr(x.id)+'\')" onmouseleave="mbHoverEnd()">'+
+      '<label class="mb-chk" title="Select" onclick="event.stopPropagation()"><input type="checkbox" '+(picked?'checked ':'')+'onclick="mbSel(\''+escAttr(x.id)+'\',event)" aria-label="Select this email"></label>'+
       mbAvatar(party,28)+
       '<div class="mb-row-b">'+
         '<div class="mb-row-t">'+
@@ -887,6 +1202,7 @@
         '<div class="mb-subj">'+esc(x.subject||'(no subject)')+'</div>'+
         '<div class="mb-prev">'+esc(x.preview||'')+
           (x.has_attachments?' <span title="Has attachments">📎</span>':'')+'</div>'+
+        labelChips(x.label_ids,2)+
       '</div>'+
     '</div>';
   }
@@ -910,12 +1226,14 @@
           (hasOthers?'<span class="pill mute">'+threadLen+' messages</span>':'')+'</div>'+
         '<span class="kebab" title="Close" onclick="mbBack()">'+UI.ic('x')+'</span>'+
       '</div>'+
+      labelChips(x.label_ids,6)+
       '<div class="mb-acts">'+
         '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
         ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
         '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mbLabelMenu([\''+escAttr(x.id)+'\'])">Label</button>'+
         (hasOthers?'<button class="btn btn-sm btn-outline" title="Make the open message taller, to read it without scrolling inside it" onclick="mbToggleTall()">'+(M().bodyTall?'Shrink message':'Expand message')+'</button>':'')+
         '<button class="btn btn-sm btn-danger" onclick="mbTrash(\''+escAttr(x.id)+'\',event)">Delete</button>'+
       '</div>';

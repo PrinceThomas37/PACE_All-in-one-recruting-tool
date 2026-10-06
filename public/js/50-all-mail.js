@@ -20,11 +20,12 @@ var AM_SOURCES = {
   leads:      { lbl: 'Lead outreach',   hint: 'Cold emails and follow-ups, drip-sent from the queue', fg: '#3730a3', bg: '#e0e7ff' },
   individual: { lbl: 'One-off',         hint: 'Sent immediately — client emails, interview invites',  fg: '#0369a1', bg: '#e0f2fe' },
   candidates: { lbl: 'Candidate batch', hint: 'Queued to candidates, evenings and weekends',          fg: '#9a3412', bg: '#ffedd5' },
+  replies:    { lbl: 'Received',        hint: 'A reply that came back to one of your mailboxes or to a lead you own', fg: '#166534', bg: '#dcfce7' },
 };
 
 function amState() {
   if (!STATE.allMail) {
-    STATE.allMail = { data: null, loading: false, error: null, q: '', page: 0, source: '', open: null, showAll: false };
+    STATE.allMail = { data: null, loading: false, error: null, q: '', page: 0, source: '', direction: '', open: null, showAll: false, full: {} };
   }
   return STATE.allMail;
 }
@@ -37,6 +38,7 @@ window.loadAllMail = function (force) {
   var qs = [];
   if (a.q) qs.push('q=' + encodeURIComponent(a.q));
   if (a.source) qs.push('source=' + encodeURIComponent(a.source));
+  if (a.direction) qs.push('direction=' + encodeURIComponent(a.direction));
   if (a.page) qs.push('page=' + a.page);
   if (a.showAll) qs.push('days=0');
   apiGet('/email/history' + (qs.length ? '?' + qs.join('&') : '')).then(function (d) {
@@ -50,6 +52,22 @@ window.loadAllMail = function (force) {
 
 window.amSearch = function (v) { var a = amState(); a.q = v; a.page = 0; a.data = null; loadAllMail(true); };
 window.amGoPage = function (i) { var a = amState(); a.page = i; a.data = null; loadAllMail(true); };
+// All · Received · Sent — what came back and what went out, in one list.
+window.amDirection = function (d) { var a = amState(); a.direction = d; a.source = ''; a.page = 0; a.data = null; loadAllMail(true); };
+// "Read the full email": the stored copy is quote-stripped; the whole message is fetched live
+// from the mailbox it arrived in (the lead's own owner-only endpoint) and never kept.
+window.amFull = function (id, jobId, ev) {
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  var a = amState(); a.full = a.full || {};
+  var f = a.full[id];
+  if (f && f.text != null) { f.open = !f.open; scheduleRender(); return; }
+  a.full[id] = { loading: true, open: true }; scheduleRender();
+  apiGet('/leads/' + encodeURIComponent(jobId) + '/intel/messages/' + encodeURIComponent(id) + '/full').then(function (x) {
+    a.full[id] = { text: String((x && x.text) || ''), open: true }; scheduleRender();
+  }).catch(function (e) {
+    a.full[id] = { error: (e && e.message) || 'Could not open it', open: true }; scheduleRender();
+  });
+};
 window.amSource = function (s) { var a = amState(); a.source = s; a.page = 0; a.data = null; loadAllMail(true); };
 window.amShowAll = function () { var a = amState(); a.showAll = true; a.page = 0; a.data = null; loadAllMail(true); };
 window.amToggle = function (id) {
@@ -84,13 +102,26 @@ window.renderAllMailBody = function () {
       (n === null || n === undefined ? '' : ' <b>' + n + '</b>') + '</button>';
   }
 
-  var total = (bs.leads || 0) + (bs.individual || 0) + (bs.candidates || 0);
+  var sentN = (bs.leads || 0) + (bs.individual || 0) + (bs.candidates || 0);
+  var recvN = bs.replies || 0;
+  function dirBtn(key, label, n) {
+    return '<button class="am-src' + (a.direction === key ? ' is-on' : '') + '" onclick="amDirection(\'' + key + '\')">' +
+      htmlEsc(label) + ' <b>' + n + '</b></button>';
+  }
   var filters = '<div class="am-srcs">' +
-    srcBtn('', 'All', total) +
-    srcBtn('leads', AM_SOURCES.leads.lbl, bs.leads || 0) +
-    srcBtn('individual', AM_SOURCES.individual.lbl, bs.individual || 0) +
-    srcBtn('candidates', AM_SOURCES.candidates.lbl, bs.candidates || 0) +
-  '</div>';
+    dirBtn('', 'All', sentN + recvN) +
+    dirBtn('in', 'Received', recvN) +
+    dirBtn('out', 'Sent', sentN) +
+  '</div>' +
+  // Which pipeline a SENT email went through — only when looking at what was sent.
+  (a.direction === 'out'
+    ? '<div class="am-srcs am-srcs2">' +
+        srcBtn('', 'Every kind', sentN) +
+        srcBtn('leads', AM_SOURCES.leads.lbl, bs.leads || 0) +
+        srcBtn('individual', AM_SOURCES.individual.lbl, bs.individual || 0) +
+        srcBtn('candidates', AM_SOURCES.candidates.lbl, bs.candidates || 0) +
+      '</div>'
+    : '');
 
   var rows = items.map(function (it) {
     var s = AM_SOURCES[it.source] || AM_SOURCES.leads;
@@ -98,7 +129,9 @@ window.renderAllMailBody = function () {
     var when = it.sent_at ? fmtWhen(it.sent_at) : '—';
     // A pending row must say it is pending, not pretend it was sent — that
     // conflation is what made three pipelines feel like one broken one.
-    var stat = it.status === 'pending'
+    var stat = it.source === 'replies'
+      ? '<span class="am-stat am-replied">↩ Received</span>'
+      : it.status === 'pending'
       ? '<span class="am-stat am-pending">Queued' + (it.due_at ? ' · due ' + fmtWhen(it.due_at) : '') + '</span>'
       : it.status === 'failed'
         ? '<span class="am-stat am-failed" title="' + htmlEsc(it.fail_reason || '') + '">Failed</span>'
@@ -113,8 +146,10 @@ window.renderAllMailBody = function () {
         '<span class="am-tag" style="background:' + s.bg + ';color:' + s.fg + '" title="' + htmlEsc(s.hint) + '">' + htmlEsc(s.lbl) + '</span>' +
         '<div class="am-main">' +
           '<div class="am-subj">' + htmlEsc(it.subject || '(no subject)') + '</div>' +
-          '<div class="am-to">' + htmlEsc(it.to_email || '') +
-            (it.from_email ? ' <span class="am-dim">from ' + htmlEsc(it.from_email) + '</span>' : '') + '</div>' +
+          (it.source === 'replies'
+            ? '<div class="am-to">' + htmlEsc(it.from_email || 'unknown sender') + ' <span class="am-dim">to ' + htmlEsc(it.to_email || 'your mailbox') + '</span></div>'
+            : '<div class="am-to">' + htmlEsc(it.to_email || '') +
+                (it.from_email ? ' <span class="am-dim">from ' + htmlEsc(it.from_email) + '</span>' : '') + '</div>') +
         '</div>' +
         stat +
         '<span class="am-when">' + htmlEsc(when) + '</span>' +
@@ -127,6 +162,13 @@ window.renderAllMailBody = function () {
         (it.body
           ? '<div class="am-text">' + htmlEsc(it.body) + '</div>'
           : '<div class="am-dim">No copy of this message was stored.</div>') +
+        (it.can_open_full ? (function () {
+          var f = (a.full || {})[it.id];
+          return '<button class="am-fulllink" onclick="amFull(\'' + htmlEsc(String(it.id)) + '\',\'' + htmlEsc(String(it.job_id)) + '\',event)">' +
+            (f && f.loading ? 'Opening…' : (f && f.open && f.text != null ? 'Hide the full email' : 'Read the full email')) + '</button>' +
+            (f && f.open && f.error ? '<div class="am-meta am-failed">' + htmlEsc(f.error) + '</div>' : '') +
+            (f && f.open && f.text != null ? '<div class="am-text am-fulltext">' + htmlEsc(f.text) + '</div>' : '');
+        })() : '') +
         (it.angle ? '<div class="am-meta">Angle: ' + htmlEsc(it.angle) + (it.engine ? ' · written by ' + htmlEsc(it.engine) : '') + '</div>' : '') +
         (it.fail_reason ? '<div class="am-meta am-failed">' + htmlEsc(it.fail_reason) + '</div>' : '') +
       '</div>' : '') +
@@ -152,7 +194,7 @@ window.renderAllMailBody = function () {
 
   return '<div>' +
     '<div class="am-top">' + filters +
-      UI.searchBox(a.q, 'amSearch(this.value)', 'Search subject or recipient…') +
+      UI.searchBox(a.q, 'amSearch(this.value)', 'Search subject, sender or recipient…') +
     '</div>' +
     warn + hidden +
     '<div class="card am-list">' + rows + '</div>' +

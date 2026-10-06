@@ -575,3 +575,13 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **A to-do shows where it comes from** (6 Oct, R-125): click a row in "Needs you today" or "Your client conversations" and see the rule that put it there and the emails it was worked out from (theirs and yours, newest first, a reply readable in full); a reminder says what created it. "Open the lead" is one button in that window.
 - **Add lead can add a new company and several contacts** (6 Oct, R-125): pick an existing company or add a new one (name, website, address, city, industry — it checks yours first so it is never doubled), then add as many contacts as you have; the first is the main one.
 - **Write a sequence email right in its step** (6 Oct, R-126): each email step is either a saved template (Outreach 1 / Follow-up 1 / Follow-up 2) or its own subject and email, with one-click fields (first name, role, company…), a preview for an example person (a field PACE cannot fill is marked, and saving is refused), "Edit a copy for this step", and **Write with AI** — say what the email should do and it drafts it; with no AI it says so and gives a ready-made starter. Undo puts back what was there.
+
+## Round 3 (Session 40, R-127, D-0078 — on the branch)
+- **A job's people, ten at a time** — the candidate list inside a job shows ten with Prev/Next; "This page" ticks only what you can see.
+- **A finished send is one line, not a panel** — "Send finished at … — N sent, M waiting · why"; the full panel stays only while sending or when something failed.
+- **Email → All email shows what went out AND what came back** (there is no Sent tab): All · Received · Sent; click a received email to read it, "Read the full email" for the whole message (fetched live, never kept); search finds a reply by its sender.
+- **Outreach Plan has a live preview** of the template for an example person, signed by the sending mailbox you pick.
+- **Inbox: select many** — tick rows (or "Select all loaded"), then Archive / Delete (to Trash, recoverable) / Mark read / Mark unread / Label…; **labels** are Gmail's labels and Outlook's categories — pick, tick, or create one. Folders and opened messages come back at once.
+- **Lead Insights** (yours, your team's, one person's) is on the same kit as Reports.
+- **Primary sequence** — a left-to-right switch on each active sequence; "Start sequence" then opens with **Start with <your Primary>** ready (per person, per kind of record; never sends by itself).
+- **Editing a sequence that has people in it** — the editor says so at the top with the number and offers **Save as a new sequence** (the old one carries on unchanged).

@@ -206,6 +206,7 @@ window.setComposeSide=function(side){
 };
 
 window.setEmailTab=function(t){if(t==='generator')t='compose';  // the two tabs merged
+  if(t==='sent')t='allmail';       // Sent was folded into All email (it shows what went out AND what came back)
   STATE.emailTab=t;STATE.raLeadSelectedBD=null;STATE.genEmail=null;STATE.emailSearch=null;STATE.previewEmail=null;STATE.showEmailPreview=false;STATE.composeFromEmailId=null;STATE.pendingEmailPage=0;STATE.sentEmailPage=0;loadEmailsForCurrentUser();if(t==='pending'){loadPendingSummary();startPendingSummaryPoll();}else{stopPendingSummaryPoll();}render();}
 
 
@@ -321,7 +322,7 @@ function startProgressPoll(){
         _emailRefreshCount=0;
         if(STATE.page==='email')loadEmailsForCurrentUser();
         // Auto-dismiss only clean runs; keep failures up until the user reviews/dismisses them.
-        if(!d.failed){setTimeout(function(){STATE.sendProgress=null;scheduleRender();},30000);}
+        if(!d.failed){setTimeout(function(){ STATE._progressDismissed=true; STATE.sendProgress=null; scheduleRender(); },30000);}   // _progressDismissed: the next poll must not bring the finished run back
       }
       var delay=(d&&d.active)?2000:30000; // idle polling slowed — sends surface within 2s once active anyway
       STATE._progressPollTimer=setTimeout(pollOnce,delay);

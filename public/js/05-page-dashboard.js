@@ -89,10 +89,13 @@ function withDashReports(html,isViewingOther){
   if(!STATE.reports.data&&!STATE.reports.loading&&!STATE.reports._dashTried&&window.reportsLoadQuiet){ STATE.reports._dashTried=true; setTimeout(reportsLoadQuiet,0); }
   // A fault in the report must never take the whole Dashboard down with it.
   var body;
-  try{ body=renderReportsBody(); }
+  try{ body=renderReportsBody({noPeople:true}); }
   catch(e){ body='<div class="dt-empty">The reports could not be drawn just now.</div>'; }
+  // The per-person table is not on Today (owner, 6 Oct) — a team lead is pointed to where it is.
+  var leads=!!(window.directReportsOf&&directReportsOf(u.id).length);
+  var pointer=leads?'<div class="dash-rep-more"><a onclick="goPage(\'reports\')">Numbers by person are in My Team \u2192 Reports \u2192</a></div>':'';
   var section='<div id="dash-reports" class="card cp mt4 dash-reports">'+
-    '<div class="fw6 mb3">Reports</div>'+body+'</div>';
+    '<div class="fw6 mb3">Reports</div>'+body+pointer+'</div>';
   // Inside the page's own wrapper, so it takes the page's width and padding.
   return html.replace(/<\/div>\s*$/, section+'</div>');
 }

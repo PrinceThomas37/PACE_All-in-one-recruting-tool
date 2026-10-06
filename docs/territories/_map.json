@@ -2,8 +2,8 @@
   "generated": "2026-10-06",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 476,
-    "lines": 112850,
+    "files": 485,
+    "lines": 114551,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,19 +25,19 @@
         "services/view-horizon.js"
       ],
       "files": 74,
-      "lines": 31166,
+      "lines": 31594,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1760
+          "n": 1777
         },
         {
           "f": "public/js/47-page-mailbox.js",
-          "n": 1117
+          "n": 1435
         },
         {
           "f": "public/js/09-page-workflows.js",
-          "n": 1027
+          "n": 1071
         },
         {
           "f": "public/ui.css",
@@ -78,7 +78,7 @@
         "services/error-report.js"
       ],
       "files": 35,
-      "lines": 12262,
+      "lines": 12320,
       "largest": [
         {
           "f": "index.js",
@@ -140,7 +140,7 @@
           "n": 174
         }
       ],
-      "lastTouched": "2026-10-06",
+      "lastTouched": "2026-10-07",
       "openIn": 2,
       "openOut": 0
     },
@@ -192,11 +192,15 @@
         "routes/deliverability.js"
       ],
       "files": 32,
-      "lines": 5720,
+      "lines": 5869,
       "largest": [
         {
           "f": "services/mail-provider.js",
-          "n": 804
+          "n": 866
+        },
+        {
+          "f": "routes/mailbox.js",
+          "n": 551
         },
         {
           "f": "email-vars.js",
@@ -205,10 +209,6 @@
         {
           "f": "routes/emails.js",
           "n": 509
-        },
-        {
-          "f": "routes/mailbox.js",
-          "n": 472
         }
       ],
       "lastTouched": "2026-10-06",
@@ -277,7 +277,7 @@
           "n": 1113
         }
       ],
-      "lastTouched": "2026-10-06",
+      "lastTouched": "2026-10-07",
       "openIn": 0,
       "openOut": 1
     },
@@ -299,6 +299,7 @@
         "services/submission-stages.js",
         "services/report-work.js",
         "services/sequence-templates.js",
+        "services/sequence-primary.js",
         "services/applicants.js",
         "services/candidate-fields.js",
         "services/client-resolve.js",
@@ -319,8 +320,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 32,
-      "lines": 8518,
+      "files": 33,
+      "lines": 8609,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -332,7 +333,7 @@
         },
         {
           "f": "routes/wf.js",
-          "n": 496
+          "n": 529
         },
         {
           "f": "services/recruiting-core.js",
@@ -406,8 +407,8 @@
         "test/",
         ".github/"
       ],
-      "files": 192,
-      "lines": 35774,
+      "files": 200,
+      "lines": 36749,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",

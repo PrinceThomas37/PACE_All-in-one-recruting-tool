@@ -135,11 +135,15 @@ function renderTodaySummaryCard(ts){
       '<div class="fs-14 c-accent" style="font-weight:700">Today\'s assignment summary</div>'+
       '<div class="fs-24 c-accent" style="font-weight:700">'+ts.total+' leads</div>'+
     '</div>'+
-    '<div class="fs-12" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'+
-      '<div><div class="c-text3 fs-11" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Freshness</div>'+rows(bf)+'</div>'+
-      '<div><div class="c-text3 fs-11" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Industry</div>'+rows(bi)+'</div>'+
-      '<div><div class="c-text3 fs-11" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Timezone</div>'+rows(btz)+'</div>'+
-    '</div>'+
+    // A column with nothing in it is not drawn (the owner: blank space looks broken) — the
+    // others share the width.
+    (function(){
+      var cols=[['Freshness',bf],['Industry',bi],['Timezone',btz]].filter(function(c){ return Object.keys(c[1]).length; });
+      if(!cols.length) return '';
+      return '<div class="fs-12" style="display:grid;grid-template-columns:repeat('+cols.length+',1fr);gap:10px">'+
+        cols.map(function(c){ return '<div><div class="c-text3 fs-11" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">'+c[0]+'</div>'+rows(c[1])+'</div>'; }).join('')+
+      '</div>';
+    })()+
   '</div>';
 }
 

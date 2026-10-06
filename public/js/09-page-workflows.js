@@ -22,13 +22,24 @@ function loadWorkflows(){
     apiGet('/wf/definitions').catch(function(){return [];}),
     apiGet('/wf/enrollments').catch(function(){return [];}),
     apiGet('/wf/stats').catch(function(){return {by_workflow:{},total:0};}),
-    apiGet('/wf/channels').catch(function(){return {channels:['email','bd_touch','reminder','stage_move'],catalogue:[]};})
+    apiGet('/wf/channels').catch(function(){return {channels:['email','bd_touch','reminder','stage_move'],catalogue:[]};}),
+    apiGet('/wf/primary').catch(function(){return {};})
   ]).then(function(r){
+    STATE.wfPrimary=r[4]||{};
     STATE.wf={defs:r[0]||[],enrollments:r[1]||[],stats:r[2]||{by_workflow:{}},channels:(r[3]&&r[3].channels)||[],catalogue:(r[3]&&r[3].catalogue)||[]};
     STATE.wfDefs=r[0]||[];
     STATE._wfLoading=false; scheduleRender();
   });
 }
+// ── PRIMARY: the sequence you start by default (owner, 6 Oct; pre-selects only — D-0079) ──
+window.wfPrimaryToggle=function(id,on,ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  apiPut('/wf/primary',{workflow_id:id,on:!!on}).then(function(r){
+    STATE.wfPrimary=r||{};
+    showToast(on?'Primary — "Start sequence" will have this one ready':'No longer your Primary','success');
+    scheduleRender();
+  }).catch(function(e){ showToast('Could not change it: '+((e&&e.message)||e),'error'); });
+};
 window.wfSetStatus=function(id,status){ apiPost('/wf/definitions/'+id+'/status',{status:status}).then(function(){ showToast('Workflow '+status,'success'); loadWorkflows(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
 window.wfRunTick=function(){ STATE.wfTickLog='running'; scheduleRender(); apiPost('/wf/tick',{}).then(function(r){ STATE.wfTickLog=r; loadWorkflows(); }).catch(function(e){ STATE.wfTickLog=null; showToast('Tick failed: '+(e&&e.message||e),'error'); scheduleRender(); }); };
 window.wfEnrollmentAction=function(id,action){ apiPost('/wf/enrollments/'+id+'/'+action,{}).then(function(){ showToast('Enrollment '+action+(action==='exit'?'ed':'d'),'success'); loadWorkflows(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
@@ -74,6 +85,14 @@ window.wfStepCfg=function(i,k,v){ var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i
 window.wfAddStep=function(){ STATE.wfBuilder.steps.push(wfBlankStep()); refreshWfBuilder(); };
 window.wfRemoveStep=function(i){ STATE.wfBuilder.steps.splice(i,1); refreshWfBuilder(); };
 window.wfMoveStep=function(i,dir){ var st=STATE.wfBuilder.steps, j=i+dir; if(j<0||j>=st.length)return; var t=st[i]; st[i]=st[j]; st[j]=t; refreshWfBuilder(); };
+// Save what is on screen as a NEW sequence (a draft); the old one is not touched.
+window.wfSaveAsNew=function(){
+  var b=STATE.wfBuilder; if(!b)return;
+  var orig=(STATE.wf&&STATE.wf.defs||[]).find(function(x){return x.id===b.id;});
+  if(orig&&String(b.name||'').trim()===String(orig.name||'').trim()) b.name=orig.name+' (new version)';
+  b._copyOf=b.id; b.id=null;
+  wfSaveDefinition();
+};
 window.wfSaveDefinition=function(){
   var b=STATE.wfBuilder; if(!b)return;
   if(!b.name){ showToast('Name is required','warning'); return; }
@@ -100,7 +119,7 @@ window.wfSaveDefinition=function(){
         .then(function(){ wfEnrollSelectionInto(res.id,enrollAfter.entity_type,enrollAfter.items); })
         .catch(function(e){ showToast('Created, but activate failed: '+(e&&e.message||e),'error'); loadWorkflows(); });
     } else {
-      showToast(b.id?'Sequence updated':'Sequence created (draft — activate it to enroll)','success'); loadWorkflows();
+      showToast(b.id?'Sequence updated':(b._copyOf?'Saved as a new sequence (a draft — activate it to use it). The old one carries on unchanged.':'Sequence created (draft — activate it to enroll)'),'success'); loadWorkflows();
     }
   }).catch(function(e){ showToast('Save failed: '+(e&&e.message||e),'error'); });
 };
@@ -182,8 +201,15 @@ function wfMailboxPicker(st){
 function renderWfStartModal(){
   var st=STATE.wfStart; if(!st)return;
   var defs=((STATE.wf&&STATE.wf.defs)||[]).filter(function(d){return (d.entity_type||'contact')===st.entity_type&&d.status==='active';});
+  // The Primary (if this person has one for this kind) goes first, with its own big one-click button.
+  var primId=(STATE.wfPrimary||{})[st.entity_type]||'';
+  var primDef=defs.filter(function(d){return d.id===primId;})[0]||null;
+  if(primDef) defs=[primDef].concat(defs.filter(function(d){return d.id!==primId;}));
+  var primBtn=primDef
+    ?'<button class="btn btn-primary wf-start-primary" style="width:100%;margin-bottom:12px" onclick="wfEnrollSelectionInto(\''+primDef.id+'\')">Start with '+htmlEsc(primDef.name)+' <span class="wf-prim-badge">Primary</span></button>'
+    :'';
   var rows=defs.map(function(d){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:7px">'+
+    return '<div data-wfstart="'+d.id+'" style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:7px">'+
       '<div style="min-width:0"><div class="fs-13" style="font-weight:600">'+htmlEsc(d.name)+'</div><div class="fs-11_5 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+wfChain(d.steps)+'</div></div>'+
       '<button class="btn btn-sm btn-primary" onclick="wfEnrollSelectionInto(\''+d.id+'\')">Start</button>'+
     '</div>';
@@ -195,9 +221,10 @@ function renderWfStartModal(){
     '<div class="mh"><div class="mt">Start sequence · '+st.items.length+' '+wfNoun(st.entity_type)+(st.items.length===1?'':'s')+'</div></div>'+
     '<div class="mb_">'+
       '<div class="fs-12 c-text3" style="margin-bottom:10px">Pick an existing sequence to enroll the selection, or build and name a new one.</div>'+
+      primBtn+
       wfMailboxPicker(st)+
       stageToggle+
-      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Sequence</div>'+
+      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">'+(primDef?'Or pick another':'Sequence')+'</div>'+
       rows+
       '<button onclick="wfStartBuildNew()" class="btn btn-outline btn-sm" style="width:100%;margin-top:4px">+ Build a new sequence</button>'+
     '</div>'+
@@ -459,6 +486,14 @@ function refreshWfBuilder(){
 
   // One follow-up doubles reply rates in practice, so a one-step sequence gets
   // a nudge rather than being silently accepted as finished.
+  // People mid-sequence lock the STEPS (the server refuses — their place in it would break). Say so
+  // BEFORE anything is written, with the number, and offer the way through: a new sequence from this
+  // text; the old one is untouched and carries on for the people already in it.
+  var lockedN=b.id?(((((STATE.wf||{}).stats||{}).by_workflow||{})[b.id]||{}).active||0):0;
+  var lockBanner=lockedN>0
+    ?'<div class="wf-lock"><b>'+lockedN+' '+(lockedN===1?'person is':'people are')+' in this sequence right now,</b> so its steps cannot be changed here. '+
+      'Either stop them first (Enrollments, below the list), or press <b>Save as a new sequence</b> — your writing is kept, and this one carries on unchanged for the people already in it.</div>'
+    :'';
   var hint = b.steps.length < 2
     ? '<div class="seq-hint">'+UI.ic('bolt')+'<span>It is usually the follow-up that gets the reply. Consider adding one more step.</span></div>'
     : '';
@@ -471,13 +506,17 @@ function refreshWfBuilder(){
     '<div class="mb_">'+
       '<input placeholder="Sequence name (e.g. Java Dev – Client X pipeline)" value="'+htmlEsc(b.name)+'" oninput="wfBuilderField(\'name\',this.value)" class="inp" style="margin-bottom:8px">'+
       '<input placeholder="Description" value="'+htmlEsc(b.description)+'" oninput="wfBuilderField(\'description\',this.value)" class="inp" style="margin-bottom:8px">'+
+      lockBanner+
       entityPicker+
       '<div class="seq">'+stepRows+'</div>'+
       '<button class="seq-add" onclick="wfAddStep()">'+UI.ic('plus')+'Add step</button>'+
       hint+
-      (b.id?'<div class="fs-11_5 c-ink3" style="margin-top:10px">Editing steps is blocked while this sequence has active enrollments.</div>':'')+
     '</div>'+
-    '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button><button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button></div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="STATE.wfBuilder=null;closeModal()">Cancel</button>'+
+      (lockedN>0
+        ?'<button class="btn btn-outline" disabled title="Not while people are mid-sequence">Save</button><button class="btn btn-primary wf-save-new" onclick="wfSaveAsNew()">Save as a new sequence</button>'
+        :'<button class="btn btn-primary" onclick="wfSaveDefinition()">Save</button>')+
+    '</div>'+
   '</div>';
   render();
 }
@@ -533,10 +572,15 @@ function renderSequenceBody(){
       (d.status==='draft'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:0;background:var(--green);color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer">Activate</button>':'')+
       (d.status==='active'?'<button onclick="wfSetStatus(\''+d.id+'\',\'archived\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer">Archive</button>':'')+
       (d.status==='archived'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--green);padding:4px 10px;border-radius:6px;cursor:pointer">Reactivate</button>':'')):'';
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px">'+
+    var isPrim=(STATE.wfPrimary||{})[d.entity_type||'contact']===d.id;
+    var primSw=(d.status==='active')
+      ?'<label class="wf-prim" title="'+(isPrim?'Your Primary — Start sequence has it ready':'Make this the one Start sequence has ready')+'"><span class="wf-prim-l">Primary</span>'+
+        '<button type="button" class="wf-prim-sw'+(isPrim?' on':'')+'" role="switch" aria-checked="'+(isPrim?'true':'false')+'" data-wf="'+d.id+'" data-kind="'+htmlEsc(d.entity_type||'contact')+'" onclick="wfPrimaryToggle(\''+d.id+'\','+(isPrim?'false':'true')+',event)"><i></i></button></label>'
+      :'';
+    return '<div data-wfcard="'+d.id+'" style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
-        '<div style="display:flex;align-items:center;gap:8px"><span class="fs-14" style="font-weight:700">'+htmlEsc(d.name)+'</span><span class="fs-10 c-text2" style="padding:2px 7px;border-radius:6px;background:var(--bg3);font-weight:600">'+htmlEsc(d.domain||'sales')+'</span>'+wfStatusBadge(d.status)+'</div>'+
-        '<div style="display:flex;gap:6px;align-items:center">'+stats+btns+'</div>'+
+        '<div style="display:flex;align-items:center;gap:8px"><span class="fs-14" style="font-weight:700">'+htmlEsc(d.name)+'</span>'+(isPrim?'<span class="wf-prim-badge">Primary</span>':'')+'<span class="fs-10 c-text2" style="padding:2px 7px;border-radius:6px;background:var(--bg3);font-weight:600">'+htmlEsc(d.domain||'sales')+'</span>'+wfStatusBadge(d.status)+'</div>'+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+primSw+stats+btns+'</div>'+
       '</div>'+
       (d.description?'<div class="fs-12 c-text3" style="margin-top:5px">'+htmlEsc(d.description)+'</div>':'')+
       '<div class="fs-12_5" style="margin-top:8px">'+wfChain(d.steps)+'</div>'+

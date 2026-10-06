@@ -91,6 +91,7 @@ module.exports = (ctx) => {
   function normalise(row, source) {
     return {
       source,
+      direction: source === 'replies' ? 'in' : 'out',
       // NEVER row.token. A ledger fix (routes/tracking.js) found the same
       // fault: `email_tracking.token` is the bearer secret behind the open
       // pixel AND `POST /i/<token>/opt-out`, which writes the GLOBAL
@@ -130,7 +131,13 @@ module.exports = (ctx) => {
       const days = q ? 0
         : (req.query.days === undefined ? horizon.DEFAULT_HORIZON_DAYS : Number(req.query.days));
       const only = String(req.query.source || '').trim();
-      const wants = (s) => !only || only === s;
+      // ?direction=in  → only what CAME BACK;  ?direction=out → only what WENT OUT (the owner, 6 Oct:
+      // "all email will have both outbound and inbound").
+      const dir = String(req.query.direction || '').trim();
+      const wants = (s) => {
+        if (s === 'replies') return dir !== 'out' && (!only || only === 'replies');
+        return dir !== 'in' && (!only || only === s);
+      };
 
       const out = [];
       const sourceErrors = [];
@@ -245,6 +252,55 @@ module.exports = (ctx) => {
         } catch (e) { sourceErrors.push('candidates: ' + e.message); }
       }
 
+      // ── 4. what CAME BACK ─────────────────────────────────────────────────
+      // The replies the sweeps filed (conversation_messages, quote-stripped — D-0039). Who may
+      // see one is the same rule as the rest of this list, narrowed in SQL before the .limit():
+      //   * admin / whole-company viewers: the company's replies;
+      //   * everyone else: replies on a lead they OWN (canSeeEmail's rule), plus anything that
+      //     arrived in one of THEIR OWN mailboxes (the in-app Inbox rule: your mailboxes only).
+      // The full text of a reply is never stored here; "Read the full email" fetches it live,
+      // through the lead's own owner-only endpoint.
+      if (wants('replies')) {
+        try {
+          const SEL = 'id,from_email,to_email,subject,body,sent_at,contact_id,candidate_id,job_id,message_key';
+          const base = () => {
+            let sel = withOrg(supabase.from('conversation_messages').select(SEL).eq('direction', 'inbound'), req);
+            if (req.query.candidate_id) sel = sel.eq('candidate_id', req.query.candidate_id);
+            if (req.query.contact_id) sel = sel.eq('contact_id', req.query.contact_id);
+            if (req.query.job_id) sel = sel.eq('job_id', req.query.job_id);
+            return sel;
+          };
+          let mine = [];
+          const { data: mbs } = await supabase.from('user_emails').select('email_address').eq('user_id', req.user.id);
+          mine = (mbs || []).map(m => String(m.email_address || '').toLowerCase()).filter(Boolean);
+          let rows = [];
+          if (scope.all) {
+            const { data, error } = await base().order('sent_at', { ascending: false }).limit(PER_SOURCE);
+            if (error) throw error;
+            rows = data || [];
+          } else {
+            const queries = [];
+            const owned = await ownedJobMap(req, scope);
+            for (const part of chunk(owned.ids || [], 200)) {
+              queries.push(base().in('job_id', part).order('sent_at', { ascending: false }).limit(PER_SOURCE));
+            }
+            if (mine.length) queries.push(base().in('to_email', mine).order('sent_at', { ascending: false }).limit(PER_SOURCE));
+            const results = await Promise.all(queries);
+            const byId = new Map();
+            for (const r of results) { if (r.error) throw r.error; for (const x of (r.data || [])) byId.set(x.id, x); }
+            rows = [...byId.values()].sort((a, b) => String(b.sent_at || '').localeCompare(String(a.sent_at || ''))).slice(0, PER_SOURCE);
+          }
+          for (const r of rows) {
+            out.push(Object.assign(
+              normalise({ id: 'in:' + r.id, to_email: r.to_email, from_email: r.from_email, subject: r.subject, body: r.body, status: 'received',
+                sent_at: r.sent_at, job_id: r.job_id, contact_id: r.contact_id, candidate_id: r.candidate_id }, 'replies'),
+              // A person can open the whole email only from their OWN mailbox, on a lead (the existing endpoint's rules).
+              { can_open_full: !!(r.message_key && r.job_id && mine.includes(String(r.to_email || '').toLowerCase())) }
+            ));
+          }
+        } catch (e) { sourceErrors.push('replies: ' + e.message); }
+      }
+
       // A missing table must not empty the whole view — candidate_outreach
       // arrives with migration 042, and this endpoint has to be useful before
       // and after it. Partial results are reported as partial, never as none.
@@ -252,7 +308,8 @@ module.exports = (ctx) => {
       if (q) {
         rows = rows.filter((r) =>
           String(r.subject).toLowerCase().includes(q) ||
-          String(r.to_email).toLowerCase().includes(q));
+          String(r.to_email).toLowerCase().includes(q) ||
+          String(r.from_email || '').toLowerCase().includes(q));
       }
 
       const part = horizon.partitionForView(rows, {
@@ -278,6 +335,7 @@ module.exports = (ctx) => {
           leads: rows.filter((r) => r.source === 'leads').length,
           individual: rows.filter((r) => r.source === 'individual').length,
           candidates: rows.filter((r) => r.source === 'candidates').length,
+          replies: rows.filter((r) => r.source === 'replies').length,
         },
         // Named honestly: a caller must be able to tell "nothing was sent" from
         // "one of the three could not be read".
