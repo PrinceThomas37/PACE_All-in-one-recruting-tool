@@ -67,4 +67,71 @@ function sortAlerts(list) {
     (rank[a.state] - rank[b.state]) || ((b.held || 0) - (a.held || 0)) || String(a.email).localeCompare(String(b.email)));
 }
 
-module.exports = { reasonSentence, alertFor, sortAlerts };
+// ── HIDING A WARNING (R-122 step 3) ──────────────────────────────────────────
+// A warning that stays for weeks because the owner has not reconnected yet makes
+// the first screen crowded, so a person can hide it FOR THEMSELVES. Rules, all
+// callable (a test greps no source text):
+//   * it is hidden for a fixed time (default a week), never forever;
+//   * it is hidden against the FACT it was hidden against — the alert's state
+//     and when the mailbox last worked — so a mailbox that fails in a NEW way
+//     (or was reconnected and died again) comes straight back;
+//   * hiding is per person: it does not touch anyone else's warning, and it does
+//     not fix the mailbox — mail still waits behind it;
+//   * what is hidden is COUNTED and can be shown again; the page never hides
+//     without saying how many.
+// Storage is one app_settings row per person (like the needs-you snoozes), so
+// there is no migration; expired entries are dropped whenever it is read.
+const HIDE_DAYS = 7;
+const MS_DAY = 24 * 60 * 60 * 1000;
+function hideKey(userId) { return `mba_hide_${userId}`; }
+function fingerprintOf(alert) {
+  return alert ? `${alert.state || ''}|${alert.since || ''}` : '';
+}
+function pruneHidden(store, now = Date.now()) {
+  const out = {};
+  if (!store || typeof store !== 'object') return out;
+  for (const [k, v] of Object.entries(store)) {
+    if (!v || typeof v !== 'object' || !v.until) continue;
+    const t = new Date(v.until).getTime();
+    if (!Number.isFinite(t) || t <= now) continue;
+    out[k] = { until: v.until, fp: typeof v.fp === 'string' ? v.fp : '' };
+  }
+  return out;
+}
+function recordHide(store, alert, now = Date.now(), days = HIDE_DAYS) {
+  const next = pruneHidden(store, now);
+  if (!alert || !alert.mailbox_id) return next;
+  next[alert.mailbox_id] = { until: new Date(now + days * MS_DAY).toISOString(), fp: fingerprintOf(alert) };
+  return next;
+}
+function isHidden(store, alert, now = Date.now()) {
+  if (!store || !alert) return false;
+  const rec = store[alert.mailbox_id];
+  if (!rec || !rec.until) return false;
+  const t = new Date(rec.until).getTime();
+  if (!Number.isFinite(t) || t <= now) return false;
+  return (rec.fp || '') === fingerprintOf(alert);
+}
+function applyHidden(alerts, store, now = Date.now()) {
+  const kept = [];
+  let hidden = 0;
+  for (const a of (alerts || [])) {
+    if (isHidden(store, a, now)) hidden++; else kept.push(a);
+  }
+  return { alerts: kept, hidden };
+}
+
+// WHO MAY ASK WHOM. A prompt drops a task on somebody's morning list, so only
+// a person with that mailbox's owner in their reporting chain (or an admin) may
+// send one — never a colleague, never yourself (you have the Reconnect button).
+function askRefusal({ askerId, ownerId, isAdmin, chainIds }) {
+  if (!ownerId) return 'Nobody owns this mailbox, so there is nobody to ask.';
+  if (ownerId === askerId) return 'This is your own mailbox — use Reconnect.';
+  if (!isAdmin && !(chainIds || []).includes(ownerId)) return 'You can only ask somebody on your own team to reconnect a mailbox.';
+  return null;
+}
+
+module.exports = {
+  reasonSentence, alertFor, sortAlerts,
+  HIDE_DAYS, hideKey, fingerprintOf, pruneHidden, recordHide, isHidden, applyHidden, askRefusal,
+};

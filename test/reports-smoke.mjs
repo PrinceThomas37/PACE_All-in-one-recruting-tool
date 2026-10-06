@@ -123,6 +123,34 @@ try {
   step('Top clients section', out.html.includes('Top clients') && out.html.includes('Acme Construction'));
   step('Time in stage card (R-001): who is stuck where', out.html.includes('Time in stage') && out.html.includes('Stuck 14+ days') && /rep-stuck">2</.test(out.html) && out.html.includes('30 days'));
 
+  // THE RETRO CHARTS (R-122 step 3): the bars are square, outlined, segmented and
+  // coloured by what the stage MEANS — not the old rounded blue ramp.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(async () => { STATE.page = 'dashboard'; render(); await new Promise(r => setTimeout(r, 300)); });
+  const charts = await page.evaluate(() => {
+    const root = document.getElementById('dash-reports'); if (!root) return { missing: true };
+    const tracks = [...root.querySelectorAll('.rep-track')], fills = [...root.querySelectorAll('.rep-fill')], cols = [...root.querySelectorAll('.rep-colbar')];
+    const cs = (e) => getComputedStyle(e);
+    const rowOf = (label) => [...root.querySelectorAll('.rep-row')].find(r => r.querySelector('.rep-lbl') && r.querySelector('.rep-lbl').textContent === label);
+    const bg = (label) => { const r = rowOf(label); return r ? cs(r.querySelector('.rep-fill')).backgroundColor : null; };
+    return {
+      missing: false, tracks: tracks.length, fills: fills.length, cols: cols.length,
+      sq: [...tracks, ...fills, ...cols].every(e => cs(e).borderTopLeftRadius === '0px'),
+      outlined: tracks.every(e => parseFloat(cs(e).borderTopWidth) >= 2) && cols.every(e => parseFloat(cs(e).borderTopWidth) >= 2),
+      segmented: fills.every(e => /repeating-linear-gradient/.test(cs(e).backgroundImage)),
+      inlineColour: [...root.querySelectorAll('.rep-fill,.rep-colbar')].filter(e => /background/i.test(e.getAttribute('style') || '')).length,
+      won: bg('Placement'), lost: bg('Not Accepted'), ours: bg('Sourced'), client: bg('Submitted to Client'),
+      pills: [...root.querySelectorAll('.rep-pill')].map(e => cs(e).borderTopLeftRadius),
+    };
+  });
+  step('the report draws its funnel, columns and filter keys', !charts.missing && charts.tracks >= 11 && charts.cols >= 1 && charts.pills.length >= 7, JSON.stringify(charts).slice(0, 160));
+  step('bars and columns are SQUARE (no rounded corners) and outlined', charts.sq && charts.outlined, JSON.stringify({ sq: charts.sq, outlined: charts.outlined }));
+  step('fills are segmented like a level meter', charts.segmented);
+  step('colour comes from the tone classes, never inline', charts.inlineColour === 0, String(charts.inlineColour));
+  step('stages are coloured by meaning: won green, lost red, ours purple, client side blue',
+    charts.won === 'rgb(169, 201, 140)' && charts.lost === 'rgb(217, 138, 126)' && charts.ours === 'rgb(122, 77, 224)' && charts.client === 'rgb(156, 198, 226)', JSON.stringify([charts.won, charts.lost, charts.ours, charts.client]));
+  step('the period / who keys are square paper keys', charts.pills.every(r => r === '0px'), charts.pills.join());
+
   step('No uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {
   step('Test harness ran', false, String(e));

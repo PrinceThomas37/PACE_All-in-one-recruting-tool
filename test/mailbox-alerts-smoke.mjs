@@ -126,6 +126,81 @@ step('admin sees every dead mailbox in the company', r.alerts.map(a => a.email).
 step('…and never another organisation\'s', !r.alerts.some(a => a.email === 'x@b.com'));
 step('a certain failure sorts above the rest', r.alerts[0].state === 'failed');
 
+// ── HIDING A WARNING + ASKING THE OWNER (R-122 step 3) ───────────────────────
+// The rules are plain functions (no source-grep): hidden for a week against the
+// FACT it was hidden against; per person; counted; and "who may ask whom".
+{
+  const t0 = Date.parse('2026-10-06T12:00:00Z');
+  const al = { mailbox_id: 'mb1', state: 'failed', since: '2026-07-21T22:16:55Z' };
+  let st = ma.recordHide({}, al, t0);
+  step('a hidden warning is hidden now…', ma.isHidden(st, al, t0 + 1000));
+  step('…for a week, not forever', ma.isHidden(st, al, t0 + 6.9 * 864e5) && !ma.isHidden(st, al, t0 + 7.1 * 864e5));
+  step('…and comes straight back if the mailbox fails in a NEW way (state or last-worked date changes)',
+    !ma.isHidden(st, { ...al, state: 'probably_expired' }, t0 + 1000) && !ma.isHidden(st, { ...al, since: '2026-10-01T00:00:00Z' }, t0 + 1000));
+  step('hiding one mailbox hides no other', !ma.isHidden(st, { ...al, mailbox_id: 'mb2' }, t0 + 1000));
+  const ap = ma.applyHidden([al, { ...al, mailbox_id: 'mb2' }], st, t0 + 1000);
+  step('what is hidden is COUNTED, never silently dropped', ap.alerts.length === 1 && ap.hidden === 1 && ap.alerts[0].mailbox_id === 'mb2');
+  step('an expired entry is pruned on the next write (the row cannot grow without bound)', Object.keys(ma.recordHide(st, { ...al, mailbox_id: 'mb3' }, t0 + 8 * 864e5)).join() === 'mb3');
+  step('nobody may ask themselves, a peer, or ask about an unowned mailbox',
+    /own mailbox/.test(ma.askRefusal({ askerId: 'a', ownerId: 'a', chainIds: [] })) &&
+    /own team/.test(ma.askRefusal({ askerId: 'a', ownerId: 'b', chainIds: ['c'] })) &&
+    /nobody to ask/.test(ma.askRefusal({ askerId: 'a', ownerId: null })));
+  step('a manager (owner in their chain) and an admin may ask', ma.askRefusal({ askerId: 'a', ownerId: 'b', chainIds: ['b'] }) === null && ma.askRefusal({ askerId: 'a', ownerId: 'b', isAdmin: true }) === null);
+}
+{
+  // The routes, against a fake db that can WRITE.
+  const D = JSON.parse(JSON.stringify(T)); D.app_settings = []; D.reminders = [];
+  const written = { reminders: [], settings: [] };
+  function w(table) {
+    const f = []; let ins = null, ups = null, lim = null;
+    const api = {
+      select() { return api; }, limit(n) { lim = n; return api; }, order() { return api; },
+      eq(k, v) { f.push(r => r[k] === v); return api; }, in(k, vs) { f.push(r => vs.includes(r[k])); return api; },
+      is(k, v) { f.push(r => (r[k] == null) === (v == null)); return api; },
+      insert(row) { ins = row; return api; }, upsert(row) { ups = row; return api; },
+      maybeSingle() { return Promise.resolve({ data: (D[table] || []).filter(r => f.every(fn => fn(r)))[0] || null, error: null }); },
+      then(res, rej) {
+        if (ins) { const row = { id: 'r' + (D[table].length + 1), org_id: 'o1', ...ins }; D[table].push(row); written[table] && written[table].push(row); return Promise.resolve({ data: row, error: null }).then(res, rej); }
+        if (ups) { const i = D.app_settings.findIndex(r => r.key === ups.key); if (i >= 0) D.app_settings[i] = ups; else D.app_settings.push(ups); return Promise.resolve({ error: null }).then(res, rej); }
+        let rows = (D[table] || []).filter(r => f.every(fn => fn(r))); if (lim != null) rows = rows.slice(0, lim);
+        return Promise.resolve({ data: rows, error: null }).then(res, rej);
+      },
+    };
+    return api;
+  }
+  const rr = require('../routes/mailbox-alerts.js')({ supabase: { from: w }, auth: (_a, _b, n) => n(), hasRole: (req, r) => (req.user.roles || []).includes(r) });
+  const handler = (method, path) => rr.stack.find(l => l.route && l.route.path === path && l.route.methods[method]).route.stack.slice(-1)[0].handle;
+  const run = async (method, path, user, { body = {}, params = {} } = {}) => { let out, code = 200; const res = { status(c) { code = c; return res; }, json(j) { out = j; return res; } }; await handler(method, path)({ user, orgId: user.org_id, body, params }, res); return { code, out }; };
+  const mgr = { id: 'u-mgr', name: 'Mona', roles: ['bd_lead'], org_id: 'o1' }, rep = { id: 'u-rep', name: 'Raj', roles: ['bd'], org_id: 'o1' }, peer = { id: 'u-peer', name: 'Pat', roles: ['bd'], org_id: 'o1' };
+
+  let x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-rep' } });
+  step('the manager\'s "Remind Raj" puts a task on RAJ\'s list, naming who asked', x.code === 201 && written.reminders.length === 1 && written.reminders[0].user_id === 'u-rep' &&
+    /Mona asked you to pick this up/.test(written.reminders[0].note) && /raj@a.com/.test(written.reminders[0].note) && written.reminders[0].reminder_type === 'manager_prompt', JSON.stringify(written.reminders[0]));
+  step('…carrying the plain-words reason and what to do', /withdrew PACE's permission/.test(written.reminders[0].note) && /press Reconnect/.test(written.reminders[0].note));
+  x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-rep' } });
+  step('asking twice does not pile a second task on Raj', x.out.already === true && written.reminders.length === 1);
+  const list = await run('get', '/mailboxes/alerts', mgr);
+  step('…and the warning then says Raj has been asked', list.out.alerts[0].asked === true, JSON.stringify(list.out.alerts[0]));
+  x = await run('post', '/mailboxes/alerts/:mailboxId/ask', peer, { params: { mailboxId: 'mb-rep' } });
+  step('a peer outside the chain cannot drop a task on Raj (it is not even their warning)', x.code === 404 && written.reminders.length === 1);
+  x = await run('post', '/mailboxes/alerts/:mailboxId/ask', rep, { params: { mailboxId: 'mb-rep' } });
+  step('Raj cannot "ask" himself — his own mailbox has Reconnect', x.code === 403 && /Reconnect/.test(x.out.error));
+  x = await run('post', '/mailboxes/alerts/:mailboxId/ask', mgr, { params: { mailboxId: 'mb-mgr' } });
+  step('a working mailbox creates no task', x.code === 404 && written.reminders.length === 1);
+
+  x = await run('post', '/mailboxes/alerts/hide', mgr, { body: { mailbox_id: 'mb-rep' } });
+  step('hide works for a warning that is on your list', x.code === 200 && x.out.success === true);
+  const after = await run('get', '/mailboxes/alerts', mgr);
+  step('the hidden warning leaves the list and is counted', after.out.alerts.length === 0 && after.out.hidden === 1, JSON.stringify(after.out));
+  const other = await run('get', '/mailboxes/alerts', { id: 'u-adm', roles: ['admin'], org_id: 'o1' });
+  step('hiding is PER PERSON — the admin still sees it', other.out.alerts.some(a => a.email === 'raj@a.com') && other.out.hidden === 0);
+  x = await run('post', '/mailboxes/alerts/hide', peer, { body: { mailbox_id: 'mb-rep' } });
+  step('you cannot hide a warning that is not yours to see', x.code === 404);
+  x = await run('post', '/mailboxes/alerts/show', mgr);
+  const back = await run('get', '/mailboxes/alerts', mgr);
+  step('Show brings every hidden warning back', x.out.success === true && back.out.alerts.length === 1 && back.out.hidden === 0);
+}
+
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);

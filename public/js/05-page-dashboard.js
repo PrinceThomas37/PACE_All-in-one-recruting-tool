@@ -101,100 +101,12 @@ window.dashScrollToReports=function(){
   if(STATE.page!=='dashboard'){ goPage('dashboard'); setTimeout(go,150); } else go();
 };
 
-// ── REMINDERS WIDGET (shared: BD + recruiter + individual dashboards) ─────────
-// The same rows the Reminders page draws, in brief, and ONE way to act on them.
-//
-// "Compose email" opens the composer through composeReminderEmail() — the route
-// that queues through the send engine (POST /emails/reminder-send), fills the
-// merge fields on the server, applies the double-send rule and CLOSES the
-// reminder there. This card used to have its own Send and "Send all due": they
-// opened web Gmail/Outlook with a canned body signed "Fute Global LLC" (one
-// customer's name in every org's mail), went around all of that, and marked the
-// reminder done in the browser only — so it came back on the next load (R-071).
-// Those two are gone; two paths to one outcome is the bug.
-//
-// A send the server would refuse is not OFFERED (`compose.can_send`, from
-// GET /reminders): the row says why instead, in the server's own words.
-//
-// Field names are the ones GET /reminders returns — contact_name, company_name,
-// compose.* — not the `name`/`company` this card used to read, which do not
-// exist, so every name line was blank and the company line held the address.
-// The due wording is reminderDue() (10-page-modals.js), the Reminders page's own:
-// "Overdue by 2 days", never "Due today" over a two-day-old row.
-var DASH_REM_MAX=5;   // due rows drawn; the rest are counted and one click away
-function renderRemindersWidget(){
-      var today=todayIST();
-      var myR=(STATE.reminders||[]).filter(function(r){return r.user_id===STATE.user.id&&r.status==="pending";});
-      var due=myR.filter(function(r){return r.return_date<=today;});
-      var allUpcoming=myR.filter(function(r){return r.return_date>today;});
-      var upcoming=allUpcoming.slice(0,4);
-      var dueShown=due.slice(0,DASH_REM_MAX);
-      if(!myR.length)return '<div class="card cp mt4">'+
-        '<div class="flex jb aic mb3">'+
-          '<div><div class="fw6">Reminders</div><div class="f12 text3">No reminders set</div></div>'+
-          '<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">Go to Reminders</button>'+
-        '</div>'+
-        '<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">Set reminders to follow up with contacts at the right time.</div>'+
-      '</div>';
-
-      var dueRows=dueShown.map(function(r){
-        var cmp=r.compose||{};
-        var d=reminderDue(r);
-        var toEmail=cmp.to_email||r.email||'';
-        var contactId=cmp.contact_id||(r.contact&&r.contact.id)||r.contact_id||'';
-        // Same gate as the Reminders page: an address, and the server has not said no.
-        var canSend=!!toEmail&&cmp.can_send!==false;
-        var about=[cmp.company||r.company_name||'',cmp.position||(r.job&&r.job.position)||''].filter(Boolean).join(' · ');
-        // Why there is no button — only ever from what the server said about this row.
-        var why=canSend?'':(cmp.blocked_sentence||(!toEmail?'No email on record.':'Not linked to a lead, so PACE cannot send from it.'));
-        return '<div class="dash-rem">'+
-          '<div class="dash-rem-main">'+
-            '<div class="dash-rem-name">'+htmlEsc(r.contact_name||cmp.to_name||'Reminder')+'</div>'+
-            '<div class="dash-rem-sub">'+htmlEsc(about||toEmail)+'</div>'+
-            (why?'<div class="dash-rem-why">'+htmlEsc(why)+'</div>':'')+
-          '</div>'+
-          '<div class="dash-rem-acts">'+
-            '<span class="rem-pill dash-rem-chip '+(d.state==='overdue'?'is-overdue':'is-today')+'">'+htmlEsc(d.label)+'</span>'+
-            (canSend?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+contactId+'\')">'+ico("send",12)+' Compose email</button>':'')+
-          '</div>'+
-        '</div>';
-      }).join("");
-
-      var upcomingRows=upcoming.map(function(r){
-        var d=reminderDue(r);
-        var cmp=r.compose||{};
-        return '<div class="dash-rem">'+
-          '<div class="dash-rem-main">'+
-            '<div class="dash-rem-name">'+htmlEsc(r.contact_name||cmp.to_name||'Reminder')+'</div>'+
-            '<div class="dash-rem-sub">'+htmlEsc(r.return_date||'')+(r.reminder_time?' · '+htmlEsc(String(r.reminder_time).slice(0,5))+' IST':'')+(r.note?' · '+htmlEsc(r.note):'')+'</div>'+
-          '</div>'+
-          '<div class="dash-rem-acts"><span class="rem-pill dash-rem-chip '+(d.days<=3?'is-soon':'is-later')+'">'+htmlEsc(d.label)+'</span></div>'+
-        '</div>';
-      }).join("");
-
-      // A list that hides rows says how many (D-0013).
-      var hiddenDue=due.length-dueShown.length;
-      var more=(hiddenDue>0||allUpcoming.length>upcoming.length)
-        ? '<div class="dash-rem-more">'+(hiddenDue>0?hiddenDue+' more due · ':'')+'<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all '+myR.length+' reminders</button></div>'
-        : '';
-
-      return '<div class="card cp mt4">'+
-        '<div class="flex jb aic mb3">'+
-          '<div>'+
-            '<div class="fw6">Reminders</div>'+
-            '<div class="f12 text3">'+due.length+' due · '+allUpcoming.length+' upcoming</div>'+
-          '</div>'+
-          '<div class="flex gap2">'+
-            '<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all</button>'+
-          '</div>'+
-        '</div>'+
-        (due.length?'<div class="fs-12 c-amber" style="margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">⏰ Due now</div>':"")+
-        dueRows+
-        (upcoming.length?'<div style="margin:'+(due.length?"12px":"0")+'px 0 8px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Upcoming</div>':"")+
-        upcomingRows+
-        more+
-      '</div>';
-}
+// ── NO REMINDERS BOX ON TODAY (R-122 step 3) ─────────────────────────────────
+// The dashboards used to carry a second "Reminders" card under "Needs you today".
+// Every due reminder is ALREADY a row in "Needs you today" (a "Reminder" row with
+// its own Write / Done), so the same task showed up twice and the page read as
+// crowded. The owner had the card removed. Reminders still live on the Reminders
+// page (the bell, the sidebar), and "N PAST DUE" in the header still links there.
 
 // ── RECRUITER DASHBOARD ────────────────────────────────────────────────
 // A recruiter's day is jobs, candidates and interviews — not lead-gen. This
@@ -387,7 +299,6 @@ function renderRecruiterDashboard(u){
       (upcomingRows||'<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">No interviews scheduled. Move a candidate to "Interview Scheduled" to see it here.</div>')+
     '</div>'+
 
-    renderRemindersWidget()+
 
   '</div>';
 }
@@ -494,7 +405,6 @@ function renderManagerDashboard(u){
       (upcomingRows||'<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">No interviews scheduled across your team yet.</div>')+
     '</div>'+
 
-    renderRemindersWidget()+
 
   '</div>';
 }
@@ -609,7 +519,6 @@ function renderIndividualDashboard(u){
 
     '<div class="card cp"><div class="flex jb aic mb3"><div class="fw6">Pipeline overview</div><div class="f12 text3">'+period+'</div></div><div class="flex gap2 flex-wrap">'+(stagePills||'<div class="text3 f13">No leads in this period yet.</div>')+'</div></div>'+
 
-    renderRemindersWidget()+
 
   '</div>';
 }

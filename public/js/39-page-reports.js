@@ -73,34 +73,46 @@
     '</div>';
   }
 
+  // THE RETRO CHARTS (R-122 step 3). Every bar is a square paper track with a
+  // hard outline and a segmented fill (the 90s level meter), coloured by what
+  // the stage MEANS rather than by the old blue ramp: purple = still ours,
+  // blue = with the client side, amber = in interviews, green = won, red =
+  // lost, grey = parked. The looks are classes (retro.css .rep-*); only the
+  // number-driven size is inline. An unknown stage draws purple, never nothing.
+  var STAGE_TONE = {
+    'Sourced':'brand', 'Screening':'brand',
+    'Submitted to BDM':'info', 'Submitted to Client':'info',
+    'Interview Scheduled':'wait', 'Interview Completed':'wait',
+    'Offer':'go', 'Joining':'go', 'Placement':'go',
+    'Not Accepted':'stop', 'On Hold':'muted'
+  };
+  function toneOf(stage){ return STAGE_TONE[stage] || 'brand'; }
+
   function funnelCard(funnel, stages){
-    var colors = window.ATS_STAGE_COLORS || {};
     var max = Math.max(1, Math.max.apply(null, stages.map(function(s){ return funnel[s]||0; })));
     var rows = stages.map(function(s){
       var n = funnel[s]||0; var w = Math.round((n/max)*100);
-      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'+
-        '<div class="fs-12 c-text2" style="width:130px;text-align:right;flex-shrink:0">'+esc(s)+'</div>'+
-        '<div style="flex:1;background:var(--bg);border-radius:6px;height:20px;position:relative;overflow:hidden">'+
-          '<div style="width:'+w+'%;height:100%;background:'+(colors[s]||'var(--accent)')+';border-radius:6px;min-width:'+(n?'2px':'0')+'"></div>'+
-        '</div>'+
-        '<div class="fs-12_5" style="width:34px;font-weight:700;color:'+(n?'var(--text)':'var(--text3)')+'">'+n+'</div>'+
+      return '<div class="rep-row">'+
+        '<div class="rep-lbl">'+esc(s)+'</div>'+
+        '<div class="rep-track"><div class="rep-fill tone-'+toneOf(s)+(n?'':' is-empty')+'" style="width:'+w+'%"></div></div>'+
+        '<div class="rep-num'+(n?'':' is-zero')+'">'+n+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:12px">Pipeline funnel</div>'+rows+'</div>';
+    return '<div class="card rep-card"><div class="rep-ttl">Pipeline funnel</div>'+rows+'</div>';
   }
 
   function trendCard(trend){
     var max = Math.max(1, Math.max.apply(null, trend.map(function(t){ return t.count; })));
     var bars = trend.map(function(t){
-      var h = t.count ? Math.max(6, Math.round((t.count/max)*90)) : 2;
-      return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:110px">'+
-        '<div class="fs-11" style="font-weight:700;color:'+(t.count?'var(--text)':'var(--text3)')+'">'+t.count+'</div>'+
-        '<div style="width:60%;height:'+h+'px;background:var(--accent);border-radius:4px 4px 0 0;margin-top:3px"></div>'+
-        '<div class="fs-9_5 c-text3" style="margin-top:4px;white-space:nowrap">'+esc(t.week)+'</div>'+
+      var h = t.count ? Math.max(8, Math.round((t.count/max)*96)) : 0;
+      return '<div class="rep-col">'+
+        '<div class="rep-colv'+(t.count?'':' is-zero')+'">'+t.count+'</div>'+
+        '<div class="rep-colbar'+(t.count?'':' is-zero')+'"'+(t.count?' style="height:'+h+'px"':'')+'></div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:10px">Submissions — last 8 weeks</div>'+
-      '<div style="display:flex;align-items:flex-end;gap:6px">'+bars+'</div></div>';
+    var weeks = trend.map(function(t){ return '<div class="rep-colw">'+esc(t.week)+'</div>'; }).join('');
+    return '<div class="card rep-card"><div class="rep-ttl">Submissions &mdash; last 8 weeks</div>'+
+      '<div class="rep-cols">'+bars+'</div><div class="rep-weeks">'+weeks+'</div></div>';
   }
 
   function recruiterCard(rows){
@@ -118,7 +130,7 @@
         '<td class="fs-12_5" style="padding:8px 10px">'+money(r.revenue)+'</td>'+
       '</tr>';
     }).join('');
-    return '<div class="card" style="padding:0;overflow-x:auto"><div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border)">Recruiter productivity</div>'+
+    return '<div class="card" style="padding:0;overflow-x:auto"><div style="padding:14px 16px;border-bottom:1px solid var(--border)"><span class="rep-ttl">Recruiter productivity</span></div>'+
       '<table style="width:100%;border-collapse:collapse;min-width:620px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>';
   }
 
@@ -127,29 +139,29 @@
     var max = Math.max(1, Math.max.apply(null, rows.map(function(r){ return r.count; })));
     var body = rows.map(function(r){
       var w = Math.round((r.count/max)*100);
-      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'+
-        '<div class="fs-12_5 c-text2" style="width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">'+esc(r.client)+'</div>'+
-        '<div style="flex:1;background:var(--bg);border-radius:6px;height:16px"><div style="width:'+w+'%;height:100%;background:var(--accent);border-radius:6px"></div></div>'+
-        '<div class="fs-12" style="width:26px;font-weight:700">'+r.count+'</div>'+
+      return '<div class="rep-row">'+
+        '<div class="rep-lbl is-name">'+esc(r.client)+'</div>'+
+        '<div class="rep-track"><div class="rep-fill tone-brand" style="width:'+w+'%"></div></div>'+
+        '<div class="rep-num">'+r.count+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:12px">Top clients by submissions</div>'+body+'</div>';
+    return '<div class="card rep-card"><div class="rep-ttl">Top clients by submissions</div>'+body+'</div>';
   }
 
   function filterBar(d){
     var f = STATE.reports.filters||{};
     function pill(active,label,onclick){
-      return '<button onclick="'+onclick+'" class="fs-12" style="border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent-l)':'var(--card)')+';color:'+(active?'var(--accent)':'var(--text2)')+';border-radius:7px;padding:5px 11px;font-weight:600;cursor:pointer">'+label+'</button>';
+      return '<button onclick="'+onclick+'" class="rep-pill'+(active?' on':'')+'">'+label+'</button>';
     }
     var presetBtns=[['7','7d'],['30','30d'],['90','90d'],['all','All']].map(function(p){ return pill((f.preset||'all')===p[0],p[1],"reportsPreset('"+p[0]+"')"); }).join('');
     var roleBtns=[['','All'],['bd','BDs'],['recruiter','Recruiters']].map(function(r){ return pill((f.role||'')===r[0],r[1],"reportsRole('"+r[0]+"')"); }).join('');
-    return '<div class="card" style="padding:12px 14px;margin-bottom:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">'+
-      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Period</span>'+presetBtns+
-        '<input type="date" value="'+esc(f.from||'')+'" onchange="reportsDate(\'from\',this.value)" style="border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;background:var(--card);color:var(--text)"/>'+
-        '<span class="c-text3 fs-12">to</span>'+
-        '<input type="date" value="'+esc(f.to||'')+'" onchange="reportsDate(\'to\',this.value)" style="border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;background:var(--card);color:var(--text)"/>'+
+    return '<div class="card rep-filters">'+
+      '<div class="rep-fgroup"><span class="rep-flbl">Period</span>'+presetBtns+
+        '<input type="date" class="rep-date" value="'+esc(f.from||'')+'" onchange="reportsDate(\'from\',this.value)"/>'+
+        '<span class="rep-fto">to</span>'+
+        '<input type="date" class="rep-date" value="'+esc(f.to||'')+'" onchange="reportsDate(\'to\',this.value)"/>'+
       '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center"><span class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Who</span>'+roleBtns+'</div>'+
+      '<div class="rep-fgroup"><span class="rep-flbl">Who</span>'+roleBtns+'</div>'+
     '</div>';
   }
 
@@ -163,11 +175,11 @@
       return '<div class="rep-hot">'+
         '<div class="rep-hot-t"><div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
           '<div class="fs-11 c-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
-        '<div class="rep-hot-bar"><div style="width:'+w+'%;height:100%;background:linear-gradient(90deg,var(--accent),#2563eb);border-radius:6px"></div></div>'+
-        '<div class="rep-hot-s"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
+        '<div class="rep-hot-bar rep-track"><div class="rep-fill tone-brand" style="width:'+w+'%"></div></div>'+
+        '<div class="rep-hot-s"><b>'+j.submissions+'</b> subs · <b>'+j.interviews+'</b> intv</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px;margin-bottom:14px"><div class="fs-14" style="font-weight:600;margin-bottom:2px">🔥 Hot jobs</div>'+
+    return '<div class="card rep-card" style="margin-bottom:14px"><div class="rep-ttl" style="margin-bottom:6px">🔥 Hot jobs</div>'+
       '<div class="fs-12 c-text3" style="margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
   }
 
@@ -185,23 +197,22 @@
         '<td>'+days(r.typical_days)+(r.typical_from==='still_there'&&r.typical_days!=null?' <span class="rep-muted">so far</span>':'')+'</td>'+
         '<td class="num">'+(r.final?'<span class="rep-muted">—</span>':(r.stuck?'<b class="rep-stuck">'+r.stuck+'</b>':'0'))+'</td></tr>';
     }).join('');
-    return '<div class="card" style="padding:16px;margin-bottom:14px">'+
-      '<div class="fs-14" style="font-weight:600;margin-bottom:2px">Time in stage</div>'+
+    return '<div class="card rep-card" style="margin-bottom:14px">'+
+      '<div class="rep-ttl" style="margin-bottom:6px">Time in stage</div>'+
       '<div class="fs-12 c-text3" style="margin-bottom:12px">How long candidates typically sit at each stage, and how many have been there '+(stuckDays||14)+'+ days</div>'+
       '<div class="dt-wrap"><table class="rep-tis"><thead><tr><th>Stage</th><th class="num">Now there</th><th>Typical time there</th><th class="num">Stuck '+(stuckDays||14)+'+ days</th></tr></thead>'+
       '<tbody>'+body+'</tbody></table></div></div>';
   }
 
   function miniFunnel(f, stages){
-    var colors=window.ATS_STAGE_COLORS||{};
     var present=stages.filter(function(s){return (f[s]||0)>0;});
-    if(!present.length) return '<div class="fs-11_5 c-text3" style="padding:8px 44px;background:var(--bg)">No submissions in this period.</div>';
+    if(!present.length) return '<div class="rep-mini is-empty">No submissions in this period.</div>';
     var max=Math.max(1,Math.max.apply(null,present.map(function(s){return f[s]||0;})));
-    return '<div style="padding:8px 10px 10px 44px;background:var(--bg)">'+present.map(function(s){
+    return '<div class="rep-mini">'+present.map(function(s){
       var n=f[s]||0,w=Math.round(n/max*100);
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><div class="fs-11 c-text3" style="width:130px;text-align:right">'+esc(s)+'</div>'+
-        '<div style="flex:1;background:var(--card);border-radius:4px;height:12px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:'+(colors[s]||'var(--accent)')+'"></div></div>'+
-        '<div class="fs-11" style="width:26px;font-weight:700">'+n+'</div></div>';
+      return '<div class="rep-row is-mini"><div class="rep-lbl">'+esc(s)+'</div>'+
+        '<div class="rep-track"><div class="rep-fill tone-'+toneOf(s)+'" style="width:'+w+'%"></div></div>'+
+        '<div class="rep-num">'+n+'</div></div>';
     }).join('')+'</div>';
   }
 
@@ -247,7 +258,7 @@
     }
     return '<div class="card" style="padding:0;overflow-x:auto;margin-bottom:14px">'+
       '<div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">'+
-        '<span>Per-person productivity <span class="fs-11 c-text3" style="font-weight:400">tick people to combine · ▸ opens their funnel</span></span>'+
+        '<span><span class="rep-ttl">Per-person productivity</span> <span class="fs-11 c-text3" style="font-weight:400">tick people to combine · ▸ opens their funnel</span></span>'+
         (selIds.length?'<button class="btn btn-sm btn-outline" onclick="reportsClearSel()">Clear ('+selIds.length+')</button>':'')+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+combined+'</tbody></table></div>';

@@ -221,6 +221,34 @@ const thread = (over) => ({
   ok('summary of an empty queue is safe', summarize([]).total === 0 && summarize([]).top === null);
 }
 
+// ── 6d. ONE ROW PER LEAD, NOT ONE PER SILENT CONTACT (R-122 step 3) ─────────
+// The owner's screenshot: dozens of "No reply yet" rows for ONE company, each
+// "Sent 6 days ago". The silence is a fact about the lead, so it is one row —
+// that says how many people were written to and how long ago the latest went.
+{
+  const silent = (id, days, over = {}) => thread({ entity_id: id, name: 'Person ' + id, company: 'Renewable Energy Partners, Inc.', stage: 'Connected', job_id: 'lead-1', owner_id: 'u-bd', messages: [m('outbound', days, 'Hi')], ...over });
+  const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((x, i) => silent(x, 6 + (i === 0 ? 0 : 1)));
+  const items = buildNextActions({ threads: six, now: NOW });
+  const nudges = items.filter(i => i.kind === KIND.NUDGE);
+  ok('six silent contacts of one lead are ONE row', nudges.length === 1, JSON.stringify(nudges.map(n => n.title)));
+  const g = nudges[0] || {};
+  ok('…titled with the company and counting the people', g.title === 'Renewable Energy Partners, Inc.' && g.subtitle === '6 people' && g.group_size === 6, JSON.stringify(g));
+  ok('…and it says the basis in plain words, with the LATEST email\'s age', /emailed 6 people here \(the latest 6 days ago\) and nobody has replied/.test(g.reason || ''), g.reason);
+  ok('…it is the lead\'s row (opens the lead), never one person\'s address', g.entity_type === 'lead' && g.entity_id === 'lead-1' && g.job_id === 'lead-1' && g.email === null);
+  ok('…ownership stays exact — the row is the lead owner\'s', g.owner_id === 'u-bd');
+  // A single silent contact keeps its own row, unchanged.
+  const one = buildNextActions({ threads: [silent('solo', 5, { job_id: 'lead-2' })], now: NOW }).filter(i => i.kind === KIND.NUDGE);
+  ok('a lead with ONE silent contact keeps that person\'s own row', one.length === 1 && one[0].entity_type === 'contact' && one[0].title === 'Person solo', JSON.stringify(one));
+  // Two leads are two rows; two owners on one lead are two rows (the ownership split must stay exact).
+  const mixed = buildNextActions({ threads: [silent('x1', 5), silent('x2', 5), silent('y1', 5, { job_id: 'lead-9' }), silent('y2', 5, { job_id: 'lead-9' }),
+    silent('z1', 5, { owner_id: 'u-other' }), silent('z2', 5, { owner_id: 'u-other' })], now: NOW }).filter(i => i.kind === KIND.NUDGE);
+  ok('different leads / different owners are not merged into each other', mixed.length === 3 && mixed.filter(n => n.group_size === 2).length === 3, JSON.stringify(mixed.map(n => [n.entity_id, n.owner_id, n.group_size])));
+  // Someone who REPLIED is never swallowed by the group.
+  const withReply = buildNextActions({ threads: [silent('q1', 5), silent('q2', 5), thread({ entity_id: 'q3', name: 'Replied Person', stage: 'Connected', job_id: 'lead-1', owner_id: 'u-bd', messages: [m('outbound', 8, 'Hi'), m('inbound', 2, 'Yes, call me')] })], now: NOW });
+  ok('a person who replied still has their own reply_due row', withReply.some(i => i.kind === KIND.REPLY_DUE && i.entity_id === 'q3'));
+  ok('the dismissal key of the group is the LEAD (stable while its members change)', require('../services/next-action-dismissals.js').itemKey(g) === 'nudge:lead:lead-1');
+}
+
 console.log('\n=== NEXT ACTION SMOKE ===');
 let failed = 0;
 for (const r of results) {

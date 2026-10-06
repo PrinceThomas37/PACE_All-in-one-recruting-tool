@@ -19,6 +19,17 @@
     { key:'clients',    label:'Clients' }
   ];
 
+  // The shortcut hint names the key the person actually has: ⌘ on a Mac and an
+  // iPad/iPhone, Ctrl everywhere else. (Either key already works — see the
+  // keydown listener below — this only decides what we SAY.)
+  function isMac(){
+    try{
+      var p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || '';
+      return /mac|iphone|ipad|ipod/i.test(p);
+    }catch(e){ return false; }
+  }
+  window.paceIsMac = isMac;
+
   function flat(res){
     var out = [];
     if (!res) return out;
@@ -57,7 +68,7 @@
         'placeholder="Search candidates, leads, jobs, clients…" aria-label="Search everything" ' +
         'value="' + htmlEsc(g.q) + '" oninput="gsearchInput(this.value)" onkeydown="gsearchKey(event)" ' +
         'onfocus="gsearchFocus()" onblur="gsearchBlur()">' +
-      '<kbd class="gs-kbd">⌘K</kbd>' + panel() +
+      '<kbd class="gs-kbd" title="Press ' + (isMac() ? '⌘K' : 'Ctrl+K') + ' to search from anywhere">' + (isMac() ? '⌘K' : 'Ctrl K') + '</kbd>' + panel() +
     '</div>';
   };
 
