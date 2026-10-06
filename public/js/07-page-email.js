@@ -324,7 +324,7 @@ function renderEmail(){
     return { id:t, label:TAB_LABELS[t]||t, n:n, onclick:"setEmailTab('"+t+"')" };
   }), STATE.emailTab,
     (ps&&ps.total_pending&&STATE.emailTab==='pending'
-      ? '<span class="fs-12 c-ink3" title="'+escAttr('Send window: '+(ps.send_window_label||'8:00 – 16:00 lead local time')+(ps.held_company?'. Held until tomorrow: the company already got its '+(ps.company_daily_cap||2)+' first email(s) today (Admin → System Settings).':''))+'">'+htmlEsc(pendingSplitLine(ps))+'</span>'+
+      ? '<span class="fs-12 c-ink3" title="'+escAttr('Send window: '+(ps.send_window_label||'8:00 – 16:00 lead local time')+(ps.held_company?'. Held until tomorrow: the company already got its '+(ps.company_daily_cap||2)+' first email'+((ps.company_daily_cap||2)===1?'':'s')+' today (Admin → System Settings).':'')+(ps.waiting_retry?'. Waiting to retry: a send failed and PACE tries again by itself — each row says when.':''))+'">'+htmlEsc(pendingSplitLine(ps))+'</span>'+
         // The panel this replaces carried the only "try the waiting ones now" button; it lives on in one quiet link.
         (ps.waiting_window>0&&!userHasRole(u,'ra_lead')?' <button class="fs-12 c-accent" style="background:none;border:0;padding:0;cursor:pointer;text-decoration:underline" onclick="retryPendingWindowNow()">Try the waiting ones now</button>':'')
       : ''));
