@@ -117,7 +117,7 @@ try {
   // Dashboard" is no longer a flat index. What still has to hold is the intent:
   // Dashboard leads, and inside Records a recruiter's OWN jobs come before the
   // shared board and before the candidate pool.
-  step('Nav starts at Dashboard', navItems[0] === 'Dashboard', navItems.join(' | '));
+  step('Nav starts at Today (the dashboard)', navItems[0] === 'Today', navItems.join(' | '));
   step('Nav puts My Jobs ahead of All Jobs and Candidates',
     navItems.indexOf('My Jobs') > -1 &&
     navItems.indexOf('My Jobs') < navItems.indexOf('All Jobs') &&

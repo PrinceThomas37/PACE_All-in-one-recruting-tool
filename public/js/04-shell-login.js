@@ -128,30 +128,38 @@ function renderSidebar(){
   var inboxBadge=(STATE.mailbox&&STATE.mailbox.unread)||null;
 
   // ── The rail's menu ──────────────────────────────────────────────────────
-  // Grouped, because a flat list of fourteen items is a list nobody reads. The
-  // groups follow how the work actually splits: what you do today (Work), the
-  // records you work on (Records), the mail machinery (Outreach), and the
-  // numbers (Insight). A group with no visible items disappears entirely.
-  var G_WORK='Work', G_REC='Records', G_OUT='Outreach', G_INS='Insight';
-  var navItems=[{id:"dashboard",lbl:"Dashboard",ic:"grid",grp:G_WORK}];
+  // Grouped, because a flat list of fourteen items is a list nobody reads.
+  // R-122: the groups follow the two halves of the BUSINESS — PACE is a lead-
+  // generation tool and an ATS — plus your own day and the setup screens:
+  //   My Day (dashboard, team, inbox, reminders, email) · Sales (leads, sourced,
+  //   assign, clients, lead numbers) · Recruiting (jobs, candidates) · Setup.
+  // WHO SEES WHAT IS UNCHANGED — only the headings moved. A group with no
+  // visible items disappears entirely, so a recruiter never sees "Sales" and a
+  // research analyst never sees "Recruiting". Each group carries a class
+  // (sec-day / sec-sales / sec-rec / sec-set) that retro.css colours.
+  var G_WORK='My Day', G_REC='Recruiting', G_SALES='Sales', G_OUT='My Day', G_INS='Sales', G_SET='Setup';
+  var GRP_CLS={'My Day':'sec-day','Sales':'sec-sales','Recruiting':'sec-rec','Setup':'sec-set'};
+  var navItems=[{id:"dashboard",lbl:"Today",ic:"grid",grp:G_WORK}];
   if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"users",grp:G_WORK});
   navItems.push({id:"mailbox",lbl:"Inbox",ic:"inbox",badge:inboxBadge,grp:G_WORK});
-  navItems.push(raOnly?{id:"insights",lbl:"Insights",ic:"chart",grp:G_INS}
+  navItems.push(raOnly?{id:"insights",lbl:"My Numbers",ic:"chart",grp:G_INS}
                       :{id:"reminders",lbl:"Reminders",ic:"bell",badge:remBadge,grp:G_WORK});
 
-  if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"send",badge:todayCnt,grp:G_REC});
-  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"check",grp:G_REC});
+  if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"send",badge:todayCnt,grp:G_SALES});
+  if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"check",grp:G_SALES});
   // Leads PACE sourced itself, waiting for a human to approve them. Sits next to
   // Leads because that is where the work continues once one is approved.
   if(userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','director','associate_director'))
-    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"search",grp:G_REC,badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
+    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"search",grp:G_SALES,badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
   if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"doc",grp:G_REC});
   if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"doc",grp:G_REC});navItems.push({id:"job_board",lbl:"All Jobs",ic:"search",grp:G_REC});}
-  if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"building",grp:G_REC});
+  // Clients sit with Sales: that is where the relationship is won. A job still
+  // links to its client.
+  if(bdm)navItems.push({id:"clients",lbl:"Clients",ic:"building",grp:G_SALES});
   if(bdm||recruiter)navItems.push({id:"applicants",lbl:"Candidates",ic:"user",grp:G_REC});
 
   if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))navItems.push({id:"email",lbl:"Email",ic:"mail",grp:G_OUT});
-  if(userHasAnyRole(u,'admin','bd_lead','ra_lead'))navItems.push({id:"deliverability",lbl:"Deliverability",ic:"shield",grp:G_OUT});
+  if(userHasAnyRole(u,'admin','bd_lead','ra_lead'))navItems.push({id:"deliverability",lbl:"Deliverability",ic:"shield",grp:G_SET});
 
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"chart",grp:G_INS});
   // BD / BD Lead (not admin): own lead-gen performance — "Lead Insights".
@@ -162,7 +170,7 @@ function renderSidebar(){
   // Expanding it showed different labels, hence "no repeats in full menu".
   // R-006: Reports are part of the Dashboard now (its foot), so the standalone
   // nav item is gone; goPage('reports') still works and lands there.
-  if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_INS});
+  if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_SET});
 
   // De-duplicate: Insights can be pushed twice for an admin who is also an RA
   // lead, and a doubled nav item looks like a bug to the person using it.
@@ -170,26 +178,40 @@ function renderSidebar(){
   navItems=navItems.filter(function(n){ if(seen[n.id])return false; seen[n.id]=true; return true; });
 
   function navRow(n){
-    var active=STATE.page===n.id?" active":"";
+    var active=(STATE.page===n.id?" active":"")+" "+GRP_CLS[n.grp];
     var badge=n.badge&&n.badge>0?'<span class="nav-badge">'+n.badge+'</span>':"";
+    // R-122: a pixel icon per item (9x9, drawn in the text colour). Every item
+    // has its OWN — the collapsed rail is icons only (nav-icons-smoke).
+    var pic=NAV_PIXEL_ICONS[n.id];
     return '<div class="nav-item'+active+'" onclick="goPage(\''+n.id+'\')" title="'+n.lbl+'">'+
-      '<span class="nav-icon">'+UI.ic(n.ic)+'</span>'+
+      '<span class="nav-icon">'+(pic?pixelSprite(pic,'currentColor',2):UI.ic(n.ic))+'</span>'+
       '<span class="nav-txt">'+n.lbl+'</span>'+badge+
     '</div>';
   }
-  var nav=[G_WORK,G_REC,G_OUT,G_INS].map(function(g){
+  // Setup (Deliverability, Admin) is not a menu section: it lives under the
+  // name card, behind "Setup" (toggleSetup — one class, no render).
+  var setupRows=navItems.filter(function(n){return n.grp==='Setup';});
+  var setupOpen=(STATE.page==='admin'||STATE.page==='deliverability')?' setup-open':'';
+  var nav=['My Day','Sales','Recruiting'].map(function(g){
     var rows=navItems.filter(function(n){return n.grp===g;});
     if(!rows.length)return '';
-    return '<div class="sb-lbl">'+g+'</div>'+rows.map(navRow).join('');
+    return '<div class="sb-lbl '+GRP_CLS[g]+'">'+g+'</div>'+rows.map(navRow).join('');
   }).join('');
 
   // Restore the rail's pinned state. Read at build time so it is part of the
   // region's html string — the render engine compares those strings, so a
   // deterministic class here costs nothing and never causes a repaint.
+  // R-122: on a full-size screen the labelled sidebar is OPEN by default (the
+  // owner's design); one click on the logo folds it to the icon rail, and that
+  // choice is remembered. Below 1100px (tablets, phones) it starts folded as
+  // before.
   var railPinned='';
-  try{ if(localStorage.getItem('pace-rail')==='pinned') railPinned=' class="pinned"'; }catch(e){}
+  try{
+    var rp=localStorage.getItem('pace-rail');
+    if(rp==='pinned'||(rp!=='collapsed'&&window.innerWidth>=1100)) railPinned=' pinned';
+  }catch(e){}
 
-  return '<div id="sidebar"'+railPinned+'>'+
+  return '<div id="sidebar" class="'+(railPinned+setupOpen).trim()+'">'+
     // THE BRAND MARK IS ALSO THE RAIL'S SWITCH ON A TOUCH DEVICE.
     // The rail expands on hover, correctly gated on (hover:hover) — a mouse
     // feature, never a width. But that leaves a TOUCH device at desktop width
@@ -201,18 +223,24 @@ function renderSidebar(){
     // only where hover is unavailable.
     '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
       'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
+      // R-122: the pixel logo on a slice of the sky (retro.css paints both).
       '<div class="rail-mark">P</div>'+
-      '<div class="rail-word"><span class="c-accent">PA</span><span style="color:#C99A18">CE</span></div>'+
+      '<div class="rail-word">PACE<span class="rail-sub">AI RECRUITING</span></div>'+
+      '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
       '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
     '<div class="sb-footer">'+
-      '<div class="user-row" onclick="goPage(\'profile\')" title="'+htmlEsc(u.name)+' — open my profile">'+
-        av(u,"32")+
-        '<div class="user-meta" style="flex:1;min-width:0">'+
-          '<div class="u-name">'+htmlEsc(u.name)+'</div>'+
-          '<div class="u-role">'+roleLabel(u.role)+'</div>'+
+      (setupRows.length?'<div class="sb-setup">'+setupRows.map(navRow).join('')+'</div>':'')+
+      '<div class="me-card">'+
+        '<div class="user-row" onclick="goPage(\'profile\')" title="'+htmlEsc(u.name)+' — open my profile">'+
+          av(u,"32")+
+          '<div class="user-meta" style="flex:1;min-width:0">'+
+            '<div class="u-name">'+htmlEsc(u.name)+'</div>'+
+            '<div class="u-role">'+roleLabel(u.role)+'</div>'+
+          '</div>'+
         '</div>'+
+        (setupRows.length?'<div class="me-setup" onclick="toggleSetup()" role="button" title="Setup: '+setupRows.map(function(n){return n.lbl;}).join(', ')+'">'+UI.ic('cog')+'<span class="nav-txt">Setup</span></div>':'')+
       '</div>'+
       '<div class="nav-item" onclick="signOut()" title="Sign out">'+
         '<span class="nav-icon">'+UI.ic('ban')+'</span><span class="nav-txt">Sign out</span>'+
@@ -224,7 +252,7 @@ function renderSidebar(){
 function renderTopbar(){
   var u=STATE.user;
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
-  var pageTitles={dashboard:"Dashboard",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
+  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing
@@ -244,9 +272,22 @@ function renderTopbar(){
   // unlabelled icons in a 60px strip. Hidden by CSS above 860px, where the
   // hover rail is back and a hamburger would be one click too many.
   return '<div id="topbar">'+
+      // R-122: the sky. The bar's colours follow the clock through the
+      // data-sky attribute on <html> (retro.css); the sun or moon is the one
+      // thing drawn here, placed by the hour (paceSkyOrb). Decorative only.
+      // The sky's decoration sits in its own clipped layer, so the bar itself
+      // can let the search results hang below it.
+      '<div class="tb-sky" aria-hidden="true">'+paceSkyOrb()+paceSkyDecor()+'</div>'+
       '<div class="tb-burger" onclick="toggleNav()" title="Menu" aria-label="Menu" role="button">'+UI.ic('menu')+'</div>'+
-      '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
-      '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
+      // The title block: the page name in pixels, and under it today's date
+      // and time (the clock ticker keeps #tb-clock current — text only).
+      '<div class="tb-head">'+
+        '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
+        '<div class="tb-meta"><span id="tb-clock">'+paceHeaderClock()+'</span></div>'+
+      '</div>'+
+      paceTodayChips()+
+      (window.paceSearchBox?paceSearchBox():'')+
+      '<div class="tb-right" style="margin-left:12px;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
           '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
         // BOTH ICONS ARE ALWAYS IN THE MARKUP; theme.css shows one and hides
@@ -256,6 +297,7 @@ function renderTopbar(){
         // engine is built around (a repaint that changes nothing writes
         // nothing). Toggling an attribute on <html> costs a repaint of colour
         // and nothing else.
+        paceHeaderNew()+
         '<div class="tb-theme" onclick="toggleTheme()" title="Light / dark" aria-label="Toggle light or dark theme" role="button">'+
           '<span class="ic-moon">'+UI.ic('moon')+'</span><span class="ic-sun">'+UI.ic('sun')+'</span>'+
         '</div>'+
@@ -269,6 +311,33 @@ function renderTopbar(){
   '</div>';
 }
 
+// Show or hide the Setup items above the name card. One class, no render.
+window.toggleSetup=function(){
+  var sb=document.getElementById('sidebar'); if(sb)sb.classList.toggle('setup-open');
+};
+
+// The sidebar's pixel icons (R-122): 9x9, '#' = a pixel. One per nav id.
+var NAV_PIXEL_ICONS={
+  dashboard:['#...#...#','.#..#..#.','..#####..','..#####..','#########','..#####..','..#####..','.#..#..#.','#...#...#'],
+  myteam:['..##.##..','.####.##.','.####.##.','..##..#..','.........','######.##','#######.#','#######.#','.........'],
+  mailbox:['#########','#.......#','#.......#','#.......#','##.....##','#.##.##.#','#..###..#','#.......#','#########'],
+  reminders:['....#....','...###...','..#####..','..#####..','..#####..','.#######.','#########','.........','....#....'],
+  email:['#########','##.....##','#.#...#.#','#..#.#..#','#...#...#','#.......#','#.......#','#.......#','#########'],
+  leads:['....#....','..#####..','.#..#..#.','.#.....#.','####.####','.#.....#.','.#..#..#.','..#####..','....#....'],
+  assign:['#####....','#...#....','#...#..#.','#####.###','......###','..#....#.','.###.....','#####....','..#......'],
+  sourced:['.####....','#....#...','#....#...','#....#...','#....#...','.####.#..','......##.','.......##','........#'],
+  clients:['..#####..','..#.#.#..','..#####..','..#.#.#..','#########','#.#.#.#.#','#########','#.#.#.#.#','#########'],
+  insights:['.......##','.......##','....##.##','....##.##','.##.##.##','.##.##.##','.##.##.##','.##.##.##','#########'],
+  bdinsights:['........#','.......#.','......#..','.#...#...','#.#.#....','...#.....','.........','#########','#########'],
+  bd_joborders:['...###...','..#...#..','#########','#.......#','#...#...#','#########','#.......#','#.......#','#########'],
+  bd_myjobs:['...###...','..#...#..','#########','#.......#','#.#####.#','#########','#.......#','#.......#','#########'],
+  job_board:['#########','#.......#','#.#####.#','#.......#','#.####..#','#.......#','#.###...#','#.......#','#########'],
+  applicants:['...###...','..#####..','..#####..','...###...','.........','.#######.','#########','#########','#########'],
+  deliverability:['.#######.','#########','##.....##','##.....##','##.....##','.##...##.','..##.##..','...###...','....#....'],
+  admin:['...#.#...','.#######.','.##...##.','###...###','.#.....#.','###...###','.##...##.','.#######.','...#.#...']
+};
+window.NAV_PIXEL_ICONS=NAV_PIXEL_ICONS;
+
 // Expand or collapse the icon rail. Like the nav drawer and the theme switch,
 // this toggles ONE class and calls nothing else — a render() here would rebuild
 // the shell, reload every iframe and lose the page's scroll, to move a rail.
@@ -278,52 +347,170 @@ window.toggleRail=function(){
   try{ localStorage.setItem('pace-rail', on?'pinned':'collapsed'); }catch(e){}
 };
 
-// ── LIGHT / DARK ──────────────────────────────────────────────────────────
-// Three states, not two: 'light', 'dark', or NO attribute at all, which means
-// "follow the operating system". The toggle only ever moves between the two
-// explicit ones, because a user who reaches for it has stopped wanting the OS
-// to decide.
+// ── LIGHT / DARK / AUTO ───────────────────────────────────────────────────
+// Three states (D-0015, D-0072): the person chose 'light', chose 'dark', or
+// chose nothing — AUTO, which follows their clock (light 05:00–16:59, dark
+// otherwise; the same hours as the inline script in index.html's <head>).
+// Auto is always resolved to a real data-theme attribute, with a
+// data-theme-auto marker saying nobody picked it.
 //
-// Like openNav()/closeNav(), this touches ONE attribute and calls nothing
-// else. No render(), no scheduleRender(). Re-rendering to change a colour
-// would reload every sandboxed iframe on screen and lose the page's scroll —
-// and the whole point of the render engine is that a repaint changing nothing
-// writes nothing.
+// Like openNav()/closeNav(), changing theme touches attributes and calls
+// nothing else. No render(), no scheduleRender(). Re-rendering to change a
+// colour would reload every sandboxed iframe on screen and lose the page's
+// scroll — and the whole point of the render engine is that a repaint changing
+// nothing writes nothing.
+function paceClockTheme(d){
+  var h=(d||new Date()).getHours();
+  return (h>=5&&h<17)?'light':'dark';
+}
+window.paceClockTheme=paceClockTheme;
+function isAutoTheme(){ return document.documentElement.hasAttribute('data-theme-auto'); }
+window.isAutoTheme=isAutoTheme;
 function currentTheme(){
   var set=document.documentElement.getAttribute('data-theme');
   if(set==='dark'||set==='light')return set;
-  // No explicit choice: report what the OS is actually giving them, so the
-  // toggle flips to the opposite of what is ON SCREEN rather than to a
-  // default that may already be showing.
-  return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  return paceClockTheme();
 }
-// APPLY A THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
-// account-preference load, so there is one place that knows how to put a theme
-// on screen.
-function applyTheme(next){
-  document.documentElement.setAttribute('data-theme',next);
-  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
-  // the account preference arrives so the page never flashes the wrong theme
-  // while a fetch is in flight. The account is the authority (D-0022).
-  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+// THE SKY (R-122). Four phases by the clock — dawn 05–07, day 08–16, dusk
+// 17–19, night 20–04 — independent of light/dark: someone who chose dark still
+// sees the sun at noon. Set on <html> as data-sky before first paint
+// (index.html, same hours) and kept up by paceClockCheck().
+function paceSkyPhase(d){
+  var h=(d||new Date()).getHours();
+  return h>=5&&h<8?'dawn':h>=8&&h<17?'day':h>=17&&h<20?'dusk':'night';
+}
+window.paceSkyPhase=paceSkyPhase;
+// The date line under the page title: "TUE · 06 OCT 2026 · 15:52 CDT" in
+// the person's own zone. startClock() refreshes #tb-clock's TEXT every tick;
+// nothing re-renders for it.
+function paceHeaderClock(d){
+  d=d||new Date();
+  var day=d.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase();
+  var date=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+  var t=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'}).toUpperCase();
+  return day+' · '+date+' · '+t;
+}
+window.paceHeaderClock=paceHeaderClock;
+// On Today only: what is waiting on you. Both numbers are REAL or absent —
+// "need you" is the loaded needs-you-today list (STATE.nextActions), "past
+// due" is your own pending reminders dated before today. A click goes to
+// Today. Nothing is shown while a number is unknown.
+function paceTodayChips(){
+  if(STATE.page!=='dashboard'||(STATE.viewingUser&&STATE.user&&STATE.viewingUser.id!==STATE.user.id))return '';
+  var out='';
+  var na=STATE.nextActions;
+  if(na&&na.items&&!na._error)out+='<span class="tb-chip">'+na.items.length+' NEED YOU</span>';
+  var uid=STATE.user&&STATE.user.id, today=(typeof todayIST==='function')?todayIST():new Date().toISOString().slice(0,10);
+  var late=(STATE.reminders||[]).filter(function(r){return r.user_id===uid&&r.status==='pending'&&r.due_date&&String(r.due_date).slice(0,10)<today;}).length;
+  if(late)out+='<span class="tb-chip is-late" onclick="goPage(\'reminders\')" role="button">'+late+' PAST DUE</span>';
+  return out?'<div class="tb-chips">'+out+'</div>':'';
+}
+// The one Sun Yellow action on Today, by desk — and only actions PACE has:
+// a BD desk (admin / bd / bd_lead) opens a new job, a recruiter a new
+// candidate. Other pages keep their own primary button in their toolbar, so
+// the header never shows a second yellow button there.
+function paceHeaderNew(){
+  if(STATE.page!=='dashboard'||!STATE.user)return '';
+  var u=STATE.user;
+  if(userHasAnyRole(u,'admin','bd','bd_lead')&&typeof window.bdOpenNewJob==='function')
+    return '<button class="btn btn-primary tb-new" onclick="bdOpenNewJob(null)">+ New Job</button>';
+  if(userHasRole(u,'recruiter')&&typeof window.atsOpenNew==='function')
+    return '<button class="btn btn-primary tb-new" onclick="atsOpenNew()">+ New Candidate</button>';
+  return '';
+}
+// Pixel clouds (always) and stars (CSS shows them at dusk and night).
+var PACE_CLOUD=['......####......','...#########....','..############..','.##############.','################'];
+function paceSkyDecor(){
+  return '<span class="tb-cloud c1">'+pixelSprite(PACE_CLOUD,'currentColor',3)+'</span>'+
+    '<span class="tb-cloud c2">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
+    '<span class="tb-stars"></span>';
+}
+window.paceSkyDecor=paceSkyDecor;
+
+// The sun (06:00–18:59) or the moon (19:00–05:59) on an arc across the empty
+// middle of the top bar — between the page title and the icons, so it never
+// sits behind either. Quantised to 15 minutes so the bar's html (which the
+// render engine compares) changes at most four times an hour.
+var PACE_SUN=['...YYYY...','..YYYYYY..','.YYYYYYYY.','YYYYYYYYYY','YYYYYYYYYY','YYYYYYYYYY','YYYYYYYYYY','.YYYYYYYY.','..YYYYYY..','...YYYY...'];
+var PACE_MOON=['...YYY.','..YYY..','.YYY...','.YYY...','.YYY...','..YYY..','...YYY.'];
+function pixelSprite(rows,fill,px){
+  var r='';
+  rows.forEach(function(row,y){ for(var x=0;x<row.length;x++) if(row.charAt(x)!=='.') r+='<rect x="'+x+'" y="'+y+'" width="1.02" height="1.02"/>'; });
+  return '<svg viewBox="0 0 '+rows[0].length+' '+rows.length+'" width="'+rows[0].length*px+'" height="'+rows.length*px+'" fill="'+fill+'" shape-rendering="crispEdges" aria-hidden="true">'+r+'</svg>';
+}
+window.pixelSprite=pixelSprite;
+function paceSkyOrb(d){
+  d=d||new Date();
+  var h=d.getHours()+Math.floor(d.getMinutes()/15)*15/60;
+  var sun=h>=6&&h<19, p=sun?(h-6)/13:((h-19+24)%24)/11;
+  var left=(30+p*40).toFixed(1), top=Math.round(92-Math.sin(p*Math.PI)*22);
+  return '<span class="tb-orb '+(sun?'is-sun':'is-moon')+'" style="left:'+left+'%;top:'+top+'px">'+
+    (sun?pixelSprite(PACE_SUN,'currentColor',3.4):pixelSprite(PACE_MOON,'currentColor',4.4))+'</span>';
+}
+window.paceSkyOrb=paceSkyOrb;
+function themeChanged(){
   // Anything that paints itself rather than being painted BY CSS has to be
   // told. Right now that is the login backdrop (a <canvas>); an event keeps
   // that knowledge with the thing that needs it instead of hard-wiring a call
   // to a function that may not be on the page.
   try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
 }
+// APPLY A CHOSEN THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
+// account-preference load, so there is one place that knows how to put a theme
+// on screen.
+function applyTheme(next){
+  document.documentElement.removeAttribute('data-theme-auto');
+  document.documentElement.setAttribute('data-theme',next);
+  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
+  // the account preference arrives so the page never flashes the wrong theme
+  // while a fetch is in flight. The account is the authority (D-0022).
+  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+  themeChanged();
+}
 window.applyTheme=applyTheme;
+// BACK TO AUTO: forget the choice and let the clock decide.
+function applyAutoTheme(){
+  try{ localStorage.removeItem('pace-theme'); }catch(e){}
+  document.documentElement.setAttribute('data-theme-auto','');
+  var was=document.documentElement.getAttribute('data-theme');
+  var now=paceClockTheme();
+  document.documentElement.setAttribute('data-theme',now);
+  if(was!==now)themeChanged();
+}
+window.applyAutoTheme=applyAutoTheme;
+// AUTO KEEPS UP WITH THE CLOCK — but never under someone's hands. Called when
+// they move to another screen (goPage) and when they come back to the tab; a
+// timer would flip the page while they are reading it.
+window.paceClockCheck=function(){
+  var sky=paceSkyPhase();
+  if(document.documentElement.getAttribute('data-sky')!==sky)document.documentElement.setAttribute('data-sky',sky);
+  if(!isAutoTheme())return;
+  var now=paceClockTheme();
+  if(document.documentElement.getAttribute('data-theme')!==now){
+    document.documentElement.setAttribute('data-theme',now);
+    themeChanged();
+  }
+};
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible')window.paceClockCheck();
+});
 
+// ONE CLICK ALWAYS FLIPS WHAT IS ON SCREEN. If the flip lands on what the clock
+// would show anyway, that is Auto again (saved as 'system', the value the
+// account preference already uses for "nobody chose"); otherwise it is a
+// choice. So in the daytime: Auto(light) → Dark → Auto(light) → …
 window.toggleTheme=function(){
   var next=currentTheme()==='dark'?'light':'dark';
-  applyTheme(next);
+  var save;
+  if(!isAutoTheme()&&next===paceClockTheme()){ applyAutoTheme(); save='system'; }
+  else { applyTheme(next); save=next; }
   // THE CHOICE FOLLOWS THE PERSON, NOT THE BROWSER (D-0022). Saved against the
   // account so it reaches their other devices and does NOT carry over to
   // whoever signs in next on a shared computer. Best-effort: a preference that
   // fails to save still applied on screen, and localStorage keeps it for this
   // browser, so the failure costs a sync and never the interaction.
   if(STATE&&STATE.token&&typeof apiFetch==='function'){
-    apiFetch('PUT','/me/preferences',{theme:next}).catch(function(){});
+    apiFetch('PUT','/me/preferences',{theme:save}).catch(function(){});
   }
 };
 
@@ -334,13 +521,10 @@ window.loadThemePreference=function(){
   if(!(STATE&&STATE.token)||typeof apiGet!=='function')return;
   apiGet('/me/preferences').then(function(p){
     if(!p||!p.theme)return;
-    if(p.theme==='system'){
-      document.documentElement.removeAttribute('data-theme');
-      try{ localStorage.removeItem('pace-theme'); }catch(e){}
-      try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
-      return;
+    if(p.theme==='system'){ if(!isAutoTheme())applyAutoTheme(); return; }
+    if(p.theme==='light'||p.theme==='dark'){
+      if(isAutoTheme()||p.theme!==currentTheme())applyTheme(p.theme);
     }
-    if(p.theme!==currentTheme())applyTheme(p.theme);
   }).catch(function(){});
 };
 

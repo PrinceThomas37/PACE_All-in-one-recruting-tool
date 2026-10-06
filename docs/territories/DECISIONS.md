@@ -47,6 +47,27 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0075 · 2026-10-06 · STANDS · Merge the redesign so far (steps 1–2, the sky header, search) now — the owner wants to try it live
+**Their words:** *"okay update the context and i will resume in the next chat. and merge these, let me see how it looks and works around"*
+**Chosen:** reverses D-0074's "release only after Today + Leads": #294 merges now (179/179 on Node 22 and Node 26). The page LAYOUTS below the frame are still the old ones until steps 3–4; the owner accepts the half-new look in order to try it. D-0074's search decision stands.
+**Re-open when:** the live look causes trouble for the team (then removing the `retro.css` <link> restores the old look in one line).
+
+### D-0074 · 2026-10-06 · REVERSED (the release timing — see D-0075; the search part stands) · Build the header search (R-123); release the redesign only once Today and Leads are rebuilt
+**Their words:** *"Should I build the search box (R-123)? Yes"*. On releasing steps 1–2 they first answered *"it's done, the leads have been assigned and the emails have been triggered and sent"* — read as the day's work, not the screens — so the question was asked again plainly; answer: **"Wait for Today + Leads (Recommended)"**.
+**Chosen:** search finds candidates, leads (also by company / contact), jobs and clients, each limited to what the person's own lists show. Nothing from R-122/R-123 merges to `main` until the Today and Leads screens are rebuilt in the list / record / decide layout and the owner has seen them.
+**Re-open when:** the owner asks to release sooner, or wants the search to cover more (emails, notes, documents).
+
+### D-0073 · 2026-10-06 · STANDS · The retro look is the DEFAULT for every customer; build it step by step without breaking the app (R-122)
+**Their words:** *"Default for everyone, go ahead and build it. step by step, i dont want to break the application"*
+**Chosen:** `docs/design/PACE.ds` is the design to build. It replaces the current look for every company (not an opt-in theme); each person keeps Auto (follows the clock) / Light / Dark, saved per person. Built in small steps, each tested and shown before the next: (1) colours + clock switch, (2) sidebar + sky header, (3) the shared UI kit, (4) Today, then Leads, then the rest. Nothing merges to `main` (= live) until the owner has seen it.
+**Re-open when:** a customer objects to the look, or a step breaks something the owner relies on.
+
+### D-0072 · 2026-10-06 · STANDS · Retro redesign (R-122): the Duck Hunt scoreboard goes; the WHOLE app follows day and night
+**Their words:** on concept 2, asked *"Can the scoreboard go?"* — *"Yes"*; asked *"Should the whole app follow day and night, or only the header?"* — *"Yes"* (to the recommended option, the whole app).
+**Chosen:** (1) No Duck Hunt scoreboard / grass strip on the default screen; the duck may return only as a brief celebration (e.g. a placement). (2) The whole app follows the viewer's own clock: light cream pages by day, the dark version in the evening and at night, with the header sky (dawn/day/dusk/night, sun or moon on an arc) on top. Earlier in the same thread the owner chose the 90s retro direction (Stamply layout, Launch Week colours and pixel type, Duck Hunt touches) and asked for muted state colours — concept 2 did that.
+**Still open:** pixel lettering in the frame only (recommended) or everywhere; the new look for everyone or offered as a theme first.
+**Re-open when:** customers or the owner find the clock-driven switch distracting (a fixed light/dark choice per user would then override it — per-user, not per-browser, D-0022).
+
 ### D-0071 · 2026-10-05 · STANDS · Stage 2 (lead contacts + phones at import) ships in the SAME merge as stage 1 (R-114)
 **Their words:** *"Do the Stage 1 screenshots feel right? - Yes"* · *"Should Stage 2 … go in this same merge, - Same merge, Do this now."*
 **Chosen:** one PR (#289), one migration (056, which already carries the lead-contact columns), one go from the owner to apply it BEFORE merging. The leads sending engine keeps sending to `contacts.email` (the main) and now also honours a person-level opt-out across all of a contact's addresses.

@@ -1,0 +1,216 @@
+---
+name: PACE Retro
+slug: pace-retro
+source: owner's brief 2026-10-06 (R-122, D-0072) — Kombai "Stamply" layout + WorkOS Launch Week sunset + Duck Hunt, drawn as concepts 1-3
+version: 0.1.0 (plan — not built yet)
+modes: [light, dark]   # chosen by the viewer's clock unless the person picks one
+color:
+  palette:
+    # ink and paper
+    midnight-ink: "#1A1033"        # all borders, body text, hard shadows on light
+    cartridge-cream: "#FFF6E6"     # cards, records, buttons at rest
+    arcade-cream: "#F2EADB"        # light page canvas
+    shelf-tan: "#E8DCC6"           # light sidebar
+    ruled-line: "#E3D2B4"          # table row lines on cream
+    faded-ink: "#6E6290"           # metadata, captions on cream
+    ink-on-page: "#5A4E7A"         # text placed straight on the light canvas
+    # night
+    night-canvas: "#130B2B"        # dark page canvas
+    night-shelf: "#1D1240"         # dark sidebar
+    lavender-glow: "#CDB8FF"       # text placed straight on the dark canvas; Recruiting accent
+    # brand
+    pixel-purple: "#7A4DE0"        # active tab, AI match bar, record numbers
+    shadow-violet: "#5B3BB0"       # hard shadow on dark
+    shadow-plum: "#2A1A57"         # hard shadow on light
+    sun-yellow: "#FFD36E"          # the ONE primary action (New Job, New Lead, Save); selection outline; the sun
+    moon-white: "#F4EFD8"
+    # states — muted on purpose (owner: "very poppy")
+    sage: "#A9C98C"                # go / done / My Day accent
+    brick: "#D98A7E"               # stop / past due / not a fit — never fire-red
+    ochre: "#E6BC7A"               # waiting on you / needs detail / Sales accent
+    powder: "#9CC6E2"              # informational (interview booked, scheduled)
+    leaf-text: "#2E7D32"           # "YES / PASS" as text on cream
+    rust-text: "#A0540C"           # "GAP / H-1B" as text on cream
+    # CRT activity log
+    crt-black: "#0C0820"
+    phosphor: "#9EF7A8"
+  sky:   # banded (hard stops, no smooth blend) — the 90s look; top band first
+    night: ["#0B0620", "#110A2A", "#171036", "#1E1445", "#271A57"]
+    dawn:  ["#2A1A57", "#5A2A8E", "#A84F93", "#E27788", "#FFAE88", "#FFDDA6"]
+    day:   ["#1C6FBF", "#2588D6", "#36A6EC", "#62C2F5", "#A6DEFA"]
+    dusk:  ["#1B1240", "#2E1863", "#5A2A8E", "#A2409E", "#E2588F", "#FF8E5A", "#FFC36B"]
+  semantic:
+    background.canvas:  { light: "{arcade-cream}", dark: "{night-canvas}" }
+    background.sidebar: { light: "{shelf-tan}",    dark: "{night-shelf}" }
+    surface.card:       { light: "{cartridge-cream}", dark: "#221748" }   # dusk plum at night: cards and canvas share one text colour in the app
+    text.primary:       "{midnight-ink}"           # on cards
+    text.secondary:     "{faded-ink}"              # on cards
+    text.on-canvas:     { light: "{ink-on-page}", dark: "{lavender-glow}" }
+    text.on-canvas-strong: { light: "{midnight-ink}", dark: "{cartridge-cream}" }
+    border.default:     "{midnight-ink}"
+    shadow.hard:        { light: "{shadow-plum}", dark: "{shadow-violet}" }
+    primary.bg:         "{sun-yellow}"
+    primary.fg:         "{midnight-ink}"
+    state.go:     "{sage}"
+    state.stop:   "{brick}"
+    state.wait:   "{ochre}"
+    state.info:   "{powder}"
+    section.my-day:     "{sage}"
+    section.sales:      "{ochre}"
+    section.recruiting: "{lavender-glow}"
+typography:
+  family:
+    display: "Press Start 2P"     # pixel — logo, page title, record title, log title ONLY
+    pixel-label: "Silkscreen"     # pixel — tabs, sidebar section labels
+    body: "Hanken Grotesk"        # everything people read: names, jobs, buttons, labels
+    data: "Space Mono"            # numbers, rates, IDs, times, tags, the activity log
+  textStyle:
+    logo:          { fontFamily: display, fontSize: "34px", note: "lavender face, 5-step purple extrusion, 2px black outline" }
+    page-title:    { fontFamily: display, fontSize: "22px", phone: "15px", color: cartridge-cream, shadow: "3px 3px 0 #000" }
+    record-title:  { fontFamily: display, fontSize: "18px", phone: "14px" }
+    tab:           { fontFamily: pixel-label, fontSize: "13px", phone: "11px" }
+    section-label: { fontFamily: pixel-label, fontSize: "11px", letterSpacing: "2px", case: upper }
+    name:          { fontFamily: body, fontSize: "17px", fontWeight: 800, phone: "16px" }
+    body:          { fontFamily: body, fontSize: "14px", lineHeight: 1.45, phone: "15px" }
+    nav-item:      { fontFamily: body, fontSize: "14px", fontWeight: 700 }
+    button:        { fontFamily: body, fontSize: "14px", fontWeight: 800, letterSpacing: "0.6px", case: upper }
+    field-label:   { fontFamily: body, fontSize: "10px", fontWeight: 700, letterSpacing: "1.5px", case: upper }
+    amount:        { fontFamily: data, fontSize: "18px", fontWeight: 700 }
+    tag:           { fontFamily: data, fontSize: "10px", fontWeight: 700, case: upper }
+    meta:          { fontFamily: data, fontSize: "10px", letterSpacing: "1px", color: faded-ink }
+    log:           { fontFamily: data, fontSize: "11px", lineHeight: 1.75, color: phosphor }
+    input:         { fontFamily: body, fontSize: "13px", phone: "16px" }   # 16px on a phone or iOS zooms in
+spacing: { xs: "4px", sm: "8px", ms: "12px", md: "16px", lg: "20px", xl: "24px", xxl: "28px" }
+radius: { all: "0" }               # square everywhere — pixels have no round corners
+border:
+  width: { control: "2px", surface: "3px" }
+  style: { solid: "solid", not-yet: "dashed" }   # dashed = a step that has not happened
+shadow:   # hard offset, NO blur, tinted — never a soft drop shadow, never glass
+  control: "3px 3px 0 {shadow.hard}"
+  nav:     "4px 4px 0 {shadow.hard}"
+  card:    "5px 5px 0 {shadow.hard}"
+  record:  "6px 6px 0 {shadow.hard}"
+  selected: "5px 5px 0 {lavender-glow} + 3px {sun-yellow} outline, 3px offset"
+  overdue:  "5px 5px 0 {brick}"
+motion:
+  hover: "translate(-1px,-1px) and the shadow grows 1px; 80ms, steps(2) — it clicks, it does not glide"
+  never: "transition: all; anything on a timer that repaints the page"
+  sky: "sun/moon position nudged every 5 minutes; header only"
+  mode-switch: "light <-> dark only on load or when the person moves to another screen — never under their hands"
+  celebrate: "a pixel duck flies across once (1.2s) when a placement is recorded — the only animation that plays itself"
+  reduced-motion: "no orb drift, no duck"
+breakpoint:
+  phone:   { px: "<=600", change: "sidebar -> 5-item bottom bar; header stacks (logo, title, chips, search); an opened record gets a 3-button decision bar above the bottom bar" }
+  tablet:  { px: "601-1100", change: "sidebar collapses to the icon rail (pixel icons); record opens as a drawer over the list" }
+  desktop: { px: ">1100", change: "list | record | decision column" }
+components:
+  sky-header:      { type: header, height: "118px", fill: "{sky.<phase>}", holds: "page title, counts, date/time, search, primary button, sun or moon on an arc below the text" }
+  sidebar:         { type: nav, width: "236px", sections: ["MY DAY", "SALES", "RECRUITING"], foot: "name card (Admin + Deliverability live under it)" }
+  nav-item:        { type: nav-item, height: "36px", fill: cartridge-cream, border: "2px ink", shadow: control, active: "fill = its section colour", count: "ink box for 'needs you', plain number for totals" }
+  section-label:   { type: label, marker: "10px square in the section colour", text: section-label }
+  tab:             { type: tab, fill: cartridge-cream, active: "pixel-purple, cream text", border: "3px ink, no bottom" }
+  list-card:       { type: card, fill: cartridge-cream, border: "3px ink", shadow: card, idTab: "record id in a small box hanging off the top-left edge", rows: ["name + job/company | amount", "1-2 tags", "owner avatar + time | stage trail"] }
+  record:          { type: panel, fill: cartridge-cream, border: "3px ink", shadow: record, head: "record-title + id/date meta | client block", body: "facts grid, AI match bar, requirement table, stage chain" }
+  decision-button: { type: button, height: "96px (phone 58px)", fills: ["sage = go", "brick = stop", "ochre = needs detail"], text: "button style, ink", glyph: "pixel ✓ ✕ ?", shortcut: "shown under the label" }
+  primary-button:  { type: button, fill: sun-yellow, text: "ink, display font 10px", shadow: "4px 4px 0 #000" }
+  tag:             { type: badge, border: "2px ink", fills: [cream, sage, brick, ochre, powder, lavender], text: tag }
+  stage-trail:     { type: progress, cell: "16px square, 2px ink", done: sage, current: "ochre + letter", problem: "brick + !", not-yet: "dashed, empty" }
+  stage-chain:     { type: progress, step: "bordered box: stage + who/when", you: ochre, next: dashed }
+  match-bar:       { type: meter, segments: "11px blocks, 3px gaps (ONE element, a mask — not one div per block)", fill: pixel-purple, track: ruled-line, number: "display font, purple" }
+  checks:          { type: card, rows: "label | PASS/SIGNED/CLEAR in leaf-text, warnings in rust-text" }
+  activity-log:    { type: panel, fill: crt-black, text: log, verbs: sun-yellow, you: lavender-glow, scanlines: "1px every 3px", cursor: "blinking block on the last line" }
+  avatar:          { type: avatar, shape: "28px square, 2px ink", text: "initials, pixel-label", fill: "a state colour, never photo" }
+  pixel-icon:      { type: icon, grid: "9x9", size: "18px", rule: "every nav item has its own — the icon rail is icons only, two alike is a bug" }
+  bottom-bar:      { type: nav, phone: true, items: 5, active: "fill = section colour" }
+  search:          { type: input, fill: cartridge-cream, border: "3px ink", shadow: "4px 4px 0 #000", hint: "⌘K in a small ink box" }
+---
+
+# PACE Retro — design.md
+
+> Cutting-edge AI underneath, a 90s cartridge on top. PACE looks like the game you
+> played after school and works like the sharpest tool on the desk: square paper
+> cards with hard purple shadows, a pixel sky that follows the clock, and every
+> name, rate and decision in plain, fast type. The personality lives in the frame
+> (logo, sky, titles, icons); the work itself is calm.
+
+## Instructions
+- Pixel type is for the **frame only**: logo, page title, record title, log title (Press Start 2P); tabs and sidebar section labels (Silkscreen). Never on names, jobs, rates, buttons or body text.
+- Everything has **square corners, an ink border and a hard, blur-free shadow**. No rounded corners, no soft shadows, no glass.
+- Cards are **cream paper by day and dusk plum (`#221748`) at night** with cream text. (Cream cards at night were the first idea; the app gives cards and canvas one text colour, so a cream card would need dark text on a dark page — found building step 1.)
+- **Sun Yellow is the single primary action** per screen (New Job, New Lead, Save). Decisions use the three muted state colours, never Sun Yellow.
+- Colour on a list is scarce: one stage tag, one time tag, the trail. A record that is late gets a brick shadow and a brick id tab — not a red card.
+- Numbers, rates, IDs and times are Space Mono so they line up; names are Hanken Grotesk 800.
+- The mode follows the person's clock (light dawn–afternoon, dark dusk–night) unless they chose Light or Dark — saved **per person**, not per browser (D-0022).
+
+## Brand & accent
+- **Pixel Purple** `#7A4DE0` is the brand: active tab, AI match bar and score, record numbers.
+- **Sun Yellow** `#FFD36E` is the one call to action and the selection outline.
+- **Section colours** tell the two businesses apart at a glance: **My Day = Sage**, **Sales (lead generation) = Ochre**, **Recruiting = Lavender**. An active nav item takes its section's colour.
+
+## Surface
+- Light: canvas Arcade Cream `#F2EADB` with a faint 16px grid; sidebar Shelf Tan `#E8DCC6`.
+- Dark: canvas Night `#130B2B` with the same grid in lavender at 5%; sidebar `#1D1240`.
+- Cards and records: Cartridge Cream `#FFF6E6` by day, dusk plum `#221748` at night; 2px ink border app-wide (3px on the hero record and list cards). Controls: 2px border.
+- The activity log is a green-screen monitor in both modes (CRT Black, phosphor text, scanlines).
+
+## Text
+- On cards: Midnight Ink `#1A1033` primary, Faded Ink `#6E6290` secondary.
+- Straight on the canvas: `#5A4E7A` by day, Lavender Glow `#CDB8FF` at night.
+- Page title on the sky: cream with a 3px black shadow, and **only over the upper (darker) bands** — every one of those is at least 3:1 against cream (day top band 4.8:1; the pale horizon bands are 1.2–2.5:1, so they carry only the sun, the moon and clouds). Small text on the sky (the date line) must sit over a band of 4.5:1 or better; on a phone, where the header stacks lower, it moves onto a cream chip.
+- Measured (WCAG): faded ink on cream 5.1:1, ink on every state colour 6.8–10:1, cream on the purple tab 4.9:1, phosphor on CRT 15:1.
+
+## Status & semantic
+- Go / done = Sage. Stop / past due / not a fit = Brick (never fire-red). Waiting on you / needs detail = Ochre. Informational = Powder.
+- As text on cream (YES, PASS, GAP): Leaf `#2E7D32` and Rust `#A0540C`.
+- Stage words come from PACE's one stage vocabulary (`33-stage-modal.js`); the design never invents stage names.
+
+## Fonts
+- Press Start 2P and Silkscreen (pixel), Hanken Grotesk (body), Space Mono (data). All four are free (Google Fonts, OFL) and are **self-hosted** in `public/fonts/` — no third-party font request at runtime.
+
+## Layout
+- Desktop: sidebar 236px | list 430px | record (flexible) | decision column 196px; the activity log sits under the record.
+- **The same three-pane pattern serves both businesses:**
+  - Today / submissions: candidate list | submission | Send to client · Not a fit · Needs detail.
+  - **Leads:** company list | lead (contacts, email history, AI brief) | Write email · Find contact · Release to pool.
+  - Jobs: job list | job | Add candidate · Share apply link · Close.
+- Sidebar sections: **MY DAY** (Today, My Team, Inbox, Reminders, Email) · **SALES** (Leads, Sourced Leads, Assign Leads, Clients, Lead Insights) · **RECRUITING** (Jobs / My Jobs + All Jobs, Candidates). A person sees only the sections their role uses; the role rules are unchanged from `renderSidebar`.
+
+## Responsiveness
+- Phone (≤600px): bottom bar of five, header stacks, nothing scrolls sideways, inputs 16px. An opened record shows a fixed three-button decision bar above the bottom bar, in thumb reach.
+- Tablet: icon rail + record as a drawer.
+- Hover effects only where a mouse exists (`hover:hover and pointer:fine`), never by width.
+
+## Shape & geometry
+- Radius 0. Borders 2px (controls) / 3px (surfaces). Dashed = not yet happened.
+- Pixel art (sun, moon, clouds, icons, the duck) is drawn on a grid and rendered with crisp edges — never blurred, never scaled to a fractional pixel.
+
+## Do
+- Keep pixel type in the frame; keep data in Hanken / Space Mono.
+- Use hard tinted shadows (plum by day, violet by night).
+- Use one Sun Yellow action per screen.
+- Give every nav item its own pixel icon.
+- Let the sky carry the time of day; let the cards stay calm.
+- Draw the AI match bar as one element (a mask), not one box per block.
+
+## Don't
+- Don't put the pixel font on buttons, names, tables or anything read under pressure.
+- Don't use fire-red, lime or hot pink — the state colours are muted on purpose.
+- Don't round corners, blur shadows or use glass.
+- Don't animate anything on a timer that repaints the page; don't flip light/dark while someone is looking.
+- Don't bring back the Duck Hunt scoreboard (D-0072); the duck appears only as a placement celebration.
+- Don't use `transition: all`, inline colours or inline font sizes (R-013 classes only).
+- Don't advertise what PACE does not do (no "verified", no fake system status).
+
+## Signature
+- **The clock sky:** banded dawn / day / dusk / night in the header and logo tile, with a pixel sun or crescent moon travelling an arc below the text.
+- **The id tab:** every list card wears its record id in a small box hanging off its top-left edge (amber when selected, brick when late).
+- **Hard purple shadows** under cream paper.
+- **The green-screen activity log** — every change, who, when.
+- **The PACE logo:** chunky pixel letters, lavender face, purple 3D extrusion, black outline.
+
+## Notes
+- **Decided:** retro direction (R-122); muted state colours; scoreboard out; the whole app follows day/night (D-0072); sidebar grouped by business (drawn 2026-10-06).
+- **Open:** is this the look for every customer, or a theme they switch on? (Recommended: default for everyone, with Auto / Light / Dark saved per person.)
+- **How it is built:** like the Session 23 re-skin (`docs/UI_REVAMP.md`, D-0015) — the tokens in `public/theme.css`, applied before first paint, the toggle touching one attribute. D-0015's three states become **Auto (clock) / Light / Dark**; "Auto" replaces "follow the operating system". Then the frame (sidebar, sky header), then the UI kit (`00-ui-kit.js` + `ui.css`), then screen by screen with a phone pass each.
+- **Guards that must stay green:** `theme-contrast-smoke`, `mobile-layout-smoke`, `page-renders-smoke`, `utility-classes-smoke`, `nav-icons`, `screen-stability`.
+- The reference mockups (concepts 1-3, sidebars by role) were built outside the app; they are pictures, not code to copy.

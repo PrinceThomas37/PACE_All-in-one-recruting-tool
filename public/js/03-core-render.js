@@ -33,6 +33,9 @@ function startClock(){
     var dd=document.getElementById("dash-clock-date");
     if(dt)dt.textContent=n.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true});
     if(dd)dd.textContent=n.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"});
+    // The header's date line (R-122): text only, and only when the minute changed.
+    var tc=document.getElementById("tb-clock");
+    if(tc&&window.paceHeaderClock){var v=paceHeaderClock(n);if(tc.textContent!==v)tc.textContent=v;}
   },1000);
 }
 
