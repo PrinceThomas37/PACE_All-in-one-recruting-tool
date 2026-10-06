@@ -47,6 +47,12 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0072 · 2026-10-06 · STANDS · Retro redesign (R-122): the Duck Hunt scoreboard goes; the WHOLE app follows day and night
+**Their words:** on concept 2, asked *"Can the scoreboard go?"* — *"Yes"*; asked *"Should the whole app follow day and night, or only the header?"* — *"Yes"* (to the recommended option, the whole app).
+**Chosen:** (1) No Duck Hunt scoreboard / grass strip on the default screen; the duck may return only as a brief celebration (e.g. a placement). (2) The whole app follows the viewer's own clock: light cream pages by day, the dark version in the evening and at night, with the header sky (dawn/day/dusk/night, sun or moon on an arc) on top. Earlier in the same thread the owner chose the 90s retro direction (Stamply layout, Launch Week colours and pixel type, Duck Hunt touches) and asked for muted state colours — concept 2 did that.
+**Still open:** pixel lettering in the frame only (recommended) or everywhere; the new look for everyone or offered as a theme first.
+**Re-open when:** customers or the owner find the clock-driven switch distracting (a fixed light/dark choice per user would then override it — per-user, not per-browser, D-0022).
+
 ### D-0071 · 2026-10-05 · STANDS · Stage 2 (lead contacts + phones at import) ships in the SAME merge as stage 1 (R-114)
 **Their words:** *"Do the Stage 1 screenshots feel right? - Yes"* · *"Should Stage 2 … go in this same merge, - Same merge, Do this now."*
 **Chosen:** one PR (#289), one migration (056, which already carries the lead-contact columns), one go from the owner to apply it BEFORE merging. The leads sending engine keeps sending to `contacts.email` (the main) and now also honours a person-level opt-out across all of a contact's addresses.
