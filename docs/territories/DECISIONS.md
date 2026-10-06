@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0074 · 2026-10-06 · STANDS · Build the header search (R-123); release the redesign only once Today and Leads are rebuilt
+**Their words:** *"Should I build the search box (R-123)? Yes"*. On releasing steps 1–2 they first answered *"it's done, the leads have been assigned and the emails have been triggered and sent"* — read as the day's work, not the screens — so the question was asked again plainly; answer: **"Wait for Today + Leads (Recommended)"**.
+**Chosen:** search finds candidates, leads (also by company / contact), jobs and clients, each limited to what the person's own lists show. Nothing from R-122/R-123 merges to `main` until the Today and Leads screens are rebuilt in the list / record / decide layout and the owner has seen them.
+**Re-open when:** the owner asks to release sooner, or wants the search to cover more (emails, notes, documents).
+
 ### D-0073 · 2026-10-06 · STANDS · The retro look is the DEFAULT for every customer; build it step by step without breaking the app (R-122)
 **Their words:** *"Default for everyone, go ahead and build it. step by step, i dont want to break the application"*
 **Chosen:** `docs/design/PACE.ds` is the design to build. It replaces the current look for every company (not an opt-in theme); each person keeps Auto (follows the clock) / Light / Dark, saved per person. Built in small steps, each tested and shown before the next: (1) colours + clock switch, (2) sidebar + sky header, (3) the shared UI kit, (4) Today, then Leads, then the rest. Nothing merges to `main` (= live) until the owner has seen it.
