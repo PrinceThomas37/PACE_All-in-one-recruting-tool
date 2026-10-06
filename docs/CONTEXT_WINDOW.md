@@ -3,62 +3,27 @@
 > **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-10-06 (Session 38) · **Last merged to `main`**: #291 (`7818888`, R-118 + R-120 + R-013) after #290 (`5a9c446`, R-119) and #289 (`38bdc2e`, R-114) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release.
-**Highest ids:** decision D-0068 · contract C-0036 · next roadmap id `R-122` · next migration `057`.
+**Updated**: 2026-10-06 (end of Session 38) · **Last merged to `main`**: #292 (`94bf8c1`, docs) after #291 (`7818888`, R-118 + R-120 + R-013), #290 (`5a9c446`, R-119), #289 (`38bdc2e`, R-114) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox: the owner hard-refreshes and looks).
+**Highest ids:** decision D-0071 · contract C-0036 · next roadmap id `R-122` · next migration `057` (056 APPLIED 2026-10-05).
 
-## ▶ SESSION 38, LATER (2026-10-05 → 06) — START HERE
-**All merged and live after the Render deploy (unverified from the sandbox — the owner hard-refreshes and looks):** **#290** R-119 candidate search on a job's own page (name/email/phone incl. extras, any number punctuation); **#291** R-118 expired sign-in → one calm sentence + back to page/job/candidate after sign-in (`23-auth.js`, `22-api.js`, `37-nav-history.js` `navResume`), R-120 job page header wraps on a phone, **R-013** 1,704 inline font sizes/colours → 34 utility classes (`fs-*`, `c-*`, one generated block at the end of `ui.css`; **rule: never write inline type again**). R-013 was PROVEN, not trusted: `scripts/inline-to-classes.mjs` (per-tag browser proof) and `scripts/screens-fingerprint.mjs` (58,832 elements, 336 screens, before/after identical, control = zero). 95 spots stay inline on purpose (a stylesheet rule would change them). Full suite on the final head: Node 22 176/176, Node 26 176/176.
-**Owner confirmed R-114 (second email/phone) works live.** Migration 056 applied; the 80 shifted lead contacts repaired (R-117; private backup `backups.contacts_r117`; the 37 leads still need re-assigning by the owner to generate first emails).
-**What's left (owner's list, 6 Oct):** R-121 a real phone text scale using the new classes (visible → screenshots first); **R-096 Boolean search** (design questions first, its own project); R-110 Stage B (open tracking beyond BD Lead 1); R-053 contact-finder remainder; before a SECOND customer: **R-067 per-company API keys + R-049 operator role** (+ R-016 CSV import for candidates); R-115 ARCHITECTURE.md pass 2; ideas R-057/R-061/R-062/R-054/R-052/R-015/R-017/R-003. Session lasts 8 h (a rolling/sliding session would be a separate decision).
+## ▶ NEXT CHAT — PRODUCT DESIGN & UI (the owner's stated focus, 6 Oct) — START HERE
+The owner is moving to **product design and UI**. They are not an engineer: show screenshots and the running app, ask design questions in plain words with choices, build only after they react. No helper agents without their words (D-0060).
+- **Where the look lives:** `public/ui.css` (the UI kit; ends with a GENERATED block of type/colour utility classes — do not hand-edit it), `public/theme.css` (light/dark via `data-theme` on `<html>`), `public/mobile.css` (phone ≤860px), `public/styles.css` (older base), `public/js/00-ui-kit.js` (`UI.registerPage`, `UI.table`, drawers). Rules: `CLAUDE.md` § "Frontend and layout" (render engine, phone first-class, themes, lists have a horizon). Earlier design intent: `docs/UI_REVAMP.md` (the new look, D-0015), `docs/ROLE_UX_BLUEPRINT.md`, `docs/AGEING_UI_PLAN.md`.
+- **What R-013 just made possible (merged, #291):** all text sizes/colours that used to be inline are classes (`fs-12`, `c-text3` …), so a phone type scale or a palette change can now reach them. **Never write inline `font-size` or `color:var(--…)` again.** ~2,900 other inline declarations (padding, flex, gaps, backgrounds, borders) remain — the "layout half" of R-013, same proof needed. **95 spots stay inline on purpose** (a stylesheet rule would change them): list via `node scripts/inline-to-classes.mjs --report=/tmp/r.json` (dry run changes nothing); 37 are in `16-insights.js`. 114 hard-coded colours (`#fff` …) are untouched (a design call).
+- **R-121 (pending, the owner's call):** a real phone text scale using the new classes — a VISIBLE change, so screenshots first.
+- **How to prove a "change nothing" job:** `scripts/screens-fingerprint.mjs` — run it on a worktree of the old commit and on the new tree (`--root=…`, `--out=…`), then `--diff a.json b.json`; first diff the old tree against itself (must be zero). **A green suite is not a screen: take screenshots** (`CP_SHOT_DIR=… node test/<suite>.mjs`, then look). Existing look guards: `theme-contrast-smoke`, `mobile-layout-smoke`, `modal-mobile-smoke`, `page-renders-smoke`, `utility-classes-smoke`.
+- **Design-shaped open items:** **R-096 Boolean search** (its own project; design questions first: syntax, fields, where the box lives, saved searches, how a bad query is explained); R-121 above; R-110 Stage B (an "opened" figure in Lead Insights, an "opened, no reply" prompt, an Admin switch); R-054 per-industry playbook (screens + words per company); sign-ins last 8 h (a rolling session is a decision, not built).
 
-## ▶ SESSION 38 (2026-10-05) — earlier in the session
-**MERGED: #288** (squash `88d83c8`, on the owner's "Okay merge 288"; full suite 166/166 on Node 22 AND Node 26): R-111 Gmail previews show real text (`services/html-entities.js`), R-112 the opened email in a long thread is big + an **Expand message** button, R-108 stale test fixed, R-115 `ARCHITECTURE.md` pass 1, roadmap + roadmap page tidied, ten orphan files claimed. Live after the Render deploy (unverified from the sandbox — ask the owner to hard-refresh, open a long thread, click Expand message).
-**The owner's 1 Oct handwritten notes** (once only on the unmerged branch `ccr-63ed4fab-omfwgz`, draft PR #282, now CLOSED as superseded) are **R-111…R-116** on main. R-113 closed (stale tab). **R-116 DROPPED** — the owner said no to a "new version is ready" notice (D-0069). Daily Sentry routine `trig_01TFL3dY7C9jDaTXmZR55Jee` is back ON (next run 07:47 New York).
-**MERGED: #289 (5 Oct, squash `38bdc2e`, on the owner's "merge it") — R-114 several emails/phones per person (candidates + lead contacts + phones at import).** Migration 056 was applied to the live DB first (owner's go); the 80 shifted lead contacts were REPAIRED (R-117 DONE; backup `backups.contacts_r117`, private; nothing sent — those 37 leads need re-assigning to generate first emails). Full suite 172/172 on Node 22 AND Node 26. Live after the Render deploy (unverified from the sandbox). **Owner-side checks:** hard-refresh; open a lead's contact (phone shown, "+ add another email / number", Make main); open a candidate ("More emails / More numbers"). Not built: search by an extra address, reply-from-extra-address matching. Gap: `processPendingEmailSends` is not mounted in a test (its rule is the pure `suppressedFor`).
-**Found 5 Oct:** the owner's Inbox showed "Invalid token" = their PACE sign-in (8 h JWT) had expired in an open tab, NOT Gmail — sign out/in fixes it. **R-118** (say "your session expired, sign in again" plainly) is offered, awaiting the owner. Memory for the merged state was written on a follow-up docs branch.
-**What's left (see `docs/ROADMAP.md`):** owner's call — R-118 (small), **R-096 Boolean search** (design questions first; its own project), R-110 Stage B (open tracking beyond BD Lead 1), R-082 ("remove from a job"), R-081 (Admin shows what last failed), R-057/R-061/R-062 (Apollo/match ideas), R-013 (inline styles, not asked). Mine, when the owner says go: `ARCHITECTURE.md` pass 2 (R-115), **R-067 per-company API keys + R-049 operator role before a SECOND customer**. Nobody decided: R-054 per-industry playbook, R-052, R-053, R-015 SMS, R-016 CSV import for candidates, R-017 seat pricing.
+## ▶ SESSION 38 (2026-10-05 → 06) — what shipped, all MERGED and live after the Render deploy
+**#288** R-111 Gmail previews show real text, R-112 big opened email + Expand message, R-108 test fixed, R-115 `ARCHITECTURE.md` pass 1. **#289** R-114 several emails/phones per person (candidates + lead contacts + phones at import; main + extras, "Make main", duplicates on any address, an opted-out address can never be main, every send checks all addresses; `services/contact-points.js`) — **owner confirmed it works live**. Migration 056 applied; the 80 shifted lead contacts repaired (R-117; private backup `backups.contacts_r117`; nothing was sent — **the 37 leads still need re-assigning by the owner** to generate first emails). **#290** R-119 candidate search on a job's own page (name/email/phone incl. extras, numbers typed any way). **#291** R-118 an expired sign-in says so in one sentence and returns the person to page/job/candidate after sign-in (`23-auth.js`, `22-api.js`, `37-nav-history.js` `navResume`); R-120 job page header wraps on a phone; **R-013** 1,704 inline sizes/colours → 34 classes, PROVEN (58,832 elements over 336 screens identical before/after). R-116 (new-version notice) DROPPED by the owner. Daily Sentry routine `trig_01TFL3dY7C9jDaTXmZR55Jee` is ON. Full suite: Node 22 176/176, Node 26 176/176.
 
-## ▶ SESSION 37 (2026-10-02) — live-data fix + R-107 merged
-Owner double-assigned a day's import. By hand on live data (guarded SQL, each step approved): 7 + 27 un-emailed leads returned to Unassigned; the 34 leads' 70 contacts had a shifted import sheet (title in Email, real address in Phone) — repaired, leads re-assigned by the owner, emails now generating. **#283 merged:** the import preview warns about contacts with no usable address, Import asks first, the result line states how many won't be emailed. **Open:** R-108 (`needs-you-today-day-smoke` fails from 2 Oct — pins 1 Oct); offered, not built: show a "no emails generated" failure to the RA Lead right after Assign (today it only lives in `send_progress_<bd>`); the owner's "delete all managers" left BD Lead 2's emails and 2 older BD Lead 1 emails — not explained, run not logged. Detail: `docs/CONTEXT_ARCHIVE.md` § Session 37.
-
-**R-110 open tracking, Stage A — MERGED (#286, `ec65d7b`) and LIVE for BD Lead 1 only:** the recipient's opens only (sender's own network, scanners, first 2 minutes ignored), a pixel on leads emails ONLY for `app_settings` `open_tracking_users` (= `["9065ce34-d31a-4b1a-95d4-e58bd16e4ea8"]`; set to `all` for everyone), an "opened · likely read" line under each sent email on a lead's Emails tab. Migration 055 applied to the live DB 2 Oct. **Owner-side check:** BD Lead 1's next leads emails carry opens — open a lead's Emails tab a few hours after sending; try opening your own copy and confirm it is NOT counted. Stage B not built: Lead Insights figure, "opened, no reply" in Needs you today, an Admin switch for who is tracked. D-0068.
-
-## ▶ NEXT SESSION — START HERE (2026-10-01, end of Session 36)
-
-**State: everything is merged and deploying. Nothing is waiting on a branch.** Last code merge #279 (`7d55e6c`), last docs merge #280 (`92411e7`). Full suite **163/163 on Node 26** (Render's Node; `nodejs.org/dist/v26.10.0/...`, the sandbox runs 22). `npm install` first.
-
-**The owner's whole priority list is built except Boolean search.** Session 36 merged #269, #271, #273, #274, #275, #276, #278, #279 (+ docs #270, #272, #277, #280). Details of every round: `docs/CONTEXT_ARCHIVE.md` § "Session 36" (rounds 1–8 and the closing synthesis).
-
-1. **NEXT: R-096 Boolean search** (Candidates tab, Recruiter and BDM profiles) — the owner said it is *its own project*. Do NOT start coding: first agree the design in plain words — which syntax (AND / OR / NOT, "quoted phrases", brackets), which fields it searches (name, title, skills, résumé text?), where the box lives, whether searches can be saved, and how a bad query is explained. Reuse the pattern of the job-candidate search box (`plFilterRows`, `28-page-pipeline.js`) only for the in-browser case; a database-wide search must run on the server and respect who-sees-what (D-0034/35/36).
-2. **Owner-side checks (I cannot do these from the sandbox) — ask how they went:** (a) open a candidate with a PDF résumé → opens on Resume, preview + Download; (b) Needs you today = today only, top 3, "See all", the checkbox; Client conversations the same; (c) a Cc with several addresses (chips) and the search box on a job's Candidates tab; (d) schedule an interview in another time zone and read the email; (e) submit to the BD Manager and to the client with the email ticked (résumé attached); (f) hand a lead to a colleague, see the next follow-up still leave from the first sender; (g) a US-zone user: reminders not "due" a day early; RA dashboard periods match Lead Insights; (h) Lead Insights / RA Team from a non-UTC device. Plus the Session 35 list below (Lead Insights 311, apply-link test, a real lead's Emails tab, windows + From picker on a phone).
-3. **Small known leftovers:** the Reports 8-week `trend` buckets still count weeks from the server's clock; `GET /stats` has no screen reading it; **R-067** (per-company API keys — before a SECOND customer; today keys are deployment-wide); the border follow-ups below.
-4. **Decisions of this session (read `docs/territories/DECISIONS.md`):** D-0065 a day is the viewer's own day; D-0066 R-080 auto switch-back / R-092 attach résumé / R-098-099 top 3 + See all + checkbox; D-0067 follow-ups leave from the mailbox that sent the first email. R-105's "month" question was answered by me (Dashboard/Reports = calendar month, Insights = labelled 30 days) and is a one-line change (`monthStart`, `services/viewer-time.js`) if the owner prefers the other.
-5. **Standing rules:** no helper agents without the owner's words (D-0060 — none were used in Session 36); plain English, no code shown; owner-approved PRs are merged by me (D-0062); the owner never reads code or uses GitHub; one full `node test/run-all.mjs` (read the count, never pipe it) + Node 26 before a merge; write memory as the work lands. At a session start check Sentry (`search_issues` on `pace-backend`) and tell the owner what it shows; the daily routine `trig_01TFL3dY7C9jDaTXmZR55Jee` is report-only.
-
-## ✅ SESSION 36 — WHAT SHIPPED (all live after Render deploys)
-
-| PR | What |
-|---|---|
-| #269 | R-091 the candidate opens on the Resume (file read through PACE, 3 tries, Try again) · R-097 Needs you today = today on the user's clock · R-093 To/Cc address chips · R-094 search inside a job's candidates |
-| #271 | R-102 Lead Insights days = the viewer's own (`?tz=`) |
-| #273 | R-100 RA Team view on one server calculation (`services/ra-insights.js`) · R-101 audit (`docs/AUDIT_NUMBERS_R101.md`) · D-0066 |
-| #274 | R-095 interview time zones (picker, every zone; email states the zone; no migration) · R-080 out-of-office contacts switch back to Valid on the return date (`ooo_return`, every 6 h) |
-| #275 | R-092 email the submission details with the résumé (recruiter→BD manager, BD→client; sent after the move is saved; client copy starts unticked) |
-| #276 | R-098 + R-099 top 3, "See all", and a "completed" checkbox on Needs you today and Client conversations |
-| #278 | R-070 a follow-up leaves from the mailbox that sent the first email (D-0067) |
-| #279 | R-103 `todayIST()` = the device's own day · R-104 `/stats` response rate = replies · R-105 dashboard/Reports/`/stats` windows in the viewer's zone, 7-day week · R-106 RA dashboard draws the server's `periods` |
-
-**Dropped earlier by the owner:** R-081. **Not built, by design:** per-person/company rules for which suggestions show (the owner chose top-3 instead).
-
-## ✅ SESSION 35 (summary) — merged and live (PRs #262–#265)
-
-Stage-change screens + group stage move, windows (minimise/full screen/tray), "Needs you today" rows do the task, addressed email, From-mailbox picker, Reject-with-a-reason, Lead Insights on one server calculation (R-089), Sentry reporter (R-090). **Session 35 owner-side checks still open:** (1) live Lead Insights: emails ≈ 311, 7-day tile = sum of the chart bars, Replied % vs Conv % differ; (2) send a test application through an apply link (dead since 22 Sep); (3) a real lead's Emails tab with a connected mailbox; (4) windows and the From picker on a phone.
-
-**R-090 Sentry error reporter: MERGED (#266, `1be62e7`) and live; `SENTRY_DSN` is set in Render.** Sentry org `pace-ek` (EU), project `pace-backend`; alert rule 1319209 "PACE: new error -> #pace-alerts" posts new errors to the private Slack channel `#pace-alerts` in workspace PACE_all_in_one (the Slack connector is now linked to that workspace). **Slack alert verified by the owner (test notification arrived).** **Daily check routine** `trig_01TFL3dY7C9jDaTXmZR55Jee` ("PACE daily error check", 07:47 America/New_York, Sentry attached by the owner in the claude.ai Routines screen, push + email to the owner): reads Sentry, reports "All quiet" or a plain-English list with proposed fixes; REPORT ONLY (never changes code, merges or deploys). A routine made through the tool cannot carry connectors — the owner must attach them in the Routines UI. Its first report is due 2026-10-01; if none arrives or it says Sentry was unreachable, look at the routine first. At a session start, check `search_issues` on `pace-backend` and tell the owner what it shows. A stray `#pace-alerts` remains in the Century Champions workspace (unreachable now; owner may delete it). D-0063.
-
-**Known limits:** the mailbox's inline reply box is not a window and does not park; the reminder compose keeps its own From box; a window that repaints itself while parked must call `Dock.updateParked` (surface.md). **Before a second customer: R-067** (per-company API keys — today they are deployment-wide).
-**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves not owner-gated; review `bulk-stage` and `GET /submissions` scoping). Session 34's scratch proofs: `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
-**Border follow-ups still open:** C-0033 (harbour — candidate-outreach's own add → `core.addCandidateToJob`), C-0034 (foundry pins — partly done), C-0035 (b) (drop the inert `pipeline_status` column, later), C-0036 (rampart — BD stage moves not owner-gated; review `bulk-stage` and `GET /submissions` scoping). Session 34's scratch proofs: `docs/handoff/session-34-harnesses.tar.gz` (delete once the owner is happy).
+## ✅ WHAT'S LEFT (the owner's list, 6 Oct — details in `docs/ROADMAP.md`)
+- **Owner-side:** hard-refresh and look (nothing should look different except the job page on a phone); re-assign the 37 repaired leads; share the apply link (R-008); reconnect the two dead mailboxes below if still dead; R-011 "stalled at BDM" look (deferred).
+- **Next, owner's call:** R-121 phone text scale · **R-096 Boolean search** · R-110 Stage B · R-053 contact-finder remainder (read the job posting/company site, free sources).
+- **Before a SECOND customer (safe today, not later):** **R-067** each company brings its own API keys (today one deployment-wide set), **R-049** a separate PACE-operator role (today any customer's admin can pause sending for everyone), R-016 CSV import for candidates.
+- **Mine, on the owner's go:** `ARCHITECTURE.md` pass 2 (R-115).
+- **Ideas (safe to leave):** R-057 matching candidates we already hold · R-061 what Apollo knows about a company · R-062 more leads from a company's other open jobs · R-054 per-industry playbook · R-052 create documents · R-015 SMS (consent is a legal question) · R-017 seat pricing · R-003 a real job column on the applicant queue.
+- **Known gaps (not built, by design):** search by an extra email/phone on the Candidates list; recognising a reply from an extra address; `processPendingEmailSends` (inside `index.js`) is not mounted in any test — its opt-out rule is the pure, tested `suppressedFor`.
 
 ## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
 
@@ -104,7 +69,7 @@ Leads engine (import → distribute → **AI-written** first email → template
 follow-ups → reply sweep → recycle), the ATS, the outreach generator, candidate
 outreach, the in-app mailbox, reminders / "needs you today", the public apply
 page, ownership + take-over requests, failed-send retry (D-0031), the rewind
-clock, client/lead email timelines with the AI summary button. Billing and
+clock, client/lead email timelines with the AI summary button, **several emails/phones per candidate and lead contact (Make main)**, **search inside a job's candidates (job page and Pipeline)**, **an expired sign-in that returns you to where you were**. Billing and
 self-serve signup built and **off**.
 
 ### Session 32 added (all merged, all live) — the owner said "do all these" (D-0047)
@@ -151,82 +116,27 @@ self-serve signup built and **off**.
 **⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
 read the default before saying what a switch is set to.
 
-## Migrations — next is **055** · 054 APPLIED 2026-09-28 (poc_suggestions slot 'other') · 053 APPLIED 2026-09-28 (companies.employee_count/size_source/size_checked_at/apollo_org_id) · 052 APPLIED 2026-09-27 (poc_suggestions, re-verified 2026-09-28) · 051 APPLIED 2026-09-27 (company size) · 049/050 on 2026-09-26
 
-049: RLS + revoke on the two backup tables. 050: `recruiting_lookups` unique
-index is `(org_id, category, lower(value))`. **SQL/migrations are pre-approved
-by the owner (D-0047)** — still state a destructive customer-data change first,
-and prove a schema change in a rolled-back probe (see 050's archive entry).
+## Migrations — next is **057** · 056 APPLIED 2026-10-05 (candidates + contacts `extra_emails`/`extra_phones`, alt_phone copied) · 055 APPLIED 2026-10-02 (open tracking) · 054/053 2026-09-28
+**SQL/migrations are pre-approved by the owner in principle (D-0047)** — still state a destructive customer-data change first, ask for a fresh go before touching the live DB, apply a migration BEFORE merging the code that uses it, and prove a schema change in a rolled-back probe.
 
-## ⏭ PICK THIS UP FIRST
-
-**Session 35 first: the top of this file** (the lot, paused under D-0060). The items below are older and still open.
-
-1. **Session 33 took two of D-0047's four:** R-012 done (#252), R-053 slices
-   1–2 live (#253); the D-0050 round (Search contact per slot, size from
-   Apollo, the Leads ×) is LIVE too (#257). **Watch the first real Apollo
-   search with the owner** — read `apollo_last_call` / `apollo_last_error`. **R-057** (matching candidates in emails)
-   and **R-054** (a playbook per industry) are still deferred — design first.
-2. **Tell/remind the owner:** reconnect the two dead mailboxes (above); the
-   Anthropic key has no credit (harmless — Groq answers); the apply link on
-   "Office Manager/ Bookkeeper" needs sharing (R-008, 0 applicants).
-3. Mine, open: **R-049** operator role (before customer #2), R-003. **C-0030**
-   (org-scoping debt list) open. **R-032 is DONE and verified live** (#251 + #255, 2026-09-28: 62 files
-   scanned, 38 deleted, 24 kept — every kept file referenced).
-4. **After #260 is live:** the 14 follow-ups need one Retry (Email → Didn't
-   send) unless their last automatic try fell after the release; the stuck
-   Lamons follow-up shows as "may have gone out" — check Spencer's Sent first.
-   (The "held counted as ready now" gap is closed by R-069.) R-070 is DONE (D-0067).
-
-## 🧪 TESTS: 163 SUITES
-
-`npm test` — read the COUNT; never pipe into `tail`. `bash
-test/verify-frontend.sh` too. Newest (Session 36): `viewer-day-ui-smoke` (11), `top-three-complete-smoke` (12), `submission-email-smoke` (30), `followup-sender-smoke` (15), `ooo-return-smoke` (15), `interview-timezone-smoke` (13), `insights-ra-team-smoke` (16), `insights-timezone-smoke` (13), `resume-first-smoke` (20), `needs-you-today-day-smoke` (9), `email-cc-chips-smoke` (13), `job-candidate-search-smoke` (12). Older: `send-recovery-smoke` (58: the Gmail
-fallback against a fake Google, the boot sweep, the real emails router over two
-orgs, the Pending tab in a browser), `leads-search-clear-smoke` (11, a REAL
-mouse click), `poc-apollo-smoke` (44), `poc-routes-smoke` (94, a fake Apollo +
-migration 052's rules), `poc-finder-ui-smoke` (58, incl. light/dark contrast
-of the found cards); `mailbox-alerts-smoke` (22) + `-ui` (12),
-`client-digest-ui-smoke` (11), `stage-history-reports-smoke` (10, real
-handlers), `reports-smoke` (14, incl. a 390px fit walk), `integration-test-
-honesty-smoke` (12), `lookups-per-org-smoke` (10), `client-docs-ownership-smoke`
-(15), `overlay-opacity-smoke` (14, now opens the record drawer). **Every new
-check was run against the old code and failed there.** Two faults this session
-(see-through drawer, blank-box Integrations card) were found by LOOKING at a
-screenshot of a green suite — take the screenshot.
+## 🧪 TESTS: 176 SUITES (Node 22 and Node 26 both 176/176 on #291)
+`npm test` — read the COUNT; never pipe into `tail`. `bash test/verify-frontend.sh` too. Newest (Session 38): `contact-points-smoke`, `candidate-contact-points-routes-smoke`, `lead-contact-points-routes-smoke`, `contact-points-ui-smoke`, `lead-contact-cp-ui-smoke`, `candidate-outreach-optout-smoke`, `job-page-candidate-search-smoke` (25), `session-expiry-resume-smoke` (20), `job-page-phone-smoke` (10), `utility-classes-smoke` (7). **Every new check was run against the broken code and failed there**; a guard that cannot see the thing FAILS rather than passes.
 
 ## Owner actions outstanding
-
-- Reconnect kristy.scott@fute-global.com and princethomasfute@gmail.com.
-- Share the apply link; paste job postings on leads (R-056).
-- Optional: drop the two empty backup tables (say the word). Google sign-in
-  still needs `GOOGLE_CLIENT_ID`/`SECRET`.
+- Reconnect kristy.scott@fute-global.com and princethomasfute@gmail.com (dead mailboxes) if still dead; share the apply link; paste job postings on leads (R-056). Optional: drop the two empty backup tables; drop `backups.contacts_r117` once satisfied. Google sign-in still needs `GOOGLE_CLIENT_ID`/`SECRET`.
 
 ## ⏸ Parked — do NOT re-raise as blocking
-
-`DECISIONS.md` is the authority: pricing `null`, signup off, no timezone
-backfill, no attachments on candidate email (D-0012), reassignment only by
-request (D-0036–38), documents designed later (R-052), R-057 later (D-0046).
+`DECISIONS.md` is the authority: pricing `null`, signup off, no timezone backfill, no attachments on candidate email (D-0012), reassignment only by request (D-0036–38), documents designed later (R-052), R-057 later (D-0046), no "new version ready" notice (D-0069).
 
 ## Traps that will bite you
-
-- **`*.onrender.com` is blocked from this sandbox** — a merge lands, a deploy
-  is **unverified**. Check `app_settings` `cron_last_*` rows in Supabase for
-  signs of life; never claim you watched it come up.
-- **Sandbox Node 22, Render Node 26.** Works-here-fails-there → get Node 26.
-- **A guard is vacuous until you watched it fail** — and a green suite is not a
-  screen: look at the screenshot (Session 32 found two faults that way).
-- **Registration order is load-bearing** in every router
-  (`route-shadowing-smoke`).
-- **Every reader of a stored email body calls `renderStoredEmail`.**
-- **A lead row opens without `render()`** — anything inside it (`58-lead-intel`,
-  `59-lead-posting`) fills its own element by id, never re-renders.
-- **Never `git add -A`**; never pipe `git push` into `tail`.
-- **A squash-merged branch conflicts with `main` on its own files** — after a
-  merge, restart the dev branch from `origin/main`
-  (`git checkout -B <branch> origin/main`) before new work.
-- **Secrets live in `app_settings` (`int_*_api_key`)** — never echo them into
-  chat, commits or files (query `length(value)`, never `value`).
-- **Hard-coded AI model names expire** — five so far. Check the live
-  `ai_last_test` row's `available_models` before trusting one.
-- **This sandbox cannot measure smoothness** (software compositing).
+- **`*.onrender.com` is blocked from this sandbox** — a merge lands, a deploy is **unverified**. Check `app_settings` `cron_last_*` rows for signs of life; never claim you watched it come up.
+- **Sandbox Node 22, Render Node 26** (`/tmp/claude-0/node26/...` if you downloaded it). Works-here-fails-there → get Node 26.
+- **A guard is vacuous until you watched it fail** — and a green suite is not a screen: look at the screenshot. A suite only covers the screens it renders (R-094's search test only opened the Pipeline page while the job page's own list had none).
+- **Registration order is load-bearing** in every router (`route-shadowing-smoke`). **Every reader of a stored email body calls `renderStoredEmail`.**
+- **A lead row opens without `render()`** — anything inside it fills its own element by id, never re-renders.
+- **A squash-merged branch conflicts with `main` on its own files** — after a merge, restart the dev branch from `origin/main` (`git checkout -B <branch> origin/main`), push with `--force-with-lease` pinned to the old remote sha.
+- **Never `git add -A`**; never pipe `git push` into `tail`. `node scripts/territory-map.mjs` regenerates `docs/territories/island.html` and `_map.json` — commit them with the change.
+- **Secrets live in `app_settings` (`int_*_api_key`)** — never echo them (query `length(value)`, never `value`).
+- **Hard-coded AI model names expire** — five so far. Check the live `ai_last_test` row's `available_models` first.
+- **This sandbox cannot measure smoothness** (software compositing) — say how it FEELS is the owner's call.
