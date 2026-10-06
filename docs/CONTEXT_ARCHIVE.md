@@ -6524,3 +6524,5 @@ Five screenshots of the LIVE app after #295 and seven points (quoted in D-0077).
 - **Today**: `renderReportsBody({noPeople:true})` for the Dashboard embed (`05-page-dashboard.js`), pointer line for team leads; My Team → Reports keeps the table. `reports-smoke` updated (36): person-number steps now run on the My Team body; the soft chart purple expected (`rgb(168,148,219)`).
 
 - **Merged (2026-10-06): #298** on the owner's "merge it" — round 3 and the Primary switch (D-0078, D-0079; R-127, R-131). Full suite 194/194 on Node 22 and Node 26.10.0 on the merged commit. The sandbox cannot reach the live site, so the Render deploy was not observed from here.
+
+### NEXT (2026-10-06, end of the session's work): the owner's fourteen points (D-0080, R-134…R-145) are recorded in DECISIONS/ROADMAP and orient a fresh session in CONTEXT_WINDOW's "NEXT UP". Nothing of them is built yet — the last code that landed is #298.
