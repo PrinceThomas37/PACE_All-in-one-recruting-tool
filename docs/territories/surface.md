@@ -1198,3 +1198,10 @@ resulting "Ask to take over" modal after clicking through, showing
 - **Mailbox warning card** (`60-mailbox-alerts.js`): "Hide for a week", "Remind <full name>" (full name — "BD 2" would read "BD"), the "N hidden · Show" line. **Needs you today:** a `reminder_due` row with no address has no "Write"; a lead group row (`entity_type:'lead'`) says "Open lead" and `naAct` opens the lead.
 - **Reminders box deleted** from the three dashboards (the same task is already a row in Needs you today).
 - **Charts:** `.rep-*` in `retro.css` — square outlined tracks, segmented fills (`repeating-linear-gradient`), tone classes by stage meaning; no inline colour. Card titles use `.rep-ttl`.
+
+## 2026-10-06 (Session 40, round 2) — R-125
+- **`64-evidence-drawer.js`** is the one "what is behind this" drawer (`evidenceOpen`); **`65-trace.js`** fills it for to-dos (`traceOpen`). Row clicks on Needs you today now call `naTrace` (the old jump is the drawer's "Open the lead" button); owner's client conversations call `clientDigestTrace`. A bar/number that cannot open anything is not made clickable (zero values are plain text — no dead buttons).
+- **Reports (`39-page-reports.js`):** work funnel with time-in-stage folded into the rows, two-series trend (sent to BDM = purple, to client = blue), "Work by person" table (numbers are buttons), tooltips on every target, drill helpers `reportsDrillM/User/Week/Client/Job`. The "Your team's pipeline" card is gone from the manager dashboard.
+- **Add lead (`06-page-leads.js`/`24-jobs-wired.js`):** state in `STATE.addLead`; typing never repaints, only mode switch / add / remove contact do. `.modal .mh/.mf/.mt` are retro now for every modal (square, ink rule, pixel title).
+
+- 2026-10-06 (R-126, sequence builder): `09-page-workflows.js` email-step editor — three ways to fill a step (use the saved template / write your own / write with AI), `WF_CHIPS` insert-a-field buttons, live preview, undo for an AI draft; state per step in a WeakMap, so typing never repaints. `retro.css`: `#layer{z-index:90}` — wide pop-ups were hidden under the sidebar (pre-existing, found by stashing my work).

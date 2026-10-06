@@ -6,6 +6,7 @@
 
 
 const subStages = require('../../services/submission-stages');
+const reportWork = require('../../services/report-work');
 const viewerTime = require('../../services/viewer-time');
 const bdInsights = require('../../services/bd-insights');
 
@@ -212,157 +213,194 @@ module.exports = function (app, core) {
   // everyone under them on the reporting chain (users.manager_id) — a BD
   // sees just their own, a BD Lead sees their whole team's, and so on up to
   // Director. Admin always sees the whole desk regardless of the hierarchy.
+  // ── THE TEAM'S WORK (R-124 follow-up, D-0077) ───────────────────────────────
+  // Loads the submissions this person may see and turns each into WHEN it
+  // reached each work stage (services/report-work.js). The report and its
+  // drill-down (the rows behind any number) both read it, so a number on
+  // screen and the list behind it come from the same rows by construction.
+  async function loadWork(req) {
+    const admin = hasRole(req, 'admin');
+    const scoped = !admin;
+    const org = orgIdFor(req);
+    const chain = scoped ? await reportingChainIds(req.user.id, org) : null;
+
+    const q = req.query || {};
+    // "1–7 Oct" means the viewer's 1 Oct 00:00 to 7 Oct 23:59:59 in THEIR zone (`?tz=`), not the server's (R-105).
+    const fromT = q.from ? viewerTime.dayStartMs(q.from, q.tz) : null;
+    const toT = q.to ? viewerTime.dayEndMs(q.to, q.tz) : null;
+    const roleFilter = (q.role === 'bd' || q.role === 'recruiter') ? q.role : null;
+    let userIds = null;
+    if (q.user_ids) {
+      userIds = String(q.user_ids).split(',').map(x => x.trim()).filter(Boolean);
+      if (scoped) { const cs = new Set(chain); if (!userIds.every(id => cs.has(id))) return { status: 403, error: 'Some users are outside your team.' }; }
+      if (!userIds.length) userIds = null;
+    }
+    // Effective recruiter scope for the submissions query.
+    let recScope = null;
+    if (scoped) recScope = userIds ? chain.filter(id => userIds.includes(id)) : chain;
+    else if (userIds) recScope = userIds;
+
+    let sq = withOrg(supabase.from('submissions')
+      .select('id,stage,created_at,submitted_at,stage_updated_at,job_order_id,candidate_id,recruiter_id,recruiter:users!recruiter_id(id,name),candidate:candidates(id,full_name)')
+      .is('deleted_at', null), req);
+    if (recScope) sq = sq.in('recruiter_id', recScope);
+    const jq = withOrg(supabase.from('job_orders').select('id,client,status,created_at,placement_fee,job_title,job_code').is('deleted_at', null), req);
+
+    // Roles for the BD-vs-recruiter split (and the by_user rows).
+    let ru = supabase.from('users').select('id,name,role,roles,employee_id').is('deleted_at', null);
+    if (org) ru = ru.eq('org_id', org);
+    if (recScope) ru = ru.in('id', recScope);
+
+    const [{ data: subs }, { data: jobs }, { data: usersData }] = await Promise.all([sq, jq, ru]);
+    const J = jobs || [], jobById = {}; J.forEach(j => { jobById[j.id] = j; });
+    const roleOf = {}, nameOf = {}, empOf = {};
+    (usersData || []).forEach(u => { roleOf[u.id] = u.roles || (u.role ? [u.role] : []); nameOf[u.id] = u.name; empOf[u.id] = u.employee_id; });
+    const isBDRole = id => (roleOf[id] || []).some(r => ['bd', 'bd_lead', 'associate_director', 'director'].includes(r));
+
+    let S = subs || [];
+    if (roleFilter) S = S.filter(s => roleFilter === 'bd' ? isBDRole(s.recruiter_id) : !isBDRole(s.recruiter_id));
+    const hist = await stageHistoryFor(req, S.map(s => s.id));
+    const rows = S.map(s => Object.assign(reportWork.reachTimes(s, hist[s.id], normalizeStage), { sub: s }));
+    return { admin, scoped, chain, q, win: { from: fromT, to: toT }, roleFilter, userIds, rows, J, jobById, usersData: usersData || [], roleOf, nameOf, empOf, isBDRole, hist, recScope };
+  }
+
   app.get('/reports/recruiting', auth, async (req, res) => {
     try {
       if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
-      const admin = hasRole(req, 'admin');
-      const scoped = !admin;
-      const org = orgIdFor(req);
-      const chain = scoped ? await reportingChainIds(req.user.id, org) : null;
-
-      // ── optional filters (no param ⇒ same response as before) ──────────────
-      const q = req.query || {};
-      // "1–7 Oct" means the viewer's 1 Oct 00:00 to 7 Oct 23:59:59 in THEIR zone (`?tz=`), not the server's (R-105).
-      const fromT = q.from ? viewerTime.dayStartMs(q.from, q.tz) : null;
-      const toT = q.to ? viewerTime.dayEndMs(q.to, q.tz) : null;
-      const roleFilter = (q.role === 'bd' || q.role === 'recruiter') ? q.role : null;
-      let userIds = null;
-      if (q.user_ids) {
-        userIds = String(q.user_ids).split(',').map(s => s.trim()).filter(Boolean);
-        if (scoped) { const cs = new Set(chain); if (!userIds.every(id => cs.has(id))) return res.status(403).json({ error: 'Some users are outside your team.' }); }
-        if (!userIds.length) userIds = null;
-      }
-      // Effective recruiter scope for the submissions query.
-      let recScope = null;
-      if (scoped) recScope = userIds ? chain.filter(id => userIds.includes(id)) : chain;
-      else if (userIds) recScope = userIds;
-
-      let sq = withOrg(supabase.from('submissions')
-        .select('id,stage,created_at,submitted_at,stage_updated_at,job_order_id,recruiter_id,recruiter:users!recruiter_id(id,name)')
-        .is('deleted_at', null), req);
-      if (recScope) sq = sq.in('recruiter_id', recScope);
-      let jq = withOrg(supabase.from('job_orders').select('id,client,status,created_at,placement_fee,job_title,job_code').is('deleted_at', null), req);
-      let pq = withOrg(supabase.from('candidate_pipeline').select('id,tagged_by,tagged_at').is('deleted_at', null), req);
-      if (recScope) pq = pq.in('tagged_by', recScope);
-
-      // Roles for the BD-vs-recruiter split (and the by_user rows).
-      const idsForRoles = recScope || null;
-      let ru = supabase.from('users').select('id,name,role,roles,employee_id').is('deleted_at', null);
-      if (org) ru = ru.eq('org_id', org);
-      if (idsForRoles) ru = ru.in('id', idsForRoles);
-
-      const [{ data: subs }, { data: jobs }, { data: pipe }, { data: usersData }] = await Promise.all([sq, jq, pq, ru]);
-      const J = jobs || [], jobById = {}; J.forEach(j => { jobById[j.id] = j; });
-      const roleOf = {}, nameOf = {}, empOf = {};
-      (usersData || []).forEach(u => { roleOf[u.id] = u.roles || (u.role ? [u.role] : []); nameOf[u.id] = u.name; empOf[u.id] = u.employee_id; });
-      const isBDRole = id => (roleOf[id] || []).some(r => ['bd', 'bd_lead', 'associate_director', 'director'].includes(r));
-
-      const inWindow = t => { const ms = new Date(t).getTime(); if (fromT != null && ms < fromT) return false; if (toT != null && ms > toT) return false; return true; };
-      let S = (subs || []).filter(s => inWindow(s.submitted_at || s.created_at));
-      if (roleFilter) S = S.filter(s => roleFilter === 'bd' ? isBDRole(s.recruiter_id) : !isBDRole(s.recruiter_id));
-      let P = (pipe || []).filter(p => inWindow(p.tagged_at));
-      if (roleFilter) P = P.filter(p => roleFilter === 'bd' ? isBDRole(p.tagged_by) : !isBDRole(p.tagged_by));
-
-      const hist = await stageHistoryFor(req, S.map(s => s.id));
-
-      const funnel = {}; STAGES.forEach(s => { funnel[s] = 0; });
-      S.forEach(s => { const st = normalizeStage(s.stage); if (funnel[st] !== undefined) funnel[st]++; });
-
-      const SUBMITTED = ['Submitted to BDM', 'Submitted to Client', 'Interview Scheduled', 'Interview Completed', 'Offer', 'Joining', 'Placement'];
-      const INTERVIEWED = ['Interview Scheduled', 'Interview Completed', 'Offer', 'Joining', 'Placement'];
-      const feeByJob = {}; J.forEach(j => { const n = parseFloat(String(j.placement_fee || '').replace(/[^0-9.]/g, '')); feeByJob[j.id] = isNaN(n) ? 0 : n; });
-
-      // Per-user productivity + per-user funnels (keyed by user id, with role).
-      const byUser = {}, per_user_funnels = {};
-      S.forEach(s => {
-        const id = s.recruiter_id || 'none';
-        const st = normalizeStage(s.stage);
-        const u = byUser[id] || (byUser[id] = {
-          user_id: id, recruiter: nameOf[id] || (s.recruiter && s.recruiter.name) || 'Unassigned',
-          employee_id: empOf[id] || null, role_label: isBDRole(id) ? 'BD' : 'Recruiter',
-          total: 0, submitted: 0, interviews: 0, placements: 0, revenue: 0
-        });
-        u.total++;
-        if (SUBMITTED.includes(st)) u.submitted++;
-        if (INTERVIEWED.includes(st)) u.interviews++;
-        if (st === 'Placement') { u.placements++; u.revenue += feeByJob[s.job_order_id] || 0; }
-        const f = per_user_funnels[id] || (per_user_funnels[id] = {}); f[st] = (f[st] || 0) + 1;
-      });
-      const by_user = Object.values(byUser).map(u => Object.assign({}, u, { fill_rate: u.total ? Math.round((u.placements / u.total) * 100) : 0 }))
-        .sort((a, b) => b.placements - a.placements || b.total - a.total);
-      // Back-compat: the old by_recruiter shape (name-keyed, no user_id/role).
-      const by_recruiter = by_user.map(u => ({ recruiter: u.recruiter, total: u.total, submitted: u.submitted, interviews: u.interviews, placements: u.placements, revenue: u.revenue, fill_rate: u.fill_rate }));
-
-      // Hot jobs — active reqs ranked by (submissions + interviews) in the window.
-      const closedish = st => { st = String(st || '').toLowerCase(); return st === 'closed' || st === 'filled' || st === 'cancelled'; };
-      const jobAgg = {};
-      // Same correction: a job is "hot" because candidates have been SENT, not
-      // because somebody sourced into it. `pipeline` keeps the fuller count so
-      // the screen can say both without conflating them.
-      S.forEach(s => { const jid = s.job_order_id; if (!jid) return; const a = jobAgg[jid] || (jobAgg[jid] = { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 });
-        const ns2 = normalizeStage(s.stage);
-        const reached2 = reachedOf(s, hist);
-        a.pipeline++;
-        if (subStages.isSentToBdm(reached2)) a.submissions++;
-        if (subStages.isSentToClient(reached2)) a.client_submissions++;
-        if (INTERVIEWED.includes(ns2)) a.interviews++; });
-      // From history (R-002) — the same rule the dashboard tiles use above.
-      const subCounts = subStages.countSubmissionsEver(S.map(x => ({
-        stage: normalizeStage(x.stage),
-        history: (hist[x.id] || []).flatMap(a => [a.old_stage, a.new_stage]).filter(Boolean).map(normalizeStage),
-      })));
-      // Time in stage across the desk (R-001): which stages go stale.
-      const stage_time = subStages.timeInStage(S.map(x => ({
-        id: x.id, stage: x.stage, stage_updated_at: x.stage_updated_at, created_at: x.created_at,
-        events: hist[x.id] || [],
-      })), { normalize: normalizeStage });
-      const hot_jobs = J.filter(j => !closedish(j.status)).map(j => { const a = jobAgg[j.id] || { submissions: 0, client_submissions: 0, pipeline: 0, interviews: 0 }; return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions: a.submissions, client_submissions: a.client_submissions, pipeline: a.pipeline, interviews: a.interviews, score: a.submissions + a.interviews }; })
-        .filter(j => j.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
-
+      const W = await loadWork(req);
+      if (W.error) return res.status(W.status).json({ error: W.error });
+      const { rows, win, J, jobById, nameOf, empOf, isBDRole, roleOf, scoped, chain, q, roleFilter, userIds } = W;
       const now = Date.now();
-      const trend = [];
-      for (let i = 7; i >= 0; i--) trend.push({ week: i === 0 ? 'This wk' : (i + 'w ago'), count: 0 });
-      S.forEach(s => {
-        const t = new Date(s.submitted_at || s.created_at).getTime();
-        const wa = Math.floor((now - t) / (7 * 86400000));
-        if (wa >= 0 && wa < 8) trend[7 - wa].count++;
-      });
+      const feeByJob = {}; J.forEach(j => { const n = parseFloat(String(j.placement_fee || '').replace(/[^0-9.]/g, '')); feeByJob[j.id] = isNaN(n) ? 0 : n; });
+      const M = (metric, list) => reportWork.members(list || rows, metric, win, now);
 
-      const ttf = [];
-      S.forEach(s => {
-        if (s.stage === 'Placement') {
-          const d = (new Date(s.stage_updated_at || s.created_at) - new Date(s.created_at)) / 86400000;
-          if (d >= 0) ttf.push(d);
-        }
+      // THE FUNNEL is work: candidates who reached each stage from "sent to the
+      // manager" on, in the period — Sourced/Screening are inventory and are not
+      // here. Not Accepted / On Hold are where work ended or paused.
+      const funnel = {};
+      reportWork.WORK_STAGES.forEach(st => { funnel[st] = M('reached:' + st).length; });
+      reportWork.PARKED_STAGES.forEach(st => { funnel[st] = M('parked:' + st).length; });
+      const stages = reportWork.WORK_STAGES.concat(reportWork.PARKED_STAGES);
+
+      // Everyone in the team is evaluated — someone who did nothing shows 0, not nothing.
+      const byRecruiter = {};
+      rows.forEach(r => { const id = r.recruiter_id || 'none'; (byRecruiter[id] = byRecruiter[id] || []).push(r); });
+      const peopleIds = new Set(Object.keys(byRecruiter));
+      W.usersData.forEach(u => {
+        if (!(roleOf[u.id] || []).some(r => ['recruiter', 'bd', 'bd_lead'].includes(r))) return;
+        if (roleFilter && (roleFilter === 'bd') !== isBDRole(u.id)) return;
+        peopleIds.add(u.id);
       });
+      const per_user_funnels = {};
+      const by_user = [...peopleIds].map(id => {
+        const mine = byRecruiter[id] || [];
+        const placed = M('placements', mine);
+        const revenue = placed.reduce((a, m) => a + (feeByJob[m.row.job_order_id] || 0), 0);
+        const to_client = M('to_client', mine).length, placements = placed.length;
+        const f = {}; reportWork.WORK_STAGES.forEach(st => { f[st] = M('reached:' + st, mine).length; }); per_user_funnels[id] = f;
+        const sample = mine[0] && mine[0].sub && mine[0].sub.recruiter;
+        return {
+          user_id: id, recruiter: nameOf[id] || (sample && sample.name) || 'Unassigned',
+          employee_id: empOf[id] || null, role_label: isBDRole(id) ? 'BD' : 'Recruiter',
+          to_bdm: M('to_bdm', mine).length, to_client, interviews: M('interviews', mine).length,
+          placements, revenue,
+          // Of the people SENT to a client, how many were placed — null when none were sent.
+          fill_rate: to_client ? Math.round((placements / to_client) * 100) : null,
+        };
+      }).sort((a, b) => b.placements - a.placements || b.to_client - a.to_client || b.to_bdm - a.to_bdm || String(a.recruiter).localeCompare(String(b.recruiter)));
+
+      // Hot jobs — active reqs ranked by what was SENT and interviewed in the period.
+      const closedish = st => { st = String(st || '').toLowerCase(); return st === 'closed' || st === 'filled' || st === 'cancelled'; };
+      const perJob = (metric) => { const m = {}; M(metric).forEach(x => { const j = x.row.job_order_id; if (j) m[j] = (m[j] || 0) + 1; }); return m; };
+      const jb = perJob('to_bdm'), jc = perJob('to_client'), ji = perJob('interviews');
+      const hot_jobs = J.filter(j => !closedish(j.status)).map(j => {
+        const submissions = jb[j.id] || 0, interviews = ji[j.id] || 0;
+        return { job_order_id: j.id, job_code: j.job_code, job_title: j.job_title, client: j.client, status: j.status, submissions, client_submissions: jc[j.id] || 0, interviews, score: submissions + interviews };
+      }).filter(j => j.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
+
+      // Time in stage across the desk (R-001): which stages go stale. A "now" view
+      // (who is sitting where today), so it ignores the period; work stages only.
+      const stage_time = subStages.timeInStage(rows.map(r => ({
+        id: r.id, stage: r.stage, stage_updated_at: r.sub.stage_updated_at, created_at: r.sub.created_at,
+        events: W.hist[r.id] || [],
+      })), { normalize: normalizeStage }).filter(x => stages.includes(x.stage));
+
+      const trend = reportWork.weeklyTrend(rows, now);
+
+      const placedNow = M('placements');
+      const ttf = placedNow.map(m => (m.at - (m.row.created_at || m.at)) / 86400000).filter(d => d >= 0);
       const avg_time_to_fill = ttf.length ? Math.round(ttf.reduce((a, b) => a + b, 0) / ttf.length) : null;
 
       const byClient = {};
-      S.forEach(s => { const c = (jobById[s.job_order_id] && jobById[s.job_order_id].client) || '—'; byClient[c] = (byClient[c] || 0) + 1; });
+      M('to_client').forEach(m => { const c = (jobById[m.row.job_order_id] && jobById[m.row.job_order_id].client) || '—'; byClient[c] = (byClient[c] || 0) + 1; });
       const top_clients = Object.keys(byClient).map(c => ({ client: c, count: byClient[c] })).sort((a, b) => b.count - a.count).slice(0, 6);
 
+      // Submissions the old "current stage" count would have dropped (R-002).
+      const recovered = M('to_bdm').filter(m => m.row.reached[reportWork.CLIENT] != null ? !subStages.isSentToClient(m.row.stage) : !subStages.isSentToBdm(m.row.stage)).length;
       const totals = {
-        candidates_added: P.length,
-        // ONE DEFINITION, SHARED (D-0029) — this used a local SUBMITTED list
-        // while two other counts in the same file used none at all.
-        submissions: subCounts.toBdm,
-        client_submissions: subCounts.toClient,
-        stalled_at_bdm: subCounts.stalled,
-        // Submissions the old "current stage" count would have dropped (R-002).
-        submissions_recovered: subCounts.recovered,
-        interviews: funnel['Interview Scheduled'] + funnel['Interview Completed'],
-        placements: funnel['Placement'],
-        open_jobs: J.filter(j => !closedish(j.status)).length,
-        total_jobs: J.length,
-        revenue: by_user.reduce((a, r) => a + r.revenue, 0)
+        // The team's WORK in the period (D-0029, D-0077). No "candidates added",
+        // no "open jobs": data put into the system is not evaluated.
+        submissions: M('to_bdm').length,
+        client_submissions: M('to_client').length,
+        stalled_at_bdm: M('stalled').length,
+        submissions_recovered: recovered,
+        interviews: M('interviews').length,
+        placements: placedNow.length,
+        revenue: by_user.reduce((a, r) => a + r.revenue, 0),
       };
 
       const scope = !scoped ? 'org' : (chain.length > 1 ? 'team' : 'own');
       res.json({
         role: scoped ? 'recruiter' : 'manager', scope, team_size: scoped ? chain.length : null,
-        funnel, stages: STAGES, by_recruiter, by_user, per_user_funnels, hot_jobs, trend, avg_time_to_fill, top_clients, totals,
+        funnel, stages, by_user, per_user_funnels, hot_jobs, trend, avg_time_to_fill, top_clients, totals,
         stage_time, stuck_days: subStages.STUCK_DAYS,
         filters: { from: q.from || null, to: q.to || null, role: roleFilter, user_ids: userIds }
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // THE ROWS BEHIND A NUMBER. Every figure on the report is a click away from
+  // the people it counts. Same filters, same scope, same rule as the report —
+  // `members()` is both the count and this list. Capped; says how many more.
+  //   metric = to_bdm | to_client | interviews | placements | stalled
+  //          | reached:<Stage> | parked:<Stage> | now:<Stage> | stuck:<Stage>
+  //   optional narrowing: user_id, client, job_order_id, and for the trend
+  //   `kind` (to_bdm|to_client) + `ago` (0 = this week) instead of `metric`.
+  app.get('/reports/recruiting/rows', auth, async (req, res) => {
+    try {
+      if (!isBDM(req) && !isRecruiter(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const q = req.query || {};
+      const W = await loadWork(req);
+      if (W.error) return res.status(W.status).json({ error: W.error });
+      let rows = W.rows;
+      if (q.user_id) rows = rows.filter(r => (r.recruiter_id || 'none') === q.user_id);
+      if (q.job_order_id) rows = rows.filter(r => r.job_order_id === q.job_order_id);
+      if (q.client) rows = rows.filter(r => ((W.jobById[r.job_order_id] || {}).client || '—') === q.client);
+      const now = Date.now();
+      let list;
+      if (q.ago !== undefined && q.kind) {
+        const ago = parseInt(q.ago, 10);
+        if (!(ago >= 0 && ago < 8)) return res.status(400).json({ error: 'week out of range' });
+        list = reportWork.weekMembers(rows, q.kind, ago, now);
+      } else {
+        const metric = String(q.metric || '');
+        if (!/^(to_bdm|to_client|interviews|placements|stalled|(reached|parked|now|stuck):[A-Za-z ]+)$/.test(metric)) return res.status(400).json({ error: 'unknown metric' });
+        list = reportWork.members(rows, metric, W.win, now);
+      }
+      list.sort((a, b) => b.at - a.at);
+      const CAP = 200;
+      res.json({
+        total: list.length, more: Math.max(0, list.length - CAP),
+        rows: list.slice(0, CAP).map(({ row, at }) => {
+          const j = W.jobById[row.job_order_id] || {}, s = row.sub || {};
+          return {
+            submission_id: row.id, candidate_id: s.candidate_id || null,
+            candidate: (s.candidate && s.candidate.full_name) || 'Candidate',
+            job_order_id: row.job_order_id, job_title: j.job_title || null, job_code: j.job_code || null, client: j.client || null,
+            stage: row.stage, at: new Date(at).toISOString(),
+            recruiter_id: row.recruiter_id, recruiter: W.nameOf[row.recruiter_id] || (s.recruiter && s.recruiter.name) || null,
+          };
+        }),
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

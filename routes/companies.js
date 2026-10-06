@@ -115,7 +115,13 @@ router.post('/companies', auth, async (req, res) => {
   try {
     const { name, website, industry, location, size, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name required' });
-    const { data, error } = await supabase.from('companies').insert({ name, website, industry, location, size, notes, created_by: req.user.id, ...orgStamp(req) }).select().single();
+    // The postal address is the structured one from migration 043 (street, suite,
+    // city, state, ZIP, country — every part optional), exactly what the New Job
+    // form writes. `location` stays the short "City, ST" form; when the caller
+    // gave an address but no location it is derived, as the New Job form does.
+    const address = clientResolve.readAddress(req.body);
+    const shortLocation = location || clientResolve.displayLocation(address) || location;
+    const { data, error } = await supabase.from('companies').insert({ name, website, industry, location: shortLocation, size, notes, ...address, created_by: req.user.id, ...orgStamp(req) }).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -127,6 +133,8 @@ router.put('/companies/:id', auth, async (req, res) => {
     if (!co) return; // requireClientOwner already answered (404 foreign/missing, 403 not-yours)
     const { name, website, industry, location, size, notes } = req.body;
     const updates = { updated_at: new Date() };
+    // Postal address parts the caller sent (043's columns); an empty string clears a part.
+    clientResolve.ADDRESS_FIELDS.forEach(k => { if (req.body[k] !== undefined) updates[k] = String(req.body[k] || '').trim() || null; });
     if (name !== undefined) updates.name = name;
     if (website !== undefined) updates.website = website;
     if (industry !== undefined) updates.industry = industry;

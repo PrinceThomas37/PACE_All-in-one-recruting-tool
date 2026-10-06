@@ -36,6 +36,17 @@
     goPage('leads');
   };
 
+  // Click a conversation of yours = the emails it is worked out from (65-trace.js).
+  window.clientDigestTrace=function(idx){
+    var it=((STATE.clientDigest||{}).mine||[])[idx]; if(!it||!window.traceOpen) return;
+    traceOpen({
+      title:it.name,
+      hint:'Listed because the other side has written in the last 60 days. Right now: '+String(it.headline||'a live conversation').replace(/[.\s]+$/,'')+'.',
+      leadId:it.id, firstChip:it.state==='needs_reply'?'the reply you owe':'latest',
+      open:{label:'Open the lead',fn:function(){ clientDigestOpen(it.name); }}
+    });
+  };
+
   // The checkbox: this conversation is dealt with. It is a snooze that returns when they write again
   // (the same store as "Needs you today"), never a delete. The item recorded against is the server's.
   window.clientDigestComplete=function(chk, idx, ev){
@@ -58,7 +69,8 @@
       :(it.promises_due?'<span class="cd-chip">promise due</span>':'');
     var tick=(mine&&it.complete)
       ?'<label class="cd-tick" onclick="event.stopPropagation()" title="Completed — hides this until they write again"><input type="checkbox" onclick="clientDigestComplete(this,'+idx+',event)" aria-label="Mark completed"></label>':'';
-    return '<div class="cd-row" onclick="clientDigestOpen(\''+esc(it.name).replace(/'/g,'&#39;')+'\')">'+
+    // Yours: click shows the emails behind it. A teammate's is facts only (D-0040) — it still just opens the lead.
+    return '<div class="cd-row" '+(mine?'onclick="clientDigestTrace('+idx+')" title="Click to see the emails behind this"':'onclick="clientDigestOpen(\''+esc(it.name).replace(/'/g,'&#39;')+'\')"')+'>'+
       '<div class="cd-name">'+tick+esc(it.name)+badge+'</div>'+
       '<div class="cd-line">'+esc(it.headline||'')+'</div>'+
       (mine&&it.summary_line?'<div class="cd-sum">'+esc(it.summary_line)+'</div>':'')+

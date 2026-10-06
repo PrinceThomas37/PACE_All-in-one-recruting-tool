@@ -203,6 +203,27 @@ window.naComplete=function(chk,ev){
   }).catch(undo);
 };
 
+// CLICK A ROW = SEE WHERE IT COMES FROM (D-0077). The row used to jump straight to
+// the lead; now it opens the evidence — the rule that put it here and the emails
+// it was worked out from — with the old jump one button away (65-trace.js).
+window.naTrace=function(row){
+  var it=naItemOf(row); if(!it||!window.traceOpen)return;
+  var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
+  var opts={
+    title:(it.title||'')+(it.subtitle&&it.entity_type!=='lead'?' · '+it.subtitle:'')+(it.entity_type==='lead'&&it.subtitle?' · '+it.subtitle:''),
+    hint:(k.why||'')+(it.reason?' Right now: '+it.reason:''),
+    reminderId:it.reminder_id||null,
+    firstChip:it.kind==='reply_due'?'the reply you owe':(it.kind==='nudge'?'your last email':null)
+  };
+  if(it.entity_type==='lead'){ opts.leadId=it.entity_id; }
+  else if(it.entity_type==='contact'){ opts.leadId=it.job_id; opts.who=it.title; }
+  else if(it.entity_type==='candidate'){ opts.candidateId=it.entity_id; }
+  else if(it.job_id){ opts.leadId=it.job_id; }
+  var canOpen=it.entity_type==='candidate'||it.job_id||it.entity_type==='lead'||it.entity_type==='contact';
+  if(canOpen) opts.open={label:it.entity_type==='candidate'?'Open the candidate':'Open the lead',fn:function(){ naOpen(it.kind,it.entity_type,it.entity_id,it.job_id); }};
+  traceOpen(opts);
+};
+
 window.naOpen=function(kind,entityType,entityId,jobId){
   // Jump to the thing the action is about. Leads live behind the job, so a
   // contact action opens its job — that is where the reply is answered.
@@ -217,12 +238,16 @@ window.naOpen=function(kind,entityType,entityId,jobId){
 // none, so it fell through to `nudge` and drew "No reply yet" over a candidate
 // who HAD replied, and the count chips left it out entirely (Session 34).
 var NA_KIND={
-  reply_due:       {lbl:'Reply due',           bg:'#fee2e2', fg:'#b91c1c'},
-  commitment_due:  {lbl:'They promised',       bg:'#fef3c7', fg:'#92400e'},
-  reminder_due:    {lbl:'Reminder',            bg:'#e0e7ff', fg:'#3730a3'},
+  reply_due:       {lbl:'Reply due',           bg:'#fee2e2', fg:'#b91c1c',
+                    why:'Shown because their latest email to you has no reply from you after it.'},
+  commitment_due:  {lbl:'They promised',       bg:'#fef3c7', fg:'#92400e',
+                    why:'Shown because they wrote that they would do something by a date, and that date has passed.'},
+  reminder_due:    {lbl:'Reminder',            bg:'#e0e7ff', fg:'#3730a3',
+                    why:'Shown because a reminder set for this person has come due.'},
   nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569',
                     why:'Shown because you emailed and nobody has answered for 3 or more days, on a lead that is already talking to you. Not shown for leads still in the automatic follow-up.'},
-  stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534'}
+  stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534',
+                    why:'Shown because their reply reads as interest, so it may be time to move them forward.'}
 };
 // A kind this file does not know says so neutrally. The old fallback was `nudge`,
 // which asserts something specific and false about every kind added later.
@@ -351,11 +376,11 @@ function renderNextActionsCard(){
       job_id:it.job_id||null, reminder_id:it.reminder_id||null,
       last_activity_at:it.last_activity_at||null,
       overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
-      state:it.state||null, title:it.title||'',
+      state:it.state||null, title:it.title||'', reason:it.reason||'',
       email:it.email||null, subtitle:it.subtitle||null
     }));
     return '<div data-na-item="'+payload+'" '+
-      'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
+      'onclick="naTrace(this)" title="Click to see where this comes from" '+
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
       '<label class="cd-tick" onclick="event.stopPropagation()" title="Completed'+(it.reminder_id?'':' — hides this until they reply')+'"><input type="checkbox" onclick="naComplete(this,event)" aria-label="Mark completed"></label>'+
       '<span class="fs-10_5" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'"'+(k.why?' title="'+escAttr(k.why)+'"':'')+'>'+k.lbl+'</span>'+

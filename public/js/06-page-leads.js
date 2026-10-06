@@ -483,7 +483,7 @@ window.leadStartSequence=function(){
 function closeAndOpenLead(jobId){ if(jobId){ openJob(jobId); } }
 // Manually dismiss the send-results panel (stays put until dismissed when there are failures).
 function dismissSendProgress(){ STATE._progressDismissed=true; STATE.sendProgress=null; scheduleRender(); }
-function openAddJob(){ STATE.modal={type:"addJob"}; render(); }
+function openAddJob(){ STATE.addLead=window.addLeadFresh(); STATE.modal={type:"addJob"}; render(); }
 
 // ── JOB DETAIL MODAL ──────────────────────────────
 // ── LEAD DETAILS (Session 29) ─────────────────────────────────────────────
@@ -620,51 +620,102 @@ function renderJobDetailModal(){
   '</div>';
 }
 
-// ── ADD JOB MODAL ─────────────────────────────────
+// ── ADD LEAD (R-124 follow-up, D-0077) ───────────────────────────────────────
+// The owner: "the add lead page looks like old theme … there is no option of
+// adding a new company name, no option to add another POC for that lead, no
+// address bar of the company." So: the shared form kit (it takes the retro
+// look with the rest of the app), a company that is EITHER found among yours OR
+// added right here (name, website, industry, address, city — checked against
+// yours first so it is never added twice), the job opening, and as many
+// contacts as the person has — the first is the main one.
+// Everything typed lives in STATE.addLead, so adding a contact or switching
+// company mode redraws the window without losing a letter.
+window.addLeadFresh=function(){
+  return { mode:'existing', company:null, coText:'',
+    newCo:{ name:'', website:'', industry:'', address_line1:'', address_line2:'', city:'', state:'', postal_code:'', country:'' },
+    pos:'', loc:'', src:'LinkedIn', url:'', busy:false,
+    contacts:[ window.addLeadBlankContact() ] };
+};
+window.addLeadBlankContact=function(){ return { first_name:'', last_name:'', designation:'', email:'', phone:'', linkedin:'' }; };
+
 function renderAddJobModal(){
-  var u=STATE.user;
-  var coOpts=STATE.companies.map(function(c){return '<option value="'+c.id+'">'+escHtml(c.name)+'</option>';}).join("");
-  return '<div style="background:var(--bg2);border-radius:14px;width:min(560px,94vw);max-height:90vh;overflow-y:auto;border:1px solid var(--border)">'+
-    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div class="fs-16 c-text" style="font-weight:700">Add Lead</div><button onclick="closeModal()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer;line-height:1">×</button></div>'+
-    '<div style="padding:20px 22px">'+
-      '<div style="margin-bottom:12px"><label class="fs-11 c-text3">Company</label><select id="aj-co" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px">'+coOpts+'</select></div>'+
-      '<div style="margin-bottom:12px"><label class="fs-11 c-text3">Position</label><input id="aj-pos" placeholder="e.g. Senior Software Engineer" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'+
-        '<div><label class="fs-11 c-text3">Location</label><input id="aj-loc" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
-        '<div><label class="fs-11 c-text3">Source</label><input id="aj-src" placeholder="LinkedIn, Indeed..." class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
+  var a=STATE.addLead||(STATE.addLead=window.addLeadFresh());
+  var inds=(typeof getIndustriesList==='function'&&getIndustriesList().length?getIndustriesList():(window.INDUSTRIES||[]));
+  var indOpts='<option value="">— Industry —</option>'+inds.map(function(i){return '<option'+(a.newCo.industry===i?' selected':'')+'>'+htmlEsc(i)+'</option>';}).join('');
+  var srcOpts=SOURCES.map(function(x){return '<option'+(a.src===x?' selected':'')+'>'+htmlEsc(x)+'</option>';}).join('');
+
+  var company;
+  if(a.mode==='new'){
+    company='<div class="g2">'+
+        '<div class="fgrp"><label class="flbl">Company name <span class="c-red">*</span></label><input class="inp" id="al-conew" value="'+htmlEsc(a.newCo.name)+'" placeholder="e.g. Acme Corp" oninput="addLeadCo(\'name\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">Website</label><input class="inp" value="'+htmlEsc(a.newCo.website)+'" placeholder="acme.com" oninput="addLeadCo(\'website\',this.value)"/></div>'+
       '</div>'+
-      '<div style="margin-bottom:14px"><label class="fs-11 c-text3">Job URL (optional)</label><input id="aj-url" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;padding-top:6px;border-top:1px solid var(--border2);padding-top:12px">First contact (you can add more after creating)</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<input id="aj-fn" placeholder="First name *" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
-        '<input id="aj-ln" placeholder="Last name" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
+      '<div class="fgrp"><label class="flbl">Street address</label><input class="inp" value="'+htmlEsc(a.newCo.address_line1)+'" placeholder="e.g. 1400 Edwin Miller Blvd" oninput="addLeadCo(\'address_line1\',this.value)"/></div>'+
+      '<div class="fgrp"><label class="flbl">Suite / floor / unit</label><input class="inp" value="'+htmlEsc(a.newCo.address_line2)+'" placeholder="Optional" oninput="addLeadCo(\'address_line2\',this.value)"/></div>'+
+      '<div class="g3">'+
+        '<div class="fgrp"><label class="flbl">City</label><input class="inp" value="'+htmlEsc(a.newCo.city)+'" oninput="addLeadCo(\'city\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">State / region</label><input class="inp" value="'+htmlEsc(a.newCo.state)+'" oninput="addLeadCo(\'state\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">ZIP / postal code</label><input class="inp" value="'+htmlEsc(a.newCo.postal_code)+'" oninput="addLeadCo(\'postal_code\',this.value)"/></div>'+
       '</div>'+
-      '<input id="aj-desig" placeholder="Designation" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'+
-        '<input id="aj-email" placeholder="Email" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
-        '<input id="aj-phone" placeholder="Phone" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
+      '<div class="g2">'+
+        '<div class="fgrp"><label class="flbl">Country</label><input class="inp" value="'+htmlEsc(a.newCo.country)+'" placeholder="e.g. United States" oninput="addLeadCo(\'country\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">Industry</label><select class="sel" onchange="addLeadCo(\'industry\',this.value)">'+indOpts+'</select></div>'+
       '</div>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px"><button onclick="closeModal()" class="c-text3 fs-13" style="background:transparent;border:1px solid var(--border);padding:9px 16px;border-radius:7px;cursor:pointer">Cancel</button><button onclick="submitAddJob()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:7px;cursor:pointer;font-weight:600">Add Lead</button></div>'+
+      '<div class="fs-12 c-text3">We check the name against your companies first, so it is never added twice.</div>';
+  } else if(a.company){
+    company='<div class="al-picked"><div><div class="al-picked-n">'+htmlEsc(a.company.name)+'</div>'+
+      '<div class="fs-12 c-text3">'+htmlEsc([a.company.industry,a.company.location].filter(Boolean).join(' · ')||'Already in your companies')+'</div></div>'+
+      '<button class="btn btn-outline btn-sm" onclick="addLeadChangeCo()">Change</button></div>';
+  } else {
+    company=companyAcHTML('al-co',a.coText,'addLeadPickCo','addLeadTypeCo','Search your companies…')+
+      '<div class="fs-12 c-text3" style="margin-top:6px">Not there? <a href="#" class="c-accent" onclick="addLeadMode(\'new\');return false;">Add it as a new company</a></div>';
+  }
+
+  var contacts=a.contacts.map(function(c,i){
+    function f(k,ph,type){ return '<input class="inp" '+(type?'type="'+type+'" ':'')+'placeholder="'+ph+'" value="'+htmlEsc(c[k])+'" oninput="addLeadContact('+i+',\''+k+'\',this.value)"/>'; }
+    return '<div class="al-contact">'+
+      '<div class="al-contact-h"><span class="al-contact-t">'+(i===0?'Main contact':'Contact '+(i+1))+'</span>'+
+        (i>0?'<button class="btn btn-outline btn-sm" onclick="addLeadRemoveContact('+i+')">Remove</button>':'')+'</div>'+
+      '<div class="g3"><div class="fgrp">'+f('first_name','First name *')+'</div><div class="fgrp">'+f('last_name','Last name')+'</div><div class="fgrp">'+f('designation','Designation')+'</div></div>'+
+      '<div class="g3"><div class="fgrp">'+f('email','Email','email')+'</div><div class="fgrp">'+f('phone','Phone','tel')+'</div><div class="fgrp">'+f('linkedin','LinkedIn URL')+'</div></div>'+
+    '</div>';
+  }).join('');
+
+  return '<div class="modal modal-w860">'+
+    '<div class="mh"><div class="mt">Add lead</div><button class="btn-icon" onclick="closeModal()" aria-label="Close">'+ico('x',14)+'</button></div>'+
+    '<div class="mb_">'+
+      '<div class="al-sec"><div class="al-h"><span class="al-ht">Company</span>'+
+        '<div class="al-tabs"><button class="fc'+(a.mode==='existing'?' on':'')+'" onclick="addLeadMode(\'existing\')">Existing company</button>'+
+        '<button class="fc'+(a.mode==='new'?' on':'')+'" onclick="addLeadMode(\'new\')">New company</button></div></div>'+company+'</div>'+
+      '<div class="al-sec"><div class="al-h"><span class="al-ht">Job opening</span></div>'+
+        '<div class="g3"><div class="fgrp span2"><label class="flbl">Position <span class="c-red">*</span></label><input class="inp" id="al-pos" value="'+htmlEsc(a.pos)+'" placeholder="e.g. Senior Software Engineer" oninput="addLeadField(\'pos\',this.value)"/></div>'+
+          '<div class="fgrp"><label class="flbl">Source</label><select class="sel" onchange="addLeadField(\'src\',this.value)">'+srcOpts+'</select></div></div>'+
+        '<div class="g2"><div class="fgrp"><label class="flbl">Location</label><input class="inp" value="'+htmlEsc(a.loc)+'" placeholder="City, State" oninput="addLeadField(\'loc\',this.value)"/></div>'+
+          '<div class="fgrp"><label class="flbl">Job URL (optional)</label><input class="inp" value="'+htmlEsc(a.url)+'" oninput="addLeadField(\'url\',this.value)"/></div></div></div>'+
+      '<div class="al-sec"><div class="al-h"><span class="al-ht">People at the company</span><span class="fs-12 c-text3">the first is the main contact — you can add more later too</span></div>'+
+        contacts+
+        '<button class="btn btn-outline btn-sm" onclick="addLeadAddContact()">'+ico('plus',12)+' Add another contact</button></div>'+
     '</div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
+      '<button class="btn btn-primary" onclick="submitAddJob()"'+(a.busy?' disabled':'')+'>'+(a.busy?'Adding…':'Add lead')+'</button></div>'+
   '</div>';
 }
 
 // ── ADD CONTACT MODAL ─────────────────────────────
 function renderAddContactModal(){
   var jid=STATE.modal.job_id;
-  return '<div style="background:var(--bg2);border-radius:14px;width:min(480px,94vw);border:1px solid var(--border)">'+
-    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div class="fs-16 c-text" style="font-weight:700">Add Contact</div><button onclick="backToJob(\''+jid+'\')" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button></div>'+
-    '<div style="padding:20px 22px">'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<input id="ac-fn" placeholder="First name *" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
-        '<input id="ac-ln" placeholder="Last name" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
-      '</div>'+
-      '<input id="ac-desig" placeholder="Designation" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
-      '<input id="ac-email" placeholder="Email" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
-      '<input id="ac-phone" placeholder="Phone" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
-      '<input id="ac-linkedin" placeholder="LinkedIn URL" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:14px"/>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px"><button onclick="backToJob(\''+jid+'\')" style="background:transparent;color:var(--text3);border:1px solid var(--border);padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px">Cancel</button><button onclick="submitAddContact(\''+jid+'\')" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Add Contact</button></div>'+
+  return '<div class="modal modal-w640">'+
+    '<div class="mh"><div class="mt">Add contact</div><button class="btn-icon" onclick="backToJob(\''+jid+'\')" aria-label="Back to the lead">'+ico('x',14)+'</button></div>'+
+    '<div class="mb_">'+
+      '<div class="g2"><div class="fgrp"><label class="flbl">First name <span class="c-red">*</span></label><input class="inp" id="ac-fn"/></div>'+
+        '<div class="fgrp"><label class="flbl">Last name</label><input class="inp" id="ac-ln"/></div></div>'+
+      '<div class="fgrp"><label class="flbl">Designation</label><input class="inp" id="ac-desig" placeholder="e.g. CTO"/></div>'+
+      '<div class="g2"><div class="fgrp"><label class="flbl">Email</label><input class="inp" id="ac-email" type="email"/></div>'+
+        '<div class="fgrp"><label class="flbl">Phone</label><input class="inp" id="ac-phone" type="tel"/></div></div>'+
+      '<div class="fgrp"><label class="flbl">LinkedIn URL</label><input class="inp" id="ac-linkedin" placeholder="linkedin.com/in/…"/></div>'+
     '</div>'+
+    '<div class="mf"><button class="btn btn-outline" onclick="backToJob(\''+jid+'\')">Cancel</button>'+
+      '<button class="btn btn-primary" onclick="submitAddContact(\''+jid+'\')">Add contact</button></div>'+
   '</div>';
 }
 
@@ -680,33 +731,6 @@ function deleteJob(jid){
   STATE.contacts=STATE.contacts.filter(function(c){return c.job_id!==jid;});
   STATE.modal=null; STATE.detailJob=null;
   showToast("Job deleted","success"); render();
-}
-function submitAddJob(){
-  var co=document.getElementById("aj-co").value;
-  var pos=document.getElementById("aj-pos").value.trim();
-  var fn=document.getElementById("aj-fn").value.trim();
-  if(!pos){showToast("Position is required","error");return;}
-  if(!fn){showToast("First contact name is required","error");return;}
-  apiPost('/jobs',{
-    company_id:co,
-    position:pos,
-    location:document.getElementById("aj-loc").value.trim()||null,
-    source:document.getElementById("aj-src").value.trim()||"LinkedIn",
-    job_url:document.getElementById("aj-url").value.trim()||null,
-    contacts:[{
-      first_name:fn,
-      last_name:document.getElementById("aj-ln").value.trim(),
-      designation:document.getElementById("aj-desig").value.trim()||null,
-      email:document.getElementById("aj-email").value.trim()||null,
-      phone:document.getElementById("aj-phone").value.trim()||null
-    }]
-  }).then(function(){
-    STATE.modal=null;
-    showToast("Lead created","success");
-    return refreshJobs();
-  }).catch(function(e){
-    showToast("Failed to create lead: "+e.message,"error");
-  });
 }
 function openAddContact(jid){ STATE.modal={type:"addContact",job_id:jid}; render(); }
 function backToJob(jid){ STATE.modal={type:"jobDetail",id:jid}; render(); }

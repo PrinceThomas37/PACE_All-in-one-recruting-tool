@@ -78,7 +78,7 @@ step('hot jobs uses the same rule (1 to client, 2 to BD)', hot.client_submission
 const st = (r.body.stage_time || []);
 const bdm = st.find(x => x.stage === 'Submitted to BDM') || {};
 step('time in stage: someone has sat at BDM 20 days — stuck', bdm.now_there === 1 && bdm.stuck === 1, JSON.stringify(bdm));
-step('time in stage: finished stays are measured (Sourced → BDM took 2 days)', (st.find(x => x.stage === 'Sourced') || {}).samples >= 1);
+step('time in stage covers the work stages only — Sourced (inventory) is not evaluated', !st.some(x => x.stage === 'Sourced'));
 step('another organisation\'s history was not read (no Placement appears)', !st.some(x => x.stage === 'Placement') && t.placements === 0);
 
 r = await call('GET /recruiting-dashboard', admin);
@@ -98,7 +98,7 @@ step('the week is seven calendar days — a submission exactly 7×24 h ago is NO
 step('this month is the VIEWER\'s: UTC counts 2, Kolkata (already the 1st) counts 3', dUtc.submissions_month === 2 && dIst.submissions_month === 3, dUtc.submissions_month + '/' + dIst.submissions_month);
 const first = new Date(Date.UTC(Y, M, 1)).toISOString().slice(0, 10);
 const rUtc = (await call('GET /reports/recruiting', admin, { from: first, to: first })).body, rIst = (await call('GET /reports/recruiting', admin, { from: first, to: first, tz: 'Asia/Kolkata' })).body;
-const tot = (b) => (b.by_user || []).reduce((n, u) => n + u.total, 0);
+const tot = (b) => (b.by_user || []).reduce((n, u) => n + u.to_bdm, 0);
 step('a report for "the 1st" is cut at the viewer\'s midnight: UTC finds none, Kolkata finds C', tot(rUtc) === 0 && tot(rIst) === 1, tot(rUtc) + '/' + tot(rIst));
 
 const failed = results.filter(x => !x).length;

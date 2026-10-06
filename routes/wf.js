@@ -6,6 +6,8 @@
 // ============================================================================
 const express = require('express');
 const own = require('../services/ownership');
+const aiProvider = require('../services/ai-provider');
+const sequenceDraft = require('../services/sequence-draft');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -199,6 +201,24 @@ module.exports = (ctx) => {
       if (error) throw error;
       (data || []).forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
       res.json(data || []);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // WRITE A STEP'S EMAIL (D-0077). A short instruction becomes a TEMPLATE written
+  // in merge fields, held to a checker (services/sequence-draft.js); with no AI,
+  // no allowance left, or a draft that breaks a rule it answers with a
+  // ready-made starter and says so — never an error, never a silent swap.
+  // Same gate as designing a sequence at all.
+  router.post('/wf/draft-email', auth, async (req, res) => {
+    try {
+      if (!canDesign(req)) return res.status(403).json({ error: 'Not permitted.' });
+      const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 600);
+      const purpose = sequenceDraft.purposeOf(req.body && req.body.purpose);
+      const result = await sequenceDraft.draft({
+        prompt, purpose,
+        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 700, system, prompt: user }),
+      });
+      res.json(Object.assign({ purpose }, result));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
