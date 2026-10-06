@@ -185,27 +185,27 @@ function renderReminders(){
     var days=daysUntil(r.return_date);
     var isOOO=r.reminder_type==='ooo_return';
     return '<tr>'+
-      '<td><div style="font-weight:500;font-size:13px">'+htmlEsc(r.contact_name||'—')+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(r.company_name||'')+'</div></td>'+
+      '<td><div class="fs-13" style="font-weight:500">'+htmlEsc(r.contact_name||'—')+'</div>'+
+        '<div class="fs-11 c-text3">'+htmlEsc(r.company_name||'')+'</div></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.email||'—')+'</td>'+
-      '<td><span title="'+escAttr(reminderWhy(r).why)+'" style="font-size:11px;padding:2px 7px;background:'+(isOOO?'var(--amber-l)':'var(--accent-l)')+';color:'+(isOOO?'var(--amber)':'var(--accent)')+';border-radius:8px;font-weight:600">'+htmlEsc(reminderWhy(r).label)+'</span></td>'+
+      '<td><span title="'+escAttr(reminderWhy(r).why)+'" class="fs-11" style="padding:2px 7px;background:'+(isOOO?'var(--amber-l)':'var(--accent-l)')+';color:'+(isOOO?'var(--amber)':'var(--accent)')+';border-radius:8px;font-weight:600">'+htmlEsc(reminderWhy(r).label)+'</span></td>'+
       // Amber, not red: a reminder due in three days is "soon", not an
       // emergency. Same reasoning as the cards above — if the list colours
       // every near row, the colour stops carrying meaning.
       '<td><span class="rem-pill" style="background:'+(days<=3?'var(--amber-l)':'var(--bg)')+';color:'+(days<=3?'var(--amber)':'var(--text3)')+'">'+days+' day'+(days!==1?'s':'')+'</span></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.return_date||'')+'</td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(String(r.reminder_time||'09:00').slice(0,5))+'</td>'+
-      '<td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.note||'')+'</td>'+
+      '<td class="fs-12" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(r.note||'')+'</td>'+
       '<td><button class="btn btn-outline btn-xs" onclick="dismissReminder(\''+r.id+'\')">Remove</button></td>'+
     '</tr>';
   }).join('');
 
   var sentRows=sent.slice(0,10).map(function(r){
     return '<tr>'+
-      '<td style="font-size:12px">'+htmlEsc(r.contact_name||'—')+'</td>'+
+      '<td class="fs-12">'+htmlEsc(r.contact_name||'—')+'</td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.company_name||'')+'</td>'+
       '<td style="font-size:12px;color:var(--text3)">'+htmlEsc(r.return_date||'')+'</td>'+
-      '<td><span style="font-size:11px;padding:2px 7px;background:var(--green-l);color:var(--green);border-radius:8px">Done</span></td>'+
+      '<td><span class="fs-11 c-green" style="padding:2px 7px;background:var(--green-l);border-radius:8px">Done</span></td>'+
     '</tr>';
   }).join('');
 
@@ -238,22 +238,22 @@ function renderReminders(){
     dueCards+
 
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:18px">'+
-      '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600;font-size:13px">Upcoming reminders ('+upcoming.length+')</div>'+
+      '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600">Upcoming reminders ('+upcoming.length+')</div>'+
       (upcoming.length?
-        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
-          '<thead style="background:var(--bg);color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px">'+
+        '<div style="overflow-x:auto"><table class="fs-13" style="width:100%;border-collapse:collapse">'+
+          '<thead class="c-text3 fs-11" style="background:var(--bg);text-transform:uppercase;letter-spacing:.5px">'+
             '<tr><th style="padding:10px 12px;text-align:left">Contact</th><th style="padding:10px 12px;text-align:left">Email</th><th style="padding:10px 12px;text-align:left">Type</th><th style="padding:10px 12px;text-align:left">In</th><th style="padding:10px 12px;text-align:left">Date</th><th style="padding:10px 12px;text-align:left">Time</th><th style="padding:10px 12px;text-align:left">Note</th><th style="padding:10px 12px"></th></tr>'+
           '</thead>'+
           '<tbody>'+upcomingRows+'</tbody>'+
         '</table></div>'
-      :'<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">No upcoming reminders.</div>')+
+      :'<div class="c-text3 fs-13" style="padding:24px;text-align:center">No upcoming reminders.</div>')+
     '</div>'+
 
     (sent.length?
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
-        '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600;font-size:13px;color:var(--text3)">Recently dismissed ('+sent.length+')</div>'+
-        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
-          '<thead style="background:var(--bg);color:var(--text3);font-size:11px;text-transform:uppercase">'+
+        '<div class="fs-13 c-text3" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:600">Recently dismissed ('+sent.length+')</div>'+
+        '<div style="overflow-x:auto"><table class="fs-13" style="width:100%;border-collapse:collapse">'+
+          '<thead class="c-text3 fs-11" style="background:var(--bg);text-transform:uppercase">'+
             '<tr><th style="padding:10px 12px;text-align:left">Contact</th><th style="padding:10px 12px;text-align:left">Company</th><th style="padding:10px 12px;text-align:left">Date</th><th style="padding:10px 12px;text-align:left">Status</th></tr>'+
           '</thead>'+
           '<tbody>'+sentRows+'</tbody>'+
@@ -264,11 +264,11 @@ function renderReminders(){
 }
 
 // ── Add reminder ──────────────────────────────
-function remField(lbl,inner){return '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">'+lbl+'</label>'+inner+'</div>';}
+function remField(lbl,inner){return '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em">'+lbl+'</label>'+inner+'</div>';}
 window.remOpenAdd=function(){
   var t=todayIST();
   STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:440px">'+
-    '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Add reminder</div>'+
+    '<div class="fs-15" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Add reminder</div>'+
     '<div style="padding:16px 20px;display:grid;gap:12px">'+
       remField('Who','<input id="rem-name" class="inp" placeholder="Contact or candidate name"/>')+
       remField('Company','<input id="rem-co" class="inp" placeholder="Company (optional)"/>')+
@@ -315,9 +315,9 @@ function remRenderMeeting(){
   var m=STATE._meeting||{};
   if(m.joinUrl){
     STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:520px">'+
-      '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Send meeting invite</div>'+
+      '<div class="fs-15" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Send meeting invite</div>'+
       '<div style="padding:16px 20px;display:grid;gap:12px">'+
-        '<div style="font-size:12px;color:var(--green);background:var(--green-l);padding:8px 10px;border-radius:8px">✓ Teams link created — review the email, then send.</div>'+
+        '<div class="fs-12 c-green" style="background:var(--green-l);padding:8px 10px;border-radius:8px">✓ Teams link created — review the email, then send.</div>'+
         remField('To','<input id="mt-to" class="inp" value="'+escAttr(m.name+' <'+m.email+'>')+'" readonly style="color:var(--text3)"/>')+
         remField('Subject','<input id="mt-esub" class="inp" value="'+escAttr(m.emailSubject)+'"/>')+
         remField('Message','<textarea id="mt-ebody" class="inp" style="min-height:150px;resize:vertical">'+htmlEsc(m.emailBody)+'</textarea>')+
@@ -327,11 +327,11 @@ function remRenderMeeting(){
     render();return;
   }
   var people=remPeople(m.q);
-  var results=(m.q&&people.length)?'<div style="border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:170px;overflow:auto">'+people.map(function(p){return '<div onclick="remPickAttendee(\''+escAttr(p.name)+'\',\''+escAttr(p.email)+'\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12.5px" onmouseenter="this.style.background=\'var(--bg)\'" onmouseleave="this.style.background=\'transparent\'"><b>'+htmlEsc(p.name)+'</b> <span style="color:var(--text3)">· '+htmlEsc(p.email)+'</span> <span style="font-size:10px;color:var(--accent)">'+p.type+'</span></div>';}).join('')+'</div>':(m.q?'<div style="font-size:11.5px;color:var(--text3);margin-top:4px">No match — type a name/email above or fill the fields below.</div>':'');
+  var results=(m.q&&people.length)?'<div style="border:1px solid var(--border);border-radius:8px;margin-top:4px;max-height:170px;overflow:auto">'+people.map(function(p){return '<div onclick="remPickAttendee(\''+escAttr(p.name)+'\',\''+escAttr(p.email)+'\')" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12.5px" onmouseenter="this.style.background=\'var(--bg)\'" onmouseleave="this.style.background=\'transparent\'"><b>'+htmlEsc(p.name)+'</b> <span class="c-text3">· '+htmlEsc(p.email)+'</span> <span class="fs-10 c-accent">'+p.type+'</span></div>';}).join('')+'</div>':(m.q?'<div class="fs-11_5 c-text3" style="margin-top:4px">No match — type a name/email above or fill the fields below.</div>':'');
   STATE.modal='<div class="modal" onclick="event.stopPropagation()" style="max-width:520px">'+
-    '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Schedule a meeting</div>'+
+    '<div class="fs-15" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Schedule a meeting</div>'+
     '<div style="padding:16px 20px;display:grid;gap:12px">'+
-      remField('Find a person <span style="font-weight:400;color:var(--text3);text-transform:none">— candidate or client contact</span>','<input id="mt-q" class="inp" value="'+escAttr(m.q)+'" placeholder="Search by name or email" oninput="remMeetingSearch(this.value)"/>'+results)+
+      remField('Find a person <span class="c-text3" style="font-weight:400;text-transform:none">— candidate or client contact</span>','<input id="mt-q" class="inp" value="'+escAttr(m.q)+'" placeholder="Search by name or email" oninput="remMeetingSearch(this.value)"/>'+results)+
       '<div style="display:flex;gap:10px"><div style="flex:1">'+remField('Name','<input id="mt-name" class="inp" value="'+escAttr(m.name)+'" onchange="remMeetingSet(\'name\',this.value)" placeholder="Attendee name"/>')+'</div>'+
         '<div style="flex:1">'+remField('Email','<input id="mt-email" class="inp" type="email" value="'+escAttr(m.email)+'" onchange="remMeetingSet(\'email\',this.value)" placeholder="attendee@email.com"/>')+'</div></div>'+
       remField('Subject','<input id="mt-subject" class="inp" value="'+escAttr(m.subject)+'" onchange="remMeetingSet(\'subject\',this.value)" placeholder="e.g. Intro call"/>')+
@@ -339,9 +339,9 @@ function remRenderMeeting(){
         '<div style="width:110px">'+remField('Time','<input id="mt-time" class="inp" type="time" value="'+escAttr(m.time)+'" onchange="remMeetingSet(\'time\',this.value)"/>')+'</div>'+
         '<div style="width:110px">'+remField('Minutes','<select id="mt-min" class="inp" onchange="remMeetingSet(\'minutes\',this.value)">'+['15','30','45','60'].map(function(x){return '<option'+(m.minutes===x?' selected':'')+'>'+x+'</option>';}).join('')+'</select>')+'</div></div>'+
       remField('Platform','<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-        '<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 11px;border:1.5px solid var(--accent);border-radius:8px;background:var(--accent-l);color:var(--accent)">✓ Microsoft Teams</span>'+
-        '<span style="font-size:12px;padding:6px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text3)">Zoom · soon</span>'+
-        '<span style="font-size:12px;padding:6px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text3)">Google Meet · soon</span>'+
+        '<span class="fs-12_5 c-accent" style="display:flex;align-items:center;gap:6px;padding:6px 11px;border:1.5px solid var(--accent);border-radius:8px;background:var(--accent-l)">✓ Microsoft Teams</span>'+
+        '<span class="fs-12 c-text3" style="padding:6px 11px;border:1px solid var(--border);border-radius:8px">Zoom · soon</span>'+
+        '<span class="fs-12 c-text3" style="padding:6px 11px;border:1px solid var(--border);border-radius:8px">Google Meet · soon</span>'+
       '</div>')+
     '</div>'+
     '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="remCreateMeeting()">Create link & preview email →</button></div>'+
@@ -415,7 +415,7 @@ function renderMailMergeModal(){
     '<div class="mh">'+
       '<div>'+
         '<div class="mt">Mail Merge</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+
+        '<div class="fs-12 c-text3" style="margin-top:2px">'+
           sent+' sent · '+(total-sent-skipped)+' remaining · '+skipped+' skipped'+
         '</div>'+
       '</div>'+
@@ -433,12 +433,12 @@ function renderMailMergeModal(){
           ' style="width:32px;height:32px;border-radius:50%;border:1.5px solid var(--border2);background:var(--card);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px">‹</button>'+
         // Lead info
         '<div style="text-align:center;flex:1;padding:0 14px">'+
-          '<div style="font-weight:600;font-size:14px">'+htmlEsc(l.fn+' '+l.ln)+'</div>'+
-          '<div style="font-size:12px;color:var(--text3)">'+htmlEsc(l.desig||"")+(co.name?' · '+htmlEsc(co.name):'')+'</div>'+
-          '<div style="font-size:12px;color:var(--accent);margin-top:2px">'+htmlEsc(l.email||"No email")+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:4px">'+
+          '<div class="fs-14" style="font-weight:600">'+htmlEsc(l.fn+' '+l.ln)+'</div>'+
+          '<div class="fs-12 c-text3">'+htmlEsc(l.desig||"")+(co.name?' · '+htmlEsc(co.name):'')+'</div>'+
+          '<div class="fs-12 c-accent" style="margin-top:2px">'+htmlEsc(l.email||"No email")+'</div>'+
+          '<div class="fs-11 c-text3" style="margin-top:4px">'+
             (idx+1)+' of '+total+
-            (isSent?' · <span style="color:var(--green);font-weight:500">✓ Sent</span>':'')+
+            (isSent?' · <span class="c-green" style="font-weight:500">✓ Sent</span>':'')+
           '</div>'+
         '</div>'+
         // Next arrow
@@ -474,7 +474,7 @@ function renderMailMergeModal(){
       '</div>'+
       '<div class="flex gap2">'+
         (isSent?
-          '<span style="font-size:13px;color:var(--green);font-weight:500">✓ Sent</span>':
+          '<span class="fs-13 c-green" style="font-weight:500">✓ Sent</span>':
           '<button class="btn btn-primary" onclick="mailMergeSend()" '+(l.email?'':'disabled style="opacity:.4" title="No email address"')+'>'+ico("send",13)+' Send this email</button>'
         )+
         (idx<total-1?
@@ -520,7 +520,7 @@ function renderProfile(){
     var sel=u.plt===p;
     return '<div onclick="setProfilePlt(\''+p+'\')" style="display:flex;align-items:center;gap:11px;padding:12px 13px;border:2px solid '+(sel?"var(--accent)":"var(--border)")+';border-radius:var(--r2);cursor:pointer;margin-bottom:8px;background:'+(sel?"var(--accent-l)":"var(--card)")+';transition:all .12s">'+
       '<div style="width:22px;height:22px;border-radius:5px;background:'+(sel?"var(--accent)":"var(--bg)")+';display:flex;align-items:center;justify-content:center">'+ico("email",13)+'</div>'+
-      '<div style="flex:1"><div style="font-weight:500;font-size:13.5px;color:'+(sel?"var(--accent)":"var(--text)")+'">'+p+'</div><div class="f12 text3">'+(p==="Gmail"?"Google Workspace":"Microsoft 365")+'</div></div>'+
+      '<div style="flex:1"><div class="fs-13_5" style="font-weight:500;color:'+(sel?"var(--accent)":"var(--text)")+'">'+p+'</div><div class="f12 text3">'+(p==="Gmail"?"Google Workspace":"Microsoft 365")+'</div></div>'+
       (sel?'<div style="width:16px;height:16px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 10 10" width="9" height="9" fill="none" stroke="#fff" stroke-width="1.6"><polyline points="1.5,5 4,7.5 8.5,2.5"/></svg></div>':"")+
     '</div>';
   }).join("");
@@ -531,7 +531,7 @@ function renderProfile(){
       '<div>'+
         '<div class="card cp mb4">'+
           '<div class="flex aic gap4 mb4">'+av(u,"48")+
-            '<div><div style="font-family:var(--display);font-weight:600;font-size:18px">'+u.name+'</div>'+
+            '<div><div class="fs-18" style="font-family:var(--display);font-weight:600">'+u.name+'</div>'+
             '<div class="text3 f12 mt1">'+roleLabel(u.role)+' · '+u.empId+'</div>'+
             '<span class="bdg '+(u.role==="admin"?"bdg-purple":u.role==="bd"?"bdg-blue":"bdg-green")+' mt1">'+roleLabel(u.role)+'</span></div>'+
           '</div>'+
@@ -553,7 +553,7 @@ function renderProfile(){
           '<div class="fw6 mb1">Email platform</div>'+
           '<div class="f12 text3 mb3">Choose your outreach platform. Emails will open in this app when you click Send.</div>'+
           pltOpts+
-          '<div style="margin-top:13px;padding:9px 11px;background:var(--bg);border-radius:var(--r);font-size:12px;color:var(--text3)">In production: clicking Connect will open OAuth authorization to send emails from your account.</div>'+
+          '<div class="fs-12 c-text3" style="margin-top:13px;padding:9px 11px;background:var(--bg);border-radius:var(--r)">In production: clicking Connect will open OAuth authorization to send emails from your account.</div>'+
         '</div>'+
       '</div>'+
     '</div>'+
@@ -578,7 +578,7 @@ function renderAddLeadModal(){
         '<div class="fw5 f13 mb2">Company</div>'+
         '<div class="flex gap2 mb3"><button class="fc on" id="co-new-btn" onclick="toggleCoMode(true)">New company</button><button class="fc" id="co-exist-btn" onclick="toggleCoMode(false)">Existing company</button></div>'+
         '<div id="co-new-fields">'+
-          '<div class="g3"><div class="fgrp"><label class="flbl">Company name <span style="color:var(--red)">*</span></label><input class="inp" id="f-coname" placeholder="e.g. Acme Corp"/></div>'+
+          '<div class="g3"><div class="fgrp"><label class="flbl">Company name <span class="c-red">*</span></label><input class="inp" id="f-coname" placeholder="e.g. Acme Corp"/></div>'+
           '<div class="fgrp"><label class="flbl">Website</label><input class="inp" id="f-web" placeholder="acme.com"/></div>'+
           '<div class="fgrp"><label class="flbl">Industry</label><select class="sel" id="f-ind">'+indOpts+'</select></div>'+
           '<div class="fgrp"><label class="flbl">Location</label><input class="inp" id="f-loc" placeholder="City"/></div></div>'+
@@ -587,16 +587,16 @@ function renderAddLeadModal(){
       '</div>'+
       '<div class="fw5 f13 mb3">Point of Contact</div>'+
       '<div class="g3 mb4">'+
-        '<div class="fgrp"><label class="flbl">First name <span style="color:var(--red)">*</span></label><input class="inp" id="f-fn"/></div>'+
+        '<div class="fgrp"><label class="flbl">First name <span class="c-red">*</span></label><input class="inp" id="f-fn"/></div>'+
         '<div class="fgrp"><label class="flbl">Last name</label><input class="inp" id="f-ln"/></div>'+
         '<div class="fgrp"><label class="flbl">Designation</label><input class="inp" id="f-desig" placeholder="e.g. CTO"/></div>'+
-        '<div class="fgrp span2"><label class="flbl">Email ID <span style="color:var(--red)">*</span></label><input class="inp" id="f-email" type="email"/></div>'+
+        '<div class="fgrp span2"><label class="flbl">Email ID <span class="c-red">*</span></label><input class="inp" id="f-email" type="email"/></div>'+
         '<div class="fgrp"><label class="flbl">Phone</label><input class="inp" id="f-phone" type="tel"/></div>'+
         '<div class="fgrp span3"><label class="flbl">LinkedIn URL</label><input class="inp" id="f-li" placeholder="linkedin.com/in/..."/></div>'+
       '</div>'+
       '<div class="fw5 f13 mb3">Job opening</div>'+
       '<div class="g3 mb4">'+
-        '<div class="fgrp span2"><label class="flbl">Position / Role <span style="color:var(--red)">*</span></label><input class="inp" id="f-pos" placeholder="e.g. VP of Engineering"/></div>'+
+        '<div class="fgrp span2"><label class="flbl">Position / Role <span class="c-red">*</span></label><input class="inp" id="f-pos" placeholder="e.g. VP of Engineering"/></div>'+
         '<div class="fgrp"><label class="flbl">Source</label><select class="sel" id="f-src">'+srcOpts+'</select></div>'+
       '</div>'+
       '<div class="g2">'+
@@ -619,8 +619,8 @@ function renderUserModal(existing){
     '<div class="mh"><div class="mt">'+(existing?"Edit user":"Add new user")+'</div><button class="btn-icon" onclick="closeModal()">'+ico("x",14)+'</button></div>'+
     '<div class="mb_">'+
       '<div class="g2 mb3">'+
-        '<div class="fgrp"><label class="flbl">Full name <span style="color:var(--red)">*</span></label><input class="inp" id="u-name" value="'+htmlEsc(u.name)+'"/></div>'+
-        '<div class="fgrp"><label class="flbl">Work email <span style="color:var(--red)">*</span></label><input class="inp" id="u-email" type="email" value="'+htmlEsc(u.email)+'"/></div>'+
+        '<div class="fgrp"><label class="flbl">Full name <span class="c-red">*</span></label><input class="inp" id="u-name" value="'+htmlEsc(u.name)+'"/></div>'+
+        '<div class="fgrp"><label class="flbl">Work email <span class="c-red">*</span></label><input class="inp" id="u-email" type="email" value="'+htmlEsc(u.email)+'"/></div>'+
       '</div>'+
       '<div class="g2 mb3">'+
         '<div class="fgrp"><label class="flbl">Employee ID</label><input class="inp" id="u-eid" value="'+htmlEsc(u.empId)+'"/></div>'+
@@ -640,7 +640,7 @@ function renderUserModal(existing){
         '<div class="fgrp"><label class="flbl">Email platform</label><select class="sel" id="u-plt"><option'+(u.plt==="Gmail"?" selected":"")+'>Gmail</option><option'+(u.plt==="Outlook"?" selected":"")+'>Outlook</option></select></div>'+
       '</div>'+
       '<div class="fgrp" id="u-bd-wrap" style="'+(isRA?"":"display:none")+'">'+
-        '<label class="flbl">Assigned BD Manager <span style="font-size:11px;color:var(--text3)">(only for Research Analysts)</span></label>'+
+        '<label class="flbl">Assigned BD Manager <span class="fs-11 c-text3">(only for Research Analysts)</span></label>'+
         '<select class="sel" id="u-bd">'+bdOpts+'</select>'+
       '</div>'+
     '</div>'+

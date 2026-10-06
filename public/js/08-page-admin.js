@@ -3,7 +3,7 @@
 window.openSystemSettingsModal=function(){
   STATE._sysSettingsErrors={};
   if(STATE.sysSettings){renderSystemSettingsModal();return;}
-  STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">System Settings</div></div><div class="mb_" style="padding:24px;text-align:center;color:var(--text3)">Loading…</div></div>';
+  STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">System Settings</div></div><div class="mb_ c-text3" style="padding:24px;text-align:center">Loading…</div></div>';
   render();
   apiGet('/admin/settings/numbers').then(function(r){
     STATE.sysSettings=r||[];
@@ -32,19 +32,19 @@ function renderSystemSettingsModal(){
       return '<div style="margin-bottom:14px">'+
         '<label class="flbl" style="display:flex;justify-content:space-between;align-items:baseline">'+
           '<span>'+htmlEsc(s.label)+'</span>'+
-          '<span style="font-size:11px;color:var(--text3);font-weight:400">'+s.min+'–'+s.max+' '+htmlEsc(s.unit||'')+'</span>'+
+          '<span class="fs-11 c-text3" style="font-weight:400">'+s.min+'–'+s.max+' '+htmlEsc(s.unit||'')+'</span>'+
         '</label>'+
         '<input class="inp" type="number" id="sys-'+s.key+'" value="'+htmlEsc(String(s.value))+'" min="'+s.min+'" max="'+s.max+'" step="any" data-key="'+s.key+'" style="'+(err?'border-color:var(--red)':'')+'"/>'+
-        '<div style="font-size:11.5px;color:'+(err?'var(--red)':'var(--text3)')+';margin-top:3px">'+htmlEsc(err||s.description)+'</div>'+
+        '<div class="fs-11_5" style="color:'+(err?'var(--red)':'var(--text3)')+';margin-top:3px">'+htmlEsc(err||s.description)+'</div>'+
       '</div>';
     }).join('');
     return '<div style="margin-bottom:18px">'+
-      '<div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(g.group)+'</div>'+
+      '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(g.group)+'</div>'+
       rows+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
-    '<div class="mh"><div><div class="mt">System Settings</div><div style="font-size:12px;color:var(--text3);margin-top:2px">Operational numbers used across the platform. Changes apply the next time each check runs (within about a minute).</div></div>'+
+    '<div class="mh"><div><div class="mt">System Settings</div><div class="fs-12 c-text3" style="margin-top:2px">Operational numbers used across the platform. Changes apply the next time each check runs (within about a minute).</div></div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+body+'</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
@@ -90,7 +90,7 @@ window.saveSystemSettings=function(){
 // ── Integrations & API Keys (admin) ──
 window.openIntegrationsModal=function(){
   STATE._intgTest={}; STATE._emailVerifyResult=null; STATE.aiHealth=null;
-  STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">Integrations & API Keys</div></div><div class="mb_" style="padding:24px;text-align:center;color:var(--text3)">Loading…</div></div>';
+  STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">Integrations & API Keys</div></div><div class="mb_ c-text3" style="padding:24px;text-align:center">Loading…</div></div>';
   render();
   STATE.apolloUsage=null;
   apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); loadApolloUsage(); })
@@ -118,8 +118,8 @@ function renderIntegrationsModal(){
   var cats=(d.categories||[]).map(function(cat){
     var cards=cat.items.map(function(it){
       var badge=it.configured
-        ?'<span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:var(--green-l);color:var(--green)">Connected</span>'
-        :'<span style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;background:var(--bg3);color:var(--text3)">Not configured</span>';
+        ?'<span class="fs-10 c-green" style="padding:2px 8px;border-radius:6px;font-weight:700;background:var(--green-l)">Connected</span>'
+        :'<span class="fs-10 c-text3" style="padding:2px 8px;border-radius:6px;font-weight:700;background:var(--bg3)">Not configured</span>';
       var fields=it.fields.map(function(f){
         // A model name or a server address is not a credential: show it as
         // readable text with its current value, or the operator can never see
@@ -131,8 +131,8 @@ function renderIntegrationsModal(){
       }).join('');
       var t=tests[it.id]; var testHtml='';
       if(t){ testHtml=t.pending
-        ?'<span style="font-size:11.5px;color:var(--text3);margin-left:6px">Testing…</span>'
-        :'<span style="font-size:11.5px;margin-left:6px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✓ '+htmlEsc(t.detail||'OK'):'✗ '+htmlEsc(t.error||'failed'))+'</span>'+
+        ?'<span class="fs-11_5 c-text3" style="margin-left:6px">Testing…</span>'
+        :'<span class="fs-11_5" style="margin-left:6px;color:'+(t.ok?'var(--green)':'var(--red)')+'">'+(t.ok?'✓ '+htmlEsc(t.detail||'OK'):'✗ '+htmlEsc(t.error||'failed'))+'</span>'+
           // R-030: Test checks the key TYPED in the box, which may not be the
           // one saved. Saying only "✓ Key valid" beside a "Not configured"
           // badge made the card contradict itself; say which key was tested.
@@ -140,13 +140,13 @@ function renderIntegrationsModal(){
             ?'That was the key typed above — it is not saved yet, so PACE is still using the saved one. Press Save to switch.'
             :'That was the key typed above — it is not saved yet. Press Save to start using it.')+'</div>':''); }
       var activeToggle=it.verifier
-        ?'<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);cursor:pointer;margin-top:2px"><input type="checkbox" '+(it.active_verifier?'checked':'')+' onchange="setActiveVerifier(\''+it.id+'\',this.checked)"> Use this verifier for pre-send checks</label>'
+        ?'<label class="fs-11_5 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:2px"><input type="checkbox" '+(it.active_verifier?'checked':'')+' onchange="setActiveVerifier(\''+it.id+'\',this.checked)"> Use this verifier for pre-send checks</label>'
         :(it.ai
-        ?'<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2);cursor:pointer;margin-top:2px"><input type="radio" name="intg-active-ai" '+(it.active_ai?'checked':'')+' onchange="setActiveAi(\''+it.id+'\')"> Use this provider first</label>'
+        ?'<label class="fs-11_5 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:2px"><input type="radio" name="intg-active-ai" '+(it.active_ai?'checked':'')+' onchange="setActiveAi(\''+it.id+'\')"> Use this provider first</label>'
         :'');
       return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div style="font-weight:600;font-size:13px">'+htmlEsc(it.label)+'</div>'+badge+'</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">'+htmlEsc(it.description)+(it.docs?' · <a href="'+htmlEsc(it.docs)+'" target="_blank" rel="noopener" style="color:var(--accent)">Get key ↗</a>':'')+'</div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div class="fs-13" style="font-weight:600">'+htmlEsc(it.label)+'</div>'+badge+'</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-bottom:8px">'+htmlEsc(it.description)+(it.docs?' · <a href="'+htmlEsc(it.docs)+'" target="_blank" rel="noopener" class="c-accent">Get key ↗</a>':'')+'</div>'+
         fields+activeToggle+(it.id==='apollo'?apolloLimitBlock():'')+
         '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
           '<button class="btn btn-sm btn-primary" onclick="saveIntegration(\''+it.id+'\')">Save</button>'+
@@ -157,12 +157,12 @@ function renderIntegrationsModal(){
       '</div>';
     }).join('');
     return '<div style="margin-bottom:16px">'+
-      '<div style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
+      '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
       (cat.category==='AI'?aiProviderNote()+aiHealthCard()+aiBudgetCard():'')+cards+(cat.category==='Email verification'?emailVerifyTester():'')+
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
-    '<div class="mh"><div><div class="mt">Integrations & API Keys</div><div style="font-size:12px;color:var(--text3);margin-top:2px">Paste a provider key and Save. Stored keys are never shown again — only a masked hint. The matching backend hook uses them automatically.</div></div>'+
+    '<div class="mh"><div><div class="mt">Integrations & API Keys</div><div class="fs-12 c-text3" style="margin-top:2px">Paste a provider key and Save. Stored keys are never shown again — only a masked hint. The matching backend hook uses them automatically.</div></div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+cats+'</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Close</button></div>'+
@@ -219,9 +219,9 @@ window.saveApolloLimit=function(){
 function emailVerifyTester(){
   var r=STATE._emailVerifyResult;
   var c=r?(r.result==='valid'?'var(--green)':r.result==='invalid'?'var(--red)':r.result==='risky'?'var(--amber)':'var(--text3)'):'var(--text3)';
-  var resHtml=r?'<div style="font-size:12px;margin-top:6px;color:'+c+'">Result: <b>'+htmlEsc(r.result)+'</b>'+(r.provider?' ('+htmlEsc(r.provider)+')':'')+(r.reason==='not_configured'?' — no verifier configured yet':'')+'</div>':'';
+  var resHtml=r?'<div class="fs-12" style="margin-top:6px;color:'+c+'">Result: <b>'+htmlEsc(r.result)+'</b>'+(r.provider?' ('+htmlEsc(r.provider)+')':'')+(r.reason==='not_configured'?' — no verifier configured yet':'')+'</div>':'';
   return '<div style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-top:2px">'+
-    '<div style="font-size:11.5px;color:var(--text3);margin-bottom:6px">Test the active verifier against an address:</div>'+
+    '<div class="fs-11_5 c-text3" style="margin-bottom:6px">Test the active verifier against an address:</div>'+
     '<div style="display:flex;gap:6px"><input class="inp" id="intg-verify-addr" placeholder="name@company.com" style="flex:1"/>'+
       '<button class="btn btn-sm btn-primary" onclick="runEmailVerifyTest()">Verify</button></div>'+resHtml+
   '</div>';
@@ -271,20 +271,20 @@ function aiBudgetCard(){
       '<td style="padding:2px 0;text-align:right;font-weight:600">'+(f.spent_today||0).toLocaleString()+'</td></tr>';
   }).join('');
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
-    '<div style="font-weight:600;font-size:13px;margin-bottom:2px">Daily budget</div>'+
-    '<div style="font-size:11.5px;color:var(--text3);line-height:1.5">Spending is capped per day so a free allowance cannot be used up in one morning. '+
+    '<div class="fs-13" style="font-weight:600;margin-bottom:2px">Daily budget</div>'+
+    '<div class="fs-11_5 c-text3" style="line-height:1.5">Spending is capped per day so a free allowance cannot be used up in one morning. '+
       'Past the cap, features go back to their built-in version until tomorrow — nothing breaks and nothing is charged.</div>'+
     bar+
-    '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px"><b>'+b.spent.tokens.toLocaleString()+'</b> of '+b.caps.tokens.toLocaleString()+' tokens used today · <b>'+b.spent.calls.toLocaleString()+'</b> of '+b.caps.calls.toLocaleString()+' requests</div>'+
+    '<div class="fs-11_5 c-text2" style="margin-bottom:8px"><b>'+b.spent.tokens.toLocaleString()+'</b> of '+b.caps.tokens.toLocaleString()+' tokens used today · <b>'+b.spent.calls.toLocaleString()+'</b> of '+b.caps.calls.toLocaleString()+' requests</div>'+
     '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'+
       '<input class="inp" id="aib-tokens" type="number" min="0" value="'+b.caps.tokens+'" title="Tokens per day" style="width:120px"/>'+
-      '<span style="font-size:11.5px;color:var(--text3)">tokens/day</span>'+
+      '<span class="fs-11_5 c-text3">tokens/day</span>'+
       '<input class="inp" id="aib-calls" type="number" min="0" value="'+b.caps.calls+'" title="Requests per day" style="width:90px"/>'+
-      '<span style="font-size:11.5px;color:var(--text3)">requests/day</span>'+
+      '<span class="fs-11_5 c-text3">requests/day</span>'+
       '<button class="btn btn-sm btn-primary" onclick="saveAiBudget()">Save</button>'+
     '</div>'+
-    '<table style="width:100%;font-size:11px;border-collapse:collapse">'+
-      '<tr style="color:var(--text3);text-transform:uppercase;letter-spacing:.05em;font-size:9.5px">'+
+    '<table class="fs-11" style="width:100%;border-collapse:collapse">'+
+      '<tr class="c-text3 fs-9_5" style="text-transform:uppercase;letter-spacing:.05em">'+
         '<td style="padding-bottom:4px">Feature</td><td>Model</td><td style="text-align:right">Per request</td><td style="text-align:right">Used today</td></tr>'+
       rows+
     '</table>'+
@@ -343,9 +343,9 @@ function canWriteText(id){ return !AI_NOT_WRITERS.test(String(id||'')); }
 var AI_TIER_USE={fast:'resume parsing, job-description cleanup, briefings',
                  quality:'the outreach generator and cold emails'};
 function attemptLine(a){
-  var tier=a.tier?'<span style="color:var(--text3)"> · '+htmlEsc(a.tier)+' model'+
+  var tier=a.tier?'<span class="c-text3"> · '+htmlEsc(a.tier)+' model'+
     (AI_TIER_USE[a.tier]?' ('+htmlEsc(AI_TIER_USE[a.tier])+')':'')+'</span>':'';
-  var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span style="color:var(--text3)">'+htmlEsc(a.model||'')+'</span>'+tier+'<br>'+
+  var head='<div style="margin-bottom:6px;color:'+(a.ok?'var(--green)':'var(--red)')+'"><b>'+(a.ok?'✓ ':'✗ ')+htmlEsc(a.provider)+'</b> <span class="c-text3">'+htmlEsc(a.model||'')+'</span>'+tier+'<br>'+
     htmlEsc(a.ok?('replied in '+a.ms+'ms: "'+(a.sample||'')+'"'):(a.error||'failed'));
   if(!a.ok&&a.available_models&&a.available_models.length){
     // NOT every model a provider hosts can write an email. Groq's list came
@@ -355,13 +355,13 @@ function attemptLine(a){
     // list is the difference between an instruction and a trap.
     var writers=a.available_models.filter(canWriteText);
     var others=a.available_models.filter(function(m){return !canWriteText(m);});
-    head+='<div style="color:var(--text2);margin-top:6px;font-size:11px;line-height:1.6">';
+    head+='<div class="c-text2 fs-11" style="margin-top:6px;line-height:1.6">';
     head+=writers.length
-      ? 'Models on this account that can <b>write text</b>: <span style="color:var(--accent);font-weight:600">'+
+      ? 'Models on this account that can <b>write text</b>: <span class="c-accent" style="font-weight:600">'+
         writers.map(htmlEsc).join(', ')+'</span><br>Paste one into the model box on the provider\'s card above and Save.'
       : 'This account has <b>no text-writing model</b> available — every model it offers is speech, text-to-speech or a safety classifier. A different provider is needed.';
     if(others.length){
-      head+='<div style="color:var(--text3);margin-top:3px">Also offered, but not usable here (speech, text-to-speech or safety models): '+
+      head+='<div class="c-text3" style="margin-top:3px">Also offered, but not usable here (speech, text-to-speech or safety models): '+
         others.map(htmlEsc).join(', ')+'</div>';
     }
     head+='</div>';
@@ -392,8 +392,8 @@ function aiHealthCard(){
     // on screen with the message — a silent redraw is exactly the symptom this
     // whole feature exists to eliminate.
     return '<div style="border:1px solid var(--red);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
-      '<div style="font-weight:600;font-size:13px;color:var(--red)">The AI status card could not draw</div>'+
-      '<div style="font-size:11.5px;color:var(--text2);margin-top:4px">'+htmlEsc((err&&err.message)||String(err))+'</div>'+
+      '<div class="fs-13 c-red" style="font-weight:600">The AI status card could not draw</div>'+
+      '<div class="fs-11_5 c-text2" style="margin-top:4px">'+htmlEsc((err&&err.message)||String(err))+'</div>'+
       '<button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="runAiHealthTest()">Try the test again</button>'+
     '</div>';
   }
@@ -403,31 +403,31 @@ function aiHealthCardInner(){
   var b=STATE.aiBudget;
   var lastErr=b&&b.last_error;
   var panel=function(bg,bd,html){
-    return '<div style="background:'+bg+';border:1px solid '+bd+';border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12px;line-height:1.6">'+html+'</div>';
+    return '<div class="fs-12" style="background:'+bg+';border:1px solid '+bd+';border-radius:8px;padding:10px 12px;margin-top:8px;line-height:1.6">'+html+'</div>';
   };
   var body;
   if(d&&d.pending){
-    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word… <span style="color:var(--text3)">This can take up to a minute if PACE has been idle and is waking up.</span>');
+    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word… <span class="c-text3">This can take up to a minute if PACE has been idle and is waking up.</span>');
   }else if(d&&d.attempts&&d.attempts.length){
     var lines=d.attempts.map(function(a){
       return attemptLine(a);
     }).join('');
     body=d.working
-      ?panel('var(--green-l)','var(--green)','<b style="color:var(--green)">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
+      ?panel('var(--green-l)','var(--green)','<b class="c-green">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
       :d.partial
       // One tier answering and the other not is the trap this card was blind
       // to: the small model is fine, the bigger one has been renamed, and the
       // only feature a customer's prospect sees keeps writing with its rules
       // under a green tick. Amber, and it names which half is down.
       ?panel('#fffbeb','var(--amber,#f59e0b)','<b>AI IS ONLY HALF WORKING.</b> One of the two models answered and the other did not, so the features on the failing one are still writing with their built-in version. The line marked ✗ names the model to change.<br><br>'+lines)
-      :panel('#fef2f2','var(--red)','<b style="color:var(--red)">AI IS NOT WORKING.</b> Every feature is writing with its built-in version. Below is what each provider said — that text names the problem.<br><br>'+lines);
+      :panel('#fef2f2','var(--red)','<b class="c-red">AI IS NOT WORKING.</b> Every feature is writing with its built-in version. Below is what each provider said — that text names the problem.<br><br>'+lines);
   }else if(d&&d.configured===false){
     // The important distinction: nothing saved, versus something saved that is
     // not being found. The per-provider list makes that unmissable.
     var rows=(d.providers||[]).map(function(p){
       return '<div style="margin-bottom:3px"><b>'+htmlEsc(p.provider)+'</b> — '+
-        (p.usable?'<span style="color:var(--green)">ready</span>':'<span style="color:var(--text3)">'+htmlEsc(p.why||'not set up')+'</span>')+
-        (p.key_hint?' <span style="color:var(--text3)">(key '+htmlEsc(p.key_hint)+')</span>':'')+'</div>';
+        (p.usable?'<span class="c-green">ready</span>':'<span class="c-text3">'+htmlEsc(p.why||'not set up')+'</span>')+
+        (p.key_hint?' <span class="c-text3">(key '+htmlEsc(p.key_hint)+')</span>':'')+'</div>';
     }).join('');
     body=panel('#fffbeb','var(--amber,#f59e0b)','<b>No provider is connected, so no AI ran.</b> Every feature is using its built-in version — that is a working state, not a crash. If you saved a key and it is not listed as ready below, the save did not stick and that is a bug worth reporting.<br><br>'+rows);
   }else if(b&&b.last_test&&b.last_test.attempts&&b.last_test.attempts.length){
@@ -435,11 +435,11 @@ function aiHealthCardInner(){
     var tlines=t.attempts.map(attemptLine).join('');
     body=panel(t.working?'var(--green-l)':'#fef2f2',t.working?'var(--green)':'var(--red)',
       '<b style="color:'+(t.working?'var(--green)':'var(--red)')+'">'+(t.working?'AI IS WORKING.':'AI IS NOT WORKING.')+'</b> '+
-      '<span style="color:var(--text3)">(last tested '+htmlEsc(String(t.at||'').replace('T',' ').slice(0,16))+' UTC)</span><br><br>'+tlines);
+      '<span class="c-text3">(last tested '+htmlEsc(String(t.at||'').replace('T',' ').slice(0,16))+' UTC)</span><br><br>'+tlines);
   }else if(lastErr){
     body=panel('#fef2f2','var(--red)','<b>Not tested yet.</b> The last failure recorded was:<br>'+
       (lastErr.failures||[]).map(function(f){
-        return '<div style="color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span><br>'+htmlEsc(f.error||'')+'</div>';
+        return '<div class="c-red" style="margin-top:3px">✗ '+htmlEsc(f.provider)+' <span class="c-text3">('+htmlEsc(f.model||'')+')</span><br>'+htmlEsc(f.error||'')+'</div>';
       }).join(''));
   }else{
     body=panel('var(--bg3)','var(--border2)','Click <b>Test AI generation</b> after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back to its built-in version.');
@@ -449,17 +449,17 @@ function aiHealthCardInner(){
   // be hidden the moment any test result existed. Shown underneath, always.
   var realFail='';
   if(lastErr&&lastErr.failures&&lastErr.failures.length){
-    realFail='<div style="margin-top:8px;font-size:11.5px;color:var(--text2);line-height:1.6">'+
+    realFail='<div class="fs-11_5 c-text2" style="margin-top:8px;line-height:1.6">'+
       '<b>Last time a feature actually asked for text</b> ('+htmlEsc(String(lastErr.feature||'a feature'))+
       ', '+htmlEsc(String(lastErr.at||'').replace('T',' ').slice(0,16))+' UTC) it fell back to the built-in version:'+
       lastErr.failures.map(function(f){
-        return '<div style="color:var(--red);margin-top:3px">✗ '+htmlEsc(f.provider)+' <span style="color:var(--text3)">('+htmlEsc(f.model||'')+')</span> — '+htmlEsc(f.error||'')+'</div>';
+        return '<div class="c-red" style="margin-top:3px">✗ '+htmlEsc(f.provider)+' <span class="c-text3">('+htmlEsc(f.model||'')+')</span> — '+htmlEsc(f.error||'')+'</div>';
       }).join('')+
     '</div>';
   }
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
-      '<div style="font-weight:600;font-size:13px">Is AI actually working?</div>'+
+      '<div class="fs-13" style="font-weight:600">Is AI actually working?</div>'+
       '<button class="btn btn-sm btn-primary" onclick="runAiHealthTest()">Test AI generation</button>'+
     '</div>'+body+realFail+
   '</div>';
@@ -515,7 +515,7 @@ window.saveAiBudget=function(){
   }).catch(function(e){ showToast('Failed: '+(e&&e.message||e),'error'); });
 };
 function aiProviderNote(){
-  return '<div style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11.5px;color:var(--text3);line-height:1.5">'+
+  return '<div class="fs-11_5 c-text3" style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:10px;line-height:1.5">'+
     'AI is optional everywhere in PACE — email drafting, resume parsing, job-description cleanup and the daily briefing all have a built-in non-AI version that runs when no provider is set up. '+
     'Connect one below to improve them. <b>Groq</b> and <b>OpenRouter</b> are free and need no credit card; <b>Ollama</b> runs a model on a server you own. '+
     'The one marked "use first" is tried first, and if it is unavailable or out of free requests, the others are tried before falling back to the built-in version.'+
@@ -640,10 +640,10 @@ window.openWarmupStart=function(id){
   STATE.modal='<div class="modal modal-w480">'+
     '<div class="mh"><div class="mt">Start warm-up · '+htmlEsc(mb.email||'')+'</div></div>'+
     '<div class="mb_">'+
-      '<div style="font-size:12.5px;color:var(--text3);margin-bottom:12px">This mailbox will send warm-up emails to your other pool mailboxes and hold short conversations with them each day, ramping up over the duration below, then graduate to outreach. Needs at least one other connected pool mailbox.</div>'+
-      '<label style="font-size:12px;color:var(--text2)">Warm-up duration (days)</label>'+
+      '<div class="fs-12_5 c-text3" style="margin-bottom:12px">This mailbox will send warm-up emails to your other pool mailboxes and hold short conversations with them each day, ramping up over the duration below, then graduate to outreach. Needs at least one other connected pool mailbox.</div>'+
+      '<label class="fs-12 c-text2">Warm-up duration (days)</label>'+
       '<input id="wu-days" class="inp" type="number" min="1" max="120" value="'+defDays+'" style="margin:4px 0 12px">'+
-      '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer"><input type="checkbox" id="wu-optin" checked style="width:15px;height:15px"> Also let this mailbox receive + reply to other warm-up mail (recommended)</label>'+
+      '<label class="fs-12_5" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="wu-optin" checked style="width:15px;height:15px"> Also let this mailbox receive + reply to other warm-up mail (recommended)</label>'+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="submitWarmupStart(\''+id+'\')">Start warm-up</button></div>'+
   '</div>';
@@ -671,10 +671,10 @@ window.previewTemplateSample=function(variant){
   STATE.modal='<div class="modal modal-w480">'+
     '<div class="mh"><div class="mt">'+htmlEsc(t.label||t.variant)+' — sample sent</div></div>'+
     '<div class="mb_">'+
-      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Subject</div>'+
-      '<div style="font-size:13.5px;font-weight:600;margin-bottom:12px">'+htmlEsc(t.sample.subject||'')+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Body</div>'+
-      '<div style="font-size:13px;white-space:pre-wrap;line-height:1.5;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px">'+htmlEsc(t.sample.body||'')+'</div>'+
+      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Subject</div>'+
+      '<div class="fs-13_5" style="font-weight:600;margin-bottom:12px">'+htmlEsc(t.sample.subject||'')+'</div>'+
+      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Body</div>'+
+      '<div class="fs-13" style="white-space:pre-wrap;line-height:1.5;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px">'+htmlEsc(t.sample.body||'')+'</div>'+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Close</button></div>'+
   '</div>';
@@ -687,21 +687,21 @@ function renderDeliverability(){
   if(STATE.deliv===undefined&&!STATE._delivLoading){loadDeliverability();}
   var days=STATE.delivDays||30;
   var d=STATE.deliv, tpls=STATE.delivTemplates||[], sr=STATE.spamResult;
-  function stat(label,val,color){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;min-width:118px"><div style="font-size:22px;font-weight:700;color:'+(color||'var(--text)')+'">'+(val==null?'—':val)+'</div><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">'+label+'</div></div>'; }
-  var statsRow=d?'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'+stat('Sent ('+days+'d)',d.sent,'var(--accent)')+stat('Failed ('+days+'d)',d.failed,'var(--amber)')+stat('Bounced',d.bounced_contacts,'var(--red)')+stat('Replied',d.replied_contacts,'var(--green)')+stat('Opted out',d.suppression_count,'var(--text2)')+'</div>':'<div style="color:var(--text3);margin-bottom:20px">Loading…</div>';
+  function stat(label,val,color){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;min-width:118px"><div class="fs-22" style="font-weight:700;color:'+(color||'var(--text)')+'">'+(val==null?'—':val)+'</div><div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-top:2px">'+label+'</div></div>'; }
+  var statsRow=d?'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'+stat('Sent ('+days+'d)',d.sent,'var(--accent)')+stat('Failed ('+days+'d)',d.failed,'var(--amber)')+stat('Bounced',d.bounced_contacts,'var(--red)')+stat('Replied',d.replied_contacts,'var(--green)')+stat('Opted out',d.suppression_count,'var(--text2)')+'</div>':'<div class="c-text3" style="margin-bottom:20px">Loading…</div>';
   var dayFilter='<div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px">'+[7,30,90].map(function(n){
     var on=days===n;
-    return '<button onclick="setDelivDays('+n+')" style="padding:5px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+n+'d</button>';
+    return '<button onclick="setDelivDays('+n+')" class="fs-12" style="padding:5px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:600;cursor:pointer">'+n+'d</button>';
   }).join('')+'</div>';
   var mbRows=(d&&d.mailboxes||[]).map(function(m){
     var conn=m.connection||{};
     // Sign-in health first — a "healthy" send-rate badge is misleading if the
     // mailbox can't actually sign in to send.
-    var connBadge=conn.status==='expired'?'<span title="'+htmlEsc(conn.error||'The mailbox sign-in refresh is failing — reconnect it under Manager Users → Email IDs.')+'" style="font-size:11px;padding:2px 8px;background:var(--red-l);color:var(--red);border-radius:6px;font-weight:700">&#9888; Sign-in expired — reconnect</span>':(conn.status==='ok'?'<span style="font-size:11px;padding:2px 8px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600">&#10003; Signed in</span>':(conn.status==='none'?'<span style="font-size:11px;padding:2px 8px;background:var(--bg3);color:var(--text3);border-radius:6px;font-weight:600">Not connected</span>':''));
+    var connBadge=conn.status==='expired'?'<span title="'+htmlEsc(conn.error||'The mailbox sign-in refresh is failing — reconnect it under Manager Users → Email IDs.')+'" class="fs-11 c-red" style="padding:2px 8px;background:var(--red-l);border-radius:6px;font-weight:700">&#9888; Sign-in expired — reconnect</span>':(conn.status==='ok'?'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:6px;font-weight:600">&#10003; Signed in</span>':(conn.status==='none'?'<span class="fs-11 c-text3" style="padding:2px 8px;background:var(--bg3);border-radius:6px;font-weight:600">Not connected</span>':''));
     // Send-rate / warm-up status is moot while a mailbox can't sign in — show only
     // the actionable reconnect badge in that case.
-    var status=conn.status==='expired'?'':(m.auto_paused?'<span style="font-size:11px;padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700">Auto-paused</span> <button onclick="resumeMailbox(\''+m.id+'\')" style="font-size:11px;color:var(--green);background:transparent;border:0;cursor:pointer">Resume</button>':(m.warmup?'<span style="font-size:11px;padding:2px 8px;background:var(--amber-l);color:var(--amber);border-radius:6px;font-weight:600">Warm-up · cap '+m.warmup.today_cap+'/day</span>':'<span style="font-size:11px;padding:2px 8px;background:var(--green-l);color:var(--green);border-radius:6px;font-weight:600">Healthy</span>'));
-    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+htmlEsc(m.name||m.email)+'</div><div style="font-size:11px;color:var(--text3)">'+htmlEsc(m.email)+' · '+m.daily_limit+'/day cap</div></div>'+connBadge+status+'</div>';
+    var status=conn.status==='expired'?'':(m.auto_paused?'<span class="fs-11" style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700">Auto-paused</span> <button onclick="resumeMailbox(\''+m.id+'\')" style="font-size:11px;color:var(--green);background:transparent;border:0;cursor:pointer">Resume</button>':(m.warmup?'<span class="fs-11 c-amber" style="padding:2px 8px;background:var(--amber-l);border-radius:6px;font-weight:600">Warm-up · cap '+m.warmup.today_cap+'/day</span>':'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:6px;font-weight:600">Healthy</span>'));
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="fs-13" style="font-weight:500">'+htmlEsc(m.name||m.email)+'</div><div class="fs-11 c-text3">'+htmlEsc(m.email)+' · '+m.daily_limit+'/day cap</div></div>'+connBadge+status+'</div>';
   }).join('');
   // Personal / My team / Org-wide scope toggle — you see the sending mailboxes of
   // your own people, not everyone's, unless you're an admin viewing org-wide.
@@ -722,16 +722,16 @@ function renderDeliverability(){
     var badge, actions='';
     var btn=function(action,label,color){ return '<button onclick="warmupAction(\''+m.id+'\',\''+action+'\')" style="font-size:11px;color:'+color+';background:transparent;border:1px solid var(--border2);padding:3px 9px;border-radius:6px;cursor:pointer;margin-left:5px">'+label+'</button>'; };
     if(m.warmup_status==='warming'){
-      badge='<span style="'+warmMuted+';background:var(--amber-l);color:var(--amber)">Warming · day '+(m.day_label||'')+'</span>';
+      badge='<span class="c-amber" style="'+warmMuted+';background:var(--amber-l)">Warming · day '+(m.day_label||'')+'</span>';
       if(isAdmin)actions=btn('pause','Pause','var(--amber)')+btn('stop','Graduate','var(--green)');
     } else if(m.warmup_status==='paused'){
-      badge='<span style="'+warmMuted+';background:var(--bg3);color:var(--text2)">Paused</span>';
+      badge='<span class="c-text2" style="'+warmMuted+';background:var(--bg3)">Paused</span>';
       if(isAdmin)actions=btn('resume','Resume','var(--green)')+btn('stop','Graduate','var(--text2)');
     } else if(m.warmup_status==='warmed'){
-      badge='<span style="'+warmMuted+';background:var(--green-l);color:var(--green)">✓ Warmed — ready for outreach</span>';
+      badge='<span class="c-green" style="'+warmMuted+';background:var(--green-l)">✓ Warmed — ready for outreach</span>';
       if(isAdmin)actions='<button onclick="openWarmupStart(\''+m.id+'\')" style="font-size:11px;color:var(--accent);background:transparent;border:1px solid var(--border2);padding:3px 9px;border-radius:6px;cursor:pointer;margin-left:5px">Warm again</button>';
     } else {
-      badge=m.opt_in?'<span style="'+warmMuted+';background:var(--accent-l);color:var(--accent)">Pool receiver</span>':'<span style="'+warmMuted+';background:var(--bg3);color:var(--text3)">Not warming</span>';
+      badge=m.opt_in?'<span class="c-accent" style="'+warmMuted+';background:var(--accent-l)">Pool receiver</span>':'<span class="c-text3" style="'+warmMuted+';background:var(--bg3)">Not warming</span>';
       if(isAdmin)actions=m.connected
         ?'<button onclick="openWarmupStart(\''+m.id+'\')" style="font-size:11px;color:#fff;background:var(--accent);border:0;padding:4px 11px;border-radius:6px;cursor:pointer;margin-left:5px">Start warm-up</button>'
         :'<span style="font-size:10.5px;color:var(--amber)" title="Connect this mailbox under the user\'s Email IDs first">⚠ not connected</span>';
@@ -741,27 +741,27 @@ function renderDeliverability(){
     if(m.health&&m.health.inbox_placement_pct!=null)meta.push('inbox '+m.health.inbox_placement_pct+'%');
     if(m.health&&m.health.rescued)meta.push(m.health.rescued+' rescued');
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap">'+
-      '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500">'+htmlEsc(m.display_name||m.email)+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(m.email)+(m.owner?' · '+htmlEsc(m.owner):'')+(meta.length?' · '+meta.join(' · '):'')+'</div></div>'+
+      '<div style="flex:1;min-width:0"><div class="fs-13" style="font-weight:500">'+htmlEsc(m.display_name||m.email)+'</div>'+
+        '<div class="fs-11 c-text3">'+htmlEsc(m.email)+(m.owner?' · '+htmlEsc(m.owner):'')+(meta.length?' · '+meta.join(' · '):'')+'</div></div>'+
       badge+actions+
     '</div>';
-  }).join('')||'<div style="padding:14px;color:var(--text3);font-size:13px">No active mailboxes.</div>';
-  var warmExtra=(isAdmin?'<button onclick="runWarmupTick()" style="font-size:11px;color:var(--text2);background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">'+(wtick==='running'?'Running…':'▶ Run warm-up now')+'</button>':'')+
-    (wtick&&wtick!=='running'?'<span style="font-size:11px;color:var(--text3);margin-left:8px">'+(wtick.off?'engine off — apply migration 009':'sent '+(wtick.sent||0)+' · replies '+(wtick.replied||0)+' · rescued '+(wtick.rescued||0)+' · pool '+(wtick.pool||0))+'</span>':'');
+  }).join('')||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes.</div>';
+  var warmExtra=(isAdmin?'<button onclick="runWarmupTick()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">'+(wtick==='running'?'Running…':'▶ Run warm-up now')+'</button>':'')+
+    (wtick&&wtick!=='running'?'<span class="fs-11 c-text3" style="margin-left:8px">'+(wtick.off?'engine off — apply migration 009':'sent '+(wtick.sent||0)+' · replies '+(wtick.replied||0)+' · rescued '+(wtick.rescued||0)+' · pool '+(wtick.pool||0))+'</span>':'');
   var readyColors={none:'var(--red)',minimal:'var(--amber)',ok:'var(--accent)',good:'var(--green)'};
   var rd=w&&w.readiness;
-  var readyBanner=rd?'<div style="padding:9px 14px;font-size:11.5px;border-bottom:1px solid var(--border);background:'+readyColors[rd.level]+'14;color:'+(readyColors[rd.level]||'var(--text2)')+';font-weight:600">'+
+  var readyBanner=rd?'<div class="fs-11_5" style="padding:9px 14px;border-bottom:1px solid var(--border);background:'+readyColors[rd.level]+'14;color:'+(readyColors[rd.level]||'var(--text2)')+';font-weight:600">'+
     (w.pool_count||0)+' mailbox'+((w.pool_count||0)===1?'':'es')+' · '+(w.pool_domains||0)+' domain'+((w.pool_domains||0)===1?'':'s')+' in pool — '+htmlEsc(rd.note)+'</div>':'';
-  var warmSub='<div style="padding:10px 14px;font-size:11.5px;color:var(--text3);border-bottom:1px solid var(--border)">Warm-up sends real email between your connected mailboxes and holds short conversations to build reputation, then graduates them to outreach. Every mailbox that participates — the ones you warm <b>and</b> their partners — must be added and connected here.</div>'+readyBanner;
+  var warmSub='<div class="fs-11_5 c-text3" style="padding:10px 14px;border-bottom:1px solid var(--border)">Warm-up sends real email between your connected mailboxes and holds short conversations to build reputation, then graduates them to outreach. Every mailbox that participates — the ones you warm <b>and</b> their partners — must be added and connected here.</div>'+readyBanner;
 
   // ── Domain authentication & blacklists ──
   if(STATE.domainHealth===undefined&&!STATE._dhLoading)loadDomainHealth(false);
   var dh=STATE.domainHealth;
   var dhColors={good:'var(--green)',ok:'var(--accent)',warn:'var(--amber)',bad:'var(--red)',unknown:'var(--text3)'};
-  function dhChip(label,state){ var c=state==='pass'?'var(--green)':state==='fail'?'var(--red)':state==='warn'?'var(--amber)':'var(--text3)'; var sym=state==='pass'?'✓':state==='fail'?'✗':state==='warn'?'!':'?'; return '<span style="font-size:10.5px;padding:2px 7px;border-radius:6px;font-weight:700;background:'+c+'1a;color:'+c+'">'+label+' '+sym+'</span>'; }
+  function dhChip(label,state){ var c=state==='pass'?'var(--green)':state==='fail'?'var(--red)':state==='warn'?'var(--amber)':'var(--text3)'; var sym=state==='pass'?'✓':state==='fail'?'✗':state==='warn'?'!':'?'; return '<span class="fs-10_5" style="padding:2px 7px;border-radius:6px;font-weight:700;background:'+c+'1a;color:'+c+'">'+label+' '+sym+'</span>'; }
   var dhRows;
-  if(dh===undefined||dh==='loading')dhRows='<div style="padding:14px;color:var(--text3);font-size:13px">Checking domains (DNS lookups)…</div>';
-  else if(!dh.domains||!dh.domains.length)dhRows='<div style="padding:14px;color:var(--text3);font-size:13px">No sending domains found — add mailboxes first.</div>';
+  if(dh===undefined||dh==='loading')dhRows='<div class="c-text3 fs-13" style="padding:14px">Checking domains (DNS lookups)…</div>';
+  else if(!dh.domains||!dh.domains.length)dhRows='<div class="c-text3 fs-13" style="padding:14px">No sending domains found — add mailboxes first.</div>';
   else dhRows=dh.domains.map(function(D){
     var spfState=D.spf.found===true?(D.spf.ok?'pass':'warn'):(D.spf.found===false?'fail':'unknown');
     var dkimState=D.dkim.found===true?'pass':(D.dkim.found===false?'fail':'unknown');
@@ -772,50 +772,50 @@ function renderDeliverability(){
     var findings=D.findings||[];
     var findingsHtml=open?'<div style="padding:8px 14px 10px;background:var(--bg3)">'+(findings.length?findings.map(function(f){
       var fc=f.severity==='high'?'var(--red)':f.severity==='warn'?'var(--amber)':'var(--text3)';
-      return '<div style="margin-bottom:9px"><div style="font-size:12px;font-weight:600;color:'+fc+'">'+htmlEsc(f.area)+' — '+htmlEsc(f.detail)+'</div>'+(f.cure?'<div style="font-size:11px;color:var(--text2);margin-top:3px;font-family:ui-monospace,monospace;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px">'+htmlEsc(f.cure)+'</div>':'')+'</div>';
-    }).join(''):'<div style="font-size:12px;color:var(--green)">All checks passed — nothing to fix.</div>')+'</div>':'';
+      return '<div style="margin-bottom:9px"><div class="fs-12" style="font-weight:600;color:'+fc+'">'+htmlEsc(f.area)+' — '+htmlEsc(f.detail)+'</div>'+(f.cure?'<div class="fs-11 c-text2" style="margin-top:3px;font-family:ui-monospace,monospace;white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px">'+htmlEsc(f.cure)+'</div>':'')+'</div>';
+    }).join(''):'<div class="fs-12 c-green">All checks passed — nothing to fix.</div>')+'</div>':'';
     return '<div style="border-bottom:1px solid var(--border)">'+
       '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;flex-wrap:wrap">'+
-        '<div style="flex:1;min-width:120px"><span style="font-size:13px;font-weight:600">'+htmlEsc(D.domain)+'</span> <span style="font-size:11px;color:'+(dhColors[D.level]||'var(--text3)')+';font-weight:700;margin-left:4px">'+(D.score==null?'unknown':D.score+'/100')+'</span></div>'+
+        '<div style="flex:1;min-width:120px"><span class="fs-13" style="font-weight:600">'+htmlEsc(D.domain)+'</span> <span class="fs-11" style="color:'+(dhColors[D.level]||'var(--text3)')+';font-weight:700;margin-left:4px">'+(D.score==null?'unknown':D.score+'/100')+'</span></div>'+
         dhChip('SPF',spfState)+dhChip('DKIM',dkimState)+dhChip('DMARC',dmarcState)+dhChip(listed?'Blacklisted':'Blacklist',blState)+
         '<a onclick="toggleDomainFindings(\''+D.domain+'\')" style="cursor:pointer;font-size:11px;color:var(--accent);white-space:nowrap">'+(open?'Hide':'Fixes'+(findings.length?' ('+findings.length+')':''))+'</a>'+
       '</div>'+findingsHtml+
     '</div>';
   }).join('');
-  var dhExtra='<button onclick="refreshDomainHealth()" style="font-size:11px;color:var(--text2);background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">↻ Re-check</button>';
-  var dhSub='<div style="padding:10px 14px;font-size:11.5px;color:var(--text3);border-bottom:1px solid var(--border)">SPF, DKIM, DMARC and blacklist status for every sending domain. Fix these <b>before</b> warming — broken authentication or a blacklisting lands you in spam no matter how well a mailbox is warmed. Cached ~15 min.</div>';
+  var dhExtra='<button onclick="refreshDomainHealth()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">↻ Re-check</button>';
+  var dhSub='<div class="fs-11_5 c-text3" style="padding:10px 14px;border-bottom:1px solid var(--border)">SPF, DKIM, DMARC and blacklist status for every sending domain. Fix these <b>before</b> warming — broken authentication or a blacklisting lands you in spam no matter how well a mailbox is warmed. Cached ~15 min.</div>';
 
   var tplRows=tpls.length?tpls.map(function(t){
     var hasSample=t.sample&&t.sample.subject;
     return '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)">'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13px;font-weight:600">'+htmlEsc(t.label||t.variant)+'</div>'+
-        (hasSample?'<div style="font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px">'+htmlEsc(t.sample.subject)+'</div>':'')+
+        '<div class="fs-13" style="font-weight:600">'+htmlEsc(t.label||t.variant)+'</div>'+
+        (hasSample?'<div class="fs-11_5 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px">'+htmlEsc(t.sample.subject)+'</div>':'')+
       '</div>'+
       (hasSample?'<button onclick="previewTemplateSample(\''+t.variant+'\')" style="font-size:11px;color:var(--accent);background:transparent;border:1px solid var(--border2);padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">Preview</button>':'')+
-      '<div style="font-size:12px;color:var(--text3);white-space:nowrap">'+t.sent+' sent · '+t.replied+' replied</div>'+
-      '<div style="font-size:14px;font-weight:700;color:'+(t.reply_rate>=5?'var(--green)':t.reply_rate>0?'var(--accent)':'var(--text3)')+';min-width:54px;text-align:right">'+t.reply_rate+'%</div>'+
+      '<div class="fs-12 c-text3" style="white-space:nowrap">'+t.sent+' sent · '+t.replied+' replied</div>'+
+      '<div class="fs-14" style="font-weight:700;color:'+(t.reply_rate>=5?'var(--green)':t.reply_rate>0?'var(--accent)':'var(--text3)')+';min-width:54px;text-align:right">'+t.reply_rate+'%</div>'+
     '</div>';
-  }).join(''):'<div style="padding:14px;color:var(--text3);font-size:13px">No sent emails with variants yet in this window.</div>';
+  }).join(''):'<div class="c-text3 fs-13" style="padding:14px">No sent emails with variants yet in this window.</div>';
   var spamHtml='';
-  if(sr){ var col=sr.level==='risk'?'var(--red)':sr.level==='warn'?'var(--amber)':'var(--green)'; spamHtml='<div style="margin-top:10px;padding:10px 12px;border:1px solid '+col+';border-radius:8px">'+'<div style="font-weight:700;color:'+col+';font-size:13px">Spam score: '+sr.score+'/100 ('+sr.level+')</div>'+(sr.warnings&&sr.warnings.length?'<ul style="margin:6px 0 0 16px;font-size:12px;color:var(--text2)">'+sr.warnings.map(function(w){return '<li>'+htmlEsc(w)+'</li>';}).join('')+'</ul>':'<div style="font-size:12px;color:var(--text3);margin-top:4px">Looks clean.</div>')+'</div>'; }
-  function card(title,inner,extra){ return '<div style="margin-bottom:20px"><div style="font-weight:600;font-size:13px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+title+(extra||'')+'</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+inner+'</div></div>'; }
+  if(sr){ var col=sr.level==='risk'?'var(--red)':sr.level==='warn'?'var(--amber)':'var(--green)'; spamHtml='<div style="margin-top:10px;padding:10px 12px;border:1px solid '+col+';border-radius:8px">'+'<div class="fs-13" style="font-weight:700;color:'+col+'">Spam score: '+sr.score+'/100 ('+sr.level+')</div>'+(sr.warnings&&sr.warnings.length?'<ul class="fs-12 c-text2" style="margin:6px 0 0 16px">'+sr.warnings.map(function(w){return '<li>'+htmlEsc(w)+'</li>';}).join('')+'</ul>':'<div class="fs-12 c-text3" style="margin-top:4px">Looks clean.</div>')+'</div>'; }
+  function card(title,inner,extra){ return '<div style="margin-bottom:20px"><div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+title+(extra||'')+'</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+inner+'</div></div>'; }
   return '<div class="page">'+
     '<div class="ph"><div class="flex jb aic">'+
       '<div><div class="ptitle">Deliverability & Replies</div><div class="psub">Reputation, reply rate & content health</div></div>'+
       dayFilter+
     '</div></div>'+
     statsRow+
-    card('Mailbox health (outreach cap & auto-pause)', mbViewToggle+(mbRows||'<div style="padding:14px;color:var(--text3);font-size:13px">No active mailboxes for this scope.</div>'))+
+    card('Mailbox health (outreach cap & auto-pause)', mbViewToggle+(mbRows||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes for this scope.</div>'))+
     card('Warm-up pool'+(w&&w.pool_count?' · '+w.pool_count+' active':''), warmSub+warmRows, warmExtra)+
     card('Domain authentication & blacklists', dhSub+dhRows, dhExtra)+
     card('Reply rate by template', tplRows)+
     card('Spam-content checker',
       '<div style="padding:14px">'+
-        '<div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">Paste a subject + body to check it for things that hurt deliverability before you send: spam-trigger words, too many links/images, ALL-CAPS, excess exclamation marks, subject/body length, and a missing opt-out line.</div>'+
+        '<div class="fs-12_5 c-text3" style="margin-bottom:10px">Paste a subject + body to check it for things that hurt deliverability before you send: spam-trigger words, too many links/images, ALL-CAPS, excess exclamation marks, subject/body length, and a missing opt-out line.</div>'+
         '<input id="spamSubj" class="inp" placeholder="Subject" value="'+htmlEsc(STATE.spamSubj||'')+'" oninput="STATE.spamSubj=this.value" style="margin-bottom:8px">'+
         '<textarea id="spamBody" class="inp" placeholder="Paste an email body to score it" oninput="STATE.spamBody=this.value" style="width:100%;min-height:90px;font-family:inherit">'+htmlEsc(STATE.spamBody||'')+'</textarea>'+
-        '<button onclick="runSpamCheck()" style="margin-top:8px;background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;font-size:13px;cursor:pointer">Check</button>'+spamHtml+
+        '<button onclick="runSpamCheck()" class="fs-13" style="margin-top:8px;background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;cursor:pointer">Check</button>'+spamHtml+
       '</div>')+
   '</div>';
 }
@@ -888,11 +888,11 @@ window.runEngineJob=function(job){
 function renderEngineCard(isAdmin){
   var s=STATE.engineStatus;
   if(s===undefined||s===null){
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text3)">Checking background engine…</div>';
+    return '<div class="fs-13 c-text3" style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px">Checking background engine…</div>';
   }
   if(s._error){
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text3)">'+
-      'Background engine status unavailable. <button onclick="refreshEngineStatus()" style="border:0;background:none;color:var(--accent);cursor:pointer;font-size:13px">Retry</button></div>';
+    return '<div class="fs-13 c-text3" style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:16px">'+
+      'Background engine status unavailable. <button onclick="refreshEngineStatus()" class="c-accent fs-13" style="border:0;background:none;cursor:pointer">Retry</button></div>';
   }
 
   var jobs=s.jobs||[];
@@ -936,10 +936,10 @@ function renderEngineCard(isAdmin){
     return '<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-top:1px solid var(--border)">'+
       '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:'+(j.running?'var(--accent)':(j.overdue?'#f59e0b':'var(--green)'))+'"></span>'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13px;font-weight:600">'+htmlEsc(j.description||j.job)+'</div>'+
-        '<div style="font-size:11.5px;color:var(--text3)">'+htmlEsc(j.job)+' · '+engineEvery(j.every_ms)+'</div>'+
+        '<div class="fs-13" style="font-weight:600">'+htmlEsc(j.description||j.job)+'</div>'+
+        '<div class="fs-11_5 c-text3">'+htmlEsc(j.job)+' · '+engineEvery(j.every_ms)+'</div>'+
       '</div>'+
-      '<div style="font-size:12px;color:'+lateTone+';font-weight:'+(j.overdue?'600':'400')+';white-space:nowrap">'+lateLbl+'</div>'+
+      '<div class="fs-12" style="color:'+lateTone+';font-weight:'+(j.overdue?'600':'400')+';white-space:nowrap">'+lateLbl+'</div>'+
       (isAdmin?'<button onclick="runEngineJob(\''+htmlEsc(j.job)+'\')" style="padding:4px 10px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12px;cursor:pointer;color:var(--text2)">Run now</button>':'')+
     '</div>';
   }).join('');
@@ -948,16 +948,16 @@ function renderEngineCard(isAdmin){
   return '<div style="background:'+tone.bg+';border:1px solid '+tone.bd+';border-radius:var(--r2);margin-bottom:16px;overflow:hidden">'+
     '<div style="padding:14px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
       '<div style="flex:1;min-width:220px">'+
-        '<div style="font-weight:700;font-size:14px;color:'+tone.fg+';display:flex;align-items:center;gap:8px">'+
+        '<div class="fs-14" style="font-weight:700;color:'+tone.fg+';display:flex;align-items:center;gap:8px">'+
           '<span style="width:9px;height:9px;border-radius:50%;background:'+tone.dot+';display:inline-block"></span>'+
           htmlEsc(headline)+
-          (overdue?'<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e">'+overdue+' overdue</span>':'')+
+          (overdue?'<span class="fs-11" style="font-weight:600;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e">'+overdue+' overdue</span>':'')+
         '</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:3px">'+htmlEsc(explain)+'</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:3px">'+htmlEsc(explain)+'</div>'+
       '</div>'+
-      '<button onclick="refreshEngineStatus()" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer">Refresh</button>'+
-      '<button onclick="STATE.engineExpanded='+(open?'false':'true')+';render()" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer">'+(open?'Hide jobs':'Show '+jobs.length+' jobs')+'</button>'+
+      '<button onclick="refreshEngineStatus()" class="fs-13 c-text2" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">Refresh</button>'+
+      '<button onclick="STATE.engineExpanded='+(open?'false':'true')+';render()" class="fs-13 c-text2" style="padding:7px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">'+(open?'Hide jobs':'Show '+jobs.length+' jobs')+'</button>'+
     '</div>'+
-    (open?'<div style="background:var(--card)">'+(rows||'<div style="padding:14px;font-size:13px;color:var(--text3)">No jobs registered.</div>')+'</div>':'')+
+    (open?'<div style="background:var(--card)">'+(rows||'<div class="fs-13 c-text3" style="padding:14px">No jobs registered.</div>')+'</div>':'')+
   '</div>';
 }

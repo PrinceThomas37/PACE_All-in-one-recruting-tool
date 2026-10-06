@@ -493,13 +493,13 @@
       '<div class="modal modal-w640" data-win="mailCompose" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">New message</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
+          '<div class="fs-11_5 c-text3" style="margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To <span style="color:var(--text3)">(press Enter or comma after each address)</span></label>'+chipField('mb-c-to','to',c.to,'mbComposeField','someone@company.com')+'</div>'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cc <span style="color:var(--text3)">(optional — add as many as you like)</span></label>'+chipField('mb-c-cc','cc',c.cc,'mbComposeField','')+'</div>'+
+          '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">To <span class="c-text3">(press Enter or comma after each address)</span></label>'+chipField('mb-c-to','to',c.to,'mbComposeField','someone@company.com')+'</div>'+
+          '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Cc <span class="c-text3">(optional — add as many as you like)</span></label>'+chipField('mb-c-cc','cc',c.cc,'mbComposeField','')+'</div>'+
           field('mb-c-subject','Subject','',c.subject,'mbComposeField(\'subject\',this.value)')+
-          '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+
+          '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
             '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
           renderSigRow(c.sig,'mbComposeSetSig')+
@@ -575,7 +575,7 @@
   window.mbChipFlush=function(){ Array.prototype.forEach.call(document.querySelectorAll('.chipf-in'),function(i){ if(i.value) mbChipCommit(i); }); };
 
   function field(id,label,ph,val,oninput){
-    return '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+'</label>'+
+    return '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">'+label+'</label>'+
       '<input id="'+id+'" class="sel" placeholder="'+escAttr(ph)+'" value="'+escAttr(val||'')+'" oninput="'+oninput+'"></div>';
   }
 
@@ -767,7 +767,7 @@
     var unread=list.filter(function(x){return x.unread;}).length;
     var folder=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
     var right=folder
-      ? '<span style="font-size:12px;color:var(--ink3)">'+esc(folder.name)+
+      ? '<span class="fs-12 c-ink3">'+esc(folder.name)+
         (list.length?' · '+list.length+' loaded':'')+'</span>'
       : '';
     return UI.tabs([
@@ -787,14 +787,14 @@
     var broken=(m.accounts||[]).filter(function(a){return !a.readable;});
     return '<div class="pg"><div class="pg-body">'+
       '<div class="card" style="max-width:560px;margin:40px auto;padding:32px;text-align:center">'+
-        '<div style="color:var(--text3);margin-bottom:14px">'+icon('inbox',40)+'</div>'+
-        '<div style="font-weight:700;font-size:17px;margin-bottom:6px">No mailbox connected yet</div>'+
-        '<div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:18px">'+
+        '<div class="c-text3" style="margin-bottom:14px">'+icon('inbox',40)+'</div>'+
+        '<div class="fs-17" style="font-weight:700;margin-bottom:6px">No mailbox connected yet</div>'+
+        '<div class="fs-13 c-text2" style="line-height:1.6;margin-bottom:18px">'+
           'Connect your Outlook or Gmail account and your inbox, sent mail and folders appear here — '+
           'so you can work your email without leaving PACE.'+
         '</div>'+
         (broken.length
-          ? '<div style="background:var(--amber-l);border:1px solid var(--amber);border-radius:var(--r);padding:10px 12px;font-size:12px;color:var(--amber);margin-bottom:16px;text-align:left">'+
+          ? '<div class="fs-12 c-amber" style="background:var(--amber-l);border:1px solid var(--amber);border-radius:var(--r);padding:10px 12px;margin-bottom:16px;text-align:left">'+
             broken.map(function(a){
               return '<div><b>'+esc(a.email_address)+'</b> — '+
                 (a.is_active===false?'switched off':(a.connection&&a.connection.status==='expired'?'sign-in expired, needs reconnecting':'not connected'))+'</div>';
@@ -815,12 +815,12 @@
               esc(a.email_address)+(a.platform==='Gmail'?' · Gmail':' · Outlook')+'</option>';
           }).join('')+
         '</select>'
-      : '<div style="font-size:13px;font-weight:600">'+esc((readable[0]||{}).email_address||'')+
-        '<span style="font-weight:400;color:var(--ink3)"> · '+esc((readable[0]||{}).platform==='Gmail'?'Gmail':'Outlook')+'</span></div>';
+      : '<div class="fs-13" style="font-weight:600">'+esc((readable[0]||{}).email_address||'')+
+        '<span class="c-ink3" style="font-weight:400"> · '+esc((readable[0]||{}).platform==='Gmail'?'Gmail':'Outlook')+'</span></div>';
 
     var folders=m.folders||[];
     var folderPicker = m.foldersLoading
-      ? '<span style="font-size:12.5px;color:var(--ink3)">Loading folders…</span>'
+      ? '<span class="fs-12_5 c-ink3">Loading folders…</span>'
       : (folders.length
         ? '<select class="seq-sel" style="max-width:230px" onchange="mbSelectFolder(this.value)">'+
             folders.map(function(f){
@@ -898,7 +898,7 @@
     var inner;
     if(shape==='none')         inner=UI.ic('mailopen')+'<div>Pick a conversation to read it here.</div>';
     else if(shape==='loading') inner='Opening…';
-    else                       inner='<span style="color:var(--red)">'+esc(m.error||'Could not open this message')+'</span>';
+    else                       inner='<span class="c-red">'+esc(m.error||'Could not open this message')+'</span>';
     return '<div class="mb-read" id="mb-read" data-shape="'+shape+'"><div class="mb-empty">'+inner+'</div></div>';
   }
 
@@ -953,7 +953,7 @@
       '<div class="mb-msg-h">'+
         mbAvatar(t.from,28)+
         '<div class="mb-msg-b">'+
-          '<div class="mb-from" style="font-size:13px">'+esc(who(t.from))+'</div>'+
+          '<div class="mb-from fs-13">'+esc(who(t.from))+'</div>'+
           '<div class="mb-collapsed">'+esc(t.preview||'(no preview)')+'</div>'+
         '</div>'+
         '<div class="mb-msg-when">'+esc(fmtWhen(t.date))+'</div>'+
@@ -978,7 +978,7 @@
         var url=API_URL+'/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(x.id)+
           '/attachments/'+encodeURIComponent(a.id)+'?name='+encodeURIComponent(a.name||'attachment');
         return '<button class="btn btn-xs btn-outline" onclick="mbDownload(\''+escAttr(url)+'\',\''+escAttr(a.name||'attachment')+'\')">'+
-          '📎 '+esc(a.name||'attachment')+' <span style="color:var(--text3)">'+fmtSize(a.size)+'</span></button>';
+          '📎 '+esc(a.name||'attachment')+' <span class="c-text3">'+fmtSize(a.size)+'</span></button>';
       }).join('')+
     '</div>';
   }
@@ -1037,12 +1037,12 @@
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
         '<button class="btn btn-xs btn-outline" onclick="'+pickFn+'">📎 Attach files</button>'+
         files.map(function(f,i){
-          return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 9px">'+
-            esc(f.name)+' <span style="color:var(--text3)">'+fmtSize(f.size)+'</span>'+
-            '<button onclick="'+removeFn+'('+i+')" title="Remove" style="color:var(--text3);font-size:13px;line-height:1;padding:0 3px">✕</button></span>';
+          return '<span class="fs-11" style="display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 4px 2px 9px">'+
+            esc(f.name)+' <span class="c-text3">'+fmtSize(f.size)+'</span>'+
+            '<button onclick="'+removeFn+'('+i+')" title="Remove" class="c-text3 fs-13" style="line-height:1;padding:0 3px">✕</button></span>';
         }).join('')+
       '</div>'+
-      (over?'<div style="font-size:11px;color:var(--red);margin-top:5px">That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something, or send the big files as a link.</div>':'')+
+      (over?'<div class="fs-11 c-red" style="margin-top:5px">That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something, or send the big files as a link.</div>':'')+
     '</div>';
   }
 
@@ -1051,15 +1051,15 @@
   function renderSigRow(on, setFn){
     var m=M();
     return '<div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
-      '<label style="font-size:11px;color:var(--text2);padding-top:5px">Signature</label>'+
+      '<label class="fs-11 c-text2" style="padding-top:5px">Signature</label>'+
       '<select class="sel" style="width:auto;font-size:12px;padding:4px 8px" onchange="'+setFn+'(this.value===\'1\')">'+
         '<option value="0"'+(on?'':' selected')+'>No signature</option>'+
         '<option value="1"'+(on?' selected':'')+'>My signature</option>'+
       '</select>'+
       (on
         ? '<div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;background:var(--card);max-height:120px;overflow:auto">'+
-            (m.sigLoading?'<span style="font-size:11px;color:var(--text3)">Loading…</span>'
-              : (m.sigHtml?m.sigHtml:'<span style="font-size:11px;color:var(--text3)">No signature saved for this mailbox.</span>'))+
+            (m.sigLoading?'<span class="fs-11 c-text3">Loading…</span>'
+              : (m.sigHtml?m.sigHtml:'<span class="fs-11 c-text3">No signature saved for this mailbox.</span>'))+
           '</div>'
         : '')+
     '</div>';
@@ -1073,20 +1073,20 @@
 
     return '<div style="border-top:1px solid var(--border);padding:12px 18px;background:var(--bg);max-height:62%;overflow-y:auto">'+
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-        '<div style="font-size:12px;font-weight:700">'+title+'</div>'+
-        (fwd?'':'<div style="font-size:11px;color:var(--text3)">The original is quoted underneath automatically.</div>')+
-        (fwd?'<div style="font-size:11px;color:var(--text3)">Attachments on the original are carried over.</div>':'')+
+        '<div class="fs-12" style="font-weight:700">'+title+'</div>'+
+        (fwd?'':'<div class="fs-11 c-text3">The original is quoted underneath automatically.</div>')+
+        (fwd?'<div class="fs-11 c-text3">Attachments on the original are carried over.</div>':'')+
       '</div>'+
 
       // To — editable everywhere. A forward starts empty; a reply is prefilled.
       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
-        '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">To</label>'+
+        '<label class="fs-11 c-text2" style="width:52px;flex:none">To</label>'+
         chipField('mb-comp-to','to',c.to,'mbCompField',fwd?'someone@company.com':'')+
         (c.showCc?'':'<button class="btn btn-xs btn-ghost" onclick="mbCompToggleCc()">Add Cc</button>')+
       '</div>'+
       (c.showCc
         ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
-            '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">Cc</label>'+
+            '<label class="fs-11 c-text2" style="width:52px;flex:none">Cc</label>'+
             chipField('mb-comp-cc','cc',c.cc,'mbCompField','')+
           '</div>'
         : '')+
@@ -1094,7 +1094,7 @@
       // Subject — visible and editable on reply and forward alike. It was
       // previously decided for you by the mail provider and never shown.
       '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
-        '<label style="font-size:11px;color:var(--text2);width:52px;flex:none">Subject</label>'+
+        '<label class="fs-11 c-text2" style="width:52px;flex:none">Subject</label>'+
         '<input id="mb-comp-subject" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.subject||'')+'" oninput="mbCompField(\'subject\',this.value)">'+
       '</div>'+
 

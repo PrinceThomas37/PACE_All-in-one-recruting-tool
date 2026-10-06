@@ -55,9 +55,9 @@ function _patchCoAcSugs(inputId, results, onPickFnName) {
     results.map(function (c, i) {
       var sub = [c.industry, c.location].filter(Boolean).join(' · ');
       var count = c.job_count ? c.job_count + ' lead' + (c.job_count === 1 ? '' : 's') : '';
-      return '<div class="_co-ac-sug" data-idx="' + i + '" style="padding:8px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">' +
+      return '<div class="_co-ac-sug fs-13" data-idx="' + i + '" style="padding:8px 13px;cursor:pointer;border-bottom:1px solid var(--border)">' +
         '<div style="font-weight:600">' + htmlEsc(c.name) + '</div>' +
-        (sub || count ? '<div style="font-size:11px;color:var(--text3)">' + htmlEsc(sub) +
+        (sub || count ? '<div class="fs-11 c-text3">' + htmlEsc(sub) +
           (sub && count ? ' · ' : '') + htmlEsc(count) + '</div>' : '') +
       '</div>';
     }).join('') +

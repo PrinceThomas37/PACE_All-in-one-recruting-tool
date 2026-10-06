@@ -267,19 +267,19 @@
   // ── drawing ───────────────────────────────────────────────────────────────
   function senderCard(){
     var s=S().sender;
-    if(!s) return '<div class="card cp mb3" style="font-size:12.5px;color:var(--text3)">Checking which mailbox will send…</div>';
+    if(!s) return '<div class="card cp mb3 fs-12_5 c-text3">Checking which mailbox will send…</div>';
     if(!s.mailbox){
       return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--amber-l)">'+
         '<span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block"></span>'+
-        '<div style="font-size:12.5px;flex:1;min-width:200px">No connected mailbox — candidate emails need one before anything can be queued.</div>'+
+        '<div class="fs-12_5" style="flex:1;min-width:200px">No connected mailbox — candidate emails need one before anything can be queued.</div>'+
         '<button class="btn btn-outline btn-sm" onclick="goPage(\'emailaccounts\')">Set up a mailbox</button>'+
       '</div>';
     }
     return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-      '<div style="font-size:12.5px;flex:1;min-width:180px">'+fromLine(s)+
+      '<div class="fs-12_5" style="flex:1;min-width:180px">'+fromLine(s)+
         (s.company_name?' · '+esc(s.company_name):'')+
-        '<div style="font-size:11.5px;color:var(--text3)">'+
+        '<div class="fs-11_5 c-text3">'+
           (s.ai?'The role description is written once per job by the AI writer; each email is personalised from the match reasons.'
                :'No AI writer is configured, so the built-in writer does all of it — which costs nothing.')+
         '</div>'+
@@ -289,8 +289,8 @@
         // off) so this screen and the queue can never disagree about it
         // (C-0011: the window shipped off by default, and the old copy here
         // kept promising a wait that no longer happens).
-        (s.window?'<div style="font-size:11.5px;color:var(--text3);margin-top:3px">'+esc(s.window.sentence)+
-          (s.window.enabled&&userHasRole(STATE.user,'admin')?' <button type="button" onclick="openSystemSettingsModal()" style="border:0;background:none;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer">Change these hours</button>':'')+
+        (s.window?'<div class="fs-11_5 c-text3" style="margin-top:3px">'+esc(s.window.sentence)+
+          (s.window.enabled&&userHasRole(STATE.user,'admin')?' <button type="button" onclick="openSystemSettingsModal()" class="c-accent" style="border:0;background:none;padding:0;font:inherit;text-decoration:underline;cursor:pointer">Change these hours</button>':'')+
         '</div>':'')+
       '</div>'+
     '</div>';
@@ -326,9 +326,9 @@
     };
     return '<div class="card cp mb3" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
       one(1,'Pick the job',s.step===1,s.step>1?'candOutreachBackTo(1)':null)+
-      '<span style="color:var(--border)">→</span>'+
+      '<span class="c-border">→</span>'+
       one(2,'Pick the people',s.step===2,s.step>2?'candOutreachBackTo(2)':null)+
-      '<span style="color:var(--border)">→</span>'+
+      '<span class="c-border">→</span>'+
       one(3,'Write and send',s.step===3,null)+
     '</div>';
   }
@@ -340,11 +340,11 @@
       return '<div onclick="candOutreachPickJob(\''+j.id+'\')" style="padding:10px 12px;border-bottom:1px solid var(--border2);cursor:pointer" '+
         'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
         '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'+
-          '<strong style="font-size:13px">'+esc(j.job_title)+'</strong>'+
-          (j.client?'<span style="font-size:12px;color:var(--text2)">'+esc(j.client)+'</span>':'')+
-          (j.status!=='Active'?'<span class="bdg" style="font-size:10px">'+esc(j.status)+'</span>':'')+
+          '<strong class="fs-13">'+esc(j.job_title)+'</strong>'+
+          (j.client?'<span class="fs-12 c-text2">'+esc(j.client)+'</span>':'')+
+          (j.status!=='Active'?'<span class="bdg fs-10">'+esc(j.status)+'</span>':'')+
         '</div>'+
-        '<div style="font-size:11.5px;color:var(--text3)">'+
+        '<div class="fs-11_5 c-text3">'+
           esc([j.place,j.job_code].filter(Boolean).join(' · ')||'no location on the order')+
           (j.has_brief?' · description written':'')+
         '</div>'+
@@ -354,9 +354,9 @@
       '<div class="fgrp"><label class="flbl">Which job are you recruiting for?</label>'+
         '<input class="inp" placeholder="Search by title, client or job code" value="'+esc(s.jobQuery)+'" oninput="candOutreachJobSearch(this.value)">'+
       '</div>'+
-      (s.jobsLoading?'<div style="font-size:12px;color:var(--text3);padding:8px 2px">Loading…</div>':
+      (s.jobsLoading?'<div class="fs-12 c-text3" style="padding:8px 2px">Loading…</div>':
         rows?'<div class="tbl-wrap" data-keep-scroll="co-jobs" style="border:1px solid var(--border2);border-radius:var(--r);max-height:340px;overflow:auto">'+rows+'</div>'
-            :'<div style="font-size:12px;color:var(--text3);padding:8px 2px">No job orders match that.</div>')+
+            :'<div class="fs-12 c-text3" style="padding:8px 2px">No job orders match that.</div>')+
     '</div>';
   }
 
@@ -367,15 +367,15 @@
     var isAi=s.brief.engine==='ai';
     return '<div class="card cp mb3">'+
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
-        '<div style="font-size:12px;font-weight:600">How the role is described</div>'+
+        '<div class="fs-12" style="font-weight:600">How the role is described</div>'+
         '<div style="display:flex;align-items:center;gap:8px">'+
-          '<span class="bdg '+(isAi?'bdg-blue':'')+'" style="font-size:10px">'+(isAi?'written by AI':'built-in writer')+'</span>'+
+          '<span class="bdg '+(isAi?'bdg-blue':'')+' fs-10">'+(isAi?'written by AI':'built-in writer')+'</span>'+
           '<button class="btn btn-outline btn-sm" '+(s.briefLoading?'disabled':'')+' onclick="candOutreachWriteBrief()">'+
             (s.briefLoading?'Writing…':(isAi?'Rewrite':'Write it with AI'))+'</button>'+
         '</div>'+
       '</div>'+
-      '<div style="font-size:12.5px;color:var(--text2);line-height:1.55">'+esc(text)+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+
+      '<div class="fs-12_5 c-text2" style="line-height:1.55">'+esc(text)+'</div>'+
+      '<div class="fs-11 c-text3" style="margin-top:7px">'+
         'Written once for this job and reused in every email — so picking 30 people costs the same as picking one.'+
       '</div>'+
     '</div>';
@@ -383,7 +383,7 @@
 
   function band(b){
     var c=b==='strong'?'var(--green)':b==='good'?'var(--accent)':b==='fair'?'var(--amber)':'var(--text3)';
-    return '<span style="font-size:10.5px;font-weight:700;color:'+c+'">'+esc(b||'—')+'</span>';
+    return '<span class="fs-10_5" style="font-weight:700;color:'+c+'">'+esc(b||'—')+'</span>';
   }
 
   // WHY SOMEBODY WAS SKIPPED, IN WORDS. The first live batch skipped three of
@@ -404,19 +404,19 @@
       var why=x.reason==='failed_check'
         ? (x.detail||'the wording broke a house rule')
         : (SKIP_TEXT[x.reason]||String(x.reason||'').replace(/_/g,' '));
-      return '<div style="padding:6px 0;border-top:1px solid var(--border2);font-size:11.5px;color:var(--text2)">'+
+      return '<div class="fs-11_5 c-text2" style="padding:6px 0;border-top:1px solid var(--border2)">'+
         '<strong>'+esc(x.name||x.candidate_id)+'</strong> — '+esc(why)+'</div>';
     }).join('');
     return '<div class="card cp mb3">'+
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-        '<div style="font-size:13px;font-weight:600">'+r.queued+' email'+(r.queued===1?'':'s')+' queued</div>'+
+        '<div class="fs-13" style="font-weight:600">'+r.queued+' email'+(r.queued===1?'':'s')+' queued</div>'+
         '<button class="btn btn-outline btn-sm" onclick="candOutreachDismissResult()">Dismiss</button>'+
       '</div>'+
-      (r.queued?'<div style="font-size:12px;color:var(--text2);margin-top:3px">Going out about one every 90 seconds from '+esc(r.mailbox)+
+      (r.queued?'<div class="fs-12 c-text2" style="margin-top:3px">Going out about one every 90 seconds from '+esc(r.mailbox)+
         ((s.sender&&s.sender.window&&s.sender.window.enabled)?', in each candidate\'s local free time ('+esc(s.sender.window.label)+')':', starting straight away')+
         ', under your daily cap.</div>':'')+
-      (r.pipeline?'<div style="font-size:12px;color:var(--text2);margin-top:4px">Pipeline: '+r.pipeline.added+' added, '+r.pipeline.existing+' already there'+(r.pipeline.failed?', '+r.pipeline.failed+' failed':'')+'.</div>':'')+
-      (sk.length?'<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:var(--amber)">'+sk.length+' not sent</div>'+rows+'</div>':'')+
+      (r.pipeline?'<div class="fs-12 c-text2" style="margin-top:4px">Pipeline: '+r.pipeline.added+' added, '+r.pipeline.existing+' already there'+(r.pipeline.failed?', '+r.pipeline.failed+' failed':'')+'.</div>':'')+
+      (sk.length?'<div style="margin-top:10px"><div class="fs-12 c-amber" style="font-weight:600">'+sk.length+' not sent</div>'+rows+'</div>':'')+
     '</div>';
   }
   window.candOutreachDismissResult=function(){ S().result=null; render(); };
@@ -435,12 +435,12 @@
           (blocked?'':'<input type="checkbox" '+(on?'checked':'')+' onchange="candOutreachToggle(\''+r.candidate_id+'\')">')+
         '</td>'+
         '<td style="padding:8px 10px">'+
-          '<div style="font-size:12.5px;font-weight:600">'+esc(r.name||'(no name)')+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+esc([r.title,r.location].filter(Boolean).join(' · '))+'</div>'+
-          (why?'<div style="font-size:11px;color:var(--amber)">'+esc(why)+'</div>':'')+
+          '<div class="fs-12_5" style="font-weight:600">'+esc(r.name||'(no name)')+'</div>'+
+          '<div class="fs-11 c-text3">'+esc([r.title,r.location].filter(Boolean).join(' · '))+'</div>'+
+          (why?'<div class="fs-11 c-amber">'+esc(why)+'</div>':'')+
         '</td>'+
         '<td style="padding:8px 10px;white-space:nowrap">'+
-          '<div style="font-size:13px;font-weight:700">'+(r.score==null?'—':r.score)+'</div>'+band(r.band)+
+          '<div class="fs-13" style="font-weight:700">'+(r.score==null?'—':r.score)+'</div>'+band(r.band)+
         '</td>'+
         '<td style="padding:8px 10px;font-size:11.5px;color:var(--text3);line-height:1.5">'+
           esc((r.reasons||[]).slice(0,3).join(' · ')||'not enough on either side to score')+
@@ -456,10 +456,10 @@
         (picked?'<button class="btn btn-outline btn-sm" onclick="candOutreachPickAll(false)">Clear</button>':'')+
       '</div>'+
       (p&&!p.scoreable
-        ? '<div style="background:var(--amber-l);border-radius:var(--r);padding:8px 11px;font-size:11.5px;margin-bottom:10px">'+
+        ? '<div class="fs-11_5" style="background:var(--amber-l);border-radius:var(--r);padding:8px 11px;margin-bottom:10px">'+
           'This job order has no skills listed, so everyone is scored on title and location alone. Adding primary skills to the job will sharpen this list a lot.</div>'
         : '')+
-      (s.poolLoading?'<div style="font-size:12px;color:var(--text3);padding:8px 2px">Ranking the pool…</div>':
+      (s.poolLoading?'<div class="fs-12 c-text3" style="padding:8px 2px">Ranking the pool…</div>':
         rows?'<div class="tbl-wrap" data-keep-scroll="co-pool" style="overflow:auto;max-height:420px;border:1px solid var(--border2);border-radius:var(--r)">'+
               '<table style="width:100%;border-collapse:collapse;min-width:560px">'+
               '<thead><tr style="background:var(--bg);position:sticky;top:0">'+
@@ -468,10 +468,10 @@
                 '<th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--text3);font-weight:600">Fit</th>'+
                 '<th style="text-align:left;padding:7px 10px;font-size:11px;color:var(--text3);font-weight:600">Why</th>'+
               '</tr></thead><tbody>'+rows+'</tbody></table></div>'
-            :'<div style="font-size:12px;color:var(--text3);padding:8px 2px">Nobody in the database matches yet. Add candidates from Applicants, or use Sourcing.</div>')+
+            :'<div class="fs-12 c-text3" style="padding:8px 2px">Nobody in the database matches yet. Add candidates from Applicants, or use Sourcing.</div>')+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px">'+
-        '<div style="font-size:12px;color:var(--text3)">'+
-          (picked?('<strong style="color:var(--text)">'+picked+'</strong> picked'):'Nobody picked yet')+
+        '<div class="fs-12 c-text3">'+
+          (picked?('<strong class="c-text">'+picked+'</strong> picked'):'Nobody picked yet')+
           (p&&p.pool_size?(' · '+p.pool_size+' in the pool'):'')+
         '</div>'+
         '<button class="btn btn-primary btn-sm" '+(picked?'':'disabled')+' onclick="candOutreachToPreview()">Write the email →</button>'+
@@ -500,12 +500,12 @@
 
     var body='';
     if(s.previewLoading){
-      body='<div style="font-size:12px;color:var(--text3);padding:10px 2px">Building a preview…</div>';
+      body='<div class="fs-12 c-text3" style="padding:10px 2px">Building a preview…</div>';
     } else if(!v){
-      body='<div style="font-size:12px;color:var(--text3);padding:10px 2px">No preview yet.</div>';
+      body='<div class="fs-12 c-text3" style="padding:10px 2px">No preview yet.</div>';
     } else {
       var warn=(v.quality&&!v.quality.ok)
-        ? '<div style="background:var(--amber-l);border-radius:var(--r);padding:8px 11px;font-size:11.5px;margin-bottom:10px">'+
+        ? '<div class="fs-11_5" style="background:var(--amber-l);border-radius:var(--r);padding:8px 11px;margin-bottom:10px">'+
           '<strong>This wording breaks a house rule</strong> — '+esc((v.quality.violations||[]).map(function(x){return x.instruction;}).join(' '))+
           ' Anyone it would affect is skipped rather than sent.</div>'
         : '';
@@ -520,18 +520,18 @@
         };
         stepper='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
           nav(-1,'‹','Previous candidate')+
-          '<div style="font-size:12px;color:var(--text2)">'+
+          '<div class="fs-12 c-text2">'+
             '<strong>'+(s.previewIdx+1)+'</strong> of '+ids.length+
-            '<span style="color:var(--text3)"> — each person’s own email</span>'+
+            '<span class="c-text3"> — each person’s own email</span>'+
           '</div>'+
           nav(1,'›','Next candidate')+
         '</div>';
       }
       body=stepper+anglePicker()+warn+
         '<div style="border:1px solid var(--border2);border-radius:var(--r);overflow:hidden">'+
-          '<div style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border2);font-size:12.5px">'+
-            '<span style="color:var(--text3)">Subject: </span><strong>'+esc(v.preview_subject||v.subject)+'</strong></div>'+
-          '<div style="padding:12px;font-size:13px;line-height:1.6;white-space:pre-wrap">'+
+          '<div class="fs-12_5" style="padding:9px 12px;background:var(--bg);border-bottom:1px solid var(--border2)">'+
+            '<span class="c-text3">Subject: </span><strong>'+esc(v.preview_subject||v.subject)+'</strong></div>'+
+          '<div class="fs-13" style="padding:12px;line-height:1.6;white-space:pre-wrap">'+
             esc(v.preview_prose||v.preview_email||v.email)+'</div>'+
           // C-0019 / D-0012: the job description travels INSIDE the email as a
           // bordered panel, so the preview draws it as that panel and not as the
@@ -559,28 +559,28 @@
           // preview exists to prevent. The token in here is dead on purpose.
           (s.preview.buttons_html
             ? '<div style="padding:0 12px 4px">'+s.preview.buttons_html+
-              '<div style="font-size:11px;color:var(--text3);margin-top:2px">One tap answers — it opens a confirmation page rather than recording straight from the link, so a mail scanner cannot answer on their behalf.</div></div>'
+              '<div class="fs-11 c-text3" style="margin-top:2px">One tap answers — it opens a confirmation page rather than recording straight from the link, so a mail scanner cannot answer on their behalf.</div></div>'
             : '')+
           (s.preview.signature_html
             ? '<div style="padding:0 12px 12px;border-top:1px dashed var(--border2);margin-top:4px;padding-top:10px">'+s.preview.signature_html+'</div>'
             : '')+
         '</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+
+        '<div class="fs-11 c-text3" style="margin-top:7px">'+
           'Shown with <strong>'+esc((s.preview.candidate&&s.preview.candidate.name)||'this person')+'</strong>’s details filled in. '+
           'The name in the sign-off is resolved from the mailbox at the moment each one sends.'+
         '</div>';
     }
 
     return '<div class="card cp">'+
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+
-        '<strong style="color:var(--text)">'+ids.length+'</strong> candidate'+(ids.length===1?'':'s')+
+      '<div class="fs-12 c-text3" style="margin-bottom:10px">'+
+        '<strong class="c-text">'+ids.length+'</strong> candidate'+(ids.length===1?'':'s')+
         (s.job?(' · '+esc(s.job.job_title)+(s.job.client?' · '+esc(s.job.client):'')):'')+
       '</div>'+
       body+
-      '<label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:12.5px;cursor:pointer">'+
+      '<label class="fs-12_5" style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;cursor:pointer">'+
         '<input type="checkbox" '+(s.addToPipeline?'checked':'')+' onchange="candOutreachSetPipeline(this.checked)" style="margin-top:2px">'+
         '<span>Add these people to this job’s pipeline at <strong>Sourced</strong>'+
-          '<div style="font-size:11px;color:var(--text3)">Off by default — emailing somebody is not the same as working them, and a board that fills with people who never answered stops being worth looking at.</div>'+
+          '<div class="fs-11 c-text3">Off by default — emailing somebody is not the same as working them, and a board that fills with people who never answered stops being worth looking at.</div>'+
         '</span>'+
       '</label>'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px">'+
@@ -607,7 +607,7 @@
             : '')
         : (r.sent_at?new Date(r.sent_at).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}):'');
       var waitLine=(r.status==='pending'&&r.wait&&r.wait.reason!=='queued')
-        ? '<div style="font-size:11px;color:'+(r.wait.reason==='paused'?'#ef4444':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
+        ? '<div class="fs-11" style="color:'+(r.wait.reason==='paused'?'#ef4444':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
         : '';
       // READ WHAT THIS PERSON ACTUALLY GOT. The body has always been stored; it
       // simply had no way out of the database, so "what did we send them?" meant
@@ -615,32 +615,32 @@
       var open=S().openQueue===r.id;
       var bodyPanel=open
         ? '<div style="padding:10px 12px;background:var(--bg);border-top:1px solid var(--border2)">'+
-            '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">To '+esc(r.to_email||'')+
+            '<div class="fs-11 c-text3" style="margin-bottom:6px">To '+esc(r.to_email||'')+
               (r.angle?' · '+esc(r.angle):'')+(r.engine?' · written by '+esc(r.engine):'')+'</div>'+
-            '<div style="font-size:12.5px;font-weight:600;margin-bottom:6px">'+esc(r.subject||'(no subject)')+'</div>'+
+            '<div class="fs-12_5" style="font-weight:600;margin-bottom:6px">'+esc(r.subject||'(no subject)')+'</div>'+
             (r.body
-              ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(r.body)+'</div>'
-              : '<div style="font-size:12px;color:var(--text3)">The text of this one was not recorded.</div>')+
+              ? '<div class="fs-12_5" style="line-height:1.6;white-space:pre-wrap">'+esc(r.body)+'</div>'
+              : '<div class="fs-12 c-text3">The text of this one was not recorded.</div>')+
           '</div>'
         : '';
       return '<div style="border-bottom:1px solid var(--border2)">'+
         '<div style="display:flex;align-items:center;gap:10px;padding:8px 11px;cursor:pointer" '+
           'onclick="candOutreachToggleQueue(\''+r.id+'\')" title="Read the email this person got">'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
-            '<span style="color:var(--text3);font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(r.name||r.to_email)+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
-          (r.fail_reason?'<div style="font-size:11px;color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
+          '<div class="fs-12_5" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
+            '<span class="c-text3" style="font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(r.name||r.to_email)+'</div>'+
+          '<div class="fs-11 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
+          (r.fail_reason?'<div class="fs-11" style="color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
           waitLine+
         '</div>'+
         '<div style="text-align:right;white-space:nowrap">'+
-          '<div style="font-size:11px;font-weight:700;color:'+(r.response==='interested'?'var(--green)':r.response?'var(--text3)':colour)+'">'+
+          '<div class="fs-11" style="font-weight:700;color:'+(r.response==='interested'?'var(--green)':r.response?'var(--text3)':colour)+'">'+
             (r.response==='interested'?'★ INTERESTED':r.response==='not_interested'?'not this one':r.response==='opted_out'?'opted out'
               :(r.status==='pending'&&r.wait&&r.wait.reason==='window')?'waiting'
               :(r.status==='pending'&&r.wait&&r.wait.reason==='due')?'sending soon'
               :esc(r.status))+
           '</div>'+
-          '<div style="font-size:10.5px;color:var(--text3)">'+esc(when)+'</div>'+
+          '<div class="fs-10_5 c-text3">'+esc(when)+'</div>'+
         '</div>'+
         (r.status==='pending'?'<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();candOutreachCancel(\''+r.id+'\')">Cancel</button>':'')+
         '</div>'+
@@ -649,8 +649,8 @@
     }).join('');
     if(!rows) return '';
     return '<div class="card cp" style="margin-top:16px;padding:0;overflow:hidden">'+
-      '<div style="padding:10px 12px;border-bottom:1px solid var(--border2);font-size:12px;font-weight:600">Your candidate outreach'+
-        '<span style="font-weight:400;color:var(--text3)"> — click anyone to read the email they got</span></div>'+
+      '<div class="fs-12" style="padding:10px 12px;border-bottom:1px solid var(--border2);font-weight:600">Your candidate outreach'+
+        '<span class="c-text3" style="font-weight:400"> — click anyone to read the email they got</span></div>'+
       rows+
     '</div>';
   }
@@ -675,7 +675,7 @@
     var rows=s.pendingQueue||[];
     if(!rows.length){
       if(isBD) return '';
-      return '<div class="card cp" style="font-size:12.5px;color:var(--text3)">'+
+      return '<div class="card cp fs-12_5 c-text3">'+
         (s.pendingLoading&&!s.pendingQueue?'Checking your queue…':'Nothing waiting — every candidate email you queued has gone out.')+'</div>';
     }
     var fmt=function(d){ return new Date(d).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}); };
@@ -684,19 +684,19 @@
       var why=r.wait?r.wait.text:'';
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--border2)">'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name||r.to_email)+
-            ' <span style="font-weight:400;color:var(--text3)">'+esc(r.to_email||'')+'</span></div>'+
-          '<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
-          (why?'<div style="font-size:11px;color:var(--text2)">'+esc(why)+'</div>':'')+
+          '<div class="fs-12_5" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.name||r.to_email)+
+            ' <span class="c-text3" style="font-weight:400">'+esc(r.to_email||'')+'</span></div>'+
+          '<div class="fs-11 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
+          (why?'<div class="fs-11 c-text2">'+esc(why)+'</div>':'')+
         '</div>'+
-        '<div style="font-size:11px;color:var(--text3);white-space:nowrap">'+(r.send_after?'due '+esc(fmt(r.send_after)):'')+'</div>'+
+        '<div class="fs-11 c-text3" style="white-space:nowrap">'+(r.send_after?'due '+esc(fmt(r.send_after)):'')+'</div>'+
         '<button class="btn btn-outline btn-sm" onclick="candOutreachCancel(\''+r.id+'\');S_pendingReload()">Cancel</button>'+
       '</div>';
     }).join('');
     return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">'+
       '<div style="padding:11px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'+
-        '<div style="font-size:13px;font-weight:600">Candidate emails waiting to go ('+rows.length+')</div>'+
-        '<div style="font-size:11.5px;color:var(--text3)">They go out one about every 90 seconds, so a batch does not look like a blast'+
+        '<div class="fs-13" style="font-weight:600">Candidate emails waiting to go ('+rows.length+')</div>'+
+        '<div class="fs-11_5 c-text3">They go out one about every 90 seconds, so a batch does not look like a blast'+
           (next&&next.send_after?' · next '+esc(fmt(next.send_after)):'')+'</div>'+
       '</div>'+list+
     '</div>';

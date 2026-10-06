@@ -272,11 +272,11 @@ function renderNextActionsCard(){
   // out…" forever.
   var isViewingOther=STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id;
   if(isViewingOther&&s===undefined){
-    return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">'+
+    return '<div class="card cp mb4 c-text3 fs-13">'+
       'This is a personal to-do queue — not shown while previewing someone else\'s dashboard.</div>';
   }
   if(s===undefined||s===null){
-    return '<div class="card cp mb4" style="color:var(--text3);font-size:13px">Working out what needs you…</div>';
+    return '<div class="card cp mb4 c-text3 fs-13">Working out what needs you…</div>';
   }
   if(s._error){
     // Honest, not silent — same rule as the briefing card (C-0009): a failed
@@ -302,8 +302,8 @@ function renderNextActionsCard(){
     return '<div class="card mb4" style="padding:0;overflow:hidden">'+
       '<div class="cp" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<span style="width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-        '<div style="font-size:13.5px;font-weight:600">'+(olderCount?'Nothing new for today.':'Nothing waiting on you.')+'</div>'+
-        '<div style="font-size:12px;color:var(--text3)">'+(olderCount?'Nothing arrived or came due today.':'No unanswered replies or due reminders.')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:600">'+(olderCount?'Nothing new for today.':'Nothing waiting on you.')+'</div>'+
+        '<div class="fs-12 c-text3">'+(olderCount?'Nothing arrived or came due today.':'No unanswered replies or due reminders.')+'</div>'+
       '</div>'+
       naOlderLine(olderCount)+
       naTeamLine(s)+
@@ -352,14 +352,14 @@ function renderNextActionsCard(){
       'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
       '<label class="cd-tick" onclick="event.stopPropagation()" title="Completed'+(it.reminder_id?'':' — hides this until they reply')+'"><input type="checkbox" onclick="naComplete(this,event)" aria-label="Mark completed"></label>'+
-      '<span style="flex:none;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'">'+k.lbl+'</span>'+
+      '<span class="fs-10_5" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'">'+k.lbl+'</span>'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13.5px;font-weight:600">'+htmlEsc(it.title||'')+
-          (it.subtitle?' <span style="font-weight:400;color:var(--text3)">· '+htmlEsc(it.subtitle)+'</span>':'')+'</div>'+
-        '<div style="font-size:12px;color:var(--text3)">'+htmlEsc(it.reason||'')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:600">'+htmlEsc(it.title||'')+
+          (it.subtitle?' <span class="c-text3" style="font-weight:400">· '+htmlEsc(it.subtitle)+'</span>':'')+'</div>'+
+        '<div class="fs-12 c-text3">'+htmlEsc(it.reason||'')+'</div>'+
       '</div>'+
       '<div class="na-acts">'+acts+'</div>'+
-      '<div style="color:var(--text3);font-size:18px">›</div>'+
+      '<div class="c-text3 fs-18">›</div>'+
     '</div>';
   }).join('');
 
@@ -367,13 +367,13 @@ function renderNextActionsCard(){
   items.forEach(function(i){bk[i.kind]=(bk[i.kind]||0)+1;});
   function chip(n,label,color){
     if(!n)return '';
-    return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:'+color+'">'+n+' '+label+'</span>';
+    return '<span class="fs-11" style="font-weight:600;padding:2px 8px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:'+color+'">'+n+' '+label+'</span>';
   }
 
   return '<div class="card cp mb4" style="padding:0;overflow:hidden">'+
     '<div style="padding:13px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
       '<div style="flex:1;min-width:200px">'+
-        '<div style="font-weight:700;font-size:14px">Needs you today</div>'+
+        '<div class="fs-14" style="font-weight:700">Needs you today</div>'+
         '<div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap">'+
           chip(bk.reply_due,'to reply','#b91c1c')+
           chip(bk.commitment_due,'promised','#92400e')+
@@ -382,8 +382,8 @@ function renderNextActionsCard(){
           chip(bk.stage_suggested,'interested','#166534')+
         '</div>'+
       '</div>'+
-      '<button onclick="refreshNextActions()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">Refresh</button>'+
-      (items.length>NA_TOP?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:12.5px;color:var(--text2);cursor:pointer">'+(STATE.naExpanded?'Show the top '+NA_TOP:'See all '+items.length)+'</button>':'')+
+      '<button onclick="refreshNextActions()" class="fs-12_5 c-text2" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">Refresh</button>'+
+      (items.length>NA_TOP?'<button onclick="STATE.naExpanded='+(STATE.naExpanded?'false':'true')+';render()" class="fs-12_5 c-text2" style="padding:6px 12px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">'+(STATE.naExpanded?'Show the top '+NA_TOP:'See all '+items.length)+'</button>':'')+
     '</div>'+
     rows+
     naOlderLine(olderCount)+

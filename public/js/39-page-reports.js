@@ -67,9 +67,9 @@
 
   function tile(label, value, sub){
     return '<div class="card" style="padding:14px 16px;flex:1;min-width:130px">'+
-      '<div style="font-size:24px;font-weight:800;color:var(--text)">'+esc(value)+'</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+esc(label)+'</div>'+
-      (sub?'<div style="font-size:11px;color:var(--text3);margin-top:2px">'+esc(sub)+'</div>':'')+
+      '<div class="fs-24 c-text" style="font-weight:800">'+esc(value)+'</div>'+
+      '<div class="fs-12 c-text3" style="margin-top:2px">'+esc(label)+'</div>'+
+      (sub?'<div class="fs-11 c-text3" style="margin-top:2px">'+esc(sub)+'</div>':'')+
     '</div>';
   }
 
@@ -79,14 +79,14 @@
     var rows = stages.map(function(s){
       var n = funnel[s]||0; var w = Math.round((n/max)*100);
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'+
-        '<div style="width:130px;font-size:12px;color:var(--text2);text-align:right;flex-shrink:0">'+esc(s)+'</div>'+
+        '<div class="fs-12 c-text2" style="width:130px;text-align:right;flex-shrink:0">'+esc(s)+'</div>'+
         '<div style="flex:1;background:var(--bg);border-radius:6px;height:20px;position:relative;overflow:hidden">'+
           '<div style="width:'+w+'%;height:100%;background:'+(colors[s]||'var(--accent)')+';border-radius:6px;min-width:'+(n?'2px':'0')+'"></div>'+
         '</div>'+
-        '<div style="width:34px;font-size:12.5px;font-weight:700;color:'+(n?'var(--text)':'var(--text3)')+'">'+n+'</div>'+
+        '<div class="fs-12_5" style="width:34px;font-weight:700;color:'+(n?'var(--text)':'var(--text3)')+'">'+n+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div style="font-weight:600;font-size:14px;margin-bottom:12px">Pipeline funnel</div>'+rows+'</div>';
+    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:12px">Pipeline funnel</div>'+rows+'</div>';
   }
 
   function trendCard(trend){
@@ -94,12 +94,12 @@
     var bars = trend.map(function(t){
       var h = t.count ? Math.max(6, Math.round((t.count/max)*90)) : 2;
       return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:110px">'+
-        '<div style="font-size:11px;font-weight:700;color:'+(t.count?'var(--text)':'var(--text3)')+'">'+t.count+'</div>'+
+        '<div class="fs-11" style="font-weight:700;color:'+(t.count?'var(--text)':'var(--text3)')+'">'+t.count+'</div>'+
         '<div style="width:60%;height:'+h+'px;background:var(--accent);border-radius:4px 4px 0 0;margin-top:3px"></div>'+
-        '<div style="font-size:9.5px;color:var(--text3);margin-top:4px;white-space:nowrap">'+esc(t.week)+'</div>'+
+        '<div class="fs-9_5 c-text3" style="margin-top:4px;white-space:nowrap">'+esc(t.week)+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div style="font-weight:600;font-size:14px;margin-bottom:10px">Submissions — last 8 weeks</div>'+
+    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:10px">Submissions — last 8 weeks</div>'+
       '<div style="display:flex;align-items:flex-end;gap:6px">'+bars+'</div></div>';
   }
 
@@ -109,16 +109,16 @@
       .map(function(h){ return '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">'+h+'</th>'; }).join('');
     var body = rows.map(function(r){
       return '<tr style="border-top:1px solid var(--border)">'+
-        '<td style="padding:8px 10px;font-size:12.5px;font-weight:600">'+esc(r.recruiter)+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.total+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.submitted+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.interviews+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px;font-weight:600">'+esc(r.recruiter)+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.total+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.submitted+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.interviews+'</td>'+
         '<td style="padding:8px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+r.placements+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.fill_rate+'%</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+money(r.revenue)+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.fill_rate+'%</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+money(r.revenue)+'</td>'+
       '</tr>';
     }).join('');
-    return '<div class="card" style="padding:0;overflow-x:auto"><div style="padding:14px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border)">Recruiter productivity</div>'+
+    return '<div class="card" style="padding:0;overflow-x:auto"><div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border)">Recruiter productivity</div>'+
       '<table style="width:100%;border-collapse:collapse;min-width:620px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>';
   }
 
@@ -128,28 +128,28 @@
     var body = rows.map(function(r){
       var w = Math.round((r.count/max)*100);
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'+
-        '<div style="width:130px;font-size:12.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">'+esc(r.client)+'</div>'+
+        '<div class="fs-12_5 c-text2" style="width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">'+esc(r.client)+'</div>'+
         '<div style="flex:1;background:var(--bg);border-radius:6px;height:16px"><div style="width:'+w+'%;height:100%;background:var(--accent);border-radius:6px"></div></div>'+
-        '<div style="width:26px;font-size:12px;font-weight:700">'+r.count+'</div>'+
+        '<div class="fs-12" style="width:26px;font-weight:700">'+r.count+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px"><div style="font-weight:600;font-size:14px;margin-bottom:12px">Top clients by submissions</div>'+body+'</div>';
+    return '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:12px">Top clients by submissions</div>'+body+'</div>';
   }
 
   function filterBar(d){
     var f = STATE.reports.filters||{};
     function pill(active,label,onclick){
-      return '<button onclick="'+onclick+'" style="border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent-l)':'var(--card)')+';color:'+(active?'var(--accent)':'var(--text2)')+';border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer">'+label+'</button>';
+      return '<button onclick="'+onclick+'" class="fs-12" style="border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent-l)':'var(--card)')+';color:'+(active?'var(--accent)':'var(--text2)')+';border-radius:7px;padding:5px 11px;font-weight:600;cursor:pointer">'+label+'</button>';
     }
     var presetBtns=[['7','7d'],['30','30d'],['90','90d'],['all','All']].map(function(p){ return pill((f.preset||'all')===p[0],p[1],"reportsPreset('"+p[0]+"')"); }).join('');
     var roleBtns=[['','All'],['bd','BDs'],['recruiter','Recruiters']].map(function(r){ return pill((f.role||'')===r[0],r[1],"reportsRole('"+r[0]+"')"); }).join('');
     return '<div class="card" style="padding:12px 14px;margin-bottom:14px;display:flex;gap:18px;flex-wrap:wrap;align-items:center">'+
-      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Period</span>'+presetBtns+
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Period</span>'+presetBtns+
         '<input type="date" value="'+esc(f.from||'')+'" onchange="reportsDate(\'from\',this.value)" style="border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;background:var(--card);color:var(--text)"/>'+
-        '<span style="color:var(--text3);font-size:12px">to</span>'+
+        '<span class="c-text3 fs-12">to</span>'+
         '<input type="date" value="'+esc(f.to||'')+'" onchange="reportsDate(\'to\',this.value)" style="border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12px;background:var(--card);color:var(--text)"/>'+
       '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center"><span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Who</span>'+roleBtns+'</div>'+
+      '<div style="display:flex;gap:6px;align-items:center"><span class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em">Who</span>'+roleBtns+'</div>'+
     '</div>';
   }
 
@@ -161,14 +161,14 @@
       // Classes, not inline widths (R-006): 190px + a bar + 200px cannot fit a
       // phone, and an inline width is out of any stylesheet's reach.
       return '<div class="rep-hot">'+
-        '<div class="rep-hot-t"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
+        '<div class="rep-hot-t"><div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
+          '<div class="fs-11 c-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
         '<div class="rep-hot-bar"><div style="width:'+w+'%;height:100%;background:linear-gradient(90deg,var(--accent),#2563eb);border-radius:6px"></div></div>'+
         '<div class="rep-hot-s"><b>'+j.submissions+'</b> subs · <b style="color:#2563eb">'+j.interviews+'</b> intv</div>'+
       '</div>';
     }).join('');
-    return '<div class="card" style="padding:16px;margin-bottom:14px"><div style="font-weight:600;font-size:14px;margin-bottom:2px">🔥 Hot jobs</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
+    return '<div class="card" style="padding:16px;margin-bottom:14px"><div class="fs-14" style="font-weight:600;margin-bottom:2px">🔥 Hot jobs</div>'+
+      '<div class="fs-12 c-text3" style="margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
   }
 
   // TIME IN STAGE (R-001): how long people sit at each stage across the desk,
@@ -186,8 +186,8 @@
         '<td class="num">'+(r.final?'<span class="rep-muted">—</span>':(r.stuck?'<b class="rep-stuck">'+r.stuck+'</b>':'0'))+'</td></tr>';
     }).join('');
     return '<div class="card" style="padding:16px;margin-bottom:14px">'+
-      '<div style="font-weight:600;font-size:14px;margin-bottom:2px">Time in stage</div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">How long candidates typically sit at each stage, and how many have been there '+(stuckDays||14)+'+ days</div>'+
+      '<div class="fs-14" style="font-weight:600;margin-bottom:2px">Time in stage</div>'+
+      '<div class="fs-12 c-text3" style="margin-bottom:12px">How long candidates typically sit at each stage, and how many have been there '+(stuckDays||14)+'+ days</div>'+
       '<div class="dt-wrap"><table class="rep-tis"><thead><tr><th>Stage</th><th class="num">Now there</th><th>Typical time there</th><th class="num">Stuck '+(stuckDays||14)+'+ days</th></tr></thead>'+
       '<tbody>'+body+'</tbody></table></div></div>';
   }
@@ -195,13 +195,13 @@
   function miniFunnel(f, stages){
     var colors=window.ATS_STAGE_COLORS||{};
     var present=stages.filter(function(s){return (f[s]||0)>0;});
-    if(!present.length) return '<div style="padding:8px 44px;background:var(--bg);font-size:11.5px;color:var(--text3)">No submissions in this period.</div>';
+    if(!present.length) return '<div class="fs-11_5 c-text3" style="padding:8px 44px;background:var(--bg)">No submissions in this period.</div>';
     var max=Math.max(1,Math.max.apply(null,present.map(function(s){return f[s]||0;})));
     return '<div style="padding:8px 10px 10px 44px;background:var(--bg)">'+present.map(function(s){
       var n=f[s]||0,w=Math.round(n/max*100);
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><div style="width:130px;font-size:11px;color:var(--text3);text-align:right">'+esc(s)+'</div>'+
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><div class="fs-11 c-text3" style="width:130px;text-align:right">'+esc(s)+'</div>'+
         '<div style="flex:1;background:var(--card);border-radius:4px;height:12px;overflow:hidden"><div style="width:'+w+'%;height:100%;background:'+(colors[s]||'var(--accent)')+'"></div></div>'+
-        '<div style="width:26px;font-size:11px;font-weight:700">'+n+'</div></div>';
+        '<div class="fs-11" style="width:26px;font-weight:700">'+n+'</div></div>';
     }).join('')+'</div>';
   }
 
@@ -215,14 +215,14 @@
       var rowHtml='<tr style="border-top:1px solid var(--border)">'+
         '<td style="padding:8px 6px 8px 10px"><input type="checkbox" '+(sel[r.user_id]?'checked':'')+' onclick="reportsToggleSel(\''+r.user_id+'\')"/></td>'+
         '<td style="padding:8px 4px"><button onclick="reportsToggleExpand(\''+r.user_id+'\')" style="border:0;background:none;cursor:pointer;color:var(--text3);font-size:12px">'+(open?'▾':'▸')+'</button></td>'+
-        '<td style="padding:8px 10px;font-size:12.5px;font-weight:600">'+esc(r.recruiter)+'</td>'+
-        '<td style="padding:8px 10px;font-size:11.5px"><span style="padding:1px 7px;border-radius:7px;font-weight:600;background:'+(r.role_label==='BD'?'var(--accent-l)':'rgba(37,99,235,.12)')+';color:'+(r.role_label==='BD'?'var(--accent)':'#2563eb')+'">'+esc(r.role_label||'Recruiter')+'</span></td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.total+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.submitted+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.interviews+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px;font-weight:600">'+esc(r.recruiter)+'</td>'+
+        '<td class="fs-11_5" style="padding:8px 10px"><span style="padding:1px 7px;border-radius:7px;font-weight:600;background:'+(r.role_label==='BD'?'var(--accent-l)':'rgba(37,99,235,.12)')+';color:'+(r.role_label==='BD'?'var(--accent)':'#2563eb')+'">'+esc(r.role_label||'Recruiter')+'</span></td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.total+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.submitted+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.interviews+'</td>'+
         '<td style="padding:8px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+r.placements+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+r.fill_rate+'%</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px">'+money(r.revenue)+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+r.fill_rate+'%</td>'+
+        '<td class="fs-12_5" style="padding:8px 10px">'+money(r.revenue)+'</td>'+
       '</tr>';
       if(open) rowHtml+='<tr><td colspan="10" style="padding:0">'+miniFunnel(funnels[r.user_id]||{}, stages)+'</td></tr>';
       return rowHtml;
@@ -235,19 +235,19 @@
       var avgFill=chosen.length?Math.round(chosen.reduce(function(a,r){return a+r.fill_rate;},0)/chosen.length):0;
       combined='<tr style="border-top:2px solid var(--accent);background:var(--accent-l)">'+
         '<td colspan="2" style="padding:9px 10px"></td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">Combined ('+chosen.length+')</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">Combined ('+chosen.length+')</td>'+
         '<td style="padding:9px 10px"></td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">'+sum.total+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">'+sum.submitted+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">'+sum.interviews+'</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.total+'</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.submitted+'</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.interviews+'</td>'+
         '<td style="padding:9px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+sum.placements+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">'+avgFill+'% <span style="font-weight:400;color:var(--text3);font-size:10px">avg</span></td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700">'+money(sum.revenue)+'</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+avgFill+'% <span class="c-text3 fs-10" style="font-weight:400">avg</span></td>'+
+        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+money(sum.revenue)+'</td>'+
       '</tr>';
     }
     return '<div class="card" style="padding:0;overflow-x:auto;margin-bottom:14px">'+
-      '<div style="padding:14px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">'+
-        '<span>Per-person productivity <span style="font-size:11px;font-weight:400;color:var(--text3)">tick people to combine · ▸ opens their funnel</span></span>'+
+      '<div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">'+
+        '<span>Per-person productivity <span class="fs-11 c-text3" style="font-weight:400">tick people to combine · ▸ opens their funnel</span></span>'+
         (selIds.length?'<button class="btn btn-sm btn-outline" onclick="reportsClearSel()">Clear ('+selIds.length+')</button>':'')+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+combined+'</tbody></table></div>';
@@ -286,7 +286,7 @@
       : (d.by_recruiter||[]).map(function(x,i){ return Object.assign({ user_id:'r'+i, role_label:'Recruiter' }, x); });
 
     var body =
-      (r.loading?'<div style="font-size:12px;color:var(--ink3);margin-bottom:10px">Updating…</div>':'')+
+      (r.loading?'<div class="fs-12 c-ink3" style="margin-bottom:10px">Updating…</div>':'')+
       // A class, not an inline grid: an inline grid cannot reflow on a phone,
       // and this one pushed the report ~200px past a 390px screen (R-006).
       '<div class="rep-2col">'+funnelCard(d.funnel,d.stages)+trendCard(d.trend)+'</div>'+
@@ -318,7 +318,7 @@
       strip: p.strip,
       toolbar: UI.toolbar({
         icons:[{ icon:'refresh', title:'Reload', onclick:'reportsReload()' }],
-        right:'<span style="font-size:12.5px;color:var(--ink3)">'+esc(scopeLine)+'</span>'
+        right:'<span class="fs-12_5 c-ink3">'+esc(scopeLine)+'</span>'
       }),
       body: p.filters + p.body
     });

@@ -116,15 +116,15 @@
   };
   window.navBar = function(){
     var stack = (STATE.nav && STATE.nav.stack) || [];
-    if (!stack.length) return '<div style="margin-bottom:8px"><span onclick="navBack()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Back</span></div>';
+    if (!stack.length) return '<div style="margin-bottom:8px"><span onclick="navBack()" class="fs-12_5 c-accent" style="cursor:pointer">← Back</span></div>';
     var crumbs = stack.map(function(e,i){
       var last = i === stack.length-1;
       var lbl = esc(labelOf(e));
-      if (last) return '<span style="font-size:12.5px;color:var(--text2);font-weight:600">'+lbl+'</span>';
-      return '<span onclick="navGoTo('+i+')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">'+lbl+'</span>'+
-             '<span style="color:var(--text3);margin:0 7px">›</span>';
+      if (last) return '<span class="fs-12_5 c-text2" style="font-weight:600">'+lbl+'</span>';
+      return '<span onclick="navGoTo('+i+')" class="fs-12_5 c-accent" style="cursor:pointer">'+lbl+'</span>'+
+             '<span class="c-text3" style="margin:0 7px">›</span>';
     }).join('');
-    var back = stack.length>1 ? '<span onclick="navBack()" title="Back" style="cursor:pointer;color:var(--accent);font-weight:700;margin-right:10px">←</span>' : '';
+    var back = stack.length>1 ? '<span onclick="navBack()" title="Back" class="c-accent" style="cursor:pointer;font-weight:700;margin-right:10px">←</span>' : '';
     return '<div style="margin-bottom:10px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">'+back+crumbs+'</div>';
   };
 })();

@@ -49,19 +49,19 @@ function planUsageRow(key,u){
   var unlimited=u.limit===null||u.limit===undefined;
   var pct=unlimited?0:Math.min(100,Math.round((u.used/Math.max(1,u.limit))*100));
   var bar=unlimited
-    ? '<div style="font-size:12px;color:var(--text3)">Unlimited</div>'
+    ? '<div class="fs-12 c-text3">Unlimited</div>'
     : '<div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden">'+
         '<div style="height:100%;width:'+pct+'%;background:'+(u.over?'var(--red)':pct>=80?'#f59e0b':'var(--accent)')+'"></div>'+
       '</div>';
   return '<div style="display:flex;align-items:center;gap:14px;padding:10px 14px;border-top:1px solid var(--border)">'+
     '<div style="flex:1;min-width:150px">'+
-      '<div style="font-size:13px;font-weight:600;text-transform:capitalize">'+htmlEsc(u.label||key)+'</div>'+
+      '<div class="fs-13" style="font-weight:600;text-transform:capitalize">'+htmlEsc(u.label||key)+'</div>'+
       (u.over
-        ? '<div style="font-size:11.5px;color:var(--red);margin-top:2px">Over the plan limit — nothing has been removed, you just can’t add more until you upgrade.</div>'
+        ? '<div class="fs-11_5 c-red" style="margin-top:2px">Over the plan limit — nothing has been removed, you just can’t add more until you upgrade.</div>'
         : '')+
     '</div>'+
     '<div style="width:180px">'+bar+'</div>'+
-    '<div style="font-family:var(--mono);font-size:12.5px;color:var(--text2);min-width:80px;text-align:right">'+
+    '<div class="fs-12_5 c-text2" style="font-family:var(--mono);min-width:80px;text-align:right">'+
       u.used+(unlimited?'':' / '+u.limit)+
     '</div>'+
   '</div>';
@@ -69,16 +69,16 @@ function planUsageRow(key,u){
 
 function renderPlanPicker(){
   var d=STATE.allPlans;
-  if(!d)return '<div style="border-top:1px solid var(--border);padding:14px;font-size:13px;color:var(--text3)">Loading plans…</div>';
+  if(!d)return '<div class="fs-13 c-text3" style="border-top:1px solid var(--border);padding:14px">Loading plans…</div>';
   var cards=(d.plans||[]).map(function(p){
     var current=STATE.orgPlan&&STATE.orgPlan.plan&&STATE.orgPlan.plan.id===p.id;
     var lim=p.limits||{};
     function n(v){return v===null||v===undefined?'Unlimited':v;}
     function plural(v,word){return n(v)+' '+word+(v===1?'':'s');}
     return '<div style="border:1.5px solid '+(current?'var(--accent)':'var(--border)')+';border-radius:10px;padding:14px;flex:1;min-width:190px">'+
-      '<div style="font-weight:700;font-size:14px">'+htmlEsc(p.name)+(current?' <span style="font-size:10.5px;color:var(--accent)">· current</span>':'')+'</div>'+
-      '<div style="font-size:11.5px;color:var(--text3);margin:4px 0 10px;line-height:1.45;min-height:32px">'+htmlEsc(p.blurb||'')+'</div>'+
-      '<div style="font-size:12.5px;color:var(--text2);line-height:1.7">'+
+      '<div class="fs-14" style="font-weight:700">'+htmlEsc(p.name)+(current?' <span class="fs-10_5 c-accent">· current</span>':'')+'</div>'+
+      '<div class="fs-11_5 c-text3" style="margin:4px 0 10px;line-height:1.45;min-height:32px">'+htmlEsc(p.blurb||'')+'</div>'+
+      '<div class="fs-12_5 c-text2" style="line-height:1.7">'+
         '<div>'+plural(lim.seats,'team member')+'</div>'+
         '<div>'+plural(lim.job_orders,'job order')+'</div>'+
         '<div>'+plural(lim.candidates,'candidate')+'</div>'+
@@ -86,8 +86,8 @@ function renderPlanPicker(){
       '</div>'+
       '<div style="margin-top:12px">'+
         (p.price!==null&&p.price!==undefined
-          ? '<div style="font-size:15px;font-weight:700">'+htmlEsc(String(p.price))+'</div>'
-          : '<div style="font-size:11.5px;color:var(--text3)">Pricing not published yet</div>')+
+          ? '<div class="fs-15" style="font-weight:700">'+htmlEsc(String(p.price))+'</div>'
+          : '<div class="fs-11_5 c-text3">Pricing not published yet</div>')+
       '</div>'+
       (current||!p.purchasable
         ? ''
@@ -99,7 +99,7 @@ function renderPlanPicker(){
     '<div style="display:flex;gap:12px;flex-wrap:wrap">'+cards+'</div>'+
     (d.billing_enabled
       ? ''
-      : '<div style="font-size:11.5px;color:var(--text3);margin-top:12px;line-height:1.5">'+
+      : '<div class="fs-11_5 c-text3" style="margin-top:12px;line-height:1.5">'+
           'Online payment is not switched on for this deployment, so plans are changed by arrangement. '+
           'Everything above is already enforced.'+
         '</div>')+
@@ -108,19 +108,19 @@ function renderPlanPicker(){
 
 function renderPlanCard(){
   var s=STATE.orgPlan;
-  if(s===undefined||s===null){loadPlan();return '<div class="card cp mb4" style="font-size:13px;color:var(--text3)">Loading plan…</div>';}
+  if(s===undefined||s===null){loadPlan();return '<div class="card cp mb4 fs-13 c-text3">Loading plan…</div>';}
   if(s._error)return '';
 
   var plan=s.plan||{};
   var statusPill=s.status==='active'
     ? ''
-    : '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:8px;background:var(--red-l);color:var(--red);margin-left:8px">'+htmlEsc(s.status)+'</span>';
+    : '<span class="fs-11 c-red" style="font-weight:700;padding:3px 9px;border-radius:8px;background:var(--red-l);margin-left:8px">'+htmlEsc(s.status)+'</span>';
 
   var rows=Object.keys(s.usage||{}).map(function(k){return planUsageRow(k,s.usage[k]);}).join('');
 
   var features=Object.keys(s.features||{}).map(function(f){
     var on=s.features[f].enabled;
-    return '<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:'+(on?'var(--text2)':'var(--text3)')+'">'+
+    return '<div class="fs-12_5" style="display:flex;align-items:center;gap:7px;color:'+(on?'var(--text2)':'var(--text3)')+'">'+
       '<span style="color:'+(on?'var(--green)':'var(--text3)')+';font-weight:700">'+(on?'✓':'—')+'</span>'+
       htmlEsc(s.features[f].label)+
     '</div>';
@@ -130,17 +130,17 @@ function renderPlanCard(){
     '<div style="padding:14px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
         '<div>'+
-          '<div style="font-weight:700;font-size:14px">Plan &amp; usage</div>'+
-          '<div style="font-size:12px;color:var(--text3);margin-top:3px">'+
-            'You are on <strong style="color:var(--text2)">'+htmlEsc(plan.name||'—')+'</strong>'+statusPill+
-            (plan.internal?' <span style="color:var(--text3)">· not a billed tier</span>':'')+
+          '<div class="fs-14" style="font-weight:700">Plan &amp; usage</div>'+
+          '<div class="fs-12 c-text3" style="margin-top:3px">'+
+            'You are on <strong class="c-text2">'+htmlEsc(plan.name||'—')+'</strong>'+statusPill+
+            (plan.internal?' <span class="c-text3">· not a billed tier</span>':'')+
           '</div>'+
         '</div>'+
         '<div style="display:flex;gap:8px">'+
           (s.can_manage
             ? '<button class="btn btn-primary" onclick="togglePlanPicker()">'+(STATE.showPlanPicker?'Hide plans':'Change plan')+'</button>'
             : '')+
-          '<button onclick="refreshPlan()" style="padding:8px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;font-size:13px;color:var(--text2);cursor:pointer">Refresh</button>'+
+          '<button onclick="refreshPlan()" class="fs-13 c-text2" style="padding:8px 14px;background:var(--card);border:1px solid var(--border2);border-radius:8px;cursor:pointer">Refresh</button>'+
         '</div>'+
       '</div>'+
       (features?'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">'+features+'</div>':'')+

@@ -78,7 +78,7 @@ function renderJobs(){
       '<span onclick="event.stopPropagation()">'+
         (hasEmail
           ? '<input type="checkbox" class="ck" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" title="Select for sequence">'
-          : '<span title="No contact email" style="color:var(--ink3)">·</span>')+
+          : '<span title="No contact email" class="c-ink3">·</span>')+
       '</span>' });
     cells.push({ html: UI.idCell(j.position||'—', j.location||'', null, { badge: marks }) });
     cells.push({ html: escHtml(j.company_name||'—') });
@@ -90,8 +90,8 @@ function renderJobs(){
       ? UI.idCell(j.assigned_bd_name, j.assigned_at
           ? new Date(j.assigned_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})
           : '', null)
-      : '<span style="color:var(--ink3)">—</span>' });
-    cells.push({ cls:'tight', html: '<span style="color:var(--ink3)">'+
+      : '<span class="c-ink3">—</span>' });
+    cells.push({ cls:'tight', html: '<span class="c-ink3">'+
       escHtml(j.created_date||(j.created_at?new Date(j.created_at).toISOString().slice(0,10):''))+'</span>' });
 
     // D-0014: the row REVEALS, it does not navigate away. Clicking opens a
@@ -121,11 +121,11 @@ function renderJobs(){
                { verified: !!primary.email }) },
       { cls:'tight', html: UI.pill(String(cs.length),'info') },
       { cls:'tight', html: '<span class="pill" style="background:'+stageColor+'14;color:'+stageColor+'"><i></i>'+escHtml(j.stage)+'</span>' },
-      { cls:'tight', html: '<span style="color:var(--ink3)">'+
+      { cls:'tight', html: '<span class="c-ink3">'+
           escHtml(j.created_date||(j.created_at?new Date(j.created_at).toISOString().slice(0,10):''))+'</span>' },
       { cls:'tight', html: '<span onclick="event.stopPropagation()">'+(canRAEdit
           ? '<button class="btn btn-sm btn-outline" onclick="raFormEdit(\''+j.id+'\')">Edit</button>'
-          : '<span style="font-size:11.5px;color:var(--ink3)">Locked</span>')+'</span>' }
+          : '<span class="fs-11_5 c-ink3">Locked</span>')+'</span>' }
     ]};
   });
 
@@ -134,11 +134,11 @@ function renderJobs(){
       toolbar: UI.toolbar({
         search:{ value:f.search||'', placeholder:'Search your leads…',
                  oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
-        right:'<span style="font-size:12.5px;color:var(--ink3)">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' submitted by you</span>'
+        right:'<span class="fs-12_5 c-ink3">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' submitted by you</span>'
       }),
       body:
         renderRALeadForm()+
-        '<div style="margin:20px 0 10px;font-weight:600;font-size:14px">Your submitted leads</div>'+
+        '<div class="fs-14" style="margin:20px 0 10px;font-weight:600">Your submitted leads</div>'+
         UI.table({
           cols:['Position','Company','Primary contact','Contacts','Stage','Created',{label:'',w:'90px'}],
           rows:raRows, minWidth:'820px',
@@ -158,8 +158,8 @@ function renderJobs(){
     var panel='';
     if(STATE.openDrop===name){
       panel='<div style="position:absolute;top:calc(100% + 4px);left:0;z-index:9000;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);min-width:190px;padding:6px 0" onclick="event.stopPropagation()">'+
-        items.map(function(v){var on=selected.indexOf(v)>-1;return '<label style="display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;font-size:13px;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+'"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleJobFilter(\''+key+'\',\''+v+'\',this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer"/>'+v+'</label>';}).join('')+
-        (selected.length?'<div style="border-top:1px solid var(--border);padding:6px 14px;margin-top:2px"><button onclick="STATE.jobsFilter.'+key+'=[];STATE.leadsPage=0;render()" style="font-size:11.5px;color:var(--red);background:none;border:none;cursor:pointer;padding:0">Clear</button></div>':'')+
+        items.map(function(v){var on=selected.indexOf(v)>-1;return '<label class="fs-13" style="display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+'"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleJobFilter(\''+key+'\',\''+v+'\',this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer"/>'+v+'</label>';}).join('')+
+        (selected.length?'<div style="border-top:1px solid var(--border);padding:6px 14px;margin-top:2px"><button onclick="STATE.jobsFilter.'+key+'=[];STATE.leadsPage=0;render()" class="fs-11_5 c-red" style="background:none;border:none;cursor:pointer;padding:0">Clear</button></div>':'')+
       '</div>';
     }
     return '<div style="position:relative">'+btn+panel+'</div>';
@@ -175,10 +175,10 @@ function renderJobs(){
         '</div>'+
         // Custom separator
         '<div style="border-top:1px solid var(--border);margin:8px 0 10px"></div>'+
-        '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Custom range</div>'+
+        '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Custom range</div>'+
         '<div style="display:flex;flex-direction:column;gap:8px">'+
-          '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text2);width:28px">From</span><input type="date" value="'+escAttr(f.dateFrom||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateFrom=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
-          '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:12px;color:var(--text2);width:28px">To</span><input type="date" value="'+escAttr(f.dateTo||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateTo=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
+          '<div style="display:flex;align-items:center;gap:8px"><span class="fs-12 c-text2" style="width:28px">From</span><input type="date" value="'+escAttr(f.dateFrom||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateFrom=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
+          '<div style="display:flex;align-items:center;gap:8px"><span class="fs-12 c-text2" style="width:28px">To</span><input type="date" value="'+escAttr(f.dateTo||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateTo=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
         '</div>'+
         (dateActive?'<button onclick="STATE.jobsFilter.dateRange=\'all\';STATE.jobsFilter.dateFrom=\'\';STATE.jobsFilter.dateTo=\'\';STATE.leadsPage=0;render()" style="margin-top:10px;font-size:11.5px;color:var(--red);background:none;border:none;cursor:pointer;padding:0">Clear</button>':'')+
       '</div>':'')  +
@@ -228,10 +228,10 @@ function renderJobs(){
   // rather than the toolbar — a permanently-reserved empty strip is worse.
   var bulkBar=(canSequence&&leadSelCount)?
     '<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
-      '<span style="font-size:13px;font-weight:600">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
+      '<span class="fs-13" style="font-weight:600">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
       '<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>'+
       '<button class="btn btn-sm btn-outline" onclick="leadClearSel()">Clear</button>'+
-      '<span style="font-size:11.5px;color:var(--ink3);margin-left:auto">You pick the "from" mailboxes next — sends rotate across them, whatever the stage.</span>'+
+      '<span class="fs-11_5 c-ink3" style="margin-left:auto">You pick the "from" mailboxes next — sends rotate across them, whatever the stage.</span>'+
     '</div>':'';
 
   var cols=[];
@@ -272,10 +272,10 @@ function renderJobs(){
       UI.table({
         cols:cols, rows:rows, minWidth:'1020px',
         empty: anyActive||f.search
-          ? 'No leads match these filters. <span style="color:var(--accent);cursor:pointer" onclick="'+escAttr(clearFilters)+'">Clear them &rarr;</span>'
+          ? 'No leads match these filters. <span class="c-accent" style="cursor:pointer" onclick="'+escAttr(clearFilters)+'">Clear them &rarr;</span>'
           : 'No leads yet.'
       })+
-      '<div style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12.5px;color:var(--ink3)">'+
+      '<div class="fs-12_5 c-ink3" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
         '<div>'+jobs.length+' lead'+(jobs.length===1?'':'s')+'</div>'+
         (_tp>1?'<div style="display:flex;gap:6px;align-items:center">'+
           '<button class="btn btn-sm btn-outline" onclick="setLeadsPage('+(_pg-1)+')"'+(_pg===0?' disabled style="opacity:.5"':'')+'>&lsaquo; Prev</button>'+
@@ -294,7 +294,7 @@ window.leadsCloseConnected=function(){};
 // already became a job names the job instead.
 function leadConvertBtn(j,compact){
   var done=window.bdConvertedJobFor?bdConvertedJobFor(j.id):null;
-  if(done)return '<span style="font-size:11px;color:var(--ink3);white-space:nowrap" title="Already converted">✓ '+escHtml(done.job_code||'Job')+'</span>';
+  if(done)return '<span class="fs-11 c-ink3" style="white-space:nowrap" title="Already converted">✓ '+escHtml(done.job_code||'Job')+'</span>';
   return '<button class="btn btn-sm '+(compact?'btn-outline':'btn-primary')+'" style="white-space:nowrap'+(compact?';padding:3px 9px;font-size:11.5px':'')+'" '+
     'onclick="event.stopPropagation();bdConvertLead(\''+j.id+'\')">'+(compact?'Convert':'Convert to job')+'</button>';
 }
@@ -429,7 +429,7 @@ function leadExpandHtml(j){
       '<div class="lx-facts">'+facts+'</div>'+
       // The job link and website used to live only in the Connected side
       // panel, which is gone; they belong with the lead wherever it opens.
-      ((leadSafeUrl(j.job_url)||leadSafeUrl(j.company_web))?'<div style="font-size:12px;margin:0 0 8px;display:flex;gap:12px;flex-wrap:wrap">'+
+      ((leadSafeUrl(j.job_url)||leadSafeUrl(j.company_web))?'<div class="fs-12" style="margin:0 0 8px;display:flex;gap:12px;flex-wrap:wrap">'+
         (leadSafeUrl(j.job_url)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.job_url))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Job posting ↗</a>':'')+
         (leadSafeUrl(j.company_web)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.company_web))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Website ↗</a>':'')+
       '</div>':'')+
@@ -548,7 +548,7 @@ function renderJobDetailModal(){
     var es=c.email_status||'valid';
     var esColor=emailStatusColors[es]||'var(--text3)';
     var esLabel=emailStatusLabels[es]||es;
-    var emailStatusBadge='<span style="font-size:10px;padding:2px 7px;border-radius:6px;font-weight:600;background:'+esColor+'22;color:'+esColor+'">'+esLabel+'</span>';
+    var emailStatusBadge='<span class="fs-10" style="padding:2px 7px;border-radius:6px;font-weight:600;background:'+esColor+'22;color:'+esColor+'">'+esLabel+'</span>';
     var emailStatusSel=canChangeEmailStatus?
       '<select onchange="changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml((c.first_name||'')+' '+(c.last_name||''))+'\')" style="font-size:11px;padding:3px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-top:4px">'+
         ['valid','invalid','deactivated','out_of_office'].map(function(s){
@@ -560,14 +560,14 @@ function renderJobDetailModal(){
       '<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">'+
         (selectable?'<input type="checkbox" '+(seqSel.indexOf(c.id)>-1?'checked':'')+' onclick="jobToggleSeqSel(\''+c.id+'\')" style="margin-top:3px;cursor:pointer" title="Select for Start sequence">':'')+
         '<div style="flex:1">'+
-          '<div style="font-weight:600;color:var(--text)">'+escHtml((c.first_name||"")+" "+(c.last_name||""))+(c.is_primary?' <span style="background:rgba(16,185,129,.15);color:#10b981;padding:2px 7px;border-radius:8px;font-size:10px;margin-left:4px">PRIMARY</span>':'')+'</div>'+
-          '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+escHtml(c.designation||"—")+'</div>'+
-          '<div style="font-size:12px;color:var(--text2);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<div class="c-text" style="font-weight:600">'+escHtml((c.first_name||"")+" "+(c.last_name||""))+(c.is_primary?' <span class="fs-10" style="background:rgba(16,185,129,.15);color:#10b981;padding:2px 7px;border-radius:8px;margin-left:4px">PRIMARY</span>':'')+'</div>'+
+          '<div class="fs-12 c-text3" style="margin-top:2px">'+escHtml(c.designation||"—")+'</div>'+
+          '<div class="fs-12 c-text2" style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
             '\ud83d\udce7 '+escHtml(c.email||"—")+' '+emailStatusBadge+
           '</div>'+
-          (canChangeEmailStatus?'<div style="margin-top:5px">'+emailStatusSel+(c.ooo_until&&es==='out_of_office'?'<span style="font-size:11px;color:var(--amber);margin-left:8px">until '+escHtml(c.ooo_until)+'</span>':'')+'</div>':'')+
-          (c.phone?'<div style="font-size:12px;color:var(--text2);margin-top:4px">\ud83d\udcde '+escHtml(c.phone)+'</div>':'')+
-          (c.linkedin?'<div style="font-size:12px;color:var(--text2);margin-top:2px">\ud83d\udd17 '+escHtml(c.linkedin)+'</div>':'')+
+          (canChangeEmailStatus?'<div style="margin-top:5px">'+emailStatusSel+(c.ooo_until&&es==='out_of_office'?'<span class="fs-11 c-amber" style="margin-left:8px">until '+escHtml(c.ooo_until)+'</span>':'')+'</div>':'')+
+          (c.phone?'<div class="fs-12 c-text2" style="margin-top:4px">\ud83d\udcde '+escHtml(c.phone)+'</div>':'')+
+          (c.linkedin?'<div class="fs-12 c-text2" style="margin-top:2px">\ud83d\udd17 '+escHtml(c.linkedin)+'</div>':'')+
           wfContactChip(j.id,c)+
         '</div>'+
         '<div style="display:flex;flex-direction:column;gap:4px">'+
@@ -578,25 +578,25 @@ function renderJobDetailModal(){
       '</div>'+
     '</div>';
   }).join("");
-  if(!contactRows)contactRows='<div style="color:var(--text3);font-size:12px;padding:12px;text-align:center">No contacts yet.</div>';
+  if(!contactRows)contactRows='<div class="c-text3 fs-12" style="padding:12px;text-align:center">No contacts yet.</div>';
 
   return '<div style="background:var(--bg2);border-radius:14px;width:min(720px,94vw);max-height:90vh;overflow-y:auto;border:1px solid var(--border)">'+
     '<div style="padding:20px 24px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:start;gap:12px">'+
-      '<div><div style="font-size:18px;font-weight:700;color:var(--text)">'+escHtml(j.position)+'</div><div style="font-size:13px;color:var(--text3);margin-top:3px">'+escHtml(j.company_name)+(j.location?" · "+escHtml(j.location):"")+'</div></div>'+
+      '<div><div class="fs-18 c-text" style="font-weight:700">'+escHtml(j.position)+'</div><div class="fs-13 c-text3" style="margin-top:3px">'+escHtml(j.company_name)+(j.location?" · "+escHtml(j.location):"")+'</div></div>'+
       // The rewind clock, beside the close. A lead ALREADY had a full trail in
       // activity_log — every stage change, dated — and nothing had ever shown
       // it to anybody. This is the read, not a new recording.
       '<div style="display:flex;align-items:center;gap:10px">'+
         (window.rewindBtn?rewindBtn('lead',j.id):'')+
-        '<button onclick="closeModal()" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button>'+
+        '<button onclick="closeModal()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer;line-height:1">×</button>'+
       '</div>'+
     '</div>'+
     '<div style="padding:20px 24px">'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'+
-        '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Stage</label>'+
-          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:8px;background:'+leadStageBg(j.stage)+';border:1.5px solid '+leadStageColor(j.stage)+';border-radius:7px;color:'+leadStageColor(j.stage)+';font-weight:600;font-size:13px">'+stageOpts+'</select>':'<div style="margin-top:5px;font-size:13px;font-weight:600;color:'+leadStageColor(j.stage)+'">'+j.stage+'</div>')+
+        '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.5px">Stage</label>'+
+          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:8px;background:'+leadStageBg(j.stage)+';border:1.5px solid '+leadStageColor(j.stage)+';border-radius:7px;color:'+leadStageColor(j.stage)+';font-weight:600;font-size:13px">'+stageOpts+'</select>':'<div class="fs-13" style="margin-top:5px;font-weight:600;color:'+leadStageColor(j.stage)+'">'+j.stage+'</div>')+
         '</div>'+
-        '<div><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Source</label><div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.source||"—")+'</div></div>'+
+        '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.5px">Source</label><div class="fs-13 c-text" style="margin-top:5px">'+escHtml(j.source||"—")+'</div></div>'+
       '</div>'+
       // D-0038: a manager viewing a report's lead (or anyone else who is not
       // its owner) sees "Ask to take over" once the server confirms it —
@@ -604,10 +604,10 @@ function renderJobDetailModal(){
       // check for a lead, so this is exactly its inverse.
       (canEdit?'':'<div style="margin-bottom:16px">'+(window.otSlot?otSlot('lead',j.id):'')+'</div>')+
       leadDetailsBlock(j)+
-      '<div style="margin-bottom:18px"><label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px">Notes</label>'+
-        (canEdit?'<textarea id="job-notes" onblur="saveJobNotes(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:64px;resize:vertical;font-family:inherit">'+escHtml(j.notes||"")+'</textarea>':'<div style="margin-top:5px;font-size:13px;color:var(--text)">'+escHtml(j.notes||"—")+'</div>')+
+      '<div style="margin-bottom:18px"><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.5px">Notes</label>'+
+        (canEdit?'<textarea id="job-notes" onblur="saveJobNotes(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;min-height:64px;resize:vertical;font-family:inherit">'+escHtml(j.notes||"")+'</textarea>':'<div class="fs-13 c-text" style="margin-top:5px">'+escHtml(j.notes||"—")+'</div>')+
       '</div>'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-size:13px;font-weight:600;color:var(--text)">Contacts ('+cs.length+')</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="fs-13 c-text" style="font-weight:600">Contacts ('+cs.length+')</div>'+
         '<div style="display:flex;gap:6px">'+
           (seqSel.length?'<button onclick="jobStartSequence(\''+j.id+'\')" style="background:var(--accent);color:#fff;border:0;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">▶ Start sequence ('+seqSel.length+')</button>':'')+
           (canEdit?'<button onclick="openAddContact(\''+j.id+'\')" style="background:var(--accent);color:#fff;border:0;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer">+ Add Contact</button>':'')+
@@ -625,26 +625,26 @@ function renderAddJobModal(){
   var u=STATE.user;
   var coOpts=STATE.companies.map(function(c){return '<option value="'+c.id+'">'+escHtml(c.name)+'</option>';}).join("");
   return '<div style="background:var(--bg2);border-radius:14px;width:min(560px,94vw);max-height:90vh;overflow-y:auto;border:1px solid var(--border)">'+
-    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div style="font-size:16px;font-weight:700;color:var(--text)">Add Lead</div><button onclick="closeModal()" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button></div>'+
+    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div class="fs-16 c-text" style="font-weight:700">Add Lead</div><button onclick="closeModal()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer;line-height:1">×</button></div>'+
     '<div style="padding:20px 22px">'+
-      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text3)">Company</label><select id="aj-co" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px">'+coOpts+'</select></div>'+
-      '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text3)">Position</label><input id="aj-pos" placeholder="e.g. Senior Software Engineer" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/></div>'+
+      '<div style="margin-bottom:12px"><label class="fs-11 c-text3">Company</label><select id="aj-co" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px">'+coOpts+'</select></div>'+
+      '<div style="margin-bottom:12px"><label class="fs-11 c-text3">Position</label><input id="aj-pos" placeholder="e.g. Senior Software Engineer" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'+
-        '<div><label style="font-size:11px;color:var(--text3)">Location</label><input id="aj-loc" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/></div>'+
-        '<div><label style="font-size:11px;color:var(--text3)">Source</label><input id="aj-src" placeholder="LinkedIn, Indeed..." style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/></div>'+
+        '<div><label class="fs-11 c-text3">Location</label><input id="aj-loc" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
+        '<div><label class="fs-11 c-text3">Source</label><input id="aj-src" placeholder="LinkedIn, Indeed..." class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
       '</div>'+
-      '<div style="margin-bottom:14px"><label style="font-size:11px;color:var(--text3)">Job URL (optional)</label><input id="aj-url" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/></div>'+
+      '<div style="margin-bottom:14px"><label class="fs-11 c-text3">Job URL (optional)</label><input id="aj-url" class="c-text fs-13" style="width:100%;margin-top:4px;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/></div>'+
       '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;padding-top:6px;border-top:1px solid var(--border2);padding-top:12px">First contact (you can add more after creating)</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<input id="aj-fn" placeholder="First name *" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
-        '<input id="aj-ln" placeholder="Last name" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
+        '<input id="aj-fn" placeholder="First name *" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
+        '<input id="aj-ln" placeholder="Last name" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
       '</div>'+
-      '<input id="aj-desig" placeholder="Designation" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;margin-bottom:10px"/>'+
+      '<input id="aj-desig" placeholder="Designation" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'+
-        '<input id="aj-email" placeholder="Email" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
-        '<input id="aj-phone" placeholder="Phone" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
+        '<input id="aj-email" placeholder="Email" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
+        '<input id="aj-phone" placeholder="Phone" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
       '</div>'+
-      '<div style="display:flex;justify-content:flex-end;gap:8px"><button onclick="closeModal()" style="background:transparent;color:var(--text3);border:1px solid var(--border);padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px">Cancel</button><button onclick="submitAddJob()" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Add Lead</button></div>'+
+      '<div style="display:flex;justify-content:flex-end;gap:8px"><button onclick="closeModal()" class="c-text3 fs-13" style="background:transparent;border:1px solid var(--border);padding:9px 16px;border-radius:7px;cursor:pointer">Cancel</button><button onclick="submitAddJob()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:7px;cursor:pointer;font-weight:600">Add Lead</button></div>'+
     '</div>'+
   '</div>';
 }
@@ -653,16 +653,16 @@ function renderAddJobModal(){
 function renderAddContactModal(){
   var jid=STATE.modal.job_id;
   return '<div style="background:var(--bg2);border-radius:14px;width:min(480px,94vw);border:1px solid var(--border)">'+
-    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div style="font-size:16px;font-weight:700;color:var(--text)">Add Contact</div><button onclick="backToJob(\''+jid+'\')" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button></div>'+
+    '<div style="padding:18px 22px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between"><div class="fs-16 c-text" style="font-weight:700">Add Contact</div><button onclick="backToJob(\''+jid+'\')" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer;line-height:1">×</button></div>'+
     '<div style="padding:20px 22px">'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-        '<input id="ac-fn" placeholder="First name *" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
-        '<input id="ac-ln" placeholder="Last name" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px"/>'+
+        '<input id="ac-fn" placeholder="First name *" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
+        '<input id="ac-ln" placeholder="Last name" class="c-text fs-13" style="padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px"/>'+
       '</div>'+
-      '<input id="ac-desig" placeholder="Designation" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;margin-bottom:10px"/>'+
-      '<input id="ac-email" placeholder="Email" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;margin-bottom:10px"/>'+
-      '<input id="ac-phone" placeholder="Phone" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;margin-bottom:10px"/>'+
-      '<input id="ac-linkedin" placeholder="LinkedIn URL" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:13px;margin-bottom:14px"/>'+
+      '<input id="ac-desig" placeholder="Designation" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
+      '<input id="ac-email" placeholder="Email" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
+      '<input id="ac-phone" placeholder="Phone" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px"/>'+
+      '<input id="ac-linkedin" placeholder="LinkedIn URL" class="c-text fs-13" style="width:100%;padding:9px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:14px"/>'+
       '<div style="display:flex;justify-content:flex-end;gap:8px"><button onclick="backToJob(\''+jid+'\')" style="background:transparent;color:var(--text3);border:1px solid var(--border);padding:9px 16px;border-radius:7px;cursor:pointer;font-size:13px">Cancel</button><button onclick="submitAddContact(\''+jid+'\')" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:600">Add Contact</button></div>'+
     '</div>'+
   '</div>';

@@ -134,7 +134,7 @@ function renderRemindersWidget(){
           '<div><div class="fw6">Reminders</div><div class="f12 text3">No reminders set</div></div>'+
           '<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">Go to Reminders</button>'+
         '</div>'+
-        '<div style="padding:16px 0;text-align:center;font-size:13px;color:var(--text3)">Set reminders to follow up with contacts at the right time.</div>'+
+        '<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">Set reminders to follow up with contacts at the right time.</div>'+
       '</div>';
 
       var dueRows=dueShown.map(function(r){
@@ -188,7 +188,7 @@ function renderRemindersWidget(){
             '<button class="btn btn-outline btn-sm" onclick="goPage(\'reminders\')">View all</button>'+
           '</div>'+
         '</div>'+
-        (due.length?'<div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.05em">⏰ Due now</div>':"")+
+        (due.length?'<div class="fs-12 c-amber" style="margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">⏰ Due now</div>':"")+
         dueRows+
         (upcoming.length?'<div style="margin:'+(due.length?"12px":"0")+'px 0 8px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Upcoming</div>':"")+
         upcomingRows+
@@ -229,29 +229,29 @@ function renderRecruiterJobsCard(d){
 
   function stat(label,value){
     return '<div style="text-align:center;padding:10px 14px;background:var(--bg);border-radius:var(--r2);min-width:88px;flex:1">'+
-      '<div style="font-family:var(--display);font-size:20px;font-weight:700;color:var(--accent)">'+(value||0)+'</div>'+
-      '<div style="font-size:10.5px;color:var(--text3);margin-top:2px;white-space:nowrap">'+label+'</div>'+
+      '<div class="fs-20 c-accent" style="font-family:var(--display);font-weight:700">'+(value||0)+'</div>'+
+      '<div class="fs-10_5 c-text3" style="margin-top:2px;white-space:nowrap">'+label+'</div>'+
     '</div>';
   }
 
   var rows=top.map(function(j){
     var loc=[j.city,j.state].filter(Boolean).join(', ');
     var hot=j.team_subs_14d>0;
-    var pr=j.priority&&j.priority!=='Normal'?'<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-l);padding:2px 7px;border-radius:8px;margin-left:6px">'+htmlEsc(j.priority)+'</span>':'';
+    var pr=j.priority&&j.priority!=='Normal'?'<span class="fs-10 c-red" style="font-weight:700;background:var(--red-l);padding:2px 7px;border-radius:8px;margin-left:6px">'+htmlEsc(j.priority)+'</span>':'';
     return '<div onclick="bdOpenSubmissions(\''+j.id+'\')" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'transparent\'" style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s">'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(j.job_title||'')+pr+'</div>'+
+        '<div class="fs-13_5" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(j.job_title||'')+pr+'</div>'+
         '<div class="f12 text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(j.job_code||'')+(j.client?' · '+htmlEsc(j.client):'')+(loc?' · '+htmlEsc(loc):'')+'</div>'+
       '</div>'+
       '<div style="text-align:center;width:88px;flex-shrink:0">'+
-        '<div style="font-family:var(--display);font-weight:700;font-size:16px;color:'+(hot?'var(--green)':'var(--text3)')+'">'+(j.team_subs_14d||0)+'</div>'+
-        '<div style="font-size:10px;color:var(--text3)">team · 14d</div>'+
+        '<div class="fs-16" style="font-family:var(--display);font-weight:700;color:'+(hot?'var(--green)':'var(--text3)')+'">'+(j.team_subs_14d||0)+'</div>'+
+        '<div class="fs-10 c-text3">team · 14d</div>'+
       '</div>'+
       '<div style="text-align:center;width:70px;flex-shrink:0">'+
-        '<div style="font-family:var(--display);font-weight:700;font-size:16px;color:var(--accent)">'+(j.my_subs||0)+'</div>'+
-        '<div style="font-size:10px;color:var(--text3)">my subs</div>'+
+        '<div class="fs-16 c-accent" style="font-family:var(--display);font-weight:700">'+(j.my_subs||0)+'</div>'+
+        '<div class="fs-10 c-text3">my subs</div>'+
       '</div>'+
-      '<div style="width:16px;text-align:center;color:var(--text3);font-size:13px;flex-shrink:0">›</div>'+
+      '<div class="c-text3 fs-13" style="width:16px;text-align:center;flex-shrink:0">›</div>'+
     '</div>';
   }).join("");
 
@@ -267,8 +267,8 @@ function renderRecruiterJobsCard(d){
       stat('All time',ja.total)+
     '</div>'+
     (top.length?
-      '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Most active — team submissions, last 14 days</div>'+rows
-    :'<div style="padding:12px 0;text-align:center;font-size:13px;color:var(--text3)">No jobs on your desk yet — your BD manager assigns them to you.</div>')+
+      '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Most active — team submissions, last 14 days</div>'+rows
+    :'<div class="fs-13 c-text3" style="padding:12px 0;text-align:center">No jobs on your desk yet — your BD manager assigns them to you.</div>')+
   '</div>';
 }
 
@@ -282,7 +282,7 @@ function renderRecentRejections(d){
     var when;try{when=new Date(r.at).toLocaleDateString("en-IN",{day:"numeric",month:"short"});}catch(e){when='';}
     return '<div style="padding:9px 0;border-bottom:1px solid var(--border)">'+
       '<div style="display:flex;justify-content:space-between;gap:10px">'+
-        '<span style="font-size:13px;font-weight:600">'+htmlEsc(r.candidate||'Candidate')+'</span>'+
+        '<span class="fs-13" style="font-weight:600">'+htmlEsc(r.candidate||'Candidate')+'</span>'+
         '<span class="f12 text3" style="white-space:nowrap">'+htmlEsc(when)+'</span>'+
       '</div>'+
       '<div class="f12 text3" style="margin-top:2px">'+(r.reason?htmlEsc(r.reason):'No reason recorded yet')+'</div>'+
@@ -310,8 +310,8 @@ function renderRecruiterDashboard(u){
     var cnt=bs[s];
     if(!cnt)return"";
     return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
-      '<div style="font-family:var(--display);font-size:22px;font-weight:700;color:'+recStageColor(s)+'">'+cnt+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+s+'</div>'+
+      '<div class="fs-22" style="font-family:var(--display);font-weight:700;color:'+recStageColor(s)+'">'+cnt+'</div>'+
+      '<div class="fs-11 c-text3" style="margin-top:2px">'+s+'</div>'+
     '</div>';
   }).join("");
 
@@ -320,7 +320,7 @@ function renderRecruiterDashboard(u){
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
       '<div style="width:7px;height:7px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(iv.candidate||'Candidate')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(iv.candidate||'Candidate')+'</div>'+
         '<div class="f12 text3">'+htmlEsc(dt)+(iv.interview_location?' · '+htmlEsc(iv.interview_location):'')+'</div>'+
       '</div>'+
     '</div>';
@@ -359,7 +359,7 @@ function renderRecruiterDashboard(u){
     (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
-    (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your desk…</div>':'')+
+    (loading?'<div class="card cp mb4 c-text3 fs-13" style="text-align:center">Loading your desk…</div>':'')+
 
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
       tile('My Jobs',(d.jobs&&d.jobs.total)||0,'var(--accent)')+
@@ -384,7 +384,7 @@ function renderRecruiterDashboard(u){
       '<div class="flex jb aic mb3">'+
         '<div><div class="fw6">Upcoming interviews</div><div class="f12 text3">'+((d.upcoming_interviews||[]).length||'No')+' scheduled</div></div>'+
       '</div>'+
-      (upcomingRows||'<div style="padding:16px 0;text-align:center;font-size:13px;color:var(--text3)">No interviews scheduled. Move a candidate to "Interview Scheduled" to see it here.</div>')+
+      (upcomingRows||'<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">No interviews scheduled. Move a candidate to "Interview Scheduled" to see it here.</div>')+
     '</div>'+
 
     renderRemindersWidget()+
@@ -417,8 +417,8 @@ function renderManagerDashboard(u){
   var stagePills=Object.keys(bs).map(function(s){
     var cnt=bs[s];if(!cnt)return"";
     return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
-      '<div style="font-family:var(--display);font-size:22px;font-weight:700;color:'+recStageColor(s)+'">'+cnt+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+s+'</div>'+
+      '<div class="fs-22" style="font-family:var(--display);font-weight:700;color:'+recStageColor(s)+'">'+cnt+'</div>'+
+      '<div class="fs-11 c-text3" style="margin-top:2px">'+s+'</div>'+
     '</div>';
   }).join("");
 
@@ -427,7 +427,7 @@ function renderManagerDashboard(u){
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
       '<div style="width:7px;height:7px;border-radius:50%;background:#2563eb;flex-shrink:0"></div>'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(iv.candidate||'Candidate')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(iv.candidate||'Candidate')+'</div>'+
         '<div class="f12 text3">'+htmlEsc(dt)+(iv.interview_location?' · '+htmlEsc(iv.interview_location):'')+'</div>'+
       '</div>'+
     '</div>';
@@ -468,7 +468,7 @@ function renderManagerDashboard(u){
     (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
 
-    (loading?'<div class="card cp mb4" style="text-align:center;color:var(--text3);font-size:13px">Loading your team\'s desk…</div>':'')+
+    (loading?'<div class="card cp mb4 c-text3 fs-13" style="text-align:center">Loading your team\'s desk…</div>':'')+
 
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">'+
       tile('Jobs',(d.jobs&&d.jobs.total)||0,'var(--accent)')+
@@ -491,7 +491,7 @@ function renderManagerDashboard(u){
       '<div class="flex jb aic mb3">'+
         '<div><div class="fw6">Upcoming interviews</div><div class="f12 text3">'+((d.upcoming_interviews||[]).length||'No')+' scheduled</div></div>'+
       '</div>'+
-      (upcomingRows||'<div style="padding:16px 0;text-align:center;font-size:13px;color:var(--text3)">No interviews scheduled across your team yet.</div>')+
+      (upcomingRows||'<div class="fs-13 c-text3" style="padding:16px 0;text-align:center">No interviews scheduled across your team yet.</div>')+
     '</div>'+
 
     renderRemindersWidget()+
@@ -547,9 +547,9 @@ function renderIndividualDashboard(u){
   var indRows=indArr.map(function(e){
     var pct=Math.round(e[1]/maxI*100);
     return '<div class="ind-row">'+
-      '<div style="font-size:13px;min-width:110px">'+htmlEsc(e[0])+'</div>'+
+      '<div class="fs-13" style="min-width:110px">'+htmlEsc(e[0])+'</div>'+
       '<div class="ind-bg"><div class="ind-fill" style="width:'+pct+'%;background:var(--accent)"></div></div>'+
-      '<div style="font-size:12px;font-family:var(--mono);color:var(--text3);min-width:22px;text-align:right">'+e[1]+'</div>'+
+      '<div class="fs-12 c-text3" style="font-family:var(--mono);min-width:22px;text-align:right">'+e[1]+'</div>'+
     '</div>';
   }).join("");
 
@@ -558,8 +558,8 @@ function renderIndividualDashboard(u){
     var cnt=(P.by_stage||{})[s]||0;
     if(!cnt)return"";
     return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
-      '<div style="font-family:var(--display);font-size:22px;font-weight:700;color:'+LEAD_STAGE_COLORS[s]+'">'+cnt+'</div>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+s+'</div>'+
+      '<div class="fs-22" style="font-family:var(--display);font-weight:700;color:'+LEAD_STAGE_COLORS[s]+'">'+cnt+'</div>'+
+      '<div class="fs-11 c-text3" style="margin-top:2px">'+s+'</div>'+
     '</div>';
   }).join("");
 
@@ -567,10 +567,10 @@ function renderIndividualDashboard(u){
   var recentRows=myJobs.slice().sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);}).slice(0,6).map(function(j){
     return '<div onclick="goPage(\'leads\')" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'transparent\'" style="display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s">'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(j.position||'')+'</div>'+
+        '<div class="fs-13" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(j.position||'')+'</div>'+
         '<div class="f12 text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(j.company_name||'')+(j.location?' · '+htmlEsc(j.location):'')+'</div>'+
       '</div>'+
-      '<span style="font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:8px;background:'+(LEAD_STAGE_COLORS[j.stage]||'var(--text3)')+'1a;color:'+(LEAD_STAGE_COLORS[j.stage]||'var(--text3)')+'">'+htmlEsc(j.stage||'')+'</span>'+
+      '<span class="fs-10_5" style="font-weight:700;padding:2px 8px;border-radius:8px;background:'+(LEAD_STAGE_COLORS[j.stage]||'var(--text3)')+'1a;color:'+(LEAD_STAGE_COLORS[j.stage]||'var(--text3)')+'">'+htmlEsc(j.stage||'')+'</span>'+
     '</div>';
   }).join("");
 

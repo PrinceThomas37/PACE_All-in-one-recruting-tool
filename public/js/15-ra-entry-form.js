@@ -16,16 +16,16 @@ function renderSuggestedSkillChips(suggested,assignHandler,skillsSource){
   });
   if(!unique.length)return '';
   var sourceNote='';
-  if(skillsSource==='title_inference')sourceNote='<div style="font-size:10.5px;color:var(--amber);margin-bottom:6px">⚠ Guessed from the job title (no JD on file) — verify before sending</div>';
-  else if(skillsSource==='history_match')sourceNote='<div style="font-size:10.5px;color:var(--accent);margin-bottom:6px">Based on similar past leads (no JD on file) — verify before sending</div>';
+  if(skillsSource==='title_inference')sourceNote='<div class="fs-10_5 c-amber" style="margin-bottom:6px">⚠ Guessed from the job title (no JD on file) — verify before sending</div>';
+  else if(skillsSource==='history_match')sourceNote='<div class="fs-10_5 c-accent" style="margin-bottom:6px">Based on similar past leads (no JD on file) — verify before sending</div>';
   return '<div class="mb3" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2)">'+
     sourceNote+
-    '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Suggested skills — click 1, 2, or 3 to assign</div>'+
+    '<div class="fs-11 c-text3" style="margin-bottom:8px">Suggested skills — click 1, 2, or 3 to assign</div>'+
     '<div style="display:flex;flex-direction:column;gap:8px">'+
     unique.map(function(sk){
       var esc=htmlEsc(sk);
       return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
-        '<span style="font-size:12px;color:var(--text);flex:1;min-width:140px">'+esc+'</span>'+
+        '<span class="fs-12 c-text" style="flex:1;min-width:140px">'+esc+'</span>'+
         '<span style="display:inline-flex;gap:4px">'+
           [1,2,3].map(function(slot){
             return '<button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:10px;min-width:28px" onclick="'+assignHandler+'(this)" data-skill="'+esc.replace(/"/g,'&quot;')+'" data-slot="'+slot+'">'+slot+'</button>';
@@ -82,11 +82,11 @@ function renderRaFormContactIntel(f){
       return '<option value="'+v+'"'+(ci.best_time===v?' selected':'')+'>'+(v||'— Select —')+'</option>';
     }).join('');
     return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
-      '<div style="font-weight:500;font-size:12px;margin-bottom:8px;color:var(--text2)">'+cName+'</div>'+
+      '<div class="fs-12 c-text2" style="font-weight:500;margin-bottom:8px">'+cName+'</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">'+
-        '<div><label style="font-size:10px;color:var(--text3)">Seniority</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'seniority\',this.value)">'+senOpts+'</select></div>'+
-        '<div><label style="font-size:10px;color:var(--text3)">Decision maker?</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'decision_maker\',this.value)">'+dmOpts+'</select></div>'+
-        '<div><label style="font-size:10px;color:var(--text3)">Best time</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'best_time\',this.value)">'+timeOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Seniority</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'seniority\',this.value)">'+senOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Decision maker?</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'decision_maker\',this.value)">'+dmOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Best time</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="raFormUpdateContactIntel('+idx+',\'best_time\',this.value)">'+timeOpts+'</select></div>'+
       '</div>'+
       '<input class="inp" style="font-size:12px" placeholder="Notes about this contact..." value="'+htmlEsc(ci.notes||'')+'" oninput="raFormUpdateContactIntel('+idx+',\'notes\',this.value)"/>'+
     '</div>';
@@ -109,7 +109,7 @@ function renderRALeadForm(){
   var coBanner='';
   if(f.coInfo){
     var ci=f.coInfo;
-    coBanner='<div style="margin-top:6px;padding:8px 12px;background:var(--accent-l);border-radius:var(--r);font-size:12px;color:var(--text2)">'+
+    coBanner='<div class="fs-12 c-text2" style="margin-top:6px;padding:8px 12px;background:var(--accent-l);border-radius:var(--r)">'+
       '\u2139\ufe0f <strong>'+htmlEsc(ci.name)+'</strong> already exists'+
       (ci.job_count?' \u00b7 '+ci.job_count+' open job'+(ci.job_count!==1?'s':'')+' in system':'')+
       (ci.bd_name?' \u00b7 Manager: <strong>'+htmlEsc(ci.bd_name)+'</strong>':'')+
@@ -121,7 +121,7 @@ function renderRALeadForm(){
   if(STATE.raFormZipSuggestions&&STATE.raFormZipSuggestions.length){
     zipSuggestions='<div style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px" id="zip-suggestions">'+
       STATE.raFormZipSuggestions.map(function(z,i){
-        return '<div class="_zip-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+
+        return '<div class="_zip-sug fs-13" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border)">'+
           htmlEsc(z.display)+'</div>';
       }).join('')+
     '</div>';
@@ -148,10 +148,10 @@ function renderRALeadForm(){
   });
 
   return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:8px">'+
-    '<div style="font-weight:700;font-size:14px;margin-bottom:16px;color:var(--text)">'+(isEditing?'\u270f\ufe0f Edit Lead':'Add New Lead')+'</div>'+
+    '<div class="fs-14 c-text" style="font-weight:700;margin-bottom:16px">'+(isEditing?'\u270f\ufe0f Edit Lead':'Add New Lead')+'</div>'+
 
     // ── Company ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Company</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Company</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
       '<div>'+
         '<div style="position:relative">'+
@@ -161,13 +161,13 @@ function renderRALeadForm(){
               STATE.raFormCoSuggestions.map(function(co,i){
                 var cool=companyCooldownCheck(co.name);
                 return '<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+
-                  '<div style="font-weight:500;font-size:13px">'+htmlEsc(co.name)+(cool?'<span style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
-                  '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(co.industry||'')+(co.location?' \u00b7 '+htmlEsc(co.location):'')+( co.job_count?' \u00b7 '+co.job_count+' jobs':'')+( co.bd_name?' \u00b7 '+htmlEsc(co.bd_name):'')+'</div>'+
+                  '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+(cool?'<span class="fs-10" style="margin-left:6px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
+                  '<div class="fs-11 c-text3">'+htmlEsc(co.industry||'')+(co.location?' \u00b7 '+htmlEsc(co.location):'')+( co.job_count?' \u00b7 '+co.job_count+' jobs':'')+( co.bd_name?' \u00b7 '+htmlEsc(co.bd_name):'')+'</div>'+
                 '</div>';
               }).join('')+
             '</div>':'')+
         '</div>'+
-        (function(){var cool=companyCooldownCheck(f.coName);return cool?'<div style="margin-top:5px;padding:8px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;font-size:11.5px;color:#92400e"><strong>⚠ 21-day cooldown active</strong> — '+htmlEsc(f.coName)+' was added '+cool.daysAgo+' day'+(cool.daysAgo!==1?'s':'')+' ago ('+htmlEsc(cool.position)+'). '+cool.daysLeft+' day'+(cool.daysLeft!==1?'s':'')+' remaining.</div>':'';})()  +
+        (function(){var cool=companyCooldownCheck(f.coName);return cool?'<div class="fs-11_5" style="margin-top:5px;padding:8px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;color:#92400e"><strong>⚠ 21-day cooldown active</strong> — '+htmlEsc(f.coName)+' was added '+cool.daysAgo+' day'+(cool.daysAgo!==1?'s':'')+' ago ('+htmlEsc(cool.position)+'). '+cool.daysLeft+' day'+(cool.daysLeft!==1?'s':'')+' remaining.</div>':'';})()  +
         coBanner+
       '</div>'+
       '<input class="inp" placeholder="Website" value="'+htmlEsc(f.website||'')+'" oninput="raFormSet(\'website\',this.value)"/>'+
@@ -179,17 +179,17 @@ function renderRALeadForm(){
           '<input class="inp" id="ra-zip" placeholder="Zip code (e.g. 10001)" value="'+htmlEsc(f.zipCode||'')+'" autocomplete="off" oninput="raFormZipSearch(this.value)" onblur="raFormZipBlur()"/>'+
           zipSuggestions+
         '</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-top:3px">Type zip to auto-fill location</div>'+
+        '<div class="fs-11 c-text3" style="margin-top:3px">Type zip to auto-fill location</div>'+
       '</div>'+
     '</div>'+
     '<div style="margin-bottom:10px">'+
       '<input class="inp" id="ra-location" placeholder="Location (City, State) *" value="'+htmlEsc(f.location||'')+'" oninput="raFormSet(\'location\',this.value)" style="border-color:'+(f.location?'var(--border)':'')+'"/>'+
-      (!f.location?'<div style="font-size:11px;color:var(--red);margin-top:3px">Location is required</div>':'')+
+      (!f.location?'<div class="fs-11 c-red" style="margin-top:3px">Location is required</div>':'')+
     '</div>'+
     '<div class="fgrp mb4"><label class="flbl">Company expertise</label><input class="inp" placeholder="e.g. Healthcare staffing, ERP implementations..." value="'+htmlEsc(r.company.expertise||'')+'" oninput="raFormUpdateResearch(\'company\',\'expertise\',this.value)"/></div>'+
 
     // ── Job ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Job Details</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Job Details</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
       '<input class="inp" placeholder="Job title *" value="'+htmlEsc(f.position||'')+'" oninput="raFormSet(\'position\',this.value)"/>'+
       '<input class="inp" placeholder="Job URL" value="'+htmlEsc(f.jobUrl||'')+'" oninput="raFormSet(\'jobUrl\',this.value)"/>'+
@@ -198,18 +198,18 @@ function renderRALeadForm(){
       '<input class="inp" placeholder="Source (LinkedIn, Indeed...)" value="'+htmlEsc(f.source||'')+'" oninput="raFormSet(\'source\',this.value)"/>'+
     '</div>'+
     '<div style="margin-bottom:16px;max-width:280px">'+
-      '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Job Created Date</label>'+
+      '<label class="fs-11 c-text3" style="display:block;margin-bottom:4px">Job Created Date</label>'+
       '<input type="date" class="inp" value="'+htmlEsc(f.jobCreatedDate||'')+'" oninput="raFormSet(\'jobCreatedDate\',this.value)"/>'+
-      '<div style="font-size:11px;color:var(--text3);margin-top:4px">Job opened date is set automatically when the lead is converted to a job.</div>'+
+      '<div class="fs-11 c-text3" style="margin-top:4px">Job opened date is set automatically when the lead is converted to a job.</div>'+
     '</div>'+
 
     // ── Contacts ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Contacts / POCs</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Contacts / POCs</div>'+
     pocBlockHTML('ra')+
     '<div style="margin-bottom:16px"></div>'+
 
     // ── Job Description (requirements) ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Job Description</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Job Description</div>'+
     '<div class="fgrp mb2"><label class="flbl">Paste job description</label>'+
       '<textarea class="txta w100" style="min-height:120px;font-size:12px" id="ra-jd-raw" placeholder="Paste the full JD here, then click Extract..." oninput="raFormUpdateResearch(\'jd_raw\',\'__root__\',this.value)">'+htmlEsc(r.jd_raw||'')+'</textarea>'+
     '</div>'+
@@ -233,24 +233,24 @@ function renderRALeadForm(){
     '</div>'+
 
     // ── Contact Intel ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 10px">Contact Intel</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:16px 0 10px">Contact Intel</div>'+
     renderRaFormContactIntel(f)+
 
     // ── Company Research ──
-    '<div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 10px">Company Research</div>'+
+    '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:16px 0 10px">Company Research</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-      '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Headcount</label><select class="sel" style="font-size:12px" onchange="raFormUpdateResearch(\'company\',\'headcount\',this.value)">'+headcountOpts+'</select></div>'+
-      '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Hiring volume</label><select class="sel" style="font-size:12px" onchange="raFormUpdateResearch(\'company\',\'hiring_volume\',this.value)">'+hiringOpts+'</select></div>'+
+      '<div><label class="fs-11 c-text3" style="display:block;margin-bottom:4px">Headcount</label><select class="sel" style="font-size:12px" onchange="raFormUpdateResearch(\'company\',\'headcount\',this.value)">'+headcountOpts+'</select></div>'+
+      '<div><label class="fs-11 c-text3" style="display:block;margin-bottom:4px">Hiring volume</label><select class="sel" style="font-size:12px" onchange="raFormUpdateResearch(\'company\',\'hiring_volume\',this.value)">'+hiringOpts+'</select></div>'+
     '</div>'+
     '<div class="fgrp mb2"><label class="flbl">Company notes / recent news</label><textarea class="txta w100" style="min-height:60px;font-size:12px" placeholder="Any relevant company news, context..." oninput="raFormUpdateResearch(\'company\',\'notes\',this.value)">'+htmlEsc(r.company.notes||'')+'</textarea></div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Outreach Notes</div>'+
+    '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Outreach Notes</div>'+
     '<div class="fgrp mb2"><label class="flbl">Recommended angle</label><input class="inp" style="font-size:12px" placeholder="What angle to use in outreach..." value="'+htmlEsc(r.outreach.angle||'')+'" oninput="raFormUpdateResearch(\'outreach\',\'angle\',this.value)"/></div>'+
     '<div class="fgrp mb4"><label class="flbl">What to avoid</label><input class="inp" style="font-size:12px" placeholder="Topics or approaches to avoid..." value="'+htmlEsc(r.outreach.avoid||'')+'" oninput="raFormUpdateResearch(\'outreach\',\'avoid\',this.value)"/></div>'+
 
     // ── Actions ──
     '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:14px;border-top:1px solid var(--border)">'+
-      '<button onclick="raFormClear()" style="background:transparent;border:1px solid var(--border);color:var(--text3);padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer">'+(isEditing?'Cancel edit':'Clear form')+'</button>'+
-      '<button onclick="raFormSubmit()" style="background:var(--accent);color:#fff;border:0;padding:10px 24px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer'+(STATE.raFormSubmitting?';opacity:.6':'')+'">'+( STATE.raFormSubmitting?'Saving\u2026':(isEditing?'Save changes':'Submit Lead'))+'</button>'+
+      '<button onclick="raFormClear()" class="c-text3 fs-13" style="background:transparent;border:1px solid var(--border);padding:8px 16px;border-radius:8px;cursor:pointer">'+(isEditing?'Cancel edit':'Clear form')+'</button>'+
+      '<button onclick="raFormSubmit()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer'+(STATE.raFormSubmitting?';opacity:.6':'')+'">'+( STATE.raFormSubmitting?'Saving\u2026':(isEditing?'Save changes':'Submit Lead'))+'</button>'+
     '</div>'+
   '</div>';
 }
@@ -402,7 +402,7 @@ function _patchZipSuggestions(){
   var sugs=STATE.raFormZipSuggestions||[];
   if(!sugs.length){if(existing)existing.remove();return;}
   var html='<div id="zip-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;margin-top:2px">'+
-    sugs.map(function(z,i){return'<div class="_zip-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+htmlEsc(z.display)+'</div>';}).join('')+'</div>';
+    sugs.map(function(z,i){return'<div class="_zip-sug fs-13" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border)">'+htmlEsc(z.display)+'</div>';}).join('')+'</div>';
   if(existing){existing.outerHTML=html;}else{var d=document.createElement('div');d.innerHTML=html;wrap.appendChild(d.firstChild);}
   Array.prototype.forEach.call(document.querySelectorAll('._zip-sug'),function(el){
     el.addEventListener('mouseenter',function(){this.style.background='var(--accent-l)';});
@@ -429,8 +429,8 @@ function _patchCoSuggestions(){
     sugs.map(function(co,i){
       var cool=companyCooldownCheck(co.name);
       return'<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+
-        '<div style="font-weight:500;font-size:13px">'+htmlEsc(co.name)+(cool?'<span style="margin-left:6px;font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(co.industry||'')+(co.location?' · '+htmlEsc(co.location):'')+(co.job_count?' · '+co.job_count+' jobs':'')+(co.bd_name?' · '+htmlEsc(co.bd_name):'')+'</div>'+
+        '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+(cool?'<span class="fs-10" style="margin-left:6px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
+        '<div class="fs-11 c-text3">'+htmlEsc(co.industry||'')+(co.location?' · '+htmlEsc(co.location):'')+(co.job_count?' · '+co.job_count+' jobs':'')+(co.bd_name?' · '+htmlEsc(co.bd_name):'')+'</div>'+
       '</div>';
     }).join('')+'</div>';
   if(existing){existing.outerHTML=html;}else{var d=document.createElement('div');d.innerHTML=html;wrap.appendChild(d.firstChild);}

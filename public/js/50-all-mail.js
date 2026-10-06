@@ -63,11 +63,11 @@ window.renderAllMailBody = function () {
   if (a.error) {
     return '<div class="card" style="padding:22px">' +
       '<div style="font-weight:600;margin-bottom:6px">Could not load the email history.</div>' +
-      '<div style="font-size:12.5px;color:var(--text3);margin-bottom:12px">' + htmlEsc(a.error) + '</div>' +
+      '<div class="fs-12_5 c-text3" style="margin-bottom:12px">' + htmlEsc(a.error) + '</div>' +
       '<button class="hz-btn" onclick="loadAllMail(true)">Try again</button></div>';
   }
   if (!a.data) {
-    return '<div class="card" style="padding:40px;text-align:center;color:var(--text3)">Loading email history…</div>';
+    return '<div class="card c-text3" style="padding:40px;text-align:center">Loading email history…</div>';
   }
 
   var d = a.data;

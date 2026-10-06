@@ -10,7 +10,7 @@
   if (!STATE.sourcing) STATE.sourcing = { providers:[], staged:[], sel:{}, loading:false, tagJob:'', force:false, jobs:null };
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
 
   // ── CSV parser (quote-aware) + header mapping ───────────────────────────────
   function parseCSV(text){
@@ -97,28 +97,28 @@
           : '';
       return '<div class="card" style="padding:12px 14px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
-          '<div style="font-weight:700;font-size:13px">'+esc(p.label)+'</div>'+
-          '<span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(0,0,0,.04);padding:2px 7px;border-radius:9px">READY</span>'+
+          '<div class="fs-13" style="font-weight:700">'+esc(p.label)+'</div>'+
+          '<span class="fs-10 c-green" style="font-weight:700;background:rgba(0,0,0,.04);padding:2px 7px;border-radius:9px">READY</span>'+
         '</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:5px;line-height:1.5">'+esc(p.note||'')+'</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:5px;line-height:1.5">'+esc(p.note||'')+'</div>'+
         action+
       '</div>';
     }).join('');
 
     var notBuiltBlock = !notBuilt.length ? '' :
       '<div class="card" style="padding:12px 14px;margin-top:10px">'+
-        '<div style="font-weight:700;font-size:12.5px">Not connected'+
-          '<span style="font-weight:500;color:var(--text3)"> \u00b7 '+notBuilt.length+' source'+(notBuilt.length===1?'':'s')+'</span></div>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px;line-height:1.5">'+
+        '<div class="fs-12_5" style="font-weight:700">Not connected'+
+          '<span class="c-text3" style="font-weight:500"> \u00b7 '+notBuilt.length+' source'+(notBuilt.length===1?'':'s')+'</span></div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:4px;line-height:1.5">'+
           'PACE cannot search these yet. Each one needs a paid account with the provider before a connection can be built \u2014 '+
           '<strong>an API key on its own is not enough, and none of them is free.</strong> '+
           'You can still use any of them today by exporting your search results and importing the file above.</div>'+
         '<div style="margin-top:10px">'+
           notBuilt.map(function(p){
             return '<div style="padding:9px 0;border-top:1px solid var(--border)">'+
-              '<div style="font-size:12.5px;font-weight:600">'+esc(p.label)+'</div>'+
-              (p.note?'<div style="font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.5">'+esc(p.note)+'</div>':'')+
-              (p.blocker?'<div style="font-size:11.5px;color:var(--text3);margin-top:3px;line-height:1.5"><strong>Needs:</strong> '+esc(p.blocker)+'</div>':'')+
+              '<div class="fs-12_5" style="font-weight:600">'+esc(p.label)+'</div>'+
+              (p.note?'<div class="fs-11_5 c-text3" style="margin-top:2px;line-height:1.5">'+esc(p.note)+'</div>':'')+
+              (p.blocker?'<div class="fs-11_5 c-text3" style="margin-top:3px;line-height:1.5"><strong>Needs:</strong> '+esc(p.blocker)+'</div>':'')+
             '</div>';
           }).join('')+
         '</div>'+
@@ -133,15 +133,15 @@
       var dup = r.dup;
       return '<tr style="border-top:1px solid var(--border)">'+
         '<td style="padding:8px 9px"><input type="checkbox" '+(s.sel[r.id]?'checked':'')+' onclick="srcToggle(\''+r.id+'\')"></td>'+
-        '<td style="padding:8px 9px;font-size:12.5px;font-weight:600;white-space:nowrap">'+esc(r.full_name||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(r.email||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(r.phone||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(r.current_title||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(r.current_employer||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(r.location||[r.city,r.state].filter(Boolean).join(', ')||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(r.work_authorization||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(r.provider||'')+'</td>'+
-        '<td style="padding:8px 9px;font-size:11px;white-space:nowrap">'+(dup?'<span title="'+esc(dup.full_name||'')+'" style="color:var(--amber);font-weight:700">⚠ '+esc(dup.candidate_code||'dup')+'</span>':'<span style="color:var(--green)">new</span>')+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 9px;font-weight:600;white-space:nowrap">'+esc(r.full_name||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(r.email||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(r.phone||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(r.current_title||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(r.current_employer||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(r.location||[r.city,r.state].filter(Boolean).join(', ')||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(r.work_authorization||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(r.provider||'')+'</td>'+
+        '<td class="fs-11" style="padding:8px 9px;white-space:nowrap">'+(dup?'<span title="'+esc(dup.full_name||'')+'" class="c-amber" style="font-weight:700">⚠ '+esc(dup.candidate_code||'dup')+'</span>':'<span class="c-green">new</span>')+'</td>'+
         '<td style="padding:8px 9px;white-space:nowrap">'+
           '<button class="btn btn-sm btn-primary" onclick="srcImportOne(\''+r.id+'\')">Import</button> '+
           '<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="srcDiscard(\''+r.id+'\')">✕</button>'+
@@ -158,20 +158,20 @@
     return UI.page({
       tabs: (window.atsTabBar?atsTabBar():''),
       body:
-      '<div style="font-size:18px;font-weight:700;margin-bottom:2px">Sourcing</div>'+
-      '<div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Where candidates come from. Everyone here lands in the review list below \u2014 nothing reaches your candidate database until you import it.</div>'+
+      '<div class="fs-18" style="font-weight:700;margin-bottom:2px">Sourcing</div>'+
+      '<div class="fs-12_5 c-text3" style="margin-bottom:14px">Where candidates come from. Everyone here lands in the review list below \u2014 nothing reaches your candidate database until you import it.</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">'+providerCards+'</div>'+
       notBuiltBlock+
       '<div style="height:18px"></div>'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+
-        '<div style="font-weight:600;font-size:14px">Review &amp; import ('+staged.length+')</div>'+
+        '<div class="fs-14" style="font-weight:600">Review &amp; import ('+staged.length+')</div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
           tagPicker+
-          '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" '+(s.force?'checked':'')+' onclick="srcToggleForce()"> Import duplicates too</label>'+
+          '<label class="fs-12 c-text2" style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" '+(s.force?'checked':'')+' onclick="srcToggleForce()"> Import duplicates too</label>'+
           '<button class="btn btn-sm btn-primary" '+(selIds.length?'':'disabled style="opacity:.5"')+' onclick="srcImportSelected()">Import selected'+(selIds.length?' ('+selIds.length+')':'')+'</button>'+
         '</div>'+
       '</div>'+
-      (s.loading?'<div style="text-align:center;padding:40px;color:var(--text3)">Loading…</div>':
+      (s.loading?'<div class="c-text3" style="text-align:center;padding:40px">Loading…</div>':
         '<div class="dt-wrap"><table class="dt" style="min-width:1000px"><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>')
     });
   };

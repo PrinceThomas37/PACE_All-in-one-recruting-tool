@@ -115,7 +115,7 @@
   // dash, never a zero — "we could not tell" and "a bad fit" are different
   // answers and a 0 would sort a good person to the bottom of a shortlist.
   function matchCell(m){
-    if (!m || m.score == null) return '<span style="color:var(--text3);font-size:12px" title="Not enough detail on the CV or the job order to score">—</span>';
+    if (!m || m.score == null) return '<span title="Not enough detail on the CV or the job order to score" class="c-text3 fs-12">—</span>';
     var tone = m.band === 'strong' ? 'ok' : (m.band === 'weak' ? 'mute' : 'info');
     var why = (m.reasons || []).join(' · ');
     return '<span title="' + esc(why) + '">' + UI.pill(m.score + '%', tone) + '</span>';
@@ -131,10 +131,10 @@
 
       var jobCell = opts.hideJob ? null : (aj.title
         ? UI.idCell(aj.title, aj.code || '', null)
-        : '<span style="color:var(--text3)">—</span>');
+        : '<span class="c-text3">—</span>');
 
       var dupNote = r.dup_candidate_id && !imported
-        ? '<div style="font-size:11px;color:var(--amber,#92400e);margin-top:3px">Already in candidates</div>' : '';
+        ? '<div class="fs-11" style="color:var(--amber,#92400e);margin-top:3px">Already in candidates</div>' : '';
 
       var statusCell = imported
         ? UI.pill('Imported', 'ok')
@@ -142,19 +142,19 @@
 
       var resumeBtn = r.resume_url
         ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenResume(\'' + esc(r.id) + '\')" style="font-size:11.5px">CV</button>'
-        : '<span style="color:var(--text3);font-size:12px">No CV</span>';
+        : '<span class="c-text3 fs-12">No CV</span>';
 
       var actionBtn = imported
         ? (r.imported && r.imported.id
             ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenCandidate(\'' + esc(r.imported.id) + '\')" style="font-size:11.5px">Open</button>'
-            : '<span style="color:var(--text3);font-size:12px">—</span>')
+            : '<span class="c-text3 fs-12">—</span>')
         : '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();appliedImport(\'' + esc(r.id) + '\',\'' + esc(aj.id || '') + '\')" style="font-size:11.5px"' +
           (st().busy[r.id] ? ' disabled' : '') + '>' + (st().busy[r.id] ? 'Adding…' : 'Add to candidates') + '</button>';
 
       var cells = [{ html: who + dupNote }];
       if (jobCell !== null) cells.push({ html: jobCell });
-      cells.push({ cls:'tight', html:'<span style="font-size:12.5px">' + esc(whenLabel(aj.applied_at || r.created_at)) + '</span>' });
-      cells.push({ cls:'tight', html:'<span style="font-size:12.5px">' + esc(r.location || '—') + '</span>' });
+      cells.push({ cls:'tight', html:'<span class="fs-12_5">' + esc(whenLabel(aj.applied_at || r.created_at)) + '</span>' });
+      cells.push({ cls:'tight', html:'<span class="fs-12_5">' + esc(r.location || '—') + '</span>' });
       cells.push({ cls:'tight', html: matchCell(r.match) });
       cells.push({ cls:'tight', html: statusCell });
       cells.push({ cls:'tight', html: resumeBtn + ' ' + actionBtn });
@@ -175,7 +175,7 @@
     var list = s.rows || [];
     var nNew = list.filter(function(r){ return r.status === 'new'; }).length;
 
-    var intro = '<div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">' +
+    var intro = '<div class="fs-12_5 c-text3" style="margin-bottom:10px">' +
       'People who applied through a job\'s public apply link. They are not in the candidate database yet — ' +
       'open the CV, then add the ones worth keeping.' +
       '</div>';
@@ -184,7 +184,7 @@
     // passing one drops it silently, so the count goes in `right` beside the
     // button rather than into a key the kit does not read.
     var toolbar = UI.toolbar({
-      right: '<span style="font-weight:600;font-size:13px;margin-right:10px">' +
+      right: '<span class="fs-13" style="font-weight:600;margin-right:10px">' +
                (s.loading ? 'Loading…' : (nNew + (nNew === 1 ? ' new application' : ' new applications'))) + '</span>' +
              '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:11.5px">Refresh</button>'
     });
@@ -217,14 +217,14 @@
     var nNew = list.filter(function(r){ return r.status === 'new'; }).length;
 
     var head = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">' +
-      '<div style="font-weight:600;font-size:14px">Applicants' +
-        (nNew ? ' <span style="font-size:11px;color:var(--green,#166534);font-weight:600">· ' + nNew + ' new</span>' : '') +
+      '<div class="fs-14" style="font-weight:600">Applicants' +
+        (nNew ? ' <span class="fs-11" style="color:var(--green,#166534);font-weight:600">· ' + nNew + ' new</span>' : '') +
       '</div>' +
       '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:11.5px">Refresh</button>' +
     '</div>';
 
     var body = s.loading
-      ? '<div style="font-size:12.5px;color:var(--text3)">Loading…</div>'
+      ? '<div class="fs-12_5 c-text3">Loading…</div>'
       : UI.table({
           cols: cols(true),
           rows: rowsFor(list, { hideJob:true }),

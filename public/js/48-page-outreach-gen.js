@@ -434,13 +434,13 @@
     var over=u.generations>=u.cap;
     return '<div class="card cp mb3">'+
       '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
-        '<div style="font-size:12px;color:var(--text3)">This month</div>'+
-        '<div style="font-size:13px;font-weight:600">'+u.generations+' of '+u.cap+' drafts</div>'+
+        '<div class="fs-12 c-text3">This month</div>'+
+        '<div class="fs-13" style="font-weight:600">'+u.generations+' of '+u.cap+' drafts</div>'+
       '</div>'+
       '<div style="height:7px;border-radius:5px;background:var(--border);overflow:hidden;margin:6px 0 8px">'+
         '<div style="height:100%;width:'+pct+'%;background:'+(over?'var(--amber)':'var(--accent)')+';transition:width .3s ease"></div>'+
       '</div>'+
-      '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text3)">'+
+      '<div class="fs-11_5 c-text3" style="display:flex;align-items:center;gap:8px">'+
         '<span>Monthly cap</span>'+
         '<input class="inp" style="width:70px;padding:4px 6px;font-size:12px" value="'+esc(u.cap)+'" '+
           'onchange="outreachGenSetCap(this.value)">'+
@@ -451,23 +451,23 @@
 
   function senderCard(){
     var g=G(), s=g.sender;
-    if(!s) return '<div class="card cp mb3" style="font-size:12.5px;color:var(--text3)">Checking which mailbox will send…</div>';
+    if(!s) return '<div class="card cp mb3 fs-12_5 c-text3">Checking which mailbox will send…</div>';
     if(!s.mailbox){
       // A missing mailbox is stated plainly and early. Writing a whole email
       // and only then finding out it cannot go anywhere is the worse version
       // of this screen.
       return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--amber-l)">'+
         '<span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block"></span>'+
-        '<div style="font-size:12.5px;flex:1;min-width:200px">No connected mailbox — you can still write and copy a draft, but sending needs one connected first.</div>'+
+        '<div class="fs-12_5" style="flex:1;min-width:200px">No connected mailbox — you can still write and copy a draft, but sending needs one connected first.</div>'+
         '<button class="btn btn-outline btn-sm" onclick="goPage(\'emailaccounts\')">Set up a mailbox</button>'+
       '</div>';
     }
     return '<div class="card cp mb3" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>'+
-      '<div style="font-size:12.5px;flex:1;min-width:180px">Sends as <strong>'+
+      '<div class="fs-12_5" style="flex:1;min-width:180px">Sends as <strong>'+
         esc((s.sender&&s.sender.name)||s.mailbox.email)+'</strong> &lt;'+esc(s.mailbox.email)+'&gt;'+
         (s.company_name?' · '+esc(s.company_name):'')+
-        '<div style="font-size:11.5px;color:var(--text3)">'+
+        '<div class="fs-11_5 c-text3">'+
           (s.ai?'Drafted by the AI writer.':'Drafted by the built-in rules writer — no API key is configured, so this costs nothing.')+
         '</div>'+
       '</div>'+
@@ -496,7 +496,7 @@
     if(g.recipMode==='existing'){
       var r=g.recipResults;
       if(g.recipSearching){
-        results='<div style="font-size:12px;color:var(--text3);padding:8px 2px">Searching…</div>';
+        results='<div class="fs-12 c-text3" style="padding:8px 2px">Searching…</div>';
       } else if(r){
         var rows=[];
         (r.contacts||[]).forEach(function(c){
@@ -504,18 +504,18 @@
           rows.push('<div onclick="outreachPickContact(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
             'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
             '<strong>'+esc(c.name||c.email)+'</strong>'+(c.title?' · '+esc(c.title):'')+
-            '<div style="font-size:11.5px;color:var(--text3)">'+esc(c.email)+(c.company?' · '+esc(c.company):'')+'</div></div>');
+            '<div class="fs-11_5 c-text3">'+esc(c.email)+(c.company?' · '+esc(c.company):'')+'</div></div>');
         });
         (r.companies||[]).forEach(function(co){
           var j=encodeURIComponent(JSON.stringify(co));
           rows.push('<div onclick="outreachPickCompany(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
             'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-            '<strong>'+esc(co.name)+'</strong> <span style="color:var(--text3)">— company</span>'+
-            '<div style="font-size:11.5px;color:var(--text3)">'+esc([co.industry,co.location].filter(Boolean).join(' · ')||'see its contacts')+'</div></div>');
+            '<strong>'+esc(co.name)+'</strong> <span class="c-text3">— company</span>'+
+            '<div class="fs-11_5 c-text3">'+esc([co.industry,co.location].filter(Boolean).join(' · ')||'see its contacts')+'</div></div>');
         });
         results=rows.length
           ? '<div style="border:1px solid var(--border2);border-radius:var(--r);max-height:230px;overflow:auto;margin-top:8px">'+rows.join('')+'</div>'
-          : '<div style="font-size:12px;color:var(--text3);padding:8px 2px">Nothing in PACE matches that. Use <strong>Someone new</strong> to add them.</div>';
+          : '<div class="fs-12 c-text3" style="padding:8px 2px">Nothing in PACE matches that. Use <strong>Someone new</strong> to add them.</div>';
       }
     }
 
@@ -523,12 +523,12 @@
     // writer to re-read four separate boxes to check who this is going to.
     var chosen=(f.to||f.contact_first_name)?
       '<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--accent-l);border-radius:var(--r);margin-top:10px">'+
-        '<div style="flex:1;min-width:0;font-size:13px"><strong>'+esc(f.contact_first_name||f.to)+'</strong>'+
+        '<div class="fs-13" style="flex:1;min-width:0"><strong>'+esc(f.contact_first_name||f.to)+'</strong>'+
           (f.contact_title?' · '+esc(f.contact_title):'')+
-          '<div style="font-size:11.5px;color:var(--accent);font-weight:600">'+esc(f.to||'(no address yet)')+'</div>'+
-          (f.company?'<div style="font-size:11px;color:var(--text3)">'+esc(f.company)+'</div>':'')+
+          '<div class="fs-11_5 c-accent" style="font-weight:600">'+esc(f.to||'(no address yet)')+'</div>'+
+          (f.company?'<div class="fs-11 c-text3">'+esc(f.company)+'</div>':'')+
         '</div>'+
-        (f.pickedContactId?'<span class="bdg bdg-blue" style="font-size:10.5px">in PACE</span>':'')+
+        (f.pickedContactId?'<span class="bdg bdg-blue fs-10_5">in PACE</span>':'')+
       '</div>':'';
 
     return '<div class="card cp mb3">'+
@@ -537,7 +537,7 @@
       '</div>'+
       (g.recipMode==='existing'
         ? '<input class="inp" placeholder="Search by name, email or company" value="'+esc(g.recipQuery)+'" oninput="outreachRecipSearch(this.value)">'+results
-        : '<div style="font-size:11.5px;color:var(--text3)">Fill in the contact and company below — nothing is saved to PACE unless you convert a reply into a lead.</div>')+
+        : '<div class="fs-11_5 c-text3">Fill in the contact and company below — nothing is saved to PACE unless you convert a reply into a lead.</div>')+
       chosen+
     '</div>';
   }
@@ -545,7 +545,7 @@
   function inputsCard(){
     var f=G().form;
     var radio=function(v,lbl){
-      return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">'+
+      return '<label class="fs-13" style="display:flex;align-items:center;gap:6px;cursor:pointer">'+
         '<input type="radio" name="og-type" value="'+v+'" '+(f.outreach_type===v?'checked':'')+
         ' onchange="outreachGenType(\''+v+'\')"> '+lbl+'</label>';
     };
@@ -558,7 +558,7 @@
           '<input class="inp" id="og-first" placeholder="Susan" value="'+esc(f.contact_first_name)+'" oninput="outreachGenField(\'contact_first_name\',this.value)"></div>'+
         '<div class="fgrp"><label class="flbl">Contact title (optional)</label>'+
           '<input class="inp" id="og-title" placeholder="Controller / HR Manager" value="'+esc(f.contact_title)+'" oninput="outreachGenField(\'contact_title\',this.value)">'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:3px">Shapes how the email is written. Never printed in it.</div></div>'+
+          '<div class="fs-11 c-text3" style="margin-top:3px">Shapes how the email is written. Never printed in it.</div></div>'+
       '</div>'+
       '<div class="fpair">'+
         '<div class="fgrp"><label class="flbl">Company (optional)</label>'+
@@ -568,9 +568,9 @@
       '</div>'+
       '<div class="fgrp"><label class="flbl">Send to</label>'+
         '<input class="inp" id="og-to" placeholder="susan@company.com" value="'+esc(f.to)+'" oninput="outreachGenField(\'to\',this.value)">'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">Where the finished email goes. Leave it blank to write a draft and copy it out.</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:4px">Where the finished email goes. Leave it blank to write a draft and copy it out.</div>'+
       '</div>'+
-      '<div class="fgrp"><label style="display:flex;align-items:flex-start;gap:8px;font-size:13px">'+
+      '<div class="fgrp"><label class="fs-13" style="display:flex;align-items:flex-start;gap:8px">'+
         '<input type="checkbox" '+(f.no_agencies?'checked':'')+' onchange="outreachGenToggle(\'no_agencies\',this.checked)" style="margin-top:3px">'+
         '<span>Posting says no agencies / no calls / inquiries through a form only</span></label>'+
       '</div>'+
@@ -578,11 +578,11 @@
         '<input class="inp" id="og-natext" placeholder="EMPLOYMENT OUTSOURCING/JOB PLACEMENT INQUIRIES..." value="'+esc(f.no_agencies_text)+'" oninput="outreachGenField(\'no_agencies_text\',this.value)"></div>':'')+
       '<div class="fgrp"><label class="flbl">Context on the contact or situation (optional)</label>'+
         '<textarea class="txta w100" id="og-notes" rows="3" placeholder="e.g. mutual connection Christian, 14 years at the company, re-posted after 22 days..." oninput="outreachGenField(\'notes\',this.value)">'+esc(f.notes)+'</textarea>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">One real detail from here gets worked into the email — never more than one.</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:4px">One real detail from here gets worked into the email — never more than one.</div>'+
       '</div>'+
       '<div class="fgrp"><label class="flbl">Job title</label>'+
         '<input class="inp" id="og-jobtitle" placeholder="Construction Superintendent" value="'+esc(f.job_title)+'" oninput="outreachGenField(\'job_title\',this.value)">'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">Which opening this email is about. A pasted job page often lists other roles too — this settles it.</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:4px">Which opening this email is about. A pasted job page often lists other roles too — this settles it.</div>'+
       '</div>'+
       '<div class="fgrp"><label class="flbl">Job posting</label>'+
         '<textarea class="txta w100" id="og-jd" style="min-height:180px" placeholder="Paste the full job description. Site clutter (Quick Apply, Continue, nav links) is fine — it gets ignored." oninput="outreachGenField(\'job_description\',this.value)">'+esc(f.job_description)+'</textarea>'+
@@ -607,7 +607,7 @@
   function outputCard(){
     var g=G(), d=g.draft;
     if(!d){
-      return '<div class="card cp" style="text-align:center;color:var(--text3);font-size:13px;padding:36px 16px">'+
+      return '<div class="card cp c-text3 fs-13" style="text-align:center;padding:36px 16px">'+
         'Fill in the posting and the contact, then generate. The angle and the email show up here.</div>';
     }
     var cur=currentVariant();
@@ -629,7 +629,7 @@
           'color:'+(can?'var(--text2)':'var(--text3)')+';font-size:12px;border-radius:99px;'+
           'padding:5px 12px;font-family:inherit;cursor:'+(can?'pointer':'default')+';opacity:'+(can?'1':'.6')+'">'+
           (busy?'Rewriting…':'\u21bb Rewrite this one')+'</button>'+
-        '<span style="font-size:11.5px;color:var(--text3)">'+
+        '<span class="fs-11_5 c-text3">'+
           (left>0
             ? left+' of '+REWRITE_LIMIT+' left \u2014 same angle, different wording'
             : 'No rewrites left for this angle. Edit it by hand, or try another angle.')+
@@ -644,7 +644,7 @@
     var picker='';
     if(list.length>1){
       picker='<div style="margin-bottom:12px">'+
-        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Pick an angle</div>'+
+        '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Pick an angle</div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
         list.map(function(v){
           var on=v.id===cur.id;
@@ -664,7 +664,7 @@
             '</button>';
         }).join('')+
         '</div>'+
-        (cur.blurb?'<div style="font-size:11.5px;color:var(--text3);margin-top:6px">'+esc(cur.blurb)+'</div>':'')+
+        (cur.blurb?'<div class="fs-11_5 c-text3" style="margin-top:6px">'+esc(cur.blurb)+'</div>':'')+
       '</div>';
     }
 
@@ -674,16 +674,16 @@
     // out that way. Here it is a labelled value you can check at a glance.
     var u=d.used||{};
     var readRow=function(lbl,val,warn){
-      return '<div style="display:flex;gap:8px;padding:3px 0;font-size:12px">'+
-        '<span style="color:var(--text3);min-width:66px">'+lbl+'</span>'+
+      return '<div class="fs-12" style="display:flex;gap:8px;padding:3px 0">'+
+        '<span class="c-text3" style="min-width:66px">'+lbl+'</span>'+
         '<span style="font-weight:600;color:'+(warn?'#b45309':'var(--text)')+'">'+esc(val||'—')+'</span></div>';
     };
     var readCard=(u.role||u.company||u.location)?
       '<div style="border:1px solid var(--border2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;background:var(--bg)">'+
-        '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Read from the posting</div>'+
+        '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Read from the posting</div>'+
         readRow('Role',u.role)+readRow('Company',u.company)+readRow('Location',u.location)+
         (d.company_rejected?
-          '<div style="margin-top:6px;font-size:11.5px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
+          '<div class="fs-11_5" style="margin-top:6px;color:#b45309">"'+esc(d.company_rejected)+'" looks like a person\'s job title, so it was not used as the company. Put their title in <strong>Contact title</strong> — it shapes the email but is never printed in it.</div>':'')+
       '</div>':'';
 
     // ── ADD IT TO A SEQUENCE ───────────────────────────────────────────────
@@ -709,7 +709,7 @@
         : 'Sending on its own does not create a lead. Pick a sequence to track this one and run its follow-ups.';
       return '<div class="fgrp"><label class="flbl">Add to a sequence</label>'+
         '<select class="inp" onchange="outreachSetSequence(this.value)">'+opts+'</select>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-top:4px">'+note+'</div>'+
+        '<div class="fs-11_5 c-text3" style="margin-top:4px">'+note+'</div>'+
       '</div>';
     }
 
@@ -719,10 +719,10 @@
     var info=g.angleInfo[cur.id]||{};
     var modeNote='';
     if(g.angleLoading[cur.id]){
-      modeNote='<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Writing this angle…</div>';
+      modeNote='<div class="fs-11_5 c-text3" style="margin-bottom:8px">Writing this angle…</div>';
     } else if(cur.mode==='ai'){
       var q=info.quality||{};
-      modeNote='<div style="font-size:11.5px;color:var(--green);margin-bottom:8px">Written by the AI'+
+      modeNote='<div class="fs-11_5 c-green" style="margin-bottom:8px">Written by the AI'+
         (info.engine?' ('+esc(info.engine)+(info.engine_model?' · '+esc(info.engine_model):'')+')':'')+
         ', checked against the house rules'+(q.repaired?' and corrected once':'')+'.</div>';
     } else {
@@ -737,11 +737,11 @@
       } else if(d.ai_available){
         why=' Click this angle again to have the AI write it.';
       }
-      modeNote='<div style="font-size:11.5px;color:'+(info.ai_error?'#b45309':'var(--text3)')+';margin-bottom:8px">'+
+      modeNote='<div class="fs-11_5" style="color:'+(info.ai_error?'#b45309':'var(--text3)')+';margin-bottom:8px">'+
         'Written by the built-in rules writer.'+why+'</div>';
     }
     var sentBanner=g.sentOk
-      ? '<div style="background:var(--green-l);border-radius:var(--r);padding:9px 12px;font-size:12.5px;margin-bottom:10px">'+
+      ? '<div class="fs-12_5" style="background:var(--green-l);border-radius:var(--r);padding:9px 12px;margin-bottom:10px">'+
         'Sent to <strong>'+esc(g.sentOk.to)+'</strong> from '+esc(g.sentOk.mailbox)+'.</div>'
       : '';
     return '<div class="card cp">'+
@@ -750,7 +750,7 @@
       picker+
       rewriteBtn(cur)+
       modeNote+
-      (cur.diagnosis?'<div style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+
+      (cur.diagnosis?'<div class="fs-12_5" style="background:var(--accent-l);border-radius:var(--r);padding:10px 12px;margin-bottom:12px">'+
         '<strong>Why this angle:</strong> '+esc(cur.diagnosis)+'</div>':'')+
       '<div class="fgrp"><label class="flbl">Subject</label>'+
         '<div style="display:flex;gap:8px">'+
@@ -769,7 +769,7 @@
       (sigHtml(d)?
         '<div class="fgrp"><label class="flbl">Signature (added automatically)</label>'+
           '<div style="border:1px solid var(--border2);border-radius:var(--r);padding:12px;background:var(--bg);max-height:190px;overflow:auto">'+sigHtml(d)+'</div>'+
-          (/\{\{/.test(sigHtml(d))?'<div style="font-size:11.5px;color:#b91c1c;margin-top:5px">This signature still has an unfilled variable in it — tell me before you send.</div>':'')+
+          (/\{\{/.test(sigHtml(d))?'<div class="fs-11_5" style="color:#b91c1c;margin-top:5px">This signature still has an unfilled variable in it — tell me before you send.</div>':'')+
         '</div>':'')+
       seqPicker()+
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
@@ -794,18 +794,18 @@
     if(!g.sent.length) return '';
     var fmt=function(d){ try{ return new Date(d).toLocaleDateString(); }catch(e){ return ''; } };
     return '<div class="card cp mt3">'+
-      '<div style="font-size:12px;color:var(--text3);font-weight:600;margin-bottom:8px">Sent from here</div>'+
+      '<div class="fs-12 c-text3" style="font-weight:600;margin-bottom:8px">Sent from here</div>'+
       g.sent.slice(0,12).map(function(r){
         // A reply is the only status worth acting on, so it is the only one that
         // gets a button. Opens are information; a reply is a live conversation
         // that is invisible to the pipeline until somebody makes it a lead.
         var status = r.replied_at
-          ? '<span style="color:var(--green);font-weight:600">Replied</span>'
+          ? '<span class="c-green" style="font-weight:600">Replied</span>'
           : r.opened_at
-            ? '<span style="color:var(--accent)">Opened'+(r.open_count>1?' · '+r.open_count+'×':'')+'</span>'
-            : '<span style="color:var(--text3)">Sent</span>';
+            ? '<span class="c-accent">Opened'+(r.open_count>1?' · '+r.open_count+'×':'')+'</span>'
+            : '<span class="c-text3">Sent</span>';
         var action = r.lead_id
-          ? '<span style="font-size:11.5px;color:var(--text3)">lead created</span>'
+          ? '<span class="fs-11_5 c-text3">lead created</span>'
           : (r.replied_at
               ? '<button class="btn btn-outline btn-sm" '+(g.converting===r.id?'disabled style="opacity:.6"':'')+
                 ' onclick="outreachConvertLead(\''+esc(r.id)+'\')">'+
@@ -813,15 +813,15 @@
               : '');
         return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border2)">'+
           '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.to_email||'')+'</div>'+
-            '<div style="font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
+            '<div class="fs-12_5" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.to_email||'')+'</div>'+
+            '<div class="fs-11_5 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
           '</div>'+
-          '<div style="font-size:11.5px;white-space:nowrap">'+status+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);white-space:nowrap">'+fmt(r.sent_at)+'</div>'+
+          '<div class="fs-11_5" style="white-space:nowrap">'+status+'</div>'+
+          '<div class="fs-11_5 c-text3" style="white-space:nowrap">'+fmt(r.sent_at)+'</div>'+
           '<div style="min-width:112px;text-align:right">'+action+'</div>'+
         '</div>';
       }).join('')+
-      '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Replies land in your Inbox and you can answer them there. Converting one makes it a lead, so the reply also reaches the pipeline, your reports and the follow-up engine.</div>'+
+      '<div class="fs-11_5 c-text3" style="margin-top:8px">Replies land in your Inbox and you can answer them there. Converting one makes it a lead, so the reply also reaches the pipeline, your reports and the follow-up engine.</div>'+
     '</div>';
   }
 
@@ -829,10 +829,10 @@
     var h=readHistory();
     if(!h.length) return '';
     return '<div class="card cp mt3">'+
-      '<div style="font-size:12px;color:var(--text3);font-weight:600;margin-bottom:8px">Recent</div>'+
+      '<div class="fs-12 c-text3" style="font-weight:600;margin-bottom:8px">Recent</div>'+
       h.map(function(r){
-        return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--text3);padding:5px 0;border-bottom:1px solid var(--border2)">'+
-          '<span><strong style="color:var(--text)">'+esc(r.company)+'</strong>'+(r.sent?' · sent':'')+'</span><span>'+esc(r.d)+'</span></div>';
+        return '<div class="fs-12_5 c-text3" style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border2)">'+
+          '<span><strong class="c-text">'+esc(r.company)+'</strong>'+(r.sent?' · sent':'')+'</span><span>'+esc(r.d)+'</span></div>';
       }).join('')+
     '</div>';
   }
@@ -842,7 +842,7 @@
     var g=G();
     if(!g.sender&&!g.senderLoading) setTimeout(loadOutreachSender,0);
     if(g.sequences===null) setTimeout(loadOutreachSequences,0);
-    var err=g.error?'<div style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:var(--r);padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+esc(g.error)+'</div>':'';
+    var err=g.error?'<div class="fs-12_5" style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;border-radius:var(--r);padding:10px 12px;margin-bottom:12px">'+esc(g.error)+'</div>':'';
     return senderCard()+meterCard()+err+
       '<div class="og-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">'+
         '<div>'+recipientCard()+inputsCard()+'</div>'+

@@ -15,12 +15,12 @@ function renderLogin(){
   }
 
   var err=STATE.loginErr
-    ? '<div style="color:var(--red);font-size:12px;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginErr)+'</div>'
-    : '<div id="login-err" style="display:none;color:var(--red);font-size:12px;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>';
+    ? '<div class="c-red fs-12" style="background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginErr)+'</div>'
+    : '<div id="login-err" class="c-red fs-12" style="display:none;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>';
 
   // The plain reason the person is looking at the sign-in again (R-118) — a calm notice, not an error.
   var notice=STATE.loginNotice
-    ? '<div role="status" style="color:var(--text);font-size:12.5px;background:var(--accent-l,var(--card-solid));border:1px solid var(--accent);padding:9px 11px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginNotice)+'</div>'
+    ? '<div role="status" class="c-text fs-12_5" style="background:var(--accent-l,var(--card-solid));border:1px solid var(--accent);padding:9px 11px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginNotice)+'</div>'
     : '';
   var body = tab==='signup' ? renderSignupPanel() :
     // ── Log In ──────────────────────────────────────────────────────────────
@@ -33,10 +33,10 @@ function renderLogin(){
     err+
     '<button class="btn btn-primary w100" style="justify-content:center" onclick="doLogin()">Log In</button>'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:10px">'+
-      '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);cursor:pointer">'+
+      '<label class="fs-12_5 c-text2" style="display:flex;align-items:center;gap:7px;cursor:pointer">'+
         '<input type="checkbox" id="login-remember" checked style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer"/> Keep me signed in'+
       '</label>'+
-      '<button onclick="showForgotPassword()" style="background:none;border:0;padding:0;font-size:12.5px;color:var(--text2);text-decoration:underline;cursor:pointer;font-family:inherit">Forgot password?</button>'+
+      '<button onclick="showForgotPassword()" class="fs-12_5 c-text2" style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font-family:inherit">Forgot password?</button>'+
     '</div>';
 
   return '<div class="login-wrap">'+
@@ -44,10 +44,10 @@ function renderLogin(){
     '<div class="login-card" style="position:relative;z-index:2">'+
       '<div class="login-top">'+
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'+
-          '<div style="line-height:1;flex-shrink:0"><span style="font-family:var(--display);font-weight:700;font-size:36px;color:#fff;letter-spacing:-.5px">PA</span><span style="font-family:var(--display);font-weight:700;font-size:36px;color:#F5C23B;letter-spacing:-.5px">CE</span></div>'+
-          '<div><div style="font-family:var(--display);font-weight:700;font-size:17px;color:#fff;line-height:1.25">All-in-one Recruiting Platform</div><div style="font-size:12px;color:rgba(255,255,255,.82);margin-top:3px">Applicant tracking · Lead management · Outreach</div></div>'+
+          '<div style="line-height:1;flex-shrink:0"><span class="fs-36" style="font-family:var(--display);font-weight:700;color:#fff;letter-spacing:-.5px">PA</span><span class="fs-36" style="font-family:var(--display);font-weight:700;color:#F5C23B;letter-spacing:-.5px">CE</span></div>'+
+          '<div><div class="fs-17" style="font-family:var(--display);font-weight:700;color:#fff;line-height:1.25">All-in-one Recruiting Platform</div><div class="fs-12" style="color:rgba(255,255,255,.82);margin-top:3px">Applicant tracking · Lead management · Outreach</div></div>'+
         '</div>'+
-        '<div style="font-size:11.5px;color:rgba(255,255,255,.65);border-top:1px solid rgba(255,255,255,.2);padding-top:10px">Sign in to your workspace</div>'+
+        '<div class="fs-11_5" style="color:rgba(255,255,255,.65);border-top:1px solid rgba(255,255,255,.2);padding-top:10px">Sign in to your workspace</div>'+
       '</div>'+
       '<div class="login-body">'+
         '<div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px">'+
@@ -202,7 +202,7 @@ function renderSidebar(){
     '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
       'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       '<div class="rail-mark">P</div>'+
-      '<div class="rail-word"><span style="color:var(--accent)">PA</span><span style="color:#C99A18">CE</span></div>'+
+      '<div class="rail-word"><span class="c-accent">PA</span><span style="color:#C99A18">CE</span></div>'+
       '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
@@ -493,7 +493,7 @@ function renderSignupPanel(){
   // panel to show depends on it.
   if(STATE.ssoProviders===undefined){loadSsoProviders();return '';}
   if(STATE.selfServe&&(STATE.ssoProviders||[]).length){
-    return '<div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.55">'+
+    return '<div class="fs-13 c-text3" style="margin-bottom:16px;line-height:1.55">'+
         'Create your PACE workspace in one step — no password to choose. Sign in with your work account and we’ll set everything up.'+
       '</div>'+
       (STATE.ssoProviders||[]).map(function(p){
@@ -502,30 +502,30 @@ function renderSignupPanel(){
           htmlEsc(String(p.label||'').replace(/^Continue with/,'Sign up with'))+
         '</button>';
       }).join('')+
-      '<div style="font-size:11.5px;color:var(--text3);margin-top:14px;line-height:1.55;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">'+
-        '<strong style="color:var(--text2)">If your company already uses PACE</strong> and has verified its email domain, you’ll join their workspace automatically. '+
+      '<div class="fs-11_5 c-text3" style="margin-top:14px;line-height:1.55;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px">'+
+        '<strong class="c-text2">If your company already uses PACE</strong> and has verified its email domain, you’ll join their workspace automatically. '+
         'Otherwise you get a private workspace of your own — you can invite your team and claim your domain from there.'+
       '</div>'+
-      '<div style="font-size:11.5px;color:var(--text3);margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
+      '<div class="fs-11_5 c-text3" style="margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
         '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
       '</div>';
   }
   if(STATE.signupSent){
     return '<div style="text-align:center;padding:14px 4px">'+
       '<div style="font-size:34px;line-height:1;margin-bottom:10px">✓</div>'+
-      '<div style="font-family:var(--display);font-weight:600;font-size:16px;margin-bottom:6px">Request received</div>'+
-      '<div style="font-size:13px;color:var(--text3);line-height:1.55">We’ll be in touch at <strong>'+htmlEsc(STATE.signupSent)+'</strong> to set your workspace up.</div>'+
+      '<div class="fs-16" style="font-family:var(--display);font-weight:600;margin-bottom:6px">Request received</div>'+
+      '<div class="fs-13 c-text3" style="line-height:1.55">We’ll be in touch at <strong>'+htmlEsc(STATE.signupSent)+'</strong> to set your workspace up.</div>'+
       '<button onclick="STATE.signupSent=null;STATE.loginTab=\'login\';render()" style="margin-top:16px;background:none;border:0;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline;font-family:inherit">Back to log in</button>'+
     '</div>';
   }
-  return '<div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.55">'+
+  return '<div class="fs-13 c-text3" style="margin-bottom:16px;line-height:1.55">'+
       'PACE is rolling out to new organisations. Tell us where to reach you and we’ll set your workspace up.'+
     '</div>'+
     '<div class="fgrp"><label class="flbl">Work email</label><input class="inp" id="su-email" type="email" placeholder="you@yourcompany.com"/></div>'+
-    '<div class="fgrp"><label class="flbl">Company <span style="color:var(--text3);font-weight:400">(leave blank if it’s just you)</span></label><input class="inp" id="su-company" type="text" placeholder="Your company"/></div>'+
-    '<div id="su-err" style="display:none;color:var(--red);font-size:12px;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>'+
+    '<div class="fgrp"><label class="flbl">Company <span class="c-text3" style="font-weight:400">(leave blank if it’s just you)</span></label><input class="inp" id="su-company" type="text" placeholder="Your company"/></div>'+
+    '<div id="su-err" class="c-red fs-12" style="display:none;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>'+
     '<button class="btn btn-primary w100" style="justify-content:center" onclick="submitSignupRequest()">Request access</button>'+
-    '<div style="font-size:11.5px;color:var(--text3);margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
+    '<div class="fs-11_5 c-text3" style="margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
       '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
     '</div>';
 }

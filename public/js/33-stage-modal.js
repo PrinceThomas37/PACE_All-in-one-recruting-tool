@@ -314,86 +314,86 @@
     var curStages = ids.map(function(id){ return personFor(id, people).stage; })
       .filter(function(x, i, a){ return x && a.indexOf(x) === i; });
     var curStage = curStages.length === 1 ? curStages[0] : (curStages.length > 1 ? 'Various stages' : '');
-    var arrow = '<span style="color:var(--text3)">'+(curStage?esc(curStage):'—')+'</span>'+
-      ' <span style="color:var(--text3)">→</span> '+
+    var arrow = '<span class="c-text3">'+(curStage?esc(curStage):'—')+'</span>'+
+      ' <span class="c-text3">→</span> '+
       '<span style="font-weight:700;color:'+(STAGE_COLORS[newStage]||'var(--text)')+'">'+esc(newStage)+'</span>';
 
     STATE.modal =
       '<div class="modal modal-w480" onclick="event.stopPropagation()">'+
         '<div class="stg-hd">'+
-          '<div style="font-weight:700;font-size:15px">'+
+          '<div class="fs-15" style="font-weight:700">'+
             (group ? 'Move '+ids.length+' candidate'+(ids.length===1?'':'s') : esc(names[0]||'Candidate'))+
           '</div>'+
           (group && names.length ? '<div class="stg-who">'+nameList(names, 4)+'</div>' : '')+
           (mv.jobTitle ? '<div class="stg-job">on '+esc(mv.jobTitle)+'</div>' : '')+
-          '<div style="font-size:13px;margin-top:3px">'+arrow+'</div>'+
+          '<div class="fs-13" style="margin-top:3px">'+arrow+'</div>'+
         '</div>'+
         '<div class="stg-bd">'+
           leftOutHtml(mv)+
           (subStages.length?
-            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Sub-stage</label>'+
+            '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Sub-stage</label>'+
             '<select id="stg-sub" class="sel"><option value="">— none —</option>'+
               subStages.map(function(s){ return '<option value="'+esc(s)+'">'+esc(s)+'</option>'; }).join('')+
             '</select></div>':'')+
           (showInterview?
             '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">'+
-              '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px">INTERVIEW DETAILS</div>'+
+              '<div class="fs-11 c-text3" style="font-weight:700;margin-bottom:8px">INTERVIEW DETAILS</div>'+
               '<div class="gc2" style="gap:10px">'+
-                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Date &amp; time</label>'+
+                '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Date &amp; time</label>'+
                   '<input id="stg-iv-at" type="datetime-local" class="sel" value="'+esc(ivAt0)+'"></div>'+
-                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Time zone</label>'+ivZoneSelect()+'</div>'+
-                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Format</label>'+
+                '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Time zone</label>'+ivZoneSelect()+'</div>'+
+                '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Format</label>'+
                   '<select id="stg-iv-type" class="sel" onchange="stgIvTypeToggle()">'+
                     ['in_person|In person','virtual|Virtual','phone|Phone'].map(function(o){ var kv=o.split('|'); return '<option value="'+kv[0]+'"'+(ivType0===kv[0]?' selected':'')+'>'+kv[1]+'</option>'; }).join('')+
                   '</select></div>'+
               '</div>'+
               '<div id="stg-iv-virtual" class="gc2" style="display:'+(ivType0==='virtual'?'grid':'none')+';gap:10px;margin-top:10px">'+
-                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Platform</label>'+
+                '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Platform</label>'+
                   '<select id="stg-iv-platform" class="sel">'+
                     ['Microsoft Teams','Google Meet','Zoom','Other'].map(function(p){ return '<option'+(ivPlatform0===p?' selected':'')+'>'+esc(p)+'</option>'; }).join('')+
                   '</select></div>'+
-                '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Join link / meeting ID</label>'+
+                '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Join link / meeting ID</label>'+
                   '<input id="stg-iv-link" class="sel" placeholder="https://… or meeting ID" value="'+esc(ivType0==='virtual'?ivLink0:'')+'"></div>'+
                 (ids.length===1 && !group?'<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
                   '<button type="button" class="btn btn-sm btn-outline" onclick="stgGenTeams(\''+ids[0]+'\')">📅 Generate Teams meeting link</button>'+
-                  '<span style="font-size:11px;color:var(--text3)">Creates a Microsoft Teams meeting &amp; fills the link above.</span>'+
+                  '<span class="fs-11 c-text3">Creates a Microsoft Teams meeting &amp; fills the link above.</span>'+
                 '</div>':'')+
               '</div>'+
               '<div id="stg-iv-inperson" style="display:'+(ivType0==='in_person'?'block':'none')+';margin-top:10px">'+
-                '<label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Office address</label>'+
+                '<label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Office address</label>'+
                 '<input id="stg-iv-address" class="sel" placeholder="Street, suite, city…" value="'+esc(ivType0==='in_person'?ivAddr0:'')+'"></div>'+
               '<div id="stg-iv-phone" style="display:'+(ivType0==='phone'?'block':'none')+';margin-top:10px">'+
-                '<label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Phone number</label>'+
+                '<label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Phone number</label>'+
                 '<input id="stg-iv-phone-num" class="sel" placeholder="+1 …" value="'+esc(ivType0==='phone'?ivLink0:'')+'"></div>'+
-              '<div style="margin-top:10px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Interviewer name(s) — up to 3</label>'+
+              '<div style="margin-top:10px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Interviewer name(s) — up to 3</label>'+
                 '<input id="stg-iv-people" class="sel" placeholder="e.g. Jane Smith, Raj Patel" value="'+esc(ivPeople0)+'"></div>'+
-              '<div style="margin-top:11px;font-size:11.5px;color:var(--text2);font-weight:600">Email these details to:</div>'+
+              '<div class="fs-11_5 c-text2" style="margin-top:11px;font-weight:600">Email these details to:</div>'+
               '<div style="display:flex;gap:16px;margin-top:5px">'+
-                '<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-cand" checked> Candidate</label>'+
-                '<label style="font-size:12.5px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-bd"> BD Manager</label>'+
+                '<label class="fs-12_5" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-cand" checked> Candidate</label>'+
+                '<label class="fs-12_5" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="stg-iv-notify-bd"> BD Manager</label>'+
               '</div>'+
               (window.FromPick?'<div style="margin-top:9px">'+FromPick.slot('stg-iv-from')+'</div>':'')+
-              '<div style="font-size:11px;color:var(--text3);margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
+              '<div class="fs-11 c-text3" style="margin-top:5px">Job title, company, date/time, format, interviewers &amp; the job details are added automatically. The candidate is ticked by default — a phone interview is confirmed by email too; untick to skip. Sent (and open-tracked) from your connected mailbox.'+
                 (group?' <b>These details go on every person you move, and each one gets their own email.</b>':'')+'</div>'+
             '</div>':'')+
           (newStage === 'Submitted to Client' && !group && !recruiterScoped() ? subEmailHtml('client') : '')+
           // Rejecting is a choice from a fixed list, not free typing (owner, 2026-09-30) —
           // so the reasons can be counted later. "Other" asks for the words.
           (newStage==='Not Accepted'?
-            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Why is '+(group?'this group':'this candidate')+' being rejected? (required)</label>'+
+            '<div style="margin-bottom:12px"><label class="fs-11 c-red" style="display:block;margin-bottom:3px;font-weight:700">Why is '+(group?'this group':'this candidate')+' being rejected? (required)</label>'+
             '<select id="stg-reject-type" class="sel" onchange="var t=document.getElementById(\'stg-reject\');if(t)t.placeholder=(this.value===\'Other\'?\'Type the reason (required)\':\'Anything to add? (optional)\')">'+
               '<option value="">— pick a reason —</option>'+REJECT_REASONS.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
             '</select>'+
             '<textarea id="stg-reject" class="sel" style="min-height:48px;resize:vertical;margin-top:6px" placeholder="Anything to add? (optional)"></textarea></div>':'')+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Note <span style="color:var(--red)">*</span></label>'+
+          '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Note <span class="c-red">*</span></label>'+
             '<textarea id="stg-note" class="sel" style="min-height:56px;resize:vertical" placeholder="'+(group?'Why are these candidates moving? One note is saved on each person’s history.':'Why is this candidate moving? (call summary, feedback, next step…)')+'"></textarea></div>'+
-          '<label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:8px">'+
+          '<label class="fs-12_5 c-text2" style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-bottom:8px">'+
             '<input type="checkbox" id="stg-rem" onchange="document.getElementById(\'stg-rem-fields\').style.display=this.checked?\'grid\':\'none\'"> Set a reminder to call / follow up'+(group?' (one for each person)':'')+
           '</label>'+
           '<div id="stg-rem-fields" style="display:none;grid-template-columns:1fr 1fr;gap:10px">'+
-            '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Remind on</label>'+
+            '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Remind on</label>'+
               '<input id="stg-rem-date" type="date" class="sel"></div>'+
-            '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Reminder note</label>'+
+            '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Reminder note</label>'+
               '<input id="stg-rem-note" class="sel" placeholder="Call about…"></div>'+
           '</div>'+
           '<div class="stg-err" id="stg-err" role="alert"></div>'+
@@ -455,7 +455,7 @@
       : (n === 1 ? 'has' : 'have') + ' no stage on this job yet';
     return '<div class="modal modal-w480" onclick="event.stopPropagation()">'+
       '<div class="stg-hd">'+
-        '<div style="font-weight:700;font-size:15px">These people need one more step</div>'+
+        '<div class="fs-15" style="font-weight:700">These people need one more step</div>'+
         (mv.jobTitle ? '<div class="stg-job">on '+esc(mv.jobTitle)+'</div>' : '')+
       '</div>'+
       '<div class="stg-bd">'+
@@ -757,7 +757,7 @@
       var locFallback = [c.city,c.state].filter(Boolean).join(', ');
 
       function fld(id,label,valv,ph,req){
-        return '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+(req?' <span style="color:var(--red)">*</span>':'')+'</label>'+
+        return '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">'+label+(req?' <span class="c-red">*</span>':'')+'</label>'+
           '<input id="'+id+'" class="sel" value="'+esc(valv||'')+'" placeholder="'+esc(ph||'')+'"></div>';
       }
 
@@ -765,8 +765,8 @@
       STATE.modal =
         '<div class="modal" style="width:600px;max-width:94vw" onclick="event.stopPropagation()">'+
           '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
-            '<div style="font-weight:700;font-size:15px">Submit to BD Manager</div>'+
-            '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+esc(c.full_name||'Candidate')+' — these details go to the BDM with the profile</div>'+
+            '<div class="fs-15" style="font-weight:700">Submit to BD Manager</div>'+
+            '<div class="fs-12 c-text3" style="margin-top:2px">'+esc(c.full_name||'Candidate')+' — these details go to the BDM with the profile</div>'+
           '</div>'+
           '<div style="padding:16px 20px;max-height:62vh;overflow:auto">'+
             '<div class="gc2" style="gap:10px;margin-bottom:10px">'+
@@ -780,18 +780,18 @@
               fld('sbdm-reloc','Relocation','','Willing to relocate to…')+
               fld('sbdm-avail','Availability',c.availability,'asap / 2 weeks…')+
             '</div>'+
-            '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--red);display:block;margin-bottom:3px;font-weight:700">Submission Comment (important) <span>*</span></label>'+
+            '<div style="margin-bottom:12px"><label class="fs-11 c-red" style="display:block;margin-bottom:3px;font-weight:700">Submission Comment (important) <span>*</span></label>'+
               '<textarea id="sbdm-comment" class="sel" style="min-height:64px;resize:vertical" placeholder="Why this candidate fits — rate, highlights, anything the BDM should know"></textarea></div>'+
             '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px">'+
-              '<div style="font-size:12px;font-weight:600;margin-bottom:6px">Resume</div>'+
-              (c.resume_filename?'<div style="font-size:12px;color:var(--green);margin-bottom:6px">✓ On file: '+esc(c.resume_filename)+'</div>'
-                :'<div style="font-size:12px;color:var(--amber);margin-bottom:6px">No resume on file — attach one below.</div>')+
+              '<div class="fs-12" style="font-weight:600;margin-bottom:6px">Resume</div>'+
+              (c.resume_filename?'<div class="fs-12 c-green" style="margin-bottom:6px">✓ On file: '+esc(c.resume_filename)+'</div>'
+                :'<div class="fs-12 c-amber" style="margin-bottom:6px">No resume on file — attach one below.</div>')+
               '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
                 '<label class="btn btn-sm btn-outline" style="cursor:pointer;margin:0">Attach file<input type="file" accept=".pdf,.doc,.docx,.txt,.rtf" style="display:none" onchange="sbdmPickFile(this)"></label>'+
-                '<span id="sbdm-file-name" style="font-size:12px;color:var(--text3)"></span>'+
+                '<span id="sbdm-file-name" class="fs-12 c-text3"></span>'+
                 '<button class="btn btn-sm btn-outline" onclick="sbdmFormat()" title="Convert the attached resume to the company letterhead format">✨ Format resume</button>'+
               '</div>'+
-              '<div id="sbdm-fmt-status" style="font-size:11.5px;color:var(--green);margin-top:7px"></div>'+
+              '<div id="sbdm-fmt-status" class="fs-11_5 c-green" style="margin-top:7px"></div>'+
             '</div>'+
           '</div>'+
           '<div style="padding:0 20px">'+subEmailHtml('bdm')+'</div>'+
@@ -894,21 +894,21 @@
   window.subEmailHtml = function(kind){
     var lbl = 'font-size:11px;color:var(--text2);display:block;margin:9px 0 3px';
     return '<div id="se-box" style="border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0">'+
-      '<label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer">'+
+      '<label class="fs-13" style="font-weight:600;display:flex;align-items:center;gap:7px;cursor:pointer">'+
         '<input type="checkbox" id="se-on" onchange="subEmailToggle()"> Email these submission details to '+seIdFor(kind)+'</label>'+
       '<div id="se-body" style="display:none">'+
         '<label style="'+lbl+'">To</label>'+
         '<input id="se-to" class="sel" list="se-sugg" autocomplete="off" placeholder="name@company.com"><datalist id="se-sugg"></datalist>'+
-        '<label style="'+lbl+'">Cc <span style="color:var(--text3)">(optional — Enter or comma after each)</span></label>'+
+        '<label style="'+lbl+'">Cc <span class="c-text3">(optional — Enter or comma after each)</span></label>'+
         (window.mbChipField ? mbChipField('se-cc','cc','','subEmailNoop','') : '<input id="se-cc" class="sel">')+
-        '<label style="'+lbl+'">A note above the details <span style="color:var(--text3)">(optional)</span></label>'+
+        '<label style="'+lbl+'">A note above the details <span class="c-text3">(optional)</span></label>'+
         '<textarea id="se-note" class="sel" style="min-height:54px;resize:vertical" placeholder="e.g. Strong fit — available from 1 Nov."></textarea>'+
-        '<div id="se-docs" style="margin-top:9px;font-size:12.5px;color:var(--text3)">'+
+        '<div id="se-docs" class="fs-12_5 c-text3" style="margin-top:9px">'+
           (kind === 'client' ? 'Looking for the résumé…' :
-            '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text)"><input type="checkbox" id="se-attach" checked> Attach the résumé file(s) from this submission</label>')+
+            '<label class="c-text" style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="se-attach" checked> Attach the résumé file(s) from this submission</label>')+
         '</div>'+
         (window.FromPick ? '<div style="margin-top:9px">'+FromPick.slot('se-from')+'</div>' : '')+
-        '<div style="font-size:11px;color:var(--text3);margin-top:6px">Sent from your connected mailbox after the move is saved. The candidate’s details and the submission comment are added for you.</div>'+
+        '<div class="fs-11 c-text3" style="margin-top:6px">Sent from your connected mailbox after the move is saved. The candidate’s details and the submission comment are added for you.</div>'+
       '</div></div>';
   };
   window.subEmailToggle = function(){
@@ -933,8 +933,8 @@
         if (docs && kind === 'client') {
           var list = r.documents || [];
           docs.innerHTML = list.length
-            ? '<div style="color:var(--text);margin-bottom:4px">Attach the résumé:</div>'+list.map(function(d,i){
-                return '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--text)"><input type="checkbox" class="se-doc" value="'+esc(d.id)+'"'+(i===0?' checked':'')+'> '+esc(d.filename||'résumé')+'</label>'; }).join('')
+            ? '<div class="c-text" style="margin-bottom:4px">Attach the résumé:</div>'+list.map(function(d,i){
+                return '<label class="c-text" style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" class="se-doc" value="'+esc(d.id)+'"'+(i===0?' checked':'')+'> '+esc(d.filename||'résumé')+'</label>'; }).join('')
             : 'No résumé on file for this candidate, so none will be attached.';
         }
       }).catch(function(){

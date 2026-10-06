@@ -22,25 +22,25 @@ function renderAssignLeads(){
     var mPaused=pausedMgrs.indexOf(m.id)>-1;
     var assignBtn=(hasCapacity&&poolStats.total>0?
         '<button onclick="openAssignToManager(\''+m.id+'\')" style="background:var(--accent);color:#fff;border:0;padding:10px 20px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap">Assign leads</button>':
-        '<span style="font-size:12px;color:var(--text3);padding:8px 12px">'+(!hasCapacity?'No email IDs':'No leads')+'</span>');
+        '<span class="fs-12 c-text3" style="padding:8px 12px">'+(!hasCapacity?'No email IDs':'No leads')+'</span>');
     var pauseCtl=mPaused
       ?'<button onclick="toggleManagerSending(\''+m.id+'\',false)" style="background:var(--green);color:#fff;border:0;padding:8px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap">Resume emailing</button>'
       :'<button onclick="toggleManagerSending(\''+m.id+'\',true)" style="background:transparent;color:#dc2626;border:1px solid #fca5a5;padding:8px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap">\u23f8 Stop emailing</button>';
     return '<div style="background:'+(mPaused?'#fef2f2':'var(--card)')+';border:1px solid '+(mPaused?'#fca5a5':'var(--border)')+';border-radius:var(--r2);padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:12px">'+
       av(m,'40')+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-weight:600;font-size:14px">'+htmlEsc(m.name)+(mPaused?' <span style="font-size:11px;padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700;vertical-align:middle">Emailing paused</span>':'')+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:3px">'+
+        '<div class="fs-14" style="font-weight:600">'+htmlEsc(m.name)+(mPaused?' <span class="fs-11" style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700;vertical-align:middle">Emailing paused</span>':'')+'</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:3px">'+
           emailAccounts.length+' email ID'+(emailAccounts.length!==1?'s':'')+
           ' \u00b7 '+capacity+' emails/day capacity'+
         '</div>'+
         (emailAccounts.length?
           '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">'+
             emailAccounts.map(function(a){
-              return '<span style="font-size:11px;padding:2px 8px;background:var(--accent-l);color:var(--accent);border-radius:6px">'+htmlEsc(a.display_name)+'</span>';
+              return '<span class="fs-11 c-accent" style="padding:2px 8px;background:var(--accent-l);border-radius:6px">'+htmlEsc(a.display_name)+'</span>';
             }).join('')+
           '</div>':
-          '<div style="font-size:12px;color:var(--red);margin-top:4px">No email IDs assigned</div>')+
+          '<div class="fs-12 c-red" style="margin-top:4px">No email IDs assigned</div>')+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">'+assignBtn+pauseCtl+'</div>'+
     '</div>';
@@ -54,44 +54,44 @@ function renderAssignLeads(){
     var btz=poolStats.by_timezone||{};
     poolBar='<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;margin-bottom:18px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-weight:600;font-size:13px">Unassigned lead pool</div>'+
-        '<div style="font-size:22px;font-weight:700;color:var(--accent)">'+poolStats.total+'</div>'+
+        '<div class="fs-13" style="font-weight:600">Unassigned lead pool</div>'+
+        '<div class="fs-22 c-accent" style="font-weight:700">'+poolStats.total+'</div>'+
       '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-size:12px">'+
+      '<div class="fs-12" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">'+
         '<div>'+
-          '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Freshness</div>'+
+          '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Freshness</div>'+
           Object.keys(bf).map(function(k){
             var col=k==='Old'?'var(--red)':k==='New'?'var(--green)':'var(--accent)';
             return '<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:'+col+';font-weight:500">'+k+'</span><span>'+bf[k]+'</span></div>';
           }).join('')+
         '</div>'+
         '<div>'+
-          '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Industry</div>'+
+          '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Industry</div>'+
           Object.keys(bi).slice(0,5).map(function(k){
             return '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+htmlEsc(k)+'</span><span>'+bi[k]+'</span></div>';
           }).join('')+
         '</div>'+
         '<div>'+
-          '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Timezone</div>'+
+          '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Timezone</div>'+
           Object.keys(btz).map(function(k){
             return '<div style="display:flex;justify-content:space-between;padding:2px 0"><span>'+htmlEsc(k)+'</span><span>'+btz[k]+'</span></div>';
           }).join('')+
         '</div>'+
       '</div>'+
-      (poolStats.duplicates?'<div style="margin-top:8px;font-size:12px;color:var(--amber)">\u26a0 '+poolStats.duplicates+' duplicate leads in pool</div>':'')+
+      (poolStats.duplicates?'<div class="fs-12 c-amber" style="margin-top:8px">\u26a0 '+poolStats.duplicates+' duplicate leads in pool</div>':'')+
     '</div>';
   } else {
-    poolBar='<div style="background:var(--green-l);border:1px solid var(--green);border-radius:var(--r2);padding:14px 16px;margin-bottom:18px;font-size:13px;color:var(--green);font-weight:600">\u2713 No unassigned leads — pool is clear for today.</div>';
+    poolBar='<div class="fs-13 c-green" style="background:var(--green-l);border:1px solid var(--green);border-radius:var(--r2);padding:14px 16px;margin-bottom:18px;font-weight:600">\u2713 No unassigned leads — pool is clear for today.</div>';
   }
 
   return '<div class="page">'+
     '<div class="ph"><div class="flex jb aic">'+
       '<div><div class="ptitle">Assign Leads</div>'+
         '<div class="psub">'+poolStats.total+' unassigned leads in pool \u00b7 '+managers.length+' managers</div></div>'+
-      '<button onclick="refreshPoolStats()" style="background:transparent;border:1px solid var(--border);color:var(--text2);padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer">\u21bb Refresh pool</button>'+
+      '<button onclick="refreshPoolStats()" class="c-text2 fs-12" style="background:transparent;border:1px solid var(--border);padding:7px 13px;border-radius:8px;cursor:pointer">\u21bb Refresh pool</button>'+
     '</div></div>'+
     poolBar+
-    '<div style="font-weight:600;font-size:13px;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Managers</div>'+
+    '<div class="fs-13 c-text2" style="font-weight:600;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Managers</div>'+
     managerCards+
   '</div>';
 }
@@ -130,11 +130,11 @@ window.openAssignConfirm=function(){
     '<div class="mh"><div class="mt">Confirm Assignment</div></div>'+
     '<div class="mb_">'+
       '<div style="padding:16px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:12px">'+
-        '<div style="font-size:22px;font-weight:700;color:var(--accent);margin-bottom:4px">'+selIds.length+' leads</div>'+
-        '<div style="font-size:14px;color:var(--text2)">\u2192 <strong>'+htmlEsc(bd.name)+'</strong></div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:6px">'+dateStr+' \u00b7 '+timeStr+'</div>'+
+        '<div class="fs-22 c-accent" style="font-weight:700;margin-bottom:4px">'+selIds.length+' leads</div>'+
+        '<div class="fs-14 c-text2">\u2192 <strong>'+htmlEsc(bd.name)+'</strong></div>'+
+        '<div class="fs-12 c-text3" style="margin-top:6px">'+dateStr+' \u00b7 '+timeStr+'</div>'+
       '</div>'+
-      '<div style="font-size:13px;color:var(--text2)">Once confirmed, these leads will be marked <strong>Assigned</strong> and the email engine will begin sending outreach emails over the next 2\u20133 minutes.</div>'+
+      '<div class="fs-13 c-text2">Once confirmed, these leads will be marked <strong>Assigned</strong> and the email engine will begin sending outreach emails over the next 2\u20133 minutes.</div>'+
     '</div>'+
     '<div class="mf">'+
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+

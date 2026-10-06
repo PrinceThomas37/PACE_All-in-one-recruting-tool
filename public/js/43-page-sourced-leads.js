@@ -173,18 +173,18 @@
       project_win:'Project win', urgent:'Urgent'
     };
     var c = COLORS[reason.category]||'var(--text3)';
-    return '<span style="display:inline-block;font-size:10.5px;font-weight:700;color:#fff;background:'+c+
+    return '<span class="fs-10_5" style="display:inline-block;font-weight:700;color:#fff;background:'+c+
       ';border-radius:9px;padding:2px 8px;white-space:nowrap">'+esc(LABEL[reason.category]||reason.category)+'</span>';
   }
 
   function renderQueue(){
     var s = STATE.sourced;
-    if (s.loading) return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Loading…</div>';
+    if (s.loading) return '<div class="c-text3 fs-13" style="padding:40px;text-align:center">Loading…</div>';
 
     if (s.notConfigured || (!s.list||!s.list.length) && !(s.sources||[]).length){
       return '<div class="card" style="padding:30px;text-align:center">'+
-        '<div style="font-size:15px;font-weight:700;margin-bottom:6px">No boards being watched yet</div>'+
-        '<div style="font-size:13px;color:var(--text2);max-width:560px;margin:0 auto 14px">'+
+        '<div class="fs-15" style="font-weight:700;margin-bottom:6px">No boards being watched yet</div>'+
+        '<div class="fs-13 c-text2" style="max-width:560px;margin:0 auto 14px">'+
           'Add a company whose careers page runs on Greenhouse, Lever, Ashby, Workable, SmartRecruiters or Recruitee, '+
           'and PACE will check it daily for new openings and bring them here for you to review.</div>'+
         '<button class="btn btn-primary" onclick="srcdSetView(\'sources\')">Add a board to watch</button>'+
@@ -192,7 +192,7 @@
     }
 
     if (!s.list || !s.list.length){
-      return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">'+
+      return '<div class="c-text3 fs-13" style="padding:40px;text-align:center">'+
         (s.status==='new' ? 'Nothing waiting for review. New openings appear here as they are found.'
                           : 'Nothing with that status.')+'</div>';
     }
@@ -208,11 +208,11 @@
         '<div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">'+
           '<div style="min-width:260px;flex:1">'+
             '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">'+
-              '<span style="font-size:15px;font-weight:700">'+esc(r.title||'—')+'</span>'+
+              '<span class="fs-15" style="font-weight:700">'+esc(r.title||'—')+'</span>'+
               reasonChip(reason)+
-              (isDup?'<span style="font-size:10.5px;font-weight:700;color:var(--amber)">already a lead</span>':'')+
+              (isDup?'<span class="fs-10_5 c-amber" style="font-weight:700">already a lead</span>':'')+
             '</div>'+
-            '<div style="font-size:13px;color:var(--text2)">'+
+            '<div class="fs-13 c-text2">'+
               '<strong>'+esc(r.company_name||'—')+'</strong>'+
               (r.location?' · '+esc(r.location):'')+
               (r.department?' · '+esc(r.department):'')+
@@ -220,15 +220,15 @@
             // The reason, in plain words. This is the whole point of the feature:
             // the recruiter should know why to call before they call.
             (reason.angle
-              ? '<div style="margin-top:8px;font-size:13px;color:var(--text)">'+
-                  '<span style="color:var(--text3)">Why call them:</span> '+esc(reason.angle)+'</div>'
+              ? '<div class="fs-13 c-text" style="margin-top:8px">'+
+                  '<span class="c-text3">Why call them:</span> '+esc(reason.angle)+'</div>'
               : '')+
             (skills.length
               ? '<div style="margin-top:7px;display:flex;gap:4px;flex-wrap:wrap">'+skills.map(function(k){
-                  return '<span style="font-size:10.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:2px 7px">'+esc(k)+'</span>';
+                  return '<span class="fs-10_5" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:2px 7px">'+esc(k)+'</span>';
                 }).join('')+'</div>'
               : '')+
-            '<div style="margin-top:8px;font-size:11.5px;color:var(--text3)">'+
+            '<div class="fs-11_5 c-text3" style="margin-top:8px">'+
               (age!=null? 'Posted '+age+' day'+(age===1?'':'s')+' ago' : 'Posted date unknown')+
               (r.repost_count>0? ' · reposted '+r.repost_count+'×' : '')+
               ' · seen '+(r.seen_count||1)+'×'+
@@ -261,33 +261,33 @@
           return '<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 9px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;cursor:pointer">'+
             '<input type="checkbox" '+(a.chosen[c.email]?'checked':'')+' onclick="srcdToggleContact(\''+esc(c.email)+'\')" style="margin-top:2px">'+
             '<span style="flex:1">'+
-              '<span style="font-size:13px;font-weight:600">'+esc(c.email)+'</span>'+
-              (c.name?'<span style="font-size:12px;color:var(--text2)"> · '+esc(c.name)+'</span>':'')+
-              '<div style="font-size:11.5px;color:var(--text3)">'+esc(label)+' · about '+pct+'% likely'+
+              '<span class="fs-13" style="font-weight:600">'+esc(c.email)+'</span>'+
+              (c.name?'<span class="fs-12 c-text2"> · '+esc(c.name)+'</span>':'')+
+              '<div class="fs-11_5 c-text3">'+esc(label)+' · about '+pct+'% likely'+
                 (c.deliverable==='domain_ok'?' · domain accepts mail':'')+'</div>'+
             '</span>'+
           '</label>';
         }).join('')
-      : '<div style="font-size:12.5px;color:var(--text3);padding:6px 0">'+
+      : '<div class="fs-12_5 c-text3" style="padding:6px 0">'+
           'No contact worked out yet. Add the company’s website and PACE will work out the likely email format.'+
         '</div>';
 
     return '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:16px">Add this as a lead</div>'+
+        '<div class="fs-16" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Add this as a lead</div>'+
         '<div style="padding:16px 20px;max-height:62vh;overflow:auto">'+
-          '<div style="font-size:14px;font-weight:700">'+esc(r.title||'')+'</div>'+
-          '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">'+esc(r.company_name||'')+
+          '<div class="fs-14" style="font-weight:700">'+esc(r.title||'')+'</div>'+
+          '<div class="fs-13 c-text2" style="margin-bottom:10px">'+esc(r.company_name||'')+
             (r.location?' · '+esc(r.location):'')+'</div>'+
 
           (reason.angle
             ? '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px">'+
-                '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Opening line for outreach</div>'+
-                '<div style="font-size:13px">'+esc(reason.angle)+'</div>'+
-                '<div style="font-size:11.5px;color:var(--text3);margin-top:5px">This is saved with the lead and is what the first email will lead with.</div>'+
+                '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">Opening line for outreach</div>'+
+                '<div class="fs-13">'+esc(reason.angle)+'</div>'+
+                '<div class="fs-11_5 c-text3" style="margin-top:5px">This is saved with the lead and is what the first email will lead with.</div>'+
               '</div>'
             : '')+
 
-          '<div style="font-size:12px;font-weight:700;margin-bottom:6px">Who to contact</div>'+
+          '<div class="fs-12" style="font-weight:700;margin-bottom:6px">Who to contact</div>'+
           '<div style="display:flex;gap:6px;margin-bottom:9px">'+
             '<input id="srcd-approve-domain" class="sel" style="flex:1;font-size:12.5px" placeholder="Company website, e.g. acme.com" '+
               'value="'+esc(a.domain||'')+'" oninput="srcdSetDomain(this.value)">'+
@@ -295,7 +295,7 @@
               (a.busy?'Working…':'Work out email')+'</button>'+
           '</div>'+
           contactRows+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">'+
+          '<div class="fs-11_5 c-text3" style="margin-top:8px">'+
             'Tick only the addresses you want attached. Nothing is emailed now — the lead goes into the Unassigned pool '+
             'and follows your normal distribution and sequence rules.</div>'+
         '</div>'+
@@ -314,27 +314,27 @@
 
     var test = s.testResult;
     var testBlock = !test ? '' : (test.loading
-      ? '<div style="font-size:12.5px;color:var(--text3);margin-top:8px">Checking that board…</div>'
+      ? '<div class="fs-12_5 c-text3" style="margin-top:8px">Checking that board…</div>'
       : (test.ok
         ? '<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px">'+
-            '<div style="font-size:13px;font-weight:700;color:var(--green)">✓ Found '+test.found+' open '+(test.found===1?'role':'roles')+'</div>'+
+            '<div class="fs-13 c-green" style="font-weight:700">✓ Found '+test.found+' open '+(test.found===1?'role':'roles')+'</div>'+
             (test.company_kind==='staffing_firm'
-              ? '<div style="font-size:12.5px;color:var(--amber);margin-top:4px">⚠ This looks like a staffing firm rather than an end client'+
+              ? '<div class="fs-12_5 c-amber" style="margin-top:4px">⚠ This looks like a staffing firm rather than an end client'+
                 (test.company_kind_why&&test.company_kind_why.length?' ('+esc(test.company_kind_why.join('; '))+')':'')+
                 '. Postings from it will be skipped.</div>'
               : '')+
             (test.sample&&test.sample.length
-              ? '<div style="margin-top:7px;font-size:12px;color:var(--text2)">'+test.sample.map(function(x){
+              ? '<div class="fs-12 c-text2" style="margin-top:7px">'+test.sample.map(function(x){
                   return '• '+esc(x.title)+(x.location?' — '+esc(x.location):'');
                 }).join('<br>')+'</div>'
               : '')+
           '</div>'
-        : '<div style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:12.5px;color:var(--red)">'+
+        : '<div class="fs-12_5 c-red" style="margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px">'+
             esc(test.error||'That board could not be read.')+'</div>'));
 
     var addBlock = !s.adding ? '' :
       '<div class="card" style="padding:14px 16px;margin-bottom:12px">'+
-        '<div style="font-size:13px;font-weight:700;margin-bottom:9px">Watch a new board</div>'+
+        '<div class="fs-13" style="font-weight:700;margin-bottom:9px">Watch a new board</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
           '<select id="srcd-provider" class="sel" style="font-size:12.5px;min-width:150px">'+
             providers.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'; }).join('')+
@@ -343,7 +343,7 @@
           '<input id="srcd-company" class="inp" style="font-size:12.5px;min-width:170px" placeholder="Company name (optional)">'+
           '<input id="srcd-domain" class="inp" style="font-size:12.5px;min-width:170px" placeholder="Website (for emails)">'+
         '</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);margin-bottom:9px">'+
+        '<div class="fs-11_5 c-text3" style="margin-bottom:9px">'+
           'The board name is the last part of their careers URL. '+
           (providers.length? esc(providers[0].example||'') : '')+'</div>'+
         '<div style="display:flex;gap:8px">'+
@@ -355,15 +355,15 @@
       '</div>';
 
     var rows = !list.length
-      ? '<div style="padding:30px;text-align:center;color:var(--text3);font-size:13px">No boards yet.</div>'
+      ? '<div class="c-text3 fs-13" style="padding:30px;text-align:center">No boards yet.</div>'
       : list.map(function(x){
           var when = x.last_run_at ? fmtDate(x.last_run_at) : 'never';
           var bad = x.last_status==='error';
           return '<div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'+
             '<div style="min-width:220px">'+
-              '<div style="font-size:13.5px;font-weight:700">'+esc(x.company_name||x.board_token)+
-                '<span style="font-weight:500;color:var(--text3);font-size:12px"> · '+esc(x.provider)+'</span></div>'+
-              '<div style="font-size:11.5px;color:'+(bad?'var(--red)':'var(--text3)')+'">'+
+              '<div class="fs-13_5" style="font-weight:700">'+esc(x.company_name||x.board_token)+
+                '<span class="c-text3 fs-12" style="font-weight:500"> · '+esc(x.provider)+'</span></div>'+
+              '<div class="fs-11_5" style="color:'+(bad?'var(--red)':'var(--text3)')+'">'+
                 'Last checked '+esc(when)+
                 (x.last_found!=null? ' · '+x.last_found+' roles seen':'')+
                 (bad? ' · '+esc(x.last_error||'failed') : '')+
@@ -377,7 +377,7 @@
         }).join('');
 
     return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-        '<div style="font-size:12.5px;color:var(--text3)">PACE checks each board once a day and brings anything new to the review queue.</div>'+
+        '<div class="fs-12_5 c-text3">PACE checks each board once a day and brings anything new to the review queue.</div>'+
         (s.adding?'':'<button class="btn btn-primary btn-sm" onclick="srcdToggleAdd()">+ Watch a board</button>')+
       '</div>'+ addBlock + rows;
   }
@@ -397,7 +397,7 @@
       { id:'queue',   label:'Review queue',  n:(counts['new']||0), onclick:"srcdSetView('queue')" },
       { id:'sources', label:'Boards watched',                      onclick:"srcdSetView('sources')" }
     ], s.view||'queue',
-      '<span style="font-size:12px;color:var(--ink3)">Openings PACE found on its own. Nothing is contacted until you add it here.</span>');
+      '<span class="fs-12 c-ink3">Openings PACE found on its own. Nothing is contacted until you add it here.</span>');
 
     // The status filter IS the strip on this page — every cell is a queue you
     // can stand in, and the number is how much is in it.

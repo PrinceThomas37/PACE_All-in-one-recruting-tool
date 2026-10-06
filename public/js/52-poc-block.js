@@ -56,8 +56,8 @@ function _pocRow(name, c, idx, total) {
   };
   return '<div class="poc-row" style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2);padding:13px;margin-bottom:10px">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">' +
-      '<div style="font-weight:600;font-size:11.5px;color:var(--text2)">Contact ' + (idx + 1) +
-        (idx === 0 ? ' <span style="font-size:10px;color:var(--text3);border:1px solid var(--border2);padding:1px 6px;border-radius:5px;margin-left:5px">PRIMARY</span>' : '') +
+      '<div class="fs-11_5 c-text2" style="font-weight:600">Contact ' + (idx + 1) +
+        (idx === 0 ? ' <span class="fs-10 c-text3" style="border:1px solid var(--border2);padding:1px 6px;border-radius:5px;margin-left:5px">PRIMARY</span>' : '') +
       '</div>' +
       (total > 1 ? '<button type="button" onclick="pocRemove(\'' + name + '\',' + idx + ')" style="background:transparent;border:0;color:var(--text3);font-size:12px;cursor:pointer">Remove</button>' : '') +
     '</div>' +
@@ -134,7 +134,7 @@ function _pocNoteHTML(c) {
     var d = c._emailDup;
     // D-0038: same proof-of-right-to-ask as the import's duplicate warning —
     // this person typed the email themselves, and the server checked it.
-    return '<div style="padding:6px 10px;background:var(--red-l);border-radius:var(--r);font-size:11.5px;color:var(--red)">' +
+    return '<div class="fs-11_5 c-red" style="padding:6px 10px;background:var(--red-l);border-radius:var(--r)">' +
       'Already in PACE — added ' + d.days_ago + ' day' + (d.days_ago !== 1 ? 's' : '') + ' ago' +
       (d.added_by ? ' by <strong>' + htmlEsc(d.added_by) + '</strong>' : '') +
       (d.company ? ' at <strong>' + htmlEsc(d.company) + '</strong>' : '') + '.' +
@@ -149,11 +149,11 @@ function _pocNoteHTML(c) {
         : '') +
     '</div>';
   }
-  if (c._emailState === 'ok') return '<div style="font-size:11px;color:var(--text3)">Not seen before.</div>';
+  if (c._emailState === 'ok') return '<div class="fs-11 c-text3">Not seen before.</div>';
   // A placeholder line of the SAME shape, so the empty state is exactly as tall
   // as the answered one BY CONSTRUCTION rather than by a measured magic number
   // that a font change would quietly invalidate.
-  return '<div style="font-size:11px" aria-hidden="true">&nbsp;</div>';
+  return '<div aria-hidden="true" class="fs-11">&nbsp;</div>';
 }
 
 // "Have we met this person already?" — the same check the RA form runs. It is

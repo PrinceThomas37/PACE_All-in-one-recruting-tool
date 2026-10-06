@@ -42,35 +42,35 @@ function renderMailMergeModal(){
     '<div class="mh">'+
       '<div>'+
         '<div class="mt">Mail Merge</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+sentCount+' sent · '+(total-sentCount-(q.filter(function(x){return x.status==="skipped";}).length))+' remaining · '+total+' total</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:2px">'+sentCount+' sent · '+(total-sentCount-(q.filter(function(x){return x.status==="skipped";}).length))+' remaining · '+total+' total</div>'+
       '</div>'+
       '<button class="btn-icon" onclick="STATE.mailMerge=null;closeModal()">'+ico("x",14)+'</button>'+
     '</div>'+
 
     // Progress counter
     '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--bg);border-bottom:1px solid var(--border)">'+
-      '<div style="font-size:13px;font-weight:500;color:var(--text2)">Email <span style="color:var(--accent);font-weight:700">'+(i+1)+'</span> of <span style="font-weight:700">'+total+'</span></div>'+
+      '<div class="fs-13 c-text2" style="font-weight:500">Email <span class="c-accent" style="font-weight:700">'+(i+1)+'</span> of <span style="font-weight:700">'+total+'</span></div>'+
       '<div style="display:flex;gap:6px;align-items:center">'+
-        (sentCount>0?'<span style="font-size:12px;padding:2px 8px;background:var(--green-l);color:var(--green);border-radius:10px;font-weight:500">'+sentCount+' sent ✓</span>':"")+
-        (q.filter(function(x){return x.status==="skipped";}).length>0?'<span style="font-size:12px;padding:2px 8px;background:var(--bg);color:var(--text3);border-radius:10px">'+q.filter(function(x){return x.status==="skipped";}).length+' skipped</span>':"")+
+        (sentCount>0?'<span class="fs-12 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:10px;font-weight:500">'+sentCount+' sent ✓</span>':"")+
+        (q.filter(function(x){return x.status==="skipped";}).length>0?'<span class="fs-12 c-text3" style="padding:2px 8px;background:var(--bg);border-radius:10px">'+q.filter(function(x){return x.status==="skipped";}).length+' skipped</span>':"")+
       '</div>'+
     '</div>'+
 
     (allDone?
       '<div style="padding:40px;text-align:center">'+
         '<div style="font-size:40px;margin-bottom:12px">✅</div>'+
-        '<div style="font-family:var(--display);font-size:18px;font-weight:600;margin-bottom:6px">All done!</div>'+
-        '<div style="font-size:13px;color:var(--text3);margin-bottom:20px">'+sentCount+' email'+(sentCount!==1?"s":"")+" sent successfully."+'</div>'+
+        '<div class="fs-18" style="font-family:var(--display);font-weight:600;margin-bottom:6px">All done!</div>'+
+        '<div class="fs-13 c-text3" style="margin-bottom:20px">'+sentCount+' email'+(sentCount!==1?"s":"")+" sent successfully."+'</div>'+
         '<button class="btn btn-primary" onclick="STATE.mailMerge=null;closeModal()">Close</button>'+
       '</div>'
     :
       '<div style="padding:18px 20px;flex:1;overflow-y:auto">'+
         '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:14px;border:1px solid rgba(37,99,235,.15)">'+
           '<div style="flex:1">'+
-            '<div style="font-weight:600;font-size:14px">'+htmlEsc(current.name)+'<span style="font-weight:400;color:var(--text2);font-size:12.5px"> · '+htmlEsc(current.desig||"")+'</span></div>'+
-            '<div style="font-size:12px;color:var(--text3);margin-top:2px">'+htmlEsc(current.company)+' · '+htmlEsc(current.email)+'</div>'+
+            '<div class="fs-14" style="font-weight:600">'+htmlEsc(current.name)+'<span class="c-text2 fs-12_5" style="font-weight:400"> · '+htmlEsc(current.desig||"")+'</span></div>'+
+            '<div class="fs-12 c-text3" style="margin-top:2px">'+htmlEsc(current.company)+' · '+htmlEsc(current.email)+'</div>'+
           '</div>'+
-          (current.status==="sent"?'<span style="font-size:11px;padding:3px 9px;background:var(--green);color:#fff;border-radius:10px">✓ Sent</span>':"")+
+          (current.status==="sent"?'<span class="fs-11" style="padding:3px 9px;background:var(--green);color:#fff;border-radius:10px">✓ Sent</span>':"")+
         '</div>'+
         '<div class="fgrp">'+
           '<label class="flbl">Subject</label>'+
@@ -273,16 +273,16 @@ window.importXL=function(input){
 function renderSheetPickerModal(sheets){
   var items=sheets.map(function(s,i){
     return '<div onclick="selectSheet(\''+htmlEsc(s)+'\')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--r2);cursor:pointer;margin-bottom:8px;transition:all .12s" onmouseenter="this.style.borderColor=\'var(--accent)\';this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.borderColor=\'var(--border)\';this.style.background=\'\'">'+
-      '<div style="width:32px;height:32px;background:var(--accent-l);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--accent)">'+(i+1)+'</div>'+
-      '<div><div style="font-weight:500;font-size:13.5px">'+htmlEsc(s)+'</div>'+
+      '<div class="fs-13 c-accent" style="width:32px;height:32px;background:var(--accent-l);border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-weight:600">'+(i+1)+'</div>'+
+      '<div><div class="fs-13_5" style="font-weight:500">'+htmlEsc(s)+'</div>'+
       '<div class="f12 text3">Sheet '+(i+1)+' of '+sheets.length+'</div></div>'+
-      '<div style="margin-left:auto;color:var(--text3);font-size:18px">›</div>'+
+      '<div class="c-text3 fs-18" style="margin-left:auto">›</div>'+
     '</div>';
   }).join("");
   return '<div class="modal modal-w480">'+
     '<div class="mh"><div class="mt">Select sheet to import</div><button class="btn-icon" onclick="closeModal()">'+ico("x",14)+'</button></div>'+
     '<div class="mb_">'+
-      '<div style="font-size:13px;color:var(--text3);margin-bottom:14px">This file has '+sheets.length+' sheets. Choose which one contains your leads.</div>'+
+      '<div class="fs-13 c-text3" style="margin-bottom:14px">This file has '+sheets.length+' sheets. Choose which one contains your leads.</div>'+
       items+
     '</div>'+
   '</div>';
@@ -376,47 +376,47 @@ function renderImportModal(rows, sheetName){
     var named=window.ImportColumns?window.ImportColumns.fieldFor(c):field;
     var isSerial=window.ImportColumns&&window.ImportColumns.isSerialColumn(c);
     var status=isSerial?
-      '<span style="color:var(--text3)">ignored \u2014 PACE numbers records itself</span>':
+      '<span class="c-text3">ignored \u2014 PACE numbers records itself</span>':
       field?
-      '<span style="color:var(--green);font-weight:500">\u2192 '+(window.ImportColumns&&ImportColumns.label?ImportColumns.label(field):field)+'</span>'+
-        (field==='jobUrl'&&named==='linkedin'?' <span style="color:var(--text3)">(these are job postings, not LinkedIn profiles)</span>':''):
-      '<span style="color:var(--text3)">kept as an extra detail</span>';
-    return '<tr><td style="padding:5px 10px;font-size:12.5px">'+htmlEsc(c)+'</td><td style="padding:5px 10px">'+status+'</td></tr>';
+      '<span class="c-green" style="font-weight:500">\u2192 '+(window.ImportColumns&&ImportColumns.label?ImportColumns.label(field):field)+'</span>'+
+        (field==='jobUrl'&&named==='linkedin'?' <span class="c-text3">(these are job postings, not LinkedIn profiles)</span>':''):
+      '<span class="c-text3">kept as an extra detail</span>';
+    return '<tr><td class="fs-12_5" style="padding:5px 10px">'+htmlEsc(c)+'</td><td style="padding:5px 10px">'+status+'</td></tr>';
   }).join("");
 
   return '<div class="modal modal-w640">'+
     '<div class="mh">'+
       '<div>'+
         '<div class="mt">Import Jobs from Excel</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:3px">Sheet: <strong style="color:var(--accent)">'+htmlEsc(sheetName||"Sheet1")+'</strong>'+
-        (multiSheet?' \u00b7 <span style="cursor:pointer;color:var(--accent);text-decoration:underline" onclick="STATE.modal=renderSheetPickerModal(STATE.importWB.SheetNames);render()">Change sheet</span>':'')+
+        '<div class="fs-12 c-text3" style="margin-top:3px">Sheet: <strong class="c-accent">'+htmlEsc(sheetName||"Sheet1")+'</strong>'+
+        (multiSheet?' \u00b7 <span class="c-accent" style="cursor:pointer;text-decoration:underline" onclick="STATE.modal=renderSheetPickerModal(STATE.importWB.SheetNames);render()">Change sheet</span>':'')+
         '</div>'+
       '</div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico("x",14)+'</button>'+
     '</div>'+
     '<div class="mb_">'+
       '<div style="padding:12px 14px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">'+
-        '<div><div style="font-size:22px;font-weight:700;color:var(--accent)">'+newJobs+'</div><div style="color:var(--text2);font-size:11px;margin-top:2px">NEW JOBS</div></div>'+
-        '<div><div style="font-size:22px;font-weight:700;color:var(--teal)">'+totalContacts+'</div><div style="color:var(--text2);font-size:11px;margin-top:2px">CONTACTS</div></div>'+
-        '<div><div style="font-size:22px;font-weight:700;color:var(--purple)">'+newCoCnt+'</div><div style="color:var(--text2);font-size:11px;margin-top:2px">NEW COMPANIES</div></div>'+
+        '<div><div class="fs-22 c-accent" style="font-weight:700">'+newJobs+'</div><div class="c-text2 fs-11" style="margin-top:2px">NEW JOBS</div></div>'+
+        '<div><div class="fs-22 c-teal" style="font-weight:700">'+totalContacts+'</div><div class="c-text2 fs-11" style="margin-top:2px">CONTACTS</div></div>'+
+        '<div><div class="fs-22 c-purple" style="font-weight:700">'+newCoCnt+'</div><div class="c-text2 fs-11" style="margin-top:2px">NEW COMPANIES</div></div>'+
       '</div>'+
-      (dupeCnt?'<div style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--amber)">'+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist. They won\'t be added again, but anything they are missing (job link, website, salary, extra columns) will be filled in from this file. Nothing already on them is changed.</div>':'')+
-      (skippedRows?'<div style="padding:8px 12px;background:var(--bg);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--text3)">'+skippedRows+' row'+(skippedRows>1?'s':'')+' skipped (no company/name).</div>':'')+
-      (addrCheck.withoutAddress?'<div style="padding:10px 12px;background:var(--red-l,#fef2f2);border:1px solid var(--red,#dc2626);border-radius:var(--r2);margin-bottom:10px;font-size:12.5px;color:var(--red,#dc2626)">'+htmlEsc(importAddressWarning(addrCheck))+'</div>':'')+
+      (dupeCnt?'<div class="fs-12_5 c-amber" style="padding:8px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:10px">'+dupeCnt+' job'+(dupeCnt>1?'s':'')+' already exist. They won\'t be added again, but anything they are missing (job link, website, salary, extra columns) will be filled in from this file. Nothing already on them is changed.</div>':'')+
+      (skippedRows?'<div class="fs-12_5 c-text3" style="padding:8px 12px;background:var(--bg);border-radius:var(--r2);margin-bottom:10px">'+skippedRows+' row'+(skippedRows>1?'s':'')+' skipped (no company/name).</div>':'')+
+      (addrCheck.withoutAddress?'<div class="fs-12_5" style="padding:10px 12px;background:var(--red-l,#fef2f2);border:1px solid var(--red,#dc2626);border-radius:var(--r2);margin-bottom:10px;color:var(--red,#dc2626)">'+htmlEsc(importAddressWarning(addrCheck))+'</div>':'')+
       '<div class="fw5 f13 mb2">Column mapping</div>'+
       '<div class="tbl-wrap mb4" style="max-height:180px;overflow-y:auto">'+
         '<table><thead><tr><th>Your column</th><th>Maps to</th></tr></thead>'+
         '<tbody>'+colRows+'</tbody></table>'+
       '</div>'+
       '<div class="fw5 f13 mb2">Preview (first 3 rows)</div>'+
-      '<div style="background:var(--bg);border-radius:var(--r2);padding:10px;font-size:12px;max-height:130px;overflow-y:auto">'+
+      '<div class="fs-12" style="background:var(--bg);border-radius:var(--r2);padding:10px;max-height:130px;overflow-y:auto">'+
         sample.map(function(r){
           var m=mapCol(r,COL_MAP);
           return '<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">'+
             (m.firstName?'<span class="bdg bdg-blue">'+htmlEsc(m.firstName+(m.lastName?" "+m.lastName:""))+'</span>':"")+
             (m.company?'<span class="bdg bdg-gray">'+htmlEsc(m.company)+'</span>':"")+
             (m.position?'<span class="bdg bdg-gray">'+htmlEsc(m.position)+'</span>':"")+
-            (m.email?'<span class="bdg bdg-teal" style="background:var(--teal-l);color:var(--teal)">'+htmlEsc(m.email)+'</span>':"")+
+            (m.email?'<span class="bdg bdg-teal c-teal" style="background:var(--teal-l)">'+htmlEsc(m.email)+'</span>':"")+
           '</div>';
         }).join("")+
       '</div>'+
@@ -506,7 +506,7 @@ function renderImportProgressModal(done,total,logLines,finished,summary){
     '<div class="mh"><div class="mt">'+(finished?'Import complete':'Importing\u2026')+'</div></div>'+
     '<div class="mb_">'+
       '<div style="margin-bottom:12px">'+
-        '<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text2);margin-bottom:6px">'+
+        '<div class="fs-12_5 c-text2" style="display:flex;justify-content:space-between;margin-bottom:6px">'+
           '<span>'+(finished?'Done':'Processing job '+Math.min(done+1,total)+' of '+total)+'</span>'+
           '<span>'+pct+'%</span>'+
         '</div>'+
@@ -514,9 +514,9 @@ function renderImportProgressModal(done,total,logLines,finished,summary){
           '<div style="height:100%;width:'+pct+'%;background:var(--accent);border-radius:99px;transition:width .3s"></div>'+
         '</div>'+
       '</div>'+
-      (finished&&summary?'<div style="padding:10px 12px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:10px;font-size:13px">'+htmlEsc(summary)+'</div>':'')+
-      '<div style="background:var(--bg);border-radius:var(--r2);padding:8px 10px;font-size:11.5px;max-height:160px;overflow-y:auto;font-family:var(--mono);color:var(--text2)" id="import-log">'+
-        (logLines.length?logLines.map(function(l){return '<div style="padding:2px 0">'+htmlEsc(l)+'</div>';}).join(''):'<div style="color:var(--text3)">Starting\u2026</div>')+
+      (finished&&summary?'<div class="fs-13" style="padding:10px 12px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:10px">'+htmlEsc(summary)+'</div>':'')+
+      '<div class="fs-11_5 c-text2" style="background:var(--bg);border-radius:var(--r2);padding:8px 10px;max-height:160px;overflow-y:auto;font-family:var(--mono)" id="import-log">'+
+        (logLines.length?logLines.map(function(l){return '<div style="padding:2px 0">'+htmlEsc(l)+'</div>';}).join(''):'<div class="c-text3">Starting\u2026</div>')+
       '</div>'+
     '</div>'+
     (finished?'<div class="mf"><button class="btn btn-primary" onclick="closeModal();refreshJobs().then(function(){if(STATE.user&&(STATE.user.role===\'bd\'||STATE.user.role===\'bd_lead\')){var myJobIds=STATE.jobs.filter(function(j){return j.assigned_to_bd===STATE.user.id&&j.stage===\'Unassigned\';}).map(function(j){return j.id;});if(myJobIds.length)apiPost(\'/emails/generate\',{job_ids:myJobIds}).then(function(r){showToast(r.generated+\' emails generated\',\'success\');apiGet(\'/emails?status=pending\').then(function(d){STATE.pendingEmails=d;render();});});}});">Done</button></div>':'')+
@@ -615,8 +615,8 @@ function renderDuplicateWarningModal(groups,dupEmailMap){
   var items=Object.keys(dupEmailMap).slice(0,6).map(function(email){
     var d=dupEmailMap[email];
     var since=d.since?new Date(d.since).toLocaleDateString():'';
-    return '<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'+
-      '<span style="color:var(--amber);font-weight:600">'+htmlEsc(email)+'</span>'+
+    return '<div class="fs-12" style="padding:5px 0;border-bottom:1px solid var(--border)">'+
+      '<span class="c-amber" style="font-weight:600">'+htmlEsc(email)+'</span>'+
       (d.owner_name?' \u2014 already on <strong>'+htmlEsc(d.owner_name)+'</strong>\u2019s lead'+(since?' since '+htmlEsc(since):''):' \u2014 already on someone else\u2019s lead')+
       // The typed email travels as a `data-*` attribute, never interpolated
       // into the onclick JS-string \u2014 esc()/htmlEsc() only protects the HTML
@@ -631,11 +631,11 @@ function renderDuplicateWarningModal(groups,dupEmailMap){
     '<div class="mh"><div class="mt">\u26a0 Duplicate emails found</div>'+
     '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+
-      '<div style="padding:10px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:12px;font-size:13px;color:var(--amber)">'+
+      '<div class="fs-13 c-amber" style="padding:10px 12px;background:var(--amber-l);border-radius:var(--r2);margin-bottom:12px">'+
         '<strong>'+dupCount+' email ID'+(dupCount>1?'s':'')+' already exist</strong> in the system. These leads will be imported but flagged as <strong>DUPLICATE</strong> for the Team Lead to review.'+
       '</div>'+
       items+
-      (Object.keys(dupEmailMap).length>6?'<div style="font-size:12px;color:var(--text3);padding-top:6px">+'+(Object.keys(dupEmailMap).length-6)+' more</div>':'')+
+      (Object.keys(dupEmailMap).length>6?'<div class="fs-12 c-text3" style="padding-top:6px">+'+(Object.keys(dupEmailMap).length-6)+' more</div>':'')+
     '</div>'+
     '<div class="mf">'+
       '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+

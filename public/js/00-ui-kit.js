@@ -183,7 +183,7 @@ window.UI = (function () {
     return '<span class="pill '+tone+'">'+(dot?'<i></i>':'')+esc(text)+'</span>';
   }
   function ring(n, tone){
-    if (n==null||n==='') return '<span style="color:var(--ink3)">—</span>';
+    if (n==null||n==='') return '<span class="c-ink3">—</span>';
     return '<span class="ring '+(tone||'ok')+'">'+esc(n)+'</span>';
   }
   function toggle(on, onclick){
@@ -193,7 +193,7 @@ window.UI = (function () {
   function check(on, onclick){
     return '<input type="checkbox" class="ck"'+(on?' checked':'')+(onclick?' onclick="'+onclick+'"':'')+'>';
   }
-  function dash(v){ return (v==null||v===''||v===0) ? '<span style="color:var(--ink3)">-</span>' : esc(v); }
+  function dash(v){ return (v==null||v===''||v===0) ? '<span class="c-ink3">-</span>' : esc(v); }
 
   function notice(o){
     o = o || {};
