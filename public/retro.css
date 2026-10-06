@@ -477,6 +477,15 @@ body.ui-kit .tb-chips{display:flex;gap:8px;margin-top:2px}
 .tb-chip.is-late{background:#D98A7E;cursor:pointer}
 body.ui-kit .tb-right{align-self:flex-start;margin-top:-2px}
 body.ui-kit .tb-new{font-family:var(--pixel);font-weight:400;font-size:10px;letter-spacing:.5px;padding:11px 14px;border:3px solid #000;box-shadow:4px 4px 0 #000;white-space:nowrap}
+/* THE "+ NEW" MENU: an opaque paper float (glass is for the sky, not menus) */
+.tb-newwrap{position:relative}
+.tb-caret{display:inline-block;width:0;height:0;margin-left:8px;vertical-align:middle;border:4px solid transparent;border-top-color:currentColor;border-bottom-width:0}
+.tb-newmenu{position:absolute;right:0;top:calc(100% + 8px);min-width:240px;background:#FFF6E6;border:3px solid #000;box-shadow:5px 5px 0 var(--hard);z-index:60;padding:4px 0}
+.tb-newrow{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:9px 14px;background:transparent;border:0;border-left:4px solid transparent;cursor:pointer;text-align:left;font:inherit;color:#1A1033}
+.tb-newrow:focus-visible{background:#F2E6CF;border-left-color:#7A4DE0;outline:none}
+@media (hover:hover) and (pointer:fine){ .tb-newrow:hover{background:#F2E6CF;border-left-color:#7A4DE0} }
+.tb-newlbl{font-family:var(--pixel);font-size:10px;letter-spacing:.5px}
+.tb-newsub{font-family:var(--mono);font-size:10.5px;color:#6E6290}
 /* clouds, stars, and a bigger sun/moon travelling BELOW the text */
 .tb-cloud{position:absolute;z-index:0;pointer-events:none;line-height:0;color:#FFF6E6}
 .tb-cloud svg{display:block}
@@ -491,8 +500,21 @@ body.ui-kit .tb-new{font-family:var(--pixel);font-weight:400;font-size:10px;lett
 
 /* The logo tile: same height as the sky, PACE big, "AI RECRUITING" under it. */
 body.ui-kit .sb-brand{height:var(--topbar-h);min-height:var(--topbar-h);position:relative;overflow:hidden}
-body.ui-kit .rail-word{display:flex;flex-direction:column;gap:10px;font-size:27px;position:relative;z-index:1}
-.rail-sub{font-family:var(--pixel-label);font-size:10px;letter-spacing:.12em;color:#FFF6E6;text-shadow:1px 1px 0 #000;-webkit-text-stroke:0}
+body.ui-kit .rail-word{display:flex;align-items:center;font-size:27px;position:relative;z-index:1;white-space:nowrap}
+/* TYPING PACE: each letter pops in on its own beat (steps — a typewriter, not a
+   fade), then the caret blinks a few times and is gone. --el moves the whole
+   show back in time when the sidebar repaints part-way through. */
+.rail-word .tw{display:inline-block}
+.rail-word.typing .tw{font-size:0;animation:tw-in 0s steps(1,end) forwards;animation-delay:calc(var(--i)*.2s + .45s - var(--el,0s))}
+.tw-caret{display:none;width:.45em;height:.9em;margin-left:3px;background:#E4D6FF;box-shadow:1px 1px 0 #000;vertical-align:-.08em;
+  animation:tw-blink .7s steps(1,end) infinite;animation-delay:calc(-1 * var(--el,0s));animation-iteration-count:3;animation-fill-mode:forwards}
+body.ui-kit .rail-word.typing .tw-caret{display:inline-block}
+@keyframes tw-in{to{font-size:1em}}
+@keyframes tw-blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .rail-word.typing .tw{font-size:inherit;animation:none}
+  .tw-caret{display:none}
+}
 .sb-cloud{position:absolute;right:16px;top:14px;line-height:0;color:#FFF6E6;opacity:.95;pointer-events:none}
 .sb-cloud svg{display:block}
 :root[data-sky="night"] .sb-cloud{color:#3A2F6B}
@@ -553,3 +575,61 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   .tb-search input{font-size:16px}                 /* 16px: no zoom-on-focus on a phone */
   .gs-kbd{display:none}
 }
+
+/* ══ RETRO CHARTS (R-122 step 3) ═══════════════════════════════════════════
+   The report's bars and columns (39-page-reports.js). Square paper tracks with
+   a hard outline and plum shadow; the fill is a segmented level meter. Colour
+   says what a stage MEANS (purple ours, blue client side, amber interviews,
+   green won, red lost, grey parked) — not the old rounded blue ramp. They sit
+   on cream cards in BOTH modes, so these are fixed paper-and-ink colours. */
+.rep-card{padding:16px 18px}
+.rep-ttl{font-family:var(--pixel-label);font-weight:700;font-size:11px;letter-spacing:.14em;color:#1A1033;margin-bottom:14px}
+.rep-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.rep-lbl{width:140px;flex:none;text-align:right;font-family:var(--mono);font-size:11px;color:#3D3260}
+.rep-lbl.is-name{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rep-track{flex:1;min-width:40px;height:20px;background:#F2EADB;border:2px solid #1A1033;border-radius:0;box-shadow:2px 2px 0 var(--hard);overflow:hidden;position:relative}
+.rep-fill{height:100%;min-width:10px;border-right:2px solid #1A1033;border-radius:0;background-color:var(--tone,#7A4DE0);
+  background-image:repeating-linear-gradient(90deg,transparent 0 10px,rgba(26,16,51,.28) 10px 12px)}
+.rep-fill.is-empty{display:none}
+.tone-brand{--tone:#7A4DE0} .tone-info{--tone:#9CC6E2} .tone-wait{--tone:#E6BC7A}
+.tone-go{--tone:#A9C98C} .tone-stop{--tone:#D98A7E} .tone-muted{--tone:#C9BFA9}
+.rep-num{width:34px;flex:none;font-family:var(--pixel-label);font-weight:700;font-size:13px;color:#1A1033}
+.rep-num.is-zero{color:#8C80AD}
+
+.rep-cols{display:flex;align-items:flex-end;gap:10px;height:132px;padding:0 4px;border-bottom:3px solid #1A1033}
+.rep-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px}
+.rep-colv{font-family:var(--pixel-label);font-weight:700;font-size:11px;color:#1A1033}
+.rep-colv.is-zero{color:#8C80AD}
+.rep-colbar{width:62%;max-width:46px;background-color:#7A4DE0;border:2px solid #1A1033;border-bottom:0;border-radius:0;box-shadow:3px 0 0 var(--hard);
+  background-image:repeating-linear-gradient(0deg,transparent 0 8px,rgba(26,16,51,.25) 8px 10px)}
+.rep-colbar.is-zero{display:none}
+.rep-weeks{display:flex;gap:10px;padding:0 4px;margin-top:6px}
+.rep-colw{flex:1;min-width:0;text-align:center;font-family:var(--mono);font-size:9.5px;color:#6E6290;white-space:nowrap}
+
+.rep-filters{display:flex;gap:18px;flex-wrap:wrap;align-items:center;padding:12px 14px;margin-bottom:14px}
+.rep-fgroup{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rep-flbl{font-family:var(--pixel-label);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6E6290;margin-right:2px}
+.rep-fto{font-family:var(--mono);font-size:11px;color:#6E6290}
+.rep-pill{font-family:var(--mono);font-weight:700;font-size:11.5px;padding:5px 11px;background:#FFF6E6;color:#1A1033;border:2px solid #1A1033;border-radius:0;box-shadow:2px 2px 0 var(--hard);cursor:pointer}
+.rep-pill.on{background:#7A4DE0;color:#FFF6E6}
+.rep-pill:active{transform:translate(2px,2px);box-shadow:none}
+.rep-date{font-family:var(--mono);font-size:11.5px;padding:4px 7px;background:#FFF6E6;color:#1A1033;border:2px solid #1A1033;border-radius:0}
+
+.rep-mini{padding:10px 12px 12px 44px;background:var(--bg)}
+.rep-mini.is-empty{font-family:var(--mono);font-size:11.5px;color:#6E6290}
+.rep-row.is-mini{margin-bottom:4px}
+.rep-row.is-mini .rep-lbl{font-size:10px}
+.rep-row.is-mini .rep-track{height:14px;box-shadow:none}
+.rep-hot-bar{border-radius:0;background:#F2EADB;height:18px}
+.rep-hot-s{font-family:var(--mono)}
+@media (max-width:860px){
+  .rep-lbl{width:92px;font-size:10px}
+  .rep-date{font-size:16px}
+  .rep-mini{padding-left:12px}
+}
+
+/* Mailbox warning: the two buttons sit together; the "hidden" line is quiet. */
+.mba-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mba-hidden{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text3)}
+.mba-hidden a{color:var(--accent);font-weight:700}
+.mba-hidden.is-alone{border-top:0;margin-top:0;padding-top:0}

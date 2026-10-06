@@ -225,7 +225,7 @@ function renderSidebar(){
       'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       // R-122: the pixel logo on a slice of the sky (retro.css paints both).
       '<div class="rail-mark">P</div>'+
-      '<div class="rail-word">PACE<span class="rail-sub">AI RECRUITING</span></div>'+
+      paceLogoWord()+
       '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
       '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
@@ -311,6 +311,34 @@ function renderTopbar(){
   '</div>';
 }
 
+// THE LOGO TYPES ITSELF OUT (R-122): P, A, C, E appear one by one with a caret
+// that blinks and goes. The MARKUP NEVER CHANGES — it is always the finished
+// word — because the render engine compares the sidebar's html and an idle
+// repaint must write nothing (ui-smoothness-smoke). The show is a class
+// ('typing') put on the live element once, by script, for the first 3 seconds of
+// a visit; the animation itself is CSS (retro.css .rail-word.typing). If a
+// repaint replaces the element mid-show, the class is put back and the
+// animation resumes where it should be (--el), so it never restarts or jumps.
+var PACE_LOGO_SHOW_MS=3200;
+function paceLogoWord(){
+  var letters='PACE'.split('').map(function(ch,i){return '<span class="tw" style="--i:'+i+'">'+ch+'</span>';}).join('');
+  if(!window.__paceLogoT0){ window.__paceLogoT0=Date.now(); paceLogoShow(); }
+  return '<div class="rail-word" aria-label="PACE"><span aria-hidden="true">'+letters+'<span class="tw-caret"></span></span></div>';
+}
+function paceLogoShow(){
+  var t0=window.__paceLogoT0;
+  var tick=function(){
+    var el=document.querySelector('#sidebar .rail-word'), gone=Date.now()-t0>=PACE_LOGO_SHOW_MS;
+    if(el){
+      if(gone){ el.classList.remove('typing'); el.style.removeProperty('--el'); return true; }
+      if(!el.classList.contains('typing')){ el.style.setProperty('--el',((Date.now()-t0)/1000).toFixed(2)+'s'); el.classList.add('typing'); }
+    }
+    return gone;
+  };
+  var iv=setInterval(function(){ if(tick())clearInterval(iv); },250);
+}
+window.paceLogoWord=paceLogoWord;
+
 // Show or hide the Setup items above the name card. One class, no render.
 window.toggleSetup=function(){
   var sb=document.getElementById('sidebar'); if(sb)sb.classList.toggle('setup-open');
@@ -391,33 +419,77 @@ function paceHeaderClock(d){
   return day+' · '+date+' · '+t;
 }
 window.paceHeaderClock=paceHeaderClock;
-// On Today only: what is waiting on you. Both numbers are REAL or absent —
-// "need you" is the loaded needs-you-today list (STATE.nextActions), "past
-// due" is your own pending reminders dated before today. A click goes to
-// Today. Nothing is shown while a number is unknown.
+// On Today only: how many of YOUR reminders are past due - real or absent, and
+// a click goes to the Reminders page. There used to be a "N NEED YOU" chip
+// beside it; it did nothing when clicked (and counted items the card below
+// already lists), so the owner had it removed (R-122 step 3). A chip that
+// looks like a button must be one.
 function paceTodayChips(){
-  if(STATE.page!=='dashboard'||(STATE.viewingUser&&STATE.user&&STATE.viewingUser.id!==STATE.user.id))return '';
+  if(STATE.page!=='dashboard'||(STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id))return '';
   var out='';
-  var na=STATE.nextActions;
-  if(na&&na.items&&!na._error)out+='<span class="tb-chip">'+na.items.length+' NEED YOU</span>';
   var uid=STATE.user&&STATE.user.id, today=(typeof todayIST==='function')?todayIST():new Date().toISOString().slice(0,10);
-  var late=(STATE.reminders||[]).filter(function(r){return r.user_id===uid&&r.status==='pending'&&r.due_date&&String(r.due_date).slice(0,10)<today;}).length;
+  var late=(STATE.reminders||[]).filter(function(r){return r.user_id===uid&&r.status==='pending'&&r.return_date&&String(r.return_date).slice(0,10)<today;}).length;
   if(late)out+='<span class="tb-chip is-late" onclick="goPage(\'reminders\')" role="button">'+late+' PAST DUE</span>';
   return out?'<div class="tb-chips">'+out+'</div>':'';
 }
-// The one Sun Yellow action on Today, by desk — and only actions PACE has:
-// a BD desk (admin / bd / bd_lead) opens a new job, a recruiter a new
-// candidate. Other pages keep their own primary button in their toolbar, so
-// the header never shows a second yellow button there.
-function paceHeaderNew(){
-  if(STATE.page!=='dashboard'||!STATE.user)return '';
-  var u=STATE.user;
-  if(userHasAnyRole(u,'admin','bd','bd_lead')&&typeof window.bdOpenNewJob==='function')
-    return '<button class="btn btn-primary tb-new" onclick="bdOpenNewJob(null)">+ New Job</button>';
-  if(userHasRole(u,'recruiter')&&typeof window.atsOpenNew==='function')
-    return '<button class="btn btn-primary tb-new" onclick="atsOpenNew()">+ New Candidate</button>';
-  return '';
+// THE "+ NEW" MENU (R-122 step 3). One yellow button on every page that opens
+// a small paper menu of the things a person can START: a job, a candidate, a
+// lead, an email, a sequence. Each entry is offered ONLY to someone who is
+// already given that action on its own page (same role gates as the Jobs /
+// Candidates / Leads / Email / Sequence screens), and only when the function
+// that does it is loaded - the menu never advertises something PACE cannot do.
+// The open/closed flag lives in STATE so a repaint of the bar draws it the same.
+function paceNewItems(){
+  var u=STATE.user, out=[];
+  if(!u)return out;
+  var bdm=userHasAnyRole(u,'admin','bd','bd_lead');
+  var recruiter=userHasRole(u,'recruiter');
+  if(bdm&&typeof window.bdOpenNewJob==='function')out.push({id:'job',lbl:'Job',sub:'An opening from a client'});
+  if((bdm||recruiter)&&typeof window.atsOpenNew==='function')out.push({id:'candidate',lbl:'Candidate',sub:'Add a person to the pool'});
+  if(!isPureRecruiter(u)&&u.role!=='ra'&&typeof window.openAddJob==='function')out.push({id:'lead',lbl:'Lead',sub:'A company to sell to'});
+  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))out.push({id:'email',lbl:'Email',sub:'Write a new message'});
+  if(userHasAnyRole(u,'admin','ra_lead','bd_lead')&&typeof window.wfOpenBuilder==='function')out.push({id:'sequence',lbl:'Sequence',sub:'Steps and timing for outreach'});
+  return out;
 }
+window.paceNewItems=paceNewItems;
+function paceHeaderNew(){
+  if(!STATE.user)return '';
+  if(STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id)return '';
+  var items=paceNewItems();
+  if(!items.length)return '';
+  var open=!!STATE.newMenu;
+  return '<div class="tb-newwrap'+(open?' is-open':'')+'">'+
+    '<button class="btn btn-primary tb-new" onclick="paceNewToggle(event)" aria-haspopup="menu" aria-expanded="'+(open?'true':'false')+'">+ New<span class="tb-caret" aria-hidden="true"></span></button>'+
+    (open?'<div class="tb-newmenu" role="menu">'+items.map(function(it){
+      return '<button class="tb-newrow" role="menuitem" onclick="paceNewGo(\''+it.id+'\')">'+
+        '<span class="tb-newlbl">'+it.lbl+'</span><span class="tb-newsub">'+it.sub+'</span></button>';
+    }).join('')+'</div>':'')+
+  '</div>';
+}
+window.paceNewToggle=function(ev){
+  if(ev&&ev.stopPropagation)ev.stopPropagation();
+  STATE.newMenu=!STATE.newMenu; render();
+};
+window.paceNewGo=function(kind){
+  STATE.newMenu=false; render();     // the menu is gone first, whatever the action then draws
+  if(kind==='job')return bdOpenNewJob(null);
+  if(kind==='candidate')return atsOpenNew();
+  if(kind==='lead')return openAddJob();
+  if(kind==='email'){ STATE.emailTab='compose'; return goPage('email'); }
+  if(kind==='sequence'){
+    STATE.emailTab='sequence'; goPage('email');
+    return setTimeout(function(){ if(window.wfOpenBuilder)wfOpenBuilder(); },0);
+  }
+};
+// Click anywhere else, or Escape, closes the menu. One listener for the app.
+document.addEventListener('click',function(ev){
+  if(!STATE.newMenu)return;
+  if(ev.target&&ev.target.closest&&ev.target.closest('.tb-newwrap'))return;
+  STATE.newMenu=false; render();
+});
+document.addEventListener('keydown',function(ev){
+  if(ev.key==='Escape'&&STATE.newMenu){ STATE.newMenu=false; render(); }
+});
 // Pixel clouds (always) and stars (CSS shows them at dusk and night).
 var PACE_CLOUD=['......####......','...#########....','..############..','.##############.','################'];
 function paceSkyDecor(){

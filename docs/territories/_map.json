@@ -2,8 +2,8 @@
   "generated": "2026-10-06",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 464,
-    "lines": 110345,
+    "files": 465,
+    "lines": 110965,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 72,
-      "lines": 30448,
+      "lines": 30566,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -78,7 +78,7 @@
         "services/error-report.js"
       ],
       "files": 35,
-      "lines": 12156,
+      "lines": 12249,
       "largest": [
         {
           "f": "index.js",
@@ -192,7 +192,7 @@
         "routes/deliverability.js"
       ],
       "files": 32,
-      "lines": 5653,
+      "lines": 5720,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -257,7 +257,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 27,
-      "lines": 11265,
+      "lines": 11313,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -403,8 +403,8 @@
         "test/",
         ".github/"
       ],
-      "files": 185,
-      "lines": 34678,
+      "files": 186,
+      "lines": 34972,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",

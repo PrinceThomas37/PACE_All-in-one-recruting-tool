@@ -87,7 +87,8 @@ try {
   step('Tiles: My Jobs / Offers / Placements', content.includes('My Jobs') && content.includes('Offers') && content.includes('Placements'));
   step('Candidate pipeline card renders stages', content.includes('My candidate pipeline') && content.includes('Sourced') && content.includes('Interview Scheduled'));
   step('Upcoming interviews shows candidate', content.includes('Upcoming interviews') && content.includes('Jane Doe') && content.includes('Zoom'));
-  step('Reminders widget present', content.includes('Reminders'));
+  // R-122 step 3: the second Reminders box is gone — a due reminder is already a row in "Needs you today".
+  step('no second Reminders box on the dashboard', !/\bReminders\n|View all \d+ reminders|No reminders set/.test(content), content.slice(content.indexOf('Reminders')-20, content.indexOf('Reminders')+40));
 
   // My jobs card
   step('Jobs-assigned timeline stats', content.includes('Assigned this week') && content.includes('This quarter') && content.includes('All time'));

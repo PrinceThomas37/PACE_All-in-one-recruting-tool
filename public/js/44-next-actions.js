@@ -121,6 +121,8 @@ function naItemOf(btn){
 window.naAct=function(btn,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   var it=naItemOf(btn); if(!it){showToast('Could not read that row','error');return;}
+  // A lead's silent contacts are one row with no single address: open the lead, where each person is.
+  if(it.entity_type==='lead')return naOpen(it.kind,'lead',it.entity_id,it.job_id);
   if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
   var isCand=it.entity_type==='candidate';
   if(it.kind==='reply_due'||isCand){
@@ -218,7 +220,8 @@ var NA_KIND={
   reply_due:       {lbl:'Reply due',           bg:'#fee2e2', fg:'#b91c1c'},
   commitment_due:  {lbl:'They promised',       bg:'#fef3c7', fg:'#92400e'},
   reminder_due:    {lbl:'Reminder',            bg:'#e0e7ff', fg:'#3730a3'},
-  nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569'},
+  nudge:           {lbl:'No reply yet',        bg:'#f1f5f9', fg:'#475569',
+                    why:'Shown because you emailed and nobody has answered for 3 or more days, on a lead that is already talking to you. Not shown for leads still in the automatic follow-up.'},
   stage_suggested: {lbl:'Replied — interested',bg:'#dcfce7', fg:'#166534'}
 };
 // A kind this file does not know says so neutrally. The old fallback was `nudge`,
@@ -330,7 +333,10 @@ function renderNextActionsCard(){
     // R-073 (owner: "no option to do the task … just information is mentioned"):
     // the row itself does the work — see naAct below for what each does.
     var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write'}[it.kind]||'';
-    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:'Write a follow-up',reminder_due:'Write the email this reminder is for'}[it.kind])+'">'+doLbl+'</button>'
+    // A reminder with nobody to write to (a task someone asked you to do, like "reconnect your mailbox") has no Write — a button that can only say "no address" is worse than none.
+    if(it.kind==='reminder_due'&&!it.email)doLbl='';
+    if(it.kind==='nudge'&&it.entity_type==='lead')doLbl='Open lead';
+    var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:(it.entity_type==='lead'?'Open the lead to see who you have emailed':'Write a follow-up'),reminder_due:'Write the email this reminder is for'}[it.kind])+'">'+doLbl+'</button>'
       :(it.kind==='stage_suggested'?naMoveStageSelect():'');
     var acts=doAct+(it.reminder_id
       ?'<button class="na-act" onclick="naDone(\''+it.reminder_id+'\',event)" title="Mark this reminder done">Done</button>'
@@ -352,7 +358,7 @@ function renderNextActionsCard(){
       'onclick="naOpen(\''+it.kind+'\',\''+it.entity_type+'\',\''+it.entity_id+'\','+(it.job_id?'\''+it.job_id+'\'':'null')+')" '+
       'style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);cursor:pointer">'+
       '<label class="cd-tick" onclick="event.stopPropagation()" title="Completed'+(it.reminder_id?'':' — hides this until they reply')+'"><input type="checkbox" onclick="naComplete(this,event)" aria-label="Mark completed"></label>'+
-      '<span class="fs-10_5" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'">'+k.lbl+'</span>'+
+      '<span class="fs-10_5" style="flex:none;font-weight:700;padding:3px 8px;border-radius:7px;background:'+k.bg+';color:'+k.fg+'"'+(k.why?' title="'+escAttr(k.why)+'"':'')+'>'+k.lbl+'</span>'+
       '<div style="flex:1;min-width:0">'+
         '<div class="fs-13_5" style="font-weight:600">'+htmlEsc(it.title||'')+
           (it.subtitle?' <span class="c-text3" style="font-weight:400">· '+htmlEsc(it.subtitle)+'</span>':'')+'</div>'+

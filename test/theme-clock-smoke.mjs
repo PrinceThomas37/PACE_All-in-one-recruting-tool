@@ -136,17 +136,36 @@ try {
     step('no counts are shown while they are unknown', h.chips.length === 0, JSON.stringify(h.chips));
     step('the date line reads the person\'s clock', /^TUE · 06 OCT 2026 · 12:00/.test(h.clock), h.clock);
     await page.evaluate(() => { const S = window.STATE; S.nextActions = { items: [{}, {}, {}] };
-      S.reminders = [{ id: 'a', user_id: S.user.id, status: 'pending', due_date: '2026-10-01' }, { id: 'b', user_id: S.user.id, status: 'pending', due_date: '2026-10-09' }, { id: 'c', user_id: 'someone-else', status: 'pending', due_date: '2026-10-01' }];
+      S.reminders = [{ id: 'a', user_id: S.user.id, status: 'pending', return_date: '2026-10-01' }, { id: 'b', user_id: S.user.id, status: 'pending', return_date: '2026-10-09' }, { id: 'c', user_id: 'someone-else', status: 'pending', return_date: '2026-10-01' }];
       window.render(); });
     h = await hdr();
-    step('Today counts what needs you and only YOUR overdue reminders', h.chips.join('|') === '3 NEED YOU|1 PAST DUE', JSON.stringify(h.chips));
-    step('a BD desk gets "+ New Job" on Today', h.newBtn === '+ New Job', String(h.newBtn));
+    step('Today counts only YOUR overdue reminders (no dead need-you chip)', h.chips.join('|') === '1 PAST DUE', JSON.stringify(h.chips));
+    // THE "+ NEW" MENU (R-122 step 3): one button, every page, and each entry
+    // only for someone who already has that action. Opening it lists them;
+    // picking one runs the page's own function; a click elsewhere closes it.
+    const items = () => page.evaluate(() => [...document.querySelectorAll('#topbar .tb-newrow .tb-newlbl')].map(e => e.textContent));
+    step('a BD desk gets one "+ New" button on Today', /^\+ New/.test(h.newBtn || ''), String(h.newBtn));
+    step('…closed until it is opened', (await items()).length === 0);
+    await page.evaluate(() => document.querySelector('#topbar .tb-new').click());
+    step('opening it offers Job, Candidate, Lead, Email and Sequence to an admin', (await items()).join('|') === 'Job|Candidate|Lead|Email|Sequence', (await items()).join('|'));
+    const picked = await page.evaluate(() => { let got = null; window.bdOpenNewJob = (id) => { got = 'job:' + id; };
+      [...document.querySelectorAll('#topbar .tb-newrow')].find(b => /Job/.test(b.textContent)).click(); return got; });
+    step('picking "Job" runs the Jobs screen\'s own new-job action', picked === 'job:null', String(picked));
+    step('…and the menu closes', (await items()).length === 0);
+    await page.evaluate(() => document.querySelector('#topbar .tb-new').click());
+    await page.evaluate(() => document.body.click());
+    step('a click anywhere else closes it', (await items()).length === 0);
+    await page.evaluate(() => document.querySelector('#topbar .tb-new').click());
+    await page.keyboard.press('Escape');
+    step('Escape closes it', (await items()).length === 0);
     await page.evaluate(() => window.goPage('leads'));
     h = await hdr();
-    step('other pages keep their own button — no second yellow one, no Today counts', h.newBtn === null && h.chips.length === 0, JSON.stringify(h));
-    await page.evaluate(() => { window.STATE.user = Object.assign({}, window.STATE.user, { role: 'ra', roles: ['ra'] }); window.goPage('dashboard'); });
+    step('the button is on every page, not just Today — and Today\'s counts stay on Today', /^\+ New/.test(h.newBtn || '') && h.chips.length === 0, JSON.stringify(h));
+    await page.evaluate(() => { window.STATE.user = Object.assign({}, window.STATE.user, { role: 'bd', roles: ['bd'] }); window.goPage('dashboard'); document.querySelector('#topbar .tb-new').click(); });
+    step('a plain BD is not offered a Sequence (only leads and admins design them)', (await items()).join('|') === 'Job|Candidate|Lead|Email', (await items()).join('|'));
+    await page.evaluate(() => { window.STATE.newMenu = false; window.STATE.user = Object.assign({}, window.STATE.user, { role: 'ra', roles: ['ra'] }); window.goPage('dashboard'); });
     h = await hdr();
-    step('a desk with no "new" action gets no button', h.newBtn === null, String(h.newBtn));
+    step('a desk with nothing to start gets no button', h.newBtn === null, String(h.newBtn));
     await ctx.close();
   }
 

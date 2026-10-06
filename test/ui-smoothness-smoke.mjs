@@ -142,6 +142,10 @@ try {
   // assumed.
   const repaint = await page.evaluate(async ()=>{
     const running = ()=>document.getAnimations().filter(a=>a.playState==='running').length;
+    // The logo types itself out once, in the first 3 seconds of a visit (a
+    // class put on the live element — not a repaint). Wait for the show so the
+    // count below is what a REPAINT starts, with nothing else on screen playing.
+    while (window.__paceLogoT0 && Date.now() - window.__paceLogoT0 < 3600) await new Promise(r=>setTimeout(r,150));
     window.STATE.page='leads'; window.render();
     await new Promise(r=>setTimeout(r,400));
     const before = running();

@@ -39,15 +39,28 @@
         '<a href="#" onclick="loadMailboxAlerts(true);return false;">Try again</a></div>';
     }
     var list=s.alerts||[];
-    if(!list.length) return '';
+    // What the person hid for a week is COUNTED here, never silently gone, and
+    // one click brings it back (R-122 step 3: a warning that stays for weeks
+    // crowds the first screen, so it can be put away — but not forgotten).
+    var hiddenLine=s.hidden
+      ? '<div class="mba-hidden">'+s.hidden+' mailbox warning'+(s.hidden===1?'':'s')+' hidden for a week · '+
+          '<a href="#" onclick="mailboxAlertShow();return false;">Show</a></div>'
+      : '';
+    if(!list.length) return hiddenLine.replace('class="mba-hidden"','class="mba-hidden is-alone mb4"');
     var rows=list.map(function(a){
       var mine=a.is_owner;
       var who=mine?'':'<span class="mba-owner">'+esc(a.owner_name||'Its owner')+'\'s mailbox · </span>';
       var held=a.held?'<span class="mba-held">'+a.held+' email'+(a.held===1?'':'s')+' waiting behind it</span>':'';
       var since=a.since?'<span class="mba-since">last worked '+esc(day(a.since))+'</span>':'';
-      var action=mine
+      // Only the owner can complete the provider's consent screen, so anyone
+      // else can PROMPT: the "Remind" puts a task on the owner's own list.
+      var first=esc(a.owner_name||'them');   // the full name: a first word alone would read "Remind BD" for "BD 2"
+      var action=(mine
         ? '<button class="btn btn-sm btn-primary" onclick="mailboxAlertReconnect(\''+a.mailbox_id+'\',\''+(a.platform||'')+'\')">Reconnect</button>'
-        : '<span class="mba-ask">Ask '+esc(a.owner_name||'its owner')+' to reconnect it</span>';
+        : (a.asked
+            ? '<span class="mba-ask">Asked '+first+' — it is on their list</span>'
+            : '<button class="btn btn-sm btn-primary" onclick="mailboxAlertAsk(\''+a.mailbox_id+'\',this)" title="Puts a task on '+esc(a.owner_name||'their')+'\'s own list">Remind '+first+'</button>'))+
+        '<button class="btn btn-sm btn-outline" onclick="mailboxAlertHide(\''+a.mailbox_id+'\',this)" title="Hide this warning for a week. It comes back sooner if the mailbox fails in a new way.">Hide for a week</button>';
       return '<div class="mba-row">'+
         '<div class="mba-main">'+
           '<div class="mba-mail">'+who+esc(a.email)+(a.state==='probably_expired'?' <span class="mba-tag">probably</span>':'')+'</div>'+
@@ -61,7 +74,33 @@
     return '<div class="mba-card mb4">'+
       '<div class="mba-head">'+(n===1?'A mailbox can\'t send':n+' mailboxes can\'t send')+'</div>'+
       rows+
+      hiddenLine+
     '</div>';
+  };
+
+  window.mailboxAlertHide=function(mailboxId,btn){
+    if(btn) btn.disabled=true;
+    apiPost('/mailboxes/alerts/hide',{mailbox_id:mailboxId}).then(function(){
+      showToast('Hidden for a week — it comes back sooner if it fails again','success');
+      loadMailboxAlerts(true);
+    }).catch(function(e){
+      if(btn) btn.disabled=false;
+      showToast('Could not hide that: '+((e&&e.message)||e),'error');
+    });
+  };
+  window.mailboxAlertShow=function(){
+    apiPost('/mailboxes/alerts/show',{}).then(function(){ loadMailboxAlerts(true); })
+      .catch(function(e){ showToast('Could not show them: '+((e&&e.message)||e),'error'); });
+  };
+  window.mailboxAlertAsk=function(mailboxId,btn){
+    if(btn) btn.disabled=true;
+    apiPost('/mailboxes/alerts/'+encodeURIComponent(mailboxId)+'/ask',{}).then(function(r){
+      showToast(r&&r.already?'Already asked — it is on their list':'Asked — it is on their list for today','success');
+      loadMailboxAlerts(true);
+    }).catch(function(e){
+      if(btn) btn.disabled=false;
+      showToast((e&&e.message)||'Could not ask','error');
+    });
   };
 
   // Reuses the one reconnect flow Admin uses — never a second OAuth path.

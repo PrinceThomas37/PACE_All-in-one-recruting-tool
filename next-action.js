@@ -34,6 +34,51 @@ const KIND = {
 const dayDiff = (a, b) => Math.floor((a - b) / DAY_MS);
 const fmtDays = (n) => (n === 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
 
+// ONE ROW PER LEAD, NOT ONE PER CONTACT (R-122 step 3).
+// A lead is a company, and a sales sequence writes to every person it found
+// there. Once ONE of them replies the lead moves to "Connected", and from then
+// on each of the others who had simply not answered yet became its own "No reply
+// yet" row — 30 near-identical rows for one company, none of which the owner
+// could explain ("on what basis is this shown?"). The silence is a fact about
+// the LEAD, so it is ONE row that says how many people were written to and how
+// long ago the latest email went. Candidates are unaffected (a candidate is a
+// person, not a company), and a lead with a single silent contact keeps its own
+// row. Rows are grouped per (lead, owner) so the ownership split stays exact.
+function groupNudgesByLead(items) {
+  const groups = new Map();
+  const out = [];
+  for (const it of items) {
+    if (it.kind !== KIND.NUDGE || it.entity_type !== 'contact' || !it.job_id) { out.push(it); continue; }
+    const key = `${it.job_id}|${it.owner_id || ''}`;
+    if (!groups.has(key)) { const slot = { members: [] }; groups.set(key, slot); out.push(slot); }
+    groups.get(key).members.push(it);
+  }
+  return out.map(x => {
+    if (!x.members) return x;
+    if (x.members.length === 1) return x.members[0];
+    const m = x.members;
+    const latest = m.reduce((a, b) => ((b.overdue_days ?? Infinity) < (a.overdue_days ?? Infinity) ? b : a));
+    const days = latest.overdue_days;
+    const lastAt = m.reduce((mx, i) => (i.last_activity_at && i.last_activity_at > mx ? i.last_activity_at : mx), '') || null;
+    return {
+      kind: KIND.NUDGE,
+      last_activity_at: lastAt,
+      entity_type: 'lead', entity_id: latest.job_id,
+      title: latest.subtitle || 'This lead',
+      subtitle: `${m.length} people`,
+      email: null,                 // there is no single person to write to — the row opens the lead
+      job_id: latest.job_id, owner_id: latest.owner_id || null,
+      reason: `You have emailed ${m.length} people here${Number.isFinite(days) ? ` (the latest ${fmtDays(days)} ago)` : ''} and nobody has replied.`,
+      state: latest.state,
+      intent: null,
+      priority: Math.max.apply(null, m.map(i => i.priority)),
+      due_at: null,
+      overdue_days: days,
+      group_size: m.length,
+    };
+  });
+}
+
 /**
  * Build the ranked queue.
  *
@@ -175,6 +220,9 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
     }
   }
 
+  // Silent contacts of one lead are one row (see groupNudgesByLead).
+  { const merged = groupNudgesByLead(items); items.length = 0; merged.forEach(i => items.push(i)); }
+
   // Reminders: the feature that existed and never fired.
   for (const r of reminders) {
     if (r.status && r.status !== 'pending') continue;
@@ -238,4 +286,4 @@ function summarize(items) {
   return { total: items.length, by_kind: by, top: items[0] || null };
 }
 
-module.exports = { buildNextActions, summarize, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS };
+module.exports = { buildNextActions, summarize, groupNudgesByLead, KIND, DAY_MS, NUDGE_MAX_AGE_DAYS };
