@@ -318,7 +318,7 @@ body.ui-kit #content{
   background-color:var(--sky-base);background-image:var(--sky);
   border-bottom:2px solid #000;
 }
-body.ui-kit #topbar>*:not(.tb-orb):not(.tb-cloud):not(.tb-stars){position:relative;z-index:1}
+body.ui-kit #topbar>*:not(.tb-sky){position:relative;z-index:1}
 body.ui-kit .tb-title{
   font-family:var(--pixel);font-weight:400;font-size:14px;letter-spacing:.5px;
   color:#FFF6E6;text-shadow:2px 2px 0 #000;text-transform:uppercase;
@@ -522,4 +522,34 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   body.ui-kit .tb-chips{order:3}
   body.ui-kit .tb-new{font-size:9px;padding:8px 9px;box-shadow:3px 3px 0 #000}
   .tb-cloud.c1{right:24px;top:auto;bottom:10px;left:auto}
+}
+
+/* ══ SEARCH EVERYTHING (R-123) ════════════════════════════════════════════
+   The bar no longer clips (its decoration is clipped by .tb-sky instead), so
+   the results hang below it over the page. */
+#topbar,body.ui-kit #topbar{overflow:visible;z-index:30}
+.tb-sky{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+.tb-search{position:relative;margin-left:auto;width:340px;flex:none;align-self:flex-start;
+  display:flex;align-items:center;gap:8px;background:#FFF6E6;border:3px solid #000;box-shadow:4px 4px 0 #000;padding:0 10px;height:40px}
+.tb-search .gs-ic{color:#6E6290;display:flex}
+.tb-search .gs-ic svg{width:15px;height:15px}
+.tb-search input{flex:1;min-width:0;border:none!important;background:transparent!important;box-shadow:none!important;outline:none;
+  font-family:var(--font);font-size:13px;color:#1A1033;padding:0;height:34px}
+.tb-search input::placeholder{color:#6E6290}
+.tb-search input::-webkit-search-cancel-button{display:none}
+.gs-kbd{font-family:var(--mono);font-size:10px;border:2px solid #1A1033;padding:0 4px;color:#1A1033;line-height:16px}
+.gs-panel{position:absolute;left:-3px;right:-3px;top:calc(100% + 6px);max-height:420px;overflow-y:auto;
+  background:#FFF6E6;border:3px solid #000;box-shadow:5px 5px 0 var(--hard);padding:4px 0;z-index:40}
+.gs-group{font-family:var(--pixel-label);font-size:10px;letter-spacing:.14em;color:#6E6290;padding:9px 12px 4px}
+.gs-row{display:flex;flex-direction:column;gap:1px;padding:7px 12px;cursor:pointer;border-left:4px solid transparent}
+.gs-row.on,.gs-row:hover{background:#F2E6CF;border-left-color:#7A4DE0}
+.gs-title{font-weight:700;font-size:13.5px;color:#1A1033}
+.gs-sub{font-family:var(--mono);font-size:10.5px;color:#6E6290}
+.gs-note{padding:12px;font-size:13px;color:#3D3260}
+.gs-note.is-err{color:#B23A2E}
+@media (max-width:1180px){ .tb-search{width:260px} }
+@media (max-width:860px){
+  .tb-search{order:4;flex:1 1 100%;width:auto;margin-left:0;height:42px}
+  .tb-search input{font-size:16px}                 /* 16px: no zoom-on-focus on a phone */
+  .gs-kbd{display:none}
 }

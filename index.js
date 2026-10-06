@@ -3592,6 +3592,9 @@ app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));
 // The rewind button's one endpoint. Read-only, org-scoped, every record kind.
 app.use(require('./routes/record-history')(routeCtx));
+// The header's search-everything box (R-123). Each kind applies the same
+// visibility rule as the list it comes from — see the file's header.
+app.use(require('./routes/search')(routeCtx));
 // Take-over requests (D-0036/D-0037/D-0038) — asking to own somebody else's
 // lead, client or job order. No bare `:id` GET/PUT here, so there is nothing
 // for a new literal to shadow today, but any literal added later still goes

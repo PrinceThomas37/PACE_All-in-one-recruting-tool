@@ -275,7 +275,9 @@ function renderTopbar(){
       // R-122: the sky. The bar's colours follow the clock through the
       // data-sky attribute on <html> (retro.css); the sun or moon is the one
       // thing drawn here, placed by the hour (paceSkyOrb). Decorative only.
-      paceSkyOrb()+paceSkyDecor()+
+      // The sky's decoration sits in its own clipped layer, so the bar itself
+      // can let the search results hang below it.
+      '<div class="tb-sky" aria-hidden="true">'+paceSkyOrb()+paceSkyDecor()+'</div>'+
       '<div class="tb-burger" onclick="toggleNav()" title="Menu" aria-label="Menu" role="button">'+UI.ic('menu')+'</div>'+
       // The title block: the page name in pixels, and under it today's date
       // and time (the clock ticker keeps #tb-clock current — text only).
@@ -284,7 +286,8 @@ function renderTopbar(){
         '<div class="tb-meta"><span id="tb-clock">'+paceHeaderClock()+'</span></div>'+
       '</div>'+
       paceTodayChips()+
-      '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
+      (window.paceSearchBox?paceSearchBox():'')+
+      '<div class="tb-right" style="margin-left:12px;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
           '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
         // BOTH ICONS ARE ALWAYS IN THE MARKUP; theme.css shows one and hides
@@ -440,7 +443,7 @@ function paceSkyOrb(d){
   d=d||new Date();
   var h=d.getHours()+Math.floor(d.getMinutes()/15)*15/60;
   var sun=h>=6&&h<19, p=sun?(h-6)/13:((h-19+24)%24)/11;
-  var left=(30+p*40).toFixed(1), top=Math.round(80-Math.sin(p*Math.PI)*26);
+  var left=(30+p*40).toFixed(1), top=Math.round(92-Math.sin(p*Math.PI)*22);
   return '<span class="tb-orb '+(sun?'is-sun':'is-moon')+'" style="left:'+left+'%;top:'+top+'px">'+
     (sun?pixelSprite(PACE_SUN,'currentColor',3.4):pixelSprite(PACE_MOON,'currentColor',4.4))+'</span>';
 }
