@@ -29,7 +29,10 @@
      live in paceClockTheme() in 04-shell-login.js; keep the two in step. -->
 <script>
 (function(){
-  var root=document.documentElement,t=null;
+  var root=document.documentElement,t=null,hh=new Date().getHours();
+  // The sky in the top bar (R-122): dawn 05-07, day 08-16, dusk 17-19, night
+  // 20-04 — same hours as paceSkyPhase() in 04-shell-login.js.
+  root.setAttribute('data-sky',hh>=5&&hh<8?'dawn':hh>=8&&hh<17?'day':hh>=17&&hh<20?'dusk':'night');
   try{ t=localStorage.getItem('pace-theme'); }catch(e){/* private mode: Auto */}
   if(t==='dark'||t==='light'){ root.setAttribute('data-theme',t); return; }
   var h=new Date().getHours();

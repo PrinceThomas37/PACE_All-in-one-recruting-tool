@@ -104,7 +104,7 @@ try {
   step('Org chart view renders the transitive tree', hub.chartHtml.includes('Org chart') && hub.chartHtml.includes('Mia') && hub.chartHtml.includes('Sam'));
   // 3c. Nav order: My Team sits right after Dashboard, and Team Insights / My
   // Profile / Reports are no longer standalone items for a team lead.
-  step('Nav: My Team right after Dashboard', hub.nav[0] === 'Dashboard' && hub.nav[1] === 'My Team', hub.nav.join(' | '));
+  step('Nav: My Team right after Today', hub.nav[0] === 'Today' && hub.nav[1] === 'My Team', hub.nav.join(' | '));
   step('Nav: no standalone Team Insights / My Profile item', !hub.nav.includes('Team Insights') && !hub.nav.includes('My Profile'));
 
   // 4. My Team gate is data-driven: Ora (no reports) gets no nav item, no page

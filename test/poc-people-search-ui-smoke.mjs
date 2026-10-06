@@ -228,19 +228,21 @@ try{
   step('past the day\'s limit the server\'s sentence shows, in red', red && red.err && /used up/.test(red.text) && /admin can raise/.test(red.text), JSON.stringify(red));
   usedUp = false;
 
-  // The text follows the theme — no hard-coded ink.
+  // The text follows the theme — no hard-coded ink. R-122: night keeps cream
+  // paper with dark ink (the owner's design), so "light in dark" is no longer
+  // the test of following the theme; being the --text TOKEN in both is.
   const ink = async () => page.evaluate(()=>{
     const el=document.querySelector('#lx-poc-j1 .lxc-ppl-name'); if(!el) return null;
-    const c=(getComputedStyle(el).color.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
-    const l=c.map(v=>{ v/=255; return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4); });
-    return 0.2126*l[0]+0.7152*l[1]+0.0722*l[2];
+    const probe=document.createElement('span'); probe.style.color='var(--text)'; el.parentElement.appendChild(probe);
+    const tok=getComputedStyle(probe).color; probe.remove();
+    return { own:getComputedStyle(el).color, tok };
   });
   await page.evaluate(()=>applyTheme('dark')); await page.waitForTimeout(150);
   const inkDark = await ink();
   await shot('people-search-dark');
   await page.evaluate(()=>applyTheme('light')); await page.waitForTimeout(150);
   const inkLight = await ink();
-  step('names are light ink in dark and dark ink in light (theme tokens, never a fixed colour)', inkDark > 0.5 && inkLight < 0.2, `dark ${inkDark && inkDark.toFixed(2)} light ${inkLight && inkLight.toFixed(2)}`);
+  step('names are drawn in the theme\'s ink token in both modes (never a fixed colour)', inkDark && inkLight && inkDark.own===inkDark.tok && inkLight.own===inkLight.tok, JSON.stringify({inkDark,inkLight}));
 
   // Clear.
   await realClick('#lx-poc-j1 .lxc-ppl-bar button[onclick*="leadPocPeopleClear"]');

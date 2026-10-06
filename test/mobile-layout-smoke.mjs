@@ -290,6 +290,30 @@ try {
   await waitForLogin(dpage);
   await enterApp(dpage, 'admin');
 
+  // R-122 (owner's sidebar design): on a full-size screen the LABELLED sidebar
+  // is open by default and pushes the page over — it must never cover the left
+  // of the page (the pinned rail used to float over it).
+  const openState = await dpage.evaluate(() => {
+    const sb = document.getElementById('sidebar').getBoundingClientRect();
+    return {
+      railWidth: Math.round(sb.width),
+      mainLeft: Math.round(document.getElementById('main').getBoundingClientRect().left),
+      label: getComputedStyle(document.querySelector('.sb-lbl')).opacity,
+      txt: getComputedStyle(document.querySelector('.nav-txt')).opacity,
+    };
+  });
+  step('a full-size screen opens with the labelled sidebar', openState.railWidth > 180 && openState.label === '1' && openState.txt === '1', JSON.stringify(openState));
+  step('…which pushes the page over instead of covering it', openState.mainLeft >= openState.railWidth - 1, openState.mainLeft + 'px vs ' + openState.railWidth + 'px');
+
+  // Folding it (a click on the logo, remembered) gives back the slim rail —
+  // and everything below is the slim rail's original contract.
+  await dpage.evaluate(() => { window.toggleRail(); window.render(); });
+  await dpage.waitForTimeout(250);
+  const remembered = await dpage.evaluate(() => localStorage.getItem('pace-rail'));
+  step('folding the sidebar is remembered', remembered === 'collapsed', String(remembered));
+  await dpage.mouse.move(900, 500);
+  await dpage.waitForTimeout(250);
+
   const deskState = await dpage.evaluate(() => {
     const sb = document.getElementById('sidebar');
     return {
@@ -300,11 +324,11 @@ try {
       label: getComputedStyle(document.querySelector('.sb-lbl')).opacity,
     };
   });
-  step('the desktop still gets the slim icon rail', deskState.railWidth <= 70, deskState.railWidth + 'px');
+  step('folded, the desktop gets the slim icon rail', deskState.railWidth <= 70, deskState.railWidth + 'px');
   step('…with the content still offset by it', deskState.mainLeft >= 55);
   step('the hamburger is not shown on a desktop', deskState.burgerHidden);
   step('the scrim is not in the way on a desktop', deskState.scrimHidden);
-  step('the rail is collapsed until hovered', deskState.label === '0');
+  step('folded, the rail stays collapsed until hovered', deskState.label === '0');
 
   // The hover rail must still work where there IS a pointer — that is the half
   // of the fix it would be easy to break by simply deleting the hover rules.

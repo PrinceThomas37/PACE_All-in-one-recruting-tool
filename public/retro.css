@@ -97,6 +97,11 @@
   --blur:0px;
   --glow1:transparent; --glow2:transparent; --glow3:transparent;
   --grid:rgba(26,16,51,.055);
+  --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+  /* the CANVAS and the sidebar SHELF are their own tokens: --bg is also the
+     recessed groove inside cards (segmented controls, chips), which must stay
+     cream at night. */
+  --canvas:#F2EADB; --shelf:#E8DCC6;
   /* the action colour: one Sun Yellow per screen */
   --sun:#FFD36E; --on-sun:#1A1033;
   /* state fills (muted on purpose) — for tags and decision buttons */
@@ -110,47 +115,127 @@
   color-scheme:light;
 }
 
-/* ── NIGHT (dark) — defined twice, as theme.css does, so they cannot drift ── */
+/* ── NIGHT (dark) — the DAY palette restated (theme.css's own dark block would
+   otherwise win) with the night overrides last. Defined twice, as theme.css
+   does, so the two cannot drift. ─────────────────────────────────────────── */
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#130B2B; --bg2:#1D1240; --bg3:rgba(205,184,255,.06);
-    --card:#221748; --card-solid:#221748;
-    --glass-brd:#06030F; --ctl-brd:#6C5BA8;
-    --border:rgba(205,184,255,.14); --border2:rgba(205,184,255,.26);
-    --text:#FFF6E6; --text2:#DCD2F2; --text3:#ACA0D2;
-    --accent:#B49BFF; --accent-m:#CDB8FF; --accent-d:#9579F0; --accent-l:rgba(180,155,255,.18);
-    --green:#A9C98C; --green-l:rgba(169,201,140,.18);
-    --amber:#E6BC7A; --amber-l:rgba(230,188,122,.18);
-    --red:#EA9A8E;   --red-l:rgba(234,154,142,.18);
-    --purple:#CDB8FF;--purple-l:rgba(205,184,255,.18);
-    --teal:#9CC6E2;  --teal-l:rgba(156,198,226,.18);
-    --gold:#E6BC7A;  --gold-l:rgba(230,188,122,.18);
+  --bg:#F2EADB;            /* arcade cream: the canvas */
+    --bg2:#E8DCC6;           /* shelf tan: the sidebar, the second ground */
+    --bg3:rgba(26,16,51,.045);
+    --card:#FFF6E6;          /* cartridge cream: paper, opaque — no glass */
+    --card-solid:#FFF6E6;
+    --glass-brd:#1A1033;     /* every surface edge is ink */
+    --ctl-brd:#1A1033;
+    --border:#E3D2B4;        /* ruled lines inside a surface */
+    --border2:#CDBA98;
+    --text:#1A1033;          /* midnight ink */
+    --text2:#3D3260;
+    --text3:#6E6290;         /* faded ink — 5.1:1 on cream */
+    --accent:#7A4DE0;        /* pixel purple */
+    --accent-m:#9B78F0;
+    --accent-d:#5B3BB0;
+    --accent-l:rgba(122,77,224,.12);
+    --green:#2E7D32;   --green-l:#DCE8CF;
+    --amber:#A0540C;   --amber-l:#F5E0BC;
+    --red:#B23A2E;     --red-l:#F3D3CC;
+    --purple:#7A4DE0;  --purple-l:#E6DCFF;
+    --teal:#2F6F8F;    --teal-l:#D7E9F4;
+    --gold:#A0540C;    --gold-l:#F5E0BC;
+    /* square, and hard shadows with no blur */
+    --r:0px; --r2:0px; --r3:0px; --r4:0px;
+    --hard:#2A1A57;          /* shadow plum */
+    --sh:2px 2px 0 var(--hard);
+    --sh2:4px 4px 0 var(--hard);
+    --sh3:6px 6px 0 var(--hard);
+    --blur:0px;
+    --glow1:transparent; --glow2:transparent; --glow3:transparent;
+    --grid:rgba(26,16,51,.055);
+    --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+    /* the action colour: one Sun Yellow per screen */
+    --sun:#FFD36E; --on-sun:#1A1033;
+    /* state fills (muted on purpose) — for tags and decision buttons */
+    --st-go:#A9C98C; --st-stop:#D98A7E; --st-wait:#E6BC7A; --st-info:#9CC6E2;
+    /* type: pixel faces are for the frame only (step 2); data in Space Mono */
+    --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    --display:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    --mono:'Space Mono',ui-monospace,Menlo,Consolas,monospace;
+    --pixel:'Press Start 2P',ui-monospace,monospace;
+    --pixel-label:'Silkscreen',ui-monospace,monospace;
+    /* ── night overrides ── */
+    --canvas:#130B2B; --shelf:#1D1240;
+    /* NIGHT KEEPS THE PAPER (owner, on the first night build: "too much
+       purple … not like this" — the concept had cream cards on a dark grid).
+       So night changes the CANVAS, the sidebar ground and the shadow colour;
+       cards, controls and their ink stay exactly as by day. Text that sits
+       straight on the canvas is lightened one rule at a time below
+       (ON THE NIGHT CANVAS). */
     --hard:#5B3BB0;
     --grid:rgba(205,184,255,.05);
-    color-scheme:dark;
+    --on-canvas:#CDB8FF; --on-canvas-strong:#FFF6E6;
+    color-scheme:light;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#130B2B; --bg2:#1D1240; --bg3:rgba(205,184,255,.06);
-  --card:#221748; --card-solid:#221748;
-  --glass-brd:#06030F; --ctl-brd:#6C5BA8;
-  --border:rgba(205,184,255,.14); --border2:rgba(205,184,255,.26);
-  --text:#FFF6E6; --text2:#DCD2F2; --text3:#ACA0D2;
-  --accent:#B49BFF; --accent-m:#CDB8FF; --accent-d:#9579F0; --accent-l:rgba(180,155,255,.18);
-  --green:#A9C98C; --green-l:rgba(169,201,140,.18);
-  --amber:#E6BC7A; --amber-l:rgba(230,188,122,.18);
-  --red:#EA9A8E;   --red-l:rgba(234,154,142,.18);
-  --purple:#CDB8FF;--purple-l:rgba(205,184,255,.18);
-  --teal:#9CC6E2;  --teal-l:rgba(156,198,226,.18);
-  --gold:#E6BC7A;  --gold-l:rgba(230,188,122,.18);
+  --bg:#F2EADB;            /* arcade cream: the canvas */
+  --bg2:#E8DCC6;           /* shelf tan: the sidebar, the second ground */
+  --bg3:rgba(26,16,51,.045);
+  --card:#FFF6E6;          /* cartridge cream: paper, opaque — no glass */
+  --card-solid:#FFF6E6;
+  --glass-brd:#1A1033;     /* every surface edge is ink */
+  --ctl-brd:#1A1033;
+  --border:#E3D2B4;        /* ruled lines inside a surface */
+  --border2:#CDBA98;
+  --text:#1A1033;          /* midnight ink */
+  --text2:#3D3260;
+  --text3:#6E6290;         /* faded ink — 5.1:1 on cream */
+  --accent:#7A4DE0;        /* pixel purple */
+  --accent-m:#9B78F0;
+  --accent-d:#5B3BB0;
+  --accent-l:rgba(122,77,224,.12);
+  --green:#2E7D32;   --green-l:#DCE8CF;
+  --amber:#A0540C;   --amber-l:#F5E0BC;
+  --red:#B23A2E;     --red-l:#F3D3CC;
+  --purple:#7A4DE0;  --purple-l:#E6DCFF;
+  --teal:#2F6F8F;    --teal-l:#D7E9F4;
+  --gold:#A0540C;    --gold-l:#F5E0BC;
+  /* square, and hard shadows with no blur */
+  --r:0px; --r2:0px; --r3:0px; --r4:0px;
+  --hard:#2A1A57;          /* shadow plum */
+  --sh:2px 2px 0 var(--hard);
+  --sh2:4px 4px 0 var(--hard);
+  --sh3:6px 6px 0 var(--hard);
+  --blur:0px;
+  --glow1:transparent; --glow2:transparent; --glow3:transparent;
+  --grid:rgba(26,16,51,.055);
+  --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+  /* the action colour: one Sun Yellow per screen */
+  --sun:#FFD36E; --on-sun:#1A1033;
+  /* state fills (muted on purpose) — for tags and decision buttons */
+  --st-go:#A9C98C; --st-stop:#D98A7E; --st-wait:#E6BC7A; --st-info:#9CC6E2;
+  /* type: pixel faces are for the frame only (step 2); data in Space Mono */
+  --font:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --display:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --mono:'Space Mono',ui-monospace,Menlo,Consolas,monospace;
+  --pixel:'Press Start 2P',ui-monospace,monospace;
+  --pixel-label:'Silkscreen',ui-monospace,monospace;
+  /* ── night overrides ── */
+  --canvas:#130B2B; --shelf:#1D1240;
+  /* NIGHT KEEPS THE PAPER (owner, on the first night build: "too much
+     purple … not like this" — the concept had cream cards on a dark grid).
+     So night changes the CANVAS, the sidebar ground and the shadow colour;
+     cards, controls and their ink stay exactly as by day. Text that sits
+     straight on the canvas is lightened one rule at a time below
+     (ON THE NIGHT CANVAS). */
   --hard:#5B3BB0;
   --grid:rgba(205,184,255,.05);
-  color-scheme:dark;
+  --on-canvas:#CDB8FF; --on-canvas-strong:#FFF6E6;
+  color-scheme:light;
 }
 
 /* ══ THE GROUND: cream (or night) with a faint 16px grid, no glows ════════ */
 body{
-  background-color:var(--bg);
+  background-color:var(--canvas);
   background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
   background-size:16px 16px;
   font-family:var(--font);
@@ -163,7 +248,7 @@ body::before{background:none}
 .modal,.drawer,.dw,.dwr-pane,#nav-scrim,.scrim{
   -webkit-backdrop-filter:none;backdrop-filter:none;
 }
-#sidebar,body.ui-kit #sidebar{background:var(--bg2);border-right:2px solid var(--glass-brd);box-shadow:none}
+#sidebar,body.ui-kit #sidebar{background:var(--shelf);border-right:2px solid var(--glass-brd);box-shadow:none}
 #topbar,body.ui-kit #topbar{background:var(--bg2);border-bottom:2px solid var(--glass-brd);box-shadow:none}
 
 /* ══ SURFACES: square paper, ink edge, hard shadow ════════════════════════ */
@@ -205,3 +290,172 @@ table td.num,.mono,code,kbd{font-family:var(--mono)}
 
 /* The horizon bar and its friends were drawn as glass pills. */
 .hz-bar,.hz-btn,.hz-count,.hz-pg,.na-act,.am-src,.lp-wrap,.lp-chip,.am-list,.var-chip,.warn-panel,.warn-panel-sm,.banner-chip{border-radius:0}
+
+/* The content area paints its own ground in ui.css; give it the grid too. */
+body.ui-kit #content{
+  background-color:var(--canvas);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:16px 16px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   STEP 2 — THE FRAME: the sky, the pixel logo, the sidebar by business.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── THE SKY. Banded, hard stops (the 90s look), chosen by data-sky on <html>
+   (set before first paint; see index.html and paceSkyPhase()). Independent of
+   light/dark. The bar's background-COLOUR is the darkest band, and every band
+   the text sits on is >= 3:1 against cream; the pale horizon bands are kept to
+   the bottom quarter, where only the sun travels. ───────────────────────── */
+:root{ --sky:linear-gradient(180deg,#1C6FBF 0 34%,#2588D6 34% 58%,#36A6EC 58% 74%,#62C2F5 74% 88%,#A6DEFA 88%); --sky-base:#1C6FBF; }
+:root[data-sky="dawn"]{ --sky:linear-gradient(180deg,#2A1A57 0 30%,#5A2A8E 30% 56%,#A84F93 56% 72%,#E27788 72% 84%,#FFAE88 84% 93%,#FFDDA6 93%); --sky-base:#2A1A57; }
+:root[data-sky="day"]{ --sky:linear-gradient(180deg,#1C6FBF 0 34%,#2588D6 34% 58%,#36A6EC 58% 74%,#62C2F5 74% 88%,#A6DEFA 88%); --sky-base:#1C6FBF; }
+:root[data-sky="dusk"]{ --sky:linear-gradient(180deg,#1B1240 0 26%,#2E1863 26% 46%,#5A2A8E 46% 62%,#A2409E 62% 74%,#E2588F 74% 84%,#FF8E5A 84% 93%,#FFC36B 93%); --sky-base:#1B1240; }
+:root[data-sky="night"]{ --sky:linear-gradient(180deg,#0B0620 0 30%,#110A2A 30% 52%,#171036 52% 70%,#1E1445 70% 86%,#271A57 86%); --sky-base:#0B0620; }
+
+#topbar,body.ui-kit #topbar{
+  position:relative;overflow:hidden;
+  background-color:var(--sky-base);background-image:var(--sky);
+  border-bottom:2px solid #000;
+}
+body.ui-kit #topbar>*:not(.tb-orb){position:relative;z-index:1}
+body.ui-kit .tb-title{
+  font-family:var(--pixel);font-weight:400;font-size:14px;letter-spacing:.5px;
+  color:#FFF6E6;text-shadow:2px 2px 0 #000;text-transform:uppercase;
+}
+body.ui-kit .tb-title .tb-count{
+  font-family:var(--mono);font-size:11px;text-shadow:none;text-transform:none;
+  background:#FFF6E6;color:#1A1033;border:2px solid #000;border-radius:0;
+}
+body.ui-kit .tb-title .tb-crumb{font-family:var(--font);font-size:13px;text-transform:none;text-shadow:1px 1px 0 #000;color:#FFF6E6}
+body.ui-kit .tb-ico,body.ui-kit .tb-theme,body.ui-kit .tb-burger{color:#FFF6E6;border-radius:0}
+body.ui-kit .tb-ico:hover,body.ui-kit .tb-theme:hover{background:rgba(255,246,230,.16);color:#FFF6E6;border-color:transparent}
+body.ui-kit .tb-ico .dot{border-radius:0;background:#FFD36E;box-shadow:0 0 0 2px #000}
+body.ui-kit .tb-user{border-radius:0}
+body.ui-kit #topbar .btn-outline{background:#FFF6E6;color:#1A1033;border-color:#000}
+.tb-orb{position:absolute;z-index:0;pointer-events:none;line-height:0}
+.tb-orb.is-sun{color:#FFD36E}
+.tb-orb.is-moon{color:#F4EFD8}
+.tb-orb svg{display:block}
+
+/* ── THE LOGO: pixel PACE on a slice of the same sky ─────────────────────── */
+body.ui-kit .sb-brand{
+  background-color:var(--sky-base);background-image:var(--sky);
+  border-bottom:2px solid #000;
+}
+body.ui-kit .rail-mark{
+  width:30px;height:30px;border-radius:0;background:#1A1033;border:2px solid #000;
+  font-family:var(--pixel);font-weight:400;font-size:14px;color:#E4D6FF;letter-spacing:0;
+  box-shadow:2px 2px 0 #000;
+}
+body.ui-kit .rail-word{
+  font-family:var(--pixel);font-weight:400;font-size:20px;letter-spacing:1px;color:#E4D6FF;
+  text-shadow:1px 1px 0 #8A63F0,2px 2px 0 #5530B8,3px 3px 0 #2A1270,-1px 0 0 #000,1px 0 0 #000,0 -1px 0 #000,0 1px 0 #000,4px 4px 0 #000;
+}
+
+/* ── THE SIDEBAR, BY BUSINESS. Section labels in the pixel label face with a
+   square in the section colour; items are chunky paper keys; the active one
+   takes its section's colour. Collapsed (60px) they read as icon keys. ───── */
+:root{ --sec-day:#A9C98C; --sec-sales:#E6BC7A; --sec-rec:#CDB8FF; --sec-set:#9CC6E2; }
+body.ui-kit .sb-nav{padding:8px 10px}
+body.ui-kit .sb-lbl{
+  font-family:var(--pixel-label);font-weight:400;font-size:10px;letter-spacing:.14em;
+  color:var(--text);display:flex;align-items:center;gap:7px;padding:14px 4px 7px;height:auto;
+}
+body.ui-kit .sb-lbl::before{content:'';width:12px;height:12px;flex:none;box-sizing:border-box;border:2px solid var(--glass-brd);background:var(--sec,transparent)}
+.sec-day{--sec:var(--sec-day)} .sec-sales{--sec:var(--sec-sales)} .sec-rec{--sec:var(--sec-rec)} .sec-set{--sec:var(--sec-set)}
+body.ui-kit .nav-item{
+  height:36px;margin-bottom:7px;padding:0 0 0 9px;border-radius:0;
+  background:var(--card);border:2px solid var(--glass-brd);box-shadow:var(--sh);
+  color:var(--text);font-weight:700;font-size:13.5px;
+  transition:transform .08s steps(2),box-shadow .08s steps(2);
+}
+body.ui-kit .nav-icon{opacity:.85}
+@media (hover:hover) and (pointer:fine){
+  body.ui-kit .nav-item:hover{background:var(--card);transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--hard)}
+}
+body.ui-kit .nav-item.active,body.ui-kit .nav-item.on{
+  background:var(--sec,var(--card));color:#1A1033;border:2px solid var(--glass-brd);box-shadow:var(--sh);font-weight:800;
+}
+body.ui-kit .nav-item.active .nav-icon{opacity:1;color:#1A1033}
+/* counts: an ink box (collapsed: a sun-yellow square on the icon) */
+body.ui-kit .nav-badge{border-radius:0;background:var(--sun);box-shadow:0 0 0 1.5px #000}
+body.ui-kit #sidebar.pinned .nav-badge{border-radius:0;background:#1A1033;color:#FFF6E6;box-shadow:none}
+@media (hover:hover) and (pointer:fine){
+  body.ui-kit #sidebar:hover .nav-badge{border-radius:0;background:#1A1033;color:#FFF6E6;box-shadow:none}
+}
+/* the sign-out row and the person stay quiet */
+body.ui-kit .sb-footer{border-top:2px solid var(--glass-brd)}
+body.ui-kit .sb-footer .nav-item{box-shadow:none;background:transparent;border-color:transparent}
+body.ui-kit .user-row{border-radius:0}
+
+/* PINNED OPEN PUSHES THE PAGE OVER; HOVER STILL FLOATS. The owner wants the
+   labelled sidebar (R-122), so someone who pins it open must not lose the left
+   of every page under it. Desktop only — below 861px the rail is the
+   hamburger drawer (mobile.css) and must keep overlaying. */
+@media (min-width:861px){
+  body.ui-kit #sidebar.pinned ~ #main{margin-left:var(--rail-w-open)}
+}
+/* On a phone the bar is full of buttons — the sky stays, the sun/moon rests. */
+@media (max-width:860px){ .tb-orb{display:none} }
+
+/* ══ ON THE NIGHT CANVAS ══════════════════════════════════════════════════
+   Cards keep their ink at night; only text that sits straight on the canvas
+   or the sidebar ground changes. --on-canvas* is ink by day and cream/lavender
+   by night, so each rule below is right in both. theme-contrast-smoke finds
+   the next one. */
+body.ui-kit .sb-lbl{color:var(--on-canvas-strong)}
+body.ui-kit .sb-footer .nav-item,body.ui-kit .u-name{color:var(--on-canvas-strong)}
+body.ui-kit .u-role{color:var(--on-canvas)}
+
+/* ══ THE SIDEBAR AS DESIGNED (owner's sidebar mockup, R-122) ══════════════ */
+/* The logo tile: a taller slice of sky with the big pixel PACE. */
+body.ui-kit .sb-brand{height:84px;min-height:84px;padding-left:14px}
+body.ui-kit #sidebar.pinned .rail-mark{display:none}
+@media (hover:hover) and (pointer:fine){
+  body.ui-kit #sidebar:hover .rail-mark{display:none}
+}
+body.ui-kit .rail-word{font-size:24px;margin-left:2px}
+/* collapsed: the P key sits centred in the 60px rail */
+body.ui-kit .sb-brand .rail-mark{margin-left:0}
+
+/* Pixel icons are drawn in the text colour. */
+body.ui-kit .nav-icon svg{display:block}
+body.ui-kit .nav-item.sec-day .nav-icon,body.ui-kit .nav-item:not(.active) .nav-icon{color:var(--text)}
+body.ui-kit .nav-item.active.sec-day .nav-icon svg rect:first-child{fill:inherit}
+
+/* Counts on an open sidebar: an ink box, mono, square. */
+body.ui-kit #sidebar.pinned .nav-badge{
+  font-family:var(--mono);font-size:11px;font-weight:700;padding:0 6px;margin-right:9px;
+}
+
+/* Setup lives under the name card (Deliverability, Admin). */
+body.ui-kit .sb-setup{display:none;padding:2px 0 8px}
+body.ui-kit #sidebar.setup-open .sb-setup{display:block}
+body.ui-kit .sb-footer{padding:10px;border-top:none}
+body.ui-kit .sb-footer .sb-setup .nav-item{background:var(--card);border:2px solid var(--glass-brd);box-shadow:var(--sh);color:var(--text)}
+body.ui-kit .sb-footer .sb-setup .nav-item.active{background:var(--sec-set);color:#1A1033}
+
+/* The name card: paper, square avatar, a SETUP key on the right. */
+body.ui-kit .me-card{
+  display:flex;align-items:center;gap:6px;
+  background:var(--card);border:2px solid var(--glass-brd);box-shadow:var(--sh);
+  padding:0 6px 0 0;margin-bottom:8px;
+}
+body.ui-kit .me-card .user-row{flex:1;min-width:0;height:48px;padding-left:6px}
+body.ui-kit .me-card .user-row:hover{background:transparent}
+body.ui-kit .me-card .u-name{color:var(--text)}
+body.ui-kit .me-card .u-role{color:var(--text3);font-family:var(--mono);font-size:9.5px;text-transform:uppercase;letter-spacing:.05em}
+body.ui-kit #sidebar .me-card .av{border-radius:0;border:2px solid #000;font-family:var(--pixel-label);font-weight:700}
+body.ui-kit .me-setup{
+  display:none;align-items:center;gap:4px;flex:none;cursor:pointer;
+  font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;
+  border:2px solid var(--glass-brd);padding:3px 6px;color:var(--text);background:var(--card);
+}
+body.ui-kit .me-setup svg{width:12px;height:12px}
+body.ui-kit .me-setup .nav-txt{margin-left:0}
+body.ui-kit #sidebar.pinned .me-setup{display:flex}
+body.ui-kit #sidebar.setup-open .me-setup{background:var(--sec-set)}
+@media (hover:hover) and (pointer:fine){ body.ui-kit #sidebar:hover .me-setup{display:flex} }
+/* the sign-out row stays a quiet line under the card */
+body.ui-kit .sb-footer>.nav-item{height:30px;margin:0}
