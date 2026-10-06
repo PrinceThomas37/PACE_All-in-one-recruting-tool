@@ -364,16 +364,91 @@
   function paintJobRowPipe(id){
     var el=document.getElementById('lx-jo-pipe-'+id), j=joById(id);
     if(el&&j) el.innerHTML=jobRowPipeHtml(j);
+    var iv=document.getElementById('lx-jo-iv-'+id); if(iv&&j) iv.innerHTML=jobRowInterviewsHtml(j);
+    var ac=document.getElementById('lx-jo-acts-'+id); if(ac&&j) ac.outerHTML=jobRowActions(j);   // "Review N waiting" needs the counts
+  }
+  // ── what fills the rest of an opened job row (R-134, owner: "interviews this week, quick actions,
+  // best-matching candidates") ────────────────────────────────────────────────────────────────────
+  // Everything is drawn from what is already known: the job's submissions (who is on it, interview times) and the
+  // server's own ranking of the pool (GET /job-orders/:id/matches — the same scorer the grid uses). Nothing is
+  // worked out twice, and nothing here changes anything until the person presses a button.
+  var _rowMatch={};
+  function subsOf(raw){ return Array.isArray(raw)?raw:((raw&&raw.submissions)||[]); }
+  function interviewsSoon(subs){
+    var d0=new Date(); d0.setHours(0,0,0,0);
+    var from=d0.getTime(), to=from+7*86400000;
+    return subs.filter(function(s){
+      if(nStage(s.stage)!=='Interview Scheduled'||!s.interview_at) return false;
+      var t=new Date(s.interview_at).getTime(); return !isNaN(t)&&t>=from&&t<to;
+    }).sort(function(a,b){ return new Date(a.interview_at)-new Date(b.interview_at); }).slice(0,5).map(function(s){
+      return {name:(s.candidate&&s.candidate.full_name)||'A candidate',at:s.interview_at,where:s.interview_location||''};
+    });
   }
   function loadJobRowPipe(id){
     var p=_rowPipe[id];
     if(p&&!p.error&&Date.now()-p.at<60000) return;
-    apiGet('/job-orders/'+id+'/submissions').then(function(subs){
-      var c=stageCountsOf(subs||[]);
-      _rowPipe[id]={counts:c.counts,total:c.total,at:Date.now()};
-      paintJobRowPipe(id);
+    apiGet('/job-orders/'+id+'/submissions').then(function(raw){
+      var subs=subsOf(raw), masked=!!(raw&&!Array.isArray(raw)&&raw.masked);
+      var c=stageCountsOf(subs);
+      var onJob={}; subs.forEach(function(s){ var cid=s.candidate_id||(s.candidate&&s.candidate.id); if(cid) onJob[cid]=1; });
+      _rowPipe[id]={counts:c.counts,total:c.total,at:Date.now(),onJob:onJob,masked:masked,interviews:masked?[]:interviewsSoon(subs)};
+      paintJobRowPipe(id); loadJobRowMatches(id);
     }).catch(function(){ _rowPipe[id]={error:true,at:Date.now()}; paintJobRowPipe(id); });
   }
+  function loadJobRowMatches(id){
+    var m=_rowMatch[id];
+    if(m&&!m.error&&Date.now()-m.at<120000){ paintJobRowMatch(id); return; }
+    apiGet('/job-orders/'+id+'/matches?limit=12').then(function(r){
+      var on=(_rowPipe[id]&&_rowPipe[id].onJob)||{};
+      var items=((r&&r.results)||[]).filter(function(x){ return x.score!=null&&!on[x.candidate_id]; }).slice(0,3);
+      _rowMatch[id]={items:items,scoreable:!!(r&&r.scoreable),at:Date.now()};
+      paintJobRowMatch(id);
+    }).catch(function(){ _rowMatch[id]={error:true,at:Date.now()}; paintJobRowMatch(id); });
+  }
+  function paintJobRowMatch(id){
+    var el=document.getElementById('lx-jo-match-'+id), j=joById(id);
+    if(el&&j) el.innerHTML=jobRowMatchHtml(j);
+  }
+  function rowWhen(iso){
+    var d=new Date(iso); if(isNaN(d)) return '';
+    return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'})+' · '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }
+  function jobRowInterviewsHtml(j){
+    var p=_rowPipe[j.id];
+    if(!p) return '<span class="lx-muted">Loading…</span>';
+    if(p.error) return '<span class="lx-muted">Could not load the interviews.</span>';
+    if(p.masked) return '<span class="lx-muted">Interview times are shown to the people assigned to this job.</span>';
+    if(!p.interviews.length) return '<span class="lx-muted">No interviews in the next 7 days.</span>';
+    return p.interviews.map(function(i){
+      return '<div class="lx-iv"><b>'+esc(rowWhen(i.at))+'</b><span>'+esc(i.name)+(i.where?' · '+esc(i.where):'')+'</span></div>';
+    }).join('');
+  }
+  function canAddToJob(){ return userHasAnyRole(STATE.user,'admin','bd','bd_lead','recruiter'); }
+  function jobRowMatchHtml(j){
+    var m=_rowMatch[j.id];
+    if(!m) return '<span class="lx-muted">Looking through the pool…</span>';
+    if(m.error) return '<span class="lx-muted">Could not rank the pool — open the full job to match by hand.</span>';
+    if(!m.scoreable) return '<span class="lx-muted">Add skills to this job and the best-fitting people will be listed here.</span>';
+    if(!m.items.length) return '<span class="lx-muted">Nobody left in the pool who fits better than the people already on it.</span>';
+    var can=canAddToJob();
+    return m.items.map(function(x){
+      var c=x.candidate||{}, sub=[c.current_title,[c.city,c.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+      return '<div class="lx-match"><div class="lx-match-who"><b>'+esc(c.full_name||'—')+'</b><span>'+esc(sub)+'</span></div>'+
+        '<span class="lx-score" title="How well this person fits the job: skills, title, location">'+esc(String(x.score))+'</span>'+
+        (can?'<button class="lx-link" onclick="event.stopPropagation();bdRowAddMatch(\''+esc(j.id)+'\',\''+esc(x.candidate_id)+'\')">Add</button>'
+            :'<button class="lx-link is-off" disabled title="Recruiters, BD managers and admins can add people to a job">Add</button>')+'</div>';
+    }).join('');
+  }
+  window.bdRowAddMatch=function(jid,cid){
+    apiPost('/pipeline',{candidate_id:cid,job_order_id:jid}).then(function(){
+      showToast('Added to the job','success');
+      delete _rowPipe[jid]; delete _rowMatch[jid];
+      var el=document.getElementById('lx-jo-match-'+jid); if(el) el.innerHTML='<span class="lx-muted">Looking through the pool…</span>';
+      loadJobRowPipe(jid);
+    }).catch(function(e){
+      showToast(/already/i.test(e.message)?'Already on this job':('Could not add: '+e.message),'error');
+    });
+  };
   function jobRowFacts(j){
     var canOwn=j.poc_visible!==false;   // the owner, their manager, or admin (D-0035)
     var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
@@ -399,6 +474,17 @@
       kv('Job type',j.job_type)+kv('Remote',j.remote)+
       kv('Owner',j.bd_manager&&j.bd_manager.name)+kv('Opened',opened);
   }
+  // Quick actions: the three things people open this job FOR. One a person may not do is greyed with the reason, never removed.
+  function jobRowActions(j){
+    var can=canAddToJob(), p=_rowPipe[j.id], waiting=(p&&p.counts&&p.counts['Submitted to BDM'])||0;
+    var add=can
+      ? '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();bdOpenAddCandidate(\''+j.id+'\')">Add a candidate</button>'
+      : '<button class="btn btn-outline btn-sm" disabled title="Recruiters, BD managers and admins can add people to a job">Add a candidate</button>';
+    var review=(waiting&&j.poc_visible!==false)
+      ? '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();bdOpenJobOrder(\''+j.id+'\')">Review '+waiting+' waiting</button>':'';
+    return '<div class="lx-acts" id="lx-jo-acts-'+esc(j.id)+'"><div class="lx-head">Quick actions</div>'+add+
+      '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();bdOpenPipeline(\''+j.id+'\')">Pipeline board</button>'+review+'</div>';
+  }
   function jobRowPanel(j){
     var canOwn=j.poc_visible!==false;
     var recs=(j.recruiters||[]).map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).filter(Boolean);
@@ -418,6 +504,10 @@
       '<div class="lx-main">'+
         '<div class="lx-head">Candidates on this job</div>'+
         '<div id="lx-jo-pipe-'+esc(j.id)+'">'+jobRowPipeHtml(j)+'</div>'+
+        '<div class="lx-head lx-gap">Interviews this week <span class="lx-hint">today and the next 6 days</span></div>'+
+        '<div id="lx-jo-iv-'+esc(j.id)+'">'+jobRowInterviewsHtml(j)+'</div>'+
+        '<div class="lx-head lx-gap">Best matches not on this job yet</div>'+
+        '<div id="lx-jo-match-'+esc(j.id)+'">'+jobRowMatchHtml(j)+'</div>'+
         '<div class="lx-head lx-gap">Recruiters</div>'+
         '<div class="lx-line">'+(recs.length?esc(recs.join(', ')):'<span class="lx-muted">No recruiter assigned yet.</span>')+'</div>'+
         '<div class="lx-head lx-gap">Apply page</div>'+
@@ -425,6 +515,7 @@
       '</div>'+
       '<div class="lx-side">'+
         '<div class="lx-facts">'+jobRowFacts(j)+'</div>'+
+        jobRowActions(j)+
         '<button class="btn btn-primary btn-sm lx-open" onclick="event.stopPropagation();bdOpenJobOrder(\''+j.id+'\')">Open full job</button>'+
       '</div>'+
     '</div>';

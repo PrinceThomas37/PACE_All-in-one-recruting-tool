@@ -894,3 +894,17 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 
 /* a label's own colour, as a small square beside its name (R-136) */
 .mb-ldot{display:inline-block;width:9px;height:9px;margin-right:5px;border:1px solid #1A1033;vertical-align:-1px;flex:none}
+
+/* An opened job row (R-134): interviews this week, best matches, quick actions */
+.lx-hint{font-weight:400;letter-spacing:0;text-transform:none;margin-left:6px;color:var(--text3)}
+.lx-iv{display:flex;gap:12px;align-items:baseline;font-size:12.5px;padding:3px 0}
+.lx-iv b{font-family:var(--mono);font-size:11.5px;min-width:150px}
+.lx-match{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border)}
+.lx-match:last-child{border-bottom:0}
+.lx-match-who{flex:1;min-width:0;display:flex;flex-direction:column;font-size:12.5px}
+.lx-match-who span{font-size:11.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lx-score{font-family:var(--mono);font-weight:700;font-size:12px;border:2px solid var(--glass-brd);padding:1px 6px;background:var(--card)}
+.lx-link.is-off{opacity:.45;cursor:not-allowed}
+.lx-acts{display:flex;flex-direction:column;gap:6px}
+.lx-acts .btn{justify-content:center}
+.lx-acts .btn[disabled]{opacity:.5;cursor:not-allowed}

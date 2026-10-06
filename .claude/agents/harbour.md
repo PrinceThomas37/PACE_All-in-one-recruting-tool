@@ -13,7 +13,7 @@ a customer's name. Treat every change as outward-facing, because it is.
 
 ## You own
 `email-vars.js` · `email-tracking.js` · `email-signature.js` · `email-validation.js` ·
-`email-verify.js` · `gmail-provider.js` · `services/mail-provider.js` ·
+`email-verify.js` · `gmail-provider.js` · `services/mail-provider.js` · `services/microsoft-oauth.js` ·
 `send-queue-order.js` · `services/outreach-cycle.js` · `services/send-progress.js` · `services/send-retry.js` ·
 `services/mailbox-reassign.js` · `warmup-engine.js` · `deliverability.js` ·
 `domain-health.js` · `mailbox-health.js` · `routes/mailbox.js` · `routes/emails.js` ·
