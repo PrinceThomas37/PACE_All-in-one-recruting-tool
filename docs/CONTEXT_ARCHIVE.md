@@ -6487,3 +6487,5 @@ Owner opened with "continue where we left off" (answered from `docs/CONTEXT_WIND
 - **Tests:** new `retro-header-smoke` (11: logo show, markup static, resume after repaint, Ctrl/⌘ hint); extended `next-action-smoke` 58 (grouping; mutation: merge off → 6 fail), `mailbox-alerts-smoke` 42 (rules + routes with a writing fake), `mailbox-alerts-ui-smoke` 19, `theme-clock-smoke` 35, `reports-smoke` 20, `recruiter-dashboard-smoke`, `ui-smoothness-smoke`. Full run **180/180 on Node 22 AND on Node 26.10.0**.
 - **Not done / next:** step 3 remainder (selects/filters, stage tags and "Contacts 1" chips, avatars, drawers/modals, login backdrop, tile colours) then step 4. Open question left for the owner: is the + New button wanted on pages that already have their own add button?
 
+
+- **2026-10-06, end of Session 40 — merged on the owner's word:** owner: *"Merge it"* → PR #295 marked ready and squash-merged as `c4db341` (`main` had not moved; Supabase Preview check skipped as usual; no migration). The roadmap artifact now shows R-124 done and shipped.
