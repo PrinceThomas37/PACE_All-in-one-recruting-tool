@@ -106,7 +106,7 @@ window.UI = (function () {
     return '<div class="strip">'+(items||[]).map(function(i){
       if (i.sep) return '<div class="strip-sep"></div>';
       return '<div class="strip-i'+(i.onclick?' click':'')+(i.on?' on':'')+'"'+
-        (i.onclick?' onclick="'+i.onclick+'"':'')+'>'+
+        (i.onclick?' onclick="'+i.onclick+'"':'')+(i.title?' title="'+esc(i.title)+'"':'')+'>'+
         '<div class="strip-v">'+esc(i.v)+'</div>'+
         '<div class="strip-l">'+(i.icon?ic(i.icon):'')+esc(i.label)+'</div>'+
       '</div>';

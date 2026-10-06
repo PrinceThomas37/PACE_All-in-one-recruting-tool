@@ -113,9 +113,11 @@ router.post('/companies/bulk', auth, async (req, res) => {
 
 router.post('/companies', auth, async (req, res) => {
   try {
-    const { name, website, industry, location, size, notes } = req.body;
+    const { name, website, industry, location, size, notes, address } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name required' });
-    const { data, error } = await supabase.from('companies').insert({ name, website, industry, location, size, notes, created_by: req.user.id, ...orgStamp(req) }).select().single();
+    // `address` (migration 057) is only written when the person typed one, so a
+    // create that has none works whether or not the column exists yet.
+    const { data, error } = await supabase.from('companies').insert({ name, website, industry, location, size, notes, ...(address ? { address: String(address).trim() } : {}), created_by: req.user.id, ...orgStamp(req) }).select().single();
     if (error) throw error;
     res.status(201).json(data);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -125,8 +127,9 @@ router.put('/companies/:id', auth, async (req, res) => {
   try {
     const co = await requireClientOwner(req, res, req.params.id);
     if (!co) return; // requireClientOwner already answered (404 foreign/missing, 403 not-yours)
-    const { name, website, industry, location, size, notes } = req.body;
+    const { name, website, industry, location, size, notes, address } = req.body;
     const updates = { updated_at: new Date() };
+    if (address !== undefined) updates.address = address ? String(address).trim() : null;
     if (name !== undefined) updates.name = name;
     if (website !== undefined) updates.website = website;
     if (industry !== undefined) updates.industry = industry;

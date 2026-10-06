@@ -1,8 +1,12 @@
 // ===== RECRUITING REPORTS / ANALYTICS PAGE (additive) =====
-// A "Reports" page: headline totals, the pipeline funnel, an 8-week submission
-// trend, per-recruiter productivity, time-to-fill and top clients. Built from the
-// single org-scoped GET /reports/recruiting endpoint. Managers see the whole desk;
-// recruiters see only their own numbers.
+// The team's WORK, not the size of the database (D-0077): candidates sent to the
+// BD manager, sent to the client, interviews and placements, each counted on the
+// day it happened (services/report-work.js). A funnel with its time-in-stage
+// folded into the same rows, an 8-week trend of what was SENT, per-person work,
+// hot jobs and top clients — from the one org-scoped GET /reports/recruiting.
+// Managers see the whole desk; recruiters see only their own numbers.
+// EVERY figure here opens the drawer of the people behind it
+// (GET /reports/recruiting/rows → evidenceOpen, 64-evidence-drawer.js).
 
 (function () {
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
@@ -14,8 +18,9 @@
   STATE.reports.sel = STATE.reports.sel || {};
   STATE.reports.expanded = STATE.reports.expanded || {};
 
-  function reportsQS(){
+  function reportsQS(extra){
     var f = STATE.reports.filters||{}, p=[];
+    if(extra) Object.keys(extra).forEach(function(k){ if(extra[k]!==undefined&&extra[k]!==null&&extra[k]!=='') p.push(k+'='+encodeURIComponent(extra[k])); });
     if(f.from)p.push('from='+encodeURIComponent(f.from));
     if(f.to)p.push('to='+encodeURIComponent(f.to));
     if(f.role)p.push('role='+encodeURIComponent(f.role));
@@ -65,87 +70,139 @@
   function paint(){ if(STATE.page!=='reports') return; paintPageContent(); }
   UI.registerPage('reports', function(){ return renderReports(); });
 
-  function tile(label, value, sub){
-    return '<div class="card" style="padding:14px 16px;flex:1;min-width:130px">'+
-      '<div class="fs-24 c-text" style="font-weight:800">'+esc(value)+'</div>'+
-      '<div class="fs-12 c-text3" style="margin-top:2px">'+esc(label)+'</div>'+
-      (sub?'<div class="fs-11 c-text3" style="margin-top:2px">'+esc(sub)+'</div>':'')+
-    '</div>';
-  }
-
   // THE RETRO CHARTS (R-122 step 3). Every bar is a square paper track with a
   // hard outline and a segmented fill (the 90s level meter), coloured by what
-  // the stage MEANS rather than by the old blue ramp: purple = still ours,
-  // blue = with the client side, amber = in interviews, green = won, red =
+  // the stage MEANS rather than by the old blue ramp: purple = with the BD manager,
+  // blue = sent to the client, amber = in interviews, green = won, red =
   // lost, grey = parked. The looks are classes (retro.css .rep-*); only the
   // number-driven size is inline. An unknown stage draws purple, never nothing.
   var STAGE_TONE = {
     'Sourced':'brand', 'Screening':'brand',
-    'Submitted to BDM':'info', 'Submitted to Client':'info',
+    'Submitted to BDM':'brand', 'Submitted to Client':'info',
     'Interview Scheduled':'wait', 'Interview Completed':'wait',
     'Offer':'go', 'Joining':'go', 'Placement':'go',
     'Not Accepted':'stop', 'On Hold':'muted'
   };
   function toneOf(stage){ return STAGE_TONE[stage] || 'brand'; }
 
-  function funnelCard(funnel, stages){
+  // ── DRILL-DOWN: every number opens the people behind it (D-0077) ─────────────
+  // The owner: "when we hover over the data points or click them nothing
+  // happens, it does not show the data from which this is drawn". The list comes
+  // from GET /reports/recruiting/rows, which asks the SAME rule the count does
+  // (services/report-work.js members()), so the two cannot disagree.
+  var METRIC_INFO = {
+    to_bdm:     { t:'Sent to the BD manager', h:'Candidates a recruiter sent to the BD manager, counted on the day they were sent.' },
+    to_client:  { t:'Sent to the client',     h:'Candidates sent to the client, counted on the day they were sent.' },
+    interviews: { t:'Interviews',             h:'Candidates who got an interview scheduled, counted on that day.' },
+    placements: { t:'Placements',             h:'Candidates placed, counted on the day of the placement.' },
+    stalled:    { t:'Waiting on the BD manager', h:'Sent to the BD manager and not yet sent to the client — as of today.' }
+  };
+  function periodText(){ var f=STATE.reports.filters||{}; if(f.from&&f.to) return f.from+' to '+f.to; if(f.from) return 'from '+f.from; if(f.to) return 'until '+f.to; return 'all time'; }
+  function metricInfo(m){
+    if(METRIC_INFO[m]) return METRIC_INFO[m];
+    var d=(STATE.reports.data||{}), sd=d.stuck_days||14, k=m.indexOf(':'), st=m.slice(k+1);
+    if(m.indexOf('reached:')===0) return { t:st, h:'Candidates who reached "'+st+'", counted on the day they first got there.' };
+    if(m.indexOf('parked:')===0)  return { t:st, h:'Candidates now at "'+st+'", counted on the day they were moved there.' };
+    if(m.indexOf('now:')===0)     return { t:st+' — right now', h:'Candidates sitting at "'+st+'" today.' };
+    if(m.indexOf('stuck:')===0)   return { t:st+' — stuck', h:'Candidates who have sat at "'+st+'" for '+sd+' days or more, as of today.' };
+    return { t:'Candidates', h:'' };
+  }
+  function isNow(m){ return m==='stalled'||m.indexOf('now:')===0||m.indexOf('stuck:')===0; }
+  function dayLabel(iso){ var d=new Date(iso); return isNaN(d.getTime())?'':d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+  function drillRow(r){
+    return {
+      primary:r.candidate,
+      secondary:[r.job_title?(r.job_title+(r.job_code?' ('+r.job_code+')':'')):'',r.client||''].filter(Boolean).join(' · '),
+      chips:[r.stage].filter(Boolean),
+      when:dayLabel(r.at)+(r.recruiter?' · '+r.recruiter:''),
+      pick:(r.candidate_id&&window.bdOpenCandidate)?function(){ bdOpenCandidate(r.candidate_id); }:undefined
+    };
+  }
+  function drill(title,hint,extra){
+    if(!window.evidenceOpen) return;
+    evidenceOpen({ title:title, hint:hint, load:function(){
+      return apiGet(withTz('/reports/recruiting/rows'+reportsQS(extra))).then(function(d){
+        return { items:((d&&d.rows)||[]).map(drillRow), total:d&&d.total, more:d&&d.more };
+      });
+    }});
+  }
+  window.reportsDrillM = function(m, extra){
+    var i=metricInfo(m);
+    drill(i.t, i.h+(isNow(m)?'':' Period: '+periodText()+'.'), Object.assign({ metric:m }, extra||{}));
+  };
+  window.reportsDrillUser = function(uid, m){
+    var u=((STATE.reports.data||{}).by_user||[]).filter(function(x){ return x.user_id===uid; })[0], i=metricInfo(m);
+    drill((u?u.recruiter+' — ':'')+i.t, i.h+(isNow(m)?'':' Period: '+periodText()+'.'), { metric:m, user_id:uid });
+  };
+  window.reportsDrillWeek = function(kind, ago){
+    var t=((STATE.reports.data||{}).trend||[]).filter(function(x){ return x.ago===ago; })[0], i=METRIC_INFO[kind];
+    drill(i.t+' — '+(t?t.week:''), i.h+' One of the last eight weeks, whatever period is chosen above.', { kind:kind, ago:ago });
+  };
+  window.reportsDrillClient = function(idx){
+    var c=((STATE.reports.data||{}).top_clients||[])[idx]; if(!c) return;
+    drill(c.client+' — sent to the client', METRIC_INFO.to_client.h+' Period: '+periodText()+'.', { metric:'to_client', client:c.client });
+  };
+  window.reportsDrillJob = function(idx){
+    var j=((STATE.reports.data||{}).hot_jobs||[])[idx]; if(!j) return;
+    drill((j.job_title||'Job')+' — sent', METRIC_INFO.to_bdm.h+' Period: '+periodText()+'.', { metric:'to_bdm', job_order_id:j.job_order_id });
+  };
+
+  // THE FUNNEL, WITH TIME IN STAGE FOLDED IN (D-0077). It used to be three
+  // screens saying the same thing (a pipeline card, this funnel, and a separate
+  // time-in-stage table). One row now says: who reached the stage, how long
+  // people typically stay, and how many are stuck.
+  function funnelCard(d){
+    var funnel=d.funnel||{}, stages=d.stages||[], tis={};
+    (d.stage_time||[]).forEach(function(x){ tis[x.stage]=x; });
     var max = Math.max(1, Math.max.apply(null, stages.map(function(s){ return funnel[s]||0; })));
+    var parked = reportsParkedSet();
     var rows = stages.map(function(s){
-      var n = funnel[s]||0; var w = Math.round((n/max)*100);
-      return '<div class="rep-row">'+
+      var n = funnel[s]||0, w = Math.round((n/max)*100), t = tis[s]||{}, m = (parked[s]?'parked:':'reached:')+s;
+      var meta = '';
+      if(t.typical_days!=null && !t.final) meta += '<span class="rep-tis" title="Typical time people spend at this stage">typ. '+t.typical_days+'d</span>';
+      if(t.stuck) meta += '<span class="rep-stuckchip" onclick="event.stopPropagation();reportsDrillM(\'stuck:'+esc(s)+'\')" title="Who has sat here '+(d.stuck_days||14)+' days or more">'+t.stuck+' stuck</span>';
+      return '<div class="rep-row is-click" onclick="reportsDrillM(\''+m+'\')" title="'+esc(s)+': '+n+' — click to see who">'+
         '<div class="rep-lbl">'+esc(s)+'</div>'+
         '<div class="rep-track"><div class="rep-fill tone-'+toneOf(s)+(n?'':' is-empty')+'" style="width:'+w+'%"></div></div>'+
         '<div class="rep-num'+(n?'':' is-zero')+'">'+n+'</div>'+
+        '<div class="rep-meta">'+meta+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card rep-card"><div class="rep-ttl">Pipeline funnel</div>'+rows+'</div>';
+    return '<div class="card rep-card"><div class="rep-ttl">Work funnel</div>'+
+      '<div class="rep-sub">Candidates who reached each stage in the period. Click a bar to see who.</div>'+rows+'</div>';
   }
+  function reportsParkedSet(){ return { 'Not Accepted':1, 'On Hold':1 }; }
 
+  // WHAT WAS SENT, WEEK BY WEEK: two columns per week — sent to the BD manager
+  // and sent to the client — never "candidates added to a job" (D-0029, D-0077).
   function trendCard(trend){
-    var max = Math.max(1, Math.max.apply(null, trend.map(function(t){ return t.count; })));
-    var bars = trend.map(function(t){
-      var h = t.count ? Math.max(8, Math.round((t.count/max)*96)) : 0;
-      return '<div class="rep-col">'+
-        '<div class="rep-colv'+(t.count?'':' is-zero')+'">'+t.count+'</div>'+
-        '<div class="rep-colbar'+(t.count?'':' is-zero')+'"'+(t.count?' style="height:'+h+'px"':'')+'></div>'+
+    var max = Math.max(1, Math.max.apply(null, trend.map(function(t){ return Math.max(t.to_bdm||0, t.to_client||0); })));
+    function bar(t, key, tone, lbl){
+      var n = t[key]||0, h = n ? Math.max(8, Math.round((n/max)*96)) : 0;
+      return '<div class="rep-bar1'+(n?' is-click':'')+'"'+(n?' onclick="reportsDrillWeek(\''+key+'\','+t.ago+')"':'')+' title="'+esc(lbl)+', '+esc(t.week)+': '+n+(n?' — click to see who':'')+'">'+
+        '<div class="rep-colv'+(n?'':' is-zero')+'">'+n+'</div>'+
+        '<div class="rep-colbar tone-'+tone+(n?'':' is-zero')+'"'+(n?' style="height:'+h+'px"':'')+'></div>'+
       '</div>';
-    }).join('');
+    }
+    var cols = trend.map(function(t){ return '<div class="rep-col"><div class="rep-pair">'+bar(t,'to_bdm','brand','Sent to the BD manager')+bar(t,'to_client','info','Sent to the client')+'</div></div>'; }).join('');
     var weeks = trend.map(function(t){ return '<div class="rep-colw">'+esc(t.week)+'</div>'; }).join('');
-    return '<div class="card rep-card"><div class="rep-ttl">Submissions &mdash; last 8 weeks</div>'+
-      '<div class="rep-cols">'+bars+'</div><div class="rep-weeks">'+weeks+'</div></div>';
-  }
-
-  function recruiterCard(rows){
-    if (!rows.length) return '';
-    var head = ['Recruiter','Total','Submitted','Interviews','Placements','Fill %','Revenue']
-      .map(function(h){ return '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">'+h+'</th>'; }).join('');
-    var body = rows.map(function(r){
-      return '<tr style="border-top:1px solid var(--border)">'+
-        '<td class="fs-12_5" style="padding:8px 10px;font-weight:600">'+esc(r.recruiter)+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.total+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.submitted+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.interviews+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+r.placements+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.fill_rate+'%</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+money(r.revenue)+'</td>'+
-      '</tr>';
-    }).join('');
-    return '<div class="card" style="padding:0;overflow-x:auto"><div style="padding:14px 16px;border-bottom:1px solid var(--border)"><span class="rep-ttl">Recruiter productivity</span></div>'+
-      '<table style="width:100%;border-collapse:collapse;min-width:620px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+'</tbody></table></div>';
+    return '<div class="card rep-card"><div class="rep-ttl">Sent &mdash; last 8 weeks</div>'+
+      '<div class="rep-legend"><span><i class="rep-key tone-brand"></i>Sent to the BD manager</span><span><i class="rep-key tone-info"></i>Sent to the client</span></div>'+
+      '<div class="rep-cols">'+cols+'</div><div class="rep-weeks">'+weeks+'</div></div>';
   }
 
   function clientsCard(rows){
     if (!rows.length) return '';
     var max = Math.max(1, Math.max.apply(null, rows.map(function(r){ return r.count; })));
-    var body = rows.map(function(r){
+    var body = rows.map(function(r, i){
       var w = Math.round((r.count/max)*100);
-      return '<div class="rep-row">'+
+      return '<div class="rep-row is-click" onclick="reportsDrillClient('+i+')" title="'+esc(r.client)+': '+r.count+' sent to the client — click to see who">'+
         '<div class="rep-lbl is-name">'+esc(r.client)+'</div>'+
         '<div class="rep-track"><div class="rep-fill tone-brand" style="width:'+w+'%"></div></div>'+
         '<div class="rep-num">'+r.count+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="card rep-card"><div class="rep-ttl">Top clients by submissions</div>'+body+'</div>';
+    return '<div class="card rep-card"><div class="rep-ttl">Top clients &mdash; sent to the client</div>'+body+'</div>';
   }
 
   function filterBar(d){
@@ -168,45 +225,25 @@
   function hotJobsCard(rows){
     if(!rows||!rows.length) return '';
     var max=Math.max(1,Math.max.apply(null,rows.map(function(r){return r.score;})));
-    var body=rows.map(function(j){
+    var body=rows.map(function(j,i){
       var w=Math.round((j.score/max)*100);
       // Classes, not inline widths (R-006): 190px + a bar + 200px cannot fit a
       // phone, and an inline width is out of any stylesheet's reach.
-      return '<div class="rep-hot">'+
+      return '<div class="rep-hot is-click" onclick="reportsDrillJob('+i+')" title="Click to see who was sent on this job">'+
         '<div class="rep-hot-t"><div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_title||'—')+'</div>'+
           '<div class="fs-11 c-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
         '<div class="rep-hot-bar rep-track"><div class="rep-fill tone-brand" style="width:'+w+'%"></div></div>'+
-        '<div class="rep-hot-s"><b>'+j.submissions+'</b> subs · <b>'+j.interviews+'</b> intv</div>'+
+        '<div class="rep-hot-s"><b>'+j.submissions+'</b> to BDM · <b>'+(j.client_submissions||0)+'</b> to client · <b>'+j.interviews+'</b> intv</div>'+
       '</div>';
     }).join('');
-    return '<div class="card rep-card" style="margin-bottom:14px"><div class="rep-ttl" style="margin-bottom:6px">🔥 Hot jobs</div>'+
-      '<div class="fs-12 c-text3" style="margin-bottom:12px">Active reqs by candidates sent to the client, then to BDM, plus interviews</div>'+body+'</div>';
-  }
-
-  // TIME IN STAGE (R-001): how long people sit at each stage across the desk,
-  // and how many have been stuck past the threshold. Built by the server from
-  // the stage-change log; finished stages (Placement, Not Accepted) are never
-  // "stuck". A stage nobody has passed through yet says "so far".
-  function timeInStageCard(rows, stuckDays){
-    rows = (rows||[]).filter(function(r){ return r.now_there || r.samples; });
-    if(!rows.length) return '';
-    var days=function(n){ return n==null?'—':(n<1?'under a day':(Math.round(n)+' day'+(Math.round(n)===1?'':'s'))); };
-    var body=rows.map(function(r){
-      return '<tr><td>'+esc(r.stage)+'</td>'+
-        '<td class="num">'+(r.now_there||0)+'</td>'+
-        '<td>'+days(r.typical_days)+(r.typical_from==='still_there'&&r.typical_days!=null?' <span class="rep-muted">so far</span>':'')+'</td>'+
-        '<td class="num">'+(r.final?'<span class="rep-muted">—</span>':(r.stuck?'<b class="rep-stuck">'+r.stuck+'</b>':'0'))+'</td></tr>';
-    }).join('');
-    return '<div class="card rep-card" style="margin-bottom:14px">'+
-      '<div class="rep-ttl" style="margin-bottom:6px">Time in stage</div>'+
-      '<div class="fs-12 c-text3" style="margin-bottom:12px">How long candidates typically sit at each stage, and how many have been there '+(stuckDays||14)+'+ days</div>'+
-      '<div class="dt-wrap"><table class="rep-tis"><thead><tr><th>Stage</th><th class="num">Now there</th><th>Typical time there</th><th class="num">Stuck '+(stuckDays||14)+'+ days</th></tr></thead>'+
-      '<tbody>'+body+'</tbody></table></div></div>';
+    return '<div class="card rep-card" style="margin-bottom:14px"><div class="rep-ttl" style="margin-bottom:6px">Hot jobs</div>'+
+      '<div class="rep-sub">Active jobs ranked by candidates sent and interviews in the period. Click a job to see who.</div>'+body+'</div>';
   }
 
   function miniFunnel(f, stages){
-    var present=stages.filter(function(s){return (f[s]||0)>0;});
-    if(!present.length) return '<div class="rep-mini is-empty">No submissions in this period.</div>';
+    var work=stages.filter(function(s){ return !({ 'Not Accepted':1, 'On Hold':1 })[s]; });
+    var present=work.filter(function(s){return (f[s]||0)>0;});
+    if(!present.length) return '<div class="rep-mini is-empty">Nothing sent in this period.</div>';
     var max=Math.max(1,Math.max.apply(null,present.map(function(s){return f[s]||0;})));
     return '<div class="rep-mini">'+present.map(function(s){
       var n=f[s]||0,w=Math.round(n/max*100);
@@ -216,24 +253,29 @@
     }).join('')+'</div>';
   }
 
+  // THE TEAM'S WORK, PERSON BY PERSON — everyone in the team, so someone who has
+  // sent nothing shows 0 rather than being missing. Every number opens its
+  // people. (The old "Total" column counted candidates put on jobs — data
+  // entered, not work done — and "Fill %" was measured against it.)
   function byUserCard(rows, funnels, stages){
     if(!rows.length) return '';
     var sel=STATE.reports.sel||{}, exp=STATE.reports.expanded||{};
-    var head=['','','Who','Role','Total','Submitted','Interviews','Placements','Fill %','Revenue']
-      .map(function(h){return '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3);font-weight:700;white-space:nowrap">'+h+'</th>';}).join('');
+    var head=['','','Who','Role','Sent to BDM','Sent to client','Interviews','Placements','Placed %','Revenue']
+      .map(function(h){return '<th class="rep-th">'+h+'</th>';}).join('');
+    function num(uid,m,n){ return n?'<button class="rep-numbtn" onclick="reportsDrillUser(\''+uid+'\',\''+m+'\')" title="Click to see who">'+n+'</button>':'<span class="rep-zero">0</span>'; }
     var body=rows.map(function(r){
       var open=exp[r.user_id];
-      var rowHtml='<tr style="border-top:1px solid var(--border)">'+
-        '<td style="padding:8px 6px 8px 10px"><input type="checkbox" '+(sel[r.user_id]?'checked':'')+' onclick="reportsToggleSel(\''+r.user_id+'\')"/></td>'+
-        '<td style="padding:8px 4px"><button onclick="reportsToggleExpand(\''+r.user_id+'\')" style="border:0;background:none;cursor:pointer;color:var(--text3);font-size:12px">'+(open?'▾':'▸')+'</button></td>'+
-        '<td class="fs-12_5" style="padding:8px 10px;font-weight:600">'+esc(r.recruiter)+'</td>'+
-        '<td class="fs-11_5" style="padding:8px 10px"><span style="padding:1px 7px;border-radius:7px;font-weight:600;background:'+(r.role_label==='BD'?'var(--accent-l)':'rgba(37,99,235,.12)')+';color:'+(r.role_label==='BD'?'var(--accent)':'#2563eb')+'">'+esc(r.role_label||'Recruiter')+'</span></td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.total+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.submitted+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.interviews+'</td>'+
-        '<td style="padding:8px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+r.placements+'</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+r.fill_rate+'%</td>'+
-        '<td class="fs-12_5" style="padding:8px 10px">'+money(r.revenue)+'</td>'+
+      var rowHtml='<tr class="rep-tr">'+
+        '<td class="rep-td"><input type="checkbox" '+(sel[r.user_id]?'checked':'')+' onclick="reportsToggleSel(\''+r.user_id+'\')"/></td>'+
+        '<td class="rep-td"><button class="rep-exp" onclick="reportsToggleExpand(\''+r.user_id+'\')">'+(open?'▾':'▸')+'</button></td>'+
+        '<td class="rep-td rep-who">'+esc(r.recruiter)+'</td>'+
+        '<td class="rep-td"><span class="rep-role '+(r.role_label==='BD'?'is-bd':'')+'">'+esc(r.role_label||'Recruiter')+'</span></td>'+
+        '<td class="rep-td">'+num(r.user_id,'to_bdm',r.to_bdm)+'</td>'+
+        '<td class="rep-td">'+num(r.user_id,'to_client',r.to_client)+'</td>'+
+        '<td class="rep-td">'+num(r.user_id,'interviews',r.interviews)+'</td>'+
+        '<td class="rep-td">'+num(r.user_id,'placements',r.placements)+'</td>'+
+        '<td class="rep-td">'+(r.fill_rate==null?'<span class="rep-zero">—</span>':r.fill_rate+'%')+'</td>'+
+        '<td class="rep-td">'+money(r.revenue)+'</td>'+
       '</tr>';
       if(open) rowHtml+='<tr><td colspan="10" style="padding:0">'+miniFunnel(funnels[r.user_id]||{}, stages)+'</td></tr>';
       return rowHtml;
@@ -242,26 +284,22 @@
     var combined='';
     if(selIds.length){
       var chosen=rows.filter(function(r){return sel[r.user_id];});
-      var sum=chosen.reduce(function(a,r){return {total:a.total+r.total,submitted:a.submitted+r.submitted,interviews:a.interviews+r.interviews,placements:a.placements+r.placements,revenue:a.revenue+r.revenue};},{total:0,submitted:0,interviews:0,placements:0,revenue:0});
-      var avgFill=chosen.length?Math.round(chosen.reduce(function(a,r){return a+r.fill_rate;},0)/chosen.length):0;
-      combined='<tr style="border-top:2px solid var(--accent);background:var(--accent-l)">'+
-        '<td colspan="2" style="padding:9px 10px"></td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">Combined ('+chosen.length+')</td>'+
-        '<td style="padding:9px 10px"></td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.total+'</td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.submitted+'</td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+sum.interviews+'</td>'+
-        '<td style="padding:9px 10px;font-size:12.5px;font-weight:700;color:var(--green)">'+sum.placements+'</td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+avgFill+'% <span class="c-text3 fs-10" style="font-weight:400">avg</span></td>'+
-        '<td class="fs-12_5" style="padding:9px 10px;font-weight:700">'+money(sum.revenue)+'</td>'+
+      var sum=chosen.reduce(function(a,r){return {to_bdm:a.to_bdm+r.to_bdm,to_client:a.to_client+r.to_client,interviews:a.interviews+r.interviews,placements:a.placements+r.placements,revenue:a.revenue+r.revenue};},{to_bdm:0,to_client:0,interviews:0,placements:0,revenue:0});
+      combined='<tr class="rep-tr is-combined">'+
+        '<td colspan="2" class="rep-td"></td>'+
+        '<td class="rep-td rep-who">Combined ('+chosen.length+')</td><td class="rep-td"></td>'+
+        '<td class="rep-td">'+sum.to_bdm+'</td><td class="rep-td">'+sum.to_client+'</td><td class="rep-td">'+sum.interviews+'</td>'+
+        '<td class="rep-td">'+sum.placements+'</td>'+
+        '<td class="rep-td">'+(sum.to_client?Math.round(sum.placements/sum.to_client*100)+'%':'—')+'</td>'+
+        '<td class="rep-td">'+money(sum.revenue)+'</td>'+
       '</tr>';
     }
-    return '<div class="card" style="padding:0;overflow-x:auto;margin-bottom:14px">'+
-      '<div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">'+
-        '<span><span class="rep-ttl">Per-person productivity</span> <span class="fs-11 c-text3" style="font-weight:400">tick people to combine · ▸ opens their funnel</span></span>'+
+    return '<div class="card rep-card rep-tablecard" style="margin-bottom:14px">'+
+      '<div class="rep-tablehead">'+
+        '<span><span class="rep-ttl" style="margin:0">Work by person</span> <span class="fs-11 c-text3" style="font-weight:400">numbers open the people · tick people to combine · ▸ opens their funnel</span></span>'+
         (selIds.length?'<button class="btn btn-sm btn-outline" onclick="reportsClearSel()">Clear ('+selIds.length+')</button>':'')+
       '</div>'+
-      '<table style="width:100%;border-collapse:collapse;min-width:720px"><thead><tr style="background:var(--bg)">'+head+'</tr></thead><tbody>'+body+combined+'</tbody></table></div>';
+      '<div class="rep-tablewrap"><table class="rep-table"><thead><tr>'+head+'</tr></thead><tbody>'+body+combined+'</tbody></table></div></div>';
   }
 
   // renderReportsBody() returns the inner content (no .page wrapper) so it can be
@@ -276,32 +314,27 @@
     var d = r.data, t = d.totals || {};
     var ttf = d.avg_time_to_fill != null ? d.avg_time_to_fill + ' days' : '—';
 
+    // THE TEAM'S WORK (D-0029, D-0077): what was sent, interviewed and placed in
+    // the period — never how many candidates or jobs were typed into the system.
+    // Every tile opens the people it counts.
     var strip = UI.strip([
-      { v:(t.candidates_added||0), label:'Candidates added', icon:'user' },
-      // TWO NUMBERS, NAMED FOR WHAT THEY ARE (D-0029). One tile reading
-      // "Submissions" was ambiguous between recruiter output and what actually
-      // reached a client — and the gap between them is the useful part.
-      { v:(t.submissions||0),          label:'Sent to BDM',    icon:'send' },
-      { v:(t.client_submissions||0),   label:'Sent to client', icon:'send' },
-      { v:(t.interviews||0),       label:'Interviews',       icon:'cal' },
-      { v:(t.placements||0),       label:'Placements',       icon:'check' },
+      { v:(t.submissions||0),        label:'Sent to BDM',    icon:'send',  onclick:"reportsDrillM('to_bdm')",     title:'Candidates sent to the BD manager — click to see who' },
+      { v:(t.client_submissions||0), label:'Sent to client', icon:'send',  onclick:"reportsDrillM('to_client')",  title:'Candidates sent to the client — click to see who' },
+      { v:(t.interviews||0),         label:'Interviews',     icon:'cal',   onclick:"reportsDrillM('interviews')", title:'Interviews scheduled — click to see who' },
+      { v:(t.placements||0),         label:'Placements',     icon:'check', onclick:"reportsDrillM('placements')", title:'Placements — click to see who' },
       { sep:true },
-      { v:(t.open_jobs||0),        label:'Open jobs',        icon:'doc' },
-      { v:ttf,                     label:'Avg time-to-fill',  icon:'clock' },
-      { v:money(t.revenue),        label:'Revenue',          icon:'dollar' }
+      { v:(t.stalled_at_bdm||0),     label:'Waiting on BDM', icon:'clock', onclick:"reportsDrillM('stalled')",    title:'Sent to the BD manager, not yet to the client — click to see who' },
+      { v:ttf,                       label:'Avg time-to-fill', icon:'clock', onclick:"reportsDrillM('placements')", title:'Placements behind this average — click to see them' },
+      { v:money(t.revenue),          label:'Revenue',        icon:'dollar', onclick:"reportsDrillM('placements')", title:'Placements behind this revenue — click to see them' }
     ]);
 
-    // by_user is the per-person breakdown (with role); fall back to the older
-    // by_recruiter shape if an older backend is answering.
-    var people = (d.by_user && d.by_user.length) ? d.by_user
-      : (d.by_recruiter||[]).map(function(x,i){ return Object.assign({ user_id:'r'+i, role_label:'Recruiter' }, x); });
+    var people = d.by_user || [];
 
     var body =
       (r.loading?'<div class="fs-12 c-ink3" style="margin-bottom:10px">Updating…</div>':'')+
       // A class, not an inline grid: an inline grid cannot reflow on a phone,
       // and this one pushed the report ~200px past a 390px screen (R-006).
-      '<div class="rep-2col">'+funnelCard(d.funnel,d.stages)+trendCard(d.trend)+'</div>'+
-      timeInStageCard(d.stage_time, d.stuck_days)+
+      '<div class="rep-2col">'+funnelCard(d)+trendCard(d.trend||[])+'</div>'+
       hotJobsCard(d.hot_jobs||[])+
       byUserCard(people, d.per_user_funnels||{}, d.stages||[])+
       clientsCard(d.top_clients||[]);

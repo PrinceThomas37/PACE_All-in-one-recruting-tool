@@ -1036,3 +1036,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-06 (Session 40) — mailbox-alert endpoints (R-124)
 `routes/mailbox-alerts.js` now has `buildAlerts(req)` (scope + rules, shared) and, besides `GET /mailboxes/alerts` (adds `hidden` and per-alert `asked`): `POST /mailboxes/alerts/hide`, `POST /mailboxes/alerts/show`, `POST /mailboxes/alerts/:mailboxId/ask`. The literals are registered before the `:mailboxId` route. Hiding is stored per person in `app_settings` (`mba_hide_<userId>`, no migration); "ask" inserts a `manager_prompt` reminder for the mailbox owner via `db.forRequest(req)`.
+
+- 2026-10-06 (R-125): `routes/recruiting/analytics.js` — `loadWork(req)` is shared by `GET /reports/recruiting` (rewritten on `services/report-work.js`) and the new `GET /reports/recruiting/rows` (drill-down; metric is validated against a whitelist regex; scoped exactly like the report; cap 200). `routes/companies.js` — `POST/PUT /companies` accept `address` (written only when typed).

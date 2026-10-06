@@ -1,0 +1,18 @@
+-- ============================================================================
+-- 057 — a company's address (D-0077).
+--
+-- The owner, looking at "Add lead": "no option of adding a new company name …
+-- no address bar of the company". A company had only a free-text `location`
+-- (a city, used to infer the time zone); the street address a recruiter or
+-- researcher finds on a company's site had nowhere to go.
+--
+-- One nullable text column beside the others. `location` stays exactly what it
+-- was (a city/state, read by time-zone inference and the company search);
+-- `address` is the full address line(s) as typed. Nothing reads it except the
+-- screens that show a company, and every existing row simply has none.
+--
+-- APPLY THIS BEFORE the code that writes `address` is merged (POST/PUT
+-- /companies only include the column when the person typed one, so existing
+-- flows keep working either way).
+-- ============================================================================
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS address TEXT;

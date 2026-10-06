@@ -102,7 +102,7 @@ const TERRITORIES = [
           // The ONE definition of a submission (D-0029) and the ONE reader of a
           // staged applicant's `raw` blob (D-0028). Both are domain vocabulary,
           // so they sit with the stages they describe.
-          'services/submission-stages.js', 'services/applicants.js',
+          'services/submission-stages.js', 'services/report-work.js', 'services/applicants.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
           'services/company-merge.js', 'services/lead-fill.js',

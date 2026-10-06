@@ -325,14 +325,6 @@ function renderManagerDashboard(u){
   // (R-072, D-0056/D-0059): the team view lives on the My Team page, which has
   // its own nav item. Nothing else on this dashboard changed.
 
-  var stagePills=Object.keys(bs).map(function(s){
-    var cnt=bs[s];if(!cnt)return"";
-    return '<div style="text-align:center;padding:12px 16px;background:var(--bg);border-radius:var(--r2);min-width:76px">'+
-      '<div class="fs-22" style="font-family:var(--display);font-weight:700;color:'+recStageColor(s)+'">'+cnt+'</div>'+
-      '<div class="fs-11 c-text3" style="margin-top:2px">'+s+'</div>'+
-    '</div>';
-  }).join("");
-
   var upcomingRows=(d.upcoming_interviews||[]).map(function(iv){
     var dt;try{var x=new Date(iv.interview_at);dt=x.toLocaleDateString("en-IN",{day:"numeric",month:"short"})+' · '+x.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});}catch(e){dt='';}
     return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
@@ -390,14 +382,9 @@ function renderManagerDashboard(u){
       tile('Placements',bs['Placement']||0,'var(--green)')+
     '</div>'+
 
-    '<div class="card cp mb4">'+
-      '<div class="flex jb aic mb3">'+
-        '<div><div class="fw6">'+(scope==='org'?'Recruiting pipeline':"Your team's pipeline")+'</div><div class="f12 text3">Submissions by stage'+(scope==='team'?' across your reporting line':'')+'</div></div>'+
-        '<button class="btn btn-outline btn-sm" onclick="dashScrollToReports()">Full reports ↓</button>'+
-      '</div>'+
-      '<div class="flex gap2 flex-wrap">'+(stagePills||'<div class="text3 f13">No submissions in this scope yet.</div>')+'</div>'+
-    '</div>'+
-
+    // No "team's pipeline" card (D-0077): it showed the same stage counts as the
+    // Reports funnel below (and counted Sourced/Screening, which is inventory, as
+    // if it were the team's output). One place says it: the funnel, in Reports.
     '<div class="card cp mb4">'+
       '<div class="flex jb aic mb3">'+
         '<div><div class="fw6">Upcoming interviews</div><div class="f12 text3">'+((d.upcoming_interviews||[]).length||'No')+' scheduled</div></div>'+
