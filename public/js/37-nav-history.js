@@ -81,6 +81,25 @@
   var _cand = window.bdOpenCandidate;  window.bdOpenCandidate = function(cid){ record({k:'candidate',cid:cid}); return _cand && _cand.apply(this, arguments); };
   var _goPage = window.goPage;         // fully-wrapped goPage (all page modules already loaded)
 
+  // Put the person back where they were after their sign-in ran out (R-118, 23-auth.js): restore the saved trail,
+  // then open each level in order — the list page, the job, the candidate — the way a click would have.
+  // Each opener loads its own data, so the levels are replayed one after another, never all at once.
+  window.navResume = function(saved){
+    if (!Array.isArray(saved) || !saved.length) return false;
+    var trail = saved.filter(function(d){ return d && d.k; });
+    if (!trail.length) return false;
+    STATE.nav.stack = trail;
+    var i = 0;
+    (function next(){
+      if (i >= trail.length) return;
+      var d = trail[i++];
+      reopen(d);
+      // a deeper level opens over what the previous one painted: give that a moment to load first
+      if (i < trail.length) setTimeout(next, 450);
+    })();
+    return true;
+  };
+
   // ── public API used by the page templates ──────────────────────────────────
   window.navBack = function(){
     var stack = STATE.nav.stack;

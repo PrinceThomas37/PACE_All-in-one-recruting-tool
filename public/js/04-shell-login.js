@@ -18,8 +18,13 @@ function renderLogin(){
     ? '<div style="color:var(--red);font-size:12px;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginErr)+'</div>'
     : '<div id="login-err" style="display:none;color:var(--red);font-size:12px;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>';
 
+  // The plain reason the person is looking at the sign-in again (R-118) — a calm notice, not an error.
+  var notice=STATE.loginNotice
+    ? '<div role="status" style="color:var(--text);font-size:12.5px;background:var(--accent-l,var(--card-solid));border:1px solid var(--accent);padding:9px 11px;border-radius:var(--r);margin-bottom:12px">'+htmlEsc(STATE.loginNotice)+'</div>'
+    : '';
   var body = tab==='signup' ? renderSignupPanel() :
     // ── Log In ──────────────────────────────────────────────────────────────
+    notice+
     ssoButtons()+
     orgSsoButton()+
     '<div class="or-div">Or</div>'+

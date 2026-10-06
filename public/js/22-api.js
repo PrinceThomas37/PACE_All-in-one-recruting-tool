@@ -7,7 +7,13 @@
 // ════════════════════════════════════════════════
 var IS_FILE=window.location.protocol==='file:';
 var API_URL=(function(){var h=window.location.hostname;if(h===''||h==='localhost'||h.indexOf('127.')===0)return'https://fute-lms-backend.onrender.com';if(h.indexOf('onrender.com')>=0)return'';return'https://fute-lms-backend.onrender.com';})();
-function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok){var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
+// An expired sign-in (R-118). The server answers 401 with one of these three sentences when the session token is
+// missing, expired or from before multi-tenancy; ANY other 401 (a wrong password, "Current password incorrect") is
+// a different thing and must reach the screen that asked, so the match is on the sentence, not on the status alone,
+// and only when we actually HAD a session to lose (the login call itself has none).
+var SESSION_EXPIRED_MSG='Your session expired — please sign in again.';
+function isExpiredAnswer(status,msg){return status===401&&/^(Invalid token|No token|Your session is out of date)/i.test(String(msg||''));}
+function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok){if(hadSession&&isExpiredAnswer(r.status,d&&d.error)&&window.sessionExpired){window.sessionExpired();var x=new Error(SESSION_EXPIRED_MSG);x.status=401;x.expired=true;x.body=d;throw x;}var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
 function apiGet(p){return apiFetch('GET',p);}
 function apiPost(p,b){return apiFetch('POST',p,b);}
 function apiPut(p,b){return apiFetch('PUT',p,b);}
@@ -144,6 +150,8 @@ function loadAppData(){
       }).catch(function(){});
     }
     STATE.loading=false;render();
+    // Somebody whose sign-in ran out comes back to the place they were in (R-118, 23-auth.js).
+    if(window.resumeWhereLeftOff)resumeWhereLeftOff();
     // Auto-start progress poll for BD/BD_Lead so bar appears without any button click
     if(STATE.user&&userHasAnyRole(STATE.user,'bd','bd_lead','admin')){startProgressPoll();}
     // Start background polling to keep UI in sync (every 30s)
@@ -160,7 +168,9 @@ function refreshJobs(){return apiGet('/jobs').then(function(raw){var p=STATE._pe
 var _bgPollTimer=null;
 function startBackgroundPoll(){
   if(_bgPollTimer)return;
-  _bgPollTimer=setInterval(function(){
+  _bgPollTimer=setInterval(backgroundPollTick,180000); // 3 min — this poll ships the full jobs list, so cadence is the main egress lever
+}
+function backgroundPollTick(){
     if(!STATE.user||!STATE.token)return;
     if(document.hidden)return; // no point refreshing a tab nobody is looking at
     var pg=STATE.page;
@@ -193,8 +203,22 @@ function startBackgroundPoll(){
     if(pg==='reminders'||pg==='dashboard'){
       apiGet('/reminders').then(function(d){STATE.reminders=d||[];scheduleRender();}).catch(function(){});
     }
-  },180000); // 3 min — this poll ships the full jobs list, so cadence is the main egress lever
 }
+// Coming BACK to a tab that sat hidden (R-118): the poll above never runs for a hidden tab, so what is on screen
+// can be hours old. If the sign-in has run out meanwhile, say so now (and keep the place) instead of letting the
+// first click fail; otherwise, after a real absence, refresh what the poll refreshes. Never on a quick tab switch.
+var _hiddenAt=0, AWAY_REFRESH_MS=5*60*1000;
+function tokenExpired(tok){
+  try{var p=JSON.parse(atob(String(tok).split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return !!(p&&p.exp&&p.exp*1000<=Date.now());}
+  catch(e){return false;}   // not a token we can read — the server decides, as before
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){_hiddenAt=Date.now();return;}
+  if(!STATE.user||!STATE.token)return;
+  if(tokenExpired(STATE.token)){if(window.sessionExpired)sessionExpired();return;}
+  if(_hiddenAt&&Date.now()-_hiddenAt>=AWAY_REFRESH_MS)backgroundPollTick();
+  _hiddenAt=0;
+});
 function stopBackgroundPoll(){
   if(_bgPollTimer){clearInterval(_bgPollTimer);_bgPollTimer=null;}
 }

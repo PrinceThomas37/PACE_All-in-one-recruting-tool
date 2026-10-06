@@ -1131,13 +1131,13 @@
     return '<div class="page">'+
       (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="goPage(\'bd_joborders\')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Jobs</span></div>')+
       '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:start">'+
-          '<div>'+
+        '<div class="jo-head">'+
+          '<div class="jo-head-main">'+
             '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+code(j.job_code)+badge(j.status)+'</div>'+
             '<div style="font-size:19px;font-weight:700">'+esc(j.job_title||'')+'</div>'+
             '<div style="font-size:13px;color:var(--text3);margin-top:2px">'+esc(j.client||'')+' · '+esc(loc||'')+'</div>'+
           '</div>'+
-          '<div style="display:flex;gap:8px">'+
+          '<div class="jo-head-actions">'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Candidates</button>'+
             '<button class="btn btn-sm btn-outline" onclick="bdOpenKanban(\''+j.id+'\')">Board</button>'+
             // D-0035: `PUT /job-orders/:id` now 403s a non-owner — never draw
@@ -1153,7 +1153,7 @@
             (window.rewindBtn?rewindBtn('job_order',j.id):'')+
           '</div>'+
         '</div>'+
-        '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
+        '<div class="jo-facts">'+
           dr('Pay Rate',pay)+dr('Job Type',j.job_type)+dr('Emp. Level',j.emp_level)+
           dr('Work Auth',j.work_auth)+dr('Remote',j.remote)+dr('Clearance',j.clearance)+
           dr('Priority',j.priority)+dr('Positions',j.positions)+dr('Duration',j.duration)+

@@ -372,3 +372,9 @@
   .win-chip .wx{width:32px;height:32px}
   .overlay.win-max .modal{height:100dvh;max-height:100dvh!important}
 }
+
+/* Job page facts: two across on a phone, not three (R-120). */
+@media (max-width:860px){
+  .jo-facts{grid-template-columns:1fr 1fr}
+}
+

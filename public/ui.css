@@ -976,3 +976,12 @@ select.na-act-do{padding:4px 6px;max-width:132px}
   .cp-link,.cp-add,.cp-x{min-height:36px;display:inline-flex;align-items:center}
   .cp-val{font-size:15px}
 }
+
+/* The job page's header (R-120): title on the left, Candidates / Board / Edit job on the right. The buttons wrap
+   under the title when there is no room — they used to be one unbreakable row that ran past a phone's edge and
+   left "Edit job" cut off and unreachable. The fact grid below it is three across until the phone breakpoint. */
+.jo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px 14px;flex-wrap:wrap}
+.jo-head-main{min-width:0;flex:1 1 240px;overflow-wrap:anywhere}
+.jo-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.jo-facts{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
