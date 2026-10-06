@@ -47,7 +47,12 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
-### D-0074 · 2026-10-06 · STANDS · Build the header search (R-123); release the redesign only once Today and Leads are rebuilt
+### D-0075 · 2026-10-06 · STANDS · Merge the redesign so far (steps 1–2, the sky header, search) now — the owner wants to try it live
+**Their words:** *"okay update the context and i will resume in the next chat. and merge these, let me see how it looks and works around"*
+**Chosen:** reverses D-0074's "release only after Today + Leads": #294 merges now (179/179 on Node 22 and Node 26). The page LAYOUTS below the frame are still the old ones until steps 3–4; the owner accepts the half-new look in order to try it. D-0074's search decision stands.
+**Re-open when:** the live look causes trouble for the team (then removing the `retro.css` <link> restores the old look in one line).
+
+### D-0074 · 2026-10-06 · REVERSED (the release timing — see D-0075; the search part stands) · Build the header search (R-123); release the redesign only once Today and Leads are rebuilt
 **Their words:** *"Should I build the search box (R-123)? Yes"*. On releasing steps 1–2 they first answered *"it's done, the leads have been assigned and the emails have been triggered and sent"* — read as the day's work, not the screens — so the question was asked again plainly; answer: **"Wait for Today + Leads (Recommended)"**.
 **Chosen:** search finds candidates, leads (also by company / contact), jobs and clients, each limited to what the person's own lists show. Nothing from R-122/R-123 merges to `main` until the Today and Leads screens are rebuilt in the list / record / decide layout and the owner has seen them.
 **Re-open when:** the owner asks to release sooner, or wants the search to cover more (emails, notes, documents).
