@@ -8,6 +8,7 @@ const express = require('express');
 const own = require('../services/ownership');
 const aiProvider = require('../services/ai-provider');
 const sequenceDraft = require('../services/sequence-draft');
+const aiStyle = require('../services/ai-style');
 const sequencePrimary = require('../services/sequence-primary');
 
 module.exports = (ctx) => {
@@ -247,9 +248,11 @@ module.exports = (ctx) => {
       if (!canDesign(req)) return res.status(403).json({ error: 'Not permitted.' });
       const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 600);
       const purpose = sequenceDraft.purposeOf(req.body && req.body.purpose);
+      // D-0082: the person's own writing instructions shape "Write with AI" too (services/ai-style.js).
+      const styleNote = await aiStyle.effectiveFor(supabase, { userId: req.user.id, orgId: req.orgId });
       const result = await sequenceDraft.draft({
         prompt, purpose,
-        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 700, system, prompt: user }),
+        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 700, system: system + aiStyle.styleBlock(styleNote), prompt: user }),
       });
       res.json(Object.assign({ purpose }, result));
     } catch (err) { res.status(500).json({ error: err.message }); }

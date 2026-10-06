@@ -597,3 +597,9 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **RA / Admin Insights** looks like Lead Insights.
 - **Outlook labels show their own colour** (needs the one extra permission, asked once when a mailbox is connected); Gmail labels too.
 - **An opened job row shows interviews this week, the best-matching people not yet on the job (with Add), and quick actions.**
+
+## Round 5 (Session 40, R-146/147/148) — on the branch
+- **Tell the AI how to write** — a plain-words note per person (and an admin's team default): tone, length, how to open, what to avoid. It shapes every email the AI writes in your name, **including the first email to a lead**, the Compose generator and "Write with AI". "Try it on a sample" shows the effect first. It can never switch off the checks that keep an email honest (no invented facts, no fee figure, no call request, no leftover placeholders, one sign-off).
+- **Outreach Plan is inside Sequence** — one tab: Sequences · My wording · AI style; a step has "Edit my wording". A BD edits their own words without needing permission to change the sequence.
+- **Take leads** — a BD or BD lead is handed pool leads into their own connected mailboxes, up to a daily limit an admin sets (Admin → System Settings → Leads, 0 = off).
+- **Import into my own profile** — a BD's Excel import makes the leads theirs, in their mailboxes; then **Write the first emails** puts a first email for each into Pending to look over and send.

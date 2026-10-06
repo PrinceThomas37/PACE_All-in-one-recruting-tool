@@ -70,6 +70,8 @@ const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
 const outreachGen = require('./services/outreach-generator');
+const aiStyle = require('./services/ai-style');
+const leadDistribution = require('./services/lead-distribution');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -1804,6 +1806,15 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
       orgNameFor(email.org_id),
     ]);
     const who = senderIdentityFor(sendingEmail, email.from_email);
+    let styleNote = '';
+    try {
+      let ownerId = email.sent_by || null;
+      if (sendingEmail && sendingEmail.id) {
+        const { data: mb } = await supabase.from('user_emails').select('user_id').eq('id', sendingEmail.id).maybeSingle();
+        if (mb && mb.user_id) ownerId = mb.user_id;          // the mailbox's owner is the one whose name is on it
+      }
+      styleNote = await aiStyle.effectiveFor(supabase, { userId: ownerId, orgId: email.org_id });
+    } catch (_) { styleNote = ''; }
     const input = engineDraft.engineInput({
       job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
       sender: { name: who.displayName, email: who.emailAddress },
@@ -1811,8 +1822,10 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
     const res = await engineDraft.draftFirstEmail({
       gen: outreachGen, input, companyName,
       omitSignOff: !!String(sigTemplate || '').trim(),
+      // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js).
+      // Read once per email; a note that cannot be read is "no note", never a reason not to send.
       complete: (system, prompt) => aiProvider.complete(supabase, {
-        system, prompt, maxTokens: 800, orgId: email.org_id,
+        system: system + aiStyle.styleBlock(styleNote), prompt, maxTokens: 800, orgId: email.org_id,
         feature: input && input.thin_posting ? 'engine_first_email_thin' : 'engine_first_email',
       }),
     });
@@ -2238,33 +2251,13 @@ app.post('/distribute/execute', auth, async (req, res) => {
       return res.status(400).json({ error: 'That manager is not in your organisation.' });
     }
 
-    // Get manager's active email accounts that have a working, connected token
-    // (Microsoft or Gmail — leads used to only ever go to Microsoft mailboxes,
-    // silently starving Gmail accounts and any mailbox whose token had gone
-    // bad, since a stale/broken token row still counted as "connected").
-    const { data: allUserEmails } = await withOrg(supabase.from('user_emails')
-      .select('id,email_address,display_name,daily_send_limit').eq('user_id', manager_id).eq('is_active', true), req);
-    if (!allUserEmails?.length) return res.status(400).json({ error: 'Manager has no active email IDs configured' });
-    const emailIds = allUserEmails.map(e => e.id);
-    const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
-      supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
-      supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
-    ]);
-    const connectedIds = new Set(
-      [...(msTokens || []), ...(gmailTokens || [])]
-        .filter(t => !t.refresh_failed)
-        .map(t => t.user_email_id)
-    );
-    const userEmails = allUserEmails.filter(e => connectedIds.has(e.id));
-    if (!userEmails?.length) return res.status(400).json({ error: 'Manager has no connected, working email accounts — please connect or reconnect one under Email IDs' });
-
-    const todayDate = today();
-    const { data: sendLogs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', todayDate);
-    const sentToday = {};
-    (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent; });
-
-    const accounts = userEmails.map(a => ({ ...a, remaining: (a.daily_send_limit || 150) - (sentToday[a.id] || 0) })).filter(a => a.remaining > 0);
-    if (!accounts.length) return res.status(400).json({ error: 'All email IDs have reached daily limit' });
+    // The manager's active email accounts that have a working, connected token and room today — the ONE
+    // rule shared with a BD taking leads for themselves and with a BD's own import (services/lead-distribution.js).
+    const mb = await leadDistribution.connectedMailboxesFor({
+      supabase, withOrg: (q) => withOrg(q, req), userId: manager_id, todayStr: today(), who: 'Manager',
+    });
+    if (mb.error) return res.status(400).json({ error: mb.error });
+    const accounts = mb.accounts;
 
     const totalCapacity = accounts.reduce((s, a) => s + a.remaining, 0);
     const totalToSend = Math.min(ratio.total_to_send || 50, totalCapacity);
@@ -2282,8 +2275,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     }
     if (!pool?.length) return res.status(400).json({ error: 'No unassigned leads in pool' });
 
-    const freshnessOrder = { 'Old': 0, 'Normal': 1, 'New': 2, '': 3 };
-    const sorted = [...pool].sort((a, b) => (freshnessOrder[a.freshness] ?? 3) - (freshnessOrder[b.freshness] ?? 3));
+    const sorted = leadDistribution.orderPool(pool);
     const selected = [];
     const used = { freshness: {}, industry: {}, timezone: {} };
     for (const job of sorted) {
@@ -2298,24 +2290,9 @@ app.post('/distribute/execute', auth, async (req, res) => {
     const assignedLeads = [];
     const now = new Date();
 
-    // Build a flat assignment queue — fill each account's slot count proportionally,
-    // then shuffle the whole queue so jobs are interleaved randomly
+    // Which mailbox gets which lead: proportional to what each can still send today, then shuffled.
     const totalToAssign = selected.length;
-    const totalCap = accounts.reduce((s, a) => s + a.remaining, 0);
-    const assignmentQueue = [];
-    for (const account of accounts) {
-      // How many of the totalToAssign does this account get, proportional to its remaining capacity
-      const share = Math.round((account.remaining / totalCap) * totalToAssign);
-      for (let i = 0; i < share; i++) assignmentQueue.push(account.id);
-    }
-    // If rounding left us short or over, pad/trim to exactly totalToAssign
-    while (assignmentQueue.length < totalToAssign) assignmentQueue.push(accounts[assignmentQueue.length % accounts.length].id);
-    while (assignmentQueue.length > totalToAssign) assignmentQueue.pop();
-    // Fisher-Yates shuffle so assignment order is random, not blocks
-    for (let i = assignmentQueue.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [assignmentQueue[i], assignmentQueue[j]] = [assignmentQueue[j], assignmentQueue[i]];
-    }
+    const assignmentQueue = leadDistribution.assignmentQueue(accounts, totalToAssign);
 
     console.log(`[Distribute] Accounts in pool: ${accounts.map(a => a.email_address).join(', ')}`);
     console.log(`[Distribute] Assignment queue breakdown:`, assignmentQueue.reduce((m, id) => { m[id] = (m[id]||0)+1; return m; }, {}));
@@ -3578,11 +3555,13 @@ app.use(require('./routes/integrations')(routeCtx));
 app.use(require('./routes/deliverability')(routeCtx));
 app.use(require('./routes/mailbox-alerts')(routeCtx));
 app.use(require('./routes/ai')(routeCtx));
+app.use(require('./routes/ai-style')(routeCtx));   // D-0082: how the AI writes for each person
 app.use(require('./routes/events')(routeCtx));
 // The POC finder (R-053): a lead's four people-to-reach slots and the
 // company-size pick. Before routes/jobs so nothing there can shadow it.
 app.use(require('./routes/poc')(routeCtx));
 app.use(require('./routes/jobs')(routeCtx));
+app.use(require('./routes/lead-take')(routeCtx));   // R-148 / D-0082: a BD takes leads for themselves
 app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));

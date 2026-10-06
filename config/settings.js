@@ -160,6 +160,12 @@ const SETTINGS_SCHEMA = [
     description: "When on, the lead engine asks AI to write each lead's FIRST email just before it is sent; follow-ups stay templates. If AI is unavailable, over the daily limit, or writes something that breaks a house rule, the template goes out instead.",
     default: 1, min: 0, max: 1,
   },
+  // R-148 (D-0082, option A): a BD can take leads from the pool for themselves, up to this many a day.
+  {
+    key: 'self_assign_daily_cap', label: 'Leads a BD may take for themselves per day', unit: 'leads (0 = switched off)', group: 'Leads',
+    description: "Lets a BD or BD lead press \"Take leads\" and be handed pool leads straight into their own connected mailboxes — the same spread an admin's Assign Leads does, marked as self-assigned. They never see the pool itself, only how many they may still take today. 0 switches it off.",
+    default: 25, min: 0, max: 500,
+  },
   // The POC finder's paid rung (R-053, D-0049). Searching Apollo for names is
   // free; revealing one person's work email costs one credit. An address PACE
   // can build from the company's own learned format costs nothing and is used
