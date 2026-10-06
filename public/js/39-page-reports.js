@@ -308,7 +308,8 @@
   // The reports content, split into its three bands so the standalone page can
   // hang them off the kit's frame while the My Team hub still gets one blob it
   // can drop into a tab.
-  function reportsParts(){
+  // opts.noPeople: leave out the per-person table (the Today page's copy — it lives in My Team → Reports).
+  function reportsParts(opts){
     var r = STATE.reports;
     if (!r.data) return null;
     var d = r.data, t = d.totals || {};
@@ -336,7 +337,7 @@
       // and this one pushed the report ~200px past a 390px screen (R-006).
       '<div class="rep-2col">'+funnelCard(d)+trendCard(d.trend||[])+'</div>'+
       hotJobsCard(d.hot_jobs||[])+
-      byUserCard(people, d.per_user_funnels||{}, d.stages||[])+
+      ((opts&&opts.noPeople)?'':byUserCard(people, d.per_user_funnels||{}, d.stages||[]))+
       clientsCard(d.top_clients||[]);
 
     return { strip:strip, filters:filterBar(d), body:body, scope:d.scope, team_size:d.team_size };
@@ -344,8 +345,8 @@
 
   // Embedded form — used as the "Reports" tab inside the My Team hub, where the
   // page frame belongs to that page, not to this one.
-  window.renderReportsBody = function(){
-    var p = reportsParts();
+  window.renderReportsBody = function(opts){
+    var p = reportsParts(opts);
     if (!p) return '<div class="dt-empty">'+(STATE.reports.loading?'Loading reports…':'No data yet.')+'</div>';
     return '<div style="margin:-16px -18px 14px">'+p.strip+'</div>'+p.filters+p.body;
   };

@@ -92,7 +92,8 @@ try {
     await new Promise(r => setTimeout(r, 400));
     return { has: !!el, t, pageAfter: STATE.page };
   });
-  step('the same report is on the Dashboard (R-006)', onDash.has && /Work funnel/.test(onDash.t) && /Work by person/.test(onDash.t), onDash.t.slice(0, 80));
+  step('the same report is on the Dashboard (R-006)', onDash.has && /Work funnel/.test(onDash.t) && !/Work by person/.test(onDash.t), onDash.t.slice(0, 80));
+  step('…but the per-person table is NOT on Today (owner, 6 Oct) — it is in My Team → Reports, the same body without the option', await page.evaluate(() => /Work by person/.test(window.renderReportsBody()) && !/Work by person/.test(window.renderReportsBody({ noPeople: true }))));
   step('an old link to Reports lands on the Dashboard', onDash.pageAfter === 'dashboard');
   // On a phone the section must fit: anything wider than the screen must sit
   // inside its own horizontal scroller, never push the page sideways.
@@ -149,8 +150,9 @@ try {
   step('bars and columns are SQUARE (no rounded corners) and outlined', charts.sq && charts.outlined, JSON.stringify({ sq: charts.sq, outlined: charts.outlined }));
   step('fills are segmented like a level meter', charts.segmented);
   step('colour comes from the tone classes, never inline', charts.inlineColour === 0, String(charts.inlineColour));
+  // 'ours purple' is the soft chart purple (D-0078, owner: the old one was "very poppy"); the brand purple stays on controls.
   step('stages are coloured by meaning: won green, lost red, ours purple, client side blue',
-    charts.won === 'rgb(169, 201, 140)' && charts.lost === 'rgb(217, 138, 126)' && charts.ours === 'rgb(122, 77, 224)' && charts.client === 'rgb(156, 198, 226)', JSON.stringify([charts.won, charts.lost, charts.ours, charts.client]));
+    charts.won === 'rgb(169, 201, 140)' && charts.lost === 'rgb(217, 138, 126)' && charts.ours === 'rgb(168, 148, 219)' && charts.client === 'rgb(156, 198, 226)', JSON.stringify([charts.won, charts.lost, charts.ours, charts.client]));
   step('the period / who keys are square paper keys', charts.pills.every(r => r === '0px'), charts.pills.join());
 
   // EVERY NUMBER OPENS THE PEOPLE BEHIND IT (D-0077). The server's answer is a
@@ -192,8 +194,10 @@ try {
     col.click(); await wait();
     out.week = drawer(); out.weekAsk = asked[asked.length - 1];
     document.querySelector('.ev-head .btn').click(); await wait();
-    // a person's number
-    const nb = document.querySelector('#dash-reports .rep-numbtn'); nb.click(); await wait();
+    // a person's number — the per-person table is no longer on Today (owner, 6 Oct); it is in My Team → Reports,
+    // which draws the same body. Mount that body the way the tab does and use it.
+    const probe = document.createElement('div'); probe.id = 'people-probe'; probe.innerHTML = window.renderReportsBody(); document.body.appendChild(probe);
+    const nb = probe.querySelector('.rep-numbtn'); nb.click(); await wait();
     out.person = drawer(); out.personAsk = asked[asked.length - 1];
     document.querySelector('.overlay').click(); await wait();            // a click outside closes
     out.outsideClosed = !document.querySelector('.ev-drawer');
@@ -201,7 +205,7 @@ try {
     const chip = document.querySelector('#dash-reports .rep-stuckchip'); out.chip = !!chip;
     if (chip) { chip.click(); await wait(); out.stuck = drawer(); out.stuckAsk = asked[asked.length - 1]; document.querySelector('.ev-head .btn').click(); await wait(); }
     // zero is not a dead button: a zero person-number is plain text, a zero column has no click
-    out.zeroBtns = [...document.querySelectorAll('#dash-reports .rep-zero')].length;
+    out.zeroBtns = [...probe.querySelectorAll('.rep-zero')].length; probe.remove();
     out.deadCols = [...document.querySelectorAll('#dash-reports .rep-bar1:not(.is-click) .rep-colbar:not(.is-zero)')].length;
     return out;
   });

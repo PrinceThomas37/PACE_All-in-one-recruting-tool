@@ -8,6 +8,7 @@ const express = require('express');
 const own = require('../services/ownership');
 const aiProvider = require('../services/ai-provider');
 const sequenceDraft = require('../services/sequence-draft');
+const sequencePrimary = require('../services/sequence-primary');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -201,6 +202,38 @@ module.exports = (ctx) => {
       if (error) throw error;
       (data || []).forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
       res.json(data || []);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // PRIMARY SEQUENCE (D-0079) — the one sequence per kind of record this person starts by default.
+  // Per person, in app_settings (no migration). It only PRE-SELECTS in the Start window; nothing
+  // here sends, enrolls or replaces the Outreach Plan. Literal paths: above any '/wf/:id' route.
+  async function primaryStore(userId) {
+    try {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', sequencePrimary.primaryKey(userId)).maybeSingle();
+      return data ? data.value : null;
+    } catch (_) { return null; }
+  }
+  async function activeDefs(req) {
+    const { data } = await withOrg(supabase.from('workflow_definitions').select('id,status,entity_type'), req);
+    return data || [];
+  }
+  router.get('/wf/primary', auth, async (req, res) => {
+    try { res.json(sequencePrimary.resolve(await primaryStore(req.user.id), await activeDefs(req))); }
+    catch (err) { res.status(500).json({ error: err.message }); }
+  });
+  router.put('/wf/primary', auth, async (req, res) => {
+    try {
+      const id = String((req.body && req.body.workflow_id) || '').trim();
+      if (!id) return res.status(400).json({ error: 'workflow_id required' });
+      const def = await loadWorkflowOrgScoped(req, id);
+      if (!def) return res.status(404).json({ error: 'Workflow not found' });
+      const on = !!(req.body && req.body.on);
+      if (on && def.status !== 'active') return res.status(409).json({ error: 'Only an active sequence can be your Primary — activate it first.' });
+      const next = sequencePrimary.toggle(await primaryStore(req.user.id), def.entity_type || 'contact', def.id, on);
+      const { error } = await supabase.from('app_settings').upsert({ key: sequencePrimary.primaryKey(req.user.id), value: JSON.stringify(next) }, { onConflict: 'key' });
+      if (error) throw error;
+      res.json(sequencePrimary.resolve(next, await activeDefs(req)));
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

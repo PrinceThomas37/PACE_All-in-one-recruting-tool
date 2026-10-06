@@ -583,3 +583,5 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Outreach Plan has a live preview** of the template for an example person, signed by the sending mailbox you pick.
 - **Inbox: select many** — tick rows (or "Select all loaded"), then Archive / Delete (to Trash, recoverable) / Mark read / Mark unread / Label…; **labels** are Gmail's labels and Outlook's categories — pick, tick, or create one. Folders and opened messages come back at once.
 - **Lead Insights** (yours, your team's, one person's) is on the same kit as Reports.
+- **Primary sequence** — a left-to-right switch on each active sequence; "Start sequence" then opens with **Start with <your Primary>** ready (per person, per kind of record; never sends by itself).
+- **Editing a sequence that has people in it** — the editor says so at the top with the number and offers **Save as a new sequence** (the old one carries on unchanged).

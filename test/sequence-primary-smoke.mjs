@@ -100,7 +100,7 @@ try {
   ok('nothing is Primary yet', await ev(() => document.querySelectorAll('.wf-prim-sw.on').length === 0));
   await ev(() => document.querySelector('.wf-prim-sw[data-wf="wf-a"]').click()); await page.waitForTimeout(250);
   ok('clicking the switch asks the server to make it Primary', await ev(() => window.__puts.length === 1 && window.__puts[0][1].workflow_id === 'wf-a' && window.__puts[0][1].on === true), JSON.stringify(await ev(() => window.__puts)));
-  ok('…the switch goes to the "on" side and a "Primary" badge appears on that sequence', await ev(() => document.querySelector('.wf-prim-sw[data-wf="wf-a"]').classList.contains('on') && /Primary/.test(document.querySelector('.wf-prim-sw[data-wf="wf-a"]').closest('[data-wfcard]').innerText)));
+  ok('…the switch goes to the "on" side and a "Primary" badge appears on that sequence', await ev(() => document.querySelector('.wf-prim-sw[data-wf="wf-a"]').classList.contains('on') && !!document.querySelector('[data-wfcard="wf-a"] .wf-prim-badge') && !document.querySelector('[data-wfcard="wf-b"] .wf-prim-badge')));
   await ev(() => document.querySelector('.wf-prim-sw[data-wf="wf-b"]').click()); await page.waitForTimeout(250);
   ok('switching another one on moves it: only one is on among leads', await ev(() => document.querySelectorAll('.wf-prim-sw.on[data-kind="contact"]').length === 1 && document.querySelector('.wf-prim-sw[data-wf="wf-b"]').classList.contains('on')));
   ok('…while a candidate sequence can have its own Primary at the same time', await (async () => { await ev(() => document.querySelector('.wf-prim-sw[data-wf="wf-d"]').click()); await page.waitForTimeout(250); return ev(() => document.querySelectorAll('.wf-prim-sw.on').length === 2); })());

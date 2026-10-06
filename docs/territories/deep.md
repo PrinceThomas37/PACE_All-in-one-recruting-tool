@@ -315,3 +315,5 @@ file, so this is 047. **Next migration is 048.**
 - 2026-10-06 (R-013): two tools added under `scripts/` (deep owns that folder): `inline-to-classes.mjs` (rewrites inline type styles in `public/js` into classes and proves each change in a real browser; also owns the generated block at the end of `public/ui.css`) and `screens-fingerprint.mjs` (before/after look of every element, for work that must change nothing). Neither touches data or schema. Surface owns what they rewrite; foundry owns the proof — see their memories.
 
 - 2026-10-06 (R-125): NO migration. A planned `companies.address` column was dropped — the live table already has `address_line1/2, city, state, postal_code, country` (migration 043). Next migration is still **057**.
+
+- 2026-10-06 (R-131): a new `app_settings` key per person, `wf_primary_<userId>` = JSON {kind: workflow id} — no migration, no new table (same pattern as `mba_hide_<userId>`).

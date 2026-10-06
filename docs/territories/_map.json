@@ -2,8 +2,8 @@
   "generated": "2026-10-06",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 483,
-    "lines": 114250,
+    "files": 485,
+    "lines": 114551,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 74,
-      "lines": 31531,
+      "lines": 31594,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -37,14 +37,14 @@
         },
         {
           "f": "public/js/09-page-workflows.js",
-          "n": 1027
+          "n": 1071
         },
         {
           "f": "public/ui.css",
           "n": 1027
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-06",
       "openIn": 2,
       "openOut": 0
     },
@@ -97,7 +97,7 @@
           "n": 627
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-06",
       "openIn": 1,
       "openOut": 1
     },
@@ -299,6 +299,7 @@
         "services/submission-stages.js",
         "services/report-work.js",
         "services/sequence-templates.js",
+        "services/sequence-primary.js",
         "services/applicants.js",
         "services/candidate-fields.js",
         "services/client-resolve.js",
@@ -319,8 +320,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 32,
-      "lines": 8518,
+      "files": 33,
+      "lines": 8609,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -332,14 +333,14 @@
         },
         {
           "f": "routes/wf.js",
-          "n": 496
+          "n": 529
         },
         {
           "f": "services/recruiting-core.js",
           "n": 486
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-06",
       "openIn": 0,
       "openOut": 6
     },
@@ -406,8 +407,8 @@
         "test/",
         ".github/"
       ],
-      "files": 199,
-      "lines": 36602,
+      "files": 200,
+      "lines": 36749,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -426,7 +427,7 @@
           "n": 590
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-06",
       "openIn": 1,
       "openOut": 0
     },

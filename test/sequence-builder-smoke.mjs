@@ -137,6 +137,27 @@ try {
   step('switching back to a saved template removes the own words from the step…', await page.evaluate(() => !('subject' in STATE.wfBuilder.steps[0].config) && !('body' in STATE.wfBuilder.steps[0].config)));
   await page.evaluate(() => wfEmailMode(0, true));
   step('…and a blank own-text step saved untouched goes back to the saved template (never an empty email)', await page.evaluate(() => { const st = STATE.wfBuilder.steps[0]; st.config.subject = ''; st.config.body = ''; STATE.wfBuilder.name = 'x'; __posts.length = 0; wfSaveDefinition(); const sent = __posts[0]; return sent && !('subject' in sent[1].steps[0].config) && sent[1].steps[0].config.template_key; }));
+  // 9. A SEQUENCE WITH PEOPLE IN IT cannot have its steps changed (the server says 409). The editor says so
+  //    BEFORE anything is written, with the number, and offers "Save as a new sequence" (owner, 6 Oct: they
+  //    wrote a whole email and was only told on Save).
+  await page.evaluate(() => {
+    STATE.wf = { stats: { by_workflow: { 'wf-live': { active: 3 }, 'wf-idle': { active: 0 } } }, defs: [
+      { id: 'wf-live', name: 'Client intro', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] },
+      { id: 'wf-idle', name: 'Idle one', description: '', domain: 'sales', entity_type: 'contact', status: 'active', steps: [{ name: 'Email', channel: 'email', delay_days: 0, config: { template: 'initial' } }] }] };
+    __posts.length = 0; __toasts.length = 0; wfOpenBuilder('wf-live');
+  });
+  await page.waitForSelector('.seq-modal');
+  step('a sequence with 3 people in it says so AT THE TOP, with the number', await page.evaluate(() => { const b = document.querySelector('.wf-lock'); return !!b && /3 people are in this sequence/.test(b.innerText) && b.compareDocumentPosition(document.querySelector('.seq')) & Node.DOCUMENT_POSITION_FOLLOWING; }));
+  step('…Save is switched off and "Save as a new sequence" is the button offered', await page.evaluate(() => { const f = document.querySelector('.seq-modal .mf'); const save = [...f.querySelectorAll('button')].find(x => x.textContent.trim() === 'Save'); return !!save && save.disabled && !!f.querySelector('.wf-save-new'); }));
+  await page.evaluate(() => { wfEmailMode(0, true); wfOwnText(0, 'subject', 'New words for {{pos}}'); wfOwnText(0, 'body', 'Hi {{fn}}, this is what I wrote while people were still in the old one.'); __posts.length = 0; wfSaveAsNew(); });
+  await page.waitForTimeout(200);
+  const asNew = await page.evaluate(() => ({ posts: __posts.map(p => p[0]), body: (__posts.find(p => p[0] === '/wf/definitions') || [null, {}])[1], toasts: __toasts.map(t => t[0]).join('|') }));
+  step('Save as a new sequence CREATES one (POST) — it never edits the old one (no PUT)', asNew.posts.length === 1 && asNew.posts[0] === '/wf/definitions', JSON.stringify(asNew.posts));
+  step('…the new one has the person\'s writing, and a name that is not the same as the old one', asNew.body && asNew.body.steps[0].config.subject === 'New words for {{pos}}' && asNew.body.name !== 'Client intro' && /Client intro/.test(asNew.body.name), JSON.stringify(asNew.body && asNew.body.name));
+  step('…and the toast says the old one carries on unchanged', /old one carries on/.test(asNew.toasts), asNew.toasts);
+  await page.evaluate(() => { __posts.length = 0; wfOpenBuilder('wf-idle'); });
+  await page.waitForSelector('.seq-modal');
+  step('a sequence with nobody in it has no warning and a normal Save', await page.evaluate(() => !document.querySelector('.wf-lock') && !document.querySelector('.wf-save-new') && [...document.querySelectorAll('.seq-modal .mf button')].some(x => x.textContent.trim() === 'Save' && !x.disabled)));
   step('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
 } catch (e) { step('suite ran', false, e && e.stack || String(e)); }

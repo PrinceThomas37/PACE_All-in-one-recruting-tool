@@ -1042,3 +1042,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - 2026-10-06 (R-126): `routes/wf.js` `POST /wf/draft-email` (gate `canDesign`, prompt clipped to 600, returns `{purpose, subject, body, source, note}`); `index.js` workflow email executor resolves the template via `services/sequence-templates.js` (slot `initial` was looked up as a settings key that never existed — the step silently sent the default).
 
 - 2026-10-06 (R-127): `routes/email-history.js` — source `replies` + `?direction=in|out` (visibility decided in SQL: admin company-wide; others `job_id IN owned leads` OR `to_email IN my mailboxes`; `can_open_full` only for my own mailbox on a lead). `routes/mailbox.js` — `POST /mailbox/:mid/bulk` (≤50, per-message results, 4 at a time, trash is a MOVE), `GET/POST /mailbox/:mid/labels`, `POST …/messages/:id/labels`, a 30s per-mailbox folder cache dropped on any change, parallel CRM lookups.
+
+- 2026-10-06 (R-131): `routes/wf.js` `GET/PUT /wf/primary` (per person in `app_settings`; PUT is org-scoped, active-only → 409). Registered above any `/wf/:id` route.

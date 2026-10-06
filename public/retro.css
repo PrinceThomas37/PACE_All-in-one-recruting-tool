@@ -794,3 +794,18 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 .rep-kpi{padding:10px 12px;background:#F2EADB;border:2px solid #1A1033}
 .rep-kpi-v{font-family:var(--pixel-label);font-weight:700;font-size:20px;color:#1A1033;line-height:1.1}
 .rep-kpi-l{font-family:var(--mono);font-size:10.5px;color:#6E6290;margin-top:5px}
+
+/* ── PRIMARY SEQUENCE: a left-to-right switch (owner, 6 Oct) ───────────────── */
+.wf-prim{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.wf-prim-l{font-family:var(--pixel-label);font-weight:700;font-size:12px;letter-spacing:.08em;color:#6E6290;text-transform:uppercase}
+.wf-prim-sw{position:relative;width:46px;height:24px;padding:0;border:2px solid #1A1033;background:#F2EADB;cursor:pointer;box-shadow:2px 2px 0 var(--hard)}
+.wf-prim-sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;background:#FFF6E6;border:2px solid #1A1033}
+.wf-prim-sw.on{background:#A9C98C}
+.wf-prim-sw.on i{left:24px;background:#1A1033}
+.wf-prim-sw:active{transform:translate(2px,2px);box-shadow:none}
+.wf-prim-badge{font-family:var(--mono);font-size:10px;font-weight:700;padding:1px 7px;border:2px solid #1A1033;background:#CDB8FF;color:#1A1033;text-transform:uppercase;letter-spacing:.06em}
+
+.wf-lock{margin-bottom:12px;padding:10px 12px;background:#F8E3B7;border:2px solid #1A1033;font-size:12.5px;line-height:1.5;color:#1A1033}
+
+.dash-rep-more{margin-top:12px;font-family:var(--mono);font-size:11.5px}
+.dash-rep-more a{color:var(--accent);cursor:pointer;font-weight:700;text-decoration:underline}
