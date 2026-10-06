@@ -133,11 +133,11 @@
   };
   function matchBadge(result){
     if (!result || result.score == null) {
-      return '<span style="font-size:11px;color:var(--text3)" title="Not enough job/candidate detail to score">—</span>';
+      return '<span title="Not enough job/candidate detail to score" class="fs-11 c-text3">—</span>';
     }
     var b = BAND[result.band] || BAND.fair;
     var tip = esc(result.reasons.join(' · '));
-    return '<span title="' + tip + '" style="display:inline-block;min-width:58px;text-align:center;font-size:11px;font-weight:700;color:' + b.c +
+    return '<span title="' + tip + '" class="fs-11" style="display:inline-block;min-width:58px;text-align:center;font-weight:700;color:' + b.c +
       ';background:' + b.bg + ';border:1px solid var(--border);border-radius:10px;padding:2px 8px">' + result.score + '% ' + b.label + '</span>';
   }
 

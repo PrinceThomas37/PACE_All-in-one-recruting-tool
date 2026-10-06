@@ -36,7 +36,7 @@ function _patchZipAcSugs(inputId, results, onPickFnName) {
   if (!results || !results.length) { el.innerHTML = ''; return; }
   el.innerHTML = '<div style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:8px;box-shadow:var(--sh2);z-index:200;max-height:200px;overflow-y:auto;margin-top:2px">' +
     results.map(function (z, i) {
-      return '<div class="_zip-ac-sug" data-idx="' + i + '" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">' + htmlEsc(z.display) + '</div>';
+      return '<div class="_zip-ac-sug fs-13" data-idx="' + i + '" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border)">' + htmlEsc(z.display) + '</div>';
     }).join('') +
   '</div>';
   Array.prototype.forEach.call(el.querySelectorAll('._zip-ac-sug'), function (node) {

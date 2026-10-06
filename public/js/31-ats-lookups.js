@@ -47,12 +47,12 @@
     var cats = CATS.map(function(c){
       var rows = (all[c.key]||[]).map(function(r){
         return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'+
-          '<span style="flex:1;font-size:12.5px'+(r.is_active?'':';color:var(--text3);text-decoration:line-through')+'">'+esc(r.value)+'</span>'+
-          '<label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox"'+(r.is_active?' checked':'')+' onchange="atsLkToggle(\''+r.id+'\',this.checked)"> active</label>'+
+          '<span class="c-text3" style="flex:1;font-size:12.5px'+(r.is_active?'':';text-decoration:line-through')+'">'+esc(r.value)+'</span>'+
+          '<label class="fs-11 c-text3" style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox"'+(r.is_active?' checked':'')+' onchange="atsLkToggle(\''+r.id+'\',this.checked)"> active</label>'+
         '</div>';
-      }).join('') || '<div style="font-size:12px;color:var(--text3);padding:4px 0">No values.</div>';
+      }).join('') || '<div class="fs-12 c-text3" style="padding:4px 0">No values.</div>';
       return '<div style="margin-bottom:16px">'+
-        '<div style="font-weight:700;font-size:12.5px;margin-bottom:4px">'+esc(c.label)+'</div>'+
+        '<div class="fs-12_5" style="font-weight:700;margin-bottom:4px">'+esc(c.label)+'</div>'+
         rows+
         '<div style="display:flex;gap:6px;margin-top:6px">'+
           '<input class="sel" id="lkadd_'+c.key+'" placeholder="Add value…" style="flex:1" onkeydown="if(event.key===\'Enter\')atsLkAdd(\''+c.key+'\')">'+
@@ -63,10 +63,10 @@
     STATE.modal =
       '<div class="modal modal-w640" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-          '<div class="mhd">Manage ATS Lists</div><span style="cursor:pointer;color:var(--text3)" onclick="closeModal()">✕</span>'+
+          '<div class="mhd">Manage ATS Lists</div><span class="c-text3" style="cursor:pointer" onclick="closeModal()">✕</span>'+
         '</div>'+
         '<div style="padding:18px 20px;max-height:64vh;overflow-y:auto">'+
-          '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">These populate the dropdowns on the applicant form and filters. Inactive values are hidden from new entries but kept on existing records.</div>'+
+          '<div class="fs-12 c-text3" style="margin-bottom:12px">These populate the dropdowns on the applicant form and filters. Inactive values are hidden from new entries but kept on existing records.</div>'+
           cats+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+

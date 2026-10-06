@@ -72,13 +72,13 @@ function renderSalaryRangeControl(idPrefix,req,handlerMode){
       '<label class="flbl" style="margin:0">Salary range</label>'+
       '<select class="sel" style="font-size:12px;max-width:160px" onchange="'+onPeriod+'">'+periodOpts+'</select>'+
     '</div>'+
-    '<div id="salary-display-'+idPrefix+'" style="font-size:15px;font-weight:600;color:var(--accent);margin-top:6px">'+htmlEsc(display)+'</div>'+
+    '<div id="salary-display-'+idPrefix+'" class="fs-15 c-accent" style="font-weight:600;margin-top:6px">'+htmlEsc(display)+'</div>'+
     '<div class="salary-range-track" id="salary-track-'+idPrefix+'">'+
       '<div class="salary-range-fill" id="salary-fill-'+idPrefix+'" style="left:'+leftPct+'%;width:'+widthPct+'%"></div>'+
       '<input type="range" id="salary-min-'+idPrefix+'" min="'+st.cfg.min+'" max="'+st.cfg.max+'" step="'+st.cfg.step+'" value="'+st.min+'" oninput="'+onMin+'"/>'+
       '<input type="range" id="salary-max-'+idPrefix+'" min="'+st.cfg.min+'" max="'+st.cfg.max+'" step="'+st.cfg.step+'" value="'+st.max+'" oninput="'+onMax+'"/>'+
     '</div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">'+
+    '<div class="fs-11 c-text3" style="display:flex;justify-content:space-between">'+
       '<span>'+formatSalaryMoney(st.cfg.min,st.period)+'</span>'+
       '<span>Drag handles to set min and max</span>'+
       '<span>'+formatSalaryMoney(st.cfg.max,st.period)+'</span>'+
@@ -119,22 +119,22 @@ function renderResearchSection(j, canEdit){
       // Read-only for BD
       if(!ci.seniority&&!ci.decision_maker&&!ci.best_time&&!ci.notes)return '';
       return '<div style="padding:8px 0;border-bottom:1px solid var(--border)">'+
-        '<div style="font-weight:500;font-size:12px;margin-bottom:4px">'+cName+'</div>'+
-        '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'+
+        '<div class="fs-12" style="font-weight:500;margin-bottom:4px">'+cName+'</div>'+
+        '<div class="fs-12 c-text2" style="display:flex;gap:12px;flex-wrap:wrap">'+
           (ci.seniority?'<span>\ud83d\udcbc '+htmlEsc(ci.seniority)+'</span>':'')+
           (ci.decision_maker?'<span>\ud83d\udd11 Decision maker: '+htmlEsc(ci.decision_maker)+'</span>':'')+
           (ci.best_time?'<span>\u23f0 Best time: '+htmlEsc(ci.best_time)+'</span>':'')+
-          (ci.notes?'<div style="width:100%;margin-top:3px;color:var(--text3)">'+htmlEsc(ci.notes)+'</div>':'')+
+          (ci.notes?'<div class="c-text3" style="width:100%;margin-top:3px">'+htmlEsc(ci.notes)+'</div>':'')+
         '</div>'+
       '</div>';
     }
 
     return '<div style="padding:10px 0;border-bottom:1px solid var(--border)">'+
-      '<div style="font-weight:500;font-size:12px;margin-bottom:8px;color:var(--text2)">'+cName+'</div>'+
+      '<div class="fs-12 c-text2" style="font-weight:500;margin-bottom:8px">'+cName+'</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px">'+
-        '<div><label style="font-size:10px;color:var(--text3)">Seniority</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'seniority\',this.value)">'+senOpts+'</select></div>'+
-        '<div><label style="font-size:10px;color:var(--text3)">Decision maker?</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'decision_maker\',this.value)">'+dmOpts+'</select></div>'+
-        '<div><label style="font-size:10px;color:var(--text3)">Best time</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'best_time\',this.value)">'+timeOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Seniority</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'seniority\',this.value)">'+senOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Decision maker?</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'decision_maker\',this.value)">'+dmOpts+'</select></div>'+
+        '<div><label class="fs-10 c-text3">Best time</label><select class="sel" style="font-size:12px;padding:5px 8px" onchange="researchUpdateContact(\''+j.id+'\','+idx+',\'best_time\',this.value)">'+timeOpts+'</select></div>'+
       '</div>'+
       '<input class="inp" style="font-size:12px" placeholder="Notes about this contact..." value="'+htmlEsc(ci.notes||'')+'" oninput="researchUpdateContact(\''+j.id+'\','+idx+',\'notes\',this.value)"/>'+
     '</div>';
@@ -146,14 +146,14 @@ function renderResearchSection(j, canEdit){
     var hasData=company.headcount||company.hiring_volume||company.notes||outreach.angle||outreach.avoid||hasReq||jdRaw;
     if(!hasData&&!contactIntel.trim())return '';
     return '<div style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--r2);padding:14px;margin-top:14px">'+
-      '<div style="font-weight:700;font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">\ud83d\udd2c RA Research</div>'+
+      '<div class="fs-12 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">\ud83d\udd2c RA Research</div>'+
       (hasReq?
         '<div style="margin-bottom:10px">'+
-          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">JD requirements</div>'+
-          '<div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'+
-            (req.skill_1?'<span style="background:var(--accent-l);color:var(--accent);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_1)+'</span>':'')+
-            (req.skill_2?'<span style="background:var(--accent-l);color:var(--accent);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_2)+'</span>':'')+
-            (req.skill_3?'<span style="background:var(--accent-l);color:var(--accent);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_3)+'</span>':'')+
+          '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;margin-bottom:6px">JD requirements</div>'+
+          '<div class="fs-12 c-text2" style="display:flex;gap:8px;flex-wrap:wrap">'+
+            (req.skill_1?'<span class="c-accent" style="background:var(--accent-l);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_1)+'</span>':'')+
+            (req.skill_2?'<span class="c-accent" style="background:var(--accent-l);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_2)+'</span>':'')+
+            (req.skill_3?'<span class="c-accent" style="background:var(--accent-l);padding:2px 8px;border-radius:6px">'+htmlEsc(req.skill_3)+'</span>':'')+
             (req.salary_display?'<span style="background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:6px">'+htmlEsc(req.salary_display)+'</span>':'')+
             (req.location?'<span style="background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:6px">'+htmlEsc(req.location)+'</span>':'')+
             (req.local_hint?'<span style="background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:6px">Local: '+htmlEsc(req.local_hint)+'</span>':'')+
@@ -162,44 +162,44 @@ function renderResearchSection(j, canEdit){
         '</div>':'')+
       (company.expertise?
         '<div style="margin-bottom:10px">'+
-          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Company expertise</div>'+
-          '<div style="font-size:12px;color:var(--text2)">'+htmlEsc(company.expertise)+'</div>'+
+          '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;margin-bottom:6px">Company expertise</div>'+
+          '<div class="fs-12 c-text2">'+htmlEsc(company.expertise)+'</div>'+
         '</div>':'')+
-      (contactIntel?'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Contact Intel</div>'+contactIntel+'</div>':'')+
+      (contactIntel?'<div style="margin-bottom:10px"><div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;margin-bottom:6px">Contact Intel</div>'+contactIntel+'</div>':'')+
       (company.headcount||company.hiring_volume||company.notes?
         '<div style="margin-bottom:10px">'+
-          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Company Research</div>'+
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text2)">'+
+          '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;margin-bottom:6px">Company Research</div>'+
+          '<div class="fs-12 c-text2" style="display:flex;gap:10px;flex-wrap:wrap">'+
             (company.headcount?'<span style="background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:6px">'+htmlEsc(company.headcount)+' employees</span>':'')+
-            (company.hiring_volume?'<span style="background:var(--green-l);color:var(--green);padding:2px 8px;border-radius:6px">Hiring: '+htmlEsc(company.hiring_volume)+'</span>':'')+
+            (company.hiring_volume?'<span class="c-green" style="background:var(--green-l);padding:2px 8px;border-radius:6px">Hiring: '+htmlEsc(company.hiring_volume)+'</span>':'')+
           '</div>'+
-          (company.notes?'<div style="font-size:12px;color:var(--text2);margin-top:6px;padding:8px;background:var(--card);border-radius:var(--r)">'+htmlEsc(company.notes)+'</div>':'')+
+          (company.notes?'<div class="fs-12 c-text2" style="margin-top:6px;padding:8px;background:var(--card);border-radius:var(--r)">'+htmlEsc(company.notes)+'</div>':'')+
         '</div>':'')+
       (outreach.angle||outreach.avoid?
         '<div>'+
-          '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Outreach notes</div>'+
-          (outreach.angle?'<div style="font-size:12px;color:var(--text2);margin-bottom:4px">\ud83c\udfaf Angle: '+htmlEsc(outreach.angle)+'</div>':'')+
-          (outreach.avoid?'<div style="font-size:12px;color:var(--red)">\u26d4 Avoid: '+htmlEsc(outreach.avoid)+'</div>':'')+
+          '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;margin-bottom:6px">Outreach notes</div>'+
+          (outreach.angle?'<div class="fs-12 c-text2" style="margin-bottom:4px">\ud83c\udfaf Angle: '+htmlEsc(outreach.angle)+'</div>':'')+
+          (outreach.avoid?'<div class="fs-12 c-red">\u26d4 Avoid: '+htmlEsc(outreach.avoid)+'</div>':'')+
         '</div>':'')+
     '</div>';
   }
 
   // RA editable view — JD/requirements live on lead form; here: contact intel + company research only
   return '<div style="border-top:2px solid var(--border2);margin-top:18px;padding-top:16px">'+
-    '<div style="font-weight:700;font-size:13px;margin-bottom:14px">\ud83d\udd2c Research Notes</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:14px">Job description and requirements are edited on the lead form. Use this section for contact intel and company research.</div>'+
+    '<div class="fs-13" style="font-weight:700;margin-bottom:14px">\ud83d\udd2c Research Notes</div>'+
+    '<div class="fs-12 c-text3" style="margin-bottom:14px">Job description and requirements are edited on the lead form. Use this section for contact intel and company research.</div>'+
 
     (cs.length?
-      '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Contact Intel</div>'+
+      '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Contact Intel</div>'+
       contactIntel:'') +
 
-    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Company Research</div>'+
+    '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Company Research</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
-      '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Headcount</label><select class="sel" style="font-size:12px" id="res-headcount" onchange="researchUpdate(\''+j.id+'\',\'company\',\'headcount\',this.value)">'+headcountOpts+'</select></div>'+
-      '<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Hiring volume</label><select class="sel" style="font-size:12px" id="res-hiring" onchange="researchUpdate(\''+j.id+'\',\'company\',\'hiring_volume\',this.value)">'+hiringOpts+'</select></div>'+
+      '<div><label class="fs-11 c-text3" style="display:block;margin-bottom:4px">Headcount</label><select class="sel" style="font-size:12px" id="res-headcount" onchange="researchUpdate(\''+j.id+'\',\'company\',\'headcount\',this.value)">'+headcountOpts+'</select></div>'+
+      '<div><label class="fs-11 c-text3" style="display:block;margin-bottom:4px">Hiring volume</label><select class="sel" style="font-size:12px" id="res-hiring" onchange="researchUpdate(\''+j.id+'\',\'company\',\'hiring_volume\',this.value)">'+hiringOpts+'</select></div>'+
     '</div>'+
     '<div class="fgrp mb2"><label class="flbl">Company notes / recent news</label><textarea class="txta w100" style="min-height:60px;font-size:12px" id="res-notes" oninput="researchUpdate(\''+j.id+'\',\'company\',\'notes\',this.value)" placeholder="Any relevant company news, context...">'+htmlEsc(company.notes||'')+'</textarea></div>'+
-    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Outreach Notes</div>'+
+    '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 10px">Outreach Notes</div>'+
     '<div class="fgrp mb2"><label class="flbl">Recommended angle</label><input class="inp" style="font-size:12px" placeholder="What angle to use in outreach..." value="'+htmlEsc(outreach.angle||'')+'" oninput="researchUpdate(\''+j.id+'\',\'outreach\',\'angle\',this.value)"/></div>'+
     '<div class="fgrp mb3"><label class="flbl">What to avoid</label><input class="inp" style="font-size:12px" placeholder="Topics or approaches to avoid..." value="'+htmlEsc(outreach.avoid||'')+'" oninput="researchUpdate(\''+j.id+'\',\'outreach\',\'avoid\',this.value)"/></div>'+
 

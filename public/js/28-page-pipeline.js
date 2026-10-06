@@ -12,7 +12,7 @@
   if (STATE.bd) { STATE.bd.pipeline = STATE.bd.pipeline || []; STATE.bd.view = STATE.bd.view || {}; STATE.bd.plSel = STATE.bd.plSel || {}; }
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
   var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
   // Stage ranking used to decide when a candidate has actually been *submitted*.
   // A candidate is only "Submitted" once they reach "Submitted to BDM" (i.e. sent
@@ -33,7 +33,7 @@
     var loc = [j.city,j.state,j.country,j.zip].filter(Boolean).join(', ');
     var pay = (j.pay_min||j.pay_max) ? ((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')) : '';
     var exp = (j.exp_min||j.exp_max) ? ((j.exp_min||'0')+'–'+(j.exp_max||'?')+' yrs') : '';
-    function dr(lbl,val){ return val?'<div style="font-size:12.5px;margin-bottom:4px"><span style="color:var(--text3)">'+esc(lbl)+': </span>'+esc(val)+'</div>':''; }
+    function dr(lbl,val){ return val?'<div class="fs-12_5" style="margin-bottom:4px"><span class="c-text3">'+esc(lbl)+': </span>'+esc(val)+'</div>':''; }
     var bdName = j.bd_manager && j.bd_manager.name;
     var creatorName = j.creator && j.creator.name;
     var grid = dr('BD Manager',bdName)+(creatorName&&creatorName!==bdName?dr('Created by',creatorName):'')+
@@ -47,12 +47,12 @@
     // empty) — recruiters kept landing on candidates with no req context, so
     // this section must never silently disappear.
     var descBody = j.job_description
-      ? '<div id="'+descId+'" style="font-size:13px;line-height:1.5;white-space:pre-wrap;'+(longDesc?'max-height:110px;overflow:hidden':'')+'">'+esc(j.job_description)+'</div>'+
+      ? '<div id="'+descId+'" class="fs-13" style="line-height:1.5;white-space:pre-wrap;'+(longDesc?'max-height:110px;overflow:hidden':'')+'">'+esc(j.job_description)+'</div>'+
         (longDesc?'<button class="btn btn-sm btn-outline" style="margin-top:8px" onclick="var el=document.getElementById(\''+descId+'\');var open=el.style.maxHeight===\'none\';el.style.maxHeight=open?\'110px\':\'none\';el.style.overflow=open?\'hidden\':\'visible\';this.textContent=open?\'Show more\':\'Show less\'">Show more</button>':'')
-      : '<div style="font-size:12.5px;color:var(--text3);font-style:italic">No job description was provided by the BD team yet.</div>';
+      : '<div class="fs-12_5 c-text3" style="font-style:italic">No job description was provided by the BD team yet.</div>';
     var desc =
       '<div style="margin-top:'+(grid?'12px':'0')+';padding-top:'+(grid?'12px':'0')+(grid?';border-top:1px solid var(--border)':'')+'">'+
-        '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Job Description</div>'+descBody+
+        '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Job Description</div>'+descBody+
       '</div>';
     return '<div class="card" style="padding:16px 18px;margin-bottom:14px">'+
       (grid?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px 18px">'+grid+'</div>':'')+
@@ -136,8 +136,8 @@
       // "Added"; an early-stage one shows nothing extra (the Stage cell says it).
       var isSubmitted = promoted && STAGE_RANK[curStage]!=null && STAGE_RANK[curStage] >= SUBMITTED_RANK;
       var statusMark = !promoted
-        ? '<span style="font-size:11px;color:var(--text3);font-weight:700;background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px;margin-right:4px">Added</span>'
-        : (isSubmitted ? '<span style="font-size:11px;color:var(--green);font-weight:700;margin-right:4px">✓ Submitted</span>' : '');
+        ? '<span class="fs-11 c-text3" style="font-weight:700;background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px;margin-right:4px">Added</span>'
+        : (isSubmitted ? '<span class="fs-11 c-green" style="font-weight:700;margin-right:4px">✓ Submitted</span>' : '');
       var stageOpts = (window.ATS_STAGE_LIST||[]).map(function(x){
         return '<option value="'+esc(x)+'"'+(curStage===x?' selected':'')+'>'+esc(x)+'</option>'; }).join('');
       var statusSel =
@@ -145,30 +145,30 @@
           (promoted?'':'<option value="">Not submitted</option>')+
           stageOpts+
         '</select>'+
-        (p.submission&&p.submission.sub_stage?'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+esc(p.submission.sub_stage)+'</div>':'');
-      var resume = c.resume_url ? '<a href="'+esc(c.resume_url)+'" target="_blank" rel="noopener" style="color:var(--accent)">↗</a>' : '—';
+        (p.submission&&p.submission.sub_stage?'<div class="fs-10 c-text3" style="margin-top:2px">'+esc(p.submission.sub_stage)+'</div>':'');
+      var resume = c.resume_url ? '<a href="'+esc(c.resume_url)+'" target="_blank" rel="noopener" class="c-accent">↗</a>' : '—';
       return '<tr style="border-top:1px solid var(--border)">'+
         '<td style="padding:8px 9px"><input id="pl-chk-'+p.id+'" type="checkbox" '+(sel[p.id]?'checked':'')+' onclick="plToggleSel(\''+p.id+'\')"></td>'+
         '<td style="padding:8px 9px;white-space:nowrap">'+code(p.pipeline_code||'—')+'</td>'+
-        '<td style="padding:8px 9px;white-space:nowrap;font-size:12.5px"><span style="font-weight:600;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span> '+(c.candidate_code?'<span style="font-size:10px;color:var(--text3)">'+esc(c.candidate_code)+'</span>':'')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(c.current_title||c.headline||'—')+'</td>'+
+        '<td class="fs-12_5" style="padding:8px 9px;white-space:nowrap"><span style="font-weight:600;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+c.id+'\')">'+esc(c.full_name||'—')+'</span> '+(c.candidate_code?'<span class="fs-10 c-text3">'+esc(c.candidate_code)+'</span>':'')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(c.current_title||c.headline||'—')+'</td>'+
         '<td style="padding:8px 9px">'+(window.matchBadge?matchBadge(matchScore(c,j)):'')+'</td>'+
         '<td style="padding:8px 9px">'+statusSel+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.work_auth_snap||c.work_authorization||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.phone||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+(c.email?'<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(c.email).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE" style="color:var(--accent)">'+esc(c.email)+'</a>':'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(candLoc(c))+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.country||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(c.experience_years!=null?c.experience_years:'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.source||c.source||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:14px;text-align:center">'+resume+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.bill_rate||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.pay_rate||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px">'+esc(p.employer_name||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.availability||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.notice_period||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc(p.current_ctc||'—')+'</td>'+
-        '<td style="padding:8px 9px;font-size:12px;white-space:nowrap">'+esc((p.tagger&&p.tagger.name)||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.work_auth_snap||c.work_authorization||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(c.phone||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+(c.email?'<a href="#" onclick="event.preventDefault();event.stopPropagation();mbComposeTo(decodeURIComponent(\''+encodeURIComponent(c.email).replace(/\x27/g,'%27')+'\'))" title="Write to this person in PACE" style="color:var(--accent)">'+esc(c.email)+'</a>':'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(candLoc(c))+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(c.country||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(c.experience_years!=null?c.experience_years:'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.source||c.source||'—')+'</td>'+
+        '<td class="fs-14" style="padding:8px 9px;text-align:center">'+resume+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.bill_rate||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.pay_rate||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px">'+esc(p.employer_name||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.availability||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.notice_period||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc(p.current_ctc||'—')+'</td>'+
+        '<td class="fs-12" style="padding:8px 9px;white-space:nowrap">'+esc((p.tagger&&p.tagger.name)||'—')+'</td>'+
         '<td style="padding:8px 9px;font-size:12px;color:var(--text3);white-space:nowrap">'+fmtDate(p.tagged_at)+'</td>'+
         '<td style="padding:8px 9px;white-space:nowrap">'+
           statusMark+
@@ -179,7 +179,7 @@
       '</tr>';
     }).join('');
     if (!rows.length) body = (STATE.bd.plQ
-      ? '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidate on this job matches “'+esc(STATE.bd.plQ)+'”. <span style="color:var(--accent);cursor:pointer" onclick="plSearchClear()">Clear the search</span></td></tr>'
+      ? '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidate on this job matches “'+esc(STATE.bd.plQ)+'”. <span class="c-accent" style="cursor:pointer" onclick="plSearchClear()">Clear the search</span></td></tr>'
       : '<tr><td colspan="23" style="padding:40px;text-align:center;color:var(--text3)">No candidates on this job yet. '+
         '<span style="color:var(--accent);cursor:pointer" onclick="plOpenAdd(\''+j.id+'\')">Add a candidate →</span></td></tr>');
 
@@ -254,7 +254,7 @@
     var u = STATE.user;
     var jid = STATE.bd.view && STATE.bd.view.pipelineJoId;
     var j = joById(jid);
-    if (!j) return '<div class="page"><div style="padding:40px;text-align:center;color:var(--text3)">Job not found.</div></div>';
+    if (!j) return '<div class="page"><div class="c-text3" style="padding:40px;text-align:center">Job not found.</div></div>';
     // "Best matches" ranks the WHOLE candidate database against this job, which
     // the browser can't do (it only ever holds this job's pipeline) — so that
     // view is server-scored and rendered separately.
@@ -273,7 +273,7 @@
 
     var tabs =
       '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Candidates ('+total+')</div>'+
+        '<div class="fs-13 c-accent" style="padding:8px 16px;font-weight:700;border-bottom:2px solid var(--accent)">Candidates ('+total+')</div>'+
         '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plOpenMatches(\''+j.id+'\')">Best matches</div>'+
         '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
         (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
@@ -290,8 +290,8 @@
     return '<div class="page">'+
       (window.navBar?navBar():'')+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-        '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span style="font-weight:700;font-size:17px">'+esc(j.job_title||'')+'</span></div>'+
-        '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.client||'')+'</div></div>'+
+        '<div><div style="display:flex;gap:8px;align-items:center">'+code(j.job_code)+'<span class="fs-17" style="font-weight:700">'+esc(j.job_title||'')+'</span></div>'+
+        '<div class="fs-12_5 c-text3">'+esc(j.client||'')+'</div></div>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn btn-outline" onclick="bdOpenEditJob(\''+j.id+'\')">Edit job</button>'+
           '<button class="btn btn-outline" onclick="plOpenSourcing(\''+j.id+'\')">Source candidates</button>'+
@@ -300,13 +300,13 @@
       '</div>'+
       jobCard+
       tabs+bulkBar+
-      (total ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">'+
+      (total ? '<div class="fs-12" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
         '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px">'+
           '<input id="pl-q" class="sel" type="search" style="max-width:340px" placeholder="Search this job’s candidates — name, skill, title, place…" value="'+esc(STATE.bd.plQ||'')+'" oninput="plSearch(this.value)" autocomplete="off">'+
-          '<span id="pl-qcount" style="color:var(--text3)">'+esc(plCountLine(rows.length,total))+'</span>'+
+          '<span id="pl-qcount" class="c-text3">'+esc(plCountLine(rows.length,total))+'</span>'+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:6px">'+
-        '<span style="color:var(--text3)">Sort by</span>'+
+        '<span class="c-text3">Sort by</span>'+
         ['match','recent'].map(function(m){ var on=sortMode===m;
           return '<button class="btn btn-sm '+(on?'btn-primary':'btn-outline')+'" onclick="plSetSort(\''+m+'\')">'+(m==='match'?'Best match':'Recently added')+'</button>'; }).join('')+
         '</div>'+
@@ -367,7 +367,7 @@
   function plBulkBarInner(count){
     if(!count) return '';
     return '<div class="card" style="padding:9px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
-      '<span style="font-size:12.5px;color:var(--text2)"><b>'+count+'</b> selected</span>'+
+      '<span class="fs-12_5 c-text2"><b>'+count+'</b> selected</span>'+
       // Session 31: the owner asked for an email option here. It is NOT the
       // removed D-0012 flow coming back — it opens the one survivor, Email →
       // Compose → Candidates, with this job and these people already picked.
@@ -380,7 +380,7 @@
       // the system; see CAPABILITIES.md "Emailing a candidate about a job".
       (window.stageGroupSelect ? stageGroupSelect(count, 'plMoveGroup(this.value);this.value=\'\'') : '')+
       '<button class="btn btn-sm btn-outline" onclick="plClearSel()">Clear</button>'+
-      (window.stageGroupHint && stageGroupHint() ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--text3)">'+esc(stageGroupHint())+'</div>' : '')+
+      (window.stageGroupHint && stageGroupHint() ? '<div class="fs-11_5 c-text3" style="flex-basis:100%">'+esc(stageGroupHint())+'</div>' : '')+
     '</div>';
   }
   // Repaint ONLY the checkboxes + the bulk bar in place — never a full render() —
@@ -437,18 +437,18 @@
     var p = (STATE.bd.pipeline||[]).find(function(x){ return x.id===id; }); if(!p) return;
     STATE.bd._plEdit = Object.assign({}, p);
     var f = STATE.bd._plEdit;
-    function row(label,key){ return '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+'</label>'+
+    function row(label,key){ return '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">'+label+'</label>'+
       '<input class="sel" value="'+esc(f[key]||'')+'" oninput="plEditSet(\''+key+'\',this.value)"></div>'; }
     STATE.modal =
       '<div class="modal modal-w560" onclick="event.stopPropagation()">'+
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px">Edit Pipeline Entry '+code(p.pipeline_code||'')+'</div>'+
+        '<div class="fs-15" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Edit Pipeline Entry '+code(p.pipeline_code||'')+'</div>'+
         '<div style="padding:18px 20px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
           row('Work Authorization','work_auth_snap')+row('Employer','employer_name')+
           row('Bill Rate','bill_rate')+row('Pay Rate','pay_rate')+
           row('Availability','availability')+row('Notice Period','notice_period')+
           row('Current CTC','current_ctc')+row('Source','source')+
         '</div>'+
-        '<div style="margin-top:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Notes</label>'+
+        '<div style="margin-top:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Notes</label>'+
           '<textarea class="sel" style="min-height:56px;resize:vertical" oninput="plEditSet(\'notes\',this.value)">'+esc(f.notes||'')+'</textarea></div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
@@ -565,8 +565,8 @@
 
     var tabs =
       '<div style="display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:14px">'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="plCloseMatches()">Candidates</div>'+
-        '<div style="padding:8px 16px;font-size:13px;font-weight:700;color:var(--accent);border-bottom:2px solid var(--accent)">Best matches</div>'+
+        '<div class="fs-13 c-text3" style="padding:8px 16px;font-weight:600;cursor:pointer" onclick="plCloseMatches()">Candidates</div>'+
+        '<div class="fs-13 c-accent" style="padding:8px 16px;font-weight:700;border-bottom:2px solid var(--accent)">Best matches</div>'+
         '<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenKanban(\''+j.id+'\')">Board</div>'+
         (isBDM(u)?'<div style="padding:8px 16px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer" onclick="bdOpenJobOrder(\''+j.id+'\')">Job details</div>':'')+
       '</div>';
@@ -576,19 +576,19 @@
     // rather than showing a confidently useless list.
     var notice = m.scoreable === false
       ? '<div class="card" style="padding:12px 14px;margin-bottom:12px;border-left:3px solid var(--amber)">'+
-          '<div style="font-size:13px;font-weight:700;margin-bottom:3px">This job lists no skills yet</div>'+
-          '<div style="font-size:12.5px;color:var(--text2)">Matching is mostly guesswork without them — scores below are based only on title and location. '+
+          '<div class="fs-13" style="font-weight:700;margin-bottom:3px">This job lists no skills yet</div>'+
+          '<div class="fs-12_5 c-text2">Matching is mostly guesswork without them — scores below are based only on title and location. '+
           '<button class="btn btn-sm btn-outline" style="margin-left:6px" onclick="plParseJd(\''+j.id+'\')">Read skills from the job description</button></div>'+
         '</div>'
       : '';
 
     var body;
     if (m.loading){
-      body = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Scoring the candidate database…</div>';
+      body = '<div class="c-text3 fs-13" style="padding:40px;text-align:center">Scoring the candidate database…</div>';
     } else if (m.error){
-      body = '<div style="padding:30px;text-align:center;color:var(--red);font-size:13px">'+esc(m.error)+'</div>';
+      body = '<div class="c-red fs-13" style="padding:30px;text-align:center">'+esc(m.error)+'</div>';
     } else if (!(m.results||[]).length){
-      body = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">'+
+      body = '<div class="c-text3 fs-13" style="padding:40px;text-align:center">'+
         (m.q||m.minScore ? 'No candidates match those filters.' : 'No candidates in the database yet.')+'</div>';
     } else {
       var head = ['Match','Why','Candidate','Title','Employer','Exp','Work Auth','Location','Email','Mobile','']
@@ -603,7 +603,7 @@
           // nobody trusts. Show them inline, not only on hover.
           '<td style="'+td+';color:var(--text3);font-size:11.5px;max-width:230px">'+esc((r.reasons||[]).join(' · '))+'</td>'+
           '<td style="'+td+';font-weight:600"><a href="#" onclick="bdOpenCandidate(\''+c.id+'\');return false">'+esc(c.full_name||'—')+'</a>'+
-            (c.candidate_code?'<div style="font-size:11px;color:var(--text3)">'+esc(c.candidate_code)+'</div>':'')+'</td>'+
+            (c.candidate_code?'<div class="fs-11 c-text3">'+esc(c.candidate_code)+'</div>':'')+'</td>'+
           '<td style="'+td+'">'+esc(c.current_title||'—')+'</td>'+
           '<td style="'+td+'">'+esc(c.current_employer||'—')+'</td>'+
           '<td style="'+td+'">'+(c.experience_years!=null?esc(String(c.experience_years)):'—')+'</td>'+
@@ -613,7 +613,7 @@
           '<td style="'+td+'">'+esc(c.phone||'—')+'</td>'+
           '<td style="'+td+';text-align:right;white-space:nowrap">'+
             (already
-              ? '<span style="font-size:11.5px;color:var(--green);font-weight:600">✓ In pipeline</span>'
+              ? '<span class="fs-11_5 c-green" style="font-weight:600">✓ In pipeline</span>'
               : '<button class="btn btn-sm btn-primary" onclick="plTagMatch(\''+c.id+'\',this)">+ Add</button>')+
           '</td>'+
         '</tr>';
@@ -625,8 +625,8 @@
     var bands = [[0,'All'],[25,'Fair +'],[50,'Good +'],[75,'Strong only']];
     var filters =
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">'+
-        '<div style="font-size:12.5px;color:var(--text3)">'+
-          (m.loading?'':'Showing <strong style="color:var(--text2)">'+((m.results||[]).length)+'</strong> of '+(m.total||0)+' matched'+
+        '<div class="fs-12_5 c-text3">'+
+          (m.loading?'':'Showing <strong class="c-text2">'+((m.results||[]).length)+'</strong> of '+(m.total||0)+' matched'+
             (m.poolSize?' · '+m.poolSize+' candidates scored':''))+
         '</div>'+
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
@@ -639,8 +639,8 @@
 
     return '<div class="page">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">'+
-        '<div><div style="font-size:19px;font-weight:800">'+esc(j.job_title||'Job')+'</div>'+
-          '<div style="font-size:12.5px;color:var(--text3)">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
+        '<div><div class="fs-19" style="font-weight:800">'+esc(j.job_title||'Job')+'</div>'+
+          '<div class="fs-12_5 c-text3">'+esc(j.job_code||'')+(j.client?' · '+esc(j.client):'')+'</div></div>'+
         '<button class="btn btn-outline" onclick="plCloseMatches()">← Back to pipeline</button>'+
       '</div>'+
       tabs + notice + filters + body +

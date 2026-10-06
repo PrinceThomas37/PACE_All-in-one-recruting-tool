@@ -22,8 +22,8 @@ function bdStatsFromServer(t){
   }).sort(function(a,b){return b.convRate-a.convRate;});
 }
 function bdTeamStatus(t){
-  if(!t||t.loading&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Loading the team\u2019s numbers\u2026</div>';
-  if(t.error&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--red);font-size:13px">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.bdTeamInsights=null;render();return false">try again</a></div>';
+  if(!t||t.loading&&!t.data)return '<div class="c-text3 fs-13" style="padding:40px;text-align:center">Loading the team\u2019s numbers\u2026</div>';
+  if(t.error&&!t.data)return '<div class="c-red fs-13" style="padding:40px;text-align:center">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.bdTeamInsights=null;render();return false">try again</a></div>';
   return '';
 }
 
@@ -47,8 +47,8 @@ function raStatsFromServer(t){
   }).sort(function(a,b){return b.month-a.month;});
 }
 function raTeamStatus(t){
-  if(!t||t.loading&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">Loading the team\u2019s numbers\u2026</div>';
-  if(t.error&&!t.data)return '<div style="padding:40px;text-align:center;color:var(--red);font-size:13px">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.raTeamInsights=null;render();return false">try again</a></div>';
+  if(!t||t.loading&&!t.data)return '<div class="c-text3 fs-13" style="padding:40px;text-align:center">Loading the team\u2019s numbers\u2026</div>';
+  if(t.error&&!t.data)return '<div class="c-red fs-13" style="padding:40px;text-align:center">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.raTeamInsights=null;render();return false">try again</a></div>';
   return '';
 }
 
@@ -73,11 +73,11 @@ function renderInsights(){
     var leaderBD=bdStats.find(function(r){return r.total>0&&r.convRate>0;})||(bdStats.find(function(r){return r.total>0;})||null);
     var leaderBannerBD=leaderBD?
       '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
-        '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
-          '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
-          '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leaderBD.bd.name)+'</div>'+
-          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leaderBD.convRate+'% conversion \u00b7 '+leaderBD.month+' leads in 30 days</div></div>'+
-        '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leaderBD.convRate+'%</div><div style="font-size:11px;opacity:.78">conversion</div></div>'+
+        '<div class="fs-32">\uD83C\uDFC6</div><div style="flex:1">'+
+          '<div class="fs-11" style="font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
+          '<div class="fs-20" style="font-weight:700;font-family:var(--display)">'+htmlEsc(leaderBD.bd.name)+'</div>'+
+          '<div class="fs-12" style="opacity:.82;margin-top:2px">'+leaderBD.convRate+'% conversion \u00b7 '+leaderBD.month+' leads in 30 days</div></div>'+
+        '<div style="text-align:right"><div class="fs-36" style="font-weight:700;font-family:var(--display);line-height:1">'+leaderBD.convRate+'%</div><div class="fs-11" style="opacity:.78">conversion</div></div>'+
       '</div>':'';
 
     var teamTotalBD=bdStats.reduce(function(s,r){return s+r.total;},0);
@@ -87,10 +87,10 @@ function renderInsights(){
 
     var lbRowsBD=bdStats.map(function(r,i){
       return '<tr style="cursor:default" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-        '<td style="padding:10px 14px;font-weight:500;font-size:13px"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;color:var(--text3);min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span>'+htmlEsc(r.bd.name)+'</span></div></td>'+
+        '<td class="fs-13" style="padding:10px 14px;font-weight:500"><div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span>'+htmlEsc(r.bd.name)+'</span></div></td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--accent)">'+r.today+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px">'+r.week+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600">'+r.month+'</td>'+
+        '<td class="fs-13" style="padding:10px 8px;text-align:center">'+r.week+'</td>'+
+        '<td class="fs-13" style="padding:10px 8px;text-align:center;font-weight:600">'+r.month+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.sent+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--green)">'+r.pos+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)" title="Leads where a contact has replied">'+r.replyRate+'%</td>'+
@@ -100,7 +100,7 @@ function renderInsights(){
 
     var switcherBD='<div style="display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'+
       '<button onclick="STATE.insightsTeam=\'ra\';STATE.insightsSelectedRA=null;render()" style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--text3)">RA Team</button>'+
-      '<button style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">BD Team</button>'+
+      '<button class="fs-13" style="padding:8px 20px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">BD Team</button>'+
     '</div>';
 
     return '<div class="page">'+
@@ -110,12 +110,12 @@ function renderInsights(){
       switcherBD+
       leaderBannerBD+
       '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--accent)">'+teamTotalBD+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Total leads</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--teal)">'+teamSentBD+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Emails sent</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--green)">'+teamConvRateBD+'%</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Team conv. rate</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-accent" style="font-weight:700">'+teamTotalBD+'</div><div class="fs-12 c-text3" style="margin-top:3px">Total leads</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-teal" style="font-weight:700">'+teamSentBD+'</div><div class="fs-12 c-text3" style="margin-top:3px">Emails sent</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-green" style="font-weight:700">'+teamConvRateBD+'%</div><div class="fs-12 c-text3" style="margin-top:3px">Team conv. rate</div></div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
-        '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px">BD Manager performance</div>'+
+        '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700">BD Manager performance</div>'+
         (bdTeamStatus(tBD)||(allBDs.length?
           '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
             '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">BD Manager</th>'+
@@ -127,7 +127,7 @@ function renderInsights(){
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Replied %</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
           '</tr></thead><tbody>'+lbRowsBD+'</tbody></table></div>':
-          '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers in the system yet.</div>'))+
+          '<div class="c-text3 fs-13" style="padding:40px;text-align:center">No BD Managers in the system yet.</div>'))+
       '</div></div>';
   }
 
@@ -142,11 +142,11 @@ function renderInsights(){
     var leader=raStats.find(function(r){return r.month>0;})||null;
     var leaderBanner=leader?
       '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
-        '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
-          '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer this month</div>'+
-          '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leader.ra.name)+'</div>'+
-          '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.month+' leads in 30 days \u00b7 '+leader.assignPct+'% assigned</div></div>'+
-        '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leader.month+'</div><div style="font-size:11px;opacity:.78">leads</div></div>'+
+        '<div class="fs-32">\uD83C\uDFC6</div><div style="flex:1">'+
+          '<div class="fs-11" style="font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer this month</div>'+
+          '<div class="fs-20" style="font-weight:700;font-family:var(--display)">'+htmlEsc(leader.ra.name)+'</div>'+
+          '<div class="fs-12" style="opacity:.82;margin-top:2px">'+leader.month+' leads in 30 days \u00b7 '+leader.assignPct+'% assigned</div></div>'+
+        '<div style="text-align:right"><div class="fs-36" style="font-weight:700;font-family:var(--display);line-height:1">'+leader.month+'</div><div class="fs-11" style="opacity:.78">leads</div></div>'+
       '</div>':'';
 
     var teamTotal=raStats.reduce(function(s,r){return s+r.total;},0);
@@ -157,10 +157,10 @@ function renderInsights(){
 
     var lbRows=raStats.map(function(r,i){
       return '<tr onclick="loadRAInsights(\''+r.ra.id+'\')" style="cursor:pointer" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-        '<td style="padding:10px 14px;font-weight:500;font-size:13px"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;color:var(--text3);min-width:16px">'+(i+1)+'</span>'+av(r.ra,'28')+'<span>'+htmlEsc(r.ra.name)+'</span></div></td>'+
+        '<td class="fs-13" style="padding:10px 14px;font-weight:500"><div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.ra,'28')+'<span>'+htmlEsc(r.ra.name)+'</span></div></td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--accent)">'+r.today+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px">'+r.week+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600">'+r.month+'</td>'+
+        '<td class="fs-13" style="padding:10px 8px;text-align:center">'+r.week+'</td>'+
+        '<td class="fs-13" style="padding:10px 8px;text-align:center;font-weight:600">'+r.month+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--amber)">'+r.dups+'</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.assignPct+'%</td>'+
         '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convPct+'%</td>'+
@@ -168,7 +168,7 @@ function renderInsights(){
     }).join('');
 
     var switcherRA=isAdmin?'<div style="display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'+
-      '<button style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">RA Team</button>'+
+      '<button class="fs-13" style="padding:8px 20px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">RA Team</button>'+
       '<button onclick="STATE.insightsTeam=\'bd\';STATE.insightsSelectedRA=null;render()" style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--text3)">BD Team</button>'+
     '</div>':'';
 
@@ -179,13 +179,13 @@ function renderInsights(){
       switcherRA+
       leaderBanner+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--accent)">'+teamTotal+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Total leads</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--teal)">'+teamMonth+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">This month</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--green)">'+teamAssignPct+'%</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Assign rate</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--amber)">'+teamDups+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Duplicates</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-accent" style="font-weight:700">'+teamTotal+'</div><div class="fs-12 c-text3" style="margin-top:3px">Total leads</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-teal" style="font-weight:700">'+teamMonth+'</div><div class="fs-12 c-text3" style="margin-top:3px">This month</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-green" style="font-weight:700">'+teamAssignPct+'%</div><div class="fs-12 c-text3" style="margin-top:3px">Assign rate</div></div>'+
+        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-amber" style="font-weight:700">'+teamDups+'</div><div class="fs-12 c-text3" style="margin-top:3px">Duplicates</div></div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
-        '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px">RA performance <span style="font-size:11px;font-weight:400;color:var(--text3)">click a row for detail</span></div>'+
+        '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700">RA performance <span class="fs-11 c-text3" style="font-weight:400">click a row for detail</span></div>'+
         (ras.length?
           '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
             '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Research Analyst</th>'+
@@ -196,7 +196,7 @@ function renderInsights(){
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Assign %</th>'+
             '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
           '</tr></thead><tbody>'+lbRows+'</tbody></table></div>':
-          '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No Research Analysts in the system yet.</div>')+
+          '<div class="c-text3 fs-13" style="padding:40px;text-align:center">No Research Analysts in the system yet.</div>')+
       '</div></div>';
   }
 
@@ -213,11 +213,11 @@ function renderInsights(){
     var pct=Math.round(val/l7max*100);
     var day=new Date(k).toLocaleDateString('en-US',{weekday:'short'});
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">'+
-      '<div style="font-size:11px;font-weight:600;color:var(--accent)">'+val+'</div>'+
+      '<div class="fs-11 c-accent" style="font-weight:600">'+val+'</div>'+
       '<div style="width:100%;background:var(--border);border-radius:4px;height:48px;display:flex;align-items:flex-end">'+
         '<div style="width:100%;background:var(--accent);border-radius:4px;height:'+pct+'%;min-height:'+(val>0?'4px':'0')+'"></div>'+
       '</div>'+
-      '<div style="font-size:10px;color:var(--text3)">'+day+'</div>'+
+      '<div class="fs-10 c-text3">'+day+'</div>'+
     '</div>';
   }).join('');
 
@@ -228,18 +228,18 @@ function renderInsights(){
     return entries.map(function(e){
       var pct=Math.round(e.v/total*100);
       return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
-        '<div style="width:90px;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(e.k)+'</div>'+
+        '<div class="fs-12 c-text2" style="width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(e.k)+'</div>'+
         '<div style="flex:1;background:var(--border);border-radius:99px;height:6px">'+
           '<div style="width:'+pct+'%;background:var(--accent);border-radius:99px;height:6px"></div>'+
         '</div>'+
-        '<div style="width:36px;text-align:right;font-size:12px;font-weight:600">'+e.v+'</div>'+
+        '<div class="fs-12" style="width:36px;text-align:right;font-weight:600">'+e.v+'</div>'+
       '</div>';
     }).join('');
   }
 
   return '<div class="page">'+
     '<div class="ph"><div class="flex aic gap3">'+
-      (isRALead?'<button onclick="STATE.insightsSelectedRA=null;STATE.insightsData=null;render()" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer">\u2190</button>':'')+
+      (isRALead?'<button onclick="STATE.insightsSelectedRA=null;STATE.insightsData=null;render()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer">\u2190</button>':'')+
       (raUser?av(raUser,'40'):'')+
       '<div><div class="ptitle" style="margin:0">'+(raUser?htmlEsc(raUser.name):'My')+' Insights</div>'+
         '<div class="psub" style="margin:0">Last 30 days activity</div></div>'+
@@ -249,34 +249,34 @@ function renderInsights(){
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:18px">'+
       [['Today',d.total_today,'var(--accent)'],['This Week',d.total_week,'var(--teal)'],['This Month',d.total_month,'var(--purple)'],['Duplicates',d.duplicates,'var(--amber)']].map(function(s){
         return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
-          '<div style="font-size:28px;font-weight:700;color:'+s[2]+'">'+s[1]+'</div>'+
-          '<div style="font-size:12px;color:var(--text3);margin-top:3px">'+s[0]+'</div>'+
+          '<div class="fs-28" style="font-weight:700;color:'+s[2]+'">'+s[1]+'</div>'+
+          '<div class="fs-12 c-text3" style="margin-top:3px">'+s[0]+'</div>'+
         '</div>';
       }).join('')+
     '</div>'+
 
     // ── Last 7 days bar chart ──
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px">'+
-      '<div style="font-weight:600;font-size:13px;margin-bottom:12px">Last 7 days</div>'+
+      '<div class="fs-13" style="font-weight:600;margin-bottom:12px">Last 7 days</div>'+
       '<div style="display:flex;gap:6px;align-items:flex-end">'+barChart+'</div>'+
     '</div>'+
 
     // ── Category breakdowns ──
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:10px">By Industry</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Industry</div>'+
         categoryRows(d.by_industry,true)+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:10px">By Timezone</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Timezone</div>'+
         categoryRows(d.by_timezone)+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:10px">By Freshness</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Freshness</div>'+
         categoryRows(d.by_freshness)+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:10px">By Stage</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Stage</div>'+
         categoryRows(d.by_stage)+
       '</div>'+
     '</div>'+
@@ -342,7 +342,7 @@ function renderBDInsights(){
     return '<div class="page">'+toggle+'<div class="ph"><div class="ptitle">Lead Insights</div><div class="psub">Loading your performance data\u2026</div></div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
         ['Emails Sent','Leads','Converted','Conv Rate'].map(function(l){
-          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--border)">—</div><div style="font-size:12px;color:var(--text3);margin-top:3px">'+l+'</div></div>';
+          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-border" style="font-weight:700">—</div><div class="fs-12 c-text3" style="margin-top:3px">'+l+'</div></div>';
         }).join('')+
       '</div></div>';
   }
@@ -353,8 +353,8 @@ function renderBDInsights(){
     var pct=Math.round(val/funnelTotal*100);
     return '<div style="margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:4px">'+
-        '<span style="font-size:12px;color:var(--text2)">'+label+'</span>'+
-        '<span style="font-size:12px;font-weight:700;color:'+color+'">'+val+' <span style="font-weight:400;color:var(--text3)">('+pct+'%)</span></span>'+
+        '<span class="fs-12 c-text2">'+label+'</span>'+
+        '<span class="fs-12" style="font-weight:700;color:'+color+'">'+val+' <span class="c-text3" style="font-weight:400">('+pct+'%)</span></span>'+
       '</div>'+
       '<div style="background:var(--border);border-radius:99px;height:7px;overflow:hidden">'+
         '<div style="width:'+Math.max(pct,val?2:0)+'%;background:'+color+';height:100%;border-radius:99px;transition:width .4s"></div>'+
@@ -380,11 +380,11 @@ function renderBDInsights(){
     var isT=k===todayStr;
     var lbl=new Date(k+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'});
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">'+
-      '<div style="font-size:11px;font-weight:600;color:'+(isT?'var(--green)':'var(--teal)')+'">'+val+'</div>'+
+      '<div class="fs-11" style="font-weight:600;color:'+(isT?'var(--green)':'var(--teal)')+'">'+val+'</div>'+
       '<div style="width:100%;background:var(--border);border-radius:4px;height:64px;display:flex;align-items:flex-end">'+
         '<div style="width:100%;background:'+(isT?'var(--green)':'var(--teal)')+';border-radius:4px;height:'+Math.max(pct,val?4:0)+'%;opacity:'+(isT?'1':'.7')+'"></div>'+
       '</div>'+
-      '<div style="font-size:10px;color:'+(isT?'var(--green)':'var(--text3)')+';font-weight:'+(isT?700:400)+'">'+lbl+'</div>'+
+      '<div class="fs-10" style="color:'+(isT?'var(--green)':'var(--text3)')+';font-weight:'+(isT?700:400)+'">'+lbl+'</div>'+
     '</div>';
   }).join('');
 
@@ -397,11 +397,11 @@ function renderBDInsights(){
     var isT=k===todayStr;
     var lbl=new Date(k+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'});
     return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">'+
-      '<div style="font-size:11px;font-weight:600;color:'+(isT?'var(--green)':'var(--accent)')+'">'+val+'</div>'+
+      '<div class="fs-11" style="font-weight:600;color:'+(isT?'var(--green)':'var(--accent)')+'">'+val+'</div>'+
       '<div style="width:100%;background:var(--border);border-radius:4px;height:64px;display:flex;align-items:flex-end">'+
         '<div style="width:100%;background:'+(isT?'var(--green)':'var(--accent)')+';border-radius:4px;height:'+Math.max(pct,val?4:0)+'%;opacity:'+(isT?'1':'.65')+'"></div>'+
       '</div>'+
-      '<div style="font-size:10px;color:'+(isT?'var(--green)':'var(--text3)')+';font-weight:'+(isT?700:400)+'">'+lbl+'</div>'+
+      '<div class="fs-10" style="color:'+(isT?'var(--green)':'var(--text3)')+';font-weight:'+(isT?700:400)+'">'+lbl+'</div>'+
     '</div>';
   }).join('');
 
@@ -412,9 +412,9 @@ function renderBDInsights(){
   var indRows=indEntries.map(function(e){
     var pct=Math.round(e.v/indTotal*100);
     return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'+
-      '<div style="width:110px;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">'+htmlEsc(e.k)+'</div>'+
+      '<div class="fs-12 c-text2" style="width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">'+htmlEsc(e.k)+'</div>'+
       '<div style="flex:1;background:var(--border);border-radius:99px;height:6px"><div style="width:'+pct+'%;background:var(--accent);border-radius:99px;height:6px"></div></div>'+
-      '<div style="width:28px;text-align:right;font-size:12px;font-weight:600;flex-shrink:0">'+e.v+'</div>'+
+      '<div class="fs-12" style="width:28px;text-align:right;font-weight:600;flex-shrink:0">'+e.v+'</div>'+
     '</div>';
   }).join('');
 
@@ -426,9 +426,9 @@ function renderBDInsights(){
     return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2)">'+
       '<div style="display:flex;align-items:center;gap:8px">'+
         '<div style="width:8px;height:8px;border-radius:50%;background:'+(stgColors[s]||'var(--text3)')+'"></div>'+
-        '<span style="font-size:13px;color:var(--text2)">'+s+'</span>'+
+        '<span class="fs-13 c-text2">'+s+'</span>'+
       '</div>'+
-      '<span style="font-size:13px;font-weight:700;color:'+(stgColors[s]||'var(--text)')+'">'+stg[s]+'</span>'+
+      '<span class="fs-13" style="font-weight:700;color:'+(stgColors[s]||'var(--text)')+'">'+stg[s]+'</span>'+
     '</div>';
   }).join('');
 
@@ -448,15 +448,15 @@ function renderBDInsights(){
       ].map(function(s){
         return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px;text-align:center">'+
           '<div style="font-size:30px;font-weight:700;color:'+s[2]+';font-family:var(--display)">'+s[1]+'</div>'+
-          '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-top:2px">'+s[0]+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:1px">'+s[3]+'</div>'+
+          '<div class="fs-12 c-text2" style="font-weight:600;margin-top:2px">'+s[0]+'</div>'+
+          '<div class="fs-11 c-text3" style="margin-top:1px">'+s[3]+'</div>'+
         '</div>';
       }).join('')+
     '</div>'+
 
     // ── Email pipeline (today focus) ──
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px">'+
-      '<div style="font-weight:700;font-size:13px;margin-bottom:12px">Email pipeline</div>'+
+      '<div class="fs-13" style="font-weight:700;margin-bottom:12px">Email pipeline</div>'+
       '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px">'+
         [
           ['Sent today',d.emails_sent_today,'var(--green)'],
@@ -466,8 +466,8 @@ function renderBDInsights(){
           ['Response rate',d.response_rate+'%','var(--accent)']
         ].map(function(s){
           return '<div style="text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)">'+
-            '<div style="font-size:22px;font-weight:700;color:'+s[2]+'">'+s[1]+'</div>'+
-            '<div style="font-size:11px;color:var(--text3);margin-top:3px">'+s[0]+'</div>'+
+            '<div class="fs-22" style="font-weight:700;color:'+s[2]+'">'+s[1]+'</div>'+
+            '<div class="fs-11 c-text3" style="margin-top:3px">'+s[0]+'</div>'+
           '</div>';
         }).join('')+
       '</div>'+
@@ -476,44 +476,44 @@ function renderBDInsights(){
     // ── This month at a glance ──
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
-        '<div style="font-size:24px;font-weight:700;color:var(--accent)">'+d.total_today+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads today</div>'+
+        '<div class="fs-24 c-accent" style="font-weight:700">'+d.total_today+'</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:2px">Leads today</div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
-        '<div style="font-size:24px;font-weight:700;color:var(--teal)">'+d.total_week+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads, last 7 days</div>'+
+        '<div class="fs-24 c-teal" style="font-weight:700">'+d.total_week+'</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:2px">Leads, last 7 days</div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
-        '<div style="font-size:24px;font-weight:700;color:var(--purple)">'+d.total_month+'</div>'+
-        '<div style="font-size:12px;color:var(--text3);margin-top:2px">Leads, last 30 days</div>'+
+        '<div class="fs-24 c-purple" style="font-weight:700">'+d.total_month+'</div>'+
+        '<div class="fs-12 c-text3" style="margin-top:2px">Leads, last 30 days</div>'+
       '</div>'+
     '</div>'+
 
     // ── Charts row ──
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:12px">Emails sent — last 7 days <span style="font-size:11px;color:var(--green)">\u25cf today</span></div>'+
-        '<div style="display:flex;gap:5px;align-items:flex-end">'+(emailChart||'<div style="font-size:12px;color:var(--text3)">No data</div>')+'</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:12px">Emails sent — last 7 days <span class="fs-11 c-green">\u25cf today</span></div>'+
+        '<div style="display:flex;gap:5px;align-items:flex-end">'+(emailChart||'<div class="fs-12 c-text3">No data</div>')+'</div>'+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-        '<div style="font-weight:600;font-size:13px;margin-bottom:12px">Leads assigned — last 7 days</div>'+
-        '<div style="display:flex;gap:5px;align-items:flex-end">'+(leadsChart||'<div style="font-size:12px;color:var(--text3)">No data</div>')+'</div>'+
+        '<div class="fs-13" style="font-weight:600;margin-bottom:12px">Leads assigned — last 7 days</div>'+
+        '<div style="display:flex;gap:5px;align-items:flex-end">'+(leadsChart||'<div class="fs-12 c-text3">No data</div>')+'</div>'+
       '</div>'+
     '</div>'+
 
     // ── Funnel + Stage + Industry ──
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-        '<div style="font-weight:700;font-size:13px;margin-bottom:12px">Conversion funnel <span style="font-size:11px;font-weight:400;color:var(--text3)">% of '+d.total_all+' leads</span></div>'+
+        '<div class="fs-13" style="font-weight:700;margin-bottom:12px">Conversion funnel <span class="fs-11 c-text3" style="font-weight:400">% of '+d.total_all+' leads</span></div>'+
         funnel+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-        '<div style="font-weight:700;font-size:13px;margin-bottom:10px">Stage breakdown</div>'+
-        (stgRows||'<div style="font-size:13px;color:var(--text3)">No leads yet.</div>')+
+        '<div class="fs-13" style="font-weight:700;margin-bottom:10px">Stage breakdown</div>'+
+        (stgRows||'<div class="fs-13 c-text3">No leads yet.</div>')+
       '</div>'+
       '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-        '<div style="font-weight:700;font-size:13px;margin-bottom:12px">By industry</div>'+
-        (indRows||'<div style="font-size:13px;color:var(--text3)">No leads yet.</div>')+
+        '<div class="fs-13" style="font-weight:700;margin-bottom:12px">By industry</div>'+
+        (indRows||'<div class="fs-13 c-text3">No leads yet.</div>')+
       '</div>'+
     '</div>'+
 
@@ -534,38 +534,38 @@ function renderTeamInsightsBody(){
   // ── Drill-down: individual BD Manager ──
   if(selectedBD){
     var tDrill=bdTeamData(); var row=bdStatsFromServer(tDrill).filter(function(r){return r.bd.id===selectedBD;})[0];
-    if(!row)return bdTeamStatus(tDrill)||'<div style="padding:40px;text-align:center;color:var(--text3)">Not in your team</div>';
+    if(!row)return bdTeamStatus(tDrill)||'<div class="c-text3" style="padding:40px;text-align:center">Not in your team</div>';
     var P=row._p;
     var stgColors={Connected:'var(--green)','In Discussion':'var(--accent)',Positive:'var(--teal)',Assigned:'var(--text3)','No Response':'var(--amber)',Negative:'var(--red)',Future:'var(--purple)','Out of Office':'var(--amber)'};
     var stgRows=['Connected','In Discussion','Positive','Assigned','No Response','Negative','Future','Out of Office'].map(function(s){
       var cnt=(P.by_stage||{})[s]||0; if(!cnt)return'';
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border2)">'+
-        '<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:'+(stgColors[s]||'var(--text3)')+'"></div><span style="font-size:13px;color:var(--text2)">'+s+'</span></div>'+
-        '<span style="font-size:13px;font-weight:700;color:'+(stgColors[s]||'var(--text)')+'">'+cnt+'</span></div>';
+        '<div style="display:flex;align-items:center;gap:8px"><div style="width:8px;height:8px;border-radius:50%;background:'+(stgColors[s]||'var(--text3)')+'"></div><span class="fs-13 c-text2">'+s+'</span></div>'+
+        '<span class="fs-13" style="font-weight:700;color:'+(stgColors[s]||'var(--text)')+'">'+cnt+'</span></div>';
     }).join('');
     return ''+
       '<div class="ph"><div class="flex aic gap3">'+
-        '<button onclick="STATE.bdLeadSelectedBD=null;render()" style="background:transparent;border:0;color:var(--text3);font-size:22px;cursor:pointer">\u2190</button>'+
+        '<button onclick="STATE.bdLeadSelectedBD=null;render()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer">\u2190</button>'+
         av(row.bd,'40')+
         '<div><div class="ptitle" style="margin:0">'+htmlEsc(row.bd.name)+'</div><div class="psub" style="margin:0">BD Manager performance</div></div>'+
       '</div></div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
         [['Today',P.total_today,'var(--accent)'],['Last 7 days',P.total_week,'var(--teal)'],['Last 30 days',P.total_month,'var(--purple)'],['Converted',P.converted,'var(--green)']].map(function(s){
-          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:'+s[2]+'">'+s[1]+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">'+s[0]+'</div></div>';
+          return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28" style="font-weight:700;color:'+s[2]+'">'+s[1]+'</div><div class="fs-12 c-text3" style="margin-top:3px">'+s[0]+'</div></div>';
         }).join('')+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'+
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-          '<div style="font-weight:700;font-size:13px;margin-bottom:10px">Email pipeline</div>'+
+          '<div class="fs-13" style="font-weight:700;margin-bottom:10px">Email pipeline</div>'+
           '<div style="display:flex;gap:10px;margin-bottom:10px">'+
-            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--green)">'+P.emails_sent+'</div><div style="font-size:11px;color:var(--text3)">Sent (30 days)</div></div>'+
-            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div style="font-size:22px;font-weight:700;color:var(--amber)">'+P.emails_pending+'</div><div style="font-size:11px;color:var(--text3)">Pending</div></div>'+
+            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div class="fs-22 c-green" style="font-weight:700">'+P.emails_sent+'</div><div class="fs-11 c-text3">Sent (30 days)</div></div>'+
+            '<div style="flex:1;text-align:center;padding:10px;background:var(--bg);border-radius:var(--r2)"><div class="fs-22 c-amber" style="font-weight:700">'+P.emails_pending+'</div><div class="fs-11 c-text3">Pending</div></div>'+
           '</div>'+
-          '<div style="font-size:12px;color:var(--text3)">Conv: <strong style="color:var(--green)">'+P.conv_rate+'%</strong> \u00b7 Replied: <strong style="color:var(--teal)">'+P.replied+' ('+P.reply_rate+'%)</strong> \u00b7 Positive: <strong style="color:var(--teal)">'+P.positive+'</strong> \u00b7 Negative: <strong style="color:var(--red)">'+P.negative+'</strong></div>'+
+          '<div class="fs-12 c-text3">Conv: <strong class="c-green">'+P.conv_rate+'%</strong> \u00b7 Replied: <strong class="c-teal">'+P.replied+' ('+P.reply_rate+'%)</strong> \u00b7 Positive: <strong class="c-teal">'+P.positive+'</strong> \u00b7 Negative: <strong class="c-red">'+P.negative+'</strong></div>'+
         '</div>'+
         '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px">'+
-          '<div style="font-weight:700;font-size:13px;margin-bottom:10px">Stage breakdown</div>'+
-          (stgRows||'<div style="font-size:13px;color:var(--text3)">No leads.</div>')+
+          '<div class="fs-13" style="font-weight:700;margin-bottom:10px">Stage breakdown</div>'+
+          (stgRows||'<div class="fs-13 c-text3">No leads.</div>')+
         '</div>'+
       '</div>';
   }
@@ -581,11 +581,11 @@ function renderTeamInsightsBody(){
   var leader=bdStats.find(function(r){return r.total>0&&r.convRate>0;})||(bdStats.find(function(r){return r.total>0;})||null);
   var leaderBanner=leader?
     '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
-      '<div style="font-size:32px">\uD83C\uDFC6</div><div style="flex:1">'+
-        '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
-        '<div style="font-size:20px;font-weight:700;font-family:var(--display)">'+htmlEsc(leader.bd.name)+'</div>'+
-        '<div style="font-size:12px;opacity:.82;margin-top:2px">'+leader.convRate+'% conversion \u00b7 '+leader.month+' leads in 30 days</div></div>'+
-      '<div style="text-align:right"><div style="font-size:36px;font-weight:700;font-family:var(--display);line-height:1">'+leader.convRate+'%</div><div style="font-size:11px;opacity:.78">conversion</div></div>'+
+      '<div class="fs-32">\uD83C\uDFC6</div><div style="flex:1">'+
+        '<div class="fs-11" style="font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
+        '<div class="fs-20" style="font-weight:700;font-family:var(--display)">'+htmlEsc(leader.bd.name)+'</div>'+
+        '<div class="fs-12" style="opacity:.82;margin-top:2px">'+leader.convRate+'% conversion \u00b7 '+leader.month+' leads in 30 days</div></div>'+
+      '<div style="text-align:right"><div class="fs-36" style="font-weight:700;font-family:var(--display);line-height:1">'+leader.convRate+'%</div><div class="fs-11" style="opacity:.78">conversion</div></div>'+
     '</div>':'';
   var teamTotal=bdStats.reduce(function(s,r){return s+r.total;},0);
   var teamSent=bdStats.reduce(function(s,r){return s+r.sent;},0);
@@ -593,10 +593,10 @@ function renderTeamInsightsBody(){
   var teamConvRate=teamTotal?Math.round(teamConv/teamTotal*100):0;
   var lbRows=bdStats.map(function(r,i){
     return '<tr onclick="STATE.bdLeadSelectedBD=\''+r.bd.id+'\';render()" style="cursor:pointer" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-      '<td style="padding:10px 14px;font-weight:500;font-size:13px"><div style="display:flex;align-items:center;gap:9px"><span style="font-size:11px;font-weight:700;color:var(--text3);min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span>'+htmlEsc(r.bd.name)+'</span></div></td>'+
+      '<td class="fs-13" style="padding:10px 14px;font-weight:500"><div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span>'+htmlEsc(r.bd.name)+'</span></div></td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--accent)">'+r.today+'</td>'+
-      '<td style="padding:10px 8px;text-align:center;font-size:13px">'+r.week+'</td>'+
-      '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600">'+r.month+'</td>'+
+      '<td class="fs-13" style="padding:10px 8px;text-align:center">'+r.week+'</td>'+
+      '<td class="fs-13" style="padding:10px 8px;text-align:center;font-weight:600">'+r.month+'</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.sent+'</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--green)">'+r.pos+'</td>'+
       '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)" title="Leads where a contact has replied">'+r.replyRate+'%</td>'+
@@ -609,12 +609,12 @@ function renderTeamInsightsBody(){
     '</div></div>'+
     leaderBanner+
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--accent)">'+teamTotal+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Total leads</div></div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--teal)">'+teamSent+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Emails sent</div></div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div style="font-size:28px;font-weight:700;color:var(--green)">'+teamConvRate+'%</div><div style="font-size:12px;color:var(--text3);margin-top:3px">Team conv. rate</div></div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-accent" style="font-weight:700">'+teamTotal+'</div><div class="fs-12 c-text3" style="margin-top:3px">Total leads</div></div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-teal" style="font-weight:700">'+teamSent+'</div><div class="fs-12 c-text3" style="margin-top:3px">Emails sent</div></div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-green" style="font-weight:700">'+teamConvRate+'%</div><div class="fs-12 c-text3" style="margin-top:3px">Team conv. rate</div></div>'+
     '</div>'+
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
-      '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px">BD Manager performance <span style="font-size:11px;font-weight:400;color:var(--text3)">click a row for detail</span></div>'+
+      '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700">BD Manager performance <span class="fs-11 c-text3" style="font-weight:400">click a row for detail</span></div>'+
       (bdTeamStatus(tTeam)||(myBDs.length?
         '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
           '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">BD Manager</th>'+
@@ -626,7 +626,7 @@ function renderTeamInsightsBody(){
           '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Replied %</th>'+
           '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
         '</tr></thead><tbody>'+lbRows+'</tbody></table></div>':
-        '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px">No BD Managers report to you yet.<br><br>An admin sets reporting lines on the Admin → user page.</div>'))+
+        '<div class="c-text3 fs-13" style="padding:40px;text-align:center">No BD Managers report to you yet.<br><br>An admin sets reporting lines on the Admin → user page.</div>'))+
     '</div>';
 }
 

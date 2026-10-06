@@ -31,7 +31,7 @@
   if (STATE.bd) STATE.bd.profile = STATE.bd.profile || null;
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
   function fmtDT(s){ if(!s)return ''; try{ var d=new Date(s); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){ return ''; } }
   function loc(c){ return [c.city,c.state,c.country].filter(Boolean).join(', ') || c.current_location || '—'; }
 
@@ -122,7 +122,7 @@
     if (d && ready && isPdfDoc(d)) {
       body = '<iframe data-cpresume-frame src="'+esc(f.url)+'" style="width:100%;height:520px;border:1px solid var(--border);border-radius:8px;background:#fff"></iframe>';
     } else if (c.resume_text) {
-      body = '<div style="max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:14px;font-size:12.5px;line-height:1.55;white-space:pre-wrap">'+esc(c.resume_text)+'</div>';
+      body = '<div class="fs-12_5" style="max-height:520px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);padding:14px;line-height:1.55;white-space:pre-wrap">'+esc(c.resume_text)+'</div>';
     } else if (d && f && f.state === 'failed') {
       body = '<div style="'+RESUME_NOTE+'">The résumé could not be loaded just now'+(f.msg?' ('+esc(f.msg)+')':'')+'. Press Try again.</div>';
     } else if (d && ready) {
@@ -130,10 +130,10 @@
     } else if (d) {
       body = '<div style="'+RESUME_NOTE+'">Loading the résumé…</div>';
     } else {
-      body = '<div style="'+RESUME_NOTE+'">The documents could not be loaded just now. <a href="#" onclick="cpReloadDocs();return false" style="color:var(--accent)">Try again</a></div>';
+      body = '<div style="'+RESUME_NOTE+'">The documents could not be loaded just now. <a href="#" onclick="cpReloadDocs();return false" class="c-accent">Try again</a></div>';
     }
     return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-             '<div style="font-weight:600;font-size:14px">Resume</div>'+action+'</div>'+body;
+             '<div class="fs-14" style="font-weight:600">Resume</div>'+action+'</div>'+body;
   }
   function paintResume(){
     var pr = STATE.bd && STATE.bd.profile;
@@ -236,9 +236,9 @@
       var txtcol = s.reached?'var(--text)':'var(--text3)';
       return '<div style="flex:1;text-align:center;position:relative;min-width:70px">'+
         (i>0?'<div style="position:absolute;left:-50%;right:50%;top:9px;height:2px;background:'+(s.reached?'var(--green)':'var(--border2)')+'"></div>':'')+
-        '<div style="width:18px;height:18px;border-radius:50%;background:'+color+';margin:0 auto 6px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px">'+(s.reached?'✓':'')+'</div>'+
-        '<div style="font-size:11px;font-weight:600;color:'+txtcol+'">'+esc(s.label)+'</div>'+
-        '<div style="font-size:10px;color:var(--text3);margin-top:2px">'+(s.at?esc(fmtDT(s.at)):'')+'</div>'+
+        '<div class="fs-11" style="width:18px;height:18px;border-radius:50%;background:'+color+';margin:0 auto 6px;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;color:#fff">'+(s.reached?'✓':'')+'</div>'+
+        '<div class="fs-11" style="font-weight:600;color:'+txtcol+'">'+esc(s.label)+'</div>'+
+        '<div class="fs-10 c-text3" style="margin-top:2px">'+(s.at?esc(fmtDT(s.at)):'')+'</div>'+
       '</div>';
     }).join('');
     return '<div style="display:flex;align-items:flex-start;overflow-x:auto;padding:6px 4px">'+nodes+'</div>';
@@ -265,21 +265,21 @@
     var jobSel = jobs.length>1 ?
       '<select class="sel" style="max-width:320px" onchange="bdProfileSelectJob(this.value)">'+
         jobs.map(function(x){ var j=x.job||{}; return '<option value="'+esc(j.id)+'"'+(selJob===j.id?' selected':'')+'>'+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||'')+(j.client?' — '+j.client:''))+'</option>'; }).join('')+
-      '</select>' : (jobs.length===1 ? '<div style="font-size:12.5px;color:var(--text3)">'+esc((jobs[0].job&&jobs[0].job.job_code?jobs[0].job.job_code+' · ':'')+((jobs[0].job&&jobs[0].job.job_title)||''))+'</div>' : '');
+      '</select>' : (jobs.length===1 ? '<div class="fs-12_5 c-text3">'+esc((jobs[0].job&&jobs[0].job.job_code?jobs[0].job.job_code+' · ':'')+((jobs[0].job&&jobs[0].job.job_title)||''))+'</div>' : '');
     var lifecycle = jobs.length ?
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-weight:600;font-size:14px">Lifecycle</div>'+jobSel+'</div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div class="fs-14" style="font-weight:600">Lifecycle</div>'+jobSel+'</div>'+
         lifecycleBar(selJob)+
       '</div>' :
-      '<div class="card" style="padding:16px;margin-bottom:16px;color:var(--text3);font-size:13px">Not yet on any job. Tag this candidate to a job’s pipeline to begin.</div>';
+      '<div class="card c-text3 fs-13" style="padding:16px;margin-bottom:16px">Not yet on any job. Tag this candidate to a job’s pipeline to begin.</div>';
 
     // pipelines & submissions table
     var rows = jobs.map(function(x){
       var j=x.job||{}, p=x.pipe, s=x.sub;
       return '<tr style="border-top:1px solid var(--border)">'+
-        '<td style="padding:9px 10px;font-size:12.5px"><span style="cursor:pointer;color:var(--accent);font-weight:600" onclick="bdOpenSubmissions(\''+j.id+'\')">'+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||''))+'</span><div style="font-size:11px;color:var(--text3)">'+esc(j.client||'')+'</div></td>'+
-        '<td style="padding:9px 10px;font-size:12px">'+(p?code(p.pipeline_code||'')+' <span style="color:var(--text3)">'+esc(p.stage||p.pipeline_status||'')+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
-        '<td style="padding:9px 10px;font-size:12px">'+(s?code(s.submission_code||'')+' <span style="color:var(--text3)">'+esc(s.stage||'')+'</span>':'<span style="color:var(--text3)">—</span>')+'</td>'+
+        '<td class="fs-12_5" style="padding:9px 10px"><span style="cursor:pointer;color:var(--accent);font-weight:600" onclick="bdOpenSubmissions(\''+j.id+'\')">'+esc((j.job_code?j.job_code+' · ':'')+(j.job_title||''))+'</span><div class="fs-11 c-text3">'+esc(j.client||'')+'</div></td>'+
+        '<td class="fs-12" style="padding:9px 10px">'+(p?code(p.pipeline_code||'')+' <span class="c-text3">'+esc(p.stage||p.pipeline_status||'')+'</span>':'<span class="c-text3">—</span>')+'</td>'+
+        '<td class="fs-12" style="padding:9px 10px">'+(s?code(s.submission_code||'')+' <span class="c-text3">'+esc(s.stage||'')+'</span>':'<span class="c-text3">—</span>')+'</td>'+
         '<td style="padding:9px 10px;white-space:nowrap">'+
           '<button class="btn btn-sm btn-outline" onclick="bdOpenPipeline(\''+j.id+'\')">Open</button>'+
         '</td>'+
@@ -287,7 +287,7 @@
     }).join('') || '<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text3)">No jobs yet.</td></tr>';
     var jobsCard =
       '<div class="card" style="padding:0;margin-bottom:16px;overflow-x:auto">'+
-        '<div style="padding:14px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--border)">Jobs ('+jobs.length+')</div>'+
+        '<div class="fs-14" style="padding:14px 16px;font-weight:600;border-bottom:1px solid var(--border)">Jobs ('+jobs.length+')</div>'+
         '<table style="width:100%;border-collapse:collapse;min-width:640px"><thead><tr style="background:var(--bg)">'+
           ['Job','Pipeline','Submission',''].map(function(hh){ return '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text3);font-weight:700">'+hh+'</th>'; }).join('')+
         '</tr></thead><tbody>'+rows+'</tbody></table>'+
@@ -298,11 +298,11 @@
     var actHtml = acts.map(function(a){
       var label = a.action==='promoted'?'Promoted to submission':a.action==='bdm_approved'?'BDM approved → client':a.action==='created'?'Submission created':(a.old_stage&&a.new_stage?'Moved '+a.old_stage+' → '+a.new_stage:(a.new_stage||a.action));
       return '<div style="display:flex;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
-        '<div style="font-size:11px;color:var(--text3);white-space:nowrap;min-width:96px">'+esc(fmtDT(a.created_at))+'</div>'+
-        '<div style="font-size:12.5px">'+esc(label)+(a.note?' — <span style="color:var(--text3)">'+esc(a.note)+'</span>':'')+'</div>'+
+        '<div class="fs-11 c-text3" style="white-space:nowrap;min-width:96px">'+esc(fmtDT(a.created_at))+'</div>'+
+        '<div class="fs-12_5">'+esc(label)+(a.note?' — <span class="c-text3">'+esc(a.note)+'</span>':'')+'</div>'+
       '</div>';
-    }).join('') || '<div style="padding:12px 4px;color:var(--text3);font-size:12.5px">No activity yet.</div>';
-    var actCard = '<div class="card" style="padding:16px"><div style="font-weight:600;font-size:14px;margin-bottom:8px">Activity</div>'+actHtml+'</div>';
+    }).join('') || '<div class="c-text3 fs-12_5" style="padding:12px 4px">No activity yet.</div>';
+    var actCard = '<div class="card" style="padding:16px"><div class="fs-14" style="font-weight:600;margin-bottom:8px">Activity</div>'+actHtml+'</div>';
 
     // Notes (Job Posting / Applicant Reference tabs)
     var noteTab = pr.noteTab || 'applicant_reference';
@@ -312,16 +312,16 @@
     var noteRows = notes.map(function(n){
       return '<div style="padding:9px 4px;border-bottom:1px solid var(--border)">'+
         '<div style="display:flex;justify-content:space-between;align-items:center">'+
-          '<div style="font-size:11px;color:var(--text3)">'+esc((n.author&&n.author.name)||'—')+' · '+esc(fmtDT(n.created_at))+'</div>'+
+          '<div class="fs-11 c-text3">'+esc((n.author&&n.author.name)||'—')+' · '+esc(fmtDT(n.created_at))+'</div>'+
           '<span style="cursor:pointer;color:var(--text3);font-size:12px" onclick="cpDeleteNote(\''+n.id+'\')">✕</span>'+
         '</div>'+
-        '<div style="font-size:13px;margin-top:3px;white-space:pre-wrap">'+esc(n.body)+'</div>'+
+        '<div class="fs-13" style="margin-top:3px;white-space:pre-wrap">'+esc(n.body)+'</div>'+
       '</div>';
-    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No notes in this tab yet.</div>';
+    }).join('') || '<div class="c-text3 fs-12_5" style="padding:10px 4px">No notes in this tab yet.</div>';
     var notesCard =
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-          '<div style="font-weight:600;font-size:14px">Notes</div>'+
+          '<div class="fs-14" style="font-weight:600">Notes</div>'+
           '<div style="display:flex;gap:4px;background:var(--bg);padding:3px;border-radius:10px">'+tabBtn('job_posting','Job Posting')+tabBtn('applicant_reference','Applicant Reference')+'</div>'+
         '</div>'+
         '<textarea id="cp-note-body" class="sel" style="min-height:52px;resize:vertical;margin-bottom:8px" placeholder="Add a note…"></textarea>'+
@@ -338,16 +338,16 @@
     var docRows = docs.map(function(d){
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:13px;font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+esc(fmtDT(d.uploaded_at))+'</div>'+
+          '<div class="fs-13" style="font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" class="c-accent">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
+          '<div class="fs-11 c-text3">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+esc(fmtDT(d.uploaded_at))+'</div>'+
         '</div>'+
         '<span style="cursor:pointer;color:var(--text3);font-size:12px" onclick="cpDeleteDoc(\''+d.id+'\')">✕</span>'+
       '</div>';
-    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No documents yet.</div>';
+    }).join('') || '<div class="c-text3 fs-12_5" style="padding:10px 4px">No documents yet.</div>';
     var docsCard =
       '<div class="card" style="padding:16px;margin-bottom:16px">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-          '<div style="font-weight:600;font-size:14px">Documents</div>'+
+          '<div class="fs-14" style="font-weight:600">Documents</div>'+
           '<div style="display:flex;gap:8px">'+
             '<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">+ Upload<input type="file" id="cp-doc-file" style="display:none" onchange="cpUploadDoc(this)"></label>'+
           '</div>'+
@@ -370,10 +370,10 @@
     var eaRows = ea.map(function(e){
       var opened = !!e.opened_at, replied = !!e.replied_at;
       var badge = replied
-        ? '<span style="font-size:11px;font-weight:700;color:#fff;background:var(--green);padding:2px 9px;border-radius:10px">↩ Replied</span>'
+        ? '<span class="fs-11" style="font-weight:700;color:#fff;background:var(--green);padding:2px 9px;border-radius:10px">↩ Replied</span>'
         : (opened
-          ? '<span style="font-size:11px;font-weight:700;color:var(--green);background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">✓ Opened'+((e.open_count>1)?' · '+e.open_count+'×':'')+'</span>'
-          : '<span style="font-size:11px;font-weight:700;color:var(--text3);background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px">Sent · not opened yet</span>');
+          ? '<span class="fs-11 c-green" style="font-weight:700;background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">✓ Opened'+((e.open_count>1)?' · '+e.open_count+'×':'')+'</span>'
+          : '<span class="fs-11 c-text3" style="font-weight:700;background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:10px">Sent · not opened yet</span>');
       var sub = 'to '+esc(e.to_email||'')+' · '+esc(fmtDT(e.sent_at))+
         (e.replied_at?' · replied '+esc(fmtDT(e.replied_at)):(e.opened_at?' · opened '+esc(fmtDT(e.opened_at)):''));
       // READ WHAT THIS PERSON WAS SENT. The panel is always drawn and simply
@@ -387,10 +387,10 @@
       // (body_visible!==false && !body), which still means "sent before PACE
       // kept a copy" — the two nulls must not collapse into one sentence.
       var bodyHtml = e.body_visible===false
-        ? '<div style="font-size:12px;color:var(--text3)">'+esc(e.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
+        ? '<div class="fs-12 c-text3">'+esc(e.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
         : (e.body
-          ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(e.body)+'</div>'
-          : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>');
+          ? '<div class="fs-12_5" style="line-height:1.6;white-space:pre-wrap">'+esc(e.body)+'</div>'
+          : '<div class="fs-12 c-text3">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>');
       var panel='<div data-cpmail="'+esc(e.id)+'" hidden '+
         'style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
           bodyHtml+
@@ -399,15 +399,15 @@
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" '+
           'onclick="cpToggleEmail(\''+esc(e.id)+'\')" title="Read this email">'+
         '<div style="min-width:0">'+
-          '<div style="font-size:13px;font-weight:600">'+
-            '<span data-cpmailmark="'+esc(e.id)+'" style="color:var(--text3);font-weight:400">&#9656;</span> '+esc(e.subject||'(no subject)')+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+sub+'</div>'+
+          '<div class="fs-13" style="font-weight:600">'+
+            '<span data-cpmailmark="'+esc(e.id)+'" class="c-text3" style="font-weight:400">&#9656;</span> '+esc(e.subject||'(no subject)')+'</div>'+
+          '<div class="fs-11 c-text3">'+sub+'</div>'+
         '</div>'+badge+
         '</div>'+panel+
       '</div>';
-    }).join('') || '<div style="padding:10px 4px;color:var(--text3);font-size:12.5px">No tracked emails yet. Use “Send tracked through futé” from a job’s Candidates tab.</div>';
+    }).join('') || '<div class="c-text3 fs-12_5" style="padding:10px 4px">No tracked emails yet. Use “Send tracked through futé” from a job’s Candidates tab.</div>';
     var emailCard = '<div class="card" style="padding:16px;margin-bottom:16px">'+
-      '<div style="font-weight:600;font-size:14px;margin-bottom:8px">Email activity</div>'+eaRows+'</div>';
+      '<div class="fs-14" style="font-weight:600;margin-bottom:8px">Email activity</div>'+eaRows+'</div>';
 
     // ── the drawer ────────────────────────────────────────────────────────
     // Left: who this person is. Right: everything that has happened to them,
@@ -513,7 +513,7 @@
     var subtitle = [c.headline||c.current_title, c.current_employer].filter(Boolean).join(' · ');
     var avatarInitials = (String(c.full_name||'?').trim().split(/\s+/).slice(0,2)
       .map(function(w){ return (w[0]||''); }).join('') || '?').toUpperCase();
-    var avatar = '<div class="av av-48 av-ra" style="font-size:16px">'+esc(avatarInitials)+'</div>';
+    var avatar = '<div class="av av-48 av-ra fs-16">'+esc(avatarInitials)+'</div>';
 
     return UI.drawer({
       avatar: avatar,
@@ -528,7 +528,7 @@
       onmenu: "atsOpenEdit('"+c.id+"')",
       fields:
         '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">'+
-          (c.candidate_code?'<span class="pill mute" style="font-family:var(--mono);font-size:11px">'+esc(c.candidate_code)+'</span>':'')+
+          (c.candidate_code?'<span class="pill mute fs-11" style="font-family:var(--mono)">'+esc(c.candidate_code)+'</span>':'')+
           (c.applicant_status?UI.pill(c.applicant_status,'info',true):'')+
         '</div>'+ fields,
       tabs: tabBar,

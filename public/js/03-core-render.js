@@ -254,7 +254,7 @@ function render(){
     _resetShell();
     root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg)">'+
       '<div style="width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>'+
-      '<div style="font-size:13.5px;color:var(--text3)">Loading your data...</div>'+
+      '<div class="fs-13_5 c-text3">Loading your data...</div>'+
       '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'+
     '</div>';
     return;
@@ -441,16 +441,16 @@ function renderOrgSubtree(userId,opts,depth,seen){
   else if(opts.click==='admin'){click=' onclick="event.stopPropagation();STATE.adminSelectedUser=\''+userId+'\';loadUserEmails(\''+userId+'\');render()"';cursor='pointer';}
   else if(opts.click==='activity'){click=' onclick="event.stopPropagation();openTeamActivity(\''+userId+'\')"';cursor='pointer';}
   if(cursor==='pointer')hover=' onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'transparent\'"';
-  var meDot=(STATE.user&&STATE.user.id===userId)?'<span style="font-size:9px;font-weight:700;color:var(--accent);background:var(--accent-l);padding:1px 6px;border-radius:6px;margin-left:6px">YOU</span>':'';
-  var subChip=reports.length?'<span style="font-size:10.5px;color:var(--green);background:var(--green-l);padding:2px 7px;border-radius:8px;white-space:nowrap">'+subCount+' in team</span>':'';
+  var meDot=(STATE.user&&STATE.user.id===userId)?'<span class="fs-9 c-accent" style="font-weight:700;background:var(--accent-l);padding:1px 6px;border-radius:6px;margin-left:6px">YOU</span>':'';
+  var subChip=reports.length?'<span class="fs-10_5 c-green" style="background:var(--green-l);padding:2px 7px;border-radius:8px;white-space:nowrap">'+subCount+' in team</span>':'';
   var node='<div'+click+hover+' style="display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;cursor:'+cursor+';transition:background .1s">'+
       av(user,'32')+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(user.name||'')+meDot+'</div>'+
-        '<div style="font-size:11.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(roleLabel(user.role))+(user.empId?' · '+htmlEsc(user.empId):'')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(user.name||'')+meDot+'</div>'+
+        '<div class="fs-11_5 c-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(roleLabel(user.role))+(user.empId?' · '+htmlEsc(user.empId):'')+'</div>'+
       '</div>'+
       subChip+
-      (opts.click&&opts.click!=='none'?'<span style="color:var(--text3);font-size:14px">›</span>':'')+
+      (opts.click&&opts.click!=='none'?'<span class="c-text3 fs-14">›</span>':'')+
     '</div>';
   if(opts.flat)return '<div>'+node+'</div>';
   var childHtml=reports.map(function(r){return renderOrgSubtree(r.id,opts,depth+1,seen);}).join('');
@@ -477,22 +477,22 @@ function renderOrgNodeH(userId,depth,seen){
   var st=orgStatFor(userId);
   var statLine=st?
     '<div style="display:flex;gap:12px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">'+
-      '<div style="text-align:center"><div style="font-weight:700;font-size:14px">'+st.total+'</div><div style="font-size:9.5px;color:var(--text3)">subs</div></div>'+
-      '<div style="text-align:center"><div style="font-weight:700;font-size:14px;color:#2563eb">'+st.interviews+'</div><div style="font-size:9.5px;color:var(--text3)">intv</div></div>'+
-      '<div style="text-align:center"><div style="font-weight:700;font-size:14px;color:var(--green)">'+st.placements+'</div><div style="font-size:9.5px;color:var(--text3)">placed</div></div>'+
+      '<div style="text-align:center"><div class="fs-14" style="font-weight:700">'+st.total+'</div><div class="fs-9_5 c-text3">subs</div></div>'+
+      '<div style="text-align:center"><div class="fs-14" style="font-weight:700;color:#2563eb">'+st.interviews+'</div><div class="fs-9_5 c-text3">intv</div></div>'+
+      '<div style="text-align:center"><div class="fs-14 c-green" style="font-weight:700">'+st.placements+'</div><div class="fs-9_5 c-text3">placed</div></div>'+
     '</div>'
-    :'<div style="margin-top:6px;font-size:10.5px;color:var(--text3)">No recruiting activity</div>';
+    :'<div class="fs-10_5 c-text3" style="margin-top:6px">No recruiting activity</div>';
   var popup='<div class="ochover" style="display:none;position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:60;margin-top:6px;width:200px;background:var(--card-solid);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:12px;text-align:left">'+
-    '<div style="display:flex;align-items:center;gap:9px">'+av(user,'32')+'<div style="min-width:0"><div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(user.name||'')+'</div>'+
-      '<div style="font-size:11px;color:var(--text3)">'+htmlEsc(roleLabel(user.role))+(user.empId?' · '+htmlEsc(user.empId):'')+'</div></div></div>'+
+    '<div style="display:flex;align-items:center;gap:9px">'+av(user,'32')+'<div style="min-width:0"><div class="fs-13" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(user.name||'')+'</div>'+
+      '<div class="fs-11 c-text3">'+htmlEsc(roleLabel(user.role))+(user.empId?' · '+htmlEsc(user.empId):'')+'</div></div></div>'+
     statLine+
-    '<div style="margin-top:8px;font-size:11px;color:var(--accent);font-weight:600">Click to see activity ›</div>'+
+    '<div class="fs-11 c-accent" style="margin-top:8px;font-weight:600">Click to see activity ›</div>'+
   '</div>';
   var box='<div onclick="openTeamActivity(\''+userId+'\')" onmouseenter="var p=this.parentNode.querySelector(\'.ochover\');if(p)p.style.display=\'block\'" onmouseleave="var p=this.parentNode.querySelector(\'.ochover\');if(p)p.style.display=\'none\'" '+
     'style="cursor:pointer;background:var(--card);border:1px solid '+(me?'var(--accent)':'var(--border)')+';border-radius:10px;padding:9px 12px;min-width:150px;max-width:190px;text-align:center;transition:box-shadow .1s" '+
     'onmousedown="event.stopPropagation()">'+
-    '<div style="display:flex;align-items:center;gap:8px;justify-content:center">'+av(user,'28')+'<div style="min-width:0;text-align:left"><div style="font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">'+htmlEsc((user.name||'').split(' ')[0])+(me?' <span style="font-size:8px;font-weight:700;color:var(--accent)">YOU</span>':'')+'</div>'+
-      '<div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">'+htmlEsc(roleLabel(user.role))+'</div></div></div>'+
+    '<div style="display:flex;align-items:center;gap:8px;justify-content:center">'+av(user,'28')+'<div style="min-width:0;text-align:left"><div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">'+htmlEsc((user.name||'').split(' ')[0])+(me?' <span class="c-accent" style="font-size:8px;font-weight:700">YOU</span>':'')+'</div>'+
+      '<div class="fs-10 c-text3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">'+htmlEsc(roleLabel(user.role))+'</div></div></div>'+
   '</div>';
   var nodeWrap='<div style="position:relative;display:inline-block">'+box+popup+'</div>';
   if(!reports.length) return '<div style="display:flex;flex-direction:column;align-items:center">'+nodeWrap+'</div>';
@@ -798,16 +798,16 @@ var MERGE_VAR_MORE=[
 function outreachTmplApiKey(tabKey){return tabKey==='outreach'?'o1':tabKey;}
 function renderSendingEmailCard(userId,myEmails,selectedId,onSelectFn){
   if(!myEmails.length){
-    return '<div class="card cp mb3"><div class="fw6 mb2" style="font-size:13px">Sending from</div>'+
-      '<div style="font-size:12px;color:var(--amber);padding:4px 0">No active email IDs yet. Ask your admin to add one under your profile.</div></div>';
+    return '<div class="card cp mb3"><div class="fw6 mb2 fs-13">Sending from</div>'+
+      '<div class="fs-12 c-amber" style="padding:4px 0">No active email IDs yet. Ask your admin to add one under your profile.</div></div>';
   }
   var selId=selectedId||(myEmails.find(function(e){return e.is_primary;})||myEmails[0]).id;
   var opts=myEmails.map(function(e){
     return '<option value="'+e.id+'"'+(e.id===selId?' selected':'')+'>'+htmlEsc(e.display_name||e.email_address)+' &lt;'+htmlEsc(e.email_address)+'&gt;</option>';
   }).join('');
   return '<div class="card cp mb3">'+
-    '<div class="fw6 mb1" style="font-size:13px">Sending from</div>'+
-    '<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">Emails go out from this address. Signature uses this ID too.</div>'+
+    '<div class="fw6 mb1 fs-13">Sending from</div>'+
+    '<div class="fs-11_5 c-text3" style="margin-bottom:8px">Emails go out from this address. Signature uses this ID too.</div>'+
     '<select class="sel" onchange="'+onSelectFn+'(this.value)">'+opts+'</select>'+
   '</div>';
 }
@@ -836,26 +836,26 @@ function renderVarChipBar(subjId,bodyId){
   var target=STATE.varInsertTarget||'body';
   var groupHtml=MERGE_VAR_GROUPS.map(function(g){
     var chips=g.chips.map(function(v){return renderVarChipBtn(v[0],v[1],v[2],subjId,bodyId);}).join('');
-    return '<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+htmlEsc(g.label)+'</div>'+
+    return '<div style="margin-bottom:10px"><div class="fs-10 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'+htmlEsc(g.label)+'</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div></div>';
   }).join('');
   var moreHtml='';
   if(STATE.showMoreVarChips){
-    moreHtml='<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Individual skills</div>'+
+    moreHtml='<div style="margin-bottom:10px"><div class="fs-10 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Individual skills</div>'+
       '<div style="display:flex;flex-wrap:wrap;gap:6px">'+
       MERGE_VAR_MORE.map(function(v){return renderVarChipBtn(v[0],v[1],v[2],subjId,bodyId);}).join('')+
       '</div></div>';
   }
   return '<div style="padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);margin-top:8px">'+
-    '<div style="font-weight:600;font-size:13px;color:var(--text);margin-bottom:4px">Personalize your message</div>'+
-    '<div style="font-size:12px;color:var(--text3);margin-bottom:12px">Step 1 — choose where to add &nbsp;·&nbsp; Step 2 — click a field below</div>'+
+    '<div class="fs-13 c-text" style="font-weight:600;margin-bottom:4px">Personalize your message</div>'+
+    '<div class="fs-12 c-text3" style="margin-bottom:12px">Step 1 — choose where to add &nbsp;·&nbsp; Step 2 — click a field below</div>'+
     '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
       '<button type="button" class="seg-btn'+(target==='subject'?' is-on':'')+'" onclick="setVarInsertTarget(\'subject\')">① Subject line</button>'+
       '<button type="button" class="seg-btn'+(target==='body'?' is-on':'')+'" onclick="setVarInsertTarget(\'body\')">② Email body</button>'+
-      '<span style="font-size:11px;color:var(--text3);align-self:center">Adding to: <strong style="color:var(--accent)">'+(target==='subject'?'Subject line':'Email body')+'</strong></span>'+
+      '<span class="fs-11 c-text3" style="align-self:center">Adding to: <strong class="c-accent">'+(target==='subject'?'Subject line':'Email body')+'</strong></span>'+
     '</div>'+
     groupHtml+moreHtml+
-    '<button type="button" onclick="STATE.showMoreVarChips=!STATE.showMoreVarChips;render()" style="font-size:11px;padding:4px 0;border:0;background:transparent;color:var(--accent);cursor:pointer;font-weight:600">'+
+    '<button type="button" onclick="STATE.showMoreVarChips=!STATE.showMoreVarChips;render()" class="fs-11 c-accent" style="padding:4px 0;border:0;background:transparent;cursor:pointer;font-weight:600">'+
       (STATE.showMoreVarChips?'▲ Hide individual skills':'▼ Show individual skills (Skill 1, 2, 3)')+
     '</button>'+
   '</div>';

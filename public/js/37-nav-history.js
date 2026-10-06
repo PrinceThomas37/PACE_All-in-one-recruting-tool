@@ -81,6 +81,25 @@
   var _cand = window.bdOpenCandidate;  window.bdOpenCandidate = function(cid){ record({k:'candidate',cid:cid}); return _cand && _cand.apply(this, arguments); };
   var _goPage = window.goPage;         // fully-wrapped goPage (all page modules already loaded)
 
+  // Put the person back where they were after their sign-in ran out (R-118, 23-auth.js): restore the saved trail,
+  // then open each level in order — the list page, the job, the candidate — the way a click would have.
+  // Each opener loads its own data, so the levels are replayed one after another, never all at once.
+  window.navResume = function(saved){
+    if (!Array.isArray(saved) || !saved.length) return false;
+    var trail = saved.filter(function(d){ return d && d.k; });
+    if (!trail.length) return false;
+    STATE.nav.stack = trail;
+    var i = 0;
+    (function next(){
+      if (i >= trail.length) return;
+      var d = trail[i++];
+      reopen(d);
+      // a deeper level opens over what the previous one painted: give that a moment to load first
+      if (i < trail.length) setTimeout(next, 450);
+    })();
+    return true;
+  };
+
   // ── public API used by the page templates ──────────────────────────────────
   window.navBack = function(){
     var stack = STATE.nav.stack;
@@ -97,15 +116,15 @@
   };
   window.navBar = function(){
     var stack = (STATE.nav && STATE.nav.stack) || [];
-    if (!stack.length) return '<div style="margin-bottom:8px"><span onclick="navBack()" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Back</span></div>';
+    if (!stack.length) return '<div style="margin-bottom:8px"><span onclick="navBack()" class="fs-12_5 c-accent" style="cursor:pointer">← Back</span></div>';
     var crumbs = stack.map(function(e,i){
       var last = i === stack.length-1;
       var lbl = esc(labelOf(e));
-      if (last) return '<span style="font-size:12.5px;color:var(--text2);font-weight:600">'+lbl+'</span>';
-      return '<span onclick="navGoTo('+i+')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">'+lbl+'</span>'+
-             '<span style="color:var(--text3);margin:0 7px">›</span>';
+      if (last) return '<span class="fs-12_5 c-text2" style="font-weight:600">'+lbl+'</span>';
+      return '<span onclick="navGoTo('+i+')" class="fs-12_5 c-accent" style="cursor:pointer">'+lbl+'</span>'+
+             '<span class="c-text3" style="margin:0 7px">›</span>';
     }).join('');
-    var back = stack.length>1 ? '<span onclick="navBack()" title="Back" style="cursor:pointer;color:var(--accent);font-weight:700;margin-right:10px">←</span>' : '';
+    var back = stack.length>1 ? '<span onclick="navBack()" title="Back" class="c-accent" style="cursor:pointer;font-weight:700;margin-right:10px">←</span>' : '';
     return '<div style="margin-bottom:10px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">'+back+crumbs+'</div>';
   };
 })();

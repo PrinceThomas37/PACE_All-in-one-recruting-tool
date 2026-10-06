@@ -172,6 +172,7 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
   `UI.registerOverlay`; **anything that must survive a repaint needs its own region; an idle repaint writes
   nothing; a repaint on a timer is a repaint under the user's hands.** Everything entering `#layer` goes through
   `overlayWrap()`. Build screens with the `UI` kit (`public/ui.css` + `00-ui-kit.js`), not another hand-rolled table.
+- **Text size and colour are classes, not inline (R-013):** `fs-12`, `c-text3` … (one generated block at the end of `ui.css`). Never write `style="font-size:…"` or `color:var(--…)` in new markup. `scripts/inline-to-classes.mjs` converts AND proves each change in the real app; `scripts/screens-fingerprint.mjs` (run on two checkouts, then `--diff`) is the before/after proof for any work that must change nothing on screen. `test/utility-classes-smoke.mjs` fails if a class is used but not defined.
 - **Phone is first-class (`public/mobile.css`):** hover gated on `(hover:hover) and (pointer:fine)`, never width;
   the menu is a class on `<body>`, never a render; nothing may overflow `#content` (a wide thing scrolls in its
   own box); **an inline style cannot be responsive, re-themed or re-scaled — give it a class**; reflow, never shrink;

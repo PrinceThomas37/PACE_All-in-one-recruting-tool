@@ -165,8 +165,8 @@
         { cls:'tight', html: UI.dash(c.location) },
         { cls:'tight', html: c.open_job_order_count
             ? UI.pill(c.open_job_order_count+' open','ok',true)+
-              '<span style="margin-left:7px;color:var(--ink3)">'+c.job_order_count+' total</span>'
-            : '<span style="color:var(--ink3)">'+(c.job_order_count||0)+' total</span>' }
+              '<span class="c-ink3" style="margin-left:7px">'+c.job_order_count+' total</span>'
+            : '<span class="c-ink3">'+(c.job_order_count||0)+' total</span>' }
       ]};
     });
 
@@ -180,7 +180,7 @@
       ]),
       toolbar: UI.toolbar({
         search:{ value:STATE.clients.q||'', placeholder:'Search clients…', oninput:'clientsSearch(this.value)' },
-        right:'<span style="font-size:12.5px;color:var(--ink3)">Companies with at least one job order — leads that turned into real business.</span>'
+        right:'<span class="fs-12_5 c-ink3">Companies with at least one job order — leads that turned into real business.</span>'
       }),
       body: UI.table({
         cols:[{label:'Client',icon:'building'},'Industry','Location','Job orders'],
@@ -202,11 +202,11 @@
 
     var jobRows=(jobs||[]).map(function(j){
       return { cells:[
-        { cls:'tight', html:'<span style="font-family:var(--mono);font-size:11.5px;color:var(--ink3)">'+esc(j.job_code||'')+'</span>' },
+        { cls:'tight', html:'<span class="fs-11_5 c-ink3" style="font-family:var(--mono)">'+esc(j.job_code||'')+'</span>' },
         { html: esc(j.job_title||'—') },
         { cls:'tight', html: j.status ? UI.pill(j.status, /open|active/i.test(j.status)?'ok':'mute', true) : UI.dash('') },
         { cls:'tight', html: UI.dash((j.bd_manager&&j.bd_manager.name)||'') },
-        { cls:'tight', html:'<span style="color:var(--ink3)">'+fmtDate(j.created_at)+'</span>' }
+        { cls:'tight', html:'<span class="c-ink3">'+fmtDate(j.created_at)+'</span>' }
       ]};
     });
 
@@ -219,8 +219,8 @@
       return '<div style="display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)">'+
         '<input type="checkbox" class="ck" '+(sel[d.id]?'checked':'')+' onclick="clientsDocToggle(\''+d.id+'\')">'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:13px;font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
-          '<div style="font-size:11.5px;color:var(--ink3)">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+fmtDate(d.uploaded_at)+'</div>'+
+          '<div class="fs-13" style="font-weight:600">'+(d.url?'<a href="'+esc(d.url)+'" target="_blank" rel="noopener" class="c-accent">'+esc(d.filename)+'</a>':esc(d.filename))+'</div>'+
+          '<div class="fs-11_5 c-ink3">'+esc(d.doc_type||'')+' · '+esc((d.uploader&&d.uploader.name)||'—')+' · '+fmtDate(d.uploaded_at)+'</div>'+
         '</div>'+
         (canEdit?'<span class="kebab" title="Delete" onclick="clientsDeleteDoc(\''+d.id+'\')">'+UI.ic('trash')+'</span>':'')+
       '</div>';
@@ -246,7 +246,7 @@
       '</div>'+
       '<div class="feed" data-clpanel="docs" style="padding:16px 18px"'+(tab==='docs'?'':' hidden')+'>'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-          '<div style="font-weight:600;font-size:13.5px">Documents'+(selIds.length?' · '+selIds.length+' selected':'')+'</div>'+
+          '<div class="fs-13_5" style="font-weight:600">Documents'+(selIds.length?' · '+selIds.length+' selected':'')+'</div>'+
           '<div style="display:flex;gap:8px">'+
             (selIds.length?'<button class="btn btn-sm btn-outline" onclick="clientsOpenEmail(\''+c.id+'\',true)">Email selected</button>':'')+
             (canEdit?'<label class="btn btn-sm btn-primary" style="cursor:pointer;margin:0">'+UI.ic('plus')+'Upload'+
@@ -261,7 +261,7 @@
       .map(function(w){ return (w[0]||''); }).join('')||'?').toUpperCase();
 
     return UI.drawer({
-      avatar:'<div class="av av-48 av-bd" style="font-size:16px">'+esc(initials)+'</div>',
+      avatar:'<div class="av av-48 av-bd fs-16">'+esc(initials)+'</div>',
       name: c.name||'Client',
       sub: [c.industry, c.location].filter(Boolean).join(' · '),
       onclose:'clientsBack()',
@@ -287,7 +287,7 @@
         UI.kv('Industry', c.industry, { placeholder:'Not recorded' })+
         UI.kv('Location', c.location, { placeholder:'Not recorded' })+
         (c.website
-          ? UI.kv('Website','<a href="'+esc(/^https?:/.test(c.website)?c.website:'https://'+c.website)+'" target="_blank" rel="noopener" style="color:var(--accent)">'+esc(c.website)+'</a>',{ html:true })
+          ? UI.kv('Website','<a href="'+esc(/^https?:/.test(c.website)?c.website:'https://'+c.website)+'" target="_blank" rel="noopener" class="c-accent">'+esc(c.website)+'</a>',{ html:true })
           : UI.kv('Website','',{ placeholder:'Not recorded' }))+
         // D-0038: every BD sees every client (D-0035), but only its owner may
         // act on it. `GET /clients` carries no owner today, so this always
@@ -318,8 +318,8 @@
   function fmtWhen(s){ try{ var dayOnly=/^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); return new Date(s).toLocaleDateString('en-GB',dayOnly?{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}:{day:'2-digit',month:'short',year:'numeric'}); }catch(e){ return ''; } }
   function stepsHtml(steps){
     if(!steps||!steps.length) return '';
-    return '<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Suggested next steps</div>'+
-      steps.map(function(s){ return '<div style="font-size:12.5px;margin-bottom:4px"><b>'+esc(s.label||s.id)+'</b>'+(s.why?'<span style="color:var(--ink3)"> — '+esc(s.why)+'</span>':'')+'</div>'; }).join('')+'</div>';
+    return '<div style="margin-top:10px"><div class="fs-11 c-ink3" style="font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Suggested next steps</div>'+
+      steps.map(function(s){ return '<div class="fs-12_5" style="margin-bottom:4px"><b>'+esc(s.label||s.id)+'</b>'+(s.why?'<span class="c-ink3"> — '+esc(s.why)+'</span>':'')+'</div>'; }).join('')+'</div>';
   }
   function intelPanel(c){
     var i=STATE.clients.intel;
@@ -339,17 +339,17 @@
       btn='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<button class="btn btn-sm '+(dis?'btn-outline':'btn-primary')+'"'+(dis?' disabled':'')+' onclick="clientsSummarise(false)">'+label+'</button>'+
         (st.state==='up_to_date'&&!busy?'<button type="button" onclick="clientsSummarise(true)" style="border:0;background:none;padding:0;font:inherit;font-size:12px;color:var(--accent);cursor:pointer">Rewrite anyway</button>':'')+
-        '<span style="font-size:11.5px;color:var(--ink3)">'+(st.state==='up_to_date'?'Nothing new since the last summary — costs nothing.':'Uses 1 of your '+(ai.per_user_limit||0)+' today · '+(ai.left_today||0)+' left')+'</span>'+
+        '<span class="fs-11_5 c-ink3">'+(st.state==='up_to_date'?'Nothing new since the last summary — costs nothing.':'Uses 1 of your '+(ai.per_user_limit||0)+' today · '+(ai.left_today||0)+' left')+'</span>'+
       '</div>';
     }
     var summaryBlock;
     if(sum&&sum.summary){
       summaryBlock='<div class="card" style="padding:14px 16px;margin-bottom:14px;border-left:3px solid var(--accent)">'+
         '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
-          '<div style="font-weight:700;font-size:13.5px">AI summary to '+esc(fmtWhen(sum.covers_until||sum.updated_at))+'</div>'+
-          '<span style="font-size:11px;color:var(--ink3)">'+esc(sum.message_count||0)+' emails read</span>'+
+          '<div class="fs-13_5" style="font-weight:700">AI summary to '+esc(fmtWhen(sum.covers_until||sum.updated_at))+'</div>'+
+          '<span class="fs-11 c-ink3">'+esc(sum.message_count||0)+' emails read</span>'+
         '</div>'+
-        '<div style="font-size:13px;line-height:1.55">'+esc(sum.summary)+'</div>'+
+        '<div class="fs-13" style="line-height:1.55">'+esc(sum.summary)+'</div>'+
         stepsHtml(sum.next_steps)+
         (btn?'<div style="margin-top:12px">'+btn+'</div>':'')+
       '</div>';
@@ -358,8 +358,8 @@
       // button. Built from rules — no AI, no cost.
       var f=i.facts||{};
       summaryBlock='<div class="card" style="padding:14px 16px;margin-bottom:14px">'+
-        '<div style="font-weight:700;font-size:13.5px;margin-bottom:6px">Where things stand <span style="font-weight:500;font-size:11px;color:var(--ink3)">· from the emails, no AI</span></div>'+
-        '<div style="font-size:13px;line-height:1.55">'+esc(f.summary||'No emails with this client yet.')+'</div>'+
+        '<div class="fs-13_5" style="font-weight:700;margin-bottom:6px">Where things stand <span class="fs-11 c-ink3" style="font-weight:500">· from the emails, no AI</span></div>'+
+        '<div class="fs-13" style="line-height:1.55">'+esc(f.summary||'No emails with this client yet.')+'</div>'+
         stepsHtml(f.next_steps)+
         (btn?'<div style="margin-top:12px">'+btn+'</div>':'')+
       '</div>';
@@ -370,10 +370,10 @@
       var who=inbound?(m.person||m.from||'Them'):'You → '+(m.to||'');
       return '<div style="border-bottom:1px solid var(--border)">'+
         '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" onclick="clientsToggleEmail(\''+m.id+'\')">'+
-          '<span title="'+(inbound?'From them':'From us')+'" style="font-size:11px;font-weight:700;color:'+(inbound?'var(--green)':'var(--ink3)')+';width:16px;text-align:center">'+(inbound?'↙':'↗')+'</span>'+
+          '<span title="'+(inbound?'From them':'From us')+'" class="fs-11" style="font-weight:700;color:'+(inbound?'var(--green)':'var(--ink3)')+';width:16px;text-align:center">'+(inbound?'↙':'↗')+'</span>'+
           '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.subject||'(no subject)')+'</div>'+
-            '<div style="font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(who)+' · '+esc(fmtWhen(m.sent_at))+'</div>'+
+            '<div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.subject||'(no subject)')+'</div>'+
+            '<div class="fs-11 c-ink3" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(who)+' · '+esc(fmtWhen(m.sent_at))+'</div>'+
           '</div>'+
         '</div>'+
         (open?intelBody(m,inbound):'')+
@@ -382,12 +382,12 @@
     // R-085: our own replies are read live from the caller's mailbox; when that
     // could not be done, say so instead of presenting half a conversation as whole.
     var ss=i.sent_side, sideNote='';
-    if(ss&&!ss.ok) sideNote='<div style="font-size:12px;color:var(--ink3);margin:0 0 8px">'+(ss.reason==='no_mailbox'
+    if(ss&&!ss.ok) sideNote='<div class="fs-12 c-ink3" style="margin:0 0 8px">'+(ss.reason==='no_mailbox'
       ?'Connect your mailbox so PACE can read the emails you sent — replies you write there are not in this list.'
       :'PACE could not read your sent mail just now, so replies you wrote yourself may be missing here and from the summary. Try again in a minute.')+'</div>';
     return sideNote+summaryBlock+
-      '<div style="font-weight:600;font-size:13.5px;margin:4px 0 6px">Every email with '+esc(c.name||'this client')+
-        ' <span style="font-weight:400;color:var(--ink3);font-size:12px">'+(i.total_messages||0)+' in total, newest first</span></div>'+
+      '<div class="fs-13_5" style="font-weight:600;margin:4px 0 6px">Every email with '+esc(c.name||'this client')+
+        ' <span class="c-ink3 fs-12" style="font-weight:400">'+(i.total_messages||0)+' in total, newest first</span></div>'+
       rows;
   }
   // One opened email. A reply shows its stored new part until the person asks
@@ -403,8 +403,8 @@
       else if(full&&full.text) foot='The full email, straight from your mailbox — not stored in PACE.';
       else foot='The new part of their email.'+(m.can_open_full?' <button type="button" onclick="event.stopPropagation();clientsOpenFullMail(\''+m.id+'\')" style="border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-decoration:underline">Open the full email</button>':'');
     }
-    return '<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px;font-size:12.5px;line-height:1.6;white-space:pre-wrap;max-height:60vh;overflow:auto">'+esc(text)+
-      (foot?'<div style="font-size:11px;color:var(--ink3);margin-top:6px;white-space:normal">'+foot+'</div>':'')+'</div>';
+    return '<div class="fs-12_5" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px;line-height:1.6;white-space:pre-wrap;max-height:60vh;overflow:auto">'+esc(text)+
+      (foot?'<div class="fs-11 c-ink3" style="margin-top:6px;white-space:normal">'+foot+'</div>':'')+'</div>';
   }
   window.clientsOpenFullMail=function(mid){
     var st=STATE.clients, id=st.selectedId; if(!id) return;
@@ -445,7 +445,7 @@
     var acts=STATE.clients.emailActivity;
     if(acts===null) return '<div class="dt-empty">Loading email history…</div>';
     var rows=(acts||[]).map(function(a){
-      var status=a.replied_at?'<span style="font-size:10.5px;font-weight:700;color:var(--green)">↩ Replied</span>':(a.opened_at?'<span style="font-size:10.5px;font-weight:700;color:var(--accent)">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span style="font-size:10.5px;color:var(--text3)">Sent</span>');
+      var status=a.replied_at?'<span class="fs-10_5 c-green" style="font-weight:700">↩ Replied</span>':(a.opened_at?'<span class="fs-10_5 c-accent" style="font-weight:700">✓ Opened'+(a.open_count>1?' ·'+a.open_count+'×':'')+'</span>':'<span class="fs-10_5 c-text3">Sent</span>');
       // READ WHAT WE ACTUALLY SAID. Before migration 042 the body was never
       // stored, so anything older reads back null and says so rather than
       // showing an empty box that looks like a bug. `body_visible:false`
@@ -456,18 +456,18 @@
       var panel=open
         ? '<div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);margin:0 4px 8px">'+
             (a.body_visible===false
-              ? '<div style="font-size:12px;color:var(--text3)">'+esc(a.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
+              ? '<div class="fs-12 c-text3">'+esc(a.body_note||'Only the sender, whoever they report to and an admin can read what it said.')+'</div>'
               : (a.body
-                ? '<div style="font-size:12.5px;line-height:1.6;white-space:pre-wrap">'+esc(a.body)+'</div>'
-                : '<div style="font-size:12px;color:var(--text3)">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>'))+
+                ? '<div class="fs-12_5" style="line-height:1.6;white-space:pre-wrap">'+esc(a.body)+'</div>'
+                : '<div class="fs-12 c-text3">This one was sent before PACE kept a copy, so the text is only in the mailbox it went from.</div>'))+
           '</div>'
         : '';
       return '<div style="border-bottom:1px solid var(--border)">'+
         '<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;cursor:pointer" '+
           'onclick="clientsToggleEmail(\''+a.id+'\')" title="Read this email">'+
-        '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+
-          '<span style="color:var(--text3);font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(a.subject||'(no subject)')+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+esc(a.to_email||'')+' · '+fmtDate(a.sent_at)+'</div></div>'+
+        '<div style="flex:1;min-width:0"><div class="fs-12_5" style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+
+          '<span class="c-text3" style="font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(a.subject||'(no subject)')+'</div>'+
+          '<div class="fs-11 c-text3">'+esc(a.to_email||'')+' · '+fmtDate(a.sent_at)+'</div></div>'+
         status+
         '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();clientsReply(\''+c.id+'\',\''+escAttr(a.to_email||'')+'\',\''+escAttr(a.subject||'')+'\')">Reply</button>'+
         '</div>'+panel+
@@ -530,16 +530,16 @@
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">Email '+esc(c.name)+'</div>'+
-          (docIds.length?'<div style="font-size:11.5px;color:var(--text3);margin-top:2px">'+docIds.length+' document'+(docIds.length>1?'s':'')+' will be attached.</div>':'')+
+          (docIds.length?'<div class="fs-11_5 c-text3" style="margin-top:2px">'+docIds.length+' document'+(docIds.length>1?'s':'')+' will be attached.</div>':'')+
         '</div>'+
         '<div style="padding:16px 20px">'+
           // R-087: which of MY mailboxes it leaves from. The page names an id; the server checks it is mine.
           (window.FromPick?FromPick.slot('client-em-from'):'')+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">To</label>'+
+          '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">To</label>'+
             toField+'</div>'+
-          '<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Subject</label>'+
+          '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Subject</label>'+
             '<input id="client-em-subject" class="sel" value="'+esc(STATE.clients._emailDraft.subject)+'"></div>'+
-          '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Message</label>'+
+          '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
             '<textarea id="client-em-body" class="sel" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.5">'+esc(STATE.clients._emailDraft.body)+'</textarea></div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
@@ -568,19 +568,19 @@
     // so "what is about to happen" is the whole point of this panel — and the
     // button stays disabled until there is a plan to agree to.
     var plan = m.busy
-      ? '<div style="font-size:12.5px;color:var(--text3)">Checking what would move…</div>'
+      ? '<div class="fs-12_5 c-text3">Checking what would move…</div>'
       : p
-        ? '<div style="border-left:3px solid var(--accent);background:var(--bg);border-radius:6px;padding:11px 13px;font-size:12.5px;color:var(--text2);line-height:1.55">'+esc(p.sentence)+'</div>'
-        : '<div style="font-size:12.5px;color:var(--text3)">Pick the duplicate above and its records will be listed here before anything moves.</div>';
+        ? '<div class="fs-12_5 c-text2" style="border-left:3px solid var(--accent);background:var(--bg);border-radius:6px;padding:11px 13px;line-height:1.55">'+esc(p.sentence)+'</div>'
+        : '<div class="fs-12_5 c-text3">Pick the duplicate above and its records will be listed here before anything moves.</div>';
     STATE.modal =
       '<div class="modal modal-w480" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">Merge a duplicate into '+esc(m.targetName)+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:3px">Everything attached to the duplicate moves here. Nothing is deleted.</div>'+
+          '<div class="fs-11_5 c-text3" style="margin-top:3px">Everything attached to the duplicate moves here. Nothing is deleted.</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
           '<div style="margin-bottom:12px">'+
-            '<label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">The duplicate to merge in</label>'+
+            '<label class="fs-11 c-text2" style="display:block;margin-bottom:3px">The duplicate to merge in</label>'+
             companyAcHTML('client-merge-src', m.sourceName, 'clientsMergePick', 'clientsMergeType', 'Start typing the duplicate\'s name…')+
           '</div>'+
           '<div id="client-merge-plan">'+plan+'</div>'+
@@ -600,7 +600,7 @@
     var m=STATE.clients._merge; if(!m) return;
     m.sourceName=val; m.sourceId=null; m.preview=null; m.busy=false;
     var el=document.getElementById('client-merge-plan');
-    if(el) el.innerHTML='<div style="font-size:12.5px;color:var(--text3)">Pick the duplicate above and its records will be listed here before anything moves.</div>';
+    if(el) el.innerHTML='<div class="fs-12_5 c-text3">Pick the duplicate above and its records will be listed here before anything moves.</div>';
     var go=document.getElementById('client-merge-go');
     if(go){ go.disabled=true; go.style.opacity='.5'; go.style.cursor='not-allowed'; }
   };

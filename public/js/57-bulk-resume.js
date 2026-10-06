@@ -186,7 +186,7 @@
   function bar(done, total, label){
     var pct = total ? Math.round(done*100/total) : 0;
     return '<div style="margin:4px 0 14px">'+
-      '<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span>'+label+'</span><b>'+done+' / '+total+'</b></div>'+
+      '<div class="fs-12_5" style="display:flex;justify-content:space-between;margin-bottom:6px"><span>'+label+'</span><b>'+done+' / '+total+'</b></div>'+
       '<div role="progressbar" aria-valuenow="'+pct+'" aria-valuemin="0" aria-valuemax="100" style="height:8px;background:var(--border);border-radius:99px;overflow:hidden">'+
         '<div style="height:100%;width:'+pct+'%;background:var(--accent);border-radius:99px;transition:width .3s ease"></div>'+
       '</div></div>';
@@ -200,29 +200,29 @@
     var b = B();
     if (b.phase==='adding' || b.phase==='done'){
       var r = row.result;
-      if (r==='added') return '<span style="color:var(--green);font-weight:600">✓ Added</span>'+(row.warn?'<div style="font-size:10.5px;color:var(--amber)">'+esc(row.warn)+'</div>':'');
-      if (r==='adding') return '<span style="color:var(--accent)">Adding…</span>';
-      if (r==='queued') return '<span style="color:var(--text3)">Waiting</span>';
-      if (r==='duplicate') return '<span style="color:var(--amber);font-weight:600">Already in PACE?</span>'+
+      if (r==='added') return '<span class="c-green" style="font-weight:600">✓ Added</span>'+(row.warn?'<div class="fs-10_5 c-amber">'+esc(row.warn)+'</div>':'');
+      if (r==='adding') return '<span class="c-accent">Adding…</span>';
+      if (r==='queued') return '<span class="c-text3">Waiting</span>';
+      if (r==='duplicate') return '<span class="c-amber" style="font-weight:600">Already in PACE?</span>'+
         (b.phase==='done'?'<div><button class="btn btn-sm btn-outline" style="font-size:11px;padding:2px 8px;margin-top:3px" onclick="bulkResumeForce(\''+row.key+'\')">Add anyway</button></div>':'');
-      if (r==='failed') return '<span style="color:var(--red)">Not added</span><div style="font-size:10.5px;color:var(--text3)">'+esc(row.error)+'</div>';
-      if (!row.include) return '<span style="color:var(--text3)">Skipped</span>';
+      if (r==='failed') return '<span class="c-red">Not added</span><div class="fs-10_5 c-text3">'+esc(row.error)+'</div>';
+      if (!row.include) return '<span class="c-text3">Skipped</span>';
     }
-    if (row.status==='reading') return '<span style="color:var(--accent)">Reading…</span>';
-    if (row.status==='waiting') return '<span style="color:var(--text3)">Waiting</span>';
-    if (row.status==='error') return '<span style="color:var(--red)">Could not read</span><div style="font-size:10.5px;color:var(--text3);max-width:180px">'+esc(row.error)+'</div>';
-    return '<span style="color:var(--text2)">'+(row.used_ai?'Read by AI':'Read')+'</span>';
+    if (row.status==='reading') return '<span class="c-accent">Reading…</span>';
+    if (row.status==='waiting') return '<span class="c-text3">Waiting</span>';
+    if (row.status==='error') return '<span class="c-red">Could not read</span><div class="fs-10_5 c-text3" style="max-width:180px">'+esc(row.error)+'</div>';
+    return '<span class="c-text2">'+(row.used_ai?'Read by AI':'Read')+'</span>';
   }
 
   function body(){
     var b = B();
     if (b.phase==='pick'){
       return '<div style="border:2px dashed var(--border2);border-radius:12px;padding:30px 20px;text-align:center">'+
-        '<div style="font-size:14px;font-weight:600;margin-bottom:6px">Choose the resumes</div>'+
-        '<div style="font-size:12.5px;color:var(--text3);margin-bottom:14px">Up to '+MAX_FILES+' files at once — PDF, Word or text, 4.5 MB each. Hold Ctrl (or ⌘) to pick several.</div>'+
-        '<input type="file" id="br-files" multiple accept="'+ACCEPT+'" onchange="bulkResumePicked(this)" style="font-size:12.5px">'+
+        '<div class="fs-14" style="font-weight:600;margin-bottom:6px">Choose the resumes</div>'+
+        '<div class="fs-12_5 c-text3" style="margin-bottom:14px">Up to '+MAX_FILES+' files at once — PDF, Word or text, 4.5 MB each. Hold Ctrl (or ⌘) to pick several.</div>'+
+        '<input type="file" id="br-files" multiple accept="'+ACCEPT+'" onchange="bulkResumePicked(this)" class="fs-12_5">'+
       '</div>'+
-      (b.job?'<div style="font-size:12px;color:var(--text2);margin-top:12px">Everyone you add will also be put on <b>'+esc(b.job.jobTitle||'this job')+'</b>.</div>':'');
+      (b.job?'<div class="fs-12 c-text2" style="margin-top:12px">Everyone you add will also be put on <b>'+esc(b.job.jobTitle||'this job')+'</b>.</div>':'');
     }
     var readDone = b.rows.filter(function(r){ return r.status==='read'||r.status==='error'; }).length;
     var head = '';
@@ -232,29 +232,29 @@
       var dup = b.rows.filter(function(r){return r.result==='duplicate';}).length;
       var bad = b.rows.filter(function(r){return r.result==='failed';}).length;
       head = '<div class="card" style="padding:12px 14px;margin-bottom:12px;border-left:3px solid var(--green)">'+
-        '<div style="font-size:14px;font-weight:700">'+b.done+' candidate'+(b.done===1?'':'s')+' added'+(b.job?' to '+esc(b.job.jobTitle||'the job'):'')+'</div>'+
-        ((dup||bad)?'<div style="font-size:12px;color:var(--text2);margin-top:3px">'+
+        '<div class="fs-14" style="font-weight:700">'+b.done+' candidate'+(b.done===1?'':'s')+' added'+(b.job?' to '+esc(b.job.jobTitle||'the job'):'')+'</div>'+
+        ((dup||bad)?'<div class="fs-12 c-text2" style="margin-top:3px">'+
           (dup?dup+' look like someone already in PACE — check them, or “Add anyway”. ':'')+
           (bad?bad+' could not be added — the reason is on the row.':'')+'</div>':'')+
       '</div>';
     } else {
       var errs = b.rows.filter(function(r){return r.status==='error';}).length;
-      head = '<div style="font-size:12.5px;color:var(--text2);margin-bottom:10px">'+
+      head = '<div class="fs-12_5 c-text2" style="margin-bottom:10px">'+
         'Check each row and fix anything the reader got wrong. Untick anyone you do not want to add.'+
-        (errs?' <span style="color:var(--amber)">'+errs+' file'+(errs===1?'':'s')+' could not be read.</span>':'')+'</div>';
+        (errs?' <span class="c-amber">'+errs+' file'+(errs===1?'':'s')+' could not be read.</span>':'')+'</div>';
     }
     var rows = b.rows.map(function(r){
       var lock = b.phase==='adding'||b.phase==='done'||r.status!=='read';
       return '<tr style="border-top:1px solid var(--border2)">'+
         '<td style="padding:4px 6px;text-align:center"><input type="checkbox" '+(r.include?'checked':'')+(lock?' disabled':'')+' onchange="bulkResumeInclude(\''+r.key+'\',this.checked)"></td>'+
-        '<td style="padding:4px 6px;font-size:11.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.name)+'">'+esc(r.name)+'</td>'+
+        '<td class="fs-11_5" style="padding:4px 6px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.name)+'">'+esc(r.name)+'</td>'+
         cell(r,'full_name','Full name *',140)+cell(r,'email','Email',170)+cell(r,'phone','Phone',115)+
         cell(r,'current_title','Current title',140)+cell(r,'city','City',95)+cell(r,'state','State',80)+
         cell(r,'experience_years','Yrs',50)+cell(r,'skills','Skills',200)+
-        '<td style="padding:4px 8px;font-size:11.5px;white-space:nowrap">'+statusCell(r)+'</td>'+
+        '<td class="fs-11_5" style="padding:4px 8px;white-space:nowrap">'+statusCell(r)+'</td>'+
       '</tr>';
     }).join('');
-    return (b.note?'<div style="font-size:12px;color:var(--amber);margin-bottom:8px">'+esc(b.note)+'</div>':'')+
+    return (b.note?'<div class="fs-12 c-amber" style="margin-bottom:8px">'+esc(b.note)+'</div>':'')+
       head+
       '<div class="tbl-wrap" data-keep-scroll="bulk-resume" style="overflow:auto;max-height:48vh;border:1px solid var(--border2);border-radius:var(--r)">'+
         '<table style="width:100%;border-collapse:collapse;min-width:1250px">'+
@@ -266,7 +266,7 @@
 
   function footer(){
     var b = B();
-    var left = '<div style="font-size:11.5px;color:var(--text3)">'+(b.job?'Adds to '+esc(b.job.jobTitle||'the job')+' too':'Owner: you')+'</div>';
+    var left = '<div class="fs-11_5 c-text3">'+(b.job?'Adds to '+esc(b.job.jobTitle||'the job')+' too':'Owner: you')+'</div>';
     var btns;
     if (b.phase==='pick') btns = '<button class="btn btn-outline" onclick="bulkResumeCancel()">Close</button>';
     else if (b.phase==='reading') btns = '<button class="btn btn-outline" onclick="bulkResumeCancel()">Stop reading</button>';
@@ -284,7 +284,7 @@
       '<div class="modal" onclick="event.stopPropagation()" style="width:min(1180px,96vw)">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">Upload resumes'+(b.job?' — '+esc(b.job.jobTitle||''):'')+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:2px">Read many resumes at once, check what was found, then add them together.</div>'+
+          '<div class="fs-11_5 c-text3" style="margin-top:2px">Read many resumes at once, check what was found, then add them together.</div>'+
         '</div>'+
         '<div style="padding:16px 20px;max-height:66vh;overflow:auto">'+body()+'</div>'+
         footer()+

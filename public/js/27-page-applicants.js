@@ -50,7 +50,7 @@
   };
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
   function canUse(u){ return userHasAnyRole(u,'admin','bd','bd_lead','recruiter'); }
   function isBDMlike(u){ return userHasAnyRole(u,'admin','bd','bd_lead'); }
   function fmtDate(s){ if(!s)return '—'; try{ var d=new Date(s); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }catch(e){ return '—'; } }
@@ -223,7 +223,7 @@
           '<input class="sel" type="number" placeholder="max" value="'+esc(f.experience_max)+'" onchange="atsSetFilter(\'experience_max\',this.value)"></div></div>'+
         '<div><label class="flbl">Created from</label><input class="sel" type="date" value="'+esc(f.created_from)+'" onchange="atsSetFilter(\'created_from\',this.value)"></div>'+
         '<div><label class="flbl">Created to</label><input class="sel" type="date" value="'+esc(f.created_to)+'" onchange="atsSetFilter(\'created_to\',this.value)"></div>'+
-        '<div style="display:flex;align-items:end"><label style="font-size:12.5px;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="ck"'+(f.has_resume==='1'?' checked':'')+' onchange="atsSetFilter(\'has_resume\',this.checked?\'1\':\'\')"> Has résumé</label></div>'+
+        '<div style="display:flex;align-items:end"><label class="fs-12_5 c-ink2" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="ck"'+(f.has_resume==='1'?' checked':'')+' onchange="atsSetFilter(\'has_resume\',this.checked?\'1\':\'\')"> Has résumé</label></div>'+
       '</div>') : '';
 
     if (a.loading) return UI.page({ tabs:tabs, strip:strip, toolbar:toolbar,
@@ -234,7 +234,7 @@
     var allOn = a.rows.length && a.rows.every(function(c){ return a.sel[c.id]; });
     var bulkBar = selIds.length ?
       '<div class="card" style="padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">'+
-        '<span style="font-size:12.5px;color:var(--ink2)"><b>'+selIds.length+'</b> selected</span>'+
+        '<span class="fs-12_5 c-ink2"><b>'+selIds.length+'</b> selected</span>'+
         // Session 31: tag the whole selection to a job in one go — it used to
         // be one row, one picker, one click, twelve times over.
         '<button class="btn btn-sm btn-primary" onclick="atsAddSelectedToJob()">'+UI.ic('plus')+'Add to job</button>'+
@@ -269,7 +269,7 @@
       return { id:c.id, onclick:"atsRowToggle('"+c.id+"',event)", cells:[
         { html: '<span onclick="event.stopPropagation()">'+UI.check(!!a.sel[c.id], "atsToggleSel('"+c.id+"')")+'</span>' },
         { html: UI.idCell(c.full_name||'—', c.email||'', null,
-                 { verified:!!c.email, badge: c.candidate_code?'<span class="pill mute" style="font-family:var(--mono);font-size:10.5px">'+esc(c.candidate_code)+'</span>':'' }) },
+                 { verified:!!c.email, badge: c.candidate_code?'<span class="pill mute fs-10_5" style="font-family:var(--mono)">'+esc(c.candidate_code)+'</span>':'' }) },
         { html: statusPill(c.applicant_status), cls:'tight' },
         { html: esc(jobTitle(c)) },
         { html: esc(loc(c)), cls:'tight' },
@@ -277,22 +277,22 @@
         { html: UI.dash(c.source), cls:'tight' },
         { html: UI.dash(c.work_authorization), cls:'tight' },
         { html: UI.dash(ownerName(c)), cls:'tight' },
-        { html: '<span style="color:var(--ink3)">'+fmtDate(c.created_at)+'</span>', cls:'tight' }
+        { html: '<span class="c-ink3">'+fmtDate(c.created_at)+'</span>', cls:'tight' }
       ]};
     });
 
     var table = UI.table({
       cols: cols, rows: rows, minWidth:'1060px',
       empty: anyActive
-        ? 'No candidates match these filters. <span style="color:var(--accent);cursor:pointer" onclick="atsClearFilters()">Clear them &rarr;</span>'
-        : 'No candidates yet. <span style="color:var(--accent);cursor:pointer" onclick="atsOpenNew()">Add the first one &rarr;</span>'
+        ? 'No candidates match these filters. <span class="c-accent" style="cursor:pointer" onclick="atsClearFilters()">Clear them &rarr;</span>'
+        : 'No candidates yet. <span class="c-accent" style="cursor:pointer" onclick="atsOpenNew()">Add the first one &rarr;</span>'
     });
 
     // ── pager ─────────────────────────────────────────────────────────────
     var totalPages = Math.max(1, Math.ceil((a.total||0)/a.limit));
     var fromN = a.total ? (a.page-1)*a.limit+1 : 0, toN = Math.min(a.page*a.limit, a.total);
     var pager =
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12.5px;color:var(--ink3)">'+
+      '<div class="fs-12_5 c-ink3" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">'+
         '<div>'+fromN+'–'+toN+' of '+(a.total||0)+'</div>'+
         '<div style="display:flex;gap:6px;align-items:center">'+
           '<button class="btn btn-sm btn-outline" '+(a.page<=1?'disabled style="opacity:.5"':'')+' onclick="atsGoPage('+(a.page-1)+')">&lsaquo; Prev</button>'+
@@ -391,7 +391,7 @@
       '<div class="cp-found-h">ALSO FOUND IN THE RÉSUMÉ</div>'+
       list.map(function(it,i){
         return '<label><input type="checkbox"'+(it.on?' checked':'')+' onchange="atsFoundTick('+i+',this.checked)"><span>'+esc(it.value)+'</span>'+
-          '<span style="color:var(--text3);font-size:11px;flex:none">'+(it.kind==='email'?'extra email':'extra phone')+'</span></label>';
+          '<span class="c-text3 fs-11" style="flex:none">'+(it.kind==='email'?'extra email':'extra phone')+'</span></label>';
       }).join('')+
       '<div class="cp-found-n">Ticked ones are saved as extras with this candidate. Untick any you do not want.</div>'+
     '</div>';
@@ -482,7 +482,7 @@
   }
 
   function fld(label, inner, req){
-    return '<div><label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">'+label+(req?' <span style="color:var(--red)">*</span>':'')+'</label>'+inner+'</div>';
+    return '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">'+label+(req?' <span class="c-red">*</span>':'')+'</label>'+inner+'</div>';
   }
   function inp(key, ph, attrs){ return '<input class="sel" value="'+esc(STATE.ats.form[key]||'')+'" placeholder="'+(ph||'')+'"'+(attrs?' '+attrs:'')+' oninput="atsFormSet(\''+key+'\',this.value)">'; }
   function sel(key, opts, blank){
@@ -503,20 +503,20 @@
       var jq = (STATE.ats._jobTagQ||'').trim();
       var jpool = jq.length>=2 ? (STATE.ats._jobTagPool||[]) : [];
       var jpoolHtml = jq.length<2
-        ? '<div style="color:var(--text3);font-size:12px;padding:4px 2px">Type a name, email or CN- code to add someone already in the system.</div>'
+        ? '<div class="c-text3 fs-12" style="padding:4px 2px">Type a name, email or CN- code to add someone already in the system.</div>'
         : (jpool.map(function(c){
             return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:7px 10px;margin-bottom:5px">'+
-              '<div><div style="font-weight:600;font-size:12.5px">'+esc(c.full_name)+' '+code(c.candidate_code||'')+'</div>'+
-              '<div style="font-size:11px;color:var(--text3)">'+esc(c.current_title||c.headline||'')+(c.email?' · '+esc(c.email):'')+'</div></div>'+
+              '<div><div class="fs-12_5" style="font-weight:600">'+esc(c.full_name)+' '+code(c.candidate_code||'')+'</div>'+
+              '<div class="fs-11 c-text3">'+esc(c.current_title||c.headline||'')+(c.email?' · '+esc(c.email):'')+'</div></div>'+
               '<button class="btn btn-sm btn-primary" onclick="atsJobTagPick(\''+c.id+'\')">Add</button>'+
             '</div>';
-          }).join('') || '<div style="color:var(--text3);font-size:12px;padding:4px 2px">No matches — fill the form below to create a new candidate.</div>');
+          }).join('') || '<div class="c-text3 fs-12" style="padding:4px 2px">No matches — fill the form below to create a new candidate.</div>');
       jobTag =
         '<div style="border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin-bottom:16px;background:var(--bg)">'+
-          '<div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:7px">ALREADY IN THE SYSTEM? SEARCH TO ADD TO THIS JOB</div>'+
+          '<div class="fs-11 c-text3" style="font-weight:700;margin-bottom:7px">ALREADY IN THE SYSTEM? SEARCH TO ADD TO THIS JOB</div>'+
           '<input class="sel" placeholder="Search name, email, CN- code…" value="'+esc(STATE.ats._jobTagQ||'')+'" oninput="atsJobTagSearch(this.value)">'+
           '<div style="max-height:22vh;overflow-y:auto;margin-top:8px">'+jpoolHtml+'</div>'+
-          '<div style="font-size:11px;color:var(--text3);margin-top:7px;border-top:1px dashed var(--border);padding-top:7px">…or create a brand-new candidate below.</div>'+
+          '<div class="fs-11 c-text3" style="margin-top:7px;border-top:1px dashed var(--border);padding-top:7px">…or create a brand-new candidate below.</div>'+
         '</div>';
     }
     var modalTitle = editing ? ('Edit Candidate'+(f.candidate_code?' '+code(f.candidate_code):''))
@@ -528,15 +528,15 @@
     var ownerNameShown = editing ? ((f.owner && f.owner.name) || (f.creator && f.creator.name) || '—') : (u.name || 'You');
     var ownerSel = fld('Owner',
       '<div class="sel" style="background:var(--bg);color:var(--text2);cursor:default" title="The person who added this candidate">'+
-        esc(ownerNameShown)+(editing?'':' <span style="color:var(--text3)">(you)</span>')+'</div>');
+        esc(ownerNameShown)+(editing?'':' <span class="c-text3">(you)</span>')+'</div>');
 
     var dup = STATE.ats.dupMatches.length ? (
       '<div class="warn-panel warn-panel-sm">'+
-        '<div style="font-weight:700;font-size:12.5px;color:#b45309;margin-bottom:8px">⚠ Possible existing candidate'+(STATE.ats.dupMatches.length>1?'s':'')+' — matched by name + email/phone</div>'+
+        '<div class="fs-12_5" style="font-weight:700;color:#b45309;margin-bottom:8px">⚠ Possible existing candidate'+(STATE.ats.dupMatches.length>1?'s':'')+' — matched by name + email/phone</div>'+
         STATE.ats.dupMatches.map(function(m){
           return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin-bottom:6px">'+
-            '<div style="font-size:12.5px"><b>'+esc(m.full_name)+'</b> '+code(m.candidate_code||'')+
-              '<div style="font-size:11px;color:var(--text3)">'+esc([m.email].concat(m.extra_emails||[]).filter(Boolean).join(', '))+(m.phone||(m.extra_phones||[]).length?' · '+esc([m.phone].concat(m.extra_phones||[]).filter(Boolean).join(', ')):'')+(m.current_title?' · '+esc(m.current_title):'')+'</div></div>'+
+            '<div class="fs-12_5"><b>'+esc(m.full_name)+'</b> '+code(m.candidate_code||'')+
+              '<div class="fs-11 c-text3">'+esc([m.email].concat(m.extra_emails||[]).filter(Boolean).join(', '))+(m.phone||(m.extra_phones||[]).length?' · '+esc([m.phone].concat(m.extra_phones||[]).filter(Boolean).join(', ')):'')+(m.current_title?' · '+esc(m.current_title):'')+'</div></div>'+
             '<button class="btn btn-sm btn-outline" onclick="atsOpenEdit(\''+m.id+'\')">Open</button>'+
           '</div>';
         }).join('')+
@@ -549,7 +549,7 @@
       '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
           '<div class="mhd">'+modalTitle+'</div>'+
-          '<span style="cursor:pointer;color:var(--text3)" onclick="closeModal()">✕</span>'+
+          '<span class="c-text3" style="cursor:pointer" onclick="closeModal()">✕</span>'+
         '</div>'+
         '<div style="padding:18px 20px;max-height:66vh;overflow-y:auto">'+
           jobTag+
@@ -583,12 +583,12 @@
             fld('Pay Rate', inp('pay_rate'))+
             fld('Pay Type', sel('pay_type', lk('pay_type',PAY_TYPES), true))+
             fld('Resume URL', inp('resume_url'))+
-            fld('Attach Resume', '<input type="file" id="ats_resume_file" accept=".pdf,.doc,.docx,.rtf,.txt" style="font-size:11.5px;width:100%">'+
-              (STATE.ats._resumeStash?'<div style="font-size:10.5px;color:var(--green);margin-top:3px">✓ '+esc(STATE.ats._resumeStash.name)+' ready to attach</div>':''))+
+            fld('Attach Resume', '<input type="file" id="ats_resume_file" accept=".pdf,.doc,.docx,.rtf,.txt" class="fs-11_5" style="width:100%">'+
+              (STATE.ats._resumeStash?'<div class="fs-10_5 c-green" style="margin-top:3px">✓ '+esc(STATE.ats._resumeStash.name)+' ready to attach</div>':''))+
             ownerSel+
           '</div>'+
           '<div style="margin-top:10px"><button class="btn btn-sm btn-outline" onclick="atsParseResume()">✨ Parse &amp; fill from resume</button>'+
-            '<span style="font-size:11px;color:var(--text3);margin-left:8px">Choose a resume file above, then parse to auto-fill the form. Review before saving.</span></div>'+
+            '<span class="fs-11 c-text3" style="margin-left:8px">Choose a resume file above, then parse to auto-fill the form. Review before saving.</span></div>'+
           '<div style="margin-top:12px">'+fld('Skills', '<textarea class="sel" style="min-height:60px;resize:vertical" placeholder="Comma-separated skills" oninput="atsFormSet(\'skills\',this.value)">'+esc(f.skills||'')+'</textarea>')+'</div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:'+(editing?'space-between':'flex-end')+';gap:8px;align-items:center">'+
@@ -784,13 +784,13 @@
     var mp = STATE.ats._movePick; if(!mp) return;
     var rows = mp.jobs.map(function(g){
       return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:6px;cursor:pointer" onclick="atsMoveOnJob(\''+g.id+'\')">'+
-        '<div><div style="font-weight:600;font-size:13px">'+esc(g.job.job_title||'Job')+' '+code(g.job.job_code||'')+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+esc(g.job.client||'')+' · '+g.subs.length+' of the '+mp.cids.length+' you ticked '+(g.subs.length===1?'is':'are')+' on it</div></div>'+
+        '<div><div class="fs-13" style="font-weight:600">'+esc(g.job.job_title||'Job')+' '+code(g.job.job_code||'')+'</div>'+
+        '<div class="fs-11 c-text3">'+esc(g.job.client||'')+' · '+g.subs.length+' of the '+mp.cids.length+' you ticked '+(g.subs.length===1?'is':'are')+' on it</div></div>'+
         '<span class="btn btn-sm btn-primary">Move here</span></div>';
     }).join('');
     STATE.modal =
       '<div class="modal modal-w560" onclick="event.stopPropagation()">'+
-        '<div class="stg-hd"><div style="font-weight:700;font-size:16px">Which job?</div>'+
+        '<div class="stg-hd"><div class="fs-16" style="font-weight:700">Which job?</div>'+
           '<div class="stg-job">A stage belongs to a person on a job. Moving '+mp.cids.length+' people to '+esc(mp.stage)+'.</div></div>'+
         '<div class="stg-bd">'+rows+'</div>'+
         '<div class="stg-ft"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>'+
@@ -833,18 +833,18 @@
     var rows = list.map(function(j){
       var go = (jp.cids&&jp.cids.length>1) ? 'atsDoAddManyToJob(\''+j.id+'\')' : 'atsDoAddToJob(\''+jp.cid+'\',\''+j.id+'\')';
       return '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:6px;cursor:pointer" onclick="'+go+'">'+
-        '<div><div style="font-weight:600;font-size:13px">'+esc(j.job_title||'')+' '+code(j.job_code||'')+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+esc(j.client||'')+(j.status?' · '+esc(j.status):'')+'</div></div>'+
+        '<div><div class="fs-13" style="font-weight:600">'+esc(j.job_title||'')+' '+code(j.job_code||'')+'</div>'+
+        '<div class="fs-11 c-text3">'+esc(j.client||'')+(j.status?' · '+esc(j.status):'')+'</div></div>'+
         '<span class="btn btn-sm btn-primary">Tag</span>'+
       '</div>';
-    }).join('') || '<div style="color:var(--text3);font-size:12.5px;padding:8px">No jobs match.</div>';
+    }).join('') || '<div class="c-text3 fs-12_5" style="padding:8px">No jobs match.</div>';
     STATE.modal =
       '<div class="modal modal-w560" onclick="event.stopPropagation()">'+
-        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700;font-size:16px">Add '+esc(jp.name)+' to a Job</div>'+
+        '<div class="fs-16" style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:700">Add '+esc(jp.name)+' to a Job</div>'+
         '<div style="padding:18px 20px">'+
           '<input class="sel" placeholder="Search by job ID, title, or client…" value="'+esc(jp.q)+'" oninput="atsJobPickSearch(this.value)" style="margin-bottom:10px">'+
           '<div style="max-height:40vh;overflow-y:auto">'+rows+'</div>'+
-          '<div style="font-size:11.5px;color:var(--text3);margin-top:8px">Puts '+((jp.cids&&jp.cids.length>1)?'them':'the candidate')+' on the job at Sourced — they show on the job\'s own page straight away.</div>'+
+          '<div class="fs-11_5 c-text3" style="margin-top:8px">Puts '+((jp.cids&&jp.cids.length>1)?'them':'the candidate')+' on the job at Sourced — they show on the job\'s own page straight away.</div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
           '<button class="btn btn-outline" onclick="closeModal()">Close</button>'+

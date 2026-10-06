@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-05",
+  "generated": "2026-10-06",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 450,
-    "lines": 107357,
+    "files": 458,
+    "lines": 108841,
     "territories": 9,
     "unclaimedFiles": 0
   },
@@ -25,23 +25,23 @@
         "services/view-horizon.js"
       ],
       "files": 70,
-      "lines": 29307,
+      "lines": 29562,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
-          "n": 1719
+          "n": 1760
         },
         {
           "f": "public/js/47-page-mailbox.js",
           "n": 1117
         },
         {
-          "f": "public/theme.css",
-          "n": 1008
+          "f": "public/ui.css",
+          "n": 1027
         },
         {
-          "f": "public/js/33-stage-modal.js",
-          "n": 974
+          "f": "public/theme.css",
+          "n": 1008
         }
       ],
       "lastTouched": "2026-10-06",
@@ -78,11 +78,11 @@
         "services/error-report.js"
       ],
       "files": 34,
-      "lines": 11914,
+      "lines": 11983,
       "largest": [
         {
           "f": "index.js",
-          "n": 3942
+          "n": 3946
         },
         {
           "f": "routes/poc.js",
@@ -94,10 +94,10 @@
         },
         {
           "f": "routes/jobs.js",
-          "n": 619
+          "n": 627
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-06",
       "openIn": 1,
       "openOut": 1
     },
@@ -120,12 +120,16 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 66,
-      "lines": 3906,
+      "files": 68,
+      "lines": 4229,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
           "n": 319
+        },
+        {
+          "f": "scripts/inline-to-classes.mjs",
+          "n": 240
         },
         {
           "f": "migrations/011_ats_recruiting_baseline.sql",
@@ -134,10 +138,6 @@
         {
           "f": "schema.sql",
           "n": 174
-        },
-        {
-          "f": "models/index.js",
-          "n": 171
         }
       ],
       "lastTouched": "2026-10-06",
@@ -317,7 +317,7 @@
         "lead-ingest.js"
       ],
       "files": 30,
-      "lines": 8121,
+      "lines": 8222,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -336,7 +336,7 @@
           "n": 476
         }
       ],
-      "lastTouched": "2026-10-01",
+      "lastTouched": "2026-10-06",
       "openIn": 0,
       "openOut": 6
     },
@@ -403,8 +403,8 @@
         "test/",
         ".github/"
       ],
-      "files": 176,
-      "lines": 33497,
+      "files": 182,
+      "lines": 34233,
       "largest": [
         {
           "f": "test/ownership-requests-smoke.mjs",
@@ -412,7 +412,7 @@
         },
         {
           "f": "test/poc-routes-smoke.mjs",
-          "n": 658
+          "n": 659
         },
         {
           "f": "test/candidate-outreach-smoke.mjs",

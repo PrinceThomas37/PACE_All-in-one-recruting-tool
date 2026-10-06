@@ -54,23 +54,23 @@
     var loading=!d._at&&!d.empty;
     function tile(label,value,color){
       return '<div class="dash-tile">'+
-        '<div style="font-size:24px;font-weight:700;color:'+(color||'var(--text)')+'">'+(value||0)+'</div>'+
-        '<div style="font-size:11px;color:var(--text3);margin-top:2px;white-space:nowrap">'+esc(label)+'</div>'+
+        '<div class="fs-24" style="font-weight:700;color:'+(color||'var(--text)')+'">'+(value||0)+'</div>'+
+        '<div class="fs-11 c-text3" style="margin-top:2px;white-space:nowrap">'+esc(label)+'</div>'+
       '</div>';
     }
     var stagePills=Object.keys(bs).map(function(s){
       var cnt=bs[s]; if(!cnt)return'';
       var color=(window.recStageColor?recStageColor(s):'var(--text)');
       return '<div style="text-align:center;padding:10px 14px;background:var(--bg);border-radius:var(--r2);min-width:74px">'+
-        '<div style="font-family:var(--display);font-size:20px;font-weight:700;color:'+color+'">'+cnt+'</div>'+
-        '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">'+esc(s)+'</div>'+
+        '<div class="fs-20" style="font-family:var(--display);font-weight:700;color:'+color+'">'+cnt+'</div>'+
+        '<div class="fs-10_5 c-text3" style="margin-top:2px">'+esc(s)+'</div>'+
       '</div>';
     }).join('');
     return '<div class="card cp mb4">'+
       '<div class="flex jb aic mb3"><div><div class="fw6">Your team’s work</div>'+
         '<div class="f12 text3">Live recruiting numbers across everyone in your reporting line</div></div>'+
         '<button class="btn btn-outline btn-sm" onclick="myteamTab(\'reports\')">Full reports →</button></div>'+
-      (loading?'<div style="text-align:center;color:var(--text3);font-size:13px;padding:8px 0">Loading…</div>':
+      (loading?'<div class="c-text3 fs-13" style="text-align:center;padding:8px 0">Loading…</div>':
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">'+
           tile('To BDM this week',d.submissions_week,'var(--accent)')+
           tile('To BDM this month',d.submissions_month,'var(--accent)')+
@@ -120,23 +120,23 @@
   function activityPanel(){
     var a=STATE.myteamActivity; if(!a||!a.userId)return'';
     var user=(STATE.users||[]).find(function(x){return x.id===a.userId;});
-    var rows = a.loading ? '<div style="padding:34px;text-align:center;color:var(--text3);font-size:13px">Loading activity…</div>'
-      : (!a.data||!a.data.length) ? '<div style="padding:34px;text-align:center;color:var(--text3);font-size:13px">No recent activity recorded.</div>'
+    var rows = a.loading ? '<div class="c-text3 fs-13" style="padding:34px;text-align:center">Loading activity…</div>'
+      : (!a.data||!a.data.length) ? '<div class="c-text3 fs-13" style="padding:34px;text-align:center">No recent activity recorded.</div>'
       : a.data.map(function(ev){
           var when=''; try{ var x=new Date(ev.at); when=x.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+x.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}); }catch(e){}
           var dot=ev.kind==='submission'?'var(--accent)':'#2563eb';
           return '<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">'+
             '<div style="width:7px;height:7px;border-radius:50%;background:'+dot+';margin-top:6px;flex-shrink:0"></div>'+
-            '<div style="flex:1;min-width:0"><div style="font-size:13px">'+esc(ev.detail||'')+(ev.candidate?' — <b>'+esc(ev.candidate)+'</b>':'')+'</div>'+
-              '<div style="font-size:11px;color:var(--text3)">'+esc(when)+(ev.job?' · '+esc(ev.job):'')+'</div>'+
-              (ev.note?'<div style="font-size:11.5px;color:var(--text2);margin-top:2px">'+esc(ev.note)+'</div>':'')+'</div>'+
+            '<div style="flex:1;min-width:0"><div class="fs-13">'+esc(ev.detail||'')+(ev.candidate?' — <b>'+esc(ev.candidate)+'</b>':'')+'</div>'+
+              '<div class="fs-11 c-text3">'+esc(when)+(ev.job?' · '+esc(ev.job):'')+'</div>'+
+              (ev.note?'<div class="fs-11_5 c-text2" style="margin-top:2px">'+esc(ev.note)+'</div>':'')+'</div>'+
           '</div>';
         }).join('');
     return '<div onclick="closeTeamActivity()" style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100"></div>'+
       '<div style="position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);background:var(--card-solid);border-left:1px solid var(--border);z-index:101;box-shadow:-8px 0 24px rgba(0,0,0,.14);display:flex;flex-direction:column">'+
         '<div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">'+
-          '<div><div style="font-weight:700;font-size:15px">'+esc(user?user.name:'Activity')+'</div><div style="font-size:12px;color:var(--text3)">Recent activity</div></div>'+
-          '<button onclick="closeTeamActivity()" style="border:0;background:none;font-size:24px;cursor:pointer;color:var(--text3);line-height:1">×</button>'+
+          '<div><div class="fs-15" style="font-weight:700">'+esc(user?user.name:'Activity')+'</div><div class="fs-12 c-text3">Recent activity</div></div>'+
+          '<button onclick="closeTeamActivity()" class="fs-24 c-text3" style="border:0;background:none;cursor:pointer;line-height:1">×</button>'+
         '</div>'+
         '<div style="flex:1;overflow:auto;padding:6px 18px 18px">'+rows+'</div>'+
       '</div>';
@@ -144,8 +144,8 @@
 
   window.renderMyTeam = function(){
     var u=STATE.user;
-    if(!leadsATeam(u)) return '<div class="page"><div style="font-size:18px;font-weight:700;margin-bottom:6px">My Team</div>'+
-      '<div style="text-align:center;padding:50px;color:var(--text3)">No one reports to you yet.</div></div>';
+    if(!leadsATeam(u)) return '<div class="page"><div class="fs-18" style="font-weight:700;margin-bottom:6px">My Team</div>'+
+      '<div class="c-text3" style="text-align:center;padding:50px">No one reports to you yet.</div></div>';
     var directCount=directReportsOf(u.id).length;
     var totalCount=reportingSubtree(u.id).length;
     var tab=STATE.myteamTab||'overview';
@@ -156,8 +156,8 @@
     else body=overviewBody(u);
     return '<div class="page">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-        '<div><div style="font-size:18px;font-weight:700">My Team</div>'+
-          '<div style="font-size:12.5px;color:var(--text3)">'+directCount+' direct report'+(directCount===1?'':'s')+' · '+totalCount+' in your reporting line</div></div>'+
+        '<div><div class="fs-18" style="font-weight:700">My Team</div>'+
+          '<div class="fs-12_5 c-text3">'+directCount+' direct report'+(directCount===1?'':'s')+' · '+totalCount+' in your reporting line</div></div>'+
       '</div>'+
       tabBar(tab)+
       body+

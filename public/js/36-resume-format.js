@@ -15,10 +15,10 @@
   var LETTERHEAD_TOP =
     '<div style="border-bottom:3px solid #2E7D32;padding:16px 0 12px;display:flex;justify-content:space-between;align-items:flex-end">'+
       '<img src="'+FUTE_LOGO+'" alt="futé" style="height:44px;width:auto">'+
-      '<div style="font-size:10.5px;color:#777;text-align:right;letter-spacing:.08em;text-transform:uppercase">Candidate Submission</div>'+
+      '<div class="fs-10_5" style="color:#777;text-align:right;letter-spacing:.08em;text-transform:uppercase">Candidate Submission</div>'+
     '</div>';
   var LETTERHEAD_BOTTOM =
-    '<div style="border-top:2px solid #2E7D32;margin-top:26px;padding-top:8px;font-size:9.5px;color:#888;text-align:center">'+
+    '<div class="fs-9_5" style="border-top:2px solid #2E7D32;margin-top:26px;padding-top:8px;color:#888;text-align:center">'+
       'futé · Recruiting &amp; Staffing · '+esc(FUTE_ADDRESS)+
     '</div>';
 
@@ -40,21 +40,21 @@
     var contact = [f.email, f.phone, [f.city,f.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
     var sk = skillsArray(f.skills);
     var skills = sk.length
-      ? '<div style="margin:10px 0 2px;font-weight:700;font-size:12px;color:#2E7D32;text-transform:uppercase;letter-spacing:.06em">Key Skills</div>'+
-        '<div style="font-size:12px;line-height:1.6">'+sk.map(esc).join(' · ')+'</div>'
+      ? '<div class="fs-12" style="margin:10px 0 2px;font-weight:700;color:#2E7D32;text-transform:uppercase;letter-spacing:.06em">Key Skills</div>'+
+        '<div class="fs-12" style="line-height:1.6">'+sk.map(esc).join(' · ')+'</div>'
       : '';
-    var exp = (yrs!=null && yrs!=='' && isFinite(Number(yrs))) ? '<span style="font-size:12px;color:#555"> · '+esc(String(yrs))+' yrs experience</span>' : '';
+    var exp = (yrs!=null && yrs!=='' && isFinite(Number(yrs))) ? '<span class="fs-12" style="color:#555"> · '+esc(String(yrs))+' yrs experience</span>' : '';
     return '<!doctype html><html><head><meta charset="utf-8"><title>'+esc(name||filename||'Submission')+'</title></head>'+
       '<body style="font-family:Calibri,Arial,sans-serif;color:#222;max-width:750px;margin:0 auto;padding:0 28px 20px">'+
         LETTERHEAD_TOP+
         '<div style="margin-top:16px">'+
-          '<div style="font-size:20px;font-weight:700">'+esc(name||'Candidate')+exp+'</div>'+
-          (title?'<div style="font-size:13px;color:#333;margin-top:1px">'+esc(title)+'</div>':'')+
-          (contact?'<div style="font-size:12px;color:#555;margin-top:2px">'+esc(contact)+'</div>':'')+
-          (f.linkedin_url?'<div style="font-size:12px;color:#555">'+esc(f.linkedin_url)+'</div>':'')+
+          '<div class="fs-20" style="font-weight:700">'+esc(name||'Candidate')+exp+'</div>'+
+          (title?'<div class="fs-13" style="color:#333;margin-top:1px">'+esc(title)+'</div>':'')+
+          (contact?'<div class="fs-12" style="color:#555;margin-top:2px">'+esc(contact)+'</div>':'')+
+          (f.linkedin_url?'<div class="fs-12" style="color:#555">'+esc(f.linkedin_url)+'</div>':'')+
           skills+
-          '<div style="margin:14px 0 4px;font-weight:700;font-size:12px;color:#2E7D32;text-transform:uppercase;letter-spacing:.06em">Resume</div>'+
-          '<div style="font-size:12px;line-height:1.55;white-space:pre-wrap">'+esc(text||'')+'</div>'+
+          '<div class="fs-12" style="margin:14px 0 4px;font-weight:700;color:#2E7D32;text-transform:uppercase;letter-spacing:.06em">Resume</div>'+
+          '<div class="fs-12" style="line-height:1.55;white-space:pre-wrap">'+esc(text||'')+'</div>'+
         '</div>'+
         LETTERHEAD_BOTTOM+
       '</body></html>';
@@ -101,7 +101,7 @@
     ov.innerHTML =
       '<div style="background:var(--card);border-radius:12px;width:820px;max-width:96vw;height:88vh;display:flex;flex-direction:column;overflow:hidden">'+
         '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">'+
-          '<div style="font-weight:700;font-size:14px;flex:1">Formatted submission — preview</div>'+
+          '<div class="fs-14" style="font-weight:700;flex:1">Formatted submission — preview</div>'+
           '<button class="btn btn-sm btn-outline" id="ats-fmt-word">Download Word</button>'+
           '<button class="btn btn-sm btn-outline" id="ats-fmt-pdf">Download PDF</button>'+
           '<button class="btn btn-sm btn-outline" id="ats-fmt-close">✕</button>'+

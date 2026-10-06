@@ -55,7 +55,7 @@
   // ── the board ──────────────────────────────────────────────────────────────
   function statusBadge(st){
     var c = st==='Active' ? 'var(--green)' : st==='On Hold' ? 'var(--amber)' : st==='Closed' ? 'var(--red)' : 'var(--text3)';
-    return '<span style="font-size:10.5px;font-weight:700;color:'+c+';border:1px solid currentColor;border-radius:9px;padding:1px 8px;opacity:.85">'+esc(st||'')+'</span>';
+    return '<span class="fs-10_5" style="font-weight:700;color:'+c+';border:1px solid currentColor;border-radius:9px;padding:1px 8px;opacity:.85">'+esc(st||'')+'</span>';
   }
 
   function actionBtn(j){
@@ -86,15 +86,15 @@
       var loc = [j.city,j.state].filter(Boolean).join(', ');
       var recs = (j.recruiters||[]);
       var pr = j.priority && j.priority!=='Normal'
-        ? '<span style="font-size:10px;font-weight:700;color:var(--red);background:var(--red-l);padding:2px 7px;border-radius:8px;margin-left:6px">'+esc(j.priority)+'</span>' : '';
+        ? '<span class="fs-10 c-red" style="font-weight:700;background:var(--red-l);padding:2px 7px;border-radius:8px;margin-left:6px">'+esc(j.priority)+'</span>' : '';
       return '<div class="card" style="padding:16px;cursor:pointer" onclick="jbOpenJob(\''+j.id+'\')">'+
         '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px">'+
-          '<span style="font-family:var(--mono);font-size:11px;color:var(--text3)">'+esc(j.job_code||'')+'</span>'+statusBadge(j.status)+
+          '<span class="fs-11 c-text3" style="font-family:var(--mono)">'+esc(j.job_code||'')+'</span>'+statusBadge(j.status)+
         '</div>'+
-        '<div style="font-weight:600;font-size:15px;margin-bottom:3px">'+esc(j.job_title||'')+pr+'</div>'+
-        '<div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">'+esc(j.client||(j.company&&j.company.name)||'')+(loc?' · '+esc(loc):'')+'</div>'+
-        (j.bd_manager&&j.bd_manager.name?'<div style="font-size:11.5px;color:var(--text3);margin-bottom:8px">BD Manager: <span style="color:var(--text2);font-weight:500">'+esc(j.bd_manager.name)+'</span></div>':'')+
-        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;font-size:11.5px;color:var(--text3)">'+
+        '<div class="fs-15" style="font-weight:600;margin-bottom:3px">'+esc(j.job_title||'')+pr+'</div>'+
+        '<div class="fs-12_5 c-text3" style="margin-bottom:10px">'+esc(j.client||(j.company&&j.company.name)||'')+(loc?' · '+esc(loc):'')+'</div>'+
+        (j.bd_manager&&j.bd_manager.name?'<div class="fs-11_5 c-text3" style="margin-bottom:8px">BD Manager: <span class="c-text2" style="font-weight:500">'+esc(j.bd_manager.name)+'</span></div>':'')+
+        '<div class="fs-11_5 c-text3" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">'+
           '<span>'+(recs.length?('👥 '+esc(recs.slice(0,3).join(', '))+(recs.length>3?' +'+(recs.length-3):'')):'No recruiters yet')+'</span>'+
           '<span style="white-space:nowrap">'+(j.submission_count||0)+' subs</span>'+
         '</div>'+
@@ -120,7 +120,7 @@
       toolbar: UI.toolbar({
         search:{ value:STATE.jb.q||'', placeholder:'Search title, client, skills, location…',
                  oninput:'jbSearch(this.value)' },
-        right:'<span style="font-size:12.5px;color:var(--ink3)">'+jobs.length+' of '+all.length+' jobs · newest first</span>'
+        right:'<span class="fs-12_5 c-ink3">'+jobs.length+' of '+all.length+' jobs · newest first</span>'
       }),
       body: (jobs.length
         ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px">'+cards+'</div>'
@@ -158,19 +158,19 @@
     var loc = [j.city,j.state,j.country].filter(Boolean).join(', ');
     var pay = (j.pay_min||j.pay_max) ? ((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')) : '';
 
-    function dr(lbl,val){ return val?'<div style="font-size:12.5px;margin-bottom:4px"><span style="color:var(--text3)">'+lbl+': </span>'+esc(val)+'</div>':''; }
+    function dr(lbl,val){ return val?'<div class="fs-12_5" style="margin-bottom:4px"><span class="c-text3">'+lbl+': </span>'+esc(val)+'</div>':''; }
 
     var descBody = j.job_description
-      ? '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto">'+esc(j.job_description)+'</div>'
-      : '<div style="font-size:12.5px;color:var(--text3);font-style:italic">No job description provided yet.</div>';
+      ? '<div class="fs-13" style="line-height:1.5;white-space:pre-wrap;max-height:180px;overflow:auto">'+esc(j.job_description)+'</div>'
+      : '<div class="fs-12_5 c-text3" style="font-style:italic">No job description provided yet.</div>';
 
     return '<div onclick="jbCloseModal()" style="position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:90;display:flex;align-items:center;justify-content:center;padding:20px">'+
       '<div onclick="event.stopPropagation()" style="background:var(--card);border-radius:var(--r3);max-width:640px;width:100%;max-height:86vh;overflow:auto;padding:22px 24px">'+
         '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px">'+
           '<div>'+
-            '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">'+esc(j.job_code||'')+'</span>'+statusBadge(j.status)+'</div>'+
-            '<div style="font-size:18px;font-weight:700">'+esc(j.job_title||'')+'</div>'+
-            '<div style="font-size:13px;color:var(--text3);margin-top:2px">'+esc(j.client||(j.company&&j.company.name)||'')+(loc?' · '+esc(loc):'')+'</div>'+
+            '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px"><span class="fs-11 c-text3" style="font-family:var(--mono)">'+esc(j.job_code||'')+'</span>'+statusBadge(j.status)+'</div>'+
+            '<div class="fs-18" style="font-weight:700">'+esc(j.job_title||'')+'</div>'+
+            '<div class="fs-13 c-text3" style="margin-top:2px">'+esc(j.client||(j.company&&j.company.name)||'')+(loc?' · '+esc(loc):'')+'</div>'+
           '</div>'+
           '<button class="btn btn-sm btn-outline" onclick="jbCloseModal()">✕</button>'+
         '</div>'+
@@ -181,7 +181,7 @@
           dr('Needed By',fmtDate(j.start_date))+dr('Priority',j.priority)+
           dr('Primary Skills',j.primary_skills)+dr('Secondary Skills',j.secondary_skills)+
         '</div>'+
-        '<div style="margin:10px 0 4px;font-weight:600;font-size:13.5px">Job Description</div>'+
+        '<div class="fs-13_5" style="margin:10px 0 4px;font-weight:600">Job Description</div>'+
         descBody+
         '<div style="margin-top:14px">'+actionBtn(j)+'</div>'+
       '</div>'+
@@ -219,10 +219,10 @@
     var rows = reqs.map(function(r){
       var job = r.job||{}, rec = r.recruiter||{};
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--border)">'+
-        '<div style="flex:1;min-width:0;font-size:13px">'+
+        '<div class="fs-13" style="flex:1;min-width:0">'+
           '<b>'+esc(rec.name||'Recruiter')+'</b> wants <b>'+esc(job.job_title||'')+'</b> '+
-          '<span style="font-family:var(--mono);font-size:10.5px;color:var(--text3)">'+esc(job.job_code||'')+'</span>'+
-          '<span style="font-size:11.5px;color:var(--text3)"> · '+agoTxt(r.created_at)+(r.note?' · “'+esc(r.note)+'”':'')+'</span>'+
+          '<span class="fs-10_5 c-text3" style="font-family:var(--mono)">'+esc(job.job_code||'')+'</span>'+
+          '<span class="fs-11_5 c-text3"> · '+agoTxt(r.created_at)+(r.note?' · “'+esc(r.note)+'”':'')+'</span>'+
         '</div>'+
         '<button class="btn btn-sm btn-primary" onclick="jbDecide(\''+r.id+'\',\'approve\')">Assign</button>'+
         '<button class="btn btn-sm btn-outline" onclick="jbDecide(\''+r.id+'\',\'decline\')">Decline</button>'+
