@@ -202,7 +202,7 @@ function renderSidebar(){
     '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
       'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       '<div class="rail-mark">P</div>'+
-      '<div class="rail-word"><span class="c-accent">PA</span><span style="color:#C99A18">CE</span></div>'+
+      '<div class="rail-word"><span class="c-accent">PA</span><span class="c-amber">CE</span></div>'+
       '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
@@ -278,52 +278,91 @@ window.toggleRail=function(){
   try{ localStorage.setItem('pace-rail', on?'pinned':'collapsed'); }catch(e){}
 };
 
-// ── LIGHT / DARK ──────────────────────────────────────────────────────────
-// Three states, not two: 'light', 'dark', or NO attribute at all, which means
-// "follow the operating system". The toggle only ever moves between the two
-// explicit ones, because a user who reaches for it has stopped wanting the OS
-// to decide.
+// ── LIGHT / DARK / AUTO ───────────────────────────────────────────────────
+// Three states (D-0015, D-0072): the person chose 'light', chose 'dark', or
+// chose nothing — AUTO, which follows their clock (light 05:00–16:59, dark
+// otherwise; the same hours as the inline script in index.html's <head>).
+// Auto is always resolved to a real data-theme attribute, with a
+// data-theme-auto marker saying nobody picked it.
 //
-// Like openNav()/closeNav(), this touches ONE attribute and calls nothing
-// else. No render(), no scheduleRender(). Re-rendering to change a colour
-// would reload every sandboxed iframe on screen and lose the page's scroll —
-// and the whole point of the render engine is that a repaint changing nothing
-// writes nothing.
+// Like openNav()/closeNav(), changing theme touches attributes and calls
+// nothing else. No render(), no scheduleRender(). Re-rendering to change a
+// colour would reload every sandboxed iframe on screen and lose the page's
+// scroll — and the whole point of the render engine is that a repaint changing
+// nothing writes nothing.
+function paceClockTheme(d){
+  var h=(d||new Date()).getHours();
+  return (h>=5&&h<17)?'light':'dark';
+}
+window.paceClockTheme=paceClockTheme;
+function isAutoTheme(){ return document.documentElement.hasAttribute('data-theme-auto'); }
+window.isAutoTheme=isAutoTheme;
 function currentTheme(){
   var set=document.documentElement.getAttribute('data-theme');
   if(set==='dark'||set==='light')return set;
-  // No explicit choice: report what the OS is actually giving them, so the
-  // toggle flips to the opposite of what is ON SCREEN rather than to a
-  // default that may already be showing.
-  return (window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  return paceClockTheme();
 }
-// APPLY A THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
-// account-preference load, so there is one place that knows how to put a theme
-// on screen.
-function applyTheme(next){
-  document.documentElement.setAttribute('data-theme',next);
-  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
-  // the account preference arrives so the page never flashes the wrong theme
-  // while a fetch is in flight. The account is the authority (D-0022).
-  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+function themeChanged(){
   // Anything that paints itself rather than being painted BY CSS has to be
   // told. Right now that is the login backdrop (a <canvas>); an event keeps
   // that knowledge with the thing that needs it instead of hard-wiring a call
   // to a function that may not be on the page.
   try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
 }
+// APPLY A CHOSEN THEME WITHOUT RE-RENDERING. Shared by the toggle and by the
+// account-preference load, so there is one place that knows how to put a theme
+// on screen.
+function applyTheme(next){
+  document.documentElement.removeAttribute('data-theme-auto');
+  document.documentElement.setAttribute('data-theme',next);
+  // localStorage stays, but only as the INSTANT-APPLY CACHE: it is read before
+  // the account preference arrives so the page never flashes the wrong theme
+  // while a fetch is in flight. The account is the authority (D-0022).
+  try{ localStorage.setItem('pace-theme',next); }catch(e){ /* private mode: lasts the session */ }
+  themeChanged();
+}
 window.applyTheme=applyTheme;
+// BACK TO AUTO: forget the choice and let the clock decide.
+function applyAutoTheme(){
+  try{ localStorage.removeItem('pace-theme'); }catch(e){}
+  document.documentElement.setAttribute('data-theme-auto','');
+  var was=document.documentElement.getAttribute('data-theme');
+  var now=paceClockTheme();
+  document.documentElement.setAttribute('data-theme',now);
+  if(was!==now)themeChanged();
+}
+window.applyAutoTheme=applyAutoTheme;
+// AUTO KEEPS UP WITH THE CLOCK — but never under someone's hands. Called when
+// they move to another screen (goPage) and when they come back to the tab; a
+// timer would flip the page while they are reading it.
+window.paceClockCheck=function(){
+  if(!isAutoTheme())return;
+  var now=paceClockTheme();
+  if(document.documentElement.getAttribute('data-theme')!==now){
+    document.documentElement.setAttribute('data-theme',now);
+    themeChanged();
+  }
+};
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible')window.paceClockCheck();
+});
 
+// ONE CLICK ALWAYS FLIPS WHAT IS ON SCREEN. If the flip lands on what the clock
+// would show anyway, that is Auto again (saved as 'system', the value the
+// account preference already uses for "nobody chose"); otherwise it is a
+// choice. So in the daytime: Auto(light) → Dark → Auto(light) → …
 window.toggleTheme=function(){
   var next=currentTheme()==='dark'?'light':'dark';
-  applyTheme(next);
+  var save;
+  if(!isAutoTheme()&&next===paceClockTheme()){ applyAutoTheme(); save='system'; }
+  else { applyTheme(next); save=next; }
   // THE CHOICE FOLLOWS THE PERSON, NOT THE BROWSER (D-0022). Saved against the
   // account so it reaches their other devices and does NOT carry over to
   // whoever signs in next on a shared computer. Best-effort: a preference that
   // fails to save still applied on screen, and localStorage keeps it for this
   // browser, so the failure costs a sync and never the interaction.
   if(STATE&&STATE.token&&typeof apiFetch==='function'){
-    apiFetch('PUT','/me/preferences',{theme:next}).catch(function(){});
+    apiFetch('PUT','/me/preferences',{theme:save}).catch(function(){});
   }
 };
 
@@ -334,13 +373,10 @@ window.loadThemePreference=function(){
   if(!(STATE&&STATE.token)||typeof apiGet!=='function')return;
   apiGet('/me/preferences').then(function(p){
     if(!p||!p.theme)return;
-    if(p.theme==='system'){
-      document.documentElement.removeAttribute('data-theme');
-      try{ localStorage.removeItem('pace-theme'); }catch(e){}
-      try{ window.dispatchEvent(new Event('pace-theme-change')); }catch(e){}
-      return;
+    if(p.theme==='system'){ if(!isAutoTheme())applyAutoTheme(); return; }
+    if(p.theme==='light'||p.theme==='dark'){
+      if(isAutoTheme()||p.theme!==currentTheme())applyTheme(p.theme);
     }
-    if(p.theme!==currentTheme())applyTheme(p.theme);
   }).catch(function(){});
 };
 

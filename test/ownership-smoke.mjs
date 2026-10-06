@@ -253,7 +253,10 @@ t('no migration — it rides app_settings like the other per-user stores', () =>
 t('the toggle saves to the account, and still applies instantly', () => {
   const tg = shell.slice(shell.indexOf('window.toggleTheme='), shell.indexOf('window.loadThemePreference='));
   assert.ok(/applyTheme\(next\)/.test(tg), 'applies on screen first');
-  assert.ok(/'\/me\/preferences',\{theme:next\}/.test(tg), 'then syncs to the person');
+  // R-122: the saved value is the choice, or 'system' when the click lands back
+  // on Auto (the clock). theme-clock-smoke checks what is actually sent.
+  assert.ok(/'\/me\/preferences',\{theme:save\}/.test(tg), 'then syncs to the person');
+  assert.ok(/save='system'/.test(tg), 'back on the clock is saved as Auto');
   assert.ok(/catch\(function\(\)\{\}\)/.test(tg), 'a failed sync must not cost the interaction');
 });
 

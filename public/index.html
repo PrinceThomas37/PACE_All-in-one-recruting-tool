@@ -6,8 +6,8 @@
      is what keeps the sticky modal footer and the toast rail clear of the home
      indicator on a notched phone. Without it those insets are always 0. -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<meta name="theme-color" content="#E8E8ED" media="(prefers-color-scheme: light)"/>
-<meta name="theme-color" content="#131322" media="(prefers-color-scheme: dark)"/>
+<meta name="theme-color" content="#F2EADB" media="(prefers-color-scheme: light)"/>
+<meta name="theme-color" content="#130B2B" media="(prefers-color-scheme: dark)"/>
 <title>PACE — All-in-one Recruiting Platform</title>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/styles.css"/>
@@ -16,17 +16,25 @@
      narrow screen's behaviour on top of the two above. -->
 <link rel="stylesheet" href="/mobile.css"/>
 <link rel="stylesheet" href="/theme.css"/>
+<!-- The retro redesign (R-122, docs/design/PACE.ds). Loaded after theme.css and
+     only redefines it; removing this one line restores the Session-23 look. -->
+<link rel="stylesheet" href="/retro.css"/>
 <!-- THEME, BEFORE FIRST PAINT. This must stay inline and synchronous, here in
      <head>, above <body>. Deferring it by even one tick paints the page light
-     and then snaps it to dark — the flash every themed app gets wrong. No
-     stored choice means no attribute at all, which is the "follow the OS"
-     state (see theme.css). -->
+     and then snaps it to dark — the flash every themed app gets wrong.
+     A stored 'light' / 'dark' is the person's own choice. No stored choice is
+     AUTO (D-0072): day or night by the person's clock — light from 05:00 to
+     16:59, dark otherwise — resolved HERE to a real attribute, plus a
+     data-theme-auto marker so the toggle knows nobody chose it. The same hours
+     live in paceClockTheme() in 04-shell-login.js; keep the two in step. -->
 <script>
 (function(){
-  try{
-    var t=localStorage.getItem('pace-theme');
-    if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);
-  }catch(e){/* private mode: fall through to the OS preference */}
+  var root=document.documentElement,t=null;
+  try{ t=localStorage.getItem('pace-theme'); }catch(e){/* private mode: Auto */}
+  if(t==='dark'||t==='light'){ root.setAttribute('data-theme',t); return; }
+  var h=new Date().getHours();
+  root.setAttribute('data-theme',(h>=5&&h<17)?'light':'dark');
+  root.setAttribute('data-theme-auto','');
 })();
 </script>
 </head>

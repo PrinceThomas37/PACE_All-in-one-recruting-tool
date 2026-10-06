@@ -42,7 +42,7 @@ color:
   semantic:
     background.canvas:  { light: "{arcade-cream}", dark: "{night-canvas}" }
     background.sidebar: { light: "{shelf-tan}",    dark: "{night-shelf}" }
-    surface.card:       "{cartridge-cream}"        # cards stay cream in BOTH modes — paper on a desk
+    surface.card:       { light: "{cartridge-cream}", dark: "#221748" }   # dusk plum at night: cards and canvas share one text colour in the app
     text.primary:       "{midnight-ink}"           # on cards
     text.secondary:     "{faded-ink}"              # on cards
     text.on-canvas:     { light: "{ink-on-page}", dark: "{lavender-glow}" }
@@ -136,7 +136,7 @@ components:
 ## Instructions
 - Pixel type is for the **frame only**: logo, page title, record title, log title (Press Start 2P); tabs and sidebar section labels (Silkscreen). Never on names, jobs, rates, buttons or body text.
 - Everything has **square corners, an ink border and a hard, blur-free shadow**. No rounded corners, no soft shadows, no glass.
-- Cards are **cream paper in both modes**; only the canvas, sidebar and sky change between day and night.
+- Cards are **cream paper by day and dusk plum (`#221748`) at night** with cream text. (Cream cards at night were the first idea; the app gives cards and canvas one text colour, so a cream card would need dark text on a dark page — found building step 1.)
 - **Sun Yellow is the single primary action** per screen (New Job, New Lead, Save). Decisions use the three muted state colours, never Sun Yellow.
 - Colour on a list is scarce: one stage tag, one time tag, the trail. A record that is late gets a brick shadow and a brick id tab — not a red card.
 - Numbers, rates, IDs and times are Space Mono so they line up; names are Hanken Grotesk 800.
@@ -150,7 +150,7 @@ components:
 ## Surface
 - Light: canvas Arcade Cream `#F2EADB` with a faint 16px grid; sidebar Shelf Tan `#E8DCC6`.
 - Dark: canvas Night `#130B2B` with the same grid in lavender at 5%; sidebar `#1D1240`.
-- Cards and records: Cartridge Cream `#FFF6E6`, 3px ink border. Controls: 2px border.
+- Cards and records: Cartridge Cream `#FFF6E6` by day, dusk plum `#221748` at night; 2px ink border app-wide (3px on the hero record and list cards). Controls: 2px border.
 - The activity log is a green-screen monitor in both modes (CRT Black, phosphor text, scanlines).
 
 ## Text

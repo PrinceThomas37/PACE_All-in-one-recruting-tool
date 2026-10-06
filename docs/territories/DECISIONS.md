@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0073 · 2026-10-06 · STANDS · The retro look is the DEFAULT for every customer; build it step by step without breaking the app (R-122)
+**Their words:** *"Default for everyone, go ahead and build it. step by step, i dont want to break the application"*
+**Chosen:** `docs/design/PACE.ds` is the design to build. It replaces the current look for every company (not an opt-in theme); each person keeps Auto (follows the clock) / Light / Dark, saved per person. Built in small steps, each tested and shown before the next: (1) colours + clock switch, (2) sidebar + sky header, (3) the shared UI kit, (4) Today, then Leads, then the rest. Nothing merges to `main` (= live) until the owner has seen it.
+**Re-open when:** a customer objects to the look, or a step breaks something the owner relies on.
+
 ### D-0072 · 2026-10-06 · STANDS · Retro redesign (R-122): the Duck Hunt scoreboard goes; the WHOLE app follows day and night
 **Their words:** on concept 2, asked *"Can the scoreboard go?"* — *"Yes"*; asked *"Should the whole app follow day and night, or only the header?"* — *"Yes"* (to the recommended option, the whole app).
 **Chosen:** (1) No Duck Hunt scoreboard / grass strip on the default screen; the duck may return only as a brief celebration (e.g. a placement). (2) The whole app follows the viewer's own clock: light cream pages by day, the dark version in the evening and at night, with the header sky (dawn/day/dusk/night, sun or moon on an arc) on top. Earlier in the same thread the owner chose the 90s retro direction (Stamply layout, Launch Week colours and pixel type, Duck Hunt touches) and asked for muted state colours — concept 2 did that.
