@@ -1,5 +1,6 @@
 require('dotenv').config();
 const errorReport = require('./services/error-report'); errorReport.init(); // off unless SENTRY_DSN is set
+const sequenceTemplates = require('./services/sequence-templates');
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
@@ -3694,13 +3695,17 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   // but the send path is the single place the sender identity is resolved.
   const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
   const key = cfg.template_key || 'initial';
+  // 'initial' is this step's name for the person's Outreach 1, which is stored as
+  // 'o1' — see services/sequence-templates.js (it used to look up 'initial_*',
+  // which never existed, so a sequence's first email could not be written).
   let subjTmpl = cfg.subject, bodyTmpl = cfg.body;
   if (!subjTmpl || !bodyTmpl) {
     const { data: settingsRows } = await supabase.from('app_settings').select('key,value')
-      .in('key', [`u_${bdId}_tmpl_${key}_subject`, `u_${bdId}_tmpl_${key}_body`, `template_${key}_subject`, `template_${key}_body`]);
+      .in('key', sequenceTemplates.settingKeys(bdId, key));
     const s = {}; (settingsRows || []).forEach(r => { s[r.key] = r.value; });
-    subjTmpl = subjTmpl || resolveTemplate(s[`u_${bdId}_tmpl_${key}_subject`] || s[`template_${key}_subject`] || '', `${key}_subject`) || DEFAULT_TEMPLATES[`${key}_subject`];
-    bodyTmpl = bodyTmpl || resolveTemplate(s[`u_${bdId}_tmpl_${key}_body`] || s[`template_${key}_body`] || '', `${key}_body`) || DEFAULT_TEMPLATES[`${key}_body`];
+    const picked = sequenceTemplates.pickTemplate({ cfg, bdId, settings: s, defaults: DEFAULT_TEMPLATES, resolve: resolveTemplate });
+    if (picked.error) return { outcome: 'failed', detail: { error: picked.error } };
+    subjTmpl = picked.subject; bodyTmpl = picked.body;
   }
   if (!subjTmpl || !bodyTmpl) return { outcome: 'failed', detail: { error: `No template for key "${key}"` } };
 

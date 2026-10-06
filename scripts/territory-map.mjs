@@ -83,7 +83,7 @@ const TERRITORIES = [
 
   { id: 'observatory', name: 'Observatory', role: 'AI & Intelligence', terrain: 'the high peak',
     hue: '#D8CFE8', pos: [-15, -27], height: 22, spread: 12,
-    own: ['services/ai-provider.js', 'services/ai-budget.js',
+    own: ['services/ai-provider.js', 'services/ai-budget.js', 'services/sequence-draft.js',
           'services/outreach-generator.js', 'services/engine-draft.js', 'services/lead-posting.js', 'services/client-intel.js', 'services/sent-side.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
           'match-engine.js', 'conversation-intel.js', 'next-action.js',
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',
@@ -102,7 +102,7 @@ const TERRITORIES = [
           // The ONE definition of a submission (D-0029) and the ONE reader of a
           // staged applicant's `raw` blob (D-0028). Both are domain vocabulary,
           // so they sit with the stages they describe.
-          'services/submission-stages.js', 'services/report-work.js', 'services/applicants.js',
+          'services/submission-stages.js', 'services/report-work.js', 'services/sequence-templates.js', 'services/applicants.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
           'services/company-merge.js', 'services/lead-fill.js',

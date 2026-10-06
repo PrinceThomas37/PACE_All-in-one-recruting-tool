@@ -13,7 +13,7 @@ var WF_ENTITY_TYPES={
 function wfNoun(et){ return (WF_ENTITY_TYPES[et]&&WF_ENTITY_TYPES[et].noun)||'record'; }
 var WF_STATUS_COLORS={active:'var(--green)',paused:'var(--amber)',completed:'var(--accent)',exited:'var(--text3)',failed:'var(--red)',draft:'var(--amber)',archived:'var(--text3)'};
 function wfStatusBadge(s,extra){ var c=WF_STATUS_COLORS[s]||'var(--text3)'; return '<span class="fs-10" style="padding:2px 8px;border-radius:6px;font-weight:700;background:'+c+'22;color:'+c+'">'+htmlEsc(s+(extra?' · '+extra:''))+'</span>'; }
-function wfStepLabel(s){ var lbl=WF_CHANNEL_LABELS[s.channel]||s.channel; if(s.channel==='email'&&s.config&&s.config.template_key)lbl+=' ('+s.config.template_key+')'; if((s.channel==='stage_move'||s.channel==='submission_stage_move')&&s.config&&s.config.to_stage)lbl+=' → '+s.config.to_stage; if(s.channel==='candidate_status_move'&&s.config&&s.config.to_status)lbl+=' → '+s.config.to_status; return lbl; }
+function wfStepLabel(s){ var lbl=WF_CHANNEL_LABELS[s.channel]||s.channel; if(s.channel==='email'&&s.config&&s.config.subject)lbl+=' (written for this step)'; else if(s.channel==='email'&&s.config&&s.config.template_key)lbl+=' ('+s.config.template_key+')'; if((s.channel==='stage_move'||s.channel==='submission_stage_move')&&s.config&&s.config.to_stage)lbl+=' → '+s.config.to_stage; if(s.channel==='candidate_status_move'&&s.config&&s.config.to_status)lbl+=' → '+s.config.to_status; return lbl; }
 function wfChain(steps){ return (steps||[]).map(function(s,i){ return (i>0?'<span class="c-text3"> → +'+s.delay_days+'d </span>':'')+'<span style="font-weight:600">'+htmlEsc(wfStepLabel(s))+'</span>'; }).join(''); }
 
 function loadWorkflows(){
@@ -78,6 +78,17 @@ window.wfSaveDefinition=function(){
   var b=STATE.wfBuilder; if(!b)return;
   if(!b.name){ showToast('Name is required','warning'); return; }
   if(!b.steps.length){ showToast('Add at least one step','warning'); return; }
+  // An email step written here must be whole and must use only merge fields PACE can fill — the
+  // send path refuses an email with a hole in it, so refuse it here, where it can be fixed.
+  for(var k=0;k<b.steps.length;k++){
+    var st=b.steps[k]; if(st.channel!=='email'||!wfIsOwn(st))continue;
+    var subj=(st.config.subject||'').trim(), body=(st.config.body||'').trim();
+    if(!subj&&!body){ delete st.config.subject; delete st.config.body; continue; }     // never written: back to the saved template
+    if(!subj||!body){ showToast('Step '+(k+1)+': write both the subject and the email — or switch it back to a saved template','warning'); return; }
+    var bad=wfUnknownVars(subj+' '+body);
+    if(bad.length){ showToast('Step '+(k+1)+': PACE cannot fill {{'+bad[0]+'}} — use the Insert buttons','warning'); return; }
+    st.config.subject=subj; st.config.body=body;
+  }
   var payload={name:b.name,description:b.description,domain:b.domain,entity_type:b.entity_type||'contact',steps:b.steps};
   var isNew=!b.id, enrollAfter=b._enrollAfter;
   var req=b.id?apiPut('/wf/definitions/'+b.id,payload):apiPost('/wf/definitions',payload);
@@ -236,6 +247,142 @@ function wfWhenLine(step, i, day){
     ' on <b>day '+day+'</b> — '+(d ? '<b>'+d+' day'+(d===1?'':'s')+'</b> after step '+i : 'the same day as step '+i)+'.</span></div>';
 }
 
+// ── A SEQUENCE EMAIL STEP: a saved template, or its own words (D-0077) ─────────
+// The owner: "no option to add the template or edit, and no option to write with
+// AI when given the right prompt". An email step is now EITHER one of the
+// person's saved templates (Outreach 1 / Follow-up 1 / Follow-up 2 — the same
+// ones as Email → Outreach Plan) OR its own subject and body written right here
+// (the engine already sends a step's own text first: config.subject/body). Own
+// text is written in merge fields, with one-click chips, a live preview that
+// shows what each field will become, and an AI writer that turns a short
+// instruction into a draft — checked on the server, with a ready-made starter
+// whenever the AI is unavailable (and it says so).
+//   own text  ⇔  the step's config HAS a `subject` key (even while still empty);
+//   saved     ⇔  it does not. Nothing extra is stored on the step.
+// Names PACE can fill — must equal services/sequence-draft.js ALLOWED_VARS
+// (a test compares the two).
+var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','job_resp','company_service'];
+window.WF_VARS=WF_VARS;
+var WF_CHIPS=[['{{fn}}','First name'],['{{ln}}','Last name'],['{{pos}}','Role'],['{{company}}','Company'],['{{loc}}','Location'],['{{sender}}','Your name']];
+var WF_TEMPLATE_CHOICES=[['initial','Outreach 1 — your first email'],['fu1','Follow-up 1'],['fu2','Follow-up 2']];
+// Per-step screen-only state (the AI box text, a busy flag, the note, an undo).
+// A WeakMap keyed by the step, so none of it is ever saved with the sequence.
+var _wfUi=(typeof WeakMap==='function')?new WeakMap():null;
+function wfUi(s){ var u=_wfUi&&_wfUi.get(s); if(!u){ u={prompt:'',busy:false,note:'',undo:null,focus:'body'}; if(_wfUi)_wfUi.set(s,u); } return u; }
+function wfIsOwn(s){ return !!(s&&s.config&&Object.prototype.hasOwnProperty.call(s.config,'subject')); }
+var WF_SAMPLE={fn:'Dana',first_name:'Dana',firstname:'Dana',ln:'Fox',last_name:'Fox',lastname:'Fox',surname:'Fox',pos:'Senior Estimator',position:'Senior Estimator',job_title:'Senior Estimator',jobtitle:'Senior Estimator',role:'Senior Estimator',
+  company:'Acme Construction',client:'Acme Construction',company_name:'Acme Construction',companyname:'Acme Construction',loc:'Dallas, TX',location:'Dallas, TX',city_state:'Dallas, TX',desig:'Director of Operations',designation:'Director of Operations',title:'Director of Operations',ind:'Construction',industry:'Construction',job_resp:'estimating',company_service:'commercial'};
+function wfUnknownVars(text){
+  var bad=[]; (String(text||'').match(/\{\{\s*([^}]*?)\s*\}\}/g)||[]).forEach(function(t){ var n=t.replace(/[{}\s]/g,'').toLowerCase(); if(WF_VARS.indexOf(n)<0&&bad.indexOf(n)<0)bad.push(n); });
+  return bad;
+}
+// What the email will look like to one example person; a field PACE cannot fill is marked, never blanked.
+function wfPreviewHtml(s){
+  var c=s.config||{}, me=(STATE.user&&STATE.user.name)||'You';
+  function fill(t){
+    return htmlEsc(String(t||'')).replace(/\{\{\s*([^}]*?)\s*\}\}/g,function(m,name){
+      var n=String(name).toLowerCase();
+      if(n==='sender'||n==='sender_name'||n==='sendername'||n==='from_name')return '<b>'+htmlEsc(me)+'</b>';
+      if(n==='senderemail'||n==='sender_email'||n==='senderemailaddress'||n==='from_email')return '<b>you@yourcompany.com</b>';
+      if(WF_SAMPLE[n])return '<b>'+htmlEsc(WF_SAMPLE[n])+'</b>';
+      return '<mark class="seq-bad" title="PACE cannot fill this">'+m+'</mark>';
+    }).replace(/\n/g,'<br>');
+  }
+  if(!c.subject&&!c.body)return '<div class="seq-prev-empty">Write the email (or press "Write with AI") and a preview appears here — filled in for an example person, Dana Fox at Acme Construction.</div>';
+  var bad=wfUnknownVars((c.subject||'')+' '+(c.body||''));
+  return '<div class="seq-prev-h">Preview — an example person</div>'+
+    '<div class="seq-prev-s">'+fill(c.subject)+'</div><div class="seq-prev-b">'+fill(c.body)+'</div>'+
+    (bad.length?'<div class="seq-prev-warn">PACE cannot fill '+bad.map(function(n){return '{{'+htmlEsc(n)+'}}';}).join(', ')+' — the email would be refused. Use the buttons above.</div>':'');
+}
+function wfEmailStepEditor(s,i){
+  var c=s.config||(s.config={}), own=wfIsOwn(s), ui=wfUi(s);
+  var mode='<div class="seq-mode" role="group" aria-label="Where this email\'s words come from">'+
+    '<button class="seq-seg'+(own?'':' on')+'" onclick="wfEmailMode('+i+',false)">Use a saved template</button>'+
+    '<button class="seq-seg'+(own?' on':'')+'" onclick="wfEmailMode('+i+',true)">Write it for this step</button></div>';
+  var thread='<label class="fs-12_5 c-ink2" style="display:flex;align-items:center;gap:6px;cursor:pointer">'+
+    '<input type="checkbox" class="ck" '+(c.thread?'checked':'')+' onchange="wfStepCfg('+i+',\'thread\',this.checked);refreshWfBuilder()"> Keep it in the same thread</label>';
+  if(!own){
+    return mode+'<div class="seq-line">'+
+      '<span class="fs-12_5 c-ink2">Template</span>'+
+      '<select class="seq-sel" onchange="wfStepCfg('+i+',\'template_key\',this.value)">'+
+        WF_TEMPLATE_CHOICES.map(function(k){return '<option value="'+k[0]+'"'+(c.template_key===k[0]?' selected':'')+'>'+k[1]+'</option>';}).join('')+
+      '</select>'+thread+
+      '<button class="btn btn-outline btn-sm" onclick="wfCopyTemplate('+i+')" title="Put the words of this template into the step so you can change them for this step only">Edit a copy for this step</button>'+
+    '</div><div class="fs-11_5 c-ink3">These are the templates you edit in Email → Outreach Plan; changing one there changes every sequence that uses it.</div>';
+  }
+  var chips='<div class="seq-chips"><span class="fs-11_5 c-ink3">Insert:</span>'+WF_CHIPS.map(function(ch){
+    return '<button type="button" class="seq-chip" onmousedown="event.preventDefault()" onclick="wfInsertVar('+i+',\''+ch[0]+'\')" title="Becomes '+ch[1].toLowerCase()+' of each person">'+ch[1]+'</button>';}).join('')+'</div>';
+  var ai='<div class="seq-ai">'+
+    '<input class="seq-in" id="wf-ai-'+i+'" placeholder="Tell the AI what this email should do — e.g. a friendly first email offering two pre-screened estimators" value="'+htmlEsc(ui.prompt)+'" oninput="wfAiPrompt('+i+',this.value)" onkeydown="if(event.key===\'Enter\'){wfDraftAi('+i+',true);}">'+
+    '<button class="btn btn-primary btn-sm" onclick="wfDraftAi('+i+',true)"'+(ui.busy?' disabled':'')+'>'+(ui.busy?'Writing…':'Write with AI')+'</button>'+
+    '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',false)"'+(ui.busy?' disabled':'')+' title="A ready-made email to change">Start from an example</button>'+
+    (ui.undo?'<button class="btn btn-outline btn-sm" onclick="wfUndoDraft('+i+')">Undo</button>':'')+
+  '</div>'+(ui.note?'<div class="seq-note">'+htmlEsc(ui.note)+'</div>':'');
+  return mode+ai+
+    '<input class="seq-in" id="wf-subj-'+i+'" style="flex:1 1 100%" placeholder="Subject — e.g. Candidates for your {{pos}} role" value="'+htmlEsc(c.subject||'')+'" onfocus="wfUi(STATE.wfBuilder.steps['+i+']).focus=\'subject\'" oninput="wfOwnText('+i+',\'subject\',this.value)">'+
+    '<textarea class="seq-ta seq-ta-tall" id="wf-body-'+i+'" placeholder="Write the email. Start with Hi {{fn}}, — do not sign it; your signature is added when it is sent." onfocus="wfUi(STATE.wfBuilder.steps['+i+']).focus=\'body\'" oninput="wfOwnText('+i+',\'body\',this.value)">'+htmlEsc(c.body||'')+'</textarea>'+
+    chips+'<div class="seq-line">'+thread+'</div>'+
+    '<div class="seq-prev" id="wf-prev-'+i+'">'+wfPreviewHtml(s)+'</div>';
+}
+window.wfEmailMode=function(i,own){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
+  s.config=s.config||{};
+  if(own&&!wfIsOwn(s)){ s.config.subject=''; s.config.body=''; if(!s.config.template_key)s.config.template_key=i===0?'initial':'fu1'; }
+  else if(!own&&wfIsOwn(s)){
+    // Going back to a saved template drops the typed words — but not silently: undo keeps them.
+    var ui=wfUi(s); if(s.config.subject||s.config.body)ui.undo={subject:s.config.subject||'',body:s.config.body||''};
+    delete s.config.subject; delete s.config.body;
+  }
+  refreshWfBuilder();
+};
+// Typing: update the step and repaint ONLY the preview (never the box being typed in).
+window.wfOwnText=function(i,k,v){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
+  s.config[k]=v;
+  var el=document.getElementById('wf-prev-'+i); if(el)el.innerHTML=wfPreviewHtml(s);
+};
+window.wfAiPrompt=function(i,v){ var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(s)wfUi(s).prompt=v; };
+window.wfInsertVar=function(i,token){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
+  var ui=wfUi(s), field=ui.focus==='subject'?'subject':'body', el=document.getElementById((field==='subject'?'wf-subj-':'wf-body-')+i);
+  if(!el)return;
+  var a=el.selectionStart==null?el.value.length:el.selectionStart, b=el.selectionEnd==null?a:el.selectionEnd;
+  el.value=el.value.slice(0,a)+token+el.value.slice(b);
+  var pos=a+token.length; el.focus(); try{ el.setSelectionRange(pos,pos); }catch(e){}
+  wfOwnText(i,field,el.value);
+};
+// Put a saved template's words into the step, to be changed for this step only.
+window.wfCopyTemplate=function(i){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
+  var k=(s.config&&s.config.template_key)||'initial';
+  var src={initial:[STATE.emailSubj,STATE.emailBody],fu1:[STATE.fu1Subj,STATE.fu1Body],fu2:[STATE.fu2Subj,STATE.fu2Body]}[k]||['',''];
+  s.config.subject=src[0]||''; s.config.body=src[1]||'';
+  wfUi(s).note=(src[0]||src[1])?'This is a copy of your template — changing it here changes only this step.':'Your template has no text to copy yet — write it here.';
+  refreshWfBuilder();
+};
+window.wfUndoDraft=function(i){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
+  var ui=wfUi(s); if(!ui.undo)return;
+  s.config.subject=ui.undo.subject; s.config.body=ui.undo.body; ui.undo=null; ui.note='Put back what was there before.';
+  refreshWfBuilder();
+};
+// The AI writer (or, with no instruction / no AI, a ready-made starter).
+window.wfDraftAi=function(i,useAi){
+  var b=STATE.wfBuilder, s=b&&b.steps[i]; if(!s||!wfIsOwn(s))return;
+  var ui=wfUi(s); if(ui.busy)return;
+  var prompt=useAi?String(ui.prompt||'').trim():'';
+  if(useAi&&!prompt){ showToast('Say in a few words what this email should do — or press "Start from an example"','warning'); return; }
+  var purpose=i===0?'first':(i===b.steps.length-1?'final':'followup');
+  ui.busy=true; refreshWfBuilder();
+  apiPost('/wf/draft-email',{prompt:prompt,purpose:purpose}).then(function(r){
+    ui.busy=false;
+    if(!r||!r.subject||!r.body){ ui.note='Could not write that just now — try again.'; refreshWfBuilder(); return; }
+    if(s.config.subject||s.config.body)ui.undo={subject:s.config.subject||'',body:s.config.body||''};
+    s.config.subject=r.subject; s.config.body=r.body; ui.note=r.note||'';
+    refreshWfBuilder();
+  }).catch(function(e){ ui.busy=false; ui.note='Could not reach the writer: '+((e&&e.message)||e); refreshWfBuilder(); });
+};
+
 function refreshWfBuilder(){
   var b=STATE.wfBuilder; if(!b)return;
   if(!b.entity_type)b.entity_type='contact';
@@ -249,15 +396,7 @@ function refreshWfBuilder(){
     // ── per-channel configuration ───────────────────────────────────────
     var cfg='';
     if(s.channel==='email'){
-      cfg='<div class="seq-line">'+
-        '<span class="fs-12_5 c-ink2">Template</span>'+
-        '<select class="seq-sel" onchange="wfStepCfg('+i+',\'template_key\',this.value)">'+
-          ['initial','fu1','fu2'].map(function(k){return '<option value="'+k+'"'+((s.config&&s.config.template_key)===k?' selected':'')+'>'+k+'</option>';}).join('')+
-        '</select>'+
-        '<label class="fs-12_5 c-ink2" style="display:flex;align-items:center;gap:6px;cursor:pointer">'+
-          '<input type="checkbox" class="ck" '+(s.config&&s.config.thread?'checked':'')+' onchange="wfStepCfg('+i+',\'thread\',this.checked);refreshWfBuilder()">'+
-          'Keep it in the same thread</label>'+
-      '</div>';
+      cfg=wfEmailStepEditor(s,i);
     } else if(s.channel==='candidate_email'){
       var subPh=(b.entity_type==='candidate')
         ? 'Subject (blank = default; {{first_name}} only — no job attached)'

@@ -632,7 +632,7 @@ function renderJobDetailModal(){
 // company mode redraws the window without losing a letter.
 window.addLeadFresh=function(){
   return { mode:'existing', company:null, coText:'',
-    newCo:{ name:'', website:'', industry:'', location:'', address:'' },
+    newCo:{ name:'', website:'', industry:'', address_line1:'', address_line2:'', city:'', state:'', postal_code:'', country:'' },
     pos:'', loc:'', src:'LinkedIn', url:'', busy:false,
     contacts:[ window.addLeadBlankContact() ] };
 };
@@ -650,9 +650,15 @@ function renderAddJobModal(){
         '<div class="fgrp"><label class="flbl">Company name <span class="c-red">*</span></label><input class="inp" id="al-conew" value="'+htmlEsc(a.newCo.name)+'" placeholder="e.g. Acme Corp" oninput="addLeadCo(\'name\',this.value)"/></div>'+
         '<div class="fgrp"><label class="flbl">Website</label><input class="inp" value="'+htmlEsc(a.newCo.website)+'" placeholder="acme.com" oninput="addLeadCo(\'website\',this.value)"/></div>'+
       '</div>'+
-      '<div class="fgrp"><label class="flbl">Address</label><input class="inp" value="'+htmlEsc(a.newCo.address)+'" placeholder="Street, suite, city, state, ZIP" oninput="addLeadCo(\'address\',this.value)"/></div>'+
+      '<div class="fgrp"><label class="flbl">Street address</label><input class="inp" value="'+htmlEsc(a.newCo.address_line1)+'" placeholder="e.g. 1400 Edwin Miller Blvd" oninput="addLeadCo(\'address_line1\',this.value)"/></div>'+
+      '<div class="fgrp"><label class="flbl">Suite / floor / unit</label><input class="inp" value="'+htmlEsc(a.newCo.address_line2)+'" placeholder="Optional" oninput="addLeadCo(\'address_line2\',this.value)"/></div>'+
+      '<div class="g3">'+
+        '<div class="fgrp"><label class="flbl">City</label><input class="inp" value="'+htmlEsc(a.newCo.city)+'" oninput="addLeadCo(\'city\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">State / region</label><input class="inp" value="'+htmlEsc(a.newCo.state)+'" oninput="addLeadCo(\'state\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">ZIP / postal code</label><input class="inp" value="'+htmlEsc(a.newCo.postal_code)+'" oninput="addLeadCo(\'postal_code\',this.value)"/></div>'+
+      '</div>'+
       '<div class="g2">'+
-        '<div class="fgrp"><label class="flbl">City, State</label><input class="inp" value="'+htmlEsc(a.newCo.location)+'" placeholder="Dallas, TX" oninput="addLeadCo(\'location\',this.value)"/></div>'+
+        '<div class="fgrp"><label class="flbl">Country</label><input class="inp" value="'+htmlEsc(a.newCo.country)+'" placeholder="e.g. United States" oninput="addLeadCo(\'country\',this.value)"/></div>'+
         '<div class="fgrp"><label class="flbl">Industry</label><select class="sel" onchange="addLeadCo(\'industry\',this.value)">'+indOpts+'</select></div>'+
       '</div>'+
       '<div class="fs-12 c-text3">We check the name against your companies first, so it is never added twice.</div>';

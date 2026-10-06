@@ -716,3 +716,29 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 .ev-fulllink{margin-top:6px;padding:0;border:0;background:none;font-family:var(--mono);font-size:11px;font-weight:700;color:#7A4DE0;cursor:pointer;text-decoration:underline}
 .ev-fulltext{margin-top:8px;padding:10px 12px;max-height:260px;overflow:auto;background:#F2EADB;border:2px solid #1A1033;font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap}
 .ev-fullerr{margin-top:6px;font-size:12px;color:#B23A2E}
+
+/* ══ SEQUENCE EMAIL STEP: saved template or its own words, with the AI writer ═ */
+.seq-mode{display:inline-flex;border:2px solid var(--glass-brd);box-shadow:2px 2px 0 var(--hard);align-self:flex-start}
+.seq-seg{padding:6px 12px;border:0;border-right:2px solid var(--glass-brd);background:var(--card);color:var(--text);font-family:var(--mono);font-size:11.5px;font-weight:700;cursor:pointer;border-radius:0}
+.seq-seg:last-child{border-right:0}
+.seq-seg.on{background:var(--accent);color:#FFF6E6}
+.seq-ai{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seq-ai .seq-in{flex:1 1 320px}
+.seq-note{font-family:var(--mono);font-size:11.5px;color:var(--text2);padding:6px 10px;background:var(--bg);border-left:4px solid var(--accent)}
+.seq-ta-tall{min-height:150px}
+.seq-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.seq-chip{padding:3px 9px;border:2px solid var(--glass-brd);background:var(--card);color:var(--text);font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;border-radius:0;box-shadow:2px 2px 0 var(--hard)}
+@media (hover:hover) and (pointer:fine){ .seq-chip:hover,.seq-seg:not(.on):hover{background:var(--accent-l)} }
+.seq-prev{padding:12px 14px;background:#FFF6E6;color:#1A1033;border:2px solid #1A1033;font-size:13px;line-height:1.55}
+.seq-prev-h{font-family:var(--pixel-label);font-weight:700;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#6E6290;margin-bottom:8px}
+.seq-prev-s{font-weight:700;margin-bottom:8px}
+.seq-prev-empty{font-size:12.5px;color:#6E6290}
+.seq-bad{background:#F5C4BC;color:#7A1F14;padding:0 3px}
+.seq-prev-warn{margin-top:10px;font-size:12px;color:#B23A2E;font-weight:700}
+.seq-card,.seq-sel,.seq-in,.seq-ta,.seq-badge,.seq-day,.seq-add,.seq-hint,.seq-delay input{border-radius:0}
+.seq-card{border:2px solid var(--glass-brd);box-shadow:3px 3px 0 var(--hard)}
+
+/* POP-UPS SIT ABOVE THE SIDEBAR. #layer (modals + drawers) was a stacking context
+   at z-index 1, so with the sidebar open by default a wide window (the sequence
+   builder is 1040px) slid under it and lost its left edge. */
+#layer,body.ui-kit #layer{z-index:90}

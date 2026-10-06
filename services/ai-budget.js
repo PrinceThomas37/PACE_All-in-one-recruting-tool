@@ -86,6 +86,10 @@ const FEATURES = {
   // services/client-intel.js at ~3,400 tokens whatever the history; this is
   // the provider-side ceiling behind that, and the answer is 3-5 sentences.
   client_summary:  { label: 'Client summary',        in: 3500, out: 450,  tier: 'quality' },
+  // A sequence step's email TEMPLATE, from a one-line instruction (services/
+  // sequence-draft.js, D-0077). Small in, 50-110 words out; 'quality' because
+  // it is sent to many people and is the one thing the person reads before saving.
+  sequence_draft:  { label: 'Sequence email drafts', in: 1200, out: 700,  tier: 'quality' },
 };
 // An unnamed caller gets the tightest sensible allowance rather than no limit.
 const DEFAULT_FEATURE = { label: 'Other', in: 1000, out: 500, tier: 'fast' };

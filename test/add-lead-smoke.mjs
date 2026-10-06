@@ -74,14 +74,14 @@ try {
     step(tag + 'there is a choice: Existing company | New company', hasNew === 'Existing company|New company', hasNew);
     await page.evaluate(() => [...document.querySelectorAll('.al-tabs .fc')].find(b => /New/.test(b.textContent)).click());
     const fields = await page.evaluate(() => [...document.querySelectorAll('.modal .flbl')].map(l => l.textContent.replace('*', '').trim()));
-    step(tag + 'a new company asks for name, website, ADDRESS, city/state and industry', ['Company name', 'Website', 'Address', 'City, State', 'Industry'].every(f => fields.includes(f)), fields.join(','));
+    step(tag + 'a new company asks for name, website, the full postal ADDRESS (street, suite, city, state, ZIP, country) and industry', ['Company name', 'Website', 'Street address', 'Suite / floor / unit', 'City', 'State / region', 'ZIP / postal code', 'Country', 'Industry'].every(f => fields.includes(f)), fields.join(','));
     if (SHOTS) { await page.waitForTimeout(400); await page.screenshot({ path: path.join(SHOTS, 'add-lead-new-' + width + '.png') }); }
 
     // type it all
     await page.fill('#al-conew', 'Globex Industries');
     await page.fill('input[placeholder="acme.com"]', 'globex.com');
-    await page.fill('input[placeholder^="Street"]', '12 Main St, Suite 4, Austin, TX 78701');
-    await page.fill('input[placeholder="Dallas, TX"]', 'Austin, TX');
+    const byLabel = (label, value) => page.evaluate(([l, v]) => { const g = [...document.querySelectorAll('.modal .fgrp')].find(x => (x.querySelector('.flbl') || {}).textContent.replace('*', '').trim() === l); const i = g.querySelector('input'); i.value = v; i.dispatchEvent(new Event('input', { bubbles: true })); }, [label, value]);
+    await byLabel('Street address', '12 Main St'); await byLabel('Suite / floor / unit', 'Suite 4'); await byLabel('City', 'Austin'); await byLabel('State / region', 'TX'); await byLabel('ZIP / postal code', '78701'); await byLabel('Country', 'United States');
     await page.fill('#al-pos', 'VP Engineering');
     await page.fill('input[placeholder="First name *"]', 'Sam');
     await page.fill('input[placeholder="Email"]', 'sam@globex.com');
@@ -98,7 +98,7 @@ try {
     await page.waitForTimeout(400);
     const c1 = await page.evaluate(() => ({ calls: __calls.filter(c => c[0] === 'POST'), search: __calls.filter(c => c[0] === 'GET' && c[1].indexOf('/companies/search') === 0).length, open: !!document.querySelector('.modal') }));
     const co = c1.calls.find(c => c[1] === '/companies'), job = c1.calls.find(c => c[1] === '/jobs');
-    step(tag + 'a NEW company is checked against yours first, then created with its address', c1.search === 1 && co && co[2].name === 'Globex Industries' && co[2].address === '12 Main St, Suite 4, Austin, TX 78701' && co[2].location === 'Austin, TX' && co[2].website === 'globex.com', JSON.stringify(co));
+    step(tag + 'a NEW company is checked against yours first, then created with its structured address (the columns migration 043 already added)', c1.search === 1 && co && co[2].name === 'Globex Industries' && co[2].address_line1 === '12 Main St' && co[2].address_line2 === 'Suite 4' && co[2].city === 'Austin' && co[2].state === 'TX' && co[2].postal_code === '78701' && co[2].country === 'United States' && co[2].website === 'globex.com' && !('address' in co[2]), JSON.stringify(co));
     step(tag + 'the lead is created on THAT company with every filled contact (the empty one is skipped)', job && /^co-new-/.test(job[2].company_id) && job[2].position === 'VP Engineering' && job[2].contacts.length === 2 && job[2].contacts[0].first_name === 'Sam' && job[2].contacts[1].email === 'pat@globex.com', JSON.stringify(job && job[2].contacts));
     step(tag + 'the window closes and the lead is confirmed', !c1.open);
 

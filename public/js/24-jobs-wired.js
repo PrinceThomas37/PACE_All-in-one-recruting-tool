@@ -76,7 +76,8 @@ window.submitAddJob=function(){
           return same.id;
         }
         var n=a.newCo;
-        return apiPost('/companies',{name:n.name.trim(),website:n.website.trim()||null,industry:n.industry||null,location:n.location.trim()||null,address:n.address.trim()||null}).then(function(co){
+        return apiPost('/companies',{name:n.name.trim(),website:n.website.trim()||null,industry:n.industry||null,
+          address_line1:n.address_line1.trim(),address_line2:n.address_line2.trim(),city:n.city.trim(),state:n.state.trim(),postal_code:n.postal_code.trim(),country:n.country.trim()}).then(function(co){
           // Remember it, so a retry after a later failure reuses it instead of creating another.
           a.mode='existing'; a.company={id:co.id,name:co.name,industry:co.industry||'',location:co.location||''};
           STATE.companies.push({id:co.id,name:co.name,web:co.website,ind:co.industry,loc:co.location});
