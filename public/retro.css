@@ -318,7 +318,7 @@ body.ui-kit #content{
   background-color:var(--sky-base);background-image:var(--sky);
   border-bottom:2px solid #000;
 }
-body.ui-kit #topbar>*:not(.tb-orb){position:relative;z-index:1}
+body.ui-kit #topbar>*:not(.tb-orb):not(.tb-cloud):not(.tb-stars){position:relative;z-index:1}
 body.ui-kit .tb-title{
   font-family:var(--pixel);font-weight:400;font-size:14px;letter-spacing:.5px;
   color:#FFF6E6;text-shadow:2px 2px 0 #000;text-transform:uppercase;
@@ -459,3 +459,67 @@ body.ui-kit #sidebar.setup-open .me-setup{background:var(--sec-set)}
 @media (hover:hover) and (pointer:fine){ body.ui-kit #sidebar:hover .me-setup{display:flex} }
 /* the sign-out row stays a quiet line under the card */
 body.ui-kit .sb-footer>.nav-item{height:30px;margin:0}
+
+/* ══ THE TALL SKY HEADER (owner, comparing to the concepts: the clouds, the
+   date line, the counts, the New button and the big sun/moon were missing) ══ */
+body.ui-kit{--topbar-h:104px}
+/* Day bands re-cut for the taller bar: the title (top ~45%) and the date
+   line sit on the two darkest bands; the pale horizon is the bottom 22%. */
+:root,:root[data-sky="day"]{ --sky:linear-gradient(180deg,#1C6FBF 0 40%,#2588D6 40% 66%,#36A6EC 66% 78%,#62C2F5 78% 90%,#A6DEFA 90%); }
+:root[data-sky="dawn"]{ --sky:linear-gradient(180deg,#2A1A57 0 36%,#5A2A8E 36% 62%,#A84F93 62% 74%,#E27788 74% 84%,#FFAE88 84% 93%,#FFDDA6 93%); }
+:root[data-sky="dusk"]{ --sky:linear-gradient(180deg,#1B1240 0 30%,#2E1863 30% 50%,#5A2A8E 50% 64%,#A2409E 64% 75%,#E2588F 75% 85%,#FF8E5A 85% 93%,#FFC36B 93%); }
+body.ui-kit #topbar{align-items:flex-start;padding:20px 22px 0 24px;gap:14px}
+body.ui-kit .tb-head{display:flex;flex-direction:column;gap:9px;min-width:0}
+body.ui-kit .tb-title{font-size:21px;letter-spacing:1px;text-shadow:3px 3px 0 #000;white-space:nowrap}
+body.ui-kit .tb-meta{font-family:var(--mono);font-weight:700;font-size:11px;letter-spacing:.08em;color:#FFF6E6;text-shadow:1px 1px 0 #000}
+body.ui-kit .tb-chips{display:flex;gap:8px;margin-top:2px}
+.tb-chip{font-family:var(--mono);font-weight:700;font-size:10.5px;letter-spacing:.04em;background:#FFF6E6;color:#1A1033;border:2px solid #000;padding:3px 8px;white-space:nowrap}
+.tb-chip.is-late{background:#D98A7E;cursor:pointer}
+body.ui-kit .tb-right{align-self:flex-start;margin-top:-2px}
+body.ui-kit .tb-new{font-family:var(--pixel);font-weight:400;font-size:10px;letter-spacing:.5px;padding:11px 14px;border:3px solid #000;box-shadow:4px 4px 0 #000;white-space:nowrap}
+/* clouds, stars, and a bigger sun/moon travelling BELOW the text */
+.tb-cloud{position:absolute;z-index:0;pointer-events:none;line-height:0;color:#FFF6E6}
+.tb-cloud svg{display:block}
+.tb-cloud.c1{left:47%;top:12px}
+.tb-cloud.c2{left:63%;top:58px;opacity:.8}
+:root[data-sky="dawn"] .tb-cloud,:root[data-sky="dusk"] .tb-cloud{color:#F3E2F1}
+:root[data-sky="night"] .tb-cloud{color:#3A2F6B}
+.tb-stars{position:absolute;z-index:0;left:0;top:0;width:2px;height:2px;background:transparent;pointer-events:none;display:none;
+  box-shadow:120px 14px #fff,260px 30px #fff,410px 9px #fff,560px 40px #fff,700px 16px #fff,840px 34px #fff,980px 10px #fff,1100px 28px #fff,1240px 12px #fff,330px 66px #fff,770px 70px #fff,1010px 60px #fff}
+:root[data-sky="night"] .tb-stars,:root[data-sky="dusk"] .tb-stars{display:block}
+:root[data-sky="dusk"] .tb-stars{opacity:.6}
+
+/* The logo tile: same height as the sky, PACE big, "AI RECRUITING" under it. */
+body.ui-kit .sb-brand{height:var(--topbar-h);min-height:var(--topbar-h);position:relative;overflow:hidden}
+body.ui-kit .rail-word{display:flex;flex-direction:column;gap:10px;font-size:27px;position:relative;z-index:1}
+.rail-sub{font-family:var(--pixel-label);font-size:10px;letter-spacing:.12em;color:#FFF6E6;text-shadow:1px 1px 0 #000;-webkit-text-stroke:0}
+.sb-cloud{position:absolute;right:16px;top:14px;line-height:0;color:#FFF6E6;opacity:.95;pointer-events:none}
+.sb-cloud svg{display:block}
+:root[data-sky="night"] .sb-cloud{color:#3A2F6B}
+body.ui-kit #sidebar:not(.pinned) .sb-cloud{display:none}
+@media (hover:hover) and (pointer:fine){ body.ui-kit #sidebar:hover .sb-cloud{display:block} }
+
+/* PHONE: the sky stacks — burger + title + icons, then the date line, then the
+   counts and the New button (the concept's phone header). */
+@media (max-width:860px){
+  body.ui-kit{--topbar-h:auto}
+  body.ui-kit #topbar{flex-wrap:wrap;padding:12px 12px 14px;gap:8px 10px;min-height:96px}
+  body.ui-kit .tb-head{flex:1 1 0}
+  body.ui-kit .tb-title{font-size:14px}
+  body.ui-kit .tb-meta{font-size:10px}
+  body.ui-kit .tb-chips{order:5;flex-basis:100%}
+  body.ui-kit .tb-new{padding:8px 10px}
+  .tb-cloud.c2{display:none}
+  .tb-cloud.c1{left:auto;right:120px;top:52px}
+}
+body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
+@media (max-width:860px){
+  /* row 1: menu + the buttons; row 2: the title and date; row 3: the counts */
+  body.ui-kit #topbar{align-items:center}
+  body.ui-kit .tb-burger{order:0}
+  body.ui-kit .tb-right{order:1;margin-left:auto;align-self:center;margin-top:0}
+  body.ui-kit .tb-head{order:2;flex:1 1 100%;gap:6px;margin-top:4px}
+  body.ui-kit .tb-chips{order:3}
+  body.ui-kit .tb-new{font-size:9px;padding:8px 9px;box-shadow:3px 3px 0 #000}
+  .tb-cloud.c1{right:24px;top:auto;bottom:10px;left:auto}
+}

@@ -225,7 +225,8 @@ function renderSidebar(){
       'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
       // R-122: the pixel logo on a slice of the sky (retro.css paints both).
       '<div class="rail-mark">P</div>'+
-      '<div class="rail-word">PACE</div>'+
+      '<div class="rail-word">PACE<span class="rail-sub">AI RECRUITING</span></div>'+
+      '<span class="sb-cloud">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
       '<div class="rail-pin">'+UI.ic('menu')+'</div>'+
     '</div>'+
     '<div class="sb-nav">'+nav+'</div>'+
@@ -274,9 +275,15 @@ function renderTopbar(){
       // R-122: the sky. The bar's colours follow the clock through the
       // data-sky attribute on <html> (retro.css); the sun or moon is the one
       // thing drawn here, placed by the hour (paceSkyOrb). Decorative only.
-      paceSkyOrb()+
+      paceSkyOrb()+paceSkyDecor()+
       '<div class="tb-burger" onclick="toggleNav()" title="Menu" aria-label="Menu" role="button">'+UI.ic('menu')+'</div>'+
-      '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
+      // The title block: the page name in pixels, and under it today's date
+      // and time (the clock ticker keeps #tb-clock current — text only).
+      '<div class="tb-head">'+
+        '<div class="tb-title">'+pageTitles[STATE.page]+countChip+viewingName+'</div>'+
+        '<div class="tb-meta"><span id="tb-clock">'+paceHeaderClock()+'</span></div>'+
+      '</div>'+
+      paceTodayChips()+
       '<div class="tb-right" style="margin-left:auto;display:flex;align-items:center;gap:10px">'+
         (STATE.viewingUser&&STATE.viewingUser.id!==u.id?
           '<button class="btn btn-outline btn-sm" onclick="stopViewing()">← Back to my dashboard</button>':'')+
@@ -287,6 +294,7 @@ function renderTopbar(){
         // engine is built around (a repaint that changes nothing writes
         // nothing). Toggling an attribute on <html> costs a repaint of colour
         // and nothing else.
+        paceHeaderNew()+
         '<div class="tb-theme" onclick="toggleTheme()" title="Light / dark" aria-label="Toggle light or dark theme" role="button">'+
           '<span class="ic-moon">'+UI.ic('moon')+'</span><span class="ic-sun">'+UI.ic('sun')+'</span>'+
         '</div>'+
@@ -369,6 +377,53 @@ function paceSkyPhase(d){
   return h>=5&&h<8?'dawn':h>=8&&h<17?'day':h>=17&&h<20?'dusk':'night';
 }
 window.paceSkyPhase=paceSkyPhase;
+// The date line under the page title: "TUE · 06 OCT 2026 · 15:52 CDT" in
+// the person's own zone. startClock() refreshes #tb-clock's TEXT every tick;
+// nothing re-renders for it.
+function paceHeaderClock(d){
+  d=d||new Date();
+  var day=d.toLocaleDateString('en-GB',{weekday:'short'}).toUpperCase();
+  var date=d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+  var t=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hourCycle:'h23',timeZoneName:'short'}).toUpperCase();
+  return day+' · '+date+' · '+t;
+}
+window.paceHeaderClock=paceHeaderClock;
+// On Today only: what is waiting on you. Both numbers are REAL or absent —
+// "need you" is the loaded needs-you-today list (STATE.nextActions), "past
+// due" is your own pending reminders dated before today. A click goes to
+// Today. Nothing is shown while a number is unknown.
+function paceTodayChips(){
+  if(STATE.page!=='dashboard'||(STATE.viewingUser&&STATE.user&&STATE.viewingUser.id!==STATE.user.id))return '';
+  var out='';
+  var na=STATE.nextActions;
+  if(na&&na.items&&!na._error)out+='<span class="tb-chip">'+na.items.length+' NEED YOU</span>';
+  var uid=STATE.user&&STATE.user.id, today=(typeof todayIST==='function')?todayIST():new Date().toISOString().slice(0,10);
+  var late=(STATE.reminders||[]).filter(function(r){return r.user_id===uid&&r.status==='pending'&&r.due_date&&String(r.due_date).slice(0,10)<today;}).length;
+  if(late)out+='<span class="tb-chip is-late" onclick="goPage(\'reminders\')" role="button">'+late+' PAST DUE</span>';
+  return out?'<div class="tb-chips">'+out+'</div>':'';
+}
+// The one Sun Yellow action on Today, by desk — and only actions PACE has:
+// a BD desk (admin / bd / bd_lead) opens a new job, a recruiter a new
+// candidate. Other pages keep their own primary button in their toolbar, so
+// the header never shows a second yellow button there.
+function paceHeaderNew(){
+  if(STATE.page!=='dashboard'||!STATE.user)return '';
+  var u=STATE.user;
+  if(userHasAnyRole(u,'admin','bd','bd_lead')&&typeof window.bdOpenNewJob==='function')
+    return '<button class="btn btn-primary tb-new" onclick="bdOpenNewJob(null)">+ New Job</button>';
+  if(userHasRole(u,'recruiter')&&typeof window.atsOpenNew==='function')
+    return '<button class="btn btn-primary tb-new" onclick="atsOpenNew()">+ New Candidate</button>';
+  return '';
+}
+// Pixel clouds (always) and stars (CSS shows them at dusk and night).
+var PACE_CLOUD=['......####......','...#########....','..############..','.##############.','################'];
+function paceSkyDecor(){
+  return '<span class="tb-cloud c1">'+pixelSprite(PACE_CLOUD,'currentColor',3)+'</span>'+
+    '<span class="tb-cloud c2">'+pixelSprite(PACE_CLOUD,'currentColor',2)+'</span>'+
+    '<span class="tb-stars"></span>';
+}
+window.paceSkyDecor=paceSkyDecor;
+
 // The sun (06:00–18:59) or the moon (19:00–05:59) on an arc across the empty
 // middle of the top bar — between the page title and the icons, so it never
 // sits behind either. Quantised to 15 minutes so the bar's html (which the
@@ -385,9 +440,9 @@ function paceSkyOrb(d){
   d=d||new Date();
   var h=d.getHours()+Math.floor(d.getMinutes()/15)*15/60;
   var sun=h>=6&&h<19, p=sun?(h-6)/13:((h-19+24)%24)/11;
-  var left=(32+p*36).toFixed(1), top=Math.round(30-Math.sin(p*Math.PI)*18);
+  var left=(30+p*40).toFixed(1), top=Math.round(80-Math.sin(p*Math.PI)*26);
   return '<span class="tb-orb '+(sun?'is-sun':'is-moon')+'" style="left:'+left+'%;top:'+top+'px">'+
-    (sun?pixelSprite(PACE_SUN,'currentColor',2.4):pixelSprite(PACE_MOON,'currentColor',3))+'</span>';
+    (sun?pixelSprite(PACE_SUN,'currentColor',3.4):pixelSprite(PACE_MOON,'currentColor',4.4))+'</span>';
 }
 window.paceSkyOrb=paceSkyOrb;
 function themeChanged(){

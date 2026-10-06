@@ -112,6 +112,44 @@ try {
     await ctx.close();
   }
 
+  // 6. The sky phase: the head script's data-sky and paceSkyPhase() agree at
+  //    every boundary (dawn 05-07, day 08-16, dusk 17-19, night 20-04).
+  for (const [h, want] of [[4, 'night'], [5, 'dawn'], [7, 'dawn'], [8, 'day'], [16, 'day'], [17, 'dusk'], [19, 'dusk'], [20, 'night']]) {
+    const { ctx, page } = await boot(at(h, 30));
+    const got = await page.evaluate((h) => [document.documentElement.getAttribute('data-sky'), window.paceSkyPhase(new Date(2026, 9, 6, h, 30))], h);
+    step(`${h}:30 sky is ${want}`, got[0] === want && got[1] === want, JSON.stringify(got));
+    await ctx.close();
+  }
+
+  // 7. The header on Today shows only REAL numbers, and the New button only
+  //    where PACE has that action — never a placeholder.
+  {
+    const { ctx, page } = await boot(at(12));
+    await enterApp(page, 'admin');
+    const hdr = () => page.evaluate(() => ({
+      chips: [...document.querySelectorAll('#topbar .tb-chip')].map(e => e.textContent),
+      newBtn: (document.querySelector('#topbar .tb-new') || {}).textContent || null,
+      clock: (document.getElementById('tb-clock') || {}).textContent || '',
+    }));
+    await page.evaluate(() => { window.STATE.nextActions = undefined; window.STATE.reminders = []; window.render(); });
+    let h = await hdr();
+    step('no counts are shown while they are unknown', h.chips.length === 0, JSON.stringify(h.chips));
+    step('the date line reads the person\'s clock', /^TUE · 06 OCT 2026 · 12:00/.test(h.clock), h.clock);
+    await page.evaluate(() => { const S = window.STATE; S.nextActions = { items: [{}, {}, {}] };
+      S.reminders = [{ id: 'a', user_id: S.user.id, status: 'pending', due_date: '2026-10-01' }, { id: 'b', user_id: S.user.id, status: 'pending', due_date: '2026-10-09' }, { id: 'c', user_id: 'someone-else', status: 'pending', due_date: '2026-10-01' }];
+      window.render(); });
+    h = await hdr();
+    step('Today counts what needs you and only YOUR overdue reminders', h.chips.join('|') === '3 NEED YOU|1 PAST DUE', JSON.stringify(h.chips));
+    step('a BD desk gets "+ New Job" on Today', h.newBtn === '+ New Job', String(h.newBtn));
+    await page.evaluate(() => window.goPage('leads'));
+    h = await hdr();
+    step('other pages keep their own button — no second yellow one, no Today counts', h.newBtn === null && h.chips.length === 0, JSON.stringify(h));
+    await page.evaluate(() => { window.STATE.user = Object.assign({}, window.STATE.user, { role: 'ra', roles: ['ra'] }); window.goPage('dashboard'); });
+    h = await hdr();
+    step('a desk with no "new" action gets no button', h.newBtn === null, String(h.newBtn));
+    await ctx.close();
+  }
+
   // 5. The retro palette is the one on screen (fails if retro.css is unlinked).
   {
     const { ctx, page } = await boot(at(10));
