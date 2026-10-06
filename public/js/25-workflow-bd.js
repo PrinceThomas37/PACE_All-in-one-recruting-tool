@@ -48,7 +48,7 @@
   // current vocabulary so bucketing/counts stay correct until the data migration.
   function nStage(x){ return (window.normalizeStage?normalizeStage(x):x); }
   var BDM_GATED="Submitted to Client";
-  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
+  var STAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#6b7280"};
   var JOB_TYPES=["Contract","Full-time","Contract-to-Hire","Part-time","1099","W2"];
   var EMP_LEVELS=["Entry","Associate","Mid-Senior","Director","Executive"];
   var WORK_AUTH=["US Citizen","Green Card","H1B","OPT/CPT","TN","Any"];
@@ -1056,7 +1056,7 @@
         esc(ru.name||'')+'<span onclick="bdUnassign(\''+j.id+'\',\''+(ru.id||r.recruiter_id)+'\')" style="cursor:pointer;color:var(--text3);font-weight:700">×</span></span>';
     }).join("");
 
-    var approval=pending.length?'<div class="card" style="padding:14px 16px;margin-bottom:16px;background:rgba(210,140,0,.07);border-color:rgba(210,140,0,.3)">'+
+    var approval=pending.length?'<div class="card" style="padding:14px 16px;margin-bottom:16px;background:var(--amber-l);border-color:var(--amber)">'+
       '<div class="fs-13 c-amber" style="font-weight:600;margin-bottom:9px">⚑ Awaiting approval ('+pending.length+')</div>'+
       pending.map(function(s){
         var c=s.candidate||{};

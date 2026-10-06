@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright-core';
 import { enterApp, waitForLogin, switchRole } from './helpers/enter-app.mjs';
+import { CONTRAST_PROBE } from './helpers/contrast-probe.mjs';
 
 const PUBLIC_DIR = path.resolve(new URL('../public', import.meta.url).pathname);
 const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8' };
@@ -44,80 +45,20 @@ function findChromium() {
   return 'chromium';
 }
 
-// Below this, text is not "low contrast by choice" — it is unreadable. Real
-// muted text in this app sits around 4; dark-ink-on-dark-ground measures ~1.2.
-// 2.2 catches the breakage without arguing about deliberate hierarchy.
-const MIN_RATIO = 2.2;
+// THE LINE. Dark is the owner's complaint ("the visibility issue is persistent
+// across the UI", R-140) and is held to 4:1 — the card/ink pairs the retro look
+// is built from sit at 4.4-15, and everything under 4 was either unreadable or
+// a pale grey that should be darker. Light is held to 3.5 because brand purple
+// on its own 12% tint (a selected chip) measures 3.8-4.2 by design; darkening
+// the brand purple is the owner's call, not a test's.
+const MIN_FOR = (theme) => theme === 'dark' ? 4.0 : 3.5;
 
-const CONTRAST_PROBE = ({ minRatio, scope }) => {
-  const parse = (c) => {
-    const m = String(c).match(/rgba?\(([^)]+)\)/); if (!m) return null;
-    const p = m[1].split(',').map(s => parseFloat(s.trim()));
-    return { r:p[0], g:p[1], b:p[2], a:p.length>3?p[3]:1 };
-  };
-  const lin = (v) => { v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
-  const lum = (c) => 0.2126*lin(c.r)+0.7152*lin(c.g)+0.0722*lin(c.b);
-  const over = (fg, bg) => ({ r:fg.r*fg.a+bg.r*(1-fg.a), g:fg.g*fg.a+bg.g*(1-fg.a), b:fg.b*fg.a+bg.b*(1-fg.a), a:1 });
-  // What is REALLY behind this element: composite every translucent ancestor
-  // down onto the page ground. A single getComputedStyle cannot tell you this,
-  // which is exactly why glass hides the bug.
-  const effectiveBg = (el) => {
-    const stack = [];
-    let painted = null;                 // an ancestor we cannot measure
-    for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
-      const cs = getComputedStyle(n);
-      // A GRADIENT (or image) reports backgroundColor rgba(0,0,0,0), so a naive
-      // walk sails straight past it to whatever is behind — which is how the
-      // login header's green slab read as the pale green page behind it and
-      // produced a false failure. We cannot resolve a gradient to one colour,
-      // so we decline to judge rather than judging wrongly.
-      if (cs.backgroundImage && cs.backgroundImage !== 'none') { painted = 'image'; break; }
-      const c = parse(cs.backgroundColor);
-      if (c && c.a > 0) { stack.push(c); if (c.a === 1) break; }
-    }
-    if (painted) return null;
-    let base = parse(getComputedStyle(document.documentElement).backgroundColor) || { r:255,g:255,b:255,a:1 };
-    if (base.a === 0) base = { r:255,g:255,b:255,a:1 };
-    let acc = base;
-    for (let i = stack.length - 1; i >= 0; i--) acc = over(stack[i], acc);
-    return acc;
-  };
-
-  const bad = [];
-  const els = document.querySelectorAll(scope);
-  for (const el of els) {
-    // The element's OWN text: the text nodes directly inside it, never its
-    // children's. This used to skip every element that had a child element
-    // ("leaf text only"), and that was a blind spot, not a simplification —
-    // a name sharing its element with a title span
-    // (`<div>Grace Hill<span> · HR Manager</span></div>`), a label beside its
-    // icon, a heading beside its count badge: the text a person reads FIRST
-    // was never measured at all. Session 33 proved it on the POC finder's
-    // found-person name — a hard-coded dark ink passed the leaf-only probe in
-    // dark mode and measured 1.57:1 once own text was judged. Each child is
-    // still judged on its own turn, in its own colour, so nothing is counted
-    // twice, and a leaf's own text IS its textContent, so every element judged
-    // before is judged exactly as before.
-    const txt = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim();
-    if (txt.length < 2) continue;
-    const cs = getComputedStyle(el);
-    if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) < 0.35) continue;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 4 || rect.height < 4) continue;
-    const fg = parse(cs.color); if (!fg || fg.a < 0.35) continue;
-    const bg = effectiveBg(el);
-    if (!bg) continue;                  // sits on a gradient/image — not judged
-    const composited = over(fg, bg);
-    const l1 = lum(composited), l2 = lum(bg);
-    const ratio = (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
-    if (ratio < minRatio) {
-      bad.push({ txt: txt.slice(0,28), cls: String(el.className||'').slice(0,26),
-                 color: cs.color, bg: `rgb(${Math.round(bg.r)},${Math.round(bg.g)},${Math.round(bg.b)})`,
-                 ratio: Math.round(ratio*100)/100 });
-    }
-  }
-  return bad.sort((a,b)=>a.ratio-b.ratio).slice(0,6);
-};
+// The measuring function lives in test/helpers/contrast-probe.mjs. It used to
+// live here, and it SKIPPED any text over a background image — which includes
+// the page ground's grid, i.e. every title and tab bar standing on the dark
+// canvas. Nothing measured them, in either theme, for the whole life of the
+// test. The self-test below proves that blind spot stays closed.
+const probe = (page, minRatio, scope, limit = 6) => page.evaluate(CONTRAST_PROBE, { minRatio, scope, limit });
 
 // A page is not one screen. Setting STATE.page alone renders every multi-tab
 // page as its DEFAULT tab, so Email's Sent and Outreach Plan were never drawn
@@ -125,15 +66,73 @@ const CONTRAST_PROBE = ({ minRatio, scope }) => {
 // Each entry is [page, subState] where subState is merged into STATE.
 const SCREENS = [
   ['dashboard'], ['leads'], ['applicants'], ['reports'], ['myteam'],
-  ['bd_joborders'], ['clients'], ['sourced'], ['insights'], ['reminders'], ['admin'],
+  ['myteam', { myteamTab:'insights' }], ['myteam', { myteamTab:'reports' }],
+  ['bd_joborders'], ['bd_myjobs'], ['bd_jodetail'], ['bd_pipeline'],
+  ['clients'], ['sourced'], ['insights'], ['reminders'], ['admin'], ['assign'], ['workflows'], ['mailbox'],
   ['email', { emailTab:'pending' }],
   ['email', { emailTab:'compose' }],
   ['email', { emailTab:'sent' }],
   ['email', { emailTab:'allmail' }],
   ['email', { emailTab:'outreachplan' }],
   ['email', { emailTab:'sequence' }],
+  ['applicants', { ats:{ view:'grid' } }], ['applicants', { ats:{ view:'applied' } }], ['applicants', { ats:{ view:'sourcing' } }],
 ];
-const ROLES = ['admin','bd','recruiter'];
+const ROLES = ['admin','bd','recruiter','ra'];
+
+// A screen with nothing on it is a screen with nothing to measure: an empty
+// list has no rows, a team of one has no "5 direct reports" line. The owner's
+// unreadable text was ON the populated screens, so they are populated here.
+const SEED = () => {
+  const S = window.STATE, now = new Date().toISOString();
+  S.bd = S.bd || {}; S.bd.view = Object.assign({}, S.bd.view, { joId:'jo-1', pipelineJoId:'jo-1', kanbanJoId:'jo-1' });
+  S.bd.jobOrders = [1,2,3].map(i => ({ id:'jo-'+i, job_code:'JO-'+i, job_title:['HVAC Technician','Estimator','Project Manager'][i-1],
+    client:'Northwind '+i, status:i===3?'On Hold':'Open', city:'Hartford', state:'CT', job_type:'Full-time', pay_rate:'$80/hr',
+    primary_skills:'Procore, Bluebeam', job_description:'Service and repair.', created_at:now, apply_enabled:i===1, apply_token:'a'.repeat(32), apply_count:3 }));
+  const cands = [['Jason Palencia','Project Manager'],['Taylor Ray','Estimator'],['Kevin Back','Superintendent'],['Charles Hudson','Core Proficiencies']]
+    .map((q,i) => ({ id:'c'+i, candidate_code:'CN-0'+i, full_name:q[0], current_title:q[1], email:'p'+i+'@mail.test', phone:'864-555-010'+i,
+      city:'Austin', state:'TX', skills:['hvac','sql'], extra_emails:[], extra_phones:[] }));
+  const stages = ['Sourced','Screening','Submitted to BDM','Interview Scheduled'];
+  S.bd.pipeline = cands.map((c,i) => ({ id:'pl'+i, job_order_id:'jo-1', pipeline_code:'PL-'+i, candidate:c, submission:{ id:'s'+i, stage:stages[i] } }));
+  S.bd.jobPipeline = S.bd.pipeline;
+  S.bd.submissions = cands.map((c,i) => ({ id:'s'+i, job_order_id:'jo-1', stage:stages[i], candidate_id:c.id, candidate:c, created_at:now }));
+  S.jobs = [1,2,3,4].map(i => ({ id:'l-'+i, position:['Estimator','Site Superintendent','Project Engineer','Safety Manager'][i-1], company_name:'Acme '+i,
+    stage:['Unassigned','Assigned','Connected','Rejected'][i-1], location:'Dallas, TX', created_at:now, assigned_to_bd:S.user&&S.user.id,
+    created_by:S.user&&S.user.id, industry:'Construction' }));
+  S.contacts = [1,2,3,4].map(i => ({ id:'ct'+i, job_id:'l-'+i, first_name:'Maria', last_name:'Lopez '+i, designation:'HR Director',
+    email:'m'+i+'@acme.test', phone:'(555) 111-222'+i, extra_emails:[], extra_phones:[], linkedin:'', is_primary:i===1, email_status:i===3?'invalid':'valid' }));
+  S.leads = S.jobs; S.companies = [{ id:'co1', name:'Acme 1', web:'acme.test', ind:'Construction', loc:'Dallas' }];
+  S.reminders = [{ id:'r1', title:'Call Maria', due_date:'2026-10-01', status:'pending', type:'follow_up' }];
+  S.candidates = cands;
+  // A small reporting line: "N direct reports · M in your reporting line" is a
+  // sentence on the My Team header that only exists when someone reports to you.
+  const me = S.user.id;
+  S.users = [{ id:me, name:S.user.name, role:S.user.role, managerId:null },
+    { id:'u2', name:'Asha Rao', role:'bd', managerId:me, email:'a@x.test' },
+    { id:'u3', name:'Ben Cole', role:'recruiter', managerId:me, email:'b@x.test' },
+    { id:'u4', name:'Cy Dunn', role:'ra', managerId:'u2', email:'c@x.test' }];
+  // A mailbox with a few messages, so the Inbox's list, bar and chips are drawn.
+  S.mailbox = Object.assign(S.mailbox || {}, {
+    accounts:[{ id:'mb1', email_address:'me@example.test', platform:'Gmail', readable:true }], activeId:'mb1', accountsLoading:false,
+    folders:[{ id:'INBOX', name:'Inbox', kind:'inbox', unread:2 },{ id:'SENT', name:'Sent', kind:'sent', unread:0 },{ id:'SPAM', name:'Spam', kind:'spam', unread:0 }],
+    folderId:'INBOX', foldersLoading:false, listLoading:false, error:null, labels:{},
+    messages:[1,2,3].map(i => ({ id:'m'+i, subject:'Re: Estimator role '+i, from:{ name:'Maria Lopez', email:'m'+i+'@acme.test' }, to:[{ email:'me@example.test' }],
+      date:now, unread:i<3, preview:'Thanks for reaching out — can we talk Thursday?', label_ids:[] })),
+    sel:{ m1:true },
+  });
+};
+
+// Overlays and open menus: the drawer that opens over a page, the "+ New" menu,
+// the evidence drawer — each paints its OWN paper over the dark scrim.
+const OVERLAYS = [
+  ['the evidence drawer', () => { window.evidenceOpen({ title:'Sent to client', hint:'Each person counted.', actions:[{ label:'Open the job', fn(){} }],
+      load:() => Promise.resolve({ items:[{ primary:'Jason Palencia', secondary:'Estimator · Acme', body:'They wrote: yes, Thursday works.', tone:'in', chips:['replied'], when:'01 Oct 2026' },
+        { primary:'Taylor Ray', secondary:'Estimator', tone:'out', chips:[], when:'30 Sep 2026' }], total:2, more:0 }) }); }],
+  ['the + New menu', () => { window.STATE.page = 'dashboard'; window.STATE.newMenu = true; window.render(); }],
+  ['the job detail modal', () => { window.STATE.page = 'leads'; window.STATE.modal = { type:'jobDetail', id:'l-1' }; window.render(); }],
+  ['the add-lead modal', () => { window.STATE.page = 'leads'; window.STATE.modal = { type:'addJob' }; window.render(); }],
+  ['the add-contact modal', () => { window.STATE.page = 'leads'; window.STATE.modal = { type:'addContact', job_id:'l-1' }; window.render(); }],
+  ['a client record', () => { window.STATE.page = 'clients'; window.STATE.clients = Object.assign(window.STATE.clients || {}, { list:[{ id:'cl1', name:'Northwind 1', status:'Active', created_at:new Date().toISOString() }], selectedId:'cl1', loading:false }); window.render(); }],
+];
 
 let browser;
 try {
@@ -141,6 +140,7 @@ try {
     args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'] });
 
   for (const theme of ['dark','light']) {
+    const MIN = MIN_FOR(theme);
     const ctx = await browser.newContext({ viewport:{width:1440,height:950} });
     await ctx.route('**', r => r.request().url().startsWith(BASE) ? r.continue() : r.abort());
     await ctx.addInitScript((t)=>{ try{ localStorage.setItem('pace-theme', t); }catch(e){} }, theme);
@@ -153,25 +153,72 @@ try {
     const applied = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
     step(`the ${theme} theme is really applied`, applied === theme, `data-theme=${applied}`);
 
+    // THE PROBE CAN SEE THE PLACE IT WAS BLIND (R-140). Dark ink standing
+    // straight on the dark ground is exactly what the owner kept finding. Put
+    // some there on purpose, with a literal colour no theme rule can fix, and
+    // demand the probe reports it in dark and does not in light. If this step
+    // ever goes green by the probe skipping the ground again, the whole suite
+    // below is a claim, not a measurement.
+    await page.evaluate(() => {
+      const d = document.createElement('div'); d.id = '__ground_probe';
+      d.setAttribute('style', 'color:#1A1033;padding:8px;font-size:14px');
+      d.textContent = 'text straight on the page ground';
+      document.getElementById('content').appendChild(d);
+    });
+    const seen = await probe(page, MIN, '#__ground_probe');
+    step(`the probe ${theme === 'dark' ? 'catches' : 'accepts'} dark ink on the ${theme} page ground`,
+      theme === 'dark' ? (seen.bad.length === 1 && seen.judged === 1) : (seen.bad.length === 0 && seen.judged === 1),
+      `judged ${seen.judged}, flagged ${seen.bad.length}${seen.bad[0] ? ' at ' + seen.bad[0].ratio + ':1' : ''}`);
+    await page.evaluate(() => document.getElementById('__ground_probe').remove());
+
     const offenders = [];
-    let screens = 0;
+    let screens = 0, judged = 0, declined = 0;
     for (const role of ROLES) {
       await switchRole(page, role);
+      await page.evaluate(SEED);
       for (const [p, sub] of SCREENS) {
         await page.evaluate(({pp, ss})=>{
-          window.STATE.page = pp;
-          if (ss) Object.assign(window.STATE, ss);
+          const S = window.STATE;
+          if (ss) for (const k of Object.keys(ss)) S[k] = (ss[k] && typeof ss[k] === 'object') ? Object.assign({}, S[k], ss[k]) : ss[k];
+          S.modal = null; S.newMenu = false; S.page = pp;
           window.render();
         }, { pp:p, ss:sub || null });
-        await page.waitForTimeout(110);
+        await page.waitForTimeout(90);
         screens++;
-        const label = sub ? `${p}:${Object.values(sub).join('/')}` : p;
-        const bad = await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content *, #topbar *, #sidebar *' });
-        for (const b of bad) offenders.push(`${theme}/${role}/${label}: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
+        const label = sub ? `${p}:${Object.values(sub).map(v => typeof v === 'object' ? Object.values(v).join('/') : v).join('/')}` : p;
+        const r = await probe(page, MIN, '#content *, #topbar *, #sidebar *, #layer *');
+        judged += r.judged; declined += r.declined;
+        for (const b of r.bad) offenders.push(`${theme}/${role}/${label}: "${b.txt}" on ${b.surface} ${b.color}/${b.bg} = ${b.ratio}:1`);
       }
     }
-    step(`every screen is readable in ${theme} (${screens} screens)`,
+    step(`every screen is readable in ${theme} at ${MIN}:1 (${screens} screens, ${judged} pieces of text)`,
       offenders.length === 0, offenders.slice(0,5).join(' | '));
+    // A measurement that declined to measure is not a pass. Gradients and
+    // images behind text are the only things it may skip, and there must be few.
+    step(`the probe judged almost everything in ${theme} (declined ${declined} of ${judged + declined})`,
+      judged > 3000 && declined < judged * 0.02, `judged ${judged}, declined ${declined}`);
+
+    // The seeded mailbox must really have drawn, or the Inbox row above proved nothing.
+    await switchRole(page, 'bd');
+    await page.evaluate(SEED);
+    await page.evaluate(() => { window.STATE.page = 'mailbox'; window.render(); });
+    await page.waitForTimeout(150);
+    const mbText = await page.evaluate(() => (document.getElementById('content') || {}).innerText || '');
+    step(`the seeded Inbox is on screen in ${theme}`, /Re: Estimator role 1/.test(mbText), mbText.slice(0, 60).replace(/\n/g, ' '));
+
+    // OVERLAYS AND MENUS, drawn over the page, in the same theme.
+    const overlayBad = [];
+    for (const [name, open] of OVERLAYS) {
+      await page.evaluate(() => { const S = window.STATE; S.modal = null; S.newMenu = false; S.page = 'dashboard'; window.render(); });
+      await page.evaluate(open);
+      await page.waitForTimeout(160);
+      const r = await probe(page, MIN, '#layer *, #topbar *, #content *');
+      const shown = await page.evaluate(() => document.querySelectorAll('#layer *, .tb-newmenu').length);
+      if (!shown) overlayBad.push(`${name}: nothing was drawn, so nothing was measured`);
+      for (const b of r.bad) overlayBad.push(`${name}: "${b.txt}" on ${b.surface} ${b.color}/${b.bg} = ${b.ratio}:1`);
+    }
+    await page.evaluate(() => { const S = window.STATE; S.modal = null; S.newMenu = false; if (window.evidenceClose) window.evidenceClose(); });
+    step(`every overlay and menu is readable in ${theme} (${OVERLAYS.length} of them)`, overlayBad.length === 0, overlayBad.slice(0, +(process.env.SHOWALL ? 99 : 5)).join(' | '));
 
     // INTERACTIVE STATES. Everything above renders a screen AT REST, so the
     // hover palette and the open-row palette were never drawn once — and
@@ -208,7 +255,7 @@ try {
     if (rows > 0) {
       await page.hover('#content tr[data-row-id="j0"]');
       await page.waitForTimeout(120);
-      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *' }))
+      for (const b of (await probe(page, MIN, '#content tr[data-row-id] *')).bad)
         stateBad.push(`hover: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
       // ...and opened, which is both `.is-open` AND still hovered.
       await page.click('#content tr[data-row-id="j0"]');
@@ -225,7 +272,7 @@ try {
         const nx = tr && tr.nextElementSibling;
         return nx && nx.classList.contains('row-exp') ? nx.textContent.trim().length : 0;
       });
-      for (const b of await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: '#content tr[data-row-id] *, #content tr.row-exp *' }))
+      for (const b of (await probe(page, MIN, '#content tr[data-row-id] *, #content tr.row-exp *')).bad)
         stateBad.push(`open: "${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`);
     }
     step(`the opened row's panel is there to measure in ${theme}`, panelText > 0, `${panelText} chars of text`);
@@ -240,7 +287,7 @@ try {
     });
     await page.waitForTimeout(250);
     // The login screen lives outside the app shell, so it needs the whole body.
-    const loginBad = await page.evaluate(CONTRAST_PROBE, { minRatio: MIN_RATIO, scope: 'body *' });
+    const loginBad = (await probe(page, MIN, 'body *')).bad;
     step(`the login screen is readable in ${theme}`, loginBad.length === 0,
       loginBad.slice(0,4).map(b=>`"${b.txt}" ${b.color} on ${b.bg} = ${b.ratio}:1`).join(' | '));
 

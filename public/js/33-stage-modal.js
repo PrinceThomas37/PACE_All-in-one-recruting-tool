@@ -52,7 +52,7 @@
   // (pipeline, submissions grid, board, job detail) now shares.
   var STAGE_LIST = ['Sourced','Screening','Submitted to BDM','Submitted to Client','Interview Scheduled','Interview Completed','Offer','Joining','Placement','Not Accepted','On Hold'];
   window.ATS_STAGE_LIST = STAGE_LIST;
-  var STAGE_COLORS = {'Sourced':'var(--text3)','Screening':'#6b7280','Submitted to BDM':'var(--amber)','Submitted to Client':'var(--accent)','Interview Scheduled':'#2563eb','Interview Completed':'#1d4ed8','Offer':'#7c3aed','Joining':'#0891b2','Placement':'var(--green)','Not Accepted':'var(--red)','On Hold':'#9ca3af'};
+  var STAGE_COLORS = {'Sourced':'var(--text3)','Screening':'#6b7280','Submitted to BDM':'var(--amber)','Submitted to Client':'var(--accent)','Interview Scheduled':'#2563eb','Interview Completed':'#1d4ed8','Offer':'#7c3aed','Joining':'#0891b2','Placement':'var(--green)','Not Accepted':'var(--red)','On Hold':'#6b7280'};
   window.ATS_STAGE_COLORS = STAGE_COLORS;
 
   // A colour for a sub-stage, semantically: green = good outcome, red = bad,

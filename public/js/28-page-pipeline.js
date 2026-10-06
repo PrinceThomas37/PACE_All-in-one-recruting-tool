@@ -13,7 +13,7 @@
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
-  var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#9ca3af"};
+  var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#6b7280"};
   // Stage ranking used to decide when a candidate has actually been *submitted*.
   // A candidate is only "Submitted" once they reach "Submitted to BDM" (i.e. sent
   // to the BD team) — before that they are merely Added/Sourced/Screening.

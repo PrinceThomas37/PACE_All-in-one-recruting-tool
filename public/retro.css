@@ -77,12 +77,12 @@
   --border2:#CDBA98;
   --text:#1A1033;          /* midnight ink */
   --text2:#3D3260;
-  --text3:#6E6290;         /* faded ink — 5.1:1 on cream */
+  --text3:#625782;         /* faded ink — 5.1:1 on cream */
   --accent:#7A4DE0;        /* pixel purple */
   --accent-m:#9B78F0;
   --accent-d:#5B3BB0;
   --accent-l:rgba(122,77,224,.12);
-  --green:#2E7D32;   --green-l:#DCE8CF;
+  --green:#276B2B;   --green-l:#DCE8CF;
   --amber:#A0540C;   --amber-l:#F5E0BC;
   --red:#B23A2E;     --red-l:#F3D3CC;
   --purple:#7A4DE0;  --purple-l:#E6DCFF;
@@ -98,6 +98,9 @@
   --glow1:transparent; --glow2:transparent; --glow3:transparent;
   --grid:rgba(26,16,51,.055);
   --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+  /* text ink for the PAGE GROUND (cv) — see THE TEXT INK RULE at the end of this file */
+  --cv-text:#1A1033; --cv-text2:#3D3260; --cv-text3:#625782;
+  --cv-accent:#7A4DE0; --cv-purple:#7A4DE0; --cv-amber:#A0540C; --cv-gold:#A0540C; --cv-red:#B23A2E; --cv-green:#276B2B; --cv-teal:#2F6F8F;
   /* the CANVAS and the sidebar SHELF are their own tokens: --bg is also the
      recessed groove inside cards (segmented controls, chips), which must stay
      cream at night. */
@@ -131,12 +134,12 @@
     --border2:#CDBA98;
     --text:#1A1033;          /* midnight ink */
     --text2:#3D3260;
-    --text3:#6E6290;         /* faded ink — 5.1:1 on cream */
+    --text3:#625782;         /* faded ink — 5.1:1 on cream */
     --accent:#7A4DE0;        /* pixel purple */
     --accent-m:#9B78F0;
     --accent-d:#5B3BB0;
     --accent-l:rgba(122,77,224,.12);
-    --green:#2E7D32;   --green-l:#DCE8CF;
+    --green:#276B2B;   --green-l:#DCE8CF;
     --amber:#A0540C;   --amber-l:#F5E0BC;
     --red:#B23A2E;     --red-l:#F3D3CC;
     --purple:#7A4DE0;  --purple-l:#E6DCFF;
@@ -152,6 +155,9 @@
     --glow1:transparent; --glow2:transparent; --glow3:transparent;
     --grid:rgba(26,16,51,.055);
     --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+    /* text ink for the PAGE GROUND (cv) — see THE TEXT INK RULE at the end of this file */
+    --cv-text:#1A1033; --cv-text2:#3D3260; --cv-text3:#625782;
+    --cv-accent:#7A4DE0; --cv-purple:#7A4DE0; --cv-amber:#A0540C; --cv-gold:#A0540C; --cv-red:#B23A2E; --cv-green:#276B2B; --cv-teal:#2F6F8F;
     /* the action colour: one Sun Yellow per screen */
     --sun:#FFD36E; --on-sun:#1A1033;
     /* state fills (muted on purpose) — for tags and decision buttons */
@@ -173,6 +179,9 @@
     --hard:#5B3BB0;
     --grid:rgba(205,184,255,.05);
     --on-canvas:#CDB8FF; --on-canvas-strong:#FFF6E6;
+    /* text ink for the PAGE GROUND (cv) — see THE TEXT INK RULE at the end of this file */
+    --cv-text:#FFF6E6; --cv-text2:#E2D6FF; --cv-text3:#B3A2E0;
+    --cv-accent:#B79BFF; --cv-purple:#B79BFF; --cv-amber:#F0B254; --cv-gold:#F0B254; --cv-red:#FF9A8B; --cv-green:#86D68F; --cv-teal:#7FC4E6;
     color-scheme:light;
   }
 }
@@ -188,12 +197,12 @@
   --border2:#CDBA98;
   --text:#1A1033;          /* midnight ink */
   --text2:#3D3260;
-  --text3:#6E6290;         /* faded ink — 5.1:1 on cream */
+  --text3:#625782;         /* faded ink — 5.1:1 on cream */
   --accent:#7A4DE0;        /* pixel purple */
   --accent-m:#9B78F0;
   --accent-d:#5B3BB0;
   --accent-l:rgba(122,77,224,.12);
-  --green:#2E7D32;   --green-l:#DCE8CF;
+  --green:#276B2B;   --green-l:#DCE8CF;
   --amber:#A0540C;   --amber-l:#F5E0BC;
   --red:#B23A2E;     --red-l:#F3D3CC;
   --purple:#7A4DE0;  --purple-l:#E6DCFF;
@@ -209,6 +218,9 @@
   --glow1:transparent; --glow2:transparent; --glow3:transparent;
   --grid:rgba(26,16,51,.055);
   --on-canvas:#5A4E7A; --on-canvas-strong:#1A1033;
+  /* text ink for the PAGE GROUND (cv) — see THE TEXT INK RULE at the end of this file */
+  --cv-text:#1A1033; --cv-text2:#3D3260; --cv-text3:#625782;
+  --cv-accent:#7A4DE0; --cv-purple:#7A4DE0; --cv-amber:#A0540C; --cv-gold:#A0540C; --cv-red:#B23A2E; --cv-green:#276B2B; --cv-teal:#2F6F8F;
   /* the action colour: one Sun Yellow per screen */
   --sun:#FFD36E; --on-sun:#1A1033;
   /* state fills (muted on purpose) — for tags and decision buttons */
@@ -230,6 +242,9 @@
   --hard:#5B3BB0;
   --grid:rgba(205,184,255,.05);
   --on-canvas:#CDB8FF; --on-canvas-strong:#FFF6E6;
+  /* text ink for the PAGE GROUND (cv) — see THE TEXT INK RULE at the end of this file */
+  --cv-text:#FFF6E6; --cv-text2:#E2D6FF; --cv-text3:#B3A2E0;
+  --cv-accent:#B79BFF; --cv-purple:#B79BFF; --cv-amber:#F0B254; --cv-gold:#F0B254; --cv-red:#FF9A8B; --cv-green:#86D68F; --cv-teal:#7FC4E6;
   color-scheme:light;
 }
 
@@ -349,8 +364,11 @@ body.ui-kit .rail-mark{
   box-shadow:2px 2px 0 #000;
 }
 body.ui-kit .rail-word{
-  font-family:var(--pixel);font-weight:400;font-size:20px;letter-spacing:1px;color:#E4D6FF;
-  text-shadow:1px 1px 0 #8A63F0,2px 2px 0 #5530B8,3px 3px 0 #2A1270,-1px 0 0 #000,1px 0 0 #000,0 -1px 0 #000,0 1px 0 #000,4px 4px 0 #000;
+  /* R-138 (owner: "increase the purple contrast for PACE, now it looks dull"):
+     a bright face on a deep, saturated purple extrusion — the ramp is steeper,
+     so the letters stand off the sky instead of melting into it. */
+  font-family:var(--pixel);font-weight:400;font-size:20px;letter-spacing:1px;color:#FFFFFF;
+  text-shadow:1px 1px 0 #B58CFF,2px 2px 0 #8A4DFF,3px 3px 0 #5E2BE0,4px 4px 0 #35108F,-1px 0 0 #000,1px 0 0 #000,0 -1px 0 #000,0 1px 0 #000,5px 5px 0 #000;
 }
 
 /* ── THE SIDEBAR, BY BUSINESS. Section labels in the pixel label face with a
@@ -809,3 +827,62 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 
 .dash-rep-more{margin-top:12px;font-family:var(--mono);font-size:11.5px}
 .dash-rep-more a{color:var(--accent);cursor:pointer;font-weight:700;text-decoration:underline}
+
+
+/* ══ THE TEXT INK RULE (R-140, owner: "the visibility issue is persistent across
+   the UI") ══════════════════════════════════════════════════════════════════
+   Night keeps the PAPER: cards stay cream with dark ink; only the ground goes
+   dark. So there are two kinds of surface and two kinds of ink, and a piece of
+   text must get the ink of the surface it is standing on:
+     * the PAGE GROUND (#content itself) — --text/--text2/--text3 are the cv-
+       values: ink by day, cream/lavender by night;
+     * every PAPER surface (the list below) — --text* go back to ink.
+   Because this is done with the tokens, everything that reads var(--text*)
+   (headings, .c-text2, tab bars, inline styles) is right without being touched,
+   and by day the two sets are the same colours, so nothing changes.
+   A page's title, its sub-line and its tab bar used to be dark ink on the dark
+   ground (1.05:1) in every screen, and the contrast test could not see it
+   because it skipped anything over the ground's grid image (test/helpers/
+   contrast-probe.mjs now measures it). A NEW paper surface that is not in this
+   list shows up in theme-contrast-smoke as cream text on cream — add it here. */
+/* zero specificity on purpose: this only fills in where no other rule says a colour,
+   so a selected tab or an accent link keeps its own colour on either surface */
+:where(#content){
+  --text:var(--cv-text); --text2:var(--cv-text2); --text3:var(--cv-text3);
+  --accent:var(--cv-accent); --purple:var(--cv-purple); --amber:var(--cv-amber); --gold:var(--cv-gold);
+  --red:var(--cv-red); --green:var(--cv-green); --teal:var(--cv-teal);
+  /* the kit's own aliases are resolved once at :root, so they are restated per surface */
+  --ink:var(--text); --ink2:var(--text2); --ink3:var(--text3);
+  color:var(--text);
+}
+html :where(#content :where(
+  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,
+  .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
+  .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,
+  .email-card,.failed-panel,.dash-tile,.cmp-prev,.cmp-fld select,.cmp-fld .cmp-static,.cp-found,.cpill,
+  .chipf,.chipf-c,.fc,.fsel,.ev-chip,.ev-drawer,.gs-panel,.lx-chip,.lx-contact,.lx-facts,.lx-item,.lx-sel,
+  .lxc-slot,.lxi-card,.lxi-row,.lxp-card,.mb-body,.mb-head,.mb-list,.mb-msg,.mb-read,.mb-bulk,.mb-lm-box,
+  .mb-selhead,.mba-card,.rep-date,.rep-mini,.rep-numbtn,.rep-pill,.rep-hot-bar,.rw-panel,.seq-card,.seq-chip,
+  .seq-note,.seq-prev,.seq-seg,.seq-sel,.seq-in,.seq-ta,.sp-line,.switcher,.toast,.txta,.al-contact,.al-picked,
+  .win-bar,.win-chip,.bdg-gray,.ot-chip,.ind-bg,.empty-ico,.salary-range-wrap,
+  .inp,.sel,input,select,textarea,.btn-outline,.btn-primary,.btn-danger,.google-btn,th,.bdg,.pill,
+  [class*="bdg-"],
+  /* paper made inline: style="background:var(--card)" / var(--bg) / var(--card-solid) / #fff */
+  [style*="background:var(--card)"],[style*="background: var(--card)"],
+  [style*="background:var(--card-solid)"],[style*="background: var(--card-solid)"],
+  [style*="background:var(--bg)"],[style*="background: var(--bg)"],
+  [style*="background:var(--bg2)"],[style*="background: var(--bg2)"],
+  [style*="background:var(--green-l)"],[style*="background:var(--amber-l)"],[style*="background:var(--red-l)"],
+  [style*="background:var(--purple-l)"],[style*="background:var(--teal-l)"],[style*="background:var(--gold-l)"],
+  [style*="background:var(--accent)"],[style*="background: var(--accent)"],[style*="background:var(--accent-d)"],[style*="background:var(--accent-m)"],
+  [style*="background:#fff"],[style*="background: #fff"],[style*="background:white"]
+)){
+  --text:#1A1033; --text2:#3D3260; --text3:#625782;
+  --accent:#7A4DE0; --purple:#7A4DE0; --amber:#A0540C; --gold:#A0540C;
+  --red:#B23A2E; --green:#276B2B; --teal:#2F6F8F;
+  --ink:var(--text); --ink2:var(--text2); --ink3:var(--text3);
+  color:var(--text);
+}
+
+/* an error card is pink paper: faded ink on it was 3.9:1, so its helper text uses the darker ink */
+.briefing-card.is-error{--text3:#3D3260}

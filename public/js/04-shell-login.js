@@ -208,7 +208,12 @@ function renderSidebar(){
   var railPinned='';
   try{
     var rp=localStorage.getItem('pace-rail');
-    if(rp==='pinned'||(rp!=='collapsed'&&window.innerWidth>=1100)) railPinned=' pinned';
+    // R-139 (owner: the fold on a logo click "pushes the page under the menu,
+    // it is not required now"): on a full-size screen the sidebar is simply
+    // OPEN, and an old remembered 'collapsed' is ignored there, so nobody who
+    // folded it before is left with a closed menu and no way to open it.
+    // Below 1100px (tablet, phone) the person's own choice still applies.
+    if(window.innerWidth>=1100||rp==='pinned') railPinned=' pinned';
   }catch(e){}
 
   return '<div id="sidebar" class="'+(railPinned+setupOpen).trim()+'">'+
@@ -221,8 +226,8 @@ function renderSidebar(){
     // precisely because it is an explicit choice rather than a hover — it just
     // had nothing to toggle it. Now the mark does, and CSS shows the affordance
     // only where hover is unavailable.
-    '<div class="sb-brand" onclick="toggleRail()" role="button" tabindex="0" '+
-      'title="Show or hide the menu labels" aria-label="Show or hide the menu labels">'+
+    '<div class="sb-brand" onclick="paceLogoClick()" role="button" tabindex="0" '+
+      'title="PACE" aria-label="PACE">'+
       // R-122: the pixel logo on a slice of the sky (retro.css paints both).
       '<div class="rail-mark">P</div>'+
       paceLogoWord()+
@@ -338,6 +343,20 @@ function paceLogoShow(){
   var iv=setInterval(function(){ if(tick())clearInterval(iv); },250);
 }
 window.paceLogoWord=paceLogoWord;
+// A click on the logo types PACE again (R-138). On a screen too narrow for the
+// open sidebar the same click still folds/unfolds the rail — a touch device
+// has no other way to read the labels (see the long note above).
+window.paceLogoClick=function(){
+  var el=document.querySelector('#sidebar .rail-word');
+  if(el){
+    window.__paceLogoT0=Date.now();
+    el.classList.remove('typing'); el.style.removeProperty('--el');
+    void el.offsetWidth;                       // let the animation start from the beginning
+    el.classList.add('typing');
+    paceLogoShow();                            // ends the show, and keeps it alive through a repaint
+  }
+  if(window.innerWidth<1100&&typeof window.toggleRail==='function') window.toggleRail();
+};
 
 // Show or hide the Setup items above the name card. One class, no render.
 window.toggleSetup=function(){

@@ -595,7 +595,7 @@
     var s=S();
     if(s.queue===null&&!s.queueLoading) candOutreachLoadQueue();
     var rows=(s.queue||[]).slice(0,25).map(function(r){
-      var colour=r.status==='sent'?'var(--green)':r.status==='failed'?'#ef4444':r.status==='skipped'?'var(--text3)':'var(--amber)';
+      var colour=r.status==='sent'?'var(--green)':r.status==='failed'?'var(--red)':r.status==='skipped'?'var(--text3)':'var(--amber)';
       // A DUE TIME THAT HAS PASSED LOOKS BROKEN. It usually is not — the drip
       // slot came round, the drain picked it up, and the CANDIDATE's local
       // working hours were shut, so it waits. The owner had to ask which of
@@ -607,7 +607,7 @@
             : '')
         : (r.sent_at?new Date(r.sent_at).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}):'');
       var waitLine=(r.status==='pending'&&r.wait&&r.wait.reason!=='queued')
-        ? '<div class="fs-11" style="color:'+(r.wait.reason==='paused'?'#ef4444':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
+        ? '<div class="fs-11" style="color:'+(r.wait.reason==='paused'?'var(--red)':'var(--amber)')+'">'+esc(r.wait.text)+'</div>'
         : '';
       // READ WHAT THIS PERSON ACTUALLY GOT. The body has always been stored; it
       // simply had no way out of the database, so "what did we send them?" meant
@@ -630,7 +630,7 @@
           '<div class="fs-12_5" style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+
             '<span class="c-text3" style="font-weight:400">'+(open?'▾':'▸')+'</span> '+esc(r.name||r.to_email)+'</div>'+
           '<div class="fs-11 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.subject||'')+'</div>'+
-          (r.fail_reason?'<div class="fs-11" style="color:#ef4444">'+esc(r.fail_reason)+'</div>':'')+
+          (r.fail_reason?'<div class="fs-11" style="color:var(--red)">'+esc(r.fail_reason)+'</div>':'')+
           waitLine+
         '</div>'+
         '<div style="text-align:right;white-space:nowrap">'+

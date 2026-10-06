@@ -560,7 +560,7 @@ function renderJobDetailModal(){
       '<div style="display:flex;justify-content:space-between;align-items:start;gap:8px">'+
         (selectable?'<input type="checkbox" '+(seqSel.indexOf(c.id)>-1?'checked':'')+' onclick="jobToggleSeqSel(\''+c.id+'\')" style="margin-top:3px;cursor:pointer" title="Select for Start sequence">':'')+
         '<div style="flex:1">'+
-          '<div class="c-text" style="font-weight:600">'+escHtml((c.first_name||"")+" "+(c.last_name||""))+(c.is_primary?' <span class="fs-10" style="background:rgba(16,185,129,.15);color:#10b981;padding:2px 7px;border-radius:8px;margin-left:4px">PRIMARY</span>':'')+'</div>'+
+          '<div class="c-text" style="font-weight:600">'+escHtml((c.first_name||"")+" "+(c.last_name||""))+(c.is_primary?' <span class="fs-10" style="background:var(--green-l);color:var(--green);padding:2px 7px;border-radius:8px;margin-left:4px">PRIMARY</span>':'')+'</div>'+
           '<div class="fs-12 c-text3" style="margin-top:2px">'+escHtml(c.designation||"—")+'</div>'+
           '<div class="fs-12 c-text2" style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
             '\ud83d\udce7 '+escHtml(c.email||"—")+' '+emailStatusBadge+
@@ -573,14 +573,14 @@ function renderJobDetailModal(){
         '<div style="display:flex;flex-direction:column;gap:4px">'+
           (c.email?'<button onclick="sendEmailToContact(\''+c.id+'\')" style="background:var(--accent);color:#fff;border:0;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">Email</button>':'')+
           (c.email&&!wfContactEnrollment(j.id,c.id)?'<button onclick="wfEnrollContact(\''+c.id+'\',\''+j.id+'\')" style="background:transparent;color:var(--accent);border:1px solid var(--accent);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">Enroll</button>':'')+
-          (canEdit?'<button onclick="deleteContact(\''+c.id+'\')" style="background:transparent;color:#ef4444;border:1px solid #ef4444;padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">Delete</button>':'')+
+          (canEdit?'<button onclick="deleteContact(\''+c.id+'\')" style="background:transparent;color:var(--red);border:1px solid var(--red);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer">Delete</button>':'')+
         '</div>'+
       '</div>'+
     '</div>';
   }).join("");
   if(!contactRows)contactRows='<div class="c-text3 fs-12" style="padding:12px;text-align:center">No contacts yet.</div>';
 
-  return '<div style="background:var(--bg2);border-radius:14px;width:min(720px,94vw);max-height:90vh;overflow-y:auto;border:1px solid var(--border)">'+
+  return '<div style="background:var(--card);border-radius:14px;width:min(720px,94vw);max-height:90vh;overflow-y:auto;border:1px solid var(--border)">'+
     '<div style="padding:20px 24px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:start;gap:12px">'+
       '<div><div class="fs-18 c-text" style="font-weight:700">'+escHtml(j.position)+'</div><div class="fs-13 c-text3" style="margin-top:3px">'+escHtml(j.company_name)+(j.location?" · "+escHtml(j.location):"")+'</div></div>'+
       // The rewind clock, beside the close. A lead ALREADY had a full trail in
@@ -615,7 +615,7 @@ function renderJobDetailModal(){
       '</div>'+
       contactRows+
       renderResearchSection(j, canEditResearch(u,j))+
-      (canEdit?'<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border2);display:flex;justify-content:flex-end;gap:8px"><button onclick="deleteJob(\''+j.id+'\')" style="background:transparent;color:#ef4444;border:1px solid #ef4444;padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer">Delete Job</button></div>':'')+
+      (canEdit?'<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border2);display:flex;justify-content:flex-end;gap:8px"><button onclick="deleteJob(\''+j.id+'\')" style="background:transparent;color:var(--red);border:1px solid var(--red);padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer">Delete Job</button></div>':'')+
     '</div>'+
   '</div>';
 }

@@ -259,7 +259,7 @@ function renderEmail(){
     var waitingTotal=sp.deferred||0;
     var chips='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
       statChip(sp.sent,'Sent','var(--green)')+
-      statChip(sp.failed,'Failed',sp.failed>0?'#ef4444':'var(--text2)')+
+      statChip(sp.failed,'Failed',sp.failed>0?'var(--red)':'var(--text2)')+
       (sp.retrying?statChip(sp.retrying,'Will retry','var(--amber)'):'')+
       (waitingTotal?statChip(waitingTotal,'Waiting','var(--amber)'):'')+
       statChip(sp.total,'Total','var(--text)')+
@@ -324,13 +324,15 @@ function renderEmail(){
     return { id:t, label:TAB_LABELS[t]||t, n:n, onclick:"setEmailTab('"+t+"')" };
   }), STATE.emailTab,
     (ps&&ps.total_pending&&STATE.emailTab==='pending'
-      ? '<span class="fs-12 c-ink3">'+htmlEsc(pendingSplitLine(ps))+'</span>'
+      ? '<span class="fs-12 c-ink3" title="'+escAttr('Send window: '+(ps.send_window_label||'8:00 – 16:00 lead local time')+(ps.held_company?'. Held until tomorrow: the company already got its '+(ps.company_daily_cap||2)+' first email(s) today (Admin → System Settings).':''))+'">'+htmlEsc(pendingSplitLine(ps))+'</span>'+
+        // The panel this replaces carried the only "try the waiting ones now" button; it lives on in one quiet link.
+        (ps.waiting_window>0&&!userHasRole(u,'ra_lead')?' <button class="fs-12 c-accent" style="background:none;border:0;padding:0;cursor:pointer;text-decoration:underline" onclick="retryPendingWindowNow()">Try the waiting ones now</button>':'')
       : ''));
 
   // ── PENDING TAB ──
   var pendingHtml='';
   if(STATE.emailTab==='pending'&&isBD){
-    var scheduleBanner=renderPendingScheduleBanner();
+    var scheduleBanner='';   // R-141: the schedule panel is gone — the one-line summary above the list says the same
     var isRaLead=userHasRole(u,'ra_lead');
 
     // ── RA LEAD: BD user picker ──────────────────────────────────────
@@ -585,7 +587,7 @@ function renderEmail(){
     '<div class="cmp-foot">'+UI.ic('shield')+'<span>Filled in with an example person. Each lead gets its own details when it is sent; your signature is added from the mailbox above.</span></div>'+
   '</div>';
   var tmplHtml=canEditTemplates?
-    '<div class="cmp"><div class="cmp-edit" style="max-width:720px">'+
+    '<div class="cmp cmp-plan"><div class="cmp-edit">'+
       '<div class="fs-13 c-text2" style="padding:12px 14px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:16px">'+
         '<strong>How this works:</strong> Pick your sending email → choose a message style → edit Outreach &amp; follow-ups → Save. Assigned leads use these templates automatically.'+
       '</div>'+
@@ -861,7 +863,6 @@ function renderEmail(){
     return r.reminder_type==='ooo_return'&&r.status==='pending';
   }).sort(function(a,b){return a.return_date>b.return_date?1:-1;});
   var dueOOO=oooReminders.filter(function(r){return r.return_date<=today;});
-  var upcomingOOO=oooReminders.filter(function(r){return r.return_date>today;});
 
   var oooCards='';
   if(dueOOO.length){
@@ -879,22 +880,8 @@ function renderEmail(){
       '</div>';
     }).join('')+'</div>';
   }
-  if(upcomingOOO.length){
-    oooCards+='<div style="background:var(--amber-l);border:1px solid var(--amber);border-radius:var(--r2);padding:10px 14px;margin-bottom:16px">'+
-      '<div class="fs-12 c-amber" style="font-weight:600;margin-bottom:6px">⏰ Upcoming OOO Returns ('+upcomingOOO.length+')</div>'+
-      upcomingOOO.slice(0,3).map(function(r){
-        return '<div class="fs-12 c-text2" style="padding:3px 0;border-bottom:1px solid rgba(0,0,0,.05)">'+
-          htmlEsc(r.contact_name||'')+(r.company_name?' \u00b7 '+htmlEsc(r.company_name):'')+'<span class="c-amber" style="float:right;font-weight:600">'+htmlEsc(r.return_date)+'</span>'+
-        '</div>';
-      }).join('')+
-    '</div>';
-  }
-
-  // BD today summary card
-  var bdSummaryCard='';
-  if((u.role==='bd'||u.role==='bd_lead')&&STATE.todaySummary&&STATE.todaySummary.total>0){
-    bdSummaryCard=renderTodaySummaryCard(STATE.todaySummary);
-  }
+  // (R-141) "Upcoming OOO returns" is not drawn: it lives on the Reminders page and Today. A contact who HAS
+  // returned is still shown above, because that one asks the person to do something.
 
   // The page identity already lives in the top bar, so the old in-page title
   // block is gone — it was the second "Email" heading on the same screen.
@@ -902,7 +889,6 @@ function renderEmail(){
     tabs: tabBar,
     body:
       oooCards+
-      bdSummaryCard+
       pausedBanner+
       progressBar+
       // Candidate emails first: they are drained on their own queue and used

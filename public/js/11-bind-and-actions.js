@@ -207,7 +207,9 @@ window.setComposeSide=function(side){
 
 window.setEmailTab=function(t){if(t==='generator')t='compose';  // the two tabs merged
   if(t==='sent')t='allmail';       // Sent was folded into All email (it shows what went out AND what came back)
-  STATE.emailTab=t;STATE.raLeadSelectedBD=null;STATE.genEmail=null;STATE.emailSearch=null;STATE.previewEmail=null;STATE.showEmailPreview=false;STATE.composeFromEmailId=null;STATE.pendingEmailPage=0;STATE.sentEmailPage=0;loadEmailsForCurrentUser();if(t==='pending'){loadPendingSummary();startPendingSummaryPoll();}else{stopPendingSummaryPoll();}render();}
+  STATE.emailTab=t;STATE.raLeadSelectedBD=null;STATE.genEmail=null;STATE.emailSearch=null;STATE.previewEmail=null;STATE.showEmailPreview=false;STATE.composeFromEmailId=null;STATE.pendingEmailPage=0;STATE.sentEmailPage=0;loadEmailsForCurrentUser();if(t==='pending'){loadPendingSummary();startPendingSummaryPoll();}else{stopPendingSummaryPoll();}render();
+  // A different TAB starts at the top (a repaint of the same tab keeps its place — see paintPageContent).
+  var _pb=document.querySelector('#content .pg-body');if(_pb)_pb.scrollTop=0;}
 
 
 // C-0026 #2 (D-0034): per-sender COUNTS for the RA Lead picker/drill-down —
@@ -233,40 +235,6 @@ function startPendingSummaryPoll(){
 }
 function stopPendingSummaryPoll(){
   if(STATE._pendingSummaryTimer){clearInterval(STATE._pendingSummaryTimer);STATE._pendingSummaryTimer=null;}
-}
-function renderPendingScheduleBanner(){
-  var ps=STATE.pendingSummary;
-  if(!ps||!ps.total_pending)return '';
-  var ready=ps.ready_now||0;
-  var wait=ps.waiting_window||0;
-  var retrying=ps.waiting_retry||0;
-  var held=ps.held_company||0;
-  var cap=ps.company_daily_cap||2;
-  var winLbl=ps.send_window_label||'8:00 – 16:00 lead local time';
-  var tzRows=(ps.by_timezone||[]).filter(function(t){return t.waiting_window>0;}).map(function(t){
-    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">'+
-      '<span><strong>'+htmlEsc(t.timezone)+'</strong> · '+t.waiting_window+' waiting</span>'+
-      '<span class="c-amber" style="font-weight:600">Resumes: '+htmlEsc(t.resumes_label)+'</span></div>';
-  }).join('');
-  var retryBtn='';
-  if(wait>0&&!userHasRole(STATE.user,'ra_lead')){
-    retryBtn='<button onclick="retryPendingWindowNow()" class="fs-12" style="margin-top:10px;background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;font-weight:600;cursor:pointer">Send in-window emails now</button>';
-  }
-  return '<div class="warn-panel">'+
-    '<div class="fs-14" style="font-weight:700;color:#92400e;margin-bottom:8px">Pending send schedule (US lead timezones)</div>'+
-    '<div class="fs-13" style="color:#78350f;line-height:1.5;margin-bottom:10px">'+
-      '<strong>'+ps.total_pending+'</strong> pending total · '+
-      '<span class="c-green" style="font-weight:600">'+ready+' ready to send now</span>'+
-      (wait?' · <span style="color:#b45309;font-weight:600">'+wait+' waiting for send window</span>':'')+
-      (retrying?' · <span style="font-weight:600">'+retrying+' waiting to retry</span>':'')+
-      (held?' · <span style="font-weight:600">'+held+' held until tomorrow</span>':'')+
-      '<br><span class="fs-12">Send window: '+htmlEsc(winLbl)+'.</span>'+
-      (retrying?'<br><span class="fs-12">Waiting to retry: a send failed and PACE tries again by itself — each row says when.</span>':'')+
-      (held?'<br><span class="fs-12">Held until tomorrow: the company already got its '+cap+' first email'+(cap===1?'':'s')+' today (First emails per company per day, in Admin → System Settings). Nothing is dropped.</span>':'')+
-    '</div>'+
-    (tzRows?'<div class="fs-12" style="margin-top:8px">'+tzRows+'</div>':'')+
-    retryBtn+
-  '</div>';
 }
 window.retryPendingWindowNow=function(){
   var body={};

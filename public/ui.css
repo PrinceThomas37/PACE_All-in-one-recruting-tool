@@ -601,6 +601,16 @@ body.ui-kit .nav-icon svg{width:18px;height:18px}
   .cmp{flex-direction:column}
   .cmp-prev{width:100%;position:static}
 }
+/* The Outreach Plan (R-144): the editor and its preview are one PAIR, centred in the
+   space — equal room on both sides at any width. Left-aligned they left 500px of
+   blank on the right of a wide screen; stacked (narrow) the preview was wider
+   than the editor above it. */
+.cmp-plan{justify-content:center}
+.cmp-plan .cmp-edit{flex:0 1 720px}
+@media(max-width:1180px){
+  .cmp-plan{align-items:center}
+  .cmp-plan .cmp-edit,.cmp-plan .cmp-prev{flex:none;width:100%;max-width:720px}
+}
 
 /* ── 10. MAILBOX: TWO PANES AND A THREAD ─────────────────────────────────── */
 /* The folder rail became a picker in the toolbar, so the two panes that matter
