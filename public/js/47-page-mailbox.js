@@ -253,6 +253,33 @@
     fetchList(key,cursor,false);
   }
 
+  // THE OTHER FOLDERS ARE READ BEHIND THE SCREEN (R-142). The owner: "once it is loaded it switches
+  // mailboxes easily, but not the tabs within, from inbox to sent to spam … it still takes 3 secs."
+  // Switching a mailbox was quick because the folder list was remembered; switching a FOLDER was slow
+  // because its messages had never been read. So once the Inbox is on screen, the folders people
+  // actually move between (Sent, Junk, Archive) are read quietly, one at a time with a pause between,
+  // into the same memory a visit fills — and the first click on one of them is a remembered screen.
+  // Only ever once per connection per page-load, never while the tab is hidden, never when a search
+  // is typed, and any action that moves mail (archive, delete, label) drops it all, as before.
+  var WARM_KINDS=['sent','junk','archive'], WARM_GAP=350, _warmed={};
+  function warmFolders(acct){
+    if(_warmed[acct]) return; _warmed[acct]=true;
+    var m=M(), ids=(m.folders||[]).filter(function(f){ return WARM_KINDS.indexOf(f.kind)>=0; })
+      .sort(function(a,b){ return WARM_KINDS.indexOf(a.kind)-WARM_KINDS.indexOf(b.kind); })
+      .map(function(f){ return f.id; });
+    var next=function(){
+      var mm=M(); if(mm.activeId!==acct) { _warmed[acct]=false; return; }   // moved on: a later visit may warm it
+      var id=ids.shift(); if(!id) return;
+      var key=[acct,id,''].join('|');
+      if(_lc[key]||(typeof document!=='undefined'&&document.hidden)) return next();
+      apiGet('/mailbox/'+enc(acct)+'/messages?limit=25&folder='+enc(id)).then(function(d){
+        if(!_lc[key]) _lc[key]={at:Date.now(),messages:(d.messages||[]).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},d.crm||{})};
+      }).catch(function(){}).then(function(){ setTimeout(next,WARM_GAP); });
+    };
+    setTimeout(next,WARM_GAP);
+  }
+  window.mbWarmFolders=warmFolders;
+
   function fetchList(key,cursor,quiet){
     var m=M(), acct=m.activeId;
     apiGet(listPath(cursor)).then(function(d){
@@ -276,6 +303,10 @@
       m.listLoading=false; m.error=null;
       if(!cursor) _lc[key]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
       paint();
+      if(!cursor&&!m.q){
+        var cur=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
+        if(cur&&cur.kind==='inbox') warmFolders(acct);
+      }
     }).catch(function(e){
       if(M().activeId!==acct || lkey()!==key) return;
       if(quiet) return;                                          // a failed refresh behind the screen says nothing
@@ -519,7 +550,7 @@
       var st=labelState(l.id);
       return '<button class="mb-lm-row" '+(m.labelMenu.busy?'disabled ':'')+'onclick="mbLabelToggle(\''+escAttr(l.id)+'\')">'+
         '<span class="mb-lm-box st-'+st+'">'+(st==='all'?'✓':(st==='some'?'–':''))+'</span>'+
-        '<span class="mb-lm-name">'+esc(l.name)+'</span></button>';
+        '<span class="mb-lm-name">'+labelDot(l.id)+esc(l.name)+'</span></button>';
     }).join(''):'<div class="mb-lm-empty">No labels yet — make the first one below.</div>';
     return '<div class="overlay" onclick="mbLabelClose()">'+
       '<div class="modal mb-lm" role="dialog" aria-label="Label emails" onclick="event.stopPropagation()">'+
@@ -1155,12 +1186,22 @@
     var l=labelList().filter(function(x){return x.id===id;})[0];
     return l?l.name:'';
   }
+  // The label's own colour as a small square beside its name (R-136) — a square, never a coloured chip, so the
+  // text keeps the paper's ink and its contrast, whatever colour the person chose in Gmail or Outlook.
+  function labelColor(id){
+    var l=labelList().filter(function(x){return x.id===id;})[0];
+    return (l&&l.color)||'';
+  }
+  function labelDot(id){
+    var c=labelColor(id);
+    return /^#[0-9a-fA-F]{3,8}$/.test(c)?'<i class="mb-ldot" style="background:'+c+'"></i>':'';
+  }
   function labelChips(ids,max){
     ids=(ids||[]); if(!ids.length) return '';
     var named=ids.map(function(id){ return {id:id,name:labelName(id)}; }).filter(function(x){return x.name;});
     if(!named.length) return '';
     var shown=named.slice(0,max||2), more=named.length-shown.length;
-    return '<div class="mb-lbls">'+shown.map(function(x){ return '<span class="mb-lbl">'+esc(x.name)+'</span>'; }).join('')+
+    return '<div class="mb-lbls">'+shown.map(function(x){ return '<span class="mb-lbl">'+labelDot(x.id)+esc(x.name)+'</span>'; }).join('')+
       (more>0?'<span class="mb-lbl mb-lbl-more">+'+more+'</span>':'')+'</div>';
   }
   function ensureLabels(){

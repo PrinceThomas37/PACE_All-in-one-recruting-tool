@@ -886,3 +886,11 @@ html :where(#content :where(
 
 /* an error card is pink paper: faded ink on it was 3.9:1, so its helper text uses the darker ink */
 .briefing-card.is-error{--text3:#3D3260}
+
+/* "+ New" (R-135): an entry — or the whole button — the person has no permission for is GREYED, never hidden. */
+body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;cursor:not-allowed}
+.tb-newrow.is-off{opacity:.5;cursor:not-allowed}
+.tb-newrow.is-off:hover,.tb-newrow.is-off:focus-visible{background:transparent;border-left-color:transparent}
+
+/* a label's own colour, as a small square beside its name (R-136) */
+.mb-ldot{display:inline-block;width:9px;height:9px;margin-right:5px;border:1px solid #1A1033;vertical-align:-1px;flex:none}

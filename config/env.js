@@ -19,7 +19,17 @@
 // is identical until MICROSOFT_REDIRECT_URI is set in the environment.
 const DEFAULT_MICROSOFT_REDIRECT_URI = 'https://fute-lms-backend.onrender.com/auth/microsoft/callback';
 // Protocol constant, not a per-deployment secret — safe to keep in code.
-const MICROSOFT_SCOPES = 'Mail.Send Mail.ReadWrite OnlineMeetings.ReadWrite offline_access User.Read';
+const MICROSOFT_BASE_SCOPES = 'Mail.Send Mail.ReadWrite OnlineMeetings.ReadWrite offline_access User.Read';
+// R-136: Outlook label COLOURS live in the mailbox's master category list, which needs this one extra permission —
+// asked for once, when a mailbox is connected. It is never sent on a token refresh (services/microsoft-oauth.js).
+// MICROSOFT_EXTRA_SCOPES overrides it; set it to an EMPTY value to switch the extra permission off (a tenant
+// whose consent policy refuses it can still connect with the base set; labels then just have no colour).
+const MICROSOFT_LABEL_SCOPE = 'MailboxSettings.ReadWrite';
+function microsoftScopes(env = process.env) {
+  const extra = env.MICROSOFT_EXTRA_SCOPES !== undefined ? String(env.MICROSOFT_EXTRA_SCOPES).trim() : MICROSOFT_LABEL_SCOPE;
+  return (MICROSOFT_BASE_SCOPES + ' ' + extra).trim();
+}
+const MICROSOFT_SCOPES = microsoftScopes();
 
 // Gmail / Google Workspace — same shape as Microsoft, fully OPTIONAL. Sending
 // stays unavailable for Gmail mailboxes until these are set + Google approves
@@ -56,7 +66,7 @@ function loadConfig() {
       clientId: process.env.MICROSOFT_CLIENT_ID,
       clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
       redirectUri: process.env.MICROSOFT_REDIRECT_URI || DEFAULT_MICROSOFT_REDIRECT_URI,
-      scopes: MICROSOFT_SCOPES,
+      scopes: microsoftScopes(),
     },
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -89,4 +99,4 @@ function loadConfig() {
   return config;
 }
 
-module.exports = { loadConfig, DEFAULT_MICROSOFT_REDIRECT_URI, MICROSOFT_SCOPES, DEFAULT_GOOGLE_REDIRECT_URI, GOOGLE_SCOPES };
+module.exports = { loadConfig, DEFAULT_MICROSOFT_REDIRECT_URI, MICROSOFT_SCOPES, MICROSOFT_BASE_SCOPES, microsoftScopes, DEFAULT_GOOGLE_REDIRECT_URI, GOOGLE_SCOPES };

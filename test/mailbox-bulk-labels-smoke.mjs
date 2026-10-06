@@ -49,7 +49,8 @@ const ok = (name, cond, detail = '') => { results.push(!!cond); console.log((con
   const patch = graph.filter(c => c.method === 'PATCH').pop();
   ok('Outlook: adding "Hot" and removing "Red category" PATCHes exactly {Hot}', patch && JSON.stringify(patch.body.categories) === '["Hot"]', JSON.stringify(patch));
   ok('Outlook: a category added to a message already carrying one KEEPS the old one', await (async () => { cats = ['Keep me']; await ms.setLabels('M1', { add: ['New'] }); return JSON.stringify(cats) === '["Keep me","New"]'; })(), JSON.stringify(cats));
-  ok('Outlook: the master list is read when permitted', JSON.stringify(await ms.listLabels()) === '[{"id":"Hot","name":"Hot","color":"preset0"}]');
+  ok('Outlook: the master list is read when permitted', JSON.stringify(await ms.listLabels()) === '[{"id":"Hot","name":"Hot","color":"#E74856"}]');
+  ok('Outlook: a category colour is a real colour (preset0 → red), not Microsoft\'s preset name', (await ms.listLabels())[0].color === '#E74856');
   masterOk = false;
   ok('Outlook: master list NOT permitted → an empty list, not an error (nobody has to reconnect)', JSON.stringify(await ms.listLabels()) === '[]');
   ok('Outlook: creating a label without that permission still returns it, by name', JSON.stringify(await ms.createLabel('Follow up')) === '{"id":"Follow up","name":"Follow up"}');

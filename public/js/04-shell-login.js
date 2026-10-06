@@ -459,27 +459,42 @@ function paceTodayChips(){
 // that does it is loaded - the menu never advertises something PACE cannot do.
 // The open/closed flag lives in STATE so a repaint of the bar draws it the same.
 function paceNewItems(){
+  // R-135 (owner: "keep it the same; if permission is not there, it should be greyed out"):
+  // every entry is ALWAYS listed. One the person cannot use is shown greyed with the reason —
+  // never hidden, so the menu looks the same for everyone and nobody wonders where "Sequence" went.
   var u=STATE.user, out=[];
   if(!u)return out;
   var bdm=userHasAnyRole(u,'admin','bd','bd_lead');
   var recruiter=userHasRole(u,'recruiter');
-  if(bdm&&typeof window.bdOpenNewJob==='function')out.push({id:'job',lbl:'Job',sub:'An opening from a client'});
-  if((bdm||recruiter)&&typeof window.atsOpenNew==='function')out.push({id:'candidate',lbl:'Candidate',sub:'Add a person to the pool'});
-  if(!isPureRecruiter(u)&&u.role!=='ra'&&typeof window.openAddJob==='function')out.push({id:'lead',lbl:'Lead',sub:'A company to sell to'});
-  if(!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'))out.push({id:'email',lbl:'Email',sub:'Write a new message'});
-  if(userHasAnyRole(u,'admin','ra_lead','bd_lead')&&typeof window.wfOpenBuilder==='function')out.push({id:'sequence',lbl:'Sequence',sub:'Steps and timing for outreach'});
+  var viewingOther=!!(STATE.viewingUser&&STATE.viewingUser.id!==u.id);
+  var away='You are looking at someone else\u2019s desk';
+  function item(id,lbl,sub,ok,why,loaded){
+    var can=!!ok&&(loaded!==false)&&!viewingOther;
+    return {id:id,lbl:lbl,sub:sub,ok:can,why:can?'':(viewingOther?away:(ok?'Not available here':why))};
+  }
+  out.push(item('job','Job','An opening from a client',bdm,'BD managers and admins',typeof window.bdOpenNewJob==='function'));
+  out.push(item('candidate','Candidate','Add a person to the pool',bdm||recruiter,'Recruiters, BD managers and admins',typeof window.atsOpenNew==='function'));
+  out.push(item('lead','Lead','A company to sell to',!isPureRecruiter(u)&&u.role!=='ra','Sales roles only',typeof window.openAddJob==='function'));
+  out.push(item('email','Email','Write a new message',!userHasRole(u,'ra')||userHasAnyRole(u,'bd','bd_lead','admin','ra_lead'),'Not available to analysts'));
+  out.push(item('sequence','Sequence','Steps and timing for outreach',userHasAnyRole(u,'admin','ra_lead','bd_lead'),'Team leads and admins',typeof window.wfOpenBuilder==='function'));
   return out;
 }
 window.paceNewItems=paceNewItems;
 function paceHeaderNew(){
   if(!STATE.user)return '';
-  if(STATE.viewingUser&&STATE.viewingUser.id!==STATE.user.id)return '';
   var items=paceNewItems();
-  if(!items.length)return '';
-  var open=!!STATE.newMenu;
+  var any=items.some(function(it){return it.ok;});
+  var open=!!STATE.newMenu&&any;
+  if(!any){
+    // nothing to start on this desk: the button stays, greyed, and says why on hover
+    var why=items.length&&items[0].why==='You are looking at someone else\u2019s desk'?items[0].why:'Nothing to start from this role';
+    return '<div class="tb-newwrap"><button class="btn btn-primary tb-new is-off" disabled aria-disabled="true" title="'+escAttr(why)+'">+ New<span class="tb-caret" aria-hidden="true"></span></button></div>';
+  }
   return '<div class="tb-newwrap'+(open?' is-open':'')+'">'+
     '<button class="btn btn-primary tb-new" onclick="paceNewToggle(event)" aria-haspopup="menu" aria-expanded="'+(open?'true':'false')+'">+ New<span class="tb-caret" aria-hidden="true"></span></button>'+
     (open?'<div class="tb-newmenu" role="menu">'+items.map(function(it){
+      if(!it.ok) return '<button class="tb-newrow is-off" role="menuitem" aria-disabled="true" disabled title="'+escAttr(it.why)+'">'+
+        '<span class="tb-newlbl">'+it.lbl+'</span><span class="tb-newsub">'+htmlEsc(it.why)+'</span></button>';
       return '<button class="tb-newrow" role="menuitem" onclick="paceNewGo(\''+it.id+'\')">'+
         '<span class="tb-newlbl">'+it.lbl+'</span><span class="tb-newsub">'+it.sub+'</span></button>';
     }).join('')+'</div>':'')+
