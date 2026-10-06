@@ -69,6 +69,16 @@ const GRAPH_DISPLAY_NAMES = {
   'outbox': 'drafts',
 };
 
+// Outlook names a category colour by preset (preset0 … preset24). The names are Microsoft's; the hex values are the
+// colours Outlook draws for them. A category with no preset (or one we do not know) simply has no colour.
+const OUTLOOK_PRESET_COLOURS = {
+  preset0: '#E74856', preset1: '#F7630C', preset2: '#8E562E', preset3: '#FFB900', preset4: '#10893E', preset5: '#038387',
+  preset6: '#847545', preset7: '#0078D4', preset8: '#8764B8', preset9: '#C30052', preset10: '#7A7574', preset11: '#515C6B',
+  preset12: '#A6A6A6', preset13: '#5E5E5E', preset14: '#222222', preset15: '#750B1C', preset16: '#CA5010', preset17: '#603D30',
+  preset18: '#986F0B', preset19: '#0B6A0B', preset20: '#005B70', preset21: '#4C4A48', preset22: '#00188F', preset23: '#32145A',
+  preset24: '#6B0F2E',
+};
+
 function folderKindFromGraph(folder) {
   const wk = String(folder?.wellKnownName || '').toLowerCase().replace(/\s+/g, '');
   if (GRAPH_WELL_KNOWN[wk]) return GRAPH_WELL_KNOWN[wk];
@@ -549,7 +559,7 @@ function createMailProvider(ctx) {
       try {
         const t = await token();
         const d = await graphMailRequest(t, '/me/outlook/masterCategories');
-        return (d.value || []).map(c => ({ id: c.displayName, name: c.displayName, color: c.color || null }));
+        return (d.value || []).map(c => ({ id: c.displayName, name: c.displayName, color: OUTLOOK_PRESET_COLOURS[c.color] || null }));
       } catch (_) { return []; }
     }
     async function createLabel(name) {

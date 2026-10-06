@@ -64,6 +64,28 @@ try{
 
   if(SHOTS){ fs.mkdirSync(SHOTS,{recursive:true}); await ev(()=>{ STATE.activeTmpl='outreach'; STATE.planFromEmailId='m1'; render(); }); await page.waitForTimeout(300); await page.screenshot({path:path.join(SHOTS,'plan-preview-desktop.png')}); }
 
+  // R-144 (owner): "1 - overlapping, 2nd is blank space … align this preview to the middle
+  // in between the space, so it is equal on both sides." The pair (editor + preview) must be
+  // CENTRED at every screen width, never overlap, and when stacked be one width.
+  await ev(()=>{ STATE.planFromEmailId=null; STATE.activeTmpl='outreach'; render(); });
+  const geo=()=>ev(()=>{
+    const body=document.querySelector('#content .pg-body').getBoundingClientRect(), e=document.querySelector('.cmp-edit').getBoundingClientRect(), p=document.querySelector('.cmp-prev').getBoundingClientRect();
+    const hit=!(e.right<=p.left+0.5||p.right<=e.left+0.5||e.bottom<=p.top+0.5||p.bottom<=e.top+0.5);
+    const left=Math.min(e.left,p.left)-body.left, right=body.right-Math.max(e.right,p.right);
+    return { vw:window.innerWidth, left:Math.round(left), right:Math.round(right), overlap:hit, sameWidth:Math.abs(e.width-p.width)<2, sideBySide:p.left>=e.right-1 };
+  });
+  const bad=[]; let wide=0;
+  for(const w of [1920,1728,1536,1440,1280,1180,1100,1000]){
+    await page.setViewportSize({width:w,height:900}); await page.waitForTimeout(250);
+    const g=await geo();
+    if(g.overlap) bad.push(w+': the two overlap');
+    if(Math.abs(g.left-g.right)>2) bad.push(w+': unequal sides '+g.left+' vs '+g.right);
+    if(!g.sideBySide && !g.sameWidth) bad.push(w+': stacked at different widths');
+    if(g.sideBySide && g.left>40) wide++;
+  }
+  step('the editor + preview pair is centred (equal sides), never overlaps, and stacks at one width, from 1000px to 1920px', bad.length===0, bad.join(' | '));
+  step('…the wide-screen check really had room to centre (the probe can measure)', wide>=2, wide+' widths with room');
+
   // phone
   await page.setViewportSize({width:390,height:800}); await page.waitForTimeout(400);
   const ph=await ev(()=>{ const e=document.querySelector('.cmp-edit').getBoundingClientRect(), p=document.querySelector('.cmp-prev').getBoundingClientRect(); const c=document.getElementById('content'); return {below:p.top>=e.bottom-2, over:c.scrollWidth-c.clientWidth, pw:Math.round(p.width), vw:innerWidth}; });

@@ -7,12 +7,12 @@
 // dashboard). Owner's spec: Assigned = blue, Connected = green, Rejected = red,
 // Unassigned = grey, and two distinct colours for the middle stages.
 window.LEAD_STAGE_COLORS = {
-  Unassigned: '#94a3b8',      // grey
-  Assigned:   '#3b82f6',      // blue
-  Connected:  '#10b981',      // green
-  'In Discussion': '#8b5cf6', // violet
-  Future:     '#f59e0b',      // amber
-  Rejected:   '#ef4444'       // red
+  Unassigned: '#64748b',      // grey (R-140: was #94a3b8, 2.2:1 on cream)
+  Assigned:   '#2563eb',      // blue (R-140: darker, text on cream)
+  Connected:  '#047857',      // green
+  'In Discussion': '#7c3aed', // violet
+  Future:     '#b45309',      // amber
+  Rejected:   '#b91c1c'       // red
 };
 // Soft background tint for a stage (hex + alpha).
 window.leadStageBg = function(stage){ return (window.LEAD_STAGE_COLORS[stage]||'#64748b') + '1a'; };

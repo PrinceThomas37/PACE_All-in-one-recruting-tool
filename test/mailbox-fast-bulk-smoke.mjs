@@ -46,7 +46,7 @@ const F = {
   folders: [{ id: 'INBOX', name: 'Inbox', kind: 'inbox', unread: 2, total: 9 }, { id: 'SENT', name: 'Sent', kind: 'sent', unread: 0, total: 9 }, { id: 'SPAM', name: 'Spam', kind: 'junk', unread: 0, total: 1 }],
   inbox: [mk('a1', 'Alpha subject', true), mk('a2', 'Bravo subject', true), mk('a3', 'Charlie subject', false), mk('a4', 'Delta subject', false)],
   sent: [mk('s1', 'Sent one', false)],
-  labels: [{ id: 'Label_1', name: 'Clients' }, { id: 'Label_2', name: 'Hot' }],
+  labels: [{ id: 'Label_1', name: 'Clients', color: '#E74856' }, { id: 'Label_2', name: 'Hot' }],
 };
 let browser; const pageErrors = [];
 try {
@@ -90,10 +90,24 @@ try {
   await ev(() => goPage('mailbox'));
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 4, { timeout: 8000 });
   step('the Inbox loads (first time: it has to wait for the provider)', (await rowNames()).length === 4);
+  // R-142 (owner: "switching the tabs within — inbox to sent to spam — still takes 3 secs"): once the Inbox is
+  // on screen, Sent and Spam are read quietly behind it, so the FIRST click on them is a remembered screen.
+  await settle(2600);
+  const folderGets = (f) => ev((f) => window.__gets.filter(g => new RegExp('/messages\\?.*folder=' + f).test(g)).length, f);
+  step('after the Inbox, Sent and Spam were each read quietly, once', (await folderGets('SENT')) === 1 && (await folderGets('SPAM')) === 1, `sent=${await folderGets('SENT')} spam=${await folderGets('SPAM')}`);
+  step('…and nothing else was read behind the screen (no custom folders, no repeats)', (await listGets()) === 3, 'list requests: ' + await listGets());
+  const w0 = Date.now();
+  await ev(() => mbSelectFolder('SENT'));
+  const warmSent = await ev(() => ({ rows: document.querySelectorAll('.mb-row').length, loading: STATE.mailbox.listLoading }));
+  step('the FIRST click on Sent paints its row at once — no "Loading…", no wait', warmSent.rows === 1 && !warmSent.loading, JSON.stringify(warmSent) + ' ' + (Date.now() - w0) + 'ms');
+  await settle(700);
+  step('…and it asked the provider for nothing more', (await folderGets('SENT')) === 1, 'sent reads: ' + await folderGets('SENT'));
+  await ev(() => mbSelectFolder('INBOX'));
+  await settle(500);
   const gets1 = await listGets();
   await ev(() => mbSelectFolder('SENT'));
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 1 && !STATE.mailbox.listLoading, { timeout: 8000 });
-  step('Sent loads (first time)', (await rowNames())[0] === 'Sent one');
+  step('Sent loads', (await rowNames())[0] === 'Sent one');
   const before = await listGets();
   const t0 = Date.now();
   await ev(() => mbSelectFolder('INBOX'));
@@ -184,6 +198,7 @@ try {
   step('one click on "Clients" labels both ticked emails (one request)', lab.length === 1 && lab[0][1].action === 'label' && lab[0][1].label_id === 'Label_1' && lab[0][1].ids.length === 2, JSON.stringify(lab));
   step('the picker now shows ✓ for Clients', await ev(() => /✓/.test(document.querySelector('.mb-lm').innerText)));
   step('chips appear on the two rows behind it', await ev(() => document.querySelectorAll('.mb-row .mb-lbl').length === 2 && /Clients/.test(document.querySelector('.mb-row .mb-lbl').textContent)));
+  step('R-136: a chip shows its label\'s own colour as a small square (and a label with none shows no square)', await ev(() => { const d = document.querySelector('.mb-row .mb-lbl .mb-ldot'); return !!d && getComputedStyle(d).backgroundColor === 'rgb(231, 72, 86)' && !document.querySelector('.mb-lm-name .mb-ldot ~ .none'); }) && await ev(() => document.querySelectorAll('.mb-lm-row').length === 2 && document.querySelectorAll('.mb-lm-row .mb-ldot').length === 1));
   await ev(() => { window.__posts.length = 0; });
   await ev(() => mbLabelToggle('Label_1')); await settle(400);
   const unl = await ev(() => window.__posts.filter(p => /\/bulk$/.test(p[0])));

@@ -58,7 +58,7 @@ const TERRITORIES = [
     hue: '#4E8A7A', pos: [10, 31], height: 2.5, spread: 15,
     own: ['email-vars.js', 'email-tracking.js', 'email-signature.js',
           'email-validation.js', 'email-verify.js', 'gmail-provider.js',
-          'services/mail-provider.js', 'send-queue-order.js',
+          'services/mail-provider.js', 'services/microsoft-oauth.js', 'send-queue-order.js',
           // Builds the applicant receipt and the recruiter nudge. It writes mail,
           // so the rules about what may be in one are enforced here.
           'services/applicant-notify.js',

@@ -244,7 +244,18 @@ function paintPageContent(){
   var parts=window._shellParts||(window._shellParts={});
   if(parts.content===html) return;
   parts.content=html;
+  // THE PAGE'S OWN SCROLL BOX KEEPS ITS PLACE (R-143). Every kit page scrolls in
+  // its `.pg-body`, not in #content or `.page` (the two render() restores), so a
+  // click that changed the page's html — "Follow-up 2", a style preset, a
+  // Clients/Candidates switch — recreated the box at the top and the screen
+  // jumped. The owner: "I click on a button … the page resets to up, like it
+  // doesn't reload, but scrolls up automatically." Same page, same place.
+  var pb=c.querySelector('.pg-body'), pbTop=pb?pb.scrollTop:0, pbLeft=pb?pb.scrollLeft:0;
   putRegion(c, html, false);
+  if(pbTop||pbLeft){
+    var npb=c.querySelector('.pg-body');
+    if(npb){ npb.scrollTop=pbTop; npb.scrollLeft=pbLeft; }
+  }
   // The rewrite took any open row panel with it; put it back (see rowReveal).
   rowRevealRestore();
 }

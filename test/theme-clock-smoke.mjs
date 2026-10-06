@@ -144,6 +144,8 @@ try {
     // only for someone who already has that action. Opening it lists them;
     // picking one runs the page's own function; a click elsewhere closes it.
     const items = () => page.evaluate(() => [...document.querySelectorAll('#topbar .tb-newrow .tb-newlbl')].map(e => e.textContent));
+    const usable = () => page.evaluate(() => [...document.querySelectorAll('#topbar .tb-newrow:not(.is-off) .tb-newlbl')].map(e => e.textContent));
+    const greyed = () => page.evaluate(() => [...document.querySelectorAll('#topbar .tb-newrow.is-off .tb-newlbl')].map(e => e.textContent));
     step('a BD desk gets one "+ New" button on Today', /^\+ New/.test(h.newBtn || ''), String(h.newBtn));
     step('…closed until it is opened', (await items()).length === 0);
     await page.evaluate(() => document.querySelector('#topbar .tb-new').click());
@@ -162,10 +164,13 @@ try {
     h = await hdr();
     step('the button is on every page, not just Today — and Today\'s counts stay on Today', /^\+ New/.test(h.newBtn || '') && h.chips.length === 0, JSON.stringify(h));
     await page.evaluate(() => { window.STATE.user = Object.assign({}, window.STATE.user, { role: 'bd', roles: ['bd'] }); window.goPage('dashboard'); document.querySelector('#topbar .tb-new').click(); });
-    step('a plain BD is not offered a Sequence (only leads and admins design them)', (await items()).join('|') === 'Job|Candidate|Lead|Email', (await items()).join('|'));
+    // R-135 (owner): never hidden — greyed, with the reason, when the person has no permission.
+    step('a plain BD still SEES Sequence in the menu — greyed, not removed', (await items()).join('|') === 'Job|Candidate|Lead|Email|Sequence' && (await greyed()).join('|') === 'Sequence', (await items()).join('|') + ' / greyed: ' + (await greyed()).join('|'));
+    step('…and the greyed Sequence gives the reason and cannot be clicked', await page.evaluate(() => { const b = document.querySelector('#topbar .tb-newrow.is-off'); return !!b && b.disabled && /Team leads and admins/.test(b.textContent) && b.getAttribute('aria-disabled') === 'true'; }));
+    step('…while the four they CAN use are live', (await usable()).join('|') === 'Job|Candidate|Lead|Email', (await usable()).join('|'));
     await page.evaluate(() => { window.STATE.newMenu = false; window.STATE.user = Object.assign({}, window.STATE.user, { role: 'ra', roles: ['ra'] }); window.goPage('dashboard'); });
     h = await hdr();
-    step('a desk with nothing to start gets no button', h.newBtn === null, String(h.newBtn));
+    step('a desk with nothing to start STILL has the button — greyed out and not clickable', /^\+ New/.test(h.newBtn || '') && await page.evaluate(() => { const b = document.querySelector('#topbar .tb-new'); return b.disabled && b.classList.contains('is-off') && !!b.title; }), String(h.newBtn));
     await ctx.close();
   }
 

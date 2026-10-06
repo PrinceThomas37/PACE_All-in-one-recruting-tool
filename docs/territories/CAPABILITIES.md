@@ -585,3 +585,15 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Lead Insights** (yours, your team's, one person's) is on the same kit as Reports.
 - **Primary sequence** — a left-to-right switch on each active sequence; "Start sequence" then opens with **Start with <your Primary>** ready (per person, per kind of record; never sends by itself).
 - **Editing a sequence that has people in it** — the editor says so at the top with the number and offers **Save as a new sequence** (the old one carries on unchanged).
+
+## Round 4 (Session 40, R-134…R-144) — on the branch
+- **Dark mode is readable everywhere** — page titles, tab bars and helper text on the dark ground are light; text on the cream cards stays dark; a test measures every screen, every overlay and the logged-out screen.
+- **Click the PACE logo and it types itself again**, brighter; the sidebar never folds on a full-size screen.
+- **A button on the Email tab no longer scrolls the page to the top.**
+- **The Email page is quieter** — no upcoming-OOO box, no assignment summary, no schedule panel (one summary line, with "Try the waiting ones now").
+- **The Outreach Plan editor and its preview sit centred, equal sides**, at any width.
+- **Inbox: Sent, Spam and Archive are ready before you click them.**
+- **"+ New" is always there** — what you cannot do is greyed, with the reason.
+- **RA / Admin Insights** looks like Lead Insights.
+- **Outlook labels show their own colour** (needs the one extra permission, asked once when a mailbox is connected); Gmail labels too.
+- **An opened job row shows interviews this week, the best-matching people not yet on the job (with Add), and quick actions.**

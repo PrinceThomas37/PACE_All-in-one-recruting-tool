@@ -88,10 +88,6 @@ function loadAppData(){
     if(STATE.user&&(STATE.user.role==='ra_lead'||STATE.user.role==='admin')){
       apiGet('/distribute/pool-stats').then(function(d){STATE.distributePoolStats=d;scheduleRender();}).catch(function(){});
     }
-    // Load today's summary for BD
-    if(STATE.user&&(STATE.user.role==='bd'||STATE.user.role==='bd_lead')){
-      apiGet('/distribute/today-summary').then(function(d){STATE.todaySummary=d;scheduleRender();}).catch(function(){});
-    }
     if(isBD){
       STATE.pendingEmails=(r[5]||[]);
       STATE.emails=(r[6]||[]);

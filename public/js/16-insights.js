@@ -55,230 +55,117 @@ function raTeamStatus(t){
 // ════════════════════════════════════════════════
 // INSIGHTS TAB — RA activity + RA Lead team view
 // ════════════════════════════════════════════════
+// ── RA / Admin Insights, on the shared kit (owner, 6 Oct: "RA/Admin Insights page … still has the old look. Yes, restyle it") ──
+// The same parts Lead Insights uses (ivCard, ivRow, ivCols, ivKpis, UI.strip, UI.table, the .rep-pill toggle and the
+// .iv-top "top performer" card). The numbers and the three views are unchanged: the BD team (admin only), the RA team,
+// and one analyst's own page.
+function ivTeamSwitch(active){
+  return '<div class="rep-fgroup" style="margin-bottom:14px">'+[['ra','RA Team'],['bd','BD Team']].map(function(t){
+    return '<button class="rep-pill'+(active===t[0]?' on':'')+'" onclick="STATE.insightsTeam=\''+t[0]+'\';STATE.insightsSelectedRA=null;render()">'+t[1]+'</button>';
+  }).join('')+'</div>';
+}
+function ivTopCard(label,name,line,big,bigLabel){
+  return '<div class="iv-top">'+
+    '<div class="iv-top-ico">★</div><div style="flex:1;min-width:0">'+
+      '<div class="rep-flbl">'+htmlEsc(label)+'</div>'+
+      '<div class="fs-20" style="font-weight:700">'+htmlEsc(name)+'</div>'+
+      '<div class="fs-12 c-text3" style="margin-top:2px">'+htmlEsc(line)+'</div></div>'+
+    '<div style="text-align:right"><div class="fs-28" style="font-weight:700;line-height:1">'+htmlEsc(String(big))+'</div><div class="fs-11 c-text3">'+htmlEsc(bigLabel)+'</div></div>'+
+  '</div>';
+}
+function ivWho(i,person){
+  return '<div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(person,'28')+'<span style="font-weight:600">'+htmlEsc(person.name)+'</span></div>';
+}
+function ivTableCard(title,hint,body){
+  return '<div class="card rep-card rep-tablecard" style="margin-top:14px">'+
+    '<div class="rep-tablehead"><div class="rep-ttl" style="margin:0">'+title+'</div>'+(hint?'<span class="rep-sub" style="margin:0">'+hint+'</span>':'')+'</div>'+body+'</div>';
+}
+// One breakdown (industry, timezone, freshness, stage) as bar rows, biggest first.
+function ivBreakdown(obj,isIndustry,tone){
+  var src=isIndustry?normalizeIndustryMap(obj||{}):(obj||{});
+  var entries=Object.keys(src).map(function(k){return{k:k,v:src[k]};}).sort(function(a,b){return b.v-a.v;}).slice(0,8);
+  if(!entries.length) return '<div class="fs-13 c-text3">Nothing yet.</div>';
+  var max=Math.max(1,entries[0].v);
+  return entries.map(function(e){ return ivRow(e.k,e.v,max,tone||'brand',null,e.k+': '+e.v); }).join('');
+}
+
 function renderInsights(){
   var u=STATE.user;
   var isRALead=(u.role==='ra_lead'||u.role==='admin');
   var selectedRA=STATE.insightsSelectedRA;
   var data=STATE.insightsData;
-
-  // Admin: show RA/BD team switcher
   var isAdmin=userHasRole(u,'admin');
   var insightsTeam=STATE.insightsTeam||'ra';
 
-  // Admin BD Team view
+  // Admin: the BD team
   if(isAdmin&&insightsTeam==='bd'&&!selectedRA){
     var tBD=bdTeamData();
     var bdStats=bdStatsFromServer(tBD);
     var allBDs=bdStats.map(function(r){return r.bd;});
     var leaderBD=bdStats.find(function(r){return r.total>0&&r.convRate>0;})||(bdStats.find(function(r){return r.total>0;})||null);
-    var leaderBannerBD=leaderBD?
-      '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
-        '<div class="fs-32">\uD83C\uDFC6</div><div style="flex:1">'+
-          '<div class="fs-11" style="font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer</div>'+
-          '<div class="fs-20" style="font-weight:700;font-family:var(--display)">'+htmlEsc(leaderBD.bd.name)+'</div>'+
-          '<div class="fs-12" style="opacity:.82;margin-top:2px">'+leaderBD.convRate+'% conversion \u00b7 '+leaderBD.month+' leads in 30 days</div></div>'+
-        '<div style="text-align:right"><div class="fs-36" style="font-weight:700;font-family:var(--display);line-height:1">'+leaderBD.convRate+'%</div><div class="fs-11" style="opacity:.78">conversion</div></div>'+
-      '</div>':'';
-
     var teamTotalBD=bdStats.reduce(function(s,r){return s+r.total;},0);
     var teamSentBD=bdStats.reduce(function(s,r){return s+r.sent;},0);
     var teamConvBD=bdStats.reduce(function(s,r){return s+r.conv;},0);
     var teamConvRateBD=teamTotalBD?Math.round(teamConvBD/teamTotalBD*100):0;
-
-    var lbRowsBD=bdStats.map(function(r,i){
-      return '<tr style="cursor:default" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-        '<td class="fs-13" style="padding:10px 14px;font-weight:500"><div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span>'+htmlEsc(r.bd.name)+'</span></div></td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--accent)">'+r.today+'</td>'+
-        '<td class="fs-13" style="padding:10px 8px;text-align:center">'+r.week+'</td>'+
-        '<td class="fs-13" style="padding:10px 8px;text-align:center;font-weight:600">'+r.month+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.sent+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--green)">'+r.pos+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)" title="Leads where a contact has replied">'+r.replyRate+'%</td>'+
-      '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convRate+'%</td>'+
-      '</tr>';
-    }).join('');
-
-    var switcherBD='<div style="display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'+
-      '<button onclick="STATE.insightsTeam=\'ra\';STATE.insightsSelectedRA=null;render()" style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--text3)">RA Team</button>'+
-      '<button class="fs-13" style="padding:8px 20px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">BD Team</button>'+
-    '</div>';
-
+    var boardBD=UI.table({
+      cols:['BD Manager','Today','7 days','30 days','Sent (30d)','Positive','Replied %','Conv %'],
+      rows:bdStats.map(function(r,i){ return {cells:[ivWho(i,r.bd),r.today,r.week,r.month,r.sent,r.pos,r.replyRate+'%',r.convRate+'%']}; }),
+      empty:'No BD Managers in the system yet.'
+    });
     return '<div class="page">'+
-      '<div class="ph"><div class="flex jb aic">'+
-        '<div><div class="ptitle">Insights</div><div class="psub">'+allBDs.length+' BD Manager'+(allBDs.length!==1?'s':'')+' \u00b7 '+teamTotalBD+' leads \u00b7 '+teamSentBD+' emails sent</div></div>'+
-      '</div></div>'+
-      switcherBD+
-      leaderBannerBD+
-      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-accent" style="font-weight:700">'+teamTotalBD+'</div><div class="fs-12 c-text3" style="margin-top:3px">Total leads</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-teal" style="font-weight:700">'+teamSentBD+'</div><div class="fs-12 c-text3" style="margin-top:3px">Emails sent</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-green" style="font-weight:700">'+teamConvRateBD+'%</div><div class="fs-12 c-text3" style="margin-top:3px">Team conv. rate</div></div>'+
-      '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
-        '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700">BD Manager performance</div>'+
-        (bdTeamStatus(tBD)||(allBDs.length?
-          '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
-            '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">BD Manager</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Today</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">7 days</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">30 days</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Sent (30d)</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Positive</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Replied %</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
-          '</tr></thead><tbody>'+lbRowsBD+'</tbody></table></div>':
-          '<div class="c-text3 fs-13" style="padding:40px;text-align:center">No BD Managers in the system yet.</div>'))+
-      '</div></div>';
+      '<div class="ph"><div class="ptitle">Insights</div><div class="psub">'+allBDs.length+' BD Manager'+(allBDs.length!==1?'s':'')+' · '+teamTotalBD+' leads · '+teamSentBD+' emails sent</div></div>'+
+      ivTeamSwitch('bd')+
+      (leaderBD?ivTopCard('Top performer',leaderBD.bd.name,leaderBD.convRate+'% conversion · '+leaderBD.month+' leads in 30 days',leaderBD.convRate+'%','conversion'):'')+
+      UI.strip([{v:teamTotalBD,label:'Total leads'},{v:teamSentBD,label:'Emails sent'},{v:teamConvRateBD+'%',label:'Team conversion'}])+
+      ivTableCard('BD Manager performance',null,bdTeamStatus(tBD)||boardBD)+
+    '</div>';
   }
 
-  // If RA Lead and no RA selected, show RA team overview (mirrors BD Lead layout)
+  // RA Lead / admin, nobody selected: the RA team
   if(isRALead&&!selectedRA){
     var rt=raTeamData();
     var raWait=raTeamStatus(rt);
     if(raWait)return '<div class="page"><div class="ph"><div class="ptitle">Insights</div></div>'+raWait+'</div>';
-    var raStats=raStatsFromServer(rt);
-    var ras=raStats;
-
-    var leader=raStats.find(function(r){return r.month>0;})||null;
-    var leaderBanner=leader?
-      '<div style="background:linear-gradient(135deg,#1a3a6e,#2563eb);border-radius:var(--r2);padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:20px;color:#fff">'+
-        '<div class="fs-32">\uD83C\uDFC6</div><div style="flex:1">'+
-          '<div class="fs-11" style="font-weight:700;letter-spacing:.1em;opacity:.75;text-transform:uppercase;margin-bottom:4px">Top Performer this month</div>'+
-          '<div class="fs-20" style="font-weight:700;font-family:var(--display)">'+htmlEsc(leader.ra.name)+'</div>'+
-          '<div class="fs-12" style="opacity:.82;margin-top:2px">'+leader.month+' leads in 30 days \u00b7 '+leader.assignPct+'% assigned</div></div>'+
-        '<div style="text-align:right"><div class="fs-36" style="font-weight:700;font-family:var(--display);line-height:1">'+leader.month+'</div><div class="fs-11" style="opacity:.78">leads</div></div>'+
-      '</div>':'';
-
-    var teamTotal=raStats.reduce(function(s,r){return s+r.total;},0);
-    var teamMonth=raStats.reduce(function(s,r){return s+r.month;},0);
-    var teamAssigned=raStats.reduce(function(s,r){return s+r.assigned;},0);
+    var ras=raStatsFromServer(rt);
+    var leader=ras.find(function(r){return r.month>0;})||null;
+    var teamTotal=ras.reduce(function(s,r){return s+r.total;},0);
+    var teamMonth=ras.reduce(function(s,r){return s+r.month;},0);
+    var teamAssigned=ras.reduce(function(s,r){return s+r.assigned;},0);
     var teamAssignPct=teamTotal?Math.round(teamAssigned/teamTotal*100):0;
-    var teamDups=raStats.reduce(function(s,r){return s+r.dups;},0);
-
-    var lbRows=raStats.map(function(r,i){
-      return '<tr onclick="loadRAInsights(\''+r.ra.id+'\')" style="cursor:pointer" onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
-        '<td class="fs-13" style="padding:10px 14px;font-weight:500"><div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.ra,'28')+'<span>'+htmlEsc(r.ra.name)+'</span></div></td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--accent)">'+r.today+'</td>'+
-        '<td class="fs-13" style="padding:10px 8px;text-align:center">'+r.week+'</td>'+
-        '<td class="fs-13" style="padding:10px 8px;text-align:center;font-weight:600">'+r.month+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--amber)">'+r.dups+'</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;color:var(--teal)">'+r.assignPct+'%</td>'+
-        '<td style="padding:10px 8px;text-align:center;font-size:13px;font-weight:600;color:var(--green)">'+r.convPct+'%</td>'+
-      '</tr>';
-    }).join('');
-
-    var switcherRA=isAdmin?'<div style="display:inline-flex;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px">'+
-      '<button class="fs-13" style="padding:8px 20px;font-weight:600;border:0;cursor:pointer;background:var(--accent);color:#fff;border-radius:6px">RA Team</button>'+
-      '<button onclick="STATE.insightsTeam=\'bd\';STATE.insightsSelectedRA=null;render()" style="padding:8px 20px;font-size:13px;font-weight:600;border:0;cursor:pointer;background:transparent;color:var(--text3)">BD Team</button>'+
-    '</div>':'';
-
+    var teamDups=ras.reduce(function(s,r){return s+r.dups;},0);
+    var boardRA=UI.table({
+      cols:['Research Analyst','Today','7 days','30 days','Dups','Assign %','Conv %'],
+      rows:ras.map(function(r,i){ return {onclick:"loadRAInsights('"+r.ra.id+"')",cells:[ivWho(i,r.ra),r.today,r.week,r.month,r.dups,r.assignPct+'%',r.convPct+'%']}; }),
+      empty:'No Research Analysts in the system yet.'
+    });
     return '<div class="page">'+
-      '<div class="ph"><div class="flex jb aic">'+
-        '<div><div class="ptitle">Insights</div><div class="psub">'+ras.length+' Research Analyst'+(ras.length!==1?'s':'')+' \u00b7 '+teamTotal+' leads \u00b7 '+teamAssignPct+'% assigned</div></div>'+
-      '</div></div>'+
-      switcherRA+
-      leaderBanner+
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-accent" style="font-weight:700">'+teamTotal+'</div><div class="fs-12 c-text3" style="margin-top:3px">Total leads</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-teal" style="font-weight:700">'+teamMonth+'</div><div class="fs-12 c-text3" style="margin-top:3px">This month</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-green" style="font-weight:700">'+teamAssignPct+'%</div><div class="fs-12 c-text3" style="margin-top:3px">Assign rate</div></div>'+
-        '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center"><div class="fs-28 c-amber" style="font-weight:700">'+teamDups+'</div><div class="fs-12 c-text3" style="margin-top:3px">Duplicates</div></div>'+
-      '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:14px">'+
-        '<div class="fs-13" style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700">RA performance <span class="fs-11 c-text3" style="font-weight:400">click a row for detail</span></div>'+
-        (ras.length?
-          '<div class="tbl-wrap"><table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--bg)">'+
-            '<th style="padding:9px 14px;text-align:left;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Research Analyst</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Today</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">7 days</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">30 days</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Dups</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Assign %</th>'+
-            '<th style="padding:9px 8px;text-align:center;font-size:10.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Conv %</th>'+
-          '</tr></thead><tbody>'+lbRows+'</tbody></table></div>':
-          '<div class="c-text3 fs-13" style="padding:40px;text-align:center">No Research Analysts in the system yet.</div>')+
-      '</div></div>';
+      '<div class="ph"><div class="ptitle">Insights</div><div class="psub">'+ras.length+' Research Analyst'+(ras.length!==1?'s':'')+' · '+teamTotal+' leads · '+teamAssignPct+'% assigned</div></div>'+
+      (isAdmin?ivTeamSwitch('ra'):'')+
+      (leader?ivTopCard('Top performer this month',leader.ra.name,leader.month+' leads in 30 days · '+leader.assignPct+'% assigned',leader.month,'leads'):'')+
+      UI.strip([{v:teamTotal,label:'Total leads'},{v:teamMonth,label:'Last 30 days'},{v:teamAssignPct+'%',label:'Assigned'},{v:teamDups,label:'Duplicates'}])+
+      ivTableCard('RA performance','click a row for detail',boardRA)+
+    '</div>';
   }
 
-  // Show individual RA insights
+  // One analyst's page (yours, or the one a lead picked)
   var raUser=isRALead?STATE.users.find(function(x){return x.id===selectedRA;}):u;
   var d=data||{total_month:0,total_week:0,total_today:0,duplicates:0,last_7_days:{},by_industry:{},by_timezone:{},by_freshness:{},by_stage:{}};
-
-  // Bar chart for last 7 days
-  var l7=d.last_7_days||{};
-  var l7keys=Object.keys(l7);
-  var l7max=Math.max(1,Math.max.apply(null,l7keys.map(function(k){return l7[k];})));
-  var barChart=l7keys.map(function(k){
-    var val=l7[k];
-    var pct=Math.round(val/l7max*100);
-    var day=new Date(k).toLocaleDateString('en-US',{weekday:'short'});
-    return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1">'+
-      '<div class="fs-11 c-accent" style="font-weight:600">'+val+'</div>'+
-      '<div style="width:100%;background:var(--border);border-radius:4px;height:48px;display:flex;align-items:flex-end">'+
-        '<div style="width:100%;background:var(--accent);border-radius:4px;height:'+pct+'%;min-height:'+(val>0?'4px':'0')+'"></div>'+
-      '</div>'+
-      '<div class="fs-10 c-text3">'+day+'</div>'+
-    '</div>';
-  }).join('');
-
-  function categoryRows(obj,isIndustry){
-    var src=isIndustry?normalizeIndustryMap(obj):obj;
-    var entries=Object.keys(src).map(function(k){return{k:k,v:src[k]};}).sort(function(a,b){return b.v-a.v;});
-    var total=entries.reduce(function(s,e){return s+e.v;},0)||1;
-    return entries.map(function(e){
-      var pct=Math.round(e.v/total*100);
-      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
-        '<div class="fs-12 c-text2" style="width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+htmlEsc(e.k)+'</div>'+
-        '<div style="flex:1;background:var(--border);border-radius:99px;height:6px">'+
-          '<div style="width:'+pct+'%;background:var(--accent);border-radius:99px;height:6px"></div>'+
-        '</div>'+
-        '<div class="fs-12" style="width:36px;text-align:right;font-weight:600">'+e.v+'</div>'+
-      '</div>';
-    }).join('');
-  }
-
   return '<div class="page">'+
     '<div class="ph"><div class="flex aic gap3">'+
-      (isRALead?'<button onclick="STATE.insightsSelectedRA=null;STATE.insightsData=null;render()" class="c-text3 fs-22" style="background:transparent;border:0;cursor:pointer">\u2190</button>':'')+
+      (isRALead?'<button onclick="STATE.insightsSelectedRA=null;STATE.insightsData=null;render()" class="rep-pill" title="Back to the team">← Team</button>':'')+
       (raUser?av(raUser,'40'):'')+
       '<div><div class="ptitle" style="margin:0">'+(raUser?htmlEsc(raUser.name):'My')+' Insights</div>'+
         '<div class="psub" style="margin:0">Last 30 days activity</div></div>'+
     '</div></div>'+
-
-    // ── Top stats ──
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:18px">'+
-      [['Today',d.total_today,'var(--accent)'],['This Week',d.total_week,'var(--teal)'],['This Month',d.total_month,'var(--purple)'],['Duplicates',d.duplicates,'var(--amber)']].map(function(s){
-        return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px;text-align:center">'+
-          '<div class="fs-28" style="font-weight:700;color:'+s[2]+'">'+s[1]+'</div>'+
-          '<div class="fs-12 c-text3" style="margin-top:3px">'+s[0]+'</div>'+
-        '</div>';
-      }).join('')+
+    UI.strip([{v:d.total_today,label:'Today'},{v:d.total_week,label:'This week'},{v:d.total_month,label:'This month'},{v:d.duplicates,label:'Duplicates'}])+
+    '<div class="rep-grid">'+
+      ivCard('Leads — last 7 days','Each column is a day; the green one is today.',ivCols(d.last_7_days,'brand','Leads'))+
+      ivCard('By stage',null,ivBreakdown(d.by_stage,false,'info'))+
     '</div>'+
-
-    // ── Last 7 days bar chart ──
-    '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:16px;margin-bottom:14px">'+
-      '<div class="fs-13" style="font-weight:600;margin-bottom:12px">Last 7 days</div>'+
-      '<div style="display:flex;gap:6px;align-items:flex-end">'+barChart+'</div>'+
-    '</div>'+
-
-    // ── Category breakdowns ──
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Industry</div>'+
-        categoryRows(d.by_industry,true)+
-      '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Timezone</div>'+
-        categoryRows(d.by_timezone)+
-      '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Freshness</div>'+
-        categoryRows(d.by_freshness)+
-      '</div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px">'+
-        '<div class="fs-13" style="font-weight:600;margin-bottom:10px">By Stage</div>'+
-        categoryRows(d.by_stage)+
-      '</div>'+
+    '<div class="rep-grid rep-grid3">'+
+      ivCard('By industry',null,ivBreakdown(d.by_industry,true,'brand'))+
+      ivCard('By timezone',null,ivBreakdown(d.by_timezone,false,'info'))+
+      ivCard('By freshness',null,ivBreakdown(d.by_freshness,false,'go'))+
     '</div>'+
   '</div>';
 }

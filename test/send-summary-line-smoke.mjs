@@ -53,11 +53,23 @@ try{
   await page.waitForTimeout(2600);
   step('…and the next poll of the server does not bring it back', !(await has('.sp-line')) && ((await ev(()=>STATE.sendProgress))===null));
 
-  // the assignment summary has no empty column
-  const html=await ev(()=>renderTodaySummaryCard({total:33,by_freshness:{},by_industry:{Engineering:24,Legal:2},by_timezone:{EST:19,CST:7}}));
-  step('the assignment summary draws no empty "Freshness" column', !/Freshness/i.test(html) && /repeat\(2,1fr\)/.test(html));
-  const full=await ev(()=>renderTodaySummaryCard({total:5,by_freshness:{Fresh:5},by_industry:{A:5},by_timezone:{EST:5}}));
-  step('…and with all three it still draws three', /Freshness/.test(full) && /repeat\(3,1fr\)/.test(full));
+  // R-141 (owner: "i miss the simplicity in the UI"): the Email page no longer carries the
+  // upcoming-OOO box, the "Today's assignment summary" card or the "Pending send schedule"
+  // panel. Seed everything that used to draw them and demand all three are gone.
+  await ev(()=>{
+    const today=new Date().toISOString().slice(0,10), later=new Date(Date.now()+5*864e5).toISOString().slice(0,10);
+    STATE.user=Object.assign({},STATE.user,{role:'bd',roles:['bd']});
+    STATE.reminders=[{id:'r9',reminder_type:'ooo_return',status:'pending',contact_name:'Dana Ortiz',company_name:'Acme',return_date:later}];
+    STATE.todaySummary={total:33,by_freshness:{Fresh:5},by_industry:{Engineering:24},by_timezone:{EST:19}};
+    STATE.pendingSummary={total_pending:12,ready_now:4,waiting_window:8,waiting_retry:0,held_company:0,by_timezone:[{timezone:'PST',waiting_window:8,resumes_label:'tomorrow 8:00'}]};
+    STATE.page='email'; STATE.emailTab='pending'; STATE.sendProgress=null; render();
+  });
+  await page.waitForTimeout(200);
+  const pageText=await ev(()=>document.getElementById('content').innerText);
+  step('the Email page does not show "Upcoming OOO Returns"', !/Upcoming OOO/i.test(pageText));
+  step('…nor "Today\'s assignment summary"', !/assignment summary/i.test(pageText));
+  step('…nor the "Pending send schedule" panel', !/Pending send schedule/i.test(pageText));
+  step('…but the one-line summary and its retry link are there', /4 ready now/.test(pageText) && /Try the waiting ones now/.test(pageText), pageText.slice(0,160).replace(/\n/g,' '));
   step('No page errors', errs.length===0, errs.join('|').slice(0,300));
 }catch(e){ console.log('[FAIL] crashed — '+(e&&e.stack||e)); results.push(false); }
 finally{ if(browser) await browser.close(); server.close(); }

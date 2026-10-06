@@ -1044,3 +1044,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - 2026-10-06 (R-127): `routes/email-history.js` — source `replies` + `?direction=in|out` (visibility decided in SQL: admin company-wide; others `job_id IN owned leads` OR `to_email IN my mailboxes`; `can_open_full` only for my own mailbox on a lead). `routes/mailbox.js` — `POST /mailbox/:mid/bulk` (≤50, per-message results, 4 at a time, trash is a MOVE), `GET/POST /mailbox/:mid/labels`, `POST …/messages/:id/labels`, a 30s per-mailbox folder cache dropped on any change, parallel CRM lookups.
 
 - 2026-10-06 (R-131): `routes/wf.js` `GET/PUT /wf/primary` (per person in `app_settings`; PUT is org-scoped, active-only → 409). Registered above any `/wf/:id` route.
+
+## 2026-10-06 (Session 40, round 4)
+- `index.js`: the Microsoft token refresh builds its request through `services/microsoft-oauth.js` `refreshParams()` (no `scope`), and `config/env.js` adds `MailboxSettings.ReadWrite` to the CONNECT scopes (harbour's note has why). No route changed. `GET /distribute/today-summary` is no longer called by the browser (the Email page card is gone); the route is left in place.

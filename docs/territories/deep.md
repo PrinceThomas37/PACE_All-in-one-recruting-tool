@@ -317,3 +317,6 @@ file, so this is 047. **Next migration is 048.**
 - 2026-10-06 (R-125): NO migration. A planned `companies.address` column was dropped — the live table already has `address_line1/2, city, state, postal_code, country` (migration 043). Next migration is still **057**.
 
 - 2026-10-06 (R-131): a new `app_settings` key per person, `wf_primary_<userId>` = JSON {kind: workflow id} — no migration, no new table (same pattern as `mba_hide_<userId>`).
+
+## 2026-10-06 (Session 40, round 4)
+- `config/env.js` (deep owns config): `MICROSOFT_SCOPES` = base + `MailboxSettings.ReadWrite`, `MICROSOFT_BASE_SCOPES`, `microsoftScopes(env)` and the `MICROSOFT_EXTRA_SCOPES` switch (empty = off) — see harbour.md for why a refresh sends no scope. No schema change; no migration.

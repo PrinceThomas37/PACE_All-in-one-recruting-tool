@@ -305,12 +305,37 @@ try {
   step('a full-size screen opens with the labelled sidebar', openState.railWidth > 180 && openState.label === '1' && openState.txt === '1', JSON.stringify(openState));
   step('…which pushes the page over instead of covering it', openState.mainLeft >= openState.railWidth - 1, openState.mainLeft + 'px vs ' + openState.railWidth + 'px');
 
-  // Folding it (a click on the logo, remembered) gives back the slim rail —
-  // and everything below is the slim rail's original contract.
-  await dpage.evaluate(() => { window.toggleRail(); window.render(); });
+  // R-139 (owner): a click on the logo must NOT fold a full-size sidebar — it
+  // used to leave the menu open under the mouse while the page slid left and was
+  // covered. The click types PACE again instead (R-138).
+  await dpage.click('.sb-brand');
+  await dpage.waitForTimeout(300);
+  const afterClick = await dpage.evaluate(() => {
+    const sb = document.getElementById('sidebar');
+    return { pinned: sb.classList.contains('pinned'), width: Math.round(sb.getBoundingClientRect().width),
+      mainLeft: Math.round(document.getElementById('main').getBoundingClientRect().left),
+      typing: document.querySelector('#sidebar .rail-word').classList.contains('typing') };
+  });
+  step('clicking the logo on a full-size screen does not fold the sidebar',
+    afterClick.pinned && afterClick.width > 180 && afterClick.mainLeft >= afterClick.width - 1, JSON.stringify(afterClick));
+  step('…it types PACE again instead', afterClick.typing);
+  // Someone who folded it before this change must not be left with a closed menu.
+  await dpage.evaluate(() => { localStorage.setItem('pace-rail', 'collapsed'); window.render(); });
+  await dpage.waitForTimeout(200);
+  const oldMemory = await dpage.evaluate(() => ({ pinned: document.getElementById('sidebar').classList.contains('pinned'),
+    width: Math.round(document.getElementById('sidebar').getBoundingClientRect().width) }));
+  step('an old remembered "collapsed" is ignored on a full-size screen', oldMemory.pinned && oldMemory.width > 180, JSON.stringify(oldMemory));
+
+  // A narrow window (below 1100px) keeps the logo's fold — that is the touch
+  // device's only way to read the labels — and everything below is the slim
+  // rail's original contract.
+  await dpage.setViewportSize({ width: 1000, height: 900 });
+  await dpage.evaluate(() => { localStorage.removeItem('pace-rail'); window.render(); });
+  await dpage.waitForTimeout(200);
+  await dpage.evaluate(() => { window.paceLogoClick(); window.paceLogoClick(); window.render(); });
   await dpage.waitForTimeout(250);
   const remembered = await dpage.evaluate(() => localStorage.getItem('pace-rail'));
-  step('folding the sidebar is remembered', remembered === 'collapsed', String(remembered));
+  step('folding the sidebar (narrow window) is remembered', remembered === 'collapsed', String(remembered));
   await dpage.mouse.move(900, 500);
   await dpage.waitForTimeout(250);
 

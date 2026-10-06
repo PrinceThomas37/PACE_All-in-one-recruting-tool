@@ -425,8 +425,12 @@ try {
   ok('4d. …and its tooltip says why', /2 people at this company already got a first email today/.test(heldTip || ''), heldTip);
   ok('4e. the row the next run will send still says "Ready now"', /Ready now/.test(await rowText('ready@beta.test')));
   ok('4f. the retrying row keeps its own retry note', /Retry 2 of 3 in about 1 h/.test(await rowText('retry@beta.test')));
-  ok('4g. the schedule panel explains the hold in words', /1 held until tomorrow/.test(text) && /Held until tomorrow: the company already got its 2 first emails today/.test(text));
-  ok('4h. …and the retry', /1 waiting to retry/.test(text) && /PACE tries again by itself/.test(text));
+  // R-141: the separate "Pending send schedule" panel is gone (owner: "i miss the simplicity"). Its two explanations live on the
+  // one-line summary's hover text instead — still in words, one hover away, never lost.
+  const lineTip = await page.evaluate(() => { const l = [...document.querySelectorAll('#content span[title]')].find(e => /held until tomorrow/.test(e.textContent)); return l ? l.getAttribute('title') : ''; });
+  ok('4g. the summary line explains the hold in words (hover)', /Held until tomorrow: the company already got its 2 first emails? today/.test(lineTip), lineTip);
+  ok('4h. …and the retry', /Waiting to retry: a send failed and PACE tries again by itself/.test(lineTip), lineTip);
+  ok('4i. the panel itself is gone', !/Pending send schedule/.test(text));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'pending-explained.png'), fullPage: false });
   ok('4i. no page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) { ok('4. browser part ran', false, e && e.stack || String(e)); }

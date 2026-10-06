@@ -3395,6 +3395,7 @@ const MS_TENANT   = config.microsoft.tenantId;
 const MS_CLIENT   = config.microsoft.clientId;
 const MS_SECRET   = config.microsoft.clientSecret;
 const MS_REDIRECT = config.microsoft.redirectUri;
+const microsoftOauth = require('./services/microsoft-oauth');   // R-136: a refresh sends no scope list
 const MS_SCOPES   = config.microsoft.scopes;
 
 // Gmail / Google Workspace provider — inert until GOOGLE_CLIENT_ID/SECRET are
@@ -3493,7 +3494,7 @@ async function getMicrosoftToken(userEmailId) {
   if (new Date(tokenRow.expires_at).getTime() - now.getTime() > 5 * 60 * 1000) return tokenRow.access_token;
   // retryUnsafe: a token refresh is idempotent — replaying it costs nothing and
   // a transient failure here takes the whole mailbox offline until the next sweep.
-  const refreshRes = await fetchWithRetry(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: MS_CLIENT, client_secret: MS_SECRET, refresh_token: tokenRow.refresh_token, grant_type: 'refresh_token', scope: MS_SCOPES }) }, { timeoutMs: OAUTH_TIMEOUT_MS, retryUnsafe: true, retries: 2 });
+  const refreshRes = await fetchWithRetry(`https://login.microsoftonline.com/${MS_TENANT}/oauth2/v2.0/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: microsoftOauth.refreshParams({ clientId: MS_CLIENT, clientSecret: MS_SECRET, refreshToken: tokenRow.refresh_token }) }, { timeoutMs: OAUTH_TIMEOUT_MS, retryUnsafe: true, retries: 2 });
   const refreshed = await refreshRes.json();
   if (refreshed.error) {
     // Capture the EXACT Microsoft error (e.g. AADSTS7000215 invalid client
