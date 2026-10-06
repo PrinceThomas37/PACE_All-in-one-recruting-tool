@@ -233,6 +233,8 @@ function normalizeGraphMessage(m, { folderId } = {}) {
     flagged: m.flag?.flagStatus === 'flagged',
     has_attachments: !!m.hasAttachments,
     is_draft: !!m.isDraft,
+    // Outlook's labels are CATEGORIES, applied by name — so a label's id is its name.
+    label_ids: Array.isArray(m.categories) ? m.categories.filter(Boolean) : [],
     platform: 'Microsoft',
   };
 }
@@ -263,6 +265,8 @@ function normalizeGmailMessage(m, { folderId } = {}) {
     flagged: labels.includes('STARRED'),
     has_attachments: gmailHasAttachment(m.payload),
     is_draft: labels.includes('DRAFT'),
+    // Only the person's OWN labels (Label_…); INBOX, UNREAD, STARRED… are folders/state, not labels.
+    label_ids: labels.filter(l => /^Label_/.test(String(l))),
     platform: 'Gmail',
     message_id_header: h['message-id'] || null,
     references_header: h.references || null,
@@ -447,7 +451,7 @@ function createMailProvider(ctx) {
       const t = await token();
       const skip = Math.max(0, parseInt(cursor, 10) || 0);
       const select = 'id,conversationId,parentFolderId,subject,from,sender,toRecipients,ccRecipients,'
-        + 'receivedDateTime,sentDateTime,bodyPreview,isRead,hasAttachments,isDraft,flag';
+        + 'receivedDateTime,sentDateTime,bodyPreview,isRead,hasAttachments,isDraft,flag,categories';
       const base = folderId ? `/me/mailFolders/${encodeURIComponent(folderId)}/messages` : '/me/messages';
       let path = `${base}?$top=${limit}&$skip=${skip}&$select=${select}`;
       if (q) path += `&$search=${encodeURIComponent(`"${String(q).replace(/"/g, '')}"`)}`;
@@ -463,7 +467,7 @@ function createMailProvider(ctx) {
     async function getMessage(id, { blockRemoteImages = true } = {}) {
       const t = await token();
       const select = 'id,conversationId,parentFolderId,subject,from,sender,toRecipients,ccRecipients,'
-        + 'receivedDateTime,sentDateTime,bodyPreview,isRead,hasAttachments,isDraft,flag,body,internetMessageId';
+        + 'receivedDateTime,sentDateTime,bodyPreview,isRead,hasAttachments,isDraft,flag,categories,body,internetMessageId';
       const m = await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}?$select=${select}`);
       const raw = m.body?.content || '';
       const isHtml = (m.body?.contentType || '').toLowerCase() === 'html';
@@ -536,6 +540,39 @@ function createMailProvider(ctx) {
     // INBOX. One verb, two correct implementations.
     async function archive(id) { return move(id, 'archive'); }
 
+    // ── Labels (Outlook calls them categories) ───────────────────────────────
+    // A category is applied to a message BY NAME, and that needs only Mail.ReadWrite — which is
+    // already granted. The tenant's master list (names + colours) needs MailboxSettings, which is
+    // NOT granted; when it is unreadable the list is empty and the screen offers the names it has
+    // already seen on messages. Nobody has to reconnect for this.
+    async function listLabels() {
+      try {
+        const t = await token();
+        const d = await graphMailRequest(t, '/me/outlook/masterCategories');
+        return (d.value || []).map(c => ({ id: c.displayName, name: c.displayName, color: c.color || null }));
+      } catch (_) { return []; }
+    }
+    async function createLabel(name) {
+      try {
+        const t = await token();
+        await graphMailRequest(t, '/me/outlook/masterCategories', {
+          method: 'POST', body: JSON.stringify({ displayName: name, color: 'preset9' }),
+        });
+      } catch (_) { /* not in the master list is fine — the message still carries the category */ }
+      return { id: name, name };
+    }
+    async function setLabels(id, { add = [], remove = [] } = {}) {
+      const t = await token();
+      const cur = await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}?$select=categories`);
+      const set = new Set((cur.categories || []).filter(Boolean));
+      remove.forEach(x => set.delete(x));
+      add.forEach(x => set.add(x));
+      await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}`, {
+        method: 'PATCH', body: JSON.stringify({ categories: [...set] }),
+      });
+      return { ok: true };
+    }
+
     // Graph builds the draft (quoting the original for us), we patch in the
     // user's text and any edits, then send. Shared by reply and forward because
     // only the endpoint and the recipient rules differ.
@@ -604,6 +641,7 @@ function createMailProvider(ctx) {
       platform: 'Microsoft', mailbox,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
+      listLabels, createLabel, setLabels,
     };
   }
 
@@ -712,6 +750,29 @@ function createMailProvider(ctx) {
       return { ok: true, id: msgId };
     }
 
+    // ── Labels — Gmail's own ─────────────────────────────────────────────────
+    async function listLabels() {
+      const raw = await gmailProvider.listLabels(id);
+      return (raw || []).filter(l => l.type === 'user')
+        .map(l => ({ id: l.id, name: l.name || l.id, color: (l.color && l.color.backgroundColor) || null }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    async function createLabel(name) {
+      try {
+        const l = await gmailProvider.createLabel(id, name);
+        return { id: l.id, name: l.name || name };
+      } catch (e) {
+        // Already there (409): hand back the one that exists rather than failing.
+        const have = (await listLabels()).find(l => l.name.toLowerCase() === String(name).toLowerCase());
+        if (have) return have;
+        throw e;
+      }
+    }
+    async function setLabels(msgId, { add = [], remove = [] } = {}) {
+      await gmailProvider.modifyLabels(id, msgId, { add, remove });
+      return { ok: true };
+    }
+
     async function reply(msgId, { htmlBody, replyAll = false, to, cc, subject, attachments }) {
       const original = await getMessage(msgId, { blockRemoteImages: false });
       const rec = (to?.length || cc?.length)
@@ -777,6 +838,7 @@ function createMailProvider(ctx) {
       platform: 'Gmail', mailbox,
       listFolders, listMessages, getMessage, getAttachment,
       setRead, setFlagged, move, trash, archive, reply, forward, listThread,
+      listLabels, createLabel, setLabels,
     };
   }
 

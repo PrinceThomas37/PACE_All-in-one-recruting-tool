@@ -39,9 +39,9 @@ try{
   await page.waitForFunction(()=>/Emails Sent/.test(document.getElementById('content').innerText),null,{timeout:8000}).catch(()=>{});
   await page.waitForTimeout(300);
   const t1 = await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
-  step('personal: emails sent (30 days) is the server\'s 311 — with no emails in the browser at all', /311\s*Emails Sent/.test(t1) || /Emails Sent[^0-9]{0,30}311/.test(t1), t1.slice(0,160));
-  step('personal: "Leads, last 7 days" is 85 and the 30-day tile 110, both the server\'s', /85\s*Leads, last 7 days/.test(t1) && /110\s*Leads, last 30 days/.test(t1));
-  step('personal: the tile says what the tiles mean ("last 30 days"), not "this month"', /last 30 days/.test(t1) && !/Sent \(month\)/.test(t1));
+  step('personal: emails sent (30 days) is the server\'s 311 — with no emails in the browser at all', /311\s*Emails sent/i.test(t1), t1.slice(0,160));
+  step('personal: "Leads, last 7 days" is 85 and the 30-day tile 110, both the server\'s', /85\s*Last 7 days/.test(t1) && /110\s*Last 30 days/.test(t1));
+  step('personal: the tile says what the tiles mean ("last 30 days"), not "this month"', /30 days/i.test(t1) && !/Sent \(month\)/.test(t1) && !/this month/i.test(t1));
   step('personal: response rate shows the REPLY rate (10%), not the conversion rate (5%)', /10%\s*Response rate/.test(t1) || /Response rate[^0-9]{0,20}10%/.test(t1), (t1.match(/.{30}Response rate.{20}/)||[''])[0]);
   const bars = await ev(()=>{ const c=document.getElementById('content'); return c.innerText; });
   step('personal: the chart and the tile agree (15+22+48 = 85)', /15/.test(bars) && /22/.test(bars) && /48/.test(bars));
@@ -60,7 +60,7 @@ try{
   await ev((id)=>{ STATE.bdLeadSelectedBD=id; render(); },R1);
   await page.waitForTimeout(300);
   const t3 = await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
-  step('drill-down: the same person shows the same figures (12 in 7 days, 123 sent, 2 pending, replied 14 = 35%)', /12\s*Last 7 days/.test(t3) && /123\s*Sent \(30 days\)/.test(t3) && /\b2\s*Pending/.test(t3) && /Replied:\s*14 \(35%\)/.test(t3), t3.slice(0,300));
+  step('drill-down: the same person shows the same figures (12 in 7 days, 123 sent, 2 pending, replied 14 = 35%)', /12\s*Last 7 days/.test(t3) && /123\s*Sent · 30 days/.test(t3) && /\b2\s*Pending/.test(t3) && /Replied\s*14 \(35%\)/.test(t3), t3.slice(0,300));
   step('drill-down: the stage breakdown is the server\'s (Assigned 30, Connected 8)', /Assigned\s*30/.test(t3) && /Connected\s*8/.test(t3));
 
   // a failure is said, not drawn as zeros

@@ -284,6 +284,7 @@ window.insertVarChip=function(token,subjId,bodyId){
   var targetId=(STATE.varInsertTarget==='subject')?subjId:bodyId;
   var where=(STATE.varInsertTarget==='subject')?'subject line':'email body';
   insertVarFromPicker(token,targetId);
+  if(window.planRepaintPreview)planRepaintPreview();   // the Outreach Plan's live preview follows the chip
   showToast('Added '+mergeVarFriendlyLabel(token)+' to '+where,'success');
 };
 window.saveOutreachTemplate=function(key,subjId,bodyId){

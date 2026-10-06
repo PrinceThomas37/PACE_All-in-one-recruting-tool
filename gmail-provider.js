@@ -326,6 +326,14 @@ function createGmailProvider(ctx) {
     const r = await api(token, '/labels');
     return r.labels || [];
   }
+  // A user label. gmail.modify already covers labels.create, so nobody reconnects.
+  async function createLabel(userEmailId, name) {
+    const token = await getToken(userEmailId);
+    return api(token, '/labels', {
+      method: 'POST',
+      body: JSON.stringify({ name, labelListVisibility: 'labelShow', messageListVisibility: 'show' }),
+    });
+  }
   async function getLabel(userEmailId, labelId) {
     const token = await getToken(userEmailId);
     return api(token, `/labels/${encodeURIComponent(labelId)}`);
@@ -365,7 +373,7 @@ function createGmailProvider(ctx) {
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
     // In-app mailbox reads (services/mail-provider.js)
-    listMessagePage, listLabels, getLabel, getThread, getAttachment, trashMessage,
+    listMessagePage, listLabels, getLabel, createLabel, getThread, getAttachment, trashMessage,
     // Exported for testing — header encoding is easy to get subtly wrong.
     encodeMimeHeader, encodeAddressHeader,
   };

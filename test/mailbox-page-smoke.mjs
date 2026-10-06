@@ -413,8 +413,12 @@ try {
     /class="tbar-ico(?![^"]*\boff\b)[^"]*"[^>]*onclick="mbClearSearch\(\)"/.test(html));
 
   await page.evaluate(() => { window.mbClearSearch(); });
-  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 3, { timeout: 5000 });
-  step('Clearing search restores the folder', true);
+  // m3 was deleted and m2 archived above. The folder comes back from what the page remembers, and that
+  // memory was updated by those actions — so neither reappears (the fake server below still lists
+  // them; a real mailbox would not). One is left, not three.
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 1, { timeout: 5000 });
+  step('Clearing search restores the folder — without the messages just deleted and archived',
+    await page.evaluate(() => !(STATE.mailbox.messages || []).some(x => x.id === 'm2' || x.id === 'm3')));
 
   await page.evaluate(() => window.mbSelectFolder('f-junk'));
   await page.waitForFunction(() => STATE.mailbox.folderId === 'f-junk' && !STATE.mailbox.listLoading, { timeout: 5000 });
@@ -423,7 +427,7 @@ try {
 
   // ── compose ────────────────────────────────────────────────────────────────
   await page.evaluate(() => window.mbSelectFolder('f-inbox'));
-  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 3, { timeout: 5000 });
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 1, { timeout: 5000 });
   await page.evaluate(() => window.mbCompose());
   // To/Cc are address chips now (R-093): the real value rides in a hidden input with the old id,
   // and the visible control is the chip box.

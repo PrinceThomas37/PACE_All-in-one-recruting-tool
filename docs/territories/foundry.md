@@ -1103,3 +1103,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - 2026-10-06 (R-125): new `report-work-smoke` (37; mutations: Sourced counted as work / period ignored / history ignored → each fails), `add-lead-smoke` (33), `trace-smoke` (17); `reports-smoke` 35 (new payload; every kind of click opens the drawer; zero is not a dead button), `stage-history-reports-smoke` 13. Full run 183/183 on Node 22.
 
 - 2026-10-06 (R-126): new `sequence-email-smoke` (34), `sequence-builder-smoke` (22, includes a guard that the window sits above the sidebar), `company-address-smoke`; `add-lead-smoke` updated.
+
+- 2026-10-06 (R-127): new `job-roster-paging-smoke` (18), `send-summary-line-smoke` (11), `email-history-replies-smoke` (16), `all-email-ui-smoke` (14), `plan-preview-smoke` (14), `mailbox-bulk-labels-smoke` (35), `mailbox-fast-bulk-smoke` (32, ~25 s: it ages a cache 15 s); updated `mailbox-page-smoke` (a fake server that still lists a deleted message) and `insights-screens-smoke` (wording only). Mutations shown to fail: page size, scope bypass, Sent tab back, live hook, folder-cache invalidation, list memory, the "untouched" guard.

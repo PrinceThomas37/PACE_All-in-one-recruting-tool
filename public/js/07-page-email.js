@@ -112,6 +112,53 @@ function composeRepaintPreview(){
   if(el)el.innerHTML=composePreviewInner();
 }
 
+// ── OUTREACH PLAN: the same live preview, so the right half is never blank (owner, 6 Oct) ──
+// The template is shown filled in for an EXAMPLE person (marked as one), signed by the mailbox
+// chosen above. {{sender}} comes from that mailbox, exactly as at send time; a field PACE cannot
+// fill is left visible and marked, never blanked.
+var PLAN_EXAMPLE={
+  '{{fn}}':'Sam','{{first_name}}':'Sam','{{ln}}':'Rivera','{{desig}}':'Operations Director',
+  '{{pos}}':'Senior Estimator','{{company}}':'Acme Builders','{{loc}}':'Dallas, TX','{{city}}':'Dallas',
+  '{{ind}}':'Construction','{{skills_line}}':' with experience in Bluebeam and Procore',
+  '{{job_resp}}':'Bluebeam and Procore','{{company_service}}':'Commercial construction',
+  '{{local_line}}':'Local candidates only.','{{salary_line}}':'($95k–$110k)','{{salary_range}}':'$95k–$110k',
+  '{{skill_1}}':'Bluebeam','{{skill_2}}':'Procore','{{skill_3}}':'Takeoffs'
+};
+function planFromMailbox(){
+  var u=STATE.user||{};
+  var list=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]);
+  return list.find(function(e){return e.id===STATE.planFromEmailId;})||null;
+}
+function planPreviewInner(){
+  var t=STATE.activeTmpl||'outreach', ids={outreach:['tmpl-o1-subj','tmpl-o1-body'],fu1:['tmpl-fu1-subj','tmpl-fu1-body'],fu2:['tmpl-fu2-subj','tmpl-fu2-body']}[t]||['tmpl-o1-subj','tmpl-o1-body'];
+  var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]);
+  var plan=STATE.myOutreachPlan||{}, key=(t==='outreach'?'o1':t);
+  var subj=se?se.value:(plan['tmpl_'+key+'_subject']||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'');
+  var body=be?be.value:(plan['tmpl_'+key+'_body']||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'');
+  var from=planFromMailbox();
+  var vars=Object.assign({},PLAN_EXAMPLE,{'{{sender}}':from?(from.display_name||from.email_address||''):'','{{senderemail}}':from?(from.email_address||''):''});
+  function fill(escaped){
+    return String(escaped||'').replace(/\{\{\s*([a-z_0-9]+)\s*\}\}/gi,function(m,name){
+      var v=vars['{{'+name.toLowerCase()+'}}'];
+      if(v===undefined) return '<span class="cmp-unset" title="Not a field this app fills">'+htmlEsc(m)+'</span>';
+      if(v==='')        return '<span class="cmp-unset" title="Nothing to fill this with — pick a sending email above">'+htmlEsc(m)+'</span>';
+      return htmlEsc(v);
+    });
+  }
+  if(!subj&&!body) return '<div class="c-ink3 fs-13" style="padding:26px 0;text-align:center">Write the subject or message and it appears here, filled in.</div>';
+  var sigRaw=from&&STATE.emailSignaturesCache?STATE.emailSignaturesCache[from.id]:undefined, sigHtml='';
+  if(sigRaw){
+    var n=(typeof normalizeMailboxSignature==='function')?normalizeMailboxSignature(sigRaw):sigRaw;
+    sigHtml=(typeof fillSignatureHtml==='function')?fillSignatureHtml(n,(from.display_name||from.email_address||''),(from.email_address||'')):n;
+  }
+  return (subj?'<div class="cmp-subject">'+fill(htmlEsc(subj))+'</div>':'')+
+    '<div class="cmp-body">'+fill(htmlEsc(body))+'</div>'+
+    (sigHtml?'<div class="cmp-sig">'+sigHtml+'</div>':'');
+}
+window.planRepaintPreview=function(){
+  var el=document.getElementById('plan-mail'); if(el) el.innerHTML=planPreviewInner();
+};
+
 // Insert a merge variable at the caret in the message box.
 window.composeInsertVar=function(v){
   var ta=document.getElementById('email-body');
@@ -131,7 +178,6 @@ function renderEmail(){
   // BD sees pending+queued+sent; others see sent only
   var isBD=userHasAnyRole(u,'bd','bd_lead','admin','ra_lead');
   var pending=STATE.pendingEmails||[];
-  var sentEmails=STATE.sentEmails||[];
   // COMPOSE AND GENERATOR ARE ONE TAB NOW.
   //
   // They were two ways to write the same email, and only one of them actually
@@ -146,7 +192,8 @@ function renderEmail(){
   // email or a candidate batch never appeared in it however hard you looked.
   // Recruiters get Pending too (Session 31): their candidate emails wait in a
   // queue of their own, and "is it still queued?" had nowhere to be answered.
-  var tabs=isBD?['pending','compose','sent','allmail','outreachplan','sequence']:['compose','pending','sent','allmail','outreachplan'];
+  var tabs=isBD?['pending','compose','allmail','outreachplan','sequence']:['compose','pending','allmail','outreachplan'];
+  if(STATE.emailTab==='sent')STATE.emailTab='allmail';
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
   // ── WHO THIS ORGANISATION WRITES TO ──────────────────────────────────────
@@ -238,6 +285,18 @@ function renderEmail(){
         '<div style="max-height:240px;overflow-y:auto">'+failRows+'</div>'+
       '</div>':'';
     var dismissBtn=sp.done?'<button onclick="dismissSendProgress()" title="Dismiss" class="c-text3 fs-18" style="background:transparent;border:0;line-height:1;cursor:pointer;padding:0 2px">×</button>':'';
+    // A run that finished cleanly is ONE quiet line, not a panel (the owner, 6 Oct: "once it is
+    // done this information is on the dashboard anyway … just a small summary"). The full
+    // panel stays for a send in flight and for anything that needs a person (failures, retries).
+    var tidy=!!(sp.done&&!sp.active&&!sp.failed&&!sp.retrying);
+    var doneAt=sp.completedAt?new Date(sp.completedAt):null;
+    var stale=tidy&&doneAt&&!isNaN(doneAt.getTime())&&(Date.now()-doneAt.getTime())>3600000;   // an old run is history, not news
+    if(tidy&&!stale){
+      progressBar='<div class="sp-line"><span class="sp-line-t">Send finished'+(doneAt&&!isNaN(doneAt.getTime())?' at '+htmlEsc(doneAt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})):'')+
+        ' — '+sp.sent+' sent'+(waitingTotal?', '+waitingTotal+' waiting':'')+'</span>'+
+        (sp.deferredNote?'<span class="sp-line-n"> · '+htmlEsc(sp.deferredNote)+'</span>':'')+
+        '<button onclick="dismissSendProgress()" title="Dismiss" class="sp-line-x" aria-label="Dismiss">×</button></div>';
+    } else if(!stale)
     progressBar='<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 18px;margin-bottom:16px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
         '<div class="fs-14" style="font-weight:700">'+(sp.done?(sp.failed>0?'Send complete — '+sp.failed+' need attention':'Send complete'):'Sending emails…')+'</div>'+
@@ -256,7 +315,7 @@ function renderEmail(){
   // Tabs on the shared kit. The Pending count is the number of emails actually
   // waiting; the "N now / M waiting" split stays in the sub-line under the tab
   // rather than being crammed into the label.
-  var TAB_LABELS={pending:'Pending',compose:'Compose',sent:'Sent',allmail:'All email',outreachplan:'Outreach Plan',sequence:'Sequence'};
+  var TAB_LABELS={pending:'Pending',compose:'Compose',allmail:'All email',outreachplan:'Outreach Plan',sequence:'Sequence'};
   var ps=STATE.pendingSummary;
   var tabBar=UI.tabs(tabs.map(function(t){
     var n=null;
@@ -463,40 +522,7 @@ function renderEmail(){
     } // end else (BD table view)
   }
 
-  // ── SENT TAB ──
-  var sentHtml='';
-  if(STATE.emailTab==='sent'){
-    var _sPg=Math.min(STATE.sentEmailPage||0,Math.max(0,Math.ceil(sentEmails.length/20)-1));
-    var _sTp=Math.max(1,Math.ceil(sentEmails.length/20));
-    var sentPaged=sentEmails.slice(_sPg*20,(_sPg+1)*20);
-    var sentRows=sentPaged.map(function(e){
-      var jname=(e.job&&e.job.position?e.job.position:'')+(e.job&&e.job.company?(' · '+e.job.company.name):'');
-      return '<tr style="border-bottom:1px solid var(--border2)">'+
-        '<td class="fs-13" style="padding:10px 12px">'+htmlEsc(e.to_email||'')+(e.ai_written?'<span class="ai-chip">AI-written</span>':'')+'</td>'+
-        '<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+
-        '<td class="fs-12" style="padding:10px 12px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+
-        '<td style="padding:10px 12px"><span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:8px;font-weight:600">'+htmlEsc(e.status||'sent')+'</span></td>'+
-        '<td style="padding:10px 12px;font-size:11px;color:var(--text3)">'+htmlEsc(e.sent_at||'')+'</td>'+
-      '</tr>';
-    }).join('');
-    if(!sentRows)sentRows='<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--text3)">No sent emails yet.</td></tr>';
-    sentHtml='<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
-      '<table class="fs-13" style="width:100%;border-collapse:collapse">'+
-        '<thead class="c-text3 fs-11" style="background:var(--bg);text-transform:uppercase;letter-spacing:.5px">'+
-          '<tr><th style="padding:10px 12px;text-align:left">To</th><th style="padding:10px 12px;text-align:left">Job</th><th style="padding:10px 12px;text-align:left">Subject</th><th style="padding:10px 12px;text-align:left">Status</th><th style="padding:10px 12px;text-align:left">Date</th></tr>'+
-        '</thead>'+
-        '<tbody>'+sentRows+'</tbody>'+
-      '</table>'+
-      (_sTp>1?'<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border)">'+
-        '<div class="fs-12 c-text3">'+sentEmails.length+' total · page '+(_sPg+1)+' of '+_sTp+'</div>'+
-        '<div style="display:flex;gap:5px">'+
-          '<button onclick="STATE.sentEmailPage=Math.max(0,'+_sPg+'-1);render()" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer" '+(_sPg===0?'disabled':'')+'>← Prev</button>'+
-          '<span class="fs-12" style="padding:5px 10px;font-weight:600">'+(_sPg+1)+' / '+_sTp+'</span>'+
-          '<button onclick="STATE.sentEmailPage=Math.min('+(_sTp-1)+','+_sPg+'+1);render()" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--card);font-size:12px;cursor:pointer" '+(_sPg>=_sTp-1?'disabled':'')+'>Next →</button>'+
-        '</div>'+
-      '</div>':'')  +
-    '</div>';
-  }
+  // (There is no separate Sent tab any more — "All email" holds what was sent AND what came back, 6 Oct.)
 
   // ── OUTREACH PLAN TAB ──
   if(!STATE.activeTmpl)STATE.activeTmpl='outreach';
@@ -549,8 +575,17 @@ function renderEmail(){
     '</div>';
   }
   var canEditTemplates=userHasAnyRole(u,'bd','bd_lead','admin');
+  var planFrom=planFromMailbox();
+  var planPrev='<div class="cmp-prev">'+
+    '<div class="cmp-prev-h">'+UI.ic('mailopen')+'<b>How '+htmlEsc(activeTmpl.label)+' reads</b>'+
+      '<span class="fs-11_5 c-ink3" style="margin-left:auto">example person</span></div>'+
+    '<div class="cmp-fld"><label>From</label><div class="cmp-static">'+(planFrom?htmlEsc((planFrom.display_name?planFrom.display_name+' <':'')+planFrom.email_address+(planFrom.display_name?'>':'')):'<span class="c-amber">Pick a sending email</span>')+'</div></div>'+
+    '<div class="cmp-fld"><label>To</label><div class="cmp-static">Sam Rivera &lt;sam@acmebuilders.example&gt;</div></div>'+
+    '<div class="cmp-mail" id="plan-mail">'+planPreviewInner()+'</div>'+
+    '<div class="cmp-foot">'+UI.ic('shield')+'<span>Filled in with an example person. Each lead gets its own details when it is sent; your signature is added from the mailbox above.</span></div>'+
+  '</div>';
   var tmplHtml=canEditTemplates?
-    '<div style="max-width:720px">'+
+    '<div class="cmp"><div class="cmp-edit" style="max-width:720px">'+
       '<div class="fs-13 c-text2" style="padding:12px 14px;background:var(--accent-l);border-radius:var(--r2);margin-bottom:16px">'+
         '<strong>How this works:</strong> Pick your sending email → choose a message style → edit Outreach &amp; follow-ups → Save. Assigned leads use these templates automatically.'+
       '</div>'+
@@ -583,8 +618,8 @@ function renderEmail(){
           '<div class="fs-12 c-text3" style="margin-top:2px">'+activeTmpl.sublabel+'</div>'+
         '</div>'+
         daySettingsHtml+
-        '<div class="fgrp"><label class="flbl">Subject</label><input class="inp" id="'+activeTmpl.subjId+'" value="'+htmlEsc(activeTmpl.subjVal)+'" onfocus="setVarInsertTarget(\'subject\')"/></div>'+
-        '<div class="fgrp"><label class="flbl">Body</label><textarea class="txta w100" style="min-height:200px" id="'+activeTmpl.bodyId+'" onfocus="setVarInsertTarget(\'body\')">'+htmlEsc(activeTmpl.bodyVal)+'</textarea></div>'+
+        '<div class="fgrp"><label class="flbl">Subject</label><input class="inp" id="'+activeTmpl.subjId+'" value="'+htmlEsc(activeTmpl.subjVal)+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'subject\')"/></div>'+
+        '<div class="fgrp"><label class="flbl">Body</label><textarea class="txta w100" style="min-height:200px" id="'+activeTmpl.bodyId+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'body\')">'+htmlEsc(activeTmpl.bodyVal)+'</textarea></div>'+
         renderVarChipBar(activeTmpl.subjId,activeTmpl.bodyId)+
         '<button class="btn btn-primary mt3" onclick="saveOutreachTemplate(\''+activeTmpl.key+'\',\''+activeTmpl.subjId+'\',\''+activeTmpl.bodyId+'\')">Save '+activeTmpl.label+'</button>'+
       '</div>'+
@@ -652,7 +687,7 @@ function renderEmail(){
           )+
         '</div>';
       })()+
-    '</div>':
+    '</div>'+planPrev+'</div>':
     '<div class="card cp"><div class="c-text3 fs-13">Outreach plan editing is available to BD and Admin roles only.</div></div>';
 
   // ── COMPOSE TAB ──
@@ -885,7 +920,6 @@ function renderEmail(){
                 ? (typeof renderCandidateOutreachBody==='function'?renderCandidateOutreachBody():composeHtml)
                 : (typeof renderOutreachGenBody==='function'?renderOutreachGenBody():composeHtml)))
         : '')+
-      (STATE.emailTab==='sent'?sentHtml:'')+
       (STATE.emailTab==='allmail'?renderAllMailBody():'')+
       (STATE.emailTab==='outreachplan'?tmplHtml:'')+
       (STATE.emailTab==='sequence'?renderSequenceBody():'')

@@ -41,6 +41,13 @@ const MAX_ATTACH_BYTES = 3.5 * 1024 * 1024;
 const UNREAD_TTL_MS = 60 * 1000;
 const unreadCache = new Map(); // userId -> { at, value }
 
+// Folder lists carry counts and, on Gmail, cost one provider call PER LABEL (up to 26 for one
+// mailbox). Switching tabs and accounts asked for them every time. Held briefly, per mailbox,
+// and dropped the moment anything in that mailbox changes — so a count is never older than 30s
+// and never survives the action that changed it. In memory only; nothing is stored.
+const FOLDERS_TTL_MS = 30 * 1000;
+const folderCache = new Map(); // mailboxId -> { at, value }
+
 module.exports = (ctx) => {
   const router = express.Router();
   const {
@@ -166,29 +173,30 @@ module.exports = (ctx) => {
     if (!uniq.length) return {};
     const out = {};
     const scoped = db.forRequest(req);
-    try {
-      const { data } = await scoped.from('contacts')
-        .select('id,first_name,last_name,email,job_id').in('email', uniq).limit(120);
-      for (const c of (data || [])) {
-        const key = String(c.email || '').toLowerCase();
-        if (!key || out[key]) continue;
-        out[key] = {
-          type: 'contact', id: c.id, job_id: c.job_id || null,
-          name: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email,
-        };
-      }
-    } catch (_) { /* a cross-link is a nicety; never fail the inbox for it */ }
-    try {
-      const { data } = await scoped.from('candidates')
-        .select('id,full_name,email').in('email', uniq).is('deleted_at', null).limit(120);
-      for (const c of (data || [])) {
-        const key = String(c.email || '').toLowerCase();
-        // A contact match wins: a BD conversation is the more actionable link,
-        // and the same address being both is rare enough not to need a UI for.
-        if (!key || out[key]) continue;
-        out[key] = { type: 'candidate', id: c.id, name: c.full_name || c.email };
-      }
-    } catch (_) { /* same */ }
+    // The two lookups do not depend on each other, so they run together — one database
+    // round trip of waiting instead of two, on every list and every opened message.
+    const [contactRes, candRes] = await Promise.all([
+      Promise.resolve(scoped.from('contacts')
+        .select('id,first_name,last_name,email,job_id').in('email', uniq).limit(120)).catch(() => ({ data: null })),
+      Promise.resolve(scoped.from('candidates')
+        .select('id,full_name,email').in('email', uniq).is('deleted_at', null).limit(120)).catch(() => ({ data: null })),
+    ]);
+    // A cross-link is a nicety; never fail the inbox for it.
+    for (const c of ((contactRes && contactRes.data) || [])) {
+      const key = String(c.email || '').toLowerCase();
+      if (!key || out[key]) continue;
+      out[key] = {
+        type: 'contact', id: c.id, job_id: c.job_id || null,
+        name: [c.first_name, c.last_name].filter(Boolean).join(' ') || c.email,
+      };
+    }
+    for (const c of ((candRes && candRes.data) || [])) {
+      const key = String(c.email || '').toLowerCase();
+      // A contact match wins: a BD conversation is the more actionable link,
+      // and the same address being both is rare enough not to need a UI for.
+      if (!key || out[key]) continue;
+      out[key] = { type: 'candidate', id: c.id, name: c.full_name || c.email };
+    }
     return out;
   }
 
@@ -255,7 +263,11 @@ module.exports = (ctx) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
     try {
-      res.json(await mail.forMailbox(mailbox).listFolders());
+      const hit = folderCache.get(mailbox.id);
+      if (hit && Date.now() - hit.at < FOLDERS_TTL_MS) return res.json(hit.value);
+      const value = await mail.forMailbox(mailbox).listFolders();
+      folderCache.set(mailbox.id, { at: Date.now(), value });
+      res.json(value);
     } catch (err) { providerError(res, err); }
   });
 
@@ -323,7 +335,7 @@ module.exports = (ctx) => {
       const adapter = mail.forMailbox(mailbox);
       if (req.body.read !== undefined) await adapter.setRead(req.params.id, !!req.body.read);
       if (req.body.flagged !== undefined) await adapter.setFlagged(req.params.id, !!req.body.flagged);
-      unreadCache.delete(req.user.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
       res.json({ success: true });
     } catch (err) { providerError(res, err); }
   });
@@ -339,7 +351,7 @@ module.exports = (ctx) => {
       const r = await mail.forMailbox(mailbox).move(req.params.id, req.body.folder_id, {
         fromLabelId: req.body.from_folder_id || null,
       });
-      unreadCache.delete(req.user.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
   });
@@ -349,7 +361,7 @@ module.exports = (ctx) => {
     if (error) return res.status(error.status).json(error.body);
     try {
       const r = await mail.forMailbox(mailbox).archive(req.params.id);
-      unreadCache.delete(req.user.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
   });
@@ -362,9 +374,76 @@ module.exports = (ctx) => {
     if (error) return res.status(error.status).json(error.body);
     try {
       const r = await mail.forMailbox(mailbox).trash(req.params.id);
-      unreadCache.delete(req.user.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
+  });
+
+  // ═════════════════════════════════════════════════════════════════
+  // LABELS  (Gmail labels / Outlook categories) and BULK ACTIONS
+  // ═════════════════════════════════════════════════════════════════
+  router.get('/mailbox/:mid/labels', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try { res.json(await mail.forMailbox(mailbox).listLabels()); }
+    catch (err) { providerError(res, err); }
+  });
+
+  router.post('/mailbox/:mid/labels', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    const name = String(req.body.name || '').trim().slice(0, 60);
+    if (!name) return res.status(400).json({ error: 'Give the label a name' });
+    try { res.json(await mail.forMailbox(mailbox).createLabel(name)); }
+    catch (err) { providerError(res, err); }
+  });
+
+  router.post('/mailbox/:mid/messages/:id/labels', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    const clean = (v) => (Array.isArray(v) ? v : []).map(x => String(x || '').slice(0, 200)).filter(Boolean).slice(0, 20);
+    try {
+      await mail.forMailbox(mailbox).setLabels(req.params.id, { add: clean(req.body.add), remove: clean(req.body.remove) });
+      res.json({ success: true });
+    } catch (err) { providerError(res, err); }
+  });
+
+  // One request for "do this to all of them" — a hundred round trips from the browser was the
+  // slow way to do it. Capped, each message answered on its own (one failure never hides the
+  // others), and — as everywhere in this file — Delete is a MOVE to Trash, never destruction.
+  const BULK_MAX = 50, BULK_ACTIONS = ['trash', 'archive', 'read', 'unread', 'label', 'unlabel'];
+  router.post('/mailbox/:mid/bulk', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    const ids = Array.isArray(req.body.ids) ? [...new Set(req.body.ids.map(x => String(x || '')).filter(Boolean))] : [];
+    const action = String(req.body.action || '');
+    if (!ids.length) return res.status(400).json({ error: 'Pick at least one message' });
+    if (ids.length > BULK_MAX) return res.status(400).json({ error: `Pick at most ${BULK_MAX} messages at a time`, code: 'too_many' });
+    if (!BULK_ACTIONS.includes(action)) return res.status(400).json({ error: 'Unknown action' });
+    const labelId = String(req.body.label_id || '').slice(0, 200);
+    if ((action === 'label' || action === 'unlabel') && !labelId) return res.status(400).json({ error: 'label_id required' });
+    const adapter = mail.forMailbox(mailbox);
+    const one = async (id) => {
+      if (action === 'trash') return adapter.trash(id);
+      if (action === 'archive') return adapter.archive(id);
+      if (action === 'read') return adapter.setRead(id, true);
+      if (action === 'unread') return adapter.setRead(id, false);
+      if (action === 'label') return adapter.setLabels(id, { add: [labelId] });
+      return adapter.setLabels(id, { remove: [labelId] });
+    };
+    const results = new Array(ids.length);
+    let next = 0;
+    // Four at a time: quick, and under the providers' per-user burst limits.
+    await Promise.all(new Array(Math.min(4, ids.length)).fill(0).map(async () => {
+      while (true) {
+        const i = next++; if (i >= ids.length) return;
+        try { const r = await one(ids[i]); results[i] = { id: ids[i], ok: true, new_id: (r && r.id) || ids[i] }; }
+        catch (e) { results[i] = { id: ids[i], ok: false, error: String((e && e.message) || 'failed').slice(0, 160) }; }
+      }
+    }));
+    unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+    const failed = results.filter(r => !r.ok).length;
+    res.json({ ok: results.length - failed, failed, results });
   });
 
   router.get('/mailbox/:mid/threads/:tid', auth, async (req, res) => {

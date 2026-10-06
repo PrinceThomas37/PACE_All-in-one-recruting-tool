@@ -245,3 +245,5 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-06 (Session 40) — mailbox warning: hide + remind (R-124)
 `services/mailbox-alerts.js` gained pure rules: `recordHide/isHidden/applyHidden/pruneHidden` (a hide is for 7 days AND against the alert's fingerprint `state|since` — a new failure returns at once; per person; counted) and `askRefusal` (chain-or-admin only, never yourself, never an unowned mailbox). The reminder written by "ask" is `contact_name 'Reconnect your mailbox'`, `company_name <the mailbox email>`, `reminder_type 'manager_prompt'`; the same triple is how "already asked" is found. Only the owner can complete the provider's consent screen, so a manager PROMPTS (D-0020).
+
+- 2026-10-06 (R-127): `services/mail-provider.js` — adapters gain `listLabels/createLabel/setLabels` (Gmail labels; Outlook categories by NAME — the master list needs `MailboxSettings`, not granted, so an unreadable list is "no list", R-130); messages carry `label_ids` (Gmail: only `Label_…`). `gmail-provider.js` — `createLabel`. Nothing destroys mail: bulk delete is the same move-to-Trash.
