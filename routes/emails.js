@@ -26,7 +26,7 @@
 // ============================================================================
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
-const { isStaleProgress } = require('../services/send-progress');
+const { isStaleProgress, reconcileProgress } = require('../services/send-progress');
 const sendRetry = require('../services/send-retry');
 const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
@@ -346,10 +346,19 @@ router.get('/emails/send-progress', auth, async (req, res) => {
     // about a queue that has since changed (emails purged, a new assignment
     // made) and contradicts the pending panel beside it.
     const expire = async (p) => {
-      if (!isStaleProgress(p)) return p;
-      sendProgressCache.set(req.user.id, null);
-      try { await supabase.from('app_settings').delete().eq('key', key); } catch (_) {}
-      return null;
+      if (isStaleProgress(p)) {
+        sendProgressCache.set(req.user.id, null);
+        try { await supabase.from('app_settings').delete().eq('key', key); } catch (_) {}
+        return null;
+      }
+      // A run that died with its process (a deploy, a restart) is not "still sending": say it stopped early, and keep
+      // that record (it ages out like any finished run). With no liveness probe (a bare test harness) nothing changes.
+      const r = reconcileProgress(p, { alive: ctx.isSendAlive ? ctx.isSendAlive(req.user.id) : true });
+      if (r !== p) {
+        sendProgressCache.set(req.user.id, r);
+        try { await supabase.from('app_settings').upsert({ key, value: JSON.stringify(r) }, { onConflict: 'key' }); } catch (_) {}
+      }
+      return r;
     };
     const cached = sendProgressCache.get(req.user.id);
     if (cached !== undefined) return res.json((await expire(cached)) || { active: false });

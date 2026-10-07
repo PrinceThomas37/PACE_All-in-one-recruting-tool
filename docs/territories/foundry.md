@@ -1137,3 +1137,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 ## 2026-10-07 (Session 42) — Lead Finder history tests (D-0094)
 - `finder-routes-smoke` 84→96 (history: decided cards only, counts, lead visible only to who made/holds it, handed-away and deleted leads, 90-day horizon + `all=1`, per-person isolation, unwait only for the owner and only for parked) and `finder-page-smoke` 54→68 (the Saved & past tab, per-search filter, Show now, name box, Show everything, "Found before / See them", Open lead). The test helper `call()` gained a `query` argument.
 - Mutation-checked: lead visibility, 90-day cut-off, search filter, handed-away wording, history reload after Save (the first version of that guard was vacuous — other loads also bumped the count — so it now compares the count before and after Save).
+
+## 2026-10-07 (Session 42) — send-progress tests (D-0095)
+- New `send-progress-smoke` (19: the rule, the route with/without a live run, the one-step start) and `send-card-smoke` (13, browser: the owner's exact 29/3/56 numbers, stopped-early card, already-running toast, no auto-dismiss). Mutation-checked: route reconcile, the queue-all guard, the dismiss guard, the Still-to-go chip. Lesson: a detector that matched its own source (the poll function contains the dismiss text) passed vacuously — match the callback's start, not a substring.

@@ -24,4 +24,30 @@ function isStaleProgress(progress, now = Date.now(), ttlMs = DONE_TTL_MS) {
   return (now - at) > ttlMs;
 }
 
-module.exports = { isStaleProgress, DONE_TTL_MS };
+// ── a run that died with its process ───────────────────────────────────────
+// A send runs inside the web process. A deploy or a restart kills it mid-run and leaves its progress record
+// saying `active: true` forever — and an ACTIVE record never expires above, so the card kept saying "Sending
+// emails…" while nothing was sending (owner's 29-of-56 screenshot, 7 Oct 2026). `alive` is the server's own
+// answer to "is a send for this person running in THIS process right now?"; when it is not, an old active
+// record is turned into an honest "stopped early" one. A run younger than the grace is left alone: a run that
+// is only just starting has written its record a moment before it registers itself.
+const DEAD_RUN_GRACE_MS = 90 * 1000;
+
+function reconcileProgress(progress, { alive, now = Date.now(), graceMs = DEAD_RUN_GRACE_MS } = {}) {
+  if (!progress || typeof progress !== 'object' || !progress.active) return progress;
+  if (alive) return progress;
+  const started = progress.startedAt ? new Date(progress.startedAt).getTime() : NaN;
+  if (Number.isFinite(started) && now - started <= graceMs) return progress;
+  return Object.assign({}, progress, { active: false, done: true, interrupted: true, current: '', completedAt: new Date(now).toISOString() });
+}
+
+// Start a run for this person unless one is already going. The check and the registration are ONE step, so two
+// clicks in the same instant cannot both start. (A function, so a test can call it — a grep cannot tell a live
+// rule from a dead one.)
+function tryStartRun(active, userId) {
+  if (active.has(userId)) return false;
+  active.add(userId);
+  return true;
+}
+
+module.exports = { isStaleProgress, reconcileProgress, tryStartRun, DONE_TTL_MS, DEAD_RUN_GRACE_MS };

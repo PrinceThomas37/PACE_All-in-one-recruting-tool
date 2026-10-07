@@ -290,7 +290,7 @@ function startProgressPoll(){
         _emailRefreshCount=0;
         if(STATE.page==='email')loadEmailsForCurrentUser();
         // Auto-dismiss only clean runs; keep failures up until the user reviews/dismisses them.
-        if(!d.failed){setTimeout(function(){ STATE._progressDismissed=true; STATE.sendProgress=null; scheduleRender(); },30000);}   // _progressDismissed: the next poll must not bring the finished run back
+        if(!d.failed&&!d.interrupted){setTimeout(function(){ STATE._progressDismissed=true; STATE.sendProgress=null; scheduleRender(); },30000);}   // _progressDismissed: the next poll must not bring the finished run back
       }
       var delay=(d&&d.active)?2000:30000; // idle polling slowed — sends surface within 2s once active anyway
       STATE._progressPollTimer=setTimeout(pollOnce,delay);

@@ -6600,3 +6600,6 @@ Owner: "apply the database and merge the changes." Checked first: no emails `sen
 
 ### SESSION 42, release — Lead Finder fixes + Saved & past live (D-0093, D-0094)
 Owner confirmed no sends were running ("No") and agreed to the merge; they will check the first-email workflow after release. Re-checked before merging: no `sending` emails, no `send_progress_*` keys. Node 22 and Node 26.10.0 full suites 209/209 on the final code. No migration. Merged as #307 → `0a0605a` (squash). Not verified from here: Render's deploy. Owner's open item: try the BD "Write the first email now" flow and report; the choice (ticked by default, writes into Pending, never sends) stands until they say otherwise.
+
+### SESSION 42, the stalled-send fixes (D-0095, R-162) — dev branch
+Owner asked what "the three stalled-send flaws" were, then said "Yes build it and merge it. It only works when there is an error in email sending right?" (answer: no — restarts and double clicks, plus the card's numbers). Built per D-0095; tests `send-progress-smoke` 19, `send-card-smoke` 13. Care taken: Send selected also writes an active record without registering in `activeSendByUser`, so a naive "not in the set = dead" would have declared a live Send-selected run interrupted — it now registers too. Open: R-163.

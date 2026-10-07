@@ -537,7 +537,13 @@ function buildDeferredNote({ skippedWindow, skippedQuota, skippedDomain, skipped
   return parts.length ? parts.join(' · ') : undefined;
 }
 
+const { tryStartRun } = require('./services/send-progress');
 const activeSendByUser = new Set();
+// "Is a send for this person running in THIS process?" — the two ways a run starts (Send all pending registers in
+// activeSendByUser; Send selected registers here). A progress record that says `active` with neither is a run a
+// restart killed (services/send-progress.js reconcileProgress).
+const selectedSendsByUser = new Map();
+const isSendAlive = (userId) => activeSendByUser.has(userId) || (selectedSendsByUser.get(userId) || 0) > 0;
 
 // ── Emergency stop ── a global switch that halts ALL outbound sending. Mirrored
 // to app_settings so it survives restarts/redeploys; the in-memory copy keeps
@@ -1230,6 +1236,8 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     const totalCount = pendingEmails.length;
     const userId = req.user.id;
     res.json({ success: true, queued: totalCount });
+    selectedSendsByUser.set(userId, (selectedSendsByUser.get(userId) || 0) + 1);
+    try {
     await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
     console.log(`[SendSelected] Starting ${totalCount} emails, userId=${userId}`);
@@ -1248,6 +1256,10 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     });
     setTimeout(() => clearSendProgress(userId), 60000);
     console.log(`[SendSelected] Completed: ${sent} sent, ${failed} failed, deferred window=${skippedWindow} quota=${skippedQuota} domain=${skippedDomain}`);
+    } finally {
+      const left = (selectedSendsByUser.get(userId) || 1) - 1;
+      if (left > 0) selectedSendsByUser.set(userId, left); else selectedSendsByUser.delete(userId);
+    }
   } catch (err) { console.error('[SendSelected] Error:', err.message); }
 });
 
@@ -1264,19 +1276,17 @@ app.post('/emails/queue-all', auth, async (req, res) => {
     // Respond immediately so browser doesn't time out — send loop runs in background
     const totalCount = pendingEmails.length;
     const userId = req.user.id;
-    res.json({ success: true, queued: totalCount });
-
     // Concurrency guard: never run two send loops for the same user at once
     // (a double-click, or this manual send-all overlapping the auto-send/retry
     // loop). Without this the same pending rows were dispatched twice. The
-    // per-email atomic claim in processPendingEmailSends is the hard guarantee;
-    // this just avoids starting redundant work. If a send is already running,
-    // those pending emails will be handled by that run (or the deferred retry).
-    if (activeSendByUser.has(userId)) {
-      console.log(`[SendAll] A send is already in progress for user ${userId} — skipping duplicate loop`);
-      return;
+    // per-email atomic claim in processPendingEmailSends is the hard guarantee.
+    // The answer must be TRUE: this used to say "queued" first and skip the run
+    // silently afterwards, so a second click looked like it had worked.
+    if (!tryStartRun(activeSendByUser, userId)) {
+      console.log(`[SendAll] A send is already in progress for user ${userId} — not starting a second loop`);
+      return res.json({ success: true, queued: 0, already_running: true, pending: totalCount });
     }
-    activeSendByUser.add(userId);
+    res.json({ success: true, queued: totalCount });
     try {
       await setSendProgress(userId, { active: true, total: totalCount, sent: 0, failed: 0, current: '', failDetails: [], startedAt: new Date().toISOString() });
 
@@ -3534,7 +3544,7 @@ const routeCtx = {
   addToSuppression, warmupLimit, loadSuppressedSet,
   loadAllJobs, JOB_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
   getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
-  formatWindowOpensLabel, padHour, sendProgressCache,
+  formatWindowOpensLabel, padHour, sendProgressCache, isSendAlive,
   pixelLimiter, openTracking,
   // The in-app mailbox (routes/mailbox.js) reads and writes real mailboxes
   // through the SAME provider calls the outreach engine sends with — there is

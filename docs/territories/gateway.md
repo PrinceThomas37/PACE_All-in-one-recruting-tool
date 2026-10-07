@@ -1073,3 +1073,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-07 (Session 42) — Lead Finder history (D-0094)
 - `GET /finder/history` (own decided cards: accepted/waiting/rejected; 90-day default, `?all=1`; lead job/stage only if the person created or holds it, else `lead_elsewhere`; `lead_gone` if deleted) and `POST /finder/cards/:id/unwait` (parked → today's cards; turned-down cannot return). Tests: `finder-routes-smoke` 96.
+
+## 2026-10-07 (Session 42) — queue-all answers truthfully; send-selected registers its run (D-0095)
+- `index.js`: `isSendAlive`, `selectedSendsByUser`, `tryStartRun` in `/emails/queue-all`; `routeCtx` carries `isSendAlive`. Details in harbour.md.

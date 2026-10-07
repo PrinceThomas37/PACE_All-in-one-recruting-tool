@@ -1253,3 +1253,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-07 (Session 42) — Find Leads "Saved & past" tab (D-0094)
 - `68-page-finder.js`: tab `history` (`renderHistory`, `fdHistStatus/Search/Q/All`, `fdUnwait`, `fdOpenLead` → `goPage('leads'); openJob(id)` only if the lead is in `STATE.jobs`); My searches rows show "Found before … See them" (`fdHistFor`). History reloads after Save/Reject/Wait. Tests: `finder-page-smoke` 68.
+
+## 2026-10-07 (Session 42) — the send card (D-0095, R-162)
+- `07-page-email.js`: "Still to go" chip for a run in flight (total − sent − failed − retrying − waiting); a stopped-early run (`interrupted`) shows "Sending stopped early", amber, "Still pending", and says to press Send all pending; it is never the quiet one-line summary. `11-bind-and-actions.js`: a stopped-early card is not auto-dismissed after 30 s. `18-email-status-actions.js`: `already_running` → an honest toast, and the rows the click had taken off the Pending list are loaded back.
