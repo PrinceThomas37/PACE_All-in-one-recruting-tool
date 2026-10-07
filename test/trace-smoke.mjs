@@ -41,6 +41,10 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.route('**', r => r.request().url().startsWith(BASE) ? r.continue() : r.abort());
   const page = await ctx.newPage();
+  // THE DATES BELOW ARE 6 OCT 2026, AND "NEEDS YOU TODAY" SPLITS TODAY FROM OLDER BY THE VIEWER'S OWN CLOCK. Unpinned, this
+  // suite passed on 6 Oct and failed on the 7th — every seeded item had silently become "older" and the rows were not
+  // on the screen — on main as well as on the branch. The browser's date is fixed so it means the same thing every day.
+  await page.clock.setFixedTime(new Date('2026-10-06T14:00:00Z'));
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(BASE + '/'); await waitForLogin(page); await enterApp(page, 'bd');
 
