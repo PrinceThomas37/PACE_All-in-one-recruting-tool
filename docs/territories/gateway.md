@@ -1047,3 +1047,8 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-06 (Session 40, round 4)
 - `index.js`: the Microsoft token refresh builds its request through `services/microsoft-oauth.js` `refreshParams()` (no `scope`), and `config/env.js` adds `MailboxSettings.ReadWrite` to the CONNECT scopes (harbour's note has why). No route changed. `GET /distribute/today-summary` is no longer called by the browser (the Email page card is gone); the route is left in place.
+
+## 2026-10-07 (Session 40, round 5) — a BD takes leads, imports into their own profile (R-148, D-0082)
+- **`services/lead-distribution.js`** is now the ONE spread rule (`orderPool`, `assignmentQueue`, `dayRemaining`, `connectedMailboxesFor`); `POST /distribute/execute` was refactored onto it (same messages, same behaviour — `lead-distribution-preview-smoke`, `backend-smoke` green).
+- **`routes/lead-take.js`**: `GET /leads/take/status`, `POST /leads/take {count}` — bd/bd_lead only, cap `self_assign_daily_cap` (`config/settings.js`, default 25, 0 = off, group "Leads"), tally `self_take_<user>_<day>` in app_settings, only MY connected mailboxes, pool conditions ON the update (two people never get one lead), assigns only (no send), `logActivity('self_assigned')`. Never exposes the pool size (D-0034).
+- **`POST /jobs/bulk`** takes `for_me`: honoured only for bd/bd_lead; the leads are Assigned, owned, in my mailboxes (`ignoreRoom`: owning is not sending); an admin/RA import still goes to the pool. The answer carries `owned` and `job_ids`.

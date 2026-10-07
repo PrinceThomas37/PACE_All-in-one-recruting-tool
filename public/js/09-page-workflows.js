@@ -335,7 +335,8 @@ function wfEmailStepEditor(s,i){
         WF_TEMPLATE_CHOICES.map(function(k){return '<option value="'+k[0]+'"'+(c.template_key===k[0]?' selected':'')+'>'+k[1]+'</option>';}).join('')+
       '</select>'+thread+
       '<button class="btn btn-outline btn-sm" onclick="wfCopyTemplate('+i+')" title="Put the words of this template into the step so you can change them for this step only">Edit a copy for this step</button>'+
-    '</div><div class="fs-11_5 c-ink3">These are the templates you edit in Email → Outreach Plan; changing one there changes every sequence that uses it.</div>';
+      '<button class="btn btn-outline btn-sm" onclick="wfEditMyWording('+i+')" title="Open YOUR wording for this email, with a live preview">Edit my wording</button>'+
+    '</div><div class="fs-11_5 c-ink3">These are your own templates (Email → Sequence → My wording); changing one there changes every sequence of yours that uses it.</div>';
   }
   var chips='<div class="seq-chips"><span class="fs-11_5 c-ink3">Insert:</span>'+WF_CHIPS.map(function(ch){
     return '<button type="button" class="seq-chip" onmousedown="event.preventDefault()" onclick="wfInsertVar('+i+',\''+ch[0]+'\')" title="Becomes '+ch[1].toLowerCase()+' of each person">'+ch[1]+'</button>';}).join('')+'</div>';
@@ -379,6 +380,15 @@ window.wfInsertVar=function(i,token){
   wfOwnText(i,field,el.value);
 };
 // Put a saved template's words into the step, to be changed for this step only.
+// R-146: from a step, jump to the person's OWN wording for that email (the old Outreach Plan editor, with its live
+// preview). Anyone who can open a step may do this — a BD edits their own words without needing to change the sequence.
+window.wfEditMyWording=function(i){
+  var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s) return;
+  var k=(s.config&&s.config.template_key)||'initial';
+  STATE.activeTmpl=({initial:'outreach',o1:'outreach',fu1:'fu1',fu2:'fu2'})[k]||'outreach';
+  STATE.wfBuilder=null; closeModal();
+  STATE.seqView='wording'; STATE.emailTab='sequence'; goPage('email');
+};
 window.wfCopyTemplate=function(i){
   var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;
   var k=(s.config&&s.config.template_key)||'initial';

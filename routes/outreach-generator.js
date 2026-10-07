@@ -31,6 +31,7 @@ const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
 const { fillSignatureHtml } = require('../email-signature');
 const gen = require('../services/outreach-generator');
+const aiStyle = require('../services/ai-style');
 const own = require('../services/ownership');
 
 // An explicit override for this feature only; otherwise the model comes from
@@ -44,6 +45,11 @@ module.exports = (ctx) => {
     loadSuppressedSet, recruiterSendingMailbox, sendMailboxNewMessage, sendingMailboxFor, ownSendingMailboxes,
     withOrg, orgStamp, logActivity, wfEngine, hasRole, orgIdFor, canTouchJob,
   } = ctx;
+  // The sender's own writing instructions (D-0082), read once per request however many angles are drafted.
+  const styleNoteOf = async (req) => {
+    if (!req._styleNote) req._styleNote = aiStyle.effectiveFor(supabase, { userId: req.user.id, orgId: req.orgId });
+    return req._styleNote;
+  };
   // The ONE chain walk in PACE (D-0034) — never a second copy here.
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
@@ -219,7 +225,9 @@ module.exports = (ctx) => {
           style_reference: variant && variant.email,
         };
         const angle = gen.angleBrief(variant && variant.id) ? variant.id : null;
-        const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle });
+        // D-0082: the sender's own writing instructions ride along (services/ai-style.js).
+        const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle })
+          + aiStyle.styleBlock(await styleNoteOf(req));
         const askAi = (prompt) => aiProvider.complete(supabase, {
           model: AI_MODEL || undefined,
           maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId,
@@ -340,7 +348,8 @@ module.exports = (ctx) => {
         job_description: aiProvider.budget.trimToTokens(withSender.job_description, 2200),
         style_reference: variant.email,
       };
-      const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle: angleId });
+      const system = gen.buildSystemPrompt(companyName, { omitSignOff: draftOpts.omitSignOff, angle: angleId })
+        + aiStyle.styleBlock(await styleNoteOf(req));
       const askAi = (prompt) => aiProvider.complete(supabase, {
         model: AI_MODEL || undefined,
         maxTokens: 1000, feature: 'outreach_draft', orgId: req.orgId, system, prompt,

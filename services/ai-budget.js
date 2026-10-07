@@ -90,6 +90,9 @@ const FEATURES = {
   // sequence-draft.js, D-0077). Small in, 50-110 words out; 'quality' because
   // it is sent to many people and is the one thing the person reads before saving.
   sequence_draft:  { label: 'Sequence email drafts', in: 1200, out: 700,  tier: 'quality' },
+  // "Try it on a sample" under a person's writing instructions (services/ai-style.js, D-0082): one
+  // first-email draft for an invented lead, so the person sees what their note does before saving.
+  style_sample:    { label: 'Writing-style sample',  in: 3000, out: 800,  tier: 'quality' },
 };
 // An unnamed caller gets the tightest sensible allowance rather than no limit.
 const DEFAULT_FEATURE = { label: 'Other', in: 1000, out: 500, tier: 'fast' };

@@ -320,3 +320,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-06 (Session 40, round 4)
 - `config/env.js` (deep owns config): `MICROSOFT_SCOPES` = base + `MailboxSettings.ReadWrite`, `MICROSOFT_BASE_SCOPES`, `microsoftScopes(env)` and the `MICROSOFT_EXTRA_SCOPES` switch (empty = off) — see harbour.md for why a refresh sends no scope. No schema change; no migration.
+
+## 2026-10-07 (Session 40, round 5)
+- `config/settings.js`: new setting `self_assign_daily_cap` (group "Leads", default 25, 0 = off) — how many pool leads a BD may take for themselves per day (R-148). Per-person tally is `app_settings` key `self_take_<userId>_<YYYY-MM-DD>`; per-person AI note `ai_style_<userId>`; team default `ai_style_org_<orgId>` (D-0082). No migration.

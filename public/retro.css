@@ -908,3 +908,17 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .lx-acts{display:flex;flex-direction:column;gap:6px}
 .lx-acts .btn{justify-content:center}
 .lx-acts .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+/* "How the AI writes for you" (D-0082) */
+.ais-box{width:100%;min-height:96px;font-size:14px;line-height:1.5;resize:vertical}
+.ais-box-sm{min-height:56px;margin:6px 0}
+.ais-row{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:4px 0 10px;flex-wrap:wrap}
+.ais-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ais-on{font-weight:700;color:var(--green)}
+.ais-off{font-weight:700;color:var(--amber)}
+.ais-sample{margin-top:14px;padding:12px 14px;background:var(--bg);border:2px solid var(--glass-brd)}
+.ais-sample.is-bad{border-style:dashed;font-size:13px;line-height:1.5}
+.ais-subj{font-weight:700;margin:6px 0 8px}
+.ais-body{white-space:pre-wrap;font-size:13.5px;line-height:1.55}
+.ais-never{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+.ais-team{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}

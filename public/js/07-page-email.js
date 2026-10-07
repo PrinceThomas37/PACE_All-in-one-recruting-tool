@@ -10,6 +10,7 @@ function pendingSplitLine(ps){
   return parts.join(' · ');
 }
 window.pendingSplitLine=pendingSplitLine;
+window.seqView=function(v){ if(STATE.seqView===v) return; STATE.seqView=v; render(); };
 
 function loadMySendingStatus(){
   apiGet('/sending/my-status').then(function(s){
@@ -192,8 +193,12 @@ function renderEmail(){
   // email or a candidate batch never appeared in it however hard you looked.
   // Recruiters get Pending too (Session 31): their candidate emails wait in a
   // queue of their own, and "is it still queued?" had nowhere to be answered.
-  var tabs=isBD?['pending','compose','allmail','outreachplan','sequence']:['compose','pending','allmail','outreachplan'];
+  // R-146 (owner, D-0082): Outreach Plan is part of Sequence now — "the outreach plan will come up when the user edits the
+  // sequence". One tab, three pills: Sequences · My wording (the old Outreach Plan) · AI style. A person with no
+  // sequence permission still edits their OWN wording there. 'outreachplan' stays a valid alias (old links, saved state).
+  var tabs=isBD?['pending','compose','allmail','sequence']:['compose','pending','allmail'];
   if(STATE.emailTab==='sent')STATE.emailTab='allmail';
+  if(STATE.emailTab==='outreachplan'){ STATE.emailTab='sequence'; STATE.seqView='wording'; }
   if(!STATE.emailTab)STATE.emailTab=isBD?'pending':'compose';
 
   // ── WHO THIS ORGANISATION WRITES TO ──────────────────────────────────────
@@ -315,7 +320,7 @@ function renderEmail(){
   // Tabs on the shared kit. The Pending count is the number of emails actually
   // waiting; the "N now / M waiting" split stays in the sub-line under the tab
   // rather than being crammed into the label.
-  var TAB_LABELS={pending:'Pending',compose:'Compose',allmail:'All email',outreachplan:'Outreach Plan',sequence:'Sequence'};
+  var TAB_LABELS={pending:'Pending',compose:'Compose',allmail:'All email',sequence:'Sequence'};
   var ps=STATE.pendingSummary;
   var tabBar=UI.tabs(tabs.map(function(t){
     var n=null;
@@ -692,6 +697,22 @@ function renderEmail(){
     '</div>'+planPrev+'</div>':
     '<div class="card cp"><div class="c-text3 fs-13">Outreach plan editing is available to BD and Admin roles only.</div></div>';
 
+  // ── SEQUENCE TAB (Sequences · My wording · AI style) ──
+  var seqShell='';
+  if(STATE.emailTab==='sequence'){
+    var canSeeSeqs=userHasAnyRole(u,'admin','bd_lead','ra_lead','bd');
+    var seqPills=[];
+    if(canSeeSeqs) seqPills.push(['sequences','Sequences']);
+    seqPills.push(['wording','My wording']);
+    seqPills.push(['style','AI style']);
+    var seqView=STATE.seqView||(canSeeSeqs?'sequences':'wording');
+    if(!seqPills.some(function(p){return p[0]===seqView;})) seqView=seqPills[0][0];
+    seqShell='<div class="rep-fgroup" style="margin-bottom:14px">'+seqPills.map(function(p){
+      return '<button class="rep-pill'+(seqView===p[0]?' on':'')+'" onclick="seqView(\''+p[0]+'\')">'+p[1]+'</button>';
+    }).join('')+'</div>'+
+      (seqView==='wording'?tmplHtml:seqView==='style'?renderAiStyleCard():renderSequenceBody());
+  }
+
   // ── COMPOSE TAB ──
   var myJobs=getMyJobs(u);
 
@@ -907,8 +928,7 @@ function renderEmail(){
                 : (typeof renderOutreachGenBody==='function'?renderOutreachGenBody():composeHtml)))
         : '')+
       (STATE.emailTab==='allmail'?renderAllMailBody():'')+
-      (STATE.emailTab==='outreachplan'?tmplHtml:'')+
-      (STATE.emailTab==='sequence'?renderSequenceBody():'')
+      (STATE.emailTab==='sequence'?seqShell:'')
   });
 }
 

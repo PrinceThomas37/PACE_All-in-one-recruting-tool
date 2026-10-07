@@ -263,6 +263,7 @@ function renderJobs(){
         dateBtn+
         (userHasAnyRole(u,'ra_lead','admin')
           ? '<button class="btn btn-sm btn-outline" onclick="openExportLeads()">'+UI.ic('dl')+'Export</button>':'')+
+        (userHasAnyRole(u,'bd','bd_lead')?'<button class="btn btn-sm btn-outline" onclick="openTakeLeads()" title="Be handed leads from the pool, into your own mailboxes">Take leads</button>':'')+
         '<button class="btn btn-sm btn-outline" onclick="triggerImport()">Import Excel</button>'+
         (u.role!=='ra'?'<button class="btn btn-sm btn-primary" onclick="openAddJob()">'+UI.ic('plus')+'Add Lead</button>':'')+
         '<input type="file" id="xl-import" accept=".xlsx,.xls" style="display:none" onchange="importXL(this)"/>'

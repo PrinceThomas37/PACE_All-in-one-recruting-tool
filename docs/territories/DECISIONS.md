@@ -47,6 +47,11 @@ came from a screenshot or a reaction rather than a sentence, say that plainly.
 ---
 <!-- NEW ENTRIES GO DIRECTLY BELOW THIS LINE -->
 
+### D-0082 · 2026-10-07 · STANDS · The owner's answers on R-146, R-147, R-148 — and a real-world gap (Round 4 merged as #299)
+
+The owner: *"1. Can the AI's writing be edited? No — enable it. I want AI to write the emails the way I want it. Even in the first sequence itself. 2. Yes. BD can edit their own wordings inside the step. 3. A — because today I thought of importing a list of leads directly into BD user profile. But did not find a way to send the outreach."*
+**Decisions:** (R-147) build the place to tell the AI how to write — it must reach EVERY AI-written email including the first one of a sequence, not just "Write with AI"; (R-146) merge Outreach Plan into Sequence, and a BD edits their OWN wording inside a step even without permission to change the sequence's shape; (R-148) option A — a BD takes leads for themselves, capped per day, into their own connected mailboxes. **New requirement found in the same breath:** a BD who IMPORTS a list into their own profile has no way to start the outreach — closing that gap is part of R-148, not a separate wish.
+
 ### D-0081 · 2026-10-06 · STANDS · Merge Outreach Plan into Sequence, and a place to edit how the AI writes (R-146, R-147)
 
 The owner, mid-round: *"sequence and outreach plan are mostly the same right? so why cant we kind of merge them as one and the outreach plan will come up when the user edit the sequence … first plan and then implement."* And: *"do we have an option of editing the AI written emails right now, like edit the prompt by which the email is written. if yes, where? and if not make space of that too."*

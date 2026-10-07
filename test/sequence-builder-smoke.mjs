@@ -70,7 +70,8 @@ try {
   // 1. saved template mode
   const saved = await page.evaluate(() => ({ seg: [...document.querySelectorAll('.seq-seg')].map(b => b.textContent + (b.classList.contains('on') ? '*' : '')), opts: [...document.querySelectorAll('.seq-body select')].map(s => [...s.options].map(o => o.textContent)).filter(o => /Outreach 1/.test(o.join())).flat() }));
   step('a step starts on "Use a saved template", offering Outreach 1 / Follow-up 1 / Follow-up 2 by name (not initial/fu1/fu2)', saved.seg.join() === 'Use a saved template*,Write it for this step' && saved.opts.join() === 'Outreach 1 — your first email,Follow-up 1,Follow-up 2', JSON.stringify(saved));
-  step('…it says where those templates are edited', await page.evaluate(() => /Outreach Plan/.test(document.querySelector('.seq-body').textContent)));
+  step('…it says where those templates are edited (Email → Sequence → My wording — Outreach Plan lives inside Sequence now)', await page.evaluate(() => /My wording/.test(document.querySelector('.seq-body').textContent) && !/Outreach Plan/.test(document.querySelector('.seq-body').textContent)));
+  step('…and offers "Edit my wording" beside it (R-146)', await page.evaluate(() => [...document.querySelectorAll('.seq-body button')].some(x => /Edit my wording/.test(x.textContent))));
 
   // 2. copy a saved template into the step
   await page.evaluate(() => [...document.querySelectorAll('.seq-body .btn')].find(b => /Edit a copy/.test(b.textContent)).click());
@@ -158,6 +159,12 @@ try {
   await page.evaluate(() => { __posts.length = 0; wfOpenBuilder('wf-idle'); });
   await page.waitForSelector('.seq-modal');
   step('a sequence with nobody in it has no warning and a normal Save', await page.evaluate(() => !document.querySelector('.wf-lock') && !document.querySelector('.wf-save-new') && [...document.querySelectorAll('.seq-modal .mf button')].some(x => x.textContent.trim() === 'Save' && !x.disabled)));
+  // last, because it closes the window: Edit my wording opens that wording, with its live preview (R-146)
+  step('"Edit my wording" closes the window and opens that wording with its live preview (R-146)', await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.seq-body button')].find(x => /Edit my wording/.test(x.textContent)); if (!b) return false;
+    b.click();
+    return !STATE.wfBuilder && STATE.emailTab === 'sequence' && STATE.seqView === 'wording' && !!STATE.activeTmpl;
+  }));
   step('no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
   await ctx.close();
 } catch (e) { step('suite ran', false, e && e.stack || String(e)); }

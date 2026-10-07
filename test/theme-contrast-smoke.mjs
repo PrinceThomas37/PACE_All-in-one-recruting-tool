@@ -75,6 +75,13 @@ const SCREENS = [
   ['email', { emailTab:'allmail' }],
   ['email', { emailTab:'outreachplan' }],
   ['email', { emailTab:'sequence' }],
+  // R-146/R-147 (D-0082): the merged Sequence tab's other two pills — My wording (the old Outreach Plan) and AI style, with
+  // a written sample and an admin's team box on screen so every surface of the card is measured.
+  ['email', { emailTab:'sequence', seqView:'wording' }],
+  ['email', { emailTab:'sequence', seqView:'style', aiStyle:{ data:{ person:'Warm and plain.', team:'Plain.', in_force:'Warm and plain.', source:'person', max:700, can_set_team:true, ai:{ available:true, reason:null } },
+    draft:'Warm and plain.', teamDraft:'Plain.', sample:{ ai:true, written:true, subject:'Senior Estimator hire in Dallas', body:'Hi Sam,\n\nA short, warm note.\n\nThanks,' } } }],
+  ['email', { emailTab:'sequence', seqView:'style', aiStyle:{ data:{ person:'', team:'', in_force:'', source:null, max:700, can_set_team:false, ai:{ available:false, reason:'not_configured' } },
+    draft:'', teamDraft:'', sample:{ ai:true, written:false, reason:'draft_rejected', violations:['fee_percentage'] } } }],
   ['applicants', { ats:{ view:'grid' } }], ['applicants', { ats:{ view:'applied' } }], ['applicants', { ats:{ view:'sourcing' } }],
 ];
 const ROLES = ['admin','bd','recruiter','ra'];

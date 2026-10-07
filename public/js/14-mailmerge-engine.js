@@ -500,7 +500,9 @@ function groupImportRows(mapped){
   return order.map(function(k){return groups[k];}).filter(function(g){return g.contacts.length>0;});
 }
 
-function renderImportProgressModal(done,total,logLines,finished,summary){
+// ownedIds: the ids of leads this import made THEIRS (a BD importing into their own profile, R-148). Then the finish
+// step is "Write the first emails" - owning leads sends nothing, and the old Done button looked for leads that cannot exist.
+function renderImportProgressModal(done,total,logLines,finished,summary,ownedIds){
   var pct=total>0?Math.round(done/total*100):0;
   return '<div class="modal modal-w480">'+
     '<div class="mh"><div class="mt">'+(finished?'Import complete':'Importing\u2026')+'</div></div>'+
@@ -519,7 +521,7 @@ function renderImportProgressModal(done,total,logLines,finished,summary){
         (logLines.length?logLines.map(function(l){return '<div style="padding:2px 0">'+htmlEsc(l)+'</div>';}).join(''):'<div class="c-text3">Starting\u2026</div>')+
       '</div>'+
     '</div>'+
-    (finished?'<div class="mf"><button class="btn btn-primary" onclick="closeModal();refreshJobs().then(function(){if(STATE.user&&(STATE.user.role===\'bd\'||STATE.user.role===\'bd_lead\')){var myJobIds=STATE.jobs.filter(function(j){return j.assigned_to_bd===STATE.user.id&&j.stage===\'Unassigned\';}).map(function(j){return j.id;});if(myJobIds.length)apiPost(\'/emails/generate\',{job_ids:myJobIds}).then(function(r){showToast(r.generated+\' emails generated\',\'success\');apiGet(\'/emails?status=pending\').then(function(d){STATE.pendingEmails=d;render();});});}});">Done</button></div>':'')+
+    (finished&&ownedIds&&ownedIds.length?'<div class="mf"><button class="btn btn-outline" onclick="closeModal();refreshJobs()">Not now</button><button class="btn btn-primary" onclick="writeFirstEmails('+htmlEsc(JSON.stringify(ownedIds))+')">Write the first emails</button></div>':(finished?'<div class="mf"><button class="btn btn-primary" onclick="closeModal();refreshJobs().then(function(){if(STATE.user&&(STATE.user.role===\'bd\'||STATE.user.role===\'bd_lead\')){var myJobIds=STATE.jobs.filter(function(j){return j.assigned_to_bd===STATE.user.id&&j.stage===\'Unassigned\';}).map(function(j){return j.id;});if(myJobIds.length)apiPost(\'/emails/generate\',{job_ids:myJobIds}).then(function(r){showToast(r.generated+\' emails generated\',\'success\');apiGet(\'/emails?status=pending\').then(function(d){STATE.pendingEmails=d;render();});});}});">Done</button></div>':''))+
   '</div>';
 }
 
@@ -695,7 +697,9 @@ window.doImportProcess=function(toProcess,dupEmailMap){
     render();
 
     // Single bulk API call
-    apiPost('/jobs/bulk',{jobs:jobPayloads}).then(function(res){
+    // A BD importing into their OWN profile gets leads that are theirs, in their own mailboxes (R-148). An RA / admin import still goes to the pool.
+    var forMe=userHasAnyRole(STATE.user,'bd','bd_lead')&&!userHasAnyRole(STATE.user,'admin','ra_lead');
+    apiPost('/jobs/bulk',{jobs:jobPayloads,for_me:forMe}).then(function(res){
       var summary=res.imported+' job'+(res.imported!==1?'s':'')+' imported, '+res.contacts+' contacts created.';
       // The server already counts addresses it flagged invalid; the result used
       // to say nothing about them, so a batch that could not be emailed looked
@@ -710,7 +714,8 @@ window.doImportProcess=function(toProcess,dupEmailMap){
         (res.invalidEmails?'\u26a0 Contacts with no valid email (will not be emailed): '+res.invalidEmails:''),
         (Object.keys(dupEmailMap).length?' Flagged as duplicates: '+toProcess.filter(function(g){return g.contacts.some(function(c){return c.email&&dupEmailMap[c.email.toLowerCase().trim()];});}).length:'')
       ].filter(Boolean);
-      STATE.modal=renderImportProgressModal(res.imported,res.imported,logs,true,summary);
+      if(res.owned&&res.imported)summary+=' They are yours, spread over your own connected mailboxes. Nothing has been sent yet \u2014 the next step is to write the first emails.';
+      STATE.modal=renderImportProgressModal(res.imported,res.imported,logs,true,summary,res.owned?res.job_ids:null);
       render();
     }).catch(function(err){
       var logs=['\u2717 Batch failed: '+err.message,'Check your data and try again.'];

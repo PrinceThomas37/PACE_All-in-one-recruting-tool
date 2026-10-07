@@ -777,3 +777,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 - 2026-10-06 (R-126): `services/sequence-templates.js` (pure) — a sequence step's text = the step's own words, then the person's template, then the org's, then the built-in default; slot `initial` is an alias of `o1`. An unknown template key fails the step with a plain message instead of sending something else.
 
 - 2026-10-06 (R-131): `services/sequence-primary.js` — one Primary per kind per person; only an active sequence of the right kind is offered.
+
+## 2026-10-07 (Session 40, round 5)
+- `routes/jobs.js` `POST /jobs/bulk` takes `for_me` (honoured only for bd/bd_lead): the imported leads are `Assigned`, owned by the importer, spread over THEIR connected mailboxes (services/lead-distribution.js, `ignoreRoom`); everyone else's import still lands in the pool as `Unassigned`. Response adds `owned` and `job_ids`. The opened job row (25-workflow-bd.js) shows interviews this week / best matches / quick actions (round 4).
