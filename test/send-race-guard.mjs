@@ -40,8 +40,10 @@ step('Deferred follow-up releases the claim back to pending',
 // 3. queue-all respects the concurrency lock.
 const qaStart = SRC.indexOf("app.post('/emails/queue-all'");
 const qaBlock = SRC.slice(qaStart, qaStart + 4200);
-step('queue-all skips when a send is already running for the user', /if\s*\(activeSendByUser\.has\(userId\)\)[\s\S]{0,120}return;/.test(qaBlock));
-step('queue-all acquires the lock', /activeSendByUser\.add\(userId\)/.test(qaBlock));
+// The check and the registration are ONE step (services/send-progress.js tryStartRun, tested by
+// send-progress-smoke), and a refused second click is answered truthfully ("already running"), then returns.
+step('queue-all skips when a send is already running for the user', /if\s*\(!tryStartRun\(activeSendByUser,\s*userId\)\)[\s\S]{0,260}already_running:\s*true[\s\S]{0,40}\}/.test(qaBlock));
+step('queue-all acquires the lock', /tryStartRun\(activeSendByUser,\s*userId\)/.test(qaBlock));
 step('queue-all releases the lock in finally', /finally\s*\{\s*activeSendByUser\.delete\(userId\)/.test(qaBlock));
 
 const fails = results.filter(r => !r.ok).length;
