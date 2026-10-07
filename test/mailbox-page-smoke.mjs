@@ -232,10 +232,10 @@ try {
   // ── reply composer ─────────────────────────────────────────────────────────
   await page.evaluate(() => window.mbReply(false));
   await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
-  step('Reply opens an inline composer, not a modal',
-    await page.evaluate(() => !!document.getElementById('mb-comp-body') && !document.querySelector('.overlay')));
+  step('Reply opens as a WINDOW (on the dock: minimise / full screen / close) — not a box in the pane that the next click wipes',
+    await page.evaluate(() => !!document.querySelector('#layer [data-win="mailReply"]') && !!document.querySelector('#layer .win-bar') && !(document.getElementById('mb-comp') || { innerHTML: '' }).innerHTML.trim()));
   step('It says the original will be quoted',
-    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('quoted underneath'));
+    (await page.evaluate(() => document.getElementById('layer').innerHTML)).includes('quoted underneath'));
 
   // The reported gap: no visible, editable subject on a reply.
   const replyFields = await page.evaluate(() => ({
@@ -251,7 +251,7 @@ try {
   const sigDefault = await page.evaluate(() => STATE.mailbox.composer.sig);
   step('Signature is OFF by default on a reply', sigDefault === false, String(sigDefault));
   step('A signature picker is offered',
-    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('No signature'));
+    (await page.evaluate(() => document.getElementById('layer').innerHTML)).includes('No signature'));
 
   if (SHOTS) {
     await page.evaluate(() => {
@@ -267,7 +267,7 @@ try {
   await page.waitForFunction(() => STATE.mailbox.sigHtml !== null, { timeout: 5000 });
   const sigPreview = await page.evaluate(() => ({
     fetched: window.__calls.some(c => /\/signature$/.test(c[1] || '')),
-    html: document.getElementById('content').innerHTML,
+    html: document.getElementById('layer').innerHTML,
   }));
   step('Choosing "My signature" fetches it from the server', sigPreview.fetched);
   step('The preview shows the FILLED signature, not the raw template',
@@ -313,7 +313,7 @@ try {
   const fw = await page.evaluate(() => ({
     to: document.getElementById('mb-comp-to').value,
     subject: document.getElementById('mb-comp-subject').value,
-    html: document.getElementById('content').innerHTML,
+    html: document.getElementById('layer').innerHTML,
   }));
   step('Forward starts with an empty To', fw.to === '', fw.to);
   step('Forward prefills the subject with Fwd:', /^Fwd: /.test(fw.subject), fw.subject);
@@ -342,7 +342,7 @@ try {
   await page.evaluate(() => { window.__calls = []; window.mbReply(false); });
   await page.waitForSelector('#mb-comp-body', { timeout: 5000 });
   step('An "Attach files" button is offered on a reply',
-    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('Attach files'));
+    (await page.evaluate(() => document.getElementById('layer').innerHTML)).includes('Attach files'));
   step('There is a real file input behind it',
     await page.evaluate(() => !!document.getElementById('mb-comp-files')));
 
@@ -352,7 +352,7 @@ try {
   });
   await page.waitForFunction(() => (STATE.mailbox.composer.files || []).length === 1, { timeout: 5000 });
   step('A chosen file appears as a chip',
-    (await page.evaluate(() => document.getElementById('content').innerHTML)).includes('rahul-menon-cv.pdf'));
+    (await page.evaluate(() => document.getElementById('layer').innerHTML)).includes('rahul-menon-cv.pdf'));
 
   await page.evaluate(() => {
     document.getElementById('mb-comp-body').value = 'CV attached.';

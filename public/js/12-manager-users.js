@@ -707,9 +707,8 @@ function htmlSignatureToPlainText(sigHtml,senderName,senderEmail){
 }
 var SIG_PRESETS={professional:'<div class="fs-13" style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.45"><p style="margin:0 0 3px"><strong>{{sender}}</strong></p><p style="margin:0 0 3px;color:#333">Recruitment Manager | <strong>Fute Global LLC</strong></p><p style="margin:0 0 3px;color:#333"><a href="mailto:{{senderemail}}" style="color:#1E7A3C;text-decoration:none">{{senderemail}}</a> | +1 (972)-452-6644 | <a href="https://www.futeglobal.com/" style="color:#1E7A3C;text-decoration:none">www.futeglobal.com</a></p><p class="fs-12" style="margin:0 0 3px;color:#555">8111 Lyndon B. Johnson Freeway, Suite 1340, Dallas, TX 75251</p><p class="fs-12" style="margin:0 0 12px;color:#555;font-style:italic">Making Recruitment Easier with Future Tech</p><img src="data:image/png;base64,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" alt="Fute Global" style="height:40px;display:block"></div>',minimal:'<div class="fs-13" style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.45"><p style="margin:0 0 3px"><strong>{{sender}}</strong></p><p style="margin:0 0 3px;color:#333">Recruitment Manager | <strong>Fute Global LLC</strong></p><p style="margin:0"><a href="mailto:{{senderemail}}" style="color:#1E7A3C;text-decoration:none">{{senderemail}}</a> | +1 (972)-452-6644 | <a href="https://www.futeglobal.com/" style="color:#1E7A3C;text-decoration:none">www.futeglobal.com</a></p><p class="fs-12" style="margin:3px 0 0;color:#555">8111 Lyndon B. Johnson Freeway, Suite 1340, Dallas, TX 75251</p></div>',withLogo:'<div class="fs-13" style="font-family:Arial,Helvetica,sans-serif;color:#222;line-height:1.45"><p style="margin:0 0 3px"><strong>{{sender}}</strong></p><p style="margin:0 0 3px;color:#333">Recruitment Manager | <strong>Fute Global LLC</strong></p><p style="margin:0 0 3px;color:#333"><a href="mailto:{{senderemail}}" style="color:#1E7A3C;text-decoration:none">{{senderemail}}</a> | +1 (972)-452-6644 | <a href="https://www.futeglobal.com/" style="color:#1E7A3C;text-decoration:none">www.futeglobal.com</a></p><p class="fs-12" style="margin:0 0 3px;color:#555">8111 Lyndon B. Johnson Freeway, Suite 1340, Dallas, TX 75251</p><p class="fs-12" style="margin:0 0 12px;color:#555;font-style:italic">Making Recruitment Easier with Future Tech</p><img src="data:image/png;base64,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" alt="Fute Global" style="height:40px;display:block"></div>'};
 window.applySigPreset=function(pk){
-  var html=SIG_PRESETS[pk]||'';
-  var el=document.getElementById('sig-html-input');
-  if(el){el.value=html;updateSigPreview(html);}
+  STATE.sigEditInit=SIG_PRESETS[pk]||'';
+  STATE.sigEditing=true; render();
 };
 function getSigPreviewIdentity(){
   var uid=STATE.user&&STATE.user.id;
@@ -720,13 +719,69 @@ function getSigPreviewIdentity(){
     email:(sigEmail&&sigEmail.email_address)||'you@fute-global.com'
   };
 }
-function updateSigPreview(html){
-  var prev=document.getElementById('sig-live-preview');
-  if(!prev)return;
-  var id=getSigPreviewIdentity();
-  var filled=html.replace(/{{sender}}/g,id.name).replace(/{{senderemail}}/g,id.email);
-  prev.innerHTML=filled||'<em class="fs-12" style="color:#94A3B8">Preview will appear here</em>';
+// ── THE SIGNATURE EDITOR IS VISUAL (7 Oct, owner: "some random codes are shown which makes no sense to anyone") ──
+// What is stored is still the same HTML template (with {{sender}} / {{senderemail}}) — the server, the send
+// path and every preview are untouched. What the person sees and edits is the signature itself: the name and the
+// email show as their real values inside a small purple chip (not editable, so they cannot be broken), and a
+// toolbar does bold / italic / underline / link. sigToEditor() turns the template into that; sigFromEditor()
+// turns it back and strips anything that could run code.
+function sigPhChip(kind,id){
+  var v=kind==='sender'?id.name:id.email;
+  return '<span class="sig-ph" data-ph="'+kind+'" contenteditable="false" title="Filled in automatically — each mailbox shows its own '+(kind==='sender'?'name':'email address')+'">'+htmlEsc(v)+'</span>';
 }
+window.sigToEditor=function(html){
+  var id=getSigPreviewIdentity();
+  // Only a placeholder in the TEXT becomes a chip. One inside a tag (href="mailto:{{senderemail}}") stays as it is,
+  // or the link's address would be corrupted.
+  // The trailing empty line is somewhere to put the caret after a closing name/link chip (a chip cannot be typed beside
+  // at the very end). It is dropped on save if nothing was typed in it.
+  return String(html||'').replace(/(<[^>]*>)|{{(sender|senderemail)}}/g,function(all,tag,ph){ return tag?tag:sigPhChip(ph,id); })+'<div class="sig-pad" style="margin:0"><br></div>';
+};
+window.sigFromEditor=function(){
+  var el=document.getElementById('sig-editor'); if(!el)return null;
+  var doc=new DOMParser().parseFromString('<div id="r">'+el.innerHTML+'</div>','text/html');
+  var root=doc.getElementById('r');
+  Array.prototype.forEach.call(root.querySelectorAll('span[data-ph]'),function(sp){
+    sp.parentNode.replaceChild(doc.createTextNode('{{'+sp.getAttribute('data-ph')+'}}'),sp);
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('.sig-pad'),function(n){ if((n.textContent||'').trim()||n.querySelector('img'))n.removeAttribute('class'); else n.remove(); });
+  Array.prototype.forEach.call(root.querySelectorAll('script,style,iframe,object,embed,link,meta,form'),function(n){n.remove();});
+  Array.prototype.forEach.call(root.querySelectorAll('*'),function(n){
+    Array.prototype.slice.call(n.attributes).forEach(function(a){
+      var nm=a.name.toLowerCase(), v=String(a.value||'');
+      if(/^on/.test(nm)||((nm==='href'||nm==='src')&&/^\s*(javascript|data):/i.test(v)&&!/^\s*data:image\//i.test(v)))n.removeAttribute(a.name);
+    });
+  });
+  var out=root.innerHTML.trim();
+  return (root.textContent||'').trim()||root.querySelector('img')?out:'';
+};
+window.sigEditToggle=function(){
+  if(STATE.sigEditing){ STATE.sigEditing=false; render(); return; }
+  var cache=STATE.emailSignaturesCache||{}, cur=cache[STATE.sigEmailId];
+  STATE.sigEditInit=(cur&&String(cur).trim())?cur:((SIG_PRESETS&&SIG_PRESETS.professional)||'');
+  STATE.sigEditing=true; render();
+};
+window.sigCmd=function(cmd){
+  var el=document.getElementById('sig-editor'); if(!el)return;
+  el.focus(); try{ document.execCommand(cmd,false,null); }catch(e){}
+};
+window.sigLink=function(){
+  var el=document.getElementById('sig-editor'); if(!el)return;
+  var sel=window.getSelection&&window.getSelection();
+  if(!sel||sel.isCollapsed||!el.contains(sel.anchorNode)){ showToast('Select the words you want to turn into a link first','info'); return; }
+  var url=window.prompt('Where should the link go? (for example https://www.yourcompany.com)','https://');
+  if(!url)return; url=url.trim();
+  if(!/^(https?:\/\/|mailto:)/i.test(url)){
+    if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(url))url='mailto:'+url; else url='https://'+url.replace(/^\/+/,'');
+  }
+  el.focus(); try{ document.execCommand('createLink',false,url); }catch(e){}
+};
+window.sigInsert=function(kind){
+  var el=document.getElementById('sig-editor'); if(!el)return;
+  el.focus();
+  var chip=sigPhChip(kind,getSigPreviewIdentity());
+  try{ document.execCommand('insertHTML',false,chip+'&nbsp;'); }catch(e){ el.insertAdjacentHTML('beforeend',chip); }
+};
 window.loadMailboxSignature=function(userId,emailId){
   if(!userId||!emailId)return;
   apiGet('/users/'+userId+'/emails/'+emailId+'/signature').then(function(d){
@@ -742,18 +797,14 @@ window.loadMailboxSignature=function(userId,emailId){
 };
 window.selectSigEmail=function(emailId){
   if(!emailId||!STATE.user)return;
-  STATE.sigEmailId=emailId;
+  STATE.sigEmailId=emailId; STATE.sigEditing=false;
   STATE.planFromEmailId=emailId;
   if(STATE.emailSignaturesCache&&STATE.emailSignaturesCache[emailId]!==undefined){render();return;}
   loadMailboxSignature(STATE.user.id,emailId);
 };
-// Wire live preview on input (called via oninput on the textarea via a delegated approach)
-document.addEventListener('input',function(e){
-  if(e.target&&e.target.id==='sig-html-input'){updateSigPreview(e.target.value);}
-});
 window.saveSig=function(){
-  var el=document.getElementById('sig-html-input');
-  var html=(el&&el.value)||'';
+  var html=sigFromEditor();
+  if(html===null){showToast('Open the editor first','warning');return;}
   var emailId=STATE.sigEmailId;
   if(!emailId||!STATE.user){showToast('Select a sending email first','warning');return;}
   STATE.emailSignaturesCache=STATE.emailSignaturesCache||{};

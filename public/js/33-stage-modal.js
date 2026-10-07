@@ -104,12 +104,134 @@
       .sort(function(a, b){ return a.off - b.off || (a.id < b.id ? -1 : 1); });
     return IV_ZONES;
   }
+  // ── THE TIME ZONE IS CHOSEN BY CITY (7 Oct, owner: "it shows time zones which makes sense of systems but not human users,
+  // they just know the city name in which the interview is happening … the user types the city name and the time zone is
+  // suggested and they click and select it") ──────────────────────────────────────────────────────────────────────────
+  // The scheduler types a city, a state or a zone's everyday name ("Dallas", "Texas", "Eastern", "IST"); matching places are
+  // listed, each with the zone it is in and its offset NOW, and one click picks it. The IANA id the server needs lives in a
+  // hidden input (#stg-iv-tz — same id as the old <select>, so every reader of it is unchanged). Every zone the browser knows
+  // is still reachable (by its city name) — "all time zones, worldwide" (R-095) is not narrowed.
+  var IV_PLACES = [
+    // [label, zone, extra words people type]
+    // US — Eastern
+    'New York, NY|America/New_York|nyc manhattan brooklyn','Boston, MA|America/New_York|massachusetts','Philadelphia, PA|America/New_York|philly','Pittsburgh, PA|America/New_York','Washington, DC|America/New_York|dc district of columbia','Baltimore, MD|America/New_York','Atlanta, GA|America/New_York|georgia','Miami, FL|America/New_York|florida','Orlando, FL|America/New_York|florida','Tampa, FL|America/New_York|florida','Jacksonville, FL|America/New_York|florida','Boca Raton, FL|America/New_York|florida','Fort Lauderdale, FL|America/New_York|florida','Charlotte, NC|America/New_York|north carolina','Raleigh, NC|America/New_York|north carolina','Richmond, VA|America/New_York|virginia','Virginia Beach, VA|America/New_York|virginia','Detroit, MI|America/Detroit|michigan','Columbus, OH|America/New_York|ohio','Cleveland, OH|America/New_York|ohio','Cincinnati, OH|America/New_York|ohio','Indianapolis, IN|America/Indiana/Indianapolis|indiana','Buffalo, NY|America/New_York','Newark, NJ|America/New_York|new jersey','Jersey City, NJ|America/New_York|new jersey','Hartford, CT|America/New_York|connecticut','Providence, RI|America/New_York|rhode island','Charleston, SC|America/New_York|south carolina','Louisville, KY|America/Kentucky/Louisville|kentucky','Savannah, GA|America/New_York|georgia',
+    // US — Central
+    'Dallas, TX|America/Chicago|texas dfw','Houston, TX|America/Chicago|texas','Austin, TX|America/Chicago|texas','San Antonio, TX|America/Chicago|texas','Fort Worth, TX|America/Chicago|texas','Chicago, IL|America/Chicago|illinois','Minneapolis, MN|America/Chicago|minnesota','St. Louis, MO|America/Chicago|saint louis missouri','Kansas City, MO|America/Chicago|missouri','Milwaukee, WI|America/Chicago|wisconsin','Madison, WI|America/Chicago|wisconsin','Nashville, TN|America/Chicago|tennessee','Memphis, TN|America/Chicago|tennessee','New Orleans, LA|America/Chicago|louisiana','Oklahoma City, OK|America/Chicago|oklahoma','Omaha, NE|America/Chicago|nebraska','Des Moines, IA|America/Chicago|iowa','Birmingham, AL|America/Chicago|alabama','Little Rock, AR|America/Chicago|arkansas',
+    // US — Mountain, Pacific, Alaska, Hawaii
+    'Denver, CO|America/Denver|colorado','Colorado Springs, CO|America/Denver|colorado','Albuquerque, NM|America/Denver|new mexico','Salt Lake City, UT|America/Denver|utah','Boise, ID|America/Boise|idaho','El Paso, TX|America/Denver|texas','Billings, MT|America/Denver|montana','Phoenix, AZ|America/Phoenix|arizona no daylight saving','Tucson, AZ|America/Phoenix|arizona no daylight saving',
+    'Los Angeles, CA|America/Los_Angeles|la california','San Francisco, CA|America/Los_Angeles|sf bay area california','San Diego, CA|America/Los_Angeles|california','San Jose, CA|America/Los_Angeles|california silicon valley','Sacramento, CA|America/Los_Angeles|california','Modesto, CA|America/Los_Angeles|california','Fresno, CA|America/Los_Angeles|california','Oakland, CA|America/Los_Angeles|california','Irvine, CA|America/Los_Angeles|california','Seattle, WA|America/Los_Angeles|washington','Portland, OR|America/Los_Angeles|oregon','Las Vegas, NV|America/Los_Angeles|nevada',
+    'Anchorage, AK|America/Anchorage|alaska','Honolulu, HI|Pacific/Honolulu|hawaii',
+    // US states — the zone most of the state is in
+    'Alabama|America/Chicago|state','Arizona|America/Phoenix|state','Arkansas|America/Chicago|state','California|America/Los_Angeles|state','Colorado|America/Denver|state','Connecticut|America/New_York|state','Delaware|America/New_York|state','Florida|America/New_York|state','Georgia (US state)|America/New_York|state','Idaho|America/Boise|state','Illinois|America/Chicago|state','Indiana|America/Indiana/Indianapolis|state','Iowa|America/Chicago|state','Kansas|America/Chicago|state','Kentucky|America/New_York|state','Louisiana|America/Chicago|state','Maine|America/New_York|state','Maryland|America/New_York|state','Massachusetts|America/New_York|state','Michigan|America/Detroit|state','Minnesota|America/Chicago|state','Mississippi|America/Chicago|state','Missouri|America/Chicago|state','Montana|America/Denver|state','Nebraska|America/Chicago|state','Nevada|America/Los_Angeles|state','New Hampshire|America/New_York|state','New Jersey|America/New_York|state','New Mexico|America/Denver|state','New York (state)|America/New_York|state','North Carolina|America/New_York|state','North Dakota|America/Chicago|state','Ohio|America/New_York|state','Oklahoma|America/Chicago|state','Oregon|America/Los_Angeles|state','Pennsylvania|America/New_York|state','Rhode Island|America/New_York|state','South Carolina|America/New_York|state','South Dakota|America/Chicago|state','Tennessee|America/Chicago|state','Texas|America/Chicago|state','Utah|America/Denver|state','Vermont|America/New_York|state','Virginia|America/New_York|state','Washington (state)|America/Los_Angeles|state','West Virginia|America/New_York|state','Wisconsin|America/Chicago|state','Wyoming|America/Denver|state',
+    // Canada
+    'Toronto, Canada|America/Toronto|ontario','Ottawa, Canada|America/Toronto|ontario','Montreal, Canada|America/Toronto|quebec','Vancouver, Canada|America/Vancouver|british columbia','Calgary, Canada|America/Edmonton|alberta','Edmonton, Canada|America/Edmonton|alberta','Winnipeg, Canada|America/Winnipeg|manitoba','Halifax, Canada|America/Halifax|nova scotia',
+    // India
+    'Hyderabad, India|Asia/Kolkata|telangana','Bengaluru, India|Asia/Kolkata|bangalore karnataka','Chennai, India|Asia/Kolkata|madras tamil nadu','Mumbai, India|Asia/Kolkata|bombay maharashtra','Delhi, India|Asia/Kolkata|new delhi ncr','Pune, India|Asia/Kolkata|maharashtra','Kolkata, India|Asia/Kolkata|calcutta west bengal','Ahmedabad, India|Asia/Kolkata|gujarat','Kochi, India|Asia/Kolkata|cochin kerala','Thiruvananthapuram, India|Asia/Kolkata|trivandrum kerala','Jaipur, India|Asia/Kolkata|rajasthan','Noida, India|Asia/Kolkata|ncr','Gurugram, India|Asia/Kolkata|gurgaon ncr','Chandigarh, India|Asia/Kolkata','Coimbatore, India|Asia/Kolkata|tamil nadu','Indore, India|Asia/Kolkata|madhya pradesh','Lucknow, India|Asia/Kolkata|uttar pradesh','India|Asia/Kolkata|country',
+    // The rest of the world's usual hubs
+    'London, UK|Europe/London|england britain united kingdom','Dublin, Ireland|Europe/Dublin','Paris, France|Europe/Paris','Berlin, Germany|Europe/Berlin','Frankfurt, Germany|Europe/Berlin','Munich, Germany|Europe/Berlin','Amsterdam, Netherlands|Europe/Amsterdam','Madrid, Spain|Europe/Madrid','Barcelona, Spain|Europe/Madrid','Rome, Italy|Europe/Rome','Zurich, Switzerland|Europe/Zurich','Stockholm, Sweden|Europe/Stockholm','Warsaw, Poland|Europe/Warsaw','Istanbul, Turkey|Europe/Istanbul','Moscow, Russia|Europe/Moscow','Dubai, UAE|Asia/Dubai|united arab emirates','Abu Dhabi, UAE|Asia/Dubai','Riyadh, Saudi Arabia|Asia/Riyadh','Doha, Qatar|Asia/Qatar','Tel Aviv, Israel|Asia/Jerusalem','Cairo, Egypt|Africa/Cairo','Lagos, Nigeria|Africa/Lagos','Nairobi, Kenya|Africa/Nairobi','Johannesburg, South Africa|Africa/Johannesburg','Karachi, Pakistan|Asia/Karachi','Dhaka, Bangladesh|Asia/Dhaka','Colombo, Sri Lanka|Asia/Colombo','Kathmandu, Nepal|Asia/Kathmandu','Singapore|Asia/Singapore','Kuala Lumpur, Malaysia|Asia/Kuala_Lumpur','Bangkok, Thailand|Asia/Bangkok','Jakarta, Indonesia|Asia/Jakarta','Manila, Philippines|Asia/Manila','Hong Kong|Asia/Hong_Kong','Shanghai, China|Asia/Shanghai|beijing','Beijing, China|Asia/Shanghai','Tokyo, Japan|Asia/Tokyo','Seoul, South Korea|Asia/Seoul','Sydney, Australia|Australia/Sydney','Melbourne, Australia|Australia/Melbourne','Brisbane, Australia|Australia/Brisbane','Perth, Australia|Australia/Perth','Auckland, New Zealand|Pacific/Auckland','Mexico City, Mexico|America/Mexico_City','São Paulo, Brazil|America/Sao_Paulo|sao paulo','Buenos Aires, Argentina|America/Argentina/Buenos_Aires','Bogotá, Colombia|America/Bogota|bogota',
+    // Everyday zone names
+    'Eastern Time (ET · EST · EDT)|America/New_York|eastern est edt','Central Time (CT · CST · CDT)|America/Chicago|central cst cdt','Mountain Time (MT · MST · MDT)|America/Denver|mountain mst mdt','Pacific Time (PT · PST · PDT)|America/Los_Angeles|pacific pst pdt','India Standard Time (IST)|Asia/Kolkata|ist india','UK time (GMT · BST)|Europe/London|gmt bst uk','Central European Time (CET)|Europe/Paris|cet','Gulf Standard Time (GST)|Asia/Dubai|gst','UTC (Coordinated Universal Time)|UTC|utc gmt zulu'
+  ].map(function(r){ var p = r.split('|'); return { label: p[0], zone: p[1], keys: (p[2] || '') }; });
+
+  function ivNorm(t){ return String(t == null ? '' : t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  var IV_INDEX = null;
+  function ivIndex(){
+    if (IV_INDEX) return IV_INDEX;
+    var seen = {}, out = [];
+    IV_PLACES.forEach(function(p){ out.push({ label: p.label, zone: p.zone, hay: ivNorm(p.label + ' ' + p.keys + ' ' + p.zone.replace(/_/g, ' ')), lab: ivNorm(p.label), state: /(^| )state( |$)/.test(p.keys) }); seen[p.zone] = 1; });
+    // Every other zone the browser knows, by its city name (America/Argentina/Buenos_Aires → "Buenos Aires").
+    ivZoneList().forEach(function(z){
+      if (seen[z.id]) return;      // a zone the list above already names ("Chicago, IL") needs no second "Chicago (America)"
+      var parts = z.id.split('/'), city = parts[parts.length - 1].replace(/_/g, ' ');
+      var label = parts.length > 1 ? city + ' (' + parts[0].replace(/_/g, ' ') + ')' : city;
+      out.push({ label: label, zone: z.id, hay: ivNorm(label + ' ' + z.id.replace(/\//g, ' ').replace(/_/g, ' ')), lab: ivNorm(city), generic: true });
+    });
+    IV_INDEX = out; return out;
+  }
+  function ivZoneName(zone, atMs){
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'long' }).formatToParts(new Date(atMs || Date.now()));
+      for (var i = 0; i < parts.length; i++) if (parts[i].type === 'timeZoneName') return parts[i].value;
+    } catch (e) {}
+    return zone;
+  }
+  // The rule, callable: places matching what was typed, best first, each with its zone's everyday name and offset NOW.
+  window.ivTzSearch = function(q, limit){
+    var n = ivNorm(q); if (!n) return [];
+    var toks = n.split(' '), now = Date.now() - (Date.now() % 1000), res = [];
+    ivIndex().forEach(function(e){
+      var ok = toks.every(function(t){ return e.hay.indexOf(t) >= 0; }); if (!ok) return;
+      var rank = e.lab === n ? 0 : e.lab.indexOf(n) === 0 ? 1 : (' ' + e.hay).indexOf(' ' + n) >= 0 ? 2 : toks.every(function(t){ return (' ' + e.hay).indexOf(' ' + t) >= 0; }) ? 3 : 4;
+      res.push({ e: e, rank: rank + (e.generic ? 0.5 : 0) + (e.state ? 0.25 : 0) });   // a city before a state of the same name
+    });
+    res.sort(function(a, b){ return a.rank - b.rank || (a.e.label < b.e.label ? -1 : 1); });
+    var seen = {}, out = [];
+    for (var i = 0; i < res.length && out.length < (limit || 8); i++) {
+      var e = res[i].e, key = e.label + '|' + e.zone; if (seen[key]) continue; seen[key] = 1;
+      var off = 0; try { off = ivOffsetMin(e.zone, now); } catch (x) {}
+      out.push({ label: e.label, zone: e.zone, name: ivZoneName(e.zone, now), offset: ivOffsetLabel(off) });
+    }
+    return out;
+  };
+  function ivNote(zone){
+    var off = 0; try { off = ivOffsetMin(zone, Date.now() - (Date.now() % 1000)); } catch (e) {}
+    return 'The interview time is read in ' + ivZoneName(zone) + ' (' + ivOffsetLabel(off) + ' right now).';
+  }
   function ivZoneSelect(){
     var mine = ivMyZone();
-    return '<select id="stg-iv-tz" class="sel">' + ivZoneList().map(function(z){
-      return '<option value="' + esc(z.id) + '"' + (z.id === mine ? ' selected' : '') + '>(' + ivOffsetLabel(z.off) + ') ' + esc(z.id.replace(/_/g, ' ')) + '</option>';
-    }).join('') + '</select>';
+    return '<div class="tzp" id="stg-tzp">' +
+      '<input type="hidden" id="stg-iv-tz" value="' + esc(mine) + '">' +
+      '<input type="text" id="stg-iv-tzq" class="sel" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="stg-tz-list" aria-label="Time zone — type a city" ' +
+        'placeholder="Type a city — Dallas, Boston, Bengaluru…" value="' + esc(ivZoneName(mine)) + '" data-label="' + esc(ivZoneName(mine)) + '" ' +
+        'oninput="stgTzType(this)" onfocus="this.select();stgTzType(this)" onkeydown="stgTzKey(event,this)" onblur="stgTzBlur(this)">' +
+      '<div class="tzp-list" id="stg-tz-list" role="listbox" hidden></div>' +
+      '<div class="fs-11 c-text3 tzp-note" id="stg-tz-note">' + esc(ivNote(mine)) + ' Your time zone.</div>' +
+    '</div>';
   }
+  var tzAct = -1, tzShown = [];
+  function tzList(){ return document.getElementById('stg-tz-list'); }
+  function tzDraw(items){
+    var l = tzList(), q = document.getElementById('stg-iv-tzq'); if (!l || !q) return;
+    tzShown = items; tzAct = items.length ? 0 : -1;
+    l.innerHTML = items.length ? items.map(function(it, i){
+      return '<div class="tzp-opt' + (i === 0 ? ' on' : '') + '" role="option" data-i="' + i + '" onmousedown="stgTzPick(' + i + ',event)">' +
+        '<b>' + esc(it.label) + '</b><span>' + esc(it.name) + ' · ' + esc(it.offset) + '</span></div>';
+    }).join('') : '<div class="tzp-none">No place matches that — try the nearest big city, or a zone name like “Central”.</div>';
+    l.hidden = false; q.setAttribute('aria-expanded', 'true');
+  }
+  function tzClose(){ var l = tzList(), q = document.getElementById('stg-iv-tzq'); if (l) l.hidden = true; if (q) q.setAttribute('aria-expanded', 'false'); tzShown = []; tzAct = -1; }
+  window.stgTzType = function(inp){
+    var v = inp.value; if (!String(v).trim()) { tzClose(); return; }
+    // The box still holds the chosen label right after focus-select: show nothing new until the person types.
+    if (v === inp.getAttribute('data-label') && document.activeElement === inp && !inp._typed) { tzClose(); return; }
+    tzDraw(window.ivTzSearch(v));
+  };
+  window.stgTzPick = function(i, ev){
+    if (ev && ev.preventDefault) ev.preventDefault();       // keep focus: blur must not fire before the choice lands
+    var it = tzShown[i]; if (!it) return;
+    var q = document.getElementById('stg-iv-tzq'), h = document.getElementById('stg-iv-tz'), n = document.getElementById('stg-tz-note');
+    if (h) h.value = it.zone; if (q) { q.value = it.label; q.setAttribute('data-label', it.label); q._typed = false; }
+    if (n) n.textContent = ivNote(it.zone);
+    tzClose();
+  };
+  window.stgTzKey = function(ev, inp){
+    inp._typed = true;
+    var l = tzList(); if (!l) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      if (l.hidden) { tzDraw(window.ivTzSearch(inp.value)); ev.preventDefault(); return; }
+      if (!tzShown.length) return; ev.preventDefault();
+      tzAct = (tzAct + (ev.key === 'ArrowDown' ? 1 : -1) + tzShown.length) % tzShown.length;
+      Array.prototype.forEach.call(l.querySelectorAll('.tzp-opt'), function(el, i){ el.classList.toggle('on', i === tzAct); if (i === tzAct && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); });
+    } else if (ev.key === 'Enter') {
+      if (!l.hidden && tzShown.length) { ev.preventDefault(); stgTzPick(tzAct < 0 ? 0 : tzAct); }
+    } else if (ev.key === 'Escape') {
+      if (!l.hidden) { ev.stopPropagation(); tzClose(); }
+    }
+  };
+  // Leaving the box with words that were never chosen puts the chosen place back — the zone never silently changes.
+  window.stgTzBlur = function(inp){
+    setTimeout(function(){ var q = document.getElementById('stg-iv-tzq'); if (!q) return; q.value = q.getAttribute('data-label') || ''; q._typed = false; tzClose(); }, 120);
+  };
 
   function toLocalInput(iso){ if(!iso) return ''; var d=new Date(iso); if(isNaN(d.getTime())) return ''; var p=function(n){return String(n).padStart(2,'0');}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
 

@@ -161,8 +161,8 @@ try {
   step('one font family throughout the modal', phone.families === 1, phone.families + ' families');
 
   // Desktop must be untouched by any of this.
-  step('desktop input size is unchanged (13.5px)', desk.input === 13.5, desk.input);
-  step('desktop label size is unchanged (11.5px)', desk.label === 11.5, desk.label);
+  step('desktop input size is on the type scale (13px — was 13.5px before the 7 Oct scale)', desk.input === 13, desk.input);
+  step('desktop label size is on the type scale (12px — was 11.5px before the 7 Oct scale)', desk.label === 12, desk.label);
   step('desktop heading size is unchanged (16px)', desk.heading === 16, desk.heading);
 } catch (e) {
   step('harness completed', false, e && e.message);

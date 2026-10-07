@@ -36,13 +36,64 @@
     goPage('leads');
   };
 
-  // Click a conversation of yours = the emails it is worked out from (65-trace.js).
+  // Click a conversation of yours = the emails it is worked out from (65-trace.js) AND the step to take
+  // (7 Oct, owner: "the email task or the call task or the stage change task is not mentioned … the user can
+  // see information but cant do anything about it"). The step is the one the digest already names
+  // (it.next_step); the buttons do it, using the person who wrote last (found when the emails load).
+  var EMAIL_STEPS={follow_up:1,check_promise:1,loop_in_other:1,ask_for_jd:1,send_profiles:1,discuss_terms:1,send_quote:1,follow_quote:1,send_contract:1,send_proposal:1,loop_in_finance:1};
+  var CALL_STEPS={book_call:1,book_intake:1,book_site_visit:1,book_demo:1,start_trial:1};
+  function firstName(n){ return String(n||'').trim().split(/\s+/)[0]||'them'; }
+  function taskFor(it, meta){
+    var step=it.next_step||(it.state==='needs_reply'?{id:'reply',label:'Reply to their last email',why:'They wrote last and are waiting on you.'}:null);
+    var who=function(){ return (meta.lastInbound&&meta.lastInbound.name)||''; };
+    var openLead=function(){ clientDigestOpen(it.name); };
+    var replyInMailbox=function(){
+      var em=meta.lastInbound&&meta.lastInbound.email;
+      if(!em){ openLead(); return; }
+      STATE.mailbox=STATE.mailbox||{}; STATE.mailbox.q=em; goPage('mailbox');
+    };
+    var writeTo=function(){
+      var li=meta.lastInbound;
+      if(!li||!li.email||!window.outreachComposeTo){ openLead(); return; }
+      outreachComposeTo({id:null,name:li.name||it.name,email:li.email,company:it.name,job_id:it.id,outreach_type:'followup'});
+    };
+    var b=[], text;
+    if(!step){
+      text='Nothing is owed right now. If you want to keep the conversation moving, open the lead.';
+      b.push({label:'Open the lead',primary:true,fn:openLead});
+    }else{
+      text=step.label+(step.why?' — '+String(step.why).replace(/[.\s]+$/,''):'')+'.';
+      if(step.id==='reply') b.push({label:'Reply in the mailbox',primary:true,fn:replyInMailbox});
+      else if(EMAIL_STEPS[step.id]) b.push({label:'Write the email',primary:true,fn:writeTo});
+      else if(CALL_STEPS[step.id]) b.push({label:'Open the lead to call them',primary:true,fn:openLead});
+      else if(step.id==='convert_to_job') b.push({label:'Open the lead to add the job',primary:true,fn:openLead});
+      else b.push({label:'Open the lead',primary:true,fn:openLead});
+      if(step.id!=='reply'&&it.state==='needs_reply') b.push({label:'Reply in the mailbox',fn:replyInMailbox});
+    }
+    // THE STAGE STEP (owner, 7 Oct): somebody who wrote back is not an "Assigned" lead any more. Offered only when the lead is
+    // loaded here and this person may change stages (the same rule as the Leads list) — never a control that cannot act.
+    var stages=null, lj=window.jobById?jobById(it.id):null;
+    if(lj&&window.changeJobStage&&userHasAnyRole(STATE.user,'admin','bd','bd_lead')){
+      var ALL=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
+      var sug={'Unassigned':'Connected','Assigned':'Connected','Connected':'In Discussion'}[lj.stage]||'';
+      stages={suggest:sug,options:ALL.filter(function(x){return x!==lj.stage;}),fn:function(st){ changeJobStage(it.id,st); }};
+      text+=' The lead is at "'+lj.stage+'".';
+    }
+    if(it.complete) b.push({label:'Mark completed',quiet:true,fn:function(){
+      apiPost('/next-actions/dismiss',{item:it.complete,scope:'drop'}).then(function(){
+        showToast('Marked completed — it comes back only if they write again','success'); loadClientDigest(true);
+      }).catch(function(e){ showToast('Could not mark that completed: '+((e&&e.message)||e),'error'); });
+    }});
+    return {text:text,buttons:b,stages:stages};
+  }
   window.clientDigestTrace=function(idx){
     var it=((STATE.clientDigest||{}).mine||[])[idx]; if(!it||!window.traceOpen) return;
+    var meta={};
     traceOpen({
       title:it.name,
       hint:'Listed because the other side has written in the last 60 days. Right now: '+String(it.headline||'a live conversation').replace(/[.\s]+$/,'')+'.',
-      leadId:it.id, firstChip:it.state==='needs_reply'?'the reply you owe':'latest',
+      leadId:it.id, firstChip:it.state==='needs_reply'?'the reply you owe':'latest', meta:meta,
+      task:taskFor(it,meta),
       open:{label:'Open the lead',fn:function(){ clientDigestOpen(it.name); }}
     });
   };

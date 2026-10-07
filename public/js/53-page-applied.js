@@ -141,14 +141,14 @@
         : (r.dup_candidate_id ? UI.pill('Duplicate', 'warn') : UI.pill('New', 'info'));
 
       var resumeBtn = r.resume_url
-        ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenResume(\'' + esc(r.id) + '\')" style="font-size:11.5px">CV</button>'
+        ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenResume(\'' + esc(r.id) + '\')" style="font-size:12px">CV</button>'
         : '<span class="c-text3 fs-12">No CV</span>';
 
       var actionBtn = imported
         ? (r.imported && r.imported.id
-            ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenCandidate(\'' + esc(r.imported.id) + '\')" style="font-size:11.5px">Open</button>'
+            ? '<button class="btn btn-sm btn-outline" onclick="event.stopPropagation();appliedOpenCandidate(\'' + esc(r.imported.id) + '\')" style="font-size:12px">Open</button>'
             : '<span class="c-text3 fs-12">—</span>')
-        : '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();appliedImport(\'' + esc(r.id) + '\',\'' + esc(aj.id || '') + '\')" style="font-size:11.5px"' +
+        : '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();appliedImport(\'' + esc(r.id) + '\',\'' + esc(aj.id || '') + '\')" style="font-size:12px"' +
           (st().busy[r.id] ? ' disabled' : '') + '>' + (st().busy[r.id] ? 'Adding…' : 'Add to candidates') + '</button>';
 
       var cells = [{ html: who + dupNote }];
@@ -186,7 +186,7 @@
     var toolbar = UI.toolbar({
       right: '<span class="fs-13" style="font-weight:600;margin-right:10px">' +
                (s.loading ? 'Loading…' : (nNew + (nNew === 1 ? ' new application' : ' new applications'))) + '</span>' +
-             '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:11.5px">Refresh</button>'
+             '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:12px">Refresh</button>'
     });
 
     var body = intro + UI.table({
@@ -220,7 +220,7 @@
       '<div class="fs-14" style="font-weight:600">Applicants' +
         (nNew ? ' <span class="fs-11" style="color:var(--green,#166534);font-weight:600">· ' + nNew + ' new</span>' : '') +
       '</div>' +
-      '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:11.5px">Refresh</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="appliedRefresh()" style="font-size:12px">Refresh</button>' +
     '</div>';
 
     var body = s.loading

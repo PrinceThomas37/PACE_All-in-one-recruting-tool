@@ -66,7 +66,7 @@ function renderJobs(){
 
     var stageCell=canChangeStageInline
       ? '<select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" '+
-        'style="font-size:12px;padding:4px 8px;border:1px solid '+stageColor+'55;border-radius:7px;background:'+stageColor+'14;color:'+stageColor+';font-weight:600;cursor:pointer">'+
+        'class="sel sel-sm sel-state" style="--sc:'+stageColor+'">'+
         ['Unassigned','Assigned','Connected','Rejected','Future','In Discussion'].map(function(st){
           return '<option value="'+st+'"'+(j.stage===st?' selected':'')+'>'+st+'</option>';
         }).join('')+'</select>'
@@ -154,10 +154,10 @@ function renderJobs(){
   var dateActive=f.dateRange&&f.dateRange!=='all';
   var anyActive=stageActive||indActive||dateActive;
   function mkChkDrop(name,key,items,selected,active){
-    var btn='<button onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\''+name+'\' ?null:\''+name+'\';render()" style="padding:9px 13px;border:'+(active?'1.5px solid var(--accent)':'1px solid var(--border)')+';border-radius:8px;background:'+(active?'var(--accent-l)':'var(--bg2)')+';color:'+(active?'var(--accent)':'var(--text)')+';font-size:13px;font-weight:'+(active?'600':'400')+';cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap">'+(active?name+' ('+selected.length+')':name)+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>';
+    var btn='<button class="btn btn-sm btn-outline flt-btn'+(active?' is-on':'')+'" onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\''+name+'\' ?null:\''+name+'\';render()">'+(active?name+' ('+selected.length+')':name)+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>';
     var panel='';
     if(STATE.openDrop===name){
-      panel='<div style="position:absolute;top:calc(100% + 4px);left:0;z-index:9000;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);min-width:190px;padding:6px 0" onclick="event.stopPropagation()">'+
+      panel='<div class="flt-panel" style="min-width:190px;padding:6px 0" onclick="event.stopPropagation()">'+
         items.map(function(v){var on=selected.indexOf(v)>-1;return '<label class="fs-13" style="display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+'"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleJobFilter(\''+key+'\',\''+v+'\',this.checked)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer"/>'+v+'</label>';}).join('')+
         (selected.length?'<div style="border-top:1px solid var(--border);padding:6px 14px;margin-top:2px"><button onclick="STATE.jobsFilter.'+key+'=[];STATE.leadsPage=0;render()" class="fs-11_5 c-red" style="background:none;border:none;cursor:pointer;padding:0">Clear</button></div>':'')+
       '</div>';
@@ -166,9 +166,9 @@ function renderJobs(){
   }
   var dateLabel=f.dateRange==='today'?'Today':f.dateRange==='yesterday'?'Yesterday':f.dateRange==='week'?'This week':f.dateRange==='custom'&&(f.dateFrom||f.dateTo)?((f.dateFrom||'…')+' → '+(f.dateTo||'…')):'Date';
   var dateBtn='<div style="position:relative">'+
-    '<button onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\'date\' ?null:\'date\';render()" style="padding:9px 13px;border:'+(dateActive?'1.5px solid var(--accent)':'1px solid var(--border)')+';border-radius:8px;background:'+(dateActive?'var(--accent-l)':'var(--bg2)')+';color:'+(dateActive?'var(--accent)':'var(--text)')+';font-size:13px;font-weight:'+(dateActive?'600':'400')+';cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap">'+dateLabel+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>'+
+    '<button class="btn btn-sm btn-outline flt-btn'+(dateActive?' is-on':'')+'" onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\'date\' ?null:\'date\';render()">'+dateLabel+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>'+
     (STATE.openDrop==='date'?
-      '<div style="position:absolute;top:calc(100% + 4px);left:0;z-index:9000;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);padding:12px 14px;min-width:240px" onclick="event.stopPropagation()">'+
+      '<div class="flt-panel" style="padding:12px 14px;min-width:240px" onclick="event.stopPropagation()">'+
         // Preset chips
         '<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px">'+
           ['today','yesterday','week'].map(function(val){var lbl=val==='today'?'Today':val==='yesterday'?'Yesterday':'This week';var on=f.dateRange===val;return '<button onclick="STATE.jobsFilter.dateRange=STATE.jobsFilter.dateRange===\''+val+'\' ?\'all\':\''+val+'\';STATE.jobsFilter.dateFrom=\'\';STATE.jobsFilter.dateTo=\'\';STATE.leadsPage=0;render()" style="padding:7px 12px;border-radius:7px;font-size:13px;cursor:pointer;text-align:left;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text)')+';font-weight:'+(on?'600':'400')+'">'+lbl+'</button>';}).join('')+
@@ -180,7 +180,7 @@ function renderJobs(){
           '<div style="display:flex;align-items:center;gap:8px"><span class="fs-12 c-text2" style="width:28px">From</span><input type="date" value="'+escAttr(f.dateFrom||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateFrom=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
           '<div style="display:flex;align-items:center;gap:8px"><span class="fs-12 c-text2" style="width:28px">To</span><input type="date" value="'+escAttr(f.dateTo||'')+'" onchange="STATE.jobsFilter.dateRange=\'custom\';STATE.jobsFilter.dateTo=this.value;STATE.leadsPage=0;render()" style="flex:1;padding:6px 10px;border:1px solid var(--border2);border-radius:7px;font-size:13px;background:var(--card);color:var(--text)"/></div>'+
         '</div>'+
-        (dateActive?'<button onclick="STATE.jobsFilter.dateRange=\'all\';STATE.jobsFilter.dateFrom=\'\';STATE.jobsFilter.dateTo=\'\';STATE.leadsPage=0;render()" style="margin-top:10px;font-size:11.5px;color:var(--red);background:none;border:none;cursor:pointer;padding:0">Clear</button>':'')+
+        (dateActive?'<button onclick="STATE.jobsFilter.dateRange=\'all\';STATE.jobsFilter.dateFrom=\'\';STATE.jobsFilter.dateTo=\'\';STATE.leadsPage=0;render()" style="margin-top:10px;font-size:12px;color:var(--red);background:none;border:none;cursor:pointer;padding:0">Clear</button>':'')+
       '</div>':'')  +
   '</div>';
 
@@ -296,7 +296,7 @@ window.leadsCloseConnected=function(){};
 function leadConvertBtn(j,compact){
   var done=window.bdConvertedJobFor?bdConvertedJobFor(j.id):null;
   if(done)return '<span class="fs-11 c-ink3" style="white-space:nowrap" title="Already converted">✓ '+escHtml(done.job_code||'Job')+'</span>';
-  return '<button class="btn btn-sm '+(compact?'btn-outline':'btn-primary')+'" style="white-space:nowrap'+(compact?';padding:3px 9px;font-size:11.5px':'')+'" '+
+  return '<button class="btn btn-sm '+(compact?'btn-outline':'btn-primary')+'" style="white-space:nowrap'+(compact?';padding:3px 9px;font-size:12px':'')+'" '+
     'onclick="event.stopPropagation();bdConvertLead(\''+j.id+'\')">'+(compact?'Convert':'Convert to job')+'</button>';
 }
 
@@ -551,7 +551,7 @@ function renderJobDetailModal(){
     var esLabel=emailStatusLabels[es]||es;
     var emailStatusBadge='<span class="fs-10" style="padding:2px 7px;border-radius:6px;font-weight:600;background:'+esColor+'22;color:'+esColor+'">'+esLabel+'</span>';
     var emailStatusSel=canChangeEmailStatus?
-      '<select onchange="changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml((c.first_name||'')+' '+(c.last_name||''))+'\')" style="font-size:11px;padding:3px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin-top:4px">'+
+      '<select onchange="changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml((c.first_name||'')+' '+(c.last_name||''))+'\')" class="sel sel-sm sel-inline" style="margin-top:4px">'+
         ['valid','invalid','deactivated','out_of_office'].map(function(s){
           return '<option value="'+s+'"'+(es===s?' selected':'')+'>'+emailStatusLabels[s]+'</option>';
         }).join('')+
@@ -595,7 +595,7 @@ function renderJobDetailModal(){
     '<div style="padding:20px 24px">'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px">'+
         '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.5px">Stage</label>'+
-          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" style="width:100%;margin-top:5px;padding:8px;background:'+leadStageBg(j.stage)+';border:1.5px solid '+leadStageColor(j.stage)+';border-radius:7px;color:'+leadStageColor(j.stage)+';font-weight:600;font-size:13px">'+stageOpts+'</select>':'<div class="fs-13" style="margin-top:5px;font-weight:600;color:'+leadStageColor(j.stage)+'">'+j.stage+'</div>')+
+          (canChangeStage?'<select id="job-stage-sel" onchange="changeJobStage(\''+j.id+'\',this.value)" class="sel sel-state" style="margin-top:5px;--sc:'+leadStageColor(j.stage)+'">'+stageOpts+'</select>':'<div class="fs-13" style="margin-top:5px;font-weight:600;color:'+leadStageColor(j.stage)+'">'+j.stage+'</div>')+
         '</div>'+
         '<div><label class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.5px">Source</label><div class="fs-13 c-text" style="margin-top:5px">'+escHtml(j.source||"—")+'</div></div>'+
       '</div>'+

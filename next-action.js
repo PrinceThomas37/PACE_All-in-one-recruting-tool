@@ -210,6 +210,7 @@ function buildNextActions({ threads = [], reminders = [], now = Date.now(), limi
         subtitle: t.company || null,
         email: t.email || null,   // R-073: the row can DO the task, so it must say who to write to
         job_id: t.job_id || null, owner_id: t.owner_id || null,
+        stage: t.stage,
         reason: `${a.intent.label} — currently at "${t.stage}". Worth moving them forward?`,
         state: a.state,
         intent: a.intent.id,

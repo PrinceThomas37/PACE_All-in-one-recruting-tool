@@ -289,7 +289,7 @@
 
           '<div class="fs-12" style="font-weight:700;margin-bottom:6px">Who to contact</div>'+
           '<div style="display:flex;gap:6px;margin-bottom:9px">'+
-            '<input id="srcd-approve-domain" class="sel" style="flex:1;font-size:12.5px" placeholder="Company website, e.g. acme.com" '+
+            '<input id="srcd-approve-domain" class="sel" style="flex:1;font-size:13px" placeholder="Company website, e.g. acme.com" '+
               'value="'+esc(a.domain||'')+'" oninput="srcdSetDomain(this.value)">'+
             '<button class="btn btn-sm btn-outline" '+(a.busy?'disabled':'')+' onclick="srcdFindContacts()">'+
               (a.busy?'Working…':'Work out email')+'</button>'+
@@ -336,12 +336,12 @@
       '<div class="card" style="padding:14px 16px;margin-bottom:12px">'+
         '<div class="fs-13" style="font-weight:700;margin-bottom:9px">Watch a new board</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
-          '<select id="srcd-provider" class="sel" style="font-size:12.5px;min-width:150px">'+
+          '<select id="srcd-provider" class="sel" style="font-size:13px;min-width:150px">'+
             providers.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>'; }).join('')+
           '</select>'+
-          '<input id="srcd-token" class="inp" style="font-size:12.5px;min-width:180px" placeholder="Board name">'+
-          '<input id="srcd-company" class="inp" style="font-size:12.5px;min-width:170px" placeholder="Company name (optional)">'+
-          '<input id="srcd-domain" class="inp" style="font-size:12.5px;min-width:170px" placeholder="Website (for emails)">'+
+          '<input id="srcd-token" class="inp" style="font-size:13px;min-width:180px" placeholder="Board name">'+
+          '<input id="srcd-company" class="inp" style="font-size:13px;min-width:170px" placeholder="Company name (optional)">'+
+          '<input id="srcd-domain" class="inp" style="font-size:13px;min-width:170px" placeholder="Website (for emails)">'+
         '</div>'+
         '<div class="fs-11_5 c-text3" style="margin-bottom:9px">'+
           'The board name is the last part of their careers URL. '+

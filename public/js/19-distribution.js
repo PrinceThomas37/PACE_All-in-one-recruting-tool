@@ -115,7 +115,7 @@ function showRatioPreview(ratio){
   // used to be reported as the first. Saying "no AI provider answered" while
   // the daily meter shows the tokens spent is a contradiction the user is left
   // to resolve on their own.
-  var amber='font-size:11.5px;color:var(--amber);background:var(--amber-l,#fef3c7);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5';
+  var amber='font-size:12px;color:var(--amber);background:var(--amber-l,#fef3c7);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.5';
   var engineNote;
   if(ratio.ai_unusable){
     engineNote='<div style="'+amber+'"><b>Your priorities were not applied.</b> The AI answered but its reply was cut short, so this is the built-in balanced split. Try a shorter instruction, or try again — nothing was lost.</div>';

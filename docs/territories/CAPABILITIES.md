@@ -603,3 +603,11 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Outreach Plan is inside Sequence** — one tab: Sequences · My wording · AI style; a step has "Edit my wording". A BD edits their own words without needing permission to change the sequence.
 - **Take leads** — a BD or BD lead is handed pool leads into their own connected mailboxes, up to a daily limit an admin sets (Admin → System Settings → Leads, 0 = off).
 - **Import into my own profile** — a BD's Excel import makes the leads theirs, in their mailboxes; then **Write the first emails** puts a first email for each into Pending to look over and send.
+
+## Session 41 (7 Oct) — the owner's eight small fixes (D-0084)
+- **Every "Needs you today" row and client conversation opens a window with the step to take:** the latest exchange only (older mail one click away), and buttons — Reply in the mailbox, Chase, Follow up, **Move to <next stage>** (candidates; leads too for BD/admin), Mark completed, Not today.
+- **My Team** opens on Reports; one **Team** tab holds the reporting structure and Team Insights.
+- **Reply / Forward is a window** — minimise it, look at anything else in PACE, come back; sending answers the message it was opened on. Your words are also kept as a draft on this device (closing keeps it, Discard deletes it).
+- **Edit your signature as it looks** — bold / italic / underline / link, "+ My name", "+ My email"; presets still there.
+- **Interview time zone by city** — type Dallas, Boston, Bengaluru, Texas or "Eastern"; click the suggestion; every world zone is still reachable.
+- **One look and one font scale** across leads filters, stage dropdowns, status chips, ID tags, funnel and kanban.

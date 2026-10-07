@@ -797,7 +797,7 @@ function renderSignupPanel(){
         'Otherwise you get a private workspace of your own — you can invite your team and claim your domain from there.'+
       '</div>'+
       '<div class="fs-11_5 c-text3" style="margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
-        '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
+        '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
       '</div>';
   }
   if(STATE.signupSent){
@@ -816,7 +816,7 @@ function renderSignupPanel(){
     '<div id="su-err" class="c-red fs-12" style="display:none;background:var(--red-l);padding:8px 10px;border-radius:var(--r);margin-bottom:12px"></div>'+
     '<button class="btn btn-primary w100" style="justify-content:center" onclick="submitSignupRequest()">Request access</button>'+
     '<div class="fs-11_5 c-text3" style="margin-top:12px;text-align:center;line-height:1.5">Already have an account? '+
-      '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:11.5px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
+      '<button onclick="STATE.loginTab=\'login\';render()" style="background:none;border:0;padding:0;color:var(--accent);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit">Log in</button>'+
     '</div>';
 }
 

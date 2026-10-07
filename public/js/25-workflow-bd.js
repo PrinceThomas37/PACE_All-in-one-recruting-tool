@@ -60,7 +60,7 @@
   function isRec(u){return userHasRole(u,'recruiter');}
   function uName(id){var x=(STATE.users||[]).find(function(u){return u.id===id;});return x?x.name:"—";}
   function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-  function code(t){return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>';}
+  function code(t){return t?'<span class="id-chip">'+esc(t)+'</span>':'';}
   function badge(st){var c={Active:"var(--green)","On Hold":"var(--amber)",Filled:"var(--accent)",Closed:"var(--text3)"}[st]||"var(--text3)";return '<span class="fs-11" style="font-weight:700;color:'+c+';background:rgba(0,0,0,.04);padding:2px 8px;border-radius:10px">'+esc(st)+'</span>';}
 
   // ── IS THE APPLY PAGE REALLY OPEN? (R-076) ─────────────────────────────────
@@ -235,7 +235,7 @@
     var jobsTabBar='<div style="display:flex;gap:8px;margin-bottom:12px">'+
       jobTabs.map(function(t){
         var on=view===t[0];
-        return '<button onclick="bdSetJobsView(\''+t[0]+'\')" style="padding:7px 14px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+t[1]+' ('+t[2]+')</button>';
+        return '<button onclick="bdSetJobsView(\''+t[0]+'\')" style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid '+(on?'var(--accent)':'var(--border)')+';background:'+(on?'var(--accent)':'var(--card)')+';color:'+(on?'#fff':'var(--text2)')+'">'+t[1]+' ('+t[2]+')</button>';
       }).join('')+
     '</div>';
     // Multi-select (item 24): checkbox column + bulk status change.
@@ -249,7 +249,7 @@
     var bulkBar=selIds.length?'<div style="display:flex;align-items:center;gap:12px;background:var(--accent-l);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap">'+
       '<span class="fs-13 c-accent" style="font-weight:700">'+selIds.length+' job'+(selIds.length>1?'s':'')+' selected</span>'+
       '<span class="fs-12_5 c-text2">Set status:</span>'+
-      '<select onchange="if(this.value)bdBulkStatus(this.value);this.value=\'\'" class="sel" style="font-size:12.5px;padding:5px 8px"><option value="">Choose…</option>'+JOB_STATUSES.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('')+'</select>'+
+      '<select onchange="if(this.value)bdBulkStatus(this.value);this.value=\'\'" class="sel" style="font-size:13px;padding:5px 8px"><option value="">Choose…</option>'+JOB_STATUSES.map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('')+'</select>'+
       '<button onclick="bdJobClearSel()" class="c-text2 fs-12" style="margin-left:auto;background:transparent;border:1px solid var(--border);padding:6px 12px;border-radius:8px;cursor:pointer">Clear</button>'+
     '</div>':'';
     function fopt(key,all,list){return '<select class="sel" onchange="bdSetJobFilter(\''+key+'\',this.value)"><option value="">'+all+'</option>'+list.map(function(s){return '<option value="'+esc(s)+'"'+(f[key]===s?' selected':'')+'>'+esc(s)+'</option>';}).join("")+'</select>';}
@@ -745,8 +745,8 @@
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">'+
         '<label class="fs-11_5 c-text2">Job Description <span class="c-red">*</span></label>'+
         '<div style="display:flex;gap:6px;align-items:center">'+
-          (f._jdPrev!=null?'<button type="button" class="btn btn-sm btn-outline" onclick="bdUndoJdRewrite()" style="font-size:11.5px">Undo rewrite</button>':'')+
-          '<button type="button" id="bd-jd-ai" class="btn btn-sm btn-outline" onclick="bdRewriteJd()" style="font-size:11.5px">'+(f._jdBusy?'Rewriting…':'✨ Rewrite with AI')+'</button>'+
+          (f._jdPrev!=null?'<button type="button" class="btn btn-sm btn-outline" onclick="bdUndoJdRewrite()" style="font-size:12px">Undo rewrite</button>':'')+
+          '<button type="button" id="bd-jd-ai" class="btn btn-sm btn-outline" onclick="bdRewriteJd()" style="font-size:12px">'+(f._jdBusy?'Rewriting…':'✨ Rewrite with AI')+'</button>'+
         '</div>'+
       '</div>'+
       (url?'<div class="fs-12 c-text2" style="background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
@@ -1176,7 +1176,7 @@
         '<div class="fs-13" style="font-weight:600">Job description'+(jdShowPrev?' <span class="fs-11 c-amber" style="font-weight:600">· previous version'+(prevWhen?' ('+prevWhen+')':'')+'</span>':'')+'</div>'+
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
           (jdLong?'<button onclick="bdToggleJD()" class="fs-11_5 c-accent" style="background:none;border:0;cursor:pointer;font-weight:600">'+(jdExpanded?'Show less':'Show more')+'</button>':'')+
-          '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')" style="font-size:11.5px">✏ Re-write job description</button>'+
+          '<button class="btn btn-sm btn-outline" onclick="bdOpenPostingJD(\''+j.id+'\')" style="font-size:12px">✏ Re-write job description</button>'+
           (prevText?'<button onclick="bdTogglePrevJD()" title="View the previous job description (kept until the job ends)" class="fs-11_5" style="color:'+(jdShowPrev?'var(--amber)':'var(--text3)')+';background:none;border:1px solid var(--border);border-radius:6px;padding:3px 8px;cursor:pointer">'+(jdShowPrev?'← Current JD':'Previous JD')+'</button>':'')+
         '</div>'+
       '</div>'+
@@ -1206,9 +1206,9 @@
         '</div>'+
         (canOwn?'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
           (applyOn
-            ? '<button class="btn btn-sm btn-outline" onclick="bdCopyApplyLink()" style="font-size:11.5px">Copy link</button>'+
-              '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',false)" style="font-size:11.5px">Turn off</button>'
-            : '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',true)" style="font-size:11.5px">Publish apply page</button>')+
+            ? '<button class="btn btn-sm btn-outline" onclick="bdCopyApplyLink()" style="font-size:12px">Copy link</button>'+
+              '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',false)" style="font-size:12px">Turn off</button>'
+            : '<button class="btn btn-sm btn-outline" onclick="bdSetApplyLink(\''+j.id+'\',true)" style="font-size:12px">Publish apply page</button>')+
         '</div>':'')+
       '</div>'+
       (applyOn
@@ -1220,7 +1220,7 @@
     '</div>';
 
     return '<div class="page">'+
-      (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="goPage(\'bd_joborders\')" style="cursor:pointer;font-size:12.5px;color:var(--accent)">← Jobs</span></div>')+
+      (window.navBar?navBar():'<div style="margin-bottom:6px"><span onclick="goPage(\'bd_joborders\')" style="cursor:pointer;font-size:13px;color:var(--accent)">← Jobs</span></div>')+
       '<div class="card" style="padding:18px 20px;margin-bottom:16px">'+
         '<div class="jo-head">'+
           '<div class="jo-head-main">'+
@@ -1476,16 +1476,18 @@
     var counts={};BD_STAGES.forEach(function(s){counts[s]=0;});
     subs.forEach(function(s){var ns=nStage(s.stage);if(counts[ns]!==undefined)counts[ns]++;});
     var max=Math.max(1,Math.max.apply(null,BD_STAGES.map(function(s){return counts[s];})));
-    return '<div class="card" style="padding:14px 16px"><div class="fs-14" style="font-weight:600;margin-bottom:10px">Pipeline Funnel</div>'+
-      '<div style="display:flex;align-items:flex-end;gap:6px;height:110px;overflow-x:auto">'+
-      BD_STAGES.map(function(s){
-        var h=counts[s]?Math.max(8,Math.round((counts[s]/max)*72)):3;
-        return '<div style="flex:1;min-width:52px;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;height:100%">'+
-          '<div class="fs-11" style="font-weight:700;color:'+(counts[s]?'var(--text)':'var(--text3)')+'">'+counts[s]+'</div>'+
-          '<div style="height:'+h+'px;background:'+(counts[s]?STAGE_COLORS[s]:'var(--border)')+';border-radius:4px 4px 0 0;margin:3px 6px 0"></div>'+
-          '<div class="fs-9 c-text3" style="padding-top:4px;border-top:2px solid var(--border);white-space:nowrap">'+esc(STAGE_ABBR[s]||s)+'</div>'+
-        '</div>';
-      }).join("")+'</div></div>';
+    // Drawn with the same chart kit as Reports (rep-* in retro.css): paper card, pixel title, muted stage tones, mono numbers —
+    // it was the old blue, rounded-bar funnel (7 Oct, owner: "the pipeline funnel inside the job page looks like old theme").
+    var TONE={'Sourced':'muted','Screening':'muted','Submitted to BDM':'brand','Submitted to Client':'info','Interview Scheduled':'wait','Interview Completed':'wait','Offer':'brand','Joining':'info','Placement':'go','Not Accepted':'stop','On Hold':'muted'};
+    var cols=BD_STAGES.map(function(s){
+      var n=counts[s], h=n?Math.max(8,Math.round((n/max)*84)):0;
+      return '<div class="rep-col"><div class="rep-bar1" title="'+esc(s)+': '+n+'">'+
+        '<div class="rep-colv'+(n?'':' is-zero')+'">'+n+'</div>'+
+        '<div class="rep-colbar tone-'+(TONE[s]||'muted')+(n?'':' is-zero')+'"'+(n?' style="height:'+h+'px"':'')+'></div></div></div>';
+    }).join('');
+    var names=BD_STAGES.map(function(s){ return '<div class="rep-colw" title="'+esc(s)+'">'+esc(STAGE_ABBR[s]||s)+'</div>'; }).join('');
+    return '<div class="card rep-card"><div class="rep-ttl">Pipeline funnel</div>'+
+      '<div class="rep-scroll"><div class="rep-cols rep-cols-wide">'+cols+'</div><div class="rep-weeks rep-cols-wide">'+names+'</div></div></div>';
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1503,7 +1505,7 @@
     var colHtml=cols.map(function(st){
       var items=jobSubs.filter(function(s){return nStage(s.stage)===st;});
       var locked=(st===BDM_GATED&&recruiterScoped);
-      return '<div ondragover="bdDragOver(event)" ondragenter="if(!'+(locked?'true':'false')+'){this.style.background=\'var(--accent-l)\';this.style.outline=\'2px dashed var(--accent)\'}" ondragleave="this.style.background=\'var(--bg)\';this.style.outline=\'none\'" ondrop="this.style.background=\'var(--bg)\';this.style.outline=\'none\';bdDrop(event,\''+st+'\')" style="min-width:185px;flex:1;background:var(--bg);border-radius:10px;padding:10px;transition:background .1s">'+
+      return '<div ondragover="bdDragOver(event)" ondragenter="if(!'+(locked?'true':'false')+'){this.style.background=\'var(--accent-l)\';this.style.outline=\'2px dashed var(--accent)\'}" ondragleave="this.style.background=\'var(--bg)\';this.style.outline=\'none\'" ondrop="this.style.background=\'var(--bg)\';this.style.outline=\'none\';bdDrop(event,\''+st+'\')" class="kb-col" style="min-width:185px;flex:1">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
           '<div class="fs-12" style="font-weight:700;color:'+STAGE_COLORS[st]+'">'+st+'</div>'+
           '<div class="fs-11 c-text3" style="font-weight:700">'+items.length+'</div>'+
@@ -1512,12 +1514,12 @@
           var c=s.candidate||{};
           var subs=(window.ATS_SUB_STAGES&&ATS_SUB_STAGES[nStage(s.stage)])||[];
           var scol=window.subStageColor?subStageColor(s.sub_stage):'var(--text3)';
-          var subSel=subs.length?'<select onchange="bdSetSubStage(\''+s.id+'\',this.value)" onclick="event.stopPropagation()" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid '+(s.sub_stage?scol:'var(--border)')+';border-radius:7px;background:'+(s.sub_stage?scol+'1a':'var(--card)')+';color:'+(s.sub_stage?scol:'var(--text2)')+';font-weight:600;cursor:pointer">'+
+          var subSel=subs.length?'<select onchange="bdSetSubStage(\''+s.id+'\',this.value)" onclick="event.stopPropagation()" class="sel sel-sm sel-state" style="--sc:'+(s.sub_stage?scol:'var(--ctl-brd)')+'">'+
               '<option value="">Sub-stage…</option>'+
               subs.map(function(x){return '<option value="'+esc(x)+'"'+(s.sub_stage===x?' selected':'')+'>'+esc(x)+'</option>';}).join('')+
             '</select>':'';
-          return '<div draggable="true" ondragstart="bdDragStart(event,\''+s.id+'\')" ondragend="bdDragEnd(event)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;margin-bottom:7px;cursor:grab">'+
-            '<div style="font-weight:600;font-size:12.5px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'')+'</div>'+
+          return '<div draggable="true" ondragstart="bdDragStart(event,\''+s.id+'\')" ondragend="bdDragEnd(event)" class="kb-card" style="margin-bottom:7px;cursor:grab">'+
+            '<div style="font-weight:600;font-size:13px;cursor:pointer;color:var(--accent)" onclick="bdOpenCandidate(\''+(c.id||'')+'\')">'+esc(c.full_name||'')+'</div>'+
             '<div class="fs-10_5 c-text3" style="margin-bottom:5px">'+code(c.candidate_code||'')+' · '+esc(c.current_title||'')+'</div>'+
             (s.interview_at?'<div class="fs-10" style="color:#2563eb;margin-bottom:5px">🗓 '+esc(new Date(s.interview_at).toLocaleString())+(s.interview_location?' · '+esc(s.interview_location):'')+'</div>':'')+
             subSel+
@@ -1655,7 +1657,7 @@
           '<div class="fs-11_5 c-text3" style="margin-top:2px">Generate a public version (company name and identifying details removed), or replace the internal job description. Generate, review, edit, then save or copy.</div>'+
         '</div>'+
         '<div style="padding:16px 20px">'+
-          '<textarea id="pjd-text" class="sel" style="min-height:270px;resize:vertical;font-size:12.5px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
+          '<textarea id="pjd-text" class="sel" style="min-height:270px;resize:vertical;font-size:13px;line-height:1.45" placeholder="Click “Generate” to create an anonymized version from the internal JD, or paste/write one here.">'+esc(j.posting_description||'')+'</textarea>'+
           '<label class="fs-12_5" style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer"><input type="checkbox" id="pjd-replace" style="width:15px;height:15px;accent-color:var(--accent)"/> Replace the current job description with this text <span class="c-text3">— keeps the old one viewable until the job ends</span></label>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">'+

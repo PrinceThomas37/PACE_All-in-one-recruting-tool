@@ -89,9 +89,9 @@ function renderOrgDomainsCard(){
         ? '<label class="fs-12 c-text2" style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Anyone signing in with an address on this domain joins automatically, with no invitation">'+
             '<input type="checkbox" '+(d.auto_join?'checked':'')+' onchange="toggleOrgDomainAutoJoin(\''+d.id+'\',this.checked)" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer"/> Auto-join'+
           '</label>'
-        : '<button onclick="verifyOrgDomain(\''+d.id+'\')" style="padding:5px 12px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:12.5px;cursor:pointer">Verify</button>'+
-          '<button onclick="showOrgDomainInstructions(\''+d.id+'\')" style="padding:5px 12px;border:0;background:none;color:var(--accent);font-size:12.5px;cursor:pointer;text-decoration:underline">Show record</button>')+
-      '<button onclick="removeOrgDomain(\''+d.id+'\',\''+htmlEsc(d.domain)+'\')" style="padding:5px 10px;border:0;background:none;color:var(--red);font-size:12.5px;cursor:pointer">Remove</button>'+
+        : '<button onclick="verifyOrgDomain(\''+d.id+'\')" style="padding:5px 12px;border:1px solid var(--border2);background:var(--card);border-radius:7px;font-size:13px;cursor:pointer">Verify</button>'+
+          '<button onclick="showOrgDomainInstructions(\''+d.id+'\')" style="padding:5px 12px;border:0;background:none;color:var(--accent);font-size:13px;cursor:pointer;text-decoration:underline">Show record</button>')+
+      '<button onclick="removeOrgDomain(\''+d.id+'\',\''+htmlEsc(d.domain)+'\')" style="padding:5px 10px;border:0;background:none;color:var(--red);font-size:13px;cursor:pointer">Remove</button>'+
     '</div>';
   }).join('');
 

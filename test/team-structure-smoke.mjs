@@ -82,25 +82,30 @@ try {
   const my = await page.evaluate(() => {
     render(); // triggers injectNav
     const navHas = Array.from(document.querySelectorAll('.sb-nav .nav-item')).some(e => e.textContent.trim().includes('My Team'));
+    STATE.myteamTab = undefined;
     goPage('myteam');
+    const first = document.getElementById('content').innerHTML;       // what opens first
+    myteamTab('team');
     const html = document.getElementById('content').innerHTML;
-    return { navHas, isMyTeam: STATE.page === 'myteam', html };
+    return { navHas, isMyTeam: STATE.page === 'myteam', html, first };
   });
   step('My Team nav shows for a manager', my.navHas);
-  step('My Team page renders the reporting structure', my.isMyTeam && my.html.includes('Reporting structure') && my.html.includes('Lee Lead'));
+  step('My Team opens on REPORTS first (owner, 7 Oct) — not on the reporting structure', my.isMyTeam && !my.first.includes('Reporting structure') && /border-bottom:2px solid var\(--accent\)[^>]*>Reports</.test(my.first), my.first.slice(0, 120));
+  step('the Team tab renders the reporting structure', my.html.includes('Reporting structure') && my.html.includes('Lee Lead'));
 
   // 3b. My Team hub: three tabs (Overview / Team Insights / Reports), and the
   // Overview offers a List | Org chart toggle that renders the horizontal chart.
   const hub = await page.evaluate(() => {
     goPage('myteam');
     const tabs = Array.from(document.querySelectorAll('#content button')).map(b => b.textContent.trim());
-    const hasTabs = tabs.includes('Overview') && tabs.includes('Team Insights') && tabs.includes('Reports');
+    const hasTabs = tabs.indexOf('Reports') >= 0 && tabs.indexOf('Reports') < tabs.indexOf('Team') && !tabs.includes('Overview') && !tabs.includes('Team Insights');
+    myteamTab('team');
     myteamChartView('chart');
     const chartHtml = document.getElementById('content').innerHTML;
     const nav = Array.from(document.querySelectorAll('.sb-nav .nav-item')).map(e => e.textContent.trim());
     return { hasTabs, chartHtml, nav };
   });
-  step('My Team hub has Overview / Team Insights / Reports tabs', hub.hasTabs);
+  step('My Team hub has two tabs — Reports, then Team (Overview and Team Insights are ONE tab now)', hub.hasTabs);
   step('Org chart view renders the transitive tree', hub.chartHtml.includes('Org chart') && hub.chartHtml.includes('Mia') && hub.chartHtml.includes('Sam'));
   // 3c. Nav order: My Team sits right after Dashboard, and Team Insights / My
   // Profile / Reports are no longer standalone items for a team lead.

@@ -540,7 +540,7 @@
           '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Subject</label>'+
             '<input id="client-em-subject" class="sel" value="'+esc(STATE.clients._emailDraft.subject)+'"></div>'+
           '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
-            '<textarea id="client-em-body" class="sel" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.5">'+esc(STATE.clients._emailDraft.body)+'</textarea></div>'+
+            '<textarea id="client-em-body" class="sel" style="min-height:180px;resize:vertical;font-size:13px;line-height:1.5">'+esc(STATE.clients._emailDraft.body)+'</textarea></div>'+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+

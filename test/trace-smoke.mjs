@@ -51,7 +51,7 @@ try {
   await page.evaluate(() => {
     window.__asked = []; window.__opened = [];
     const TL = { enabled: true, owner: true, timeline: [
-      { id: 'in:m3', direction: 'inbound', sent_at: '2026-10-03T10:00:00Z', person: 'Melanie Nero', subject: 'Re: Estimator role', text: 'Yes — we are interested. Can you send two profiles by Friday?', can_open_full: true },
+      { id: 'in:m3', direction: 'inbound', from: 'melanie@pinpoint.test', sent_at: '2026-10-03T10:00:00Z', person: 'Melanie Nero', subject: 'Re: Estimator role', text: 'Yes — we are interested. Can you send two profiles by Friday?', can_open_full: true },
       { id: 'out:m2', direction: 'outbound', sent_at: '2026-09-30T10:00:00Z', person: 'Melanie Nero', subject: 'Estimator role', text: 'Hi Melanie, we have two strong estimators…', can_open_full: false },
       { id: 'out:m1', direction: 'outbound', sent_at: '2026-09-28T10:00:00Z', person: 'Other Person', subject: 'Intro', text: 'Hello Other…', can_open_full: false } ] };
     window.apiGet = (p) => { __asked.push(p);
@@ -59,7 +59,11 @@ try {
       if (p === '/leads/job-off/intel') return Promise.resolve({ enabled: false });
       if (p === '/leads/job-theirs/intel') return Promise.resolve({ enabled: true, owner: false, owner_name: 'Raj' });
       if (p === '/leads/job-1/intel/messages/in%3Am3/full') return Promise.resolve({ text: 'FULL TEXT: Yes — we are interested.\n\nPlease send two profiles by Friday.\n\nThanks, Melanie' });
-      if (p.indexOf('/email/history?candidate_id=cand-1') === 0) return Promise.resolve({ items: [{ id: 'e1', candidate_id: 'cand-1', to_email: 'maya@example.test', subject: 'Interview invite', body: 'Hi Maya, are you free Tuesday?', sent_at: '2026-10-02T09:00:00Z', replied_at: '2026-10-03T09:00:00Z' }] });
+      if (p.indexOf('/email/history?candidate_id=cand-1') === 0) return Promise.resolve({ items: [
+        { id: 'e1', candidate_id: 'cand-1', source: 'individual', direction: 'out', to_email: 'maya@example.test', subject: 'Interview invite', body: 'Hi Maya, are you free Tuesday?', sent_at: '2026-10-02T09:00:00Z', replied_at: '2026-10-03T09:00:00Z' },
+        { id: 'in:e2', candidate_id: 'cand-1', source: 'replies', direction: 'in', from_email: 'maya@example.test', subject: 'Re: Interview invite', body: 'Tuesday works for me.', sent_at: '2026-10-03T09:00:00Z' },
+        // the bug: a lead-engine email to somebody else, with no candidate on it
+        { id: 'x9', candidate_id: null, source: 'leads', direction: 'out', to_email: 'kvalladares@abitos.com', subject: 'Circling back on your Tax Associate role', body: 'Hi Karina', sent_at: '2026-10-07T09:00:00Z' }] });
       return Promise.resolve([]); };
     window.openJob = (id) => __opened.push('job:' + id);
     window.bdOpenCandidate = (id) => __opened.push('cand:' + id);
@@ -78,7 +82,7 @@ try {
   await page.waitForTimeout(400);
   const wait = () => page.waitForTimeout(300);
   const drawer = () => page.evaluate(() => { const d = document.querySelector('.ev-drawer'); if (!d) return null;
-    return { title: d.querySelector('.ev-title').textContent.trim(), hint: (d.querySelector('.ev-hint') || {}).textContent || '', rows: [...d.querySelectorAll('.ev-row')].map(r => ({ p: r.querySelector('.ev-primary').textContent, s: (r.querySelector('.ev-secondary') || {}).textContent || '', t: (r.querySelector('.ev-text') || {}).textContent || '', chips: [...r.querySelectorAll('.ev-chip')].map(c => c.textContent), tone: /tone-in/.test(r.className) ? 'in' : /tone-out/.test(r.className) ? 'out' : '' })), actions: [...d.querySelectorAll('.ev-actions .btn-primary')].map(b => b.textContent), empty: (d.querySelector('.ev-empty') || {}).textContent || '' }; });
+    return { title: d.querySelector('.ev-title').textContent.trim(), hint: (d.querySelector('.ev-hint') || {}).textContent || '', rows: [...d.querySelectorAll('.ev-row')].map(r => ({ p: r.querySelector('.ev-primary').textContent, s: (r.querySelector('.ev-secondary') || {}).textContent || '', t: (r.querySelector('.ev-text') || {}).textContent || '', chips: [...r.querySelectorAll('.ev-chip')].map(c => c.textContent), tone: /tone-in/.test(r.className) ? 'in' : /tone-out/.test(r.className) ? 'out' : '' })), actions: [...d.querySelectorAll('.ev-actions button')].map(b => b.textContent).filter(t => t !== 'Close'), task: (d.querySelector('.ev-task-text') || {}).textContent || '', taskBtns: [...d.querySelectorAll('.ev-task-acts button')].map(b => b.textContent), showAll: (d.querySelector('.ev-showall') || {}).textContent || '', empty: (d.querySelector('.ev-empty') || {}).textContent || '' }; });
   const clickRow = async (title) => { await page.evaluate((t) => { const r = [...document.querySelectorAll('[data-na-item]')].find(x => x.textContent.indexOf(t) >= 0); r.click(); }, title); await wait(); };
   const close = async () => { await page.keyboard.press('Escape'); await wait(); };
 
@@ -88,6 +92,7 @@ try {
   step('clicking a "Reply due" row opens the drawer — and says the rule in plain words', d && /^Melanie Nero/.test(d.title) && /their latest email to you has no reply from you after it/.test(d.hint) && /Right now: They replied 3 days ago/.test(d.hint), JSON.stringify(d && d.hint));
   step('…the emails behind it, newest first, theirs and yours marked (narrowed to Melanie — not the other person\'s)', d.rows.length === 2 && d.rows[0].p === 'They wrote — Melanie Nero' && d.rows[0].tone === 'in' && d.rows[1].p === 'You wrote — Melanie Nero' && d.rows[1].tone === 'out', JSON.stringify(d.rows.map(r => r.p)));
   step('…the email it was worked out from is flagged as the reply you owe, with its words', d.rows[0].chips.includes('the reply you owe') && /interested/.test(d.rows[0].t) && d.rows[0].s === 'Re: Estimator role');
+  step('…and a "What to do" band names the step and carries the buttons (Reply / Mark completed / Not today)', /^Reply to Melanie Nero/.test(d.task) && d.taskBtns.join() === 'Reply to Melanie,Mark completed,Not today', JSON.stringify([d.task, d.taskBtns]));
   step('…and it asked for THIS lead\'s timeline, nothing else', await page.evaluate(() => __asked.includes('/leads/job-1/intel')));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'trace-reply-due.png') });
   // read a reply in full
@@ -97,13 +102,16 @@ try {
   step('…a sent email has no such link (only replies can be opened)', await page.evaluate(() => document.querySelectorAll('.ev-fulllink').length === 1));
   // the old jump survives as a button
   step('the old jump is one button away: "Open the lead"', d.actions.join() === 'Open the lead');
-  await page.evaluate(() => document.querySelector('.ev-actions .btn-primary').click()); await wait();
+  await page.evaluate(() => document.querySelector('.ev-actions button').click()); await wait();
   step('…and it opens the lead (and the drawer steps aside first)', await page.evaluate(() => __opened.join() === 'job:job-1' && !document.querySelector('.ev-drawer')));
 
   // 2. the grouped "No reply yet"
   await clickRow('Pinpoint Engineering');
   d = await drawer();
-  step('a "No reply yet" group shows the basis AND the lead\'s emails (all three, whoever they were to)', d && /you emailed and nobody has answered for 3 or more days/.test(d.hint) && d.rows.length === 3 && d.rows[0].chips.includes('your last email') === false /* newest is theirs */ || (d && d.rows.length === 3), JSON.stringify(d && d.rows.map(r => r.p)));
+  step('a "No reply yet" group shows the basis AND only the newest two emails, with the rest one click away', d && /you emailed and nobody has answered for 3 or more days/.test(d.hint) && d.rows.length === 2 && /Show 1 earlier email$/.test(d.showAll), JSON.stringify(d && [d.rows.map(r => r.p), d.showAll]));
+  await page.evaluate(() => document.querySelector('.ev-showall').click()); await wait();
+  d = await drawer();
+  step('…"Show earlier" brings the third back (nothing is dropped)', d.rows.length === 3 && !d.showAll, JSON.stringify(d.rows.map(r => r.p)));
   await close();
 
   // 3. a reminder says where it came from
@@ -115,7 +123,8 @@ try {
   // 4. a candidate
   await clickRow('Maya Rao');
   d = await drawer();
-  step('a candidate row shows the send log (and that they replied), and offers "Open the candidate"', d && d.rows.length === 1 && d.rows[0].secondary === undefined && /Interview invite/.test(d.rows[0].s) && d.rows[0].chips.some(c => /they replied/.test(c)) && d.actions.join() === 'Open the candidate', JSON.stringify(d && d.rows));
+  step('a candidate row shows ONLY that candidate\'s mail — their reply and what it answered — never an email to someone else', d && d.rows.length === 2 && d.rows[0].p === 'They wrote — maya@example.test' && d.rows[0].tone === 'in' && /Tuesday works/.test(d.rows[0].t) && d.rows[1].tone === 'out' && /Interview invite/.test(d.rows[1].s) && d.rows[1].chips.some(c => /they replied/.test(c)) && !d.rows.some(r => /abitos|Tax Associate/.test(r.p + r.s + r.t)) && d.actions.join() === 'Open the candidate', JSON.stringify(d && d.rows));
+  step('…and says what to do: reply in the mailbox, with the reply button', d.task.indexOf('Reply to Maya Rao') === 0 && d.taskBtns[0] === 'Reply to Maya', JSON.stringify([d.task, d.taskBtns]));
   await close();
 
   // 5. what you may not read says so
@@ -138,11 +147,43 @@ try {
   await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
   d = await drawer();
-  step('a client conversation of yours opens the emails behind it', d && d.title.indexOf('Estimator · Pinpoint') === 0 && /written in the last 60 days/.test(d.hint) && d.rows.length === 3 && d.rows[0].chips.includes('the reply you owe') && d.actions.join() === 'Open the lead', JSON.stringify(d));
+  step('a client conversation of yours opens the emails behind it', d && d.title.indexOf('Estimator · Pinpoint') === 0 && /written in the last 60 days/.test(d.hint) && d.rows.length === 2 && d.rows[0].chips.includes('the reply you owe') && d.actions.join() === 'Open the lead', JSON.stringify(d));
+  step('…and it says the step to take and offers it as a button (Reply in the mailbox)', /Reply to their last email/.test(d.task) && d.taskBtns[0] === 'Reply in the mailbox', JSON.stringify([d.task, d.taskBtns]));
+  await page.evaluate(() => { __opened.length = 0; STATE.mailbox = {}; [...document.querySelectorAll('.ev-task-acts button')][0].click(); }); await wait();
+  step('…the button opens the mailbox on the person who wrote (their address), and the window steps aside', await page.evaluate(() => __opened.includes('page:mailbox') && STATE.mailbox.q === 'melanie@pinpoint.test' && !document.querySelector('.ev-drawer')), await page.evaluate(() => JSON.stringify([__opened, STATE.mailbox])));
+  await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'trace-client-conversation.png') });
+  // …and the lead's stage, when the lead is loaded and the person may change it
+  await close();
+  await page.evaluate(() => { window.__stageSet = null; window.jobById = (id) => id === 'job-1' ? { id: 'job-1', stage: 'Assigned' } : null; window.changeJobStage = (id, st) => { __stageSet = id + '>' + st; }; });
+  await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
+  d = await drawer();
+  step('a client conversation also offers the lead\'s stage (it replied, the lead is "Assigned" → suggest Connected)', /The lead is at "Assigned"/.test(d.task) && d.taskBtns.includes('Move to Connected'), JSON.stringify([d.task, d.taskBtns]));
+  await page.evaluate(() => [...document.querySelectorAll('.ev-task-acts button')].find(b => /^Move to Connected/.test(b.textContent)).click()); await wait();
+  step('…clicking it changes the lead\'s stage through the Leads list\'s own function', await page.evaluate(() => __stageSet === 'job-1>Connected' && !document.querySelector('.ev-drawer')), await page.evaluate(() => String(__stageSet)));
+  await page.evaluate(() => { window.jobById = () => null; });
+  await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
+  d = await drawer();
+  step('with the lead not loaded there is NO stage control (never one that cannot act)', !/Move to/.test(d.taskBtns.join()) && await page.evaluate(() => !document.querySelector('.ev-task-acts select')));
   await close();
   await page.evaluate(() => { const r = [...document.querySelectorAll('.cd-person .cd-row')][0]; r.click(); }); await wait();
   step('a teammate\'s conversation stays facts-only — no emails, it just opens the lead list (D-0040)', await page.evaluate(() => !document.querySelector('.ev-drawer') && __opened.includes('page:leads')));
+
+  // 6b. a candidate whose reply reads as interest: the window offers the stage move itself
+  await page.evaluate(() => {
+    window.__stage = null;
+    window.stageSubmissionFor = (cid, jid) => Promise.resolve({ id: 'sub-1', stage: 'Screening' });
+    window.openStageModal = (id, stage, done, o) => { __stage = { id, stage, jobId: o && o.jobId }; };
+    STATE.nextActions = { items: [{ kind: 'stage_suggested', entity_type: 'candidate', entity_id: 'cand-1', title: 'Claudia Perez', subtitle: 'Renewable Energy Partners', email: 'c@x.test', job_id: 'job-5', stage: 'Screening', last_activity_at: '2026-10-06T08:00:00Z', priority: 40, owner_id: STATE.user.id, reason: 'Interested — currently at "Screening". Worth moving them forward?' }], summary: {}, team: null, snoozed: 0, overflow: 0 };
+    STATE.naExpanded = true; STATE.page = 'dashboard'; render();
+  });
+  await page.waitForTimeout(300);
+  await clickRow('Claudia Perez');
+  d = await drawer();
+  step('a "Replied — interested" row says what to do and offers the stage move, suggesting the next stage', d && /Decide whether to move Claudia Perez forward from "Screening"/.test(d.task) && d.taskBtns.includes('Move to Submitted to BDM'), JSON.stringify([d && d.task, d && d.taskBtns]));
+  step('…the stage list is there for any other stage, and only that candidate\'s mail is listed (no lead-engine mail)', await page.evaluate(() => document.querySelectorAll('.ev-task-acts select option').length > 5) && d.rows.every(r => !/abitos/.test(r.p + r.s + r.t)));
+  await page.evaluate(() => [...document.querySelectorAll('.ev-task-acts button')].find(b => /^Move to Submitted to BDM/.test(b.textContent)).click()); await wait();
+  step('…clicking it opens the ordinary stage window on that person\'s submission for that job', await page.evaluate(() => __stage && __stage.id === 'sub-1' && __stage.stage === 'Submitted to BDM' && __stage.jobId === 'job-5' && !document.querySelector('.ev-drawer')), await page.evaluate(() => JSON.stringify(__stage)));
 
   // 7. nothing dead
   step('every kind of row opened a drawer with something in it', true);

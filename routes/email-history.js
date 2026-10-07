@@ -134,7 +134,12 @@ module.exports = (ctx) => {
       // ?direction=in  → only what CAME BACK;  ?direction=out → only what WENT OUT (the owner, 6 Oct:
       // "all email will have both outbound and inbound").
       const dir = String(req.query.direction || '').trim();
+      // A candidate's history is the candidate's own mail. The leads engine writes to
+      // LEADS and its rows carry no candidate column, so ?candidate_id= cannot narrow
+      // them — they used to ride along, and "why is this candidate's window full of
+      // emails to other people" was the result (owner, 7 Oct). Skip the source.
       const wants = (s) => {
+        if (s === 'leads' && req.query.candidate_id) return false;
         if (s === 'replies') return dir !== 'out' && (!only || only === 'replies');
         return dir !== 'in' && (!only || only === s);
       };

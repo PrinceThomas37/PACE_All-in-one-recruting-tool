@@ -66,7 +66,7 @@ const probe = (page, minRatio, scope, limit = 6) => page.evaluate(CONTRAST_PROBE
 // Each entry is [page, subState] where subState is merged into STATE.
 const SCREENS = [
   ['dashboard'], ['leads'], ['applicants'], ['reports'], ['myteam'],
-  ['myteam', { myteamTab:'insights' }], ['myteam', { myteamTab:'reports' }],
+  ['myteam', { myteamTab:'team' }], ['myteam', { myteamTab:'reports' }],
   ['bd_joborders'], ['bd_myjobs'], ['bd_jodetail'], ['bd_pipeline'],
   ['clients'], ['sourced'], ['insights'], ['reminders'], ['admin'], ['assign'], ['workflows'], ['mailbox'],
   ['email', { emailTab:'pending' }],

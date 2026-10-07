@@ -50,7 +50,7 @@
   };
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return t?'<span class="id-chip">'+esc(t)+'</span>':''; }
   function canUse(u){ return userHasAnyRole(u,'admin','bd','bd_lead','recruiter'); }
   function isBDMlike(u){ return userHasAnyRole(u,'admin','bd','bd_lead'); }
   function fmtDate(s){ if(!s)return '—'; try{ var d=new Date(s); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }catch(e){ return '—'; } }
@@ -269,7 +269,7 @@
       return { id:c.id, onclick:"atsRowToggle('"+c.id+"',event)", cells:[
         { html: '<span onclick="event.stopPropagation()">'+UI.check(!!a.sel[c.id], "atsToggleSel('"+c.id+"')")+'</span>' },
         { html: UI.idCell(c.full_name||'—', c.email||'', null,
-                 { verified:!!c.email, badge: c.candidate_code?'<span class="pill mute fs-10_5" style="font-family:var(--mono)">'+esc(c.candidate_code)+'</span>':'' }) },
+                 { verified:!!c.email, badge: c.candidate_code?'<span class="id-chip">'+esc(c.candidate_code)+'</span>':'' }) },
         { html: statusPill(c.applicant_status), cls:'tight' },
         { html: esc(jobTitle(c)) },
         { html: esc(loc(c)), cls:'tight' },
