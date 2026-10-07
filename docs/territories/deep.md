@@ -326,3 +326,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-07 (Session 42) — migration 057, a company's LinkedIn page (R-157, D-0091) — APPLIED to the live database 2026-10-07 (owner: "Yes change the database and merge it")
 - `migrations/057_company_linkedin.sql`: `companies.linkedin_url TEXT` (nullable) + index `companies_linkedin_idx (org_id, lower(linkedin_url)) WHERE linkedin_url IS NOT NULL AND deleted_at IS NULL`. Additive and idempotent; no row changes. Applied through the Supabase tool as `057_company_linkedin` BEFORE the code merged; verified after: column and index exist, 0 of 595 companies carry a LinkedIn page yet, no row changed. The code does not depend on it (`services/lead-check.js` learns the column is missing and carries on).
+
+## 2026-10-07 (Session 42) — migration 058, the Lead Finder tables (R-157, D-0092) — NOT YET APPLIED
+- `migrations/058_lead_finder.sql`: `finder_searches` (personal saved searches) and `finder_cards` (suggestions: new|waiting|rejected|accepted; unique per (org, person, company_key); waiting ⇔ wait_until). Both tenant tables (in `models/tables.js`), RLS service-role policy, default org_id. A rejected card keeps only a small mark (payload cleared). Additive, idempotent. APPLY BEFORE the code merges, with the owner's fresh go-ahead. `test/models-smoke.mjs` now expects 48 tenant tables.

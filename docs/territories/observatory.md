@@ -671,3 +671,6 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-07 (Session 41)
 - `next-action.js`: a `stage_suggested` item now carries `stage` (the candidate's current stage) so the browser can suggest the next one without the server learning the stage vocabulary.
+
+## 2026-10-07 (Session 42) — Apollo adapter additions for the Lead Finder
+- `services/people-apollo.js`: `searchOrganizations` (POST /mixed_companies/search, merges `organizations` + `accounts`) and `organizationJobPostings` (GET /organizations/:id/job_postings). Never retried; key in a header. Apollo cannot give posting TEXT, so the lead stores `jd_raw: 'Title: …'` plus Apollo-sourced facts and the AI writes only from those (no AI call is added by the finder itself).

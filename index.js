@@ -3563,6 +3563,9 @@ app.use(require('./routes/poc')(routeCtx));
 app.use(require('./routes/jobs')(routeCtx));
 app.use(require('./routes/lead-take')(routeCtx));   // R-148 / D-0082: a BD takes leads for themselves
 app.use(require('./routes/lead-check')(routeCtx));  // R-157 / D-0090: can this company be added? (the rule is services/lead-decision.js)
+// R-157: the Lead Finder — saved searches, today's cards, contacts, Accept. Kept as a const: the nightly sweep below calls its runDue().
+const finderRouter = require('./routes/finder')(routeCtx);
+app.use(finderRouter);
 app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));
@@ -3903,6 +3906,16 @@ engineRunner.register('lead_sourcing', {
   quiet: true,          // usually nothing is due; don't fill the log with no-ops
   description: 'Pull new postings from configured employer job boards into the review queue',
   run: () => require('./lead-ingest').runDueSources({ supabase })
+});
+
+// ── The Lead Finder's nightly search (R-157) ───────────────────────────────
+// Checks hourly like the board watcher; each saved search runs at most once a day (20-hour gap), for people an admin
+// has switched on, within the organisation's daily Apollo credit limit. Makes CARDS only — nothing here saves a lead or emails anyone.
+engineRunner.register('lead_finder', {
+  everyMs: 60 * 60 * 1000,
+  quiet: true,
+  description: 'Run each person\'s saved Lead Finder searches once a day and make today\'s cards',
+  run: () => finderRouter.runDue()
 });
 
 // ── THE HEARTBEAT ──────────────────────────────────────────────
