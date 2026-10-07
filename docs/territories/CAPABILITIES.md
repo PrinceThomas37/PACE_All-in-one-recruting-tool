@@ -252,6 +252,16 @@ owner's call, against advice). One definition, `services/company-cooldown.js`
 (pure), replacing three that disagreed. It is shown when a client is PICKED, not
 at Save.
 
+**Can this company be added? (R-157, D-0091)** One rule, `services/lead-decision.js`
+(pure), asked by `POST /lead-check` and enforced where a lead is really created
+(approving a sourced lead, an RA adding one). A company already in YOUR organisation
+is recognised by its website, its LinkedIn page or its name (any one); an open job
+order or a live lead (any stage but Rejected/Future) blocks it and the sentence
+names the owner; otherwise the admin-set cooldown (now 30 days) counts from the
+latest lead of any stage. Another organisation's companies are never looked at.
+The RA form and the Sourced-leads approval window show the answer BEFORE the
+button. Needs migration 057 only for the LinkedIn match.
+
 **A job order must belong to a `companies` row.** The Client box is a NAME, and
 the SERVER resolves it (`services/client-resolve.js`, pure): exact match on the
 normalised name within the caller's org, else find-or-create. The form's

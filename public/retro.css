@@ -862,7 +862,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   color:var(--text);
 }
 html :where(#content :where(
-  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,
+  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,
   .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
   .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,
   .email-card,.failed-panel,.dash-tile,.cmp-prev,.cmp-fld select,.cmp-fld .cmp-static,.cp-found,.cpill,
@@ -1000,3 +1000,11 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 /* the toolbar search box (UI.toolbar) — square ink edge like every other control (it was the old rounded pill) */
 .tbar-search input,.hz-search{border:2px solid var(--ctl-brd);border-radius:0;background:var(--card)}
 .tbar-search input:focus,.hz-search:focus{border-color:var(--accent);box-shadow:3px 3px 0 var(--accent-l)}
+
+/* ── "can this company be added?" (R-157, D-0090): the answer a person sees before they press Add.
+   Same family as the other callouts: paper, ink edge, a light tint for the state, ink text. */
+.ld-box{padding:9px 12px;margin:8px 0;border:2px solid var(--ctl-brd);background:var(--card-solid);color:var(--text);font-size:12.5px;line-height:1.45}
+.ld-box strong{display:block;margin-bottom:2px}
+.ld-box.is-stop{background:var(--red-l)}
+.ld-box.is-info{background:var(--info-l,var(--accent-l))}
+.ld-box.is-go{background:var(--green-l)}

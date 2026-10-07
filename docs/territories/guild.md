@@ -780,3 +780,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-07 (Session 40, round 5)
 - `routes/jobs.js` `POST /jobs/bulk` takes `for_me` (honoured only for bd/bd_lead): the imported leads are `Assigned`, owned by the importer, spread over THEIR connected mailboxes (services/lead-distribution.js, `ignoreRoom`); everyone else's import still lands in the pool as `Unassigned`. Response adds `owned` and `job_ids`. The opened job row (25-workflow-bd.js) shows interviews this week / best matches / quick actions (round 4).
+
+## 2026-10-07 (Session 42) — "can this company be added?" (R-157, D-0090, D-0091)
+- The add rule for leads is `services/lead-decision.js`: match a company by website / LinkedIn page / name; an open job order (`job_orders.status = 'Active'`) or a live lead (any stage except Rejected and Future) blocks; then the `company_cooldown_days` cooldown (30 on the live site) counts from the most recent lead of any stage. Owner named in the sentence. Nothing crosses organisations (D-0090). `routes/jobs.js` `POST /jobs` applies it to RAs (as the cooldown did); sourced-lead approval applies it to everyone; BD job-order creation, `/jobs/bulk` and BD/RA-lead/admin manual adds are unchanged and still on their older cooldown-only checks — widening is a one-line change each if the owner wants.

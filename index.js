@@ -3562,6 +3562,7 @@ app.use(require('./routes/events')(routeCtx));
 app.use(require('./routes/poc')(routeCtx));
 app.use(require('./routes/jobs')(routeCtx));
 app.use(require('./routes/lead-take')(routeCtx));   // R-148 / D-0082: a BD takes leads for themselves
+app.use(require('./routes/lead-check')(routeCtx));  // R-157 / D-0090: can this company be added? (the rule is services/lead-decision.js)
 app.use(require('./routes/emails')(routeCtx));
 app.use(require('./routes/lookups')(routeCtx));
 app.use(require('./routes/distribution')(routeCtx));

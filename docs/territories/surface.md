@@ -1235,3 +1235,8 @@ resulting "Ask to take over" modal after clicking through, showing
 - **Time zone (`33-stage-modal.js`):** `IV_PLACES` + `ivTzSearch(q,limit)` + combobox `#stg-iv-tzq`; hidden `#stg-iv-tz` still holds the IANA id.
 - **Look + type (`retro.css` end):** type-scale overrides for `.fs-*`; control voice (`@media (min-width:861px)` only — phone keeps 16px); `.flt-btn/.flt-panel`, `.sel-sm/.sel-state`, `.pill` (square, muted fills), `.id-chip`, `.kb-card/.kb-col`; a safety net for inline-rounded controls. **New paper surfaces must be added to the `html :where(#content :where(…))` list** (kanban was unreadable at night until `.kb-*` went in). Half-size font declarations (12.5, 13.5 …) were snapped across `styles/theme/ui/retro.css` and inline JS (not the pixel fonts, not the `.fs-*` block in `ui.css`).
 - **Job funnel** is drawn with the Reports chart kit (`rep-*`).
+
+## 2026-10-07 (Session 42) — the add rule on screen (R-157, D-0091)
+- **RA form (`15-ra-entry-form.js`):** the hard-coded 21-day `companyCooldownCheck` is GONE. `raFormCheckNow()` asks `POST /lead-check` when a company is picked, when the name or website is left, and at Submit (before anything is written); `raFormDecisionBox()` shows the refusal (`ld-box is-stop`) or "Already on file as …" (`ld-box is-info`); a free company already on file is reused instead of created twice; editing a lead is never checked. State: `STATE.raForm.decision`, `_decKey`.
+- **Sourced leads approval window (`43-page-sourced-leads.js`):** `srcdCheck()` on open and after "Work out email"; `decisionBox()`; Add lead is disabled with a hover reason when blocked; the typed website is sent with the approval.
+- **`retro.css`:** `.ld-box` (+ `.is-stop/.is-info/.is-go`), added to the paper-surface list.
