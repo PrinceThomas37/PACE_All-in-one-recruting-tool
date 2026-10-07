@@ -1682,3 +1682,12 @@ makes that call bigger (roughly +700-1,100 tokens), so ~100 emails/day with JDs
 is ≈ 300-350k tokens, still inside 400k if other AI use stays modest.
 **Re-open when:** JD-carrying imports push daily use near the cap, or the AI
 vs template reply rates (Deliverability → variants) say one of them loses.
+
+---
+
+## D-0083 — 2026-10-07 — Industry rules: no second free-text box now; playbook groundwork is on the roadmap, notifications come first
+**Owner asked:** whether a second space below the AI-writing note (to define rules for the AI) is needed, "because later when the multi-industry playbook is scaled, not every industry will have the same rules or prompts as recruiting."
+**Advice given (and accepted — the owner said to add it to the to-do list):** keep ONE note per person (how it sounds). The hard rules are a different kind of thing — guarantees the app CHECKS — and today they are recruiting-specific and in code. A free-text "rules" box would be a second prompt that looks like a guarantee. Right shape later: an admin-owned **playbook** of STRUCTURED rules (instruction + optional machine check + on/off). Groundwork (move today's rules into one named "Recruiting playbook" data block, no screen) is `R-150`, not started.
+**Also decided:** the next topic is **notifications** (`R-149`); the owner will continue in another chat; scope (what / where / per-person switches) is still theirs to answer.
+**Re-open when:** a second industry's customer is real, or a customer asks to change what the AI may never say.
+
