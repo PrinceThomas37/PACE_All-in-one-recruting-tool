@@ -6609,3 +6609,6 @@ Owner: "can we select for which job the lead should be created? can we select th
 
 ### SESSION 42, two ways to search + POCs and jobs in history (D-0097) — dev branch, with #309 (main job + Send from)
 Owner confirmed option A ("okay", then "A. Do this"). Built per D-0097 on the same dev branch as #309 so one release carries both. No migration. Node 22 on #309 alone: 211/211.
+
+### SESSION 42, release — main job, Send from, Find leads now, POCs and jobs live (D-0096, D-0097)
+Owner: "Merge once it is completed." Before merging: no `sending` emails, no active send record; Node 22 and Node 26.10.0 full suites 211/211. No migration. Merged as #309 → `0bd16ad` (squash); the earlier send-card fix (#308 → `0c0615f`) was already live. Not verified from here: Render's deploy. Owner to try: the Accept window's Main job and Send from; the Find leads now tab; Saved & past → POCs & jobs; and to report on the first email (AI first emails are ON live, `sys_engine_ai_first_email`=1; the email writer is NOT given the other jobs or Apollo's counts — offered, not built). Open: R-163 (the 20-minute pending-retry sweep mystery), R-158/159/160/161, per-organisation Apollo keys (R-067).
