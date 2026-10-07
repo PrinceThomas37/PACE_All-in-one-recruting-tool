@@ -41,8 +41,8 @@ const ACCESS = {
 const CARDS = {
   waiting: 2, daily: 25, today: 3,
   cards: [
-    { id: 'c1', company_name: 'Brazos Valley Machining', status: 'new', domain: 'brazosmachining.com', website: 'https://brazosmachining.com', linkedin_url: '', phone: '+1 254-555-0188', city: 'Waco', state: 'TX', employees: 85, revenue: '', chips: ['Headcount +12% in a year'], postings: null, search: { titles: ['CNC Machinist'], locations: ['Texas'] }, decision: { blocked: false, state: 'free', sentence: '' } },
-    { id: 'c2', company_name: 'Lone Star Dental Partners', status: 'new', domain: 'lonestardental.com', website: 'lonestardental.com', phone: '', city: 'Austin', state: 'TX', employees: 40, chips: [], postings: null, search: null, decision: { blocked: true, state: 'cooldown', sentence: 'Rhea added Lone Star 12 days ago. It can be added again in 18 days.' } },
+    { id: 'c1', search_id: 's1', company_name: 'Brazos Valley Machining', status: 'new', domain: 'brazosmachining.com', website: 'https://brazosmachining.com', linkedin_url: '', phone: '+1 254-555-0188', city: 'Waco', state: 'TX', employees: 85, revenue: '', chips: ['Headcount +12% in a year'], postings: null, search: { titles: ['CNC Machinist'], locations: ['Texas'] }, decision: { blocked: false, state: 'free', sentence: '' } },
+    { id: 'c2', search_id: 's2', company_name: 'Lone Star Dental Partners', status: 'new', domain: 'lonestardental.com', website: 'lonestardental.com', phone: '', city: 'Austin', state: 'TX', employees: 40, chips: [], postings: null, search: null, decision: { blocked: true, state: 'cooldown', sentence: 'Rhea added Lone Star 12 days ago. It can be added again in 18 days.' } },
   ],
 };
 const PEOPLE = { total: 4, people: [
@@ -67,11 +67,17 @@ try {
   await page.evaluate(({ access, cards, people, emails }) => {
     window.__calls = []; window.__access = JSON.parse(JSON.stringify(access)); window.__cards = JSON.parse(JSON.stringify(cards));
     window.__searches = [];
+    window.__hist = { days: 90, card_days: 5, hidden: 3, counts: { accepted: 2, waiting: 1, rejected: 1 }, items: [
+      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned' } },
+      { id: 'a2', search_id: 's2', company_name: 'Handed Co', place: '', status: 'accepted', decided_at: '2026-10-04T10:00:00Z', lead: null, lead_elsewhere: true },
+      { id: 'w1', search_id: 's1', company_name: 'Parked Dental', place: '', status: 'waiting', wait_until: '2026-10-21', decided_at: '2026-10-07T10:00:00Z', lead: null },
+      { id: 'r1', search_id: 's2', company_name: 'Declined Inc', place: '', status: 'rejected', decided_at: '2026-10-06T10:00:00Z', lead: null } ] };
     const rec = (m, p, b) => window.__calls.push([m, p, b]);
     window.apiGet = function (p) {
       rec('GET', p);
       if (p === '/finder/access') return Promise.resolve(window.__access);
       if (p === '/finder/cards') return Promise.resolve(window.__cards);
+      if (p.indexOf('/finder/history') === 0) return Promise.resolve(window.__hist);
       if (p === '/finder/searches') return Promise.resolve({ searches: window.__searches });
       if (p === '/finder/admin/users') return Promise.resolve({ default_daily: 25, users: [{ id: 'u9', name: 'Rob Ra', email: 'rob@x.test', roles: ['ra'], enabled: false, daily: null }] });
       if (p === '/finder/diagnose') return Promise.resolve({ connected: true, ok: false, checks: [{ ok: true, text: 'Finding people by job title works (free).' }, { ok: false, text: 'This Apollo key is not allowed to search companies.' }] });
@@ -80,14 +86,17 @@ try {
     window.apiPost = function (p, b) {
       rec('POST', p, b);
       if (/\/postings$/.test(p)) return Promise.resolve({ postings: [{ title: 'CNC Machinist', url: 'https://x.test/1', city: 'Waco', state: 'TX', age_days: 41, source: 'LinkedIn' }, { title: 'Welder', url: '', age_days: 3, source: '' }], signals: { chips: ['2 open roles', 'Oldest open 41 days'] } });
-      if (/\/people$/.test(p)) return Promise.resolve(JSON.parse(JSON.stringify(people)));
+      if (/\/people$/.test(p)) return Promise.resolve(b && b.title === 'Owner' ? { total: 1, people: [{ id: 'p9', first_name: 'Hal', last_name: 'Fox', title: 'Owner', revealed: false, email: null }] } : JSON.parse(JSON.stringify(people)));
+      if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
+      if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
-      if (/\/run$/.test(p)) return Promise.resolve({ results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } });
+      if (/\/run$/.test(p)) { const R = { results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } }; return window.__hold ? new Promise((r) => { window.__release = () => r(R); }) : Promise.resolve(R); }
       if (p === '/finder/searches') { window.__searches.push(Object.assign({ id: 's1', active: true, posted_days: b.posted_days }, b)); return Promise.resolve({ id: 's1' }); }
       return Promise.resolve({});
     };
+    window.__refreshed = 0; window.refreshJobs = function () { window.__refreshed++; return Promise.resolve(); };
     window.apiPut = function (p, b) { rec('PUT', p, b); return Promise.resolve({}); };
     window.apiDelete = function (p) { rec('DELETE', p); return Promise.resolve({}); };
   }, { access: ACCESS, cards: CARDS, people: PEOPLE, emails: EMAILS });
@@ -117,6 +126,9 @@ try {
   step('the page opens on Today\'s cards, best first, with the company facts', /Brazos Valley Machining/.test(h) && /Waco, TX/.test(h) && /85 employees/.test(h) && /Headcount \+12%/.test(h) && h.indexOf('Brazos') < h.indexOf('Lone Star'));
   step('a card says which search found it', /Found for: CNC Machinist in Texas/.test(h));
   step('the numbers are shown: to review, waiting, credits, reveals', /2<\/div><div class="strip-l">To review/.test(h) && /3\/300/.test(h) && /1\/30/.test(h));
+  step('with cards from two searches a row of choices appears, and picking one shows only that search\'s cards', /All · 2/.test(h) && await page.evaluate(() => { window.fdFilterCards('s1'); return true; }) && /Brazos Valley/.test(await html()) && !/Lone Star Dental/.test(await html()));
+  await page.evaluate(() => window.fdFilterCards(''));
+  h = await html();
   step('a company the add rule blocks shows the reason in words and its Accept button is DISABLED', /Rhea added Lone Star 12 days ago/.test(h) && await page.evaluate(() => { const b = [...document.querySelectorAll('#content button')].filter(x => x.textContent.trim() === 'Accept'); return b.length === 2 && !b[0].disabled && b[1].disabled; }));
   await page.evaluate(() => window.fdAccept('c2'));
   step('opening Accept on a card the rule blocks does nothing (no window opens)', !(await modal()) && (await page.evaluate(() => !window.STATE.finder.acc)));
@@ -139,7 +151,7 @@ try {
   await page.evaluate(() => window.fdAccept('c1'));
   await page.waitForTimeout(200);
   let m = await modal();
-  step('Accept opens ONE window with the job, the people and where it goes', /Add Brazos Valley Machining as a lead/.test(m) && /Which job is this lead for/.test(m) && /Who should we write to/.test(m) && /Where it goes/.test(m));
+  step('Accept opens ONE window with the job, the people and where it goes', /Add Brazos Valley Machining as a lead/.test(m) && /Which jobs is this lead for/.test(m) && /Who should we write to/.test(m) && /Where it goes/.test(m));
   step('for an RA it says plainly: into the Unassigned pool, nothing emailed now', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m));
   step('the jobs already opened on the card are offered as one-click choices', /class="fd-pill/.test(m) && /CNC Machinist/.test(m) && /Welder/.test(m));
   const saveDisabled = () => page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead|Saving/.test(b.textContent)).disabled);
@@ -170,12 +182,19 @@ try {
   await page.waitForTimeout(250);
   m = await modal();
   step('the three revealed-with-email people are ticked automatically', (await page.evaluate(() => Object.keys(window.STATE.finder.acc.picked).filter(k => window.STATE.finder.acc.picked[k]).sort().join())) === 'p1,p3,p4');
+  await page.evaluate(() => { document.getElementById('fd-titleq').value = 'Owner'; window.fdFindPeople(); });
+  await page.waitForTimeout(250);
+  m = await modal();
+  step('searching again for another title ADDS to the list: the people already paid for and ticked stay, with their emails', /Hal Fox/.test(m) && /Dana/.test(m) && /dana@brazosmachining\.com/.test(m) && (await page.evaluate(() => Object.keys(window.STATE.finder.acc.picked).filter(k => window.STATE.finder.acc.picked[k]).sort().join())) === 'p1,p3,p4');
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Zed'; document.getElementById('fd-m-email').value = 'zed@brazosmachining.com'; window.fdAddManual(); });
   m = await modal();
   step('a FOURTH contact is refused in words — a lead carries three at most', /Three contacts is the most/.test(m) && (await page.evaluate(() => window.STATE.finder.acc.manual.length)) === 0);
 
   // add by hand
-  await page.evaluate(() => { const a = window.STATE.finder.acc; Object.keys(a.picked).forEach(k => { a.picked[k] = false; }); a.picked.p1 = true; a.mdraft = null; a.err = ''; window.fdUsePosition('CNC Machinist'); });
+  await page.evaluate(() => { const a = window.STATE.finder.acc; Object.keys(a.picked).forEach(k => { a.picked[k] = false; }); a.picked.p1 = true; a.mdraft = null; a.err = ''; });
+  await page.evaluate(() => window.fdToggleJob('Welder'));
+  m = await modal();
+  step('several jobs can be ticked: they are numbered, the first is the main one, and the window says the rest ride along free', /1 · CNC Machinist/.test(m) && /2 · Welder/.test(m) && /also hiring/.test(m) && /no extra credit/.test(m));
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Sam'; document.getElementById('fd-m-email').value = 'not-an-email'; window.fdAddManual(); });
   m = await modal();
   step('a hand-added contact with a broken email is refused in words', /valid email/.test(m));
@@ -183,17 +202,29 @@ try {
   m = await modal();
   step('…and a good one is added and marked "added by hand"', /sam@brazosmachining\.com/.test(m) && /added by hand/.test(m));
 
+  const histBefore = (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length;
   await page.evaluate(() => window.fdSave());
   await page.waitForTimeout(300);
   cs = await calls();
   const acc = cs.find(c => /c1\/accept$/.test(c[1]));
-  step('Save sends the job and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].position === 'CNC Machinist' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
+  step('Save sends the job and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].positions.join() === 'CNC Machinist,Welder' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
   step('afterwards the window is closed and the card is gone', !(await modal()) && !/Brazos Valley Machining/.test(await html()));
+  step('the history is reloaded after Save, so the new lead is in "Saved & past" at once', (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > histBefore);
+  step('Leads is refreshed by itself after Save (the new lead needs no manual refresh)', (await page.evaluate(() => window.__refreshed)) >= 1);
+  step('for an RA (lead goes to the pool) no email is written', !(await calls()).some(c => /emails\/generate/.test(c[1])) && !/Write the first email now/.test(m));
 
   // BD sees a different destination
   await page.evaluate((c) => { window.__access.goes_to = 'you'; window.STATE.finder.access.goes_to = 'you'; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.render(); window.fdAccept('c1'); }, CARDS);
   m = await modal();
   step('for a BD manager it says: straight to you, in your own mailbox', /Straight to you/.test(m));
+  step('…and offers to write the first email now — ticked, and saying plainly that nothing is sent until Send', /Write the first email now/.test(m) && /Nothing is sent until you press Send/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdSave(); });
+  await page.waitForTimeout(300);
+  cs = await calls();
+  step('a BD Save then asks the server to write that lead\'s first email (into Pending — not to send it)', cs.some(c => c[0] === 'POST' && c[1] === '/emails/generate' && c[2].job_ids.join() === 'L1') && !cs.some(c => /send/.test(c[1])));
+  await page.evaluate((c) => { window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); window.fdToggleWrite(); }, CARDS);
+  m = await modal();
+  step('un-ticking it means no email is written for that lead', !(await page.evaluate(() => window.STATE.finder.acc.writeEmail)));
   await page.evaluate(() => window.fdCloseAccept());
 
   // a refusal from the server stays in the window, in words, and nothing is lost
@@ -227,6 +258,13 @@ try {
   step('Save sends clean lists (titles and places split on commas), the size and the posted-within choice', saved && saved[2].titles.join() === 'Dental Hygienist,Medical Assistant' && saved[2].locations.join() === 'Texas,remote' && saved[2].sizes.join() === 'mid' && saved[2].posted_days === 30 && saved[2].sector === 'medical', JSON.stringify(saved && saved[2]));
   h = await html();
   step('the saved search appears in the list with a Run now button', /Medical &amp; dental/.test(h) && /Run now/.test(h));
+  await page.evaluate(() => { window.__searches.push({ id: 's2', name: 'Second search', active: true, titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }); window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.__hold = true; window.fdRun('s1'); });
+  await page.waitForTimeout(150);
+  const btns = await page.evaluate(() => [...document.querySelectorAll('#content .fd-card button')].filter(b => /Run now|Running/.test(b.textContent)).map(b => b.textContent.trim() + (b.disabled ? '(off)' : '')));
+  step('while one search runs only ITS button says Running… — the other says Run now and is switched off', btns.join('|') === 'Running…(off)|Run now(off)' || btns.join('|') === 'Run now(off)|Running…(off)', btns.join('|'));
+  await page.evaluate(() => { window.__hold = false; window.__release(); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.fdTab('searches'));
   await page.evaluate(() => window.fdRun('s1'));
   await page.waitForTimeout(300);
   step('Run now asks the server to run THAT search, then shows the new cards', (await calls()).some(c => c[1] === '/finder/searches/s1/run') && (await page.evaluate(() => window.STATE.finder.tab)) === 'cards');
@@ -254,11 +292,57 @@ try {
   h = await html();
   step('"Check what my key can do" lists each check in words, red where Apollo refuses', /Finding people by job title works/.test(h) && /not allowed to search companies/.test(h) && /c-red/.test(h));
 
+  // ── saved & past ───────────────────────────────────────────────────────
+  await switchRole(page, 'ra');
+  await page.evaluate(() => { window.__searches = [{ id: 's1', name: 'Machining', active: true, titles: ['Welder'], locations: ['Texas'], sizes: [], posted_days: 14, keywords: [], domains: [] }, { id: 's2', name: 'Dental', active: true, titles: ['Hygienist'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }]; window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.goPage('finder'); });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => window.fdTab('history'));
+  await page.waitForTimeout(300);
+  h = await html();
+  step('there is a "Saved & past" tab that opens on the companies saved as leads, with its count', /Saved &amp; past/.test(h) && /Saved Machining/.test(h) && /Saved as leads · 2/.test(h) && /Waiting · 1/.test(h) && /Turned down · 1/.test(h) && !/Parked Dental/.test(h));
+  step('each saved company shows its place, which search found it, and the lead it became (job and stage) with an Open lead button', /Waco, TX/.test(h) && /Found by Machining/.test(h) && /<strong>Welder<\/strong> · Assigned/.test(h) && /Open lead/.test(h));
+  step('a lead handed to someone else is not described — it says so', /now belongs to someone else/.test(h));
+  await page.evaluate(() => window.fdHistSearch('s2'));
+  h = await html();
+  step('the searches can be told apart: picking one shows only what THAT search found', /Handed Co/.test(h) && !/Saved Machining/.test(h));
+  await page.evaluate(() => { window.fdHistSearch(''); window.fdHistStatus('waiting'); });
+  h = await html();
+  step('Waiting shows when each comes back, with a Show now button', /Parked Dental/.test(h) && /Comes back on/.test(h) && /Show now/.test(h));
+  await page.evaluate(() => window.fdUnwait('w1', null));
+  await page.waitForTimeout(250);
+  step('Show now asks the server to bring that company back', (await calls()).some(c => c[0] === 'POST' && c[1] === '/finder/cards/w1/unwait'));
+  await page.evaluate(() => window.fdHistStatus('rejected'));
+  h = await html();
+  step('Turned down shows the name and says it will never be shown again', /Declined Inc/.test(h) && /never shown to you again/.test(h));
+  step('it says how many older ones are hidden, offers to show everything, and says when undecided cards are removed', /3 older than 90 days are hidden/.test(h) && /Show everything/.test(h) && /removed after 5 days/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-hq').value = 'zzz'; window.fdHistQ('zzz'); });
+  h = await html();
+  step('the name box narrows the list, and says when nothing matches', /Nothing matches/.test(h));
+  await page.evaluate(() => { window.fdHistQ(''); window.fdHistAll(); });
+  await page.waitForTimeout(250);
+  step('"Show everything" asks for all of it', (await calls()).some(c => c[0] === 'GET' && c[1] === '/finder/history?all=1'));
+  await page.evaluate(() => window.fdTab('searches'));
+  h = await html();
+  step('on My searches each search says what it found before, with a See them button that opens the history for just that search', /Found before: 1 saved as leads · 1 waiting · 0 turned down/.test(h) && await page.evaluate(() => { window.fdHistFor('s1'); return window.STATE.finder.tab === 'history' && window.STATE.finder.histSearch === 's1' && window.STATE.finder.histStatus === 'accepted'; }));
+  await page.evaluate(() => { window.STATE.jobs = [{ id: 'L7' }]; window.fdOpenLead('L7'); });
+  step('Open lead takes the person to that lead', (await page.evaluate(() => window.STATE.modal && window.STATE.modal.type)) === 'jobDetail');
+  await page.evaluate(() => { window.STATE.modal = null; window.STATE.jobs = []; window.goPage('finder'); window.fdOpenLead('L7'); });
+  step('…and when the lead is not on their list it says why instead of doing nothing', !(await page.evaluate(() => window.STATE.modal && window.STATE.modal.type)));
+
   // ── phone ──────────────────────────────────────────────────────────────
   await page.setViewportSize({ width: 390, height: 800 });
   await page.evaluate(() => { window.STATE.finder.cards = JSON.parse(JSON.stringify(window.__cards.cards)); window.fdTab('cards'); });
   await page.waitForTimeout(200);
   step('on a phone nothing overflows the page sideways', await page.evaluate(() => { const c = document.getElementById('content'); return c.scrollWidth <= c.clientWidth + 1; }));
+
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await switchRole(page, 'bd');
+  await page.evaluate(() => { window.__refreshed = 0; window.goPage('leads'); });
+  await page.waitForTimeout(300);
+  step('the Leads page has a refresh button, like the Inbox', await page.evaluate(() => !!document.querySelector('#content .tbar-ico[title="Refresh leads"]')));
+  await page.evaluate(() => document.querySelector('#content .tbar-ico[title="Refresh leads"]').click());
+  await page.waitForTimeout(200);
+  step('…and pressing it reloads the leads from the server', (await page.evaluate(() => window.__refreshed)) >= 1);
 
   step('No uncaught page errors', pageErrors.length === 0, pageErrors.join(' | '));
 } catch (e) {

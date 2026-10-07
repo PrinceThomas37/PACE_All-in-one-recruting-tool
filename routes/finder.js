@@ -10,6 +10,8 @@
 //   PUT|DELETE /finder/searches/:id        change / delete one of mine
 //   POST   /finder/searches/:id/run        run one of mine now
 //   GET    /finder/cards                   today's cards: companies waiting for Accept / Wait / Reject
+//   GET    /finder/history                 what my searches found before: saved as leads, parked, turned down
+//   POST   /finder/cards/:id/unwait        bring a parked company back now
 //   POST   /finder/cards/:id/reject|wait   turn a card down for good / for the admin's number of days
 //   POST   /finder/cards/:id/postings      open the company's postings (1 Apollo credit, once)
 //   POST   /finder/cards/:id/people        find people by job title (free)
@@ -360,7 +362,7 @@ module.exports = (ctx) => {
     const posts = Array.isArray(c.postings) ? c.postings : null;
     const sig = posts ? finder.postingSignals(posts) : null;
     return {
-      id: c.id, company_name: c.company_name, status: c.status, wait_until: c.wait_until, created_on: c.created_on,
+      id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status, wait_until: c.wait_until, created_on: c.created_on,
       domain: co.domain || '', website: co.website || '', linkedin_url: co.linkedin_url || '', phone: co.phone || '',
       city: co.city || '', state: co.state || '', address: co.address || '', employees: co.employees || null, revenue: co.revenue || '',
       chips: [].concat(p.chips || [], sig ? sig.chips : []),
@@ -388,6 +390,61 @@ module.exports = (ctx) => {
       }
       const made = await scoped.from('finder_cards').select('id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
       res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ═════════ HISTORY — what this person's searches found before (decided cards only) ═════════════════
+  // Saved-as-lead, parked (Wait) and turned-down companies stay as a small record; a card nobody decided on is removed
+  // after `finder_card_days`. The default view reaches back 90 days; "all" reaches everything (the horizon rule).
+  const HISTORY_DAYS = 90;
+  router.get('/finder/history', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const scoped = db.forRequest(req), now = clock();
+      const { data, error } = await scoped.from('finder_cards')
+        .select('id,search_id,company_name,status,wait_until,decided_at,lead_id,created_at,payload')
+        .eq('user_id', req.user.id).in('status', ['accepted', 'waiting', 'rejected']).order('decided_at', { ascending: false }).limit(1000);
+      if (error) throw error;
+      const all = data || [];
+      const cutoff = new Date(now).getTime() - HISTORY_DAYS * 86400000;
+      const showAll = req.query && req.query.all === '1';
+      const items = all.filter((c) => showAll || c.status === 'waiting' || new Date(c.decided_at || c.created_at).getTime() >= cutoff);
+      // A lead is described only to the person who made it or now holds it — never to someone it was handed away from.
+      const leadIds = items.filter((c) => c.lead_id).map((c) => c.lead_id);
+      const leads = {};
+      if (leadIds.length) {
+        const j = await scoped.from('jobs').select('id,position,stage,created_by,assigned_to_bd').in('id', leadIds).is('deleted_at', null);
+        if (j.error) throw j.error;
+        (j.data || []).forEach((x) => { leads[x.id] = x; });
+      }
+      const counts = { accepted: 0, waiting: 0, rejected: 0 };
+      const out = items.map((c) => {
+        counts[c.status] = (counts[c.status] || 0) + 1;
+        const co = (c.payload && c.payload.company) || {};
+        const l = c.lead_id ? leads[c.lead_id] : null;
+        const mine = !!l && (l.created_by === req.user.id || l.assigned_to_bd === req.user.id);
+        return {
+          id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status,
+          place: [co.city, co.state].filter(Boolean).join(', '), wait_until: c.wait_until || null, decided_at: c.decided_at || null,
+          lead: mine ? { id: l.id, position: l.position, stage: l.stage } : null,
+          lead_gone: !!c.lead_id && !l, lead_elsewhere: !!l && !mine,
+        };
+      });
+      res.json({ items: out, counts, hidden: all.length - items.length, days: HISTORY_DAYS, card_days: await num('finder_card_days') });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // A parked company brought back early.
+  router.post('/finder/cards/:id/unwait', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const now = clock();
+      const { data, error } = await db.forRequest(req).from('finder_cards')
+        .update({ status: 'new', wait_until: null, decided_at: null, created_on: finder.dayOf(now), created_at: now })
+        .eq('id', req.params.id).eq('user_id', req.user.id).eq('status', 'waiting').select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Card not found' });
+      res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -500,8 +557,14 @@ module.exports = (ctx) => {
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
       const co = (card.payload && card.payload.company) || {};
       const b = req.body || {};
-      const position = String(b.position || '').trim().slice(0, 200);
-      if (!position) return res.status(400).json({ error: 'Pick the job this lead is for.' });
+      // One or more jobs (up to 5): the first is the lead's main job, the rest are kept on it as "also hiring".
+      const positions = [];
+      [].concat(Array.isArray(b.positions) ? b.positions : [], b.position ? [b.position] : []).forEach((t) => {
+        const v = String(t || '').trim().slice(0, 200);
+        if (v && !positions.some((x) => x.toLowerCase() === v.toLowerCase())) positions.push(v);
+      });
+      if (!positions.length) return res.status(400).json({ error: 'Pick the job this lead is for.' });
+      const position = positions[0], alsoHiring = positions.slice(1, 5);
 
       // Contacts: up to 3, each with a verified/typed email. People revealed on this card are taken from the card, never from the browser.
       const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 3);
@@ -554,13 +617,14 @@ module.exports = (ctx) => {
       const chosen = posts.find((p) => p.title === position) || null;
       const location = (chosen && [chosen.city, chosen.state].filter(Boolean).join(', ')) || [co.city, co.state].filter(Boolean).join(', ') || null;
       const facts = finder.factsLines(co, posts);
+      if (alsoHiring.length) facts.push('They are also hiring for ' + alsoHiring.join('; ') + '.');
       const research = {
         requirements: { skill_1: null, skill_2: null, skill_3: null, skills: [], suggested_skills: [], skills_source: 'none', location, city: (chosen && chosen.city) || co.city || null },
         company: { expertise: '', notes: '', headcount: '', hiring_volume: '' }, outreach: { angle: facts[0] || '', avoid: '' }, contacts: [],
         // Only the title: the posting TEXT cannot be read from Apollo, so the AI writes a short email from facts, never invented duties (D-0087).
         jd_raw: 'Title: ' + position,
         source: { kind: 'finder', provider: 'apollo', apollo_org_id: card.apollo_org_id || null, search_id: card.search_id || null, found_at: card.created_at, posting_url: (chosen && chosen.url) || null },
-        finder: { facts, postings: posts.slice(0, 10).map((p) => ({ title: p.title, url: p.url, posted_at: p.posted_at, source: p.source })) },
+        finder: { facts, also_hiring: alsoHiring, postings: posts.slice(0, 10).map((p) => ({ title: p.title, url: p.url, posted_at: p.posted_at, source: p.source })) },
       };
       const leadRow = {
         company_id: companyId, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,

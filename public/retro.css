@@ -1043,3 +1043,5 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-mbody{padding:6px 20px 14px;max-height:66vh;overflow:auto}
 .fd-mfoot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
 @media (max-width:640px){.fd-grid{grid-template-columns:1fr}}
+.fd-block{display:flex;align-items:flex-start;margin-top:8px;line-height:1.4}
+.fd-block input{margin-top:3px}
