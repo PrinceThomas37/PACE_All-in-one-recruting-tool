@@ -783,7 +783,7 @@ function renderAdmin(){
 function adminViewToggle(active){
   function seg(val,label){
     var on=(STATE.adminView||'list')===val;
-    return '<button onclick="setAdminView(\''+val+'\')" style="padding:6px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-size:12.5px;font-weight:600;cursor:pointer">'+label+'</button>';
+    return '<button onclick="setAdminView(\''+val+'\')" style="padding:6px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-size:13px;font-weight:600;cursor:pointer">'+label+'</button>';
   }
   return '<div style="display:flex;gap:3px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px">'+seg('list','List')+seg('org','Org chart')+'</div>';
 }

@@ -92,7 +92,7 @@
     return '<div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap">'+
       tabs.map(function(t){
         var on=active===t[0];
-        return '<button onclick="myteamTab(\''+t[0]+'\')" style="background:none;border:0;border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';color:'+(on?'var(--text)':'var(--text3)')+';font-weight:'+(on?700:500)+';font-size:13.5px;padding:8px 12px;cursor:pointer;margin-bottom:-1px">'+t[1]+'</button>';
+        return '<button onclick="myteamTab(\''+t[0]+'\')" style="background:none;border:0;border-bottom:2px solid '+(on?'var(--accent)':'transparent')+';color:'+(on?'var(--text)':'var(--text3)')+';font-weight:'+(on?700:500)+';font-size:14px;padding:8px 12px;cursor:pointer;margin-bottom:-1px">'+t[1]+'</button>';
       }).join('')+
     '</div>';
   }

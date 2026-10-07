@@ -305,7 +305,7 @@
       return 'Sends as <strong>'+esc(s.mailbox.display_name||s.mailbox.email)+'</strong> &lt;'+esc(s.mailbox.email)+'&gt;';
     }
     return '<span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;vertical-align:middle"><span>Sends from</span>'+
-      '<select class="sel" style="width:auto;font-size:12.5px;padding:4px 28px 4px 8px;max-width:320px;margin:0" onchange="candOutreachSetMailbox(this.value)">'+
+      '<select class="sel" style="width:auto;font-size:13px;padding:4px 28px 4px 8px;max-width:320px;margin:0" onchange="candOutreachSetMailbox(this.value)">'+
         list.map(function(m){
           return '<option value="'+esc(m.id)+'"'+(m.id===cur?' selected':'')+'>'+
             esc((m.display_name?m.display_name+' · ':'')+m.email)+'</option>';
@@ -318,7 +318,7 @@
     var one=function(n,label,on,click){
       return '<button type="button" '+(click?'onclick="'+click+'"':'disabled')+' style="'+
         'display:flex;align-items:center;gap:7px;border:0;background:transparent;padding:4px 2px;'+
-        'font-family:inherit;font-size:12.5px;cursor:'+(click?'pointer':'default')+';'+
+        'font-family:inherit;font-size:13px;cursor:'+(click?'pointer':'default')+';'+
         'color:'+(on?'var(--accent)':'var(--text3)')+';font-weight:'+(on?'600':'500')+'">'+
         '<span style="width:20px;height:20px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;'+
           'font-size:11px;font-weight:700;background:'+(on?'var(--accent)':'var(--border)')+';color:'+(on?'#fff':'var(--text3)')+'">'+n+'</span>'+
@@ -442,7 +442,7 @@
         '<td style="padding:8px 10px;white-space:nowrap">'+
           '<div class="fs-13" style="font-weight:700">'+(r.score==null?'—':r.score)+'</div>'+band(r.band)+
         '</td>'+
-        '<td style="padding:8px 10px;font-size:11.5px;color:var(--text3);line-height:1.5">'+
+        '<td style="padding:8px 10px;font-size:12px;color:var(--text3);line-height:1.5">'+
           esc((r.reasons||[]).slice(0,3).join(' · ')||'not enough on either side to score')+
         '</td>'+
       '</tr>';
@@ -487,7 +487,7 @@
       return '<button type="button" onclick="candOutreachSetAngle(\''+v.id+'\')" title="'+esc(v.blurb)+'" style="'+
         'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
         'background:'+(on?'var(--accent-l)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+';'+
-        'font-weight:'+(on?'600':'500')+';font-size:12.5px;border-radius:99px;padding:6px 13px;cursor:pointer;font-family:inherit">'+
+        'font-weight:'+(on?'600':'500')+';font-size:13px;border-radius:99px;padding:6px 13px;cursor:pointer;font-family:inherit">'+
         esc(v.label)+' <span style="opacity:.65">'+v.words+'w</span></button>';
     }).join('')+'</div>';
   }

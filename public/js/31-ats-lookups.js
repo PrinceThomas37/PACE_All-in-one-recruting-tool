@@ -47,7 +47,7 @@
     var cats = CATS.map(function(c){
       var rows = (all[c.key]||[]).map(function(r){
         return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">'+
-          '<span class="c-text3" style="flex:1;font-size:12.5px'+(r.is_active?'':';text-decoration:line-through')+'">'+esc(r.value)+'</span>'+
+          '<span class="c-text3" style="flex:1;font-size:13px'+(r.is_active?'':';text-decoration:line-through')+'">'+esc(r.value)+'</span>'+
           '<label class="fs-11 c-text3" style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox"'+(r.is_active?' checked':'')+' onchange="atsLkToggle(\''+r.id+'\',this.checked)"> active</label>'+
         '</div>';
       }).join('') || '<div class="fs-12 c-text3" style="padding:4px 0">No values.</div>';

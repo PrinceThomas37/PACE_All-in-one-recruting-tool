@@ -418,7 +418,7 @@ function renderEmail(){
       var _pTp=Math.max(1,Math.ceil(totalRecipients/20));
       var pendingPaged=pending.slice(_pPg*20,(_pPg+1)*20);
       var sendBlocked=!mineCount||STATE.mySendingPaused;
-      var sendAllBtn='<button onclick="openSendAllConfirm()" style="background:var(--accent);color:#fff;border:0;padding:9px 18px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer'+(sendBlocked?';opacity:.4;cursor:not-allowed':'')+'"'+(sendBlocked?'disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+mineCount+')</button>';
+      var sendAllBtn='<button class="btn btn-primary" onclick="openSendAllConfirm()"'+(sendBlocked?' disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+mineCount+')</button>';
 
       var pendingRows=pendingPaged.map(function(e){
         var isMine=e.is_mine!==false;

@@ -105,7 +105,7 @@
   // ── the résumé (R-091) ─────────────────────────────────────────────────────
   function resumeDocOf(pr){ return (pr.documents||[]).find(function(d){ return d.doc_type==='resume'; }); }
   function isPdfDoc(d){ return !!d && (/\.pdf$/i.test(d.filename||'') || /pdf/i.test(d.content_type||'')); }
-  var RESUME_NOTE = 'color:var(--text3);font-size:12.5px;padding:14px';
+  var RESUME_NOTE = 'color:var(--text3);font-size:13px;padding:14px';
 
   // What the Resume card shows right now: the preview and a Download when the
   // file has arrived, the extracted text when it is not a PDF (or while the
@@ -528,7 +528,7 @@
       onmenu: "atsOpenEdit('"+c.id+"')",
       fields:
         '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">'+
-          (c.candidate_code?'<span class="pill mute fs-11" style="font-family:var(--mono)">'+esc(c.candidate_code)+'</span>':'')+
+          (c.candidate_code?'<span class="id-chip">'+esc(c.candidate_code)+'</span>':'')+
           (c.applicant_status?UI.pill(c.applicant_status,'info',true):'')+
         '</div>'+ fields,
       tabs: tabBar,

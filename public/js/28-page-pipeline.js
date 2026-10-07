@@ -12,7 +12,7 @@
   if (STATE.bd) { STATE.bd.pipeline = STATE.bd.pipeline || []; STATE.bd.view = STATE.bd.view || {}; STATE.bd.plSel = STATE.bd.plSel || {}; }
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function code(t){ return '<span class="fs-10_5 c-text3" style="font-family:var(--mono);font-weight:600">'+esc(t)+'</span>'; }
+  function code(t){ return t?'<span class="id-chip">'+esc(t)+'</span>':''; }
   var SUBSTAGE_COLORS={"Sourced":"var(--text3)","Screening":"#6b7280","Submitted to BDM":"var(--amber)","Submitted to Client":"var(--accent)","Interview Scheduled":"#2563eb","Interview Completed":"#1d4ed8","Offer":"#7c3aed","Joining":"#0891b2","Placement":"var(--green)","Not Accepted":"var(--red)","On Hold":"#6b7280"};
   // Stage ranking used to decide when a candidate has actually been *submitted*.
   // A candidate is only "Submitted" once they reach "Submitted to BDM" (i.e. sent
@@ -596,12 +596,12 @@
       var trs = (m.results||[]).map(function(r){
         var c = r.candidate || {};
         var already = r._tagged || inPipeline[c.id];
-        var td = 'padding:8px 9px;font-size:12.5px;border-top:1px solid var(--border);vertical-align:middle';
+        var td = 'padding:8px 9px;font-size:13px;border-top:1px solid var(--border);vertical-align:middle';
         return '<tr'+(already?' style="opacity:.55"':'')+'>'+
           '<td style="'+td+'">'+(window.matchBadge?matchBadge({score:r.score,band:r.band,reasons:r.reasons||[]}):esc(String(r.score)))+'</td>'+
           // The reasons are the point: a score nobody can explain is a score
           // nobody trusts. Show them inline, not only on hover.
-          '<td style="'+td+';color:var(--text3);font-size:11.5px;max-width:230px">'+esc((r.reasons||[]).join(' · '))+'</td>'+
+          '<td style="'+td+';color:var(--text3);font-size:12px;max-width:230px">'+esc((r.reasons||[]).join(' · '))+'</td>'+
           '<td style="'+td+';font-weight:600"><a href="#" onclick="bdOpenCandidate(\''+c.id+'\');return false">'+esc(c.full_name||'—')+'</a>'+
             (c.candidate_code?'<div class="fs-11 c-text3">'+esc(c.candidate_code)+'</div>':'')+'</td>'+
           '<td style="'+td+'">'+esc(c.current_title||'—')+'</td>'+

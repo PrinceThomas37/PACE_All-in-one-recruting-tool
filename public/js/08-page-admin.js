@@ -710,7 +710,7 @@ function renderDeliverability(){
     var vv=d.view||'team';
     var vopts=[['own','Personal'],['team','My team']];
     if(d.can_org)vopts.push(['org','Org-wide']);
-    mbViewToggle='<div style="display:flex;gap:4px;padding:9px 14px;border-bottom:1px solid var(--border)">'+vopts.map(function(o){var on=vv===o[0];return '<button onclick="setDelivView(\''+o[0]+'\')" style="padding:4px 11px;border:1px solid '+(on?'var(--accent)':'var(--border)')+';border-radius:7px;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text2)')+';font-size:11.5px;font-weight:600;cursor:pointer">'+o[1]+'</button>';}).join('')+'</div>';
+    mbViewToggle='<div style="display:flex;gap:4px;padding:9px 14px;border-bottom:1px solid var(--border)">'+vopts.map(function(o){var on=vv===o[0];return '<button onclick="setDelivView(\''+o[0]+'\')" style="padding:4px 11px;border:1px solid '+(on?'var(--accent)':'var(--border)')+';border-radius:7px;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+o[1]+'</button>';}).join('')+'</div>';
   }
   // ── Warm-up pool ──
   var isAdmin=userHasRole(u,'admin');
@@ -734,7 +734,7 @@ function renderDeliverability(){
       badge=m.opt_in?'<span class="c-accent" style="'+warmMuted+';background:var(--accent-l)">Pool receiver</span>':'<span class="c-text3" style="'+warmMuted+';background:var(--bg3)">Not warming</span>';
       if(isAdmin)actions=m.connected
         ?'<button onclick="openWarmupStart(\''+m.id+'\')" style="font-size:11px;color:#fff;background:var(--accent);border:0;padding:4px 11px;border-radius:6px;cursor:pointer;margin-left:5px">Start warm-up</button>'
-        :'<span style="font-size:10.5px;color:var(--amber)" title="Connect this mailbox under the user\'s Email IDs first">⚠ not connected</span>';
+        :'<span style="font-size:11px;color:var(--amber)" title="Connect this mailbox under the user\'s Email IDs first">⚠ not connected</span>';
     }
     var meta=[];
     if(m.warmup_status==='warming')meta.push(m.sent_today+'/'+(m.target_today||0)+' today');

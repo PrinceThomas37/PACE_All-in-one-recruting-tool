@@ -242,7 +242,7 @@ input[type=number],input[type=password],textarea,select{
 table thead tr,thead tr{background:transparent!important}
 table th,thead th{
   color:var(--text3);font-weight:600;text-transform:uppercase;
-  font-size:10.5px;letter-spacing:.055em;
+  font-size:11px;letter-spacing:.055em;
   border-bottom:1px solid var(--border);
 }
 table tbody tr{transition:background .14s ease}
@@ -412,7 +412,7 @@ table td,table th{border-color:var(--border)!important}
    any more than an inline width can be re-laid-out — the same law that moved
    six admin buttons into classes. So they are classes now. */
 .bclock-time{font-family:var(--display);font-size:13px;font-weight:500;letter-spacing:.01em;line-height:1;color:var(--text3)}
-.bclock-date{font-family:var(--display);font-size:22px;font-weight:700;margin-top:5px;color:var(--text)}
+.bclock-date{font-family:var(--display);font-size:24px;font-weight:700;margin-top:5px;color:var(--text)}
 .banner-chip{
   font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;
   background:var(--accent-l);border:1px solid var(--glass-brd);color:var(--accent);
@@ -521,7 +521,7 @@ table.dt tbody tr:hover{background:var(--bg3)}
 .login-tab{
   flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
   padding:12px 8px;border:0;cursor:pointer;font-family:inherit;
-  font-size:13.5px;font-weight:600;border-radius:var(--r2);min-height:46px;
+  font-size:14px;font-weight:600;border-radius:var(--r2);min-height:46px;
   background:transparent;color:var(--text2);transition:background-color .15s ease,color .15s ease;
 }
 .login-tab:hover{color:var(--text)}
@@ -602,7 +602,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lx-main{flex:1;min-width:0}
 .lx-side{flex:none;width:230px;display:flex;flex-direction:column;gap:10px}
 .lx-head{
-  font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--text3);margin-bottom:8px;
 }
 
@@ -614,16 +614,16 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lx-who{flex:1;min-width:180px}
 .lx-nm{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:7px}
 .lx-primary{
-  font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   color:var(--accent);background:var(--accent-l);
   border-radius:999px;padding:2px 7px;
 }
-.lx-sub{font-size:11.5px;color:var(--text3);margin-top:2px}
+.lx-sub{font-size:12px;color:var(--text3);margin-top:2px}
 .lx-mail{color:var(--text2)}
 
 .lx-mailbtn{flex:none;white-space:nowrap}
 .lx-es{display:flex;align-items:center;gap:7px;flex:none}
-.lx-es>span{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+.lx-es>span{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
 /* 16px so iOS does not zoom the page on focus and never zoom back. */
 .lx-sel{
   font-size:16px;padding:6px 10px;min-height:36px;
@@ -631,8 +631,8 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
   background:var(--card);color:var(--text);cursor:pointer;
 }
 .lx-sel:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-l)}
-.lx-noemail{font-size:11.5px;color:var(--text3)}
-.lx-empty{font-size:12.5px;color:var(--text3);padding:6px 2px}
+.lx-noemail{font-size:12px;color:var(--text3)}
+.lx-empty{font-size:13px;color:var(--text3);padding:6px 2px}
 
 .lx-facts{
   background:var(--card);border:1px solid var(--glass-brd);
@@ -647,7 +647,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
    D-0048). Calm like the lead panel: neutral chips, one accent only on a link;
    no state colour on the list (D-0019). */
 .lx-gap{margin-top:14px}
-.lx-line{font-size:12.5px;color:var(--text);line-height:1.5}
+.lx-line{font-size:13px;color:var(--text);line-height:1.5}
 .lx-muted{color:var(--text3)}
 .lx-note{font-size:12px;color:var(--text2);margin-top:8px}
 .lx-chips{display:flex;flex-wrap:wrap;gap:6px}
@@ -669,15 +669,15 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lx-item{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:var(--card);border:1px solid var(--ctl-brd,var(--border));
-  border-radius:var(--r);padding:7px 10px;font-size:12.5px;color:var(--text);
+  border-radius:var(--r);padding:7px 10px;font-size:13px;color:var(--text);
 }
 .lx-item b{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lx-item span{flex:none;font-size:11.5px;color:var(--text3)}
+.lx-item span{flex:none;font-size:12px;color:var(--text3)}
 .lx-acts{display:flex;flex-direction:column;gap:6px}
 /* A control inside the facts card is compact on a wide screen. On a phone it
    stays at 16px (mobile.css) so iOS does not zoom the page on focus. */
 @media (min-width:861px){
-  .lx-kv-ctl .lx-sel{font-size:12.5px;min-height:30px;padding:3px 8px}
+  .lx-kv-ctl .lx-sel{font-size:13px;min-height:30px;padding:3px 8px}
 }
 
 /* The POC finder's four slots on a lead row (62-poc-finder.js, R-053). Calm:
@@ -686,7 +686,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
 .lxc-title{margin:0}
 .lxc-count{font-weight:600;color:var(--text2);letter-spacing:0;text-transform:none;margin-left:6px}
-.lxc-group{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin:10px 0 5px}
+.lxc-group{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin:10px 0 5px}
 .lxc-slot.is-empty{
   border:1px dashed var(--ctl-brd,var(--border));border-radius:var(--r2);
   padding:10px 12px;margin-bottom:7px;background:transparent;
@@ -695,16 +695,16 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-want > div{flex:1;min-width:0}
 .lxc-mark{flex:none;color:var(--text3);font-size:13px;line-height:19px}
 .lxc-want-t{font-size:13px;font-weight:600;color:var(--text)}
-.lxc-want-s{font-size:11.5px;color:var(--text3);margin-top:2px}
+.lxc-want-s{font-size:12px;color:var(--text3);margin-top:2px}
 .lxc-form{margin-top:10px;display:flex;flex-direction:column;gap:8px}
 .lxc-row{display:flex;gap:8px;flex-wrap:wrap}
 .lxc-row .inp{flex:1 1 180px;min-width:0}
-.lxc-note{font-size:11.5px;color:var(--text3);line-height:1.45}
+.lxc-note{font-size:12px;color:var(--text3);line-height:1.45}
 .lxc-actions{display:flex;gap:8px;flex-wrap:wrap}
 .lxc-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-top:10px}
 .lxc-foot-note{color:var(--text3);flex:1 1 220px}
 @media (min-width:861px){
-  .lxc-size{font-size:12.5px;min-height:30px;padding:3px 8px}
+  .lxc-size{font-size:13px;min-height:30px;padding:3px 8px}
 }
 /* Slice 2: people Apollo found, waiting for a yes or no. The state is one
    3px accent stripe and at most ONE tinted chip (how sure the email is) —
@@ -728,16 +728,16 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-found-main{flex:1 1 240px;min-width:0}
 .lxc-found-name{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .lxc-found-title{font-weight:500;color:var(--text2)}
-.lxc-found-mail{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--text);margin-top:3px}
+.lxc-found-mail{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--text);margin-top:3px}
 .lxc-mail{overflow-wrap:anywhere}
 .lxc-conf{font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;white-space:nowrap}
 .lxc-conf.is-confirmed{background:var(--green-l);color:var(--green)}
 .lxc-conf.is-likely{background:var(--accent-l);color:var(--accent)}
-.lxc-found-src{font-size:11.5px;color:var(--text3);line-height:1.45;margin-top:3px}
+.lxc-found-src{font-size:12px;color:var(--text3);line-height:1.45;margin-top:3px}
 .lxc-found-src a{color:var(--accent);font-weight:600;text-decoration:none}
 .lxc-found-src a:hover{text-decoration:underline}
 .lxc-found-acts{display:flex;gap:8px;flex-wrap:wrap;flex:none}
-.lxc-credits{font-size:11.5px;color:var(--text3);margin-top:6px;line-height:1.45}
+.lxc-credits{font-size:12px;color:var(--text3);margin-top:6px;line-height:1.45}
 
 /* "Find anyone at <company>" — the title search in the People to reach block
    (R-068). The results list scrolls inside its own box so fifty people never
@@ -752,7 +752,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxc-ppl-name{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .lxc-ppl-title{font-size:12px;color:var(--text2);margin-top:1px;overflow-wrap:anywhere}
 .lxc-ppl-title a{color:var(--accent);font-weight:600;text-decoration:none}
-.lxc-ppl-state{font-size:11.5px;color:var(--text3);white-space:nowrap;flex:none}
+.lxc-ppl-state{font-size:12px;color:var(--text3);white-space:nowrap;flex:none}
 .lxc-uncover{flex:none;white-space:nowrap}
 @media (max-width:560px){
   .lxc-ppl-row{flex-wrap:wrap}
@@ -764,7 +764,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .intg-apollo-label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px}
 .intg-apollo-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .intg-apollo-row .inp{width:140px;max-width:100%}
-.intg-apollo-used{font-size:11.5px;color:var(--text2);margin-top:6px;line-height:1.45}
+.intg-apollo-used{font-size:12px;color:var(--text2);margin-top:6px;line-height:1.45}
 
 /* "Already added" (owner, 2026-09-28) — the pop-up every add-a-person path
    shows when that person or address is already in PACE (10-page-modals.js
@@ -772,9 +772,9 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
    it is information, not a fault. */
 .dup-msg{font-size:14px;line-height:1.5;color:var(--text);margin:0}
 .dup-person{margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px}
-.dup-name{font-size:13.5px;font-weight:600;color:var(--text)}
-.dup-sub{font-size:12.5px;color:var(--text2);margin-top:2px;overflow-wrap:anywhere}
-.dup-where{font-size:12.5px;color:var(--text2);margin-top:10px}
+.dup-name{font-size:14px;font-weight:600;color:var(--text)}
+.dup-sub{font-size:13px;color:var(--text2);margin-top:2px;overflow-wrap:anywhere}
+.dup-where{font-size:13px;color:var(--text2);margin-top:10px}
 
 /* The lead's email timeline + summary (58-lead-intel.js). Drawn only when the
    owner has switched client intelligence on; otherwise the slot is hidden and
@@ -786,7 +786,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxi-card{
   background:var(--card);border:1px solid var(--ctl-brd,var(--border));
   border-radius:var(--r2);padding:10px 12px;margin-bottom:8px;
-  font-size:12.5px;line-height:1.5;color:var(--text);
+  font-size:13px;line-height:1.5;color:var(--text);
 }
 .lxi-card.lxi-ai{border-left:3px solid var(--accent)}
 .lxi-t{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:4px}
@@ -795,7 +795,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxi-steps b{font-weight:600}
 .lxi-steps span{color:var(--text3)}
 .lxi-btnrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
-.lxi-btnrow>span{font-size:11.5px;color:var(--text3)}
+.lxi-btnrow>span{font-size:12px;color:var(--text3)}
 .lxi-link{
   background:none;border:0;padding:4px 0;cursor:pointer;
   font:inherit;font-size:12px;font-weight:600;color:var(--accent);
@@ -814,23 +814,23 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 }
 .lxi-dir.in{color:var(--accent)}
 .lxi-rowtxt{min-width:0;display:flex;flex-direction:column}
-.lxi-rowtxt b{font-size:12.5px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lxi-rowtxt span{font-size:11.5px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lxi-rowtxt b{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lxi-rowtxt span{font-size:12px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* R-110 — the opens line under a sent email. Calm by default; colour only when it was opened. */
 .lxi-open{color:var(--text3)}
 .lxi-open.yes{color:var(--green)}
 .lxi-body{
-  padding:4px 12px 10px 42px;font-size:12.5px;line-height:1.55;color:var(--text);
+  padding:4px 12px 10px 42px;font-size:13px;line-height:1.55;color:var(--text);
   white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;
 }
-.lxi-foot{margin-top:8px;font-size:11.5px;color:var(--text3);white-space:normal}
+.lxi-foot{margin-top:8px;font-size:12px;color:var(--text3);white-space:normal}
 
 /* The job posting box on the lead row (59-lead-posting.js, R-056). Calm: one
    neutral card; only the one-word status carries colour. */
 .lx-post{margin-top:12px}
 .lxp-card{
   background:var(--card);border:1px solid var(--ctl-brd,var(--border));
-  border-radius:var(--r2);padding:10px 12px;font-size:12.5px;color:var(--text);
+  border-radius:var(--r2);padding:10px 12px;font-size:13px;color:var(--text);
 }
 .lxp-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .lxp-status{flex:1;min-width:200px}
@@ -854,8 +854,8 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .mba-main{flex:1;min-width:220px}
 .mba-mail{font-size:13px;font-weight:600;color:var(--text);overflow-wrap:anywhere}
 .mba-owner{font-weight:500;color:var(--text2)}
-.mba-tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--amber);background:var(--amber-l);border-radius:999px;padding:1px 7px;margin-left:4px}
-.mba-text{font-size:12.5px;color:var(--text2);margin-top:2px;line-height:1.5}
+.mba-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--amber);background:var(--amber-l);border-radius:999px;padding:1px 7px;margin-left:4px}
+.mba-text{font-size:13px;color:var(--text2);margin-top:2px;line-height:1.5}
 .mba-meta{font-size:12px;color:var(--text3);margin-top:3px}
 .mba-held{font-weight:600;color:var(--text2)}
 .mba-ask{font-size:12px;color:var(--text3)}
@@ -874,9 +874,9 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 /* The "completed" checkbox on a Needs-you-today / Client-conversations row (R-098/099). A generous tap area, no layout shift. */
 .cd-tick{display:inline-flex;align-items:center;justify-content:center;flex:none;margin:-6px 6px -6px -6px;padding:6px;cursor:pointer}
 .cd-tick input{width:16px;height:16px;margin:0;cursor:pointer}
-.cd-chip{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-l);border-radius:999px;padding:1px 7px;margin-left:6px}
-.cd-line{font-size:12.5px;color:var(--text2);margin-top:2px}
-.cd-sum{font-size:12.5px;color:var(--text);margin-top:3px;font-style:italic}
+.cd-chip{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-l);border-radius:999px;padding:1px 7px;margin-left:6px}
+.cd-line{font-size:13px;color:var(--text2);margin-top:2px}
+.cd-sum{font-size:13px;color:var(--text);margin-top:3px;font-style:italic}
 .cd-next{font-size:12px;color:var(--text3);margin-top:3px}
 .cd-next b{color:var(--text2);font-weight:600}
 .cd-person+.cd-person{margin-top:8px}
@@ -892,8 +892,8 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .rep-hot{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .rep-hot-t{width:190px;flex-shrink:0;min-width:0}
 .rep-hot-bar{flex:1;min-width:40px;background:var(--bg);border-radius:6px;height:18px;overflow:hidden}
-.rep-hot-s{width:200px;flex-shrink:0;text-align:right;font-size:11.5px;color:var(--text2)}
-.rep-tis{width:100%;border-collapse:collapse;font-size:12.5px}
+.rep-hot-s{width:200px;flex-shrink:0;text-align:right;font-size:12px;color:var(--text2)}
+.rep-tis{width:100%;border-collapse:collapse;font-size:13px}
 .rep-tis th{text-align:left;font-size:11px;font-weight:600;color:var(--text3);padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
 .rep-tis td{padding:7px 8px;border-bottom:1px solid var(--border);color:var(--text)}
 .rep-tis .num{text-align:right;white-space:nowrap}
@@ -999,7 +999,7 @@ input[type=number],input[type=password],textarea,select,
 }
 
 /* R-030: the integration card says which key its Test result is about. */
-.intg-unsaved{font-size:11.5px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--amber-l,#fef3c7);color:var(--amber,#92400e);line-height:1.4}
+.intg-unsaved{font-size:12px;margin-top:6px;padding:6px 10px;border-radius:8px;background:var(--amber-l,#fef3c7);color:var(--amber,#92400e);line-height:1.4}
 
 /* C-0029: why a non-owner sees no Upload/Delete on a client's documents. */
 .cl-doc-note{font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.45}

@@ -488,7 +488,7 @@
       return '<button type="button" onclick="outreachRecipMode(\''+id+'\')" style="'+
         'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
         'background:'+(on?'var(--accent-l)':'var(--card)')+';color:'+(on?'var(--accent)':'var(--text2)')+';'+
-        'font-weight:'+(on?'600':'500')+';font-size:12.5px;border-radius:99px;padding:6px 13px;'+
+        'font-weight:'+(on?'600':'500')+';font-size:13px;border-radius:99px;padding:6px 13px;'+
         'cursor:pointer;font-family:inherit">'+lbl+'</button>';
     };
 
@@ -501,14 +501,14 @@
         var rows=[];
         (r.contacts||[]).forEach(function(c){
           var j=encodeURIComponent(JSON.stringify(c));
-          rows.push('<div onclick="outreachPickContact(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
+          rows.push('<div onclick="outreachPickContact(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px" '+
             'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
             '<strong>'+esc(c.name||c.email)+'</strong>'+(c.title?' · '+esc(c.title):'')+
             '<div class="fs-11_5 c-text3">'+esc(c.email)+(c.company?' · '+esc(c.company):'')+'</div></div>');
         });
         (r.companies||[]).forEach(function(co){
           var j=encodeURIComponent(JSON.stringify(co));
-          rows.push('<div onclick="outreachPickCompany(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:12.5px" '+
+          rows.push('<div onclick="outreachPickCompany(\''+j+'\')" style="padding:8px 10px;border-bottom:1px solid var(--border2);cursor:pointer;font-size:13px" '+
             'onmouseenter="this.style.background=\'var(--accent-l)\'" onmouseleave="this.style.background=\'\'">'+
             '<strong>'+esc(co.name)+'</strong> <span class="c-text3">— company</span>'+
             '<div class="fs-11_5 c-text3">'+esc([co.industry,co.location].filter(Boolean).join(' · ')||'see its contacts')+'</div></div>');
@@ -654,7 +654,7 @@
             'border:1px solid '+(on?'var(--accent)':'var(--border2)')+';'+
             'background:'+(on?'var(--accent-l)':'var(--card)')+';'+
             'color:'+(on?'var(--accent)':'var(--text2)')+';'+
-            'font-weight:'+(on?'600':'500')+';font-size:12.5px;border-radius:99px;'+
+            'font-weight:'+(on?'600':'500')+';font-size:13px;border-radius:99px;'+
             'padding:6px 13px;cursor:pointer;font-family:inherit">'+
             esc(v.label||v.id)+
             '<span style="opacity:.65;font-weight:400"> · '+(v.words||0)+'w</span>'+

@@ -863,7 +863,7 @@
           '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Cc <span class="c-text3">(optional — add as many as you like)</span></label>'+chipField('mb-c-cc','cc',c.cc,'mbComposeField','')+'</div>'+
           field('mb-c-subject','Subject','',c.subject,'mbComposeField(\'subject\',this.value)')+
           '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
-            '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:12.5px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
+            '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:13px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
           renderSigRow(c.sig,'mbComposeSetSig')+
         '</div>'+
@@ -1422,7 +1422,7 @@
     var doc='<!doctype html><html><head><meta charset="utf-8">'+
       '<style>'+
         'html,body{margin:0;padding:16px 18px;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;'+
-        'font-size:13.5px;line-height:1.6;color:#0F172A;word-wrap:break-word;overflow-wrap:break-word}'+
+        'font-size:14px;line-height:1.6;color:#0F172A;word-wrap:break-word;overflow-wrap:break-word}'+
         'img{max-width:100%;height:auto}'+
         'table{max-width:100%}'+
         'blockquote{border-left:2px solid #E2E8F0;margin:8px 0;padding-left:12px;color:#475569}'+
