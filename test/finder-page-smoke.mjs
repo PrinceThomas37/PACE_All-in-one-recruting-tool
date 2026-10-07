@@ -77,6 +77,7 @@ try {
       rec('GET', p);
       if (p === '/finder/access') return Promise.resolve(window.__access);
       if (p === '/finder/cards') return Promise.resolve(window.__cards);
+      if (p === '/finder/mailboxes') return Promise.resolve({ goes_to: 'you', suggested_id: 'm2', mailboxes: [{ id: 'm1', email_address: 'bea@x.test', display_name: 'Bea', sent_today: 40 }, { id: 'm2', email_address: 'bea.two@x.test', display_name: '', sent_today: 3 }] });
       if (p.indexOf('/finder/history') === 0) return Promise.resolve(window.__hist);
       if (p === '/finder/searches') return Promise.resolve({ searches: window.__searches });
       if (p === '/finder/admin/users') return Promise.resolve({ default_daily: 25, users: [{ id: 'u9', name: 'Rob Ra', email: 'rob@x.test', roles: ['ra'], enabled: false, daily: null }] });
@@ -152,7 +153,7 @@ try {
   await page.waitForTimeout(200);
   let m = await modal();
   step('Accept opens ONE window with the job, the people and where it goes', /Add Brazos Valley Machining as a lead/.test(m) && /Which jobs is this lead for/.test(m) && /Who should we write to/.test(m) && /Where it goes/.test(m));
-  step('for an RA it says plainly: into the Unassigned pool, nothing emailed now', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m));
+  step('for an RA it says plainly: into the Unassigned pool, nothing emailed now — and offers no "Send from" (a pool lead has no mailbox yet)', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m) && !/Send from/.test(m));
   step('the jobs already opened on the card are offered as one-click choices', /class="fd-pill/.test(m) && /CNC Machinist/.test(m) && /Welder/.test(m));
   const saveDisabled = () => page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead|Saving/.test(b.textContent)).disabled);
   step('Save lead is disabled until a job and a contact are chosen', await saveDisabled());
@@ -194,7 +195,11 @@ try {
   await page.evaluate(() => { const a = window.STATE.finder.acc; Object.keys(a.picked).forEach(k => { a.picked[k] = false; }); a.picked.p1 = true; a.mdraft = null; a.err = ''; });
   await page.evaluate(() => window.fdToggleJob('Welder'));
   m = await modal();
-  step('several jobs can be ticked: they are numbered, the first is the main one, and the window says the rest ride along free', /1 · CNC Machinist/.test(m) && /2 · Welder/.test(m) && /also hiring/.test(m) && /no extra credit/.test(m));
+  step('several jobs can be ticked: the main one is starred, the others ticked, and the window says the rest ride along free and the email is for the main job only', /★ CNC Machinist/.test(m) && /✓ Welder/.test(m) && /also hiring/.test(m) && /no extra credit/i.test(m) && /written for the main job only/.test(m));
+  step('the main job is an explicit choice (a radio list of the ticked jobs), with the first one ticked chosen to start with', await page.evaluate(() => { const r = [...document.querySelectorAll('.modal input[name=fd-main]')]; return r.length === 2 && r[0].checked && !r[1].checked; }));
+  await page.evaluate(() => window.fdSetMain('Welder'));
+  m = await modal();
+  step('choosing another job as the main one moves the star', /★ Welder/.test(m) && /✓ CNC Machinist/.test(m));
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Sam'; document.getElementById('fd-m-email').value = 'not-an-email'; window.fdAddManual(); });
   m = await modal();
   step('a hand-added contact with a broken email is refused in words', /valid email/.test(m));
@@ -207,7 +212,7 @@ try {
   await page.waitForTimeout(300);
   cs = await calls();
   const acc = cs.find(c => /c1\/accept$/.test(c[1]));
-  step('Save sends the job and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].positions.join() === 'CNC Machinist,Welder' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
+  step('Save sends the MAIN job first, then the others, and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].positions.join() === 'Welder,CNC Machinist' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
   step('afterwards the window is closed and the card is gone', !(await modal()) && !/Brazos Valley Machining/.test(await html()));
   step('the history is reloaded after Save, so the new lead is in "Saved & past" at once', (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > histBefore);
   step('Leads is refreshed by itself after Save (the new lead needs no manual refresh)', (await page.evaluate(() => window.__refreshed)) >= 1);
@@ -216,15 +221,22 @@ try {
   // BD sees a different destination
   await page.evaluate((c) => { window.__access.goes_to = 'you'; window.STATE.finder.access.goes_to = 'you'; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.render(); window.fdAccept('c1'); }, CARDS);
   m = await modal();
-  step('for a BD manager it says: straight to you, in your own mailbox', /Straight to you/.test(m));
+  await page.waitForTimeout(250);
+  m = await modal();
+  step('for a BD manager it says: straight to you', /Straight to you/.test(m));
+  step('…with a "Send from" list of their own mailboxes, each with how many it has sent today, the one with fewest pre-selected', /Send from/.test(m) && /Bea &lt;bea@x\.test&gt; — 40 sent today/.test(m) && /bea\.two@x\.test&gt; — 3 sent today/.test(m) && (await page.evaluate(() => document.getElementById('fd-mailbox').value)) === 'm2');
   step('…and offers to write the first email now — ticked, and saying plainly that nothing is sent until Send', /Write the first email now/.test(m) && /Nothing is sent until you press Send/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
-  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdSave(); });
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdPickMailbox('m1'); window.fdSave(); });
   await page.waitForTimeout(300);
   cs = await calls();
+  step('Save sends the mailbox the person chose', (cs.find(c => /c1\/accept$/.test(c[1]) && c[2].mailbox_id) || [0, 0, {}])[2].mailbox_id === 'm1');
   step('a BD Save then asks the server to write that lead\'s first email (into Pending — not to send it)', cs.some(c => c[0] === 'POST' && c[1] === '/emails/generate' && c[2].job_ids.join() === 'L1') && !cs.some(c => /send/.test(c[1])));
   await page.evaluate((c) => { window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); window.fdToggleWrite(); }, CARDS);
   m = await modal();
   step('un-ticking it means no email is written for that lead', !(await page.evaluate(() => window.STATE.finder.acc.writeEmail)));
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; a.mailboxes = []; a.mailboxId = ''; a.mailErr = 'None of your email IDs is connected and working — connect or reconnect one under Email IDs first.'; window.fdToggleWrite(); });
+  m = await modal();
+  step('a BD with no working mailbox is told so in red and cannot Save (there would be nothing to send from)', /None of your email IDs is connected/.test(m) && await page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead/.test(b.textContent)).disabled));
   await page.evaluate(() => window.fdCloseAccept());
 
   // a refusal from the server stays in the window, in words, and nothing is lost

@@ -126,8 +126,18 @@
   window.fdAccept = function(id){
     var c=(F.cards||[]).find(function(x){ return x.id===id; }); if(!c) return;
     if (c.decision && c.decision.blocked){ showToast(c.decision.sentence,'error'); return; }       // the server enforces it too
-    F.acc = { card:c, jobs:[], jobQ:'', writeEmail:((F.access&&F.access.goes_to)==='you'), titleQ:'', people:null, picked:{}, manual:[], busy:false, finding:false, revealing:null, err:'' };
+    F.acc = { card:c, jobs:[], main:'', mailboxes:null, mailboxId:'', mailErr:'', jobQ:'', writeEmail:((F.access&&F.access.goes_to)==='you'), titleQ:'', people:null, picked:{}, manual:[], busy:false, finding:false, revealing:null, err:'' };
     paintAccept();
+    // A lead that comes straight to the person sends from one of THEIR mailboxes: fetch them (the server pre-selects the one
+    // that has sent the fewest today). A lead that goes to the pool has none.
+    if ((F.access&&F.access.goes_to)==='you'){
+      var acc=F.acc;
+      apiGet('/finder/mailboxes').then(function(r){
+        if (F.acc!==acc) return;
+        acc.mailboxes=(r&&r.mailboxes)||[]; acc.mailboxId=(r&&r.suggested_id)||''; acc.mailErr=(r&&r.error)||'';
+        paintAccept();
+      }).catch(function(e){ if(F.acc!==acc) return; acc.mailboxes=[]; acc.mailErr=e.message; paintAccept(); });
+    }
   };
   window.fdCloseAccept = function(){ F.acc=null; STATE.modal=null; render(); };
   function captureAcc(){
@@ -191,20 +201,27 @@
     if (i>=0) a.jobs.splice(i,1);
     else if (a.jobs.length>=5){ a.err='Five jobs is the most one lead can carry.'; paintAccept(true); return; }
     else a.jobs.push(t);
+    if (a.jobs.indexOf(a.main)<0) a.main=a.jobs[0]||'';           // the main job is always one of the ticked ones
     a.err=''; paintAccept(true);
   };
+  // Which ticked job the lead (and its first email) is FOR — an explicit choice, not "whichever was ticked first".
+  window.fdSetMain = function(t){ var a=F.acc; if(!a) return; captureAcc(); if(a.jobs.indexOf(t)>=0) a.main=t; paintAccept(true); };
+  window.fdPickMailbox = function(id){ var a=F.acc; if(!a) return; captureAcc(); a.mailboxId=id; paintAccept(true); };
   window.fdAddJob = function(){
     var a=F.acc; if(!a) return; captureAcc();
     var t=String(a.jobQ||'').trim();
     if (!t) return;
     if (a.jobs.some(function(x){ return x.toLowerCase()===t.toLowerCase(); })){ a.jobQ=''; paintAccept(true); return; }
     if (a.jobs.length>=5){ a.err='Five jobs is the most one lead can carry.'; paintAccept(true); return; }
-    a.jobs.push(t); a.jobQ=''; a.err=''; paintAccept(true);
+    a.jobs.push(t); if(!a.main) a.main=t; a.jobQ=''; a.err=''; paintAccept(true);
   };
   window.fdToggleWrite = function(){ var a=F.acc; if(!a) return; captureAcc(); a.writeEmail=!a.writeEmail; paintAccept(true); };
   function jobsToSave(a){
     var out=a.jobs.slice(), q=String(a.jobQ||'').trim();
-    if (q && !out.some(function(x){ return x.toLowerCase()===q.toLowerCase(); }) && out.length<5) out.push(q);
+    if (q && !out.some(function(x){ return x.toLowerCase()===q.toLowerCase(); }) && out.length<5){ out.push(q); if(!a.main) a.main=q; }
+    // the server takes the FIRST as the lead's job: put the chosen main job there
+    var mi=out.indexOf(a.main);
+    if (mi>0){ out.splice(mi,1); out.unshift(a.main); }
     return out;
   }
   window.fdSave = function(){
@@ -216,7 +233,7 @@
     if (!jobs.length){ a.err='Pick the job this lead is for.'; paintAccept(); return; }
     if (!contacts.length){ a.err='Pick at least one contact with an email, so the lead can be emailed.'; paintAccept(); return; }
     a.busy=true; a.err=''; paintAccept();
-    apiPost('/finder/cards/'+a.card.id+'/accept', { positions:jobs, contacts:contacts }).then(function(r){
+    apiPost('/finder/cards/'+a.card.id+'/accept', { positions:jobs, contacts:contacts, mailbox_id:a.mailboxId||undefined }).then(function(r){
       var id=a.card.id, wantEmail=!!a.writeEmail; F.acc=null; STATE.modal=null; dropCard(id);
       showToast(r&&r.goes_to==='you' ? 'Lead saved — it is yours, in Leads' : 'Lead saved — it is in the Unassigned pool','success');
       render(); loadAccess(); loadHistory();
@@ -238,6 +255,13 @@
     return '';
   }
 
+  function sendFromPart(a){
+    if (a.mailboxes===null) return '<div class="fd-hint">Loading your email IDs…</div>';
+    if (!a.mailboxes.length) return '<div class="fd-hint c-red" role="alert">'+esc(a.mailErr||'You have no connected email ID — add one under Email IDs first.')+'</div>';
+    return '<div class="fd-label">Send from</div><select id="fd-mailbox" class="sel fd-wide" onchange="fdPickMailbox(this.value)">'+
+      a.mailboxes.map(function(m){ return '<option value="'+esc(m.id)+'"'+(m.id===a.mailboxId?' selected':'')+'>'+esc((m.display_name?m.display_name+' ':'')+'<'+m.email_address+'>')+' — '+m.sent_today+' sent today</option>'; }).join('')+'</select>'+
+      '<div class="fd-hint">The email goes out from this address, signed with it. We pre-select the one that has sent the fewest today.</div>';
+  }
   function renderAcceptModal(){
     var a=F.acc; if(!a) return '';
     var c=a.card, goes=(F.access&&F.access.goes_to)==='you';
@@ -246,13 +270,17 @@
 
     var union=titles.slice(); a.jobs.forEach(function(j){ if(union.indexOf(j)<0) union.push(j); });
     var jobPart =
-      '<div class="fd-label">1 · Which jobs is this lead for? <span class="fd-hint">tick one or more — the first is the main job</span></div>'+
+      '<div class="fd-label">1 · Which jobs is this lead for? <span class="fd-hint">tick one or more, then choose the main one</span></div>'+
       (union.length
-        ? '<div class="fd-pills">'+union.slice(0,14).map(function(t){ var n=a.jobs.indexOf(t); return '<button class="fd-pill'+(n>=0?' on':'')+'" onclick="fdToggleJob(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')">'+(n>=0?(n+1)+' · ':'')+esc(t)+'</button>'; }).join('')+'</div>'
+        ? '<div class="fd-pills">'+union.slice(0,14).map(function(t){ var n=a.jobs.indexOf(t); return '<button class="fd-pill'+(n>=0?' on':'')+'" onclick="fdToggleJob(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')">'+(n>=0?(t===a.main?'★ ':'✓ '):'')+esc(t)+'</button>'; }).join('')+'</div>'
         : '<div class="fd-hint">Open their jobs on the card to pick from a list, or type one below.</div>')+
       '<div class="fd-row"><input id="fd-position" class="inp fd-grow" placeholder="Or type a job, e.g. CNC Machinist" value="'+esc(a.jobQ)+'" onkeydown="if(event.key===\'Enter\'){fdAddJob()}">'+
         '<button class="btn btn-sm btn-outline" onclick="fdAddJob()">Add</button></div>'+
-      (a.jobs.length>1?'<div class="fd-hint">The other jobs are saved on the lead as “also hiring” — no extra credit, they are already on the card.</div>':'');
+      (a.jobs.length>1
+        ? '<div class="fd-label">Main job <span class="fd-hint">the lead — and its first email — is for this one</span></div>'+
+          '<div class="fd-pills">'+a.jobs.map(function(t){ return '<label class="fd-use"><input type="radio" name="fd-main" '+(t===a.main?'checked':'')+' onclick="fdSetMain(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')"> '+esc(t)+'</label>'; }).join('')+'</div>'+
+          '<div class="fd-hint">The others are saved on the lead as “also hiring”. The email is written for the main job only. No extra credit — they are already on the card.</div>'
+        : (a.jobs.length===1?'<div class="fd-hint">The lead, and its first email, are for this job.</div>':''));
 
     var rows = (a.people||[]).map(function(p){
       var name=esc(p.first_name+' '+(p.last_name||p.last_name_hint||''));
@@ -282,11 +310,11 @@
         '<button class="btn btn-sm btn-outline" onclick="fdAddManual()">Add this person</button></details>';
 
     var where = '<div class="ld-box is-info"><strong>Where it goes</strong>'+(goes
-      ? 'Straight to you, in Leads, sending from one of your connected mailboxes.'+
+      ? 'Straight to you, in Leads.'+sendFromPart(a)+
         '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'
       : 'Into the Unassigned pool, where your lead hands it out. Nothing is emailed now.')+'</div>';
 
-    var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && !(c.decision&&c.decision.blocked);
+    var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && (!goes || !!a.mailboxId) && !(c.decision&&c.decision.blocked);
 
     return '<div class="modal modal-w720" onclick="event.stopPropagation()">'+
       '<div class="fs-16 fd-mhead">Add '+esc(c.company_name)+' as a lead</div>'+

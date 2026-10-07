@@ -431,6 +431,36 @@ step('Show now brings a parked company back to today\'s cards at once', r.code =
 r = await call('/finder/history', 'get', 'rec1');
 step('a person who is not switched on gets no history (403)', r.code === 403);
 
+// ═════ 7c. which mailbox a lead sends from ══════════════════════════════════════════════════════════════
+console.log('\nThe mailbox');
+({ st, apollo, router, call } = boot());
+await resetCredits(st, 300);
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'bd1' });
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra1' });
+st.tables.user_emails.push(
+  { id: 'm2', org_id: 'o1', user_id: 'bd1', email_address: 'bea.two@x.test', display_name: 'Bea Two', is_active: true, daily_send_limit: 50 },
+  { id: 'm3', org_id: 'o1', user_id: 'bd1', email_address: 'bea.off@x.test', is_active: true, daily_send_limit: 150 },
+  { id: 'mAdm', org_id: 'o1', user_id: 'adm', email_address: 'ada@x.test', is_active: true, daily_send_limit: 150 });
+st.tables.microsoft_tokens.push({ user_email_id: 'm2', refresh_failed: false }, { user_email_id: 'mAdm', refresh_failed: false }, { user_email_id: 'm3', refresh_failed: true });
+st.tables.email_send_log.push({ user_email_id: 'm1', send_date: finder.dayOf(NOW), emails_sent: 40 }, { user_email_id: 'm2', send_date: finder.dayOf(NOW), emails_sent: 3 });
+const mbxCard = (id, key) => st.tables.finder_cards.push({ id, org_id: 'o1', user_id: 'bd1', search_id: null, company_key: key, company_name: 'Mbx ' + key, status: 'new', score: 1, created_on: '2026-10-07', created_at: NOW.toISOString(), postings: null, wait_until: null, lead_id: null, decided_at: null, payload: { company: { domain: key + '.example', website: 'http://' + key + '.example' }, people: {} } });
+['mc1', 'mc2', 'mc3', 'mc4'].forEach((id, i) => mbxCard(id, 'mbx' + (i + 1)));
+r = await call('/finder/mailboxes', 'get', 'bd1');
+step('a BD sees their own CONNECTED mailboxes (not the one whose sign-in failed, not an admin\'s), with what each has sent today', r.code === 200 && r.out.mailboxes.map((m) => m.id).sort().join() === 'm1,m2' && r.out.mailboxes.find((m) => m.id === 'm1').sent_today === 40 && r.out.mailboxes.find((m) => m.id === 'm2').sent_today === 3, JSON.stringify(r.out.mailboxes.map((m) => [m.id, m.sent_today])));
+step('…and the one to pre-select is the one that has sent the FEWEST today (m2, though m1 is first and has the bigger limit)', r.out.suggested_id === 'm2');
+r = await call('/finder/mailboxes', 'get', 'ra1');
+step('a person whose leads go to the pool has no mailbox to choose (nothing to show)', r.out.goes_to === 'pool' && r.out.mailboxes.length === 0);
+const jobsBefore = st.tables.jobs.length;
+r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx1.example' }], mailbox_id: 'mAdm' }, { id: 'mc1' });
+step('a mailbox that belongs to someone else is refused in words — and nothing is saved', r.code === 400 && /not one of yours/.test(r.out.error) && st.tables.jobs.length === jobsBefore && st.tables.finder_cards.find((c) => c.id === 'mc1').status === 'new', JSON.stringify(r.out));
+r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx1.example' }], mailbox_id: 'm3' }, { id: 'mc1' });
+step('…and so is one of their own whose sign-in is broken', r.code === 400 && st.tables.jobs.length === jobsBefore);
+r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx1.example' }], mailbox_id: 'm1' }, { id: 'mc1' });
+step('a chosen mailbox is the one the lead sends from', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).sending_email_id === 'm1', JSON.stringify(r.out));
+r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx2.example' }] }, { id: 'mc2' });
+step('with no choice made, the lead goes to the mailbox that has sent the fewest today (not always the first)', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).sending_email_id === 'm2');
+step('the lead is the person\'s own, assigned, in that mailbox', st.tables.jobs.find((j) => j.id === r.out.lead_id).assigned_to_bd === 'bd1' && st.tables.jobs.find((j) => j.id === r.out.lead_id).stage === 'Assigned');
+
 // ═════ 8. what is wrong with the key, in words ═════════════════════════════════════════════════════════════
 console.log('\nDiagnose');
 ({ st, apollo, router, call } = boot());

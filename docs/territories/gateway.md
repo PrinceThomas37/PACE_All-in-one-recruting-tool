@@ -1076,3 +1076,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-07 (Session 42) — queue-all answers truthfully; send-selected registers its run (D-0095)
 - `index.js`: `isSendAlive`, `selectedSendsByUser`, `tryStartRun` in `/emails/queue-all`; `routeCtx` carries `isSendAlive`. Details in harbour.md.
+
+## 2026-10-07 (Session 42) — mailbox choice for a Finder lead (D-0096)
+- `routes/finder.js`: `GET /finder/mailboxes` (BD: own connected mailboxes + `sent_today` + `suggested_id`; others: pool, none). `POST /finder/cards/:id/accept` takes `mailbox_id` (must be one of the caller's connected mailboxes, else 400 and nothing saved); with none it uses `finder.suggestMailbox` (fewest sent today) instead of `assignmentQueue(…,1)` (which always picked the same mailbox). Tests: `finder-routes-smoke` 104.

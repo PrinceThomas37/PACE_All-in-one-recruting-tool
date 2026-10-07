@@ -81,6 +81,13 @@ step('only an explicit true enables (a truthy string does not)', F.readAccess('{
 step('a person\'s own daily number beats the organisation\'s; none stored uses the organisation\'s; a bad one is ignored', F.dailyFor(F.readAccess('{"enabled":true,"daily":5}'), 25) === 5 && F.dailyFor(F.readAccess('{"enabled":true}'), 25) === 25 && F.dailyFor(F.readAccess('{"enabled":true,"daily":-3}'), 25) === 25 && F.dailyFor(F.readAccess('{"enabled":true,"daily":0}'), 25) === 0);
 step('Wait counts N days forward (at least one), and a card wakes on its day, not before', F.waitUntil(NOW, 14) === '2026-10-21' && F.waitUntil(NOW, 0) === '2026-10-21' && F.waitUntil(NOW, 3) === '2026-10-10' && F.isDue({ status: 'waiting', wait_until: '2026-10-07' }, NOW) && !F.isDue({ status: 'waiting', wait_until: '2026-10-08' }, NOW) && !F.isDue({ status: 'new', wait_until: '2026-10-01' }, NOW));
 
+console.log('\nWhich mailbox a lead defaults to');
+const MB = [{ id: 'a', email_address: 'a@x.test', daily_send_limit: 150 }, { id: 'b', email_address: 'b@x.test', daily_send_limit: 50 }, { id: 'c', email_address: 'c@x.test', daily_send_limit: 150 }];
+step('the mailbox that has sent the fewest emails today is suggested, whatever its place in the list or its limit', F.suggestMailbox(MB, { a: 40, b: 3, c: 12 }) === 'b');
+step('on a tie the bigger daily limit wins, then the address — so the answer never depends on database row order', F.suggestMailbox(MB, {}) === 'a' && F.suggestMailbox(MB.slice().reverse(), {}) === 'a' && F.suggestMailbox([MB[1], MB[0]], { a: 0, b: 0 }) === 'a');
+step('with one mailbox it is that one; with none, nothing (never a made-up id)', F.suggestMailbox([MB[1]], {}) === 'b' && F.suggestMailbox([], {}) === null && F.suggestMailbox(null, null) === null);
+step('a missing or odd sent-today count counts as none', F.suggestMailbox(MB, { a: 'x', b: null, c: undefined }) === 'a');
+
 console.log('\n=== LEAD FINDER RULES SMOKE ===');
 const failed = results.filter(r => !r.ok).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

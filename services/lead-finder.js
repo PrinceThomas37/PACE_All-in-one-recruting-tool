@@ -235,9 +235,23 @@ const dailyFor = (access, orgDefault) => (access && access.daily != null ? acces
 const waitUntil = (now, days) => dayOf(new Date(new Date(now).getTime() + Math.max(1, Number(days) || 14) * 86400000));
 const isDue = (card, now) => !!card && card.status === 'waiting' && !!card.wait_until && String(card.wait_until) <= dayOf(now);
 
+/**
+ * Which of a person's mailboxes a lead should default to: the one that has sent the FEWEST emails today (so a person
+ * with several mailboxes rotates through them instead of every lead landing on the first), then the larger daily
+ * limit, then the address (so the answer never depends on the order the database happens to return rows in).
+ * `sentToday` is { mailboxId: n }. Returns an id, or null when there is none.
+ */
+function suggestMailbox(accounts, sentToday) {
+  const list = (accounts || []).filter((a) => a && a.id);
+  if (!list.length) return null;
+  const sent = (a) => Number((sentToday || {})[a.id]) || 0;
+  const limit = (a) => Number(a.daily_send_limit) || 150;
+  return list.slice().sort((a, b) => sent(a) - sent(b) || limit(b) - limit(a) || String(a.email_address || '').localeCompare(String(b.email_address || '')))[0].id;
+}
+
 module.exports = {
   SECTORS, SIZE_BANDS, POSTED_CHOICES, LIMITS,
   normalizeSearch, apolloFilters, normalizeOrg, isStaffingFirm, scoreOrg,
   normalizePostings, postingSignals, factsLines, sourceOf,
-  dayOf, creditKey, revealKey, accessKey, readAccess, dailyFor, waitUntil, isDue,
+  dayOf, creditKey, revealKey, accessKey, readAccess, dailyFor, waitUntil, isDue, suggestMailbox,
 };

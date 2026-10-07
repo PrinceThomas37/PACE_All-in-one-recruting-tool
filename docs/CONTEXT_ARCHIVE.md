@@ -6603,3 +6603,6 @@ Owner confirmed no sends were running ("No") and agreed to the merge; they will 
 
 ### SESSION 42, the stalled-send fixes (D-0095, R-162) — dev branch
 Owner asked what "the three stalled-send flaws" were, then said "Yes build it and merge it. It only works when there is an error in email sending right?" (answer: no — restarts and double clicks, plus the card's numbers). Built per D-0095; tests `send-progress-smoke` 19, `send-card-smoke` 13. Care taken: Send selected also writes an active record without registering in `activeSendByUser`, so a naive "not in the set = dead" would have declared a live Send-selected run interrupted — it now registers too. Open: R-163.
+
+### SESSION 42, main job + Send from (D-0096) — dev branch
+Owner: "can we select for which job the lead should be created? can we select the from email?" Built per D-0096. The send-card fix (#308 → `0c0615f`) was merged first (owner's "build it and merge it"; no sends running; Node 26 211/211; the one Node 22 failure was `send-race-guard` pinning the old wording of the lock — updated and mutation-checked).

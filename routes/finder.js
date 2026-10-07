@@ -10,6 +10,7 @@
 //   PUT|DELETE /finder/searches/:id        change / delete one of mine
 //   POST   /finder/searches/:id/run        run one of mine now
 //   GET    /finder/cards                   today's cards: companies waiting for Accept / Wait / Reject
+//   GET    /finder/mailboxes               my connected mailboxes (BD) and the one to pre-select for a new lead
 //   GET    /finder/history                 what my searches found before: saved as leads, parked, turned down
 //   POST   /finder/cards/:id/unwait        bring a parked company back now
 //   POST   /finder/cards/:id/reject|wait   turn a card down for good / for the admin's number of days
@@ -351,6 +352,31 @@ module.exports = (ctx) => {
   router.post('/finder/run', auth, async (req, res) => { try { await runMine(req, res, null); } catch (err) { res.status(500).json({ error: err.message }); } });
   router.post('/finder/searches/:id/run', auth, async (req, res) => { try { await runMine(req, res, req.params.id); } catch (err) { res.status(500).json({ error: err.message }); } });
 
+  // ═════════ THE MAILBOX A LEAD SENDS FROM ══════════════════════════════════════════════════════════
+  // Only a lead that comes straight to the person (BD, BD lead) has a mailbox; a pool lead gets the mailbox of whoever
+  // takes it. The person's own connected mailboxes, how many each has sent today, and the one to pre-select.
+  async function mailboxesFor(req, now) {
+    const mb = await leadDistribution.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: req.user.id, todayStr: finder.dayOf(now), who: 'You', ignoreRoom: true });
+    if (mb.error) return { error: mb.error };
+    const sent = {};
+    const ids = mb.accounts.map((a) => a.id);
+    try {
+      const { data } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', finder.dayOf(now)).in('user_email_id', ids);
+      (data || []).forEach((l) => { sent[l.user_email_id] = Number(l.emails_sent) || 0; });
+    } catch (_) { /* a missing count only affects which one is suggested */ }
+    const accounts = mb.accounts.map((a) => ({ id: a.id, email_address: a.email_address, display_name: a.display_name || '', daily_limit: a.daily_send_limit || 150, sent_today: sent[a.id] || 0 }));
+    return { accounts, suggested_id: finder.suggestMailbox(mb.accounts, sent) };
+  }
+  router.get('/finder/mailboxes', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      if (!hasRole(req, 'bd', 'bd_lead')) return res.json({ goes_to: 'pool', mailboxes: [], suggested_id: null });
+      const r = await mailboxesFor(req, clock());
+      if (r.error) return res.json({ goes_to: 'you', mailboxes: [], suggested_id: null, error: r.error });
+      res.json({ goes_to: 'you', mailboxes: r.accounts, suggested_id: r.suggested_id });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // ═════════ CARDS ═══════════════════════════════════════════════════════════════════════════════════
   const cardOf = async (req, id) => {
     const { data, error } = await db.forRequest(req).from('finder_cards').select('*').eq('id', id).eq('user_id', req.user.id).maybeSingle();
@@ -591,9 +617,13 @@ module.exports = (ctx) => {
       const toMe = hasRole(req, 'bd', 'bd_lead');
       let mailboxId = null;
       if (toMe) {
-        const mb = await leadDistribution.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: req.user.id, todayStr: finder.dayOf(now), who: 'You', ignoreRoom: true });
+        // The person chooses which of THEIR connected mailboxes the lead sends from; with no choice, the one that has sent
+        // the fewest today. Anyone else's mailbox, or one that is not connected, is refused (nothing is saved).
+        const mb = await mailboxesFor(req, now);
         if (mb.error) return res.status(400).json({ error: mb.error + ' (Nothing was saved.)' });
-        mailboxId = leadDistribution.assignmentQueue(mb.accounts, 1)[0] || null;
+        const wanted = b.mailbox_id ? String(b.mailbox_id) : '';
+        if (wanted && !mb.accounts.some((a) => a.id === wanted)) return res.status(400).json({ error: 'That email ID is not one of yours, or it is not connected. Pick one from the list. (Nothing was saved.)' });
+        mailboxId = wanted || mb.suggested_id;
       }
 
       // Claim the card in one conditional step so a double-click can never make two leads.

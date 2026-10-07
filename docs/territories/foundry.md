@@ -1140,3 +1140,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-07 (Session 42) — send-progress tests (D-0095)
 - New `send-progress-smoke` (19: the rule, the route with/without a live run, the one-step start) and `send-card-smoke` (13, browser: the owner's exact 29/3/56 numbers, stopped-early card, already-running toast, no auto-dismiss). Mutation-checked: route reconcile, the queue-all guard, the dismiss guard, the Still-to-go chip. Lesson: a detector that matched its own source (the poll function contains the dismiss text) passed vacuously — match the callback's start, not a substring.
+
+## 2026-10-07 (Session 42) — tests for the main job and mailbox choice (D-0096)
+- `finder-routes-smoke` 96→104 (own connected mailboxes only, fewest-sent suggestion, someone else's / broken mailbox refused with nothing saved, chosen mailbox used, default is not always the first), `lead-finder-smoke` 33→37 (`suggestMailbox` order-independent), `finder-page-smoke` 68→73. Mutation-checked: main-first order, mailbox sent in the body, Save needs a mailbox, server refusal, server default.
