@@ -177,6 +177,35 @@ const SETTINGS_SCHEMA = [
     // usage of the apollo") — the owner's test account alone holds 183.3k.
     default: 20, min: 0, max: 10000,
   },
+  // The Lead Finder (R-157, D-0088/D-0091). The owner's words: the admin sets "n number of leads to be
+  // generated per day per user", the wait time on a card, and the Apollo credits the organisation may spend
+  // ("they are going to buy it on credit based from us"). The per-person number and who may use the finder
+  // at all are set per person on the Find Leads page (app_settings `finder_user_<id>`), not here.
+  {
+    key: 'finder_cards_per_day', label: 'Lead Finder: cards a day for each person', unit: 'cards (0 = none)', group: 'Lead Finder',
+    description: 'How many companies each person sees in Today\'s cards each day, unless an admin has set a different number for that person on the Find Leads page.',
+    default: 25, min: 0, max: 500,
+  },
+  {
+    key: 'finder_wait_days', label: 'Lead Finder: how long a "Wait" lasts', unit: 'days', group: 'Lead Finder',
+    description: 'A company someone puts on Wait comes back to their cards after this many days.',
+    default: 14, min: 1, max: 180,
+  },
+  {
+    key: 'finder_card_days', label: 'Lead Finder: how long an unreviewed card stays', unit: 'days', group: 'Lead Finder',
+    description: 'A card nobody has accepted, waited or rejected disappears after this many days (nothing is saved as a lead until Accept).',
+    default: 5, min: 1, max: 30,
+  },
+  {
+    key: 'finder_apollo_daily_credits', label: 'Lead Finder: Apollo credits a day', unit: 'credits (0 = none)', group: 'Lead Finder',
+    description: 'The most Apollo credits the Lead Finder may spend in one day across everyone: one per page of companies searched, one per company whose postings are opened, one per email revealed. Searching for people is free.',
+    default: 300, min: 0, max: 100000,
+  },
+  {
+    key: 'finder_reveals_per_day', label: 'Lead Finder: emails each person may reveal a day', unit: 'emails (0 = none)', group: 'Lead Finder',
+    description: 'How many people\'s work emails one person may reveal (1 Apollo credit each) in a day. This is the number a charge could later attach to.',
+    default: 30, min: 0, max: 1000,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));

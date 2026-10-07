@@ -1061,3 +1061,9 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - **`routes/lead-check.js`** `POST /lead-check` (admin, bd, bd_lead, ra, ra_lead, director, associate_director). Registered after `lead-take`.
 - **Enforced** in `routes/lead-sources.js` `POST /sourced-leads/:id/approve` (409 with `reason` and `decision`; a company found by website/name is REUSED; a `company_id` from another organisation is a 404; the typed `domain` is honoured) and `routes/jobs.js` `POST /jobs` for RAs (409; replaces the id-only cooldown).
 - Migration `057_company_linkedin.sql` (NOT applied): `companies.linkedin_url` + index. Tests: `test/lead-decision-smoke.mjs`, `test/ra-form-add-rule-smoke.mjs`, `test/sourced-leads-page-smoke.mjs`.
+
+## 2026-10-07 (Session 42) — the Lead Finder routes (R-157, D-0092)
+- `routes/finder.js` (new, mounted after lead-check in `index.js`): GET `/finder/access`, GET `/finder/diagnose` (admin, ~2 credits), GET/PUT `/finder/admin/users[/:id]`, GET/POST/PUT/DELETE `/finder/searches`, POST `/finder/run` and `/finder/searches/:id/run` (60 s re-run gap), GET `/finder/cards`, POST `/finder/cards/:id/{reject,wait,postings,people,reveal,accept}`. Literal paths sit above their `:id` routes. `runDue()` is registered with the engine runner as `lead_finder` (hourly tick; each search at most once per 20 hours; access re-checked).
+- Accept claims the card in one conditional update (new→accepted) and undoes it on failure; contacts revealed on the card are read from the card, never from the browser; the add rule is re-asked; RA → Unassigned, BD/bd_lead → Assigned with a connected mailbox.
+- Meters live in `app_settings`: `finder_credits_<org>_<day>`, `finder_reveals_<user>_<day>`, `finder_user_<id>` (JSON enabled/daily). Settings `finder_*` in `config/settings.js` (group "Lead Finder"). Apollo failures are recorded through `noteApollo` (`apollo_last_error`).
+- Test: `test/finder-routes-smoke.mjs` (82).

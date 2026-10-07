@@ -621,3 +621,14 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Edit your signature as it looks** — bold / italic / underline / link, "+ My name", "+ My email"; presets still there.
 - **Interview time zone by city** — type Dallas, Boston, Bengaluru, Texas or "Eastern"; click the suggestion; every world zone is still reachable.
 - **One look and one font scale** across leads filters, stage dropdowns, status chips, ID tags, funnel and kanban.
+
+**Find Leads — the Lead Finder (R-157, D-0092).** A person with access (an admin switches
+people on; admins always have it) saves a search — job titles, places, company size, how
+recent, optional industry words or specific websites — and PACE asks Apollo each morning
+(or on Run now) which companies are hiring for those jobs. The best few become CARDS: the
+company, its place, size, phone, website, LinkedIn, and why it ranks. Accept / Wait
+(hides it 14 days) / Reject (never shown again). Opening a company's jobs costs a credit.
+Accept opens one window: pick the job, find people by typed title (free), get an email
+(1 credit, verified only) or type a contact by hand, up to three, Save. A BD manager's
+lead goes straight to them; everyone else's goes to the Unassigned pool. The add rule
+(D-0091) is checked again at Accept. Nothing is saved as a lead before Save.

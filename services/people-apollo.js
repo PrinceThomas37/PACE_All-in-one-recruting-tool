@@ -173,6 +173,49 @@ async function enrichOrganization({ key, domain, fetchImpl } = {}) {
 }
 
 /**
+ * Companies by what they are HIRING for (the Lead Finder, R-157): job titles in their active postings, where the
+ * jobs are, company size, how recently posted, keywords, or a list of websites. Apollo's own docs: ONE credit per
+ * page that returns results, up to 100 companies a page, 0 when nothing matches. NEVER retried — a retry after a
+ * timeout can be charged twice. `filters` is the Apollo field names exactly (services/lead-finder.js builds them).
+ * Rows come back in two buckets (companies the team has saved as accounts, and the rest); both are returned,
+ * each as Apollo sent it — services/lead-finder.js normalises them.
+ */
+async function searchOrganizations({ key, filters, page = 1, perPage = 25, fetchImpl } = {}) {
+  if (!key) return { ok: false, status: 0, error: 'Apollo is not connected — add its key in Admin → Integrations.' };
+  const body = Object.assign({}, filters || {}, { page: Math.max(1, Number(page) || 1), per_page: Math.min(Math.max(1, Number(perPage) || 25), 100) });
+  let r;
+  try {
+    r = await post('/mixed_companies/search', key, body, fetchImpl);
+  } catch (e) {
+    return { ok: false, status: 0, error: 'Could not reach Apollo from the PACE server — ' + (e && e.message || e) };
+  }
+  if (!r.ok) return { ok: false, status: r.status, error: describeApolloError(r.status, r.data, 'company search') };
+  const d = r.data || {};
+  const rows = [].concat(Array.isArray(d.organizations) ? d.organizations : [], Array.isArray(d.accounts) ? d.accounts : []);
+  const pg = d.pagination || {};
+  const total = Number(pg.total_entries != null ? pg.total_entries : d.total_entries);
+  return { ok: true, status: r.status, organizations: rows, total: Number.isFinite(total) ? total : null, total_pages: Number(pg.total_pages) || null };
+}
+
+/**
+ * One company's open postings (title, link, city/state/country, when posted). ONE credit per page, never retried.
+ * `orgId` is Apollo's own id for the company (24 hex characters).
+ */
+async function organizationJobPostings({ key, orgId, perPage = 25, fetchImpl } = {}) {
+  if (!key) return { ok: false, status: 0, error: 'Apollo is not connected — add its key in Admin → Integrations.' };
+  if (!/^[a-f0-9]{24}$/i.test(String(orgId || ''))) return { ok: false, status: 0, error: 'This company has no Apollo record to read postings from.' };
+  let r;
+  try {
+    r = await get('/organizations/' + orgId + '/job_postings?per_page=' + Math.min(Math.max(1, Number(perPage) || 25), 100), key, fetchImpl);
+  } catch (e) {
+    return { ok: false, status: 0, error: 'Could not reach Apollo from the PACE server — ' + (e && e.message || e) };
+  }
+  if (!r.ok) return { ok: false, status: r.status, error: describeApolloError(r.status, r.data, 'job postings') };
+  const list = (r.data && r.data.organization_job_postings) || [];
+  return { ok: true, status: r.status, postings: Array.isArray(list) ? list : [] };
+}
+
+/**
  * What an Apollo call did, for the one diagnostics row the routes keep
  * (app_settings `apollo_last_call` / `apollo_last_error`) — so a failure the
  * owner saw can be read from the database instead of being transcribed.
@@ -193,4 +236,4 @@ async function checkPeopleSearch({ key, fetchImpl } = {}) {
   return r.ok ? { ok: true } : { ok: false, error: r.error, status: r.status };
 }
 
-module.exports = { searchPeople, revealPerson, enrichOrganization, checkPeopleSearch, callRecord, describeApolloError, normalizePerson, BASE };
+module.exports = { searchPeople, revealPerson, enrichOrganization, searchOrganizations, organizationJobPostings, checkPeopleSearch, callRecord, describeApolloError, normalizePerson, BASE };

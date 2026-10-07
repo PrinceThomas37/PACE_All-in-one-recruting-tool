@@ -44,6 +44,9 @@ const TENANT_TABLES = new Set([
   // GLOBAL_TABLES the moment a second tenant became possible. Reached today by
   // raw `supabase.from(...)` keyed on user_email_id, which is unaffected.
   'gmail_tokens',
+  // Migration 058 — the Lead Finder's saved searches and the cards they produce (R-157).
+  'finder_cards',
+  'finder_searches',
   'job_orders',
   'jobs',
   'lead_sources',

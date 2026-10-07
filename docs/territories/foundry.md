@@ -1126,3 +1126,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-07 (Session 42) — tests for the add rule (R-157, D-0091)
 - `test/lead-decision-smoke.mjs` (48, pure + in-memory two-organisation database + the two routes + both enforcement points) and `test/ra-form-add-rule-smoke.mjs` (9, browser) are new; `test/sourced-leads-page-smoke.mjs` gained the approval-window cases (38). Every guard was shown failing with its fix removed (stages counted as active, website never matching, the `POST /jobs` and approve wiring removed, the form not asking at submit / pick / edit, the button left on). The in-memory fake in `lead-decision-smoke` supports `ilike` with `\`-escapes, `.in`, `.is`, `.single`, `.maybeSingle`, and per-table injected failures — reuse it for other organisation-scoped route tests.
+
+## 2026-10-07 (Session 42) — Lead Finder tests (R-157)
+- New: `lead-finder-smoke` (33, pure rules), `finder-routes-smoke` (82, fake two-organisation database with injected Apollo), `finder-page-smoke` (43, browser). `models-smoke` registry count 46→48. Mutation checks done for the repaint-capture guards. Node 22: 209 suites, all pass once models-smoke is updated.

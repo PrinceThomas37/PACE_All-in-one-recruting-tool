@@ -151,6 +151,10 @@ function renderSidebar(){
   // Leads because that is where the work continues once one is approved.
   if(userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','director','associate_director'))
     navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"search",grp:G_SALES,badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
+  // The Lead Finder (R-157): shown only to people an admin switched on (admins always). The answer is fetched
+  // once per person; finderEnsureAccess() repaints the rail when it arrives.
+  if(typeof finderEnsureAccess==='function')finderEnsureAccess();
+  if(typeof finderEnabled==='function'&&finderEnabled())navItems.push({id:"finder",lbl:"Find Leads",ic:"search",grp:G_SALES});
   if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"doc",grp:G_REC});
   if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"doc",grp:G_REC});navItems.push({id:"job_board",lbl:"All Jobs",ic:"search",grp:G_REC});}
   // Clients sit with Sales: that is where the relationship is won. A job still
@@ -257,7 +261,7 @@ function renderSidebar(){
 function renderTopbar(){
   var u=STATE.user;
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
-  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads"};
+  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing
@@ -372,6 +376,7 @@ var NAV_PIXEL_ICONS={
   email:['#########','##.....##','#.#...#.#','#..#.#..#','#...#...#','#.......#','#.......#','#.......#','#########'],
   leads:['....#....','..#####..','.#..#..#.','.#.....#.','####.####','.#.....#.','.#..#..#.','..#####..','....#....'],
   assign:['#####....','#...#....','#...#..#.','#####.###','......###','..#....#.','.###.....','#####....','..#......'],
+  finder:['..####...','.#....#..','#..##..#.','#.#..#.#.','#.#..#.#.','#..##..#.','.#....#..','..####.#.','.......##'],
   sourced:['.####....','#....#...','#....#...','#....#...','#....#...','.####.#..','......##.','.......##','........#'],
   clients:['..#####..','..#.#.#..','..#####..','..#.#.#..','#########','#.#.#.#.#','#########','#.#.#.#.#','#########'],
   insights:['.......##','.......##','....##.##','....##.##','.##.##.##','.##.##.##','.##.##.##','.##.##.##','#########'],

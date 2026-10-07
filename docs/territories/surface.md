@@ -1240,3 +1240,8 @@ resulting "Ask to take over" modal after clicking through, showing
 - **RA form (`15-ra-entry-form.js`):** the hard-coded 21-day `companyCooldownCheck` is GONE. `raFormCheckNow()` asks `POST /lead-check` when a company is picked, when the name or website is left, and at Submit (before anything is written); `raFormDecisionBox()` shows the refusal (`ld-box is-stop`) or "Already on file as …" (`ld-box is-info`); a free company already on file is reused instead of created twice; editing a lead is never checked. State: `STATE.raForm.decision`, `_decKey`.
 - **Sourced leads approval window (`43-page-sourced-leads.js`):** `srcdCheck()` on open and after "Work out email"; `decisionBox()`; Add lead is disabled with a hover reason when blocked; the typed website is sent with the approval.
 - **`retro.css`:** `.ld-box` (+ `.is-stop/.is-info/.is-go`), added to the paper-surface list.
+
+## 2026-10-07 (Session 42) — Find Leads page (R-157, D-0092)
+- `public/js/68-page-finder.js`: page `finder` ("Find Leads", Sales group in the rail, shown only when `GET /finder/access` says enabled — `finderEnsureAccess()`/`finderEnabled()` called from the shell's nav build). Tabs: Today's cards · My searches · (admin) Access & Apollo. The Accept window is `STATE.modal` (job → people → where it goes). Rule: `paint(skipCapture)` / `paintAccept(skipCapture)` keep what was typed, but a handler that has just changed the form itself must skip the capture or the stale screen overwrites the change (a pill click and the industry picker both hit this; the test shows them failing).
+- `retro.css`: `.fd-*` classes (and in the paper-surface list). RA form grid rows now `align-items:start` (the Website box no longer stretches).
+- Tests: `test/finder-page-smoke.mjs` (43, browser).

@@ -152,7 +152,7 @@ function renderRALeadForm(){
 
     // ── Company ──
     '<div class="fs-12 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Company</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;align-items:start">'+
       '<div>'+
         '<div style="position:relative">'+
           '<input class="inp" id="ra-co-name" placeholder="Company name *" value="'+htmlEsc(f.coName||'')+'" autocomplete="off" oninput="raFormCoSearch(this.value)" onblur="raFormCoBlur()" style="'+(f.decision&&f.decision.blocked?'border-color:var(--red)':'')+'"/>'+

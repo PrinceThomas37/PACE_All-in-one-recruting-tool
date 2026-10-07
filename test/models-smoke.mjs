@@ -168,8 +168,10 @@ const req = { orgId: ORG, user: { org_id: ORG } };
   // (migration 037) and the two OAuth token tables that migration 039 gives an
   // org_id — all three registered ahead of being applied, because the registry
   // states what a table IS and the code that touches it degrades safely.
-  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048/052 add',
-    TENANT_TABLES.size === 46, String(TENANT_TABLES.size));
+  ok('the registry covers the live tenant tables plus those migrations 037/039/042/045/047/048/052/058 add',
+    TENANT_TABLES.size === 48, String(TENANT_TABLES.size));
+  // Migration 058 — the Lead Finder's saved searches and cards (R-157). Applied BEFORE its code merges.
+  ok('finder_searches and finder_cards (migration 058) are tenant tables', ['finder_searches', 'finder_cards'].every((t) => TENANT_TABLES.has(t) && !GLOBAL_TABLES.has(t)));
   // Migration 052 — poc_suggestions, people the POC finder found for a lead
   // and waiting to be accepted (R-053). APPLIED 2026-09-28 before its code merged.
   ok('poc_suggestions (migration 052) is a tenant table', TENANT_TABLES.has('poc_suggestions') && !GLOBAL_TABLES.has('poc_suggestions'));
