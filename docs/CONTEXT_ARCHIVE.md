@@ -6606,3 +6606,6 @@ Owner asked what "the three stalled-send flaws" were, then said "Yes build it an
 
 ### SESSION 42, main job + Send from (D-0096) — dev branch
 Owner: "can we select for which job the lead should be created? can we select the from email?" Built per D-0096. The send-card fix (#308 → `0c0615f`) was merged first (owner's "build it and merge it"; no sends running; Node 26 211/211; the one Node 22 failure was `send-race-guard` pinning the old wording of the lock — updated and mutation-checked).
+
+### SESSION 42, two ways to search + POCs and jobs in history (D-0097) — dev branch, with #309 (main job + Send from)
+Owner confirmed option A ("okay", then "A. Do this"). Built per D-0097 on the same dev branch as #309 so one release carries both. No migration. Node 22 on #309 alone: 211/211.

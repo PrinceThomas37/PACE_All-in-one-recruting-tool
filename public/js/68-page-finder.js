@@ -16,7 +16,7 @@
   var F = STATE.finder = STATE.finder || {
     tab:'cards', access:null, accessFor:null, accessLoading:false,
     cards:null, waiting:0, daily:0, today:0, loading:false,
-    searches:null, form:null, running:false,
+    searches:null, form:null, nowForm:null, nowNote:'', running:false, histOpen:{},
     hist:null, histStatus:'accepted', histSearch:'', histQ:'', histAll:false,
     admin:null, diag:null, diagBusy:false,
     acc:null
@@ -332,8 +332,10 @@
     return { id:s.id, name:s.name, sector:s.sector||'', titles:(s.titles||[]).join(', '), locations:(s.locations||[]).join(', '),
              sizes:(s.sizes||[]).slice(), posted_days:s.posted_days||14, keywords:(s.keywords||[]).join(', '), domains:(s.domains||[]).join(', ') };
   }
+  // The form on screen: the Daily run tab's, or the one-off Find leads now tab's (same fields, different buttons).
+  function curForm(){ return F.tab==='now' ? (F.nowForm||(F.nowForm=blankForm())) : F.form; }
   function captureForm(){
-    var f=F.form; if(!f) return;
+    var f=curForm(); if(!f) return;
     var g=function(id){ var e=document.getElementById(id); return e?e.value:null; };
     var v;
     if ((v=g('fd-f-name'))!==null) f.name=v;
@@ -350,11 +352,34 @@
   window.fdEditSearch = function(id){ var s=(F.searches||[]).find(function(x){ return x.id===id; }); if(!s) return; F.form=formFrom(s); F.tab='searches'; paint(true); };
   window.fdCancelForm = function(){ F.form=null; paint(true); };
   window.fdPickSector = function(v){
-    captureForm(); var f=F.form; if(!f) return;
+    captureForm(); var f=curForm(); if(!f) return;
     f.sector=v;
     var sec=((F.access&&F.access.sectors)||[]).find(function(x){ return x.id===v; });
-    if (sec){ if(!String(f.titles).trim()) f.titles=sec.titles.join(', '); if(!String(f.name).trim()) f.name=sec.label; }
+    if (sec){ if(!String(f.titles).trim()) f.titles=sec.titles.join(', '); if(!f.once && !String(f.name).trim()) f.name=sec.label; }
     paint(true);
+  };
+  function bodyOf(f){ return { sector:f.sector||null, titles:lines(f.titles), locations:lines(f.locations), sizes:f.sizes, posted_days:f.posted_days, keywords:lines(f.keywords), domains:lines(f.domains) }; }
+  // Find leads now: a one-off search. Nothing is saved or scheduled; the cards land in Today's cards.
+  window.fdFindNow = function(){
+    if (F.running) return;
+    captureForm(); var f=curForm();
+    F.running='find'; F.nowNote=''; paint(true);
+    apiPost('/finder/find', bodyOf(f)).then(function(r){
+      F.running=false;
+      var x=((r&&r.results)||[])[0]||{};
+      F.nowNote=x.note||'Done.';
+      if (r && r.credits && F.access) F.access.credits=r.credits;
+      showToast(F.nowNote,(r&&r.new_cards)?'success':'info');
+      if (r && r.new_cards){ F.tab='cards'; F.cardSearch=''; loadCards(); } else paint(true);
+    }).catch(function(e){ F.running=false; F.nowNote=e.message; showToast(e.message,'error'); paint(true); });
+  };
+  // Keep a one-off search as a daily one.
+  window.fdSaveNowAsDaily = function(){
+    captureForm(); var f=curForm();
+    var body=bodyOf(f);
+    body.name=((body.titles[0]||'Search')+' in '+(body.locations[0]||'')).trim().slice(0,80);
+    apiPost('/finder/searches', body).then(function(){ showToast('Saved as a daily search — it runs every morning ("'+body.name+'")','success'); loadSearches(); })
+      .catch(function(e){ showToast(e.message,'error'); });
   };
   window.fdSaveSearch = function(){
     captureForm(); var f=F.form; if(!f) return;
@@ -375,15 +400,17 @@
     apiDelete('/finder/searches/'+id).then(function(){ showToast('Search deleted','info'); loadSearches(); }).catch(function(e){ showToast(e.message,'error'); });
   };
 
-  function renderForm(){
-    var f=F.form, acc=F.access||{};
+  function renderForm(mode){
+    var once=(mode==='now');
+    var f=once?curForm():F.form, acc=F.access||{};
     var sectors=(acc.sectors||[]).map(function(s){ return '<option value="'+esc(s.id)+'"'+(f.sector===s.id?' selected':'')+'>'+esc(s.label)+'</option>'; }).join('');
     var sizes=(acc.sizes||[]).map(function(b){ return '<label class="fd-use"><input type="checkbox" class="fd-size-box" value="'+esc(b.id)+'" '+(f.sizes.indexOf(b.id)>=0?'checked':'')+'> '+esc(b.label)+'</label>'; }).join('');
     var posted=(acc.posted||[7,14,30]).map(function(d){ return '<option value="'+d+'"'+(f.posted_days===d?' selected':'')+'>last '+d+' days</option>'; }).join('');
     return '<div class="card fd-form">'+
-      '<div class="fs-14 fd-strong">'+(f.id?'Edit this search':'New search')+'</div>'+
+      '<div class="fs-14 fd-strong">'+(once?'Find leads now':(f.id?'Edit this daily search':'New daily search'))+'</div>'+
+      (once?'<div class="fd-hint">A search for right now. It is not saved and does not repeat — the companies it finds go to Today\'s cards. It uses 1 Apollo credit each time you press Find.</div>':'<div class="fd-hint">Runs by itself every morning until you pause or delete it.</div>')+
       '<div class="fd-grid">'+
-        '<div><div class="fd-label">Name</div><input id="fd-f-name" class="inp fd-wide" placeholder="e.g. Texas machine shops" value="'+esc(f.name)+'"></div>'+
+        (once?'':'<div><div class="fd-label">Name</div><input id="fd-f-name" class="inp fd-wide" placeholder="e.g. Texas machine shops" value="'+esc(f.name)+'"></div>')+
         '<div><div class="fd-label">Start from an industry (optional)</div><select id="fd-f-sector" class="sel fd-wide" onchange="fdPickSector(this.value)"><option value="">— pick to fill in titles —</option>'+sectors+'</select></div>'+
       '</div>'+
       '<div class="fd-label">Job titles they are hiring for</div>'+
@@ -397,7 +424,11 @@
         '<div><div class="fd-label">Industry words (optional)</div><input id="fd-f-keywords" class="inp fd-wide" placeholder="e.g. machining, fabrication" value="'+esc(f.keywords)+'"></div>'+
         '<div><div class="fd-label">Only these company websites (optional)</div><input id="fd-f-domains" class="inp fd-wide" placeholder="e.g. acme.com, widgets.com" value="'+esc(f.domains)+'"></div>'+
       '</div>'+
-      '<div class="fd-row fd-end"><button class="btn btn-outline" onclick="fdCancelForm()">Cancel</button><button class="btn btn-primary" onclick="fdSaveSearch()">'+(f.id?'Save changes':'Save search')+'</button></div>'+
+      (once
+        ? '<div class="fd-row fd-end"><button class="btn btn-outline" onclick="fdSaveNowAsDaily()" title="Keep these settings as a search that runs every morning">Also run this every day</button>'+
+          '<button class="btn btn-primary" '+(F.running?'disabled':'')+' onclick="fdFindNow()">'+(F.running==='find'?'Finding…':'Find leads now')+'</button></div>'+
+          (F.nowNote?'<div class="ld-box is-info" role="status">'+esc(F.nowNote)+'</div>':'')
+        : '<div class="fd-row fd-end"><button class="btn btn-outline" onclick="fdCancelForm()">Cancel</button><button class="btn btn-primary" onclick="fdSaveSearch()">'+(f.id?'Save changes':'Save daily search')+'</button></div>')+
     '</div>';
   }
 
@@ -413,12 +444,12 @@
     if (F.form) return renderForm();
     var list=F.searches;
     if (!list) return '<div class="fd-empty">Loading…</div>';
-    var head='<div class="fd-row fd-between"><div class="fd-hint">Your searches are yours alone. Each one runs every morning and brings its best companies to <strong>Today\'s cards</strong>.</div>'+
-      '<button class="btn btn-primary btn-sm" onclick="fdNewSearch()">+ New search</button></div>';
-    if (!list.length) return head+'<div class="card fd-empty">No saved searches yet.<br>A search says what jobs to look for and where — PACE then finds companies hiring for them.<br><button class="btn btn-primary" onclick="fdNewSearch()">Make your first search</button></div>';
+    var head='<div class="fd-row fd-between"><div class="fd-hint"><strong>These run on their own every morning</strong> until you pause or delete them, and bring their best companies to <strong>Today\'s cards</strong>. Your searches are yours alone. <strong>Run now</strong> runs one early and does not change its schedule. For a search you only want once, use <strong>Find leads now</strong>.</div>'+
+      '<button class="btn btn-primary btn-sm" onclick="fdNewSearch()">+ New daily search</button></div>';
+    if (!list.length) return head+'<div class="card fd-empty">No daily searches yet.<br>A daily search says what jobs to look for and where — PACE then finds companies hiring for them every morning.<br><button class="btn btn-primary" onclick="fdNewSearch()">Make your first daily search</button></div>';
     return head+list.map(function(s){
       return '<div class="card fd-card"><div class="fd-row fd-between"><div class="fd-grow">'+
-        '<div class="fs-14 fd-strong">'+esc(s.name)+(s.active===false?' <span class="fd-tag">paused</span>':'')+'</div>'+
+        '<div class="fs-14 fd-strong">'+esc(s.name)+(s.active===false?' <span class="fd-tag">paused</span>':' <span class="fd-tag">every morning</span>')+'</div>'+
         '<div class="fs-12_5 c-text2">'+esc(summaryOf(s))+'</div>'+
         '<div class="fs-12 c-text3">'+(s.last_run_at?'Last ran '+esc(fmtDay(s.last_run_at))+' — '+esc(s.last_run_note||''):'Has not run yet.')+'</div>'+foundBefore(s.id)+'</div>'+
         '<div class="fd-row"><button class="btn btn-sm btn-primary" '+(F.running?'disabled':'')+' onclick="fdRun(\''+s.id+'\')">'+((F.running===s.id||F.running==='all')?'Running…':'Run now')+'</button>'+
@@ -469,7 +500,7 @@
     }
     // Which search found each card: a row of choices appears when more than one search has cards (a view only —
     // the server already gave this person only their own cards).
-    var names={}; (F.searches||[]).forEach(function(x){ names[x.id]=x.name; });
+    var names={ '':'One-off searches' }; (F.searches||[]).forEach(function(x){ names[x.id]=x.name; });
     var counts={}; list.forEach(function(c){ var k=c.search_id||''; counts[k]=(counts[k]||0)+1; });
     var keys=Object.keys(counts);
     var sel=(F.cardSearch && counts[F.cardSearch]) ? F.cardSearch : '';
@@ -484,6 +515,7 @@
   // ── history: what my searches found before ─────────────────────────────
   window.fdHistStatus = function(st){ F.histStatus=st; paint(); };
   window.fdHistSearch = function(id){ F.histSearch=id||''; paint(); };
+  window.fdHistToggle = function(id){ F.histOpen[id]=!F.histOpen[id]; paint(); };
   window.fdHistQ = function(v){ F.histQ=String(v||''); paint(); };
   window.fdHistAll = function(){ F.histAll=true; loadHistory(); };
   window.fdHistFor = function(id){
@@ -505,7 +537,19 @@
     ((F.hist&&F.hist.items)||[]).forEach(function(x){ if((x.search_id||'')===searchId) c[x.status]=(c[x.status]||0)+1; });
     return c;
   }
-  function searchName(id){ var s=(F.searches||[]).find(function(x){ return x.id===id; }); return s?s.name:'An earlier search'; }
+  function searchName(id){ if(!id) return 'a one-off search'; var s=(F.searches||[]).find(function(x){ return x.id===id; }); return s?s.name:'an earlier search'; }
+  // The people and the jobs behind a saved lead — what the card showed, kept with the lead.
+  function histDetails(l){
+    var people=(l.contacts||[]).map(function(c){
+      return '<div>• <strong>'+esc(c.name||'')+'</strong>'+(c.primary?' <span class="fd-tag">main contact</span>':'')+'<span class="fd-hint"> '+esc([c.title,c.email].filter(Boolean).join(' · '))+'</span></div>';
+    }).join('') || '<div class="fd-hint">No contacts on this lead.</div>';
+    var jobs=(l.jobs||[]).map(function(j){
+      return '<div>• '+(j.url?'<a href="'+esc(j.url)+'" target="_blank" rel="noopener">'+esc(j.title)+'</a>':esc(j.title))+
+        (j.main?' <span class="fd-tag">main job</span>':(j.also?' <span class="fd-tag">also hiring</span>':''))+
+        '<span class="fd-hint"> '+esc([j.source, j.posted_at?fmtDay(j.posted_at):''].filter(Boolean).join(' · '))+'</span></div>';
+    }).join('') || '<div class="fd-hint">No jobs were kept.</div>';
+    return '<div class="fd-grid fd-detail"><div><div class="fd-label">People to contact</div>'+people+'</div><div><div class="fd-label">Jobs</div>'+jobs+'</div></div>';
+  }
   function renderHistory(){
     var h=F.hist;
     if (!h) return '<div class="fd-empty">Loading…</div>';
@@ -518,20 +562,22 @@
     var sel=(F.histSearch && sIds[F.histSearch]) ? F.histSearch : '';
     var searchBar = keys.length>1
       ? '<div class="fd-pills"><button class="fd-pill'+(sel===''?' on':'')+'" onclick="fdHistSearch(\'\')">All searches</button>'+
-        keys.map(function(k){ return '<button class="fd-pill'+(sel===k?' on':'')+'" onclick="fdHistSearch(\''+esc(k)+'\')">'+esc(searchName(k))+'</button>'; }).join('')+'</div>' : '';
+        keys.map(function(k){ return '<button class="fd-pill'+(sel===k?' on':'')+'" onclick="fdHistSearch(\''+esc(k)+'\')">'+esc(searchName(k).replace(/^./,function(c){ return c.toUpperCase(); }))+'</button>'; }).join('')+'</div>' : '';
     var q=String(F.histQ||'').toLowerCase().trim();
     var rows=items.filter(function(x){ return x.status===st && (!sel || (x.search_id||'')===sel) && (!q || String(x.company_name).toLowerCase().indexOf(q)>=0); });
     var list = rows.length ? rows.map(function(x){
       var right='';
       if (x.status==='accepted'){
-        right = x.lead ? '<span class="fd-hint"><strong>'+esc(x.lead.position||'')+'</strong> · '+esc(x.lead.stage||'')+'</span><button class="btn btn-sm btn-primary" onclick="fdOpenLead(\''+esc(x.lead.id)+'\')">Open lead</button>'
+        right = x.lead ? '<span class="fd-hint"><strong>'+esc(x.lead.position||'')+'</strong> · '+esc(x.lead.stage||'')+'</span>'+
+          '<button class="btn btn-sm btn-outline" onclick="fdHistToggle(\''+esc(x.id)+'\')">'+(F.histOpen[x.id]?'Hide':'POCs &amp; jobs')+'</button>'+
+          '<button class="btn btn-sm btn-primary" onclick="fdOpenLead(\''+esc(x.lead.id)+'\')">Open lead</button>'
              : '<span class="fd-hint">'+(x.lead_elsewhere?'This lead now belongs to someone else.':'The lead was deleted.')+'</span>';
       } else if (x.status==='waiting'){
         right='<span class="fd-hint">Comes back on '+esc(fmtDay(x.wait_until))+'</span><button class="btn btn-sm btn-outline" onclick="fdUnwait(\''+esc(x.id)+'\',this)">Show now</button>';
       } else right='<span class="fd-hint">Turned down — never shown to you again</span>';
       return '<div class="card fd-card"><div class="fd-row fd-between"><div class="fd-grow"><div class="fs-14 fd-strong">'+esc(x.company_name)+'</div>'+
         '<div class="fs-12 c-text3">'+esc([x.place, 'Found by '+searchName(x.search_id||''), x.decided_at?fmtDay(x.decided_at):''].filter(Boolean).join(' · '))+'</div></div>'+
-        '<div class="fd-row">'+right+'</div></div></div>';
+        '<div class="fd-row">'+right+'</div></div>'+(x.lead&&F.histOpen[x.id]?histDetails(x.lead):'')+'</div>';
     }).join('') : '<div class="card fd-empty">'+({ accepted:'No company from your searches has been saved as a lead yet.', waiting:'Nothing is waiting.', rejected:'You have not turned anything down.' }[st])+(q?'<br>Nothing matches “'+esc(F.histQ)+'”.':'')+'</div>';
     var foot='<div class="fd-hint fd-pad">'+(h.hidden?esc(String(h.hidden))+' older than '+esc(String(h.days))+' days are hidden. <button class="fd-pill" onclick="fdHistAll()">Show everything</button><br>':'')+
       'A company you never decided on is removed after '+esc(String(h.card_days||5))+' days — Accept, Wait or Reject keeps a record of it here.</div>';
@@ -576,7 +622,8 @@
     if (!acc.enabled) return UI.page({ body:'<div class="card fd-empty">Find Leads is not switched on for you yet.<br>Ask an admin to turn it on.</div>' });
     var tabs=[
       { id:'cards', label:'Today\'s cards', n:(F.cards||[]).length, onclick:"fdTab('cards')" },
-      { id:'searches', label:'My searches', onclick:"fdTab('searches')" },
+      { id:'now', label:'Find leads now', onclick:"fdTab('now')" },
+      { id:'searches', label:'Daily run', onclick:"fdTab('searches')" },
       { id:'history', label:'Saved & past', n:(F.hist&&F.hist.counts&&F.hist.counts.accepted)||0, onclick:"fdTab('history')" }
     ];
     if (acc.is_admin) tabs.push({ id:'admin', label:'Access & Apollo', onclick:"fdTab('admin')" });
@@ -591,7 +638,7 @@
       ? '<div class="fd-row fd-between fd-toolbar"><span class="fd-hint">'+esc(String(F.today||0))+' of your '+esc(String(F.daily||acc.daily||0))+' cards for today.</span>'+
         '<button class="btn btn-sm btn-primary" '+(F.running?'disabled':'')+' onclick="fdRun()">'+(F.running==='all'?'Searching…':'Run my searches')+'</button></div>'
       : '';
-    var body = F.tab==='admin' && acc.is_admin ? renderAdmin() : (F.tab==='searches' ? renderSearches() : (F.tab==='history' ? renderHistory() : renderCards()));
+    var body = F.tab==='admin' && acc.is_admin ? renderAdmin() : (F.tab==='now' ? renderForm('now') : (F.tab==='searches' ? renderSearches() : (F.tab==='history' ? renderHistory() : renderCards())));
     return UI.page({ tabs:UI.tabs(tabs, F.tab, right), strip:strip, body:toolbar+body });
   }
 

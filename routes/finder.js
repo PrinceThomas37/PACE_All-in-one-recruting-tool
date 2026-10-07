@@ -9,6 +9,7 @@
 //   GET|POST /finder/searches              my saved searches (personal) / save one
 //   PUT|DELETE /finder/searches/:id        change / delete one of mine
 //   POST   /finder/searches/:id/run        run one of mine now
+//   POST   /finder/find                    a one-off search: cards now, nothing saved, nothing scheduled
 //   GET    /finder/cards                   today's cards: companies waiting for Accept / Wait / Reject
 //   GET    /finder/mailboxes               my connected mailboxes (BD) and the one to pre-select for a new lead
 //   GET    /finder/history                 what my searches found before: saved as leads, parked, turned down
@@ -101,19 +102,28 @@ module.exports = (ctx) => {
   // One saved search → up to `remaining` new cards. Returns a summary; never throws for an Apollo problem (it says so).
   // Safe to repeat and safe to be killed half-way: a card is written one at a time and the unique index stops a repeat, and
   // `last_run_at` is only set at the end, so an interrupted run is simply run again.
-  async function runSearch({ scoped, orgId, userId, search, daily, key, budget, now }) {
+  async function runSearch({ scoped, orgId, userId, search, daily, key, budget, now, oneOff = false }) {
     const day = finder.dayOf(now);
     const out = { search_id: search.id, name: search.name, found: 0, cards: 0, staffing: 0, worked: 0, seen: 0, note: '', error: null };
     const finish = async (note) => {
       out.note = note;
-      await scoped.from('finder_searches').update({ last_run_at: now, last_run_note: note.slice(0, 400), updated_at: now }).eq('id', search.id);
+      // A one-off search ("Find leads now") is not saved anywhere, so there is no search row to note.
+      if (search.id) await scoped.from('finder_searches').update({ last_run_at: now, last_run_note: note.slice(0, 400), updated_at: now }).eq('id', search.id);
       return out;
     };
-    if (daily <= 0) return finish('You have no cards a day. Ask an admin to set a number for you.');
-    const made = await scoped.from('finder_cards').select('id').eq('user_id', userId).eq('created_on', day);
-    if (made.error) throw made.error;
-    const remaining = daily - (made.data || []).length;
-    if (remaining <= 0) return finish('You already have your ' + daily + ' cards for today.');
+    // The daily number is for the DAILY run. A one-off search has its own ceiling per press, and its cards (no search id)
+    // are not counted against the daily number — pulling leads whenever you like must not use up tomorrow's morning list.
+    let remaining;
+    if (oneOff) {
+      remaining = daily;                                     // `daily` carries the per-run ceiling for a one-off
+      if (remaining <= 0) return finish('One-off searches are switched off. Ask an admin to set a number under Admin → Settings → Lead Finder.');
+    } else {
+      if (daily <= 0) return finish('You have no cards a day. Ask an admin to set a number for you.');
+      const made = await scoped.from('finder_cards').select('id,search_id').eq('user_id', userId).eq('created_on', day);
+      if (made.error) throw made.error;
+      remaining = daily - (made.data || []).filter((c) => c.search_id).length;
+      if (remaining <= 0) return finish('You already have your ' + daily + ' cards for today.');
+    }
     if (!key) return finish('Apollo is not connected. An admin adds its key in Admin → Integrations.');
     if (budget.left() < 1) return finish('Your organisation has used today\'s Apollo credit limit (' + budget.limit + ').');
 
@@ -145,7 +155,7 @@ module.exports = (ctx) => {
       const verdict = await leadCheck.checkCompany({ db, supabase, req: { orgId }, candidate: { name: c.o.name, website: c.o.domain || c.o.website, linkedin: c.o.linkedin_url }, now });
       if (verdict.blocked) { out.worked++; continue; }
       const row = {
-        user_id: userId, search_id: search.id, company_key: c.o.company_key, apollo_org_id: c.o.apollo_org_id,
+        user_id: userId, search_id: search.id || null, company_key: c.o.company_key, apollo_org_id: c.o.apollo_org_id,
         company_name: c.o.name.slice(0, 300), score: c.score, status: 'new', created_on: day,
         payload: { company: c.o, chips: c.chips, on_file_as: verdict.company_id ? { id: verdict.company_id, name: verdict.company_name, matched: verdict.matched_text } : null, search: { titles: search.titles, locations: search.locations } },
       };
@@ -352,6 +362,26 @@ module.exports = (ctx) => {
   router.post('/finder/run', auth, async (req, res) => { try { await runMine(req, res, null); } catch (err) { res.status(500).json({ error: err.message }); } });
   router.post('/finder/searches/:id/run', auth, async (req, res) => { try { await runMine(req, res, req.params.id); } catch (err) { res.status(500).json({ error: err.message }); } });
 
+  // "Find leads now" — a one-off search: criteria in, cards out, nothing saved and nothing scheduled. One press costs one
+  // Apollo credit (the organisation's daily limit still applies); a repeat press inside a minute is refused.
+  const lastFind = new Map();
+  router.post('/finder/find', auth, async (req, res) => {
+    try {
+      const access = await needAccess(req, res); if (!access) return;
+      const v = finder.normalizeSearch(Object.assign({}, req.body, { name: 'One-off search' }));
+      if (!v.ok) return res.status(400).json({ error: v.error });
+      const now = clock(), orgId = orgOf(req), scoped = db.forRequest(req);
+      const prev = lastFind.get(req.user.id);
+      if (prev && now.getTime() - prev < RERUN_GAP_MS && !ctx.noRerunGap) return res.json({ results: [{ search_id: null, name: 'One-off search', cards: 0, note: 'You just searched. Give it a minute.', skipped: true }], new_cards: 0 });
+      lastFind.set(req.user.id, now.getTime());
+      const key = await integrations.getSecret(supabase, 'apollo');
+      await housekeeping(scoped, req.user.id, now);
+      const budget = await budgetFor(orgId, now);
+      const r = await runSearch({ scoped, orgId, userId: req.user.id, search: Object.assign({ id: null }, v.value), daily: await num('finder_cards_per_run'), key, budget, now, oneOff: true });
+      res.json({ results: [r], new_cards: r.cards || 0, credits: { used: budget.used, limit: budget.limit } });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   // ═════════ THE MAILBOX A LEAD SENDS FROM ══════════════════════════════════════════════════════════
   // Only a lead that comes straight to the person (BD, BD lead) has a mailbox; a pool lead gets the mailbox of whoever
   // takes it. The person's own connected mailboxes, how many each has sent today, and the one to pre-select.
@@ -414,8 +444,8 @@ module.exports = (ctx) => {
         try { d = await leadCheck.checkCompany({ db, supabase, req, candidate: { name: c.company_name, website: co.domain || co.website, linkedin: co.linkedin_url }, now }); } catch (_) { d = null; }
         out.push(present(c, d));
       }
-      const made = await scoped.from('finder_cards').select('id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
-      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).length });
+      const made = await scoped.from('finder_cards').select('id,search_id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
+      res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).filter((c) => c.search_id).length });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -439,10 +469,27 @@ module.exports = (ctx) => {
       const leadIds = items.filter((c) => c.lead_id).map((c) => c.lead_id);
       const leads = {};
       if (leadIds.length) {
-        const j = await scoped.from('jobs').select('id,position,stage,created_by,assigned_to_bd').in('id', leadIds).is('deleted_at', null);
+        const j = await scoped.from('jobs').select('id,position,stage,created_by,assigned_to_bd,research').in('id', leadIds).is('deleted_at', null);
         if (j.error) throw j.error;
         (j.data || []).forEach((x) => { leads[x.id] = x; });
       }
+      // The people and the jobs behind each lead the person can see: contacts from the lead itself, jobs from what the
+      // card saved on it (the postings Apollo listed, and any ticked as "also hiring").
+      const seeable = Object.values(leads).filter((l) => l.created_by === req.user.id || l.assigned_to_bd === req.user.id).map((l) => l.id);
+      const peopleBy = {};
+      if (seeable.length) {
+        const c = await scoped.from('contacts').select('job_id,first_name,last_name,designation,email,is_primary').in('job_id', seeable);
+        if (c.error) throw c.error;
+        (c.data || []).forEach((x) => { (peopleBy[x.job_id] = peopleBy[x.job_id] || []).push({ name: [x.first_name, x.last_name].filter(Boolean).join(' '), title: x.designation || '', email: x.email || '', primary: !!x.is_primary }); });
+      }
+      const jobsOf = (l) => {
+        const f = (l.research && l.research.finder) || {}, seen = new Set(), out = [];
+        const add = (title, extra) => { const k = String(title || '').trim().toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); out.push(Object.assign({ title: String(title).trim() }, extra)); };
+        add(l.position, { main: true });
+        (f.also_hiring || []).forEach((t) => add(t, { also: true }));
+        (f.postings || []).forEach((p) => add(p.title, { url: p.url || '', source: p.source || '', posted_at: p.posted_at || null }));
+        return out;
+      };
       const counts = { accepted: 0, waiting: 0, rejected: 0 };
       const out = items.map((c) => {
         counts[c.status] = (counts[c.status] || 0) + 1;
@@ -452,7 +499,7 @@ module.exports = (ctx) => {
         return {
           id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status,
           place: [co.city, co.state].filter(Boolean).join(', '), wait_until: c.wait_until || null, decided_at: c.decided_at || null,
-          lead: mine ? { id: l.id, position: l.position, stage: l.stage } : null,
+          lead: mine ? { id: l.id, position: l.position, stage: l.stage, contacts: (peopleBy[l.id] || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)), jobs: jobsOf(l) } : null,
           lead_gone: !!c.lead_id && !l, lead_elsewhere: !!l && !mine,
         };
       });

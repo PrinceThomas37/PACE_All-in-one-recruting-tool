@@ -187,6 +187,11 @@ const SETTINGS_SCHEMA = [
     default: 25, min: 0, max: 500,
   },
   {
+    key: 'finder_cards_per_run', label: 'Lead Finder: most cards one "Find leads now" search can bring', unit: 'cards (0 = off)', group: 'Lead Finder',
+    description: 'A one-off search (Find leads now) is not part of the daily number above, so it has its own ceiling for each press of Find. It still uses one Apollo credit from the organisation\'s daily limit.',
+    default: 25, min: 0, max: 200,
+  },
+  {
     key: 'finder_wait_days', label: 'Lead Finder: how long a "Wait" lasts', unit: 'days', group: 'Lead Finder',
     description: 'A company someone puts on Wait comes back to their cards after this many days.',
     default: 14, min: 1, max: 180,

@@ -1259,3 +1259,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-07 (Session 42) — Main job and Send from in the Accept window (D-0096)
 - `68-page-finder.js`: ticked jobs show ★ (main) / ✓; a radio list "Main job" appears with 2+ ticked (`fdSetMain`); the save body puts the main job first. A BD sees "Send from" (`fdPickMailbox`, loaded from `/finder/mailboxes` when the window opens); Save is disabled with no working mailbox. Tests: `finder-page-smoke` 73.
+
+## 2026-10-07 (Session 42) — Find leads now / Daily run tabs, POCs & jobs (D-0097)
+- `68-page-finder.js`: tab `now` reuses the search form (`renderForm('now')`, `curForm()` picks the form on screen) with no name, "Find leads now" and "Also run this every day"; the old "My searches" is "Daily run" with an "every morning" tag; cards from one-off searches are grouped as "One-off searches"; Saved & past rows get "POCs & jobs" (`fdHistToggle`, `histDetails`). Tests: `finder-page-smoke` 85.

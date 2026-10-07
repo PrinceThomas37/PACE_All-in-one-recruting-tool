@@ -1079,3 +1079,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-07 (Session 42) — mailbox choice for a Finder lead (D-0096)
 - `routes/finder.js`: `GET /finder/mailboxes` (BD: own connected mailboxes + `sent_today` + `suggested_id`; others: pool, none). `POST /finder/cards/:id/accept` takes `mailbox_id` (must be one of the caller's connected mailboxes, else 400 and nothing saved); with none it uses `finder.suggestMailbox` (fewest sent today) instead of `assignmentQueue(…,1)` (which always picked the same mailbox). Tests: `finder-routes-smoke` 104.
+
+## 2026-10-07 (Session 42) — one-off search and POCs/jobs in history (D-0097)
+- `POST /finder/find` (one-off; `runSearch({oneOff:true})`: `search.id` null → no search row, cards `search_id` null, ceiling `finder_cards_per_run`, a minute between presses per person in memory). The daily count (`runSearch` and `GET /finder/cards` `today`) now counts only cards WITH a search id, so one-off cards never use up the daily number. `GET /finder/history` adds `lead.contacts` and `lead.jobs` for leads the person made or holds. Setting `finder_cards_per_run` (`config/settings.js`). Tests: `finder-routes-smoke` 117.

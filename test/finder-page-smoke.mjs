@@ -68,7 +68,7 @@ try {
     window.__calls = []; window.__access = JSON.parse(JSON.stringify(access)); window.__cards = JSON.parse(JSON.stringify(cards));
     window.__searches = [];
     window.__hist = { days: 90, card_days: 5, hidden: 3, counts: { accepted: 2, waiting: 1, rejected: 1 }, items: [
-      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned' } },
+      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', contacts: [{ name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
       { id: 'a2', search_id: 's2', company_name: 'Handed Co', place: '', status: 'accepted', decided_at: '2026-10-04T10:00:00Z', lead: null, lead_elsewhere: true },
       { id: 'w1', search_id: 's1', company_name: 'Parked Dental', place: '', status: 'waiting', wait_until: '2026-10-21', decided_at: '2026-10-07T10:00:00Z', lead: null },
       { id: 'r1', search_id: 's2', company_name: 'Declined Inc', place: '', status: 'rejected', decided_at: '2026-10-06T10:00:00Z', lead: null } ] };
@@ -91,6 +91,7 @@ try {
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
+      if (p === '/finder/find') return Promise.resolve(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } });
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
       if (/\/run$/.test(p)) { const R = { results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } }; return window.__hold ? new Promise((r) => { window.__release = () => r(R); }) : Promise.resolve(R); }
@@ -255,7 +256,8 @@ try {
   await page.evaluate(() => window.fdTab('searches'));
   await page.waitForTimeout(200);
   h = await html();
-  step('with no saved search the page says what a search is and offers to make one', /No saved searches yet/.test(h) && /Make your first search/.test(h));
+  step('with no daily search the page says what one is and offers to make one', /No daily searches yet/.test(h) && /Make your first daily search/.test(h));
+  step('the Daily run tab says plainly that these run by themselves every morning, that Run now does not change that, and where to go for a one-off', /run on their own every morning/.test(h) && /does not change its schedule/.test(h) && /Find leads now/.test(h));
   await page.evaluate(() => window.fdNewSearch());
   await page.evaluate(() => window.fdPickSector('medical'));
   h = await html();
@@ -304,6 +306,37 @@ try {
   h = await html();
   step('"Check what my key can do" lists each check in words, red where Apollo refuses', /Finding people by job title works/.test(h) && /not allowed to search companies/.test(h) && /c-red/.test(h));
 
+  // ── Find leads now (one-off) and Daily run ───────────────────────────────
+  await page.evaluate(() => { window.STATE.finder.tab = 'cards'; window.goPage('finder'); });
+  await page.waitForTimeout(300);
+  h = await html();
+  step('the tabs are: Today\'s cards · Find leads now · Daily run · Saved & past', /Today&#39;s cards|Today's cards/.test(h) && h.indexOf('Find leads now') > 0 && h.indexOf('Daily run') > h.indexOf('Find leads now') && h.indexOf('Saved &amp; past') > h.indexOf('Daily run'));
+  await page.evaluate(() => window.fdTab('now'));
+  h = await html();
+  step('Find leads now is a search for right now: it says it is not saved and does not repeat, costs 1 credit, and asks for no name', /not saved and does not repeat/.test(h) && /1 Apollo credit/.test(h) && !(await page.evaluate(() => !!document.getElementById('fd-f-name'))) && /Find leads now<\/button>/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-f-titles').value = 'Welder, CNC Machinist'; document.getElementById('fd-f-locations').value = 'Ohio'; window.__findHold = true; window.__calls.length = 0; });
+  await page.evaluate(() => { window.fdFindNow(); });
+  await page.waitForTimeout(250);
+  cs = await calls();
+  const fnd = cs.find(c => c[0] === 'POST' && c[1] === '/finder/find');
+  step('Find asks the server for a ONE-OFF search with what was typed — and never saves a search', fnd && fnd[2].titles.join() === 'Welder,CNC Machinist' && fnd[2].locations.join() === 'Ohio' && !cs.some(c => c[0] === 'POST' && c[1] === '/finder/searches'), JSON.stringify(fnd));
+  step('…then shows the new cards (it lands on Today\'s cards)', (await page.evaluate(() => window.STATE.finder.tab)) === 'cards');
+  await page.evaluate(() => window.fdTab('now'));
+  h = await html();
+  step('the one-off form keeps what was typed and says what the search found', /value="Ohio"/.test(h) && /Found 5 companies hiring\. 3 new cards\./.test(h));
+  await page.evaluate(() => window.fdSaveNowAsDaily());
+  await page.waitForTimeout(250);
+  const asDaily = (await calls()).find(c => c[0] === 'POST' && c[1] === '/finder/searches');
+  step('"Also run this every day" is the ONLY way a one-off becomes a daily search — it saves it with a name made from what was typed', asDaily && asDaily[2].name === 'Welder in Ohio' && asDaily[2].titles.join() === 'Welder,CNC Machinist', JSON.stringify(asDaily && asDaily[2]));
+  await page.evaluate(() => { window.__findResp = { results: [{ search_id: null, note: 'You just searched. Give it a minute.', skipped: true, cards: 0 }], new_cards: 0 }; window.fdFindNow(); });
+  await page.waitForTimeout(250);
+  h = await html();
+  step('a search that finds nothing new stays on the form and says why', (await page.evaluate(() => window.STATE.finder.tab)) === 'now' && /You just searched/.test(h));
+  await page.evaluate(() => { window.__findResp = null; });
+  await page.evaluate(() => { window.STATE.finder.cards = [{ id: 'o1', search_id: null, company_name: 'One Off Co', status: 'new', chips: [], _base: [], decision: { blocked: false } }, { id: 'o2', search_id: 's1', company_name: 'Daily Co', status: 'new', chips: [], _base: [], decision: { blocked: false } }]; window.STATE.finder.cardSearch = ''; window.fdTab('cards'); });
+  h = await html();
+  step('Today\'s cards tells one-off cards from daily ones in its choices', /One-off searches · 1/.test(h));
+
   // ── saved & past ───────────────────────────────────────────────────────
   await switchRole(page, 'ra');
   await page.evaluate(() => { window.__searches = [{ id: 's1', name: 'Machining', active: true, titles: ['Welder'], locations: ['Texas'], sizes: [], posted_days: 14, keywords: [], domains: [] }, { id: 's2', name: 'Dental', active: true, titles: ['Hygienist'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }]; window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.goPage('finder'); });
@@ -314,6 +347,12 @@ try {
   step('there is a "Saved & past" tab that opens on the companies saved as leads, with its count', /Saved &amp; past/.test(h) && /Saved Machining/.test(h) && /Saved as leads · 2/.test(h) && /Waiting · 1/.test(h) && /Turned down · 1/.test(h) && !/Parked Dental/.test(h));
   step('each saved company shows its place, which search found it, and the lead it became (job and stage) with an Open lead button', /Waco, TX/.test(h) && /Found by Machining/.test(h) && /<strong>Welder<\/strong> · Assigned/.test(h) && /Open lead/.test(h));
   step('a lead handed to someone else is not described — it says so', /now belongs to someone else/.test(h));
+  step('a saved company has a "POCs & jobs" button (and the others do not)', /POCs &amp; jobs/.test(h) && (h.match(/POCs &amp; jobs/g) || []).length === 1 && !/Dana Cole/.test(h));
+  await page.evaluate(() => window.fdHistToggle('a1'));
+  h = await html();
+  step('opening it shows the people to contact (main contact marked, with title and email) and the jobs (main job, also hiring, and the ones Apollo listed, with a link)', /Dana Cole/.test(h) && /main contact/.test(h) && /dana@saved\.example/.test(h) && /Eli Ross/.test(h) && /main job/.test(h) && /also hiring/.test(h) && /href="https:\/\/jobs\.example\/2"/.test(h) && /Indeed/.test(h));
+  await page.evaluate(() => window.fdHistToggle('a1'));
+  step('…and Hide closes it again', !/Dana Cole/.test(await html()));
   await page.evaluate(() => window.fdHistSearch('s2'));
   h = await html();
   step('the searches can be told apart: picking one shows only what THAT search found', /Handed Co/.test(h) && !/Saved Machining/.test(h));

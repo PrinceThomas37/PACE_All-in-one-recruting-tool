@@ -396,7 +396,8 @@ await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra
 await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra2' });
 NOW = new Date('2026-10-20T12:00:00Z');
 const card = (o) => Object.assign({ id: 'h' + (++uid), org_id: 'o1', user_id: 'ra1', search_id: 'sA', company_key: 'k' + uid, company_name: 'Co ' + uid, status: 'rejected', payload: null, score: 1, created_on: '2026-10-01', created_at: daysAgo(15), decided_at: daysAgo(10), wait_until: null, lead_id: null }, o);
-st.tables.jobs.push({ id: 'jL', org_id: 'o1', company_id: 'c1', position: 'Welder', stage: 'Assigned', created_by: 'ra1', assigned_to_bd: null, deleted_at: null });
+st.tables.jobs.push({ id: 'jL', org_id: 'o1', company_id: 'c1', position: 'Welder', stage: 'Assigned', created_by: 'ra1', assigned_to_bd: null, deleted_at: null, research: { finder: { also_hiring: ['Estimator'], postings: [{ title: 'Welder', url: 'https://jobs.example/1', source: 'Indeed' }, { title: 'Pipefitter', url: '', source: '' }] } } });
+st.tables.contacts.push({ id: 'k1', org_id: 'o1', job_id: 'jL', first_name: 'Dana', last_name: 'Cole', designation: 'HR Manager', email: 'dana@saved.example', is_primary: true }, { id: 'k2', org_id: 'o1', job_id: 'jL', first_name: 'Eli', last_name: 'Ross', designation: 'Plant Manager', email: 'eli@saved.example', is_primary: false }, { id: 'k9', org_id: 'o1', job_id: 'jM', first_name: 'Secret', last_name: 'Person', designation: 'CEO', email: 'secret@moved.example', is_primary: true });
 st.tables.jobs.push({ id: 'jM', org_id: 'o1', company_id: 'c1', position: 'Estimator', stage: 'Assigned', created_by: 'adm', assigned_to_bd: 'bd1', deleted_at: null });
 st.tables.finder_cards.push(
   card({ id: 'hAcc', company_name: 'Saved Co', status: 'accepted', lead_id: 'jL', payload: { company: { city: 'Waco', state: 'TX' } } }),
@@ -413,7 +414,9 @@ step('the history lists what was saved, parked and turned down — never an unde
 step('…counted by what became of each', r.out.counts.accepted === 3 && r.out.counts.waiting === 1 && r.out.counts.rejected === 1, JSON.stringify(r.out.counts));
 const savedItem = r.out.items.find((x) => x.company_name === 'Saved Co');
 step('a saved company shows the lead it became (job and stage) and its place', savedItem.lead.id === 'jL' && savedItem.lead.position === 'Welder' && savedItem.lead.stage === 'Assigned' && savedItem.place === 'Waco, TX');
+step('a saved company shows the POCs on the lead (primary first, with title and email) and the jobs: the main one, the "also hiring" ones, and what Apollo listed — each job once', savedItem.lead.contacts.map((c) => c.name).join() === 'Dana Cole,Eli Ross' && savedItem.lead.contacts[0].email === 'dana@saved.example' && savedItem.lead.jobs.map((j) => j.title).join() === 'Welder,Estimator,Pipefitter' && savedItem.lead.jobs[0].main === true && savedItem.lead.jobs[1].also === true && savedItem.lead.jobs[0].url === undefined, JSON.stringify(savedItem.lead.jobs));
 const movedItem = r.out.items.find((x) => x.company_name === 'Handed Away Co');
+step('…and the people of a lead that was handed away are not in the answer at all', !JSON.stringify(r.out).includes('secret@moved.example'));
 step('a lead that is no longer the person\'s (made by someone else, held by another) is NOT described to them', movedItem.lead === null && movedItem.lead_elsewhere === true);
 step('a lead that was deleted says so', r.out.items.find((x) => x.company_name === 'Deleted Lead Co').lead_gone === true);
 step('only 90 days are shown by default, and it says how many are hidden', !hn.includes('Ancient Co') && r.out.hidden === 1 && r.out.days === 90);
@@ -430,6 +433,43 @@ const back = st.tables.finder_cards.find((c) => c.id === 'hWait');
 step('Show now brings a parked company back to today\'s cards at once', r.code === 200 && back.status === 'new' && back.wait_until === null && back.created_on === '2026-10-20');
 r = await call('/finder/history', 'get', 'rec1');
 step('a person who is not switched on gets no history (403)', r.code === 403);
+
+// ═════ 7d. a one-off search ("Find leads now") ═══════════════════════════════════════════════════════════
+console.log('\nFind leads now');
+({ st, apollo, router, call } = boot());
+await resetCredits(st, 300);
+NOW = new Date('2026-10-21T12:00:00Z');
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true, daily: 3 }, { id: 'ra1' });
+r = await call('/finder/find', 'post', 'ra2', { titles: ['Welder'], locations: ['Texas'] });
+step('a person who is not switched on cannot run one (403)', r.code === 403);
+r = await call('/finder/find', 'post', 'ra1', { titles: [], locations: ['Texas'] });
+step('a one-off search with no job title is refused in words, before anything is spent', r.code === 400 && /job title/i.test(r.out.error) && apollo.calls.length === 0);
+r = await call('/finder/find', 'post', 'ra1', { titles: ['CNC Machinist', 'Welder'], locations: ['Texas'], sizes: ['mid'], posted_days: 14 });
+const oneCards = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
+step('Find leads now makes cards at once: the three clients (staffing firm and the company already worked are left out)', r.code === 200 && r.out.new_cards === 3 && oneCards.length === 3 && !oneCards.some((c) => /Staffing|Acme/.test(c.company_name)), r.out.results[0].note);
+step('…nothing is saved or scheduled: no saved search row exists', st.tables.finder_searches.length === 0 && oneCards.every((c) => c.search_id === null));
+step('…it asked Apollo once with the typed criteria, and cost one credit', apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && apollo.calls[0][1].filters.q_organization_job_titles.join() === 'CNC Machinist,Welder' && Number(st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)).value) === 1);
+step('…and the cards say what they were found for', oneCards.every((c) => c.payload.search.titles.join() === 'CNC Machinist,Welder'));
+r = await call('/finder/find', 'post', 'ra1', { titles: ['Welder'], locations: ['Texas'] });
+step('pressing Find again straight away does NOT call Apollo again (a double-click costs one credit)', r.out.results[0].skipped === true && apollo.calls.filter((c) => c[0] === 'orgs').length === 1);
+r = await call('/finder/cards', 'get', 'ra1');
+step('one-off cards are in Today\'s cards but are NOT counted in the daily number ("0 of your 3 cards for today")', r.out.cards.length === 3 && r.out.today === 0 && r.out.daily === 3, 'today=' + r.out.today);
+// the daily run still gets its full number
+const F2 = (id, name) => ({ id: id.repeat(24), name, primary_domain: name.toLowerCase().replace(/ /g, '') + '.example', organization_headcount_twelve_month_growth: 0.1 });
+apollo.orgs = [F2('f', 'Fox Foundry'), F2('g', 'Gray Gears'), F2('h', 'Hale Hydraulics'), F2('i', 'Ivy Iron')];
+await call('/finder/searches', 'post', 'ra1', SEARCH);
+r = await call('/finder/run', 'post', 'ra1');
+step('the DAILY run still brings its full number (3) — the one-off cards did not use it up', r.code === 200 && r.out.new_cards === 3 && st.tables.finder_cards.filter((c) => c.user_id === 'ra1' && c.search_id).length === 3, r.out.results[0].note);
+// the per-run ceiling
+NOW = new Date('2026-10-21T12:10:00Z');
+await settings.setSettings(st.supabase, { finder_cards_per_run: 2 });
+apollo.orgs = [F2('j', 'Jet Joinery'), F2('k', 'Kite Kilns'), F2('l', 'Lark Lumber')];
+r = await call('/finder/find', 'post', 'ra1', { titles: ['Welder'], locations: ['Texas'] });
+step('a one-off search is held to its own ceiling per press (2 here), whatever the daily number is', r.out.new_cards === 2, r.out.results[0].note);
+await settings.setSettings(st.supabase, { finder_cards_per_run: 0 });
+NOW = new Date('2026-10-21T12:20:00Z');
+r = await call('/finder/find', 'post', 'ra1', { titles: ['Welder'], locations: ['Texas'] });
+step('with the ceiling at 0 the one-off search is off, and says why — without calling Apollo', r.out.new_cards === 0 && /switched off/.test(r.out.results[0].note) && apollo.calls.filter((c) => c[0] === 'orgs').length === 3);
 
 // ═════ 7c. which mailbox a lead sends from ══════════════════════════════════════════════════════════════
 console.log('\nThe mailbox');

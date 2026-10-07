@@ -1045,3 +1045,4 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 @media (max-width:640px){.fd-grid{grid-template-columns:1fr}}
 .fd-block{display:flex;align-items:flex-start;margin-top:8px;line-height:1.4}
 .fd-block input{margin-top:3px}
+.fd-detail{margin-top:8px;padding-top:6px;border-top:2px dashed var(--ctl-brd);font-size:12.5px;line-height:1.6}
