@@ -1245,3 +1245,8 @@ resulting "Ask to take over" modal after clicking through, showing
 - `public/js/68-page-finder.js`: page `finder` ("Find Leads", Sales group in the rail, shown only when `GET /finder/access` says enabled — `finderEnsureAccess()`/`finderEnabled()` called from the shell's nav build). Tabs: Today's cards · My searches · (admin) Access & Apollo. The Accept window is `STATE.modal` (job → people → where it goes). Rule: `paint(skipCapture)` / `paintAccept(skipCapture)` keep what was typed, but a handler that has just changed the form itself must skip the capture or the stale screen overwrites the change (a pill click and the industry picker both hit this; the test shows them failing).
 - `retro.css`: `.fd-*` classes (and in the paper-surface list). RA form grid rows now `align-items:start` (the Website box no longer stretches).
 - Tests: `test/finder-page-smoke.mjs` (43, browser).
+
+## 2026-10-07 (Session 42) — Find Leads after first live use (D-0093)
+- `68-page-finder.js`: `F.running` is the id of the one search running (or `'all'`), so only its button says Running…; Accept window holds `jobs[]` (up to 5, numbered pills + a typed box, `fdToggleJob`/`fdAddJob`), `writeEmail` (ticked for a BD; after Save it calls `/emails/generate` and says the email waits in Pending); `fdFindPeople` merges (keeps revealed/ticked people); cards get a per-search filter (`fdFilterCards`); Save calls `refreshJobs()`.
+- `06-page-leads.js`: refresh icon in the Leads toolbar (`leadsRefreshNow`), also in the RA view.
+- Tests: `finder-page-smoke` now 54, each new guard shown failing without its fix.

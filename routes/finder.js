@@ -360,7 +360,7 @@ module.exports = (ctx) => {
     const posts = Array.isArray(c.postings) ? c.postings : null;
     const sig = posts ? finder.postingSignals(posts) : null;
     return {
-      id: c.id, company_name: c.company_name, status: c.status, wait_until: c.wait_until, created_on: c.created_on,
+      id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status, wait_until: c.wait_until, created_on: c.created_on,
       domain: co.domain || '', website: co.website || '', linkedin_url: co.linkedin_url || '', phone: co.phone || '',
       city: co.city || '', state: co.state || '', address: co.address || '', employees: co.employees || null, revenue: co.revenue || '',
       chips: [].concat(p.chips || [], sig ? sig.chips : []),
@@ -500,8 +500,14 @@ module.exports = (ctx) => {
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
       const co = (card.payload && card.payload.company) || {};
       const b = req.body || {};
-      const position = String(b.position || '').trim().slice(0, 200);
-      if (!position) return res.status(400).json({ error: 'Pick the job this lead is for.' });
+      // One or more jobs (up to 5): the first is the lead's main job, the rest are kept on it as "also hiring".
+      const positions = [];
+      [].concat(Array.isArray(b.positions) ? b.positions : [], b.position ? [b.position] : []).forEach((t) => {
+        const v = String(t || '').trim().slice(0, 200);
+        if (v && !positions.some((x) => x.toLowerCase() === v.toLowerCase())) positions.push(v);
+      });
+      if (!positions.length) return res.status(400).json({ error: 'Pick the job this lead is for.' });
+      const position = positions[0], alsoHiring = positions.slice(1, 5);
 
       // Contacts: up to 3, each with a verified/typed email. People revealed on this card are taken from the card, never from the browser.
       const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 3);
@@ -554,13 +560,14 @@ module.exports = (ctx) => {
       const chosen = posts.find((p) => p.title === position) || null;
       const location = (chosen && [chosen.city, chosen.state].filter(Boolean).join(', ')) || [co.city, co.state].filter(Boolean).join(', ') || null;
       const facts = finder.factsLines(co, posts);
+      if (alsoHiring.length) facts.push('They are also hiring for ' + alsoHiring.join('; ') + '.');
       const research = {
         requirements: { skill_1: null, skill_2: null, skill_3: null, skills: [], suggested_skills: [], skills_source: 'none', location, city: (chosen && chosen.city) || co.city || null },
         company: { expertise: '', notes: '', headcount: '', hiring_volume: '' }, outreach: { angle: facts[0] || '', avoid: '' }, contacts: [],
         // Only the title: the posting TEXT cannot be read from Apollo, so the AI writes a short email from facts, never invented duties (D-0087).
         jd_raw: 'Title: ' + position,
         source: { kind: 'finder', provider: 'apollo', apollo_org_id: card.apollo_org_id || null, search_id: card.search_id || null, found_at: card.created_at, posting_url: (chosen && chosen.url) || null },
-        finder: { facts, postings: posts.slice(0, 10).map((p) => ({ title: p.title, url: p.url, posted_at: p.posted_at, source: p.source })) },
+        finder: { facts, also_hiring: alsoHiring, postings: posts.slice(0, 10).map((p) => ({ title: p.title, url: p.url, posted_at: p.posted_at, source: p.source })) },
       };
       const leadRow = {
         company_id: companyId, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,

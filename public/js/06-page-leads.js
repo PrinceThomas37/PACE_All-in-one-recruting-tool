@@ -134,6 +134,7 @@ function renderJobs(){
       toolbar: UI.toolbar({
         search:{ value:f.search||'', placeholder:'Search your leads…',
                  oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
+        icons:[{ icon:'refresh', title:'Refresh leads', onclick:'leadsRefreshNow()' }],
         right:'<span class="fs-12_5 c-ink3">'+jobs.length+' lead'+(jobs.length===1?'':'s')+' submitted by you</span>'
       }),
       body:
@@ -255,7 +256,9 @@ function renderJobs(){
       search:{ value:f.search||'', placeholder:'Search leads, companies, contacts…',
                oninput:'STATE.jobsFilter.search=this.value;STATE.leadsPage=0;scheduleRender()' },
       icons:[
-        { icon:'x', title:'Clear search and filters', onclick:clearFilters, off:!(anyActive||f.search) }
+        { icon:'x', title:'Clear search and filters', onclick:clearFilters, off:!(anyActive||f.search) },
+        { sep:true },
+        { icon:'refresh', title:'Refresh leads', onclick:'leadsRefreshNow()' }
       ],
       right:
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+
@@ -782,3 +785,10 @@ function sendEmailToContact(cid){
 window.sendEmailToContact=sendEmailToContact;
 function closeModal(){ STATE.modal=null; render(); }
 
+// The Leads page's refresh button (the same idea as the Inbox's): leads that changed elsewhere — one the Lead Finder
+// just made, a colleague's assignment — appear without reloading the browser.
+window.leadsRefreshNow=function(){
+  showToast('Refreshing leads…','info');
+  refreshJobs().then(function(){ showToast('Leads are up to date','success'); })
+    .catch(function(e){ showToast('Could not refresh: '+((e&&e.message)||e),'error'); });
+};

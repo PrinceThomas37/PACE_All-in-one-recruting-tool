@@ -1067,3 +1067,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 - Accept claims the card in one conditional update (new→accepted) and undoes it on failure; contacts revealed on the card are read from the card, never from the browser; the add rule is re-asked; RA → Unassigned, BD/bd_lead → Assigned with a connected mailbox.
 - Meters live in `app_settings`: `finder_credits_<org>_<day>`, `finder_reveals_<user>_<day>`, `finder_user_<id>` (JSON enabled/daily). Settings `finder_*` in `config/settings.js` (group "Lead Finder"). Apollo failures are recorded through `noteApollo` (`apollo_last_error`).
 - Test: `test/finder-routes-smoke.mjs` (82).
+
+## 2026-10-07 (Session 42) — Lead Finder accept takes several jobs (D-0093)
+- `POST /finder/cards/:id/accept` takes `positions: []` (up to 5; `position` still works). First = the lead's `position`; the rest go to `research.finder.also_hiring` and a facts line "They are also hiring for …". `GET /finder/cards` now returns `search_id`. Tests: `finder-routes-smoke` 84.

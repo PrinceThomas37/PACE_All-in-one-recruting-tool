@@ -1129,3 +1129,7 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-07 (Session 42) — Lead Finder tests (R-157)
 - New: `lead-finder-smoke` (33, pure rules), `finder-routes-smoke` (82, fake two-organisation database with injected Apollo), `finder-page-smoke` (43, browser). `models-smoke` registry count 46→48. Mutation checks done for the repaint-capture guards. Node 22: 209 suites, all pass once models-smoke is updated.
+
+## 2026-10-07 (Session 42) — Lead Finder tests after first live use (D-0093)
+- `finder-page-smoke` 43→54 and `finder-routes-smoke` 82→84: only the running search says Running…; several jobs per lead (numbered pills, `positions[]`, `also_hiring` in notes/facts); a new people search keeps revealed/ticked people; per-search card filter; "Write the first email now" calls `/emails/generate` for a BD only and never sends; Leads refresh button + `refreshJobs()` after Save.
+- Mutation-checked (each guard failed with its fix removed): people merge, running flag, refresh after save, write-email, also-hiring facts. Lesson repeated: a stub that returns the same canned name for every reveal made a correct list look wrong — a fixture must vary what the test distinguishes.
