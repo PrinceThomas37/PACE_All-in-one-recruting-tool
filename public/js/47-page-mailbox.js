@@ -335,7 +335,7 @@
 
   function loadMessage(id){
     var m=M(), acct=m.activeId;
-    m.selectedId=id; m.showImages=false; m.composer=null;
+    m.selectedId=id; m.showImages=false;   // a reply in progress is its own window now — selecting another message must not wipe it
     var hit=_mc[acct+':'+id];
     if(hit){                                    // a message does not change: show it, no round trip
       m.message=hit; m.msgLoading=false; m.error=null;
@@ -641,28 +641,80 @@
       }
       subject=/^re:/i.test(x.subject||'')?x.subject:('Re: '+(x.subject||''));
     }
-    m.composer={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], sig:sigPrefGet(), showCc:!!cc, sending:false };
-    paint();
-    var ta=document.getElementById('mb-comp-body'); if(ta)ta.focus();
+    // THE REPLY IS A WINDOW (7 Oct, owner: "it does not open up like a new window … we have to go back and take some
+    // information from somewhere else in the app, what we have written goes off, the reply resets"). It was a box
+    // inside the reading pane, wiped by the next click on a message. It is now a window on the dock
+    // (10a-window-dock.js: minimise, full screen, look elsewhere in PACE, come back as left), it remembers WHICH
+    // message it answers (so it can be sent from anywhere), and what is typed is also kept on this device
+    // (a draft), so even closing it or reloading the page loses nothing.
+    var c={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], sig:sigPrefGet(), showCc:!!cc, sending:false,
+            acct:m.activeId, msgId:x.id, from:(x.from&&(x.from.name||x.from.email))||'', savedAt:null };
+    var d=draftGet(c);
+    if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
+    m.composer=c;
+    if(c.sig) loadSignature();
+    paintComposer();
+    setTimeout(function(){ var ta=document.getElementById('mb-comp-body'); if(ta){ ta.focus(); try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch(e){} } },30);
+    if(d) showToast('Your unsent draft for this message is back','info');
   }
-  window.mbReply=function(all){ openComposer(all?'replyAll':'reply'); };
-  window.mbForward=function(){ openComposer('forward'); };
-  window.mbCancelComposer=function(){ var m=M(); m.composer=null; paint(); };
+  // A reply already open (on screen or minimised) comes back instead of being replaced by a blank one.
+  function replyWindowOpen(){
+    return (typeof STATE.modal==='string'&&STATE.modal.indexOf('data-win="mailReply"')>=0)||(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0);
+  }
+  window.mbReply=function(all){ mbOpenReplyWindow(all?'replyAll':'reply'); };
+  window.mbForward=function(){ mbOpenReplyWindow('forward'); };
+  function mbOpenReplyWindow(mode){
+    var m=M();
+    if(m.composer&&replyWindowOpen()){
+      // Words already typed are never replaced by a blank window: bring that one back and say so.
+      if(String(m.composer.body||'').trim()){
+        if(window.Dock) Dock.restoreKind('mailReply');
+        showToast('You already have a reply open — send it or discard it first','info'); return;
+      }
+      if(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0) Dock.discardKind('mailReply');   // an empty one is simply replaced
+    }
+    openComposer(mode);
+  }
+  // Discard = the draft is deleted too. Closing the window (×) keeps the draft on this device.
+  window.mbCancelComposer=function(){ var m=M(); if(m.composer) draftClear(m.composer); m.composer=null; if(window.Dock) Dock.close(); else closeModal(); };
   window.mbCancelReply=window.mbCancelComposer;   // older name, still referenced
-  window.mbCompField=function(k,v){ var m=M(); if(m.composer) m.composer[k]=v; };
-  window.mbCompToggleCc=function(){ var m=M(); if(!m.composer)return; m.composer.showCc=!m.composer.showCc; paint(); };
+  window.mbCompField=function(k,v){ var m=M(); if(m.composer){ m.composer[k]=v; draftSaveSoon(); } };
+  window.mbCompToggleCc=function(){ var m=M(); if(!m.composer)return; m.composer.showCc=!m.composer.showCc; paintComposer(); };
   window.mbCompSetSig=function(on){
     var m=M(); if(!m.composer)return;
     m.composer.sig=!!on; sigPrefSet(!!on);
     if(m.composer.sig) loadSignature();
-    paint();
+    paintComposer();
   };
+
+  // ── the draft kept on this device ───────────────────────────────────────────
+  // Not the provider's Drafts folder (that needs Gmail/Outlook draft calls — offered, not built): a copy in this
+  // browser, keyed by mailbox + message + kind of reply, written a moment after typing stops and removed on send/discard.
+  function draftKey(c){ return 'pace-mb-draft:'+(c.acct||'')+':'+(c.msgId||'')+':'+(c.mode==='forward'?'fwd':'re'); }
+  function draftGet(c){
+    try{ var v=JSON.parse(localStorage.getItem(draftKey(c))||'null'); return (v&&String(v.body||'').trim())?v:null; }catch(e){ return null; }
+  }
+  function draftClear(c){ try{ localStorage.removeItem(draftKey(c)); }catch(e){} }
+  var _draftT=null;
+  function draftSave(){
+    var c=M().composer; if(!c)return;
+    ['to','cc','subject','body'].forEach(function(k){ var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value; });
+    try{
+      if(String(c.body||'').trim()){
+        localStorage.setItem(draftKey(c),JSON.stringify({to:c.to,cc:c.cc,subject:c.subject,body:c.body,at:Date.now()}));
+        c.savedAt=Date.now();
+        var el=document.getElementById('mb-comp-saved'); if(el) el.textContent='Draft saved on this device';
+      } else draftClear(c);
+    }catch(e){}
+  }
+  function draftSaveSoon(){ clearTimeout(_draftT); _draftT=setTimeout(draftSave,600); }
+  window.mbDraftFlush=function(){ clearTimeout(_draftT); draftSave(); };
 
   function loadSignature(){
     var m=M(); if(m.sigHtml!==null||m.sigLoading||!m.activeId)return;
     m.sigLoading=true;
     apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/signature')
-      .then(function(d){ m.sigHtml=(d&&d.html)||''; m.sigLoading=false; paint(); })
+      .then(function(d){ m.sigHtml=(d&&d.html)||''; m.sigLoading=false; if(m.composer) paintComposer(); else paint(); })
       .catch(function(){ m.sigHtml=''; m.sigLoading=false; });
   }
 
@@ -691,14 +743,14 @@
       if(total>MAX_ATTACH_BYTES){
         showToast('That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something or send a link instead','warning');
       }
-      paint();
+      paintComposer();
     }
   };
-  window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paint(); };
+  window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paintComposer(); };
 
   window.mbSendComposer=function(){
     mbChipFlush();
-    var m=M(); var c=m.composer; if(!c||!m.message||c.sending)return;
+    var m=M(); var c=m.composer; if(!c||!c.msgId||c.sending)return;
     // Read straight from the DOM as well as STATE: oninput keeps STATE current,
     // but reading here means a send can never lose a last keystroke.
     ['to','cc','subject','body'].forEach(function(k){
@@ -710,23 +762,27 @@
     if(total>MAX_ATTACH_BYTES){
       showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return;
     }
-    c.sending=true; paint();
+    c.sending=true; paintComposer();
     var payload={
       body:c.body, subject:c.subject,
       to:c.to, cc:c.cc,
       include_signature:!!c.sig,
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
     };
-    var path='/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(m.message.id)+
+    // The mailbox and message captured when the window was opened — not whatever is selected now.
+    var path='/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.msgId)+
       (c.mode==='forward'?'/forward':'/reply');
     if(c.mode!=='forward') payload.reply_all=(c.mode==='replyAll');
     apiPost(path,payload)
       .then(function(){
         showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
-        m.composer=null; paint();
+        draftClear(c);
+        // Close whichever way the window is now: on screen, or parked while the person looked elsewhere.
+        if(m.composer===c){ m.composer=null; if(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0) Dock.discardKind('mailReply'); else closeModal(); }
+        paint();
       })
       .catch(function(e){
-        c.sending=false; paint();
+        c.sending=false; if(m.composer===c) paintComposer();
         showToast((c.mode==='forward'?'Forward':'Send')+' failed: '+e.message,'error');
       });
   };
@@ -1040,12 +1096,12 @@
     // then jerked the whole pane — and every one of those pane scrolls moved
     // the iframe, which is what made reading feel like it was flickering.
     // With several messages on screen the pane has to scroll, so it does.
-    p.solo=(thread.length===1)&&!m.composer;
+    p.solo=(thread.length===1);
     p.head=renderHead(x, thread.length);
     p.before=thread.slice(0,at).map(renderCollapsedMessage).join('');
     p.open=renderOpenMessage(x);
     p.after=thread.slice(at+1).map(renderCollapsedMessage).join('');
-    p.comp=renderComposer(x);
+    p.comp='';   // the reply is its own window (paintComposer)
     p.reader='<div class="mb-read" id="mb-read" data-shape="msg">'+
       '<div class="mb-head" id="mb-head">'+p.head+'</div>'+
       '<div class="mb-thread'+(p.solo?' solo':'')+'" id="mb-thread">'+
@@ -1424,52 +1480,44 @@
     '</div>';
   }
 
-  function renderComposer(x){
-    var m=M(); var c=m.composer;
-    if(!c) return '';
+  // The reply / forward window. Same fields and handlers as before (mb-comp-*), now a modal on the dock.
+  function paintComposer(){
+    var m=M(); var c=m.composer; if(!c)return;
     var fwd=c.mode==='forward';
-    var title=fwd?'Forward':(c.mode==='replyAll'?'Reply all':'Reply');
-
-    return '<div style="border-top:1px solid var(--border);padding:12px 18px;background:var(--bg);max-height:62%;overflow-y:auto">'+
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-        '<div class="fs-12" style="font-weight:700">'+title+'</div>'+
-        (fwd?'':'<div class="fs-11 c-text3">The original is quoted underneath automatically.</div>')+
-        (fwd?'<div class="fs-11 c-text3">Attachments on the original are carried over.</div>':'')+
-      '</div>'+
-
-      // To — editable everywhere. A forward starts empty; a reply is prefilled.
-      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
-        '<label class="fs-11 c-text2" style="width:52px;flex:none">To</label>'+
-        chipField('mb-comp-to','to',c.to,'mbCompField',fwd?'someone@company.com':'')+
-        (c.showCc?'':'<button class="btn btn-xs btn-ghost" onclick="mbCompToggleCc()">Add Cc</button>')+
-      '</div>'+
-      (c.showCc
-        ? '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
-            '<label class="fs-11 c-text2" style="width:52px;flex:none">Cc</label>'+
-            chipField('mb-comp-cc','cc',c.cc,'mbCompField','')+
-          '</div>'
-        : '')+
-
-      // Subject — visible and editable on reply and forward alike. It was
-      // previously decided for you by the mail provider and never shown.
-      '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'+
-        '<label class="fs-11 c-text2" style="width:52px;flex:none">Subject</label>'+
-        '<input id="mb-comp-subject" class="sel" style="flex:1;font-size:12.5px" value="'+escAttr(c.subject||'')+'" oninput="mbCompField(\'subject\',this.value)">'+
-      '</div>'+
-
-      '<textarea id="mb-comp-body" class="sel" oninput="mbCompField(\'body\',this.value)" '+
-        'style="min-height:110px;resize:vertical;font-size:12.5px;line-height:1.55" '+
-        'placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'">'+esc(c.body||'')+'</textarea>'+
-
-      renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
-      renderSigRow(c.sig,'mbCompSetSig')+
-
-      '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">'+
-        '<button class="btn btn-sm btn-outline" onclick="mbCancelComposer()">Cancel</button>'+
-        '<button class="btn btn-sm btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+
-          (c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
-      '</div>'+
-    '</div>';
+    var title=fwd?'Forward':(c.mode==='replyAll'?'Reply all':'Reply')+(c.from?' to '+c.from:'');
+    var from=(m.accounts||[]).filter(function(a){return a.id===c.acct;})[0]||{};
+    var html=
+      '<div class="modal modal-w640" data-win="mailReply" onclick="event.stopPropagation()">'+
+        '<div class="mb-win-hd">'+
+          '<div class="mhd">'+esc(title)+'</div>'+
+          '<div class="fs-11_5 c-text3">From '+esc(from.email_address||'')+(fwd?' · attachments on the original are carried over':' · the original is quoted underneath automatically')+'</div>'+
+        '</div>'+
+        '<div class="mb-win-bd">'+
+          '<div class="mb-win-row"><label class="fs-11 c-text2">To</label>'+
+            chipField('mb-comp-to','to',c.to,'mbCompField',fwd?'someone@company.com':'')+
+            (c.showCc?'':'<button class="btn btn-xs btn-ghost" onclick="mbCompToggleCc()">Add Cc</button>')+'</div>'+
+          (c.showCc?'<div class="mb-win-row"><label class="fs-11 c-text2">Cc</label>'+chipField('mb-comp-cc','cc',c.cc,'mbCompField','')+'</div>':'')+
+          '<div class="mb-win-row"><label class="fs-11 c-text2">Subject</label>'+
+            '<input id="mb-comp-subject" class="sel mb-win-grow" value="'+escAttr(c.subject||'')+'" oninput="mbCompField(\'subject\',this.value)"></div>'+
+          '<textarea id="mb-comp-body" class="sel mb-win-text" oninput="mbCompField(\'body\',this.value)" '+
+            'placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'">'+esc(c.body||'')+'</textarea>'+
+          renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
+          renderSigRow(c.sig,'mbCompSetSig')+
+        '</div>'+
+        '<div class="mb-win-ft">'+
+          '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+
+          '<span class="mb-win-btns">'+
+            '<button class="btn btn-outline" onclick="mbCancelComposer()">Discard</button>'+
+            '<button class="btn btn-primary" id="mb-comp-send" onclick="mbSendComposer()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':(fwd?'Forward':'Send'))+'</button>'+
+          '</span>'+
+        '</div>'+
+      '</div>';
+    // Minimised: a repaint (a signature or file finishing) updates the parked window, it never pops open over the page.
+    if(window.Dock&&Dock.updateParked('mailReply',html))return;
+    STATE.modal=html;
+    render();
   }
+  // The chip's × on a parked reply: the window goes, the draft stays on this device.
+  if(window.Dock) Dock.onDiscard('mailReply',function(){ M().composer=null; });
 
 })();

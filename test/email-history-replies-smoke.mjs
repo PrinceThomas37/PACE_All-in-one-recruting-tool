@@ -138,6 +138,14 @@ const ok = (n, c, d) => results.push({ n, c: !!c, d });
   const q = await get('BD', '&q=ceo%40client');
   ok('a search finds a reply by the SENDER\'s address', q.items.length === 1 && q.items[0].subject === 'Reply on BD lead', q.items.map(i => i.subject));
 
+  // A CANDIDATE'S HISTORY IS THE CANDIDATE'S MAIL (owner, 7 Oct: the "interested" window was full of emails to other people).
+  // The leads engine's `emails` table has no candidate column, so ?candidate_id= could not narrow it and every lead email rode along.
+  DB.emails.push({ id: 'E1', org_id: O, to_email: 'karina@abitos.com', from_email: 'bd@x.com', subject: 'Circling back on your Tax Associate role', body: 'Hi Karina', status: 'sent', sent_at: '2026-10-07T09:00:00Z', created_at: '2026-10-07T09:00:00Z', job_id: 'J1', contact_id: null, sent_by: 'BD' });
+  const withLead = await subj('BD');
+  ok('GUARD CAN SEE THE THING: without a candidate filter the lead email IS in the list (so its absence below means something)', withLead.includes('Circling back on your Tax Associate role'), withLead);
+  const candOnly = await get('BD', '&candidate_id=C1');
+  ok('?candidate_id= returns that candidate\'s mail only — never a lead-engine email to someone else', JSON.stringify(candOnly.items.map(i => i.subject)) === JSON.stringify(['Candidate answered BD']) && candOnly.by_source.leads === 0, candOnly.items.map(i => i.subject));
+
   const failed = results.filter(x => !x.c);
   for (const r of results) console.log((r.c ? 'PASS' : 'FAIL') + ' - ' + r.n + (r.c ? '' : ' :: ' + JSON.stringify(r.d)));
   console.log(`\nSUMMARY: ${results.length - failed.length}/${results.length} passed`);

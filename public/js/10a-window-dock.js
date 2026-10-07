@@ -155,6 +155,11 @@
       try { if (it.kind && hooks.discard[it.kind]) hooks.discard[it.kind](it); } catch (_) {}
       render();
     },
+    // Discard a parked window by its kind (a send finished while its window was minimised).
+    discardKind: function(kind){
+      var it = D.items.filter(function(x){ return x.kind === kind; })[0];
+      if (it) Dock.discard(it.id);
+    },
     onDiscard: function(kind, fn){ hooks.discard[kind] = fn; },
     // The window on screen, closed.
     close: function(){ D.max = false; closeModal(); },

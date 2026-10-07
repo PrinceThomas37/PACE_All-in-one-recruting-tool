@@ -659,7 +659,7 @@ function renderEmail(){
               '<div class="fs-12 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em">Email Signature</div>'+
               '<div class="fs-11_5 c-text3" style="margin-top:2px">For '+sigLabel+' — appended automatically on send</div>'+
             '</div>'+
-            '<button onclick="STATE.sigEditing=!STATE.sigEditing;render()" class="fs-12 c-text2" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--bg);cursor:pointer">'+(editing?'Close editor':'Edit signature')+'</button>'+
+            '<button onclick="sigEditToggle()" class="fs-12 c-text2" style="padding:5px 12px;border:1px solid var(--border2);border-radius:7px;background:var(--bg);cursor:pointer">'+(editing?'Close editor':'Edit signature')+'</button>'+
           '</div>'+
           (!myEmails.length?'<div class="fs-12 c-amber" style="padding:12px 16px 0">Add a sending email ID in Admin → your profile before setting a signature.</div>':'')+
           (editing?
@@ -672,15 +672,20 @@ function renderEmail(){
                 }).join('')+
                 '</div>'+
               '</div>'+
-              '<div style="margin-bottom:10px">'+
-                '<div class="fs-11_5 c-text2" style="font-weight:600;margin-bottom:6px">Signature HTML <span class="c-text3" style="font-weight:400">({{sender}} = display name, {{senderemail}} = this email ID)</span></div>'+
-                '<textarea id="sig-html-input" class="fs-12 c-text" style="width:100%;min-height:110px;padding:10px;border:1.5px solid var(--border2);border-radius:8px;font-family:var(--mono);line-height:1.6;resize:vertical;background:var(--bg)" placeholder="<p>Best regards,<br><strong>{{sender}}</strong></p>">'+htmlEsc(sig)+'</textarea>'+
-              '</div>'+
               '<div style="margin-bottom:12px">'+
-                '<div class="fs-11 c-text3" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Live preview</div>'+
-                '<div id="sig-live-preview" style="padding:14px 16px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;font-family:Arial,sans-serif;min-height:48px">'+
-                  previewHtml+
+                '<div class="fs-11_5 c-text2" style="font-weight:600;margin-bottom:6px">Your signature <span class="c-text3" style="font-weight:400">— type and format it right here, exactly as it will look. Your name and email fill in automatically for each mailbox.</span></div>'+
+                '<div class="sig-bar" onmousedown="event.preventDefault()">'+
+                  '<button type="button" title="Bold" onclick="sigCmd(\'bold\')"><b>B</b></button>'+
+                  '<button type="button" title="Italic" onclick="sigCmd(\'italic\')"><i>I</i></button>'+
+                  '<button type="button" title="Underline" onclick="sigCmd(\'underline\')"><u>U</u></button>'+
+                  '<button type="button" title="Turn the selected words into a link" onclick="sigLink()">Link</button>'+
+                  '<span class="sig-bar-sep"></span>'+
+                  '<button type="button" title="Put your name here — filled in per mailbox" onclick="sigInsert(\'sender\')">+ My name</button>'+
+                  '<button type="button" title="Put this mailbox\'s email address here" onclick="sigInsert(\'senderemail\')">+ My email</button>'+
+                  '<span class="sig-bar-sep"></span>'+
+                  '<button type="button" title="Remove colours and fonts from the selected words" onclick="sigCmd(\'removeFormat\')">Clear style</button>'+
                 '</div>'+
+                '<div id="sig-editor" class="sig-editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Email signature">'+sigToEditor(STATE.sigEditInit!=null?STATE.sigEditInit:(sig||previewSource))+'</div>'+
               '</div>'+
               '<div style="display:flex;gap:8px">'+
                 '<button onclick="saveSig()" class="fs-13" style="padding:7px 18px;background:var(--accent);color:#fff;border:0;border-radius:8px;font-weight:600;cursor:pointer">Save signature</button>'+

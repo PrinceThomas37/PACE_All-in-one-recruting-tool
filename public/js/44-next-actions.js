@@ -121,6 +121,10 @@ function naItemOf(btn){
 window.naAct=function(btn,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   var it=naItemOf(btn); if(!it){showToast('Could not read that row','error');return;}
+  naActItem(it);
+};
+// The same work from an item in hand — the row's button and the evidence window's "What to do" band both call it.
+window.naActItem=function(it){
   // A lead's silent contacts are one row with no single address: open the lead, where each person is.
   if(it.entity_type==='lead')return naOpen(it.kind,'lead',it.entity_id,it.job_id);
   if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
@@ -146,6 +150,9 @@ function naMoveStageSelect(){
 window.naMoveStage=function(sel,ev){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   var it=naItemOf(sel),stage=sel.value; sel.value='';
+  naMoveStageItem(it,stage);
+};
+window.naMoveStageItem=function(it,stage){
   if(!it||!stage)return;
   if(!it.job_id||!window.stageSubmissionFor){showToast('Open the candidate to move them','warning');return;}
   window.stageSubmissionFor(it.entity_id,it.job_id).then(function(row){
@@ -209,11 +216,13 @@ window.naComplete=function(chk,ev){
 window.naTrace=function(row){
   var it=naItemOf(row); if(!it||!window.traceOpen)return;
   var k=NA_KIND[it.kind]||NA_KIND_UNKNOWN;
+  var meta={};
   var opts={
     title:(it.title||'')+(it.subtitle&&it.entity_type!=='lead'?' · '+it.subtitle:'')+(it.entity_type==='lead'&&it.subtitle?' · '+it.subtitle:''),
     hint:(k.why||'')+(it.reason?' Right now: '+it.reason:''),
     reminderId:it.reminder_id||null,
-    firstChip:it.kind==='reply_due'?'the reply you owe':(it.kind==='nudge'?'your last email':null)
+    firstChip:it.kind==='reply_due'?'the reply you owe':(it.kind==='nudge'?'your last email':null),
+    meta:meta
   };
   if(it.entity_type==='lead'){ opts.leadId=it.entity_id; }
   else if(it.entity_type==='contact'){ opts.leadId=it.job_id; opts.who=it.title; }
@@ -221,7 +230,60 @@ window.naTrace=function(row){
   else if(it.job_id){ opts.leadId=it.job_id; }
   var canOpen=it.entity_type==='candidate'||it.job_id||it.entity_type==='lead'||it.entity_type==='contact';
   if(canOpen) opts.open={label:it.entity_type==='candidate'?'Open the candidate':'Open the lead',fn:function(){ naOpen(it.kind,it.entity_type,it.entity_id,it.job_id); }};
+  opts.task=naTaskFor(it);
   traceOpen(opts);
+};
+
+// The step this row asks for, in plain words, with the buttons that do it — the SAME actions the row
+// itself carries (naActItem / naMoveStageItem / done / snooze), so the window is never read-only.
+var NA_STAGE_END=['Placement','Not Accepted','On Hold'];
+function naNextStage(it){
+  var cur=it.stage||((String(it.reason||'').match(/currently at "([^"]+)"/)||[])[1])||'';
+  var list=window.ATS_STAGE_LIST||[], i=list.indexOf(window.normalizeStage?normalizeStage(cur):cur);
+  if(i<0||NA_STAGE_END.indexOf(list[i])>=0||i+1>=list.length)return '';
+  var nx=list[i+1]; return NA_STAGE_END.indexOf(nx)>=0?'':nx;
+}
+function naTaskFor(it){
+  var first=String(it.title||'them').split(/\s+/)[0];
+  var b=[], text='', stages=null;
+  var act=function(){ naActItem(it); };
+  switch(it.kind){
+    case 'reply_due':
+      text='Reply to '+(it.title||'them')+'. Their email is below; the answer is written in your mailbox with their thread already open.';
+      b.push({label:'Reply to '+first,primary:true,fn:act}); break;
+    case 'commitment_due':
+      text='Chase '+(it.title||'them')+' about what they promised.';
+      b.push({label:'Write to '+first,primary:true,fn:act}); break;
+    case 'nudge':
+      text=it.entity_type==='lead'?'Nobody on this lead has answered. Open it to see who you have emailed and follow up.':'Follow up with '+(it.title||'them')+' — nobody has answered.';
+      b.push({label:it.entity_type==='lead'?'Open the lead':'Follow up with '+first,primary:true,fn:act}); break;
+    case 'reminder_due':
+      text=it.reason||'A reminder has come due.';
+      if(it.email) b.push({label:'Write the email',primary:true,fn:act}); break;
+    case 'stage_suggested':
+      var nx=naNextStage(it);
+      text='Their reply reads as interest. Decide whether to move '+(it.title||'them')+' forward'+(it.stage?' from "'+it.stage+'"':'')+'.';
+      stages={suggest:nx,options:(window.ATS_STAGE_LIST||[]).slice(),fn:function(st){ naMoveStageItem(it,st); }};
+      b.push({label:'Reply to '+first,fn:act}); break;
+    default: text=it.reason||'';
+  }
+  if(it.reminder_id) b.push({label:'Mark done',quiet:true,fn:function(){ naDone(it.reminder_id); }});
+  else{
+    b.push({label:'Mark completed',quiet:true,fn:function(){ naCompleteItem(it); }});
+    b.push({label:'Not today',quiet:true,fn:function(){ naSnoozeItem(it,'today'); }});
+  }
+  return {text:text,buttons:b,stages:stages};
+}
+// Close / hide from the window — the same two calls the row's checkbox and "Not today" make.
+window.naCompleteItem=function(it){
+  apiPost('/next-actions/dismiss',{item:it,scope:'drop'}).then(function(){
+    showToast('Marked completed — it comes back only if they reply','success'); STATE.nextActions=null; loadNextActions(true);
+  }).catch(function(e){showToast('Could not mark that completed: '+((e&&e.message)||e),'error');});
+};
+window.naSnoozeItem=function(it,scope){
+  apiPost('/next-actions/dismiss',{item:it,scope:scope}).then(function(){
+    showToast('Hidden until tomorrow — comes back if they reply','success'); STATE.nextActions=null; loadNextActions(true);
+  }).catch(function(e){showToast('Could not hide that: '+((e&&e.message)||e),'error');});
 };
 
 window.naOpen=function(kind,entityType,entityId,jobId){
@@ -377,7 +439,7 @@ function renderNextActionsCard(){
       last_activity_at:it.last_activity_at||null,
       overdue_days:(it.overdue_days===undefined?null:it.overdue_days),
       state:it.state||null, title:it.title||'', reason:it.reason||'',
-      email:it.email||null, subtitle:it.subtitle||null
+      email:it.email||null, subtitle:it.subtitle||null, stage:it.stage||null
     }));
     return '<div data-na-item="'+payload+'" '+
       'onclick="naTrace(this)" title="Click to see where this comes from" '+

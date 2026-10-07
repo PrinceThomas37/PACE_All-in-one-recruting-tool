@@ -691,6 +691,12 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 .ev-title{font-family:var(--pixel);font-size:12px;letter-spacing:.5px;line-height:1.5}
 .ev-count{display:inline-block;margin-left:6px;padding:1px 8px;background:#7A4DE0;color:#FFF6E6;border:2px solid #000;font-family:var(--mono);font-size:11px;vertical-align:middle}
 .ev-hint{font-size:12.5px;color:#3D3260;margin-top:6px;line-height:1.45}
+.ev-task{padding:12px 18px 14px;border-bottom:3px solid #000;background:#FFF6E6}
+.ev-task-lbl{font-family:var(--pixel-label,var(--pixel));font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:#6E6290}
+.ev-task-text{font-weight:700;font-size:14px;line-height:1.4;margin:4px 0 10px;color:#1A1033}
+.ev-task-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ev-task-acts .sel{max-width:220px}
+.ev-showall{display:block;width:100%;padding:12px 18px;text-align:center}
 .ev-body{overflow-y:auto;padding:4px 0}
 .ev-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid #E3D6BC;border-left:4px solid transparent}
 .ev-row.is-click{cursor:pointer}
