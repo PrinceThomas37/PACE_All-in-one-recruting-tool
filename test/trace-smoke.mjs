@@ -153,6 +153,18 @@ try {
   step('…the button opens the mailbox on the person who wrote (their address), and the window steps aside', await page.evaluate(() => __opened.includes('page:mailbox') && STATE.mailbox.q === 'melanie@pinpoint.test' && !document.querySelector('.ev-drawer')), await page.evaluate(() => JSON.stringify([__opened, STATE.mailbox])));
   await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'trace-client-conversation.png') });
+  // …and the lead's stage, when the lead is loaded and the person may change it
+  await close();
+  await page.evaluate(() => { window.__stageSet = null; window.jobById = (id) => id === 'job-1' ? { id: 'job-1', stage: 'Assigned' } : null; window.changeJobStage = (id, st) => { __stageSet = id + '>' + st; }; });
+  await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
+  d = await drawer();
+  step('a client conversation also offers the lead\'s stage (it replied, the lead is "Assigned" → suggest Connected)', /The lead is at "Assigned"/.test(d.task) && d.taskBtns.includes('Move to Connected'), JSON.stringify([d.task, d.taskBtns]));
+  await page.evaluate(() => [...document.querySelectorAll('.ev-task-acts button')].find(b => /^Move to Connected/.test(b.textContent)).click()); await wait();
+  step('…clicking it changes the lead\'s stage through the Leads list\'s own function', await page.evaluate(() => __stageSet === 'job-1>Connected' && !document.querySelector('.ev-drawer')), await page.evaluate(() => String(__stageSet)));
+  await page.evaluate(() => { window.jobById = () => null; });
+  await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
+  d = await drawer();
+  step('with the lead not loaded there is NO stage control (never one that cannot act)', !/Move to/.test(d.taskBtns.join()) && await page.evaluate(() => !document.querySelector('.ev-task-acts select')));
   await close();
   await page.evaluate(() => { const r = [...document.querySelectorAll('.cd-person .cd-row')][0]; r.click(); }); await wait();
   step('a teammate\'s conversation stays facts-only — no emails, it just opens the lead list (D-0040)', await page.evaluate(() => !document.querySelector('.ev-drawer') && __opened.includes('page:leads')));

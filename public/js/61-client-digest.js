@@ -70,12 +70,21 @@
       else b.push({label:'Open the lead',primary:true,fn:openLead});
       if(step.id!=='reply'&&it.state==='needs_reply') b.push({label:'Reply in the mailbox',fn:replyInMailbox});
     }
+    // THE STAGE STEP (owner, 7 Oct): somebody who wrote back is not an "Assigned" lead any more. Offered only when the lead is
+    // loaded here and this person may change stages (the same rule as the Leads list) — never a control that cannot act.
+    var stages=null, lj=window.jobById?jobById(it.id):null;
+    if(lj&&window.changeJobStage&&userHasAnyRole(STATE.user,'admin','bd','bd_lead')){
+      var ALL=['Unassigned','Assigned','Connected','In Discussion','Future','Rejected'];
+      var sug={'Unassigned':'Connected','Assigned':'Connected','Connected':'In Discussion'}[lj.stage]||'';
+      stages={suggest:sug,options:ALL.filter(function(x){return x!==lj.stage;}),fn:function(st){ changeJobStage(it.id,st); }};
+      text+=' The lead is at "'+lj.stage+'".';
+    }
     if(it.complete) b.push({label:'Mark completed',quiet:true,fn:function(){
       apiPost('/next-actions/dismiss',{item:it.complete,scope:'drop'}).then(function(){
         showToast('Marked completed — it comes back only if they write again','success'); loadClientDigest(true);
       }).catch(function(e){ showToast('Could not mark that completed: '+((e&&e.message)||e),'error'); });
     }});
-    return {text:text,buttons:b};
+    return {text:text,buttons:b,stages:stages};
   }
   window.clientDigestTrace=function(idx){
     var it=((STATE.clientDigest||{}).mine||[])[idx]; if(!it||!window.traceOpen) return;
