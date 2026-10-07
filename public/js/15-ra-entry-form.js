@@ -155,22 +155,21 @@ function renderRALeadForm(){
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
       '<div>'+
         '<div style="position:relative">'+
-          '<input class="inp" id="ra-co-name" placeholder="Company name *" value="'+htmlEsc(f.coName||'')+'" autocomplete="off" oninput="raFormCoSearch(this.value)" onblur="raFormCoBlur()" style="'+(companyCooldownCheck(f.coName)?'border-color:#f59e0b':'')+'"/>'+
+          '<input class="inp" id="ra-co-name" placeholder="Company name *" value="'+htmlEsc(f.coName||'')+'" autocomplete="off" oninput="raFormCoSearch(this.value)" onblur="raFormCoBlur()" style="'+(f.decision&&f.decision.blocked?'border-color:var(--red)':'')+'"/>'+
           (STATE.raFormCoSuggestions&&STATE.raFormCoSuggestions.length?
             '<div style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px" id="co-suggestions">'+
               STATE.raFormCoSuggestions.map(function(co,i){
-                var cool=companyCooldownCheck(co.name);
-                return '<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+
-                  '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+(cool?'<span class="fs-10" style="margin-left:6px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
+                return '<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border)">'+
+                  '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+'</div>'+
                   '<div class="fs-11 c-text3">'+htmlEsc(co.industry||'')+(co.location?' \u00b7 '+htmlEsc(co.location):'')+( co.job_count?' \u00b7 '+co.job_count+' jobs':'')+( co.bd_name?' \u00b7 '+htmlEsc(co.bd_name):'')+'</div>'+
                 '</div>';
               }).join('')+
             '</div>':'')+
         '</div>'+
-        (function(){var cool=companyCooldownCheck(f.coName);return cool?'<div class="fs-11_5" style="margin-top:5px;padding:8px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;color:#92400e"><strong>⚠ 21-day cooldown active</strong> — '+htmlEsc(f.coName)+' was added '+cool.daysAgo+' day'+(cool.daysAgo!==1?'s':'')+' ago ('+htmlEsc(cool.position)+'). '+cool.daysLeft+' day'+(cool.daysLeft!==1?'s':'')+' remaining.</div>':'';})()  +
+        raFormDecisionBox(f)+
         coBanner+
       '</div>'+
-      '<input class="inp" placeholder="Website" value="'+htmlEsc(f.website||'')+'" oninput="raFormSet(\'website\',this.value)"/>'+
+      '<input class="inp" placeholder="Website" value="'+htmlEsc(f.website||'')+'" oninput="raFormSet(\'website\',this.value)" onblur="raFormCheckNow()"/>'+
     '</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
       '<select class="sel" onchange="raFormSet(\'industry\',this.value)">'+indOpts+'</select>'+
@@ -427,9 +426,8 @@ function _patchCoSuggestions(){
   if(!sugs.length){if(existing)existing.remove();return;}
   var html='<div id="co-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--card-solid);border:1px solid var(--border2);border-radius:var(--r2);box-shadow:var(--sh2);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px">'+
     sugs.map(function(co,i){
-      var cool=companyCooldownCheck(co.name);
-      return'<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border);opacity:'+(cool?'.5':'1')+'">'+
-        '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+(cool?'<span class="fs-10" style="margin-left:6px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px">Cooldown '+cool.daysLeft+'d</span>':'')+'</div>'+
+      return'<div class="_co-sug" data-idx="'+i+'" style="padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--border)">'+
+        '<div class="fs-13" style="font-weight:500">'+htmlEsc(co.name)+'</div>'+
         '<div class="fs-11 c-text3">'+htmlEsc(co.industry||'')+(co.location?' · '+htmlEsc(co.location):'')+(co.job_count?' · '+co.job_count+' jobs':'')+(co.bd_name?' · '+htmlEsc(co.bd_name):'')+'</div>'+
       '</div>';
     }).join('')+'</div>';
@@ -447,7 +445,9 @@ function _patchCoSuggestions(){
       STATE.raForm.website=co.website||STATE.raForm.website;
       STATE.raFormCoSuggestions=[];
       if(co.location)raFormDetectTimezone(co.location);
+      STATE.raForm.decision=null;STATE.raForm._decKey=null;
       render();
+      raFormCheckNow();   // can this company be added? — asked the moment it is picked
     });
   });
 }
@@ -466,24 +466,31 @@ window.raFormZipBlur=function(){
   setTimeout(function(){STATE.raFormZipSuggestions=[];_patchZipSuggestions();},200);
 };
 
-// ── Company cooldown helper ─────────────────────
-function companyCooldownCheck(coName){
-  if(!coName)return null;
-  var COOLDOWN_DAYS=21;
-  var cutoff=new Date(Date.now()-COOLDOWN_DAYS*24*3600000);
-  var match=STATE.jobs.find(function(j){
-    if(j.company_name.toLowerCase()!==coName.toLowerCase())return false;
-    var d=j.created_at?new Date(j.created_at):j.created_date?new Date(j.created_date):null;
-    return d&&d>cutoff;
-  });
-  if(!match)return null;
-  var daysAgo=Math.floor((Date.now()-new Date(match.created_at||match.created_date).getTime())/(24*3600000));
-  var daysLeft=COOLDOWN_DAYS-daysAgo;
-  return{daysLeft:daysLeft,daysAgo:daysAgo,position:match.position,addedBy:match.created_by_name||'an RA'};
+// ── "Can this company be added?" ─────────────────
+// The rule lives on the server (services/lead-decision.js): the same company by website, LinkedIn page or name,
+// an active lead or open job order, then the admin-set cooldown. This used to be a copy of it here — a HARD-CODED
+// 21 days over only the leads this person could see, which is how the screen and the server came to disagree.
+// The answer is asked when a company is picked, when the name or website is left, and again on Submit.
+window.raFormCheckNow=function(){
+  var f=STATE.raForm;
+  if(!f||f.editJobId||(!f.coName&&!f.website)){if(f)f.decision=null;return;}
+  var key=(f.coId||'')+'|'+(f.coName||'')+'|'+(f.website||'');
+  if(f._decKey===key)return;
+  f._decKey=key;
+  apiPost('/lead-check',{company_id:f.coId||undefined,name:f.coName||'',website:f.website||''}).then(function(d){
+    if(STATE.raForm!==f||f._decKey!==key)return;      // the form moved on while this was in flight
+    f.decision=d;render();
+  }).catch(function(){ if(STATE.raForm===f&&f._decKey===key){f.decision=null;f._decKey=null;} });
+};
+function raFormDecisionBox(f){
+  var d=f&&f.decision;if(!d)return '';
+  if(d.blocked)return '<div class="ld-box is-stop" role="alert"><strong>Cannot add this company yet</strong>'+htmlEsc(d.sentence)+'</div>';
+  if(d.company_id&&d.company_id!==f.coId)return '<div class="ld-box is-info"><strong>Already on file as '+htmlEsc(d.company_name||'this company')+'</strong>Matched on its '+htmlEsc(d.matched_text||'record')+'. It is free to add, and this lead will join that company instead of creating a second one.</div>';
+  return '';
 }
 
 window.raFormCoSearch=function(val){
-  STATE.raForm.coName=val;STATE.raForm.coId=null;STATE.raForm.coInfo=null;
+  STATE.raForm.coName=val;STATE.raForm.coId=null;STATE.raForm.coInfo=null;STATE.raForm.decision=null;STATE.raForm._decKey=null;
   STATE.raFormTouchedAt=Date.now();
   if(!val||val.length<3){STATE.raFormCoSuggestions=[];_patchCoSuggestions();return;}
   apiGet('/companies/search?q='+encodeURIComponent(val)).then(function(results){
@@ -494,6 +501,8 @@ window.raFormCoSearch=function(val){
 window.raFormCoBlur=function(){
   if(STATE._rendering)return; // blur from DOM rebuild, not user action — skip
   setTimeout(function(){STATE.raFormCoSuggestions=[];_patchCoSuggestions();},200);
+  // Leaving the box without picking a suggestion: ask about the name as typed — after the pick handler (mousedown) had its turn.
+  setTimeout(function(){raFormCheckNow();},260);
 };
 
 
@@ -515,10 +524,6 @@ window.raFormSubmit=function(){
   if(!f.position){showToast('Job title is required','warning');return;}
   var validContacts=f.contacts.filter(function(c){return c.first_name||c.email;});
   if(!validContacts.length){showToast('At least one contact is required','warning');return;}
-  // 21-day company cooldown check
-  var cooldown=companyCooldownCheck(f.coName);
-  if(cooldown){showToast(f.coName+' is in a 21-day cooldown. '+cooldown.daysLeft+' day'+(cooldown.daysLeft!==1?'s':'')+' remaining.','warning');return;}
-
   STATE.raFormSubmitting=true;render();
 
   function doSave(coId){
@@ -555,10 +560,7 @@ window.raFormSubmit=function(){
     });
   }
 
-  if(f.coId){
-    doSave(f.coId);
-  } else {
-    // Create new company first
+  function createCompanyThenSave(){
     var cp={name:f.coName};
     if(f.website)cp.website=f.website;
     if(f.industry)cp.industry=f.industry;
@@ -572,6 +574,23 @@ window.raFormSubmit=function(){
       render();
     });
   }
+
+  // Editing a lead is not adding one: the add rule is for NEW leads only (it used to refuse an edit
+  // because the lead being edited was itself "added within 21 days").
+  if(f.editJobId){ if(f.coId)doSave(f.coId); else createCompanyThenSave(); return; }
+
+  // Can this company be added? Asked BEFORE anything is written, so a refused lead leaves no stray company behind.
+  apiPost('/lead-check',{company_id:f.coId||undefined,name:f.coName,website:f.website||''}).then(function(dec){
+    f.decision=dec;
+    if(dec&&dec.blocked){STATE.raFormSubmitting=false;showToast(dec.sentence,'warning');render();return;}
+    // A company already on file (same website, LinkedIn page or name) and free is REUSED — never created twice.
+    var coId=f.coId||(dec&&dec.company_id)||null;
+    if(coId)doSave(coId); else createCompanyThenSave();
+  }).catch(function(e){
+    STATE.raFormSubmitting=false;
+    showToast('Could not check the company: '+e.message,'error');
+    render();
+  });
 };
 
 // ── Export leads (RA Lead / Admin) ───────────────

@@ -1055,3 +1055,9 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-07 (Session 41)
 - `GET /email/history?candidate_id=` skips the leads-engine source entirely (those rows have no candidate column, so they could not be narrowed and rode along — a candidate's window listed emails to other people). Guard: `test/email-history-replies-smoke.mjs` (fails without the fix).
+
+## 2026-10-07 (Session 42) — the add rule (R-157, D-0090, D-0091)
+- **`services/lead-decision.js`** (pure) is the ONE rule for "can this company be added?": match by website / LinkedIn page / name (platform addresses such as linkedin.com or gmail.com never match; legal endings are dropped from names), then an open job order or a live lead (any stage except Rejected/Future) blocks, then the `company_cooldown_days` cooldown from the most recent lead of any stage, else free. The sentence names the owner. `services/lead-check.js` loads one organisation's rows through `db.forRequest(req)` (a missing `companies.linkedin_url` column is learned and survived; any other failure THROWS — a silent miss would wave a duplicate through) and `publicDecision()` is what leaves the server.
+- **`routes/lead-check.js`** `POST /lead-check` (admin, bd, bd_lead, ra, ra_lead, director, associate_director). Registered after `lead-take`.
+- **Enforced** in `routes/lead-sources.js` `POST /sourced-leads/:id/approve` (409 with `reason` and `decision`; a company found by website/name is REUSED; a `company_id` from another organisation is a 404; the typed `domain` is honoured) and `routes/jobs.js` `POST /jobs` for RAs (409; replaces the id-only cooldown).
+- Migration `057_company_linkedin.sql` (NOT applied): `companies.linkedin_url` + index. Tests: `test/lead-decision-smoke.mjs`, `test/ra-form-add-rule-smoke.mjs`, `test/sourced-leads-page-smoke.mjs`.

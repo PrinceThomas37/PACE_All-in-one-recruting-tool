@@ -67,9 +67,20 @@
   window.srcdOpenApprove = function(id){
     var row = (STATE.sourced.list||[]).find(function(x){ return x.id===id; });
     if (!row) return;
-    STATE.sourced.approving = { row:row, chosen:{}, domain:row.company_domain||'', busy:false };
+    STATE.sourced.approving = { row:row, chosen:{}, domain:row.company_domain||'', busy:false, decision:null };
     paintApprove();
+    srcdCheck();
   };
+  // "Can this company be added?" (R-157, D-0090): asked as soon as the window opens, and again when the
+  // website changes, so the answer is on screen BEFORE the button — the server still enforces it on Add.
+  function srcdCheck(){
+    var a = STATE.sourced.approving; if(!a) return;
+    var rowId = a.row.id, site = (a.domain||a.row.company_domain||'');
+    apiPost('/lead-check', { name:a.row.company_name||'', website:site }).then(function(d){
+      var cur = STATE.sourced.approving; if(!cur || cur.row.id!==rowId) return;
+      cur.decision = d; paintApprove();
+    }).catch(function(){ var cur = STATE.sourced.approving; if(cur && cur.row.id===rowId){ cur.decision=null; } });
+  }
   window.srcdCloseApprove = function(){ STATE.sourced.approving=null; closeModal(); };
   window.srcdToggleContact = function(email){
     var a = STATE.sourced.approving; if(!a) return;
@@ -96,6 +107,7 @@
       a.busy=false; a.row.contacts=(r&&r.contacts)||[]; a.row.company_domain=a.domain;
       if (!a.row.contacts.length) showToast((r&&r.note)||'No contact could be worked out','info');
       paintApprove();
+      srcdCheck();   // a new website can turn out to be a company already on file
     }).catch(function(e){ a.busy=false; showToast('Failed: '+e.message,'error'); paintApprove(); });
   };
 
@@ -103,7 +115,7 @@
     var a = STATE.sourced.approving; if(!a || a.busy) return;
     var contacts = (a.row.contacts||[]).filter(function(c){ return a.chosen[c.email]; });
     a.busy=true; paintApprove();
-    apiPost('/sourced-leads/'+a.row.id+'/approve', { contacts:contacts }).then(function(){
+    apiPost('/sourced-leads/'+a.row.id+'/approve', { contacts:contacts, domain:a.domain||undefined }).then(function(){
       STATE.sourced.list = (STATE.sourced.list||[]).filter(function(x){ return x.id!==a.row.id; });
       STATE.sourced.approving=null;
       STATE.modal=null;
@@ -245,6 +257,15 @@
     }).join('');
   }
 
+  // The answer to "can this company be added?": the reason when it cannot (who has it, how many days are left),
+  // a note when it is already on file but free (the lead joins THAT company instead of making a second one).
+  function decisionBox(d){
+    if(!d) return '';
+    if(d.blocked) return '<div class="ld-box is-stop" role="alert"><strong>Cannot add this company yet</strong>'+esc(d.sentence)+'</div>';
+    if(d.company_id) return '<div class="ld-box is-info"><strong>Already on file as '+esc(d.company_name||'this company')+'</strong>'+
+      'Matched on its '+esc(d.matched_text||'record')+'. It is free to add, and the lead will join that company instead of creating a second one.</div>';
+    return '';
+  }
   function renderApproveModal(){
     var a = STATE.sourced.approving; if(!a) return '';
     var r = a.row, reason = r.hiring_reason||{};
@@ -278,6 +299,7 @@
           '<div class="fs-14" style="font-weight:700">'+esc(r.title||'')+'</div>'+
           '<div class="fs-13 c-text2" style="margin-bottom:10px">'+esc(r.company_name||'')+
             (r.location?' · '+esc(r.location):'')+'</div>'+
+          decisionBox(a.decision)+
 
           (reason.angle
             ? '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:14px">'+
@@ -301,7 +323,7 @@
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="srcdCloseApprove()">Cancel</button>'+
-          '<button class="btn btn-primary" '+(a.busy?'disabled':'')+' onclick="srcdConfirmApprove()">'+
+          '<button class="btn btn-primary" '+((a.busy||(a.decision&&a.decision.blocked))?'disabled':'')+(a.decision&&a.decision.blocked?' title="This company cannot be added right now — see the reason above"':'')+' onclick="srcdConfirmApprove()">'+
             (a.busy?'Adding…':'Add lead')+'</button>'+
         '</div>'+
       '</div>';

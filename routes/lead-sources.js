@@ -16,10 +16,13 @@ const { providerList, fetchBoard, getProvider } = require('../lead-sources');
 const { runDueSources, ingestSource } = require('../lead-ingest');
 const { classifyCompany } = require('../company-classifier');
 const { findContacts, normalizeDomain } = require('../enrichment');
+const leadCheck = require('../services/lead-check');
+const { createDb } = require('../models');
 
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole, withOrg, orgStamp, orgIdFor, logActivity } = ctx;
+  const db = ctx.db || createDb(supabase);
 
   // Sourcing decides who the desk talks to, so it is a BD/admin concern.
   const canManage = (req) => hasRole(req, 'admin', 'bd_lead', 'ra_lead', 'director', 'associate_director');
@@ -229,8 +232,23 @@ module.exports = (ctx) => {
       const b = req.body || {};
       const org = orgStamp(req);
 
-      // 1. Company — reuse an existing one rather than creating a duplicate.
-      let companyId = b.company_id || null;
+      // THE ADD RULE (D-0090, services/lead-decision.js): is this company already in THIS organisation
+      // (matched by website, LinkedIn page or name), does it have an active lead or open job order, is it
+      // inside the cooldown? The screen shows the same answer before the button; this is where it is enforced.
+      // The website the person has in front of them (typed in the approval window) wins over the stored one.
+      const siteDomain = normalizeDomain(b.domain) || staged.company_domain || null;
+      const verdict = await leadCheck.checkCompany({
+        db, supabase, req,
+        candidate: { company_id: b.company_id || null, name: staged.company_name, website: siteDomain },
+      });
+      if (verdict.blocked) {
+        return res.status(409).json({ error: verdict.sentence, reason: verdict.state, decision: leadCheck.publicDecision(verdict) });
+      }
+      // A company id the caller names must exist in THIS organisation (it used to be trusted as sent).
+      if (b.company_id && !verdict.picked_found) return res.status(404).json({ error: 'Company not found' });
+
+      // 1. Company — reuse the one already on file (found by website, LinkedIn or name) rather than creating a duplicate.
+      let companyId = b.company_id || verdict.company_id || null;
       if (!companyId) {
         const { data: found } = await withOrg(supabase.from('companies')
           .select('id').ilike('name', staged.company_name || '').limit(1), req);
@@ -239,7 +257,7 @@ module.exports = (ctx) => {
       if (!companyId) {
         const { data: created, error: cErr } = await supabase.from('companies').insert(Object.assign({
           name: staged.company_name,
-          website: staged.company_domain ? `https://${staged.company_domain}` : null,
+          website: siteDomain ? `https://${siteDomain}` : null,
           location: [staged.city, staged.state].filter(Boolean).join(', ') || staged.location || null,
           created_by: req.user.id
         }, org)).select('id').single();

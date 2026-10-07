@@ -89,6 +89,8 @@ try {
       if (/find-contacts/.test(p)) return Promise.resolve({ contacts: [
         { email: 'priya.raman@fidelity.com', name: 'Priya Raman', title: 'Talent Acquisition', confidence: 0.45, method: 'pattern_inference', deliverable: 'domain_ok' }
       ] });
+      // "Can this company be added?" — a test sets window.__check to the answer it wants the server to give.
+      if (/lead-check/.test(p)) return Promise.resolve(window.__check || { blocked: false, company_id: null });
       return Promise.resolve({ success: true, job_id: 'new-job-1' });
     };
     window.apiDelete = function (p) { window.__posts.push(['DELETE', p]); return Promise.resolve({}); };
@@ -153,6 +155,34 @@ try {
     approveCall && approveCall[1].contacts.length === 1 && approveCall[1].contacts[0].email === 'priya.raman@fidelity.com',
     JSON.stringify(approveCall && approveCall[1].contacts));
   step('The approved row leaves the queue', await page.evaluate(() => (STATE.sourced.list || []).length === 1));
+  step('The website in front of the person is sent with the approval, so the server checks the same company the screen showed',
+    approveCall && approveCall[1].domain === 'fidelity.com', JSON.stringify(approveCall && approveCall[1].domain));
+
+  // ── "can this company be added?" (R-157, D-0090): the answer is on screen BEFORE the button ──
+  step('Opening the window asked the server about THIS company by name and website',
+    await page.evaluate(() => window.__posts.some(p => p[0] === '/lead-check' && p[1].name === 'Fidelity Investments' && p[1].website === 'fidelity.com')));
+  await page.evaluate(() => {
+    window.__check = { blocked: true, state: 'active_job', company_id: 'c9', company_name: 'Toyota Connected',
+      sentence: 'Toyota Connected already has an active lead (Data Engineer), owned by Marcus Bell. A company with an active lead cannot be added again — speak to Marcus Bell.' };
+    window.srcdOpenApprove('s2');
+  });
+  await page.waitForFunction(() => /Cannot add this company yet/.test(STATE.modal || ''), { timeout: 5000 });
+  const blockedModal = await page.evaluate(() => STATE.modal || '');
+  step('A blocked company says so, with the reason and the owner', /Cannot add this company yet/.test(blockedModal) && /owned by Marcus Bell/.test(blockedModal));
+  step('…and the Add lead button is switched off, with the reason as its hover text',
+    /<button class="btn btn-primary" disabled title="This company cannot be added right now/.test(blockedModal));
+  step('…and the reason is not styled as the good news it is not (the stop box, not the info or go box)', /ld-box is-stop/.test(blockedModal) && !/ld-box is-info/.test(blockedModal));
+  await page.evaluate(() => window.srcdCloseApprove());
+  await page.evaluate(() => {
+    window.__check = { blocked: false, state: 'free', company_id: 'c9', company_name: 'Toyota Connected Inc', matched_text: 'website' };
+    window.srcdOpenApprove('s2');
+  });
+  await page.waitForFunction(() => /Already on file as/.test(STATE.modal || ''), { timeout: 5000 });
+  const reuseModal = await page.evaluate(() => STATE.modal || '');
+  step('A company already on file but free says the lead will JOIN it instead of making a second company', /Already on file as Toyota Connected Inc/.test(reuseModal) && /instead of creating a second one/.test(reuseModal));
+  step('…and Add lead stays on', !/<button class="btn btn-primary" disabled/.test(reuseModal));
+  await page.evaluate(() => window.srcdCloseApprove());
+  await page.evaluate(() => { window.__check = null; });
 
   // ── dismissing ───────────────────────────────────────────────────────────
   await page.evaluate(() => window.srcdReject('s2', null));

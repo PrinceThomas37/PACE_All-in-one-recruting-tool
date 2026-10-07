@@ -24,6 +24,8 @@ const leadDistribution = require('../services/lead-distribution');
 // services/ownership.js's header before changing any of the scoping below.
 const own = require('../services/ownership');
 const leadPosting = require('../services/lead-posting');
+const leadCheck = require('../services/lead-check');
+const { createDb } = require('../models');
 
 // Lead stage permission matrix for PUT /jobs/:id — pulled out to a pure
 // function (no supabase/Express dependency) so it's directly unit-testable.
@@ -55,6 +57,7 @@ module.exports = (ctx) => {
     orgIdFor, withOrg, orgStamp, userOrgId, mailboxOrgId,
   } = ctx;
   const { reportingChainIds } = require('../hierarchy')(supabase);
+  const leadDb = ctx.db || createDb(supabase);   // org-scoped access for the add rule (services/lead-check.js)
 
   // The caller's D-0034 view scope — self + reporting chain, or the whole org
   // for admin. Built once per request; every route below narrows with it.
@@ -397,16 +400,14 @@ router.post('/jobs', auth, async (req, res) => {
   try {
     const { company_id, position, location, source, job_url, stage, notes, assigned_to, is_duplicate, duplicate_of, contacts, salary_range, job_created_date, job_opened_date, bdm_assigned_name, industry: jobIndustry, research } = req.body;
     if (!company_id || !position) return res.status(400).json({ error: 'company_id and position required' });
-    // Company cooldown — block RA from re-adding the same company too soon
-    // (admin-editable — config/settings.js).
+    // THE ADD RULE (D-0090, services/lead-decision.js) — block an RA from adding a company that is already
+    // in this organisation under another record (same website / LinkedIn page / name), that has an active
+    // lead or open job order, or that is inside the admin-set cooldown (config/settings.js). It used to be
+    // the cooldown on this exact company id alone.
     if (hasRole(req, 'ra')) {
-      const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
-      const cooldownDate = new Date(Date.now() - cooldownDays * 24 * 3600 * 1000).toISOString();
-      const { data: recent } = await withOrg(supabase.from('jobs').select('id,position,created_at').eq('company_id', company_id).gte('created_at', cooldownDate).is('deleted_at', null).limit(1), req);
-      if (recent && recent.length > 0) {
-        const daysAgo = Math.floor((Date.now() - new Date(recent[0].created_at).getTime()) / 86400000);
-        const daysLeft = cooldownDays - daysAgo;
-        return res.status(409).json({ error: `This company is in a ${cooldownDays}-day cooldown period. ${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining (last added: ${recent[0].position}).` });
+      const verdict = await leadCheck.checkCompany({ db: leadDb, supabase, req, candidate: { company_id } });
+      if (verdict.blocked) {
+        return res.status(409).json({ error: verdict.sentence, reason: verdict.state, decision: leadCheck.publicDecision(verdict) });
       }
     }
     const timezone = getTimezoneFromLocation(location);
