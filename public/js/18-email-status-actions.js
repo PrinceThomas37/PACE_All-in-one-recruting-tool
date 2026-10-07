@@ -94,6 +94,13 @@ window.submitSendAll=function(){
   stopProgressPoll(); // clear any stale timer from previous send
   startProgressPoll(); // start polling for real backend updates
   apiPost('/emails/queue-all',{}).then(function(res){
+    // The server says plainly when a send for this person is ALREADY running (it will not start a second one). The
+    // card then follows that real run; nothing is "queued" by this click.
+    if(res&&res.already_running){
+      showToast('A send is already running. It works through the list it started with — when it finishes, press Send all pending again for anything new.','info');
+      loadEmailsForCurrentUser();   // this click had already taken the rows off the list on screen — put them back
+      return;
+    }
     showToast(res.queued+' emails queued for sending','success');
   }).catch(function(e){
     STATE.sendProgress=null;

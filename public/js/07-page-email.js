@@ -252,7 +252,7 @@ function renderEmail(){
   var progressBar='';
   if(sp&&(sp.active||sp.done)){
     var pct=sp.total>0?Math.round((sp.sent+sp.failed+(sp.retrying||0))/sp.total*100):0;
-    var barColor=sp.done?(sp.failed>0?'var(--amber)':'var(--green)'):'var(--accent)';
+    var barColor=sp.interrupted?'var(--amber)':(sp.done?(sp.failed>0?'var(--amber)':'var(--green)'):'var(--accent)');
     var fails=sp.failDetails||[];
     // Stat chip
     var statChip=function(val,label,color){
@@ -262,11 +262,17 @@ function renderEmail(){
       '</div>';
     };
     var waitingTotal=sp.deferred||0;
+    // "Waiting" counts only the emails this run has already looked at and held back (a daily cap, a send window).
+    // The ones it has not reached yet are a different number — without it the card reads like a contradiction
+    // beside the Pending list (29 sent + 3 waiting of 56, while Pending shows 27). So say how many are still to go.
+    var stillToGo=Math.max(0,(sp.total||0)-(sp.sent||0)-(sp.failed||0)-(sp.retrying||0)-waitingTotal);
+    var notSent=Math.max(0,(sp.total||0)-(sp.sent||0)-(sp.failed||0)-(sp.retrying||0));
     var chips='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'+
       statChip(sp.sent,'Sent','var(--green)')+
       statChip(sp.failed,'Failed',sp.failed>0?'var(--red)':'var(--text2)')+
       (sp.retrying?statChip(sp.retrying,'Will retry','var(--amber)'):'')+
-      (waitingTotal?statChip(waitingTotal,'Waiting','var(--amber)'):'')+
+      (waitingTotal&&!sp.interrupted?statChip(waitingTotal,'Waiting','var(--amber)'):'')+
+      (sp.interrupted?(notSent?statChip(notSent,'Still pending','var(--amber)'):''):(sp.active&&stillToGo?statChip(stillToGo,'Still to go','var(--text2)'):''))+
       statChip(sp.total,'Total','var(--text)')+
     '</div>';
     // Failed rows — each links back to its lead
@@ -293,7 +299,7 @@ function renderEmail(){
     // A run that finished cleanly is ONE quiet line, not a panel (the owner, 6 Oct: "once it is
     // done this information is on the dashboard anyway … just a small summary"). The full
     // panel stays for a send in flight and for anything that needs a person (failures, retries).
-    var tidy=!!(sp.done&&!sp.active&&!sp.failed&&!sp.retrying);
+    var tidy=!!(sp.done&&!sp.active&&!sp.failed&&!sp.retrying&&!sp.interrupted);
     var doneAt=sp.completedAt?new Date(sp.completedAt):null;
     var stale=tidy&&doneAt&&!isNaN(doneAt.getTime())&&(Date.now()-doneAt.getTime())>3600000;   // an old run is history, not news
     if(tidy&&!stale){
@@ -304,15 +310,16 @@ function renderEmail(){
     } else if(!stale)
     progressBar='<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 18px;margin-bottom:16px">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
-        '<div class="fs-14" style="font-weight:700">'+(sp.done?(sp.failed>0?'Send complete — '+sp.failed+' need attention':'Send complete'):'Sending emails…')+'</div>'+
+        '<div class="fs-14" style="font-weight:700">'+(sp.interrupted?'Sending stopped early':(sp.done?(sp.failed>0?'Send complete — '+sp.failed+' need attention':'Send complete'):'Sending emails…'))+'</div>'+
         '<div style="display:flex;align-items:center;gap:10px"><div class="fs-12" style="font-weight:700;color:'+barColor+'">'+pct+'%</div>'+dismissBtn+'</div>'+
       '</div>'+
       chips+
       '<div style="background:var(--border);border-radius:99px;height:8px;overflow:hidden;margin-bottom:8px">'+
         '<div style="height:100%;border-radius:99px;background:'+barColor+';width:'+pct+'%;transition:width .3s ease"></div>'+
       '</div>'+
-      '<div class="fs-12 c-text3">'+(sp.active&&sp.current?'Currently sending to: '+htmlEsc(sp.current):(sp.done?'Completed at '+(sp.completedAt?new Date(sp.completedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''):''))+'</div>'+
+      '<div class="fs-12 c-text3">'+(sp.active&&sp.current?'Currently sending to: '+htmlEsc(sp.current):(sp.done?(sp.interrupted?'Stopped at ':'Completed at ')+(sp.completedAt?new Date(sp.completedAt).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):''):''))+'</div>'+
       failPanel+
+      (sp.interrupted?'<div class="fs-12_5 c-text2" style="margin-top:8px">The server restarted while this send was running, so it stopped after '+sp.sent+' of '+sp.total+'. Nothing was lost: the rest are still in Pending. Press <strong>Send all pending</strong> to carry on.</div>':'')+
       (sp.deferredNote?'<div class="fs-12" style="margin-top:8px;color:#b45309">'+htmlEsc(sp.deferredNote)+'</div>':'')+
     '</div>';
   }
