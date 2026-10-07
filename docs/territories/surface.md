@@ -1256,3 +1256,9 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-07 (Session 42) — the send card (D-0095, R-162)
 - `07-page-email.js`: "Still to go" chip for a run in flight (total − sent − failed − retrying − waiting); a stopped-early run (`interrupted`) shows "Sending stopped early", amber, "Still pending", and says to press Send all pending; it is never the quiet one-line summary. `11-bind-and-actions.js`: a stopped-early card is not auto-dismissed after 30 s. `18-email-status-actions.js`: `already_running` → an honest toast, and the rows the click had taken off the Pending list are loaded back.
+
+## 2026-10-07 (Session 42) — Main job and Send from in the Accept window (D-0096)
+- `68-page-finder.js`: ticked jobs show ★ (main) / ✓; a radio list "Main job" appears with 2+ ticked (`fdSetMain`); the save body puts the main job first. A BD sees "Send from" (`fdPickMailbox`, loaded from `/finder/mailboxes` when the window opens); Save is disabled with no working mailbox. Tests: `finder-page-smoke` 73.
+
+## 2026-10-07 (Session 42) — Find leads now / Daily run tabs, POCs & jobs (D-0097)
+- `68-page-finder.js`: tab `now` reuses the search form (`renderForm('now')`, `curForm()` picks the form on screen) with no name, "Find leads now" and "Also run this every day"; the old "My searches" is "Daily run" with an "every morning" tag; cards from one-off searches are grouped as "One-off searches"; Saved & past rows get "POCs & jobs" (`fdHistToggle`, `histDetails`). Tests: `finder-page-smoke` 85.

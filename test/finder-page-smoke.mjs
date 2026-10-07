@@ -68,7 +68,7 @@ try {
     window.__calls = []; window.__access = JSON.parse(JSON.stringify(access)); window.__cards = JSON.parse(JSON.stringify(cards));
     window.__searches = [];
     window.__hist = { days: 90, card_days: 5, hidden: 3, counts: { accepted: 2, waiting: 1, rejected: 1 }, items: [
-      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned' } },
+      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', contacts: [{ name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
       { id: 'a2', search_id: 's2', company_name: 'Handed Co', place: '', status: 'accepted', decided_at: '2026-10-04T10:00:00Z', lead: null, lead_elsewhere: true },
       { id: 'w1', search_id: 's1', company_name: 'Parked Dental', place: '', status: 'waiting', wait_until: '2026-10-21', decided_at: '2026-10-07T10:00:00Z', lead: null },
       { id: 'r1', search_id: 's2', company_name: 'Declined Inc', place: '', status: 'rejected', decided_at: '2026-10-06T10:00:00Z', lead: null } ] };
@@ -77,6 +77,7 @@ try {
       rec('GET', p);
       if (p === '/finder/access') return Promise.resolve(window.__access);
       if (p === '/finder/cards') return Promise.resolve(window.__cards);
+      if (p === '/finder/mailboxes') return Promise.resolve({ goes_to: 'you', suggested_id: 'm2', mailboxes: [{ id: 'm1', email_address: 'bea@x.test', display_name: 'Bea', sent_today: 40 }, { id: 'm2', email_address: 'bea.two@x.test', display_name: '', sent_today: 3 }] });
       if (p.indexOf('/finder/history') === 0) return Promise.resolve(window.__hist);
       if (p === '/finder/searches') return Promise.resolve({ searches: window.__searches });
       if (p === '/finder/admin/users') return Promise.resolve({ default_daily: 25, users: [{ id: 'u9', name: 'Rob Ra', email: 'rob@x.test', roles: ['ra'], enabled: false, daily: null }] });
@@ -90,6 +91,7 @@ try {
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
+      if (p === '/finder/find') return Promise.resolve(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } });
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
       if (/\/run$/.test(p)) { const R = { results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } }; return window.__hold ? new Promise((r) => { window.__release = () => r(R); }) : Promise.resolve(R); }
@@ -152,7 +154,7 @@ try {
   await page.waitForTimeout(200);
   let m = await modal();
   step('Accept opens ONE window with the job, the people and where it goes', /Add Brazos Valley Machining as a lead/.test(m) && /Which jobs is this lead for/.test(m) && /Who should we write to/.test(m) && /Where it goes/.test(m));
-  step('for an RA it says plainly: into the Unassigned pool, nothing emailed now', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m));
+  step('for an RA it says plainly: into the Unassigned pool, nothing emailed now — and offers no "Send from" (a pool lead has no mailbox yet)', /Unassigned pool/.test(m) && /Nothing is emailed now/.test(m) && !/Send from/.test(m));
   step('the jobs already opened on the card are offered as one-click choices', /class="fd-pill/.test(m) && /CNC Machinist/.test(m) && /Welder/.test(m));
   const saveDisabled = () => page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead|Saving/.test(b.textContent)).disabled);
   step('Save lead is disabled until a job and a contact are chosen', await saveDisabled());
@@ -194,7 +196,11 @@ try {
   await page.evaluate(() => { const a = window.STATE.finder.acc; Object.keys(a.picked).forEach(k => { a.picked[k] = false; }); a.picked.p1 = true; a.mdraft = null; a.err = ''; });
   await page.evaluate(() => window.fdToggleJob('Welder'));
   m = await modal();
-  step('several jobs can be ticked: they are numbered, the first is the main one, and the window says the rest ride along free', /1 · CNC Machinist/.test(m) && /2 · Welder/.test(m) && /also hiring/.test(m) && /no extra credit/.test(m));
+  step('several jobs can be ticked: the main one is starred, the others ticked, and the window says the rest ride along free and the email is for the main job only', /★ CNC Machinist/.test(m) && /✓ Welder/.test(m) && /also hiring/.test(m) && /no extra credit/i.test(m) && /written for the main job only/.test(m));
+  step('the main job is an explicit choice (a radio list of the ticked jobs), with the first one ticked chosen to start with', await page.evaluate(() => { const r = [...document.querySelectorAll('.modal input[name=fd-main]')]; return r.length === 2 && r[0].checked && !r[1].checked; }));
+  await page.evaluate(() => window.fdSetMain('Welder'));
+  m = await modal();
+  step('choosing another job as the main one moves the star', /★ Welder/.test(m) && /✓ CNC Machinist/.test(m));
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Sam'; document.getElementById('fd-m-email').value = 'not-an-email'; window.fdAddManual(); });
   m = await modal();
   step('a hand-added contact with a broken email is refused in words', /valid email/.test(m));
@@ -207,7 +213,7 @@ try {
   await page.waitForTimeout(300);
   cs = await calls();
   const acc = cs.find(c => /c1\/accept$/.test(c[1]));
-  step('Save sends the job and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].positions.join() === 'CNC Machinist,Welder' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
+  step('Save sends the MAIN job first, then the others, and the chosen contacts — revealed people by id (the server holds their email), hand-added in full', acc && acc[2].positions.join() === 'Welder,CNC Machinist' && acc[2].contacts.length === 2 && acc[2].contacts[0].person_id === 'p1' && acc[2].contacts[1].email === 'sam@brazosmachining.com', JSON.stringify(acc && acc[2]));
   step('afterwards the window is closed and the card is gone', !(await modal()) && !/Brazos Valley Machining/.test(await html()));
   step('the history is reloaded after Save, so the new lead is in "Saved & past" at once', (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > histBefore);
   step('Leads is refreshed by itself after Save (the new lead needs no manual refresh)', (await page.evaluate(() => window.__refreshed)) >= 1);
@@ -216,15 +222,22 @@ try {
   // BD sees a different destination
   await page.evaluate((c) => { window.__access.goes_to = 'you'; window.STATE.finder.access.goes_to = 'you'; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.render(); window.fdAccept('c1'); }, CARDS);
   m = await modal();
-  step('for a BD manager it says: straight to you, in your own mailbox', /Straight to you/.test(m));
+  await page.waitForTimeout(250);
+  m = await modal();
+  step('for a BD manager it says: straight to you', /Straight to you/.test(m));
+  step('…with a "Send from" list of their own mailboxes, each with how many it has sent today, the one with fewest pre-selected', /Send from/.test(m) && /Bea &lt;bea@x\.test&gt; — 40 sent today/.test(m) && /bea\.two@x\.test&gt; — 3 sent today/.test(m) && (await page.evaluate(() => document.getElementById('fd-mailbox').value)) === 'm2');
   step('…and offers to write the first email now — ticked, and saying plainly that nothing is sent until Send', /Write the first email now/.test(m) && /Nothing is sent until you press Send/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
-  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdSave(); });
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdPickMailbox('m1'); window.fdSave(); });
   await page.waitForTimeout(300);
   cs = await calls();
+  step('Save sends the mailbox the person chose', (cs.find(c => /c1\/accept$/.test(c[1]) && c[2].mailbox_id) || [0, 0, {}])[2].mailbox_id === 'm1');
   step('a BD Save then asks the server to write that lead\'s first email (into Pending — not to send it)', cs.some(c => c[0] === 'POST' && c[1] === '/emails/generate' && c[2].job_ids.join() === 'L1') && !cs.some(c => /send/.test(c[1])));
   await page.evaluate((c) => { window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); window.fdToggleWrite(); }, CARDS);
   m = await modal();
   step('un-ticking it means no email is written for that lead', !(await page.evaluate(() => window.STATE.finder.acc.writeEmail)));
+  await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; a.mailboxes = []; a.mailboxId = ''; a.mailErr = 'None of your email IDs is connected and working — connect or reconnect one under Email IDs first.'; window.fdToggleWrite(); });
+  m = await modal();
+  step('a BD with no working mailbox is told so in red and cannot Save (there would be nothing to send from)', /None of your email IDs is connected/.test(m) && await page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead/.test(b.textContent)).disabled));
   await page.evaluate(() => window.fdCloseAccept());
 
   // a refusal from the server stays in the window, in words, and nothing is lost
@@ -243,7 +256,8 @@ try {
   await page.evaluate(() => window.fdTab('searches'));
   await page.waitForTimeout(200);
   h = await html();
-  step('with no saved search the page says what a search is and offers to make one', /No saved searches yet/.test(h) && /Make your first search/.test(h));
+  step('with no daily search the page says what one is and offers to make one', /No daily searches yet/.test(h) && /Make your first daily search/.test(h));
+  step('the Daily run tab says plainly that these run by themselves every morning, that Run now does not change that, and where to go for a one-off', /run on their own every morning/.test(h) && /does not change its schedule/.test(h) && /Find leads now/.test(h));
   await page.evaluate(() => window.fdNewSearch());
   await page.evaluate(() => window.fdPickSector('medical'));
   h = await html();
@@ -292,6 +306,37 @@ try {
   h = await html();
   step('"Check what my key can do" lists each check in words, red where Apollo refuses', /Finding people by job title works/.test(h) && /not allowed to search companies/.test(h) && /c-red/.test(h));
 
+  // ── Find leads now (one-off) and Daily run ───────────────────────────────
+  await page.evaluate(() => { window.STATE.finder.tab = 'cards'; window.goPage('finder'); });
+  await page.waitForTimeout(300);
+  h = await html();
+  step('the tabs are: Today\'s cards · Find leads now · Daily run · Saved & past', /Today&#39;s cards|Today's cards/.test(h) && h.indexOf('Find leads now') > 0 && h.indexOf('Daily run') > h.indexOf('Find leads now') && h.indexOf('Saved &amp; past') > h.indexOf('Daily run'));
+  await page.evaluate(() => window.fdTab('now'));
+  h = await html();
+  step('Find leads now is a search for right now: it says it is not saved and does not repeat, costs 1 credit, and asks for no name', /not saved and does not repeat/.test(h) && /1 Apollo credit/.test(h) && !(await page.evaluate(() => !!document.getElementById('fd-f-name'))) && /Find leads now<\/button>/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-f-titles').value = 'Welder, CNC Machinist'; document.getElementById('fd-f-locations').value = 'Ohio'; window.__findHold = true; window.__calls.length = 0; });
+  await page.evaluate(() => { window.fdFindNow(); });
+  await page.waitForTimeout(250);
+  cs = await calls();
+  const fnd = cs.find(c => c[0] === 'POST' && c[1] === '/finder/find');
+  step('Find asks the server for a ONE-OFF search with what was typed — and never saves a search', fnd && fnd[2].titles.join() === 'Welder,CNC Machinist' && fnd[2].locations.join() === 'Ohio' && !cs.some(c => c[0] === 'POST' && c[1] === '/finder/searches'), JSON.stringify(fnd));
+  step('…then shows the new cards (it lands on Today\'s cards)', (await page.evaluate(() => window.STATE.finder.tab)) === 'cards');
+  await page.evaluate(() => window.fdTab('now'));
+  h = await html();
+  step('the one-off form keeps what was typed and says what the search found', /value="Ohio"/.test(h) && /Found 5 companies hiring\. 3 new cards\./.test(h));
+  await page.evaluate(() => window.fdSaveNowAsDaily());
+  await page.waitForTimeout(250);
+  const asDaily = (await calls()).find(c => c[0] === 'POST' && c[1] === '/finder/searches');
+  step('"Also run this every day" is the ONLY way a one-off becomes a daily search — it saves it with a name made from what was typed', asDaily && asDaily[2].name === 'Welder in Ohio' && asDaily[2].titles.join() === 'Welder,CNC Machinist', JSON.stringify(asDaily && asDaily[2]));
+  await page.evaluate(() => { window.__findResp = { results: [{ search_id: null, note: 'You just searched. Give it a minute.', skipped: true, cards: 0 }], new_cards: 0 }; window.fdFindNow(); });
+  await page.waitForTimeout(250);
+  h = await html();
+  step('a search that finds nothing new stays on the form and says why', (await page.evaluate(() => window.STATE.finder.tab)) === 'now' && /You just searched/.test(h));
+  await page.evaluate(() => { window.__findResp = null; });
+  await page.evaluate(() => { window.STATE.finder.cards = [{ id: 'o1', search_id: null, company_name: 'One Off Co', status: 'new', chips: [], _base: [], decision: { blocked: false } }, { id: 'o2', search_id: 's1', company_name: 'Daily Co', status: 'new', chips: [], _base: [], decision: { blocked: false } }]; window.STATE.finder.cardSearch = ''; window.fdTab('cards'); });
+  h = await html();
+  step('Today\'s cards tells one-off cards from daily ones in its choices', /One-off searches · 1/.test(h));
+
   // ── saved & past ───────────────────────────────────────────────────────
   await switchRole(page, 'ra');
   await page.evaluate(() => { window.__searches = [{ id: 's1', name: 'Machining', active: true, titles: ['Welder'], locations: ['Texas'], sizes: [], posted_days: 14, keywords: [], domains: [] }, { id: 's2', name: 'Dental', active: true, titles: ['Hygienist'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }]; window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.goPage('finder'); });
@@ -302,6 +347,12 @@ try {
   step('there is a "Saved & past" tab that opens on the companies saved as leads, with its count', /Saved &amp; past/.test(h) && /Saved Machining/.test(h) && /Saved as leads · 2/.test(h) && /Waiting · 1/.test(h) && /Turned down · 1/.test(h) && !/Parked Dental/.test(h));
   step('each saved company shows its place, which search found it, and the lead it became (job and stage) with an Open lead button', /Waco, TX/.test(h) && /Found by Machining/.test(h) && /<strong>Welder<\/strong> · Assigned/.test(h) && /Open lead/.test(h));
   step('a lead handed to someone else is not described — it says so', /now belongs to someone else/.test(h));
+  step('a saved company has a "POCs & jobs" button (and the others do not)', /POCs &amp; jobs/.test(h) && (h.match(/POCs &amp; jobs/g) || []).length === 1 && !/Dana Cole/.test(h));
+  await page.evaluate(() => window.fdHistToggle('a1'));
+  h = await html();
+  step('opening it shows the people to contact (main contact marked, with title and email) and the jobs (main job, also hiring, and the ones Apollo listed, with a link)', /Dana Cole/.test(h) && /main contact/.test(h) && /dana@saved\.example/.test(h) && /Eli Ross/.test(h) && /main job/.test(h) && /also hiring/.test(h) && /href="https:\/\/jobs\.example\/2"/.test(h) && /Indeed/.test(h));
+  await page.evaluate(() => window.fdHistToggle('a1'));
+  step('…and Hide closes it again', !/Dana Cole/.test(await html()));
   await page.evaluate(() => window.fdHistSearch('s2'));
   h = await html();
   step('the searches can be told apart: picking one shows only what THAT search found', /Handed Co/.test(h) && !/Saved Machining/.test(h));

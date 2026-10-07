@@ -1140,3 +1140,9 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-07 (Session 42) — send-progress tests (D-0095)
 - New `send-progress-smoke` (19: the rule, the route with/without a live run, the one-step start) and `send-card-smoke` (13, browser: the owner's exact 29/3/56 numbers, stopped-early card, already-running toast, no auto-dismiss). Mutation-checked: route reconcile, the queue-all guard, the dismiss guard, the Still-to-go chip. Lesson: a detector that matched its own source (the poll function contains the dismiss text) passed vacuously — match the callback's start, not a substring.
+
+## 2026-10-07 (Session 42) — tests for the main job and mailbox choice (D-0096)
+- `finder-routes-smoke` 96→104 (own connected mailboxes only, fewest-sent suggestion, someone else's / broken mailbox refused with nothing saved, chosen mailbox used, default is not always the first), `lead-finder-smoke` 33→37 (`suggestMailbox` order-independent), `finder-page-smoke` 68→73. Mutation-checked: main-first order, mailbox sent in the body, Save needs a mailbox, server refusal, server default.
+
+## 2026-10-07 (Session 42) — tests for one-off search and POCs/jobs (D-0097)
+- `finder-routes-smoke` 104→117 (one-off: 403/400 before spending, no search row, one credit, a double press costs one, not counted in the daily number, the daily run still brings its full number, per-press ceiling, 0 = off; history POCs/jobs, handed-away lead's people absent), `finder-page-smoke` 73→85. Mutation-checked: one-off counted against daily, one-off saved with an id, find route saving a search, no details, name field on the one-off form. A guard that proved NOT to be one: removing the `seeable` filter on contacts does not leak (the output is gated by `mine`) — it is only an optimisation.
