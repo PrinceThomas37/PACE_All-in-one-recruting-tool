@@ -632,3 +632,8 @@ Accept opens one window: pick the job, find people by typed title (free), get an
 (1 credit, verified only) or type a contact by hand, up to three, Save. A BD manager's
 lead goes straight to them; everyone else's goes to the Unassigned pool. The add rule
 (D-0091) is checked again at Accept. Nothing is saved as a lead before Save.
+
+**Find Leads — Saved & past (D-0094).** Every company a person's searches found and
+they decided on stays on record: saved as leads (open the lead from here), waiting
+(bring back now), turned down. Filter by search or company name; the last 90 days show
+by default. Undecided cards are removed after 5 days.

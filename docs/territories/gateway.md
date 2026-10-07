@@ -1070,3 +1070,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-07 (Session 42) — Lead Finder accept takes several jobs (D-0093)
 - `POST /finder/cards/:id/accept` takes `positions: []` (up to 5; `position` still works). First = the lead's `position`; the rest go to `research.finder.also_hiring` and a facts line "They are also hiring for …". `GET /finder/cards` now returns `search_id`. Tests: `finder-routes-smoke` 84.
+
+## 2026-10-07 (Session 42) — Lead Finder history (D-0094)
+- `GET /finder/history` (own decided cards: accepted/waiting/rejected; 90-day default, `?all=1`; lead job/stage only if the person created or holds it, else `lead_elsewhere`; `lead_gone` if deleted) and `POST /finder/cards/:id/unwait` (parked → today's cards; turned-down cannot return). Tests: `finder-routes-smoke` 96.

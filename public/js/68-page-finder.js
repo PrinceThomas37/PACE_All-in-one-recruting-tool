@@ -17,6 +17,7 @@
     tab:'cards', access:null, accessFor:null, accessLoading:false,
     cards:null, waiting:0, daily:0, today:0, loading:false,
     searches:null, form:null, running:false,
+    hist:null, histStatus:'accepted', histSearch:'', histQ:'', histAll:false,
     admin:null, diag:null, diagBusy:false,
     acc:null
   };
@@ -40,7 +41,7 @@
   window.goPage = function(p){
     if (p==='finder'){
       STATE.page='finder'; STATE.modal=null; render();
-      loadAccess(function(){ loadCards(); loadSearches(); });
+      loadAccess(function(){ loadCards(); loadSearches(); loadHistory(); });
       return;
     }
     return _prevGoPage.apply(this, arguments);
@@ -66,6 +67,10 @@
     apiGet('/finder/searches').then(function(r){ F.searches=(r&&r.searches)||[]; paint(); })
       .catch(function(e){ F.searches=F.searches||[]; showToast('Could not load searches: '+e.message,'error'); paint(); });
   }
+  function loadHistory(){
+    apiGet('/finder/history'+(F.histAll?'?all=1':'')).then(function(r){ F.hist=r||{items:[],counts:{}}; paint(); })
+      .catch(function(e){ F.hist=F.hist||{items:[],counts:{},hidden:0}; showToast('Could not load the history: '+e.message,'error'); paint(); });
+  }
   function loadAdmin(){
     apiGet('/finder/admin/users').then(function(r){ F.admin=r||{users:[]}; paint(); })
       .catch(function(e){ F.admin={users:[]}; showToast('Could not load: '+e.message,'error'); paint(); });
@@ -74,6 +79,7 @@
   window.fdTab = function(t){
     captureForm(); F.tab=t; paint();
     if (t==='admin' && !F.admin) loadAdmin();
+    if (t==='history') loadHistory();
   };
 
   // ── running searches ──────────────────────────────────────────────────────
@@ -95,14 +101,14 @@
   function dropCard(id){ F.cards=(F.cards||[]).filter(function(c){ return c.id!==id; }); }
   window.fdReject = function(id, btn){
     if (btn){ btn.disabled=true; }
-    apiPost('/finder/cards/'+id+'/reject', {}).then(function(){ dropCard(id); showToast('Turned down — you will not be shown this company again','info'); paint(); })
+    apiPost('/finder/cards/'+id+'/reject', {}).then(function(){ dropCard(id); showToast('Turned down — you will not be shown this company again','info'); paint(); loadHistory(); })
       .catch(function(e){ showToast(e.message,'error'); if(btn)btn.disabled=false; });
   };
   window.fdWait = function(id, btn){
     if (btn){ btn.disabled=true; }
     apiPost('/finder/cards/'+id+'/wait', {}).then(function(r){
       dropCard(id); F.waiting=(F.waiting||0)+1;
-      showToast('Parked — it comes back on '+fmtDay(r&&r.wait_until),'info'); paint();
+      showToast('Parked — it comes back on '+fmtDay(r&&r.wait_until),'info'); paint(); loadHistory();
     }).catch(function(e){ showToast(e.message,'error'); if(btn)btn.disabled=false; });
   };
   window.fdPostings = function(id, btn){
@@ -213,7 +219,7 @@
     apiPost('/finder/cards/'+a.card.id+'/accept', { positions:jobs, contacts:contacts }).then(function(r){
       var id=a.card.id, wantEmail=!!a.writeEmail; F.acc=null; STATE.modal=null; dropCard(id);
       showToast(r&&r.goes_to==='you' ? 'Lead saved — it is yours, in Leads' : 'Lead saved — it is in the Unassigned pool','success');
-      render(); loadAccess();
+      render(); loadAccess(); loadHistory();
       if (typeof refreshJobs==='function') refreshJobs();           // the new lead shows in Leads without a manual refresh
       // The explicit next step Take-leads and Import already use: the first email is WRITTEN into Pending for the person to read.
       // Nothing is sent here — a person presses Send.
@@ -367,6 +373,10 @@
     '</div>';
   }
 
+  function foundBefore(id){
+    var c=countsFor(id); if(!(c.accepted||c.waiting||c.rejected)) return '';
+    return '<div class="fs-12 c-text3">Found before: '+c.accepted+' saved as leads · '+c.waiting+' waiting · '+c.rejected+' turned down <button class="fd-pill" onclick="fdHistFor(\''+esc(id)+'\')">See them</button></div>';
+  }
   function summaryOf(s){
     var bits=[(s.titles||[]).slice(0,4).join(', ')+((s.titles||[]).length>4?'…':''), (s.locations||[]).join(', '), 'posted in the last '+s.posted_days+' days'];
     return bits.filter(Boolean).join(' · ');
@@ -382,7 +392,7 @@
       return '<div class="card fd-card"><div class="fd-row fd-between"><div class="fd-grow">'+
         '<div class="fs-14 fd-strong">'+esc(s.name)+(s.active===false?' <span class="fd-tag">paused</span>':'')+'</div>'+
         '<div class="fs-12_5 c-text2">'+esc(summaryOf(s))+'</div>'+
-        '<div class="fs-12 c-text3">'+(s.last_run_at?'Last ran '+esc(fmtDay(s.last_run_at))+' — '+esc(s.last_run_note||''):'Has not run yet.')+'</div></div>'+
+        '<div class="fs-12 c-text3">'+(s.last_run_at?'Last ran '+esc(fmtDay(s.last_run_at))+' — '+esc(s.last_run_note||''):'Has not run yet.')+'</div>'+foundBefore(s.id)+'</div>'+
         '<div class="fd-row"><button class="btn btn-sm btn-primary" '+(F.running?'disabled':'')+' onclick="fdRun(\''+s.id+'\')">'+((F.running===s.id||F.running==='all')?'Running…':'Run now')+'</button>'+
         '<button class="btn btn-sm btn-outline" onclick="fdEditSearch(\''+s.id+'\')">Edit</button>'+
         '<button class="btn btn-sm btn-outline" onclick="fdToggleSearch(\''+s.id+'\')">'+(s.active===false?'Resume':'Pause')+'</button>'+
@@ -443,6 +453,63 @@
   }
   window.fdFilterCards = function(id){ F.cardSearch=id||''; paint(); };
 
+  // ── history: what my searches found before ─────────────────────────────
+  window.fdHistStatus = function(st){ F.histStatus=st; paint(); };
+  window.fdHistSearch = function(id){ F.histSearch=id||''; paint(); };
+  window.fdHistQ = function(v){ F.histQ=String(v||''); paint(); };
+  window.fdHistAll = function(){ F.histAll=true; loadHistory(); };
+  window.fdHistFor = function(id){
+    F.histSearch=id; F.tab='history';
+    var c=countsFor(id); F.histStatus = c.accepted?'accepted':(c.waiting?'waiting':'rejected');
+    paint();
+  };
+  window.fdUnwait = function(id, btn){
+    if (btn) btn.disabled=true;
+    apiPost('/finder/cards/'+id+'/unwait', {}).then(function(){ showToast('Back in Today\'s cards','success'); loadCards(); loadHistory(); })
+      .catch(function(e){ showToast(e.message,'error'); if(btn) btn.disabled=false; });
+  };
+  window.fdOpenLead = function(id){
+    if (!(STATE.jobs||[]).some(function(j){ return j.id===id; })){ showToast('That lead is not on your list right now — press Refresh in Leads, or it may have been handed to someone else','warning'); return; }
+    goPage('leads'); openJob(id);
+  };
+  function countsFor(searchId){
+    var c={ accepted:0, waiting:0, rejected:0 };
+    ((F.hist&&F.hist.items)||[]).forEach(function(x){ if((x.search_id||'')===searchId) c[x.status]=(c[x.status]||0)+1; });
+    return c;
+  }
+  function searchName(id){ var s=(F.searches||[]).find(function(x){ return x.id===id; }); return s?s.name:'An earlier search'; }
+  function renderHistory(){
+    var h=F.hist;
+    if (!h) return '<div class="fd-empty">Loading…</div>';
+    var items=h.items||[], cnt=h.counts||{};
+    var st=F.histStatus||'accepted';
+    var labels=[['accepted','Saved as leads'],['waiting','Waiting'],['rejected','Turned down']];
+    var statusBar='<div class="fd-pills">'+labels.map(function(l){ return '<button class="fd-pill'+(st===l[0]?' on':'')+'" onclick="fdHistStatus(\''+l[0]+'\')">'+l[1]+' · '+(cnt[l[0]]||0)+'</button>'; }).join('')+'</div>';
+    var sIds={}; items.forEach(function(x){ sIds[x.search_id||'']=true; });
+    var keys=Object.keys(sIds);
+    var sel=(F.histSearch && sIds[F.histSearch]) ? F.histSearch : '';
+    var searchBar = keys.length>1
+      ? '<div class="fd-pills"><button class="fd-pill'+(sel===''?' on':'')+'" onclick="fdHistSearch(\'\')">All searches</button>'+
+        keys.map(function(k){ return '<button class="fd-pill'+(sel===k?' on':'')+'" onclick="fdHistSearch(\''+esc(k)+'\')">'+esc(searchName(k))+'</button>'; }).join('')+'</div>' : '';
+    var q=String(F.histQ||'').toLowerCase().trim();
+    var rows=items.filter(function(x){ return x.status===st && (!sel || (x.search_id||'')===sel) && (!q || String(x.company_name).toLowerCase().indexOf(q)>=0); });
+    var list = rows.length ? rows.map(function(x){
+      var right='';
+      if (x.status==='accepted'){
+        right = x.lead ? '<span class="fd-hint"><strong>'+esc(x.lead.position||'')+'</strong> · '+esc(x.lead.stage||'')+'</span><button class="btn btn-sm btn-primary" onclick="fdOpenLead(\''+esc(x.lead.id)+'\')">Open lead</button>'
+             : '<span class="fd-hint">'+(x.lead_elsewhere?'This lead now belongs to someone else.':'The lead was deleted.')+'</span>';
+      } else if (x.status==='waiting'){
+        right='<span class="fd-hint">Comes back on '+esc(fmtDay(x.wait_until))+'</span><button class="btn btn-sm btn-outline" onclick="fdUnwait(\''+esc(x.id)+'\',this)">Show now</button>';
+      } else right='<span class="fd-hint">Turned down — never shown to you again</span>';
+      return '<div class="card fd-card"><div class="fd-row fd-between"><div class="fd-grow"><div class="fs-14 fd-strong">'+esc(x.company_name)+'</div>'+
+        '<div class="fs-12 c-text3">'+esc([x.place, 'Found by '+searchName(x.search_id||''), x.decided_at?fmtDay(x.decided_at):''].filter(Boolean).join(' · '))+'</div></div>'+
+        '<div class="fd-row">'+right+'</div></div></div>';
+    }).join('') : '<div class="card fd-empty">'+({ accepted:'No company from your searches has been saved as a lead yet.', waiting:'Nothing is waiting.', rejected:'You have not turned anything down.' }[st])+(q?'<br>Nothing matches “'+esc(F.histQ)+'”.':'')+'</div>';
+    var foot='<div class="fd-hint fd-pad">'+(h.hidden?esc(String(h.hidden))+' older than '+esc(String(h.days))+' days are hidden. <button class="fd-pill" onclick="fdHistAll()">Show everything</button><br>':'')+
+      'A company you never decided on is removed after '+esc(String(h.card_days||5))+' days — Accept, Wait or Reject keeps a record of it here.</div>';
+    return '<div class="fd-row fd-between"><div class="fd-grow">'+statusBar+'</div><input id="fd-hq" class="inp" placeholder="Search by company name" value="'+esc(F.histQ)+'" oninput="fdHistQ(this.value)"></div>'+searchBar+list+foot;
+  }
+
   // ── admin: who may use it, and Apollo's reach ────────────────────────────
   window.fdAdminSave = function(id){
     var on=document.getElementById('fd-on-'+id), n=document.getElementById('fd-n-'+id);
@@ -481,7 +548,8 @@
     if (!acc.enabled) return UI.page({ body:'<div class="card fd-empty">Find Leads is not switched on for you yet.<br>Ask an admin to turn it on.</div>' });
     var tabs=[
       { id:'cards', label:'Today\'s cards', n:(F.cards||[]).length, onclick:"fdTab('cards')" },
-      { id:'searches', label:'My searches', onclick:"fdTab('searches')" }
+      { id:'searches', label:'My searches', onclick:"fdTab('searches')" },
+      { id:'history', label:'Saved & past', n:(F.hist&&F.hist.counts&&F.hist.counts.accepted)||0, onclick:"fdTab('history')" }
     ];
     if (acc.is_admin) tabs.push({ id:'admin', label:'Access & Apollo', onclick:"fdTab('admin')" });
     var right='<span class="fs-12 c-ink3">Companies hiring for the jobs you search for. Nothing becomes a lead until you press Accept and Save.</span>';
@@ -495,7 +563,7 @@
       ? '<div class="fd-row fd-between fd-toolbar"><span class="fd-hint">'+esc(String(F.today||0))+' of your '+esc(String(F.daily||acc.daily||0))+' cards for today.</span>'+
         '<button class="btn btn-sm btn-primary" '+(F.running?'disabled':'')+' onclick="fdRun()">'+(F.running==='all'?'Searching…':'Run my searches')+'</button></div>'
       : '';
-    var body = F.tab==='admin' && acc.is_admin ? renderAdmin() : (F.tab==='searches' ? renderSearches() : renderCards());
+    var body = F.tab==='admin' && acc.is_admin ? renderAdmin() : (F.tab==='searches' ? renderSearches() : (F.tab==='history' ? renderHistory() : renderCards()));
     return UI.page({ tabs:UI.tabs(tabs, F.tab, right), strip:strip, body:toolbar+body });
   }
 

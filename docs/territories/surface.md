@@ -1250,3 +1250,6 @@ resulting "Ask to take over" modal after clicking through, showing
 - `68-page-finder.js`: `F.running` is the id of the one search running (or `'all'`), so only its button says Running…; Accept window holds `jobs[]` (up to 5, numbered pills + a typed box, `fdToggleJob`/`fdAddJob`), `writeEmail` (ticked for a BD; after Save it calls `/emails/generate` and says the email waits in Pending); `fdFindPeople` merges (keeps revealed/ticked people); cards get a per-search filter (`fdFilterCards`); Save calls `refreshJobs()`.
 - `06-page-leads.js`: refresh icon in the Leads toolbar (`leadsRefreshNow`), also in the RA view.
 - Tests: `finder-page-smoke` now 54, each new guard shown failing without its fix.
+
+## 2026-10-07 (Session 42) — Find Leads "Saved & past" tab (D-0094)
+- `68-page-finder.js`: tab `history` (`renderHistory`, `fdHistStatus/Search/Q/All`, `fdUnwait`, `fdOpenLead` → `goPage('leads'); openJob(id)` only if the lead is in `STATE.jobs`); My searches rows show "Found before … See them" (`fdHistFor`). History reloads after Save/Reject/Wait. Tests: `finder-page-smoke` 68.

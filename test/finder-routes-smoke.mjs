@@ -120,10 +120,10 @@ function makeApollo() {
 
 const hasRole = (req, ...roles) => (req.user.roles || []).some((r) => roles.includes(r));
 const handlerOf = (router, p, m) => router.stack.find((l) => l.route && l.route.path === p && l.route.methods[m]).route.stack.slice(-1)[0].handle;
-const callOn = (router) => async (p, m, who, body, params) => {
+const callOn = (router) => async (p, m, who, body, params, query) => {
   let out, code = 200; const res = { status(x) { code = x; return res; }, json(x) { out = x; return res; } };
   const u = USERS[who];
-  await handlerOf(router, p, m)({ user: Object.assign({}, u), orgId: u.org_id, body: body || {}, params: params || {}, query: {} }, res);
+  await handlerOf(router, p, m)({ user: Object.assign({}, u), orgId: u.org_id, body: body || {}, params: params || {}, query: query || {} }, res);
   return { code, out };
 };
 const USERS = {
@@ -387,6 +387,49 @@ NOW = new Date('2026-10-09T03:00:00Z');
 st.tables.finder_cards.forEach((c) => { c.created_at = new Date(NOW.getTime() - 9 * 86400000).toISOString(); });
 await call('/finder/cards', 'get', 'ra1');
 step('unreviewed cards disappear after the admin\'s number of days (5) — nothing lingers in the database', st.tables.finder_cards.filter((c) => c.status === 'new').length === 0);
+
+// ═════ 7b. what my searches found before ═══════════════════════════════════════════════════════════════
+console.log('\nHistory');
+({ st, apollo, router, call } = boot());
+await resetCredits(st, 300);
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra1' });
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra2' });
+NOW = new Date('2026-10-20T12:00:00Z');
+const card = (o) => Object.assign({ id: 'h' + (++uid), org_id: 'o1', user_id: 'ra1', search_id: 'sA', company_key: 'k' + uid, company_name: 'Co ' + uid, status: 'rejected', payload: null, score: 1, created_on: '2026-10-01', created_at: daysAgo(15), decided_at: daysAgo(10), wait_until: null, lead_id: null }, o);
+st.tables.jobs.push({ id: 'jL', org_id: 'o1', company_id: 'c1', position: 'Welder', stage: 'Assigned', created_by: 'ra1', assigned_to_bd: null, deleted_at: null });
+st.tables.jobs.push({ id: 'jM', org_id: 'o1', company_id: 'c1', position: 'Estimator', stage: 'Assigned', created_by: 'adm', assigned_to_bd: 'bd1', deleted_at: null });
+st.tables.finder_cards.push(
+  card({ id: 'hAcc', company_name: 'Saved Co', status: 'accepted', lead_id: 'jL', payload: { company: { city: 'Waco', state: 'TX' } } }),
+  card({ id: 'hMoved', company_name: 'Handed Away Co', status: 'accepted', lead_id: 'jM' }),
+  card({ id: 'hGone', company_name: 'Deleted Lead Co', status: 'accepted', lead_id: 'jNONE' }),
+  card({ id: 'hWait', company_name: 'Parked Co', status: 'waiting', wait_until: '2026-10-30', decided_at: daysAgo(2) }),
+  card({ id: 'hRej', company_name: 'Turned Down Co' }),
+  card({ id: 'hOld', company_name: 'Ancient Co', decided_at: daysAgo(200), created_at: daysAgo(210) }),
+  card({ id: 'hNew', company_name: 'Undecided Co', status: 'new' }),
+  card({ id: 'hRob', user_id: 'ra2', company_name: 'Robs Co', status: 'accepted', lead_id: 'jL' }));
+r = await call('/finder/history', 'get', 'ra1');
+const hn = r.out.items.map((x) => x.company_name);
+step('the history lists what was saved, parked and turned down — never an undecided card', r.code === 200 && ['Saved Co', 'Parked Co', 'Turned Down Co'].every((n) => hn.includes(n)) && !hn.includes('Undecided Co'), hn.join());
+step('…counted by what became of each', r.out.counts.accepted === 3 && r.out.counts.waiting === 1 && r.out.counts.rejected === 1, JSON.stringify(r.out.counts));
+const savedItem = r.out.items.find((x) => x.company_name === 'Saved Co');
+step('a saved company shows the lead it became (job and stage) and its place', savedItem.lead.id === 'jL' && savedItem.lead.position === 'Welder' && savedItem.lead.stage === 'Assigned' && savedItem.place === 'Waco, TX');
+const movedItem = r.out.items.find((x) => x.company_name === 'Handed Away Co');
+step('a lead that is no longer the person\'s (made by someone else, held by another) is NOT described to them', movedItem.lead === null && movedItem.lead_elsewhere === true);
+step('a lead that was deleted says so', r.out.items.find((x) => x.company_name === 'Deleted Lead Co').lead_gone === true);
+step('only 90 days are shown by default, and it says how many are hidden', !hn.includes('Ancient Co') && r.out.hidden === 1 && r.out.days === 90);
+r = await call('/finder/history', 'get', 'ra1', {}, {}, { all: '1' });
+step('"all" reaches the older ones too', r.out.items.some((x) => x.company_name === 'Ancient Co') && r.out.hidden === 0);
+r = await call('/finder/history', 'get', 'ra2');
+step('Rob sees only his own history (Rhea\'s companies and her lead are not in it)', r.out.items.length === 1 && r.out.items[0].company_name === 'Robs Co' && r.out.items[0].lead === null);
+r = await call('/finder/cards/:id/unwait', 'post', 'ra2', {}, { id: 'hWait' });
+step('Rob cannot bring back Rhea\'s parked company (404)', r.code === 404 && st.tables.finder_cards.find((c) => c.id === 'hWait').status === 'waiting');
+r = await call('/finder/cards/:id/unwait', 'post', 'ra1', {}, { id: 'hRej' });
+step('a turned-down company cannot be brought back (it is gone for good)', r.code === 404 && st.tables.finder_cards.find((c) => c.id === 'hRej').status === 'rejected');
+r = await call('/finder/cards/:id/unwait', 'post', 'ra1', {}, { id: 'hWait' });
+const back = st.tables.finder_cards.find((c) => c.id === 'hWait');
+step('Show now brings a parked company back to today\'s cards at once', r.code === 200 && back.status === 'new' && back.wait_until === null && back.created_on === '2026-10-20');
+r = await call('/finder/history', 'get', 'rec1');
+step('a person who is not switched on gets no history (403)', r.code === 403);
 
 // ═════ 8. what is wrong with the key, in words ═════════════════════════════════════════════════════════════
 console.log('\nDiagnose');
