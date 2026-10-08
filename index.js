@@ -47,7 +47,9 @@ const {
   mailboxSignatureKey,
   legacyUserSignatureKey,
   fillSignatureHtml,
-  resolveSignatureHtml
+  resolveSignatureHtml,
+  sendsAsKey,
+  cleanSendsAs
 } = require('./email-signature');
 const {
   emailSyntaxValid,
@@ -391,12 +393,31 @@ function getLocalMinutesInLeadZone(tz, date = new Date()) {
 }
 
 function isInLeadSendWindow(tz, date = new Date(), window = { start: 8, end: 16 }) {
-  const mins = getLocalMinutesInLeadZone(tz || 'EST', date);
-  return mins >= window.start * 60 && mins < window.end * 60;
+  // Days (a person's own choice, read in the lead's zone) and then the hours — services/send-window.js is the one implementation.
+  return sendWindowRules.isOpen(LEAD_TZ_IANA[tz || 'EST'] || LEAD_TZ_IANA.EST, date, window);
+}
+
+// What the person's own mail obeys: the organisation's window, narrowed by what they chose in My Setup (nothing chosen = the
+// organisation's window unchanged). A read that fails is the organisation's window, never a closed one.
+async function getPersonSendWindow(userId) {
+  const org = await getSendWindowHours();
+  if (!userId) return org;
+  try {
+    const { data } = await supabase.from('app_settings').select('key,value')
+      .in('key', [`u_${userId}_send_days`, `u_${userId}_send_start_hour`, `u_${userId}_send_end_hour`]);
+    const m = {}; (data || []).forEach(r => { m[r.key] = r.value; });
+    return sendWindowRules.effectiveWindow(org, sendWindowRules.readPrefs({
+      days: m[`u_${userId}_send_days`], start: m[`u_${userId}_send_start_hour`], end: m[`u_${userId}_send_end_hour`] }));
+  } catch (_) { return org; }
 }
 
 function getMinutesUntilWindowOpens(tz, date = new Date(), window = { start: 8, end: 16 }) {
   if (isInLeadSendWindow(tz, date, window)) return 0;
+  // With days chosen the next opening may be days away: look forward in half-hour steps (this is only ever a label).
+  if (window.days) {
+    for (let m = 30; m <= 8 * 24 * 60; m += 30) { if (isInLeadSendWindow(tz, new Date(date.getTime() + m * 60000), window)) return m; }
+    return 24 * 60;
+  }
   const mins = getLocalMinutesInLeadZone(tz || 'EST', date);
   const startMins = window.start * 60;
   if (mins < startMins) return startMins - mins;
@@ -1006,81 +1027,8 @@ async function fetchInitialOutreachedPairs(jobs) {
   return pairs;
 }
 
-function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached) {
-  const tasksByBd = {};
-  let contactsSkipped = 0;
-  let alreadyOutreachedSkipped = 0;
-  const outreachedSet = alreadyOutreached instanceof Set ? alreadyOutreached : new Set();
-
-  for (const job of jobs) {
-    const bd = bdMap[job.assigned_to_bd] || { id: callerUserId, name: '', email: '' };
-    let contacts = (job.contacts || []).filter(c => emailSyntaxValid(c.email));
-    // Skip contacts already sent (or queued) an initial outreach for this job —
-    // prevents duplicate cold emails to the same POC on re-generation.
-    contacts = contacts.filter(c => {
-      if (outreachedSet.has(`${job.id}:${c.id}`)) { alreadyOutreachedSkipped++; return false; }
-      return true;
-    });
-    if (!contacts.length) {
-      contactsSkipped++;
-      continue;
-    }
-    if (!tasksByBd[bd.id]) tasksByBd[bd.id] = [];
-    for (const contact of contacts) {
-      tasksByBd[bd.id].push({ job, contact, bd });
-    }
-  }
-
-  const emailsToInsert = [];
-  for (const bdId of Object.keys(tasksByBd)) {
-    const tasks = tasksByBd[bdId];
-    const useRandom = isRandomTemplateMode(tmplSettings[`u_${bdId}_random_template_mode`]);
-    const deck = useRandom ? buildRotatingTemplateDeck(tasks.length) : null;
-    if (useRandom) {
-      console.log(`[GenerateEmails] Random template rotation for BD ${bdId}: ${tasks.length} emails across ${deck.length} slots`);
-    }
-
-    tasks.forEach((task, idx) => {
-      const { job, contact, bd } = task;
-      try {
-        const variant = deck ? deck[idx] : null;
-        const subjTmpl = variant
-          ? variant.o1.subject
-          : resolveTemplate(tmplSettings[`u_${bd.id}_tmpl_o1_subject`], 'o1_subject');
-        const bodyTmpl = variant
-          ? variant.o1.body
-          : resolveTemplate(tmplSettings[`u_${bd.id}_tmpl_o1_body`], 'o1_body');
-        // Leave {{sender}} in the queued text. Which mailbox sends this row is
-        // decided at SEND time (the lead's mailbox can change, or a sequence can
-        // rotate it), and the signature is filled from that same mailbox — so
-        // baking a name here is how the body and the signature end up naming two
-        // different people.
-        const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
-        const subject = fillTemplate(subjTmpl, vars);
-        const body = fillTemplate(bodyTmpl, vars);
-        const resolvedSendingEmail = job.sending_email || bdPrimaryEmailMap[bd.id];
-        const sendingEmailAddress = resolvedSendingEmail?.email_address || '';
-        const row = {
-          contact_id: contact.id,
-          job_id: job.id,
-          to_email: contact.email,
-          subject,
-          body,
-          platform: 'Outlook',
-          sent_by: bd.id,
-          from_email: sendingEmailAddress,
-          status: 'pending'
-        };
-        if (variant?.id) row.template_variant = variant.id;
-        emailsToInsert.push(row);
-      } catch (e) {
-        console.error(`[GenerateEmails] contact error (${contact.email}):`, e.message);
-      }
-    });
-  }
-
-  return { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped };
-}
+const { buildPendingEmailsFromJobs } = require('./services/lead-outreach-queue');
+const sendWindowRules = require('./services/send-window');
 
 // Standalone generation function — called directly by autoSendForManager (no HTTP)
 async function generateEmailsForJobs(job_ids, callerUserId) {
@@ -1121,9 +1069,10 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
   const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
-  const { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped } = buildPendingEmailsFromJobs(
+  const { emailsToInsert, contactsSkipped, alreadyOutreachedSkipped, needsSequence } = buildPendingEmailsFromJobs(
     jobs, callerUserId, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
   );
+  if (needsSequence.length) console.log(`[GenerateEmails] no emails written for ${needsSequence.map(n => n.name || n.user_id).join(', ')} — they have not written their own sequence yet`);
   if (contactsSkipped) console.log(`[GenerateEmails] ${contactsSkipped} jobs had no valid contacts — skipped`);
   if (alreadyOutreachedSkipped) console.log(`[GenerateEmails] ${alreadyOutreachedSkipped} contacts already had an initial outreach for their job — skipped to avoid duplicate cold emails`);
   // Insert emails in batches of 500 to avoid Supabase payload limits
@@ -1199,7 +1148,7 @@ app.post('/emails/generate', auth, async (req, res) => {
     (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
     const alreadyOutreached = await fetchInitialOutreachedPairs(jobs);
-    const { emailsToInsert, alreadyOutreachedSkipped } = buildPendingEmailsFromJobs(
+    const { emailsToInsert, alreadyOutreachedSkipped, needsSequence } = buildPendingEmailsFromJobs(
       jobs, req.user.id, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
     );
     if (emailsToInsert.length) {
@@ -1211,6 +1160,8 @@ app.post('/emails/generate', auth, async (req, res) => {
     res.json({
       generated: emailsToInsert.length,
       skipped_already_outreached: alreadyOutreachedSkipped || 0,
+      // Whose leads got NO email because their owner has no sequence of their own yet ([] when everyone has one).
+      needs_sequence: needsSequence || [],
       failed: 0,
       failDetails: []
     });
@@ -1816,6 +1767,14 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
       orgNameFor(email.org_id),
     ]);
     const who = senderIdentityFor(sendingEmail, email.from_email);
+    // The sending mailbox's own company and title ("sends as"), when it says them — else the organisation's name and no title, as before.
+    let sendsAs = null;
+    try {
+      if (sendingEmail && sendingEmail.id) {
+        const { data: sa } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(sendingEmail.id)).maybeSingle();
+        if (sa && sa.value) sendsAs = cleanSendsAs(JSON.parse(sa.value));
+      }
+    } catch (_) { sendsAs = null; }
     let styleNote = '';
     try {
       let ownerId = email.sent_by || null;
@@ -1827,10 +1786,10 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
     } catch (_) { styleNote = ''; }
     const input = engineDraft.engineInput({
       job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
-      sender: { name: who.displayName, email: who.emailAddress },
+      sender: { name: who.displayName, email: who.emailAddress, title: sendsAs && sendsAs.title || '' },
     });
     const res = await engineDraft.draftFirstEmail({
-      gen: outreachGen, input, companyName,
+      gen: outreachGen, input, companyName: (sendsAs && sendsAs.company) || companyName,
       omitSignOff: !!String(sigTemplate || '').trim(),
       // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js).
       // Read once per email; a note that cannot be read is "no note", never a reason not to send.
@@ -1868,7 +1827,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   // left pending, untouched, rather than each failing ~90s apart.
   const authFailedMailboxes = new Set();
   let retrying = 0;
-  const sendWindow = await getSendWindowHours();
+  const sendWindow = await getPersonSendWindow(userId);      // the organisation's hours, narrowed by this person's own choice (D-0104)
   const totalCount = pendingEmails.length;
   let sent = 0, failed = 0, skippedWindow = 0, skippedQuota = 0, skippedDomain = 0, skippedContactStatus = 0, skippedThread = 0, skippedInactive = 0, skippedSuppressed = 0, skippedCompany = 0;
   const failDetails = [], sentContactIds = [], sentJobIds = [];
@@ -3543,7 +3502,7 @@ const routeCtx = {
   canTouchJob, isPermanentFollowupBlock, requireRole,
   addToSuppression, warmupLimit, loadSuppressedSet,
   loadAllJobs, JOB_SELECT, getTimezoneFromLocation, LEAD_TZ_IANA, persistLearnedSkills,
-  getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
+  getSendWindowHours, getPersonSendWindow, isInLeadSendWindow, getMinutesUntilWindowOpens,
   formatWindowOpensLabel, padHour, sendProgressCache, isSendAlive,
   pixelLimiter, openTracking,
   // The in-app mailbox (routes/mailbox.js) reads and writes real mailboxes
@@ -3552,6 +3511,7 @@ const routeCtx = {
   graphMailRequest, gmailProvider, sendMicrosoftNewMessage,
 };
 app.use(require('./routes/auth')(routeCtx));
+app.use(require('./routes/my-setup')(routeCtx));
 app.use(require('./routes/microsoft')(routeCtx));
 app.use(require('./routes/gmail')({ supabase, auth, hasRole, orgIdFor, provider: gmailProvider }));
 app.use(require('./routes/workflows')(routeCtx));

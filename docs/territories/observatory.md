@@ -674,3 +674,6 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-07 (Session 42) — Apollo adapter additions for the Lead Finder
 - `services/people-apollo.js`: `searchOrganizations` (POST /mixed_companies/search, merges `organizations` + `accounts`) and `organizationJobPostings` (GET /organizations/:id/job_postings). Never retried; key in a header. Apollo cannot give posting TEXT, so the lead stores `jd_raw: 'Title: …'` plus Apollo-sourced facts and the AI writes only from those (no AI call is added by the finder itself).
+
+## 2026-10-08 (Session 42) — the AI writes under the SENDING mailbox's company and title (D-0103)
+- `routes/outreach-generator.js` (`senderIdentity`) and `index.js` (`aiWriteFirstEmail`): company name and title come from the sending mailbox's "sends as" when it has one, else the organisation's name and the logged-in profile's designation (unchanged). `engineInput` carries `sender.title`. No prompt text changed.

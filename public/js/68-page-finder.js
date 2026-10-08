@@ -137,7 +137,7 @@
   window.fdAccept = function(id){
     var c=(F.cards||[]).find(function(x){ return x.id===id; }); if(!c) return;
     if (c.decision && c.decision.blocked){ showToast(c.decision.sentence,'error'); return; }       // the server enforces it too
-    F.acc = { card:c, jobs:[], main:'', mailboxes:null, mailboxId:'', mailErr:'', jobQ:'', writeEmail:((F.access&&F.access.goes_to)==='you'), titleQ:'', people:null, picked:{}, manual:[], busy:false, finding:false, revealing:null, err:'' };
+    F.acc = { card:c, jobs:[], main:'', mailboxes:null, mailboxId:'', mailErr:'', jobQ:'', writeEmail:((F.access&&F.access.goes_to)==='you')&&!seqNeeded(), titleQ:'', people:null, picked:{}, manual:[], busy:false, finding:false, revealing:null, err:'' };
     paintAccept();
     // A lead that comes straight to the person sends from one of THEIR mailboxes: fetch them (the server pre-selects the one
     // that has sent the fewest today). A lead that goes to the pool has none.
@@ -226,7 +226,9 @@
     if (a.jobs.length>=5){ a.err='Five jobs is the most one lead can carry.'; paintAccept(true); return; }
     a.jobs.push(t); if(!a.main) a.main=t; a.jobQ=''; a.err=''; paintAccept(true);
   };
-  window.fdToggleWrite = function(){ var a=F.acc; if(!a) return; captureAcc(); a.writeEmail=!a.writeEmail; paintAccept(true); };
+  // Starting outreach needs a sequence of the person's OWN (owner, 8 Oct, D-0104): the box is switched off, and says where to fix it.
+  function seqNeeded(){ return typeof mySetupNeedsSequence==='function' && mySetupNeedsSequence(); }
+  window.fdToggleWrite = function(){ var a=F.acc; if(!a||seqNeeded()) return; captureAcc(); a.writeEmail=!a.writeEmail; paintAccept(true); };
   function jobsToSave(a){
     var out=a.jobs.slice(), q=String(a.jobQ||'').trim();
     if (q && !out.some(function(x){ return x.toLowerCase()===q.toLowerCase(); }) && out.length<5){ out.push(q); if(!a.main) a.main=q; }
@@ -254,6 +256,7 @@
       if (wantEmail && r && r.goes_to==='you' && r.lead_id){
         apiPost('/emails/generate',{ job_ids:[r.lead_id] }).then(function(g){
           var n=(g&&g.generated)||0;
+          if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
           showToast(n?'First email written — read it in Email → Pending, then send':'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning');
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
@@ -325,7 +328,10 @@
 
     var where = '<div class="ld-box is-info"><strong>Where it goes</strong>'+(goes
       ? 'Straight to you, in Leads.'+sendFromPart(a)+
-        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'
+        (seqNeeded()
+          ? '<div class="ld-box is-stop" role="status"><strong>Writing the first email needs your own sequence</strong>PACE does not start outreach until you have one. <button type="button" class="fd-pill" onclick="goPage(\'mysetup\')">Open My Setup</button> — a starter with your company\'s name is one click. The lead is saved either way.</div>'
+          : '')+
+        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'
       : 'Into the Unassigned pool, where your lead hands it out. Nothing is emailed now.')+'</div>';
 
     var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && (!goes || !!a.mailboxId) && !(c.decision&&c.decision.blocked);

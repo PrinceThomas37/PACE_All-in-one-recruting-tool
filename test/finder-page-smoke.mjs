@@ -272,6 +272,21 @@ try {
   step('a BD with no working mailbox is told so in red and cannot Save (there would be nothing to send from)', /None of your email IDs is connected/.test(m) && await page.evaluate(() => [...document.querySelectorAll('.modal button')].find(b => /Save lead/.test(b.textContent)).disabled));
   await page.evaluate(() => window.fdCloseAccept());
 
+  // a BD with no sequence of their own cannot start outreach from here (My Setup, D-0104): the box is off and says why
+  await page.evaluate((c) => { window.__roleWas = [window.STATE.user.role, window.STATE.user.roles]; window.STATE.user.role = 'bd'; window.STATE.user.roles = ['bd']; window.STATE.myOutreachPlan = { tmpl_o1_body: '' }; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); }, CARDS);
+  m = await modal();
+  const boxOff = await page.evaluate(() => { const b = document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]'); return !!b && b.disabled && !b.checked; });
+  step('with no sequence of their own, "Write the first email now" is OFF and cannot be ticked, and a red note says why and offers My Setup', boxOff && /needs your own sequence/.test(m) && /Open My Setup/.test(m) && !(await page.evaluate(() => window.STATE.finder.acc.writeEmail)));
+  await page.evaluate(() => window.fdCloseAccept());
+  await page.evaluate(() => { window.STATE.myOutreachPlan = { tmpl_o1_body: 'Hi {{firstname}}, my own wording that is long enough.' }; });
+  await page.evaluate((c) => { window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); }, CARDS);
+  step('once they have their own sequence the box works again', await page.evaluate(() => { const b = document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]'); return !!b && !b.disabled && b.checked; }));
+  await page.evaluate(() => window.fdCloseAccept());
+  await page.evaluate(() => { window.noteNeedsSequence({ needs_sequence: [{ user_id: window.STATE.user.id, name: 'Me', leads: 1 }] }); });
+  m = await modal();
+  step('if the server still says a sequence is needed, the person is told in a window, with a way to My Setup', /Sequence first/.test(m) && /not written your sequence/.test(m) && /Open My Setup/.test(m));
+  await page.evaluate(() => { window.closeModal(); window.STATE.myOutreachPlan = null; window.STATE.user.role = window.__roleWas[0]; window.STATE.user.roles = window.__roleWas[1]; });
+
   // a refusal from the server stays in the window, in words, and nothing is lost
   await page.evaluate((c) => {
     window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.fdAccept('c1');

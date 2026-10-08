@@ -667,3 +667,15 @@ usage is one line ("Today: Apollo 3/300 · emails 1/30 · job sources 0/6"). Als
 scrolls on a small laptop; the job-search key sits in Admin → Integrations & API Keys under Apollo; that
 window's AI status is one sentence with the detail behind "Show details" (opened once by a fresh test);
 and "Lead Insights" is called "Outreach Insights".
+
+**My Setup — a person sets up their own outreach (8 Oct, D-0103).** Any person (not only an admin)
+adds their own outreach mailbox — Outlook or Gmail — signs in to it and can remove it again. Each
+mailbox says **who it writes for**: the company, the job title under the name, the company's postal
+address (required — every outreach email must carry the sender's own) and optionally a phone and a
+website. That becomes the mailbox's signature (it is never given Fute Global's address) and what the
+AI writes under. The daily sending number stays an admin's. My Setup lists the steps with where each
+stands (connect a mailbox · say who it writes for · write your first sequence), and Today shows a
+calm card until they are done. Not yet: the standard sequence wording still names Fute Global LLC for a
+person who has not written their own (R-169).
+
+**My Setup, continued (8 Oct, D-0104).** A person with no sequence of their own is asked to write one: My Setup offers a starter with their own company's name (one click), links the AI writing-style note, and lets them narrow the days and hours their emails go out within the organisation's window (the daily number stays an admin's). Until they have a sequence, PACE does not start outreach for their leads or write the Lead Finder's first email — individual emails are never held. Their first tasks (mailbox, sequence) appear on their Reminders list and in "Needs you today" and close themselves. The signature window is an editor: font, size, colour, bold, italic, underline, links, and an optional logo that sits beside the words and can colour the name and links (the logo store needs one switch-on by the owner).

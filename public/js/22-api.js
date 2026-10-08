@@ -104,6 +104,8 @@ function loadAppData(){
         STATE.userEmailsCache=STATE.userEmailsCache||{};
         STATE.userEmailsCache[STATE.user.id]=emails||[];
         render();
+        // PACE puts the person's first tasks on their own list (a mailbox, a sequence) — once per sign-in, and it closes what is done.
+        if(window.mySetupSync&&!STATE._setupSynced){ STATE._setupSynced=true; mySetupSync(); }
       }).catch(function(){});
     }
     // Load this user's personal outreach plan

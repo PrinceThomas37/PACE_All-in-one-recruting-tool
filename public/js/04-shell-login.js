@@ -172,6 +172,8 @@ function renderSidebar(){
   // Expanding it showed different labels, hence "no repeats in full menu".
   // R-006: Reports are part of the Dashboard now (its foot), so the standalone
   // nav item is gone; goPage('reports') still works and lands there.
+  // My Setup (owner, 8 Oct): every person sets up THEIR OWN outreach — mailbox, who it writes for, sequence.
+  navItems.push({id:"mysetup",lbl:"My Setup",ic:"cog",grp:G_SET});
   if(isAdmin)navItems.push({id:"admin",lbl:"Admin",ic:"cog",grp:G_SET});
 
   // De-duplicate: Insights can be pushed twice for an admin who is also an RA
@@ -193,7 +195,7 @@ function renderSidebar(){
   // Setup (Deliverability, Admin) is not a menu section: it lives under the
   // name card, behind "Setup" (toggleSetup — one class, no render).
   var setupRows=navItems.filter(function(n){return n.grp==='Setup';});
-  var setupOpen=(STATE.page==='admin'||STATE.page==='deliverability')?' setup-open':'';
+  var setupOpen=(STATE.page==='admin'||STATE.page==='deliverability'||STATE.page==='mysetup')?' setup-open':'';
   var nav=['My Day','Sales','Recruiting'].map(function(g){
     var rows=navItems.filter(function(n){return n.grp===g;});
     if(!rows.length)return '';
@@ -259,7 +261,7 @@ function renderSidebar(){
 function renderTopbar(){
   var u=STATE.user;
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
-  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Outreach Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads"};
+  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Outreach Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads",mysetup:"My Setup"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing
@@ -384,6 +386,7 @@ var NAV_PIXEL_ICONS={
   job_board:['#########','#.......#','#.#####.#','#.......#','#.####..#','#.......#','#.###...#','#.......#','#########'],
   applicants:['...###...','..#####..','..#####..','...###...','.........','.#######.','#########','#########','#########'],
   deliverability:['.#######.','#########','##.....##','##.....##','##.....##','.##...##.','..##.##..','...###...','....#....'],
+  mysetup:['.........','###.#####','###.#####','.........','#####.###','#####.###','.........','##.######','##.######'],
   admin:['...#.#...','.#######.','.##...##.','###...###','.#.....#.','###...###','.##...##.','.#######.','...#.#...']
 };
 window.NAV_PIXEL_ICONS=NAV_PIXEL_ICONS;

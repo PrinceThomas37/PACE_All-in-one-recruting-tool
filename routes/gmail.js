@@ -46,13 +46,15 @@ module.exports = (ctx) => {
       if (!token) return res.status(401).send('Unauthorized');
       let reqUser;
       try { reqUser = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).send('Invalid token'); }
-      if (!reqUser.roles?.includes('admin') && reqUser.role !== 'admin') return res.status(403).send('Admin only');
+      const isAdmin = !!(reqUser.roles?.includes('admin') || reqUser.role === 'admin');
       const { userEmailId } = req.query;
       if (!userEmailId) return res.status(400).send('userEmailId required');
       // C-0016 #3: no state minted for a slot outside the caller's own org.
       const orgId = orgIdFor({ user: reqUser });
       const slot = await ownedMailboxSlot(orgId, userEmailId);
       if (!slot) return res.status(404).send('Not found');
+      // Own mailbox, or an admin (see routes/microsoft.js).
+      if (!isAdmin && slot.user_id !== reqUser.id) return res.status(403).send('You can only connect your own mailbox');
       // Signed the same way sso.js signs its own OAuth state (JWT_SECRET, the
       // one secret this app already requires at startup) — a forged state now
       // fails verification before any of its fields are read or echoed back.
@@ -175,10 +177,10 @@ module.exports = (ctx) => {
 
   router.delete('/auth/google/:userEmailId', auth, async (req, res) => {
     try {
-      if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
       // C-0016 #1: mirrors routes/microsoft.js's DELETE fix — 404, never 403.
       const mailbox = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
       if (!mailbox) return res.status(404).json({ error: 'Not found' });
+      if (!hasRole(req, 'admin', 'bd_lead') && mailbox.user_id !== req.user.id) return res.status(403).json({ error: 'You can only disconnect your own mailbox' });
       await supabase.from('gmail_tokens').delete().eq('user_email_id', req.params.userEmailId);
       await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
       // Move any leads still pointed at this mailbox before it went dead, so

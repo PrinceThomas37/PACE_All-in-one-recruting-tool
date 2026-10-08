@@ -270,6 +270,7 @@ function renderRecruiterDashboard(u){
     renderMorningBriefingCard()+
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
+    (window.renderMySetupCard?renderMySetupCard():'')+
     renderNextActionsCard()+
     (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
@@ -370,6 +371,7 @@ function renderManagerDashboard(u){
     renderMorningBriefingCard()+
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
+    (window.renderMySetupCard?renderMySetupCard():'')+
     renderNextActionsCard()+
     (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+
@@ -496,6 +498,7 @@ function renderIndividualDashboard(u){
     renderMorningBriefingCard()+
 
     (window.renderMailboxAlerts?renderMailboxAlerts():'')+
+    (window.renderMySetupCard?renderMySetupCard():'')+
     renderNextActionsCard()+
     (window.renderClientDigest?renderClientDigest():'')+
     (typeof renderOwnershipSummaryCard==='function'?renderOwnershipSummaryCard():'')+

@@ -92,7 +92,7 @@ try {
   });
 
   // ── 1. no page draws "Page not found", ever ──────────────────────────────
-  const PAGES = ['mailbox', 'clients', 'applicants', 'reports', 'myteam', 'sourced',
+  const PAGES = ['mailbox', 'clients', 'applicants', 'reports', 'myteam', 'sourced', 'mysetup',
                  'job_board', 'bd_joborders', 'bd_myjobs', 'bd_kanban', 'bd_pipeline'];
   const notFound = await page.evaluate((pages) => {
     const bad = [];

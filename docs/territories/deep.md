@@ -335,3 +335,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-08 (Session 42) — migration 060, where a search looks (D-0100) — APPLIED to the live database 2026-10-08 (owner: "do this also"; verified: column + check present, the 4 existing searches read 'apollo')
 - `migrations/060_finder_search_source.sql`: `finder_searches.source TEXT NOT NULL DEFAULT 'apollo'` with a check (apollo|free|both). Additive/idempotent; every existing row stays 'apollo'. The new code writes `source` on save, Applied through `execute_sql` with `lock_timeout 5s` (instant on a 4-row table) BEFORE the code merged.
+
+## 2026-10-08 (Session 42) — migration 061 written, NOT applied (D-0104)
+- `migrations/061_signature_logos_bucket.sql`: a PUBLIC storage bucket `signature-logos` (200 KB, image types only). Not applied — needs the owner's go-ahead; the code degrades (upload answers 503, the mailbox saves without a logo). Per-person sending days/hours and setup-task state live in `app_settings` (`u_<id>_send_*`) and `reminders` (type `setup`) — no new table. Next migration: 062.

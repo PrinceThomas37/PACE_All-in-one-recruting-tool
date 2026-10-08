@@ -52,6 +52,9 @@ function ensureSignatureAddress(signatureHtml) {
   const html = String(signatureHtml || '');
   if (!html.trim()) return html;
   if (html.includes('75251')) return html; // address already present
+  // A signature that already carries ANY postal address of its own (a built "sends as" signature, or one edited since — a
+  // 5-digit ZIP is the tell) is never given Fute Global's Dallas address on top.
+  if (html.includes(OWN_SIGNATURE_MARK) || /(?:^|[^\d])\d{5}(?:-\d{4})?(?:[^\d]|$)/.test(html.replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\+?\d[\d\s().-]{8,}\d/g, ' '))) return html;
   const lastClose = html.lastIndexOf('</div>');
   if (lastClose !== -1) {
     return html.slice(0, lastClose) + SIGNATURE_ADDRESS_HTML + html.slice(lastClose);
@@ -70,11 +73,68 @@ function fillSignatureHtml(signatureHtml, { displayName, emailAddress }) {
 function resolveSignatureHtml(savedHtml) {
   const val = String(savedHtml || '').trim();
   if (!val) return DEFAULT_SIGNATURE_HTML;
+  // A signature built from a mailbox's own "sends as" carries ITS company's address — never add Fute Global's (or rewrite its words).
+  if (val.includes(OWN_SIGNATURE_MARK)) return val;
   if (isLegacyBlockSignature(val)) return DEFAULT_SIGNATURE_HTML;
   return ensureSignatureAddress(upgradeSignatureTitle(upgradeSignatureTagline(val)));
 }
 
+// ── "SENDS AS": who a MAILBOX writes for (owner, 8 Oct: a VP connected another company's mailbox and the emails said Fute Global) ──
+// One small record per mailbox — the company it writes for, the title under the name, its postal address (the anti-spam law
+// requires the sender's own), and optionally a phone and a website. Stored as JSON under ue_<id>_sends_as, beside the signature.
+// A signature built from it carries OWN_SIGNATURE_MARK so nothing re-adds Fute Global's address or wording to it.
+const OWN_SIGNATURE_MARK = '<!--pace-own-signature-->';
+const sendsAsKey = (userEmailId) => `ue_${userEmailId}_sends_as`;
+const SENDS_AS_LIMITS = { company: 80, title: 80, address: 200, phone: 40, website: 120, logo: 400 };
+// A logo is hosted in PACE's own public logo bucket (never a third party's address — a hotlinked image is a tracking pixel).
+const LOGO_PATH = '/storage/v1/object/public/signature-logos/';
+const isOwnLogoUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' && x.pathname.startsWith(LOGO_PATH); } catch (_) { return false; } };
+const isHexColour = (c) => /^#[0-9a-fA-F]{6}$/.test(String(c || ''));
+function cleanSendsAs(v) {
+  const o = {};
+  const src = v && typeof v === 'object' ? v : {};
+  for (const k of Object.keys(SENDS_AS_LIMITS)) {
+    const t = String(src[k] == null ? '' : src[k]).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, SENDS_AS_LIMITS[k]);
+    if (t) o[k] = t;
+  }
+  if (o.logo && !isOwnLogoUrl(o.logo)) delete o.logo;
+  // The colour taken from the logo (optional): used for the name and the links in the built signature.
+  if (isHexColour(src.accent)) o.accent = String(src.accent).toLowerCase();
+  return o;
+}
+// What is missing, in words — company, title and address are required; phone and website are not.
+function sendsAsProblem(s) {
+  const c = cleanSendsAs(s);
+  if (!c.company || c.company.length < 2) return 'Say which company this mailbox writes for.';
+  if (!c.title) return 'Add the job title that goes under the name.';
+  if (!c.address || c.address.length < 8) return 'Add the company\'s postal address — every outreach email must carry the sender\'s own.';
+  return null;
+}
+const escHtml = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function siteHref(w) { const t = String(w || '').trim(); if (!t) return ''; return /^https?:\/\//i.test(t) ? t : 'https://' + t; }
+// {{sender}} and {{senderemail}} stay merge fields (filled from the mailbox that sends, at send time, like every signature).
+function signatureFromSendsAs(v) {
+  const s = cleanSendsAs(v);
+  const accent = s.accent || '#1E7A3C';
+  const line = (html, last) => `<p style="margin:0 0 ${last ? 0 : 3}px;color:#333">${html}</p>`;
+  const contact = [`<a href="mailto:{{senderemail}}" style="color:${accent};text-decoration:none">{{senderemail}}</a>`]
+    .concat(s.phone ? [escHtml(s.phone)] : [])
+    .concat(s.website ? [`<a href="${escHtml(siteHref(s.website))}" style="color:${accent};text-decoration:none">${escHtml(String(s.website).replace(/^https?:\/\//i, ''))}</a>`] : []);
+  const text = `<p style="margin:0 0 3px"><strong style="color:${accent}">{{sender}}</strong></p>`
+    + line(`${escHtml(s.title || '')}${s.title && s.company ? ' | ' : ''}<strong>${escHtml(s.company || '')}</strong>`)
+    + line(contact.join(' | '))
+    + `<p style="margin:0;color:#555;font-size:12px">${escHtml(s.address || '')}</p>`;
+  // With a logo: a two-column table (logo left, words right) — the one layout every mail client draws the same way.
+  const body = s.logo
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse"><tr>`
+      + `<td valign="top" style="padding:0 14px 0 0"><img src="${escHtml(s.logo)}" alt="${escHtml(s.company || 'Logo')}" height="56" style="display:block;height:56px;width:auto;border:0"></td>`
+      + `<td valign="top">${text}</td></tr></table>`
+    : text;
+  return `${OWN_SIGNATURE_MARK}<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.45">${body}</div>`;
+}
+
 module.exports = {
+  OWN_SIGNATURE_MARK, sendsAsKey, SENDS_AS_LIMITS, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, isOwnLogoUrl, LOGO_PATH,
   DEFAULT_SIGNATURE_HTML,
   SIGNATURE_POSTAL_ADDRESS,
   SIGNATURE_ADDRESS_HTML,

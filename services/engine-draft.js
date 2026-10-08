@@ -57,7 +57,7 @@ function engineInput({ job, contact, sender }) {
     job_description: posting,
     thin_posting: posting.length < THIN_POSTING_CHARS,
     outreach_type: 'first',
-    sender: { name: txt(sender && sender.name), title: '', email: txt(sender && sender.email) },
+    sender: { name: txt(sender && sender.name), title: txt(sender && sender.title), email: txt(sender && sender.email) },
   };
 }
 

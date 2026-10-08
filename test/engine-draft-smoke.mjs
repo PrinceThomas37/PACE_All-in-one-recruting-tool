@@ -116,6 +116,11 @@ await t('the draft happens after the claim and before delivery', () => {
   const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
   assert.ok(claim > 0 && draft > claim && send > draft);
 });
+await t('the sender\'s title (from the sending mailbox\'s "sends as") reaches the draft input; none given = empty, as before', () => {
+  const withTitle = D.engineInput({ job, contact, sender: { ...sender, title: 'Vice President' } });
+  assert.equal(withTitle.sender.title, 'Vice President');
+  assert.equal(D.engineInput({ job, contact, sender }).sender.title, '');
+});
 await t('budget feature and on/off setting exist, setting defaults ON', () => {
   assert.ok(budget.FEATURES ? budget.FEATURES.engine_first_email : readFileSync(new URL('../services/ai-budget.js', import.meta.url), 'utf8').includes('engine_first_email:'));
   const def = settings.SETTINGS_SCHEMA.find(s => s.key === 'engine_ai_first_email');
