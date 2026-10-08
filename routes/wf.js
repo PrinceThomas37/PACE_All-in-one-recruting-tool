@@ -264,11 +264,14 @@ module.exports = (ctx) => {
       if (!canDesign(req)) return res.status(403).json({ error: 'Not permitted.' });
       const prompt = String((req.body && req.body.prompt) || '').trim().slice(0, 600);
       const purpose = sequenceDraft.purposeOf(req.body && req.body.purpose);
+      const mode = sequenceDraft.modeOf(req.body && req.body.mode);
       // D-0082: the person's own writing instructions shape "Write with AI" too (services/ai-style.js).
       const styleNote = await aiStyle.effectiveFor(supabase, { userId: req.user.id, orgId: req.orgId });
       const result = await sequenceDraft.draft({
-        prompt, purpose,
-        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 700, system: system + aiStyle.styleBlock(styleNote), prompt: user }),
+        prompt, purpose, mode,
+        subject: String((req.body && req.body.subject) || '').slice(0, 300),
+        body: String((req.body && req.body.body) || '').slice(0, 8000),
+        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 1100, system: system + aiStyle.styleBlock(styleNote), prompt: user }),
       });
       res.json(Object.assign({ purpose }, result));
     } catch (err) { res.status(500).json({ error: err.message }); }

@@ -536,13 +536,17 @@ tr.sel-row td{background:var(--accent-l)}
 @media (hover:hover) and (pointer:fine){
   .win-b button:hover{background:var(--bg);color:var(--text)}
   .win-chip:hover{border-color:var(--accent)}
+  .win-chip{cursor:grab}
   .win-chip .wx:hover{background:var(--bg);color:var(--text)}
 }
 .overlay.win-max{padding:0;align-items:stretch;justify-content:stretch}
 .overlay.win-max .modal{width:100vw!important;max-width:100vw!important;height:100vh;max-height:100vh!important;border-radius:0}
 #win-tray{position:fixed;left:76px;bottom:12px;z-index:120;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100vw - 92px)}
+#win-tray.win-tray-wide{right:12px;max-width:none;min-height:44px}
 .win-chip{display:flex;align-items:center;gap:6px;background:var(--card-solid);border:1px solid var(--border);border-radius:10px;
   padding:5px 4px 5px 12px;box-shadow:var(--sh3);cursor:pointer;max-width:230px;transition:border-color .12s}
+.win-chip-x{position:absolute;bottom:0;left:var(--chip-x);z-index:1}
+.win-chip.is-drag{cursor:grabbing;user-select:none}
 .win-chip:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .win-chip .wt{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .win-chip .wx{width:22px;height:22px;border:0;background:transparent;border-radius:6px;cursor:pointer;color:var(--text3);font-size:16px;line-height:1;padding:0;flex:none}

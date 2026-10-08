@@ -1,5 +1,13 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 137 suites · +send-recovery-smoke (58)
+> Last written: 2026-10-08 (Cursor, D-0117 guards) · earlier: 2026-09-28 (Session 33)
+
+## 2026-10-08 — guards for the longer writer, the personal switch, and the dock drag (D-0117)
+- **New:** `test/sequence-brief-smoke.mjs` (11 — length, topic refusal, variables kept, shorter note), `test/ai-first-choice-smoke.mjs` (18 — company/on/off, per mailbox, the settings routes), `test/ai-wording-ui-smoke.mjs` (9, Chrome — the buttons and the card).
+- **Changed on purpose:** `sequence-email-smoke` (a short good draft now repairs, so the stub records both calls; far-too-long is 4100 characters), `engine-draft-smoke` (the send loop calls `shouldWriteFirst`, not a single company boolean), `window-dock-smoke` (desktop drag does not open; a later click does; phone stays a row).
+- Also green this round: wording-scope 45, ai-style 30, sequence-builder 31, scope-emails-warmup 52, utility-classes 7. Full suite not re-run (not merging). Node 26 not run.
+- `scripts/territory-map.mjs` observatory own-list now includes `services/ai-first-choice.js`.
+
+
 
 ## Session 33 (2026-09-28, later) — the title search, R-063, the Apollo card
 - **136 suites** (`npm test` 136/136, exit 0): +`poc-people-search-ui-smoke.mjs`

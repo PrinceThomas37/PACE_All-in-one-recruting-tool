@@ -86,10 +86,10 @@ const FEATURES = {
   // services/client-intel.js at ~3,400 tokens whatever the history; this is
   // the provider-side ceiling behind that, and the answer is 3-5 sentences.
   client_summary:  { label: 'Client summary',        in: 3500, out: 450,  tier: 'quality' },
-  // A sequence step's email TEMPLATE, from a one-line instruction (services/
-  // sequence-draft.js, D-0077). Small in, 50-110 words out; 'quality' because
-  // it is sent to many people and is the one thing the person reads before saving.
-  sequence_draft:  { label: 'Sequence email drafts', in: 1200, out: 700,  tier: 'quality' },
+  // A sequence step's email TEMPLATE (services/sequence-draft.js, D-0077, D-0117).
+  // A full email is 140–200 words; 'quality' because it is sent to many people
+  // and is the one thing the person reads before saving.
+  sequence_draft:  { label: 'Sequence email drafts', in: 2000, out: 1100, tier: 'quality' },
   // "Try it on a sample" under a person's writing instructions (services/ai-style.js, D-0082): one
   // first-email draft for an invented lead, so the person sees what their note does before saving.
   style_sample:    { label: 'Writing-style sample',  in: 3000, out: 800,  tier: 'quality' },

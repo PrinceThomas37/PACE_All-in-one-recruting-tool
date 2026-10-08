@@ -42,7 +42,7 @@ step('synonyms PACE does fill are fine ({{first_name}}, {{company_name}})', ok('
 step('[square-bracket] placeholders are refused', ok('S', GOOD + ' [Your Name]').violations.some(x => /square-bracket/.test(x)));
 step('a hard-coded company name is refused (the customer\'s name comes from the signature)', ok('S', GOOD + ' — Fute Global').violations.some(x => /specific company/.test(x)));
 step('invented numbers are refused: a percentage, an amount', ok('S', GOOD + ' Our fee is 15% only.').violations.some(x => /percentage/.test(x)) && ok('S', GOOD + ' Save $5000 today.').violations.some(x => /amount of money/.test(x)));
-step('empty / far too short / far too long are refused', !ok('', GOOD).ok && !ok('S', 'Hi').ok && !ok('S', 'x'.repeat(1600)).ok);
+step('empty / far too short / far too long are refused', !ok('', GOOD).ok && !ok('S', 'Hi').ok && !ok('S', 'x'.repeat(4100)).ok);
 step('THE RULES WRITER PASSES ITS OWN CHECKER: all three starters', ['first', 'followup', 'final'].every(k => sd.checkDraft(sd.starterFor(k)).ok));
 step('…and no starter names a company or signs off', ['first', 'followup', 'final'].every(k => !/fut[eé]|global|sincerely|regards/i.test(JSON.stringify(sd.starterFor(k)))));
 
@@ -58,8 +58,9 @@ let c = ai(); let r = await sd.draft({ complete: c, prompt: '', purpose: 'first'
 step('no instruction → a starter, no AI call at all', r.source === 'starter' && c.calls.length === 0 && /ready-made starter/.test(r.note));
 c = ai(null); r = await sd.draft({ complete: c, prompt: 'a friendly intro', purpose: 'first' });
 step('AI unavailable (null) → the starter, and it SAYS so', r.source === 'starter' && /not available right now/.test(r.note) && r.subject === sd.starterFor('first').subject);
-c = ai(j('Estimators for {{company}}', GOOD)); r = await sd.draft({ complete: c, prompt: 'offer two estimators', purpose: 'first' });
-step('a good draft is used as written, labelled AI, with "read it before you save"', r.source === 'ai' && r.subject === 'Estimators for {{company}}' && /read it before you save/.test(r.note) && c.calls.length === 1);
+const FULL = GOOD + '\n\n' + 'The two estimators stay on the hospital expansion, the takeoff work and the pricing review for {{company}}. '.repeat(12) + '\n\nWould a note on those two estimators be useful?';
+c = ai(j('Estimators for {{company}}', FULL)); r = await sd.draft({ complete: c, prompt: 'offer two estimators', purpose: 'first' });
+step('a full draft on the instruction is used as written, labelled AI, with "read it before you save"', r.source === 'ai' && r.subject === 'Estimators for {{company}}' && /read it before you save/.test(r.note) && !/shorter than a full email/.test(r.note) && c.calls.length === 1, r.note + ' words=' + sd.wordCount(FULL));
 step('the prompt carries the house rules and the person\'s words', /ONLY those fields/.test(c.calls[0].system) && /Do NOT sign off/.test(c.calls[0].system) && /offer two estimators/.test(c.calls[0].prompt) && /first email/.test(c.calls[0].prompt));
 c = ai(j('S', GOOD + ' {{salary}}'), j('S', GOOD)); r = await sd.draft({ complete: c, prompt: 'x', purpose: 'followup' });
 step('a draft that breaks a rule gets ONE repair turn, naming the rule — and the repaired one is used', r.source === 'ai' && c.calls.length === 2 && /\{\{salary\}\}/.test(c.calls[1].prompt));
@@ -73,8 +74,8 @@ step('an unknown purpose falls back to a first email', sd.purposeOf('whatever') 
 
 // ── 5. THE ENDPOINT ────────────────────────────────────────────────────────
 const aiProvider = require('../services/ai-provider.js');
-let seen = null, reply = null;
-aiProvider.complete = async (_sb, opts) => { seen = opts; return reply; };
+let seen = null, reply = null, calls = [];
+aiProvider.complete = async (_sb, opts) => { seen = opts; calls.push(opts); return reply; };
 const routes = {};
 const routerFn = require('../routes/wf.js');
 const router = routerFn({ supabase: { from: () => ({ select() { return this; }, eq() { return this; }, then(r) { return Promise.resolve({ data: [], error: null }).then(r); } }) }, auth: (_a, _b, n) => n(), hasRole: (req, ...r) => r.some(x => (req.user.roles || []).includes(x)), engine: {}, logActivity: async () => {} });
@@ -82,9 +83,11 @@ const h = router.stack.find(l => l.route && l.route.path === '/wf/draft-email' &
 const call = async (roles, body) => { let out, code = 200; const res = { status(x) { code = x; return res; }, json(x) { out = x; return res; } }; await h({ user: { id: 'u', roles }, orgId: 'o1', body }, res); return { code, out }; };
 let x = await call(['ra'], { prompt: 'hi', purpose: 'first' });
 step('a research analyst cannot use it (same gate as designing a sequence)', x.code === 403 && seen === null);
+calls = [];
 reply = { text: j('Hello {{fn}}', GOOD) };
 x = await call(['bd_lead'], { prompt: 'p'.repeat(900), purpose: 'followup' });
-step('a BD lead can; it asks the provider under its OWN budget name, for this org, with the instruction clipped to 600', x.code === 200 && seen.feature === 'sequence_draft' && seen.orgId === 'o1' && seen.prompt.length < 800 && /followup|a follow-up/.test(seen.prompt), JSON.stringify({ f: seen.feature, n: seen.prompt.length }));
+// Changed on purpose (D-0117): a short draft is repaired once, so the provider is called twice. The FIRST call is the instruction.
+step('a BD lead can; it asks the provider under its OWN budget name, for this org, with the instruction clipped to 600', x.code === 200 && calls[0].feature === 'sequence_draft' && calls[0].orgId === 'o1' && calls[0].prompt.length < 800 && /a follow-up/.test(calls[0].prompt) && calls.length === 2, JSON.stringify({ f: calls[0] && calls[0].feature, n: calls[0] && calls[0].prompt.length, calls: calls.length }));
 step('…and answers with the draft, its source and the purpose', x.out.source === 'ai' && x.out.purpose === 'followup' && x.out.subject === 'Hello {{fn}}');
 reply = null;
 x = await call(['admin'], { prompt: 'something', purpose: 'bogus' });

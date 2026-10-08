@@ -199,6 +199,33 @@ try{
   step('Client record: from another page, the chip takes you to the record again', reopened.open && reopened.page==='clients' && reopened.chips===0, JSON.stringify(reopened));
   await ev(()=>clientsBack());
 
+  // ═══ 11b. DRAG THE CHIP ALONG THE BOTTOM — A DRAG DOES NOT OPEN IT ═══════
+  await page.setViewportSize({ width:1440, height:900 });
+  await ev(()=>mbCompose('drag@example.test'));
+  await page.waitForTimeout(250);
+  await click('#layer .win-bar button[aria-label="Minimise"]');
+  const before = await ev(()=>{ const c=document.querySelector('#win-tray .win-chip'); const r=c.getBoundingClientRect(); return { left:r.left, open:!!document.querySelector('#layer .modal') }; });
+  await ev(()=>{
+    const chip=document.querySelector('#win-tray .win-chip');
+    const r=chip.getBoundingClientRect();
+    const fire=(type,x)=>chip.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:r.top+8,pointerId:1,button:0}));
+    fire('pointerdown', r.left+12);
+    fire('pointermove', r.left+220);
+    fire('pointerup', r.left+220);
+    chip.click();
+  });
+  const dragged = await ev(()=>{
+    const c=document.querySelector('#win-tray .win-chip'); const r=c.getBoundingClientRect();
+    const it=(STATE.dock&&STATE.dock.items||[])[0];
+    return { left:Math.round(r.left), x:it&&it.x, open:!!document.querySelector('#layer .modal'), wide:document.getElementById('win-tray').classList.contains('win-tray-wide') };
+  });
+  step('Drag: the chip moves along the bottom and the window stays closed', !before.open && !dragged.open && dragged.left > before.left + 80 && typeof dragged.x === 'number', JSON.stringify({ before, dragged }));
+  await click('#win-tray .win-chip');
+  step('Drag: a later click still opens it', await modalOpen());
+  await click('#layer .win-bar button[aria-label="Minimise"]');
+  await click('#win-tray .win-chip .wx');
+  step('Drag: the × still closes the parked window', (await tray()).length===0 && !(await modalOpen()));
+
   // ═══ 12. THE PHONE ═══════════════════════════════════════════════════════
   await page.setViewportSize({ width:390, height:800 });
   await ev(()=>{ mbCompose('phone@example.test'); });
@@ -208,6 +235,17 @@ try{
   await click('#layer .win-bar button[aria-label="Minimise"]');
   const ph = await ev(()=>{ const t=document.getElementById('win-tray'); if(!t) return null; const r=t.getBoundingClientRect(); return { l:Math.round(r.left), r:Math.round(r.right), b:Math.round(r.bottom), vw:innerWidth, vh:innerHeight }; });
   step('Phone: the tray sits inside the screen', !!ph && ph.l>=0 && ph.r<=ph.vw && ph.b<=ph.vh, JSON.stringify(ph));
+  const phoneDrag = await ev(()=>{
+    const chip=document.querySelector('#win-tray .win-chip');
+    const r=chip.getBoundingClientRect();
+    const fire=(type,x)=>chip.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:r.top+8,pointerId:1,button:0}));
+    fire('pointerdown', r.left+8);
+    fire('pointermove', r.left+200);
+    fire('pointerup', r.left+200);
+    const it=(STATE.dock&&STATE.dock.items||[])[0];
+    return { x:it&&it.x, pos:getComputedStyle(chip).position, open:!!document.querySelector('#layer .modal') };
+  });
+  step('Phone: a sideways drag does not pull the chip free — it stays a scrolling row, and it does not open', phoneDrag.x==null && phoneDrag.pos!=='absolute' && !phoneDrag.open, JSON.stringify(phoneDrag));
   await click('#win-tray .win-chip .wx');
 
   step('No page errors', pageErrors.length===0, pageErrors.slice(0,2).join(' | '));

@@ -165,6 +165,65 @@ function renderWordingScopeCard(planEmails,planFromId){
     radio('all','One wording for all my email IDs','— what you write below goes out from every email ID (only the signature differs)')+
     radio('each','A different wording for each email ID','— e.g. two companies, two pitches')+note+'</div>';
 }
+// D-0117: "AI writes first emails" — same as the company, on for me, or off.
+// One choice for the person, unless wording is per email ID, in which case it is this email ID's.
+function planAiFirstChoice(){
+  if(planScope()==='each'&&STATE.planFromEmailId){
+    var mw=(STATE.mailboxWording||{})[STATE.planFromEmailId];
+    var v=mw&&mw.ai_first;
+    return v==='on'||v==='off'?v:'company';
+  }
+  var v=(STATE.myOutreachPlan||{}).ai_first;
+  return v==='on'||v==='off'?v:'company';
+}
+function renderAiFirstCard(){
+  var each=planScope()==='each';
+  var cur=planAiFirstChoice();
+  var radio=function(v,label,hint){
+    return '<label class="fd-use fd-block"><input type="radio" name="aifirst" '+(cur===v?'checked':'')+' onclick="setAiFirst(\''+v+'\')"> <strong>'+label+'</strong><span class="fd-hint"> '+hint+'</span></label>';
+  };
+  var who=each?'this email ID':'you';
+  return '<div class="card cp mb3" id="ai-first-card"><div class="fw6 fs-13" style="margin-bottom:6px">AI writes first emails'+(each?' — this email ID':'')+'</div>'+
+    radio('company','Same as the company','— whatever an admin set for everyone')+
+    radio('on','On for '+who,'— the first email is written by AI when it is sent')+
+    radio('off','Off for '+who,'— the first email goes out in the wording you wrote')+
+    '<div class="fs-12 c-text3" style="margin-top:6px">Follow-ups always stay the wording you wrote. This only changes the first email, at the moment it is sent.</div></div>';
+}
+window.setAiFirst=function(value){
+  if(value!=='company'&&value!=='on'&&value!=='off') return;
+  if(window.planDraftCapture) planDraftCapture();
+  if(planScope()==='each'){
+    var id=STATE.planFromEmailId;
+    if(!id){ showToast('Pick a sending email first','warning'); return; }
+    STATE.mailboxWording=STATE.mailboxWording||{};
+    var mw=STATE.mailboxWording[id]=STATE.mailboxWording[id]||{};
+    mw.ai_first=value;
+    render();
+    apiPost('/outreach-plan/mailbox',{mailbox_id:id,key:'ai_first',value:value}).then(function(){
+      showToast(value==='off'?'AI will not write this email ID\'s first emails':value==='on'?'AI will write this email ID\'s first emails':'This email ID follows the company setting','success');
+    }).catch(function(e){ showToast('Save failed: '+((e&&e.message)||e),'error'); });
+    return;
+  }
+  STATE.myOutreachPlan=STATE.myOutreachPlan||{};
+  STATE.myOutreachPlan.ai_first=value;
+  render();
+  apiPost('/outreach-plan',{key:'ai_first',value:value}).then(function(){
+    showToast(value==='off'?'AI will not write your first emails':value==='on'?'AI will write your first emails':'Your first emails follow the company setting','success');
+  }).catch(function(e){ showToast('Save failed: '+((e&&e.message)||e),'error'); });
+};
+window.planDraftAi=function(mode){
+  var t=STATE.activeTmpl||'outreach', ids=planBoxIds(t);
+  var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]);
+  if(!se||!be) return;
+  if(!String(se.value||'').trim()&&!String(be.value||'').trim()){ showToast('Write the email first — there is nothing to change','warning'); return; }
+  var note=document.getElementById('plan-ai-note');
+  if(note) note.textContent='Writing…';
+  apiPost('/wf/draft-email',{prompt:'',purpose:t==='outreach'?'first':'followup',mode:mode,subject:se.value,body:be.value}).then(function(r){
+    if(!r||r.source==='refused'||(!r.subject&&!r.body&&r.source!=='kept')){ if(note) note.textContent=(r&&r.note)||'Could not write that just now.'; return; }
+    if(r.source!=='kept'){ se.value=r.subject||''; be.value=r.body||''; if(window.planRepaintPreview) planRepaintPreview(); }
+    if(note) note.textContent=r.note||'';
+  }).catch(function(e){ if(note) note.textContent='Could not reach the writer: '+((e&&e.message)||e); });
+};
 // {{sendercompany}} — "Your company", said once per email ID, right here (owner, 8 Oct: "your company name section, so it can be added
 // easily for different email IDs"). It is the mailbox's own "sends as" (company, title, address — all three are needed once, because every
 // outreach email must carry the sender's postal address); changing the Sending email above shows that email ID's company.
@@ -707,6 +766,7 @@ function renderEmail(){
       renderSendingEmailCard(u.id,planEmails,planFromId,'selectPlanFromEmail')+
       renderCompanyCard(planEmails,planFromId)+
       renderWordingScopeCard(planEmails,planFromId)+
+      renderAiFirstCard()+
       '<div class="card cp mb3">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
           '<div class="fw6 fs-13">Message style</div>'+
@@ -740,6 +800,11 @@ function renderEmail(){
         daySettingsHtml+
         '<div class="fgrp"><label class="flbl">Subject</label><input class="inp" id="'+activeTmpl.subjId+'" value="'+htmlEsc(activeTmpl.subjVal)+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'subject\')"/></div>'+
         '<div class="fgrp"><label class="flbl">Body</label><textarea class="txta w100" style="min-height:200px" id="'+activeTmpl.bodyId+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'body\')">'+htmlEsc(activeTmpl.bodyVal)+'</textarea></div>'+
+        '<div class="seq-ai">'+
+          '<button type="button" class="btn btn-outline btn-sm" onclick="planDraftAi(\'rewrite\')">Rewrite with AI</button>'+
+          '<button type="button" class="btn btn-outline btn-sm" onclick="planDraftAi(\'variant\')">Write a variant</button>'+
+          '<span class="fs-12 c-text3" id="plan-ai-note"></span>'+
+        '</div>'+
         renderVarChipBar(activeTmpl.subjId,activeTmpl.bodyId)+
         '<button class="btn btn-primary mt3" onclick="saveOutreachTemplate(\''+activeTmpl.key+'\',\''+activeTmpl.subjId+'\',\''+activeTmpl.bodyId+'\')">Save '+activeTmpl.label+'</button>'+
         '<button class="btn btn-outline mt3" style="margin-left:8px" title="Looks for spam-trigger words, too many links, ALL-CAPS and other things that send mail to junk. Nothing is saved or sent." onclick="seqSpamCheck(\''+activeTmpl.key+'\',\''+activeTmpl.subjId+'\',\''+activeTmpl.bodyId+'\')">Check for spam triggers</button>'+

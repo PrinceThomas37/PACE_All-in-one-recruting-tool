@@ -83,7 +83,7 @@ const TERRITORIES = [
 
   { id: 'observatory', name: 'Observatory', role: 'AI & Intelligence', terrain: 'the high peak',
     hue: '#D8CFE8', pos: [-15, -27], height: 22, spread: 12,
-    own: ['services/ai-provider.js', 'services/ai-budget.js', 'services/sequence-draft.js',
+    own: ['services/ai-provider.js', 'services/ai-budget.js', 'services/sequence-draft.js', 'services/ai-first-choice.js',
           'services/outreach-generator.js', 'services/engine-draft.js', 'services/lead-posting.js', 'services/client-intel.js', 'services/sent-side.js', 'services/candidate-outreach.js', 'services/morning-briefing.js',
           'match-engine.js', 'conversation-intel.js', 'next-action.js',
           'resume-parser.js', 'jd-parser.js', 'why-hiring.js',

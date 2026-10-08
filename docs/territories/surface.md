@@ -1,5 +1,14 @@
 # Surface — memory
-> Last written: 2026-09-30 (Session 35 — group stage move screens, windows, addressed email, rows that do the task, From picker) · earlier: 2026-09-29 (Session 34)
+> Last written: 2026-10-08 (Cursor, D-0117 wording buttons + dock drag) · earlier: 2026-09-30 (Session 35)
+
+## 2026-10-08 — Rewrite / variant, the personal switch, and dragging a parked window (D-0117, R-190, R-191)
+- **Sequence step (`09-page-workflows.js`):** "Rewrite with AI" and "Write a variant" sit beside "Write with AI" and "Start from an example". Rewrite and variant need text already in the step. A refused or empty result does not replace what the person typed; the note is shown.
+- **My wording (`07-page-email.js`):** the same two buttons under the body, plus an "AI writes first emails" card (same as the company / on for you / off for you — or "this email ID" when wording is per email ID). Follow-ups always stay the person's wording. Changing the switch captures the draft first so a repaint does not wipe typing. `planDraftAi`: `source: 'kept'` does not overwrite the boxes.
+- **`12-manager-users.js`:** "own wording" counts only `tmpl_*` keys, so the AI switch does not look like a custom sequence. Switching to "use mine" keeps `ai_first` on the client object.
+- **Dock (`10a-window-dock.js`, `styles.css`, `mobile.css`):** a parked chip can be dragged sideways along the bottom (`item.x` in memory only; lost on reload). The tray grows to the bottom edge (`win-tray-wide`). A move past 8px sets `suppressClick`, so the click that follows a drag does not open the window. A later click's pointerdown clears that flag and opens it. × still closes. Pointerdown on × is ignored. Phone (`max-width: 860px`) returns before a drag starts; CSS forces the chip back into the scrolling row. `--chip-x` is a position, not a font or colour.
+- Formatting on New message and Reply is **not** started (R-192).
+
+
 
 ## Session 35 (2026-09-30) — the group stage move screens (C-0032, R-077/R-075) and windows (R-078/R-079, D-0058)
 

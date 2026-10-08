@@ -1187,3 +1187,13 @@ tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no lon
 **C-0035 (a) — CLOSED 2026-09-29 (Session 35):** applied on the live database with the owner's yes. Preview 15 rows; after the FIX: 0 unlinked, 0 retired-word, 0 disagreeing links; submissions 52 → 67. (b) remains OPEN.
 
 **C-0032 — CLOSED 2026-09-30 (Session 35, surface):** all four asks done — (1) no "Tagged" inside a job, second vocabulary deleted; (2) the 409 text matched; (3) the group move on the job page, its Pipeline tab and the Candidates page (asks which job); (4) `promote` no longer called by any screen; the import messages now say `job_link_failed` / `not_added_to_job`. Pinned by `test/stage-group-move-smoke.mjs`.
+
+### C-0037 · observatory → gateway, guild, harbour, surface · ANSWERED · 2026-10-08
+**Asks for:** wire the tuned writer and the personal first-email switch, without retuning the send-time pitch.
+**Because:** D-0117 / R-190. The instruction is the brief. Default 140–200 words. Off topic is not shipped. Rewrite and variant keep every `{{variable}}` or return the person's own text. "AI writes first emails" is same as the company / on for me / off, per mailbox only when wording is per email ID. Follow-ups stay the person's wording. `engine-draft.js` stays the short recruiting pitch.
+**Answered in the same change:**
+- **gateway** — `index.js` calls `shouldWriteFirst` (company switch and provider availability are separate). `routes/settings.js` stores `ai_first` on the person and, when wording is per email ID, on the mailbox.
+- **guild** — `POST /wf/draft-email` passes mode, subject, body, and 1100 tokens.
+- **harbour** — the pending-list `ai_will_write` chip uses the same function, with `aiReady: true`.
+- **surface** — Rewrite with AI and Write a variant on the sequence step and on My wording; the on/off card; a drag that does not open a parked window (R-191).
+**Blocked until answered:** no — answered in the same change.

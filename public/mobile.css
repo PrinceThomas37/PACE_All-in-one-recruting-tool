@@ -368,7 +368,9 @@
   .win-bar{min-height:44px}
   .win-b button{width:40px;height:40px;font-size:18px}
   #win-tray{left:8px;right:8px;max-width:none;bottom:calc(8px + env(safe-area-inset-bottom));flex-wrap:nowrap;overflow-x:auto}
-  .win-chip{flex:none;padding:8px 6px 8px 12px}
+  #win-tray.win-tray-wide{min-height:0;height:auto}
+  .win-chip{flex:none;padding:8px 6px 8px 12px;cursor:pointer}
+  .win-chip-x{position:static;left:auto}
   .win-chip .wx{width:32px;height:32px}
   .overlay.win-max .modal{height:100dvh;max-height:100dvh!important}
 }

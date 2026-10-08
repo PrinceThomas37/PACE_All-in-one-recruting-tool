@@ -2,10 +2,10 @@
   "generated": "2026-10-08",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 554,
-    "lines": 125766,
+    "files": 566,
+    "lines": 126818,
     "territories": 9,
-    "unclaimedFiles": 12
+    "unclaimedFiles": 14
   },
   "territories": [
     {
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 79,
-      "lines": 34571,
+      "lines": 34743,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -36,12 +36,12 @@
           "n": 1587
         },
         {
-          "f": "public/retro.css",
-          "n": 1103
+          "f": "public/js/07-page-email.js",
+          "n": 1120
         },
         {
-          "f": "public/js/33-stage-modal.js",
-          "n": 1096
+          "f": "public/js/09-page-workflows.js",
+          "n": 1109
         }
       ],
       "lastTouched": "2026-10-09",
@@ -80,11 +80,11 @@
         "services/error-report.js"
       ],
       "files": 42,
-      "lines": 14130,
+      "lines": 14166,
       "largest": [
         {
           "f": "index.js",
-          "n": 3974
+          "n": 3998
         },
         {
           "f": "routes/finder.js",
@@ -122,8 +122,8 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 73,
-      "lines": 4383,
+      "files": 74,
+      "lines": 4397,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -195,7 +195,7 @@
         "routes/deliverability.js"
       ],
       "files": 33,
-      "lines": 6016,
+      "lines": 6034,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -211,7 +211,7 @@
         },
         {
           "f": "routes/emails.js",
-          "n": 526
+          "n": 544
         }
       ],
       "lastTouched": "2026-10-09",
@@ -234,6 +234,7 @@
         "services/ai-provider.js",
         "services/ai-budget.js",
         "services/sequence-draft.js",
+        "services/ai-first-choice.js",
         "services/outreach-generator.js",
         "services/engine-draft.js",
         "services/lead-posting.js",
@@ -262,8 +263,8 @@
         "routes/next-actions.js",
         "services/next-action-dismissals.js"
       ],
-      "files": 30,
-      "lines": 11788,
+      "files": 31,
+      "lines": 12009,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -327,7 +328,7 @@
         "lead-ingest.js"
       ],
       "files": 34,
-      "lines": 8759,
+      "lines": 8764,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -339,7 +340,7 @@
         },
         {
           "f": "routes/wf.js",
-          "n": 552
+          "n": 551
         },
         {
           "f": "services/recruiting-core.js",
@@ -413,8 +414,8 @@
         "test/",
         ".github/"
       ],
-      "files": 236,
-      "lines": 42313,
+      "files": 244,
+      "lines": 42899,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",
@@ -738,6 +739,8 @@
     }
   ],
   "unclaimed": [
+    "services/followup-chain.js",
+    "services/followup-steps.js",
     "services/followup-thread.js",
     "services/jobs-jsearch.js",
     "services/lead-check.js",

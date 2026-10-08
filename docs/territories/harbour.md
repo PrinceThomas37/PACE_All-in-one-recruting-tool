@@ -1,5 +1,10 @@
 # Harbour — memory
-> Last written: 2026-09-30 (Session 35, R-087 one From rule; R-086 interview confirmation) · earlier: 2026-09-28 (Session 33, R-069)
+> Last written: 2026-10-08 (Cursor, D-0117 "AI writes at send" chip) · earlier: 2026-09-30 (Session 35)
+
+## 2026-10-08 — the pending-list chip uses the personal switch (D-0117, C-0037)
+- **`routes/emails.js`** sets `ai_will_write` through `ai-first-choice.shouldWriteFirst` with `aiReady: true` (the chip describes the switch, not whether a provider key exists) and only when `status === 'pending'`. Choice keys are loaded in chunks of 60 for the owners and mailbox ids on the page. A follow-up and a row already written by AI do not get the chip.
+
+
 
 ## Session 35 (2026-09-30) — ONE "which of my mailboxes sends" rule (R-087) and the interview confirmation (R-086)
 Written by the orchestrator (the owner ruled out helper agents, D-0060); the files are `routes/recruiting/outreach.js`, `routes/candidate-outreach.js`, `routes/outreach-generator.js`, `index.js` ctx.
