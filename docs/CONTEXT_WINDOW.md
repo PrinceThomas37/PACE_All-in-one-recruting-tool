@@ -4,9 +4,9 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-10-07 (end of Session 41) · **Last merged to `main`**: #303 (`193e207`, docs) after #302 (`f96918e`, the eight small fixes) after #300 (round 5) after #298/#297/#295/#294 · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox: the owner hard-refreshes and looks).
-**Highest ids:** decision D-0099 · contract C-0036 · roadmap `R-165` (next `R-166`) · next migration `060` (059 written, NOT applied).
+**Highest ids:** decision D-0099 · contract C-0036 · roadmap `R-165` (next `R-166`) · next migration `060` (059 applied 2026-10-08).
 
-## ▶▶▶▶▶ LEAD FINDER FORM, ROUND 2 (8 Oct) — ON THE DEV BRANCH, WAITING FOR THE OWNER
+## ▶▶▶▶▶ LEAD FINDER FORM, ROUND 2 (8 Oct) — MIGRATION 059 APPLIED, MERGED AS #310
 Built per D-0098 (R-165): "Name of the run", ~40 industries (pick several), tick / Select all / type job titles, posted-within slider 0–30 in the retro style, preferred companies by name (Apollo lookup, 1 credit; website paste is free). **Migration 059 is written and NOT applied** — it must be applied (owner's fresh go-ahead; use `execute_sql` in pieces with `SET lock_timeout` if the tool times out) BEFORE the code merges; also check no `emails.status='sending'` and no active `send_progress_*` before the merge (Render restarts). Node 22 + Node 26.10.0 full suites run before the merge. Open question for the owner: R-164 (job sources beyond Apollo — PACE already reads six company job-board feeds in `lead-sources/index.js`; discovery is missing).
 
 ## ▶▶▶▶ LEAD FINDER STEPS 2+3 (Session 42) — READ THIS FIRST
