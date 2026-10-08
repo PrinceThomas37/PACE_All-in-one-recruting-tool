@@ -3,12 +3,12 @@
 > **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-10-08 (Session 43, the owner's first look at the live app → "Build all the changes") · **Last merged to `main`**: #315 · **OPEN: draft PR #317** (dev branch `claude/amazing-meitner-4npjua`, NOT merged — the owner has not said merge) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox).
+**Updated**: 2026-10-08 (Session 43, the owner's first look at the live app → "Build all the changes") · **Last merged to `main`**: #317 (`a008730`, Session 43's build, owner: "merge it") after #316 (custom domain) after #315 · **no PR open** (dev branch `claude/amazing-meitner-4npjua` restarted from `main`) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox).
 **Highest ids:** decision D-0111 · contract C-0036 · roadmap `R-176` (next `R-177`) · next migration `062` (none added this session).
 
 ## ▶▶▶▶▶▶▶▶▶▶▶ START HERE — NEXT CHAT (Session 43, 8 Oct)
-**State:** PR #317 holds everything built this session; full suite **225/225 on Node 22 AND Node 26.10.0** at the pushed head; CI clean. Nothing is live yet. **Before merging:** the owner's word; check no `emails.status='sending'` / active `send_progress_*` (Render restarts); no migration needed.
-**What #317 contains (details: archive "SESSION 43", DECISIONS D-0110/D-0111, roadmap R-170…R-176):**
+**State:** #317 is MERGED (squash `a008730`, 8 Oct) — Render redeploys from `main`; the deploy was NOT watched from the sandbox. Before the merge: full suite **225/225 on Node 22 AND Node 26.10.0**, then main moved (#316 custom domain, one line in `22-api.js`) and the merged result was re-checked with the touched suites; at the merge nothing was `sending`, no migration. The owner has not yet looked at any of it live.
+**What #317 contained (details: archive "SESSION 43", DECISIONS D-0110/D-0111, roadmap R-170…R-176):**
 1. Insights figures in the data typeface (R-170) · Reply all icon on the message card (R-171; cause not proven) · per-mailbox unread: picker counts, Inbox hover, "New email in <address>" notice (R-172).
 2. **Imports and Find Leads start UNASSIGNED**; the lead becomes someone's when a manager **Assigns** it (Leads page, to me or my reporting chain, with a per-email-ID split) or when its **first email is WRITTEN** (writer becomes owner, mailbox recorded, stage Assigned — `services/lead-claim.js`). Reverses D-0082/D-0089.
 3. Saved Find Leads cards show the first email's state (not written / waiting in Pending / sent / didn't send) with Review & send, and **Email another job / person** makes a second lead (R-173, R-174). Find Leads only ever WRITES the email into Pending; a person presses Send.
