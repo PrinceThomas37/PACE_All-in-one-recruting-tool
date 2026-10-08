@@ -6655,3 +6655,6 @@ Owner: "Reply in the mailbox" opened the mailbox, not the email; a follow-up (we
 
 ### SESSION 42, Deliverability becomes the admin's (D-0109)
 Owner called the tab worthless for managers; I disagreed on one point (the bounce figure is the only place anyone sees what protects the sending domains) and proposed: admin-only, spam check into the sequence editor, drop reply-by-template; owner said yes and asked for bounce + open rate on Outreach Insights. Found while building: the old "Bounced" tile was all-time invalid contacts, not a rate — the new bounce rate is per person and per 30 days, labelled by what it is.
+
+### SESSION 42, closing — merged as #315, context updated
+Owner: "merge it" then "and update the context". #315 carried D-0107 (one setup prompt, details-only mailbox rows, closable failures), D-0108 (Reply / follow-up open that email), D-0109 (admin-only Deliverability, rates on Outreach Insights, spam check in the sequence editor) and the D-0106 record. 221/221 on Node 22 and Node 26.10.0; nothing sending at the merge. `CONTEXT_WINDOW.md` START HERE rewritten with the unanswered D-0106 questions (a–e).
