@@ -72,6 +72,9 @@ const SIZE_BANDS = [
 ];
 // How recent the postings must be: any whole number of days from 0 (today) to 30 (the owner's slider, 8 Oct 2026).
 const POSTED_RANGE = { min: 0, max: 30, def: 14 };
+// Where a search looks: Apollo (company database, spends the organisation's Apollo credits), the free job sources (a job-search
+// service the organisation has its own key for; no company data, no people), or both.
+const SOURCES = ['apollo', 'free', 'both'];
 const LIMITS = { name: 80, titles: 40, title: 80, locations: 8, location: 80, keywords: 8, keyword: 40, domains: 30, sectors: 8 };
 
 const txt = (v) => String(v == null ? '' : v).trim();
@@ -133,6 +136,7 @@ function normalizeSearch(input) {
     ok: true,
     value: {
       name, sector: sectors[0] || null, sectors, titles, locations, sizes,
+      source: SOURCES.includes(i.source) ? i.source : 'apollo',
       posted_days: postedDays(i.posted_days),
       keywords: uniqueList(i.keywords, LIMITS.keywords, LIMITS.keyword),
       companies, domains: companies.map((c) => c.domain),
@@ -217,6 +221,144 @@ function rankCompanySuggestions(rows, typed, max = 6) {
   });
   list.sort((a, b) => a.tier - b.tier || a.hasPlace - b.hasPlace || (b.o.employees || 0) - (a.o.employees || 0));
   return list.slice(0, max).map(({ o }) => ({ name: o.name, domain: o.domain, city: o.city, state: o.state, country: o.country, employees: o.employees, industry: o.industry, apollo_org_id: o.apollo_org_id }));
+}
+
+// ═══ THE FREE JOB SOURCES (R-164, D-0099) — job-search results turned into the same company cards ══════════════════
+// A job-search service answers "who is hiring a welder in Texas" with JOBS, each naming its employer. A card is a COMPANY, so
+// the jobs are grouped by employer, and the jobs themselves ride on the card (the Accept window offers them with no further
+// request). Everything here is a pure function: the route owns the key, the meter and the call.
+
+const JOB_BOARD_HOST = /(linkedin|indeed|glassdoor|ziprecruiter|simplyhired|monster|dice|careerbuilder|jooble|adzuna|talent|jobrapido|learn4good|google)\./i;
+const INDIA = /\b(india|bengaluru|bangalore|hyderabad|chennai|mumbai|pune|delhi|noida|gurgaon|gurugram|kolkata|ahmedabad)\b/i;
+
+/** The service's country code for a search's places (PACE serves the US and India). */
+const countryFor = (locations) => ((locations || []).some((l) => INDIA.test(l)) ? 'in' : 'us');
+
+/** The service only knows today / 3 days / a week / a month; the exact number of days is applied afterwards (jobsToOrgs). */
+const datePostedFor = (days) => { const d = postedDays(days); return d === 0 ? 'today' : d <= 3 ? '3days' : d <= 7 ? 'week' : 'month'; };
+
+/**
+ * The searches one run asks the service, and how many of the person's choices they cover. Each request costs one credit on
+ * the organisation's own plan, so a run asks for at most `max` of them: a title in a place ("Welder jobs in Texas"), or — when
+ * companies were chosen by name — "Acme Mfg jobs in Texas". A daily run rotates through the choices by the day number, so a
+ * long list is covered over several mornings; a one-off search starts at the first.
+ */
+function jsearchPlan(search, now, { max = 3, rotate = false } = {}) {
+  const s = search || {};
+  const places = (s.locations || []).slice(0, LIMITS.locations);
+  const subjects = (s.companies && s.companies.length) ? s.companies.map((c) => c.name || c.domain) : (s.titles || []);
+  const pairs = [];
+  subjects.forEach((t) => places.forEach((l) => pairs.push((t + ' jobs in ' + l).trim())));
+  const total = pairs.length, n = Math.max(0, Math.min(Number(max) || 0, total));
+  const start = rotate && total ? (Math.floor(new Date(now).getTime() / 86400000) * n) % total : 0;
+  const picked = [];
+  for (let k = 0; k < n; k++) picked.push(pairs[(start + k) % total]);
+  const country = countryFor(places), date_posted = datePostedFor(s.posted_days);
+  return { queries: picked.map((query) => ({ query, country, date_posted })), total, covered: n, byCompany: !!(s.companies && s.companies.length) };
+}
+
+/** One job as the service sends it, in one shape. A job-board website is not the employer's website, so it is dropped. */
+function normalizeJob(j) {
+  const r = j || {};
+  const site = rule.normalizeDomain(r.employer_website);
+  const domain = site && !JOB_BOARD_HOST.test(site) ? site : '';
+  const at = r.job_posted_at_datetime_utc ? new Date(r.job_posted_at_datetime_utc) : null;
+  const t = at && !isNaN(at.getTime()) ? at.getTime() : null;
+  const link = txt(r.job_apply_link);
+  return {
+    title: txt(r.job_title).slice(0, 200), employer: txt(r.employer_name).slice(0, 300), domain,
+    website: domain ? 'https://' + domain : '',
+    city: txt(r.job_city), state: txt(r.job_state), country: txt(r.job_country),
+    url: /^https?:\/\//i.test(link) ? link.slice(0, 600) : '',
+    publisher: txt(r.job_publisher).slice(0, 80), posted_at: t ? new Date(t).toISOString() : null, remote: r.job_is_remote === true,
+  };
+}
+
+/** Does a job's title fit one of the titles the person chose? Either contains the other, ignoring case and punctuation. */
+function titleMatches(jobTitle, titles) {
+  const norm = (v) => txt(v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const j = norm(jobTitle);
+  if (!j) return false;
+  return (titles || []).some((t) => { const k = norm(t); return k && (j.includes(k) || k.includes(j)); });
+}
+
+/**
+ * Jobs → companies. Keeps only jobs inside the posted-within window (the service cannot count exact days; a job with no date
+ * is kept — the service did not say it was old); when companies were chosen by name keeps only theirs, and of those only jobs
+ * that fit a chosen title; groups by employer's website (else its name); drops an employer with no name.
+ */
+function jobsToOrgs(rawJobs, search, now) {
+  const s = search || {}, at = new Date(now).getTime();
+  const oldest = (s.posted_days == null ? POSTED_RANGE.def : s.posted_days);
+  const cutoff = isoDate(new Date(at - oldest * 86400000));
+  const wantCo = (s.companies || []).map((c) => ({ domain: c.domain, key: nameKey(c.name) })).filter((c) => c.domain || c.key);
+  const groups = new Map();
+  (Array.isArray(rawJobs) ? rawJobs : []).forEach((raw) => {
+    const j = normalizeJob(raw);
+    if (!j.title || !j.employer) return;
+    if (j.posted_at && j.posted_at.slice(0, 10) < cutoff) return;
+    if (wantCo.length) {
+      const ek = nameKey(j.employer);
+      if (!wantCo.some((c) => (c.domain && c.domain === j.domain) || (c.key && (ek === c.key || ek.startsWith(c.key + ' ') || c.key.startsWith(ek + ' '))))) return;
+      if ((s.titles || []).length && !titleMatches(j.title, s.titles)) return;
+    }
+    const key = j.domain || ('n:' + nameKey(j.employer)).slice(0, 300);
+    if (!groups.has(key)) groups.set(key, { key, name: j.employer, domain: j.domain, website: j.website, city: '', state: '', country: '', jobs: [], seen: new Set() });
+    const g = groups.get(key);
+    if (!g.city && (j.city || j.state)) { g.city = j.city; g.state = j.state; g.country = j.country; }
+    const dup = (j.title + '|' + j.city + '|' + j.state).toLowerCase();
+    if (g.seen.has(dup)) return;
+    g.seen.add(dup);
+    g.jobs.push(j);
+  });
+  return Array.from(groups.values()).map((g) => {
+    const postings = g.jobs.map((j) => {
+      const t = j.posted_at ? new Date(j.posted_at).getTime() : null;
+      return { title: j.title, url: j.url, city: j.city, state: j.state, country: j.country, posted_at: j.posted_at, age_days: t ? Math.max(0, Math.floor((at - t) / 86400000)) : null, source: j.publisher || sourceOf(j.url) };
+    }).sort((a, b) => (a.age_days == null ? 9e9 : a.age_days) - (b.age_days == null ? 9e9 : b.age_days)).slice(0, 25);
+    return {
+      apollo_org_id: null, saved_in_apollo: false, name: g.name, domain: g.domain, website: g.website, linkedin_url: '', phone: '', address: '',
+      city: g.city, state: g.state, country: g.country, employees: null, revenue: '', growth6: null, growth12: null, industry: '', sic: [], naics: [], founded_year: null,
+      source: 'free', company_key: g.key, postings,
+    };
+  });
+}
+
+/**
+ * Ranking and the "why" chips for a company found through the free sources. It has no size or growth (that is company data),
+ * so it is ordered by what the search itself saw: how many matching jobs, how fresh, whether its own website is known.
+ */
+function scoreFreeOrg(org) {
+  const posts = (org && org.postings) || [];
+  const chips = [];
+  let score = 50 + Math.min(posts.length, 5) * 4;
+  const ages = posts.map((p) => p.age_days).filter((d) => d != null);
+  if (ages.length) {
+    const newest = Math.min.apply(null, ages);
+    chips.push(newest === 0 ? 'Newest posted today' : 'Newest posted ' + newest + ' day' + (newest === 1 ? '' : 's') + ' ago');
+    score += newest <= 3 ? 8 : newest <= 7 ? 5 : newest <= 14 ? 2 : 0;
+  }
+  const via = Array.from(new Set(posts.map((p) => p.source).filter(Boolean))).slice(0, 3);
+  if (via.length) chips.push('Seen on ' + via.join(', '));
+  if (org && org.website) score += 3;
+  return { score: Math.round(clamp(score, 0, 100) * 10) / 10, chips };
+}
+
+/**
+ * Two lists of companies (Apollo's and the free sources') into one, a company only once. A company in both keeps Apollo's
+ * record (it has size, phone, growth) and takes the free source's jobs, so its card shows the jobs without a credit.
+ */
+function mergeSources(apolloOrgs, freeOrgs) {
+  const out = (apolloOrgs || []).slice();
+  const byDomain = new Map(); out.forEach((o) => { if (o.domain) byDomain.set(o.domain, o); });
+  const names = new Set(out.map((o) => nameKey(o.name)));
+  (freeOrgs || []).forEach((f) => {
+    const hit = f.domain && byDomain.get(f.domain);
+    if (hit) { hit.postings = f.postings; hit.also_free = true; return; }
+    if (names.has(nameKey(f.name))) return;
+    out.push(f);
+  });
+  return out;
 }
 
 // A staffing or recruiting firm is a competitor, not a client (the owner's choice, and lead-ingest.js says the same).
@@ -316,6 +458,7 @@ function factsLines(org, postings) {
 // ── the meters and the switches (all in app_settings; none needs a migration) ──
 const dayOf = (now) => new Date(now).toISOString().slice(0, 10);
 const creditKey = (orgId, now) => 'finder_credits_' + (orgId || 'default') + '_' + dayOf(now);
+const jsearchKey = (orgId, now) => 'finder_jsearch_' + (orgId || 'default') + '_' + dayOf(now);
 const revealKey = (userId, now) => 'finder_reveals_' + userId + '_' + dayOf(now);
 const accessKey = (userId) => 'finder_user_' + userId;
 /** { enabled, daily } from the stored JSON; anything unreadable is "not enabled". */
@@ -347,7 +490,8 @@ function suggestMailbox(accounts, sentToday) {
 }
 
 module.exports = {
-  SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS,
+  SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS, SOURCES,
+  countryFor, datePostedFor, jsearchPlan, normalizeJob, titleMatches, jobsToOrgs, scoreFreeOrg, mergeSources, jsearchKey,
   normalizeSearch, normalizeCompanies, postedDays, apolloFilters, websiteFrom, companyNameFilters, rankCompanySuggestions, normalizeOrg, isStaffingFirm, scoreOrg,
   normalizePostings, postingSignals, factsLines, sourceOf,
   dayOf, creditKey, revealKey, accessKey, readAccess, dailyFor, waitUntil, isDue, suggestMailbox,

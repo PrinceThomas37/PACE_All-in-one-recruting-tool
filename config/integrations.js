@@ -238,9 +238,31 @@ async function getActiveVerifier(supabase) {
   return null;
 }
 
+// ── a key that belongs to ONE ORGANISATION (D-0099) ──────────────────────────────────────────────────────────
+// Most keys above are one per deployment (R-067 is the job of moving them). A free-job-source key must NOT be: it is bought on the
+// organisation's own plan and its allowance is that organisation's alone, so it lives under "int_<id>_api_key__org_<orgId>" and
+// is only ever read for the organisation asking. Reads for the browser are masked, like every other secret here.
+const orgKeyName = (id, orgId) => `${PREFIX}${id}_api_key__org_${orgId}`;
+async function getOrgSecret(supabase, id, orgId) {
+  if (!orgId) return null;
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', orgKeyName(id, orgId)).maybeSingle();
+    return (data && data.value) || null;
+  } catch (_) { return null; }
+}
+async function setOrgSecret(supabase, id, orgId, value) {
+  const v = String(value || '').trim();
+  if (!orgId) return { error: 'No organisation' };
+  if (!v) { try { await supabase.from('app_settings').delete().eq('key', orgKeyName(id, orgId)); } catch (_) {} return { success: true, cleared: true }; }
+  const { error } = await supabase.from('app_settings').upsert({ key: orgKeyName(id, orgId), value: v, updated_at: new Date() }, { onConflict: 'key' });
+  return error ? { error: error.message } : { success: true };
+}
+const orgMask = mask;
+
 module.exports = {
   INTEGRATIONS, BY_ID, keyName,
   getSecret, isConfigured, getAll, setIntegration, clearIntegration,
   setActiveVerifier, getActiveVerifier,
   setActiveAi, getActiveAi,
+  orgKeyName, getOrgSecret, setOrgSecret, orgMask,
 };

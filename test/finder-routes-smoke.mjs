@@ -133,19 +133,36 @@ const USERS = {
   bd1: { id: 'bd1', name: 'Bea BD', roles: ['bd'], role: 'bd', org_id: 'o1' },
   rec1: { id: 'rec1', name: 'Rex Recruiter', roles: ['recruiter'], role: 'recruiter', org_id: 'o1' },
   ra9: { id: 'ra9', name: 'Other Org RA', roles: ['ra'], role: 'ra', org_id: 'o2' },
+  adm2: { id: 'adm2', name: 'Other Org Admin', roles: ['admin'], role: 'admin', org_id: 'o2' },
 };
 function boot() {
-  const st = makeStore(), apollo = makeApollo(), logged = [];
+  const st = makeStore(), apollo = makeApollo(), jsearch = makeJsearch(), logged = [];
   const router = require('../routes/finder.js')({
-    supabase: st.supabase, db: st.db, auth: (_a, _b, n) => n(), hasRole, apollo, now: () => NOW, noRerunGap: false,
+    supabase: st.supabase, db: st.db, auth: (_a, _b, n) => n(), hasRole, apollo, jsearch, now: () => NOW, noRerunGap: false,
     withOrg: (q) => q, logActivity: async (...a) => { logged.push(a); }, getTimezoneFromLocation: () => 'CST',
   });
   leadCheck._resetForTests();
-  return { st, apollo, router, call: callOn(router), logged };
+  return { st, apollo, jsearch, router, call: callOn(router), logged };
 }
 const resetCredits = (st, n) => settings.setSettings(st.supabase, { finder_apollo_daily_credits: n });
 
 const SEARCH = { name: 'Machining, Texas, mid-size', sector: 'manufacturing', titles: ['CNC Machinist', 'Welder'], locations: ['Texas'], sizes: ['mid'], posted_days: 14 };
+
+// ── a fake job-search service (the free sources) that records every call ───────────────────────────────────
+const JOBSET = () => [
+  { job_title: 'Welder', employer_name: 'Acme Mfg', employer_website: 'https://www.acmemfg.com', job_publisher: 'LinkedIn', job_apply_link: 'https://www.linkedin.com/jobs/view/1', job_posted_at_datetime_utc: daysAgo(1), job_city: 'Austin', job_state: 'Texas' },
+  { job_title: 'MIG Welder', employer_name: 'Acme Mfg', employer_website: 'https://www.acmemfg.com', job_publisher: 'Indeed', job_apply_link: 'https://www.indeed.com/viewjob?jk=2', job_posted_at_datetime_utc: daysAgo(3), job_city: 'Austin', job_state: 'Texas' },
+  { job_title: 'Welder', employer_name: 'Gulf Fabrication', job_publisher: 'ZipRecruiter', job_apply_link: 'https://www.ziprecruiter.com/c/x', job_posted_at_datetime_utc: daysAgo(2), job_city: 'Houston', job_state: 'Texas' },
+  { job_title: 'Welder', employer_name: 'Northline Staffing Group', employer_website: 'https://northline.example', job_posted_at_datetime_utc: daysAgo(1) },
+  { job_title: 'Welder', employer_name: 'Acme, Inc.', employer_website: 'https://www.acme.com', job_posted_at_datetime_utc: daysAgo(1) },
+];
+function makeJsearch() {
+  const j = { calls: [], error: null, jobs: JOBSET };
+  j.callRecord = require('../services/jobs-jsearch.js').callRecord;
+  j.searchJobs = async (x) => { j.calls.push(x); return j.error ? { ok: false, status: 403, error: j.error } : { ok: true, status: 200, jobs: j.jobs(), cursor: null }; };
+  j.checkKey = async (x) => { j.calls.push(Object.assign({ check: true }, x)); return j.error ? { ok: false, status: 403, error: j.error } : { ok: true, jobs: 3 }; };
+  return j;
+}
 
 // ═════ 1. who may use it ═══════════════════════════════════════════════════════════════════════════════
 console.log('\nWho may use it');
@@ -557,6 +574,131 @@ const callsBeforeNoKey = apollo.calls.length;
 r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme' });
 step('with no Apollo key it says an admin must add one, says a website can still be pasted, and calls nothing', r.code === 200 && /Admin → Integrations/.test(r.out.note) && /paste/.test(r.out.note) && apollo.calls.length === callsBeforeNoKey);
 st.tables.app_settings.push(keyRow);
+
+console.log('\nThe free job sources');
+let jsearch;
+({ st, apollo, jsearch, router, call } = boot());
+await resetCredits(st, 300);
+await settings.setSettings(st.supabase, { finder_cards_per_run: 25 });
+NOW = new Date('2026-10-23T12:00:00Z');
+const tickMin = () => { NOW = new Date(NOW.getTime() + 61000); };
+const jsMeter = () => Number((st.tables.app_settings.find((x) => x.key === 'finder_jsearch_o1_' + finder.dayOf(NOW)) || { value: 0 }).value);
+const O1KEY = 'int_jsearch_api_key__org_o1';
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true, daily: 5 }, { id: 'ra1' });
+r = await call('/finder/access', 'get', 'ra1');
+step('before a key is saved the access answer says free sources are not connected, with the day\'s allowance and the per-run number', r.out.jobsource.connected === false && r.out.jobsource.used === 0 && r.out.jobsource.limit === 6 && r.out.jobsource.per_run === 3, JSON.stringify(r.out.jobsource));
+r = await call('/finder/admin/jobsource', 'get', 'ra1');
+step('only an admin may see or change the key (403 for anyone else)', r.code === 403 && (await call('/finder/admin/jobsource', 'put', 'ra1', { api_key: 'JS-KEY-ABCDEFGH1234' })).code === 403 && (await call('/finder/admin/jobsource/test', 'post', 'ra1')).code === 403);
+r = await call('/finder/admin/jobsource', 'put', 'adm', { api_key: 'short' });
+step('a key that does not look like one is refused in words and nothing is saved', r.code === 400 && /does not look like a key/.test(r.out.error) && !st.tables.app_settings.some((x) => x.key === O1KEY));
+r = await call('/finder/admin/jobsource', 'put', 'adm', { api_key: 'JS KEY WITH SPACES 1234' });
+step('…a key with spaces too', r.code === 400);
+r = await call('/finder/admin/jobsource', 'put', 'adm', { api_key: '  JS-KEY-ABCDEFGH1234  ' });
+step('a good key is saved under THIS organisation\'s name, trimmed, and the answer shows only its last four characters — never the key', r.code === 200 && r.out.connected === true && r.out.hint === '••••••1234' && !JSON.stringify(r.out).includes('ABCDEFGH') && st.tables.app_settings.find((x) => x.key === O1KEY).value === 'JS-KEY-ABCDEFGH1234');
+r = await call('/finder/admin/jobsource', 'get', 'adm2');
+step('ANOTHER organisation\'s admin sees no key — the key is one organisation\'s alone', r.out.connected === false && r.out.hint === null);
+await call('/finder/admin/jobsource', 'put', 'adm2', { api_key: 'OTHER-ORG-KEY-5678' });
+step('…and saving theirs does not touch ours', st.tables.app_settings.find((x) => x.key === O1KEY).value === 'JS-KEY-ABCDEFGH1234' && st.tables.app_settings.some((x) => x.key === 'int_jsearch_api_key__org_o2'));
+st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== 'int_jsearch_api_key__org_o2');
+r = await call('/finder/access', 'get', 'ra1');
+step('everyone with access now sees that free sources are connected (and never the key)', r.out.jobsource.connected === true && !JSON.stringify(r.out).includes('ABCDEFGH'));
+r = await call('/finder/admin/jobsource/test', 'post', 'adm');
+step('"Check my key" makes ONE request with the organisation\'s own key, counts it on the meter, and says it works', r.out.ok === true && jsearch.calls.length === 1 && jsearch.calls[0].check === true && jsearch.calls[0].key === 'JS-KEY-ABCDEFGH1234' && jsMeter() === 1 && /works/.test(r.out.text), JSON.stringify(r.out));
+jsearch.error = 'JSearch did not accept the key — check it.';
+r = await call('/finder/admin/jobsource/test', 'post', 'adm');
+step('a key that does not work says why', r.out.ok === false && /did not accept the key/.test(r.out.text));
+jsearch.error = null; jsearch.calls.length = 0;
+
+// a one-off search through the free sources only (Apollo is never asked)
+r = await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Free one', source: 'free' }));
+step('a saved search remembers where it looks; an unknown place is Apollo, as before', r.out.source === 'free' && (await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Odd', source: 'bing' }))).out.source === 'apollo');
+st.tables.finder_searches.length = 0;
+apollo.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder', 'Machinist', 'Inspector', 'Fitter', 'Fabricator'], locations: ['Texas'], posted_days: 14 });
+const freeCards = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
+step('Find leads now with the free sources makes cards without asking Apollo at all (no key, no credit)', r.code === 200 && apollo.calls.length === 0 && freeCards.length === 2 && r.out.new_cards === 2, r.out.results[0].note);
+step('…it looked up only the allowed number of title-in-place searches (3 of 5), each with the ORGANISATION\'s key, and counted each on the meter', jsearch.calls.length === 3 && jsearch.calls.every((c) => c.key === 'JS-KEY-ABCDEFGH1234') && jsearch.calls.map((c) => c.query).join() === 'Welder jobs in Texas,Machinist jobs in Texas,Inspector jobs in Texas' && jsMeter() === 5 && /3 of 5/.test(r.out.results[0].note), r.out.results[0].note + ' meter=' + jsMeter());
+const fs_names = freeCards.map((c) => c.company_name).sort().join();
+step('the cards are the companies: the staffing firm is left out and the company this organisation already works (Acme, Inc.) is left out', fs_names === 'Acme Mfg,Gulf Fabrication' && /staffing firm/.test(r.out.results[0].note) && /already in your organisation/.test(r.out.results[0].note), fs_names + ' | ' + r.out.results[0].note);
+const acmeCard = freeCards.find((c) => c.company_name === 'Acme Mfg');
+step('a card keeps its company (website, place) and carries the jobs the search already saw — newest first, with where each was seen — and the jobs are not stored twice', acmeCard.payload.company.domain === 'acmemfg.com' && acmeCard.payload.company.city === 'Austin' && !('postings' in acmeCard.payload.company) && acmeCard.postings.length === 2 && acmeCard.postings[0].title === 'Welder' && acmeCard.postings[0].source === 'LinkedIn' && acmeCard.company_key === 'acmemfg.com' && acmeCard.apollo_org_id === null);
+r = await call('/finder/cards', 'get', 'ra1');
+const fs_shown = r.out.cards.find((c) => c.company_name === 'Acme Mfg');
+step('the card shows its jobs and why it ranks, and no company size it does not know', fs_shown.postings.length === 2 && fs_shown.chips.some((c) => /open roles/.test(c)) && fs_shown.chips.some((c) => /Seen on LinkedIn/.test(c)) && fs_shown.employees === null);
+const fs_gulf = r.out.cards.find((c) => c.company_name === 'Gulf Fabrication');
+apollo.calls.length = 0;
+r = await call('/finder/cards/:id/postings', 'post', 'ra1', {}, { id: acmeCard.id });
+step('"See their open jobs" on a free card costs nothing and calls nobody — the jobs are already there', r.out.cached === true && r.out.postings.length === 2 && apollo.calls.length === 0 && jsearch.calls.length === 3);
+r = await call('/finder/cards/:id/people', 'post', 'ra1', {}, { id: fs_gulf.id });
+step('a company with no known website cannot have people looked up — it says so and to add someone by hand (no Apollo call)', r.code === 409 && /website is not known/.test(r.out.error) && apollo.calls.length === 0);
+
+
+// the organisation's daily allowance
+tickMin();
+await settings.setSettings(st.supabase, { finder_jsearch_daily_requests: 5 });
+jsearch.calls.length = 0;
+const fsBefore = jsMeter();
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['T1', 'T2', 'T3', 'T4'], locations: ['Ohio'], posted_days: 14 });
+step('when the organisation\'s day is nearly used (5 requests) a run makes only what is left and SAYS so — and the meter never goes past the limit', jsearch.calls.length === 5 - fsBefore && jsMeter() === 5 && /free-job-source requests \(5\)/.test(r.out.results[0].note), r.out.results[0].note + ' calls=' + jsearch.calls.length);
+tickMin(); jsearch.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('with the day used up nothing is asked at all', jsearch.calls.length === 0 && r.out.new_cards === 0 && /free-job-source requests/.test(r.out.results[0].note));
+await settings.setSettings(st.supabase, { finder_jsearch_daily_requests: 50 });
+await settings.setSettings(st.supabase, { finder_jsearch_requests_per_run: 0 });
+tickMin(); jsearch.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('an admin can switch the free sources off (0 per run): nothing is asked, and it says why', jsearch.calls.length === 0 && /switched off/.test(r.out.results[0].note));
+await settings.setSettings(st.supabase, { finder_jsearch_requests_per_run: 3 });
+
+// no key / a refusing service
+st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== O1KEY);
+tickMin(); jsearch.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('with no key saved a free search asks nothing and says where an admin adds the key', jsearch.calls.length === 0 && r.out.new_cards === 0 && /Access & job sources/.test(r.out.results[0].note));
+await call('/finder/admin/jobsource', 'put', 'adm', { api_key: 'JS-KEY-ABCDEFGH1234' });
+tickMin(); jsearch.error = 'JSearch did not accept the key — check it.';
+const m0 = jsMeter(); jsearch.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder', 'Fitter', 'Fabricator'], locations: ['Texas'], posted_days: 14 });
+step('when the service refuses, the person gets its reason, no cards are made, the failure is kept for an admin, and it stops at the first refusal (one request, not three)', r.out.new_cards === 0 && /did not accept the key/.test(r.out.results[0].note) && r.out.results[0].error && jsearch.calls.length === 1 && st.tables.app_settings.some((x) => x.key === 'jsearch_last_error') && jsMeter() === m0 + 1, 'calls=' + jsearch.calls.length);
+jsearch.error = null;
+
+// both sources together
+st.tables.finder_cards.length = 0; await settings.setSettings(st.supabase, { finder_jsearch_daily_requests: 100 });
+apollo.orgs = [
+  { id: 'f'.repeat(24), name: 'Acme Manufacturing', primary_domain: 'acmemfg.com', estimated_num_employees: 80, organization_headcount_twelve_month_growth: 0.1 },
+  { id: 'g'.repeat(24), name: 'Fox Foundry', primary_domain: 'foxfoundry.example', organization_headcount_twelve_month_growth: 0.1 },
+];
+tickMin(); apollo.calls.length = 0; jsearch.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'both', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+const fsBoth = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
+const acme2 = fsBoth.find((c) => c.company_key === 'f'.repeat(24));
+step('Both: Apollo and the free sources are each asked once, and a company they both know is ONE card — Apollo\'s record (size) with the free source\'s jobs on it, so those jobs cost no credit', apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && jsearch.calls.length === 1 && fsBoth.length === 3 && fsBoth.map((c) => c.company_name).sort().join() === 'Acme Manufacturing,Fox Foundry,Gulf Fabrication' && acme2.payload.company.employees === 80 && acme2.postings.length === 2, fsBoth.map((c) => c.company_name).join() + ' | ' + r.out.results[0].note);
+tickMin(); st.tables.finder_cards.length = 0; apollo.error = 'This Apollo plan or key does not allow company search.';
+r = await call('/finder/find', 'post', 'ra1', { source: 'both', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('Both, with Apollo refusing: the free sources\' companies still come through, and the note says Apollo had a problem', r.out.new_cards === 2 && /Apollo had a problem/.test(r.out.results[0].note), r.out.results[0].note);
+apollo.error = null;
+tickMin(); st.tables.finder_cards.length = 0;
+const apolloKeyRow = st.tables.app_settings.find((x) => x.key === 'int_apollo_api_key'); st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== 'int_apollo_api_key'); apollo.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('an organisation with NO Apollo at all can still find companies by job title (the whole point)', r.out.new_cards === 2 && apollo.calls.length === 0);
+tickMin(); st.tables.finder_cards.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'apollo', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('…and an Apollo search without Apollo still says so, as it always did', r.out.new_cards === 0 && /Apollo is not connected/.test(r.out.results[0].note));
+st.tables.app_settings.push(apolloKeyRow);
+
+// the nightly run
+tickMin(); st.tables.finder_cards.length = 0; jsearch.calls.length = 0;
+await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Nightly free', source: 'free', titles: ['Welder'], locations: ['Texas'] }));
+const sumF = await router.runDue();
+step('the nightly sweep runs a free search with its own organisation\'s key and meter', sumF.searches >= 1 && jsearch.calls.length >= 1 && jsearch.calls.every((c) => c.key === 'JS-KEY-ABCDEFGH1234') && st.tables.finder_cards.some((c) => c.user_id === 'ra1' && c.company_name === 'Acme Mfg'), JSON.stringify(sumF));
+
+// accepting a free card (last: the company becomes one this organisation works, so later searches would rightly skip it)
+tickMin(); st.tables.finder_cards.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+const freeAcceptId = st.tables.finder_cards.find((c) => c.company_name === 'Acme Mfg').id;
+r = await call('/finder/cards/:id/accept', 'post', 'ra1', { position: 'Welder', positions: ['Welder', 'MIG Welder'], contacts: [{ first_name: 'Hal', last_name: 'Fox', designation: 'Owner', email: 'hal@acmemfg.com' }] }, { id: freeAcceptId });
+const fsLead = st.tables.jobs.find((j) => j.id === r.out.lead_id);
+step('a free card is accepted like any other: a lead is made, with a contact typed by hand', r.code === 201 && !!fsLead && fsLead.position === 'Welder' && fsLead.research.finder.also_hiring.join() === 'MIG Welder' && r.out.contacts === 1 && (st.tables.companies.find((c) => c.id === r.out.company_id) || {}).name === 'Acme Mfg' && !(st.tables.companies.find((c) => c.id === r.out.company_id) || {}).apollo_org_id, JSON.stringify(r.out));
 
 console.log('\nDiagnose');
 ({ st, apollo, router, call } = boot());

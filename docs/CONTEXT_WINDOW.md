@@ -4,7 +4,10 @@
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
 **Updated**: 2026-10-07 (end of Session 41) · **Last merged to `main`**: #303 (`193e207`, docs) after #302 (`f96918e`, the eight small fixes) after #300 (round 5) after #298/#297/#295/#294 · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox: the owner hard-refreshes and looks).
-**Highest ids:** decision D-0099 · contract C-0036 · roadmap `R-165` (next `R-166`) · next migration `060` (059 applied 2026-10-08).
+**Highest ids:** decision D-0100 · contract C-0036 · roadmap `R-166` (next `R-167`) · next migration `061` (059 and 060 applied 2026-10-08).
+
+## ▶▶▶▶▶▶ FREE JOB SOURCES — "SEARCH WITH" (8 Oct) — MIGRATION 060 APPLIED, MERGED (owner: "Merge once the changes are completed")
+Built per D-0100 (R-164/R-166): Apollo / Free job sources / Both on every search; JSearch through `services/jobs-jsearch.js`; the key is per organisation (Find Leads → Access & job sources; admin; masked). Migration 060 is applied. Not tested against the real service: the owner's first "Check my key" + a real search is the live proof — if the answer shape differs, fix `jobs-jsearch.js`. Next, owner's call: R-166 (ask the vendor in writing about a shared key; a board finder for Preferred companies; a paid contact finder).
 
 ## ▶▶▶▶▶ LEAD FINDER FORM, ROUND 2 (8 Oct) — MIGRATION 059 APPLIED, MERGED AS #310
 Built per D-0098 (R-165): "Name of the run", ~40 industries (pick several), tick / Select all / type job titles, posted-within slider 0–30 in the retro style, preferred companies by name (Apollo lookup, 1 credit; website paste is free). **Migration 059 is written and NOT applied** — it must be applied (owner's fresh go-ahead; use `execute_sql` in pieces with `SET lock_timeout` if the tool times out) BEFORE the code merges; also check no `emails.status='sending'` and no active `send_progress_*` before the merge (Render restarts). Node 22 + Node 26.10.0 full suites run before the merge. Open question for the owner: R-164 (job sources beyond Apollo — PACE already reads six company job-board feeds in `lead-sources/index.js`; discovery is missing).

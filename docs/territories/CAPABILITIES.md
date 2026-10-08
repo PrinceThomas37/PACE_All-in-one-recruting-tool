@@ -646,3 +646,11 @@ type a company name and press Look up — PACE shows the real companies with tha
 where they are (1 Apollo credit); pick the right one, then add another, as many as you
 like; paste a website to add it directly, free. With preferred companies set, only those
 are searched.
+
+**Find Leads — free job sources (D-0100).** For an organisation with no Apollo (or to save
+credits), a search can look in "Free job sources" instead of, or as well as, Apollo: it
+searches job sites by title and place and brings the companies that are hiring, with their
+jobs, newest first and where each was seen — no Apollo credits. The organisation brings its
+own job-search key (an admin saves it under Find Leads → Access & job sources; it is never
+shown again and never shared with another organisation). It finds companies and jobs, not
+people: the contact is added by hand. Company size and industry words are Apollo-only.
