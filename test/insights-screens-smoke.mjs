@@ -39,6 +39,8 @@ try{
   await page.waitForFunction(()=>/Emails Sent/.test(document.getElementById('content').innerText),null,{timeout:8000}).catch(()=>{});
   await page.waitForTimeout(300);
   const t1 = await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
+  const nameNow = await ev(()=>({ title:(document.querySelector('#content .ptitle')||{}).textContent||'', rail:(document.getElementById('sidebar')||{}).innerText||'', bar:(document.getElementById('topbar')||{}).innerText||'' }));
+  step('the page is called "Outreach Insights" (owner, 8 Oct) — heading, sidebar and top bar — and "Lead Insights" is gone', /Outreach Insights/.test(nameNow.title) && /Outreach Insights/.test(nameNow.rail) && !/Lead Insights/.test(nameNow.title+nameNow.rail+nameNow.bar), JSON.stringify(nameNow).slice(0,200));
   step('personal: emails sent (30 days) is the server\'s 311 — with no emails in the browser at all', /311\s*Emails sent/i.test(t1), t1.slice(0,160));
   step('personal: "Leads, last 7 days" is 85 and the 30-day tile 110, both the server\'s', /85\s*Last 7 days/.test(t1) && /110\s*Last 30 days/.test(t1));
   step('personal: the tile says what the tiles mean ("last 30 days"), not "this month"', /30 days/i.test(t1) && !/Sent \(month\)/.test(t1) && !/this month/i.test(t1));

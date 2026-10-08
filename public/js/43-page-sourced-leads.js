@@ -1,6 +1,8 @@
-// ===== SOURCED LEADS (additive) =====
+// ===== SOURCED LEADS (additive) — now a TAB INSIDE FIND LEADS (owner, 8 Oct 2026) =====
 // BD/RA-lead/admin: the review queue for leads the system found on its own, plus
-// the screen for choosing which employer job boards to watch.
+// the screen for choosing which employer job boards to watch. It used to be its own menu item and page; the owner asked
+// for ONE place for finding leads, so this file now only provides the tab's body (srcdBody), its loader (srcdOpen) and
+// its count (srcdNewCount) — public/js/68-page-finder.js draws the page and the tab.
 //
 // The review gate is the point of this page. Sourced postings are inert until
 // someone approves one here — nothing automated can email a company. Approving
@@ -19,27 +21,23 @@
     sources:null, providers:null, notConfigured:false, adding:false, testResult:null, approving:null
   };
 
-  // ── routing (same wrap-render pattern the other pages use) ────────────────
-  // Drawn by the shell (UI.registerPage below) — no second repaint per render.
-  var _prevGoPage = window.goPage;
-  window.goPage = function(p){
-    if (p==='sourced'){
-      STATE.page='sourced'; STATE.modal=null; render();
-      loadQueue(); loadSources();
-      return;
-    }
-    return _prevGoPage.apply(this, arguments);
-  };
-  function paint(){ if(STATE.page!=='sourced')return; paintPageContent(); }
-  UI.registerPage('sourced', function(){ return renderPage(); });
+  // ── what the Find Leads page asks of this file ────────────────────────────
+  // The tab repaints through the page it lives in; nothing here writes #content itself.
+  function paint(){ var f=STATE.finder; if((STATE.page==='finder'||STATE.page==='sourced')&&f&&f.tab==='sourced') paintPageContent(); }
+  window.srcdCan = function(u){ return canSource(u||STATE.user); };
+  window.srcdOpen = function(){ loadQueue(); loadSources(); };
+  window.srcdNewCount = function(){ return (STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0; };
 
   // ── data ──────────────────────────────────────────────────────────────────
   function loadQueue(){
     var s = STATE.sourced; s.loading = true; paint();
     apiGet('/sourced-leads?status='+encodeURIComponent(s.status)+'&limit=100').then(function(r){
+      var before = (s.counts&&s.counts['new'])||0;
       s.loading=false; s.list=(r&&r.results)||[]; s.counts=(r&&r.counts)||{};
       s.notConfigured = !!(r&&r.not_configured);
       paint();
+      // The menu badge is the number waiting in this queue; redraw the shell only when that number moved.
+      if (before !== ((s.counts&&s.counts['new'])||0)) render();
     }).catch(function(e){ s.loading=false; s.list=[]; showToast('Could not load: '+e.message,'error'); paint(); });
   }
   function loadSources(){
@@ -404,35 +402,23 @@
       '</div>'+ addBlock + rows;
   }
 
-  function renderPage(){
+  // The tab's body: two views (the queue, the boards) as small pills, the queue's status filter as pills, then the list.
+  window.srcdBody = function(){
     var s = STATE.sourced;
-    if (!canSource(STATE.user))
-      return UI.page({ body:'<div class="dt-empty">Not available for your role.</div>' });
-
-    var counts = s.counts||{};
+    if (!canSource(STATE.user)) return '<div class="card fd-empty">Not available for your role.</div>';
+    var counts = s.counts||{}, view = s.view||'queue';
     // Labels in the user's language, not the database's: `new` is work waiting,
     // `duplicate` means we already have it, `promoted` means it made it in.
-    var statuses = [['new','To review'],['duplicate','Already have'],
-                    ['promoted','Added'],['rejected','Dismissed']];
-
-    var tabs = UI.tabs([
-      { id:'queue',   label:'Review queue',  n:(counts['new']||0), onclick:"srcdSetView('queue')" },
-      { id:'sources', label:'Boards watched',                      onclick:"srcdSetView('sources')" }
-    ], s.view||'queue',
-      '<span class="fs-12 c-ink3">Openings PACE found on its own. Nothing is contacted until you add it here.</span>');
-
-    // The status filter IS the strip on this page — every cell is a queue you
-    // can stand in, and the number is how much is in it.
-    var strip = s.view!=='queue' ? '' : UI.strip(statuses.map(function(st){
-      return { v:(counts[st[0]]||0), label:st[1], on:s.status===st[0],
-               onclick:"srcdSetStatus('"+st[0]+"')" };
-    }));
-
-    return UI.page({
-      tabs: tabs,
-      strip: strip,
-      body: (s.view==='queue' ? renderQueue() : renderSources())
-    });
-  }
+    var statuses = [['new','To review'],['duplicate','Already have'],['promoted','Added'],['rejected','Dismissed']];
+    var pill = function(on, label, click){ return '<button type="button" class="fd-pill'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="'+click+'">'+label+'</button>'; };
+    var head = '<div class="fd-row fd-between fd-toolbar"><div class="fd-row">'+
+        pill(view==='queue','Review queue'+((counts['new']||0)?' · '+counts['new']:''),"srcdSetView('queue')")+
+        pill(view==='sources','Boards watched',"srcdSetView('sources')")+
+      '</div><span class="fd-hint">Openings PACE found on its own. Nothing is contacted until you add it here.</span></div>';
+    var filter = view!=='queue' ? '' : '<div class="fd-row fd-toolbar">'+statuses.map(function(st){
+      return pill(s.status===st[0], st[1]+' · '+(counts[st[0]]||0), "srcdSetStatus('"+st[0]+"')");
+    }).join('')+'</div>';
+    return head+filter+(view==='queue' ? renderQueue() : renderSources());
+  };
 
 })();

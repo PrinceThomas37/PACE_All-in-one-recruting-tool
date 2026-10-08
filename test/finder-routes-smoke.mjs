@@ -49,7 +49,8 @@ function makeStore() {
   } };
   const defaults = {
     finder_searches: () => ({ active: true, deleted_at: null, last_run_at: null, last_run_note: null, created_at: NOW.toISOString(), updated_at: NOW.toISOString(), sector: null, keywords: [], domains: [], sizes: [] }),
-    finder_cards: () => ({ status: 'new', created_on: finder.dayOf(NOW), created_at: NOW.toISOString(), postings: null, wait_until: null, lead_id: null, decided_at: null }),
+    // like the real table, every insert has its own moment unless the writer stamps one
+    finder_cards: () => ({ status: 'new', created_on: finder.dayOf(NOW), created_at: new Date(NOW.getTime() + (++uid)).toISOString(), postings: null, wait_until: null, lead_id: null, decided_at: null }),
     jobs: () => ({ deleted_at: null, created_at: NOW.toISOString() }), companies: () => ({ deleted_at: null }), contacts: () => ({}),
   };
   const query = (name, orgId) => {
@@ -654,7 +655,7 @@ await settings.setSettings(st.supabase, { finder_jsearch_requests_per_run: 3 });
 st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== O1KEY);
 tickMin(); jsearch.calls.length = 0;
 r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
-step('with no key saved a free search asks nothing and says where an admin adds the key', jsearch.calls.length === 0 && r.out.new_cards === 0 && /Access & job sources/.test(r.out.results[0].note));
+step('with no key saved a free search asks nothing and says where an admin adds the key', jsearch.calls.length === 0 && r.out.new_cards === 0 && /Integrations & API Keys/.test(r.out.results[0].note));
 await call('/finder/admin/jobsource', 'put', 'adm', { api_key: 'JS-KEY-ABCDEFGH1234' });
 tickMin(); jsearch.error = 'JSearch did not accept the key — check it.';
 const m0 = jsMeter(); jsearch.calls.length = 0;
@@ -673,6 +674,20 @@ r = await call('/finder/find', 'post', 'ra1', { source: 'both', titles: ['Welder
 const fsBoth = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
 const acme2 = fsBoth.find((c) => c.company_key === 'f'.repeat(24));
 step('Both: Apollo and the free sources are each asked once, and a company they both know is ONE card — Apollo\'s record (size) with the free source\'s jobs on it, so those jobs cost no credit', apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && jsearch.calls.length === 1 && fsBoth.length === 3 && fsBoth.map((c) => c.company_name).sort().join() === 'Acme Manufacturing,Fox Foundry,Gulf Fabrication' && acme2.payload.company.employees === 80 && acme2.postings.length === 2, fsBoth.map((c) => c.company_name).join() + ' | ' + r.out.results[0].note);
+step('every card of ONE run carries the same time — the run\'s — not its own moment (that is what lets a run be shown as a group)', new Set(fsBoth.map((c) => c.created_at)).size === 1 && fsBoth[0].created_at === NOW.toISOString(), fsBoth.map((c) => c.created_at).join(' | '));
+
+// Today's cards: the NEWEST RUN first (owner, 8 Oct: "new generated cards first and then the rest of the old cards below"),
+// best match first inside a run.
+st.tables.finder_cards.length = 0;
+const hoursAgo = (h) => new Date(NOW.getTime() - h * 3600000).toISOString();
+const runCard = (id, score, at) => st.tables.finder_cards.push({ id, org_id: 'o1', user_id: 'adm', search_id: null, company_key: id, company_name: id, status: 'new', score, created_on: '2026-10-07', created_at: at, postings: null, wait_until: null, lead_id: null, decided_at: null, payload: { company: { domain: id + '.example' } } });
+runCard('old-hi', 90, hoursAgo(50)); runCard('old-lo', 10, hoursAgo(50));          // an earlier run: a strong card and a weak one
+runCard('mid', 50, hoursAgo(26));                                                   // yesterday's run
+runCard('new-lo', 5, hoursAgo(1)); runCard('new-hi', 60, hoursAgo(1));              // the newest run: a weak card and a stronger one
+r = await call('/finder/cards', 'get', 'adm');
+step('the newest run\'s cards are on top (best match first within the run), then the earlier runs\' — a weak new card beats a strong old one', r.out.cards.map((c) => c.id).join() === 'new-hi,new-lo,mid,old-hi,old-lo', r.out.cards.map((c) => c.id).join());
+step('each card says when it was found and whether it is from the newest run', r.out.cards.filter((c) => c.is_new).map((c) => c.id).join() === 'new-hi,new-lo' && r.out.cards.every((c) => c.found_at), JSON.stringify(r.out.cards.map((c) => [c.id, c.is_new])));
+st.tables.finder_cards.length = 0;
 tickMin(); st.tables.finder_cards.length = 0; apollo.error = 'This Apollo plan or key does not allow company search.';
 r = await call('/finder/find', 'post', 'ra1', { source: 'both', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
 step('Both, with Apollo refusing: the free sources\' companies still come through, and the note says Apollo had a problem', r.out.new_cards === 2 && /Apollo had a problem/.test(r.out.results[0].note), r.out.results[0].note);

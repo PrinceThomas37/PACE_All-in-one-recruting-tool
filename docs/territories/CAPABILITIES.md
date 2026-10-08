@@ -651,6 +651,19 @@ are searched.
 credits), a search can look in "Free job sources" instead of, or as well as, Apollo: it
 searches job sites by title and place and brings the companies that are hiring, with their
 jobs, newest first and where each was seen — no Apollo credits. The organisation brings its
-own job-search key (an admin saves it under Find Leads → Access & job sources; it is never
+own job-search key (an admin saves it under Admin → Integrations & API Keys, under Apollo; it is never
 shown again and never shared with another organisation). It finds companies and jobs, not
 people: the contact is added by hand. Company size and industry words are Apollo-only.
+
+**Find Leads — one place for finding leads (8 Oct, D-0102).** Find Leads is the ONE menu item for
+finding leads: its tabs are Today's cards · Find leads now · Daily run · Sourced leads · Saved & past
+(· Access & limits for an admin). **Sourced leads** is the review queue of openings PACE found on its
+own from the company job boards it watches (and the list of boards watched) — it used to be a page of
+its own; someone who may review them but is not switched on for the Lead Finder sees only that tab, and
+the menu badge counts what is waiting. **Today's cards show the newest search first**, the earlier cards
+below under "Earlier cards". The search form is short: the cost of pressing Find is said beside the
+button, and company size, industry words and preferred companies fold under "More filters". The day's
+usage is one line ("Today: Apollo 3/300 · emails 1/30 · job sources 0/6"). Also: the login page now
+scrolls on a small laptop; the job-search key sits in Admin → Integrations & API Keys under Apollo; that
+window's AI status is one sentence with the detail behind "Show details" (opened once by a fresh test);
+and "Lead Insights" is called "Outreach Insights".

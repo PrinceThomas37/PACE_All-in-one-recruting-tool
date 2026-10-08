@@ -318,8 +318,12 @@ tr.sel-row td{background:var(--accent-l)}
 .ind-fill{height:100%;border-radius:3px;transition:width .5s ease}
 
 /* LOGIN */
-.login-wrap{min-height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;background:#e8f5ee;box-sizing:border-box}
-.login-card{background:var(--card);border:1px solid var(--border);border-radius:20px;box-shadow:var(--sh3);width:100%;max-width:360px;overflow:visible}
+/* The wrapper SCROLLS (owner, 8 Oct 2026): it used to be a fixed-height box with its overflow hidden, so on a small laptop
+   (150% display scaling = a ~590px-tall window) the password box and the Log In button were cut off with no way to reach them.
+   `margin:auto` on the card centres it when it fits and lets it start at the top and scroll when it does not (align-items:center
+   would cut the top off first). */
+.login-wrap{height:100vh;height:100dvh;width:100vw;display:flex;padding:24px;position:relative;overflow-x:hidden;overflow-y:auto;background:#e8f5ee;box-sizing:border-box}
+.login-card{background:var(--card);border:1px solid var(--border);border-radius:20px;box-shadow:var(--sh3);width:100%;max-width:360px;overflow:visible;margin:auto;flex:none}
 .login-top{background:linear-gradient(130deg,#1E7A3C 0%,#3AAE57 100%);padding:24px 28px 20px;color:#fff;border-radius:20px 20px 0 0}
 .login-body{padding:22px 28px 26px;border-radius:0 0 20px 20px}
 .google-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;padding:10px;border:1.5px solid var(--border2);border-radius:var(--r2);background:var(--card);font-size:14px;font-weight:500;cursor:pointer;transition:background-color .15s,border-color .15s,color .15s;margin-bottom:14px}

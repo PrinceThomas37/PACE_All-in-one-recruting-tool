@@ -269,7 +269,7 @@ function renderBDInsights(){
   if(view==='team') return '<div class="page">'+toggle+renderTeamInsightsBody()+'</div>';
 
   if(!d){
-    return '<div class="page">'+toggle+'<div class="ph"><div class="ptitle">Lead Insights</div><div class="psub">Loading your performance data…</div></div>'+
+    return '<div class="page">'+toggle+'<div class="ph"><div class="ptitle">Outreach Insights</div><div class="psub">Loading your performance data…</div></div>'+
       UI.strip([{v:'—',label:'Emails sent'},{v:'—',label:'Leads assigned'},{v:'—',label:'Converted'},{v:'—',label:'Conv rate'}])+'</div>';
   }
 
@@ -296,7 +296,7 @@ function renderBDInsights(){
   return '<div class="page">'+toggle+
     '<div class="ph"><div class="flex aic gap2">'+
       av(u,'40')+
-      '<div><div class="ptitle" style="margin:0">Lead Insights</div><div class="psub" style="margin:0">Your personal lead-gen performance</div></div>'+
+      '<div><div class="ptitle" style="margin:0">Outreach Insights</div><div class="psub" style="margin:0">Your personal lead-gen performance</div></div>'+
     '</div></div>'+
 
     UI.strip([

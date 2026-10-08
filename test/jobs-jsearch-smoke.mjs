@@ -38,7 +38,7 @@ step('an answer that is not JSON does not crash — it is "no jobs"', (await js.
 console.log('\nWhat it refuses before asking');
 f = fake(200, { data: { jobs: [] } });
 r = await js.searchJobs({ key: '', query: 'welder', fetchImpl: f.fetchImpl });
-step('no key: no call, and it says where an admin adds one', !r.ok && f.calls.length === 0 && /Access & job sources/.test(r.error));
+step('no key: no call, and it says where an admin adds one', !r.ok && f.calls.length === 0 && /Integrations & API Keys/.test(r.error));
 r = await js.searchJobs({ key: KEY, query: '   ', fetchImpl: f.fetchImpl });
 step('nothing to search for: no call', !r.ok && f.calls.length === 0);
 
