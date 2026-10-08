@@ -2145,8 +2145,9 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       const needsCompany = gate.needs;
       const sendingForThis = needsCompany ? gate.mailbox : sendingEmail;
       const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingForThis);
-      await supabase.from('emails').update({ status: 'sent', sent_at: today(),
-        ...(needsCompany ? { subject: senderCompany.fillCompany(email.subject, sendingForThis.sends_as_company), body: senderCompany.fillCompany(email.body, sendingForThis.sends_as_company) } : {}) }).eq('id', email.id);
+      await supabase.from('emails').update({ status: 'sent', sent_at: today() }).eq('id', email.id);
+      // Sent: the company is now part of the stored text, so history and quoted replies never show the token.
+      if (needsCompany) await supabase.from('emails').update({ subject: senderCompany.fillCompany(email.subject, sendingForThis.sends_as_company), body: senderCompany.fillCompany(email.body, sendingForThis.sends_as_company) }).eq('id', email.id);
       await persistGraphIds(email.id, graph);
       emit(EVENTS.EMAIL_SENT, { emailId: email.id, jobId: email.job_id, contactId: email.contact_id, managerId: userId, followupType: email.followup_type || 'initial', toEmail: email.to_email });
       const todayDate = today();

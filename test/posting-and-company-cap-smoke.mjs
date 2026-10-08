@@ -96,7 +96,7 @@ step('…not follow-ups, not yesterday, not unsent', !counts.c2 && counts.c1 ===
 
 // ── (b) wired into the send loop ───────────────────────────────────────────
 const SRC = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
-const loop = SRC.slice(SRC.indexOf('async function processPendingEmailSends'), SRC.indexOf('async function processPendingEmailSends') + 16000);
+const loop = SRC.slice(SRC.indexOf('async function processPendingEmailSends'), SRC.indexOf('async function processPendingEmailSends') + 24000);   // the loop grew (the company gate, 8 Oct); the ORDER is what is asserted
 const iWin = loop.indexOf('if (!isInLeadSendWindow(leadTz, new Date(), sendWindow))');
 const iCap = loop.indexOf('companyDailyCap.capCheck(');
 const iClaim = loop.indexOf(".update({ status: 'sending' })");
