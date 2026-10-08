@@ -1190,3 +1190,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43, fifth round, later) — test pinned the old default
 - `ai-style-ui-smoke` expected "Follow-up 2" to show by default in My wording; changed on purpose for D-0114 (none until chosen) to look for Outreach 1 and the "How many follow-ups" box. A full-suite run is the only way such a pinned default is found — it failed once there.
+
+- `sequence-preview-sender-smoke` (7): the builder preview never shows the profile name (shown failing with a profile-name mutation). Also updated four tests pinned to the old "two follow-ups by default" (`plan-preview-smoke`, `scroll-keep-smoke`, `wording-scope-ui-smoke`, `ai-style-ui-smoke`) and `orphan-followup-guard`'s source pattern (now `followupSteps.dayFor(settings, bdId, stepNo)`). The full Node 22 run at the D-0114 head was 227/232 for exactly these five; all five pass after the update.

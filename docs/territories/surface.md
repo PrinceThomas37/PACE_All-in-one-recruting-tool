@@ -1318,3 +1318,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - The Outreach Plan editor defaults to NO follow-ups; the note on an unwritten follow-up says nothing goes out for it.
+
+## 2026-10-08 (Session 43, fifth round, later) — sequence preview speaks as the email ID (R-188)
+- `09-page-workflows.js` `wfPreviewHtml`: {{sender}}, {{senderemail}}, {{sendercompany}} come from one of the person's OWN email IDs (`wfPreviewMailbox`: the picked one, else primary, else first); a "filled in as" picker (`wfPreviewAs`) when they have several; none connected = the field is marked, never the profile name. Not fixed (R-189): compose / mail-merge screens that still pass `STATE.user.name` to `fillEmail`.
