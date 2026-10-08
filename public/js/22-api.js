@@ -120,6 +120,8 @@ function loadAppData(){
         STATE.fu2Body=plan['tmpl_fu2_body']||STATE.fu2Body;
         // restore template mode preference
         if(plan['random_template_mode'])STATE.randomTemplateMode=plan['random_template_mode']==='true';
+        // R-176: what each of my email IDs says of its own (only used when I chose "a wording for each email ID").
+        apiGet('/outreach-plan/mailboxes').then(function(r){ STATE.mailboxWording=(r&&r.mailboxes)||{}; render(); }).catch(function(){});
         if(plan['compose_style_preset'])STATE.outreachStylePreset=plan['compose_style_preset'];
         render();
       }).catch(function(){});

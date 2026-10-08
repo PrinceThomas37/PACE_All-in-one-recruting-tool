@@ -242,15 +242,18 @@ module.exports = (ctx) => {
       const { data: rows } = await supabase.from('user_emails')
         .select('id,email_address,platform,is_active').eq('user_id', req.user.id).eq('is_active', true);
       let unread = 0, mailboxes = 0;
+      // 8 Oct (owner: "it does not show which email ID received the new email"): the total is the sum of these,
+      // so the screen can say where it came from. A disconnected mailbox is simply absent from the list.
+      const perMailbox = [];
       for (const mb of (rows || [])) {
         try {
           const adapter = mail.forMailbox(mb);
           const folders = await adapter.listFolders();
           const inbox = folders.find(f => f.kind === 'inbox');
-          if (inbox) { unread += inbox.unread || 0; mailboxes++; }
+          if (inbox) { unread += inbox.unread || 0; mailboxes++; perMailbox.push({ id: mb.id, email: mb.email_address, unread: inbox.unread || 0 }); }
         } catch (_) { /* a disconnected mailbox contributes nothing, silently */ }
       }
-      const value = { unread, mailboxes };
+      const value = { unread, mailboxes, per_mailbox: perMailbox };
       unreadCache.set(req.user.id, { at: Date.now(), value });
       res.json(value);
     } catch (err) { res.status(500).json({ error: err.message }); }

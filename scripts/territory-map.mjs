@@ -36,7 +36,7 @@ const TERRITORIES = [
           'services/record-history.js', 'services/record-history-writer.js',
           // The one way a person is added to a lead (POST /contacts and the POC
           // finder's Accept) — beside routes/contacts.js, which it came out of.
-          'services/lead-contacts.js', 'services/lead-distribution.js', 'services/bd-insights.js',
+          'services/lead-contacts.js', 'services/lead-distribution.js', 'services/lead-claim.js', 'services/bd-insights.js',
           // The insights numbers beside bd-insights, the viewer's-own-day helper both
           // read (D-0065), and the Sentry reporter (R-090).
           'services/ra-insights.js', 'services/viewer-time.js', 'services/error-report.js'],
@@ -102,7 +102,7 @@ const TERRITORIES = [
           // The ONE definition of a submission (D-0029) and the ONE reader of a
           // staged applicant's `raw` blob (D-0028). Both are domain vocabulary,
           // so they sit with the stages they describe.
-          'services/submission-stages.js', 'services/report-work.js', 'services/sequence-templates.js', 'services/sequence-primary.js', 'services/applicants.js',
+          'services/submission-stages.js', 'services/report-work.js', 'services/sequence-templates.js', 'services/wording-scope.js', 'services/sequence-primary.js', 'services/applicants.js',
           'services/candidate-fields.js', 'services/client-resolve.js',
           'services/company-cooldown.js',
           'services/company-merge.js', 'services/lead-fill.js',

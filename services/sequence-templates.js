@@ -17,11 +17,14 @@
 //
 // Precedence, most specific first (unchanged from before, only the slot name):
 //   1. the step's OWN subject/body (the person wrote this email for this step)
+//   1b. the email ID's own wording (R-176) — only when the person chose "a wording for each email ID"; ue_<mailbox>_tmpl_<slot>_*
 //   2. the person's own saved template  u_<id>_tmpl_<slot>_subject|body
 //   3. the organisation's global one    template_<slot>_subject|body
 //   4. the built-in default             DEFAULT_TEMPLATES[<slot>_subject|body]
 // ============================================================================
 'use strict';
+
+const wording = require('./wording-scope');
 
 const SLOT_ALIASES = { initial: 'o1' };
 
@@ -32,9 +35,12 @@ function slotFor(key) {
 }
 
 /** The four app_settings keys to read for a step, in precedence order. */
-function settingKeys(bdId, key) {
+function settingKeys(bdId, key, mailboxId) {
   const slot = slotFor(key);
-  return [`u_${bdId}_tmpl_${slot}_subject`, `u_${bdId}_tmpl_${slot}_body`, `template_${slot}_subject`, `template_${slot}_body`];
+  const keys = [`u_${bdId}_tmpl_${slot}_subject`, `u_${bdId}_tmpl_${slot}_body`, `template_${slot}_subject`, `template_${slot}_body`];
+  // R-176: the person's choice ("a wording for each email ID") and the email ID's own two texts for this slot.
+  if (mailboxId) keys.push(wording.scopeKey(bdId), wording.mailboxKey(mailboxId, `tmpl_${slot}_subject`), wording.mailboxKey(mailboxId, `tmpl_${slot}_body`));
+  return keys;
 }
 
 /**
@@ -46,15 +52,16 @@ function settingKeys(bdId, key) {
  *             saved value may be blank or a variant marker)
  * → { subject, body, slot } or { error }
  */
-function pickTemplate({ cfg, bdId, settings, defaults, resolve }) {
+function pickTemplate({ cfg, bdId, mailboxId, settings, defaults, resolve }) {
   const c = cfg || {};
   const slot = slotFor(c.template_key);
   const s = settings || {};
   const res = typeof resolve === 'function' ? resolve : (v) => v;
   let subject = c.subject, body = c.body;
   if (!subject || !body) {
-    subject = subject || res(s[`u_${bdId}_tmpl_${slot}_subject`] || s[`template_${slot}_subject`] || '', `${slot}_subject`) || (defaults || {})[`${slot}_subject`];
-    body = body || res(s[`u_${bdId}_tmpl_${slot}_body`] || s[`template_${slot}_body`] || '', `${slot}_body`) || (defaults || {})[`${slot}_body`];
+    const raw = (field) => wording.pickRaw(s, { userId: bdId, mailboxId, field, globalKey: `template_${slot}_${field.split('_').pop()}` });
+    subject = subject || res(raw(`tmpl_${slot}_subject`), `${slot}_subject`) || (defaults || {})[`${slot}_subject`];
+    body = body || res(raw(`tmpl_${slot}_body`), `${slot}_body`) || (defaults || {})[`${slot}_body`];
   }
   if (!subject || !body) return { error: `There is no template called "${c.template_key || 'initial'}" — pick one of Outreach 1, Follow-up 1, Follow-up 2, or write this step's own email.` };
   return { subject, body, slot };

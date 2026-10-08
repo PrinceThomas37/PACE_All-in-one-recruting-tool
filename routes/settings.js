@@ -9,6 +9,7 @@
 const express = require('express');
 const { resolveTemplate } = require('../email-vars');
 const numberSettings = require('../config/settings');
+const wording = require('../services/wording-scope');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -129,7 +130,7 @@ router.post('/app-settings', auth, async (req, res) => {
 router.get('/outreach-plan', auth, async (req, res) => {
   try {
     const uid = req.user.id;
-    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`];
+    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`,`u_${uid}_tmpl_scope`];
     const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
     const plan = {};
     (data || []).forEach(r => { plan[r.key.replace(`u_${uid}_`, '')] = r.value; });
@@ -159,13 +160,62 @@ router.post('/outreach-plan', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'bd', 'bd_lead', 'admin')) return res.status(403).json({ error: 'BD role required' });
     const uid = req.user.id;
-    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset'];
+    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset','tmpl_scope'];
     const { key, value } = req.body;
     if (!allowed.includes(key)) return res.status(400).json({ error: 'Invalid key' });
+    // R-176: one wording for all my email IDs ('all') or one each ('each') — nothing else is stored.
+    if (key === 'tmpl_scope' && !['all', 'each'].includes(String(value))) return res.status(400).json({ error: 'Choose "all" or "each".' });
     const fullKey = `u_${uid}_${key}`;
     const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });
     if (error) throw error;
     res.json({ success: true, key: fullKey, value });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── WORDING PER EMAIL ID (R-176, D-0111) ─────────────────────────────────────
+// The person's own email IDs only: another person's mailbox is "not found". A value saved as '' removes that email ID's text, so the
+// email ID falls back to the person's wording again. What is stored is dormant unless the person chose scope 'each' (wording-scope.js).
+async function ownMailbox(req, id) {
+  if (!id) return null;
+  const { data } = await supabase.from('user_emails').select('id,email_address').eq('id', String(id)).eq('user_id', req.user.id).maybeSingle();
+  return data || null;
+}
+router.get('/outreach-plan/mailboxes', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'bd', 'bd_lead', 'admin')) return res.status(403).json({ error: 'BD role required' });
+    const { data: boxes } = await supabase.from('user_emails').select('id,email_address').eq('user_id', req.user.id).eq('is_active', true);
+    const ids = (boxes || []).map(b => b.id);
+    const keys = wording.neededKeys([], ids);
+    const rows = [];
+    for (let i = 0; i < keys.length; i += 60) {
+      const { data } = await supabase.from('app_settings').select('key,value').in('key', keys.slice(i, i + 60));
+      (data || []).forEach(r => rows.push(r));
+    }
+    const out = {};
+    ids.forEach(id => { out[id] = {}; });
+    rows.forEach(r => {
+      const m = /^ue_([^_]+(?:-[^_]+)*)_(tmpl_.+)$/.exec(r.key);
+      if (m && out[m[1]] && String(r.value || '').trim()) out[m[1]][m[2]] = r.value;
+    });
+    res.json({ mailboxes: out });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.post('/outreach-plan/mailbox', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'bd', 'bd_lead', 'admin')) return res.status(403).json({ error: 'BD role required' });
+    const { mailbox_id, key, value } = req.body || {};
+    if (!wording.FIELDS.includes(key)) return res.status(400).json({ error: 'Invalid key' });
+    const mb = await ownMailbox(req, mailbox_id);
+    if (!mb) return res.status(404).json({ error: 'That email ID is not one of yours.' });
+    const fullKey = wording.mailboxKey(mb.id, key);
+    if (!String(value == null ? '' : value).trim()) {
+      const { error } = await supabase.from('app_settings').delete().eq('key', fullKey);
+      if (error) throw error;
+      return res.json({ success: true, key: fullKey, cleared: true });
+    }
+    const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });
+    if (error) throw error;
+    res.json({ success: true, key: fullKey });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

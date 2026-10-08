@@ -287,10 +287,62 @@ window.insertVarChip=function(token,subjId,bodyId){
   if(window.planRepaintPreview)planRepaintPreview();   // the Outreach Plan's live preview follows the chip
   showToast('Added '+mergeVarFriendlyLabel(token)+' to '+where,'success');
 };
+// ── WORDING PER EMAIL ID (R-176, D-0111) ────────────────────────────────────────────────────────────────────────────────
+// "One wording for all my email IDs" (how it always worked) or "a different wording for each". With "each" the editor below follows the
+// Sending email chosen above: it shows THAT email ID's wording (or, when it has none, the person's — the starting point), and Save
+// writes it to that email ID. An email ID with none sends the person's wording, so choosing "each" never leaves a blank page.
+window.planScope=function(){ return (STATE.myOutreachPlan&&STATE.myOutreachPlan.tmpl_scope)==='each'?'each':'all'; };
+window.planWording=function(field){
+  var my=STATE.myOutreachPlan||{};
+  if(planScope()==='each'&&STATE.planFromEmailId){ var mw=(STATE.mailboxWording||{})[STATE.planFromEmailId]; if(mw&&mw[field]) return mw[field]; }
+  return my[field];
+};
+window.mailboxHasOwnWording=function(id){ var mw=(STATE.mailboxWording||{})[id]; return !!mw&&Object.keys(mw).some(function(k){ return !!mw[k]; }); };
+var WORDING_FIELDS=['tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body'];
+window.setWordingScope=function(scope){
+  if(scope!=='all'&&scope!=='each')return;
+  STATE.myOutreachPlan=STATE.myOutreachPlan||{};
+  STATE.myOutreachPlan.tmpl_scope=scope;
+  render();
+  apiPost('/outreach-plan',{key:'tmpl_scope',value:scope}).then(function(){
+    showToast(scope==='each'?'Each email ID can now have its own wording — an email ID with none sends your main wording':'All your email IDs use one wording again','success');
+  }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
+};
+// Give this email ID a copy of the person's wording to edit (all six texts), or take its own wording away.
+window.wordingStartFromMine=function(id){
+  var my=STATE.myOutreachPlan||{}; if(!id)return;
+  STATE.mailboxWording=STATE.mailboxWording||{}; var mw=STATE.mailboxWording[id]=STATE.mailboxWording[id]||{};
+  var saves=[];
+  WORDING_FIELDS.forEach(function(f){ var v=my[f]||''; if(!v)return; mw[f]=v; saves.push(apiPost('/outreach-plan/mailbox',{mailbox_id:id,key:f,value:v})); });
+  if(!saves.length){ showToast('You have no main wording to copy yet — write it for this email ID below and Save','info'); render(); return; }
+  Promise.all(saves).then(function(){ showToast('This email ID now has its own copy of your wording — edit it and Save','success'); render(); })
+    .catch(function(e){ showToast('Save failed: '+e.message,'error'); });
+};
+window.wordingUseMine=function(id){
+  if(!id)return;
+  if(!confirm('Take away the wording written for this email ID? It will send your main wording again.'))return;
+  var mw=(STATE.mailboxWording||{})[id]||{};
+  var saves=WORDING_FIELDS.filter(function(f){ return !!mw[f]; }).map(function(f){ return apiPost('/outreach-plan/mailbox',{mailbox_id:id,key:f,value:''}); });
+  STATE.mailboxWording=STATE.mailboxWording||{}; STATE.mailboxWording[id]={};
+  render();
+  Promise.all(saves).then(function(){ showToast('This email ID sends your main wording again','success'); }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
+};
+
 window.saveOutreachTemplate=function(key,subjId,bodyId){
   var subj=(document.getElementById(subjId)||{}).value||'';
   var body=(document.getElementById(bodyId)||{}).value||'';
   var apiKey=outreachTmplApiKey(key);
+  // "A wording for each email ID": the text belongs to the Sending email chosen above, not to the person.
+  if(planScope()==='each'&&STATE.planFromEmailId){
+    var boxId=STATE.planFromEmailId, mbx=planFromMailbox();
+    STATE.mailboxWording=STATE.mailboxWording||{}; var mw=STATE.mailboxWording[boxId]=STATE.mailboxWording[boxId]||{};
+    mw['tmpl_'+apiKey+'_subject']=subj; mw['tmpl_'+apiKey+'_body']=body;
+    Promise.all([
+      apiPost('/outreach-plan/mailbox',{mailbox_id:boxId,key:'tmpl_'+apiKey+'_subject',value:subj}),
+      apiPost('/outreach-plan/mailbox',{mailbox_id:boxId,key:'tmpl_'+apiKey+'_body',value:body})
+    ]).then(function(){ showToast('Saved for '+(mbx?mbx.email_address:'this email ID'),'success'); render(); }).catch(function(e){showToast('Save failed: '+e.message,'error');});
+    return;
+  }
   if(key==='outreach'){STATE.emailSubj=subj;STATE.emailBody=body;}
   else if(key==='fu1'){STATE.fu1Subj=subj;STATE.fu1Body=body;}
   else if(key==='fu2'){STATE.fu2Subj=subj;STATE.fu2Body=body;}

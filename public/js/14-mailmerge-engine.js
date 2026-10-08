@@ -697,9 +697,8 @@ window.doImportProcess=function(toProcess,dupEmailMap){
     render();
 
     // Single bulk API call
-    // A BD importing into their OWN profile gets leads that are theirs, in their own mailboxes (R-148). An RA / admin import still goes to the pool.
-    var forMe=userHasAnyRole(STATE.user,'bd','bd_lead')&&!userHasAnyRole(STATE.user,'admin','ra_lead');
-    apiPost('/jobs/bulk',{jobs:jobPayloads,for_me:forMe}).then(function(res){
+    // D-0110: an import by anyone lands UNASSIGNED; it becomes someone's when it is assigned (Leads → Assign) or the first email is written.
+    apiPost('/jobs/bulk',{jobs:jobPayloads}).then(function(res){
       var summary=res.imported+' job'+(res.imported!==1?'s':'')+' imported, '+res.contacts+' contacts created.';
       // The server already counts addresses it flagged invalid; the result used
       // to say nothing about them, so a batch that could not be emailed looked
@@ -714,8 +713,8 @@ window.doImportProcess=function(toProcess,dupEmailMap){
         (res.invalidEmails?'\u26a0 Contacts with no valid email (will not be emailed): '+res.invalidEmails:''),
         (Object.keys(dupEmailMap).length?' Flagged as duplicates: '+toProcess.filter(function(g){return g.contacts.some(function(c){return c.email&&dupEmailMap[c.email.toLowerCase().trim()];});}).length:'')
       ].filter(Boolean);
-      if(res.owned&&res.imported)summary+=' They are yours, spread over your own connected mailboxes. Nothing has been sent yet \u2014 the next step is to write the first emails.';
-      STATE.modal=renderImportProgressModal(res.imported,res.imported,logs,true,summary,res.owned?res.job_ids:null);
+      if(res.imported)summary+=' They are Unassigned \u2014 nobody owns them yet. In the Leads tab, press Assign to give them to yourself or your team, or write the first emails; each lead becomes Assigned then.';
+      STATE.modal=renderImportProgressModal(res.imported,res.imported,logs,true,summary,null);
       render();
     }).catch(function(err){
       var logs=['\u2717 Batch failed: '+err.message,'Check your data and try again.'];

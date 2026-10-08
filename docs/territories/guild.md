@@ -786,3 +786,8 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-08 (Session 42) — insights answers carry bounce and open rate (D-0109)
 - `routes/workflows.js` `loadBdSummary` (the BD insights read) now also reads the contacts' `email_status` and `email_tracking.open_count` for the person's sent emails and hands them to `services/bd-insights.js` `deliveryStats`; the rates are null (shown "—") when not measured or when the read fails. Definitions in D-0109.
+
+## 2026-10-08 (Session 43) — wording per email ID (R-176, D-0111)
+- NEW `services/wording-scope.js` (pure): `isEach`, `mailboxOwn`, `mailboxHasOwnSequence`, `pickRaw` (email ID's own → person's → global), `followupTexts`, `neededKeys`. Keys: `u_<id>_tmpl_scope` ('all' default | 'each'), `ue_<mailboxId>_tmpl_<o1|fu1|fu2>_<subject|body>`. A stored email-ID text is DORMANT unless the person chose 'each'.
+- `services/lead-outreach-queue.js`: each lead's first email is in the wording of the email ID it goes out from; a person with 'each' may start from an email ID that has its own first email even with no wording of their own (the others are reported in `needsSequence` with the count of stuck leads); an email ID with its own text is left out of the random rotation. `services/sequence-templates.js`: `settingKeys(bdId,key,mailboxId)`, `pickTemplate({mailboxId})`. `index.js` follow-up engine uses `followupTexts` with the lead's mailbox. `routes/my-setup.js` counts a per-email-ID first email as a started sequence.
+- Tests: `wording-scope-smoke` (29, each failed when its behaviour was removed).

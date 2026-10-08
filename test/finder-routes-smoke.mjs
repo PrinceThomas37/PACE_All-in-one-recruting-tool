@@ -378,8 +378,39 @@ step('a BD with no connected mailbox cannot save (a lead they cannot email is no
 st.tables.user_emails[0].is_active = true;
 r = await call('/finder/cards/:id/accept', 'post', 'bd1', { position: 'Dental Hygienist', contacts: four }, { id: bdCard.id });
 const bdLead = st.tables.jobs.find((j) => j.id === (r.out && r.out.lead_id));
-step('with a mailbox, the BD\'s lead comes STRAIGHT TO THEM: assigned, in their mailbox, stage Assigned', r.code === 201 && r.out.goes_to === 'you' && bdLead && bdLead.assigned_to_bd === 'bd1' && bdLead.stage === 'Assigned' && bdLead.sending_email_id === 'm1', JSON.stringify(r.out));
+step('D-0110: a BD\'s saved lead starts UNASSIGNED — no owner, no mailbox yet (it becomes theirs when its first email is written, or when it is assigned)', r.code === 201 && r.out.goes_to === 'you' && bdLead && !bdLead.assigned_to_bd && bdLead.stage === 'Unassigned' && !bdLead.sending_email_id, JSON.stringify(r.out));
 step('…and only 3 contacts are kept even if 4 are sent', r.out.contacts === 3 && st.tables.contacts.filter((c) => c.job_id === bdLead.id).length === 3);
+
+// ── D (8 Oct, owner: "the email never went out"): a saved lead's card says what happened to its first email ──
+st.tables.emails = [{ id: 'e1', job_id: bdLead.id, status: 'pending', from_email: 'bd@x.test', sent_by: 'bd1', followup_type: null }];
+st.tables.finder_cards.find((c) => c.id === bdCard.id).payload.people = { pX: { first_name: 'Pat', last_name: 'Quill', title: 'CFO', email: 'pat@lonestardental.example' }, pY: { first_name: 'No', last_name: 'Email', title: 'COO' } };
+r = await call('/finder/history', 'get', 'bd1');
+let hl = r.out.items.find((x) => x.id === bdCard.id);
+step('D: a lead whose first email is written but not sent says so — 1 waiting, none sent, from which email ID', hl && hl.lead && hl.lead.email.pending === 1 && hl.lead.email.sent === 0 && hl.lead.email.from === 'bd@x.test', JSON.stringify(hl && hl.lead && hl.lead.email));
+step('D: …and says the lead is still nobody\'s (Unassigned) until that email is written for real', hl.lead.unowned === true);
+st.tables.emails[0].status = 'sent'; st.tables.emails[0].sent_at = '2026-10-11T15:00:00Z';
+r = await call('/finder/history', 'get', 'bd1'); hl = r.out.items.find((x) => x.id === bdCard.id);
+step('D: once it is sent, the card says sent, when, and from where', hl.lead.email.sent === 1 && hl.lead.email.pending === 0 && hl.lead.email.last_sent_at === '2026-10-11T15:00:00Z' && hl.lead.email.from === 'bd@x.test');
+st.tables.emails.push({ id: 'e2', job_id: bdLead.id, status: 'sent', from_email: 'x', sent_by: 'someone-else', followup_type: null }, { id: 'e3', job_id: bdLead.id, status: 'sent', from_email: 'x', sent_by: 'bd1', followup_type: 'followup1' });
+r = await call('/finder/history', 'get', 'bd1'); hl = r.out.items.find((x) => x.id === bdCard.id);
+step('D: another person\'s emails and follow-ups are NOT counted as my first email', hl.lead.email.sent === 1);
+step('D: people found on the card with a revealed address, not yet contacts, are offered for "another person" (one without an address is not)', hl.lead.more_people.length === 1 && hl.lead.more_people[0].person_id === 'pX');
+
+// ── E: email another job / another person from a saved lead's card ──
+const jobsN = st.tables.jobs.length;
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Hygienist'], contacts: [{ person_id: 'pX' }] }, { id: bdCard.id });
+step('E: the SAME job at the same company is refused — it would write to them twice about the same thing', r.code === 409 && st.tables.jobs.length === jobsN, r.out && r.out.error);
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant'], contacts: [{ person_id: 'pY' }] }, { id: bdCard.id });
+step('E: a person whose address was never revealed cannot be written to', r.code === 400 && /Reveal/.test(r.out.error) && st.tables.jobs.length === jobsN);
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant', 'Office Manager'], contacts: [{ person_id: 'pX' }, { contact_id: st.tables.contacts.find((c) => c.job_id === bdLead.id).id }] }, { id: bdCard.id });
+const second = st.tables.jobs.find((j) => j.id === (r.out && r.out.lead_id));
+step('E: another job at the same company becomes a SECOND lead — same company, new job, Unassigned, nobody\'s mailbox yet', r.code === 201 && second && second.company_id === bdLead.company_id && second.position === 'Dental Assistant' && second.stage === 'Unassigned' && !second.assigned_to_bd && !second.sending_email_id, JSON.stringify(r.out));
+step('E: …with the other job kept as "also hiring" and the people picked (a new one and one from the first lead)', second.research.finder.also_hiring.join() === 'Office Manager' && st.tables.contacts.filter((c) => c.job_id === second.id).length === 2 && st.tables.contacts.filter((c) => c.job_id === second.id)[0].email === 'pat@lonestardental.example');
+step('E: …and the first lead is untouched', st.tables.jobs.find((j) => j.id === bdLead.id).stage === 'Unassigned' && st.tables.contacts.filter((c) => c.job_id === bdLead.id).length === 3);
+r = await call('/finder/cards/:id/another', 'post', 'ra1', { positions: ['Anything'], contacts: [{ first_name: 'A', email: 'a@b.example' }] }, { id: bdCard.id });
+step('E: somebody else\'s card does not exist for you (404)', r.code === 404);
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Estimator'], contacts: [] }, { id: bdCard.id });
+step('E: with nobody to write to it is refused', r.code === 400 && /at least one person/.test(r.out.error));
 
 // ═════ 7. the nightly sweep and tidy-up ═══════════════════════════════════════════════════════════════════
 console.log('\nThe nightly run');
@@ -514,10 +545,10 @@ step('a mailbox that belongs to someone else is refused in words — and nothing
 r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx1.example' }], mailbox_id: 'm3' }, { id: 'mc1' });
 step('…and so is one of their own whose sign-in is broken', r.code === 400 && st.tables.jobs.length === jobsBefore);
 r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx1.example' }], mailbox_id: 'm1' }, { id: 'mc1' });
-step('a chosen mailbox is the one the lead sends from', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).sending_email_id === 'm1', JSON.stringify(r.out));
+step('a chosen mailbox is checked (a bad one was refused above) but the lead stays Unassigned until the first email claims it', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).stage === 'Unassigned' && !st.tables.jobs.find((j) => j.id === r.out.lead_id).sending_email_id, JSON.stringify(r.out));
 r = await call('/finder/cards/:id/accept', 'post', 'bd1', { positions: ['Welder'], contacts: [{ first_name: 'Sam', email: 'sam@mbx2.example' }] }, { id: 'mc2' });
-step('with no choice made, the lead goes to the mailbox that has sent the fewest today (not always the first)', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).sending_email_id === 'm2');
-step('the lead is the person\'s own, assigned, in that mailbox', st.tables.jobs.find((j) => j.id === r.out.lead_id).assigned_to_bd === 'bd1' && st.tables.jobs.find((j) => j.id === r.out.lead_id).stage === 'Assigned');
+step('with no choice made the lead is simply saved Unassigned (the mailbox spread happens when the first email is written)', r.code === 201 && st.tables.jobs.find((j) => j.id === r.out.lead_id).stage === 'Unassigned');
+step('…and nobody owns it yet', !st.tables.jobs.find((j) => j.id === r.out.lead_id).assigned_to_bd);
 
 // ═════ 8. what is wrong with the key, in words ═════════════════════════════════════════════════════════════
 console.log('\nThe form\'s choices and the company lookup');

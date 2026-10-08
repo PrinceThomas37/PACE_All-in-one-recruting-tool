@@ -232,16 +232,10 @@ router.post('/jobs/bulk', auth, async (req, res) => {
   try {
     const { jobs } = req.body;
     if (!Array.isArray(jobs) || !jobs.length) return res.status(400).json({ error: 'jobs array required' });
-    // R-148 (D-0082): a BD who imports a list into their OWN profile gets leads that are THEIRS, in their own
-    // connected mailboxes, ready to write the first emails for. Until now every import landed in the pool as
-    // "Unassigned" — invisible to the BD who made it, with no way to send. Anyone else's import still goes to the pool.
-    const forMe = req.body.for_me === true && hasRole(req, 'bd', 'bd_lead');
-    let myMailboxes = null;
-    if (forMe) {
-      const mb = await leadDistribution.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: req.user.id, todayStr: today(), who: 'You', ignoreRoom: true });
-      if (mb.error) return res.status(400).json({ error: mb.error + ' (Your import was not started.)' });
-      myMailboxes = mb.accounts;
-    }
+    // D-0110 (owner, 8 Oct; reverses the import half of D-0082): an import by ANYONE lands UNASSIGNED — nobody owns it, so a manager
+    // can hand it out (the Assign button, routes/lead-assign.js) or a person can start it, and the stage becomes Assigned only
+    // when someone is given the lead or the first email to its contact is written (services/lead-claim.js). The importer still
+    // sees what they imported (created_by is sight, services/ownership.js). `for_me` from an older browser tab is ignored.
     // Filter out companies in cooldown for RA users (admin-editable — config/settings.js)
     const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
     const cooldownDate = new Date(Date.now() - cooldownDays * 24 * 3600 * 1000).toISOString();
@@ -274,11 +268,10 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         location: j.location || null,
         source: j.source || 'Import',
         job_url: j.job_url || null,
-        stage: forMe ? 'Assigned' : 'Unassigned',
+        stage: 'Unassigned',
         notes: j.notes || '',
         created_by: req.user.id,
-        assigned_to: forMe ? req.user.id : null,
-        ...(forMe ? { assigned_to_bd: req.user.id, assigned_at: new Date().toISOString() } : {}),
+        assigned_to: null,
         is_duplicate: j.is_duplicate || false,
         duplicate_of: j.duplicate_of || null,
         salary_range: j.salary_range || null,
@@ -322,11 +315,6 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         }
       }
     } catch (e) { /* history lookup is best-effort — never block an import */ }
-    if (forMe) {
-      // Spread over MY mailboxes by the rule the admin's Assign Leads uses.
-      const queue = leadDistribution.assignmentQueue(myMailboxes, jobRows.length);
-      jobRows.forEach((row, i) => { row.sending_email_id = queue[i] || myMailboxes[0].id; });
-    }
     const { data: insertedJobs, error: jobErr } = await supabase.from('jobs').insert(jobRows).select('id');
     if (jobErr) throw jobErr;
     const contactRows = [];
@@ -351,7 +339,7 @@ router.post('/jobs/bulk', auth, async (req, res) => {
     }
     const invalidContacts = contactRows.filter(c => c.email_status === 'invalid').length;
     res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped,
-      owned: forMe, job_ids: forMe ? insertedJobs.map(j => j.id) : [],
+      owned: false, job_ids: [],
       contactFixes, contactFixesNote: contactPoints.describeImportFixes(contactFixes) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

@@ -611,14 +611,14 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 .rep-fill.is-empty{display:none}
 .tone-brand{--tone:#A894DB} .tone-info{--tone:#9CC6E2} .tone-wait{--tone:#E6BC7A}
 .tone-go{--tone:#A9C98C} .tone-stop{--tone:#D98A7E} .tone-muted{--tone:#C9BFA9}
-.rep-num{width:34px;flex:none;font-family:var(--pixel-label);font-weight:700;font-size:13px;color:#1A1033}
+.rep-num{width:34px;flex:none;font-family:var(--mono);font-weight:700;font-size:13px;color:#1A1033}
 .rep-num.is-zero{color:#8C80AD}
 
 .rep-cols{display:flex;align-items:flex-end;gap:10px;height:132px;padding:0 4px;border-bottom:3px solid #1A1033}
 .rep-col{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
 .rep-pair{display:flex;align-items:flex-end;justify-content:center;gap:4px;width:100%}
 .rep-bar1{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;flex:1;max-width:30px;min-width:0}
-.rep-colv{font-family:var(--pixel-label);font-weight:700;font-size:12px;color:#1A1033}
+.rep-colv{font-family:var(--mono);font-weight:700;font-size:12px;color:#1A1033}
 .rep-colv.is-zero{color:#8C80AD}
 .rep-colbar{width:100%;max-width:26px;background-color:var(--tone,#7A4DE0);border:2px solid #1A1033;border-bottom:0;border-radius:0;box-shadow:3px 0 0 var(--hard);
   background-image:repeating-linear-gradient(0deg,transparent 0 8px,rgba(26,16,51,.25) 8px 10px)}
@@ -816,7 +816,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
 
 .rep-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:14px 10px}
 .rep-kpi{padding:10px 12px;background:#F2EADB;border:2px solid #1A1033}
-.rep-kpi-v{font-family:var(--pixel-label);font-weight:700;font-size:20px;color:#1A1033;line-height:1.1}
+.rep-kpi-v{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:-.5px;color:#1A1033;line-height:1.1}   /* 8 Oct (owner: "these numbers are not readable"): the pixel face cannot draw % and 4/5/2 legibly — figures are DATA, so Space Mono */
 .rep-kpi-l{font-family:var(--mono);font-size:11px;color:#6E6290;margin-top:5px}
 
 /* ── PRIMARY SEQUENCE: a left-to-right switch (owner, 6 Oct) ───────────────── */
@@ -1090,3 +1090,13 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .ms-logo{margin:10px 0 2px}
 .ms-logo-thumb{height:40px;width:auto;max-width:140px;border:2px solid var(--ctl-brd);background:#fff;padding:2px}
 .ms-swatch{display:inline-block;width:14px;height:14px;border:2px solid var(--ctl-brd);vertical-align:middle;margin-left:4px}
+
+/* ── ASSIGN LEADS window (D-0110, R-175): who gets them, and how many go from each email ID ── */
+.as-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:2px dashed var(--line,#C9BFA9)}
+.as-who{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+.as-n{width:84px;flex:none}
+.as-note{flex-basis:100%}
+.as-sumline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.as-say{margin-top:10px;font-weight:700;min-height:1.3em}
+
+.fd-emailrow{margin-top:10px;padding-top:8px;border-top:2px dashed var(--line,#C9BFA9);align-items:center;gap:8px 12px}

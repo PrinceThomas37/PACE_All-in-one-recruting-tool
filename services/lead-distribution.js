@@ -48,6 +48,32 @@ function assignmentQueue(accounts, total, rand = Math.random) {
   return queue;
 }
 
+/**
+ * The person's OWN split (owner, 8 Oct: "can a user choose how many of the lot should go from each email ID?").
+ *   allocation  [{ mailbox_id, count }]   accounts  the assignee's connected mailboxes   total  how many leads
+ * Every named mailbox must be one of the assignee's, every count a whole number >= 0, and the counts must add up to exactly
+ * `total` — a split that loses or invents a lead is refused, in words. The queue is then shuffled like the automatic one.
+ * → { queue } | { error }
+ */
+function allocationQueue(allocation, accounts, total, rand = Math.random) {
+  const ids = new Set((accounts || []).map(a => a.id));
+  const list = Array.isArray(allocation) ? allocation : [];
+  const queue = [];
+  const seen = new Set();
+  for (const a of list) {
+    const id = a && a.mailbox_id ? String(a.mailbox_id) : '';
+    const n = Number(a && a.count);
+    if (!id || !ids.has(id)) return { error: 'One of the email IDs in that split is not one of theirs, or is not connected.' };
+    if (seen.has(id)) return { error: 'An email ID appears twice in that split.' };
+    seen.add(id);
+    if (!Number.isInteger(n) || n < 0) return { error: 'Each email ID needs a whole number of leads (0 or more).' };
+    for (let i = 0; i < n; i++) queue.push(id);
+  }
+  if (queue.length !== total) return { error: `The split gives out ${queue.length} lead${queue.length === 1 ? '' : 's'} but ${total} ${total === 1 ? 'is' : 'are'} being assigned — make the numbers add up.` };
+  for (let i = queue.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [queue[i], queue[j]] = [queue[j], queue[i]]; }
+  return { queue };
+}
+
 /** How many more a per-day self-serve cap allows. A cap of 0 (or less) means the feature is OFF. */
 function dayRemaining(cap, taken) {
   const c = Number(cap), t = Number(taken) || 0;
@@ -89,4 +115,4 @@ async function connectedMailboxesFor({ supabase, withOrg, userId, todayStr, who 
   return { accounts };
 }
 
-module.exports = { FRESHNESS_ORDER, orderPool, assignmentQueue, dayRemaining, connectedMailboxesFor };
+module.exports = { FRESHNESS_ORDER, orderPool, assignmentQueue, allocationQueue, dayRemaining, connectedMailboxesFor };

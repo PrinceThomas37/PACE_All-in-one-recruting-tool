@@ -1172,3 +1172,9 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - New: `reply-target-smoke` (10), `reply-in-thread-smoke` (12, real browser, mailbox stubbed); grown: `client-intel-routes-smoke` (55).
 ## 2026-10-08 (Session 42) — tests for D-0109
 - New `deliverability-admin-smoke` (16: menu and page admin-only for every other role, no template/spam cards, the spam check in My wording checks what is typed and does not repaint). Grown: `insights-numbers-smoke` (21: rates, other-org tracking not counted, a failed read gives null), `insights-screens-smoke` (+3), `scope-emails-warmup-smoke` (52). Mutations shown failing for each.
+
+## 2026-10-08 (Session 43)
+- `mailbox-page-smoke` 70 → 74: per-mailbox unread in the picker, the Inbox hover, the "new mail in <address>" toast, Reply all on the message card. Each failed when `47-page-mailbox.js` was stashed.
+
+## 2026-10-08 (Session 43, later)
+- NEW: `lead-assign-smoke` (30), `assign-leads-ui-smoke` (16), `wording-scope-smoke` (29), `wording-scope-ui-smoke` (16). Changed on purpose: `lead-take-smoke` (imports are Unassigned), `finder-routes-smoke` (176: Unassigned accept, email state, another lead), `finder-page-smoke` (144). Guards shown failing: assign race + chain limit, wording precedence, `isEach` forced true.

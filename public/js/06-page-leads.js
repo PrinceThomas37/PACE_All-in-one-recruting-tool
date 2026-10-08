@@ -231,6 +231,7 @@ function renderJobs(){
     '<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
       '<span class="fs-13" style="font-weight:600">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
       '<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>'+
+      '<button class="btn btn-sm btn-outline" onclick="openAssignLeads()" title="Give the ticked Unassigned leads to yourself or someone on your team">Assign selected</button>'+
       '<button class="btn btn-sm btn-outline" onclick="leadClearSel()">Clear</button>'+
       '<span class="fs-11_5 c-ink3" style="margin-left:auto">You pick the "from" mailboxes next — sends rotate across them, whatever the stage.</span>'+
     '</div>':'';
@@ -266,6 +267,7 @@ function renderJobs(){
         dateBtn+
         (userHasAnyRole(u,'ra_lead','admin')
           ? '<button class="btn btn-sm btn-outline" onclick="openExportLeads()">'+UI.ic('dl')+'Export</button>':'')+
+        (userHasAnyRole(u,'admin','ra_lead','bd','bd_lead')?'<button class="btn btn-sm btn-outline" onclick="openAssignLeads()" title="Give Unassigned leads to yourself or someone on your team — and choose how many go from each email ID">Assign</button>':'')+
         (userHasAnyRole(u,'bd','bd_lead')?'<button class="btn btn-sm btn-outline" onclick="openTakeLeads()" title="Be handed leads from the pool, into your own mailboxes">Take leads</button>':'')+
         '<button class="btn btn-sm btn-outline" onclick="triggerImport()">Import Excel</button>'+
         (u.role!=='ra'?'<button class="btn btn-sm btn-primary" onclick="openAddJob()">'+UI.ic('plus')+'Add Lead</button>':'')+

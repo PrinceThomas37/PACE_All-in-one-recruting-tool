@@ -341,3 +341,7 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-08 (Session 42) — migration 061 APPLIED (D-0105)
 - Owner's go-ahead given; bucket `signature-logos` (public, 204800 bytes, png/jpeg/gif/webp) created and read back. `candidate-docs` stays private. No storage policies added (service key only). Next migration: 062.
+
+## 2026-10-08 (Session 43) — per-email-ID wording keys; allocationQueue (D-0111)
+- No migration. New `app_settings` keys: `ue_<user_emails.id>_tmpl_<o1|fu1|fu2>_<subject|body>` (an email ID's own wording; a blank save DELETES the row) and `u_<userId>_tmpl_scope` ('all' | 'each'). Readers load them in chunks of 60 (`loadSettingsByKeys`) — one `.in()` of many keys outgrows the URL.
+- `services/lead-distribution.js` `allocationQueue(allocation, accounts, total)`: a person's explicit split — whole numbers >= 0, only the assignee's mailboxes, no repeats, must add up exactly or it is refused in words; shuffled like the automatic queue.

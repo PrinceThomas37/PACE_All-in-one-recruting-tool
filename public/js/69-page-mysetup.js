@@ -24,7 +24,13 @@
   function canSend(u){ return !!u && (!userHasRole(u,'ra') || userHasAnyRole(u,'bd','bd_lead','admin','ra_lead')); }
   function plural(n,one){ return n+' '+one+(n===1?'':'es'); }
   // The person has not written (or copied) a sequence of their own yet. False until the plan has loaded — the server is the judge.
-  window.mySetupNeedsSequence = function(){ return !!STATE.user && hasSequenceRole() && !!STATE.myOutreachPlan && !STATE.myOutreachPlan.tmpl_o1_body; };
+  // R-176: a first email written for one of my email IDs (when I chose a wording for each) lets that email ID start outreach.
+  function hasMailboxSequence(){
+    if(!STATE.myOutreachPlan||STATE.myOutreachPlan.tmpl_scope!=='each') return false;
+    var mw=STATE.mailboxWording||{};
+    return Object.keys(mw).some(function(id){ return String((mw[id]||{}).tmpl_o1_body||'').trim().length>20; });
+  }
+  window.mySetupNeedsSequence = function(){ return !!STATE.user && hasSequenceRole() && !!STATE.myOutreachPlan && !STATE.myOutreachPlan.tmpl_o1_body && !hasMailboxSequence(); };
   function status(){
     var boxes=myBoxes(), connected=boxes.filter(isConnected), said=boxes.filter(function(m){ return !!m.sends_as; });
     var steps=[
@@ -34,7 +40,7 @@
         text: !boxes.length ? 'After a mailbox is added.' : (said.length===boxes.length ? 'Company, title and address are set.' : (boxes.length-said.length)+' of '+boxes.length+' still without a company, title and address.') }
     ];
     if (hasSequenceRole()){
-      var have=!!(STATE.myOutreachPlan&&STATE.myOutreachPlan.tmpl_o1_body);
+      var have=!!(STATE.myOutreachPlan&&STATE.myOutreachPlan.tmpl_o1_body)||hasMailboxSequence();
       steps.push({ id:'sequence', done:have, title:'Write your first sequence',
         text: have ? 'Your own wording is saved.' : 'Not yet — PACE will not start outreach for your leads, or write the Lead Finder\'s first email, until you have one. Individual emails are not affected.' });
     }
