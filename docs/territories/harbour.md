@@ -274,3 +274,7 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 43) — which mailbox got the new mail (R-172)
 - `routes/mailbox.js` `GET /mailbox/unread-count` now also returns `per_mailbox: [{id,email,unread}]` (same one provider call per mailbox; the total is their sum; a disconnected mailbox is absent). Cached like the total (`unreadCache`, 60 s).
+
+## 2026-10-08 (Session 43, third round) — {{sendercompany}} at send; a follow-up as a new email (D-0112)
+- NEW `services/sender-company.js`: `{{sendercompany}}` is a SEND-TIME token (`email-vars.js` `SEND_TIME_VARS`, synonyms `sender_company`/`mycompany`/`yourcompany`); the send loop (`processPendingEmailSends`) calls `prepareForSend` — no company said for the sending email ID = the email is held ("No sending email configured for a company yet…", classified `needs_fix`, no automatic retry), never sent with a hole; on success the company is written into the stored subject/body so history never shows the token. `senderIdentityFor` carries `company` when a reader attached `sends_as_company`.
+- NEW `services/followup-thread.js`: `deliverOutboundEmail` reads `u_<sent_by>_fu1|fu2_thread`; 'new' hands the provider a plain email (followup_type `reminder`) while the stored row stays fu1/fu2.

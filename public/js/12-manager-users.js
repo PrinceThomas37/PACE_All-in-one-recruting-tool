@@ -218,6 +218,7 @@ window.connectMicrosoftAccount=function(accountId){
 
 window.selectPlanFromEmail=function(emailId){
   if(!emailId||!STATE.user)return;
+  if(window.planDraftCapture) planDraftCapture();     // what was typed for the email ID being left stays with it
   STATE.planFromEmailId=emailId;
   STATE.sigEmailId=emailId;
   loadMailboxSignature(STATE.user.id,emailId);
@@ -242,6 +243,7 @@ window.applyOutreachStylePreset=function(presetKey){
   STATE.myOutreachPlan['tmpl_fu1_subject']=preset.fu1.subj;STATE.myOutreachPlan['tmpl_fu1_body']=preset.fu1.body;
   STATE.myOutreachPlan['tmpl_fu2_subject']=preset.fu2.subj;STATE.myOutreachPlan['tmpl_fu2_body']=preset.fu2.body;
   STATE.myOutreachPlan['compose_style_preset']=presetKey;
+  STATE.planDraft={};                                  // a style replaces the texts on screen: old unsaved typing would only fight it
   if(userHasAnyRole(STATE.user,'bd','bd_lead','admin')){
     apiPost('/outreach-plan',{key:'compose_style_preset',value:presetKey}).catch(function(){});
   }
@@ -275,8 +277,22 @@ window.saveTemplateModePreference=function(){
     showToast('Outreach template mode saved','success');
   }
 };
+// Where the next merge field goes. CHANGED IN PLACE, never a repaint (owner, 8 Oct, screen recording: "I cannot change the subject line and
+// then select the variables, the subject line is getting reset"). Focusing a box used to repaint the whole page, which wrote the SAVED text
+// back over what was being typed — so a typed subject, and the field just added to it, vanished.
 window.setVarInsertTarget=function(target){
-  STATE.varInsertTarget=target||'body';
+  STATE.varInsertTarget=target==='subject'?'subject':'body';
+  var bars=document.querySelectorAll('[data-var-bar]');
+  if(!bars.length){ render(); return; }      // no chip bar on screen: nothing to update in place, so the old repaint is harmless
+  Array.prototype.forEach.call(bars,function(bar){
+    Array.prototype.forEach.call(bar.querySelectorAll('.seg-btn[data-target]'),function(b){ b.classList.toggle('is-on',b.getAttribute('data-target')===STATE.varInsertTarget); });
+    var lbl=bar.querySelector('[data-var-label]'); if(lbl) lbl.textContent=STATE.varInsertTarget==='subject'?'Subject line':'Email body';
+  });
+};
+// Showing / hiding the individual-skill chips repaints; what is typed is put away first so the repaint cannot lose it.
+window.toggleMoreVarChips=function(){
+  if(window.planDraftCapture) planDraftCapture();
+  STATE.showMoreVarChips=!STATE.showMoreVarChips;
   render();
 };
 window.insertVarChip=function(token,subjId,bodyId){
@@ -308,16 +324,7 @@ window.setWordingScope=function(scope){
     showToast(scope==='each'?'Each email ID can now have its own wording — an email ID with none sends your main wording':'All your email IDs use one wording again','success');
   }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
 };
-// Give this email ID a copy of the person's wording to edit (all six texts), or take its own wording away.
-window.wordingStartFromMine=function(id){
-  var my=STATE.myOutreachPlan||{}; if(!id)return;
-  STATE.mailboxWording=STATE.mailboxWording||{}; var mw=STATE.mailboxWording[id]=STATE.mailboxWording[id]||{};
-  var saves=[];
-  WORDING_FIELDS.forEach(function(f){ var v=my[f]||''; if(!v)return; mw[f]=v; saves.push(apiPost('/outreach-plan/mailbox',{mailbox_id:id,key:f,value:v})); });
-  if(!saves.length){ showToast('You have no main wording to copy yet — write it for this email ID below and Save','info'); render(); return; }
-  Promise.all(saves).then(function(){ showToast('This email ID now has its own copy of your wording — edit it and Save','success'); render(); })
-    .catch(function(e){ showToast('Save failed: '+e.message,'error'); });
-};
+// Take an email ID's own wording away, so it sends the person's wording again.
 window.wordingUseMine=function(id){
   if(!id)return;
   if(!confirm('Take away the wording written for this email ID? It will send your main wording again.'))return;
@@ -332,6 +339,7 @@ window.saveOutreachTemplate=function(key,subjId,bodyId){
   var subj=(document.getElementById(subjId)||{}).value||'';
   var body=(document.getElementById(bodyId)||{}).value||'';
   var apiKey=outreachTmplApiKey(key);
+  if(window.planDraftClear) planDraftClear(key);      // saved: the unsaved copy is no longer needed (and must never override a later saved text)
   // "A wording for each email ID": the text belongs to the Sending email chosen above, not to the person.
   if(planScope()==='each'&&STATE.planFromEmailId){
     var boxId=STATE.planFromEmailId, mbx=planFromMailbox();
@@ -355,6 +363,16 @@ window.saveOutreachTemplate=function(key,subjId,bodyId){
   ]).then(function(){showToast('Template saved','success');}).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };
 
+window.setFollowupThread=function(key,mode){
+  if((key!=='fu1_thread'&&key!=='fu2_thread')||(mode!=='same'&&mode!=='new'))return;
+  if(window.planDraftCapture) planDraftCapture();      // the text typed so far survives the repaint
+  STATE.myOutreachPlan=STATE.myOutreachPlan||{};
+  STATE.myOutreachPlan[key]=mode;
+  render();
+  apiPost('/outreach-plan',{key:key,value:mode}).then(function(){
+    showToast(mode==='new'?'This follow-up will go out as a new email with its own subject':'This follow-up will reply in the same thread','success');
+  }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
+};
 window.saveOutreachDay=function(key,val){
   if(!val)return;
   var day=parseInt(val,10);

@@ -130,7 +130,7 @@ router.post('/app-settings', auth, async (req, res) => {
 router.get('/outreach-plan', auth, async (req, res) => {
   try {
     const uid = req.user.id;
-    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`,`u_${uid}_tmpl_scope`];
+    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`,`u_${uid}_tmpl_scope`,`u_${uid}_fu1_thread`,`u_${uid}_fu2_thread`];
     const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
     const plan = {};
     (data || []).forEach(r => { plan[r.key.replace(`u_${uid}_`, '')] = r.value; });
@@ -160,11 +160,13 @@ router.post('/outreach-plan', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'bd', 'bd_lead', 'admin')) return res.status(403).json({ error: 'BD role required' });
     const uid = req.user.id;
-    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset','tmpl_scope'];
+    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset','tmpl_scope','fu1_thread','fu2_thread'];
     const { key, value } = req.body;
     if (!allowed.includes(key)) return res.status(400).json({ error: 'Invalid key' });
     // R-176: one wording for all my email IDs ('all') or one each ('each') — nothing else is stored.
     if (key === 'tmpl_scope' && !['all', 'each'].includes(String(value))) return res.status(400).json({ error: 'Choose "all" or "each".' });
+    // Follow-up 1 / 2: a reply in the first email's thread ('same', the default) or a new email with its own subject ('new').
+    if ((key === 'fu1_thread' || key === 'fu2_thread') && !['same', 'new'].includes(String(value))) return res.status(400).json({ error: 'Choose "same" or "new".' });
     const fullKey = `u_${uid}_${key}`;
     const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });
     if (error) throw error;

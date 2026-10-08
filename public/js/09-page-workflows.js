@@ -288,7 +288,7 @@ function wfWhenLine(step, i, day){
 //   saved     ⇔  it does not. Nothing extra is stored on the step.
 // Names PACE can fill — must equal services/sequence-draft.js ALLOWED_VARS
 // (a test compares the two).
-var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','job_resp','company_service'];
+var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','sendercompany','sender_company','mycompany','yourcompany','job_resp','company_service'];
 window.WF_VARS=WF_VARS;
 var WF_CHIPS=[['{{fn}}','First name'],['{{ln}}','Last name'],['{{pos}}','Role'],['{{company}}','Company'],['{{loc}}','Location'],['{{sender}}','Your name']];
 var WF_TEMPLATE_CHOICES=[['initial','Outreach 1 — your first email'],['fu1','Follow-up 1'],['fu2','Follow-up 2']];
@@ -570,6 +570,8 @@ function renderSequenceBody(){
   if(!userHasAnyRole(u,'admin','bd_lead','ra_lead','bd'))return '<div class="c-text3" style="padding:14px">Forbidden</div>';
   if(STATE.wf===undefined&&!STATE._wfLoading){loadWorkflows();}
   var canDesign=userHasAnyRole(u,'admin','ra_lead','bd_lead');
+  // A BD makes and changes sequences of their OWN (owner, 8 Oct): the New sequence button for them, Edit / Activate on the ones they made.
+  var canDesignOwn=!canDesign&&userHasAnyRole(u,'bd');
   var canTick=userHasAnyRole(u,'admin','bd_lead');
   var wf=STATE.wf;
   if(!wf)return '<div class="c-text3" style="padding:14px">Loading sequence…</div>';
@@ -578,7 +580,7 @@ function renderSequenceBody(){
   var defCards=(wf.defs||[]).map(function(d){
     var st=(wf.stats.by_workflow||{})[d.id]||{};
     var stats='<span class="fs-11_5 c-text3">'+(st.active||0)+' active · '+(st.completed||0)+' completed · '+(st.exited||0)+' exited</span>';
-    var btns=canDesign?('<button onclick="wfOpenBuilder(\''+d.id+'\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--accent);padding:4px 10px;border-radius:6px;cursor:pointer">Edit</button>'+
+    var btns=(canDesign||(canDesignOwn&&d.created_by===u.id))?('<button onclick="wfOpenBuilder(\''+d.id+'\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--accent);padding:4px 10px;border-radius:6px;cursor:pointer">Edit</button>'+
       (d.status==='draft'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:0;background:var(--green);color:#fff;padding:4px 10px;border-radius:6px;cursor:pointer">Activate</button>':'')+
       (d.status==='active'?'<button onclick="wfSetStatus(\''+d.id+'\',\'archived\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--text2);padding:4px 10px;border-radius:6px;cursor:pointer">Archive</button>':'')+
       (d.status==='archived'?'<button onclick="wfSetStatus(\''+d.id+'\',\'active\')" style="font-size:11px;border:1px solid var(--border2);background:transparent;color:var(--green);padding:4px 10px;border-radius:6px;cursor:pointer">Reactivate</button>':'')):'';
@@ -595,7 +597,7 @@ function renderSequenceBody(){
       (d.description?'<div class="fs-12 c-text3" style="margin-top:5px">'+htmlEsc(d.description)+'</div>':'')+
       '<div class="fs-12_5" style="margin-top:8px">'+wfChain(d.steps)+'</div>'+
     '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">No sequences yet'+(canDesign?' — create one.':'.')+'</div>';
+  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">No sequences yet'+((canDesign||canDesignOwn)?' — create one with + New sequence.':'.')+'</div>';
 
   var f=STATE.wfFilter||{};
   var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });
@@ -636,7 +638,7 @@ function renderSequenceBody(){
       '<div class="fs-12_5 c-text3" style="max-width:600px;line-height:1.5">This is your outreach sequence — the steps every enrolled lead moves through (initial email → follow-ups → LinkedIn touch). Edit the steps, timing and templates here; no code changes. Enroll a contact from a lead\'s detail view.</div>'+
       '<div style="display:flex;gap:8px;align-items:center">'+tickHtml+
         (canTick?'<button onclick="wfRunTick()" class="c-text2 fs-12" style="background:transparent;border:1px solid var(--border2);padding:7px 14px;border-radius:8px;cursor:pointer">▶ Run sequence now</button>':'')+
-        (canDesign?'<button onclick="wfOpenBuilder()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;cursor:pointer">+ New sequence</button>':'')+
+        ((canDesign||canDesignOwn)?'<button onclick="wfOpenBuilder()" class="fs-13" style="background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;cursor:pointer">+ New sequence</button>':'')+
       '</div>'+
     '</div>'+
     '<div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Sequences</div>'+

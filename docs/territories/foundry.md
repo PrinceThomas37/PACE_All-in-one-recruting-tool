@@ -1178,3 +1178,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43, later)
 - NEW: `lead-assign-smoke` (30), `assign-leads-ui-smoke` (16), `wording-scope-smoke` (29), `wording-scope-ui-smoke` (16). Changed on purpose: `lead-take-smoke` (imports are Unassigned), `finder-routes-smoke` (176: Unassigned accept, email state, another lead), `finder-page-smoke` (144). Guards shown failing: assign race + chain limit, wording precedence, `isEach` forced true.
+
+## 2026-10-08 (Session 43, third round)
+- NEW: `sender-company-smoke` (14), `sequence-own-smoke` (12), `plan-editor-keeps-typing-smoke` (19; 7/19 with the fix stashed), `leads-bulk-stage-ui-smoke` (18). Extended: `wording-scope-smoke` (35), `wording-scope-ui-smoke` (29); `sequence-builder-smoke` caught the browser/server merge-name lists drifting (company names) — fixed in `WF_VARS`.

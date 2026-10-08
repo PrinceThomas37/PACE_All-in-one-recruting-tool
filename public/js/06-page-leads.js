@@ -29,6 +29,8 @@ function renderJobs(){
     });
   }
   if(f.industries&&f.industries.length)jobs=jobs.filter(function(j){return f.industries.indexOf(j.industry||j.company_ind||"")>-1;});
+  // "Assigned to" — one person's leads, or the ones nobody owns (owner, 8 Oct: the admin should see leads per assigned user).
+  if(f.assignee)jobs=jobs.filter(function(j){return f.assignee==='none'?!j.assigned_to_bd:j.assigned_to_bd===f.assignee;});
   if(f.dateRange&&f.dateRange!=="all"&&f.dateRange!=="custom"){var _now=new Date();var _today=todayIST();var _cut=null;if(f.dateRange==="today")_cut=_today;else if(f.dateRange==="yesterday"){var _yy=new Date(_now);_yy.setDate(_yy.getDate()-1);_cut=_yy.toISOString().slice(0,10);}else if(f.dateRange==="week"){var _ww=new Date(_now);_ww.setDate(_ww.getDate()-7);_cut=_ww.toISOString().slice(0,10);}if(_cut){if(f.dateRange==="today"||f.dateRange==="yesterday")jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)===_cut;});else jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=_cut;});}}
   if(f.dateRange==="custom"){if(f.dateFrom)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)>=f.dateFrom;});if(f.dateTo)jobs=jobs.filter(function(j){return (j.created_at||"").slice(0,10)<=f.dateTo;});}
 
@@ -44,11 +46,18 @@ function renderJobs(){
   // Cross-group sequencing: BD / BD Lead / Admin can multi-select leads across
   // any stage group and start one sequence for the lot (rotating "from" mailboxes).
   var canSequence=userHasAnyRole(u,'admin','bd','bd_lead');
+  // Ticking leads is for everyone who may act on several at once (owner, 8 Oct: "the user or admin is not able to change the stage of the
+  // leads while multiselect"): sequencing, handing out and changing the stage all start from the same ticks.
+  var canSelect=userHasAnyRole(u,'admin','bd','bd_lead','ra_lead');
   var leadSel=STATE.leadSeqSel||{};
-  // Selectable = filtered leads (all pages) whose primary contact has an email.
-  var leadSelectable=jobs.filter(function(j){var cs=jobContacts(j.id);return (cs.find(function(c){return c.is_primary;})||cs[0]||{}).email;});
+  // Selectable = every lead in the current filter (all pages). Sequencing skips the ones with no contact email and says so; changing the
+  // stage and handing leads out do not need one.
+  var leadSelectable=jobs.slice();
   STATE._leadSelectableIds=leadSelectable.map(function(j){return j.id;});
-  var leadSelCount=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length;
+  // Only ticked leads that are in the CURRENT filter count — an action never reaches a lead the person can no longer see on screen.
+  var leadSelIds=leadSelectable.filter(function(j){return leadSel[j.id];}).map(function(j){return j.id;});
+  var leadSelCount=leadSelIds.length;
+  var leadSelHidden=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length-leadSelCount;
   var _tp=Math.max(1,Math.ceil(jobs.length/20));
   var _pg=Math.min(STATE.leadsPage||0,_tp-1);
   // Rows for UI.table — arrays of cells, so the column list below is the only
@@ -74,11 +83,9 @@ function renderJobs(){
     if(canConvert&&j.stage==='Connected')stageCell='<span style="display:inline-flex;align-items:center;gap:6px">'+stageCell+leadConvertBtn(j,true)+'</span>';
 
     var cells=[];
-    if(canSequence) cells.push({ cls:'tight', html:
+    if(canSelect) cells.push({ cls:'tight', html:
       '<span onclick="event.stopPropagation()">'+
-        (hasEmail
-          ? '<input type="checkbox" class="ck" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" title="Select for sequence">'
-          : '<span title="No contact email" class="c-ink3">·</span>')+
+        '<input type="checkbox" class="ck" '+(leadSel[j.id]?'checked':'')+' onclick="event.stopPropagation();leadToggleSel(\''+j.id+'\')" title="Select this lead">'+
       '</span>' });
     cells.push({ html: UI.idCell(j.position||'—', j.location||'', null, { badge: marks }) });
     cells.push({ html: escHtml(j.company_name||'—') });
@@ -153,7 +160,18 @@ function renderJobs(){
   var stageActive=f.stages&&f.stages.length>0;
   var indActive=f.industries&&f.industries.length>0;
   var dateActive=f.dateRange&&f.dateRange!=='all';
-  var anyActive=stageActive||indActive||dateActive;
+  var assigneeActive=!!f.assignee;
+  var anyActive=stageActive||indActive||dateActive||assigneeActive;
+  // "Assigned to" — who owns the leads on screen, with how many each (admin / leads see several people's; a BD sees only their own so it stays out of their way).
+  var ownerCount={}, ownerName={}, nobody=0, everyLead=getMyJobs(u);
+  everyLead.forEach(function(j){ if(j.assigned_to_bd){ ownerCount[j.assigned_to_bd]=(ownerCount[j.assigned_to_bd]||0)+1; ownerName[j.assigned_to_bd]=j.assigned_bd_name||'Someone'; } else nobody++; });
+  var ownerIds=Object.keys(ownerCount).sort(function(a,b){ return String(ownerName[a]).localeCompare(String(ownerName[b])); });
+  var assigneeSel=(userHasAnyRole(u,'admin','ra_lead','bd_lead')&&(ownerIds.length>1||nobody>0))
+    ? '<select class="sel sel-sm" aria-label="Show leads assigned to" onchange="STATE.jobsFilter.assignee=this.value;STATE.leadsPage=0;render()">'+
+        '<option value="">Everyone ('+everyLead.length+')</option>'+
+        '<option value="none"'+(f.assignee==='none'?' selected':'')+'>Nobody — Unassigned ('+nobody+')</option>'+
+        ownerIds.map(function(id){ return '<option value="'+escAttr(id)+'"'+(f.assignee===id?' selected':'')+'>'+escHtml(ownerName[id])+' ('+ownerCount[id]+')</option>'; }).join('')+
+      '</select>' : '';
   function mkChkDrop(name,key,items,selected,active){
     var btn='<button class="btn btn-sm btn-outline flt-btn'+(active?' is-on':'')+'" onclick="event.stopPropagation();STATE.openDrop=STATE.openDrop===\''+name+'\' ?null:\''+name+'\';render()">'+(active?name+' ('+selected.length+')':name)+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg></button>';
     var panel='';
@@ -221,23 +239,32 @@ function renderJobs(){
   // search was the only thing active — so with a search typed, or one filled
   // in by the client-conversations card, the × did nothing at all (owner,
   // 2026-09-28: "The cross button do not work").
-  var clearFilters="STATE.jobsFilter.search='';STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];"+
+  var clearFilters="STATE.jobsFilter.search='';STATE.jobsFilter.stages=[];STATE.jobsFilter.industries=[];STATE.jobsFilter.assignee='';"+
     "STATE.jobsFilter.dateRange='all';STATE.jobsFilter.dateFrom='';STATE.jobsFilter.dateTo='';"+
     "STATE.openDrop=null;STATE.leadsPage=0;render()";
 
   // The bulk bar only exists when something is selected, so it sits in the body
   // rather than the toolbar — a permanently-reserved empty strip is worse.
-  var bulkBar=(canSequence&&leadSelCount)?
-    '<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
+  // What a person may move a lead to in one go (the same rule the server enforces on POST /jobs/bulk-stage): an admin or RA lead may also
+  // send leads back to Unassigned ("release to the pool" — nobody owns them, their waiting emails go, follow-ups stop); a BD / BD lead may move
+  // the leads they own forward. "Assigned" is not here on purpose: it means a person and a mailbox — that is the Assign button.
+  var canRelease=userHasAnyRole(u,'admin','ra_lead');
+  var bulkStages=(canRelease?['Unassigned']:[]).concat(['Connected','In Discussion','Future','Rejected']);
+  STATE._leadSelVisibleIds=leadSelIds;
+  var bulkBar=(canSelect&&leadSelCount)?
+    '<div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span class="fs-13" style="font-weight:600">'+leadSelCount+' lead'+(leadSelCount>1?'s':'')+' selected</span>'+
-      '<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>'+
+      (leadSelHidden>0?'<span class="fs-11_5 c-ink3" title="Ticked earlier, but not in the list you are looking at — nothing here touches them">(+'+leadSelHidden+' hidden by the filters, left alone)</span>':'')+
+      '<span style="display:inline-flex;align-items:center;gap:6px"><select id="bulk-stage-sel" class="sel sel-sm" aria-label="Change stage to">'+
+        '<option value="">Change stage to…</option>'+bulkStages.map(function(st){return '<option value="'+st+'">'+(st==='Unassigned'?'Unassigned (release to the pool)':st)+'</option>';}).join('')+
+      '</select><button class="btn btn-sm btn-outline" onclick="leadBulkStage()">Apply</button></span>'+
       '<button class="btn btn-sm btn-outline" onclick="openAssignLeads()" title="Give the ticked Unassigned leads to yourself or someone on your team">Assign selected</button>'+
+      (canSequence?'<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>':'')+
       '<button class="btn btn-sm btn-outline" onclick="leadClearSel()">Clear</button>'+
-      '<span class="fs-11_5 c-ink3" style="margin-left:auto">You pick the "from" mailboxes next — sends rotate across them, whatever the stage.</span>'+
     '</div>':'';
 
   var cols=[];
-  if(canSequence) cols.push({ w:'34px', raw:
+  if(canSelect) cols.push({ w:'34px', raw:
     '<input type="checkbox" class="ck" '+
     (leadSelectable.length&&leadSelectable.every(function(j){return leadSel[j.id];})?'checked':'')+
     ' onclick="leadToggleSelAll()" title="Select every lead matching these filters">' });
@@ -262,6 +289,7 @@ function renderJobs(){
         { icon:'refresh', title:'Refresh leads', onclick:'leadsRefreshNow()' }
       ],
       right:
+        assigneeSel+
         mkChkDrop('Stage','stages',allStagesList,f.stages||[],stageActive)+
         mkChkDrop('Industry','industries',allIndustriesList,f.industries||[],indActive)+
         dateBtn+
@@ -471,9 +499,27 @@ window.leadToggleSelAll=function(){
   STATE.leadSeqSel=sel; render();
 };
 window.leadClearSel=function(){ STATE.leadSeqSel={}; render(); };
+// Change the stage of every ticked lead that is in the list on screen (one call; the server applies its own rules per role and per owner).
+window.leadBulkStage=function(){
+  var sel=document.getElementById('bulk-stage-sel'), stage=sel?sel.value:'';
+  var ids=(STATE._leadSelVisibleIds||[]).slice();
+  if(!ids.length){ showToast('Tick the leads first','warning'); return; }
+  if(!stage){ showToast('Choose the stage to move them to','warning'); return; }
+  var warn=stage==='Unassigned'
+    ? 'Release '+ids.length+' lead'+(ids.length===1?'':'s')+' to the Unassigned pool?\n\nNobody will own them any more. Emails written for them that have not been sent are removed, and their follow-ups stop. Nothing already sent is touched.'
+    : 'Move '+ids.length+' lead'+(ids.length===1?'':'s')+' to "'+stage+'"?';
+  if(!confirm(warn)) return;
+  apiPost('/jobs/bulk-stage',{job_ids:ids,stage:stage}).then(function(r){
+    var n=(r&&r.updated)||0;
+    showToast(n?(n+' lead'+(n===1?'':'s')+' moved to '+stage+(n<ids.length?' ('+(ids.length-n)+' could not be changed by you)':'')):'None of them could be changed by you',n?'success':'warning');
+    STATE.leadSeqSel={};
+    if(typeof refreshJobs==='function') refreshJobs(); else render();
+  }).catch(function(e){ showToast('Could not change the stage: '+((e&&e.message)||e),'error'); });
+};
 window.leadStartSequence=function(){
   var sel=STATE.leadSeqSel||{};
-  var ids=Object.keys(sel).filter(function(k){return sel[k];});
+  var vis=STATE._leadSelVisibleIds||null;
+  var ids=Object.keys(sel).filter(function(k){return sel[k]&&(!vis||vis.indexOf(k)>-1);});
   if(!ids.length){ showToast('Select at least one lead','warning'); return; }
   var items=[], skipped=0;
   ids.forEach(function(jid){
