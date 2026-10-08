@@ -6644,6 +6644,11 @@ Owner: "Go ahead with logo storage bucket." Checked `storage.buckets` first (onl
 ### SESSION 42, closing — handoff written (8 Oct)
 Owner paused: "update the context window, I will resume in the next chat." `CONTEXT_WINDOW.md` now opens with a START HERE block (state, what to look at live, what is not built, honest limits). Merged to `main` with the logo-bucket record (#314) so a new chat reads it from `main`. Session 42 in one paragraph: the owner's first look at live Find Leads (eight items, #312), then My Setup in two stages (#313: any person sets up their own mailbox, "sends as", a sequence of their own to START outreach, first-login tasks, sending days/hours, signature logo + formatting), then the logo bucket (migration 061, D-0105).
 
+### SESSION 43, custom domain (bought at GoDaddy) — dev branch
+Owner bought a domain and asked for help setting it up. Found what points at the Render address: the frontend's `API_URL` (fixed — same-origin on any non-local host), `PUBLIC_BASE_URL`/`APP_BASE_URL` (tracking pixel, apply links), the Microsoft/Google redirect URIs (env + the Azure/Google consoles), and the heartbeat's `APP_BASE_URL`. No migration, no server code. The DNS records, Render settings and env changes are owner-side/Render-side and wait for the domain name and a go-ahead. Old emails keep their pixel links on the Render address, so that address must stay enabled.
+
+### SESSION 43, custom domain is live — renewal noted
+`app.paceconsultant.in` is verified in Render (certificate issued) and the owner has tested sign-in on it: "it's working fine". The Render address stays enabled. Domain renewal date (GoDaddy, paceconsultant.in): **8 October 2027**. Renewal price not yet checked. Still open: the mailbox-connect test on the new address, PR #316 (draft, not merged), and the choice of a company mail host (SPF/DKIM records wait on that choice).
 ### SESSION 42, after the handoff — the owner answers the three open items (D-0106)
 Company name at send time: dropped (it lives in the person's sequence). Company profile: "where will it be used?". Random-template mode / stock wording: "each user creates it; the system gives nothing". Found by reading: Random mode, the follow-up fallback and the starter all still supply Fute-pitched text. Plan proposed to the owner, nothing built.
 
