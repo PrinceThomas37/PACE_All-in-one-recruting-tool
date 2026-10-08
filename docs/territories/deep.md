@@ -348,3 +348,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-08 (Session 43, fourth round) — migration 062 (D-0113)
 - `migrations/062_more_followups.sql`: `follow_ups.followup3..5_due_date` (date) and `followup3..5_sent_at` (timestamptz), additive and nullable. NOT applied to the live database; apply before the code merges, with the owner's go.
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- Migration 062 also adds `follow_ups.chain_rules text` (NULL = made before 8 Oct, `'own'` = new rules). Still NOT applied to the live database.

@@ -797,3 +797,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-08 (Session 43, fourth round) — sequences start blank for a plain BD (D-0113)
 - A plain `bd` sees only the sequences they created (`routes/wf.js`); BD lead / RA lead / admin see all. The seeded "Standard Sales Outreach" is not listed to new BDs.
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- Follow-up chains (`services/followup-chain.js`, `followup-steps.js`) now begin at the first send and only for follow-ups the person turned on; old chains (`chain_rules` NULL) unchanged. The Sequences builder is untouched (a contact in an active sequence gets no chain).

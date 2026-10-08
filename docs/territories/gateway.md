@@ -1118,3 +1118,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-08 (Session 43, fourth round) — up to five follow-ups (D-0113)
 - `index.js`: `runFollowupEngine`, assignment scheduling, quoting/threading and the send loop run on `services/followup-steps.js` (fu1–fu5). `routes/settings.js`: `/outreach-plan` accepts and validates `fu_count` (0–5), `fuN_day` (1–90), `fuN_thread`, `tmpl_fu3..5_*`. `routes/wf.js`: a plain BD's `GET /wf/definitions` returns only the sequences they made. `routes/emails.js`: purge covers fu1–fu5.
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- `index.js`: after a FIRST email is marked sent, `followupChain.scheduleAfterFirstSend` makes the owner's chain (best effort); `distribute/execute` rows carry `chain_rules='own'`; `runFollowupEngine` passes `strict` to `followupTexts` for such rows. Old rows (`chain_rules` NULL) behave as before.

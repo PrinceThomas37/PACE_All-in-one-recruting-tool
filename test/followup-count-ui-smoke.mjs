@@ -37,16 +37,18 @@ try{
   const val=(id)=>ev((i)=>document.getElementById(i).value,id);
   const tabs=()=>ev(()=>[...document.querySelectorAll('.cmp-edit button')].map(b=>b.innerText.trim()).filter(t=>/^(Outreach 1|Follow-up \d)$/.test(t)));
   step('a new person starts BLANK: no stock subject, no stock body', (await val('tmpl-o1-subj'))==='' && (await val('tmpl-o1-body'))==='');
-  step('two follow-ups by default (the count box says so, and there are three tabs)', (await val('fu-count-sel'))==='2' && JSON.stringify(await tabs())===JSON.stringify(['Outreach 1','Follow-up 1','Follow-up 2']), JSON.stringify(await tabs()));
+  step('NO follow-ups until the person turns them on (D-0114): the count box says none and only Outreach 1 shows', (await val('fu-count-sel'))==='0' && JSON.stringify(await tabs())===JSON.stringify(['Outreach 1']), JSON.stringify(await tabs()));
+  await ev(()=>{ window.__posts=[]; setFollowupCount('2'); }); await page.waitForTimeout(200);
+  step('turning on two shows Follow-up 1 and 2', JSON.stringify(await tabs())===JSON.stringify(['Outreach 1','Follow-up 1','Follow-up 2']));
   await ev(()=>planSetTmpl('fu1')); await page.waitForTimeout(150);
   step('Follow-up 1 is blank too, defaults to day 3, and says it has not been written yet', (await val('tmpl-fu1-subj'))==='' && (await val('tmpl-fu1-body'))==='' && (await val('fu1-day-sel'))==='3' && /You have not written this follow-up yet/.test(await ev(()=>document.querySelector('.cmp-edit').innerText)));
-  step('…and for follow-up 1 it says PACE sends its standard wording meanwhile', /standard follow-up wording/.test(await ev(()=>document.querySelector('.cmp-edit').innerText)));
+  step('…and it says nothing goes out for it until it is written (PACE never sends wording the person did not write)', /nothing goes out for it/.test(await ev(()=>document.querySelector('.cmp-edit').innerText)));
   // count to 4
   await ev(()=>{ window.__posts=[]; setFollowupCount('4'); }); await page.waitForTimeout(200);
   step('choosing 4 saves fu_count = 4', await ev(()=>window.__posts.some(p=>p[0]==='/outreach-plan'&&p[1].key==='fu_count'&&p[1].value==='4')));
   step('…and there are now five tabs', JSON.stringify(await tabs())===JSON.stringify(['Outreach 1','Follow-up 1','Follow-up 2','Follow-up 3','Follow-up 4']), JSON.stringify(await tabs()));
   await ev(()=>planSetTmpl('fu3')); await page.waitForTimeout(150);
-  step('Follow-up 3 defaults to day 14 and says that, unwritten, it is skipped (not PACE\'s own wording)', (await val('fu3-day-sel'))==='14' && /it is skipped/.test(await ev(()=>document.querySelector('.cmp-edit').innerText)));
+  step('Follow-up 3 defaults to day 14 and says that, unwritten, nothing goes out', (await val('fu3-day-sel'))==='14' && /nothing goes out for it/.test(await ev(()=>document.querySelector('.cmp-edit').innerText)));
   step('Follow-up 3 only offers days after Follow-up 2 (day 7)', await ev(()=>[...document.querySelectorAll('#fu3-day-sel option')].filter(o=>o.value).every(o=>Number(o.value)>7)));
   await ev(()=>{ window.__posts=[]; setFollowupThread('fu3_thread','new'); }); await page.waitForTimeout(150);
   step('Follow-up 3 can be sent as a new email (saved under its own key)', await ev(()=>window.__posts.some(p=>p[1].key==='fu3_thread'&&p[1].value==='new')) && await ev(()=>STATE.myOutreachPlan.fu3_thread==='new'));

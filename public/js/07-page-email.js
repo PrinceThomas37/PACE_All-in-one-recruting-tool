@@ -635,9 +635,9 @@ function renderEmail(){
   // ── OUTREACH PLAN TAB ──
   if(!STATE.activeTmpl)STATE.activeTmpl='outreach';
   var myPlan=STATE.myOutreachPlan||{};
-  // HOW MANY FOLLOW-UPS, AND WHEN EACH GOES OUT, IS THE PERSON'S CHOICE (owner, 8 Oct, D-0113): none to five; two (day 3, day 7) unless they say
-  // otherwise. A new person starts with BLANK boxes — they write their own wording; nothing is written for them.
-  var fuCount=(function(){ var v=myPlan['fu_count']; if(v===undefined||v===null||String(v).trim()==='')return 2; var k=Number(v); return (k===Math.floor(k)&&k>=0&&k<=5)?k:2; })();
+  // HOW MANY FOLLOW-UPS, AND WHEN EACH GOES OUT, IS THE PERSON'S CHOICE (owner, 8 Oct, D-0113): none to five; NONE until they turn them on (D-0114: "if no follow-up is enabled then no follow-up email is triggered").
+  // (They once defaulted to two.) A new person starts with BLANK boxes — they write their own wording; nothing is written for them.
+  var fuCount=(function(){ var v=myPlan['fu_count']; if(v===undefined||v===null||String(v).trim()==='')return 0; var k=Number(v); return (k===Math.floor(k)&&k>=0&&k<=5)?k:0; })();
   var FU_DEFAULT_DAY=[3,7,14,21,28], FU_COLORS=['#ca8a04','#ea580c','#c2410c','#9a3412','#7c2d12'];
   function fuDay(n){ var d=parseInt(myPlan['fu'+n+'_day'],10); return (d>=1&&d<=90)?d:FU_DEFAULT_DAY[n-1]; }
   function dayOpts(selected,minDay){
@@ -687,7 +687,7 @@ function renderEmail(){
       '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='same'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'same\')"> <strong>In the same email thread</strong><span class="fd-hint"> — a reply under your first email, so it reads as one conversation</span></label>'+
       '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='new'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'new\')"> <strong>As a new email</strong><span class="fd-hint"> — its own subject line, in a thread of its own (write a subject that stands alone, not “Re: …”)</span></label>'+
     '</div>'+
-    (notWritten?('<div class="fs-12 c-amber" style="margin-bottom:12px">You have not written this follow-up yet.'+(fN<=2?' Until you do, PACE sends its own standard follow-up wording.':' Until you do, it is skipped — nothing goes out for it.')+'</div>'):'');
+    (notWritten?('<div class="fs-12 c-amber" style="margin-bottom:12px">You have not written this follow-up yet.'+' Until you do, nothing goes out for it — PACE never sends wording you did not write.'+'</div>'):'');
   }
   var canEditTemplates=userHasAnyRole(u,'bd','bd_lead','admin');
   var planFrom=planFromMailbox();
@@ -730,7 +730,7 @@ function renderEmail(){
       '</div>'+
       '<div class="fgrp" style="margin-bottom:14px"><label class="flbl">How many follow-ups do you want?</label>'+
         '<select class="sel" style="max-width:220px" id="fu-count-sel" onchange="setFollowupCount(this.value)">'+[0,1,2,3,4,5].map(function(k){return '<option value="'+k+'"'+(k===fuCount?' selected':'')+'>'+(k===0?'None — only the first email':k+(k===1?' follow-up':' follow-ups'))+'</option>';}).join('')+'</select>'+
-        '<div class="fs-11 c-text3" style="margin-top:4px">You decide. After the first email PACE sends each follow-up on its day, and stops when the person replies.</div></div>'+
+        '<div class="fs-11 c-text3" style="margin-top:4px">You decide. Choose none and only the first email goes out. Each follow-up you turn on goes out on its day after the first email is sent, and stops when the person replies.</div></div>'+
       '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">'+tmplTabBtns+'</div>'+
       '<div class="card cp" style="border-top:3px solid '+activeTmpl.color+'">'+
         '<div style="margin-bottom:14px">'+

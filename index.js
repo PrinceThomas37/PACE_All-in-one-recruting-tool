@@ -79,6 +79,7 @@ const wordingScope = require('./services/wording-scope');
 const senderCompany = require('./services/sender-company');
 const followupThread = require('./services/followup-thread');
 const followupSteps = require('./services/followup-steps');
+const followupChain = require('./services/followup-chain');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -2149,6 +2150,8 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       const sendingForThis = needsCompany ? gate.mailbox : sendingEmail;
       const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingForThis);
       await supabase.from('emails').update({ status: 'sent', sent_at: today() }).eq('id', email.id);
+      // D-0114: the owner's follow-up chain starts the moment a FIRST email really goes out (best effort — never undoes the send).
+      if (companyDailyCap.isFirstEmail(email) && email.job_id && email.contact_id) await followupChain.scheduleAfterFirstSend(supabase, { email, job: email.job, sentOn: today() });
       // Sent: the company is now part of the stored text, so history and quoted replies never show the token.
       if (needsCompany) await supabase.from('emails').update({ subject: senderCompany.fillCompany(email.subject, sendingForThis.sends_as_company), body: senderCompany.fillCompany(email.body, sendingForThis.sends_as_company) }).eq('id', email.id);
       await persistGraphIds(email.id, graph);
@@ -2350,7 +2353,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // Create follow-up rows
     const jobIds = selected.map(j => j.id);
     const outreachDateStr = now.toISOString().split('T')[0];
-    // How many follow-ups this person wants (0–5) and when each goes out (services/followup-steps.js); the default is still two, day 3 and day 7.
+    // How many follow-ups this person turned on (0–5) and when each goes out (services/followup-steps.js); none unless they chose (D-0114).
     const { data: bdSettings } = await supabase.from('app_settings').select('key,value').in('key', [`u_${manager_id}_fu_count`, ...followupSteps.STEPS.map(t => `u_${manager_id}_${t}_day`)]);
     const bdSettingsMap = {};
     (bdSettings || []).forEach(r => { bdSettingsMap[r.key] = r.value; });
@@ -2361,7 +2364,7 @@ app.post('/distribute/execute', auth, async (req, res) => {
     for (const aj of (assignedJobs || [])) {
       const contacts = (aj.contacts || []).filter(c => emailSyntaxValid(c.email) && isFollowupEligibleContact(c));
       for (const c of contacts) {
-        followUpRows.push({ job_id: aj.id, contact_id: c.id, user_email_id: aj.sending_email_id, outreach_sent_at: outreachDateStr, ...fuDueDates, status: 'active' });
+        followUpRows.push({ job_id: aj.id, contact_id: c.id, user_email_id: aj.sending_email_id, outreach_sent_at: outreachDateStr, ...fuDueDates, status: 'active', chain_rules: followupSteps.RULES });
       }
     }
     // In manual mode, skip the automatic follow-up schedule — the BD drives
@@ -2570,7 +2573,8 @@ async function runFollowupEngine() {
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
         // R-176: the email ID this follow-up goes out from may have wording of its own (only when its person chose "a wording for each
         // email ID"); such an email ID is left out of the random rotation — its own text is what it sends.
-        const fuText = wordingScope.followupTexts(settings, { userId: bdId, mailboxId: acId, step: fuType, resolve: resolveTemplate, defaults: DEFAULT_TEMPLATES });
+        // A chain made under the new rules (chain_rules 'own', D-0114) sends only wording the person wrote — never PACE's standard text; an older chain keeps the old fallback.
+        const fuText = wordingScope.followupTexts(settings, { userId: bdId, mailboxId: acId, step: fuType, resolve: resolveTemplate, defaults: DEFAULT_TEMPLATES, strict: fu.chain_rules === followupSteps.RULES });
         const useRandomFu = isRandomTemplateMode(settings[`u_${bdId}_random_template_mode`]) && !fuText.own;
         let subjTmpl, bodyTmpl, variantId;
         if (useRandomFu) {

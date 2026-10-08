@@ -1,9 +1,9 @@
 // ============================================================================
 // UP TO FIVE FOLLOW-UPS, THE PERSON'S CHOICE (owner, 8 Oct: "it's the user's choice to select the number of follow-ups, if any needed").
 // The Outreach Plan used to be exactly three emails: Outreach 1, Follow-up 1, Follow-up 2. Now a person says how many follow-ups they want
-// (0 to 5) and when each goes out. Nothing changes for anyone who never touches it: the default stays TWO follow-ups on day 3 and day 7.
+// (0 to 5) and when each goes out. A person who never chooses has NO follow-ups (owner, D-0114); a chain already scheduled before that keeps its dates and its old behaviour.
 //
-//   * `u_<id>_fu_count`   how many follow-ups (0–5); missing or odd → 2, as it has always been
+//   * `u_<id>_fu_count`   how many follow-ups (0–5); missing or odd → 0 (none)
 //   * `u_<id>_fu<N>_day`  days after the FIRST email was sent (defaults 3, 7, 14, 21, 28)
 //   * `follow_ups` row    followup<N>_due_date / followup<N>_sent_at for N = 1…5 (migration 062 added 3–5)
 // A follow-up N is due when the one before it has gone out (follow-up 1: the first email has), it has not gone out itself, and its due date
@@ -15,7 +15,8 @@
 const MAX = 5;
 const STEPS = ['fu1', 'fu2', 'fu3', 'fu4', 'fu5'];
 const DEFAULT_DAYS = [3, 7, 14, 21, 28];
-const DEFAULT_COUNT = 2;
+const DEFAULT_COUNT = 0;                                          // D-0114: no follow-up unless the person turned one on
+const RULES = 'own';                                              // follow_ups.chain_rules of a chain made under the new rules (older rows are null)
 
 const isFollowupType = (t) => STEPS.includes(t);
 const stepNumber = (t) => STEPS.indexOf(t) + 1;                  // 0 when it is not a follow-up
@@ -26,7 +27,7 @@ const sentCol = (n) => `followup${n}_sent_at`;
 
 const wholeNumber = (v, lo, hi) => { if (v == null || String(v).trim() === '') return null; const n = Number(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };   // an EMPTY value is "not chosen", never 0
 
-/** How many follow-ups this person wants (0–5). Anything missing or odd is the old two. */
+/** How many follow-ups this person wants (0–5). Nothing chosen = none (D-0114): "the user has to enable follow-up 1, 2, 3 … how many they want". */
 function countFor(settings, userId) {
   const n = wholeNumber(settings && settings[`u_${userId}_fu_count`], 0, MAX);
   return n === null ? DEFAULT_COUNT : n;
@@ -66,4 +67,4 @@ function isLast(row, n) {
   return true;
 }
 
-module.exports = { MAX, STEPS, DEFAULT_DAYS, DEFAULT_COUNT, isFollowupType, stepNumber, typeOf, prevType, dueCol, sentCol, countFor, dayFor, dateAfter, dueDates, nextDue, isLast };
+module.exports = { RULES, MAX, STEPS, DEFAULT_DAYS, DEFAULT_COUNT, isFollowupType, stepNumber, typeOf, prevType, dueCol, sentCol, countFor, dayFor, dateAfter, dueDates, nextDue, isLast };

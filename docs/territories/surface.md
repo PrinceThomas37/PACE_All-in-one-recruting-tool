@@ -1315,3 +1315,6 @@ resulting "Ask to take over" modal after clicking through, showing
 ## 2026-10-08 (Session 43, fourth round) — blank start, up to five follow-ups (D-0113)
 - `07-page-email.js` / `12-manager-users.js`: Outreach Plan editor starts BLANK (no stock text); "How many follow-ups?" box (`setFollowupCount`, 0–5, default 2) decides the tabs; each follow-up has a day (`saveOutreachDay` moves later days after it) and a same-thread / new-email choice (`setFollowupThread` fu1–fu5); amber note when a follow-up is not written yet; Save repaints. `09-page-workflows.js`: a plain BD's empty Sequences list explains they start blank.
 - Test: `followup-count-ui-smoke` (19; the blank-start guard was shown failing with a stock fallback).
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- The Outreach Plan editor defaults to NO follow-ups; the note on an unwritten follow-up says nothing goes out for it.

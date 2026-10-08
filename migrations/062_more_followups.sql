@@ -7,4 +7,7 @@ ALTER TABLE follow_ups
   ADD COLUMN IF NOT EXISTS followup4_due_date date,
   ADD COLUMN IF NOT EXISTS followup4_sent_at  timestamptz,
   ADD COLUMN IF NOT EXISTS followup5_due_date date,
-  ADD COLUMN IF NOT EXISTS followup5_sent_at  timestamptz;
+  ADD COLUMN IF NOT EXISTS followup5_sent_at  timestamptz,
+  ADD COLUMN IF NOT EXISTS chain_rules text;
+-- chain_rules: 'own' on a chain made under the owner's 8 Oct rules (D-0114: only the follow-ups the person turned on, only their own wording);
+-- NULL on every row that existed before, which keeps behaving exactly as it did.

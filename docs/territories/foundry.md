@@ -1184,3 +1184,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43, fourth round) — tests (D-0113)
 - New: `followup-steps-smoke` (18), `followup-count-ui-smoke` (19). Updated: `wording-scope-smoke` (45; neededKeys now 1 + 12 per mailbox), `sequence-own-smoke` (12; a plain BD's list is only their own).
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- New `followup-chain-smoke` (14); `followup-steps-smoke` (19) and `followup-count-ui-smoke` (20) updated for the default of none.

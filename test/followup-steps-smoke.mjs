@@ -9,13 +9,15 @@ const results = [];
 const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };
 const F = require('../services/followup-steps.js');
 
-step('nobody who never chose changes: two follow-ups, on day 3 and day 7', F.countFor({}, 'u') === 2 && F.dayFor({}, 'u', 1) === 3 && F.dayFor({}, 'u', 2) === 7);
+step('a person who never chose has NO follow-ups (D-0114); their days, when they turn some on, start at 3 and 7', F.countFor({}, 'u') === 0 && F.dayFor({}, 'u', 1) === 3 && F.dayFor({}, 'u', 2) === 7);
 step('a person can ask for none, or up to five', [0, 1, 2, 3, 4, 5].every(n => F.countFor({ u_u_fu_count: String(n) }, 'u') === n));
-step('anything odd (6, -1, "x", 2.5, empty) is the old two — never a crash, never six', ['6', '-1', 'x', '2.5', ''].every(v => F.countFor({ u_u_fu_count: v }, 'u') === 2));
+step('anything odd (6, -1, "x", 2.5, empty) is "none chosen" — never a crash, never six', ['6', '-1', 'x', '2.5', ''].every(v => F.countFor({ u_u_fu_count: v }, 'u') === 0));
 step('the days after the first email: 3, 7, 14, 21, 28 unless the person set their own (1–90 only)', [1, 2, 3, 4, 5].map(n => F.dayFor({}, 'u', n)).join() === '3,7,14,21,28' && F.dayFor({ u_u_fu3_day: '10' }, 'u', 3) === 10 && F.dayFor({ u_u_fu3_day: '0' }, 'u', 3) === 14 && F.dayFor({ u_u_fu3_day: '91' }, 'u', 3) === 14);
 const t0 = new Date('2026-10-08T12:00:00Z');
 let d = F.dueDates({}, 'u', t0);
-step('a new row for a person who never chose gets exactly what it always did: follow-ups 1 and 2, nothing for 3–5', d.followup1_due_date === '2026-10-11' && d.followup2_due_date === '2026-10-15' && d.followup3_due_date === null && d.followup4_due_date === null && d.followup5_due_date === null, JSON.stringify(d));
+step('a person who never chose gets no due date at all', Object.values(d).every(v => v === null), JSON.stringify(d));
+d = F.dueDates({ u_u_fu_count: '2' }, 'u', t0);
+step('two chosen: follow-ups 1 and 2 on day 3 and day 7, nothing for 3–5', d.followup1_due_date === '2026-10-11' && d.followup2_due_date === '2026-10-15' && d.followup3_due_date === null && d.followup4_due_date === null && d.followup5_due_date === null, JSON.stringify(d));
 d = F.dueDates({ u_u_fu_count: '4', u_u_fu3_day: '12' }, 'u', t0);
 step('four follow-ups: four due dates (with the person\'s own day for the third), the fifth empty', d.followup3_due_date === '2026-10-20' && d.followup4_due_date === '2026-10-29' && d.followup5_due_date === null);
 d = F.dueDates({ u_u_fu_count: '0' }, 'u', t0);

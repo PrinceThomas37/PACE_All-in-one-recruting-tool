@@ -363,7 +363,7 @@ window.saveOutreachTemplate=function(key,subjId,bodyId){
   ]).then(function(){showToast('Template saved','success'); render();}).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };
 
-// How many follow-ups this person wants (0–5; two unless they say otherwise — D-0113). Fewer than the tab that is open: back to the first email.
+// How many follow-ups this person wants (0–5; none until they choose — D-0114). Fewer than the tab that is open: back to the first email.
 window.setFollowupCount=function(n){
   var k=Number(n); if(!(k===Math.floor(k)&&k>=0&&k<=5))return;
   if(window.planDraftCapture) planDraftCapture();      // the text typed so far survives the repaint

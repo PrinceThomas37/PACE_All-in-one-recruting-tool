@@ -281,3 +281,6 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 43, fourth round) — up to five follow-ups (D-0113)
 - Follow-up types fu1–fu5 are follow-ups everywhere mail is decided: `services/outreach-dedup.js`, `services/gmail-delivery.js`, `services/followup-thread.js`, `services/wording-scope.js` (SLOTS). An unwritten fu3–5 is skipped (`log.skipped_no_text`); fu1–2 still fall back to PACE's standard wording (asked, R-187). Follow-up rows exist only for admin-distributed leads (R-186).
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- The follow-up chain starts at the first real send (`services/followup-chain.js`); a new-rules chain never sends PACE's standard wording — an unwritten follow-up sends nothing. Old chains keep the stock fallback.
