@@ -123,7 +123,7 @@ async function readOurSide({ mail, mailboxes, addresses, have, trim, full }) {
       const full_ = await f.adapter.getMessage(f.m.id);
       const html = (full_ && full_.body_html) || '';
       messages.push({
-        id: 'mb:' + f.mailbox.id + ':' + f.m.id, source: 'mailbox', direction: 'outbound', sent_at: f.m.date,
+        id: 'mb:' + f.mailbox.id + ':' + f.m.id, source: 'mailbox', direction: 'outbound', sent_at: f.m.date, message_id: f.m.id,
         from: (f.m.from && f.m.from.email) || f.mailbox.email_address,
         to: (f.m.to || []).map(a => a && a.email).filter(Boolean).join(', '),
         subject: f.m.subject || '', text: trim(html), full: full(html), facts: null, person: null,

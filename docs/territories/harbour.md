@@ -267,3 +267,5 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 42) — failed emails can be closed (D-0107)
 - No server change: closing a failed email is the existing `DELETE /emails/:id` (sender-only, pending or failed only, the status rides on the delete). The page offers it on every own failed row, including ones that can never be retried (invalid address). A closed row is gone — the contact keeps its invalid mark, so the engine will not write to it again.
+## 2026-10-08 (Session 42) — which email a reply answers (D-0108)
+- NEW `services/reply-target.js` (pure): the newest email in the person's OWN mailbox with a provider id (inbound `message_key`; outbound `message_id`), and the newest of THEIRS; a teammate's mailbox is never offered. `services/sent-side.js` now carries `message_id` on emails read from the provider's Sent folder. Test: `reply-target-smoke` (10).

@@ -1167,3 +1167,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 42) — tests for D-0107
 - New `failed-close-smoke` (10: Close/Retry per row, a teammate's row has neither, Close all is own-only, the panel disappears when empty). `mysetup-page-smoke` now asserts there is NO second Today card and that a mailbox row is details + one button (mutations: the card function put back, the Close button removed — both fail).
+
+## 2026-10-08 (Session 42) — tests for D-0108
+- New: `reply-target-smoke` (10), `reply-in-thread-smoke` (12, real browser, mailbox stubbed); grown: `client-intel-routes-smoke` (55).

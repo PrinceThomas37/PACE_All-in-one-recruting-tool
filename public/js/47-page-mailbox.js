@@ -245,6 +245,7 @@
         m.crm=Object.assign(m.crm||{},hit.crm||{});
         m.listLoading=false; m.error=null; paint();
         if(Date.now()-hit.at>=LIST_TTL) fetchList(key,null,true);
+        deepOpen();
         return;
       }
       m.messages=null;
@@ -303,6 +304,7 @@
       m.listLoading=false; m.error=null;
       if(!cursor) _lc[key]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
       paint();
+      if(!cursor) deepOpen();
       if(!cursor&&!m.q){
         var cur=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
         if(cur&&cur.kind==='inbox') warmFolders(acct);
@@ -343,6 +345,7 @@
       paint();
       if(hit.unread) markRead(id, true, true);
       loadThread(hit);
+      deepAfterOpen(id);
       return;
     }
     m.message=null; m.msgLoading=true;
@@ -356,9 +359,11 @@
       // Optimistic locally so the row un-bolds immediately.
       if(d.unread) markRead(id, true, true);
       loadThread(d);
+      deepAfterOpen(id);
     }).catch(function(e){
       if(m.selectedId!==id)return;
       m.msgLoading=false; m.error=e.message; paint();
+      deepFailed(id);
     });
   }
 
@@ -569,6 +574,41 @@
   window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
   window.mbSelectFolder=function(id){ var m=M(); if(m.folderId===id)return; m.folderId=id; loadMessages(); };
   window.mbOpen=function(id){ loadMessage(id); };
+
+  // OPEN ONE PARTICULAR EMAIL, optionally with its reply window ready (8 Oct, owner: "when Reply in the mailbox is clicked, that
+  // particular email doesn't open — the mailbox does, and the user does not know what to do"). The buttons that mean "answer THIS
+  // email" (the evidence window, Needs you today) come here with the mailbox and the provider's message id the server found.
+  // The list of the mailbox loads behind it as usual; the message is opened as soon as that list is on screen, so the screen
+  // the person lands on is the email they asked for. If that email cannot be opened (deleted, mailbox signed out) the mailbox is
+  // searched down to the person instead and the person is told, in words, why.
+  //   opts: { reply:true → the reply window opens on it, q:'person@x.com' → the fallback search }
+  var _deep=null;
+  function deepOpen(){
+    var d=_deep; if(!d) return; _deep=null;
+    var m=M();
+    if(m.activeId!==d.acct){ return; }                        // the account they asked for was not openable: leave the mailbox as it is
+    m._replyWhen=d.reply?d.id:null; m._deepQ=d.q||'';
+    loadMessage(d.id);
+  }
+  function deepAfterOpen(id){
+    var m=M(); m._deepQ=''; if(m._replyWhen!==id) return;
+    m._replyWhen=null; mbOpenReplyWindow('reply');
+  }
+  function deepFailed(id){
+    var m=M(); if(m._replyWhen!==id && !m._deepQ) return;
+    var q=m._deepQ; m._replyWhen=null; m._deepQ='';
+    showToast('That email could not be opened (it may have been deleted, or the mailbox needs reconnecting) — showing their messages instead','warning');
+    if(q){ m.q=q; loadMessages(); }
+  }
+  window.mbOpenMessage=function(acct,id,opts){
+    opts=opts||{};
+    var m=M(); _deep={ acct:acct, id:id, reply:!!opts.reply, q:opts.q||'' };
+    var known=(m.accounts||[]).some(function(a){ return a.id===acct && a.readable; });
+    if(known && m.activeId!==acct){ m.activeId=acct; m.q=''; m.messages=null; m.selectedId=null; m.message=null; goPage('mailbox'); loadFolders(); return; }
+    if(!known) m.activeId=acct;                                // accounts not loaded yet: pickAccount keeps this pick, then the list opens it
+    goPage('mailbox');
+    if(known){ if(m.messages) deepOpen(); }                    // already on this mailbox with its list on screen: open it now
+  };
   // R-108: read a message in a long thread at (nearly) full screen height. Only a
   // class changes — see paint() — so the sandboxed frame is not rewritten.
   window.mbToggleTall=function(){
@@ -629,7 +669,9 @@
       subject=/^(fw|fwd):/i.test(x.subject||'')?x.subject:('Fwd: '+(x.subject||''));
     } else {
       var all=mode==='replyAll';
-      to=addrLine([x.from]);
+      var ownAddr=String((((m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{}).email_address)||'').toLowerCase();
+      // Answering an email that WE sent (a follow-up) goes to the people it was sent to, not back to ourselves.
+      to=(ownAddr && x.from && String(x.from.email||'').toLowerCase()===ownAddr) ? (addrLine(x.to)||addrLine([x.from])) : addrLine([x.from]);
       if(all){
         // Everyone else who was on it, minus us — the two classic reply-all
         // bugs are mailing yourself and mailing the sender twice.

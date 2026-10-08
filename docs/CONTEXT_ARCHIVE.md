@@ -6649,3 +6649,6 @@ Company name at send time: dropped (it lives in the person's sequence). Company 
 
 ### SESSION 42, three screenshots from the owner (D-0107)
 Duplicate setup prompt (Today card + Needs-you-today row) → card removed; mailbox rows reduced to details and one button; "Didn't send" gets Close / Close all. Reproduced from the screenshots' own text, built, tested with a new `failed-close-smoke` (10) and the updated My Setup page test (48); mutations shown failing (card back; Close button removed).
+
+### SESSION 42, Reply opens that email (D-0108)
+Owner: "Reply in the mailbox" opened the mailbox, not the email; a follow-up (we wrote last) had no way to go as a reply; "Write the email" took them to the lead. Built `services/reply-target.js` + `reply_target` on the intel routes + `mbOpenMessage` and wired the conversation window and Needs-you-today. Could not reproduce the lead-jump with a normal timeline — removed the silent fallback. Limits recorded in D-0108.

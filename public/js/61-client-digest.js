@@ -47,15 +47,25 @@
     var step=it.next_step||(it.state==='needs_reply'?{id:'reply',label:'Reply to their last email',why:'They wrote last and are waiting on you.'}:null);
     var who=function(){ return (meta.lastInbound&&meta.lastInbound.name)||''; };
     var openLead=function(){ clientDigestOpen(it.name); };
+    // "Reply" opens THAT email in the person's mailbox with the reply window ready; "Write the email" answers the newest email of the
+    // conversation (theirs, or ours when we wrote last) so the follow-up lands in the same thread. Only when the exact email cannot be
+    // found does either fall back — and says so, instead of silently landing somewhere else.
     var replyInMailbox=function(){
-      var em=meta.lastInbound&&meta.lastInbound.email;
-      if(!em){ openLead(); return; }
-      STATE.mailbox=STATE.mailbox||{}; STATE.mailbox.q=em; goPage('mailbox');
+      replyInThread(it.id,'inbound',null,meta.target).then(function(ok){
+        if(ok) return;
+        var em=meta.lastInbound&&meta.lastInbound.email;
+        if(!em){ showToast('Could not find their email in your mailboxes — opening the lead','warning'); openLead(); return; }
+        showToast('Could not open that exact email — showing their messages in your mailbox','warning');
+        STATE.mailbox=STATE.mailbox||{}; STATE.mailbox.q=em; goPage('mailbox');
+      });
     };
     var writeTo=function(){
-      var li=meta.lastInbound;
-      if(!li||!li.email||!window.outreachComposeTo){ openLead(); return; }
-      outreachComposeTo({id:null,name:li.name||it.name,email:li.email,company:it.name,job_id:it.id,outreach_type:'followup'});
+      replyInThread(it.id,'last',null,meta.target).then(function(ok){
+        if(ok) return;
+        var li=meta.lastInbound;
+        if(!li||!li.email||!window.outreachComposeTo){ showToast('There is no email address on record for this lead\'s contacts yet — opening the lead so you can add one','warning'); openLead(); return; }
+        outreachComposeTo({id:null,name:li.name||it.name,email:li.email,company:it.name,job_id:it.id,outreach_type:'followup'});
+      });
     };
     var b=[], text;
     if(!step){
