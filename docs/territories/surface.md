@@ -1321,3 +1321,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-08 (Session 43, fifth round, later) — sequence preview speaks as the email ID (R-188)
 - `09-page-workflows.js` `wfPreviewHtml`: {{sender}}, {{senderemail}}, {{sendercompany}} come from one of the person's OWN email IDs (`wfPreviewMailbox`: the picked one, else primary, else first); a "filled in as" picker (`wfPreviewAs`) when they have several; none connected = the field is marked, never the profile name. Not fixed (R-189): compose / mail-merge screens that still pass `STATE.user.name` to `fillEmail`.
+
+## 2026-10-08 (Session 43, fifth round, later) — R-189
+- `03-core-render.js`: `buildClientEmailVars` no longer falls back to the PROFILE name — no sender given leaves `{{sender}}`; `applyReminderTemplate` passes none, so a Compose reminder template keeps the token and the send fills it from the mailbox that sends. The old mail-merge (`13-`, `14-`, `10-page-modals`) and `openEmailPreviewModal` screens are unreachable (no caller) and pass the profile name on purpose (they open the person's own webmail); left alone.
