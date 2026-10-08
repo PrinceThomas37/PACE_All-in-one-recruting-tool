@@ -465,3 +465,6 @@ flows still separate correctly.
 
 ## 2026-10-08 (Session 42) — a person connects their OWN mailbox (D-0103)
 - The OAuth connect and disconnect routes were admin-only. They now allow the slot's own person or an admin, checked AFTER the organisation check (a foreign slot is 404, never 403) and BEFORE any sign-in state is minted; a person can never connect or disconnect someone else's mailbox. A self-serve add cannot choose its own daily limit or "primary"; the limit PATCH is admin/team-lead only (it was open to the mailbox's own person before — a latent hole, closed). Plan limits still apply (402).
+
+## 2026-10-08 (Session 42) — logo upload and signature HTML (D-0104)
+- The logo route is owner-or-admin; the file is checked by its first bytes (png/jpg/gif/webp, ≤200 KB), never by what the browser says; the stored address is served from a public bucket and `cleanSendsAs` accepts ONLY an address inside our own bucket (no tracking pixels from other hosts). Saved signature HTML goes through `sanitizeEmailHtml`. `/my-setup/*` act on the signed-in person only (the starter is for bd / bd_lead / admin).

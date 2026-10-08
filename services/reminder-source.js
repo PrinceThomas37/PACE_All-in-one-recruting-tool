@@ -40,6 +40,7 @@
 //     a contact Out of office — PACE never reads an auto-reply to do this)
 //   public/js/10-page-modals.js          → 'manual' | 'meeting'
 //   routes/next-actions.js (D-0020)      → 'manager_prompt'
+//   routes/my-setup.js (D-0104)          → 'setup'
 const SOURCES = {
   bd_touch: {
     label: 'Sequence step',
@@ -77,6 +78,12 @@ const SOURCES = {
   manual: {
     label: 'Added by you',
     why: 'You added this reminder yourself.'
+  },
+  setup: {
+    label: 'Getting started',
+    // D-0104: PACE puts these on a person's own list the first time they sign in, until the thing is done — a mailbox their
+    // outreach goes out from, and a sequence of their own. They close by themselves when it is done.
+    why: 'PACE added this to get you started: your outreach cannot go out until it is done. It closes by itself once you have done it.'
   },
   manager_prompt: {
     label: 'Asked by your manager',

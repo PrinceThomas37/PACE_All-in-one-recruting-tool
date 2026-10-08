@@ -125,6 +125,8 @@ window.naAct=function(btn,ev){
 };
 // The same work from an item in hand — the row's button and the evidence window's "What to do" band both call it.
 window.naActItem=function(it){
+  // A setup task PACE put on the person's own list (mailbox, sequence): the work is on My Setup.
+  if(it.kind==='reminder_due'&&it.subtitle==='My Setup')return goPage('mysetup');
   // A lead's silent contacts are one row with no single address: open the lead, where each person is.
   if(it.entity_type==='lead')return naOpen(it.kind,'lead',it.entity_id,it.job_id);
   if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
@@ -422,6 +424,7 @@ function renderNextActionsCard(){
     var doLbl={reply_due:'Reply',commitment_due:'Chase',nudge:'Follow up',reminder_due:'Write'}[it.kind]||'';
     // A reminder with nobody to write to (a task someone asked you to do, like "reconnect your mailbox") has no Write — a button that can only say "no address" is worse than none.
     if(it.kind==='reminder_due'&&!it.email)doLbl='';
+    if(it.kind==='reminder_due'&&it.subtitle==='My Setup')doLbl='Open My Setup';
     if(it.kind==='nudge'&&it.entity_type==='lead')doLbl='Open lead';
     var doAct=doLbl?'<button class="na-act na-act-do" onclick="naAct(this,event)" title="'+({reply_due:'Open their messages so you can answer',commitment_due:'Write to them about what they promised',nudge:(it.entity_type==='lead'?'Open the lead to see who you have emailed':'Write a follow-up'),reminder_due:'Write the email this reminder is for'}[it.kind])+'">'+doLbl+'</button>'
       :(it.kind==='stage_suggested'?naMoveStageSelect():'');

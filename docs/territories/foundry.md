@@ -1161,3 +1161,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 42) — tests for self-serve mailboxes and My Setup (D-0103)
 - New: `self-serve-mailbox-smoke` (34), `mysetup-page-smoke` (21). Updated: `engine-draft-smoke` (+1), `page-renders-smoke`, `theme-contrast-smoke`, `mobile-layout-smoke`, `screen-stability-smoke` (the new page is in their lists). One mutation survived a half-removed guard and was re-run with the whole guard removed (the edited-signature case) — caught.
+
+## 2026-10-08 (Session 42) — tests for My Setup stage 2 (D-0104)
+- New: `my-setup-routes-smoke` (32). Grown: `self-serve-mailbox-smoke` (45), `mysetup-page-smoke` (49), `finder-page-smoke` (135), `engine-draft-smoke` (+1). The page test caught two real bugs the server tests could not: formatting inside a locked chip vanished on save, and a failed logo upload left the picture in a hand-formatted signature. Full suite 217/217 on Node 22 (Node 26.10.0 run before the merge).

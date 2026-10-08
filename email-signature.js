@@ -85,7 +85,11 @@ function resolveSignatureHtml(savedHtml) {
 // A signature built from it carries OWN_SIGNATURE_MARK so nothing re-adds Fute Global's address or wording to it.
 const OWN_SIGNATURE_MARK = '<!--pace-own-signature-->';
 const sendsAsKey = (userEmailId) => `ue_${userEmailId}_sends_as`;
-const SENDS_AS_LIMITS = { company: 80, title: 80, address: 200, phone: 40, website: 120 };
+const SENDS_AS_LIMITS = { company: 80, title: 80, address: 200, phone: 40, website: 120, logo: 400 };
+// A logo is hosted in PACE's own public logo bucket (never a third party's address — a hotlinked image is a tracking pixel).
+const LOGO_PATH = '/storage/v1/object/public/signature-logos/';
+const isOwnLogoUrl = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' && x.pathname.startsWith(LOGO_PATH); } catch (_) { return false; } };
+const isHexColour = (c) => /^#[0-9a-fA-F]{6}$/.test(String(c || ''));
 function cleanSendsAs(v) {
   const o = {};
   const src = v && typeof v === 'object' ? v : {};
@@ -93,6 +97,9 @@ function cleanSendsAs(v) {
     const t = String(src[k] == null ? '' : src[k]).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, SENDS_AS_LIMITS[k]);
     if (t) o[k] = t;
   }
+  if (o.logo && !isOwnLogoUrl(o.logo)) delete o.logo;
+  // The colour taken from the logo (optional): used for the name and the links in the built signature.
+  if (isHexColour(src.accent)) o.accent = String(src.accent).toLowerCase();
   return o;
 }
 // What is missing, in words — company, title and address are required; phone and website are not.
@@ -108,19 +115,26 @@ function siteHref(w) { const t = String(w || '').trim(); if (!t) return ''; retu
 // {{sender}} and {{senderemail}} stay merge fields (filled from the mailbox that sends, at send time, like every signature).
 function signatureFromSendsAs(v) {
   const s = cleanSendsAs(v);
+  const accent = s.accent || '#1E7A3C';
   const line = (html, last) => `<p style="margin:0 0 ${last ? 0 : 3}px;color:#333">${html}</p>`;
-  const contact = [`<a href="mailto:{{senderemail}}" style="color:#1E7A3C;text-decoration:none">{{senderemail}}</a>`]
+  const contact = [`<a href="mailto:{{senderemail}}" style="color:${accent};text-decoration:none">{{senderemail}}</a>`]
     .concat(s.phone ? [escHtml(s.phone)] : [])
-    .concat(s.website ? [`<a href="${escHtml(siteHref(s.website))}" style="color:#1E7A3C;text-decoration:none">${escHtml(String(s.website).replace(/^https?:\/\//i, ''))}</a>`] : []);
-  return `${OWN_SIGNATURE_MARK}<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.45">`
-    + `<p style="margin:0 0 3px"><strong>{{sender}}</strong></p>`
+    .concat(s.website ? [`<a href="${escHtml(siteHref(s.website))}" style="color:${accent};text-decoration:none">${escHtml(String(s.website).replace(/^https?:\/\//i, ''))}</a>`] : []);
+  const text = `<p style="margin:0 0 3px"><strong style="color:${accent}">{{sender}}</strong></p>`
     + line(`${escHtml(s.title || '')}${s.title && s.company ? ' | ' : ''}<strong>${escHtml(s.company || '')}</strong>`)
     + line(contact.join(' | '))
-    + `<p style="margin:0;color:#555;font-size:12px">${escHtml(s.address || '')}</p></div>`;
+    + `<p style="margin:0;color:#555;font-size:12px">${escHtml(s.address || '')}</p>`;
+  // With a logo: a two-column table (logo left, words right) — the one layout every mail client draws the same way.
+  const body = s.logo
+    ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse"><tr>`
+      + `<td valign="top" style="padding:0 14px 0 0"><img src="${escHtml(s.logo)}" alt="${escHtml(s.company || 'Logo')}" height="56" style="display:block;height:56px;width:auto;border:0"></td>`
+      + `<td valign="top">${text}</td></tr></table>`
+    : text;
+  return `${OWN_SIGNATURE_MARK}<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#222;line-height:1.45">${body}</div>`;
 }
 
 module.exports = {
-  OWN_SIGNATURE_MARK, sendsAsKey, SENDS_AS_LIMITS, cleanSendsAs, sendsAsProblem, signatureFromSendsAs,
+  OWN_SIGNATURE_MARK, sendsAsKey, SENDS_AS_LIMITS, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, isOwnLogoUrl, LOGO_PATH,
   DEFAULT_SIGNATURE_HTML,
   SIGNATURE_POSTAL_ADDRESS,
   SIGNATURE_ADDRESS_HTML,

@@ -168,3 +168,6 @@
 - 2026-10-01 (R-080, D-0066): contacts marked Out of office are set back to Valid by `services/ooo-return.js` on the return date, so automatic follow-ups can resume (the stop on automatic mail for an out-of-office contact is lifted by the date, not by a person). Invalid/deactivated contacts are never switched — the suppression of a bad address is not undone by a holiday ending. The `ooo_return` reminder explanation (`services/reminder-source.js`) says so.
 
 - 2026-10-02 (R-110, D-0068): open tracking now covers leads emails (cold outreach to people who have not opted in). Ships limited to `open_tracking_users`; the owner chose BD Lead 1 first. Open questions for later: disclosure/consent wording for recipients in regions that expect it (EU/UK), and whether tracking should honour the suppression list (it does not touch it). Stored per open: only counters + a reason; the sender's networks are salted hashes.
+
+## 2026-10-08 (Session 42) — (D-0104) nothing new in the plans; note
+- The signature logo is a public image address; it carries no tracking and no per-recipient data. The daily sending number stays an admin's (a person cannot raise their own).

@@ -36,6 +36,7 @@ function reminderWhy(r){
   if(t==='bd_touch'||t==='reminder')return{label:'Sequence step',why:'An outreach sequence reached a step that asks you to do something.'};
   if(t==='recruiter_task')return{label:'Sequence task',why:'A candidate sequence reached a recruiter task.'};
   if(t==='meeting')return{label:'Meeting',why:'You scheduled a meeting with them.'};
+  if(t==='setup')return{label:'Getting started',why:'PACE added this to get you started: your outreach cannot go out until it is done. It closes by itself once you have done it.'};
   return{label:'Added by you',why:'You added this reminder yourself.'};
 }
 
@@ -159,6 +160,7 @@ function renderReminders(){
           // `compose.can_send` already carries the double-send rule, so the
           // button disappears instead of composing a whole email and then being
           // refused at the last step. The reason is printed below, not hidden.
+          (r.reminder_type==='setup'?'<button class="btn btn-primary btn-sm" onclick="goPage(\'mysetup\')">Open My Setup</button>':'')+
           (toEmail&&cmp.can_send!==false?'<button class="btn btn-primary btn-sm" onclick="composeReminderEmail(\''+r.id+'\',\''+(contactId||'')+'\')">'+ico('send',13)+' Compose email</button>':'')+
           '<button class="btn btn-outline btn-sm" onclick="dismissReminder(\''+r.id+'\')">Dismiss</button>'+
         '</div>'+

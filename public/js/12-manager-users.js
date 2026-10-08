@@ -711,6 +711,8 @@ window.applySigPreset=function(pk){
   STATE.sigEditing=true; render();
 };
 function getSigPreviewIdentity(){
+  // My Setup's window shows the name and address being typed for a mailbox that may not exist yet.
+  if(STATE._sigIdentityOverride)return STATE._sigIdentityOverride;
   var uid=STATE.user&&STATE.user.id;
   var emails=(uid&&STATE.userEmailsCache&&STATE.userEmailsCache[uid])||[];
   var sigEmail=emails.find(function(e){return e.id===STATE.sigEmailId;})||emails.find(function(e){return e.is_primary;})||emails[0];

@@ -54,7 +54,12 @@ function from(name) {
   };
   return q;
 }
-const supabase = { from };
+const FILES = {}; const BUCKETS = new Set();
+const storage = { from: (b) => ({
+  upload: async (path, buf, opts) => { if (!BUCKETS.has(b)) return { error: { message: 'Bucket not found' } }; FILES[b + '/' + path] = { size: buf.length, opts }; return { error: null }; },
+  getPublicUrl: (path) => ({ data: { publicUrl: `https://proj.supabase.co/storage/v1/object/public/${b}/${path}` } }),
+}) };
+const supabase = { from, storage };
 const roleOf = (req) => (req.user && req.user.roles) || [];
 const hasRole = (req, ...r) => roleOf(req).some((x) => r.includes(x));
 const orgIdFor = (req) => (req.orgId || (req.user && req.user.org_id)) || null;
@@ -67,7 +72,7 @@ const tokenFor = (id) => { const u = T.users.find((x) => x.id === id); return jw
 const ctx = { supabase, auth, hasRole, orgIdFor, loadMailboxSignatures: async () => ({}), today: () => '2026-10-08', getMailboxSignature: async (id) => (T.app_settings.find((x) => x.key === 'ue_' + id + '_signature_html') || {}).value || '', getMicrosoftToken: async () => null, buildHtmlEmailBody: (b) => b,
   MS_TENANT: 'common', MS_CLIENT: 'cid', MS_SECRET: 's', MS_REDIRECT: 'http://localhost/cb', MS_SCOPES: 'Mail.Send',
   provider: { isConfigured: () => true, authorizeUrl: (s) => 'https://accounts.google.com/o/oauth2/auth?state=' + s } };
-const app = express(); app.use(express.json());
+const app = express(); app.use(express.json({ limit: '5mb' }));   // the same limit the real server uses
 app.use(require('../routes/auth.js')(ctx));
 app.use(require('../routes/microsoft.js')(ctx));
 app.use(require('../routes/gmail.js')(ctx));
@@ -135,6 +140,35 @@ r = await call('GET', '/users/ra1/emails', 'ra1');
 const listed = Array.isArray(r.out) && r.out.find((x) => x.id === mine.id);
 step('the list says who each mailbox writes for and whether it has a signature of its own', listed && listed.sends_as && listed.sends_as.company === 'Acme Talent LLC' && listed.has_own_signature === true, JSON.stringify(listed).slice(0, 160));
 step('a mailbox that says nothing is listed as such (not set)', (await call('GET', '/users/adm/emails', 'adm')).out[0].sends_as === null);
+
+console.log('\nThe signature: safe, and with an optional logo');
+const evil = '<div>Jo <script>alert(1)</script><img src="x" onerror="alert(2)"><a href="javascript:alert(3)">x</a> | Acme | 12 Market St, Bend, OR 97701</div>';
+r = await call('PUT', `/users/ra1/emails/${mine.id}/signature`, 'ra1', { signature_html: evil });
+const savedSig = setting('ue_' + mine.id + '_signature_html');
+step('a saved signature is cleaned the way every email is: nothing that can run (script, handlers, javascript: links)', r.code === 200 && !/script|onerror|javascript:/i.test(savedSig) && /Acme/.test(savedSig), savedSig.slice(0, 120));
+step('…and because this mailbox says who it writes for, it is marked as carrying its OWN address (Fute Global\'s is never added)', savedSig.includes(sig.OWN_SIGNATURE_MARK) && sig.resolveSignatureHtml(savedSig) === savedSig);
+r = await call('PUT', '/users/adm/emails/mAdm/signature', 'adm', { signature_html: '<div>Dir | Fute Global LLC</div>' });
+step('a mailbox that says nothing keeps working exactly as before (no marker; the organisation\'s address still added at send)', r.code === 200 && !setting('ue_mAdm_signature_html').includes(sig.OWN_SIGNATURE_MARK) && /75251/.test(sig.resolveSignatureHtml(setting('ue_mAdm_signature_html'))));
+r = await call('POST', '/users/ra1/emails', 'ra1', { email_address: 'fmt@acme.test', display_name: 'F', sends_as: SA, signature_html: '<div style="font-size:18px"><b>Formatted</b> {{sender}} <script>x()</script></div>' });
+const fmt = T.user_emails.find((x) => x.email_address === 'fmt@acme.test');
+step('a signature formatted in the window is what is saved for the new mailbox (cleaned, marked) — not the plain built one', r.code === 201 && /font-size:18px/.test(setting('ue_' + fmt.id + '_signature_html')) && !/script/.test(setting('ue_' + fmt.id + '_signature_html')) && setting('ue_' + fmt.id + '_signature_html').includes(sig.OWN_SIGNATURE_MARK));
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(300, 1)]).toString('base64');
+r = await call('POST', `/users/ra1/emails/${mine.id}/signature-logo`, 'ra1', { data_base64: PNG });
+step('before the logo bucket exists the answer is plain: not switched on yet (503) — nothing else is affected', r.code === 503 && r.out.not_ready === true && /not switched on/.test(r.out.error), JSON.stringify(r.out));
+BUCKETS.add('signature-logos');
+r = await call('POST', `/users/ra1/emails/${mine.id}/signature-logo`, 'ra1', { data_base64: 'data:image/png;base64,' + PNG });
+step('with the bucket, an image is stored under its organisation and mailbox and its public address comes back, versioned', r.code === 201 && /\/storage\/v1\/object\/public\/signature-logos\/o1\/.+\.png\?v=[0-9a-f]{8}$/.test(r.out.url) && !!FILES['signature-logos/o1/' + mine.id + '.png'] && FILES['signature-logos/o1/' + mine.id + '.png'].opts.contentType === 'image/png', JSON.stringify(r.out));
+r = await call('POST', `/users/ra1/emails/${mine.id}/signature-logo`, 'ra1', { data_base64: Buffer.from('<svg onload=alert(1)>').toString('base64') });
+step('something that is not a picture is refused by what it IS, not what it is called (400)', r.code === 400 && /PNG, JPEG, GIF or WEBP/.test(r.out.error));
+r = await call('POST', `/users/ra1/emails/${mine.id}/signature-logo`, 'ra1', { data_base64: Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(260 * 1024, 1)]).toString('base64') });
+step('a logo over 200 KB is refused, saying how big it was (400)', r.code === 400 && /most is 200 KB/.test(r.out.error));
+r = await call('POST', `/users/ra1/emails/${mine.id}/signature-logo`, 'bd1', { data_base64: PNG });
+step('nobody can put a logo on somebody else\'s mailbox (403)', r.code === 403);
+const logoUrl = 'https://proj.supabase.co/storage/v1/object/public/signature-logos/o1/' + mine.id + '.png?v=abcd1234';
+const withLogo = sig.signatureFromSendsAs({ ...SA, logo: logoUrl, accent: '#336699' });
+step('the built signature carries the logo beside the words, in the logo\'s colour — and ignores a logo from anywhere else', /<table/.test(withLogo) && withLogo.includes(logoUrl) && /#336699/.test(withLogo) && !/<img/.test(sig.signatureFromSendsAs({ ...SA, logo: 'https://evil.test/pixel.gif' })));
+r = await call('PUT', `/users/ra1/emails/${mine.id}/sends-as`, 'ra1', { ...SA, title: 'Managing Director', logo: logoUrl, accent: '#336699', rebuild_signature: true });
+step('saving who it writes for with the logo keeps both, and rebuilding writes the logo into the signature', r.code === 200 && JSON.parse(setting('ue_' + mine.id + '_sends_as')).logo === logoUrl && setting('ue_' + mine.id + '_signature_html').includes(logoUrl));
 
 console.log('\nWhat the AI writes under');
 r = await call('GET', `/outreach/sender?mailbox_id=${mine.id}`, 'ra1');

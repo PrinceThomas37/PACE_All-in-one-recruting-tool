@@ -42,7 +42,7 @@ module.exports = (ctx) => {
   const router = express.Router();
   const {
     supabase, auth, hasRole, today, logActivity,
-    getSendWindowHours, isInLeadSendWindow, getMinutesUntilWindowOpens,
+    getSendWindowHours, getPersonSendWindow, isInLeadSendWindow, getMinutesUntilWindowOpens,
     formatWindowOpensLabel, padHour, sendProgressCache,
   } = ctx;
   // routeCtx carries `db`; a harness that builds this router without one still
@@ -212,10 +212,13 @@ router.get('/emails/sender-summary', auth, async (req, res) => {
 
 router.get('/emails/pending-summary', auth, async (req, res) => {
   try {
-    const sendWindow = await getSendWindowHours();
     if (!hasRole(req, 'admin', 'ra_lead', 'bd', 'bd_lead')) {
       return res.status(403).json({ error: 'Forbidden' });
     }
+    // The window the queue being counted obeys: the organisation's hours, narrowed by THAT sender's own choice (D-0104). A whole-
+    // organisation view (an admin with no sender named) has no single sender, so it counts by the organisation's window.
+    const whose = hasRole(req, 'admin', 'ra_lead') ? (req.query.manager_id || null) : req.user.id;
+    const sendWindow = whose && getPersonSendWindow ? await getPersonSendWindow(whose) : await getSendWindowHours();
 
     // Counts of the caller's own queue — or, for the two roles that operate
     // other people's sending, a named sender's. Never outside the organisation.
@@ -288,7 +291,8 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
         resumes_label: formatWindowOpensLabel(t.timezone, sendWindow)
       }));
 
-    const winLbl = `${padHour(sendWindow.start)} – ${padHour(sendWindow.end)} lead local time`;
+    const winLbl = `${padHour(sendWindow.start)} – ${padHour(sendWindow.end)} lead local time` +
+      (sendWindow.days ? ` · ${sendWindow.days.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')} only` : '');
     // Which rows are held, so each can say so. Only for a queue the caller
     // may see row by row: their own, or an admin's whole organisation. An RA
     // Lead gets counts for other people's sending, never their rows (D4).

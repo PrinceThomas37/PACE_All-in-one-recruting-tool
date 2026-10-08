@@ -7,7 +7,9 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs } = require('../email-signature');
+const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, OWN_SIGNATURE_MARK } = require('../email-signature');
+const { sanitizeEmailHtml } = require('../services/mail-provider');
+const sigLogo = require('../services/signature-logo');
 const { mailboxConnections } = require('../mailbox-health');
 const entitlements = require('../services/entitlements');
 const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
@@ -84,6 +86,17 @@ router.post('/auth/change-password', auth, async (req, res) => {
     res.status(404).json({ error: 'User not found' });
     return false;
   }
+
+// A signature a person wrote or formatted: cleaned the way every email body is (nothing that can run), and — when its mailbox says who it
+// writes for — marked as carrying its OWN address so Fute Global's is never added to it.
+function cleanSignatureForSave(html, hasSendsAs) {
+  let out = sanitizeEmailHtml(String(html == null ? '' : html), { blockRemoteImages: false });
+  if (hasSendsAs && out.trim() && !out.includes(OWN_SIGNATURE_MARK)) out = OWN_SIGNATURE_MARK + out;
+  return out;
+}
+async function mailboxHasSendsAs(mailboxId) {
+  try { const { data } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(mailboxId)).maybeSingle(); return !!(data && data.value && Object.keys(cleanSendsAs(JSON.parse(data.value))).length); } catch (_) { return false; }
+}
 
 const USER_COLS = 'id,name,email,role,roles,employee_id,designation,platform,is_active,created_at,manager_id';
 
@@ -273,7 +286,7 @@ router.post('/users/:id/emails', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
     if (!(await guardUser(req, res, req.params.id))) return;
-    const { email_address, display_name, platform, daily_send_limit, is_primary, sends_as } = req.body;
+    const { email_address, display_name, platform, daily_send_limit, is_primary, sends_as, signature_html } = req.body;
     if (!email_address) return res.status(400).json({ error: 'email_address required' });
     // A person adding their OWN mailbox (owner, 8 Oct): not an admin's powers. The daily limit and "primary" stay with admins
     // — they start at the default — and they must say who the mailbox writes for, so no email goes out under another
@@ -305,7 +318,8 @@ router.post('/users/:id/emails', auth, async (req, res) => {
     if (sendsAsClean && !sendsAsProblem(sendsAsClean)) {
       await supabase.from('app_settings').upsert([
         { key: sendsAsKey(data.id), value: JSON.stringify(sendsAsClean), updated_at: new Date() },
-        { key: mailboxSignatureKey(data.id), value: signatureFromSendsAs(sendsAsClean), updated_at: new Date() },
+        // The signature the person formatted in the window when they sent one, else the one built from what they said.
+        { key: mailboxSignatureKey(data.id), value: (typeof signature_html === 'string' && signature_html.trim()) ? cleanSignatureForSave(signature_html, true) : signatureFromSendsAs(sendsAsClean), updated_at: new Date() },
       ], { onConflict: 'key' });
     }
     res.status(201).json({ ...data, sends_as: sendsAsClean && !sendsAsProblem(sendsAsClean) ? sendsAsClean : null });
@@ -370,11 +384,36 @@ router.put('/users/:id/emails/:eid/sends-as', auth, async (req, res) => {
     const sigKey = mailboxSignatureKey(mb.id);
     const { data: had } = await supabase.from('app_settings').select('value').eq('key', sigKey).maybeSingle();
     const rows = [{ key: sendsAsKey(mb.id), value: JSON.stringify(clean), updated_at: new Date() }];
-    const rebuilt = !(had && String(had.value || '').trim()) || (req.body && req.body.rebuild_signature === true);
-    if (rebuilt) rows.push({ key: sigKey, value: signatureFromSendsAs(clean), updated_at: new Date() });
+    const given = req.body && typeof req.body.signature_html === 'string' && req.body.signature_html.trim() ? cleanSignatureForSave(req.body.signature_html, true) : null;
+    const rebuilt = !!given || !(had && String(had.value || '').trim()) || (req.body && req.body.rebuild_signature === true);
+    if (rebuilt) rows.push({ key: sigKey, value: given || signatureFromSendsAs(clean), updated_at: new Date() });
     const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
     if (error) throw error;
     res.json({ sends_as: clean, signature_rebuilt: rebuilt });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// A LOGO for a mailbox's signature (optional). The picture is kept in PACE's own public logo bucket and shown by address; the
+// route answers with that address (the window puts it in the signature). It never changes the signature by itself.
+router.post('/users/:id/emails/:eid/signature-logo', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
+    const { data: mb } = await supabase.from('user_emails').select('id').eq('id', req.params.eid).eq('user_id', req.params.id).maybeSingle();
+    if (!mb) return res.status(404).json({ error: 'Not found' });
+    const img = sigLogo.check(req.body && req.body.data_base64);
+    if (img.error) return res.status(400).json({ error: img.error });
+    const path = sigLogo.pathFor(orgIdFor(req), mb.id, img.ext);
+    const bucket = supabase.storage.from(sigLogo.BUCKET);
+    const up = await bucket.upload(path, img.buf, { contentType: img.type, upsert: true, cacheControl: '31536000' });
+    if (up.error) {
+      const msg = String(up.error.message || up.error);
+      if (/bucket.*not found|not found.*bucket/i.test(msg)) return res.status(503).json({ error: 'Logo upload is not switched on yet. Ask an admin to turn it on.', not_ready: true });
+      throw up.error;
+    }
+    const { data: pub } = bucket.getPublicUrl(path);
+    // The version in the address makes a changed logo show at once instead of after a mail client's cache runs out.
+    res.status(201).json({ url: `${pub.publicUrl}?v=${img.version}` });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -425,12 +464,13 @@ router.put('/users/:id/emails/:eid/signature', auth, async (req, res) => {
     const { data: mailbox, error } = await supabase.from('user_emails').select('id,user_id').eq('id', req.params.eid).eq('user_id', req.params.id).single();
     if (error || !mailbox) return res.status(404).json({ error: 'Email ID not found' });
     const key = mailboxSignatureKey(mailbox.id);
+    const cleaned = cleanSignatureForSave(signature_html, await mailboxHasSendsAs(mailbox.id));
     const { error: upsertErr } = await supabase.from('app_settings').upsert(
-      { key, value: String(signature_html), updated_at: new Date() },
+      { key, value: cleaned, updated_at: new Date() },
       { onConflict: 'key' }
     );
     if (upsertErr) throw upsertErr;
-    res.json({ success: true, signature_html: String(signature_html) });
+    res.json({ success: true, signature_html: cleaned });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
