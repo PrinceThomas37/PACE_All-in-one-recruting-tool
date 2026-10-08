@@ -1170,3 +1170,5 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 42) — tests for D-0108
 - New: `reply-target-smoke` (10), `reply-in-thread-smoke` (12, real browser, mailbox stubbed); grown: `client-intel-routes-smoke` (55).
+## 2026-10-08 (Session 42) — tests for D-0109
+- New `deliverability-admin-smoke` (16: menu and page admin-only for every other role, no template/spam cards, the spam check in My wording checks what is typed and does not repaint). Grown: `insights-numbers-smoke` (21: rates, other-org tracking not counted, a failed read gives null), `insights-screens-smoke` (+3), `scope-emails-warmup-smoke` (52). Mutations shown failing for each.

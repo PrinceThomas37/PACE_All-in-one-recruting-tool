@@ -18,9 +18,11 @@ function bdStatsFromServer(t){
   var people=(t&&t.data&&t.data.people)||[];
   return people.map(function(p){
     return {bd:{id:p.id,name:p.name,role:p.role},total:p.total_all,today:p.total_today,week:p.total_week,month:p.total_month,
-      conv:p.converted,pos:p.positive,sent:p.emails_sent,replied:p.replied,replyRate:p.reply_rate,convRate:p.conv_rate,_p:p};
+      conv:p.converted,pos:p.positive,sent:p.emails_sent,replied:p.replied,replyRate:p.reply_rate,convRate:p.conv_rate,bounceRate:p.bounce_rate,openRate:p.open_rate,_p:p};
   }).sort(function(a,b){return b.convRate-a.convRate;});
 }
+// A rate that could not be measured reads "—", never 0% (a person with no tracked emails has no open rate, not a zero one).
+function ivRate(v){ return v==null?'\u2014':v+'%'; }
 function bdTeamStatus(t){
   if(!t||t.loading&&!t.data)return '<div class="c-text3 fs-13" style="padding:40px;text-align:center">Loading the team\u2019s numbers\u2026</div>';
   if(t.error&&!t.data)return '<div class="c-red fs-13" style="padding:40px;text-align:center">Could not load the team\u2019s numbers: '+htmlEsc(t.error)+' <a href="#" onclick="STATE.bdTeamInsights=null;render();return false">try again</a></div>';
@@ -108,8 +110,8 @@ function renderInsights(){
     var teamConvBD=bdStats.reduce(function(s,r){return s+r.conv;},0);
     var teamConvRateBD=teamTotalBD?Math.round(teamConvBD/teamTotalBD*100):0;
     var boardBD=UI.table({
-      cols:['BD Manager','Today','7 days','30 days','Sent (30d)','Positive','Replied %','Conv %'],
-      rows:bdStats.map(function(r,i){ return {cells:[ivWho(i,r.bd),r.today,r.week,r.month,r.sent,r.pos,r.replyRate+'%',r.convRate+'%']}; }),
+      cols:['BD Manager','Today','7 days','30 days','Sent (30d)','Positive','Replied %','Bounced %','Opened %','Conv %'],
+      rows:bdStats.map(function(r,i){ return {cells:[ivWho(i,r.bd),r.today,r.week,r.month,r.sent,r.pos,r.replyRate+'%',ivRate(r.bounceRate),ivRate(r.openRate),r.convRate+'%']}; }),
       empty:'No BD Managers in the system yet.'
     });
     return '<div class="page">'+
@@ -312,7 +314,9 @@ function renderBDInsights(){
       {v:d.emails_sent,label:'Sent · 30 days'},
       {v:d.emails_pending,label:'Pending'},
       {v:d.emails_failed,label:'Failed'},
-      {v:d.response_rate+'%',label:'Response rate'}
+      {v:d.response_rate+'%',label:'Response rate'},
+      {v:ivRate(d.bounce_rate),label:'Bounced · of people emailed'},
+      {v:ivRate(d.open_rate),label:'Opened · of tracked emails'}
     ]))+
     ivCard('Leads assigned',null,ivKpis([
       {v:d.total_today,label:'Today'},
@@ -365,7 +369,7 @@ function renderTeamInsightsBody(){
       UI.strip([{v:P.total_today,label:'Today'},{v:P.total_week,label:'Last 7 days'},{v:P.total_month,label:'Last 30 days'},{v:P.converted,label:'Converted'}])+
       '<div class="rep-grid">'+
         ivCard('Email pipeline',null,
-          ivKpis([{v:P.emails_sent,label:'Sent · 30 days'},{v:P.emails_pending,label:'Pending'}])+
+          ivKpis([{v:P.emails_sent,label:'Sent · 30 days'},{v:P.emails_pending,label:'Pending'},{v:ivRate(P.bounce_rate),label:'Bounced'},{v:ivRate(P.open_rate),label:'Opened'}])+
           '<div class="fs-12 c-text3" style="margin-top:10px">Conversion <strong>'+P.conv_rate+'%</strong> · Replied <strong>'+P.replied+' ('+P.reply_rate+'%)</strong> · Positive <strong>'+P.positive+'</strong> · Negative <strong>'+(P.negative||0)+'</strong></div>')+
         ivCard('Stage breakdown',null,stgRows||'<div class="fs-13 c-text3">No leads.</div>')+
       '</div>';
@@ -393,11 +397,11 @@ function renderTeamInsightsBody(){
   var teamConv=bdStats.reduce(function(s,r){return s+r.conv;},0);
   var teamConvRate=teamTotal?Math.round(teamConv/teamTotal*100):0;
   var board=UI.table({
-    cols:['BD Manager','Today','7 days','30 days','Sent (30d)','Positive','Replied %','Conv %'],
+    cols:['BD Manager','Today','7 days','30 days','Sent (30d)','Positive','Replied %','Bounced %','Opened %','Conv %'],
     rows:bdStats.map(function(r,i){
       return {onclick:"STATE.bdLeadSelectedBD='"+r.bd.id+"';render()", cells:[
         '<div style="display:flex;align-items:center;gap:9px"><span class="fs-11 c-text3" style="font-weight:700;min-width:16px">'+(i+1)+'</span>'+av(r.bd,'28')+'<span style="font-weight:600">'+htmlEsc(r.bd.name)+'</span></div>',
-        r.today,r.week,r.month,r.sent,r.pos,r.replyRate+'%',r.convRate+'%'
+        r.today,r.week,r.month,r.sent,r.pos,r.replyRate+'%',ivRate(r.bounceRate),ivRate(r.openRate),r.convRate+'%'
       ]};
     }),
     empty:'No BD Managers report to you yet.<br><br>An admin sets reporting lines on the Admin → user page.'

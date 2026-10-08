@@ -553,3 +553,10 @@ tr.sel-row td{background:var(--accent-l)}
 .from-sel{flex:1;min-width:180px;max-width:100%}
 .from-note{font-size:12px;color:var(--text3)}
 .from-none{color:var(--amber)}
+
+/* the spam check under the sequence editor (07-page-email.js seqSpamHtml) */
+.seq-spam-box{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-left-width:3px;border-radius:8px}
+.seq-spam-box.is-risk{border-color:var(--red)}
+.seq-spam-box.is-warn{border-color:var(--amber)}
+.seq-spam-box.is-ok{border-color:var(--green)}
+.seq-spam-box ul{margin:6px 0 0 16px}

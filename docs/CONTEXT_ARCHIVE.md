@@ -6652,3 +6652,6 @@ Duplicate setup prompt (Today card + Needs-you-today row) → card removed; mail
 
 ### SESSION 42, Reply opens that email (D-0108)
 Owner: "Reply in the mailbox" opened the mailbox, not the email; a follow-up (we wrote last) had no way to go as a reply; "Write the email" took them to the lead. Built `services/reply-target.js` + `reply_target` on the intel routes + `mbOpenMessage` and wired the conversation window and Needs-you-today. Could not reproduce the lead-jump with a normal timeline — removed the silent fallback. Limits recorded in D-0108.
+
+### SESSION 42, Deliverability becomes the admin's (D-0109)
+Owner called the tab worthless for managers; I disagreed on one point (the bounce figure is the only place anyone sees what protects the sending domains) and proposed: admin-only, spam check into the sequence editor, drop reply-by-template; owner said yes and asked for bounce + open rate on Outreach Insights. Found while building: the old "Bounced" tile was all-time invalid contacts, not a rate — the new bounce rate is per person and per 30 days, labelled by what it is.

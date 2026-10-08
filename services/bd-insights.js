@@ -65,7 +65,7 @@ const pct = (n, d) => (d ? Math.round(n / d * 100) : 0);
  * @param {Date|number} o.now
  * @param {string}   [o.tz]         the viewer's IANA time zone; absent/unknown = UTC
  */
-function summarise({ jobs, emails, now, tz }) {
+function summarise({ jobs, emails, now, tz, delivery }) {
   const z = validZone(tz);
   const w = windows(now, z);
   const all = jobs || [];
@@ -119,6 +119,13 @@ function summarise({ jobs, emails, now, tz }) {
     emails_sent_today: sent.filter(e => sentDay(e) === w.today).length,
     emails_pending: mail.filter(e => e.status === 'pending').length,
     emails_failed: mail.filter(e => e.status === 'failed').length,
+    // delivery health of the same emails — see deliveryStats(); null fields mean "not measured", never 0
+    bounced: delivery ? delivery.bounced : 0,
+    contacts_emailed: delivery ? delivery.contacts_emailed : 0,
+    bounce_rate: delivery ? delivery.bounce_rate : null,
+    open_tracked: delivery ? delivery.tracked : 0,
+    opened: delivery ? delivery.opened : 0,
+    open_rate: delivery ? delivery.open_rate : null,
     // charts
     last_7_emails: last7emails,
     last_7_leads: last7leads,
@@ -128,4 +135,35 @@ function summarise({ jobs, emails, now, tz }) {
   };
 }
 
-module.exports = { summarise, windows, dayKey, validZone, localDay, dayOf, CONVERTED, POSITIVE, NEGATIVE, OOO };
+/** The emails summarise() counts as "sent in the last 30 days" — the same window, so the delivery figures speak about the same mail. */
+function sentInMonth(emails, now, tz) {
+  const z = validZone(tz), w = windows(now, z);
+  return (emails || []).filter(e => dayOf(e.created_at || e.sent_at, z) >= w.monthFrom && e.status === 'sent'
+    && dayOf(e.sent_at || e.created_at, z) >= w.monthFrom);
+}
+
+const rate1 = (n, d) => (d ? Math.round(n / d * 1000) / 10 : null);   // one decimal: 2.6% must not read as 3%
+
+/**
+ * THE TWO DELIVERY FIGURES for Outreach Insights (owner, 8 Oct: bounce rate and open rate belong with the person's other numbers).
+ *   bounce rate = of the PEOPLE this person emailed in the window, the share whose address has since turned out invalid (a bounce
+ *                 marks the contact invalid, and a known-bad address is never emailed, so after a send "invalid" means it bounced).
+ *                 Null when nobody was emailed — not 0%.
+ *   open rate   = of the emails sent WITH open tracking, the share opened by someone who looks like the recipient (scanners, the
+ *                 sender's own network and opens inside two minutes are never counted — services/open-tracking.js). Tracking is on
+ *                 for some people only, so the base is the TRACKED emails; null when none were tracked — not 0%.
+ * @param {object[]} o.sent            sentInMonth(): { id, contact_id }
+ * @param {object}   o.contactStatus   contact id → email_status
+ * @param {object[]} o.tracking        { email_id, open_count }
+ */
+function deliveryStats({ sent, contactStatus, tracking }) {
+  const people = [...new Set((sent || []).map(e => e.contact_id).filter(Boolean))];
+  const bounced = people.filter(id => (contactStatus || {})[id] === 'invalid').length;
+  const ids = new Set((sent || []).map(e => e.id));
+  const rows = (tracking || []).filter(t => ids.has(t.email_id));
+  const tracked = new Set(rows.map(t => t.email_id)).size;
+  const opened = new Set(rows.filter(t => (Number(t.open_count) || 0) > 0).map(t => t.email_id)).size;
+  return { contacts_emailed: people.length, bounced, bounce_rate: rate1(bounced, people.length), tracked, opened, open_rate: rate1(opened, tracked) };
+}
+
+module.exports = { summarise, sentInMonth, deliveryStats, windows, dayKey, validZone, localDay, dayOf, CONVERTED, POSITIVE, NEGATIVE, OOO };

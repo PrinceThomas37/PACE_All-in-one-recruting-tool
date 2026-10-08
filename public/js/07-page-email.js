@@ -12,6 +12,25 @@ function pendingSplitLine(ps){
 window.pendingSplitLine=pendingSplitLine;
 window.seqView=function(v){ if(STATE.seqView===v) return; STATE.seqView=v; render(); };
 
+// Spam check inside the sequence editor (owner, 8 Oct: it belongs where the wording is written, not on a tab nobody opens). Checks the
+// subject and body as they are typed right now — saved or not — and writes the answer into its own box, so nothing is repainted
+// under the person's hands.
+function seqSpamHtml(key){
+  var r=STATE.seqSpam; if(!r||r.key!==key||!r.res) return '';
+  var res=r.res, lvl=res.level==='risk'?'is-risk':res.level==='warn'?'is-warn':'is-ok';
+  return '<div class="seq-spam-box '+lvl+'" role="status"><div class="fs-13 fw6">Spam score '+htmlEsc(String(res.score))+'/100 — '+htmlEsc(String(res.level))+'</div>'+
+    (res.warnings&&res.warnings.length?'<ul class="fs-12 c-text2">'+res.warnings.map(function(w){ return '<li>'+htmlEsc(w)+'</li>'; }).join('')+'</ul>':'<div class="fs-12 c-text3">Looks clean.</div>')+
+    '<div class="fs-11 c-text3">Checked as written just now — press the button again after you edit.</div></div>';
+}
+window.seqSpamCheck=function(key,subjId,bodyId){
+  var sj=(document.getElementById(subjId)||{}).value||'', bd=(document.getElementById(bodyId)||{}).value||'';
+  if(!String(sj+bd).trim()){ showToast('Write the email first, then check it','info'); return; }
+  apiPost('/emails/spam-check',{subject:sj,body:bd}).then(function(res){
+    STATE.seqSpam={key:key,res:res};
+    var el=document.getElementById('seq-spam'); if(el) el.innerHTML=seqSpamHtml(key);
+  }).catch(function(e){ showToast('Could not check it: '+((e&&e.message)||e),'error'); });
+};
+
 function loadMySendingStatus(){
   apiGet('/sending/my-status').then(function(s){
     STATE.mySendingPaused=!!(s&&s.paused);
@@ -643,6 +662,8 @@ function renderEmail(){
         '<div class="fgrp"><label class="flbl">Body</label><textarea class="txta w100" style="min-height:200px" id="'+activeTmpl.bodyId+'" oninput="planRepaintPreview()" onfocus="setVarInsertTarget(\'body\')">'+htmlEsc(activeTmpl.bodyVal)+'</textarea></div>'+
         renderVarChipBar(activeTmpl.subjId,activeTmpl.bodyId)+
         '<button class="btn btn-primary mt3" onclick="saveOutreachTemplate(\''+activeTmpl.key+'\',\''+activeTmpl.subjId+'\',\''+activeTmpl.bodyId+'\')">Save '+activeTmpl.label+'</button>'+
+        '<button class="btn btn-outline mt3" style="margin-left:8px" title="Looks for spam-trigger words, too many links, ALL-CAPS and other things that send mail to junk. Nothing is saved or sent." onclick="seqSpamCheck(\''+activeTmpl.key+'\',\''+activeTmpl.subjId+'\',\''+activeTmpl.bodyId+'\')">Check for spam triggers</button>'+
+        '<div id="seq-spam">'+seqSpamHtml(activeTmpl.key)+'</div>'+
       '</div>'+
 
       // ── SIGNATURE EDITOR (per sending email ID) ───────────────

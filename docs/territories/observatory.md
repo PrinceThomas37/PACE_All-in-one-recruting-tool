@@ -680,3 +680,6 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-08 (Session 42) — "which email does Reply answer" (D-0108)
 - Conversation intelligence's emails answer (`routes/client-intel.js`) now carries `reply_target` from the pure `services/reply-target.js`: the newest email in the caller's own mailbox with a provider id, and the newest of theirs. The buttons that act on a conversation open that email instead of a search; nothing here calls an AI.
+
+## 2026-10-08 (Session 42) — `services/bd-insights.js` gains `sentInMonth` and `deliveryStats` (D-0109)
+- Pure; one definition of "the emails the page calls sent", reused for the two delivery rates (one decimal; null when not measured). No AI.

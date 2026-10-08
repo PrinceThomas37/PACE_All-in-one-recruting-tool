@@ -1102,3 +1102,5 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-08 (Session 42) — `GET /leads/:id/intel` and `/clients/:id/intel` carry `reply_target` (D-0108)
 - `routes/client-intel.js`: after the messages load, the caller's own active mailboxes (`user_emails … eq('user_id', req.user.id)`) feed `pickReplyTargets`; inbound rows now carry `message_key`. Optional `?email=` narrows to one person. Test: `client-intel-routes-smoke` (55; a reply that reached a teammate's mailbox is not offered).
+## 2026-10-08 (Session 42) — bounce and open rate on the insights answers (D-0109)
+- `routes/workflows.js` `loadBdSummary` reads the contacts' `email_status` and `email_tracking.open_count` for the person's sent emails (org-scoped, 150 per request) and passes them to `bdInsights.deliveryStats`; a failed read leaves the rates null, not 0. Fields on `/insights/bd/:id` and `/insights/bd-team`: `bounced, contacts_emailed, bounce_rate, open_tracked, opened, open_rate`. Test: `insights-numbers-smoke` (21).
