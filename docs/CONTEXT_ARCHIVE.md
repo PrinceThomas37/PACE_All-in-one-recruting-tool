@@ -6709,3 +6709,8 @@ Owner: "merge the last file too and give me handoff to cursor, since I think we 
 - Owner named the AI providers: Groq and OpenRouter. `privacy.html` now lists them, plus Supabase (storage) and Render (hosting).
 - Still open before publishing: legal company name, address, court city, registration number; owner's yes to the proposed retention and liability defaults; whether Anthropic, Apollo and JSearch are live in Render (the code reads their keys); whether to keep the "not reviewed by a lawyer" banner on the live legal pages; Render static hosting plan and price (not yet checked). Owner has confirmed info@ receives email and said yes to publish once the above are settled.
 - Publishing will need Render to read `company-site/` from `main`, so merging #321 becomes the publish step, as it is for the app.
+
+### SESSION 43, company site: legal defaults approved, draft banner removed (dev branch, PR #321)
+- Owner approved: customer data deleted 30 days after an account ends; booking requests kept 12 months; liability capped at 12 months of fees; governing law India with courts in Chengannur, Kerala; "Pricing is shown before you buy." The "not reviewed by a lawyer" banner is removed by the owner's decision; the owner will have a lawyer review the text later.
+- Owner's legal name "PACE inc." is NOT a registered company yet, so the pages must not use it until the operator's real name is settled. Still open: the operator's legal name and a contact address; the lead-data providers (owner says Apollo/JSearch keys are entered in the app, not set in Render; whether any customer has entered them must be confirmed before the privacy page names them).
+- The Anthropic key is not set in Render (owner's answer), so the privacy page does not name Anthropic.
