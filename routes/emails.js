@@ -446,11 +446,10 @@ router.patch('/emails/:id', auth, async (req, res) => {
 // (outreach = initial/null, fu1, fu2) and optionally by a "created before" cutoff.
 // Only status='pending' rows are ever touched — sent mail is never affected.
 // Pass dry_run:true to preview the count + per-type breakdown before deleting.
-const PURGE_TYPES = ['outreach', 'fu1', 'fu2'];
+const PURGE_TYPES = ['outreach', 'fu1', 'fu2', 'fu3', 'fu4', 'fu5'];
 function purgeTypeOf(followupType) {
   if (!followupType || followupType === 'initial') return 'outreach';
-  if (followupType === 'fu1') return 'fu1';
-  if (followupType === 'fu2') return 'fu2';
+  if (['fu1', 'fu2', 'fu3', 'fu4', 'fu5'].includes(followupType)) return followupType;
   return null; // e.g. 'reminder' — never matched by this tool
 }
 router.post('/admin/emails/purge-pending', auth, async (req, res) => {
@@ -491,7 +490,7 @@ router.post('/admin/emails/purge-pending', auth, async (req, res) => {
       return true;
     });
 
-    const by_type = { outreach: 0, fu1: 0, fu2: 0 };
+    const by_type = { outreach: 0, fu1: 0, fu2: 0, fu3: 0, fu4: 0, fu5: 0 };
     matches.forEach(e => { by_type[purgeTypeOf(e.followup_type)]++; });
 
     if (dry_run) return res.json({ count: matches.length, by_type });

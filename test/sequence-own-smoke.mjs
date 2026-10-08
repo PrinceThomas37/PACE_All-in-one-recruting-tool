@@ -60,7 +60,7 @@ step('…nor a lead\'s', r.code === 403 && T.workflow_definitions.find(d => d.id
 
 r = await call('/wf/definitions', 'get', 'bd1');
 const ids = (r.out || []).map(d => d.id);
-step('a BD\'s list: the company\'s standard, a lead\'s, and their own — NOT another BD\'s personal one', ids.includes('std') && ids.includes('lead1') && ids.includes('mine') && !ids.includes('theirs'), ids.join(','));
+step('a plain BD starts BLANK (D-0113): only the sequences THEY made — not the company\'s standard, not a lead\'s, not another BD\'s', ids.includes('mine') && !ids.includes('std') && !ids.includes('lead1') && !ids.includes('theirs'), ids.join(','));
 step('…including the one they just made', (r.out || []).some(d => d.name === 'My plan'));
 r = await call('/wf/definitions', 'get', 'bd2');
 step('another BD sees theirs, not the first BD\'s', (r.out || []).some(d => d.id === 'theirs') && !(r.out || []).some(d => d.id === 'mine' || d.name === 'My plan'));

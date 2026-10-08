@@ -30,7 +30,7 @@
 // Outreach-class email types. The INITIAL outreach is intentionally excluded —
 // the cold email is the thing a follow-up follows, so its existence must never
 // block one.
-const FOLLOWUP_EMAIL_TYPES = ['fu1', 'fu2', 'reminder'];
+const FOLLOWUP_EMAIL_TYPES = ['fu1', 'fu2', 'fu3', 'fu4', 'fu5', 'reminder'];
 
 /**
  * Is this row a reason not to send another follow-up right now?

@@ -21,7 +21,7 @@
 'use strict';
 const { isLegacyTemplate } = require('../email-vars');
 
-const SLOTS = ['o1', 'fu1', 'fu2'];
+const SLOTS = ['o1', 'fu1', 'fu2', 'fu3', 'fu4', 'fu5'];
 const FIELDS = SLOTS.reduce((a, s) => a.concat([`tmpl_${s}_subject`, `tmpl_${s}_body`]), []);
 
 const scopeKey = (userId) => `u_${userId}_tmpl_scope`;
@@ -67,7 +67,7 @@ function neededKeys(userIds, mailboxIds) {
 
 /**
  * A follow-up's wording for the email ID it goes out from.
- *   step      'fu1' | 'fu2'     resolve  the app's resolveTemplate (a saved value may be blank or a variant marker)
+ *   step      'fu1' … 'fu5'     resolve  the app's resolveTemplate (a saved value may be blank or a variant marker)
  *   defaults  DEFAULT_TEMPLATES (the last resort)
  * → { subject, body, own }  — `own` = this email ID has its own text for this step, so a random rotation must leave it alone.
  */

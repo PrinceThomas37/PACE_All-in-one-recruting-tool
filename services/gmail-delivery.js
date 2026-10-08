@@ -27,7 +27,7 @@
 
 function isFollowup(email) {
   const t = email && email.followup_type;
-  return t === 'fu1' || t === 'fu2';
+  return t === 'fu1' || t === 'fu2' || t === 'fu3' || t === 'fu4' || t === 'fu5';
 }
 
 // Gmail refused the request because the thing it names does not exist in

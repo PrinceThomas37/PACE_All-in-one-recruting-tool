@@ -314,7 +314,7 @@ window.planWording=function(field){
   return my[field];
 };
 window.mailboxHasOwnWording=function(id){ var mw=(STATE.mailboxWording||{})[id]; return !!mw&&Object.keys(mw).some(function(k){ return !!mw[k]; }); };
-var WORDING_FIELDS=['tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body'];
+var WORDING_FIELDS=['o1','fu1','fu2','fu3','fu4','fu5'].reduce(function(a,s){ return a.concat(['tmpl_'+s+'_subject','tmpl_'+s+'_body']); },[]);
 window.setWordingScope=function(scope){
   if(scope!=='all'&&scope!=='each')return;
   STATE.myOutreachPlan=STATE.myOutreachPlan||{};
@@ -360,11 +360,23 @@ window.saveOutreachTemplate=function(key,subjId,bodyId){
   Promise.all([
     apiPost('/outreach-plan',{key:'tmpl_'+apiKey+'_subject',value:subj}),
     apiPost('/outreach-plan',{key:'tmpl_'+apiKey+'_body',value:body})
-  ]).then(function(){showToast('Template saved','success');}).catch(function(e){showToast('Save failed: '+e.message,'error');});
+  ]).then(function(){showToast('Template saved','success'); render();}).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };
 
+// How many follow-ups this person wants (0–5; two unless they say otherwise — D-0113). Fewer than the tab that is open: back to the first email.
+window.setFollowupCount=function(n){
+  var k=Number(n); if(!(k===Math.floor(k)&&k>=0&&k<=5))return;
+  if(window.planDraftCapture) planDraftCapture();      // the text typed so far survives the repaint
+  STATE.myOutreachPlan=STATE.myOutreachPlan||{};
+  STATE.myOutreachPlan.fu_count=String(k);
+  var m=/^fu(\d)$/.exec(STATE.activeTmpl||''); if(m&&Number(m[1])>k) STATE.activeTmpl='outreach';
+  render();
+  apiPost('/outreach-plan',{key:'fu_count',value:String(k)}).then(function(){
+    showToast(k===0?'No follow-ups — only the first email goes out':(k+(k===1?' follow-up':' follow-ups')+' after the first email'),'success');
+  }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
+};
 window.setFollowupThread=function(key,mode){
-  if((key!=='fu1_thread'&&key!=='fu2_thread')||(mode!=='same'&&mode!=='new'))return;
+  if(!/^fu[1-5]_thread$/.test(key||'')||(mode!=='same'&&mode!=='new'))return;
   if(window.planDraftCapture) planDraftCapture();      // the text typed so far survives the repaint
   STATE.myOutreachPlan=STATE.myOutreachPlan||{};
   STATE.myOutreachPlan[key]=mode;
@@ -376,10 +388,19 @@ window.setFollowupThread=function(key,mode){
 window.saveOutreachDay=function(key,val){
   if(!val)return;
   var day=parseInt(val,10);
-  STATE.myOutreachPlan=STATE.myOutreachPlan||{};
-  STATE.myOutreachPlan[key]=String(day);
-  apiPost('/outreach-plan',{key:key,value:String(day)}).then(function(){
-    showToast('Schedule saved — '+key.replace('_day','').toUpperCase()+' set to Day '+day,'success');
+  var m=/^fu(\d)_day$/.exec(key||''); if(!m||!(day>=1&&day<=90))return;
+  var plan=STATE.myOutreachPlan=STATE.myOutreachPlan||{};
+  plan[key]=String(day);
+  // Each follow-up must come after the one before it: a later one that would now be too early moves to the day after.
+  var saves=[[key,day]], last=day;
+  for(var n=Number(m[1])+1;n<=5;n++){
+    var cur=parseInt(plan['fu'+n+'_day'],10); if(!(cur>=1))cur=[3,7,14,21,28][n-1];
+    if(cur>last){ last=cur; continue; }
+    last=Math.min(90,last+1); plan['fu'+n+'_day']=String(last); saves.push(['fu'+n+'_day',last]);
+  }
+  if(window.planDraftCapture) planDraftCapture();
+  Promise.all(saves.map(function(s){ return apiPost('/outreach-plan',{key:s[0],value:String(s[1])}); })).then(function(){
+    showToast('Schedule saved — Follow-up '+m[1]+' set to Day '+day+(saves.length>1?' (later follow-ups moved after it)':''),'success');
     render();
   }).catch(function(e){showToast('Save failed: '+e.message,'error');});
 };

@@ -597,7 +597,7 @@ function renderSequenceBody(){
       (d.description?'<div class="fs-12 c-text3" style="margin-top:5px">'+htmlEsc(d.description)+'</div>':'')+
       '<div class="fs-12_5" style="margin-top:8px">'+wfChain(d.steps)+'</div>'+
     '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">No sequences yet'+((canDesign||canDesignOwn)?' — create one with + New sequence.':'.')+'</div>';
+  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">'+(canDesignOwn?'You have not made a sequence yet. Yours start blank — create your first with + New sequence, and decide the steps, wording and timing yourself.':('No sequences yet'+(canDesign?' — create one with + New sequence.':'.')))+'</div>';
 
   var f=STATE.wfFilter||{};
   var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });
