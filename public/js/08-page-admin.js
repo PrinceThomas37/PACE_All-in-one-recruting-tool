@@ -90,10 +90,12 @@ window.saveSystemSettings=function(){
 // ── Integrations & API Keys (admin) ──
 window.openIntegrationsModal=function(){
   STATE._intgTest={}; STATE._emailVerifyResult=null; STATE.aiHealth=null;
+  // What the AI status shows in full is shown ONCE (owner, 8 Oct): the window opens with one line, and a fresh test opens its detail.
+  STATE._aiOpen=false; STATE._aiBudgetOpen=false; STATE.jobsourceAdmin=null; STATE._jsMsg=null;
   STATE.modal='<div class="modal modal-w480"><div class="mh"><div class="mt">Integrations & API Keys</div></div><div class="mb_ c-text3" style="padding:24px;text-align:center">Loading…</div></div>';
   render();
   STATE.apolloUsage=null;
-  apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); loadApolloUsage(); })
+  apiGet('/admin/integrations').then(function(r){ STATE.integrations=r; renderIntegrationsModal(); loadApolloUsage(); loadJsearchStatus(); })
     .catch(function(e){ closeModal(); showToast('Failed to load integrations: '+(e&&e.message||e),'error'); });
   // The budget loads alongside: an empty meter is fine, a missing one is not —
   // nobody should paste a key without seeing what it is allowed to spend.
@@ -154,7 +156,7 @@ function renderIntegrationsModal(){
           (it.configured?'<button onclick="disconnectIntegration(\''+it.id+'\')" style="font-size:11px;color:var(--red);background:transparent;border:0;cursor:pointer">Disconnect</button>':'')+
           testHtml+
         '</div>'+
-      '</div>';
+      '</div>'+(it.id==='apollo'?jsearchCard():'');
     }).join('');
     return '<div style="margin-bottom:16px">'+
       '<div class="fs-11 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+htmlEsc(cat.category)+'</div>'+
@@ -182,6 +184,62 @@ function renderIntegrationsModal(){
   Object.keys(typed).forEach(function(id){ var el=document.getElementById(id); if(el&&el.value!==typed[id])el.value=typed[id]; });
   box=document.querySelector('#layer .modal'); if(box&&scroll)box.scrollTop=scroll;
 }
+// The free job sources' key (D-0100). It belongs to the ORGANISATION using it, not to the whole PACE install, so it is saved through
+// the Lead Finder's own admin routes (stored under the organisation's name, shown only as "••••1234", never sent back). It sits here,
+// under Apollo, because this is where an admin looks for keys (owner, 8 Oct: it was in the wrong place, on the Find Leads page).
+function loadJsearchStatus(){
+  return apiGet('/finder/admin/jobsource').then(function(r){ STATE.jobsourceAdmin=r; renderIntegrationsModal(); })
+    .catch(function(){ STATE.jobsourceAdmin={ failed:true }; renderIntegrationsModal(); });
+}
+function jsearchCard(){
+  var j=STATE.jobsourceAdmin, m=STATE._jsMsg, on=!!(j&&j.connected), busy=!!STATE._jsBusy;
+  var badge=on
+    ?'<span class="fs-10 c-green" style="padding:2px 8px;border-radius:6px;font-weight:700;background:var(--green-l)">Connected</span>'
+    :'<span class="fs-10 c-text3" style="padding:2px 8px;border-radius:6px;font-weight:700;background:var(--bg3)">Not configured</span>';
+  var usage=!j?'Loading today’s usage…':j.failed?'Could not load today’s usage.'
+    :'Used today: <b>'+(j.used||0)+'</b> of '+(j.limit||0)+' requests · resets at midnight UTC. The daily number and the number per search are under Admin → Settings → Lead Finder.';
+  var msg=m?'<div class="fs-11_5 '+(m.ok?'c-green':'c-red')+'" role="status" style="margin-left:6px">'+(m.ok?'✓ ':'✗ ')+htmlEsc(m.text)+'</div>':'';
+  return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" id="intg-jsearch-card">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px"><div class="fs-13" style="font-weight:600">Free job sources (JSearch)</div>'+badge+'</div>'+
+    '<div class="fs-11_5 c-text3" style="margin-bottom:8px">Lets people on Find Leads search for companies <b>by job title</b> without Apollo — Google for Jobs (LinkedIn, Indeed, ZipRecruiter, Glassdoor, company career pages) through a licensed job-search service. '+
+      '<b>This key is your organisation’s own</b>: you sign up with the service (it has a free plan of 200 requests a month at the time of writing) and the requests are counted on your plan, never shared with another organisation. It finds companies and jobs, not people. · <a href="https://www.openwebninja.com" target="_blank" rel="noopener" class="c-accent">Get key ↗</a></div>'+
+    '<input class="inp" id="intg-jsearch-api_key" type="password" autocomplete="new-password" placeholder="'+(on?htmlEsc(j.hint||'configured'):'Paste your job-search key')+'" style="margin-bottom:6px"/>'+
+    '<div class="intg-apollo-limit"><div class="intg-apollo-used">'+usage+'</div></div>'+
+    '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">'+
+      '<button class="btn btn-sm btn-primary" '+(busy?'disabled ':'')+'onclick="saveJsearchKey()">Save</button>'+
+      (on?'<button class="btn btn-sm btn-outline" '+(busy?'disabled ':'')+'onclick="testJsearchKey()" title="One request on your plan">Check my key (1 request)</button>'+
+          '<button onclick="removeJsearchKey()" style="font-size:11px;color:var(--red);background:transparent;border:0;cursor:pointer">Disconnect</button>':'')+
+      msg+
+    '</div>'+
+  '</div>';
+}
+window.saveJsearchKey=function(){
+  var el=document.getElementById('intg-jsearch-api_key'); var v=el?String(el.value||'').trim():'';
+  if(!v){ showToast('Enter a value first','warning'); return; }
+  STATE._jsBusy=true; STATE._jsMsg=null; renderIntegrationsModal();
+  apiPut('/finder/admin/jobsource',{ api_key:v }).then(function(r){
+    STATE._jsBusy=false; STATE.jobsourceAdmin=r;
+    // a saved key leaves the page: empty the box so the redraw does not carry it back in
+    var box=document.getElementById('intg-jsearch-api_key'); if(box)box.value='';
+    STATE._jsMsg={ ok:true, text:'Saved. Press “Check my key” to confirm it works.' }; showToast('Saved','success'); renderIntegrationsModal();
+  }).catch(function(e){ STATE._jsBusy=false; STATE._jsMsg={ ok:false, text:(e&&e.message)||String(e) }; renderIntegrationsModal(); });
+};
+window.testJsearchKey=function(){
+  if(!confirm('This makes one real request on your job-search plan. Go ahead?'))return;
+  STATE._jsBusy=true; STATE._jsMsg=null; renderIntegrationsModal();
+  apiPost('/finder/admin/jobsource/test',{}).then(function(r){
+    STATE._jsBusy=false; STATE._jsMsg={ ok:!!r.ok, text:r.text||(r.ok?'The key works.':'It did not work.') };
+    if(STATE.jobsourceAdmin&&r.limit!=null){ STATE.jobsourceAdmin.used=r.used; STATE.jobsourceAdmin.limit=r.limit; }
+    renderIntegrationsModal();
+  }).catch(function(e){ STATE._jsBusy=false; STATE._jsMsg={ ok:false, text:(e&&e.message)||String(e) }; renderIntegrationsModal(); });
+};
+window.removeJsearchKey=function(){
+  if(!confirm('Remove the saved job-search key? Searches set to free job sources will stop working until a key is saved again.'))return;
+  STATE._jsBusy=true; renderIntegrationsModal();
+  apiPut('/finder/admin/jobsource',{ api_key:'' }).then(function(r){
+    STATE._jsBusy=false; STATE.jobsourceAdmin=r; STATE._jsMsg={ ok:true, text:'Disconnected.' }; showToast('Disconnected','success'); renderIntegrationsModal();
+  }).catch(function(e){ STATE._jsBusy=false; STATE._jsMsg={ ok:false, text:(e&&e.message)||String(e) }; renderIntegrationsModal(); });
+};
 // The Apollo card's daily limit (D-0054, R-066): one number for everybody in
 // the company, set here by an admin, beside what today has spent. It is the
 // same System Settings value ("Contact finder"), saved through that screen's
@@ -283,12 +341,14 @@ function aiBudgetCard(){
       '<span class="fs-11_5 c-text3">requests/day</span>'+
       '<button class="btn btn-sm btn-primary" onclick="saveAiBudget()">Save</button>'+
     '</div>'+
-    '<table class="fs-11" style="width:100%;border-collapse:collapse">'+
-      '<tr class="c-text3 fs-9_5" style="text-transform:uppercase;letter-spacing:.05em">'+
-        '<td style="padding-bottom:4px">Feature</td><td>Model</td><td style="text-align:right">Per request</td><td style="text-align:right">Used today</td></tr>'+
-      rows+
-    '</table>'+
-    aiProviderLimitsBlock(b.provider_limits)+
+    // The per-feature table and what each AI account reports are for the day something looks wrong — folded until asked for.
+    '<button type="button" class="c-accent fs-11_5" style="background:none;border:0;padding:0;cursor:pointer;text-decoration:underline" onclick="toggleAiBudgetDetail()">'+(STATE._aiBudgetOpen?'Hide the per-feature numbers ▴':'Show the per-feature numbers ▾')+'</button>'+
+    (STATE._aiBudgetOpen?
+      '<table class="fs-11" style="width:100%;border-collapse:collapse;margin-top:8px">'+
+        '<tr class="c-text3 fs-9_5" style="text-transform:uppercase;letter-spacing:.05em">'+
+          '<td style="padding-bottom:4px">Feature</td><td>Model</td><td style="text-align:right">Per request</td><td style="text-align:right">Used today</td></tr>'+
+        rows+
+      '</table>'+aiProviderLimitsBlock(b.provider_limits):'')+
   '</div>';
 }
 // R-040: PACE's own budget above is what PACE ALLOWS. This is what each AI
@@ -405,51 +465,52 @@ function aiHealthCardInner(){
   var panel=function(bg,bd,html){
     return '<div class="fs-12" style="background:'+bg+';border:1px solid '+bd+';border-radius:8px;padding:10px 12px;margin-top:8px;line-height:1.6">'+html+'</div>';
   };
-  var body;
+  // ONE LINE, AND THE DETAIL ONLY WHEN ASKED FOR (owner, 8 Oct: "there is a lot of information, it is not shown once and
+  // gone — it remains forever"). The long part — every provider's words and the models it offers — used to sit open under the
+  // verdict for as long as the window was open and came back on every visit. Now the verdict is a sentence; the lines behind it
+  // open with "Show details", and a test you just ran opens them ONCE (the next visit starts folded again).
+  var head='', details='', bg='var(--bg3)', bd='var(--border2)';
   if(d&&d.pending){
-    body=panel('var(--bg3)','var(--border2)','Asking each connected provider for one word… <span class="c-text3">This can take up to a minute if PACE has been idle and is waking up.</span>');
+    head='Asking each connected provider for one word… <span class="c-text3">This can take up to a minute if PACE has been idle and is waking up.</span>';
   }else if(d&&d.attempts&&d.attempts.length){
-    var lines=d.attempts.map(function(a){
-      return attemptLine(a);
-    }).join('');
-    body=d.working
-      ?panel('var(--green-l)','var(--green)','<b class="c-green">AI IS WORKING.</b> Every feature will use it from now on.<br><br>'+lines)
-      :d.partial
-      // One tier answering and the other not is the trap this card was blind
-      // to: the small model is fine, the bigger one has been renamed, and the
-      // only feature a customer's prospect sees keeps writing with its rules
-      // under a green tick. Amber, and it names which half is down.
-      ?panel('#fffbeb','var(--amber,#f59e0b)','<b>AI IS ONLY HALF WORKING.</b> One of the two models answered and the other did not, so the features on the failing one are still writing with their built-in version. The line marked ✗ names the model to change.<br><br>'+lines)
-      :panel('#fef2f2','var(--red)','<b class="c-red">AI IS NOT WORKING.</b> Every feature is writing with its built-in version. Below is what each provider said — that text names the problem.<br><br>'+lines);
+    details=d.attempts.map(function(a){ return attemptLine(a); }).join('');
+    if(d.working){ bg='var(--green-l)'; bd='var(--green)'; head='<b class="c-green">AI IS WORKING.</b> Every feature will use it from now on.'; }
+    // One tier answering and the other not is the trap this card was blind to: the small model is fine, the bigger one has been
+    // renamed, and the only feature a customer's prospect sees keeps writing with its rules under a green tick. Amber, and it
+    // names which half is down.
+    else if(d.partial){ bg='#fffbeb'; bd='var(--amber,#f59e0b)'; head='<b>AI IS ONLY HALF WORKING.</b> One of the two models answered and the other did not, so the features on the failing one are still writing with their built-in version.'; }
+    else { bg='#fef2f2'; bd='var(--red)'; head='<b class="c-red">AI IS NOT WORKING.</b> Every feature is writing with its built-in version.'; }
   }else if(d&&d.configured===false){
-    // The important distinction: nothing saved, versus something saved that is
-    // not being found. The per-provider list makes that unmissable.
-    var rows=(d.providers||[]).map(function(p){
+    // The important distinction: nothing saved, versus something saved that is not being found. The per-provider list makes that
+    // unmissable.
+    details=(d.providers||[]).map(function(p){
       return '<div style="margin-bottom:3px"><b>'+htmlEsc(p.provider)+'</b> — '+
         (p.usable?'<span class="c-green">ready</span>':'<span class="c-text3">'+htmlEsc(p.why||'not set up')+'</span>')+
         (p.key_hint?' <span class="c-text3">(key '+htmlEsc(p.key_hint)+')</span>':'')+'</div>';
     }).join('');
-    body=panel('#fffbeb','var(--amber,#f59e0b)','<b>No provider is connected, so no AI ran.</b> Every feature is using its built-in version — that is a working state, not a crash. If you saved a key and it is not listed as ready below, the save did not stick and that is a bug worth reporting.<br><br>'+rows);
+    bg='#fffbeb'; bd='var(--amber,#f59e0b)';
+    head='<b>No provider is connected, so no AI ran.</b> Every feature is using its built-in version — that is a working state, not a crash.';
   }else if(b&&b.last_test&&b.last_test.attempts&&b.last_test.attempts.length){
     var t=b.last_test;
-    var tlines=t.attempts.map(attemptLine).join('');
-    body=panel(t.working?'var(--green-l)':'#fef2f2',t.working?'var(--green)':'var(--red)',
-      '<b style="color:'+(t.working?'var(--green)':'var(--red)')+'">'+(t.working?'AI IS WORKING.':'AI IS NOT WORKING.')+'</b> '+
-      '<span class="c-text3">(last tested '+htmlEsc(String(t.at||'').replace('T',' ').slice(0,16))+' UTC)</span><br><br>'+tlines);
+    details=t.attempts.map(attemptLine).join('');
+    bg=t.working?'var(--green-l)':'#fef2f2'; bd=t.working?'var(--green)':'var(--red)';
+    head='<b style="color:'+(t.working?'var(--green)':'var(--red)')+'">'+(t.working?'AI IS WORKING.':'AI IS NOT WORKING.')+'</b> '+
+      '<span class="c-text3">(last tested '+htmlEsc(String(t.at||'').replace('T',' ').slice(0,16))+' UTC)</span>';
   }else if(lastErr){
-    body=panel('#fef2f2','var(--red)','<b>Not tested yet.</b> The last failure recorded was:<br>'+
-      (lastErr.failures||[]).map(function(f){
-        return '<div class="c-red" style="margin-top:3px">✗ '+htmlEsc(f.provider)+' <span class="c-text3">('+htmlEsc(f.model||'')+')</span><br>'+htmlEsc(f.error||'')+'</div>';
-      }).join(''));
+    details=(lastErr.failures||[]).map(function(f){
+      return '<div class="c-red" style="margin-top:3px">✗ '+htmlEsc(f.provider)+' <span class="c-text3">('+htmlEsc(f.model||'')+')</span><br>'+htmlEsc(f.error||'')+'</div>';
+    }).join('');
+    bg='#fef2f2'; bd='var(--red)'; head='<b>Not tested yet.</b> The last failure recorded is in the details.';
   }else{
-    body=panel('var(--bg3)','var(--border2)','Click <b>Test AI generation</b> after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back to its built-in version.');
+    head='Click <b>Test AI generation</b> after saving a key. It asks each connected provider for one word and shows exactly what came back — the only way to be sure a feature will use AI rather than quietly falling back to its built-in version.';
   }
-  // The test is a synthetic ping. `last_error` is what happened the last time a
-  // REAL feature asked for text, which is the more truthful signal and used to
-  // be hidden the moment any test result existed. Shown underneath, always.
-  var realFail='';
+  // The test is a synthetic ping. `last_error` is what happened the last time a REAL feature asked for text, which is the more
+  // truthful signal and used to be hidden the moment any test result existed. It is never dropped: a sentence beside the verdict,
+  // the full lines in the details.
+  var realNote='';
   if(lastErr&&lastErr.failures&&lastErr.failures.length){
-    realFail='<div class="fs-11_5 c-text2" style="margin-top:8px;line-height:1.6">'+
+    realNote=' <span class="c-text2">A feature fell back to its built-in version on '+htmlEsc(String(lastErr.at||'').replace('T',' ').slice(0,16))+' UTC.</span>';
+    details+='<div class="fs-11_5 c-text2" style="margin-top:8px;line-height:1.6">'+
       '<b>Last time a feature actually asked for text</b> ('+htmlEsc(String(lastErr.feature||'a feature'))+
       ', '+htmlEsc(String(lastErr.at||'').replace('T',' ').slice(0,16))+' UTC) it fell back to the built-in version:'+
       lastErr.failures.map(function(f){
@@ -457,13 +518,18 @@ function aiHealthCardInner(){
       }).join('')+
     '</div>';
   }
+  var open=!!STATE._aiOpen, toggle=details
+    ?' <button type="button" class="c-accent fs-11_5" style="background:none;border:0;padding:0;cursor:pointer;text-decoration:underline" onclick="toggleAiDetail()">'+(open?'Hide details ▴':'Show details ▾')+'</button>':'';
+  var body=panel(bg,bd,head+realNote+toggle+(open&&details?'<div style="margin-top:8px">'+details+'</div>':''));
   return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
       '<div class="fs-13" style="font-weight:600">Is AI actually working?</div>'+
       '<button class="btn btn-sm btn-primary" onclick="runAiHealthTest()">Test AI generation</button>'+
-    '</div>'+body+realFail+
+    '</div>'+body+
   '</div>';
 }
+window.toggleAiBudgetDetail=function(){ STATE._aiBudgetOpen=!STATE._aiBudgetOpen; renderIntegrationsModal(); };
+window.toggleAiDetail=function(){ STATE._aiOpen=!STATE._aiOpen; renderIntegrationsModal(); };
 window.runAiHealthTest=function(){
   try{ return runAiHealthTestInner(); }
   catch(err){
@@ -498,7 +564,7 @@ function runAiHealthTestInner(){
     STATE.aiHealth=isDiagnosis(r)?r:{configured:true,working:false,attempts:[{provider:'server',model:'',ok:false,
       error:'The server answered, but not with a test result — it replied with '+describeShape(r)+'. '+
         'That means the request reached a DIFFERENT endpoint than the one that runs the test, which is a bug in PACE, not in your key. Report this line.'}]};
-    renderIntegrationsModal();
+    STATE._aiOpen=true; renderIntegrationsModal();
     return apiGet('/admin/ai-budget').then(function(bb){ STATE.aiBudget=bb; renderIntegrationsModal(); }).catch(function(){});
   })).catch(done(function(e){
     var msg=(e&&e.message)||String(e);
@@ -516,9 +582,7 @@ window.saveAiBudget=function(){
 };
 function aiProviderNote(){
   return '<div class="fs-11_5 c-text3" style="background:var(--bg3);border:1px dashed var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:10px;line-height:1.5">'+
-    'AI is optional everywhere in PACE — email drafting, resume parsing, job-description cleanup and the daily briefing all have a built-in non-AI version that runs when no provider is set up. '+
-    'Connect one below to improve them. <b>Groq</b> and <b>OpenRouter</b> are free and need no credit card; <b>Ollama</b> runs a model on a server you own. '+
-    'The one marked "use first" is tried first, and if it is unavailable or out of free requests, the others are tried before falling back to the built-in version.'+
+    'AI is optional: every feature has a built-in version that runs when no provider is connected. <b>Groq</b> and <b>OpenRouter</b> are free; <b>Ollama</b> runs on a server you own. The one marked "use first" is tried first.'+
   '</div>';
 }
 window.setActiveAi=function(id){

@@ -123,7 +123,7 @@ module.exports = (ctx) => {
   // Never throws for a service problem — it says so, and whatever was found before the problem is kept.
   async function freeSourceOrgs({ search, jsKey, jsBudget, now, oneOff }) {
     const out = { orgs: [], note: '', error: null };
-    if (!jsKey) { out.note = 'Free job sources are not connected. An admin adds the JSearch key under Find Leads → Access & job sources.'; return out; }
+    if (!jsKey) { out.note = 'Free job sources are not connected. An admin adds the JSearch key under Admin → Integrations & API Keys.'; return out; }
     const perRun = await num('finder_jsearch_requests_per_run');
     if (perRun <= 0) { out.note = 'Free job sources are switched off. Ask an admin to set a number under Admin → Settings → Lead Finder.'; return out; }
     const plan = finder.jsearchPlan(search, now, { max: perRun, rotate: !oneOff });
@@ -220,7 +220,9 @@ module.exports = (ctx) => {
       const { postings: seenJobs, ...companyOnly } = c.o;
       const row = {
         user_id: userId, search_id: search.id || null, company_key: c.o.company_key, apollo_org_id: c.o.apollo_org_id,
-        company_name: c.o.name.slice(0, 300), score: c.score, status: 'new', created_on: day,
+        // One time for the whole run (not each card's own moment): that is what lets Today's cards put the newest run first and
+        // keep the best match first WITHIN it (owner, 8 Oct).
+        company_name: c.o.name.slice(0, 300), score: c.score, status: 'new', created_on: day, created_at: new Date(now).toISOString(),
         postings: Array.isArray(seenJobs) && seenJobs.length ? seenJobs : null,
         payload: { company: companyOnly, chips: c.chips, on_file_as: verdict.company_id ? { id: verdict.company_id, name: verdict.company_name, matched: verdict.matched_text } : null, search: { titles: search.titles, locations: search.locations } },
       };
@@ -577,13 +579,18 @@ module.exports = (ctx) => {
       const { data, error } = await scoped.from('finder_cards').select('*').eq('user_id', req.user.id).eq('status', 'new').order('score', { ascending: false });
       if (error) throw error;
       const waiting = await scoped.from('finder_cards').select('id,wait_until').eq('user_id', req.user.id).eq('status', 'waiting');
+      // NEWEST RUN FIRST, best match first inside a run (owner, 8 Oct: new cards used to be merged among the older ones by score,
+      // so a fresh search did not appear on top). A run is its stamp to the minute; older cards follow, in the same order.
+      const runOf = (c) => String(c.created_at || '').slice(0, 16);
+      const rows = (data || []).slice().sort((a, b) => (runOf(a) === runOf(b) ? Number(b.score) - Number(a.score) : (runOf(a) < runOf(b) ? 1 : -1)));
+      const newestRun = rows.length ? runOf(rows[0]) : '';
       const out = [];
-      for (const c of (data || [])) {
+      for (const c of rows) {
         const co = (c.payload && c.payload.company) || {};
         // Asked again as the card is shown: a colleague may have taken this company since last night.
         let d = null;
         try { d = await leadCheck.checkCompany({ db, supabase, req, candidate: { name: c.company_name, website: co.domain || co.website, linkedin: co.linkedin_url }, now }); } catch (_) { d = null; }
-        out.push(present(c, d));
+        out.push(Object.assign(present(c, d), { found_at: c.created_at || null, is_new: runOf(c) === newestRun }));
       }
       const made = await scoped.from('finder_cards').select('id,search_id').eq('user_id', req.user.id).eq('created_on', finder.dayOf(now));
       res.json({ cards: out, waiting: (waiting.data || []).length, daily: access.daily, today: (made.data || []).filter((c) => c.search_id).length });

@@ -39,7 +39,7 @@ for (const [name, needle] of [
   ['working', 'AI IS WORKING'],
   ['failing', 'AI IS NOT WORKING'],
   ['nothing configured', 'No provider is connected, so no AI ran'],
-  ['a remembered failure', 'The last failure recorded was'],
+  ['a remembered failure', 'The last failure recorded is in the details'],
   ['never run', 'Click <b>Test AI generation</b>'],
 ]) step(`the "${name}" state renders its own message`, cardFn.includes(needle));
 
@@ -251,7 +251,7 @@ step('a tier line says which features ride on it',
 step('the last real feature failure is rendered alongside the test result',
   cardFn.includes('Last time a feature actually asked for text'));
 step('…outside the branch chain, so a test result cannot suppress it',
-  cardFn.indexOf('Last time a feature actually asked for text') > cardFn.lastIndexOf('body=panel('));
+  cardFn.indexOf('Last time a feature actually asked for text') > cardFn.indexOf("head='Click <b>Test AI generation</b>"));
 
 // ── 7d. "paste one of these" must not point at a speech model ────────────────
 // Groq's real catalogue came back with whisper (speech-to-text), orpheus

@@ -102,6 +102,13 @@ try {
 
   const html = await page.evaluate(() => document.getElementById('content').innerHTML);
 
+  // ── ONE place for finding leads (owner, 8 Oct): Sourced Leads is a tab of Find Leads, not a menu item of its own ──
+  const nav = await page.evaluate(() => document.getElementById('sidebar').innerText);
+  const tabsTxt = await page.evaluate(() => [...document.querySelectorAll('#content .pgtab')].map(b => b.textContent.replace(/\s+/g, ' ').trim()).join('|'));
+  step('the menu has ONE item for it — "Find Leads" — and no separate "Sourced Leads" item', /Find Leads/.test(nav) && !/Sourced Leads/.test(nav), nav.replace(/\s+/g, ' ').slice(0, 160));
+  step('"goPage(sourced)" (an old link, a saved place) lands on the Find Leads page, on the Sourced leads tab', await page.evaluate(() => STATE.page === 'finder' && STATE.finder.tab === 'sourced'));
+  step('a person who may review sourced leads but is not switched on for the Lead Finder sees ONLY the Sourced leads tab (no cards, no searches to open)', /Sourced leads/.test(tabsTxt) && !/Today.s cards|Find leads now|Daily run|Saved & past/.test(tabsTxt), tabsTxt);
+  step('the menu badge counts what is waiting in the queue (2)', await page.evaluate(() => /Find Leads\s*2/.test(document.getElementById('sidebar').innerText.replace(/\s+/g, ' '))));
   step('The queue lists sourced openings', /Senior Java Developer/.test(html) && /Data Engineer/.test(html));
   step('The company is shown', /Fidelity Investments/.test(html));
   // The whole point of the feature: know why to call before calling.
@@ -113,12 +120,10 @@ try {
   step('Parsed skills are shown', /Spring Boot/.test(html));
   step('A row with no contact says so', /no contact yet/.test(html));
   step('A row with a contact says how many', /1 possible contact/.test(html));
-  // The status filters are the page's stat strip now, so the count sits above
-  // the label rather than in brackets after it. Same behaviour being pinned:
-  // every status says how much is waiting in it.
-  const stripCount = (label, n) =>
-    new RegExp('"strip-v">' + n + '</div><div class="strip-l">' + label + '<').test(html);
-  step('Status filters carry counts', stripCount('To review', 2) && stripCount('Already have', 1));
+  // The status filters are small pills now (the stat strip left the page when Sourced Leads became a tab of Find Leads), each
+  // carrying its count. Same behaviour pinned: every status says how much is waiting in it.
+  const pillCount = (label, n) => new RegExp('>' + label + ' · ' + n + '<').test(html);
+  step('Status filters carry counts', pillCount('To review', 2) && pillCount('Already have', 1));
   step('Both tabs are offered', /Review queue/.test(html) && /Boards watched/.test(html));
 
   // ── nothing becomes a lead without a person ──────────────────────────────

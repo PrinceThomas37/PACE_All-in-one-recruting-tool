@@ -147,14 +147,12 @@ function renderSidebar(){
 
   if(!pureRec)navItems.push({id:"leads",lbl:"Leads",ic:"send",badge:todayCnt,grp:G_SALES});
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"assign",lbl:"Assign Leads",ic:"check",grp:G_SALES});
-  // Leads PACE sourced itself, waiting for a human to approve them. Sits next to
-  // Leads because that is where the work continues once one is approved.
-  if(userHasAnyRole(u,'admin','bd','bd_lead','ra_lead','director','associate_director'))
-    navItems.push({id:"sourced",lbl:"Sourced Leads",ic:"search",grp:G_SALES,badge:(STATE.sourced&&STATE.sourced.counts&&STATE.sourced.counts['new'])||0});
-  // The Lead Finder (R-157): shown only to people an admin switched on (admins always). The answer is fetched
-  // once per person; finderEnsureAccess() repaints the rail when it arrives.
+  // ONE place for finding leads (owner, 8 Oct): the Lead Finder AND the leads PACE sourced itself (waiting for a human to approve
+  // them — a tab in the same page). The item shows for anyone switched on for the finder or allowed to review sourced leads; the
+  // badge counts what is waiting in the Sourced leads queue. The finder's access is fetched once per person; finderEnsureAccess()
+  // repaints the rail when it arrives.
   if(typeof finderEnsureAccess==='function')finderEnsureAccess();
-  if(typeof finderEnabled==='function'&&finderEnabled())navItems.push({id:"finder",lbl:"Find Leads",ic:"search",grp:G_SALES});
+  if(typeof finderNavVisible==='function'&&finderNavVisible())navItems.push({id:"finder",lbl:"Find Leads",ic:"search",grp:G_SALES,badge:(typeof srcdNewCount==='function'?srcdNewCount():0)});
   if(bdm)navItems.push({id:"bd_joborders",lbl:"Jobs",ic:"doc",grp:G_REC});
   if(recruiter&&!bdm){navItems.push({id:"bd_myjobs",lbl:"My Jobs",ic:"doc",grp:G_REC});navItems.push({id:"job_board",lbl:"All Jobs",ic:"search",grp:G_REC});}
   // Clients sit with Sales: that is where the relationship is won. A job still
@@ -167,7 +165,7 @@ function renderSidebar(){
 
   if(userHasAnyRole(u,'ra_lead','admin'))navItems.push({id:"insights",lbl:"Insights",ic:"chart",grp:G_INS});
   // BD / BD Lead (not admin): own lead-gen performance — "Lead Insights".
-  if(userHasAnyRole(u,'bd','bd_lead')&&!isAdmin)navItems.push({id:"bdinsights",lbl:"Lead Insights",ic:"chart",grp:G_INS});
+  if(userHasAnyRole(u,'bd','bd_lead')&&!isAdmin)navItems.push({id:"bdinsights",lbl:"Outreach Insights",ic:"chart",grp:G_INS});
   // NOT "chart": Insights / Lead Insights already use it, and they sit in this
   // same group. The collapsed rail is ICON-ONLY, so two items sharing an icon
   // are indistinguishable there — which is what "the menu is repeating" was.
@@ -261,7 +259,7 @@ function renderSidebar(){
 function renderTopbar(){
   var u=STATE.user;
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
-  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Lead Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads"};
+  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability & Replies",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Outreach Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing

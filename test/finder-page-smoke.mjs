@@ -140,7 +140,25 @@ try {
   let h = await html();
   step('the page opens on Today\'s cards, best first, with the company facts', /Brazos Valley Machining/.test(h) && /Waco, TX/.test(h) && /85 employees/.test(h) && /Headcount \+12%/.test(h) && h.indexOf('Brazos') < h.indexOf('Lone Star'));
   step('a card says which search found it', /Found for: CNC Machinist in Texas/.test(h));
-  step('the numbers are shown: to review, waiting, credits, reveals', /2<\/div><div class="strip-l">To review/.test(h) && /3\/300/.test(h) && /1\/30/.test(h));
+  // ── NEW CARDS FIRST (owner, 8 Oct) ───────────────────────────────────────
+  const savedCards = await page.evaluate(() => JSON.stringify(window.STATE.finder.cards));
+  const groupText = async (list) => {
+    await page.evaluate((j) => { const f = window.STATE.finder; f.cards = JSON.parse(j); f.tab = 'cards'; f.cardSearch = ''; window.render(); }, JSON.stringify(list));
+    const t = await page.evaluate(() => document.getElementById('content').innerText.replace(/\s+/g, ' '));
+    return t;
+  };
+  const baseCard = JSON.parse(savedCards)[0];
+  const mk = (id, name, isNew, at) => Object.assign(JSON.parse(JSON.stringify(baseCard)), { id, company_name: name, is_new: isNew, found_at: at, search_id: 's1' });
+  const minsAgo = (m) => new Date(Date.now() - m * 60000).toISOString();
+  let gt = await groupText([mk('n1', 'Newest One', true, minsAgo(5)), mk('n2', 'Newest Two', true, minsAgo(5)), mk('o1', 'Older One', false, minsAgo(60 * 30))]);
+  step('with new AND older cards a line says where the new ones end: "New · found 5 min ago · 2" above them, "Earlier cards · 1" above the rest', /New · found 5 min ago · 2/.test(gt) && /Earlier cards · 1/.test(gt) && gt.indexOf('New · found') < gt.indexOf('Newest One') && gt.indexOf('Newest Two') < gt.indexOf('Earlier cards') && gt.indexOf('Earlier cards') < gt.indexOf('Older One'), gt.slice(0, 200));
+  gt = await groupText([mk('n1', 'Newest One', true, minsAgo(5)), mk('n2', 'Newest Two', true, minsAgo(5))]);
+  step('with only one run there is nothing to divide, so no group line is drawn', !/New · found/.test(gt) && !/Earlier cards/.test(gt) && /Newest One/.test(gt));
+  gt = await groupText([mk('o1', 'Older One', false, minsAgo(60 * 30))]);
+  step('…and a day with nothing new shows the older cards plainly, never an empty "New" heading', !/New · found/.test(gt) && /Older One/.test(gt));
+  await page.evaluate((j) => { window.STATE.finder.cards = JSON.parse(j); window.render(); }, savedCards);
+
+  step('the day\'s numbers are ONE quiet line (Apollo 3/300 · emails 1/30), the stat strip is gone, and the cards line says 3 of 25 for today with 2 waiting (owner, 8 Oct: too much on screen)', /Today: Apollo 3\/300 · emails 1\/30/.test(h) && !/strip-l/.test(h) && /3 of your 25 cards for today · 2 waiting/.test(h));
   step('with cards from two searches a row of choices appears, and picking one shows only that search\'s cards', /All · 2/.test(h) && await page.evaluate(() => { window.fdFilterCards('s1'); return true; }) && /Brazos Valley/.test(await html()) && !/Lone Star Dental/.test(await html()));
   await page.evaluate(() => window.fdFilterCards(''));
   h = await html();
@@ -160,7 +178,7 @@ try {
   await page.waitForTimeout(200);
   let cs = await calls();
   step('Wait asks the server to park that card; it leaves the list', cs.some(c => c[0] === 'POST' && c[1] === '/finder/cards/c2/wait') && !/Lone Star Dental/.test(await html()));
-  step('…and the "Waiting" number goes up by one', /3<\/div><div class="strip-l">Waiting/.test(await html()));
+  step('…and the "waiting" number goes up by one', /3 of your 25 cards for today · 3 waiting/.test(await html()));
 
   // ── ACCEPT: the one window ─────────────────────────────────────────────
   await page.evaluate(() => window.fdAccept('c1'));
@@ -271,21 +289,22 @@ try {
   await page.waitForTimeout(200);
   h = await html();
   step('with no daily search the page says what one is and offers to make one', /No daily searches yet/.test(h) && /Make your first daily search/.test(h));
-  step('the Daily run tab says plainly that these run by themselves every morning, that Run now does not change that, and where to go for a one-off', /run on their own every morning/.test(h) && /does not change its schedule/.test(h) && /Find leads now/.test(h));
+  step('the Daily run tab says in one short line that these run by themselves every morning (the long paragraph is gone)', /run by themselves every morning/.test(h) && !/does not change its schedule/.test(h));
   await page.evaluate(() => window.fdNewSearch());
   h = await html();
   step('the name box is called "Name of the run" (the owner found a bare "Name" unclear)', /Name of the run/.test(h) && !/<div class="fd-label">Name<\/div>/.test(h));
   step('the form asks where to search — Apollo, Free job sources or Both — with Apollo ticked while Apollo is connected', /Search with/.test(h) && (h.match(/name="fd-src"/g) || []).length === 3 && /value="apollo" checked/.test(h) && /Free job sources/.test(h) && /Apollo plus the free sources/.test(h));
   await page.evaluate(() => window.fdPickSource('free'));
   h = await html();
-  step('picking Free job sources warns that no key is saved yet, and says company size and industry words are Apollo-only and that it brings companies not people', /value="free" checked/.test(h) && /Free job sources are not connected yet/.test(h) && /company size and industry words do not apply/.test(h) && /not people/.test(h) && !/Apollo is not connected, so Apollo cannot be searched/.test(h));
+  step('picking Free job sources warns that no key is saved yet, and says company size and industry words are Apollo-only and that it brings companies not people', /value="free" checked/.test(h) && /Free job sources are not connected yet/.test(h) && /Company size and industry words apply to Apollo only/.test(h) && /not people/.test(h) && !/Apollo is not connected, so Apollo cannot be searched/.test(h));
   await page.evaluate(() => window.fdPickSource('apollo'));
-  step('Apollo alone shows neither the warning nor the free-source note', !/Free job sources are not connected yet/.test(await html()) && !/company size and industry words do not apply/.test(await html()));
+  step('Apollo alone shows neither the warning nor the free-source note', !/Free job sources are not connected yet/.test(await html()) && !/apply to Apollo only/.test(await html()));
   await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = false; a.jobsource.connected = true; window.fdNewSearch(); });
   h = await html();
   step('an organisation with no Apollo but a job-source key starts on Free job sources, and an Apollo pick warns that Apollo is not connected', /value="free" checked/.test(h) && (await page.evaluate(() => { window.fdPickSource('apollo'); return true; })) && /Apollo is not connected, so Apollo cannot be searched/.test(await html()));
   await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = true; a.jobsource.connected = false; window.fdNewSearch(); });
-  step('before any industry is picked the page says how to get titles to tick, and nothing is chosen', /Pick an industry above to get titles you can tick/.test(h) && /0 of 40 chosen/.test(h));
+  h = await html();
+  step('before any industry is picked the page says how to get titles to tick, and nothing is chosen', /Pick an industry for titles to tick/.test(h) && /\(0 of 40\)/.test(h));
   await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); });
   h = await html();
   step('SEVERAL industries can be picked: each is a chip with its own titles to tick (the old page took one)', /fd-chip">Medical &amp; dental/.test(h) && /fd-chip">IT &amp; software/.test(h) && /Dental Hygienist/.test(h) && /Software Engineer/.test(h));
@@ -311,7 +330,10 @@ try {
   const capped = await page.evaluate(() => window.STATE.finder.form.titles.length);
   step('there is a ceiling of 40 titles at once, so one search cannot become a giant Apollo query', capped === 40, String(capped));
   await page.evaluate(() => { window.STATE.finder.form.titles = ['Medical Assistant', 'Welder', 'CNC Machinist']; window.fdTab('searches'); });
-  // preferred companies
+  // preferred companies live under "More filters" (folded until asked for, or until something is in them)
+  step('the search form shows ONE line for the rarely used filters ("More filters ▾") — no size, industry-words or company box until opened', /More filters ▾/.test(await html()) && await page.evaluate(() => !document.getElementById('fd-f-co') && !document.getElementById('fd-f-keywords') && !document.querySelector('.fd-size-box')));
+  await page.evaluate(() => window.fdMore());
+  step('"More filters" opens them: company size, industry words and preferred companies', await page.evaluate(() => !!document.getElementById('fd-f-co') && !!document.getElementById('fd-f-keywords') && document.querySelectorAll('.fd-size-box').length === 2) && /Fewer filters ▴/.test(await html()));
   await page.evaluate(() => { document.getElementById('fd-f-co').value = 'acme'; window.fdCoLookup(); });
   await page.waitForTimeout(150);
   h = await html();
@@ -319,7 +341,7 @@ try {
   step('…and the credit strip moves to what the server said it cost', /4\/300/.test(h.replace(/<[^>]+>/g, '')) || /4\/300/.test(await page.evaluate(() => document.getElementById('content').innerText)));
   await page.evaluate(() => window.fdCoAdd(0));
   h = await html();
-  step('Add puts the chosen company on the search as a chip showing its place, and the result row says Added ✓', /fd-chip"><strong>Acme Manufacturing<\/strong> · Austin, Texas · acmemfg\.com/.test(h) && /Added ✓/.test(h) && /Only these companies will be searched/.test(h));
+  step('Add puts the chosen company on the search as a chip showing its place, and the result row says Added ✓', /fd-chip"><strong>Acme Manufacturing<\/strong> · Austin, Texas · acmemfg\.com/.test(h) && /Added ✓/.test(h) && /only these are searched/.test(h));
   await page.evaluate(() => window.fdCoAdd(1));
   await page.evaluate(() => { document.getElementById('fd-f-co').value = 'acme.com'; window.fdCoLookup(); });
   await page.waitForTimeout(150);
@@ -342,6 +364,11 @@ try {
   await page.evaluate(() => { const e = document.getElementById('fd-f-posted'); e.value = '0'; e.dispatchEvent(new Event('input', { bubbles: true })); });
   step('zero reads "today" — and is a real answer, not "unset"', (await page.evaluate(() => document.getElementById('fd-posted-out').textContent)) === 'today');
   await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Texas, remote'; document.querySelector('.fd-size-box[value=mid]').checked = true; });
+  await page.evaluate(() => window.fdMore());
+  h = await html();
+  step('folding the filters away keeps what was chosen and says how many are in use (2 companies + a size = 3)', /More filters · 3 ▾/.test(h) && (await page.evaluate(() => !document.getElementById('fd-f-co'))) && (await page.evaluate(() => window.STATE.finder.form.sizes.join())) === 'mid');
+  await page.evaluate(() => window.fdMore());
+  step('…and opening them again shows the same choices', (await page.evaluate(() => document.querySelector('.fd-size-box[value=mid]').checked)) && /Acme Manufacturing/.test(await html()));
   await page.evaluate(() => window.fdTab('searches'));
   h = await html();
   step('what was typed survives a repaint of the page — including a slider left at 0 (a 0 must never snap back to 14)', /value="Texas, remote"/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /fd-posted-out" class="fd-strong">today/.test(h));
@@ -353,6 +380,7 @@ try {
   h = await html();
   step('the saved search says where it looks (Apollo + free job sources)', /looks in: Apollo \+ free job sources/.test(await html()));
   step('the saved search appears in the list with a Run now button', /Medical &amp; dental/.test(h) && /Run now/.test(h));
+  step('…whose tooltip says Run now is early and the search still runs every morning (that sentence moved off the page into the button)', /title="Runs it now, early\. It still runs every morning\."/.test(h));
   await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's3', name: 'Today only', active: true, source: 'free', sector: 'it', sectors: ['it', 'medical'], titles: ['Software Engineer'], locations: ['Ohio'], sizes: [], posted_days: 0, keywords: [], domains: ['acmemfg.com'], companies: [{ name: 'Acme Manufacturing', domain: 'acmemfg.com', city: 'Austin', state: 'Texas' }] }, { id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.fdTab('searches'); });
   h = await html();
   step('a daily search saved at 0 days reads "posted today", and one with chosen companies says how many', /posted today/.test(h) && /only 1 chosen company/.test(h) && /posted in the last 7 days/.test(h));
@@ -383,7 +411,7 @@ try {
   step('Delete (after the confirmation) asks the server to delete that search', (await calls()).some(c => c[0] === 'DELETE' && c[1] === '/finder/searches/s1'));
 
   // ── admin tab ──────────────────────────────────────────────────────────
-  step('an ordinary person has no "Access & job sources" tab', !/Access &amp; job sources/.test(await html()));
+  step('an ordinary person has no "Access & limits" tab', !/Access &amp; limits/.test(await html()));
   await page.evaluate(() => { window.__access.is_admin = true; window.STATE.finder.access.is_admin = true; });
   await switchRole(page, 'admin');
   await page.evaluate(() => { window.STATE.finder.access.is_admin = true; window.goPage('finder'); });
@@ -401,23 +429,17 @@ try {
   h = await html();
   step('"Check what my key can do" lists each check in words, red where Apollo refuses', /Finding people by job title works/.test(h) && /not allowed to search companies/.test(h) && /c-red/.test(h));
 
-  step('the admin tab has a Free job sources card: no key yet, a password box (never plain text), and a plain explanation that the key is the organisation\'s own and finds companies, not people', /Free job sources \(JSearch\)/.test(h) && /No key saved yet/.test(h) && (await page.evaluate(() => { const e = document.getElementById('fd-js-key'); return !!e && e.type === 'password' && e.autocomplete === 'off'; })) && /organisation&#39;s own|organisation's own/.test(h) && /not people/.test(h) && !/Check my key/.test(h));
-  await page.evaluate(() => { document.getElementById('fd-js-key').value = 'JS-KEY-ABCDEFGH1234'; window.fdJsSave(); });
-  await page.waitForTimeout(250);
+  // The job-source KEY is not on this page any more (owner, 8 Oct: it belongs under Admin → Integrations & API Keys, beside Apollo's —
+  // test/integrations-jsearch-smoke.mjs drives it there). Here the admin only sees whether it is there, and a way to it.
+  const jsBox = await page.evaluate(() => !!document.getElementById('fd-js-key') || !!document.querySelector('[onclick*="fdJs"]'));
+  step('the admin tab has NO key box any more — only the Free job sources status: not connected, and a button that opens Integrations & API Keys', /Free job sources \(JSearch\)/.test(h) && /Not connected/.test(h) && !jsBox && /onclick="openIntegrationsModal\(\)"/.test(h) && /Add the key in Integrations &amp; API Keys/.test(h) && !/Check my key/.test(h));
+  await page.evaluate(() => { const a = window.STATE.finder.access; a.jobsource = { connected: true, used: 2, limit: 6, per_run: 3 }; window.paintPageContent && window.paintPageContent(); window.fdTab('admin'); });
+  await page.waitForTimeout(200);
   h = await html();
-  const jsPut = (await calls()).find(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource');
-  step('saving sends the key once; afterwards only its last four characters are shown, the box is empty again, and a Check my key button appears', jsPut && jsPut[2].api_key === 'JS-KEY-ABCDEFGH1234' && /A key is saved \(••••••1234\)/.test(h) && !/ABCDEFGH/.test(h) && /Check my key \(1 request\)/.test(h) && (await page.evaluate(() => document.getElementById('fd-js-key').value)) === '');
-  step('the strip now shows the day\'s job-source requests', /Job-source requests today/.test(h));
-  await page.evaluate(() => window.fdJsTest());
-  await page.waitForTimeout(250);
-  h = await html();
-  step('Check my key says in words that it works', /The key works \(1 request used/.test(h) && (await calls()).some(c => c[0] === 'POST' && c[1] === '/finder/admin/jobsource/test'));
-  await page.evaluate(() => window.fdJsRemove());
-  await page.waitForTimeout(250);
-  h = await html();
-  step('Remove key sends an empty key and the card goes back to "No key saved yet"', (await calls()).some(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource' && c[2].api_key === '') && /No key saved yet/.test(h) && !/Check my key/.test(h));
-  await page.evaluate(() => { document.getElementById('fd-js-key').value = '   '; window.fdJsSave(); });
-  step('an empty box is not sent', (await calls()).filter(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource').length === 2);
+  step('once a key is saved the card says Connected with the day\'s requests, and never shows a key', /Connected\./.test(h) && /2 of 6 requests used/.test(h) && /Manage the key in Integrations/.test(h) && !/ABCDEFGH/.test(h));
+  step('the usage line shows the day\'s job-source requests once connected', /job sources 2\/6/.test(h));
+  await page.evaluate(() => { const a = window.STATE.finder.access; a.jobsource = { connected: false, used: 0, limit: 10, per_run: 3 }; window.fdTab('admin'); });
+  await page.waitForTimeout(150);
 
   // the Accept window for a card whose people cannot be looked up by Apollo
   await page.evaluate((c) => { const a = window.STATE.finder.access; a.apollo.connected = false; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); }, CARDS);
@@ -434,10 +456,18 @@ try {
   await page.evaluate(() => { window.STATE.finder.tab = 'cards'; window.goPage('finder'); });
   await page.waitForTimeout(300);
   h = await html();
-  step('the tabs are: Today\'s cards · Find leads now · Daily run · Saved & past', /Today&#39;s cards|Today's cards/.test(h) && h.indexOf('Find leads now') > 0 && h.indexOf('Daily run') > h.indexOf('Find leads now') && h.indexOf('Saved &amp; past') > h.indexOf('Daily run'));
+  step('the tabs are: Today\'s cards · Find leads now · Daily run · Sourced leads · Saved & past — one place for finding leads', /Today&#39;s cards|Today's cards/.test(h) && h.indexOf('Find leads now') > 0 && h.indexOf('Daily run') > h.indexOf('Find leads now') && h.indexOf('Sourced leads') > h.indexOf('Daily run') && h.indexOf('Saved &amp; past') > h.indexOf('Sourced leads'));
   await page.evaluate(() => window.fdTab('now'));
   h = await html();
-  step('Find leads now is a search for right now: it says it is not saved and does not repeat, costs 1 credit, and asks for no name', /not saved and does not repeat/.test(h) && /1 Apollo credit/.test(h) && !(await page.evaluate(() => !!document.getElementById('fd-f-name'))) && /Find leads now<\/button>/.test(h));
+  step('Find leads now is a search for right now: it says it is not saved and does not repeat, costs 1 credit, and asks for no name', /Nothing is saved/.test(h) && /Uses 1 Apollo credit\./.test(h) && !/does not repeat/.test(h) && !(await page.evaluate(() => !!document.getElementById('fd-f-name'))) && /Find leads now<\/button>/.test(h));
+  await page.evaluate(() => window.fdPickSource('free'));
+  const costFree = await page.evaluate(() => document.getElementById('content').innerText.replace(/\s+/g, ' '));
+  await page.evaluate(() => window.fdPickSource('both'));
+  const costBoth = await page.evaluate(() => document.getElementById('content').innerText.replace(/\s+/g, ' '));
+  await page.evaluate(() => window.fdPickSource('apollo'));
+  step('the cost sits by the Find button and follows the choice: Apollo = 1 credit, Free = up to 3 job-source requests, Both = both', /Uses up to 3 job-source requests\./.test(costFree) && !/Uses 1 Apollo credit/.test(costFree) && /Uses 1 Apollo credit \+ up to 3 job-source requests\./.test(costBoth));
+  const wordy = await page.evaluate(() => document.getElementById('content').innerText.length);
+  step('the one-off form is calm: the long explanations (a paragraph under the title, a line beside each choice, three lines under Preferred companies) are not on the page', !/It is not saved and does not repeat/.test(await html()) && !/pick as many as you like; each one offers/.test(await html()) && !/the company database; uses your Apollo credits/.test(await page.evaluate(() => document.getElementById('content').innerText)) && wordy < 1500, 'characters on screen: ' + wordy);
   await page.evaluate(() => { document.getElementById('fd-f-newtitle').value = 'Welder, CNC Machinist'; window.fdTitleAdd(); document.getElementById('fd-f-locations').value = 'Ohio'; const e = document.getElementById('fd-f-posted'); e.value = '0'; e.dispatchEvent(new Event('input', { bubbles: true })); window.__findHold = true; window.__calls.length = 0; });
   await page.evaluate(() => { window.fdFindNow(); });
   await page.waitForTimeout(250);

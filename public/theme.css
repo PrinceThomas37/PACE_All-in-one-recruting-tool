@@ -473,7 +473,7 @@ table.dt tbody tr:hover{background:var(--bg3)}
    signs in before testing. Both fixed. */
 .login-wrap{background:var(--bg)}
 .login-wrap::before{
-  content:'';position:absolute;inset:0;pointer-events:none;
+  content:'';position:fixed;inset:0;pointer-events:none;
   background:
     radial-gradient(620px circle at 8% 0%, var(--glow1), transparent 60%),
     radial-gradient(560px circle at 92% 100%, var(--glow2), transparent 60%);

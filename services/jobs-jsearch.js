@@ -40,7 +40,7 @@ async function get(pathAndQuery, key, fetchImpl) {
 function describeError(status, data) {
   const raw = String((data && (data.error && (data.error.message || data.error) || data.message || data.detail)) || '').toLowerCase();
   if (status === 401 || status === 403 || /invalid.*key|not subscribed|unauthori[sz]ed|forbidden/.test(raw)) {
-    return 'JSearch did not accept the key — check it under Find Leads → Access & job sources. If it is new, make sure the plan is active.';
+    return 'JSearch did not accept the key — check it under Admin → Integrations & API Keys. If it is new, make sure the plan is active.';
   }
   if (status === 429 || /quota|limit|exceed/.test(raw)) {
     return 'This JSearch key has used up its requests for the period (the free plan is 200 a month). It resets with the plan, or upgrade the plan with the vendor.';
@@ -55,7 +55,7 @@ function describeError(status, data) {
  * all / today / 3days / week / month (the service has no finer choice — the caller trims to the exact day count).
  */
 async function searchJobs({ key, query, country = 'us', datePosted = 'all', cursor = '', fetchImpl } = {}) {
-  if (!key) return { ok: false, status: 0, error: 'Free job sources are not connected. An admin adds the JSearch key under Find Leads → Access & job sources.' };
+  if (!key) return { ok: false, status: 0, error: 'Free job sources are not connected. An admin adds the JSearch key under Admin → Integrations & API Keys.' };
   const q = String(query || '').trim().slice(0, 200);
   if (!q) return { ok: false, status: 0, error: 'Nothing to search for.' };
   const params = ['query=' + encodeURIComponent(q), 'num_pages=1', 'country=' + encodeURIComponent(String(country || 'us').toLowerCase().slice(0, 2)),
