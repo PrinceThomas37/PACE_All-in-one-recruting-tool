@@ -2,8 +2,8 @@
   "generated": "2026-10-08",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 544,
-    "lines": 124454,
+    "files": 548,
+    "lines": 125227,
     "territories": 9,
     "unclaimedFiles": 10
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 79,
-      "lines": 34261,
+      "lines": 34445,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -37,7 +37,7 @@
         },
         {
           "f": "public/retro.css",
-          "n": 1101
+          "n": 1103
         },
         {
           "f": "public/js/33-stage-modal.js",
@@ -80,15 +80,15 @@
         "services/error-report.js"
       ],
       "files": 42,
-      "lines": 13935,
+      "lines": 14111,
       "largest": [
         {
           "f": "index.js",
-          "n": 3944
+          "n": 3957
         },
         {
           "f": "routes/finder.js",
-          "n": 880
+          "n": 980
         },
         {
           "f": "routes/poc.js",
@@ -304,6 +304,7 @@
         "services/submission-stages.js",
         "services/report-work.js",
         "services/sequence-templates.js",
+        "services/wording-scope.js",
         "services/sequence-primary.js",
         "services/applicants.js",
         "services/candidate-fields.js",
@@ -325,8 +326,8 @@
         "routes/lead-sources.js",
         "lead-ingest.js"
       ],
-      "files": 33,
-      "lines": 8648,
+      "files": 34,
+      "lines": 8739,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -412,12 +413,12 @@
         "test/",
         ".github/"
       ],
-      "files": 229,
-      "lines": 41627,
+      "files": 232,
+      "lines": 41949,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",
-          "n": 734
+          "n": 765
         },
         {
           "f": "test/ownership-requests-smoke.mjs",

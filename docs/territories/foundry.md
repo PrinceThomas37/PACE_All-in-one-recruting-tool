@@ -1175,3 +1175,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43)
 - `mailbox-page-smoke` 70 → 74: per-mailbox unread in the picker, the Inbox hover, the "new mail in <address>" toast, Reply all on the message card. Each failed when `47-page-mailbox.js` was stashed.
+
+## 2026-10-08 (Session 43, later)
+- NEW: `lead-assign-smoke` (30), `assign-leads-ui-smoke` (16), `wording-scope-smoke` (29), `wording-scope-ui-smoke` (16). Changed on purpose: `lead-take-smoke` (imports are Unassigned), `finder-routes-smoke` (176: Unassigned accept, email state, another lead), `finder-page-smoke` (144). Guards shown failing: assign race + chain limit, wording precedence, `isEach` forced true.

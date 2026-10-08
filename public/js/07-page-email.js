@@ -144,6 +144,25 @@ var PLAN_EXAMPLE={
   '{{local_line}}':'Local candidates only.','{{salary_line}}':'($95k–$110k)','{{salary_range}}':'$95k–$110k',
   '{{skill_1}}':'Bluebeam','{{skill_2}}':'Procore','{{skill_3}}':'Takeoffs'
 };
+// R-176: one wording for all my email IDs, or one each — and, with "each", which email IDs have their own (see 12-manager-users.js).
+function renderWordingScopeCard(planEmails,planFromId){
+  var each=planScope()==='each';
+  var radio=function(v,label,hint){
+    return '<label class="fd-use fd-block"><input type="radio" name="wscope" '+(planScope()===v?'checked':'')+' onclick="setWordingScope(\''+v+'\')"> <strong>'+label+'</strong><span class="fd-hint"> '+hint+'</span></label>';
+  };
+  var rows='';
+  if(each){
+    rows='<div class="fs-12_5 c-text2" style="margin:8px 0 4px">What each of your email IDs sends:</div>'+planEmails.map(function(e){
+      var own=mailboxHasOwnWording(e.id), editing=e.id===planFromId;
+      return '<div class="fs-12_5" style="padding:3px 0">'+(editing?'<strong>':'')+htmlEsc(e.email_address)+(editing?'</strong> <span class="c-text3">(editing below)</span>':'')+' — '+
+        (own?'<span class="c-green">its own wording</span> <button class="btn btn-xs btn-outline" onclick="wordingUseMine(\''+htmlEsc(e.id)+'\')">Use my main wording again</button>'
+            :'<span class="c-text3">your main wording</span> <button class="btn btn-xs btn-outline" onclick="wordingStartFromMine(\''+htmlEsc(e.id)+'\')">Start its own from my main wording</button>')+'</div>';
+    }).join('')+'<div class="fs-12 c-text3" style="margin-top:6px">Pick the Sending email above to edit that email ID\'s wording. An email ID without its own sends your main wording — nothing is ever left blank.</div>';
+  }
+  return '<div class="card cp mb3"><div class="fw6 fs-13" style="margin-bottom:6px">Wording for your email IDs</div>'+
+    radio('all','One wording for all my email IDs','— what you write below goes out from every email ID (only the signature differs)')+
+    radio('each','A different wording for each email ID','— e.g. two companies, two pitches')+rows+'</div>';
+}
 function planFromMailbox(){
   var u=STATE.user||{};
   var list=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]);
@@ -153,8 +172,8 @@ function planPreviewInner(){
   var t=STATE.activeTmpl||'outreach', ids={outreach:['tmpl-o1-subj','tmpl-o1-body'],fu1:['tmpl-fu1-subj','tmpl-fu1-body'],fu2:['tmpl-fu2-subj','tmpl-fu2-body']}[t]||['tmpl-o1-subj','tmpl-o1-body'];
   var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]);
   var plan=STATE.myOutreachPlan||{}, key=(t==='outreach'?'o1':t);
-  var subj=se?se.value:(plan['tmpl_'+key+'_subject']||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'');
-  var body=be?be.value:(plan['tmpl_'+key+'_body']||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'');
+  var subj=se?se.value:(planWording('tmpl_'+key+'_subject')||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'');
+  var body=be?be.value:(planWording('tmpl_'+key+'_body')||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'');
   var from=planFromMailbox();
   var vars=Object.assign({},PLAN_EXAMPLE,{'{{sender}}':from?(from.display_name||from.email_address||''):'','{{senderemail}}':from?(from.email_address||''):''});
   function fill(escaped){
@@ -578,9 +597,9 @@ function renderEmail(){
     return opts;
   }
   var tmplDefs=[
-    {key:'outreach',label:'Outreach 1',sublabel:'Sent immediately on assignment',color:'var(--accent)',subjVal:myPlan['tmpl_o1_subject']||STATE.emailSubj,bodyVal:myPlan['tmpl_o1_body']||STATE.emailBody,subjId:'tmpl-o1-subj',bodyId:'tmpl-o1-body'},
-    {key:'fu1',label:'Follow-up 1',sublabel:'Day '+fu1Day+' after outreach',color:'#ca8a04',subjVal:myPlan['tmpl_fu1_subject']||STATE.fu1Subj,bodyVal:myPlan['tmpl_fu1_body']||STATE.fu1Body,subjId:'tmpl-fu1-subj',bodyId:'tmpl-fu1-body'},
-    {key:'fu2',label:'Follow-up 2',sublabel:'Day '+fu2Day+' after outreach',color:'#ea580c',subjVal:myPlan['tmpl_fu2_subject']||STATE.fu2Subj,bodyVal:myPlan['tmpl_fu2_body']||STATE.fu2Body,subjId:'tmpl-fu2-subj',bodyId:'tmpl-fu2-body'}
+    {key:'outreach',label:'Outreach 1',sublabel:'Sent immediately on assignment',color:'var(--accent)',subjVal:planWording('tmpl_o1_subject')||STATE.emailSubj,bodyVal:planWording('tmpl_o1_body')||STATE.emailBody,subjId:'tmpl-o1-subj',bodyId:'tmpl-o1-body'},
+    {key:'fu1',label:'Follow-up 1',sublabel:'Day '+fu1Day+' after outreach',color:'#ca8a04',subjVal:planWording('tmpl_fu1_subject')||STATE.fu1Subj,bodyVal:planWording('tmpl_fu1_body')||STATE.fu1Body,subjId:'tmpl-fu1-subj',bodyId:'tmpl-fu1-body'},
+    {key:'fu2',label:'Follow-up 2',sublabel:'Day '+fu2Day+' after outreach',color:'#ea580c',subjVal:planWording('tmpl_fu2_subject')||STATE.fu2Subj,bodyVal:planWording('tmpl_fu2_body')||STATE.fu2Body,subjId:'tmpl-fu2-subj',bodyId:'tmpl-fu2-body'}
   ];
   var activeTmpl=tmplDefs.find(function(t){return t.key===STATE.activeTmpl;})||tmplDefs[0];
   var planEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
@@ -630,6 +649,7 @@ function renderEmail(){
         '<strong>How this works:</strong> Pick your sending email → choose a message style → edit Outreach &amp; follow-ups → Save. Assigned leads use these templates automatically.'+
       '</div>'+
       renderSendingEmailCard(u.id,planEmails,planFromId,'selectPlanFromEmail')+
+      renderWordingScopeCard(planEmails,planFromId)+
       '<div class="card cp mb3">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
           '<div class="fw6 fs-13">Message style</div>'+

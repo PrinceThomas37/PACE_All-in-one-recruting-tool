@@ -75,6 +75,7 @@ const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
 const leadClaim = require('./services/lead-claim');
+const wordingScope = require('./services/wording-scope');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -1031,6 +1032,20 @@ async function fetchInitialOutreachedPairs(jobs) {
 const { buildPendingEmailsFromJobs } = require('./services/lead-outreach-queue');
 const sendWindowRules = require('./services/send-window');
 
+
+// app_settings rows for a list of keys, in chunks — a manager with several email IDs now brings six wording keys per ID (R-176) and one
+// `.in()` of them all would outgrow the request URL.
+async function loadSettingsByKeys(keys) {
+  const out = [];
+  const list = [...new Set(keys || [])];
+  for (let i = 0; i < list.length; i += 60) {
+    const { data, error } = await supabase.from('app_settings').select('key,value').in('key', list.slice(i, i + 60));
+    if (error) throw error;
+    (data || []).forEach(r => out.push(r));
+  }
+  return out;
+}
+
 // Standalone generation function — called directly by autoSendForManager (no HTTP)
 async function generateEmailsForJobs(job_ids, callerUserId) {
   // Batch fetch jobs in chunks to avoid Supabase URL length limits on .in()
@@ -1062,10 +1077,12 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
     : { data: [] };
   const bdPrimaryEmailMap = {};
   (bdEmailRows || []).forEach(e => { if (!bdPrimaryEmailMap[e.user_id]) bdPrimaryEmailMap[e.user_id] = e; });
+  // R-176: the scope flag and every email ID's own wording come with the person's (services/wording-scope.js).
+  const wordingMailboxIds = [...new Set([...(bdEmailRows || []).map(e => e.id), ...jobs.map(j => j.sending_email_id)])].filter(Boolean);
   const tmplKeys = allBdIds.flatMap(id => [
     `u_${id}_tmpl_o1_subject`, `u_${id}_tmpl_o1_body`, `u_${id}_random_template_mode`
-  ]);
-  const { data: tmplRows } = await supabase.from('app_settings').select('key,value').in('key', tmplKeys);
+  ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds));
+  const tmplRows = await loadSettingsByKeys(tmplKeys);
   const tmplSettings = {};
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
@@ -1157,10 +1174,12 @@ app.post('/emails/generate', auth, async (req, res) => {
       if (!bdPrimaryEmailMap[e.user_id]) bdPrimaryEmailMap[e.user_id] = e;
     });
 
+    // R-176: the scope flag and every email ID's own wording come with the person's (services/wording-scope.js).
+    const wordingMailboxIds = [...new Set([...(bdEmailRows || []).map(e => e.id), ...jobs.map(j => j.sending_email_id)])].filter(Boolean);
     const tmplKeys = allBdIds.flatMap(id => [
       `u_${id}_tmpl_o1_subject`, `u_${id}_tmpl_o1_body`, `u_${id}_random_template_mode`
-    ]);
-    const { data: tmplRows } = await supabase.from('app_settings').select('key,value').in('key', tmplKeys);
+    ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds));
+    const tmplRows = await loadSettingsByKeys(tmplKeys);
     const tmplSettings = {};
     (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
 
@@ -2413,11 +2432,6 @@ async function runFollowupEngine() {
     const settings = {};
     (settingsRows || []).forEach(r => { settings[r.key] = r.value; });
 
-    function getBDTemplate(bdId, key, globalKey, fallback) {
-      const shortKey = key.replace('tmpl_', '');
-      const saved = settings[`u_${bdId}_${key}`] || settings[globalKey] || '';
-      return resolveTemplate(saved, shortKey) || fallback;
-    }
     const { data: sendLogs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', todayDate);
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
@@ -2538,7 +2552,10 @@ async function runFollowupEngine() {
         // Deferred to send time so the name always matches the mailbox that
         // actually sends (and therefore the signature).
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
-        const useRandomFu = isRandomTemplateMode(settings[`u_${bdId}_random_template_mode`]);
+        // R-176: the email ID this follow-up goes out from may have wording of its own (only when its person chose "a wording for each
+        // email ID"); such an email ID is left out of the random rotation — its own text is what it sends.
+        const fuText = wordingScope.followupTexts(settings, { userId: bdId, mailboxId: acId, step: isFu2 ? 'fu2' : 'fu1', resolve: resolveTemplate, defaults: DEFAULT_TEMPLATES });
+        const useRandomFu = isRandomTemplateMode(settings[`u_${bdId}_random_template_mode`]) && !fuText.own;
         let subjTmpl, bodyTmpl, variantId;
         if (useRandomFu) {
           const pairKey = `${fu.job_id}:${fu.contact_id}`;
@@ -2548,12 +2565,8 @@ async function runFollowupEngine() {
           subjTmpl = fuTmpl.subject;
           bodyTmpl = fuTmpl.body;
         } else {
-          subjTmpl = isFu2
-            ? getBDTemplate(bdId, 'tmpl_fu2_subject', 'template_fu2_subject', DEFAULT_TEMPLATES.fu2_subject)
-            : getBDTemplate(bdId, 'tmpl_fu1_subject', 'template_fu1_subject', DEFAULT_TEMPLATES.fu1_subject);
-          bodyTmpl = isFu2
-            ? getBDTemplate(bdId, 'tmpl_fu2_body', 'template_fu2_body', DEFAULT_TEMPLATES.fu2_body)
-            : getBDTemplate(bdId, 'tmpl_fu1_body', 'template_fu1_body', DEFAULT_TEMPLATES.fu1_body);
+          subjTmpl = fuText.subject;
+          bodyTmpl = fuText.body;
         }
         const fuRow = {
           contact_id: fu.contact_id,
@@ -3681,9 +3694,9 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   let subjTmpl = cfg.subject, bodyTmpl = cfg.body;
   if (!subjTmpl || !bodyTmpl) {
     const { data: settingsRows } = await supabase.from('app_settings').select('key,value')
-      .in('key', sequenceTemplates.settingKeys(bdId, key));
+      .in('key', sequenceTemplates.settingKeys(bdId, key, mailbox && mailbox.id));
     const s = {}; (settingsRows || []).forEach(r => { s[r.key] = r.value; });
-    const picked = sequenceTemplates.pickTemplate({ cfg, bdId, settings: s, defaults: DEFAULT_TEMPLATES, resolve: resolveTemplate });
+    const picked = sequenceTemplates.pickTemplate({ cfg, bdId, mailboxId: mailbox && mailbox.id, settings: s, defaults: DEFAULT_TEMPLATES, resolve: resolveTemplate });
     if (picked.error) return { outcome: 'failed', detail: { error: picked.error } };
     subjTmpl = picked.subject; bodyTmpl = picked.body;
   }

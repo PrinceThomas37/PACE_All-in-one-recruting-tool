@@ -13,6 +13,7 @@ const setupTasks = require('../services/setup-tasks');
 const sendWindow = require('../services/send-window');
 const { sendsAsKey, cleanSendsAs } = require('../email-signature');
 const { mailboxConnections } = require('../mailbox-health');
+const wording = require('../services/wording-scope');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -31,6 +32,18 @@ module.exports = (ctx) => {
     for (const m of boxes) { try { const s = cleanSendsAs(JSON.parse(by[sendsAsKey(m.id)] || 'null')); if (s.company) return s.company; } catch (_) { /* unreadable = not said */ } }
     return null;
   }
+  // Has this person started a sequence of their own — their wording, or (R-176) a first email written for one of their email IDs
+  // when they chose a wording for each? Either is enough to start outreach from the email ID that has it.
+  async function startedSequence(userId, boxes) {
+    const person = await settingsOf(userId, ['tmpl_o1_body', 'tmpl_scope']);
+    if (sequenceStarter.hasOwnSequence(person, userId)) return true;
+    if (!wording.isEach(person, userId)) return false;
+    const keys = (boxes || []).map((m) => wording.mailboxKey(m.id, 'tmpl_o1_body'));
+    if (!keys.length) return false;
+    const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
+    const by = Object.assign({}, person); (data || []).forEach((r) => { by[r.key] = r.value; });
+    return (boxes || []).some((m) => wording.mailboxHasOwnSequence(by, userId, m.id));
+  }
   async function settingsOf(userId, names) {
     const keys = names.map((n) => `u_${userId}_${n}`);
     const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
@@ -43,7 +56,7 @@ module.exports = (ctx) => {
     try {
       if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
       const uid = req.user.id;
-      const have = sequenceStarter.hasOwnSequence(await settingsOf(uid, ['tmpl_o1_body']), uid);
+      const have = await startedSequence(uid, await myMailboxes(uid));
       if (have && !(req.body && req.body.replace === true)) return res.status(409).json({ error: 'You already have your own sequence. Edit it on the Email page.', has_own: true });
       const company = await myCompany(await myMailboxes(uid));
       if (!company) return res.status(400).json({ error: 'Say which company your mailbox writes for first (My Setup, step 2) — the starter uses your company\'s name.', needs: 'sends_as' });
@@ -64,7 +77,7 @@ module.exports = (ctx) => {
       const boxes = await myMailboxes(uid);
       const conns = boxes.length ? await mailboxConnections(supabase, boxes.map((m) => m.id)) : {};
       const connected = boxes.filter((m) => conns[m.id] && conns[m.id].connected).length;
-      const hasSeq = sequenceStarter.hasOwnSequence(await settingsOf(uid, ['tmpl_o1_body']), uid);
+      const hasSeq = await startedSequence(uid, boxes);
       const owedKeys = setupTasks.owed({ sends, hasSequenceRole: hasRole(req, ...SEQUENCE_ROLES), connected, hasOwnSequence: hasSeq });
       const scoped = db.forRequest(req);
       const { data: existing, error: exErr } = await scoped.from('reminders').select('id,contact_name,status,created_at')

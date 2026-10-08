@@ -9,6 +9,7 @@
 const { emailSyntaxValid } = require('../email-validation');
 const { buildEmailVars, fillTemplate, resolveTemplate, DEFER_SENDER, buildRotatingTemplateDeck, isRandomTemplateMode } = require('../email-vars');
 const sequenceStarter = require('./sequence-starter');
+const wording = require('./wording-scope');
 
 function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached) {
   const tasksByBd = {};
@@ -40,28 +41,40 @@ function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap
   // leads and the caller is told whose they are — this is the place BOTH ways of starting outreach go through. Mail already queued
   // is untouched (it was written before), individual emails never come through here, and a follow-up is not "starting".
   const needsSequence = [];
+  // Which email ID a task goes out from — the lead's own, else the person's primary (the same choice the row's from_email makes below).
+  const mailboxIdOf = (task) => (task.job.sending_email && task.job.sending_email.id) || task.job.sending_email_id || (bdPrimaryEmailMap[task.bd.id] && bdPrimaryEmailMap[task.bd.id].id) || '';
   for (const bdId of Object.keys(tasksByBd)) {
-    const tasks = tasksByBd[bdId];
-    if (!sequenceStarter.hasOwnSequence(tmplSettings, bdId)) {
-      needsSequence.push({ user_id: bdId, name: (bdMap[bdId] && bdMap[bdId].name) || '', leads: new Set(tasks.map(t => t.job.id)).size });
-      continue;
+    const allTasks = tasksByBd[bdId];
+    // R-176 (D-0111): a person who chose "a wording for each email ID" may start outreach from an email ID that has a first email of its
+    // own even with no sequence of their own; every other email ID of theirs falls back to their wording, or is reported as needing one.
+    const personOk = sequenceStarter.hasOwnSequence(tmplSettings, bdId);
+    const tasks = allTasks.filter(t => personOk || wording.mailboxHasOwnSequence(tmplSettings, bdId, mailboxIdOf(t)));
+    if (tasks.length < allTasks.length) {
+      const stuck = allTasks.filter(t => !tasks.includes(t));
+      needsSequence.push({ user_id: bdId, name: (bdMap[bdId] && bdMap[bdId].name) || '', leads: new Set(stuck.map(t => t.job.id)).size });
     }
+    if (!tasks.length) continue;
     const useRandom = isRandomTemplateMode(tmplSettings[`u_${bdId}_random_template_mode`]);
-    const deck = useRandom ? buildRotatingTemplateDeck(tasks.length) : null;
+    // An email ID with wording of its own does not take part in the random rotation — its own text is what it sends.
+    const rotating = useRandom ? tasks.filter(t => !wording.mailboxHasOwnSequence(tmplSettings, bdId, mailboxIdOf(t))) : [];
+    const deck = useRandom ? buildRotatingTemplateDeck(rotating.length) : null;
     if (useRandom) {
-      console.log(`[GenerateEmails] Random template rotation for BD ${bdId}: ${tasks.length} emails across ${deck.length} slots`);
+      console.log(`[GenerateEmails] Random template rotation for BD ${bdId}: ${rotating.length} emails across ${deck.length} slots`);
     }
 
-    tasks.forEach((task, idx) => {
+    tasks.forEach((task) => {
       const { job, contact, bd } = task;
       try {
-        const variant = deck ? deck[idx] : null;
+        const mbId = mailboxIdOf(task);
+        const ownWording = wording.mailboxHasOwnSequence(tmplSettings, bd.id, mbId);
+        const rIdx = rotating.indexOf(task);
+        const variant = deck && rIdx >= 0 ? deck[rIdx] : null;
         const subjTmpl = variant
           ? variant.o1.subject
-          : resolveTemplate(tmplSettings[`u_${bd.id}_tmpl_o1_subject`], 'o1_subject');
+          : resolveTemplate(ownWording ? wording.mailboxOwn(tmplSettings, bd.id, mbId, 'tmpl_o1_subject') : tmplSettings[`u_${bd.id}_tmpl_o1_subject`], 'o1_subject');
         const bodyTmpl = variant
           ? variant.o1.body
-          : resolveTemplate(tmplSettings[`u_${bd.id}_tmpl_o1_body`], 'o1_body');
+          : resolveTemplate(ownWording ? wording.mailboxOwn(tmplSettings, bd.id, mbId, 'tmpl_o1_body') : tmplSettings[`u_${bd.id}_tmpl_o1_body`], 'o1_body');
         // Leave {{sender}} in the queued text. Which mailbox sends this row is
         // decided at SEND time (the lead's mailbox can change, or a sequence can
         // rotate it), and the signature is filled from that same mailbox — so
