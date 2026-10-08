@@ -141,7 +141,9 @@ function renderSidebar(){
   var GRP_CLS={'My Day':'sec-day','Sales':'sec-sales','Recruiting':'sec-rec','Setup':'sec-set'};
   var navItems=[{id:"dashboard",lbl:"Today",ic:"grid",grp:G_WORK}];
   if(leadsAnyTeam)navItems.push({id:"myteam",lbl:"My Team",ic:"users",grp:G_WORK});
-  navItems.push({id:"mailbox",lbl:"Inbox",ic:"inbox",badge:inboxBadge,grp:G_WORK});
+  // 8 Oct (owner: which email ID got the new mail?): hovering the Inbox says how many are unread in each mailbox.
+  var inboxTip=Object.keys((STATE.mailbox&&STATE.mailbox.unreadBy)||{}).map(function(id){ var r=STATE.mailbox.unreadBy[id]; return r.unread>0?r.email+' — '+r.unread+' unread':''; }).filter(Boolean).join('\n');
+  navItems.push({id:"mailbox",lbl:"Inbox",ic:"inbox",badge:inboxBadge,tip:inboxTip,grp:G_WORK});
   navItems.push(raOnly?{id:"insights",lbl:"My Numbers",ic:"chart",grp:G_INS}
                       :{id:"reminders",lbl:"Reminders",ic:"bell",badge:remBadge,grp:G_WORK});
 
@@ -187,7 +189,7 @@ function renderSidebar(){
     // R-122: a pixel icon per item (9x9, drawn in the text colour). Every item
     // has its OWN — the collapsed rail is icons only (nav-icons-smoke).
     var pic=NAV_PIXEL_ICONS[n.id];
-    return '<div class="nav-item'+active+'" onclick="goPage(\''+n.id+'\')" title="'+n.lbl+'">'+
+    return '<div class="nav-item'+active+'" onclick="goPage(\''+n.id+'\')" title="'+escAttr(n.tip||n.lbl)+'">'+
       '<span class="nav-icon">'+(pic?pixelSprite(pic,'currentColor',2):UI.ic(n.ic))+'</span>'+
       '<span class="nav-txt">'+n.lbl+'</span>'+badge+
     '</div>';

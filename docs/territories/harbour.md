@@ -271,3 +271,6 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 - NEW `services/reply-target.js` (pure): the newest email in the person's OWN mailbox with a provider id (inbound `message_key`; outbound `message_id`), and the newest of THEIRS; a teammate's mailbox is never offered. `services/sent-side.js` now carries `message_id` on emails read from the provider's Sent folder. Test: `reply-target-smoke` (10).
 ## 2026-10-08 (Session 42) — Deliverability routes admin-only (D-0109)
 - `GET /admin/deliverability` and `GET /admin/domain-health` (`routes/deliverability.js`) are admin-only; `scope-emails-warmup-smoke` pins a 403 for an RA Lead (mutation shown failing). The suppression, spam-check and template-analytics routes are unchanged.
+
+## 2026-10-08 (Session 43) — which mailbox got the new mail (R-172)
+- `routes/mailbox.js` `GET /mailbox/unread-count` now also returns `per_mailbox: [{id,email,unread}]` (same one provider call per mailbox; the total is their sum; a disconnected mailbox is absent). Cached like the total (`unreadCache`, 60 s).

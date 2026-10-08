@@ -1024,7 +1024,19 @@
     apiGet('/mailbox/unread-count').then(function(d){
       var m=M(); var was=m.unread;
       m.unread=(d&&d.unread)||0;
-      if(m.unread!==was) scheduleRender();
+      // 8 Oct (owner: "when a new email is received it does not show WHICH email ID received it"): the server now says how
+      // many are unread in each of the person's mailboxes. A count that went UP since the last look names its mailbox.
+      var before=m.unreadBy||null, now={};
+      ((d&&d.per_mailbox)||[]).forEach(function(r){ now[r.id]={ email:r.email, unread:r.unread||0 }; });
+      if(before){
+        var fresh=Object.keys(now).filter(function(id){ return before[id] && now[id].unread>before[id].unread; });
+        fresh.forEach(function(id){
+          var n=now[id].unread-before[id].unread;
+          showToast('New email'+(n>1?'s':'')+' in '+now[id].email+(n>1?' ('+n+')':''),'info');
+        });
+      }
+      m.unreadBy=now;
+      if(m.unread!==was||before===null) scheduleRender();
     }).catch(function(){ /* no mailbox connected — the badge just stays empty */ });
   };
 
@@ -1213,13 +1225,19 @@
     '</div></div>';
   }
 
+  // " — 3 unread" after a mailbox's name (the nav badge is one total; this says where it comes from).
+  function unreadNote(id){
+    var r=(M().unreadBy||{})[id];
+    return r&&r.unread>0 ? ' — '+r.unread+' unread' : '';
+  }
+
   function renderTopBar(readable){
     var m=M();
     var accountPicker = readable.length>1
       ? '<select class="seq-sel" style="max-width:280px" onchange="mbSelectAccount(this.value)">'+
           readable.map(function(a){
             return '<option value="'+escAttr(a.id)+'"'+(a.id===m.activeId?' selected':'')+'>'+
-              esc(a.email_address)+(a.platform==='Gmail'?' · Gmail':' · Outlook')+'</option>';
+              esc(a.email_address)+(a.platform==='Gmail'?' · Gmail':' · Outlook')+unreadNote(a.id)+'</option>';
           }).join('')+
         '</select>'
       : '<div class="fs-13" style="font-weight:600">'+esc((readable[0]||{}).email_address||'')+
@@ -1394,6 +1412,9 @@
         '<div class="mb-msg-when">'+esc(fmtFull(x.date))+'</div>'+
         '<div class="mb-msg-ico">'+
           '<span class="kebab" title="Reply" onclick="mbReply(false)">'+UI.ic('reply')+'</span>'+
+          // 8 Oct (owner: "no reply all option in inboxes"): the card's own icons had Reply and Forward only; Reply all
+          // sat in the bar above the message and was missed. Same rule as that bar: only when someone else was on it.
+          ((x.to||[]).length+(x.cc||[]).length>1?'<span class="kebab mb-replyall" title="Reply all" onclick="mbReply(true)">'+UI.ic('reply')+'<span class="fs-12">all</span></span>':'')+
           '<span class="kebab" title="Forward" onclick="mbForward()">'+UI.ic('right')+'</span>'+
         '</div>'+
       '</div>'+

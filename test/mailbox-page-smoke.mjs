@@ -121,7 +121,7 @@ try {
     window.apiGet = function (p) {
       window.__calls.push(['GET', p]);
       if (/^\/mailbox\/accounts/.test(p)) return Promise.resolve(F.accounts);
-      if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 4, mailboxes: 2 });
+      if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 4, mailboxes: 2, per_mailbox: [{ id: 'mb1', email: 'priya@futeglobal.com', unread: 3 }, { id: 'mb2', email: 'priya.recruiting@gmail.com', unread: 1 }] });
       // The server returns the signature already FILLED — the bug this guards
       // is the raw template ({{sender}}) reaching a real recipient.
       if (/\/signature$/.test(p)) return Promise.resolve({
@@ -177,6 +177,28 @@ try {
   step('Both mailboxes are offered in the account picker',
     html.includes('priya@futeglobal.com') && html.includes('priya.recruiting@gmail.com'));
 
+  // 8 Oct (owner: "it does not show which email ID received the new email"): each mailbox says how many are unread,
+  // and a count that RISES names the mailbox it rose in. Absent per-mailbox data must fail these, not pass them.
+  await page.evaluate(() => window.refreshUnread(true));
+  await page.waitForFunction(() => STATE.mailbox.unreadBy && STATE.mailbox.unreadBy.mb1, { timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(250);
+  const picker = await page.evaluate(() => Array.from(document.querySelectorAll('#content select option')).map(o => o.textContent));
+  step('The account picker says how many are unread in each mailbox',
+    picker.some(t => /priya@futeglobal\.com.*3 unread/.test(t)) && picker.some(t => /priya\.recruiting@gmail\.com.*1 unread/.test(t)), picker.join(' | '));
+  const tip = await page.evaluate(() => { const n = Array.from(document.querySelectorAll('.nav-item')).find(x => /Inbox/.test(x.textContent)); return n ? n.getAttribute('title') : ''; });
+  step('Hovering the Inbox says which mailbox the unread mail is in', /priya@futeglobal\.com — 3 unread/.test(tip || '') && /priya\.recruiting@gmail\.com — 1 unread/.test(tip || ''), tip);
+  await page.evaluate(() => {
+    const was = window.apiGet;
+    window.apiGet = function (p) { return /^\/mailbox\/unread-count/.test(p)
+      ? Promise.resolve({ unread: 6, mailboxes: 2, per_mailbox: [{ id: 'mb1', email: 'priya@futeglobal.com', unread: 3 }, { id: 'mb2', email: 'priya.recruiting@gmail.com', unread: 3 }] })
+      : was(p); };
+    window.__toasts = []; const st = window.showToast; window.showToast = function (m, k) { window.__toasts.push(m); return st && st.apply(this, arguments); };
+    window.refreshUnread(true);
+  });
+  await page.waitForFunction(() => (window.__toasts || []).length > 0, { timeout: 5000 }).catch(() => {});
+  const toasts = await page.evaluate(() => window.__toasts);
+  step('New mail in a mailbox is announced WITH that mailbox\'s address', toasts.some(t => /New emails in priya\.recruiting@gmail\.com \(2\)/.test(t)), toasts.join(' | '));
+
   // ── the CRM cross-link: the reason to read mail here at all ────────────────
   step('A sender who is a lead contact is chipped as "Lead"', html.includes('>Lead<'));
   step('A sender who is a candidate is chipped as "Candidate"', html.includes('>Candidate<'));
@@ -195,6 +217,9 @@ try {
   step('Cc is shown when there is one', html.includes('hiring@fidelity.com'));
   step('Reply / Reply all / Archive / Delete are all offered',
     html.includes('>Reply<') && html.includes('>Reply all<') && html.includes('>Archive<') && html.includes('>Delete<'));
+
+  step('Reply all is also on the message card itself, not only in the bar above it',
+    await page.evaluate(() => !!document.querySelector('.mb-msg-ico .mb-replyall')));
 
   // THE SAFETY ASSERTION. A message body is the most hostile HTML this app
   // handles; it must render in a sandbox with no script and no same-origin.
