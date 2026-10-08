@@ -637,3 +637,12 @@ lead goes straight to them; everyone else's goes to the Unassigned pool. The add
 they decided on stays on record: saved as leads (open the lead from here), waiting
 (bring back now), turned down. Filter by search or company name; the last 90 days show
 by default. Undecided cards are removed after 5 days.
+
+**Find Leads — the search form (D-0098).** Name the run; pick as many industries as you
+like (about forty — IT, healthcare, skilled trades, logistics, banking, retail…); each
+offers typical job titles you can tick, Select all or Clear, and you can type any title of
+your own (up to 40). "Posted" is a slider from today to 30 days. "Preferred companies":
+type a company name and press Look up — PACE shows the real companies with that name and
+where they are (1 Apollo credit); pick the right one, then add another, as many as you
+like; paste a website to add it directly, free. With preferred companies set, only those
+are searched.

@@ -862,7 +862,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   color:var(--text);
 }
 html :where(#content :where(
-  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,
+  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,.fd-block-box,
   .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
   .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,
   .email-card,.failed-panel,.dash-tile,.cmp-prev,.cmp-fld select,.cmp-fld .cmp-static,.cp-found,.cpill,
@@ -1046,3 +1046,19 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-block{display:flex;align-items:flex-start;margin-top:8px;line-height:1.4}
 .fd-block input{margin-top:3px}
 .fd-detail{margin-top:8px;padding-top:6px;border-top:2px dashed var(--ctl-brd);font-size:12.5px;line-height:1.6}
+
+/* Find Leads form (8 Oct 2026): ticked titles, the posted-within slider, picked industries and companies */
+.fd-block-box{border:2px solid var(--ctl-brd);background:var(--card-solid);padding:8px 10px;margin:8px 0}
+/* The posted-within slider in the retro kit: a square, hard-edged track that fills with the sun yellow, and a block thumb
+   with the same border and hard shadow as a primary button. --fd-pct (set by the page) is how far along it is. */
+.fd-slider{-webkit-appearance:none;appearance:none;display:block;height:28px;margin:4px 0 0;padding:0;background:transparent;border:0;cursor:pointer}
+.fd-slider:focus{outline:none}
+.fd-slider::-webkit-slider-runnable-track{height:12px;border:2px solid var(--ctl-brd);border-radius:0;background:linear-gradient(to right,var(--sun) var(--fd-pct,50%),var(--card-solid) var(--fd-pct,50%))}
+.fd-slider::-moz-range-track{height:8px;border:2px solid var(--ctl-brd);border-radius:0;background:var(--card-solid)}
+.fd-slider::-moz-range-progress{height:8px;background:var(--sun)}
+.fd-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:26px;margin-top:-9px;border:2px solid var(--glass-brd);border-radius:0;background:var(--sun);box-shadow:var(--sh)}
+.fd-slider::-moz-range-thumb{width:12px;height:22px;border:2px solid var(--glass-brd);border-radius:0;background:var(--sun);box-shadow:var(--sh)}
+.fd-slider:focus-visible::-webkit-slider-thumb{outline:2px solid var(--ctl-brd);outline-offset:2px}
+.fd-slider:focus-visible::-moz-range-thumb{outline:2px solid var(--ctl-brd);outline-offset:2px}
+.fd-x{border:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;padding:0 0 0 4px}
+.fd-pill.on{border-color:var(--text)}

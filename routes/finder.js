@@ -219,7 +219,7 @@ module.exports = (ctx) => {
         reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day') },
         wait_days: await num('finder_wait_days'), card_days: await num('finder_card_days'),
         sectors: Object.keys(finder.SECTORS).map((id) => ({ id, label: finder.SECTORS[id].label, titles: finder.SECTORS[id].titles })),
-        sizes: finder.SIZE_BANDS.map((b) => ({ id: b.id, label: b.label })), posted: finder.POSTED_CHOICES,
+        sizes: finder.SIZE_BANDS.map((b) => ({ id: b.id, label: b.label })), posted: finder.POSTED_RANGE,
         goes_to: hasRole(req, 'bd', 'bd_lead') ? 'you' : 'pool',
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -335,6 +335,40 @@ module.exports = (ctx) => {
       if (error) throw error;
       if (!data) return res.status(404).json({ error: 'Search not found' });
       res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // "Preferred companies": type a company's name and get Apollo's real matches — its own name, where it is, its website,
+  // roughly how big — to pick from. Nothing is guessed (an AI asked for a company's website writes a plausible one that may
+  // belong to somebody else, and the website is what the search is narrowed by). A website typed in needs no lookup and costs
+  // nothing. A name lookup is ONE Apollo credit when it finds anything, counted in the organisation's daily meter, never
+  // retried; a second press inside two seconds is ignored so a double-click is one call.
+  const LOOKUP_GAP_MS = 2000;
+  const lastLookup = new Map();
+  router.post('/finder/companies/suggest', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const q = String((req.body && req.body.q) || '').trim().slice(0, 80);
+      if (q.length < 2) return res.status(400).json({ error: 'Type at least two letters of the company name.' });
+      const site = finder.websiteFrom(q);
+      if (site) return res.json({ suggestions: [{ name: site, domain: site, city: '', state: '', website_only: true }], used_credit: false, note: '' });
+      const now = clock(), prev = lastLookup.get(req.user.id);
+      if (prev && now.getTime() - prev < LOOKUP_GAP_MS && !ctx.noRerunGap) return res.json({ suggestions: [], used_credit: false, skipped: true, note: '' });
+      lastLookup.set(req.user.id, now.getTime());
+      const key = await integrations.getSecret(supabase, 'apollo');
+      if (!key) return res.json({ suggestions: [], used_credit: false, note: 'Apollo is not connected, so company names cannot be looked up. An admin adds its key in Admin → Integrations. You can still paste the company\'s website.' });
+      const budget = await budgetFor(orgOf(req), now);
+      if (budget.left() < 1) return res.json({ suggestions: [], used_credit: false, note: 'Your organisation has used today\'s Apollo credit limit (' + budget.limit + '). You can still paste the company\'s website.' });
+      const r = await apollo.searchOrganizations({ key, filters: finder.companyNameFilters(q), page: 1, perPage: 10 });
+      await noteApollo('finder_company_lookup', r);
+      if (!r.ok) return res.status(502).json({ error: r.error });
+      const found = (r.organizations || []).length > 0;
+      if (found) await budget.spend(1);                     // 1 credit per page that returns results
+      const suggestions = finder.rankCompanySuggestions(r.organizations, q);
+      res.json({
+        suggestions, used_credit: found, credits: { used: budget.used, limit: budget.limit },
+        note: suggestions.length ? '' : (found ? 'Apollo found companies with that name but none has a website on file. Paste the company\'s website instead.' : 'Apollo has no company with that name. Check the spelling, or paste its website.'),
+      });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

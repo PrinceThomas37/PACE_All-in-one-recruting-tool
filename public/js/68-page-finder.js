@@ -327,11 +327,22 @@
   }
 
   // ── saved searches ───────────────────────────────────────────────────────
-  function blankForm(){ return { id:null, name:'', sector:'', titles:'', locations:'', sizes:[], posted_days:14, keywords:'', domains:'' }; }
+  // The form's state. Titles are a list (ticked from the picked industries' suggestions, or typed); companies are the
+  // ones the person chose by name, each with where it is, so the chip can say "Acme Corp · Austin, TX".
+  var MAX_TITLES = 40, MAX_COMPANIES = 30, MAX_SECTORS = 8;
+  function blankForm(){ return { id:null, name:'', sectors:[], titles:[], locations:'', sizes:[], posted_days:14, keywords:'', companies:[] }; }
+  function blankCo(){ return { q:'', busy:false, list:null, note:'' }; }
+  if (!F.co) F.co = blankCo();
+  if (F.newTitle==null) F.newTitle='';
   function formFrom(s){
-    return { id:s.id, name:s.name, sector:s.sector||'', titles:(s.titles||[]).join(', '), locations:(s.locations||[]).join(', '),
-             sizes:(s.sizes||[]).slice(), posted_days:s.posted_days||14, keywords:(s.keywords||[]).join(', '), domains:(s.domains||[]).join(', ') };
+    var sectors=(s.sectors&&s.sectors.length)?s.sectors.slice():(s.sector?[s.sector]:[]);
+    var cos=(s.companies&&s.companies.length)?s.companies.map(function(c){ return { name:c.name||c.domain, domain:c.domain, city:c.city||'', state:c.state||'' }; })
+      :(s.domains||[]).map(function(d){ return { name:d, domain:d, city:'', state:'' }; });
+    return { id:s.id, name:s.name, sectors:sectors, titles:(s.titles||[]).slice(), locations:(s.locations||[]).join(', '),
+             sizes:(s.sizes||[]).slice(), posted_days:(s.posted_days==null?14:s.posted_days), keywords:(s.keywords||[]).join(', '), companies:cos };
   }
+  // The slider's words. 0 is a real answer ("today only"), never "not set".
+  function postedText(d){ d=(d==null?14:Number(d)); return d===0?'today':(d===1?'yesterday or today':'in the last '+d+' days'); }
   // The form on screen: the Daily run tab's, or the one-off Find leads now tab's (same fields, different buttons).
   function curForm(){ return F.tab==='now' ? (F.nowForm||(F.nowForm=blankForm())) : F.form; }
   function captureForm(){
@@ -339,26 +350,95 @@
     var g=function(id){ var e=document.getElementById(id); return e?e.value:null; };
     var v;
     if ((v=g('fd-f-name'))!==null) f.name=v;
-    if ((v=g('fd-f-titles'))!==null) f.titles=v;
     if ((v=g('fd-f-locations'))!==null) f.locations=v;
     if ((v=g('fd-f-keywords'))!==null) f.keywords=v;
-    if ((v=g('fd-f-domains'))!==null) f.domains=v;
-    if ((v=g('fd-f-posted'))!==null) f.posted_days=Number(v)||14;
-    if ((v=g('fd-f-sector'))!==null) f.sector=v;
+    if ((v=g('fd-f-posted'))!==null){ var n=Number(v); f.posted_days=(v!==''&&isFinite(n))?n:14; }
+    if ((v=g('fd-f-newtitle'))!==null) F.newTitle=v;
+    if ((v=g('fd-f-co'))!==null) F.co.q=v;
     var boxes=document.querySelectorAll('.fd-size-box');
     if (boxes.length){ f.sizes=[]; Array.prototype.forEach.call(boxes,function(b){ if(b.checked) f.sizes.push(b.value); }); }
   }
-  window.fdNewSearch = function(){ F.form=blankForm(); F.tab='searches'; paint(true); };
-  window.fdEditSearch = function(id){ var s=(F.searches||[]).find(function(x){ return x.id===id; }); if(!s) return; F.form=formFrom(s); F.tab='searches'; paint(true); };
+  window.fdNewSearch = function(){ F.form=blankForm(); F.co=blankCo(); F.newTitle=''; F.tab='searches'; paint(true); };
+  window.fdEditSearch = function(id){ var s=(F.searches||[]).find(function(x){ return x.id===id; }); if(!s) return; F.form=formFrom(s); F.co=blankCo(); F.newTitle=''; F.tab='searches'; paint(true); };
   window.fdCancelForm = function(){ F.form=null; paint(true); };
-  window.fdPickSector = function(v){
-    captureForm(); var f=curForm(); if(!f) return;
-    f.sector=v;
-    var sec=((F.access&&F.access.sectors)||[]).find(function(x){ return x.id===v; });
-    if (sec){ if(!String(f.titles).trim()) f.titles=sec.titles.join(', '); if(!f.once && !String(f.name).trim()) f.name=sec.label; }
+
+  // Industries: pick as many as you like. An industry is a shortcut — it offers typical titles to tick; the search runs on the titles.
+  function sectorList(){ return ((F.access&&F.access.sectors)||[]); }
+  function sectorById(id){ return sectorList().find(function(x){ return x.id===id; }); }
+  window.fdAddSector = function(id){
+    captureForm(); var f=curForm(); if(!f||!id) return;
+    if (f.sectors.indexOf(id)<0){
+      if (f.sectors.length>=MAX_SECTORS){ showToast('You can pick up to '+MAX_SECTORS+' industries.','info'); paint(true); return; }
+      f.sectors.push(id);
+    }
+    var sec=sectorById(id);
+    if (sec && !String(f.name).trim()) f.name=sec.label;
     paint(true);
   };
-  function bodyOf(f){ return { sector:f.sector||null, titles:lines(f.titles), locations:lines(f.locations), sizes:f.sizes, posted_days:f.posted_days, keywords:lines(f.keywords), domains:lines(f.domains) }; }
+  // Dropping an industry hides its suggestions; titles already ticked stay (they move to "Your titles").
+  window.fdDropSector = function(id){ captureForm(); var f=curForm(); if(!f) return; f.sectors=f.sectors.filter(function(x){ return x!==id; }); paint(true); };
+
+  // Titles: tick any of an industry's suggestions, Select all / Clear for a whole industry, or type your own.
+  function titleIdx(f,t){ var k=String(t).toLowerCase(); for(var i=0;i<f.titles.length;i++){ if(f.titles[i].toLowerCase()===k) return i; } return -1; }
+  function addTitles(f, list){
+    var full=false;
+    list.forEach(function(t){ t=String(t).trim(); if(!t||titleIdx(f,t)>=0) return; if(f.titles.length>=MAX_TITLES){ full=true; return; } f.titles.push(t); });
+    if (full) showToast('You can search up to '+MAX_TITLES+' job titles at once.','info');
+  }
+  window.fdTitleToggle = function(sid, i){
+    captureForm(); var f=curForm(), sec=sectorById(sid); if(!f||!sec) return;
+    var t=sec.titles[i], k=titleIdx(f,t);
+    if (k>=0) f.titles.splice(k,1); else addTitles(f,[t]);
+    paint(true);
+  };
+  window.fdTitlesAll = function(sid){ captureForm(); var f=curForm(), sec=sectorById(sid); if(!f||!sec) return; addTitles(f,sec.titles); paint(true); };
+  window.fdTitlesNone = function(sid){
+    captureForm(); var f=curForm(), sec=sectorById(sid); if(!f||!sec) return;
+    var drop=sec.titles.map(function(t){ return t.toLowerCase(); });
+    f.titles=f.titles.filter(function(t){ return drop.indexOf(t.toLowerCase())<0; });
+    paint(true);
+  };
+  window.fdTitleDrop = function(i){ captureForm(); var f=curForm(); if(!f) return; f.titles.splice(i,1); paint(true); };
+  window.fdTitleAdd = function(){
+    captureForm(); var f=curForm(); if(!f) return;
+    addTitles(f, lines(F.newTitle)); F.newTitle=''; paint(true);
+    var e=document.getElementById('fd-f-newtitle'); if(e) e.focus();
+  };
+  // The slider moves without repainting the page (a repaint under the hand would drop the thumb).
+  window.fdPostedInput = function(v){
+    var f=curForm(); if(!f) return;
+    var n=Number(v); f.posted_days=isFinite(n)?n:14;
+    var o=document.getElementById('fd-posted-out'); if(o) o.textContent=postedText(f.posted_days);
+    var sl=document.getElementById('fd-f-posted'); if(sl){ var lo=Number(sl.min)||0, hi=Number(sl.max)||30; sl.style.setProperty('--fd-pct', Math.round(100*(f.posted_days-lo)/Math.max(1,hi-lo))+'%'); }
+  };
+
+  // Preferred companies: type a name, Apollo's real matches come back with where they are; pick the right one. As many as you like.
+  window.fdCoLookup = function(){
+    captureForm(); var f=curForm(); if(!f||F.co.busy) return;
+    var q=String(F.co.q||'').trim();
+    if (q.length<2){ showToast('Type at least two letters of the company name.','info'); return; }
+    F.co.busy=true; F.co.note=''; paint(true);
+    apiPost('/finder/companies/suggest',{ q:q }).then(function(r){
+      F.co.busy=false; F.co.list=(r&&r.suggestions)||[]; F.co.note=(r&&r.note)||'';
+      if (r && r.credits && F.access) F.access.credits=r.credits;
+      // A website typed in is exact — it is added straight away.
+      if (F.co.list.length===1 && F.co.list[0].website_only){ addCompany(f,F.co.list[0]); F.co.list=null; F.co.q=''; }
+      paint(true);
+    }).catch(function(e){ F.co.busy=false; F.co.note=e.message; paint(true); });
+  };
+  function addCompany(f,c){
+    var d=String(c.domain||'').toLowerCase();
+    if (!d || f.companies.some(function(x){ return x.domain===d; })) return;
+    if (f.companies.length>=MAX_COMPANIES){ showToast('You can pick up to '+MAX_COMPANIES+' companies.','info'); return; }
+    f.companies.push({ name:c.name||d, domain:d, city:c.city||'', state:c.state||'' });
+  }
+  window.fdCoAdd = function(i){ captureForm(); var f=curForm(); if(!f||!F.co.list||!F.co.list[i]) return; addCompany(f,F.co.list[i]); paint(true); };
+  window.fdCoDrop = function(i){ captureForm(); var f=curForm(); if(!f) return; f.companies.splice(i,1); paint(true); };
+
+  function bodyOf(f){
+    return { sectors:f.sectors.slice(), sector:f.sectors[0]||null, titles:f.titles.slice(), locations:lines(f.locations), sizes:f.sizes, posted_days:f.posted_days,
+             keywords:lines(f.keywords), companies:f.companies, domains:f.companies.map(function(c){ return c.domain; }) };
+  }
   // Find leads now: a one-off search. Nothing is saved or scheduled; the cards land in Today's cards.
   window.fdFindNow = function(){
     if (F.running) return;
@@ -383,15 +463,14 @@
   };
   window.fdSaveSearch = function(){
     captureForm(); var f=F.form; if(!f) return;
-    var body={ name:f.name.trim(), sector:f.sector||null, titles:lines(f.titles), locations:lines(f.locations), sizes:f.sizes, posted_days:f.posted_days, keywords:lines(f.keywords), domains:lines(f.domains) };
+    var body=bodyOf(f); body.name=f.name.trim();
     var req = f.id ? apiPut('/finder/searches/'+f.id, body) : apiPost('/finder/searches', body);
     req.then(function(){ var edited=!!f.id; F.form=null; showToast(edited?'Search updated':'Search saved — it runs every morning, or press Run now','success'); loadSearches(); })
       .catch(function(e){ showToast(e.message,'error'); });
   };
   window.fdToggleSearch = function(id){
     var s=(F.searches||[]).find(function(x){ return x.id===id; }); if(!s) return;
-    var body=formFrom(s); body.titles=lines(body.titles); body.locations=lines(body.locations); body.keywords=lines(body.keywords); body.domains=lines(body.domains);
-    body.active = s.active===false; body.sector=s.sector||null;
+    var body=bodyOf(formFrom(s)); body.name=s.name; body.active = s.active===false;
     apiPut('/finder/searches/'+id, body).then(function(){ showToast(body.active?'Search resumed':'Search paused — it will not run each morning','info'); loadSearches(); })
       .catch(function(e){ showToast(e.message,'error'); });
   };
@@ -400,30 +479,69 @@
     apiDelete('/finder/searches/'+id).then(function(){ showToast('Search deleted','info'); loadSearches(); }).catch(function(e){ showToast(e.message,'error'); });
   };
 
+  function coLine(c){ return [[c.city,c.state].filter(Boolean).join(', '), c.domain, c.employees?('about '+c.employees+' people'):''].filter(Boolean).join(' · '); }
+  function renderIndustries(f){
+    var picked=f.sectors.map(function(id){ var s=sectorById(id); return s?'<span class="fd-chip">'+esc(s.label)+' <button type="button" class="fd-x" aria-label="Remove '+esc(s.label)+'" onclick="fdDropSector(\''+esc(id)+'\')">×</button></span>':''; }).join('');
+    var left=sectorList().filter(function(s){ return f.sectors.indexOf(s.id)<0; }).sort(function(a,b){ return a.label.localeCompare(b.label); })
+      .map(function(s){ return '<option value="'+esc(s.id)+'">'+esc(s.label)+'</option>'; }).join('');
+    return '<div class="fd-label">Industries <span class="fd-hint">(optional — pick as many as you like; each one offers job titles to tick below)</span></div>'+
+      (picked?'<div class="fd-pills">'+picked+'</div>':'')+
+      (f.sectors.length<MAX_SECTORS?'<select id="fd-f-sector-add" class="sel fd-wide" onchange="fdAddSector(this.value)"><option value="">+ Add an industry…</option>'+left+'</select>':'<div class="fd-hint">That is the most industries at once ('+MAX_SECTORS+').</div>');
+  }
+  function renderTitles(f){
+    var shown={};
+    var blocks=f.sectors.map(function(id){
+      var sec=sectorById(id); if(!sec) return '';
+      var on=sec.titles.filter(function(t){ return titleIdx(f,t)>=0; }).length;
+      sec.titles.forEach(function(t){ shown[t.toLowerCase()]=1; });
+      var pills=sec.titles.map(function(t,i){ var is=titleIdx(f,t)>=0;
+        return '<button type="button" class="fd-pill'+(is?' on':'')+'" aria-pressed="'+(is?'true':'false')+'" onclick="fdTitleToggle(\''+esc(id)+'\','+i+')">'+(is?'✓ ':'')+esc(t)+'</button>'; }).join('');
+      return '<div class="fd-block-box"><div class="fd-row fd-between"><span class="fd-strong fs-12">'+esc(sec.label)+' <span class="fd-hint">('+on+' of '+sec.titles.length+' ticked)</span></span>'+
+        '<span class="fd-row"><button type="button" class="fd-pill" onclick="fdTitlesAll(\''+esc(id)+'\')">Select all</button><button type="button" class="fd-pill" onclick="fdTitlesNone(\''+esc(id)+'\')">Clear</button></span></div>'+
+        '<div class="fd-pills">'+pills+'</div></div>';
+    }).join('');
+    var own=f.titles.map(function(t,i){ return shown[t.toLowerCase()]?'':'<span class="fd-chip">'+esc(t)+' <button type="button" class="fd-x" aria-label="Remove '+esc(t)+'" onclick="fdTitleDrop('+i+')">×</button></span>'; }).join('');
+    return '<div class="fd-label">Job titles they are hiring for <span class="fd-hint">('+f.titles.length+' of '+MAX_TITLES+' chosen — the search finds companies with an open job under any of them)</span></div>'+
+      (blocks||f.titles.length?'':'<div class="fd-hint">Pick an industry above to get titles you can tick, or type your own below.</div>')+blocks+
+      (own?'<div class="fd-hint">Your titles</div><div class="fd-pills">'+own+'</div>':'')+
+      '<div class="fd-row"><input id="fd-f-newtitle" class="inp fd-grow" placeholder="Type a job title, e.g. CNC Machinist — press Enter to add" value="'+esc(F.newTitle)+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fdTitleAdd();}">'+
+      '<button type="button" class="btn btn-outline btn-sm" onclick="fdTitleAdd()">Add title</button></div>';
+  }
+  function renderCompanies(f){
+    var chips=f.companies.map(function(c,i){
+      var where=[c.city,c.state].filter(Boolean).join(', ');
+      return '<span class="fd-chip"><strong>'+esc(c.name)+'</strong>'+(where?' · '+esc(where):'')+(c.name!==c.domain?' · '+esc(c.domain):'')+' <button type="button" class="fd-x" aria-label="Remove '+esc(c.name)+'" onclick="fdCoDrop('+i+')">×</button></span>'; }).join('');
+    var list=(F.co.list||[]).map(function(c,i){
+      var has=f.companies.some(function(x){ return x.domain===c.domain; });
+      return '<div class="fd-person"><div class="fd-person-main"><strong>'+esc(c.name)+'</strong><span class="fd-hint">'+esc(coLine(c)||'No location on file')+'</span></div>'+
+        (has?'<span class="fd-tag">Added ✓</span>':'<button type="button" class="btn btn-outline btn-sm" onclick="fdCoAdd('+i+')">Add</button>')+'</div>'; }).join('');
+    return '<div class="fd-label">Preferred companies <span class="fd-hint">(optional — leave empty to search every company)</span></div>'+
+      (chips?'<div class="fd-pills">'+chips+'</div><div class="fd-hint">Only these companies will be searched.</div>':'')+
+      '<div class="fd-row"><input id="fd-f-co" class="inp fd-grow" placeholder="Type a company name, e.g. Acme Manufacturing" value="'+esc(F.co.q)+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fdCoLookup();}">'+
+      '<button type="button" class="btn btn-outline btn-sm" '+(F.co.busy?'disabled':'')+' onclick="fdCoLookup()">'+(F.co.busy?'Looking…':'Look up')+'</button></div>'+
+      '<div class="fd-hint">Look up asks Apollo for the real companies with that name and shows where they are, so you pick the right one (1 Apollo credit when it finds some). Paste a website like acme.com to add it directly — free. Then type the next one.</div>'+
+      (F.co.note?'<div class="ld-box is-info" role="status">'+esc(F.co.note)+'</div>':'')+list;
+  }
+
   function renderForm(mode){
     var once=(mode==='now');
     var f=once?curForm():F.form, acc=F.access||{};
-    var sectors=(acc.sectors||[]).map(function(s){ return '<option value="'+esc(s.id)+'"'+(f.sector===s.id?' selected':'')+'>'+esc(s.label)+'</option>'; }).join('');
     var sizes=(acc.sizes||[]).map(function(b){ return '<label class="fd-use"><input type="checkbox" class="fd-size-box" value="'+esc(b.id)+'" '+(f.sizes.indexOf(b.id)>=0?'checked':'')+'> '+esc(b.label)+'</label>'; }).join('');
-    var posted=(acc.posted||[7,14,30]).map(function(d){ return '<option value="'+d+'"'+(f.posted_days===d?' selected':'')+'>last '+d+' days</option>'; }).join('');
+    var pr=acc.posted||{ min:0, max:30 };
     return '<div class="card fd-form">'+
       '<div class="fs-14 fd-strong">'+(once?'Find leads now':(f.id?'Edit this daily search':'New daily search'))+'</div>'+
       (once?'<div class="fd-hint">A search for right now. It is not saved and does not repeat — the companies it finds go to Today\'s cards. It uses 1 Apollo credit each time you press Find.</div>':'<div class="fd-hint">Runs by itself every morning until you pause or delete it.</div>')+
-      '<div class="fd-grid">'+
-        (once?'':'<div><div class="fd-label">Name</div><input id="fd-f-name" class="inp fd-wide" placeholder="e.g. Texas machine shops" value="'+esc(f.name)+'"></div>')+
-        '<div><div class="fd-label">Start from an industry (optional)</div><select id="fd-f-sector" class="sel fd-wide" onchange="fdPickSector(this.value)"><option value="">— pick to fill in titles —</option>'+sectors+'</select></div>'+
-      '</div>'+
-      '<div class="fd-label">Job titles they are hiring for</div>'+
-      '<textarea id="fd-f-titles" class="inp fd-wide" rows="2" placeholder="Separate with commas, e.g. CNC Machinist, Welder">'+esc(f.titles)+'</textarea>'+
+      (once?'':'<div class="fd-label">Name of the run <span class="fd-hint">(so you can tell your daily runs apart)</span></div><input id="fd-f-name" class="inp fd-wide" placeholder="e.g. Texas machine shops" value="'+esc(f.name)+'">')+
+      renderIndustries(f)+renderTitles(f)+
       '<div class="fd-grid">'+
         '<div><div class="fd-label">Where the job is</div><input id="fd-f-locations" class="inp fd-wide" placeholder="e.g. Texas, Austin TX, remote" value="'+esc(f.locations)+'"></div>'+
-        '<div><div class="fd-label">Posted within</div><select id="fd-f-posted" class="sel fd-wide">'+posted+'</select></div>'+
+        '<div><div class="fd-label">Posted <span id="fd-posted-out" class="fd-strong">'+esc(postedText(f.posted_days))+'</span></div>'+
+          '<input id="fd-f-posted" class="fd-slider fd-wide" type="range" min="'+pr.min+'" max="'+pr.max+'" step="1" value="'+esc(f.posted_days)+'" style="--fd-pct:'+Math.round(100*(f.posted_days-pr.min)/Math.max(1,pr.max-pr.min))+'%" aria-label="How many days back jobs may have been posted" oninput="fdPostedInput(this.value)">'+
+          '<div class="fd-row fd-between fd-hint"><span>Today</span><span>'+pr.max+' days</span></div></div>'+
       '</div>'+
       '<div class="fd-label">Company size <span class="fd-hint">(none ticked = any)</span></div><div class="fd-row">'+sizes+'</div>'+
-      '<div class="fd-grid">'+
-        '<div><div class="fd-label">Industry words (optional)</div><input id="fd-f-keywords" class="inp fd-wide" placeholder="e.g. machining, fabrication" value="'+esc(f.keywords)+'"></div>'+
-        '<div><div class="fd-label">Only these company websites (optional)</div><input id="fd-f-domains" class="inp fd-wide" placeholder="e.g. acme.com, widgets.com" value="'+esc(f.domains)+'"></div>'+
-      '</div>'+
+      '<div class="fd-label">Industry words <span class="fd-hint">(optional)</span></div><input id="fd-f-keywords" class="inp fd-wide" placeholder="e.g. machining, fabrication" value="'+esc(f.keywords)+'">'+
+      renderCompanies(f)+
       (once
         ? '<div class="fd-row fd-end"><button class="btn btn-outline" onclick="fdSaveNowAsDaily()" title="Keep these settings as a search that runs every morning">Also run this every day</button>'+
           '<button class="btn btn-primary" '+(F.running?'disabled':'')+' onclick="fdFindNow()">'+(F.running==='find'?'Finding…':'Find leads now')+'</button></div>'+
@@ -437,7 +555,8 @@
     return '<div class="fs-12 c-text3">Found before: '+c.accepted+' saved as leads · '+c.waiting+' waiting · '+c.rejected+' turned down <button class="fd-pill" onclick="fdHistFor(\''+esc(id)+'\')">See them</button></div>';
   }
   function summaryOf(s){
-    var bits=[(s.titles||[]).slice(0,4).join(', ')+((s.titles||[]).length>4?'…':''), (s.locations||[]).join(', '), 'posted in the last '+s.posted_days+' days'];
+    var n=(s.companies&&s.companies.length)||(s.domains||[]).length;
+    var bits=[(s.titles||[]).slice(0,4).join(', ')+((s.titles||[]).length>4?'…':''), (s.locations||[]).join(', '), 'posted '+postedText(s.posted_days), n?('only '+plural(n,'chosen company','chosen companies')):''];
     return bits.filter(Boolean).join(' · ');
   }
   function renderSearches(){

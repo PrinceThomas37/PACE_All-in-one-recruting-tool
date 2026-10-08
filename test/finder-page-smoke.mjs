@@ -35,8 +35,8 @@ function findChromium() {
 const ACCESS = {
   enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
   wait_days: 14, card_days: 5, goes_to: 'pool',
-  sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant'] }],
-  sizes: [{ id: 'small', label: '11–50' }, { id: 'mid', label: '51–500' }], posted: [7, 14, 30],
+  sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
+  sizes: [{ id: 'small', label: '11–50' }, { id: 'mid', label: '51–500' }], posted: { min: 0, max: 30, def: 14 },
 };
 const CARDS = {
   waiting: 2, daily: 25, today: 3,
@@ -95,6 +95,12 @@ try {
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
       if (/\/run$/.test(p)) { const R = { results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } }; return window.__hold ? new Promise((r) => { window.__release = () => r(R); }) : Promise.resolve(R); }
+      if (p === '/finder/companies/suggest') {
+        window.__lookups = (window.__lookups || 0) + 1; const q = String(b.q).toLowerCase();
+        if (/^[a-z0-9-]+\.[a-z]{2,}$/.test(q)) return Promise.resolve({ suggestions: [{ name: q, domain: q, city: '', state: '', website_only: true }], used_credit: false, note: '' });
+        if (q === 'acme') return Promise.resolve({ suggestions: [{ name: 'Acme Manufacturing', domain: 'acmemfg.com', city: 'Austin', state: 'Texas', employees: 120 }, { name: 'Acme Foods', domain: 'acmefoods.com', city: 'Dallas', state: 'Texas', employees: 60 }], used_credit: true, credits: { used: 4, limit: 300 }, note: '' });
+        return Promise.resolve({ suggestions: [], used_credit: false, note: 'Apollo has no company with that name. Check the spelling, or paste its website.' });
+      }
       if (p === '/finder/searches') { window.__searches.push(Object.assign({ id: 's1', active: true, posted_days: b.posted_days }, b)); return Promise.resolve({ id: 's1' }); }
       return Promise.resolve({});
     };
@@ -259,19 +265,88 @@ try {
   step('with no daily search the page says what one is and offers to make one', /No daily searches yet/.test(h) && /Make your first daily search/.test(h));
   step('the Daily run tab says plainly that these run by themselves every morning, that Run now does not change that, and where to go for a one-off', /run on their own every morning/.test(h) && /does not change its schedule/.test(h) && /Find leads now/.test(h));
   await page.evaluate(() => window.fdNewSearch());
-  await page.evaluate(() => window.fdPickSector('medical'));
   h = await html();
-  step('picking an industry fills in the job titles and the name (and leaves the rest to the person)', /Dental Hygienist, Medical Assistant/.test(h) && /value="Medical &amp; dental"/.test(h));
-  await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Texas, remote'; document.querySelector('.fd-size-box[value=mid]').checked = true; document.getElementById('fd-f-posted').value = '30'; });
+  step('the name box is called "Name of the run" (the owner found a bare "Name" unclear)', /Name of the run/.test(h) && !/<div class="fd-label">Name<\/div>/.test(h));
+  step('before any industry is picked the page says how to get titles to tick, and nothing is chosen', /Pick an industry above to get titles you can tick/.test(h) && /0 of 40 chosen/.test(h));
+  await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); });
+  h = await html();
+  step('SEVERAL industries can be picked: each is a chip with its own titles to tick (the old page took one)', /fd-chip">Medical &amp; dental/.test(h) && /fd-chip">IT &amp; software/.test(h) && /Dental Hygienist/.test(h) && /Software Engineer/.test(h));
+  step('each picked industry is drawn exactly ONCE (one Select all and one Clear per industry — a screenshot once showed every block twice)', (h.match(/fdTitlesAll\('medical'\)/g) || []).length === 1 && (h.match(/fdTitlesAll\('it'\)/g) || []).length === 1 && (h.match(/fdTitlesNone\('medical'\)/g) || []).length === 1 && (h.match(/Dental Hygienist/g) || []).length === 1);
+  step('…an unnamed run is named after the first industry, and nothing is ticked yet (0 of 4)', /value="Medical &amp; dental"/.test(h) && /0 of 4 ticked/.test(h) && !/aria-pressed="true"/.test(h));
+  const titlesNow = () => page.evaluate(() => window.STATE.finder.form.titles.join('|'));
+  await page.evaluate(() => window.fdTitleToggle('medical', 1));
+  h = await html();
+  step('ticking one title ticks just that one (shown with a tick, pressed state set for assistive tech)', (await titlesNow()) === 'Medical Assistant' && /aria-pressed="true"[^>]*>✓ Medical Assistant/.test(h) && /1 of 4 ticked/.test(h));
+  await page.evaluate(() => window.fdTitlesAll('medical'));
+  step('Select all ticks every title of that industry and does not repeat the one already ticked', (await titlesNow()) === 'Medical Assistant|Dental Hygienist|Phlebotomist|Medical Coder' && /4 of 4 ticked/.test(await html()));
+  await page.evaluate(() => window.fdTitlesNone('medical'));
+  step('Clear unticks that industry\'s titles', (await titlesNow()) === '');
+  await page.evaluate(() => { window.fdTitleToggle('medical', 1); window.fdTitlesAll('it'); window.fdDropSector('it'); });
+  h = await html();
+  step('removing an industry hides its suggestions but keeps the titles already ticked, now under "Your titles"', !/fd-chip">IT &amp; software/.test(h) && (await titlesNow()) === 'Medical Assistant|Software Engineer|Data Analyst' && /Your titles/.test(h) && /fd-chip">Software Engineer/.test(h));
+  await page.evaluate(() => { window.fdTitleDrop(1); window.fdTitleDrop(1); });
+  step('a title chip can be removed with its ×', (await titlesNow()) === 'Medical Assistant');
+  await page.evaluate(() => { document.getElementById('fd-f-newtitle').value = 'Welder, CNC Machinist, welder'; window.fdTitleAdd(); });
+  h = await html();
+  step('a title that is on no list can be typed (commas allowed, repeats ignored) and shows as a chip', (await titlesNow()) === 'Medical Assistant|Welder|CNC Machinist' && /fd-chip">Welder/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-f-newtitle').value = Array.from({ length: 50 }, (_, i) => 'Title ' + i).join(', '); window.fdTitleAdd(); });
+  const capped = await page.evaluate(() => window.STATE.finder.form.titles.length);
+  step('there is a ceiling of 40 titles at once, so one search cannot become a giant Apollo query', capped === 40, String(capped));
+  await page.evaluate(() => { window.STATE.finder.form.titles = ['Medical Assistant', 'Welder', 'CNC Machinist']; window.fdTab('searches'); });
+  // preferred companies
+  await page.evaluate(() => { document.getElementById('fd-f-co').value = 'acme'; window.fdCoLookup(); });
+  await page.waitForTimeout(150);
+  h = await html();
+  step('typing a company name and pressing Look up lists the real matches WITH where they are', /Acme Manufacturing/.test(h) && /Austin, Texas · acmemfg\.com · about 120 people/.test(h) && /Acme Foods/.test(h) && /Dallas, Texas/.test(h));
+  step('…and the credit strip moves to what the server said it cost', /4\/300/.test(h.replace(/<[^>]+>/g, '')) || /4\/300/.test(await page.evaluate(() => document.getElementById('content').innerText)));
+  await page.evaluate(() => window.fdCoAdd(0));
+  h = await html();
+  step('Add puts the chosen company on the search as a chip showing its place, and the result row says Added ✓', /fd-chip"><strong>Acme Manufacturing<\/strong> · Austin, Texas · acmemfg\.com/.test(h) && /Added ✓/.test(h) && /Only these companies will be searched/.test(h));
+  await page.evaluate(() => window.fdCoAdd(1));
+  await page.evaluate(() => { document.getElementById('fd-f-co').value = 'acme.com'; window.fdCoLookup(); });
+  await page.waitForTimeout(150);
+  const cos = await page.evaluate(() => window.STATE.finder.form.companies.map(c => c.domain).join('|'));
+  step('as many companies as you like: a second and a pasted website (added straight away, no list to pick from) join the first', cos === 'acmemfg.com|acmefoods.com|acme.com', cos);
+  await page.evaluate(() => { document.getElementById('fd-f-co').value = 'zzzz'; window.fdCoLookup(); });
+  await page.waitForTimeout(150);
+  h = await html();
+  step('a name Apollo does not know says so in words and adds nothing', /Apollo has no company with that name/.test(h) && (await page.evaluate(() => window.STATE.finder.form.companies.length)) === 3);
+  await page.evaluate(() => window.fdCoDrop(2));
+  step('a company chip can be removed', (await page.evaluate(() => window.STATE.finder.form.companies.map(c => c.domain).join('|'))) === 'acmemfg.com|acmefoods.com');
+  // posted-within slider
+  h = await html();
+  step('"Posted within" is a slider from today to 30 days (the old page had a 7/14/30 drop-down)', /<input id="fd-f-posted"[^>]*type="range"[^>]*min="0"[^>]*max="30"/.test(h) && /fd-posted-out" class="fd-strong">in the last 14 days/.test(h) && !/<select id="fd-f-posted"/.test(h));
+  await page.evaluate(() => { const e = document.getElementById('fd-f-posted'); e.value = '3'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  step('moving the slider changes the words beside it without repainting the page', (await page.evaluate(() => document.getElementById('fd-posted-out').textContent)) === 'in the last 3 days');
+  step('the slider is drawn in the app\'s own style (square, yellow-filled, not the browser\'s round default) and its fill follows the thumb: 3 of 30 days = 10%', await page.evaluate(() => { const e = document.getElementById('fd-f-posted'); return getComputedStyle(e).webkitAppearance === 'none' && e.style.getPropertyValue('--fd-pct') === '10%'; }));
+  await page.evaluate(() => { const e = document.getElementById('fd-f-posted'); e.value = '1'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  step('one day reads "yesterday or today"', (await page.evaluate(() => document.getElementById('fd-posted-out').textContent)) === 'yesterday or today');
+  await page.evaluate(() => { const e = document.getElementById('fd-f-posted'); e.value = '0'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+  step('zero reads "today" — and is a real answer, not "unset"', (await page.evaluate(() => document.getElementById('fd-posted-out').textContent)) === 'today');
+  await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Texas, remote'; document.querySelector('.fd-size-box[value=mid]').checked = true; });
   await page.evaluate(() => window.fdTab('searches'));
   h = await html();
-  step('what was typed survives a repaint of the page (nothing is lost under the person\'s hands)', /value="Texas, remote"/.test(h));
+  step('what was typed survives a repaint of the page — including a slider left at 0 (a 0 must never snap back to 14)', /value="Texas, remote"/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /fd-posted-out" class="fd-strong">today/.test(h));
   await page.evaluate(() => window.fdSaveSearch());
   await page.waitForTimeout(250);
   const saved = (await calls()).find(c => c[0] === 'POST' && c[1] === '/finder/searches');
-  step('Save sends clean lists (titles and places split on commas), the size and the posted-within choice', saved && saved[2].titles.join() === 'Dental Hygienist,Medical Assistant' && saved[2].locations.join() === 'Texas,remote' && saved[2].sizes.join() === 'mid' && saved[2].posted_days === 30 && saved[2].sector === 'medical', JSON.stringify(saved && saved[2]));
+  step('Save sends clean lists: the titles ticked and typed, the places split on commas, the size, 0 days, the industries, and the chosen companies with their places', saved && saved[2].titles.join() === 'Medical Assistant,Welder,CNC Machinist' && saved[2].locations.join() === 'Texas,remote' && saved[2].sizes.join() === 'mid' && saved[2].posted_days === 0 && saved[2].sectors.join() === 'medical' && saved[2].sector === 'medical' && saved[2].companies.length === 2 && saved[2].companies[0].city === 'Austin' && saved[2].domains.join() === 'acmemfg.com,acmefoods.com' && saved[2].name === 'Medical & dental', JSON.stringify(saved && saved[2]));
   h = await html();
   step('the saved search appears in the list with a Run now button', /Medical &amp; dental/.test(h) && /Run now/.test(h));
+  await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's3', name: 'Today only', active: true, sector: 'it', sectors: ['it', 'medical'], titles: ['Software Engineer'], locations: ['Ohio'], sizes: [], posted_days: 0, keywords: [], domains: ['acmemfg.com'], companies: [{ name: 'Acme Manufacturing', domain: 'acmemfg.com', city: 'Austin', state: 'Texas' }] }, { id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.fdTab('searches'); });
+  h = await html();
+  step('a daily search saved at 0 days reads "posted today", and one with chosen companies says how many', /posted today/.test(h) && /only 1 chosen company/.test(h) && /posted in the last 7 days/.test(h));
+  await page.evaluate(() => window.fdEditSearch('s3'));
+  h = await html();
+  step('editing it brings back everything: both industries, the 0-day slider (not 14), and the company with its place', /fd-chip">IT &amp; software/.test(h) && /fd-chip">Medical &amp; dental/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /Acme Manufacturing<\/strong> · Austin, Texas/.test(h));
+  await page.evaluate(() => { window.fdCancelForm(); window.__calls.length = 0; window.fdToggleSearch('s3'); });
+  await page.waitForTimeout(150);
+  const tg = (await calls()).find(c => c[0] === 'PUT' && c[1] === '/finder/searches/s3');
+  step('pausing a search sends it back whole — still 0 days, still its companies and industries (a pause must not widen it)', tg && tg[2].posted_days === 0 && tg[2].active === false && tg[2].companies.length === 1 && tg[2].sectors.join() === 'it,medical' && tg[2].name === 'Today only', JSON.stringify(tg && tg[2]));
+  await page.waitForTimeout(150); await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.__calls.length = 0; window.fdEditSearch('s4'); });
+  h = await html();
+  step('a search saved before this change (websites only) still opens: its websites show as company chips', /fd-chip"><strong>oldco\.com<\/strong>/.test(h));
+  await page.evaluate(() => window.fdCancelForm());
   await page.evaluate(() => { window.__searches.push({ id: 's2', name: 'Second search', active: true, titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }); window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.__hold = true; window.fdRun('s1'); });
   await page.waitForTimeout(150);
   const btns = await page.evaluate(() => [...document.querySelectorAll('#content .fd-card button')].filter(b => /Run now|Running/.test(b.textContent)).map(b => b.textContent.trim() + (b.disabled ? '(off)' : '')));
@@ -314,12 +389,12 @@ try {
   await page.evaluate(() => window.fdTab('now'));
   h = await html();
   step('Find leads now is a search for right now: it says it is not saved and does not repeat, costs 1 credit, and asks for no name', /not saved and does not repeat/.test(h) && /1 Apollo credit/.test(h) && !(await page.evaluate(() => !!document.getElementById('fd-f-name'))) && /Find leads now<\/button>/.test(h));
-  await page.evaluate(() => { document.getElementById('fd-f-titles').value = 'Welder, CNC Machinist'; document.getElementById('fd-f-locations').value = 'Ohio'; window.__findHold = true; window.__calls.length = 0; });
+  await page.evaluate(() => { document.getElementById('fd-f-newtitle').value = 'Welder, CNC Machinist'; window.fdTitleAdd(); document.getElementById('fd-f-locations').value = 'Ohio'; const e = document.getElementById('fd-f-posted'); e.value = '0'; e.dispatchEvent(new Event('input', { bubbles: true })); window.__findHold = true; window.__calls.length = 0; });
   await page.evaluate(() => { window.fdFindNow(); });
   await page.waitForTimeout(250);
   cs = await calls();
   const fnd = cs.find(c => c[0] === 'POST' && c[1] === '/finder/find');
-  step('Find asks the server for a ONE-OFF search with what was typed — and never saves a search', fnd && fnd[2].titles.join() === 'Welder,CNC Machinist' && fnd[2].locations.join() === 'Ohio' && !cs.some(c => c[0] === 'POST' && c[1] === '/finder/searches'), JSON.stringify(fnd));
+  step('Find asks the server for a ONE-OFF search with what was typed — and never saves a search', fnd && fnd[2].titles.join() === 'Welder,CNC Machinist' && fnd[2].locations.join() === 'Ohio' && fnd[2].posted_days === 0 && !cs.some(c => c[0] === 'POST' && c[1] === '/finder/searches'), JSON.stringify(fnd));
   step('…then shows the new cards (it lands on Today\'s cards)', (await page.evaluate(() => window.STATE.finder.tab)) === 'cards');
   await page.evaluate(() => window.fdTab('now'));
   h = await html();

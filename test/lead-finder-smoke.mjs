@@ -19,18 +19,45 @@ step('names, titles and places are tidied: trimmed, split on commas / semicolons
 step('an unknown size is ignored; a known one is kept once', v.value.sizes.join() === 'mid');
 step('domains are reduced to the bare website and not repeated', v.value.domains.join() === 'acme.com', v.value.domains.join());
 step('a sector that is not one of ours becomes none', F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', sector: 'astrology' }).value.sector === null);
-step('posted-within is 7, 14 or 30 days — anything else becomes 14', F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', posted_days: 99 }).value.posted_days === 14 && F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', posted_days: 7 }).value.posted_days === 7);
+step('posted-within is any whole number of days from 0 to 30 — anything else (or nothing) becomes 14', [0, 1, 3, 7, 29, 30].every((d) => F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', posted_days: d }).value.posted_days === d) && [99, -1, 2.5, 'soon', null, undefined, ''].every((d) => F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', posted_days: d }).value.posted_days === 14));
+step('ZERO is a real choice ("today only"), never read as "not given" — the slider\'s whole left end', F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', posted_days: 0 }).value.posted_days === 0 && F.postedDays(0) === 0 && F.postedDays('0') === 0 && F.postedDays('') === 14);
+step('several industries can be kept (the first stays in the old single-industry field); unknown ones are dropped; an old one-industry search still works', (() => { const x = F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', sectors: ['it', 'medical', 'astrology', 'IT', 'it'] }).value; const y = F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', sector: 'legal' }).value; return x.sectors.join() === 'it,medical' && x.sector === 'it' && y.sectors.join() === 'legal' && y.sector === 'legal'; })());
+const co = F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', companies: [{ name: ' Acme Corp ', domain: 'https://www.Acme.com/careers', city: 'Austin', state: 'TX' }, { name: 'Acme again', domain: 'acme.com' }, { name: 'No site' }, 'widgets.com'], domains: 'oldco.com, widgets.com' }).value;
+step('companies chosen by name keep their name and place; the website is what is searched; repeats and ones with no website are dropped; websites that arrive only as websites get an entry too', co.companies.length === 3 && co.companies[0].name === 'Acme Corp' && co.companies[0].city === 'Austin' && co.domains.join() === 'acme.com,widgets.com,oldco.com' && co.companies.every((c) => co.domains.includes(c.domain)), JSON.stringify(co));
+step('the two lists can never disagree: every website has a company entry and every entry a website', F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', domains: 'a.com, b.com' }).value.companies.map((c) => c.domain).join() === 'a.com,b.com');
 step('a search with no name is refused, in words', /name/i.test(F.normalizeSearch({ titles: 'a', locations: 'b' }).error));
 step('a search with no job title is refused, in words', /job title/i.test(F.normalizeSearch({ name: 'x', locations: 'b' }).error));
 step('a search with no place is refused, in words', /place/i.test(F.normalizeSearch({ name: 'x', titles: 'a' }).error));
-step('there is a ceiling on titles, so one search cannot become a giant Apollo query', F.normalizeSearch({ name: 'x', locations: 'b', titles: Array.from({ length: 40 }, (_, i) => 'T' + i) }).value.titles.length === F.LIMITS.titles);
+step('there is a ceiling on titles (40), so one search cannot become a giant Apollo query', F.LIMITS.titles === 40 && F.normalizeSearch({ name: 'x', locations: 'b', titles: Array.from({ length: 60 }, (_, i) => 'T' + i) }).value.titles.length === 40);
+const ids = Object.keys(F.SECTORS);
+step('the industry list is wide (the owner: "very limited industry"): at least 35, each with its own label and plenty of titles to tick, none repeated within an industry', ids.length >= 35 && ids.every((i) => F.SECTORS[i].label && F.SECTORS[i].titles.length >= 9 && new Set(F.SECTORS[i].titles.map((t) => t.toLowerCase())).size === F.SECTORS[i].titles.length) && new Set(ids.map((i) => F.SECTORS[i].label)).size === ids.length);
+step('the owner\'s first eight industries are all still there, under the same ids', ['it', 'medical', 'manufacturing', 'construction', 'legal', 'accounting', 'property', 'engineering'].every((i) => F.SECTORS[i]));
 
 // ── turning it into Apollo's filter names ──────────────────────────────────
 console.log('\nApollo filters');
 const f = F.apolloFilters({ titles: ['CNC Machinist'], locations: ['Texas'], sizes: ['small', 'mid'], posted_days: 14, keywords: ['machining'], domains: ['acme.com'] }, NOW);
 step('titles, places and the date go under Apollo\'s own names, the date counted back from today', f.q_organization_job_titles.join() === 'CNC Machinist' && f.organization_job_locations.join() === 'Texas' && f.organization_job_posted_at_range.min === '2026-09-23');
+step('the posted-within date counts back whole days — 0 means today, 30 a month ago (a 0 must not become 14)', F.apolloFilters({ titles: ['a'], locations: ['b'], posted_days: 0 }, NOW).organization_job_posted_at_range.min === '2026-10-07' && F.apolloFilters({ titles: ['a'], locations: ['b'], posted_days: 30 }, NOW).organization_job_posted_at_range.min === '2026-09-07' && F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW).organization_job_posted_at_range.min === '2026-09-23');
 step('sizes become Apollo\'s employee ranges (small 11–50, mid 51–200 and 201–500)', f.organization_num_employees_ranges.join() === '11,50,51,200,201,500');
 step('keywords and domains are passed only when there are some', f.q_organization_keyword_tags.join() === 'machining' && f.q_organization_domains_list.join() === 'acme.com' && !('q_organization_keyword_tags' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)) && !('organization_num_employees_ranges' in F.apolloFilters({ titles: ['a'], locations: ['b'] }, NOW)));
+
+// ── finding a company by name ──────────────────────────────────────────────
+console.log('\nFinding a company by name');
+step('a typed website is recognised and reduced to the bare site; a company name is not mistaken for one', F.websiteFrom('https://www.Acme.com/careers') === 'acme.com' && F.websiteFrom('acme.co.uk') === 'acme.co.uk' && F.websiteFrom('Acme Corp') === '' && F.websiteFrom('Acme Inc.') === '' && F.websiteFrom('') === '');
+step('the lookup asks Apollo by company name', F.companyNameFilters('  Acme Mfg ').q_organization_name === 'Acme Mfg');
+const rows = [
+  { id: '1'.repeat(24), name: 'Acme Holdings', primary_domain: 'acmeholdings.com', estimated_num_employees: 900 },
+  { id: '2'.repeat(24), name: 'Acme', primary_domain: 'acme.com', organization_city: 'Austin', organization_state: 'Texas', estimated_num_employees: 40 },
+  { id: '3'.repeat(24), name: 'Acme Plumbing', primary_domain: 'acmeplumbing.com', organization_city: 'Waco', organization_state: 'Texas', estimated_num_employees: 12 },
+  { id: '4'.repeat(24), name: 'Acme No Site' },
+  { id: '5'.repeat(24), name: 'Acme', primary_domain: 'acme.com' },
+  { id: '6'.repeat(24), name: 'The Big Acme Co', primary_domain: 'bigacme.com', organization_city: 'Dallas', organization_state: 'Texas' },
+];
+const sug = F.rankCompanySuggestions(rows, 'acme');
+step('suggestions put the exact name first, then names that start with it, then the rest; a company with a known place before one without', sug.map((x) => x.domain).join() === 'acme.com,acmeplumbing.com,acmeholdings.com,bigacme.com', sug.map((x) => x.domain).join());
+step('each suggestion carries Apollo\'s own name, place, website and size — nothing invented', sug[0].name === 'Acme' && sug[0].city === 'Austin' && sug[0].state === 'Texas' && sug[0].employees === 40 && sug[0].apollo_org_id === '2'.repeat(24));
+step('a company with no website is left out (the website is what the search is narrowed by) and the same website is listed once', !sug.some((x) => /No Site/.test(x.name)) && sug.filter((x) => x.domain === 'acme.com').length === 1);
+step('at most six are offered; nothing in, nothing out', F.rankCompanySuggestions(Array.from({ length: 20 }, (_, i) => ({ id: String(i), name: 'Acme ' + i, primary_domain: 'a' + i + '.com' })), 'acme').length === 6 && F.rankCompanySuggestions(null, 'x').length === 0);
 
 // ── reading a company ──────────────────────────────────────────────────────
 console.log('\nReading a company');

@@ -329,3 +329,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-07 (Session 42) — migration 058, the Lead Finder tables (R-157, D-0092) — NOT YET APPLIED
 - `migrations/058_lead_finder.sql`: `finder_searches` (personal saved searches) and `finder_cards` (suggestions: new|waiting|rejected|accepted; unique per (org, person, company_key); waiting ⇔ wait_until). Both tenant tables (in `models/tables.js`), RLS service-role policy, default org_id. A rejected card keeps only a small mark (payload cleared). Additive, idempotent. APPLY BEFORE the code merges, with the owner's fresh go-ahead. `test/models-smoke.mjs` now expects 48 tenant tables.
+
+## 2026-10-08 (Session 42) — migration 059, Lead Finder form choices (D-0098) — NOT YET APPLIED
+- `migrations/059_finder_search_choices.sql`: drops and re-adds `finder_searches_posted_days_check` as `BETWEEN 0 AND 30` (it was `IN (7,14,30)`), adds `sectors JSONB NOT NULL DEFAULT '[]'` and `companies JSONB NOT NULL DEFAULT '[]'`. Additive/idempotent; every existing row already satisfies 0–30. Tiny table, so no long lock; if the Supabase tool times out use `execute_sql` in pieces with `SET lock_timeout` (as for 058). APPLY BEFORE the code merges (the new save writes the two columns), with the owner's fresh go-ahead.
