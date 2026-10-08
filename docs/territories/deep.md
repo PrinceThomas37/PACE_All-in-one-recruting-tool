@@ -338,3 +338,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-08 (Session 42) — migration 061 written, NOT applied (D-0104)
 - `migrations/061_signature_logos_bucket.sql`: a PUBLIC storage bucket `signature-logos` (200 KB, image types only). Not applied — needs the owner's go-ahead; the code degrades (upload answers 503, the mailbox saves without a logo). Per-person sending days/hours and setup-task state live in `app_settings` (`u_<id>_send_*`) and `reminders` (type `setup`) — no new table. Next migration: 062.
+
+## 2026-10-08 (Session 42) — migration 061 APPLIED (D-0105)
+- Owner's go-ahead given; bucket `signature-logos` (public, 204800 bytes, png/jpeg/gif/webp) created and read back. `candidate-docs` stays private. No storage policies added (service key only). Next migration: 062.
