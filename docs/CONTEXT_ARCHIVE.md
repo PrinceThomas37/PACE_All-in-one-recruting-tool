@@ -6646,3 +6646,6 @@ Owner paused: "update the context window, I will resume in the next chat." `CONT
 
 ### SESSION 43, custom domain (bought at GoDaddy) — dev branch
 Owner bought a domain and asked for help setting it up. Found what points at the Render address: the frontend's `API_URL` (fixed — same-origin on any non-local host), `PUBLIC_BASE_URL`/`APP_BASE_URL` (tracking pixel, apply links), the Microsoft/Google redirect URIs (env + the Azure/Google consoles), and the heartbeat's `APP_BASE_URL`. No migration, no server code. The DNS records, Render settings and env changes are owner-side/Render-side and wait for the domain name and a go-ahead. Old emails keep their pixel links on the Render address, so that address must stay enabled.
+
+### SESSION 43, custom domain is live — renewal noted
+`app.paceconsultant.in` is verified in Render (certificate issued) and the owner has tested sign-in on it: "it's working fine". The Render address stays enabled. Domain renewal date (GoDaddy, paceconsultant.in): **8 October 2027**. Renewal price not yet checked. Still open: the mailbox-connect test on the new address, PR #316 (draft, not merged), and the choice of a company mail host (SPF/DKIM records wait on that choice).
