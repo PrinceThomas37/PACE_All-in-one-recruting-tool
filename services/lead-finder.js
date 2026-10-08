@@ -17,18 +17,51 @@
 // ============================================================================
 const rule = require('./lead-decision');
 
-// The owner's sectors (7 Oct 2026): "IT … medical, manufacturing, construction, legal, accounting, property
-// management, engineering and all; big, small and medium companies". Picking one FILLS IN typical job titles;
-// the person edits them.
+// The owner's sectors. First list (7 Oct 2026): "IT … medical, manufacturing, construction, legal, accounting, property
+// management, engineering and all; big, small and medium companies". Widened on 8 Oct after first live use ("we have very
+// limited industry … the kind of leads that are created are very limited"): about forty. A sector is a SHORTCUT, not a filter
+// — it offers typical job titles to tick (the search itself runs on the titles, where, size and keywords). A person can pick
+// several sectors, tick any of their titles or all of them, and type titles that are on no list.
 const SECTORS = {
-  it: { label: 'IT', titles: ['Software Engineer', 'Data Analyst', 'Systems Administrator', 'QA Engineer', 'Network Engineer', 'DevOps Engineer'] },
-  medical: { label: 'Medical', titles: ['Registered Nurse', 'Medical Assistant', 'Medical Billing Specialist', 'Dental Hygienist', 'Physical Therapist', 'Patient Care Coordinator'] },
-  manufacturing: { label: 'Manufacturing', titles: ['CNC Machinist', 'Production Supervisor', 'Quality Inspector', 'Maintenance Technician', 'Welder', 'Industrial Engineer'] },
-  construction: { label: 'Construction', titles: ['Project Manager', 'Site Superintendent', 'Estimator', 'Safety Coordinator', 'Project Engineer', 'Construction Manager'] },
-  legal: { label: 'Legal', titles: ['Paralegal', 'Legal Assistant', 'Contracts Administrator', 'Legal Secretary', 'Compliance Specialist', 'Litigation Support'] },
-  accounting: { label: 'Accounting', titles: ['Staff Accountant', 'Accounts Payable Clerk', 'Controller', 'Payroll Specialist', 'Accounts Receivable Specialist', 'Senior Accountant'] },
-  property: { label: 'Property management', titles: ['Property Manager', 'Leasing Agent', 'Maintenance Supervisor', 'Assistant Property Manager', 'Community Manager', 'Leasing Consultant'] },
-  engineering: { label: 'Engineering', titles: ['Mechanical Engineer', 'Civil Engineer', 'Electrical Engineer', 'Project Engineer', 'Design Engineer', 'Manufacturing Engineer'] },
+  it: { label: 'IT & software', titles: ['Software Engineer', 'Data Analyst', 'Systems Administrator', 'QA Engineer', 'Network Engineer', 'DevOps Engineer', 'Help Desk Technician', 'IT Support Specialist', 'Database Administrator', 'Cybersecurity Analyst', 'Business Analyst', 'Project Manager', 'Web Developer', 'Cloud Engineer'] },
+  medical: { label: 'Medical & healthcare', titles: ['Registered Nurse', 'Medical Assistant', 'Medical Billing Specialist', 'Dental Hygienist', 'Physical Therapist', 'Patient Care Coordinator', 'Licensed Practical Nurse', 'Nurse Practitioner', 'Medical Receptionist', 'Radiology Technician', 'Phlebotomist', 'Medical Coder', 'Respiratory Therapist', 'Surgical Technologist'] },
+  manufacturing: { label: 'Manufacturing', titles: ['CNC Machinist', 'Production Supervisor', 'Quality Inspector', 'Maintenance Technician', 'Welder', 'Industrial Engineer', 'Machine Operator', 'Assembler', 'Production Manager', 'Quality Engineer', 'Plant Manager', 'Tool and Die Maker', 'Process Engineer', 'Manufacturing Engineer'] },
+  construction: { label: 'Construction', titles: ['Project Manager', 'Site Superintendent', 'Estimator', 'Safety Coordinator', 'Project Engineer', 'Construction Manager', 'Foreman', 'Carpenter', 'Heavy Equipment Operator', 'Project Coordinator', 'Civil Inspector', 'Scheduler', 'Laborer'] },
+  legal: { label: 'Legal', titles: ['Paralegal', 'Legal Assistant', 'Contracts Administrator', 'Legal Secretary', 'Compliance Specialist', 'Litigation Support', 'Associate Attorney', 'Legal Counsel', 'Court Clerk', 'Legal Nurse Consultant', 'Law Clerk', 'Contract Manager'] },
+  accounting: { label: 'Accounting', titles: ['Staff Accountant', 'Accounts Payable Clerk', 'Controller', 'Payroll Specialist', 'Accounts Receivable Specialist', 'Senior Accountant', 'Bookkeeper', 'Tax Accountant', 'Cost Accountant', 'Auditor', 'Accounting Manager', 'Billing Specialist', 'Financial Analyst'] },
+  property: { label: 'Property management', titles: ['Property Manager', 'Leasing Agent', 'Maintenance Supervisor', 'Assistant Property Manager', 'Community Manager', 'Leasing Consultant', 'Maintenance Technician', 'Regional Property Manager', 'Resident Services Coordinator', 'Facilities Manager', 'Property Accountant'] },
+  engineering: { label: 'Engineering', titles: ['Mechanical Engineer', 'Civil Engineer', 'Electrical Engineer', 'Project Engineer', 'Design Engineer', 'Manufacturing Engineer', 'Structural Engineer', 'Controls Engineer', 'CAD Designer', 'Field Engineer', 'Environmental Engineer', 'Systems Engineer', 'Test Engineer'] },
+  banking: { label: 'Banking & lending', titles: ['Bank Teller', 'Loan Officer', 'Loan Processor', 'Mortgage Underwriter', 'Credit Analyst', 'Branch Manager', 'Relationship Manager', 'Personal Banker', 'Collections Specialist', 'Financial Advisor', 'Compliance Analyst', 'Fraud Analyst'] },
+  insurance: { label: 'Insurance', titles: ['Claims Adjuster', 'Underwriter', 'Insurance Agent', 'Account Manager', 'Claims Examiner', 'Customer Service Representative', 'Policy Processor', 'Risk Analyst', 'Actuarial Analyst', 'Benefits Specialist', 'Insurance Sales Representative'] },
+  realestate: { label: 'Real estate & mortgage', titles: ['Real Estate Agent', 'Loan Officer', 'Mortgage Processor', 'Closer', 'Title Examiner', 'Transaction Coordinator', 'Escrow Officer', 'Appraiser', 'Leasing Manager', 'Real Estate Analyst', 'Acquisitions Associate'] },
+  retail: { label: 'Retail & e-commerce', titles: ['Store Manager', 'Assistant Store Manager', 'Sales Associate', 'Merchandiser', 'Visual Merchandiser', 'Buyer', 'Inventory Specialist', 'Cashier', 'Department Manager', 'E-commerce Manager', 'Loss Prevention Specialist', 'District Manager'] },
+  hospitality: { label: 'Hotels & restaurants', titles: ['General Manager', 'Restaurant Manager', 'Chef', 'Line Cook', 'Front Desk Agent', 'Housekeeping Supervisor', 'Banquet Manager', 'Food and Beverage Manager', 'Event Coordinator', 'Server', 'Sous Chef', 'Revenue Manager'] },
+  logistics: { label: 'Transportation & logistics', titles: ['Dispatcher', 'CDL Truck Driver', 'Logistics Coordinator', 'Freight Broker', 'Fleet Manager', 'Transportation Manager', 'Supply Chain Analyst', 'Customs Broker', 'Route Planner', 'Operations Manager', 'Procurement Specialist', 'Delivery Driver'] },
+  warehouse: { label: 'Warehouse & distribution', titles: ['Warehouse Associate', 'Forklift Operator', 'Warehouse Supervisor', 'Shipping and Receiving Clerk', 'Inventory Control Specialist', 'Order Picker', 'Distribution Manager', 'Material Handler', 'Logistics Supervisor', 'Warehouse Manager', 'Packer'] },
+  energy: { label: 'Energy & utilities', titles: ['Power Plant Operator', 'Lineman', 'Electrical Technician', 'Energy Analyst', 'Utility Locator', 'Solar Installer', 'Field Technician', 'Substation Technician', 'Project Manager', 'Meter Technician', 'Wind Turbine Technician', 'Reliability Engineer'] },
+  oilgas: { label: 'Oil & gas', titles: ['Roustabout', 'Drilling Engineer', 'Petroleum Engineer', 'Pipeline Technician', 'Field Operator', 'HSE Coordinator', 'Production Operator', 'Wireline Operator', 'Completions Engineer', 'Landman', 'Reservoir Engineer', 'Mud Engineer'] },
+  education: { label: 'Education', titles: ['Teacher', 'Substitute Teacher', 'Teaching Assistant', 'School Counselor', 'Special Education Teacher', 'Admissions Counselor', 'Instructional Designer', 'Registrar', 'Academic Advisor', 'Principal', 'Tutor', 'Curriculum Coordinator'] },
+  government: { label: 'Government & nonprofit', titles: ['Program Manager', 'Grants Manager', 'Case Manager', 'Development Coordinator', 'Policy Analyst', 'Administrative Assistant', 'Community Outreach Coordinator', 'Social Worker', 'Executive Director', 'Volunteer Coordinator', 'Fundraiser', 'Contracts Specialist'] },
+  telecom: { label: 'Telecommunications', titles: ['Network Technician', 'Cable Installer', 'Telecom Engineer', 'Field Technician', 'RF Engineer', 'Fiber Splicer', 'Network Operations Analyst', 'Tower Climber', 'Sales Engineer', 'Customer Support Representative', 'Project Coordinator'] },
+  automotive: { label: 'Automotive', titles: ['Automotive Technician', 'Service Advisor', 'Service Manager', 'Parts Specialist', 'Body Repair Technician', 'Sales Consultant', 'Diesel Mechanic', 'Painter', 'Detailer', 'Finance Manager', 'Shop Foreman', 'Collision Estimator'] },
+  aerospace: { label: 'Aerospace & defense', titles: ['Aircraft Mechanic', 'Avionics Technician', 'Aerospace Engineer', 'Quality Assurance Inspector', 'Systems Engineer', 'Program Manager', 'Sheet Metal Mechanic', 'Composite Technician', 'Test Technician', 'Supply Chain Specialist', 'Security Analyst'] },
+  pharma: { label: 'Pharma & biotech', titles: ['Clinical Research Associate', 'Laboratory Technician', 'Quality Control Analyst', 'Regulatory Affairs Specialist', 'Research Scientist', 'Process Development Scientist', 'Manufacturing Associate', 'Clinical Data Manager', 'Pharmacist', 'Pharmacy Technician', 'Validation Engineer', 'Quality Assurance Specialist'] },
+  food: { label: 'Food & beverage production', titles: ['Production Worker', 'Food Safety Technician', 'Quality Assurance Technician', 'Packaging Operator', 'Plant Supervisor', 'Maintenance Mechanic', 'Food Scientist', 'Line Lead', 'Sanitation Worker', 'Batch Operator', 'Production Planner'] },
+  agriculture: { label: 'Agriculture', titles: ['Farm Manager', 'Agronomist', 'Equipment Operator', 'Irrigation Technician', 'Crop Advisor', 'Livestock Technician', 'Greenhouse Grower', 'Farm Laborer', 'Agricultural Technician', 'Grain Handler'] },
+  marketing: { label: 'Marketing & advertising', titles: ['Marketing Manager', 'Digital Marketing Specialist', 'Content Writer', 'Graphic Designer', 'Social Media Manager', 'SEO Specialist', 'Account Executive', 'Brand Manager', 'Copywriter', 'Marketing Coordinator', 'Media Buyer', 'Email Marketing Specialist'] },
+  admin: { label: 'Office & administration', titles: ['Administrative Assistant', 'Executive Assistant', 'Receptionist', 'Office Manager', 'Data Entry Clerk', 'Office Coordinator', 'Scheduler', 'Records Clerk', 'Operations Coordinator', 'Document Controller', 'Mail Clerk'] },
+  hr: { label: 'Human resources', titles: ['HR Generalist', 'HR Manager', 'Recruiter', 'Talent Acquisition Specialist', 'Benefits Administrator', 'HR Coordinator', 'Payroll Administrator', 'Employee Relations Specialist', 'Training Coordinator', 'HR Business Partner', 'Onboarding Specialist'] },
+  customer: { label: 'Customer service', titles: ['Customer Service Representative', 'Call Center Agent', 'Customer Success Manager', 'Technical Support Specialist', 'Client Services Coordinator', 'Support Team Lead', 'Inside Sales Representative', 'Order Entry Clerk', 'Customer Care Specialist', 'Call Center Supervisor'] },
+  sales: { label: 'Sales & business development', titles: ['Sales Representative', 'Account Executive', 'Business Development Manager', 'Outside Sales Representative', 'Inside Sales Representative', 'Sales Manager', 'Territory Manager', 'Sales Engineer', 'Account Manager', 'Regional Sales Manager', 'Lead Generation Specialist'] },
+  security: { label: 'Security services', titles: ['Security Officer', 'Security Guard', 'Loss Prevention Officer', 'Security Supervisor', 'Patrol Officer', 'Dispatcher', 'Alarm Technician', 'Security Manager', 'Surveillance Operator', 'Event Security Officer'] },
+  environmental: { label: 'Environmental services', titles: ['Environmental Scientist', 'Environmental Health and Safety Specialist', 'Field Technician', 'Hazardous Waste Technician', 'Wastewater Operator', 'Remediation Technician', 'Geologist', 'Compliance Specialist', 'Water Treatment Operator', 'Industrial Hygienist'] },
+  trades: { label: 'Skilled trades', titles: ['Electrician', 'Plumber', 'HVAC Technician', 'Pipefitter', 'Journeyman Electrician', 'Welder', 'Carpenter', 'Millwright', 'Sheet Metal Worker', 'Mason', 'Roofer', 'Painter', 'Apprentice Electrician', 'Service Technician'] },
+  media: { label: 'Media & publishing', titles: ['Editor', 'Reporter', 'Producer', 'Video Editor', 'Graphic Designer', 'Content Strategist', 'Photographer', 'Production Assistant', 'Copy Editor', 'Social Media Producer', 'Broadcast Engineer'] },
+  homecare: { label: 'Home health & senior care', titles: ['Home Health Aide', 'Certified Nursing Assistant', 'Caregiver', 'Personal Care Aide', 'Registered Nurse', 'Care Coordinator', 'Activities Director', 'Licensed Practical Nurse', 'Hospice Nurse', 'Administrator', 'Medication Aide', 'Physical Therapy Assistant'] },
+  dental: { label: 'Dental & vision', titles: ['Dental Assistant', 'Dental Hygienist', 'Dental Receptionist', 'Dentist', 'Optician', 'Optometric Technician', 'Dental Office Manager', 'Treatment Coordinator', 'Orthodontic Assistant', 'Dental Biller'] },
+  veterinary: { label: 'Veterinary & animal care', titles: ['Veterinary Technician', 'Veterinary Assistant', 'Veterinarian', 'Kennel Attendant', 'Veterinary Receptionist', 'Practice Manager', 'Groomer', 'Animal Care Technician', 'Client Service Representative'] },
+  facilities: { label: 'Cleaning & facilities', titles: ['Janitor', 'Custodian', 'Facilities Technician', 'Building Maintenance Worker', 'Housekeeper', 'Groundskeeper', 'Facilities Manager', 'Porter', 'Cleaning Supervisor', 'Landscaper', 'Maintenance Mechanic'] },
+  consulting: { label: 'Consulting & professional services', titles: ['Management Consultant', 'Business Analyst', 'Project Manager', 'Senior Consultant', 'Operations Analyst', 'Strategy Analyst', 'Associate Consultant', 'Program Manager', 'Implementation Consultant', 'Research Analyst'] },
 };
 
 // Size bands as Apollo spells them (employee ranges).
@@ -37,8 +70,9 @@ const SIZE_BANDS = [
   { id: 'mid', label: 'Mid 51–500', ranges: ['51,200', '201,500'] },
   { id: 'large', label: 'Large 501+', ranges: ['501,1000', '1001,2000', '2001,5000', '5001,10000'] },
 ];
-const POSTED_CHOICES = [7, 14, 30];
-const LIMITS = { name: 80, titles: 15, title: 80, locations: 8, location: 80, keywords: 8, keyword: 40, domains: 30 };
+// How recent the postings must be: any whole number of days from 0 (today) to 30 (the owner's slider, 8 Oct 2026).
+const POSTED_RANGE = { min: 0, max: 30, def: 14 };
+const LIMITS = { name: 80, titles: 40, title: 80, locations: 8, location: 80, keywords: 8, keyword: 40, domains: 30, sectors: 8 };
 
 const txt = (v) => String(v == null ? '' : v).trim();
 function uniqueList(v, max, each) {
@@ -52,6 +86,34 @@ function uniqueList(v, max, each) {
 }
 const isoDate = (d) => new Date(d).toISOString().slice(0, 10);
 
+/** Days back for the posted-within slider. 0 is a real answer ("today only"), so it is never read as "not given". */
+function postedDays(v) {
+  const n = Number(v);
+  return v !== '' && v != null && Number.isInteger(n) && n >= POSTED_RANGE.min && n <= POSTED_RANGE.max ? n : POSTED_RANGE.def;
+}
+
+/**
+ * The companies a person asked for by name, in one shape: { name, domain, city, state }. Accepts objects, or bare
+ * websites; the website is what Apollo is searched by, so an entry without a usable one is dropped. Any website that
+ * arrives only in `domains` (an older saved search, a caller that sends websites alone) gets an entry too, so the two
+ * lists never disagree.
+ */
+function normalizeCompanies(companies, domains) {
+  const out = [], seen = new Set();
+  const add = (name, domain, city, state) => {
+    const d = rule.normalizeDomain(domain);
+    if (!d || seen.has(d) || out.length >= LIMITS.domains) return;
+    seen.add(d);
+    out.push({ name: txt(name).slice(0, 120) || d, domain: d, city: txt(city).slice(0, 60), state: txt(state).slice(0, 60) });
+  };
+  (Array.isArray(companies) ? companies : []).forEach((c) => {
+    if (c && typeof c === 'object') add(c.name, c.domain || c.website, c.city, c.state);
+    else add('', c, '', '');
+  });
+  uniqueList(domains, LIMITS.domains, 120).forEach((d) => add('', d, '', ''));
+  return out;
+}
+
 /** A saved search, checked. { ok:true, value } or { ok:false, error } in the person's words. */
 function normalizeSearch(input) {
   const i = input || {};
@@ -62,16 +124,18 @@ function normalizeSearch(input) {
   const locations = uniqueList(i.locations, LIMITS.locations, LIMITS.location);
   if (!locations.length) return { ok: false, error: 'Add at least one place where the job is (a city, a state, or "remote").' };
   const sizes = uniqueList(i.sizes, 3, 10).map((s) => s.toLowerCase()).filter((s) => SIZE_BANDS.some((b) => b.id === s));
-  const posted = Number(i.posted_days);
-  const sector = Object.prototype.hasOwnProperty.call(SECTORS, i.sector) ? i.sector : null;
-  const domains = uniqueList(i.domains, LIMITS.domains, 120).map(rule.normalizeDomain).filter(Boolean);
+  // Several industries may be picked; `sector` (the first) stays for anything that still reads the one-industry column.
+  const known = (id) => Object.prototype.hasOwnProperty.call(SECTORS, id);
+  const sectors = uniqueList(i.sectors, LIMITS.sectors, 30).filter(known);
+  if (!sectors.length && known(i.sector)) sectors.push(i.sector);
+  const companies = normalizeCompanies(i.companies, i.domains);
   return {
     ok: true,
     value: {
-      name, sector, titles, locations, sizes,
-      posted_days: POSTED_CHOICES.includes(posted) ? posted : 14,
+      name, sector: sectors[0] || null, sectors, titles, locations, sizes,
+      posted_days: postedDays(i.posted_days),
       keywords: uniqueList(i.keywords, LIMITS.keywords, LIMITS.keyword),
-      domains: Array.from(new Set(domains)),
+      companies, domains: companies.map((c) => c.domain),
       active: i.active !== false,
     },
   };
@@ -83,7 +147,7 @@ function apolloFilters(search, now) {
   const f = {
     q_organization_job_titles: s.titles || [],
     organization_job_locations: s.locations || [],
-    organization_job_posted_at_range: { min: isoDate(new Date(new Date(now).getTime() - (s.posted_days || 14) * 86400000)) },
+    organization_job_posted_at_range: { min: isoDate(new Date(new Date(now).getTime() - (s.posted_days == null ? POSTED_RANGE.def : s.posted_days) * 86400000)) },
   };
   const ranges = (s.sizes || []).reduce((a, id) => a.concat((SIZE_BANDS.find((b) => b.id === id) || { ranges: [] }).ranges), []);
   if (ranges.length) f.organization_num_employees_ranges = ranges;
@@ -120,6 +184,39 @@ function normalizeOrg(o) {
     naics: Array.isArray(r.naics_codes) ? r.naics_codes.map(String) : [],
     founded_year: num(r.founded_year),
   };
+}
+
+/** Did the person type a website (acme.com, https://www.acme.com/careers) rather than a company name? Then no lookup is needed. */
+function websiteFrom(text) {
+  const t = txt(text);
+  if (!t || /\s/.test(t) || !/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i.test(t)) return '';
+  return rule.normalizeDomain(t);
+}
+
+/** Apollo's filter for "which company is this called?" (partial name match; docs.apollo.io "Organization Search"). */
+function companyNameFilters(name) { return { q_organization_name: txt(name).slice(0, 80) }; }
+
+const nameKey = (v) => txt(v).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Apollo's answer to "which company is called …?" turned into a short pick-list: the company's own name, where it is,
+ * its website, roughly how big. Best match first (the exact name, then names that start with what was typed, then the
+ * rest; a company with a known place before one without). A company with no website is left out — the website is what
+ * the search is narrowed by, so it could not be used. Nothing is guessed: every field is Apollo's own.
+ */
+function rankCompanySuggestions(rows, typed, max = 6) {
+  const q = nameKey(typed), seen = new Set();
+  const list = [];
+  (Array.isArray(rows) ? rows : []).forEach((raw) => {
+    const o = normalizeOrg(raw);
+    if (!o.name || !o.domain || seen.has(o.domain)) return;
+    seen.add(o.domain);
+    const k = nameKey(o.name);
+    const tier = k === q ? 0 : (k.startsWith(q) ? 1 : (k.includes(q) ? 2 : 3));
+    list.push({ tier, hasPlace: o.city || o.state ? 0 : 1, o });
+  });
+  list.sort((a, b) => a.tier - b.tier || a.hasPlace - b.hasPlace || (b.o.employees || 0) - (a.o.employees || 0));
+  return list.slice(0, max).map(({ o }) => ({ name: o.name, domain: o.domain, city: o.city, state: o.state, country: o.country, employees: o.employees, industry: o.industry, apollo_org_id: o.apollo_org_id }));
 }
 
 // A staffing or recruiting firm is a competitor, not a client (the owner's choice, and lead-ingest.js says the same).
@@ -250,8 +347,8 @@ function suggestMailbox(accounts, sentToday) {
 }
 
 module.exports = {
-  SECTORS, SIZE_BANDS, POSTED_CHOICES, LIMITS,
-  normalizeSearch, apolloFilters, normalizeOrg, isStaffingFirm, scoreOrg,
+  SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS,
+  normalizeSearch, normalizeCompanies, postedDays, apolloFilters, websiteFrom, companyNameFilters, rankCompanySuggestions, normalizeOrg, isStaffingFirm, scoreOrg,
   normalizePostings, postingSignals, factsLines, sourceOf,
   dayOf, creditKey, revealKey, accessKey, readAccess, dailyFor, waitUntil, isDue, suggestMailbox,
 };

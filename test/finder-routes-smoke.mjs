@@ -155,7 +155,7 @@ step('a person nobody has switched on is told "not enabled" (200, nothing else)'
 r = await call('/finder/searches', 'get', 'ra1');
 step('…and every other finder route refuses them with a plain 403', r.code === 403 && /not switched on/.test(r.out.error));
 r = await call('/finder/access', 'get', 'adm');
-step('an admin is always on (they set it up), with the choices to offer: the owner\'s eight sectors and three sizes', r.out.enabled && r.out.sectors.length === 8 && r.out.sizes.length === 3 && r.out.is_admin);
+step('an admin is always on (they set it up), with the choices to offer: the industries and three sizes', r.out.enabled && r.out.sectors.length >= 35 && r.out.sizes.length === 3 && r.out.is_admin);
 r = await call('/finder/admin/users/:id', 'put', 'ra1', { enabled: true }, { id: 'ra1' });
 step('only an admin can switch people on (403 otherwise)', r.code === 403);
 r = await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true, daily: 40 }, { id: 'ra1' });
@@ -502,6 +502,62 @@ step('with no choice made, the lead goes to the mailbox that has sent the fewest
 step('the lead is the person\'s own, assigned, in that mailbox', st.tables.jobs.find((j) => j.id === r.out.lead_id).assigned_to_bd === 'bd1' && st.tables.jobs.find((j) => j.id === r.out.lead_id).stage === 'Assigned');
 
 // ═════ 8. what is wrong with the key, in words ═════════════════════════════════════════════════════════════
+console.log('\nThe form\'s choices and the company lookup');
+({ st, apollo, router, call } = boot());
+await resetCredits(st, 300);
+NOW = new Date('2026-10-22T12:00:00Z');
+await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true }, { id: 'ra1' });
+r = await call('/finder/access', 'get', 'ra1');
+step('the access answer offers the wide industry list (35+, each with titles) and the slider\'s range 0–30', r.out.sectors.length >= 35 && r.out.sectors.every((x) => x.titles.length >= 9) && r.out.posted.min === 0 && r.out.posted.max === 30 && r.out.posted.def === 14, JSON.stringify(r.out.posted));
+r = await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Today only', posted_days: 0, sectors: ['manufacturing', 'trades'], companies: [{ name: 'Acme Manufacturing', domain: 'https://www.acmemfg.com/x', city: 'Austin', state: 'Texas' }] }));
+step('a search saved at 0 days (today only) is kept as 0 — not 14 — with both industries and the chosen company', r.code === 201 && r.out.posted_days === 0 && r.out.sectors.join() === 'manufacturing,trades' && r.out.sector === 'manufacturing' && r.out.companies[0].name === 'Acme Manufacturing' && r.out.companies[0].city === 'Austin' && r.out.domains.join() === 'acmemfg.com', JSON.stringify(r.out));
+const todayId = r.out.id;
+r = await call('/finder/searches/:id', 'put', 'ra1', Object.assign({}, SEARCH, { name: 'Three days', posted_days: 3 }), { id: todayId });
+step('…and it can be changed to any day in between (3)', r.code === 200 && r.out.posted_days === 3);
+r = await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Too far', posted_days: 45 }));
+step('a number outside 0–30 does not break the save: it becomes the 14-day default', r.code === 201 && r.out.posted_days === 14);
+apollo.calls.length = 0; apollo.orgs = []; const credits = () => Number((st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)) || { value: 0 }).value);
+const credits0 = credits();
+const tick = () => { NOW = new Date(NOW.getTime() + 5000); };
+r = await call('/finder/companies/suggest', 'post', 'ra2', { q: 'acme' });
+step('a person who is not switched on cannot look companies up (403, no Apollo call)', r.code === 403 && apollo.calls.length === 0);
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'a' });
+step('one letter is refused in words, before anything is spent', r.code === 400 && /two letters/.test(r.out.error) && apollo.calls.length === 0);
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'https://www.Acme.com/careers' });
+step('a pasted website is added without asking Apollo and without a credit', r.code === 200 && r.out.suggestions.length === 1 && r.out.suggestions[0].domain === 'acme.com' && r.out.suggestions[0].website_only === true && r.out.used_credit === false && apollo.calls.length === 0 && credits() === credits0);
+const NAMED = [
+  { id: 'a'.repeat(24), name: 'Acme Holdings', primary_domain: 'acmeholdings.com', estimated_num_employees: 900 },
+  { id: 'b'.repeat(24), name: 'Acme', primary_domain: 'acme.com', organization_city: 'Austin', organization_state: 'Texas', estimated_num_employees: 40 },
+  { id: 'c'.repeat(24), name: 'Acme No Site' },
+];
+apollo.orgs = NAMED;
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: ' acme ' });
+const sc = apollo.calls.filter((c) => c[0] === 'orgs');
+step('a company NAME is looked up in Apollo by name, one page of ten, and the real matches come back best first with where they are', r.code === 200 && sc.length === 1 && sc[0][1].filters.q_organization_name === 'acme' && sc[0][1].perPage === 10 && r.out.suggestions.map((x) => x.domain).join() === 'acme.com,acmeholdings.com' && r.out.suggestions[0].city === 'Austin', JSON.stringify(r.out.suggestions));
+step('…it cost ONE credit, counted in the organisation\'s daily meter, and the answer says so', r.out.used_credit === true && credits() === credits0 + 1 && r.out.credits.used === credits0 + 1);
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme' });
+step('a second press in the same instant does NOT call Apollo again (a double-click is one credit)', r.out.skipped === true && apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && credits() === credits0 + 1);
+tick(); apollo.orgs = [];
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'zzzz nothing' });
+step('a name Apollo does not know says so in words and costs nothing', r.code === 200 && r.out.suggestions.length === 0 && /no company with that name/.test(r.out.note) && r.out.used_credit === false && credits() === credits0 + 1);
+tick(); apollo.orgs = [NAMED[2]];
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme no' });
+step('companies found but none with a website say so (and the credit Apollo charged is counted)', r.out.suggestions.length === 0 && /none has a website/.test(r.out.note) && credits() === credits0 + 2);
+tick(); await resetCredits(st, credits());
+const callsBeforeLimit = apollo.calls.length;
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme' });
+step('when the organisation\'s daily credit limit is used up, no lookup is made and the person is told — they can still paste a website', r.code === 200 && r.out.suggestions.length === 0 && /credit limit/.test(r.out.note) && /paste/.test(r.out.note) && apollo.calls.length === callsBeforeLimit);
+await resetCredits(st, 300); tick();
+apollo.error = 'This Apollo plan or key does not allow company search.';
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme' });
+step('when Apollo refuses, the person gets Apollo\'s reason (502) and no credit is counted', r.code === 502 && /does not allow company search/.test(r.out.error) && credits() === credits0 + 2);
+apollo.error = null; tick();
+const keyRow = st.tables.app_settings.find((x) => x.key === 'int_apollo_api_key'); st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== 'int_apollo_api_key');
+const callsBeforeNoKey = apollo.calls.length;
+r = await call('/finder/companies/suggest', 'post', 'ra1', { q: 'acme' });
+step('with no Apollo key it says an admin must add one, says a website can still be pasted, and calls nothing', r.code === 200 && /Admin → Integrations/.test(r.out.note) && /paste/.test(r.out.note) && apollo.calls.length === callsBeforeNoKey);
+st.tables.app_settings.push(keyRow);
+
 console.log('\nDiagnose');
 ({ st, apollo, router, call } = boot());
 await resetCredits(st, 300);
