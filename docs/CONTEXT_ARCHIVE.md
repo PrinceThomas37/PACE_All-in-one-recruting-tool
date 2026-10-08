@@ -6640,3 +6640,6 @@ Owner: "build this — daily number with admin"; first task at login is mailbox 
 
 ### SESSION 42, the logo bucket (D-0105) — migration 061 applied
 Owner: "Go ahead with logo storage bucket." Checked `storage.buckets` first (only `candidate-docs`), applied 061 through the Supabase tools, read it back (public, 200 KB, four image types). Merged code needed no change. Honest limit: not exercised with a real upload from the live app yet.
+
+### SESSION 42, closing — handoff written (8 Oct)
+Owner paused: "update the context window, I will resume in the next chat." `CONTEXT_WINDOW.md` now opens with a START HERE block (state, what to look at live, what is not built, honest limits). Merged to `main` with the logo-bucket record (#314) so a new chat reads it from `main`. Session 42 in one paragraph: the owner's first look at live Find Leads (eight items, #312), then My Setup in two stages (#313: any person sets up their own mailbox, "sends as", a sequence of their own to START outreach, first-login tasks, sending days/hours, signature logo + formatting), then the logo bucket (migration 061, D-0105).
