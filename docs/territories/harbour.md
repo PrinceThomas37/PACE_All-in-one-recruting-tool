@@ -258,3 +258,6 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 - `GET /emails/send-progress` (`routes/emails.js`) reconciles and writes the stopped-early record back; `index.js` supplies `isSendAlive(userId)` = `activeSendByUser` (Send all / auto) or `selectedSendsByUser` (Send selected, new: register + `finally`). `POST /emails/queue-all` now decides BEFORE it answers: a live run → `{queued:0, already_running:true, pending}`.
 - Per process: with a second web instance the liveness check would be wrong (it would call the other instance's run dead). Render runs one.
 - Open: R-163 (the 20-minute `pending_retry` sweep did not pick the rows up that day).
+
+## 2026-10-08 (Session 42) — "sends as" and the signature (D-0103)
+- `email-signature.js`: `sendsAsKey`, `cleanSendsAs` (company 80 / title 80 / address 200 / phone 40 / website 120), `sendsAsProblem` (company, title and a postal address are required), `signatureFromSendsAs` (a signature with `OWN_SIGNATURE_MARK`; `{{sender}}`/`{{senderemail}}` stay merge fields). `resolveSignatureHtml` returns a marked signature untouched, and `ensureSignatureAddress` no longer adds Fute Global's Dallas address to a signature that carries the marker or any ZIP of its own. NOT done: the stock sequence wording in `email-vars.js` still names Fute Global LLC (R-169: a send-time `{{sendercompany}}`).

@@ -68,7 +68,7 @@ const SCREENS = [
   ['dashboard'], ['leads'], ['applicants'], ['reports'], ['myteam'],
   ['myteam', { myteamTab:'team' }], ['myteam', { myteamTab:'reports' }],
   ['bd_joborders'], ['bd_myjobs'], ['bd_jodetail'], ['bd_pipeline'],
-  ['clients'], ['sourced'], ['insights'], ['reminders'], ['admin'], ['assign'], ['workflows'], ['mailbox'],
+  ['clients'], ['sourced'], ['mysetup'], ['insights'], ['reminders'], ['admin'], ['assign'], ['workflows'], ['mailbox'],
   ['email', { emailTab:'pending' }],
   ['email', { emailTab:'compose' }],
   ['email', { emailTab:'sent' }],

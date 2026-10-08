@@ -29,7 +29,7 @@ const express = require('express');
 const aiProvider = require('../services/ai-provider');
 const { emailSyntaxValid } = require('../email-validation');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('../email-tracking');
-const { fillSignatureHtml } = require('../email-signature');
+const { fillSignatureHtml, sendsAsKey, cleanSendsAs } = require('../email-signature');
 const gen = require('../services/outreach-generator');
 const aiStyle = require('../services/ai-style');
 const own = require('../services/ownership');
@@ -115,10 +115,22 @@ module.exports = (ctx) => {
       const { data } = await supabase.from('users').select('designation').eq('id', req.user.id).maybeSingle();
       title = (data && data.designation) || '';
     } catch (_) { /* a missing title is an empty string, never a guess */ }
+    // WHO THE MAILBOX WRITES FOR (owner, 8 Oct: a VP's other-company mailbox sent emails saying Fute Global with the profile's
+    // title). When the sending mailbox says its company and title, those are the ones — not the organisation's name and the
+    // logged-in profile's designation. A mailbox that says nothing behaves exactly as before.
+    let company = '';
+    if (mailbox && mailbox.id) {
+      try {
+        const { data } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(mailbox.id)).maybeSingle();
+        const sa = data && data.value ? cleanSendsAs(JSON.parse(data.value)) : null;
+        if (sa) { if (sa.title) title = sa.title; if (sa.company) company = sa.company; }
+      } catch (_) { /* unreadable = not set */ }
+    }
     return {
       name: (mailbox && txtOf(mailbox.display_name)) || txtOf(req.user.name) || '',
       email: (mailbox && mailbox.email_address) || req.user.email || '',
       title,
+      company,
     };
   }
 
@@ -130,13 +142,14 @@ module.exports = (ctx) => {
       // R-087: the page may name which of the caller's OWN mailboxes it wants to
       // see the identity and signature of; the server checks it is theirs.
       const wantId = req.query && req.query.mailbox_id;
-      const [mailbox, companyName, own] = await Promise.all([
+      let [mailbox, companyName, own] = await Promise.all([
         sendingMailboxFor(req, wantId),
         orgCompanyName(req),
         ownSendingMailboxes(req)
       ]);
       if (!mailbox && String(wantId || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
+      if (identity.company) companyName = identity.company;      // the mailbox's own company, when it says one
       res.json({
         // Every mailbox this person may send from — the "From" picker.
         mailboxes: own.map(m => ({ id: m.id, email: m.email_address, display_name: m.display_name || null,
@@ -170,11 +183,12 @@ module.exports = (ctx) => {
 
       // Resolve the mailbox BEFORE drafting: the draft has to be signed by
       // whoever is going to send it, and the page never gets to say who that is.
-      const [companyName, mailbox] = await Promise.all([
+      let [companyName, mailbox] = await Promise.all([
         orgCompanyName(req), sendingMailboxFor(req, (req.body || {}).mailbox_id)
       ]);
       if (!mailbox && String((req.body || {}).mailbox_id || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
+      if (identity.company) companyName = identity.company;
       // Whether the body signs itself depends on whether a signature will be
       // appended — so the draft on screen is exactly what the recipient gets.
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
@@ -324,11 +338,12 @@ module.exports = (ctx) => {
       }
       if (!(await aiProvider.isAvailable(supabase))) return res.status(409).json({ error: 'ai_unavailable' });
 
-      const [companyName, mailbox] = await Promise.all([
+      let [companyName, mailbox] = await Promise.all([
         orgCompanyName(req), sendingMailboxFor(req, (req.body || {}).mailbox_id)
       ]);
       if (!mailbox && String((req.body || {}).mailbox_id || '').trim()) return res.status(404).json({ error: 'That mailbox is not one you can send from.' });
       const identity = await senderIdentity(req, mailbox);
+      if (identity.company) companyName = identity.company;
       const signatureHtml = await mailboxSignature(mailbox, req.user.id);
       const draftOpts = { companyName, omitSignOff: !!signatureHtml.trim() };
       const withSender = {

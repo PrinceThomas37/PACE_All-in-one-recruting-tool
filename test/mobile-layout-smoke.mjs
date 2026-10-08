@@ -211,7 +211,7 @@ try {
 
   // ── 3. NOTHING RUNS OFF THE SIDE, ANYWHERE ───────────────────────────────
   const PAGES = ['dashboard', 'leads', 'applicants', 'admin', 'email', 'reports', 'myteam',
-                 'bd_joborders', 'clients', 'sourced', 'insights', 'mailbox', 'reminders',
+                 'bd_joborders', 'clients', 'sourced', 'mysetup', 'insights', 'mailbox', 'reminders',
                  'deliverability', 'profile', 'assign'];
   const ROLES = ['admin', 'bd', 'recruiter', 'ra', 'ra_lead'];
   const spills = [];

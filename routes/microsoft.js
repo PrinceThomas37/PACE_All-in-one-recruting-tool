@@ -47,7 +47,7 @@ router.get('/auth/microsoft/connect', async (req, res) => {
     if (!token) return res.status(401).send('Unauthorized');
     let reqUser;
     try { reqUser = jwt.verify(token, process.env.JWT_SECRET); } catch { return res.status(401).send('Invalid token'); }
-    if (!reqUser.roles?.includes('admin') && reqUser.role !== 'admin') return res.status(403).send('Admin only');
+    const isAdmin = !!(reqUser.roles?.includes('admin') || reqUser.role === 'admin');
     const { userEmailId } = req.query;
     if (!userEmailId) return res.status(400).send('userEmailId required');
     // C-0016 #3: userEmailId used to go straight into the OAuth `state` with no
@@ -56,6 +56,9 @@ router.get('/auth/microsoft/connect', async (req, res) => {
     const orgId = orgIdFor({ user: reqUser });
     const slot = await ownedMailboxSlot(orgId, userEmailId);
     if (!slot) return res.status(404).send('Not found');
+    // A person connects THEIR OWN mailbox (owner, 8 Oct: "can the user themselves set up the outreach mailbox"); an admin
+    // can connect anyone's in the organisation. Nobody else's: the slot's owner is checked here, before any state is minted.
+    if (!isAdmin && slot.user_id !== reqUser.id) return res.status(403).send('You can only connect your own mailbox');
     // Rampart review item #6 (pre-existing, HIGH): `state` used to be plain
     // base64 — readable AND FORGEABLE — and the callback wrote `userEmailId`
     // straight from it into an inline <script>, so a hand-crafted state was a
@@ -229,13 +232,14 @@ router.get('/auth/microsoft/debug', auth, async (req, res) => {
 
 router.delete('/auth/microsoft/:userEmailId', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Admin only' });
     // C-0016 #1 (critical): gated on ROLE only — an admin/bd_lead of org B
     // could disconnect org A's mailbox by id, which also rewrites org A's
     // leads onto a different sending mailbox (reassignJobsOffMailbox below).
     // 404, never 403 — a 403 would confirm the slot exists in another org.
     const mailbox = await ownedMailboxSlot(orgIdFor(req), req.params.userEmailId);
     if (!mailbox) return res.status(404).json({ error: 'Not found' });
+    // admin / team lead for anyone in the organisation, or the mailbox's own person for theirs
+    if (!hasRole(req, 'admin', 'bd_lead') && mailbox.user_id !== req.user.id) return res.status(403).json({ error: 'You can only disconnect your own mailbox' });
     await supabase.from('microsoft_tokens').delete().eq('user_email_id', req.params.userEmailId);
     await supabase.from('user_emails').update({ is_active: false }).eq('id', req.params.userEmailId);
     // Move any leads still pointed at this mailbox before it went dead, so

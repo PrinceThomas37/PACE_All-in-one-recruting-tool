@@ -47,7 +47,9 @@ const {
   mailboxSignatureKey,
   legacyUserSignatureKey,
   fillSignatureHtml,
-  resolveSignatureHtml
+  resolveSignatureHtml,
+  sendsAsKey,
+  cleanSendsAs
 } = require('./email-signature');
 const {
   emailSyntaxValid,
@@ -1816,6 +1818,14 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
       orgNameFor(email.org_id),
     ]);
     const who = senderIdentityFor(sendingEmail, email.from_email);
+    // The sending mailbox's own company and title ("sends as"), when it says them — else the organisation's name and no title, as before.
+    let sendsAs = null;
+    try {
+      if (sendingEmail && sendingEmail.id) {
+        const { data: sa } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(sendingEmail.id)).maybeSingle();
+        if (sa && sa.value) sendsAs = cleanSendsAs(JSON.parse(sa.value));
+      }
+    } catch (_) { sendsAs = null; }
     let styleNote = '';
     try {
       let ownerId = email.sent_by || null;
@@ -1827,10 +1837,10 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
     } catch (_) { styleNote = ''; }
     const input = engineDraft.engineInput({
       job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
-      sender: { name: who.displayName, email: who.emailAddress },
+      sender: { name: who.displayName, email: who.emailAddress, title: sendsAs && sendsAs.title || '' },
     });
     const res = await engineDraft.draftFirstEmail({
-      gen: outreachGen, input, companyName,
+      gen: outreachGen, input, companyName: (sendsAs && sendsAs.company) || companyName,
       omitSignOff: !!String(sigTemplate || '').trim(),
       // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js).
       // Read once per email; a note that cannot be read is "no note", never a reason not to send.

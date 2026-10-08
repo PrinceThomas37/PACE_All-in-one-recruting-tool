@@ -667,3 +667,13 @@ usage is one line ("Today: Apollo 3/300 · emails 1/30 · job sources 0/6"). Als
 scrolls on a small laptop; the job-search key sits in Admin → Integrations & API Keys under Apollo; that
 window's AI status is one sentence with the detail behind "Show details" (opened once by a fresh test);
 and "Lead Insights" is called "Outreach Insights".
+
+**My Setup — a person sets up their own outreach (8 Oct, D-0103).** Any person (not only an admin)
+adds their own outreach mailbox — Outlook or Gmail — signs in to it and can remove it again. Each
+mailbox says **who it writes for**: the company, the job title under the name, the company's postal
+address (required — every outreach email must carry the sender's own) and optionally a phone and a
+website. That becomes the mailbox's signature (it is never given Fute Global's address) and what the
+AI writes under. The daily sending number stays an admin's. My Setup lists the steps with where each
+stands (connect a mailbox · say who it writes for · write your first sequence), and Today shows a
+calm card until they are done. Not yet: the standard sequence wording still names Fute Global LLC for a
+person who has not written their own (R-169).

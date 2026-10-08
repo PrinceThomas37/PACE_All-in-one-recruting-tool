@@ -462,3 +462,6 @@ flows still separate correctly.
   three-line route that returns a whole table.
 
 
+
+## 2026-10-08 (Session 42) — a person connects their OWN mailbox (D-0103)
+- The OAuth connect and disconnect routes were admin-only. They now allow the slot's own person or an admin, checked AFTER the organisation check (a foreign slot is 404, never 403) and BEFORE any sign-in state is minted; a person can never connect or disconnect someone else's mailbox. A self-serve add cannot choose its own daily limit or "primary"; the limit PATCH is admin/team-lead only (it was open to the mailbox's own person before — a latent hole, closed). Plan limits still apply (402).

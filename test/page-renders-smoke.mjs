@@ -65,7 +65,7 @@ const BROKEN = ['Could not draw this page', 'Page not found'];
 const SCREENS = [
   ['dashboard'], ['leads'], ['email'], ['reports'], ['myteam'],
   ['bd_joborders'], ['bd_myjobs'], ['bd_jodetail'], ['bd_pipeline'],
-  ['clients'], ['sourced'], ['insights'], ['reminders'], ['job_board'],
+  ['clients'], ['sourced'], ['mysetup'], ['insights'], ['reminders'], ['job_board'],
   ['admin'], ['assign'],
   // The Candidates page is three screens, not one.
   ['applicants', { ats: { view: 'grid' } }],

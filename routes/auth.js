@@ -7,7 +7,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { mailboxSignatureKey, resolveSignatureHtml } = require('../email-signature');
+const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs } = require('../email-signature');
 const { mailboxConnections } = require('../mailbox-health');
 const entitlements = require('../services/entitlements');
 const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
@@ -251,7 +251,21 @@ router.get('/users/:id/emails', auth, async (req, res) => {
     // Per-mailbox sign-in health (ok / expired / never-connected) so the UI can
     // show a live "Connected" vs "Sign-in expired — reconnect" badge.
     const conns = await mailboxConnections(supabase, ids);
-    res.json((data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id), connection: conns[e.id] || { connected: false, status: 'none' } })));
+    // Who each mailbox writes for ("sends as") and whether it has a signature of its own — one read for all of them.
+    const sendsAs = {}, hasSig = new Set();
+    if (ids.length) {
+      try {
+        const { data: kv } = await supabase.from('app_settings').select('key,value').in('key', ids.flatMap(i => [sendsAsKey(i), mailboxSignatureKey(i)]));
+        (kv || []).forEach(r => {
+          const m = String(r.key).match(/^ue_(.+)_(sends_as|signature_html)$/);
+          if (!m) return;
+          if (m[2] === 'sends_as') { try { sendsAs[m[1]] = cleanSendsAs(JSON.parse(r.value)); } catch (_) { /* unreadable = not set */ } }
+          else if (String(r.value || '').trim()) hasSig.add(m[1]);
+        });
+      } catch (_) { /* a missing note is "not set", never a failed list */ }
+    }
+    res.json((data || []).map(e => ({ ...e, ms_connected: connectedSet.has(e.id), gmail_connected: gmailSet.has(e.id), connection: conns[e.id] || { connected: false, status: 'none' },
+      sends_as: sendsAs[e.id] && Object.keys(sendsAs[e.id]).length ? sendsAs[e.id] : null, has_own_signature: hasSig.has(e.id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -259,12 +273,22 @@ router.post('/users/:id/emails', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
     if (!(await guardUser(req, res, req.params.id))) return;
-    const { email_address, display_name, platform, daily_send_limit, is_primary } = req.body;
+    const { email_address, display_name, platform, daily_send_limit, is_primary, sends_as } = req.body;
     if (!email_address) return res.status(400).json({ error: 'email_address required' });
+    // A person adding their OWN mailbox (owner, 8 Oct): not an admin's powers. The daily limit and "primary" stay with admins
+    // — they start at the default — and they must say who the mailbox writes for, so no email goes out under another
+    // company's name by default.
+    const staff = hasRole(req, 'admin', 'bd_lead');
+    let sendsAsClean = null;
+    if (sends_as !== undefined || !staff) {
+      sendsAsClean = cleanSendsAs(sends_as);
+      const why = sendsAsProblem(sendsAsClean);
+      if (why && (!staff || sends_as !== undefined)) return res.status(400).json({ error: why, field: 'sends_as' });
+    }
     const mbGate = await entitlements.gate(supabase, req, 'mailboxes', { orgIdFor });
     if (mbGate.blocked) return res.status(mbGate.status).json(mbGate.body);
     // If setting as primary, unset others first
-    if (is_primary) {
+    if (is_primary && staff) {
       await supabase.from('user_emails').update({ is_primary: false }).eq('user_id', req.params.id);
     }
     const { data, error } = await supabase.from('user_emails').insert({
@@ -273,12 +297,18 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       email_address: email_address.toLowerCase().trim(),
       display_name: display_name || email_address,
       platform: platform || 'Microsoft',
-      is_primary: is_primary || false,
+      is_primary: staff ? (is_primary || false) : false,
       is_active: true,
-      daily_send_limit: daily_send_limit || 150
+      daily_send_limit: staff ? (daily_send_limit || 150) : 150
     }).select().single();
     if (error) throw error;
-    res.status(201).json(data);
+    if (sendsAsClean && !sendsAsProblem(sendsAsClean)) {
+      await supabase.from('app_settings').upsert([
+        { key: sendsAsKey(data.id), value: JSON.stringify(sendsAsClean), updated_at: new Date() },
+        { key: mailboxSignatureKey(data.id), value: signatureFromSendsAs(sendsAsClean), updated_at: new Date() },
+      ], { onConflict: 'key' });
+    }
+    res.status(201).json({ ...data, sends_as: sendsAsClean && !sendsAsProblem(sendsAsClean) ? sendsAsClean : null });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -287,6 +317,8 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
     if (!(await guardUser(req, res, req.params.id))) return;
     const { is_active, is_primary, display_name, daily_send_limit, platform } = req.body;
+    // The daily limit is the organisation's control, not the mailbox owner's.
+    if (daily_send_limit !== undefined && !hasRole(req, 'admin', 'bd_lead')) return res.status(403).json({ error: 'Only an admin or team lead can change a mailbox\'s daily limit.' });
     const updates = { updated_at: new Date() };
 
     // Enforce max 4 active per user
@@ -320,6 +352,29 @@ router.patch('/users/:id/emails/:eid', auth, async (req, res) => {
       reassignment = await reassignJobsOffMailbox(supabase, req.params.eid, req.params.id);
     }
     res.json({ ...data, reassignment });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// WHO A MAILBOX WRITES FOR — company, title, postal address, optional phone and website (owner, 8 Oct). The mailbox's own person or an
+// admin / team lead sets it. It is what the signature says and what the AI writes under; a signature built from it is saved for the
+// mailbox when it has none (or when the caller asks: rebuild_signature).
+router.put('/users/:id/emails/:eid/sends-as', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin', 'bd_lead') && req.user.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+    if (!(await guardUser(req, res, req.params.id))) return;
+    const { data: mb } = await supabase.from('user_emails').select('id').eq('id', req.params.eid).eq('user_id', req.params.id).maybeSingle();
+    if (!mb) return res.status(404).json({ error: 'Not found' });
+    const clean = cleanSendsAs(req.body);
+    const why = sendsAsProblem(clean);
+    if (why) return res.status(400).json({ error: why });
+    const sigKey = mailboxSignatureKey(mb.id);
+    const { data: had } = await supabase.from('app_settings').select('value').eq('key', sigKey).maybeSingle();
+    const rows = [{ key: sendsAsKey(mb.id), value: JSON.stringify(clean), updated_at: new Date() }];
+    const rebuilt = !(had && String(had.value || '').trim()) || (req.body && req.body.rebuild_signature === true);
+    if (rebuilt) rows.push({ key: sigKey, value: signatureFromSendsAs(clean), updated_at: new Date() });
+    const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
+    if (error) throw error;
+    res.json({ sends_as: clean, signature_rebuilt: rebuilt });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

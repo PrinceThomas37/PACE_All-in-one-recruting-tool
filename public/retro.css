@@ -862,7 +862,7 @@ body.ui-kit .sb-footer>.nav-item .nav-icon{color:inherit}
   color:var(--text);
 }
 html :where(#content :where(
-  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,.fd-block-box,
+  .card,.tbl-wrap,.dt-wrap,.modal,.drawer,.dw,.dwr-pane,.detail-panel,.strip,.tbar,.pgtabs,.kb-card,.kb-col,.flt-panel,.id-chip,.tzp-list,.ld-box,.fd-person,.fd-form,.fd-pill,.fd-chip,.fd-diag,.fd-block-box,.ms-box,.ms-preview,.ms-tag,.ms-step,
   .hz-bar,.hz-btn,.hz-count,.hz-pg,.hz-search,.lp-chip,.lp-wrap,.na-act,.na-hidden,
   .am-src,.am-body,.am-text,.am-list,.am-fulltext,.am-head,.banner,.briefing-card,.rem-card,.rem-panel,.rem-pill-quiet,
   .email-card,.failed-panel,.dash-tile,.cmp-prev,.cmp-fld select,.cmp-fld .cmp-static,.cp-found,.cpill,
@@ -1064,3 +1064,16 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-slider:focus-visible::-moz-range-thumb{outline:2px solid var(--ctl-brd);outline-offset:2px}
 .fd-x{border:0;background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;padding:0 0 0 4px}
 .fd-pill.on{border-color:var(--text)}
+
+/* My Setup (8 Oct 2026): the person's own outreach — steps, mailboxes, who each writes for */
+.ms-step{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:2px dashed var(--ctl-brd)}
+.ms-step:first-of-type{border-top:0}
+.ms-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:2px solid var(--ctl-brd);background:var(--card-solid);font-weight:700;flex:none}
+.ms-step.is-done .ms-num{background:var(--st-go,#A9C98C)}
+.ms-box{border:2px solid var(--ctl-brd);background:var(--card-solid);padding:10px 12px;margin:10px 0;display:flex;flex-direction:column;gap:8px}
+.ms-for{font-size:12.5px;line-height:1.5}
+.ms-for.is-none{background:var(--accent-l)}
+.ms-tag{display:inline-block;padding:1px 8px;font-size:11px;font-weight:700;border:2px solid var(--ctl-brd);white-space:nowrap}
+.ms-tag.is-ok{background:var(--st-go,#A9C98C)}
+.ms-tag.is-warn{background:var(--st-wait,#F4D58D)}
+.ms-preview{border:2px dashed var(--ctl-brd);background:var(--card-solid);padding:10px 12px;font-size:12.5px;line-height:1.5}
