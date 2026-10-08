@@ -1090,3 +1090,13 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .ms-logo{margin:10px 0 2px}
 .ms-logo-thumb{height:40px;width:auto;max-width:140px;border:2px solid var(--ctl-brd);background:#fff;padding:2px}
 .ms-swatch{display:inline-block;width:14px;height:14px;border:2px solid var(--ctl-brd);vertical-align:middle;margin-left:4px}
+
+/* ── ASSIGN LEADS window (D-0110, R-175): who gets them, and how many go from each email ID ── */
+.as-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0;border-bottom:2px dashed var(--line,#C9BFA9)}
+.as-who{flex:1 1 200px;min-width:0;overflow-wrap:anywhere}
+.as-n{width:84px;flex:none}
+.as-note{flex-basis:100%}
+.as-sumline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
+.as-say{margin-top:10px;font-weight:700;min-height:1.3em}
+
+.fd-emailrow{margin-top:10px;padding-top:8px;border-top:2px dashed var(--line,#C9BFA9);align-items:center;gap:8px 12px}

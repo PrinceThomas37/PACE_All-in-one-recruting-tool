@@ -248,13 +248,13 @@
     a.busy=true; a.err=''; paintAccept();
     apiPost('/finder/cards/'+a.card.id+'/accept', { positions:jobs, contacts:contacts, mailbox_id:a.mailboxId||undefined }).then(function(r){
       var id=a.card.id, wantEmail=!!a.writeEmail; F.acc=null; STATE.modal=null; dropCard(id);
-      showToast(r&&r.goes_to==='you' ? 'Lead saved — it is yours, in Leads' : 'Lead saved — it is in the Unassigned pool','success');
+      showToast(r&&r.goes_to==='you' ? 'Lead saved — it is Unassigned until you write its first email or assign it (Leads tab)' : 'Lead saved — it is in the Unassigned pool','success');
       render(); loadAccess(); loadHistory();
       if (typeof refreshJobs==='function') refreshJobs();           // the new lead shows in Leads without a manual refresh
       // The explicit next step Take-leads and Import already use: the first email is WRITTEN into Pending for the person to read.
       // Nothing is sent here — a person presses Send.
       if (wantEmail && r && r.goes_to==='you' && r.lead_id){
-        apiPost('/emails/generate',{ job_ids:[r.lead_id] }).then(function(g){
+        apiPost('/emails/generate',{ job_ids:[r.lead_id], mailbox_id:a.mailboxId||undefined }).then(function(g){
           var n=(g&&g.generated)||0;
           if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
           showToast(n?'First email written — read it in Email → Pending, then send':'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning');
@@ -737,6 +737,108 @@
     }).join('') || '<div class="fd-hint">No jobs were kept.</div>';
     return '<div class="fd-grid fd-detail"><div><div class="fd-label">People to contact</div>'+people+'</div><div><div class="fd-label">Jobs</div>'+jobs+'</div></div>';
   }
+  // ── what happened to a saved lead's first email, and "another job / another person" (D-0110, owner 8 Oct) ──
+  // The email is WRITTEN into Pending and a person presses Send — so the card says exactly where it is, with the button for the
+  // next step, instead of leaving "it never went out" to be discovered in another tab.
+  function emailRow(x){
+    var l=x.lead, e=l.email||{}, msg, btn='';
+    if (e.sent>0) msg='✓ First email sent'+(e.from?' from '+esc(e.from):'')+(e.last_sent_at?' on '+esc(fmtDay(e.last_sent_at)):'')+'.';
+    else if (e.pending>0){ msg='✉ The first email is written and waiting in Email → Pending'+(e.from?' (from '+esc(e.from)+')':'')+'. Nothing goes out until you press Send.'; btn='<button class="btn btn-sm btn-primary" onclick="fdGoPending()">Review &amp; send</button>'; }
+    else if (e.failed>0){ msg='⚠ The first email did not go out — it is under “Didn’t send” in Email → Pending.'; btn='<button class="btn btn-sm btn-outline" onclick="fdGoPending()">See it</button>'; }
+    else { msg='No email has been written for this lead yet.'+(l.unowned?' It is Unassigned until its first email is written, or you assign it in Leads.':''); btn='<button class="btn btn-sm btn-primary" onclick="fdWriteFirst(\''+esc(l.id)+'\',this)">Write the first email</button>'; }
+    return '<div class="fd-row fd-between fd-emailrow"><div class="fd-grow fs-12_5 c-text2">'+msg+'</div><div class="fd-row">'+btn+
+      '<button class="btn btn-sm btn-outline" onclick="fdAnother(\''+esc(x.id)+'\')" title="Write to another person here, or about another job at this company">Email another job / person</button></div></div>';
+  }
+  window.fdGoPending = function(){ STATE.emailTab='pending'; goPage('email'); if(typeof loadEmailsForCurrentUser==='function') loadEmailsForCurrentUser(); };
+  window.fdWriteFirst = function(leadId, btn){
+    if (btn) btn.disabled=true;
+    apiPost('/emails/generate',{ job_ids:[leadId] }).then(function(g){
+      if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); if(btn) btn.disabled=false; return; }
+      var n=(g&&g.generated)||0;
+      showToast(n?'First email written — read it in Email → Pending, then send':'No email could be written (check the contact\'s address)', n?'success':'warning');
+      loadHistory(); if (typeof refreshJobs==='function') refreshJobs();
+    }).catch(function(e){ showToast('Could not write the email: '+((e&&e.message)||e),'error'); if(btn) btn.disabled=false; });
+  };
+
+  function anItem(id){ return ((F.hist&&F.hist.items)||[]).find(function(x){ return x.id===id; }); }
+  window.fdAnother = function(id){
+    var x=anItem(id); if(!x||!x.lead) return;
+    var an={ id:id, x:x, jobs:{}, jobQ:'', picked:{}, mFirst:'', mLast:'', mEmail:'', mTitle:'', writeNow:!seqNeeded(), mailboxes:null, mailboxId:'', busy:false, err:'' };
+    F.an=an; STATE.modal=renderAnotherModal(); render();
+    apiGet('/finder/mailboxes').then(function(r){ if(F.an!==an) return; an.mailboxes=(r&&r.mailboxes)||[]; an.mailboxId=(r&&r.suggested_id)||''; STATE.modal=renderAnotherModal(); render(); })
+      .catch(function(){ if(F.an!==an) return; an.mailboxes=[]; });
+  };
+  function anCapture(){
+    var an=F.an; if(!an) return;
+    ['jobQ:fd-an-job','mFirst:fd-an-fn','mLast:fd-an-ln','mEmail:fd-an-em','mTitle:fd-an-tt'].forEach(function(p){ var k=p.split(':'), el=document.getElementById(k[1]); if(el) an[k[0]]=el.value; });
+  }
+  window.fdAnJob = function(i){ var an=F.an; if(!an) return; var t=(an.avail||[])[i]; if(t==null) return; anCapture(); if(an.jobs[t]) delete an.jobs[t]; else an.jobs[t]=true; an.err=''; STATE.modal=renderAnotherModal(); render(); };
+  window.fdAnWho = function(k){ var an=F.an; if(!an) return; anCapture(); an.picked[k]=!an.picked[k]; an.err=''; STATE.modal=renderAnotherModal(); render(); };
+  window.fdAnWrite = function(){ var an=F.an; if(!an||seqNeeded()) return; anCapture(); an.writeNow=!an.writeNow; STATE.modal=renderAnotherModal(); render(); };
+  window.fdAnBox = function(id){ var an=F.an; if(!an) return; anCapture(); an.mailboxId=id; };
+  window.fdAnClose = function(){ F.an=null; STATE.modal=null; render(); };
+  function anJobs(an){
+    var out=Object.keys(an.jobs).filter(function(k){ return an.jobs[k]; });
+    var q=String(an.jobQ||'').trim(); if(q && out.map(function(t){ return t.toLowerCase(); }).indexOf(q.toLowerCase())<0) out.push(q);
+    return out.slice(0,5);
+  }
+  function anContacts(an){
+    var l=an.x.lead, out=[];
+    (l.contacts||[]).forEach(function(c){ if(an.picked['c:'+c.id]) out.push({ contact_id:c.id }); });
+    (l.more_people||[]).forEach(function(p){ if(an.picked['p:'+p.person_id]) out.push({ person_id:p.person_id }); });
+    if(String(an.mEmail||'').trim()||String(an.mFirst||'').trim()) out.push({ first_name:String(an.mFirst||'').trim(), last_name:String(an.mLast||'').trim(), designation:String(an.mTitle||'').trim(), email:String(an.mEmail||'').trim() });
+    return out;
+  }
+  window.fdAnSave = function(){
+    var an=F.an; if(!an||an.busy) return; anCapture();
+    var jobs=anJobs(an), contacts=anContacts(an);
+    if(!jobs.length){ an.err='Pick or type the job this email is about.'; STATE.modal=renderAnotherModal(); render(); return; }
+    if(!contacts.length){ an.err='Pick at least one person to write to.'; STATE.modal=renderAnotherModal(); render(); return; }
+    if(contacts.length>3){ an.err='Three people is the most one lead can carry.'; STATE.modal=renderAnotherModal(); render(); return; }
+    an.busy=true; an.err=''; STATE.modal=renderAnotherModal(); render();
+    apiPost('/finder/cards/'+an.id+'/another',{ positions:jobs, contacts:contacts }).then(function(r){
+      var write=an.writeNow&&!seqNeeded(); F.an=null; STATE.modal=null; render(); loadHistory();
+      if (typeof refreshJobs==='function') refreshJobs();
+      showToast('Saved as another lead — Unassigned until its first email is written','success');
+      if (write && r && r.lead_id){
+        apiPost('/emails/generate',{ job_ids:[r.lead_id], mailbox_id:an.mailboxId||undefined }).then(function(g){
+          if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
+          var n=(g&&g.generated)||0;
+          showToast(n?'First email written — read it in Email → Pending, then send':'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning'); loadHistory();
+        }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
+      }
+    }).catch(function(e){ an.busy=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
+  };
+  function renderAnotherModal(){
+    var an=F.an, l=an.x.lead, mainT=String(l.position||'').toLowerCase();
+    var avail=(l.jobs||[]).filter(function(j){ return String(j.title||'').toLowerCase()!==mainT; });
+    an.avail=avail.map(function(j){ return j.title; });          // picked by POSITION in this list, never by a title pasted into an attribute
+    var jobList=avail.map(function(j,i){
+      return '<label class="fd-use fd-block"><input type="checkbox" '+(an.jobs[j.title]?'checked':'')+' onclick="fdAnJob('+i+')"> '+esc(j.title)+(j.also?' <span class="fd-tag">also hiring</span>':'')+'<span class="fd-hint"> '+esc([j.source, j.posted_at?fmtDay(j.posted_at):''].filter(Boolean).join(' · '))+'</span></label>';
+    }).join('') || '<div class="fd-hint">No other jobs were kept from the card — type one below.</div>';
+    var who=(l.contacts||[]).map(function(c){
+      return '<label class="fd-use fd-block"><input type="checkbox" '+(an.picked['c:'+c.id]?'checked':'')+' onclick="fdAnWho(\'c:'+esc(c.id)+'\')"> <strong>'+esc(c.name||'')+'</strong><span class="fd-hint"> '+esc([c.title,c.email].filter(Boolean).join(' · '))+' · already on this lead</span></label>';
+    }).join('')+(l.more_people||[]).map(function(p){
+      return '<label class="fd-use fd-block"><input type="checkbox" '+(an.picked['p:'+p.person_id]?'checked':'')+' onclick="fdAnWho(\'p:'+esc(p.person_id)+'\')"> <strong>'+esc(p.name||'')+'</strong><span class="fd-hint"> '+esc([p.title,p.email].filter(Boolean).join(' · '))+' · found on the card</span></label>';
+    }).join('');
+    var from='';
+    if (an.writeNow){
+      if (an.mailboxes===null) from='<div class="fd-hint">Loading your email IDs…</div>';
+      else if (!an.mailboxes.length) from='<div class="fd-hint c-red" role="alert">You have no connected email ID — the lead will be saved, but the email cannot be written until you add one under Email IDs.</div>';
+      else from='<div class="fd-label">Send from</div><select class="sel fd-wide" onchange="fdAnBox(this.value)">'+an.mailboxes.map(function(m){ return '<option value="'+esc(m.id)+'"'+(m.id===an.mailboxId?' selected':'')+'>'+esc((m.display_name?m.display_name+' ':'')+'<'+m.email_address+'>')+' — '+m.sent_today+' sent today</option>'; }).join('')+'</select>';
+    }
+    return '<div class="modal modal-w640" onclick="event.stopPropagation()"><div class="mh"><div class="mt">Another email at '+esc(an.x.company_name)+'</div></div><div class="mb_">'+
+      '<div class="fs-12_5 c-text2" style="margin-bottom:10px">This makes a <b>second lead</b> at the same company, with its own job, its own people and its own first email. The first lead ('+esc(l.position||'')+') is left alone.</div>'+
+      '<div class="fd-label">The job this email is about</div>'+jobList+
+      '<input id="fd-an-job" class="inp fd-wide" placeholder="Or type another job title" value="'+esc(an.jobQ)+'">'+
+      '<div class="fd-label" style="margin-top:12px">Who to write to (up to 3)</div>'+(who||'<div class="fd-hint">No other people were kept — add one below.</div>')+
+      '<div class="fd-row" style="margin-top:6px"><input id="fd-an-fn" class="inp" placeholder="First name" value="'+esc(an.mFirst)+'"><input id="fd-an-ln" class="inp" placeholder="Last name" value="'+esc(an.mLast)+'"></div>'+
+      '<div class="fd-row" style="margin-top:6px"><input id="fd-an-em" class="inp fd-grow" placeholder="Their email address" value="'+esc(an.mEmail)+'"><input id="fd-an-tt" class="inp fd-grow" placeholder="Title (optional)" value="'+esc(an.mTitle)+'"></div>'+
+      '<label class="fd-use fd-block" style="margin-top:12px"><input type="checkbox" '+(an.writeNow?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdAnWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'+from+
+      (an.err?'<div class="c-red fs-13" role="alert" style="margin-top:8px">'+esc(an.err)+'</div>':'')+
+      '</div><div class="mf"><button class="btn btn-outline" onclick="fdAnClose()">Cancel</button><button class="btn btn-primary" '+(an.busy?'disabled ':'')+'onclick="fdAnSave()">'+(an.busy?'Saving…':'Save as another lead')+'</button></div></div>';
+  }
+
   function renderHistory(){
     var h=F.hist;
     if (!h) return '<div class="fd-empty">Loading…</div>';
@@ -764,7 +866,7 @@
       } else right='<span class="fd-hint">Turned down — never shown to you again</span>';
       return '<div class="card fd-card"><div class="fd-row fd-between"><div class="fd-grow"><div class="fs-14 fd-strong">'+esc(x.company_name)+'</div>'+
         '<div class="fs-12 c-text3">'+esc([x.place, 'Found by '+searchName(x.search_id||''), x.decided_at?fmtDay(x.decided_at):''].filter(Boolean).join(' · '))+'</div></div>'+
-        '<div class="fd-row">'+right+'</div></div>'+(x.lead&&F.histOpen[x.id]?histDetails(x.lead):'')+'</div>';
+        '<div class="fd-row">'+right+'</div></div>'+(x.status==='accepted'&&x.lead?emailRow(x):'')+(x.lead&&F.histOpen[x.id]?histDetails(x.lead):'')+'</div>';
     }).join('') : '<div class="card fd-empty">'+({ accepted:'No company from your searches has been saved as a lead yet.', waiting:'Nothing is waiting.', rejected:'You have not turned anything down.' }[st])+(q?'<br>Nothing matches “'+esc(F.histQ)+'”.':'')+'</div>';
     var foot='<div class="fd-hint fd-pad">'+(h.hidden?esc(String(h.hidden))+' older than '+esc(String(h.days))+' days are hidden. <button class="fd-pill" onclick="fdHistAll()">Show everything</button><br>':'')+
       'A company you never decided on is removed after '+esc(String(h.card_days||5))+' days — Accept, Wait or Reject keeps a record of it here.</div>';

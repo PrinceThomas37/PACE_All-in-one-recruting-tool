@@ -36,7 +36,7 @@ const TERRITORIES = [
           'services/record-history.js', 'services/record-history-writer.js',
           // The one way a person is added to a lead (POST /contacts and the POC
           // finder's Accept) — beside routes/contacts.js, which it came out of.
-          'services/lead-contacts.js', 'services/lead-distribution.js', 'services/bd-insights.js',
+          'services/lead-contacts.js', 'services/lead-distribution.js', 'services/lead-claim.js', 'services/bd-insights.js',
           // The insights numbers beside bd-insights, the viewer's-own-day helper both
           // read (D-0065), and the Sentry reporter (R-090).
           'services/ra-insights.js', 'services/viewer-time.js', 'services/error-report.js'],

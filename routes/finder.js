@@ -626,9 +626,22 @@ module.exports = (ctx) => {
       const seeable = Object.values(leads).filter((l) => l.created_by === req.user.id || l.assigned_to_bd === req.user.id).map((l) => l.id);
       const peopleBy = {};
       if (seeable.length) {
-        const c = await scoped.from('contacts').select('job_id,first_name,last_name,designation,email,is_primary').in('job_id', seeable);
+        const c = await scoped.from('contacts').select('id,job_id,first_name,last_name,designation,email,is_primary').in('job_id', seeable);
         if (c.error) throw c.error;
-        (c.data || []).forEach((x) => { (peopleBy[x.job_id] = peopleBy[x.job_id] || []).push({ name: [x.first_name, x.last_name].filter(Boolean).join(' '), title: x.designation || '', email: x.email || '', primary: !!x.is_primary }); });
+        (c.data || []).forEach((x) => { (peopleBy[x.job_id] = peopleBy[x.job_id] || []).push({ id: x.id, name: [x.first_name, x.last_name].filter(Boolean).join(' '), title: x.designation || '', email: x.email || '', primary: !!x.is_primary }); });
+      }
+      // What happened to each lead's FIRST email, from this person's own mail (owner, 8 Oct: "the email never went out" — it had been
+      // written into Pending and was waiting for Send, which nothing on the card said). Only the person's own sends are described.
+      const emailBy = {};
+      if (seeable.length) {
+        const em = await scoped.from('emails').select('job_id,status,from_email,sent_at,created_at,followup_type').in('job_id', seeable).eq('sent_by', req.user.id).limit(2000);
+        if (em.error) throw em.error;
+        (em.data || []).filter((e) => !e.followup_type || e.followup_type === 'initial').forEach((e) => {
+          const b = (emailBy[e.job_id] = emailBy[e.job_id] || { pending: 0, sent: 0, failed: 0, from: '', last_sent_at: null });
+          if (e.status === 'sent') { b.sent++; if (!b.last_sent_at || String(e.sent_at) > String(b.last_sent_at)) { b.last_sent_at = e.sent_at; b.from = e.from_email || b.from; } }
+          else if (e.status === 'failed') b.failed++;
+          else { b.pending++; if (!b.from) b.from = e.from_email || ''; }
+        });
       }
       const jobsOf = (l) => {
         const f = (l.research && l.research.finder) || {}, seen = new Set(), out = [];
@@ -647,7 +660,13 @@ module.exports = (ctx) => {
         return {
           id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status,
           place: [co.city, co.state].filter(Boolean).join(', '), wait_until: c.wait_until || null, decided_at: c.decided_at || null,
-          lead: mine ? { id: l.id, position: l.position, stage: l.stage, contacts: (peopleBy[l.id] || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)), jobs: jobsOf(l) } : null,
+          lead: mine ? {
+            id: l.id, position: l.position, stage: l.stage, unowned: !l.assigned_to_bd, contacts: (peopleBy[l.id] || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)), jobs: jobsOf(l),
+            email: emailBy[l.id] || { pending: 0, sent: 0, failed: 0, from: '', last_sent_at: null },
+            // People found on the card whose email was revealed but who were not kept as contacts — offered for "email another person".
+            more_people: Object.entries((c.payload && c.payload.people) || {}).filter(([, pp]) => pp && pp.email && !(peopleBy[l.id] || []).some((x) => String(x.email).toLowerCase() === String(pp.email).toLowerCase()))
+              .map(([pid, pp]) => ({ person_id: pid, name: [pp.first_name, pp.last_name].filter(Boolean).join(' '), title: pp.title || '', email: pp.email })).slice(0, 12),
+          } : null,
           lead_gone: !!c.lead_id && !l, lead_elsewhere: !!l && !mine,
         };
       });
@@ -809,7 +828,7 @@ module.exports = (ctx) => {
       const verdict = await leadCheck.checkCompany({ db, supabase, req, candidate: { name: card.company_name, website: co.domain || co.website, linkedin: co.linkedin_url }, now });
       if (verdict.blocked) return res.status(409).json({ error: verdict.sentence, reason: verdict.state });
 
-      // Where it goes: a BD manager's lead comes straight to them, in one of their connected mailboxes; everyone else's goes to the pool (D-0088, D-0089).
+      // Where it goes: a BD manager can write its first email themselves (and so claim it, D-0110) from one of their connected mailboxes; everyone else's lead waits for Assign Leads (D-0088, D-0089).
       const toMe = hasRole(req, 'bd', 'bd_lead');
       let mailboxId = null;
       if (toMe) {
@@ -854,10 +873,12 @@ module.exports = (ctx) => {
       };
       const leadRow = {
         company_id: companyId, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,
-        stage: toMe ? 'Assigned' : 'Unassigned', notes: facts.join(' '), research, created_by: req.user.id,
+        stage: 'Unassigned', notes: facts.join(' '), research, created_by: req.user.id,
         created_date: finder.dayOf(now), freshness: 'New', timezone: getTimezoneFromLocation ? getTimezoneFromLocation(location) : null,
       };
-      if (toMe) Object.assign(leadRow, { assigned_to_bd: req.user.id, assigned_to: req.user.id, sending_email_id: mailboxId, assigned_at: now.toISOString ? now.toISOString() : now });
+      // D-0110 (owner, 8 Oct): a lead found here starts UNASSIGNED like an import; it becomes the person's when they write its first
+      // email (POST /emails/generate with the chosen mailbox — services/lead-claim.js) or a manager assigns it. `mailboxId` above is
+      // only checked now so a bad pick fails before anything is saved; it is applied at the claim.
       const lead = await scoped.from('jobs').insert(leadRow).select('id').single();
       if (lead.error) throw lead.error;
 
@@ -869,8 +890,90 @@ module.exports = (ctx) => {
       await scoped.from('finder_cards').update({ lead_id: lead.data.id, postings: null }).eq('id', card.id);
       try { if (logActivity) await logActivity(lead.data.id, null, req.user.id, 'lead_found', 'Found with the Lead Finder (Apollo): ' + position); } catch (_) { /* the audit is a record, never the point */ }
       claimed = null;
-      res.status(201).json({ lead_id: lead.data.id, company_id: companyId, goes_to: toMe ? 'you' : 'pool', contacts: rows.length });
+      res.status(201).json({ lead_id: lead.data.id, company_id: companyId, goes_to: toMe ? 'you' : 'pool', stage: 'Unassigned', contacts: rows.length });
     } catch (err) { await undo(); res.status(500).json({ error: err.message }); }
+  });
+
+  // ═════════ EMAIL ANOTHER JOB / ANOTHER PERSON FROM A SAVED LEAD'S CARD (D-0110, owner 8 Oct) ═════════════
+  // Once a lead is saved the card used to be finished: no way to email the same company about a second job, or write to a different
+  // person there. This makes a SECOND lead under the same company — its own job, its own contacts, its own first email — and leaves
+  // the first one alone. Same rules as any lead found here: Unassigned until its first email is written, and the person's own send
+  // protections still apply (one cold email per contact per job; the company's daily limit is enforced when it sends).
+  //   POST /finder/cards/:id/another  { positions: [title, ...], contacts: [{ contact_id } | { person_id } | { first_name, email, ... }] }
+  router.post('/finder/cards/:id/another', auth, async (req, res) => {
+    try {
+      if (!(await needAccess(req, res))) return;
+      const scoped = db.forRequest(req), now = clock();
+      const card = await cardOf(req, req.params.id);
+      if (!card || card.status !== 'accepted' || !card.lead_id) return res.status(404).json({ error: 'Card not found' });
+      const base = await scoped.from('jobs').select('id,company_id,position,location,research,industry,timezone,created_by,assigned_to_bd').eq('id', card.lead_id).is('deleted_at', null).maybeSingle();
+      if (base.error) throw base.error;
+      const lead = base.data;
+      if (!lead || !(lead.created_by === req.user.id || lead.assigned_to_bd === req.user.id)) return res.status(404).json({ error: 'That lead is not yours any more.' });
+
+      const b = req.body || {};
+      const positions = [];
+      [].concat(Array.isArray(b.positions) ? b.positions : [], b.position ? [b.position] : []).forEach((t) => {
+        const v = String(t || '').trim().slice(0, 200);
+        if (v && !positions.some((x) => x.toLowerCase() === v.toLowerCase())) positions.push(v);
+      });
+      if (!positions.length) return res.status(400).json({ error: 'Pick the job this email is about.' });
+      const position = positions[0], alsoHiring = positions.slice(1, 5);
+      // The same job at the same company is not "another" — it would write to the same company twice about the same thing.
+      const sameCo = await scoped.from('jobs').select('id,position').eq('company_id', lead.company_id).is('deleted_at', null);
+      if (sameCo.error) throw sameCo.error;
+      const clash = (sameCo.data || []).find((j) => String(j.position || '').trim().toLowerCase() === position.toLowerCase());
+      if (clash) return res.status(409).json({ error: 'There is already a lead for "' + position + '" at this company — pick a different job.', lead_id: clash.id });
+
+      // Contacts: people already on the saved lead (copied), people found on the card whose email was revealed, or one typed in.
+      const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 3);
+      const raw = [];
+      let own = null;
+      for (const c of picked) {
+        if (c && c.contact_id) {
+          if (!own) { const r = await scoped.from('contacts').select('id,first_name,last_name,designation,email,phone,linkedin,extra_emails,extra_phones').eq('job_id', lead.id); if (r.error) throw r.error; own = r.data || []; }
+          const x = own.find((o) => o.id === c.contact_id);
+          if (!x || !x.email) return res.status(400).json({ error: 'That contact has no email address to write to.' });
+          raw.push({ first_name: x.first_name, last_name: x.last_name, designation: x.designation, email: x.email, phone: x.phone, linkedin: x.linkedin });
+        } else if (c && c.person_id) {
+          const p = ((card.payload && card.payload.people) || {})[String(c.person_id)];
+          if (!p || !p.email) return res.status(400).json({ error: 'Reveal that person\'s email first — a contact needs an email PACE can use.' });
+          raw.push({ first_name: p.first_name, last_name: p.last_name, designation: p.title, email: p.email, linkedin: p.linkedin_url });
+        } else if (c && c.email) {
+          raw.push({ first_name: c.first_name, last_name: c.last_name, designation: c.designation, email: c.email, phone: c.phone, linkedin: c.linkedin });
+        }
+      }
+      if (!raw.length) return res.status(400).json({ error: 'Pick at least one person to write to.' });
+      const contacts = raw.map((r) => contactPoints.tidyImportedContact(r).contact);
+      const bad = contacts.find((c) => !c.first_name || !c.email || !emailSyntaxValid(c.email));
+      if (bad) return res.status(400).json({ error: 'Each contact needs a first name and a valid email.' });
+
+      const baseRes = lead.research || {};
+      const posts = Array.isArray(baseRes.finder && baseRes.finder.postings) ? baseRes.finder.postings : [];
+      const chosen = posts.find((p) => p.title === position) || null;
+      const location = (chosen && [chosen.city, chosen.state].filter(Boolean).join(', ')) || lead.location || null;
+      const facts = [].concat((baseRes.finder && baseRes.finder.facts) || []).filter((f) => !/also hiring for/i.test(String(f)));
+      if (alsoHiring.length) facts.push('They are also hiring for ' + alsoHiring.join('; ') + '.');
+      const research = Object.assign({}, baseRes, {
+        requirements: Object.assign({}, baseRes.requirements || {}, { location }),
+        jd_raw: 'Title: ' + position,
+        source: Object.assign({}, baseRes.source || {}, { posting_url: (chosen && chosen.url) || null, another_of: lead.id }),
+        finder: Object.assign({}, baseRes.finder || {}, { facts, also_hiring: alsoHiring }),
+      });
+      const row = {
+        company_id: lead.company_id, position, location, source: 'Finder · Apollo', job_url: (chosen && chosen.url) || null,
+        stage: 'Unassigned', notes: facts.join(' '), research, created_by: req.user.id, created_date: finder.dayOf(now), freshness: 'New',
+        timezone: getTimezoneFromLocation ? getTimezoneFromLocation(location) : (lead.timezone || null), industry: lead.industry || null,
+      };
+      const ins = await scoped.from('jobs').insert(row).select('id').single();
+      if (ins.error) throw ins.error;
+      const rows = contacts.map((c, i) => ({ job_id: ins.data.id, first_name: c.first_name || '', last_name: c.last_name || '', designation: c.designation || null, email: c.email, phone: c.phone || null, extra_emails: c.extra_emails || [], extra_phones: c.extra_phones || [], linkedin: c.linkedin || null, is_primary: i === 0 }));
+      try { await annotateContactEmailStatus(rows); } catch (_) { /* best-effort, as on every other way a lead is made */ }
+      const cIns = await scoped.from('contacts').insert(rows);
+      if (cIns.error) { try { await scoped.from('jobs').delete().eq('id', ins.data.id); } catch (_) { /* a half-made lead is removed; nothing was sent */ } throw cIns.error; }
+      try { if (logActivity) await logActivity(ins.data.id, null, req.user.id, 'lead_found', 'Another job at a company found with the Lead Finder: ' + position); } catch (_) { /* the audit is a record, never the point */ }
+      res.status(201).json({ lead_id: ins.data.id, company_id: lead.company_id, stage: 'Unassigned', contacts: rows.length, position });
+    } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
   return router;

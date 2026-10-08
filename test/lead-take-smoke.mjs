@@ -5,7 +5,7 @@
 //   * the shared distribution rules (proportional spread, exact count, a cap of 0 = off)
 //   * GET /leads/take/status and POST /leads/take: who may, the daily cap and its tally, only MY connected
 //     mailboxes, no duplicates, the pool is never exposed, and two people pressing together never get the same lead
-//   * POST /jobs/bulk with for_me: the leads are mine, Assigned, in my mailboxes — and still go to the pool for anyone else
+//   * POST /jobs/bulk (D-0110): EVERY import is Unassigned and unowned — formerly with for_me the leads were mine; still go to the pool for anyone else
 // Usage: node test/lead-take-smoke.mjs
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -134,23 +134,18 @@ const jobsRouter = require('../routes/jobs.js')({ supabase: db, auth: (_a, _b, n
 const bulk = callOn(jobsRouter);
 const payload = (n) => Array.from({ length: n }, (_, i) => ({ company_id: 'co' + i, position: 'Estimator ' + i, location: 'Dallas, TX', contacts: [{ first_name: 'Maria' + i }] }));
 tables.jobs = [];
+// D-0110 (8 Oct, reverses the import half of D-0082): an import by ANYONE is Unassigned and unowned; `for_me` from an old tab is ignored.
 r = await bulk('/jobs/bulk', 'post', {}, { jobs: payload(6), for_me: true });
 let imp = tables.jobs.filter(j => /^jobs-/.test(j.id));
-step('a BD importing "for me": the leads are MINE — Assigned, owned, time-stamped', r.code === 201 && r.out.owned === true && imp.length === 6 && imp.every(j => j.stage === 'Assigned' && j.assigned_to_bd === 'bd1' && j.assigned_at), JSON.stringify(r.out).slice(0, 140));
-step('…each in one of my connected mailboxes (so the first emails can be written and sent from it)', imp.every(j => ['m1', 'm2'].includes(j.sending_email_id)) && new Set(imp.map(j => j.sending_email_id)).size === 2);
-step('…and the answer carries the new lead ids, for "Write the first emails"', r.out.job_ids.length === 6);
-tables.jobs = [];
-r = await bulk('/jobs/bulk', 'post', {}, { jobs: payload(2) });
-step('the SAME import without "for me" still goes to the pool, unowned (how an RA works)', r.out.owned === false && tables.jobs.every(j => j.stage === 'Unassigned' && !j.assigned_to_bd), JSON.stringify(tables.jobs.map(j => j.stage)));
+step('a BD importing (even with the old "for me" flag): the leads are UNASSIGNED — no owner, no stage Assigned', r.code === 201 && r.out.owned === false && imp.length === 6 && imp.every(j => j.stage === 'Unassigned' && !j.assigned_to_bd && !j.assigned_to), JSON.stringify(imp.map(j => [j.stage, j.assigned_to_bd])));
+step('…and no mailbox is stamped on them (nobody sends them yet)', imp.every(j => !j.sending_email_id));
+step('…the answer carries no "write the first emails now" ids (the lead is not the importer\'s yet)', r.out.job_ids.length === 0);
 tables.jobs = [];
 r = await bulk('/jobs/bulk', 'post', { id: 'adm', roles: ['admin'] }, { jobs: payload(2), for_me: true });
-step('"for me" from an admin or RA is ignored: their import goes to the pool (they have Assign Leads)', r.out.owned === false && tables.jobs.every(j => j.stage === 'Unassigned'));
+step('an admin or RA import is Unassigned too (unchanged)', r.out.owned === false && tables.jobs.every(j => j.stage === 'Unassigned'));
 tables.jobs = []; tables.microsoft_tokens.forEach(t => { t.refresh_failed = true; }); tables.gmail_tokens.forEach(t => { t.refresh_failed = true; });
 r = await bulk('/jobs/bulk', 'post', {}, { jobs: payload(2), for_me: true });
-step('with no connected mailbox the import is REFUSED before anything is created — and says why', r.code === 400 && /connected and working/.test(r.out.error) && tables.jobs.length === 0, r.out.error);
-tables.microsoft_tokens.forEach(t => { t.refresh_failed = false; }); tables.email_send_log = [{ user_email_id: 'm1', emails_sent: 999, send_date: '2026-10-07' }, { user_email_id: 'm2', emails_sent: 999, send_date: '2026-10-07' }];
-r = await bulk('/jobs/bulk', 'post', {}, { jobs: payload(2), for_me: true });
-step('a mailbox whose sending limit is used up TODAY does not block an import (owning is not sending)', r.code === 201 && r.out.owned === true);
+step('a BD with NO connected mailbox can still import — owning and sending are later steps', r.code === 201 && tables.jobs.length === 2, r.out.error || '');
 
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);
 process.exit(results.every(Boolean) ? 0 : 1);

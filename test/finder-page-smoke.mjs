@@ -68,7 +68,7 @@ try {
     window.__calls = []; window.__access = JSON.parse(JSON.stringify(access)); window.__cards = JSON.parse(JSON.stringify(cards));
     window.__searches = [];
     window.__hist = { days: 90, card_days: 5, hidden: 3, counts: { accepted: 2, waiting: 1, rejected: 1 }, items: [
-      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', contacts: [{ name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
+      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', email: { pending: 1, sent: 0, failed: 0, from: 'bea@x.test', last_sent_at: null }, more_people: [{ person_id: 'pZ', name: 'Pat Quill', title: 'CFO', email: 'pat@saved.example' }], contacts: [{ id: 'c1', name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { id: 'c2', name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
       { id: 'a2', search_id: 's2', company_name: 'Handed Co', place: '', status: 'accepted', decided_at: '2026-10-04T10:00:00Z', lead: null, lead_elsewhere: true },
       { id: 'w1', search_id: 's1', company_name: 'Parked Dental', place: '', status: 'waiting', wait_until: '2026-10-21', decided_at: '2026-10-07T10:00:00Z', lead: null },
       { id: 'r1', search_id: 's2', company_name: 'Declined Inc', place: '', status: 'rejected', decided_at: '2026-10-06T10:00:00Z', lead: null } ] };
@@ -91,6 +91,7 @@ try {
       if (/\/people$/.test(p)) return Promise.resolve(b && b.title === 'Owner' ? { total: 1, people: [{ id: 'p9', first_name: 'Hal', last_name: 'Fox', title: 'Owner', revealed: false, email: null }] } : JSON.parse(JSON.stringify(people)));
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
+      if (/\/another$/.test(p)) return Promise.resolve({ lead_id: 'LNEW', stage: 'Unassigned', contacts: (b.contacts || []).length });
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
       if (p === '/finder/find') return Promise.resolve(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } });
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
@@ -522,6 +523,27 @@ try {
   step('opening it shows the people to contact (main contact marked, with title and email) and the jobs (main job, also hiring, and the ones Apollo listed, with a link)', /Dana Cole/.test(h) && /main contact/.test(h) && /dana@saved\.example/.test(h) && /Eli Ross/.test(h) && /main job/.test(h) && /also hiring/.test(h) && /href="https:\/\/jobs\.example\/2"/.test(h) && /Indeed/.test(h));
   await page.evaluate(() => window.fdHistToggle('a1'));
   step('…and Hide closes it again', !/Dana Cole/.test(await html()));
+  // D + E (8 Oct, owner): the card says where the first email is, and can write to another job / person
+  h = await html();
+  step('D: a saved lead says its first email is written and WAITING in Pending, from which email ID, with a Review & send button', /written and waiting in Email → Pending/.test(h) && /bea@x\.test/.test(h) && /Review &amp; send/.test(h) && /Nothing goes out until you press Send/.test(h));
+  step('E: the saved card offers "Email another job / person"', /Email another job \/ person/.test(h));
+  await page.evaluate(() => window.fdAnother('a1')); await page.waitForTimeout(300);
+  let mh = await modal();
+  step('E: the window is for that company, says it makes a SECOND lead and leaves the first alone', /Another email at Saved Machining/.test(mh) && /second lead/.test(mh) && /left alone/.test(mh));
+  step('E: it offers the OTHER jobs (not the lead\'s own main job) and the people — those on the lead and the one found on the card', /Estimator/.test(mh) && /Pipefitter/.test(mh) && (mh.match(/fdAnJob\(/g) || []).length === 2 && /Dana Cole/.test(mh) && /already on this lead/.test(mh) && /Pat Quill/.test(mh) && /found on the card/.test(mh));
+  await page.evaluate(() => window.fdAnSave()); await page.waitForTimeout(150);
+  step('E: saving with no job and no person is refused in words, nothing is sent', /Pick or type the job/.test(await modal()) && !(await calls()).some(c => /\/another$/.test(c[1])));
+  await page.evaluate(() => { window.fdAnJob(0); window.fdAnWho('c:c1'); window.fdAnWho('p:pZ'); });
+  await page.evaluate(() => window.fdAnSave()); await page.waitForTimeout(400);
+  const an = (await calls()).find(c => /\/finder\/cards\/a1\/another$/.test(c[1]));
+  step('E: it sends the chosen job and exactly the people picked (one from the lead by id, one from the card by person id)', an && an[2].positions.join() === 'Estimator' && JSON.stringify(an[2].contacts) === JSON.stringify([{ contact_id: 'c1' }, { person_id: 'pZ' }]), JSON.stringify(an && an[2]));
+  step('E: …then writes its first email for THE NEW LEAD (into Pending), from the chosen email ID', (await calls()).some(c => /\/emails\/generate$/.test(c[1]) && c[2].job_ids.join() === 'LNEW'));
+  step('E: …and the window closes and the history reloads', !(await page.evaluate(() => !!window.STATE.modal)) && (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > 1);
+  await page.evaluate(() => { window.STATE.page = 'finder'; window.STATE.finder.tab = 'history'; window.render(); });
+  await page.evaluate(() => window.fdGoPending()); await page.waitForTimeout(200);
+  step('D: Review & send goes to Email → Pending', await page.evaluate(() => window.STATE.page === 'email' && window.STATE.emailTab === 'pending'));
+  await page.evaluate(() => { window.goPage('finder'); window.fdTab('history'); });
+  await page.waitForTimeout(250);
   await page.evaluate(() => window.fdHistSearch('s2'));
   h = await html();
   step('the searches can be told apart: picking one shows only what THAT search found', /Handed Co/.test(h) && !/Saved Machining/.test(h));

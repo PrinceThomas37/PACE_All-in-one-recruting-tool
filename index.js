@@ -74,6 +74,7 @@ const engineDraft = require('./services/engine-draft');
 const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
+const leadClaim = require('./services/lead-claim');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -1119,6 +1120,22 @@ app.post('/emails/generate', auth, async (req, res) => {
     const jobs = touchable.filter(Boolean);
     const job_ids = jobs.map(j => j.id);
     if (!job_ids.length) return res.status(400).json({ error: 'job_ids required' });
+
+    // D-0110: a lead nobody owns yet becomes THE WRITER'S when their first email for it is written — but only once an email is
+    // really written (a person with no sequence, or a lead with no usable address, claims nothing). Planned here, applied below.
+    let claimPlan = { claims: [] };
+    if (hasRole(req, 'bd', 'bd_lead') && jobs.some(leadClaim.isUnowned)) {
+      const mb = await leadDistribution.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: req.user.id, todayStr: today(), who: 'You', ignoreRoom: true });
+      if (mb.error) return res.status(400).json({ error: mb.error + ' (Nothing was written.)' });
+      const wanted = req.body.mailbox_id ? String(req.body.mailbox_id) : '';
+      if (wanted && !mb.accounts.some(a => a.id === wanted)) return res.status(400).json({ error: 'That email ID is not one of yours, or it is not connected. (Nothing was written.)' });
+      claimPlan = leadClaim.planClaim(jobs, mb.accounts, wanted);
+      const mbById = {}; mb.accounts.forEach(a => { mbById[a.id] = a; });
+      const planned = {}; claimPlan.claims.forEach(c => { planned[c.job_id] = c.mailbox_id; });
+      jobs.forEach(j => { // in memory only until an email exists: the builder reads the owner and the mailbox from the job
+        if (planned[j.id]) { const a = mbById[planned[j.id]] || {}; j.assigned_to_bd = req.user.id; j.sending_email_id = planned[j.id]; j.sending_email = { id: a.id, email_address: a.email_address, display_name: a.display_name }; }
+      });
+    }
     const bdIds = [...new Set(jobs.map(j => j.assigned_to_bd).filter(Boolean))];
     const { data: bdUsers } = bdIds.length ? await supabase.from('users').select('id,name,email').in('id', bdIds) : { data: [] };
     const bdMap = {};
@@ -1151,6 +1168,13 @@ app.post('/emails/generate', auth, async (req, res) => {
     const { emailsToInsert, alreadyOutreachedSkipped, needsSequence } = buildPendingEmailsFromJobs(
       jobs, req.user.id, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached
     );
+    let claimedCount = 0;
+    if (claimPlan.claims.length && emailsToInsert.length) {
+      const done = await leadClaim.applyClaims({ jobsTable: () => db.forRequest(req).from('jobs'), claims: claimPlan.claims, withEmail: new Set(emailsToInsert.map(e => e.job_id)), userId: req.user.id, now: new Date() });
+      for (let i = emailsToInsert.length - 1; i >= 0; i--) if (done.lost.includes(emailsToInsert[i].job_id)) emailsToInsert.splice(i, 1);   // somebody else was handed it first
+      claimedCount = done.claimed.length;
+      for (const id of done.claimed) { try { await logActivity(id, null, req.user.id, 'first_email_claim', `Became ${req.user.name || 'a BD'}'s lead when the first email was written`, null, null); } catch (_) { /* the log is a record, never the point */ } }
+    }
     if (emailsToInsert.length) {
       // db.forRequest stamps org_id — the raw supabase insert here left every
       // queued row unstamped, misfiling into the default org (B3, R-047 review).
@@ -1159,6 +1183,7 @@ app.post('/emails/generate', auth, async (req, res) => {
     }
     res.json({
       generated: emailsToInsert.length,
+      claimed: claimedCount,   // leads that became the writer's with this first email (D-0110)
       skipped_already_outreached: alreadyOutreachedSkipped || 0,
       // Whose leads got NO email because their owner has no sequence of their own yet ([] when everyone has one).
       needs_sequence: needsSequence || [],
@@ -3532,6 +3557,7 @@ app.use(require('./routes/events')(routeCtx));
 app.use(require('./routes/poc')(routeCtx));
 app.use(require('./routes/jobs')(routeCtx));
 app.use(require('./routes/lead-take')(routeCtx));   // R-148 / D-0082: a BD takes leads for themselves
+app.use(require('./routes/lead-assign')(routeCtx));   // D-0110 / R-175: a manager hands Unassigned leads to themselves or their team
 app.use(require('./routes/lead-check')(routeCtx));  // R-157 / D-0090: can this company be added? (the rule is services/lead-decision.js)
 // R-157: the Lead Finder — saved searches, today's cards, contacts, Accept. Kept as a const: the nightly sweep below calls its runDue().
 const finderRouter = require('./routes/finder')(routeCtx);

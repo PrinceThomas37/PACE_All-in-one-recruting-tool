@@ -1,11 +1,11 @@
 {
-  "generated": "2026-10-07",
+  "generated": "2026-10-08",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 503,
-    "lines": 117371,
+    "files": 544,
+    "lines": 124454,
     "territories": 9,
-    "unclaimedFiles": 0
+    "unclaimedFiles": 10
   },
   "territories": [
     {
@@ -24,8 +24,8 @@
         "public/",
         "services/view-horizon.js"
       ],
-      "files": 76,
-      "lines": 32461,
+      "files": 79,
+      "lines": 34261,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -33,18 +33,18 @@
         },
         {
           "f": "public/js/47-page-mailbox.js",
-          "n": 1524
+          "n": 1587
+        },
+        {
+          "f": "public/retro.css",
+          "n": 1101
         },
         {
           "f": "public/js/33-stage-modal.js",
           "n": 1096
-        },
-        {
-          "f": "public/js/09-page-workflows.js",
-          "n": 1081
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 2,
       "openOut": 0
     },
@@ -73,17 +73,22 @@
         "services/record-history-writer.js",
         "services/lead-contacts.js",
         "services/lead-distribution.js",
+        "services/lead-claim.js",
         "services/bd-insights.js",
         "services/ra-insights.js",
         "services/viewer-time.js",
         "services/error-report.js"
       ],
-      "files": 37,
-      "lines": 12545,
+      "files": 42,
+      "lines": 13935,
       "largest": [
         {
           "f": "index.js",
-          "n": 3934
+          "n": 3944
+        },
+        {
+          "f": "routes/finder.js",
+          "n": 880
         },
         {
           "f": "routes/poc.js",
@@ -92,13 +97,9 @@
         {
           "f": "routes/ownership-requests.js",
           "n": 774
-        },
-        {
-          "f": "routes/jobs.js",
-          "n": 645
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 1
     },
@@ -121,8 +122,8 @@
         "scripts/",
         "services/storage-orphans.js"
       ],
-      "files": 68,
-      "lines": 4229,
+      "files": 73,
+      "lines": 4383,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
@@ -141,7 +142,7 @@
           "n": 174
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 2,
       "openOut": 0
     },
@@ -194,7 +195,7 @@
         "routes/deliverability.js"
       ],
       "files": 33,
-      "lines": 5903,
+      "lines": 6006,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -202,7 +203,7 @@
         },
         {
           "f": "routes/mailbox.js",
-          "n": 551
+          "n": 554
         },
         {
           "f": "email-vars.js",
@@ -210,10 +211,10 @@
         },
         {
           "f": "routes/emails.js",
-          "n": 509
+          "n": 522
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 0
     },
@@ -262,7 +263,7 @@
         "services/next-action-dismissals.js"
       ],
       "files": 30,
-      "lines": 11730,
+      "lines": 11788,
       "largest": [
         {
           "f": "services/candidate-outreach.js",
@@ -281,7 +282,7 @@
           "n": 1113
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 0,
       "openOut": 1
     },
@@ -325,7 +326,7 @@
         "lead-ingest.js"
       ],
       "files": 33,
-      "lines": 8612,
+      "lines": 8648,
       "largest": [
         {
           "f": "routes/recruiting/job-orders.js",
@@ -344,7 +345,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 0,
       "openOut": 6
     },
@@ -372,7 +373,7 @@
         "services/ownership.js"
       ],
       "files": 9,
-      "lines": 2377,
+      "lines": 2472,
       "largest": [
         {
           "f": "services/ownership.js",
@@ -380,7 +381,7 @@
         },
         {
           "f": "routes/auth.js",
-          "n": 425
+          "n": 520
         },
         {
           "f": "services/provisioning.js",
@@ -391,7 +392,7 @@
           "n": 198
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 0
     },
@@ -411,9 +412,13 @@
         "test/",
         ".github/"
       ],
-      "files": 211,
-      "lines": 38187,
+      "files": 229,
+      "lines": 41627,
       "largest": [
+        {
+          "f": "test/finder-routes-smoke.mjs",
+          "n": 734
+        },
         {
           "f": "test/ownership-requests-smoke.mjs",
           "n": 728
@@ -425,13 +430,9 @@
         {
           "f": "test/candidate-outreach-smoke.mjs",
           "n": 657
-        },
-        {
-          "f": "test/mailbox-smoke.mjs",
-          "n": 590
         }
       ],
-      "lastTouched": "2026-10-07",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 0
     },
@@ -457,7 +458,7 @@
         "services/reminder-source.js"
       ],
       "files": 7,
-      "lines": 1327,
+      "lines": 1334,
       "largest": [
         {
           "f": "routes/reminders.js",
@@ -472,11 +473,11 @@
           "n": 201
         },
         {
-          "f": "routes/tracking.js",
-          "n": 176
+          "f": "services/reminder-source.js",
+          "n": 180
         }
       ],
-      "lastTouched": "2026-10-02",
+      "lastTouched": "2026-10-08",
       "openIn": 0,
       "openOut": 0
     }
@@ -735,5 +736,16 @@
       "asks": "a ruling on ONE thing, plus a review of two new doors. (1) `PATCH /submissions/:id/stage` (and now `bulk-stage`) let ANY BD in the company move ANY submission — a job's owner is not checked, only the recruiter gate (D-0035 says interaction with a job is the owner's). Guild mirrored the single move exactly rather than invent a rule; if you want owner/chain/admin it is one row rule in `services/submission-stages.js` `MOVE_RULES` (needs the job's `bd_manager_id`). (2) New: `GET /submissions?candidate_ids=` (stage + job per person, no contact details, org-scoped, fail-closed on no ids) and `POST /submissions/bulk-stage` (org-scoped, ≤200). (3) Deliberate tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage."
     }
   ],
-  "unclaimed": []
+  "unclaimed": [
+    "services/jobs-jsearch.js",
+    "services/lead-check.js",
+    "services/lead-decision.js",
+    "services/lead-finder.js",
+    "services/lead-outreach-queue.js",
+    "services/reply-target.js",
+    "services/send-window.js",
+    "services/sequence-starter.js",
+    "services/setup-tasks.js",
+    "services/signature-logo.js"
+  ]
 }
