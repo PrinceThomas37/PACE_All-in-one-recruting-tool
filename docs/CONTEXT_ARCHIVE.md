@@ -6643,3 +6643,6 @@ Owner: "Go ahead with logo storage bucket." Checked `storage.buckets` first (onl
 
 ### SESSION 42, closing — handoff written (8 Oct)
 Owner paused: "update the context window, I will resume in the next chat." `CONTEXT_WINDOW.md` now opens with a START HERE block (state, what to look at live, what is not built, honest limits). Merged to `main` with the logo-bucket record (#314) so a new chat reads it from `main`. Session 42 in one paragraph: the owner's first look at live Find Leads (eight items, #312), then My Setup in two stages (#313: any person sets up their own mailbox, "sends as", a sequence of their own to START outreach, first-login tasks, sending days/hours, signature logo + formatting), then the logo bucket (migration 061, D-0105).
+
+### SESSION 42, after the handoff — the owner answers the three open items (D-0106)
+Company name at send time: dropped (it lives in the person's sequence). Company profile: "where will it be used?". Random-template mode / stock wording: "each user creates it; the system gives nothing". Found by reading: Random mode, the follow-up fallback and the starter all still supply Fute-pitched text. Plan proposed to the owner, nothing built.
