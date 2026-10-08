@@ -3,8 +3,8 @@
 > **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
 > History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
 
-**Updated**: 2026-10-08 (Session 43, later: the owner's second look → #318) · **Last merged to `main`**: #318 (second-look build, owner: "merge after it's done") after #317 (`a008730`) after #316 (custom domain) after #315 · **no PR open** (dev branch `claude/amazing-meitner-4npjua` — restart it from `main` before new work) · **Repo**: `PrinceThomas37/PACE_All-in-one-recruting-tool` · **Supabase**: `teiqievahzhllojvgsku` · **Deploy**: Render, auto-deploys from `main` — merging to `main` IS the release (unverified from the sandbox).
-**Highest ids:** decision D-0112 · contract C-0036 · roadmap `R-185` (next `R-186`) · next migration `062` (none added this session).
+**Updated**: 2026-10-08 (Session 43, end — handed to Cursor, see `docs/CURSOR_HANDOFF.md`) · **Last merged to `main`**: #319 (`b20b326`) after #318 and #317.
+**Highest ids:** decision D-0116 · contract C-0036 · roadmap `R-189` (next `R-190`) · next migration `063` (062 is APPLIED to the live DB).
 
 ## ▶▶▶▶▶▶▶▶▶▶▶ START HERE — NEXT CHAT (Session 43, 8 Oct, end)
 **State:** #317, #318 and #319 are MERGED (main `b20b326`). #319 = D-0113/D-0114 + the sequence-preview and reminder-template fixes (R-188, R-189). Full suite 234/234 on Node 22 at the final head; 233/233 on Node 26.10.0 one commit earlier. **Migration 062 was applied to the live DB before the merge** (seven nullable `follow_ups` columns; 1,187 rows untouched, none marked `chain_rules`). Render redeploys from `main`; the deploy was NOT watched from the sandbox and the owner has not seen the new build live. Earlier live-data change: Ash Sayyad's 38 leads were made Unassigned then restored to Assigned at the owner's word (backup `backups.leads_unassign_20261008` still exists).
