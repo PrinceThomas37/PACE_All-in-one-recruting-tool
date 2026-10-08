@@ -17,13 +17,13 @@ const BASE=`http://127.0.0.1:${PORT}`, API='https://fute-lms-backend.onrender.co
 const results=[]; const step=(n,ok,d='')=>{results.push(!!ok);console.log((ok?'[PASS] ':'[FAIL] ')+n+(d?' — '+d:''));};
 function findChromium(){ if(process.env.PLAYWRIGHT_CHROMIUM) return process.env.PLAYWRIGHT_CHROMIUM; const b=process.env.PLAYWRIGHT_BROWSERS_PATH; if(b&&fs.existsSync(path.join(b,'chromium'))) return path.join(b,'chromium'); return 'chromium'; }
 const day=(n)=>{ const d=new Date(); d.setUTCDate(d.getUTCDate()-n); return d.toISOString().slice(0,10); };
-const summary = (o) => Object.assign({ total_all:110,total_today:0,total_week:85,total_month:110,assigned:100,positive:0,converted:6,negative:0,ooo:0,future:0,conv_rate:5,replied:11,reply_rate:10,response_rate:10,
+const summary = (o) => Object.assign({ total_all:110,total_today:0,total_week:85,total_month:110,assigned:100,positive:0,converted:6,negative:0,ooo:0,future:0,conv_rate:5,replied:11,reply_rate:10,response_rate:10,bounced:3,contacts_emailed:115,bounce_rate:2.6,open_tracked:0,opened:0,open_rate:null,
   emails_sent:311,emails_sent_today:16,emails_pending:1,emails_failed:0,
   last_7_emails:{[day(6)]:0,[day(5)]:40,[day(4)]:41,[day(3)]:42,[day(2)]:43,[day(1)]:40,[day(0)]:16},
   last_7_leads:{[day(6)]:0,[day(5)]:15,[day(4)]:0,[day(3)]:0,[day(2)]:22,[day(1)]:48,[day(0)]:0},
   by_stage:{Assigned:100,Connected:6,'In Discussion':0,Positive:0}, by_industry:{Construction:30} }, o||{});
 const ME='u-lead', R1='u-bd2';
-const TEAM = { scope:'team', windows:{}, people:[Object.assign({id:R1,name:'BD Two',role:'bd'}, summary({total_all:40,total_today:3,total_week:12,total_month:40,converted:8,conv_rate:20,replied:14,reply_rate:35,emails_sent:123,emails_pending:2,by_stage:{Assigned:30,Connected:8,Negative:2}}))] };
+const TEAM = { scope:'team', windows:{}, people:[Object.assign({id:R1,name:'BD Two',role:'bd'}, summary({bounce_rate:5.5,open_rate:41.2,open_tracked:50,opened:20,total_all:40,total_today:3,total_week:12,total_month:40,converted:8,conv_rate:20,replied:14,reply_rate:35,emails_sent:123,emails_pending:2,by_stage:{Assigned:30,Connected:8,Negative:2}}))] };
 const calls=[]; const rep=(r,b)=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(b)});
 let browser; const errs=[]; const tzSeen=[];
 try{
@@ -45,6 +45,7 @@ try{
   step('personal: "Leads, last 7 days" is 85 and the 30-day tile 110, both the server\'s', /85\s*Last 7 days/.test(t1) && /110\s*Last 30 days/.test(t1));
   step('personal: the tile says what the tiles mean ("last 30 days"), not "this month"', /30 days/i.test(t1) && !/Sent \(month\)/.test(t1) && !/this month/i.test(t1));
   step('personal: response rate shows the REPLY rate (10%), not the conversion rate (5%)', /10%\s*Response rate/.test(t1) || /Response rate[^0-9]{0,20}10%/.test(t1), (t1.match(/.{30}Response rate.{20}/)||[''])[0]);
+  step('personal: the bounce rate is shown to one decimal (2.6%), and an open rate that could not be measured reads "—", never 0%', /2\.6%\s*Bounced/.test(t1) && /\u2014\s*Opened/.test(t1) && !/\b0%\s*Opened/.test(t1), (t1.match(/.{25}Bounced.{60}/)||[''])[0]);
   const bars = await ev(()=>{ const c=document.getElementById('content'); return c.innerText; });
   step('personal: the chart and the tile agree (15+22+48 = 85)', /15/.test(bars) && /22/.test(bars) && /48/.test(bars));
 
@@ -55,6 +56,7 @@ try{
   step('the browser tells the server which time zone it is in (a day is the viewer\'s day, R-102)', tzSeen.length>=1 && tzSeen.every(z=>z && z.length>0), JSON.stringify(tzSeen));
   step('team: asks the server once for the whole team', calls.filter(c=>c==='/insights/bd-team').length>=1);
   step('team: the row is the server\'s — 3 today, 12 in 7 days, 40 in 30 days, 123 sent, 35% replied, 20% converted', t2.rows.some(r=>/BD Two/.test(r) && /\b3\b/.test(r) && /\b12\b/.test(r) && /\b40\b/.test(r) && /\b123\b/.test(r) && /35%/.test(r) && /20%/.test(r)), JSON.stringify(t2.rows));
+  step('team: the table carries each person\'s bounce rate and open rate (5.5% and 41.2%) from the server', /Bounced %/.test(t2.text) && /Opened %/.test(t2.text) && t2.rows.some(r=>/BD Two/.test(r) && /5\.5%/.test(r) && /41\.2%/.test(r)), t2.rows[0]);
   step('team: the headline reads 40 leads and 123 emails from the same data', /40 leads/.test(t2.text) && /123 emails sent/.test(t2.text), t2.text.slice(0,120));
   step('team: the columns say what they count (7 days / 30 days / Replied %)', /7 days/i.test(t2.text) && /30 days/i.test(t2.text) && /Replied %/i.test(t2.text));
 
@@ -63,6 +65,7 @@ try{
   await page.waitForTimeout(300);
   const t3 = await ev(()=>document.getElementById('content').innerText.replace(/\s+/g,' '));
   step('drill-down: the same person shows the same figures (12 in 7 days, 123 sent, 2 pending, replied 14 = 35%)', /12\s*Last 7 days/.test(t3) && /123\s*Sent · 30 days/.test(t3) && /\b2\s*Pending/.test(t3) && /Replied\s*14 \(35%\)/.test(t3), t3.slice(0,300));
+  step('drill-down: the same person shows 5.5% bounced and 41.2% opened', /5\.5%\s*Bounced/.test(t3) && /41\.2%\s*Opened/.test(t3), (t3.match(/.{20}Bounced.{40}/)||[''])[0]);
   step('drill-down: the stage breakdown is the server\'s (Assigned 30, Connected 8)', /Assigned\s*30/.test(t3) && /Connected\s*8/.test(t3));
 
   // a failure is said, not drawn as zeros

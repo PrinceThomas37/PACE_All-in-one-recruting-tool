@@ -293,6 +293,10 @@ try {
     ok('RA Lead gets the numbers but no BD\'s letter as a sample', rv1 && rv1.sent === 2 && rv1.sample === null, JSON.stringify(rl.json));
     const d = await call('aA', 'GET', '/admin/deliverability?view=org');
     ok('deliverability figures are this org\'s', d.json?.sent === 2 && d.json?.failed === 2 && d.json?.bounced_contacts === 1 && d.json?.replied_contacts === 1 && d.json?.suppression_count === 1, JSON.stringify(d.json));
+    const dl = await call('rl', 'GET', '/admin/deliverability');
+    ok('an RA Lead is refused the Deliverability numbers (admin only, owner 8 Oct)', dl.status === 403, String(dl.status));
+    const dh = await call('rl', 'GET', '/admin/domain-health');
+    ok('...and the domain checks', dh.status === 403, String(dh.status));
     ok('deliverability lists this org\'s mailboxes only', (d.json?.mailboxes || []).map(m => m.id).sort().join(',') === 'mbA1,mbA2');
     close(); }
 

@@ -783,3 +783,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-07 (Session 42) — "can this company be added?" (R-157, D-0090, D-0091)
 - The add rule for leads is `services/lead-decision.js`: match a company by website / LinkedIn page / name; an open job order (`job_orders.status = 'Active'`) or a live lead (any stage except Rejected and Future) blocks; then the `company_cooldown_days` cooldown (30 on the live site) counts from the most recent lead of any stage. Owner named in the sentence. Nothing crosses organisations (D-0090). `routes/jobs.js` `POST /jobs` applies it to RAs (as the cooldown did); sourced-lead approval applies it to everyone; BD job-order creation, `/jobs/bulk` and BD/RA-lead/admin manual adds are unchanged and still on their older cooldown-only checks — widening is a one-line change each if the owner wants.
+
+## 2026-10-08 (Session 42) — insights answers carry bounce and open rate (D-0109)
+- `routes/workflows.js` `loadBdSummary` (the BD insights read) now also reads the contacts' `email_status` and `email_tracking.open_count` for the person's sent emails and hands them to `services/bd-insights.js` `deliveryStats`; the rates are null (shown "—") when not measured or when the read fails. Definitions in D-0109.

@@ -16,12 +16,12 @@ const results = []; const step = (n, ok, d = '') => { results.push(!!ok); consol
 const EMAIL_COLS = ['id','contact_id','job_id','to_email','subject','body','platform','sent_by','status','sent_at','created_at','from_email','followup_type','follow_up_id','graph_message_id','conversation_id','in_reply_to_graph_message_id','template_variant','sending_email_id','org_id','attempt_count','next_attempt_at','fail_kind','fail_reason'];
 const JOB_COLS = ['id','stage','industry','position','assigned_at','assigned_to_bd','deleted_at','org_id','company_id'];
 const USER_COLS = ['id','name','email','role','is_active','deleted_at','roles','org_id','manager_id'];
-const COLS = { emails: EMAIL_COLS, jobs: JOB_COLS, users: USER_COLS };
+const COLS = { emails: EMAIL_COLS, jobs: JOB_COLS, users: USER_COLS, contacts: ['id','email_status','org_id'], email_tracking: ['email_id','open_count','org_id'] };
 const ORG = 'org-a', ME = 'bd-lead-1';
 const DAY = 86400000, now = Date.now();
 const iso = (n) => new Date(now - n * DAY).toISOString();
 const D = {
-  jobs: [], emails: [], users: [],
+  jobs: [], emails: [], users: [], contacts: [], email_tracking: [],
 };
 // 110 leads: 15 assigned 5 days ago, 22 three days ago, 48 two days ago, 25 exactly SEVEN days ago (the eighth calendar day the old tile wrongly included)
 const addLeads = (n, daysAgo, stage) => { for (let i = 0; i < n; i++) D.jobs.push({ id: 'j' + D.jobs.length, assigned_to_bd: ME, org_id: ORG, deleted_at: null, stage: stage || 'Assigned', assigned_at: iso(daysAgo), position: 'x', industry: 'x', company: null }); };
@@ -41,6 +41,7 @@ function q(table) {
     eq(k, v) { try { check(k); } catch (e) { st.err = e; } st.f.push(r => r[k] === v); return api; },
     is(k, v) { st.f.push(r => (r[k] == null) === (v == null)); return api; },
     gte(k, v) { try { check(k); } catch (e) { st.err = e; } st.f.push(r => String(r[k] || '') >= String(v)); return api; },
+    in(k, vs) { try { check(k); } catch (e) { st.err = e; } st.f.push(r => vs.includes(r[k])); return api; },
     order() { return api; },
     range(a, b) { st.range = [a, b]; return api; },
     then(a, b) { const err = st.err || (failNext && failNext === table && Object.assign(new Error('boom'), { code: 'X' })); if (err) return Promise.resolve({ data: null, error: { code: err.code, message: err.message } }).then(a, b); let rows = D[table].filter(r => st.f.every(f => f(r))); if (st.range) rows = rows.slice(st.range[0], st.range[1] + 1); return Promise.resolve({ data: rows, error: null }).then(a, b); },
@@ -85,7 +86,10 @@ D.users.push({ id: ME, name: 'BD Lead 1', role: 'bd_lead', roles: ['bd_lead'], o
   { id: OUTSIDER, name: 'BD 3', role: 'bd', roles: ['bd'], org_id: ORG, manager_id: 'nobody', deleted_at: null },
   { id: BOSS, name: 'Boss', role: 'director', roles: ['director'], org_id: ORG, manager_id: null, deleted_at: null });
 for (let i = 0; i < 10; i++) D.jobs.push({ id: 'k' + i, assigned_to_bd: OTHER, org_id: ORG, deleted_at: null, stage: i < 2 ? 'Connected' : 'Assigned', assigned_at: iso(1), position: 'x', industry: 'x', company: null });
-for (let i = 0; i < 5; i++) D.emails.push({ id: 'x' + i, sent_by: OTHER, org_id: ORG, status: 'sent', created_at: iso(1), sent_at: iso(1) });
+for (let i = 0; i < 5; i++) D.emails.push({ id: 'x' + i, sent_by: OTHER, org_id: ORG, status: 'sent', created_at: iso(1), sent_at: iso(1), contact_id: 'cx' + i });
+// delivery: of the 5 people emailed, one address turned out invalid; 3 of the 5 emails were sent with open tracking and 1 of those was opened
+for (let i = 0; i < 5; i++) D.contacts.push({ id: 'cx' + i, org_id: ORG, email_status: i === 0 ? 'invalid' : 'valid' });
+D.email_tracking.push({ email_id: 'x0', org_id: ORG, open_count: 0 }, { email_id: 'x1', org_id: ORG, open_count: 2 }, { email_id: 'x2', org_id: ORG, open_count: 0 }, { email_id: 'x4', org_id: 'other-org', open_count: 9 });
 const teamH = router.stack.find(l => l.route && l.route.path === '/insights/bd-team').route.stack.slice(-1)[0].handle;
 async function callTeam(user) { let status = 200, out = null; const res = { status(s) { status = s; return res; }, json(j) { out = j; return res; } };
   await teamH({ params: {}, user, orgId: ORG }, res); return { status, body: out }; }
@@ -119,6 +123,17 @@ step('1,205 sent emails are all counted (PostgREST caps a request at 1,000 rows)
 failNext = 'users';
 const badT = await callTeam(admin);
 step('a failed read fails the team report too (500), never an empty team', badT.status === 500, String(badT.status));
+
+// ═══ BOUNCE RATE AND OPEN RATE (owner, 8 Oct) — moved here from the Deliverability tab ═══
+const dv = await personalOf(OTHER);
+step('bounce rate = of the people emailed, the share whose address turned out invalid (1 of 5 = 20%), to one decimal', dv.contacts_emailed === 5 && dv.bounced === 1 && dv.bounce_rate === 20, JSON.stringify([dv.contacts_emailed, dv.bounced, dv.bounce_rate]));
+step('open rate = of the TRACKED emails, the share opened (1 of 3 = 33.3%) — another organisation\'s tracking row is not counted', dv.open_tracked === 3 && dv.opened === 1 && dv.open_rate === 33.3, JSON.stringify([dv.open_tracked, dv.opened, dv.open_rate]));
+const none = await personalOf(ME);
+step('nobody emailed with tracking → the rates are "not measured" (null), never a made-up 0%', none.open_rate === null && none.open_tracked === 0, JSON.stringify([none.bounce_rate, none.open_rate]));
+failNext = 'contacts';
+const dvBad = await personalOf(OTHER);
+step('a failed read of the delivery data leaves the rates unmeasured (null) but the rest of the report still answers', dvBad && dvBad.bounce_rate === null && dvBad.open_rate === null && dvBad.emails_sent === 1205, JSON.stringify([dvBad && dvBad.bounce_rate, dvBad && dvBad.emails_sent]));
+failNext = null;
 
 console.log('\n' + results.filter(Boolean).length + '/' + results.length + ' passed');
 process.exit(results.every(Boolean) ? 0 : 1);

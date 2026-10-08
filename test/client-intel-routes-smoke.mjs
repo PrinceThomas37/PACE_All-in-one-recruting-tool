@@ -138,6 +138,11 @@ step('the free facts say they are waiting on us', /haven't replied/.test(g.body.
 step('with the AI switch off, the page is told so', g.body.ai.enabled === false);
 step('our own sent email is shown IN FULL (not cut at 1,500)', g.body.timeline.some(m => m.direction === 'outbound' && /THE-END-OF-OUR-EMAIL/.test(m.text)));
 step('a stored reply offers "open the full email"', g.body.timeline.some(m => m.id === 'in:cm1' && m.can_open_full));
+step('the answer says WHICH email "Reply" opens — their reply, its mailbox id, and who it is from (so the button opens that email, not the mailbox)', !!g.body.reply_target && g.body.reply_target.last_inbound && g.body.reply_target.last_inbound.message_id === 'gm-1' && g.body.reply_target.last_inbound.mailbox_id === 'mb-priya' && g.body.reply_target.last_inbound.other_email === 'maria@acme.com', JSON.stringify(g.body.reply_target));
+T.user_emails[1].user_id = 'u-other';
+let gOther = await r.get('co1', priya);
+step('a reply that reached somebody ELSE\'s mailbox is not offered as a target', gOther.body.reply_target && gOther.body.reply_target.last_inbound === null);
+T.user_emails[1].user_id = 'u-priya';
 let fm = await r.full('co1', 'in:cm1', priya);
 step('the owner can open the full reply from their own mailbox', fm.status === 200 && /Here are three profiles/.test(fm.body.text) && mailFetches === 1, JSON.stringify(fm.body).slice(0, 120));
 step('…as plain text — nothing from the sender\'s HTML can run', !/<script|<p>/.test(fm.body.text));

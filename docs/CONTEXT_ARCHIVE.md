@@ -6643,3 +6643,18 @@ Owner: "Go ahead with logo storage bucket." Checked `storage.buckets` first (onl
 
 ### SESSION 42, closing — handoff written (8 Oct)
 Owner paused: "update the context window, I will resume in the next chat." `CONTEXT_WINDOW.md` now opens with a START HERE block (state, what to look at live, what is not built, honest limits). Merged to `main` with the logo-bucket record (#314) so a new chat reads it from `main`. Session 42 in one paragraph: the owner's first look at live Find Leads (eight items, #312), then My Setup in two stages (#313: any person sets up their own mailbox, "sends as", a sequence of their own to START outreach, first-login tasks, sending days/hours, signature logo + formatting), then the logo bucket (migration 061, D-0105).
+
+### SESSION 42, after the handoff — the owner answers the three open items (D-0106)
+Company name at send time: dropped (it lives in the person's sequence). Company profile: "where will it be used?". Random-template mode / stock wording: "each user creates it; the system gives nothing". Found by reading: Random mode, the follow-up fallback and the starter all still supply Fute-pitched text. Plan proposed to the owner, nothing built.
+
+### SESSION 42, three screenshots from the owner (D-0107)
+Duplicate setup prompt (Today card + Needs-you-today row) → card removed; mailbox rows reduced to details and one button; "Didn't send" gets Close / Close all. Reproduced from the screenshots' own text, built, tested with a new `failed-close-smoke` (10) and the updated My Setup page test (48); mutations shown failing (card back; Close button removed).
+
+### SESSION 42, Reply opens that email (D-0108)
+Owner: "Reply in the mailbox" opened the mailbox, not the email; a follow-up (we wrote last) had no way to go as a reply; "Write the email" took them to the lead. Built `services/reply-target.js` + `reply_target` on the intel routes + `mbOpenMessage` and wired the conversation window and Needs-you-today. Could not reproduce the lead-jump with a normal timeline — removed the silent fallback. Limits recorded in D-0108.
+
+### SESSION 42, Deliverability becomes the admin's (D-0109)
+Owner called the tab worthless for managers; I disagreed on one point (the bounce figure is the only place anyone sees what protects the sending domains) and proposed: admin-only, spam check into the sequence editor, drop reply-by-template; owner said yes and asked for bounce + open rate on Outreach Insights. Found while building: the old "Bounced" tile was all-time invalid contacts, not a rate — the new bounce rate is per person and per 30 days, labelled by what it is.
+
+### SESSION 42, closing — merged as #315, context updated
+Owner: "merge it" then "and update the context". #315 carried D-0107 (one setup prompt, details-only mailbox rows, closable failures), D-0108 (Reply / follow-up open that email), D-0109 (admin-only Deliverability, rates on Outreach Insights, spam check in the sequence editor) and the D-0106 record. 221/221 on Node 22 and Node 26.10.0; nothing sending at the merge. `CONTEXT_WINDOW.md` START HERE rewritten with the unanswered D-0106 questions (a–e).

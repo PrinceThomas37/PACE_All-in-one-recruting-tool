@@ -128,12 +128,30 @@ async function loadBdSummary(req, bdId, now, tz) {
   jobs.forEach(j => { j.replied = (j.contacts || []).some(c => c && c.replied_at); });
   // `emails` has no `assigned_to`: an email belongs to whoever sent it (`sent_by`).
   const emails = await fetchAll(() => {
-    let q = supabase.from('emails').select('id,status,created_at,sent_at')
+    let q = supabase.from('emails').select('id,status,created_at,sent_at,contact_id')
       .eq('sent_by', bdId).gte('created_at', new Date(Date.parse(w.monthFrom + 'T00:00:00Z') - 36 * 3600e3).toISOString())   // a zone ahead of UTC starts its month up to 14h before UTC does; the extra day is trimmed by summarise().order('id');
     if (req.orgId) q = q.eq('org_id', req.orgId);
     return q;
   });
-  return bdInsights.summarise({ jobs, emails, now, tz: w.tz });
+  // Bounce rate and open rate (owner, 8 Oct) — of the same mail the page counts as sent, never a second definition.
+  const sent = bdInsights.sentInMonth(emails, now, w.tz);
+  const contactStatus = {}, tracking = [];
+  let delivery = null;                       // a failed read leaves the rates unmeasured ("—"), never a made-up 0%
+  const idsOf = (rows, k) => [...new Set(rows.map(r => r[k]).filter(Boolean))];
+  try {
+    for (let i = 0, cids = idsOf(sent, 'contact_id'); i < cids.length; i += 150) {
+      let q = supabase.from('contacts').select('id,email_status').in('id', cids.slice(i, i + 150));
+      if (req.orgId) q = q.eq('org_id', req.orgId);
+      const { data, error } = await q; if (error) throw error; (data || []).forEach(c => { contactStatus[c.id] = c.email_status; });
+    }
+    for (let i = 0, eids = idsOf(sent, 'id'); i < eids.length; i += 150) {
+      let q = supabase.from('email_tracking').select('email_id,open_count').in('email_id', eids.slice(i, i + 150));
+      if (req.orgId) q = q.eq('org_id', req.orgId);
+      const { data, error } = await q; if (error) throw error; tracking.push(...(data || []));
+    }
+    delivery = bdInsights.deliveryStats({ sent, contactStatus, tracking });
+  } catch (_) { delivery = null; }
+  return bdInsights.summarise({ jobs, emails, now, tz: w.tz, delivery });
 }
 
 // The team report. Registered ABOVE the `:userId` route (a literal path must never sit below a
