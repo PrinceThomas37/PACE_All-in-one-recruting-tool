@@ -211,6 +211,16 @@ const SETTINGS_SCHEMA = [
     description: 'How many people\'s work emails one person may reveal (1 Apollo credit each) in a day. This is the number a charge could later attach to.',
     default: 30, min: 0, max: 1000,
   },
+  {
+    key: 'finder_jsearch_daily_requests', label: 'Lead Finder: free-job-source requests a day (per organisation)', unit: 'requests (0 = none)', group: 'Lead Finder',
+    description: 'The most requests the free job sources may make in one day for one organisation. Each is one request on the organisation\'s own job-search plan (the free plan allows 200 a month — about 6 a day), so this stops a busy day using the month. Counted per organisation, not across customers.',
+    default: 6, min: 0, max: 10000,
+  },
+  {
+    key: 'finder_jsearch_requests_per_run', label: 'Lead Finder: most free-source requests one search run may make', unit: 'requests (0 = off)', group: 'Lead Finder',
+    description: 'One request looks up one job title in one place and brings up to 10 jobs. A search with more titles or places than this is covered over several daily runs (a one-off search takes the first ones).',
+    default: 3, min: 0, max: 50,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));

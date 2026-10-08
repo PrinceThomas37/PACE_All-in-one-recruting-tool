@@ -34,7 +34,7 @@ function findChromium() {
 
 const ACCESS = {
   enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
-  wait_days: 14, card_days: 5, goes_to: 'pool',
+  wait_days: 14, card_days: 5, goes_to: 'pool', jobsource: { connected: false, used: 0, limit: 10, per_run: 3 },
   sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
   sizes: [{ id: 'small', label: '11–50' }, { id: 'mid', label: '51–500' }], posted: { min: 0, max: 30, def: 14 },
 };
@@ -80,6 +80,7 @@ try {
       if (p === '/finder/mailboxes') return Promise.resolve({ goes_to: 'you', suggested_id: 'm2', mailboxes: [{ id: 'm1', email_address: 'bea@x.test', display_name: 'Bea', sent_today: 40 }, { id: 'm2', email_address: 'bea.two@x.test', display_name: '', sent_today: 3 }] });
       if (p.indexOf('/finder/history') === 0) return Promise.resolve(window.__hist);
       if (p === '/finder/searches') return Promise.resolve({ searches: window.__searches });
+      if (p === '/finder/admin/jobsource') return Promise.resolve(window.__js);
       if (p === '/finder/admin/users') return Promise.resolve({ default_daily: 25, users: [{ id: 'u9', name: 'Rob Ra', email: 'rob@x.test', roles: ['ra'], enabled: false, daily: null }] });
       if (p === '/finder/diagnose') return Promise.resolve({ connected: true, ok: false, checks: [{ ok: true, text: 'Finding people by job title works (free).' }, { ok: false, text: 'This Apollo key is not allowed to search companies.' }] });
       return Promise.resolve({});
@@ -95,6 +96,7 @@ try {
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
       if (/\/run$/.test(p)) { const R = { results: [{ name: 'S', cards: 2, note: 'Found 5 companies hiring. 2 new cards.' }], new_cards: 2, credits: { used: 4, limit: 300 } }; return window.__hold ? new Promise((r) => { window.__release = () => r(R); }) : Promise.resolve(R); }
+      if (p === '/finder/admin/jobsource/test') return Promise.resolve({ ok: true, text: 'The key works (1 request used; 3 jobs came back).', used: 1, limit: 10 });
       if (p === '/finder/companies/suggest') {
         window.__lookups = (window.__lookups || 0) + 1; const q = String(b.q).toLowerCase();
         if (/^[a-z0-9-]+\.[a-z]{2,}$/.test(q)) return Promise.resolve({ suggestions: [{ name: q, domain: q, city: '', state: '', website_only: true }], used_credit: false, note: '' });
@@ -105,7 +107,12 @@ try {
       return Promise.resolve({});
     };
     window.__refreshed = 0; window.refreshJobs = function () { window.__refreshed++; return Promise.resolve(); };
-    window.apiPut = function (p, b) { rec('PUT', p, b); return Promise.resolve({}); };
+    window.__js = { connected: false, hint: null, used: 0, limit: 10, per_run: 3 };
+    window.apiPut = function (p, b) {
+      rec('PUT', p, b);
+      if (p === '/finder/admin/jobsource') { window.__js = { connected: !!b.api_key, hint: b.api_key ? '••••••' + String(b.api_key).slice(-4) : null, used: 0, limit: 10, per_run: 3 }; return Promise.resolve(window.__js); }
+      return Promise.resolve({});
+    };
     window.apiDelete = function (p) { rec('DELETE', p); return Promise.resolve({}); };
   }, { access: ACCESS, cards: CARDS, people: PEOPLE, emails: EMAILS });
 
@@ -169,6 +176,7 @@ try {
   await page.waitForTimeout(250);
   m = await modal();
   step('Find people asks with the typed title, and lists names, titles and a masked surname as Apollo sent it', (await calls()).some(c => /c1\/people$/.test(c[1]) && c[2].title === 'HR Manager') && /Dana Cole/.test(m) && /Eli Ro\*\*\*s/.test(m) && /Plant Manager/.test(m));
+  step('with Apollo connected and a website on the card, the window offers Find people', /Find people/.test(m) && !/Apollo is not connected here/.test(m));
   step('an email is NOT shown until it is asked for, and the button says it costs a credit', !/dana@brazos/.test(m) && /Get email · 1 credit/.test(m));
 
   await page.evaluate(() => window.fdReveal('p1'));
@@ -267,6 +275,16 @@ try {
   await page.evaluate(() => window.fdNewSearch());
   h = await html();
   step('the name box is called "Name of the run" (the owner found a bare "Name" unclear)', /Name of the run/.test(h) && !/<div class="fd-label">Name<\/div>/.test(h));
+  step('the form asks where to search — Apollo, Free job sources or Both — with Apollo ticked while Apollo is connected', /Search with/.test(h) && (h.match(/name="fd-src"/g) || []).length === 3 && /value="apollo" checked/.test(h) && /Free job sources/.test(h) && /Apollo plus the free sources/.test(h));
+  await page.evaluate(() => window.fdPickSource('free'));
+  h = await html();
+  step('picking Free job sources warns that no key is saved yet, and says company size and industry words are Apollo-only and that it brings companies not people', /value="free" checked/.test(h) && /Free job sources are not connected yet/.test(h) && /company size and industry words do not apply/.test(h) && /not people/.test(h) && !/Apollo is not connected, so Apollo cannot be searched/.test(h));
+  await page.evaluate(() => window.fdPickSource('apollo'));
+  step('Apollo alone shows neither the warning nor the free-source note', !/Free job sources are not connected yet/.test(await html()) && !/company size and industry words do not apply/.test(await html()));
+  await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = false; a.jobsource.connected = true; window.fdNewSearch(); });
+  h = await html();
+  step('an organisation with no Apollo but a job-source key starts on Free job sources, and an Apollo pick warns that Apollo is not connected', /value="free" checked/.test(h) && (await page.evaluate(() => { window.fdPickSource('apollo'); return true; })) && /Apollo is not connected, so Apollo cannot be searched/.test(await html()));
+  await page.evaluate(() => { const a = window.STATE.finder.access; a.apollo.connected = true; a.jobsource.connected = false; window.fdNewSearch(); });
   step('before any industry is picked the page says how to get titles to tick, and nothing is chosen', /Pick an industry above to get titles you can tick/.test(h) && /0 of 40 chosen/.test(h));
   await page.evaluate(() => { window.fdAddSector('medical'); window.fdAddSector('it'); });
   h = await html();
@@ -327,25 +345,27 @@ try {
   await page.evaluate(() => window.fdTab('searches'));
   h = await html();
   step('what was typed survives a repaint of the page — including a slider left at 0 (a 0 must never snap back to 14)', /value="Texas, remote"/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /fd-posted-out" class="fd-strong">today/.test(h));
+  await page.evaluate(() => window.fdPickSource('both'));
   await page.evaluate(() => window.fdSaveSearch());
   await page.waitForTimeout(250);
   const saved = (await calls()).find(c => c[0] === 'POST' && c[1] === '/finder/searches');
-  step('Save sends clean lists: the titles ticked and typed, the places split on commas, the size, 0 days, the industries, and the chosen companies with their places', saved && saved[2].titles.join() === 'Medical Assistant,Welder,CNC Machinist' && saved[2].locations.join() === 'Texas,remote' && saved[2].sizes.join() === 'mid' && saved[2].posted_days === 0 && saved[2].sectors.join() === 'medical' && saved[2].sector === 'medical' && saved[2].companies.length === 2 && saved[2].companies[0].city === 'Austin' && saved[2].domains.join() === 'acmemfg.com,acmefoods.com' && saved[2].name === 'Medical & dental', JSON.stringify(saved && saved[2]));
+  step('Save sends clean lists: the titles ticked and typed, the places split on commas, the size, 0 days, the industries, and the chosen companies with their places', saved && saved[2].titles.join() === 'Medical Assistant,Welder,CNC Machinist' && saved[2].locations.join() === 'Texas,remote' && saved[2].sizes.join() === 'mid' && saved[2].posted_days === 0 && saved[2].sectors.join() === 'medical' && saved[2].source === 'both' && saved[2].sector === 'medical' && saved[2].companies.length === 2 && saved[2].companies[0].city === 'Austin' && saved[2].domains.join() === 'acmemfg.com,acmefoods.com' && saved[2].name === 'Medical & dental', JSON.stringify(saved && saved[2]));
   h = await html();
+  step('the saved search says where it looks (Apollo + free job sources)', /looks in: Apollo \+ free job sources/.test(await html()));
   step('the saved search appears in the list with a Run now button', /Medical &amp; dental/.test(h) && /Run now/.test(h));
-  await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's3', name: 'Today only', active: true, sector: 'it', sectors: ['it', 'medical'], titles: ['Software Engineer'], locations: ['Ohio'], sizes: [], posted_days: 0, keywords: [], domains: ['acmemfg.com'], companies: [{ name: 'Acme Manufacturing', domain: 'acmemfg.com', city: 'Austin', state: 'Texas' }] }, { id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.fdTab('searches'); });
+  await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's3', name: 'Today only', active: true, source: 'free', sector: 'it', sectors: ['it', 'medical'], titles: ['Software Engineer'], locations: ['Ohio'], sizes: [], posted_days: 0, keywords: [], domains: ['acmemfg.com'], companies: [{ name: 'Acme Manufacturing', domain: 'acmemfg.com', city: 'Austin', state: 'Texas' }] }, { id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.fdTab('searches'); });
   h = await html();
   step('a daily search saved at 0 days reads "posted today", and one with chosen companies says how many', /posted today/.test(h) && /only 1 chosen company/.test(h) && /posted in the last 7 days/.test(h));
   await page.evaluate(() => window.fdEditSearch('s3'));
   h = await html();
-  step('editing it brings back everything: both industries, the 0-day slider (not 14), and the company with its place', /fd-chip">IT &amp; software/.test(h) && /fd-chip">Medical &amp; dental/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /Acme Manufacturing<\/strong> · Austin, Texas/.test(h));
+  step('editing it brings back everything: both industries, the 0-day slider (not 14), and the company with its place', /fd-chip">IT &amp; software/.test(h) && /fd-chip">Medical &amp; dental/.test(h) && (await page.evaluate(() => document.getElementById('fd-f-posted').value)) === '0' && /Acme Manufacturing<\/strong> · Austin, Texas/.test(h) && /value="free" checked/.test(h));
   await page.evaluate(() => { window.fdCancelForm(); window.__calls.length = 0; window.fdToggleSearch('s3'); });
   await page.waitForTimeout(150);
   const tg = (await calls()).find(c => c[0] === 'PUT' && c[1] === '/finder/searches/s3');
-  step('pausing a search sends it back whole — still 0 days, still its companies and industries (a pause must not widen it)', tg && tg[2].posted_days === 0 && tg[2].active === false && tg[2].companies.length === 1 && tg[2].sectors.join() === 'it,medical' && tg[2].name === 'Today only', JSON.stringify(tg && tg[2]));
+  step('pausing a search sends it back whole — still 0 days, still its companies and industries (a pause must not widen it)', tg && tg[2].posted_days === 0 && tg[2].active === false && tg[2].companies.length === 1 && tg[2].sectors.join() === 'it,medical' && tg[2].source === 'free' && tg[2].name === 'Today only', JSON.stringify(tg && tg[2]));
   await page.waitForTimeout(150); await page.evaluate(() => { window.STATE.finder.searches = [{ id: 's4', name: 'Old row', active: true, sector: 'it', titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 7, keywords: [], domains: ['oldco.com'] }]; window.__calls.length = 0; window.fdEditSearch('s4'); });
   h = await html();
-  step('a search saved before this change (websites only) still opens: its websites show as company chips', /fd-chip"><strong>oldco\.com<\/strong>/.test(h));
+  step('a search saved before this change (websites only, no source) still opens: its websites show as company chips, and it looks in Apollo as it always did', /fd-chip"><strong>oldco\.com<\/strong>/.test(h) && /value="apollo" checked/.test(h));
   await page.evaluate(() => window.fdCancelForm());
   await page.evaluate(() => { window.__searches.push({ id: 's2', name: 'Second search', active: true, titles: ['Welder'], locations: ['Ohio'], sizes: [], posted_days: 14, keywords: [], domains: [] }); window.STATE.finder.searches = JSON.parse(JSON.stringify(window.__searches)); window.__hold = true; window.fdRun('s1'); });
   await page.waitForTimeout(150);
@@ -363,7 +383,7 @@ try {
   step('Delete (after the confirmation) asks the server to delete that search', (await calls()).some(c => c[0] === 'DELETE' && c[1] === '/finder/searches/s1'));
 
   // ── admin tab ──────────────────────────────────────────────────────────
-  step('an ordinary person has no "Access & Apollo" tab', !/Access &amp; Apollo/.test(await html()));
+  step('an ordinary person has no "Access & job sources" tab', !/Access &amp; job sources/.test(await html()));
   await page.evaluate(() => { window.__access.is_admin = true; window.STATE.finder.access.is_admin = true; });
   await switchRole(page, 'admin');
   await page.evaluate(() => { window.STATE.finder.access.is_admin = true; window.goPage('finder'); });
@@ -380,6 +400,35 @@ try {
   await page.waitForTimeout(250);
   h = await html();
   step('"Check what my key can do" lists each check in words, red where Apollo refuses', /Finding people by job title works/.test(h) && /not allowed to search companies/.test(h) && /c-red/.test(h));
+
+  step('the admin tab has a Free job sources card: no key yet, a password box (never plain text), and a plain explanation that the key is the organisation\'s own and finds companies, not people', /Free job sources \(JSearch\)/.test(h) && /No key saved yet/.test(h) && (await page.evaluate(() => { const e = document.getElementById('fd-js-key'); return !!e && e.type === 'password' && e.autocomplete === 'off'; })) && /organisation&#39;s own|organisation's own/.test(h) && /not people/.test(h) && !/Check my key/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-js-key').value = 'JS-KEY-ABCDEFGH1234'; window.fdJsSave(); });
+  await page.waitForTimeout(250);
+  h = await html();
+  const jsPut = (await calls()).find(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource');
+  step('saving sends the key once; afterwards only its last four characters are shown, the box is empty again, and a Check my key button appears', jsPut && jsPut[2].api_key === 'JS-KEY-ABCDEFGH1234' && /A key is saved \(••••••1234\)/.test(h) && !/ABCDEFGH/.test(h) && /Check my key \(1 request\)/.test(h) && (await page.evaluate(() => document.getElementById('fd-js-key').value)) === '');
+  step('the strip now shows the day\'s job-source requests', /Job-source requests today/.test(h));
+  await page.evaluate(() => window.fdJsTest());
+  await page.waitForTimeout(250);
+  h = await html();
+  step('Check my key says in words that it works', /The key works \(1 request used/.test(h) && (await calls()).some(c => c[0] === 'POST' && c[1] === '/finder/admin/jobsource/test'));
+  await page.evaluate(() => window.fdJsRemove());
+  await page.waitForTimeout(250);
+  h = await html();
+  step('Remove key sends an empty key and the card goes back to "No key saved yet"', (await calls()).some(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource' && c[2].api_key === '') && /No key saved yet/.test(h) && !/Check my key/.test(h));
+  await page.evaluate(() => { document.getElementById('fd-js-key').value = '   '; window.fdJsSave(); });
+  step('an empty box is not sent', (await calls()).filter(c => c[0] === 'PUT' && c[1] === '/finder/admin/jobsource').length === 2);
+
+  // the Accept window for a card whose people cannot be looked up by Apollo
+  await page.evaluate((c) => { const a = window.STATE.finder.access; a.apollo.connected = false; window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; }); window.fdAccept('c1'); }, CARDS);
+  await page.waitForTimeout(250);
+  m = await page.evaluate(() => String(window.STATE.modal));
+  step('with no Apollo the Accept window does not offer Find people; it says so and opens "Add someone by hand"', !/>Find people</.test(m) && /Apollo is not connected here/.test(m) && /<details class="fd-manual" open>/.test(m));
+  await page.evaluate((c) => { const a = window.STATE.finder.access; a.apollo.connected = true; window.fdCloseAccept(); window.STATE.finder.cards = JSON.parse(JSON.stringify(c.cards)); window.STATE.finder.cards.forEach(x => { x._base = []; x.domain = ''; }); window.fdAccept('c1'); }, CARDS);
+  await page.waitForTimeout(250);
+  m = await page.evaluate(() => String(window.STATE.modal));
+  step('a company whose website is not known (a free-source card may not have one) says so and opens the by-hand form, even with Apollo connected', !/>Find people</.test(m) && /website is not known/.test(m) && /<details class="fd-manual" open>/.test(m));
+  await page.evaluate(() => window.fdCloseAccept());
 
   // ── Find leads now (one-off) and Daily run ───────────────────────────────
   await page.evaluate(() => { window.STATE.finder.tab = 'cards'; window.goPage('finder'); });

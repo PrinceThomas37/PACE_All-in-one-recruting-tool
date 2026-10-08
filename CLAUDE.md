@@ -153,6 +153,7 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
   credit, never retried, key in a header). The Sourcing page's Apollo/Indeed/Monster/Dice/LinkedIn rows are
   NOT integrated — **a screen must not advertise what does not exist** (`config/sourcing.js`: `built` vs
   `available`, every unbuilt row carries a `blocker`). Never quote a vendor's free tier from memory.
+- **Free job sources:** only `services/jobs-jsearch.js` calls JSearch; the key belongs to the ORGANISATION using it (per-organisation, masked, never shared — the vendor's terms do not allow one key for many customers to be assumed), counted per organisation per day BEFORE the call, never retried, and a card it makes shows only what it knows (no invented size or people).
 - **Resume parsing uses `unpdf`, not `pdf-parse`** (Node 26 breaks the old one) and says which of five ways it
   failed (`describePdfFailure`); failures are recorded, best-effort.
 
