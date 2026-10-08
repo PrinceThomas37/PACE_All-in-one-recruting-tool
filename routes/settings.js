@@ -10,6 +10,7 @@ const express = require('express');
 const { resolveTemplate } = require('../email-vars');
 const numberSettings = require('../config/settings');
 const wording = require('../services/wording-scope');
+const followupSteps = require('../services/followup-steps');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -130,12 +131,12 @@ router.post('/app-settings', auth, async (req, res) => {
 router.get('/outreach-plan', auth, async (req, res) => {
   try {
     const uid = req.user.id;
-    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`,`u_${uid}_tmpl_scope`,`u_${uid}_fu1_thread`,`u_${uid}_fu2_thread`];
+    const keys = [`u_${uid}_fu1_day`,`u_${uid}_fu2_day`,`u_${uid}_tmpl_o1_subject`,`u_${uid}_tmpl_o1_body`,`u_${uid}_tmpl_fu1_subject`,`u_${uid}_tmpl_fu1_body`,`u_${uid}_tmpl_fu2_subject`,`u_${uid}_tmpl_fu2_body`,`u_${uid}_signature_html`,`u_${uid}_random_template_mode`,`u_${uid}_compose_style_preset`,`u_${uid}_tmpl_scope`,`u_${uid}_fu_count`,...followupSteps.STEPS.map(t => `u_${uid}_${t}_thread`),...followupSteps.STEPS.map(t => `u_${uid}_${t}_day`),...followupSteps.STEPS.flatMap(t => [`u_${uid}_tmpl_${t}_subject`,`u_${uid}_tmpl_${t}_body`])];
     const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
     const plan = {};
     (data || []).forEach(r => { plan[r.key.replace(`u_${uid}_`, '')] = r.value; });
 
-    const tmplFields = ['tmpl_o1_subject', 'tmpl_o1_body', 'tmpl_fu1_subject', 'tmpl_fu1_body', 'tmpl_fu2_subject', 'tmpl_fu2_body'];
+    const tmplFields = wording.FIELDS;
     const migrations = [];
     tmplFields.forEach(field => {
       const shortKey = field.replace('tmpl_', '');
@@ -160,13 +161,16 @@ router.post('/outreach-plan', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'bd', 'bd_lead', 'admin')) return res.status(403).json({ error: 'BD role required' });
     const uid = req.user.id;
-    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset','tmpl_scope','fu1_thread','fu2_thread'];
+    const allowed = ['fu1_day','fu2_day','tmpl_o1_subject','tmpl_o1_body','tmpl_fu1_subject','tmpl_fu1_body','tmpl_fu2_subject','tmpl_fu2_body','signature_html','random_template_mode','compose_style_preset','tmpl_scope','fu_count','fu3_day','fu4_day','fu5_day', ...followupSteps.STEPS.map(t => `${t}_thread`), ...['fu3','fu4','fu5'].flatMap(t => [`tmpl_${t}_subject`, `tmpl_${t}_body`])];
     const { key, value } = req.body;
     if (!allowed.includes(key)) return res.status(400).json({ error: 'Invalid key' });
     // R-176: one wording for all my email IDs ('all') or one each ('each') — nothing else is stored.
     if (key === 'tmpl_scope' && !['all', 'each'].includes(String(value))) return res.status(400).json({ error: 'Choose "all" or "each".' });
     // Follow-up 1 / 2: a reply in the first email's thread ('same', the default) or a new email with its own subject ('new').
-    if ((key === 'fu1_thread' || key === 'fu2_thread') && !['same', 'new'].includes(String(value))) return res.status(400).json({ error: 'Choose "same" or "new".' });
+    if (/^fu[1-5]_thread$/.test(key) && !['same', 'new'].includes(String(value))) return res.status(400).json({ error: 'Choose "same" or "new".' });
+    // How many follow-ups (0–5) and the day of each (1–90, whole days after the first email) — services/followup-steps.js.
+    if (key === 'fu_count' && !(Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= followupSteps.MAX)) return res.status(400).json({ error: `Choose 0 to ${followupSteps.MAX} follow-ups.` });
+    if (/^fu[1-5]_day$/.test(key) && !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 90)) return res.status(400).json({ error: 'Choose a whole number of days, 1 to 90.' });
     const fullKey = `u_${uid}_${key}`;
     const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });
     if (error) throw error;

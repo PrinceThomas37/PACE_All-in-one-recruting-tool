@@ -196,11 +196,11 @@ function planFromMailbox(){
   return list.find(function(e){return e.id===STATE.planFromEmailId;})||null;
 }
 function planPreviewInner(){
-  var t=STATE.activeTmpl||'outreach', ids={outreach:['tmpl-o1-subj','tmpl-o1-body'],fu1:['tmpl-fu1-subj','tmpl-fu1-body'],fu2:['tmpl-fu2-subj','tmpl-fu2-body']}[t]||['tmpl-o1-subj','tmpl-o1-body'];
+  var t=STATE.activeTmpl||'outreach', ids=planBoxIds(t);
   var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]);
   var plan=STATE.myOutreachPlan||{}, key=(t==='outreach'?'o1':t);
-  var subj=se?se.value:(planWording('tmpl_'+key+'_subject')||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'');
-  var body=be?be.value:(planWording('tmpl_'+key+'_body')||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'');
+  var subj=se?se.value:(planWording('tmpl_'+key+'_subject')||'');
+  var body=be?be.value:(planWording('tmpl_'+key+'_body')||'');
   var from=planFromMailbox();
   var vars=Object.assign({},PLAN_EXAMPLE,{'{{sender}}':from?(from.display_name||from.email_address||''):'','{{senderemail}}':from?(from.email_address||''):'',
     '{{sendercompany}}':from&&from.sends_as?(from.sends_as.company||''):''});
@@ -226,21 +226,21 @@ function planPreviewInner(){
 // signature arriving, switching the Sending email), because boxes are drawn from the SAVED text. What is typed is kept per
 // (email ID or "all") and template, drawn back in on every repaint, and dropped on Save — or when it equals the saved text, so an old
 // copy can never hide a later saved change.
-var PLAN_BOX_IDS={outreach:['tmpl-o1-subj','tmpl-o1-body'],fu1:['tmpl-fu1-subj','tmpl-fu1-body'],fu2:['tmpl-fu2-subj','tmpl-fu2-body']};
+function planBoxIds(t){ return t==='outreach'?['tmpl-o1-subj','tmpl-o1-body']:['tmpl-'+t+'-subj','tmpl-'+t+'-body']; }
 function planDraftScope(){ return planScope()==='each'?(STATE.planFromEmailId||''):'all'; }
 function planDraftKey(tkey){ return planDraftScope()+'|'+tkey; }
 window.planDraftFor=function(tkey){ return (STATE.planDraft||{})[planDraftKey(tkey)]||null; };
 window.planDraftCapture=function(){
-  var t=STATE.activeTmpl||'outreach', ids=PLAN_BOX_IDS[t]; if(!ids) return;
+  var t=STATE.activeTmpl||'outreach', ids=planBoxIds(t);
   var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]); if(!se||!be) return;
   var k=outreachTmplApiKey(t);
-  var savedS=planWording('tmpl_'+k+'_subject')||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'';
-  var savedB=planWording('tmpl_'+k+'_body')||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'';
+  var savedS=planWording('tmpl_'+k+'_subject')||'';
+  var savedB=planWording('tmpl_'+k+'_body')||'';
   STATE.planDraft=STATE.planDraft||{};
   if(se.value===savedS&&be.value===savedB) delete STATE.planDraft[planDraftKey(t)];
   else STATE.planDraft[planDraftKey(t)]={ subj:se.value, body:be.value };
 };
-window.planDraftClear=function(tkey){ if(STATE.planDraft) delete STATE.planDraft[planDraftKey(tkey==='outreach'||tkey==='fu1'||tkey==='fu2'?tkey:'outreach')]; };
+window.planDraftClear=function(tkey){ if(STATE.planDraft) delete STATE.planDraft[planDraftKey(tkey||'outreach')]; };
 window.planSetTmpl=function(key){ if(window.planDraftCapture) planDraftCapture(); STATE.activeTmpl=key; render(); };
 window.planRepaintPreview=function(){
   planDraftCapture();
@@ -635,23 +635,28 @@ function renderEmail(){
   // ── OUTREACH PLAN TAB ──
   if(!STATE.activeTmpl)STATE.activeTmpl='outreach';
   var myPlan=STATE.myOutreachPlan||{};
-  var fu1Day=parseInt(myPlan['fu1_day']||'3',10);
-  var fu2Day=parseInt(myPlan['fu2_day']||'7',10);
+  // HOW MANY FOLLOW-UPS, AND WHEN EACH GOES OUT, IS THE PERSON'S CHOICE (owner, 8 Oct, D-0113): none to five; NONE until they turn them on (D-0114: "if no follow-up is enabled then no follow-up email is triggered").
+  // (They once defaulted to two.) A new person starts with BLANK boxes — they write their own wording; nothing is written for them.
+  var fuCount=(function(){ var v=myPlan['fu_count']; if(v===undefined||v===null||String(v).trim()==='')return 0; var k=Number(v); return (k===Math.floor(k)&&k>=0&&k<=5)?k:0; })();
+  var FU_DEFAULT_DAY=[3,7,14,21,28], FU_COLORS=['#ca8a04','#ea580c','#c2410c','#9a3412','#7c2d12'];
+  function fuDay(n){ var d=parseInt(myPlan['fu'+n+'_day'],10); return (d>=1&&d<=90)?d:FU_DEFAULT_DAY[n-1]; }
   function dayOpts(selected,minDay){
     var opts='';
-    for(var d=1;d<=10;d++){
-      if(d<=minDay)continue;
+    for(var d=minDay+1;d<=Math.max(60,selected);d++){
       opts+='<option value="'+d+'"'+(d===selected?' selected':'')+'>Day '+d+'</option>';
     }
     return opts;
   }
   var tmplDefs=[
-    {key:'outreach',label:'Outreach 1',sublabel:'Sent immediately on assignment',color:'var(--accent)',subjVal:planWording('tmpl_o1_subject')||STATE.emailSubj,bodyVal:planWording('tmpl_o1_body')||STATE.emailBody,subjId:'tmpl-o1-subj',bodyId:'tmpl-o1-body'},
-    {key:'fu1',label:'Follow-up 1',sublabel:'Day '+fu1Day+' after outreach',color:'#ca8a04',subjVal:planWording('tmpl_fu1_subject')||STATE.fu1Subj,bodyVal:planWording('tmpl_fu1_body')||STATE.fu1Body,subjId:'tmpl-fu1-subj',bodyId:'tmpl-fu1-body'},
-    {key:'fu2',label:'Follow-up 2',sublabel:'Day '+fu2Day+' after outreach',color:'#ea580c',subjVal:planWording('tmpl_fu2_subject')||STATE.fu2Subj,bodyVal:planWording('tmpl_fu2_body')||STATE.fu2Body,subjId:'tmpl-fu2-subj',bodyId:'tmpl-fu2-body'}
+    {key:'outreach',label:'Outreach 1',sublabel:'Sent immediately on assignment',color:'var(--accent)',subjVal:planWording('tmpl_o1_subject')||'',bodyVal:planWording('tmpl_o1_body')||'',subjId:'tmpl-o1-subj',bodyId:'tmpl-o1-body'}
   ];
+  for(var fn=1;fn<=fuCount;fn++){
+    tmplDefs.push({key:'fu'+fn,n:fn,label:'Follow-up '+fn,sublabel:'Day '+fuDay(fn)+' after the first email',color:FU_COLORS[fn-1],
+      subjVal:planWording('tmpl_fu'+fn+'_subject')||'',bodyVal:planWording('tmpl_fu'+fn+'_body')||'',subjId:'tmpl-fu'+fn+'-subj',bodyId:'tmpl-fu'+fn+'-body'});
+  }
   tmplDefs.forEach(function(t){ var d=planDraftFor(t.key); if(d){ t.subjVal=d.subj; t.bodyVal=d.body; } });   // unsaved typing wins until Save
   var activeTmpl=tmplDefs.find(function(t){return t.key===STATE.activeTmpl;})||tmplDefs[0];
+  STATE.activeTmpl=activeTmpl.key;                     // fewer follow-ups than the tab that was open: back to the first email
   var planEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
   var planFromId=STATE.planFromEmailId||(planEmails.find(function(e){return e.is_primary;})||planEmails[0]||{}).id;
   if(planFromId&&!STATE.planFromEmailId)STATE.planFromEmailId=planFromId;
@@ -668,28 +673,21 @@ function renderEmail(){
     return '<button onclick="planSetTmpl(\''+t.key+'\')" style="padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:2px solid '+(isActive?t.color:'var(--border)')+';background:'+(isActive?t.color:'var(--card)')+';color:'+(isActive?'#fff':'var(--text2)')+';transition:all .15s">'+t.label+'</button>';
   }).join('');
   var daySettingsHtml='';
-  if(STATE.activeTmpl==='fu1'){
-    daySettingsHtml='<div class="fgrp" style="margin-bottom:14px"><label class="flbl">Send Follow-up 1 on</label>'+
-      '<select class="sel" style="max-width:160px" id="fu1-day-sel" onchange="saveOutreachDay(\'fu1_day\',this.value)">'+
-        '<option value="">— select day —</option>'+dayOpts(fu1Day,0)+
+  if(activeTmpl.n){
+    var fN=activeTmpl.n, prevDay=fN>1?fuDay(fN-1):0, thrKey='fu'+fN+'_thread', thr=myPlan[thrKey]==='new'?'new':'same';
+    var notWritten=!planWording('tmpl_fu'+fN+'_subject')&&!planWording('tmpl_fu'+fN+'_body')&&!planDraftFor(activeTmpl.key);
+    daySettingsHtml='<div class="fgrp" style="margin-bottom:14px"><label class="flbl">Send Follow-up '+fN+' on</label>'+
+      '<select class="sel" style="max-width:160px" id="fu'+fN+'-day-sel" onchange="saveOutreachDay(\'fu'+fN+'_day\',this.value)">'+
+        '<option value="">— select day —</option>'+dayOpts(fuDay(fN),prevDay)+
       '</select>'+
-      '<div class="fs-11 c-text3" style="margin-top:4px">Days after the outreach email was sent</div>'+
-    '</div>';
-  } else if(STATE.activeTmpl==='fu2'){
-    daySettingsHtml='<div class="fgrp" style="margin-bottom:14px"><label class="flbl">Send Follow-up 2 on</label>'+
-      '<select class="sel" style="max-width:160px" id="fu2-day-sel" onchange="saveOutreachDay(\'fu2_day\',this.value)">'+
-        '<option value="">— select day —</option>'+dayOpts(fu2Day,fu1Day)+
-      '</select>'+
-      '<div class="fs-11 c-text3" style="margin-top:4px">Must be after Follow-up 1 (Day '+fu1Day+')</div>'+
-    '</div>';
-  }
-  // Same thread or a new email — per follow-up (owner, 8 Oct). Default 'same' = how follow-ups have always gone out.
-  if(STATE.activeTmpl==='fu1'||STATE.activeTmpl==='fu2'){
-    var thrKey=STATE.activeTmpl+'_thread', thr=myPlan[thrKey]==='new'?'new':'same', thrLbl=STATE.activeTmpl==='fu1'?'Follow-up 1':'Follow-up 2';
-    daySettingsHtml+='<div class="fgrp" style="margin-bottom:14px"><label class="flbl">How '+thrLbl+' is sent</label>'+
+      '<div class="fs-11 c-text3" style="margin-top:4px">'+(fN>1?'Days after the first email was sent — must be after Follow-up '+(fN-1)+' (Day '+prevDay+')':'Days after the first email was sent')+'</div>'+
+    '</div>'+
+    // Same thread or a new email — per follow-up (owner, 8 Oct). Default 'same' = how follow-ups have always gone out.
+    '<div class="fgrp" style="margin-bottom:14px"><label class="flbl">How Follow-up '+fN+' is sent</label>'+
       '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='same'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'same\')"> <strong>In the same email thread</strong><span class="fd-hint"> — a reply under your first email, so it reads as one conversation</span></label>'+
       '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='new'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'new\')"> <strong>As a new email</strong><span class="fd-hint"> — its own subject line, in a thread of its own (write a subject that stands alone, not “Re: …”)</span></label>'+
-    '</div>';
+    '</div>'+
+    (notWritten?('<div class="fs-12 c-amber" style="margin-bottom:12px">You have not written this follow-up yet.'+' Until you do, nothing goes out for it — PACE never sends wording you did not write.'+'</div>'):'');
   }
   var canEditTemplates=userHasAnyRole(u,'bd','bd_lead','admin');
   var planFrom=planFromMailbox();
@@ -730,6 +728,9 @@ function renderEmail(){
         )+
         '<button class="btn btn-primary" onclick="saveTemplateModePreference()" style="font-size:12px;padding:6px 18px">Save preference</button>'+
       '</div>'+
+      '<div class="fgrp" style="margin-bottom:14px"><label class="flbl">How many follow-ups do you want?</label>'+
+        '<select class="sel" style="max-width:220px" id="fu-count-sel" onchange="setFollowupCount(this.value)">'+[0,1,2,3,4,5].map(function(k){return '<option value="'+k+'"'+(k===fuCount?' selected':'')+'>'+(k===0?'None — only the first email':k+(k===1?' follow-up':' follow-ups'))+'</option>';}).join('')+'</select>'+
+        '<div class="fs-11 c-text3" style="margin-top:4px">You decide. Choose none and only the first email goes out. Each follow-up you turn on goes out on its day after the first email is sent, and stops when the person replies.</div></div>'+
       '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">'+tmplTabBtns+'</div>'+
       '<div class="card cp" style="border-top:3px solid '+activeTmpl.color+'">'+
         '<div style="margin-bottom:14px">'+

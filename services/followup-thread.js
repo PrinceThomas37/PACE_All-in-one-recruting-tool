@@ -8,7 +8,7 @@
 // ============================================================================
 'use strict';
 
-const STEPS = ['fu1', 'fu2'];
+const STEPS = ['fu1', 'fu2', 'fu3', 'fu4', 'fu5'];
 const threadKey = (userId, step) => `u_${userId}_${step}_thread`;
 
 /** Only the exact word 'new' means a new email — anything else (missing, odd, 'same') stays a reply in the thread. */

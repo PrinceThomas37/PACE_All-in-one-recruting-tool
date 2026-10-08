@@ -21,7 +21,7 @@
 'use strict';
 const { isLegacyTemplate } = require('../email-vars');
 
-const SLOTS = ['o1', 'fu1', 'fu2'];
+const SLOTS = ['o1', 'fu1', 'fu2', 'fu3', 'fu4', 'fu5'];
 const FIELDS = SLOTS.reduce((a, s) => a.concat([`tmpl_${s}_subject`, `tmpl_${s}_body`]), []);
 
 const scopeKey = (userId) => `u_${userId}_tmpl_scope`;
@@ -67,11 +67,17 @@ function neededKeys(userIds, mailboxIds) {
 
 /**
  * A follow-up's wording for the email ID it goes out from.
- *   step      'fu1' | 'fu2'     resolve  the app's resolveTemplate (a saved value may be blank or a variant marker)
+ *   step      'fu1' … 'fu5'     resolve  the app's resolveTemplate (a saved value may be blank or a variant marker)
  *   defaults  DEFAULT_TEMPLATES (the last resort)
+ *   strict    true = only the person's own text, no fallback of any kind (D-0114)
  * → { subject, body, own }  — `own` = this email ID has its own text for this step, so a random rotation must leave it alone.
  */
-function followupTexts(settings, { userId, mailboxId, step, resolve, defaults }) {
+function followupTexts(settings, { userId, mailboxId, step, resolve, defaults, strict }) {
+  // strict (D-0114): only what THIS PERSON wrote — never the organisation's or the built-in wording. Nothing written = '' (the caller skips).
+  if (strict) {
+    const own = (part) => text(pickRaw(settings, { userId, mailboxId, field: `tmpl_${step}_${part}`, globalKey: null }));
+    return { subject: own('subject'), body: own('body'), own: !!mailboxOwn(settings, userId, mailboxId, `tmpl_${step}_body`) };
+  }
   const res = typeof resolve === 'function' ? resolve : (v) => v;
   const one = (part) => {
     const field = `tmpl_${step}_${part}`;

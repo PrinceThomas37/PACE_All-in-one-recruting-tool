@@ -593,7 +593,7 @@ function buildClientEmailVars(l,co,sender){
   var localLine=localHint?(" Must be local to "+localHint+"."):(req.local_required&&city?(" Local to "+city+" preferred."):"");
   return{
     fn:l.fn,ln:l.ln,company:co?co.name:"",ind:co?co.ind:"",pos:l.pos||l.position,desig:l.desig,
-    loc:loc,sender:sender||STATE.user.name,
+    loc:loc,sender:sender||'{{sender}}',   // no sender given = the token stays; the SEND fills it from the mailbox that sends (never the profile name)
     skill_1:skills[0]||"",skill_2:skills[1]||"",skill_3:skills[2]||"",
     skills_line:formatSkillsLineClient(skills),
     job_resp:formatJobRespClient(skills),
@@ -683,8 +683,9 @@ window.applyReminderTemplate=function(i){
   var rem=STATE.composeReminderId?((STATE.reminders||[]).find(function(r){return r.id===STATE.composeReminderId;})):null;
   var rc=rem?reminderCompose(rem):null;
   var recip=resolveComposeRecipient();
-  var fromEm=STATE.composeFromEmailId?((STATE.userEmailsCache[STATE.user.id]||[]).find(function(e){return e.id===STATE.composeFromEmailId;})):null;
-  var senderName=(fromEm&&fromEm.display_name)||STATE.user.name||'';
+  // {{sender}} is NOT written in here: the From email ID can still change after a template is picked, and the send fills the name from the
+  // mailbox that really sends (owner, 8 Oct, R-189 — a profile name must never end up in an email's text).
+  var senderName='';
   // Reminder facts first, the cached lead only to fill what the reminder does
   // not carry (skills lines and the like). Never the bare template: an unfilled
   // variable is a variable the recipient reads.

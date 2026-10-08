@@ -794,3 +794,9 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-08 (Session 43, third round) — sequences a BD makes themselves (D-0112)
 - `routes/wf.js` / `09-page-workflows.js`: a plain BD gets `+ New sequence` and edits / activates only sequences they created; the company's standard and the leads' sequences are listed for them but read-only; another BD's personal sequence is not listed. `sequence-own-smoke` (12; the ownership guard fails when removed). Open with the owner: whether a new person should see the company's standard sequence at all (R-182) and more than two follow-ups in My wording (R-181).
+
+## 2026-10-08 (Session 43, fourth round) — sequences start blank for a plain BD (D-0113)
+- A plain `bd` sees only the sequences they created (`routes/wf.js`); BD lead / RA lead / admin see all. The seeded "Standard Sales Outreach" is not listed to new BDs.
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- Follow-up chains (`services/followup-chain.js`, `followup-steps.js`) now begin at the first send and only for follow-ups the person turned on; old chains (`chain_rules` NULL) unchanged. The Sequences builder is untouched (a contact in an active sequence gets no chain).

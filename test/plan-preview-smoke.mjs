@@ -29,7 +29,7 @@ try{
     STATE.userEmailsCache=STATE.userEmailsCache||{};
     STATE.userEmailsCache[u]=[{id:'m1',email_address:'prince.thomas@futeglobal.com',display_name:'Prince Thomas',is_active:true,is_primary:true},{id:'m2',email_address:'kristy@fute-global.com',display_name:'Kristy Scott',is_active:true}];
     STATE.emailSignaturesCache={m1:'<b>{{sender}}</b><br>Fute Global',m2:'<b>{{sender}}</b><br>Other'};
-    STATE.myOutreachPlan={tmpl_o1_subject:'Candidates for your {{pos}} role in {{loc}}',tmpl_o1_body:'Hi {{fn}},\n\nI\'m {{sender}} ({{senderemail}}). {{bogus_field}} {{company}}.',tmpl_fu1_subject:'Following up: {{pos}}',tmpl_fu1_body:'Hi {{fn}}, checking in.'};
+    STATE.myOutreachPlan={fu_count:'2',tmpl_o1_subject:'Candidates for your {{pos}} role in {{loc}}',tmpl_o1_body:'Hi {{fn}},\n\nI\'m {{sender}} ({{senderemail}}). {{bogus_field}} {{company}}.',tmpl_fu1_subject:'Following up: {{pos}}',tmpl_fu1_body:'Hi {{fn}}, checking in.'};
     STATE.planFromEmailId=null; STATE.activeTmpl='outreach'; STATE.emailTab='outreachplan'; STATE.page='email'; render();
   });
   await page.waitForSelector('#plan-mail',{timeout:8000});

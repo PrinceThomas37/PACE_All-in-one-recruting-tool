@@ -46,7 +46,7 @@ try{
   step('the Sequence tab has three pills — Sequences (first) · My wording · AI style', pills==='Sequences*|My wording|AI style', pills);
   await ev(()=>seqView('wording')); await page.waitForTimeout(300);
   const w=await ev(()=>document.getElementById('content').innerText);
-  step('"My wording" is the old Outreach Plan editor: message styles, Outreach 1 / Follow-up 1 / 2, and its live preview', /Message style/.test(w) && /Follow-up 2/.test(w) && !!(await ev(()=>document.querySelector('#content .cmp-prev'))));
+  step('"My wording" is the old Outreach Plan editor: message styles, Outreach 1, the "how many follow-ups" choice (none until chosen, D-0114), and its live preview', /Message style/.test(w) && /Outreach 1/.test(w) && /How many follow-ups do you want/.test(w) && !!(await ev(()=>document.querySelector('#content .cmp-prev'))));
   await open('outreachplan');
   step('an old "outreachplan" link still lands on My wording', await ev(()=>STATE.emailTab==='sequence' && STATE.seqView==='wording' && !!document.querySelector('#content .cmp-prev')));
 

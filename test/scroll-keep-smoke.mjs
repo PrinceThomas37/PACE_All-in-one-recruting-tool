@@ -58,6 +58,8 @@ try {
   const scrollDown = () => page.evaluate(() => { const b = document.querySelector('#content .pg-body'); b.scrollTop = 500; return { top: b.scrollTop, room: b.scrollHeight - b.clientHeight }; });
   const top = () => page.evaluate(() => { const b = document.querySelector('#content .pg-body'); return b ? b.scrollTop : -1; });
 
+  // Follow-ups start at none (D-0114); this test needs the two tabs it clicks, so the person has turned two on.
+  await page.evaluate(() => { window.STATE.myOutreachPlan = Object.assign(window.STATE.myOutreachPlan || {}, { fu_count: '2' }); });
   // The probe must be able to measure: the page has to be tall enough to scroll.
   await open('outreachplan');
   const probeBox = await scrollDown();

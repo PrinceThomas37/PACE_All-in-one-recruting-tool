@@ -303,21 +303,41 @@ function wfUnknownVars(text){
   var bad=[]; (String(text||'').match(/\{\{\s*([^}]*?)\s*\}\}/g)||[]).forEach(function(t){ var n=t.replace(/[{}\s]/g,'').toLowerCase(); if(WF_VARS.indexOf(n)<0&&bad.indexOf(n)<0)bad.push(n); });
   return bad;
 }
+// WHO THE PREVIEW SPEAKS AS: the email ID that will send it — never the profile name (owner, 8 Oct: "it's taking the profile name instead of the
+// email ID name from which the emails are being sent"). A sequence is started later, from email IDs chosen then; until then the preview uses one
+// of the person's own email IDs (the one they pick here, else their primary) and says which.
+function wfPreviewMailboxes(){ var u=STATE.user||{}; return ((STATE.userEmailsCache&&STATE.userEmailsCache[u.id])||[]).filter(function(e){return e.is_active;}); }
+function wfPreviewMailbox(){
+  var list=wfPreviewMailboxes();
+  return list.filter(function(e){return e.id===STATE.wfPrevMbId;})[0]||list.filter(function(e){return e.is_primary;})[0]||list[0]||null;
+}
+window.wfPreviewAs=function(id){
+  STATE.wfPrevMbId=id;
+  var b=STATE.wfBuilder; if(!b||!b.steps)return;
+  b.steps.forEach(function(st,i){ var el=document.getElementById('wf-prev-'+i); if(el)el.innerHTML=wfPreviewHtml(st); });
+};
 // What the email will look like to one example person; a field PACE cannot fill is marked, never blanked.
 function wfPreviewHtml(s){
-  var c=s.config||{}, me=(STATE.user&&STATE.user.name)||'You';
+  var c=s.config||{}, mb=wfPreviewMailbox();
+  var meName=mb?(mb.display_name||mb.email_address||''):'', meEmail=mb?(mb.email_address||''):'', meCo=mb&&mb.sends_as?(mb.sends_as.company||''):'';
+  function unset(m,why){ return '<mark class="seq-bad" title="'+htmlEsc(why)+'">'+m+'</mark>'; }
   function fill(t){
     return htmlEsc(String(t||'')).replace(/\{\{\s*([^}]*?)\s*\}\}/g,function(m,name){
       var n=String(name).toLowerCase();
-      if(n==='sender'||n==='sender_name'||n==='sendername'||n==='from_name')return '<b>'+htmlEsc(me)+'</b>';
-      if(n==='senderemail'||n==='sender_email'||n==='senderemailaddress'||n==='from_email')return '<b>you@yourcompany.com</b>';
+      if(n==='sender'||n==='sender_name'||n==='sendername'||n==='from_name')return meName?'<b>'+htmlEsc(meName)+'</b>':unset(m,'Connect an email ID (Email Accounts) and your name appears here');
+      if(n==='senderemail'||n==='sender_email'||n==='senderemailaddress'||n==='from_email')return meEmail?'<b>'+htmlEsc(meEmail)+'</b>':unset(m,'Connect an email ID (Email Accounts) and its address appears here');
+      if(n==='sendercompany'||n==='sender_company'||n==='mycompany')return meCo?'<b>'+htmlEsc(meCo)+'</b>':unset(m,'No company said for this email ID yet — add it in Email → Sequence → My wording');
       if(WF_SAMPLE[n])return '<b>'+htmlEsc(WF_SAMPLE[n])+'</b>';
       return '<mark class="seq-bad" title="PACE cannot fill this">'+m+'</mark>';
     }).replace(/\n/g,'<br>');
   }
   if(!c.subject&&!c.body)return '<div class="seq-prev-empty">Write the email (or press "Write with AI") and a preview appears here — filled in for an example person, Dana Fox at Acme Construction.</div>';
   var bad=wfUnknownVars((c.subject||'')+' '+(c.body||''));
-  return '<div class="seq-prev-h">Preview — an example person</div>'+
+  var list=wfPreviewMailboxes();
+  var as=list.length>1
+    ?'<div class="seq-prev-as fs-12 c-ink3">Your name, address and company are filled in as <select class="seq-sel" aria-label="Preview as this email ID" onchange="wfPreviewAs(this.value)">'+list.map(function(e){return '<option value="'+htmlEsc(e.id)+'"'+(mb&&e.id===mb.id?' selected':'')+'>'+htmlEsc(e.email_address)+'</option>';}).join('')+'</select></div>'
+    :(mb?'<div class="seq-prev-as fs-12 c-ink3">Your name, address and company are filled in as '+htmlEsc(mb.email_address)+'.</div>':'');
+  return '<div class="seq-prev-h">Preview — an example person</div>'+as+
     '<div class="seq-prev-s">'+fill(c.subject)+'</div><div class="seq-prev-b">'+fill(c.body)+'</div>'+
     (bad.length?'<div class="seq-prev-warn">PACE cannot fill '+bad.map(function(n){return '{{'+htmlEsc(n)+'}}';}).join(', ')+' — the email would be refused. Use the buttons above.</div>':'');
 }
@@ -597,7 +617,7 @@ function renderSequenceBody(){
       (d.description?'<div class="fs-12 c-text3" style="margin-top:5px">'+htmlEsc(d.description)+'</div>':'')+
       '<div class="fs-12_5" style="margin-top:8px">'+wfChain(d.steps)+'</div>'+
     '</div>';
-  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">No sequences yet'+((canDesign||canDesignOwn)?' — create one with + New sequence.':'.')+'</div>';
+  }).join('')||'<div class="c-text3 fs-13" style="padding:10px">'+(canDesignOwn?'You have not made a sequence yet. Yours start blank — create your first with + New sequence, and decide the steps, wording and timing yourself.':('No sequences yet'+(canDesign?' — create one with + New sequence.':'.')))+'</div>';
 
   var f=STATE.wfFilter||{};
   var enr=(wf.enrollments||[]).filter(function(e){ return (!f.status||e.status===f.status)&&(!f.workflow||e.workflow_id===f.workflow); });

@@ -78,6 +78,8 @@ const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
 const senderCompany = require('./services/sender-company');
 const followupThread = require('./services/followup-thread');
+const followupSteps = require('./services/followup-steps');
+const followupChain = require('./services/followup-chain');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -1528,9 +1530,10 @@ async function findThreadMessageByConversation(accessToken, { conversationId, to
 }
 
 async function loadSentEmailRecord({ jobId, contactId, followupType }) {
-  if (followupType === 'fu2') {
+  const prevFollowup = followupSteps.prevType(followupType);     // follow-up 2 replies under 1, 3 under 2 … (1 under the first email)
+  if (prevFollowup) {
     const { data: fu1 } = await supabase.from('emails').select('id,graph_message_id,conversation_id,subject,body,sent_at,from_email')
-      .eq('job_id', jobId).eq('contact_id', contactId).eq('status', 'sent').eq('followup_type', 'fu1')
+      .eq('job_id', jobId).eq('contact_id', contactId).eq('status', 'sent').eq('followup_type', prevFollowup)
       .order('sent_at', { ascending: false }).limit(1);
     if (fu1?.[0]) return fu1[0];
   }
@@ -1591,9 +1594,10 @@ async function buildQuotedChainFromDb({ jobId, contactId, followupType }) {
       body: rendered.body
     });
   };
-  if (followupType === 'fu2') {
-    const fu1Quote = await quoteFrom(r => r.followup_type === 'fu1');
-    if (fu1Quote) return fu1Quote;
+  const prevFollowup = followupSteps.prevType(followupType);
+  if (prevFollowup) {
+    const prevQuote = await quoteFrom(r => r.followup_type === prevFollowup);
+    if (prevQuote) return prevQuote;
   }
   return quoteFrom(r => !r.followup_type || r.followup_type === 'initial');
 }
@@ -1632,7 +1636,7 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   const filledSig = fillSignatureHtml(signatureHtml, senderIdentity);
   email = { ...email, ...renderStoredEmail(email, sendingEmail) };
   // A follow-up its person chose to send as a NEW email (not a reply in the thread) is delivered like a first email, with its own subject.
-  if (email.followup_type === 'fu1' || email.followup_type === 'fu2') {
+  if (followupSteps.isFollowupType(email.followup_type)) {
     try {
       const k = followupThread.threadKey(email.sent_by, email.followup_type);
       const { data: tv } = await supabase.from('app_settings').select('value').eq('key', k).maybeSingle();
@@ -1652,7 +1656,7 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   if (platform === 'gmail' || platform === 'google') {
     return deliverViaGmail(email, userEmailId, htmlBody, sendingEmail);
   }
-  const isFollowup = email.followup_type === 'fu1' || email.followup_type === 'fu2';
+  const isFollowup = followupSteps.isFollowupType(email.followup_type);
   if (!isFollowup) {
     return sendMicrosoftNewMessage(userEmailId, { to: email.to_email, subject: email.subject, htmlBody });
   }
@@ -2083,7 +2087,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       continue;
     }
 
-    const isFollowup = email.followup_type === 'fu1' || email.followup_type === 'fu2';
+    const isFollowup = followupSteps.isFollowupType(email.followup_type);
 
     // Skip recipients flagged as permanently undeliverable (invalid/deactivated) for ALL
     // email types. Sending to addresses we already know bounce damages domain reputation.
@@ -2146,6 +2150,8 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       const sendingForThis = needsCompany ? gate.mailbox : sendingEmail;
       const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingForThis);
       await supabase.from('emails').update({ status: 'sent', sent_at: today() }).eq('id', email.id);
+      // D-0114: the owner's follow-up chain starts the moment a FIRST email really goes out (best effort — never undoes the send).
+      if (companyDailyCap.isFirstEmail(email) && email.job_id && email.contact_id) await followupChain.scheduleAfterFirstSend(supabase, { email, job: email.job, sentOn: today() });
       // Sent: the company is now part of the stored text, so history and quoted replies never show the token.
       if (needsCompany) await supabase.from('emails').update({ subject: senderCompany.fillCompany(email.subject, sendingForThis.sends_as_company), body: senderCompany.fillCompany(email.body, sendingForThis.sends_as_company) }).eq('id', email.id);
       await persistGraphIds(email.id, graph);
@@ -2347,26 +2353,23 @@ app.post('/distribute/execute', auth, async (req, res) => {
     // Create follow-up rows
     const jobIds = selected.map(j => j.id);
     const outreachDateStr = now.toISOString().split('T')[0];
-    const { data: bdSettings } = await supabase.from('app_settings').select('key,value').in('key', [`u_${manager_id}_fu1_day`, `u_${manager_id}_fu2_day`]);
+    // How many follow-ups this person turned on (0–5) and when each goes out (services/followup-steps.js); none unless they chose (D-0114).
+    const { data: bdSettings } = await supabase.from('app_settings').select('key,value').in('key', [`u_${manager_id}_fu_count`, ...followupSteps.STEPS.map(t => `u_${manager_id}_${t}_day`)]);
     const bdSettingsMap = {};
     (bdSettings || []).forEach(r => { bdSettingsMap[r.key] = r.value; });
-    const fu1Day = parseInt(bdSettingsMap[`u_${manager_id}_fu1_day`] || '3', 10);
-    const fu2Day = parseInt(bdSettingsMap[`u_${manager_id}_fu2_day`] || '7', 10);
-    const fu1Date = new Date(now); fu1Date.setDate(fu1Date.getDate() + fu1Day);
-    const fu2Date = new Date(now); fu2Date.setDate(fu2Date.getDate() + fu2Day);
-    const fu1Str = fu1Date.toISOString().split('T')[0];
-    const fu2Str = fu2Date.toISOString().split('T')[0];
+    const fuDueDates = followupSteps.dueDates(bdSettingsMap, manager_id, now);
+    const wantsFollowups = Object.values(fuDueDates).some(Boolean);
     const { data: assignedJobs } = await supabase.from('jobs').select('id,sending_email_id,contacts(id,email,email_status)').in('id', jobIds);
     const followUpRows = [];
     for (const aj of (assignedJobs || [])) {
       const contacts = (aj.contacts || []).filter(c => emailSyntaxValid(c.email) && isFollowupEligibleContact(c));
       for (const c of contacts) {
-        followUpRows.push({ job_id: aj.id, contact_id: c.id, user_email_id: aj.sending_email_id, outreach_sent_at: outreachDateStr, followup1_due_date: fu1Str, followup2_due_date: fu2Str, status: 'active' });
+        followUpRows.push({ job_id: aj.id, contact_id: c.id, user_email_id: aj.sending_email_id, outreach_sent_at: outreachDateStr, ...fuDueDates, status: 'active', chain_rules: followupSteps.RULES });
       }
     }
     // In manual mode, skip the automatic follow-up schedule — the BD drives
     // outreach (and its follow-ups) by hand.
-    if (autoSend && followUpRows.length) await supabase.from('follow_ups').insert(followUpRows);
+    if (autoSend && wantsFollowups && followUpRows.length) await supabase.from('follow_ups').insert(followUpRows);
 
     // Announce the assignment. In auto mode the lead.assigned subscriber
     // generates the emails and triggers the send; in manual mode it records the
@@ -2434,7 +2437,7 @@ function isFollowupDueFromSend(sentAt, dayGap, todayDate) {
 
 async function runFollowupEngine() {
   const todayDate = today();
-  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0, skipped_no_initial: 0, skipped_not_due_yet: 0 };
+  const log = { checked: 0, fu1_queued: 0, fu2_queued: 0, fu3_queued: 0, fu4_queued: 0, fu5_queued: 0, skipped_quota: 0, skipped_stage: 0, skipped_contact_status: 0, skipped_inactive_mailbox: 0, skipped_duplicate: 0, skipped_no_initial: 0, skipped_not_due_yet: 0 };
   // Apply any bounces that arrived since the last 30-min sweep BEFORE deciding
   // who to follow up — so a contact whose earlier email just bounced is already
   // marked invalid and gets skipped here instead of receiving another send.
@@ -2466,12 +2469,12 @@ async function runFollowupEngine() {
     }
 
     const emailsToInsert = [];
-    const fu1Updates = [];
-    const fu2Updates = [];
+    const stepUpdates = {};                        // follow-up number → the follow_ups rows that just had it queued
     const acCountDelta = {};
 
-    const fu1Due = (dueFu || []).filter(f => !f.followup1_sent_at && f.followup1_due_date <= todayDate);
-    const fu2Due = (dueFu || []).filter(f => f.followup1_sent_at && !f.followup2_sent_at && f.followup2_due_date <= todayDate);
+    // Up to five follow-ups, the person's choice (services/followup-steps.js): each row is due for at most ONE of them — the next one.
+    const dueByStep = {};
+    (dueFu || []).forEach(f => { const n = followupSteps.nextDue(f, todayDate); if (n) (dueByStep[n] = dueByStep[n] || []).push(f); });
 
     const fuJobIds = [...new Set((dueFu || []).map(f => f.job_id).filter(Boolean))];
     const variantByPair = {};
@@ -2491,7 +2494,7 @@ async function runFollowupEngine() {
     // Double-send guard: skip queueing an automatic follow-up to any contact that
     // already has a reminder or follow-up email pending or sent today (e.g. a
     // manual reminder the BD just sent). Deferred follow-ups retry on the next run.
-    const dueContactIds = [...new Set([...fu1Due, ...fu2Due].map(f => f.contact_id).filter(Boolean))];
+    const dueContactIds = [...new Set(Object.values(dueByStep).flat().map(f => f.contact_id).filter(Boolean))];
     const liveOutreachPairs = new Set();
     if (dueContactIds.length) {
       const { data: liveRows } = await supabase.from('emails')
@@ -2528,9 +2531,9 @@ async function runFollowupEngine() {
       });
     }
 
-    for (const fuList of [fu1Due, fu2Due]) {
-      const isFu2 = fuList === fu2Due;
-      for (const fu of fuList) {
+    for (const stepNo of Object.keys(dueByStep).map(Number).sort((a, b) => a - b)) {
+      const fuType = followupSteps.typeOf(stepNo);
+      for (const fu of dueByStep[stepNo]) {
         const job = fu.job;
         if (!job || job.stage !== 'Assigned') {
           await supabase.from('follow_ups').update({ status: 'skipped' }).eq('id', fu.id);
@@ -2563,29 +2566,30 @@ async function runFollowupEngine() {
         // date the due column was computed from. Without this, an initial that
         // sends five days late is followed up the same day it goes out, because
         // its stored due date is already in the past.
-        const dayGap = isFu2
-          ? parseInt(settings[`u_${bdId}_fu2_day`] || '7', 10)
-          : parseInt(settings[`u_${bdId}_fu1_day`] || '3', 10);
+        const dayGap = followupSteps.dayFor(settings, bdId, stepNo);
         if (!isFollowupDueFromSend(initialSentAt, dayGap, todayDate)) { log.skipped_not_due_yet++; continue; }
         // Deferred to send time so the name always matches the mailbox that
         // actually sends (and therefore the signature).
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
         // R-176: the email ID this follow-up goes out from may have wording of its own (only when its person chose "a wording for each
         // email ID"); such an email ID is left out of the random rotation — its own text is what it sends.
-        const fuText = wordingScope.followupTexts(settings, { userId: bdId, mailboxId: acId, step: isFu2 ? 'fu2' : 'fu1', resolve: resolveTemplate, defaults: DEFAULT_TEMPLATES });
+        // A chain made under the new rules (chain_rules 'own', D-0114) sends only wording the person wrote — never PACE's standard text; an older chain keeps the old fallback.
+        const fuText = wordingScope.followupTexts(settings, { userId: bdId, mailboxId: acId, step: fuType, resolve: resolveTemplate, defaults: DEFAULT_TEMPLATES, strict: fu.chain_rules === followupSteps.RULES });
         const useRandomFu = isRandomTemplateMode(settings[`u_${bdId}_random_template_mode`]) && !fuText.own;
         let subjTmpl, bodyTmpl, variantId;
         if (useRandomFu) {
           const pairKey = `${fu.job_id}:${fu.contact_id}`;
           variantId = variantByPair[pairKey] || settings[`u_${bdId}_compose_style_preset`] || 'v1';
           const variant = getVariantById(variantId);
-          const fuTmpl = isFu2 ? variant.fu2 : variant.fu1;
+          const fuTmpl = variant[fuType] || variant.fu2;       // the stock rotations have a first and a second follow-up; later ones reuse the second
           subjTmpl = fuTmpl.subject;
           bodyTmpl = fuTmpl.body;
         } else {
           subjTmpl = fuText.subject;
           bodyTmpl = fuText.body;
         }
+        // Follow-ups 3–5 have no stock wording: one the person never wrote is skipped (and stays due), never queued as an empty email.
+        if (!String(subjTmpl || '').trim() || !String(bodyTmpl || '').trim()) { log.skipped_no_text = (log.skipped_no_text || 0) + 1; continue; }
         const fuRow = {
           contact_id: fu.contact_id,
           job_id: fu.job_id,
@@ -2596,13 +2600,14 @@ async function runFollowupEngine() {
           platform: 'Outlook',
           sent_by: bdId,
           status: 'pending',
-          followup_type: isFu2 ? 'fu2' : 'fu1',
+          followup_type: fuType,
           follow_up_id: fu.id
         };
         if (variantId) fuRow.template_variant = variantId;
         emailsToInsert.push(fuRow);
         liveOutreachPairs.add(dupKey); // prevent a second same-run follow-up to this contact
-        if (isFu2) { fu2Updates.push(fu.id); log.fu2_queued++; } else { fu1Updates.push(fu.id); log.fu1_queued++; }
+        (stepUpdates[stepNo] = stepUpdates[stepNo] || []).push(fu);
+        log['fu' + stepNo + '_queued'] = (log['fu' + stepNo + '_queued'] || 0) + 1;
         acCountDelta[acId] = (acCountDelta[acId] || 0) + 1;
       }
     }
@@ -2613,12 +2618,17 @@ async function runFollowupEngine() {
       emit(EVENTS.FOLLOWUP_QUEUED, { bdIds: fuBdIds });
     }
     const nowTs = new Date().toISOString();
-    if (fu1Updates.length) await supabase.from('follow_ups').update({ followup1_sent_at: nowTs }).in('id', fu1Updates);
-    if (fu2Updates.length) { await supabase.from('follow_ups').update({ followup2_sent_at: nowTs, status: 'completed' }).in('id', fu2Updates); }
+    for (const stepNo of Object.keys(stepUpdates).map(Number)) {
+      // The last follow-up that was scheduled for a row finishes the row; an earlier one only records itself.
+      const finishing = stepUpdates[stepNo].filter(f => followupSteps.isLast(f, stepNo)).map(f => f.id);
+      const going = stepUpdates[stepNo].filter(f => !followupSteps.isLast(f, stepNo)).map(f => f.id);
+      if (going.length) await supabase.from('follow_ups').update({ [followupSteps.sentCol(stepNo)]: nowTs }).in('id', going);
+      if (finishing.length) await supabase.from('follow_ups').update({ [followupSteps.sentCol(stepNo)]: nowTs, status: 'completed' }).in('id', finishing);
+    }
     // Quota is charged on actual delivery (processPendingEmailSends), not at queue time.
     // Pre-charging the day's quota here marked it "used" before anything sent, which made the
     // auto-sender defer every just-queued follow-up on phantom quota — so they never left.
-    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}, skipped_no_initial: ${log.skipped_no_initial}, skipped_not_due_yet: ${log.skipped_not_due_yet}`);
+    console.log(`[FollowupEngine] FU1: ${log.fu1_queued}, FU2: ${log.fu2_queued}, FU3-5: ${log.fu3_queued + log.fu4_queued + log.fu5_queued}, skipped_quota: ${log.skipped_quota}, skipped_stage: ${log.skipped_stage}, skipped_contact_status: ${log.skipped_contact_status}, skipped_duplicate: ${log.skipped_duplicate}, skipped_no_initial: ${log.skipped_no_initial}, skipped_not_due_yet: ${log.skipped_not_due_yet}`);
     return log;
   } catch (err) { console.error('[FollowupEngine] Error:', err.message); return { ...log, error: err.message }; }
 }
@@ -3457,10 +3467,10 @@ async function cancelBlockedFollowupSend(email, contactStatus) {
   try { await supabase.from('emails').delete().eq('id', email.id); } catch (_) {}
   if (!email.follow_up_id) return;
   const status = String(contactStatus || '').toLowerCase();
-  if (email.followup_type === 'fu1') {
-    await supabase.from('follow_ups').update({ followup1_sent_at: null }).eq('id', email.follow_up_id);
-  } else if (email.followup_type === 'fu2') {
-    await supabase.from('follow_ups').update({ followup2_sent_at: null, status: 'active' }).eq('id', email.follow_up_id);
+  if (followupSteps.isFollowupType(email.followup_type)) {
+    // The follow-up goes back to "not sent yet"; one that had finished the row re-opens it (follow-up 1 never finished a row, so it stays as it is).
+    const n = followupSteps.stepNumber(email.followup_type);
+    await supabase.from('follow_ups').update({ [followupSteps.sentCol(n)]: null, ...(n > 1 ? { status: 'active' } : {}) }).eq('id', email.follow_up_id);
   }
   if (isPermanentFollowupBlock(status)) {
     await supabase.from('follow_ups').update({ status: 'skipped' }).eq('id', email.follow_up_id);

@@ -1181,3 +1181,16 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43, third round)
 - NEW: `sender-company-smoke` (14), `sequence-own-smoke` (12), `plan-editor-keeps-typing-smoke` (19; 7/19 with the fix stashed), `leads-bulk-stage-ui-smoke` (18). Extended: `wording-scope-smoke` (35), `wording-scope-ui-smoke` (29); `sequence-builder-smoke` caught the browser/server merge-name lists drifting (company names) — fixed in `WF_VARS`.
+
+## 2026-10-08 (Session 43, fourth round) — tests (D-0113)
+- New: `followup-steps-smoke` (18), `followup-count-ui-smoke` (19). Updated: `wording-scope-smoke` (45; neededKeys now 1 + 12 per mailbox), `sequence-own-smoke` (12; a plain BD's list is only their own).
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- New `followup-chain-smoke` (14); `followup-steps-smoke` (19) and `followup-count-ui-smoke` (20) updated for the default of none.
+
+## 2026-10-08 (Session 43, fifth round, later) — test pinned the old default
+- `ai-style-ui-smoke` expected "Follow-up 2" to show by default in My wording; changed on purpose for D-0114 (none until chosen) to look for Outreach 1 and the "How many follow-ups" box. A full-suite run is the only way such a pinned default is found — it failed once there.
+
+- `sequence-preview-sender-smoke` (7): the builder preview never shows the profile name (shown failing with a profile-name mutation). Also updated four tests pinned to the old "two follow-ups by default" (`plan-preview-smoke`, `scroll-keep-smoke`, `wording-scope-ui-smoke`, `ai-style-ui-smoke`) and `orphan-followup-guard`'s source pattern (now `followupSteps.dayFor(settings, bdId, stepNo)`). The full Node 22 run at the D-0114 head was 227/232 for exactly these five; all five pass after the update.
+
+- `reminder-template-sender-smoke` (5): a reminder template never writes a name into the text (3 checks fail without the fix). Full suite at head `94afa0f`: **233/233 on Node 22 and on Node 26.10.0**.

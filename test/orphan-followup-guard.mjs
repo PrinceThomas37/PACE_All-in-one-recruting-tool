@@ -46,8 +46,8 @@ step('Gate leaves the schedule active (no status:skipped on this path)',
 step('Due-ness is recomputed from the initial send date',
   /isFollowupDueFromSend\(initialSentAt,\s*dayGap,\s*todayDate\)/.test(SRC));
 
-step('fu1/fu2 day offsets are read per-BD for the re-anchor',
-  /u_\$\{bdId\}_fu2_day[\s\S]{0,200}u_\$\{bdId\}_fu1_day/.test(SRC));
+step('each follow-up\'s day offset is read per-BD for the re-anchor (services/followup-steps.js dayFor, tested in followup-steps-smoke)',
+  /followupSteps\.dayFor\(settings,\s*bdId,\s*stepNo\)/.test(SRC));
 
 // ── 3. The pure helper's date maths, extracted from source ─────────────────
 const fnMatch = SRC.match(/function isFollowupDueFromSend\([\s\S]*?\n\}/);

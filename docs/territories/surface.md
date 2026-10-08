@@ -1311,3 +1311,16 @@ resulting "Ask to take over" modal after clicking through, showing
 - `07-page-email.js` / `12-manager-users.js` / `03-core-render.js`: `setVarInsertTarget` changes the chip bar IN PLACE (data-var-bar) — a repaint here was what reset the subject; unsaved typing is kept per (email ID or all | template) in `STATE.planDraft` (`planDraftCapture/For/Clear`, `planSetTmpl`, `toggleMoreVarChips`); the per-email-ID list and "Start its own" buttons are gone — the card speaks about the Sending email and the editor header says "— for <email>"; "Your company" chip (`{{sendercompany}}`) + a company box per Sending email (`renderCompanyCard`, `savePlanCompany` → the existing sends-as route; title and address asked once); same-thread / new-email radios on Follow-up 1 and 2 (`setFollowupThread`).
 - `09-page-workflows.js`: `+ New sequence` and Edit / Activate on their own for a BD; `WF_VARS` gained the company names (kept equal to the server's `ALLOWED_VARS`).
 - Tests: `leads-bulk-stage-ui-smoke` (18), `plan-editor-keeps-typing-smoke` (19), `wording-scope-ui-smoke` (29).
+
+## 2026-10-08 (Session 43, fourth round) — blank start, up to five follow-ups (D-0113)
+- `07-page-email.js` / `12-manager-users.js`: Outreach Plan editor starts BLANK (no stock text); "How many follow-ups?" box (`setFollowupCount`, 0–5, default 2) decides the tabs; each follow-up has a day (`saveOutreachDay` moves later days after it) and a same-thread / new-email choice (`setFollowupThread` fu1–fu5); amber note when a follow-up is not written yet; Save repaints. `09-page-workflows.js`: a plain BD's empty Sequences list explains they start blank.
+- Test: `followup-count-ui-smoke` (19; the blank-start guard was shown failing with a stock fallback).
+
+## 2026-10-08 (Session 43, fifth round) — D-0114
+- The Outreach Plan editor defaults to NO follow-ups; the note on an unwritten follow-up says nothing goes out for it.
+
+## 2026-10-08 (Session 43, fifth round, later) — sequence preview speaks as the email ID (R-188)
+- `09-page-workflows.js` `wfPreviewHtml`: {{sender}}, {{senderemail}}, {{sendercompany}} come from one of the person's OWN email IDs (`wfPreviewMailbox`: the picked one, else primary, else first); a "filled in as" picker (`wfPreviewAs`) when they have several; none connected = the field is marked, never the profile name. Not fixed (R-189): compose / mail-merge screens that still pass `STATE.user.name` to `fillEmail`.
+
+## 2026-10-08 (Session 43, fifth round, later) — R-189
+- `03-core-render.js`: `buildClientEmailVars` no longer falls back to the PROFILE name — no sender given leaves `{{sender}}`; `applyReminderTemplate` passes none, so a Compose reminder template keeps the token and the send fills it from the mailbox that sends. The old mail-merge (`13-`, `14-`, `10-page-modals`) and `openEmailPreviewModal` screens are unreachable (no caller) and pass the profile name on purpose (they open the person's own webmail); left alone.

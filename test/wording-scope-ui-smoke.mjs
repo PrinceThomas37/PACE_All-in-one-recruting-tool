@@ -30,7 +30,7 @@ try{
     STATE.userEmailsCache[u]=[{id:'m1',email_address:'amy@co-a.test',display_name:'Amy A',is_active:true,is_primary:true,sends_as:{company:'Alpha Staffing',title:'Manager',address:'1 Main Street, Dallas TX'}},{id:'m2',email_address:'amy@co-b.test',display_name:'Amy B',is_active:true}];
     window.__puts=[]; window.apiPut=function(p,b){ window.__puts.push([p,b]); return Promise.resolve({sends_as:b}); };
     STATE.emailSignaturesCache={m1:'<b>{{sender}}</b>',m2:'<b>{{sender}}</b>'};
-    STATE.myOutreachPlan={tmpl_o1_subject:'MAIN subject',tmpl_o1_body:'MAIN body written by the person for every email ID.',tmpl_fu1_subject:'MAIN fu1',tmpl_fu1_body:'MAIN fu1 body text here'};
+    STATE.myOutreachPlan={fu_count:'2',tmpl_o1_subject:'MAIN subject',tmpl_o1_body:'MAIN body written by the person for every email ID.',tmpl_fu1_subject:'MAIN fu1',tmpl_fu1_body:'MAIN fu1 body text here'};
     STATE.mailboxWording={m1:{},m2:{tmpl_o1_subject:'STORED B subject',tmpl_o1_body:'STORED B body that is dormant until each is chosen'}};
     STATE.planFromEmailId='m2'; STATE.sigEmailId='m2'; STATE.activeTmpl='outreach'; STATE.emailTab='outreachplan'; STATE.page='email'; render();
   });

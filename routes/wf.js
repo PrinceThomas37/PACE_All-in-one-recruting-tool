@@ -212,14 +212,10 @@ module.exports = (ctx) => {
       if (error) throw error;
       let list = data || [];
       if (!canDesign(req) && canDesignOwn(req)) {
-        // Another BD's personal sequence is theirs; the organisation's (the seeded standard, or one a lead / admin made) is everybody's.
-        const makers = [...new Set(list.map(d => d.created_by).filter(id => id && id !== req.user.id))];
-        const orgMakers = new Set();
-        if (makers.length) {
-          const { data: us } = await supabase.from('users').select('id,role,roles').in('id', makers);
-          (us || []).forEach(u => { const rs = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role]; if (rs.some(r => ['admin', 'ra_lead', 'bd_lead'].includes(r))) orgMakers.add(u.id); });
-        }
-        list = list.filter(d => !d.created_by || d.created_by === req.user.id || orgMakers.has(d.created_by));
+        // A person starts BLANK (owner, 8 Oct, D-0113): "the system gives a blank template for a user to start with. They decide the
+        // templates, emails, counts and all." A plain BD sees only the sequences THEY made — not the company's standard one and not
+        // another person's. A BD lead, RA lead or admin still sees all (canDesign).
+        list = list.filter(d => d.created_by && d.created_by === req.user.id);
       }
       list.forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
       res.json(list);

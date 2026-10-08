@@ -686,3 +686,7 @@ person who has not written their own (R-169).
 - **Saved Find Leads cards say where the first email is** — not written, waiting in Pending (Review & send), sent from which email ID, or didn't send — and **Email another job / person** makes a second lead at the same company.
 - **Wording per email ID (Outreach Plan → "Wording for your email IDs")** — one wording for all your email IDs (default), or a different one for each; an email ID with none sends your main wording. Covers the first email, both follow-ups and sequence steps.
 - **Which mailbox got the new mail** — unread counts per mailbox in the picker and on hovering Inbox, and a notice naming the mailbox. **Reply all** is on the message card. Figures on the Insights cards use the plain data typeface.
+
+- **Choose how many follow-ups (0–5)** — in the Outreach Plan a person picks the number of follow-ups after the first email, the day each goes out and whether each replies in the same thread or goes as a new email; a new person starts with blank wording (D-0113).
+
+- **Follow-ups start at the first send, and only the ones you turn on** — whichever way a lead reaches you, its follow-up chain is made when its first email goes out; with none turned on, no follow-up is ever triggered, and PACE never sends follow-up wording you did not write (D-0114).
