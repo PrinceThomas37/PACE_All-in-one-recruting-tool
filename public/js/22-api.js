@@ -6,7 +6,7 @@
 // API LAYER — Drop B2 (Jobs wired to backend)
 // ════════════════════════════════════════════════
 var IS_FILE=window.location.protocol==='file:';
-var API_URL=(function(){var h=window.location.hostname;if(h===''||h==='localhost'||h.indexOf('127.')===0)return'https://fute-lms-backend.onrender.com';if(h.indexOf('onrender.com')>=0)return'';return'https://fute-lms-backend.onrender.com';})();
+var API_URL=(function(){var h=window.location.hostname;if(h===''||h==='localhost'||h.indexOf('127.')===0)return'https://fute-lms-backend.onrender.com';return'';})();
 // An expired sign-in (R-118). The server answers 401 with one of these three sentences when the session token is
 // missing, expired or from before multi-tenancy; ANY other 401 (a wrong password, "Current password incorrect") is
 // a different thing and must reach the screen that asked, so the match is on the sentence, not on the status alone,
