@@ -1187,3 +1187,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - New `followup-chain-smoke` (14); `followup-steps-smoke` (19) and `followup-count-ui-smoke` (20) updated for the default of none.
+
+## 2026-10-08 (Session 43, fifth round, later) — test pinned the old default
+- `ai-style-ui-smoke` expected "Follow-up 2" to show by default in My wording; changed on purpose for D-0114 (none until chosen) to look for Outreach 1 and the "How many follow-ups" box. A full-suite run is the only way such a pinned default is found — it failed once there.
