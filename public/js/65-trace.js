@@ -35,6 +35,8 @@
       if(!r||r.enabled===false) throw new Error('The email timeline is switched off, so the emails behind this cannot be shown.');
       if(r.owner===false) throw new Error('Only the owner of this lead ('+(r.owner_name||'someone else')+') can read its emails.');
       var tl=(r.timeline||[]).slice().sort(function(a,b){ return String(b.sent_at).localeCompare(String(a.sent_at)); });
+      // The exact email the reply / follow-up buttons open, in the person's own mailbox (the server finds it).
+      if(meta) meta.target=r.reply_target||null;
       // Who the reply button should answer: the newest thing THEY wrote (kept before narrowing by name).
       if(meta){
         var inb=tl.filter(function(m){ return m.direction==='inbound'&&m.from; })[0];
@@ -99,6 +101,26 @@
       when:day(r.created_at)
     };
   }
+
+  // THE EMAIL A "REPLY" / "WRITE THE EMAIL" BUTTON ANSWERS (8 Oct, owner). Asks the lead's emails for the newest message the person
+  // can answer from their own mailbox, and opens THAT email with the reply window ready — inside the conversation, not a search.
+  //   which: 'inbound' = the newest thing THEY wrote (a reply owed) · 'last' = the newest email either way (a follow-up goes as a
+  //   reply to it, so it lands in the same thread).  Resolves true when it opened the email, false when it could not (the caller then
+  //   falls back to something it can still do).
+  window.replyInThread=function(leadId, which, email, known){
+    if(!window.mbOpenMessage) return Promise.resolve(false);
+    var pick=function(rt){
+      var t=rt&&(which==='inbound'?rt.last_inbound:(rt.last||rt.last_inbound));
+      if(!t||!t.message_id||!t.mailbox_id) return false;
+      mbOpenMessage(t.mailbox_id,t.message_id,{reply:true,q:t.other_email});
+      return true;
+    };
+    if(known&&pick(known)) return Promise.resolve(true);
+    if(!leadId) return Promise.resolve(false);
+    return apiGet('/leads/'+encodeURIComponent(leadId)+'/intel'+(email?'?email='+encodeURIComponent(email):'')).then(function(r){
+      return pick(r&&r.reply_target);
+    }).catch(function(){ return false; });
+  };
 
   // opts: { title, hint, leadId, who, candidateId, reminderId, firstChip, open:{label,fn},
   //         task:{text,buttons,stages}, meta:{} (filled with lastInbound once the emails load) }

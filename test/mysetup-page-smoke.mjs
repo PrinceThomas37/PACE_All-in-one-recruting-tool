@@ -63,9 +63,7 @@ try{
   console.log('\nWhere it is');
   step('"My Setup" is in the Setup menu', /My Setup/.test(await nav()) || await ev(()=>/My Setup/.test(document.getElementById('sidebar').innerHTML)));
   let t=await txt();
-  step('Today carries one calm card: "Finish setting up your outreach · 1 of 3 done" naming the next step with an Open button', /Finish setting up your outreach · 1 of 3 done/.test(t) && /Say who each mailbox writes for/.test(t) && /Open My Setup/.test(t), t.slice(0,160));
-  await ev(()=>{ STATE.userEmailsCache={}; render(); }); await page.waitForTimeout(150);
-  step('…and nothing before the mailboxes have loaded (no flash of an alarm)', !/Finish setting up/.test(await txt()));
+  step('Today has NO second "Finish setting up" card — the first-login tasks (Reminders / Needs you today) are the one prompt, not two', !/Finish setting up/.test(t) && !(await ev(()=>typeof window.renderMySetupCard==='function')), t.slice(0,120));
   await ev(()=>{ STATE.userEmailsCache={ 'test-bd': JSON.parse(JSON.stringify(window.__boxes)) }; render(); });
 
   console.log('\nThe page');
@@ -73,7 +71,7 @@ try{
   t=await txt();
   step('three steps — connect ✓, say who each writes for, write your first sequence — and the sequence says what it gates (leads outreach, the Finder\'s first email) and what it does not (individual emails)', /Your outreach setup · 1 of 3 done/.test(t) && /Connect your mailbox/.test(t) && /1 mailbox connected/.test(t) && /will not start outreach for your leads/.test(t) && /Individual emails are not affected/.test(t));
   step('the sequence step offers the starter (one click) or writing your own', /Use the starter/.test(t) && /Write my own/.test(t));
-  step('each mailbox is listed with its state, who it writes for ("not said yet" says what that means), and the daily limit is shown as the admin\'s', /bd@fute\.test/.test(t) && /Connected/.test(t) && /Writes for: not said yet/.test(t) && /standard name, title and signature/.test(t) && /set by an admin/.test(t));
+  step('each mailbox is listed with its state, its sender details (just "not set" when empty — no explanation), ONE edit button, and the daily limit as the admin\'s', /bd@fute\.test/.test(t) && /Connected/.test(t) && /Sender & signature: not set/.test(t) && !/standard name, title and signature/.test(t) && !/Say who it writes for/.test(t) && (await ev(()=>[...document.querySelectorAll('#content button')].filter(b=>/sender & signature/i.test(b.textContent)).length))===1 && /set by an admin/.test(t));
   step('sending days and hours are on the page, with the organisation\'s window and the line that the daily number stays with the admin', /Sending days and hours/.test(t) && /8 AM – 4 PM/.test(t) && /narrow that, not widen it/.test(t) && /stays with your admin/.test(t));
   step('the AI writing-style note is one click away', /How the AI writes for you/.test(t) && /Open my writing style/.test(t));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS,'mysetup-page.png'), fullPage:true });
@@ -179,7 +177,7 @@ try{
   await ev(()=>{ window.__calls.length=0; }); await ev(()=>mySetupSave()); await page.waitForTimeout(300);
   const put3=(await calls()).find(c=>c[0]==='PUT');
   step('Save sends it to that mailbox\'s own endpoint, with the rebuild choice', put3 && /\/users\/test-bd\/emails\/m1\/sends-as$/.test(put3[1]) && put3[2].company==='Fute Global LLC' && put3[2].rebuild_signature===true);
-  step('the page says who m1 writes for and that it has its own signature', /Recruitment Manager · Fute Global LLC/.test(await txt()) && /Has its own signature/.test(await txt()));
+  step('the page shows who m1 writes as — details only, no explanation — and the one button now says Edit', /Recruitment Manager · Fute Global LLC/.test(await txt()) && !/Has its own signature|Writes for:/.test(await txt()) && /Edit sender & signature/.test(await txt()));
   await ev(()=>{ window.__calls.length=0; mySetupRemove('m2'); }); await page.waitForTimeout(250);
   step('Remove (after the confirmation) deletes THAT mailbox for them and it leaves the list', (await calls()).some(c=>c[0]==='DELETE'&&/\/users\/test-bd\/emails\/m2$/.test(c[1])) && !/vp@acmetalent\.com/.test(await txt()));
 

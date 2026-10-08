@@ -264,3 +264,10 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 42) — send window per person, logo in the signature (D-0104)
 - `services/send-window.js` (pure, injectable clock): the organisation window narrowed by `u_<id>_send_days/_send_start_hour/_send_end_hour`; `isOpen/effectiveWindow/localParts/readPrefs/checkPrefs`; days are the LEAD's local days. `index.js` `isInLeadSendWindow`/`getMinutesUntilWindowOpens` delegate to it. `email-signature.js`: `cleanSendsAs` keeps an own-bucket `logo` URL and a hex `accent`; `signatureFromSendsAs` renders a two-column table with the logo (an `<img height=56>` by address — not embedded in the mail). The start of outreach is gated in `services/lead-outreach-queue.js`; queued mail and follow-ups are not.
+
+## 2026-10-08 (Session 42) — failed emails can be closed (D-0107)
+- No server change: closing a failed email is the existing `DELETE /emails/:id` (sender-only, pending or failed only, the status rides on the delete). The page offers it on every own failed row, including ones that can never be retried (invalid address). A closed row is gone — the contact keeps its invalid mark, so the engine will not write to it again.
+## 2026-10-08 (Session 42) — which email a reply answers (D-0108)
+- NEW `services/reply-target.js` (pure): the newest email in the person's OWN mailbox with a provider id (inbound `message_key`; outbound `message_id`), and the newest of THEIRS; a teammate's mailbox is never offered. `services/sent-side.js` now carries `message_id` on emails read from the provider's Sent folder. Test: `reply-target-smoke` (10).
+## 2026-10-08 (Session 42) — Deliverability routes admin-only (D-0109)
+- `GET /admin/deliverability` and `GET /admin/domain-health` (`routes/deliverability.js`) are admin-only; `scope-emails-warmup-smoke` pins a 403 for an RA Lead (mutation shown failing). The suppression, spam-check and template-analytics routes are unchanged.

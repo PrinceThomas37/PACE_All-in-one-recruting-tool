@@ -131,6 +131,19 @@ window.naActItem=function(it){
   if(it.entity_type==='lead')return naOpen(it.kind,'lead',it.entity_id,it.job_id);
   if(!it.email){showToast('There is no email address on record for '+(it.title||'this person')+' yet','warning');return;}
   var isCand=it.entity_type==='candidate';
+  // A reply owed, or a follow-up on a lead's contact: answered INSIDE the conversation — the exact email opens in the person's mailbox
+  // with the reply window ready (8 Oct, owner). Only when it cannot be found does it fall back to what it did before.
+  if(!isCand&&it.job_id&&window.replyInThread&&(it.kind==='reply_due'||it.kind==='stage_suggested'||it.kind==='commitment_due'||it.kind==='nudge')){
+    var theirs=it.kind==='reply_due'||it.kind==='stage_suggested';
+    return replyInThread(it.job_id,theirs?'inbound':'last',it.email).then(function(ok){
+      if(ok) return;
+      if(theirs) showToast('Could not open that exact email — '+(it.kind==='reply_due'?'showing their messages instead':'opening the email screen instead'),'warning');
+      naActFallback(it,isCand);
+    });
+  }
+  return naActFallback(it,isCand);
+};
+function naActFallback(it,isCand){
   if(it.kind==='reply_due'||isCand){
     STATE.mailbox=STATE.mailbox||{};STATE.mailbox.q=it.email;
     return goPage('mailbox');

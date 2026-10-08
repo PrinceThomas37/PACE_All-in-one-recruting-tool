@@ -346,6 +346,22 @@ window.retryFailedEmail=function(id,ev){
   if(ev)ev.stopPropagation();
   apiPost('/emails/'+id+'/retry',{}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
 };
+// "Close" takes a failed email off the list for good: it deletes the failed row (the server only deletes a pending or failed email,
+// and only the sender's own). Nothing is sent. The contact keeps whatever the failure taught us (an address marked invalid stays so).
+window.closeFailedEmails=function(ids){
+  ids=(ids||[]).slice(); if(!ids.length) return;
+  var gone={};
+  var next=function(i){
+    if(i>=ids.length) return Promise.resolve();
+    return apiDelete('/emails/'+ids[i]).then(function(){ gone[ids[i]]=1; }).catch(function(e){ showToast((e&&e.message)||'Could not close that one','error'); }).then(function(){ return next(i+1); });
+  };
+  next(0).then(function(){
+    var n=Object.keys(gone).length;
+    STATE.failedEmails=(STATE.failedEmails||[]).filter(function(e){ return !gone[e.id]; });
+    if(n) showToast(n===1?'Closed':n+' closed','info');
+    scheduleRender(); loadEmailsForCurrentUser();
+  });
+};
 window.retryAllFailedEmails=function(ids){
   apiPost('/emails/retry-failed',{ids:ids||[]}).then(afterRetry).catch(function(e){showToast(e.message||'Could not retry','error');});
 };

@@ -169,7 +169,8 @@ router.get('/analytics/templates', auth, async (req, res) => {
 // ── Deliverability health overview ──────────────────────────────────────────
 router.get('/admin/deliverability', auth, async (req, res) => {
   try {
-    if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
+    // Admin only (owner, 8 Oct): the cap, warm-up and domain checks are the admin's to act on; bounce and open rates are on Outreach Insights.
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Forbidden' });
     // Scope the mailbox list to the caller's people, not everyone: 'own' = just
     // their own mailboxes, 'team' = their reporting line, 'org' = the whole org
     // (admin only). Non-admins default to their team; admins to org-wide.
@@ -224,7 +225,7 @@ router.get('/admin/deliverability', auth, async (req, res) => {
   const HEALTH_TTL_MS = 15 * 60 * 1000;
   router.get('/admin/domain-health', auth, async (req, res) => {
     try {
-      if (!hasRole(req, 'admin', 'bd_lead', 'ra_lead')) return res.status(403).json({ error: 'Forbidden' });
+      if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Forbidden' });
       const refresh = req.query.refresh === '1' || req.query.refresh === 'true';
       // This organisation's sending domains only — another customer's domains
       // (and their DNS posture) are not this caller's to read.

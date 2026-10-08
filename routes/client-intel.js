@@ -19,6 +19,7 @@
 
 const express = require('express');
 const ci = require('../services/client-intel');
+const replyTarget = require('../services/reply-target');
 const own = require('../services/ownership');
 const aiProvider = require('../services/ai-provider');
 const settingsConfig = require('../config/settings');
@@ -216,7 +217,7 @@ module.exports = (ctx) => {
       person: nameByEmail[ci.normEmail(r.from_email)] || null,
       // A reply is stored trimmed; its full original can be fetched from the
       // mailbox that received it, on request, and is never stored.
-      can_open_full: !!r.message_key,
+      can_open_full: !!r.message_key, message_key: r.message_key || null,
     }));
     sentRows.forEach(r => {
       if (!r.sent_at) return;
@@ -305,6 +306,13 @@ module.exports = (ctx) => {
         return res.json({ enabled: true, owner: false, owner_name: acc.ownerName || null });
       }
       const { messages, sent_side } = await loadMessages(req, acc.subject, { live: true });
+      // Which email "Reply" / "Write the email" should answer, in the person's OWN mailbox (8 Oct, owner): the newest answerable
+      // email, and the newest one THEY wrote — optionally only from one person (?email=).
+      let reply_target = { last: null, last_inbound: null };
+      try {
+        const { data: myBoxes } = await supabase.from('user_emails').select('id,email_address').eq('user_id', req.user.id).eq('is_active', true);
+        reply_target = replyTarget.pickReplyTargets(messages, myBoxes || [], { email: req.query && req.query.email });
+      } catch (_) { /* the buttons fall back to the contact's address */ }
       const ledger = ci.buildLedger(messages);
       const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
@@ -329,6 +337,7 @@ module.exports = (ctx) => {
         })),
         total_messages: messages.length,
         sent_side,
+        reply_target,
       });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });

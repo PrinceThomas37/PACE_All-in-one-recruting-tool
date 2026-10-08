@@ -669,17 +669,13 @@ window.toggleManagerSending=function(managerId,pause){
 function loadDeliverability(){
   STATE._delivLoading=true;
   var days=STATE.delivDays||30;
-  Promise.all([
-    apiGet('/admin/deliverability?days='+days+(STATE.delivView?'&view='+STATE.delivView:'')).catch(function(){return null;}),
-    apiGet('/analytics/templates?days='+days).catch(function(){return [];})
-  ]).then(function(r){
-    STATE.deliv=r[0]; STATE.delivTemplates=r[1]||[];
+  apiGet('/admin/deliverability?days='+days).catch(function(){return null;}).then(function(r){
+    STATE.deliv=r;
     STATE._delivLoading=false; scheduleRender();
   });
 }
 window.openDeliverability=function(){ STATE.page='deliverability'; STATE.deliv=undefined; render(); loadDeliverability(); };
 window.setDelivDays=function(days){ STATE.delivDays=days; STATE.deliv=undefined; render(); loadDeliverability(); };
-window.setDelivView=function(v){ STATE.delivView=v; STATE.deliv=undefined; render(); loadDeliverability(); };
 window.resumeMailbox=function(id){ apiPost('/admin/mailbox/'+id+'/resume',{}).then(function(){ showToast('Mailbox resumed','success'); loadDeliverability(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
 
 // ── Warm-up pool ──
@@ -728,31 +724,15 @@ function loadDomainHealth(refresh){
 }
 window.refreshDomainHealth=function(){ STATE._dhLoading=false; loadDomainHealth(true); showToast('Re-checking domains…','info'); };
 window.toggleDomainFindings=function(d){ STATE._dhOpen=STATE._dhOpen||{}; STATE._dhOpen[d]=!STATE._dhOpen[d]; scheduleRender(); };
-window.runSpamCheck=function(){ apiPost('/emails/spam-check',{subject:STATE.spamSubj||'',body:STATE.spamBody||''}).then(function(r){ STATE.spamResult=r; scheduleRender(); }).catch(function(e){showToast('Failed: '+(e&&e.message||e),'error');}); };
-window.previewTemplateSample=function(variant){
-  var t=(STATE.delivTemplates||[]).find(function(x){return x.variant===variant;});
-  if(!t||!t.sample){showToast('No sample available for this template','warning');return;}
-  STATE.modal='<div class="modal modal-w480">'+
-    '<div class="mh"><div class="mt">'+htmlEsc(t.label||t.variant)+' — sample sent</div></div>'+
-    '<div class="mb_">'+
-      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Subject</div>'+
-      '<div class="fs-13_5" style="font-weight:600;margin-bottom:12px">'+htmlEsc(t.sample.subject||'')+'</div>'+
-      '<div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Body</div>'+
-      '<div class="fs-13" style="white-space:pre-wrap;line-height:1.5;max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px">'+htmlEsc(t.sample.body||'')+'</div>'+
-    '</div>'+
-    '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Close</button></div>'+
-  '</div>';
-  render();
-};
 
 function renderDeliverability(){
   var u=STATE.user;
-  if(!userHasAnyRole(u,'admin','bd_lead','ra_lead'))return '<div class="page">Forbidden</div>';
+  if(!userHasRole(u,'admin'))return '<div class="page">Forbidden</div>';       // admin only (owner, 8 Oct): the cap, warm-up and domain checks are the admin\'s to act on
   if(STATE.deliv===undefined&&!STATE._delivLoading){loadDeliverability();}
   var days=STATE.delivDays||30;
-  var d=STATE.deliv, tpls=STATE.delivTemplates||[], sr=STATE.spamResult;
+  var d=STATE.deliv;
   function stat(label,val,color){ return '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);padding:14px 16px;min-width:118px"><div class="fs-22" style="font-weight:700;color:'+(color||'var(--text)')+'">'+(val==null?'—':val)+'</div><div class="fs-11 c-text3" style="text-transform:uppercase;letter-spacing:.04em;margin-top:2px">'+label+'</div></div>'; }
-  var statsRow=d?'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'+stat('Sent ('+days+'d)',d.sent,'var(--accent)')+stat('Failed ('+days+'d)',d.failed,'var(--amber)')+stat('Bounced',d.bounced_contacts,'var(--red)')+stat('Replied',d.replied_contacts,'var(--green)')+stat('Opted out',d.suppression_count,'var(--text2)')+'</div>':'<div class="c-text3" style="margin-bottom:20px">Loading…</div>';
+  var statsRow=d?'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px">'+stat('Sent ('+days+'d)',d.sent,'var(--accent)')+stat('Failed ('+days+'d)',d.failed,'var(--amber)')+stat('Invalid addresses',d.bounced_contacts,'var(--red)')+stat('Replied',d.replied_contacts,'var(--green)')+stat('Opted out',d.suppression_count,'var(--text2)')+'</div>':'<div class="c-text3" style="margin-bottom:20px">Loading…</div>';
   var dayFilter='<div style="display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px">'+[7,30,90].map(function(n){
     var on=days===n;
     return '<button onclick="setDelivDays('+n+')" class="fs-12" style="padding:5px 12px;border:0;border-radius:6px;background:'+(on?'var(--accent)':'transparent')+';color:'+(on?'#fff':'var(--text2)')+';font-weight:600;cursor:pointer">'+n+'d</button>';
@@ -767,15 +747,6 @@ function renderDeliverability(){
     var status=conn.status==='expired'?'':(m.auto_paused?'<span class="fs-11" style="padding:2px 8px;background:#fee2e2;color:#b91c1c;border-radius:6px;font-weight:700">Auto-paused</span> <button onclick="resumeMailbox(\''+m.id+'\')" style="font-size:11px;color:var(--green);background:transparent;border:0;cursor:pointer">Resume</button>':(m.warmup?'<span class="fs-11 c-amber" style="padding:2px 8px;background:var(--amber-l);border-radius:6px;font-weight:600">Warm-up · cap '+m.warmup.today_cap+'/day</span>':'<span class="fs-11 c-green" style="padding:2px 8px;background:var(--green-l);border-radius:6px;font-weight:600">Healthy</span>'));
     return '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap"><div style="flex:1;min-width:0"><div class="fs-13" style="font-weight:500">'+htmlEsc(m.name||m.email)+'</div><div class="fs-11 c-text3">'+htmlEsc(m.email)+' · '+m.daily_limit+'/day cap</div></div>'+connBadge+status+'</div>';
   }).join('');
-  // Personal / My team / Org-wide scope toggle — you see the sending mailboxes of
-  // your own people, not everyone's, unless you're an admin viewing org-wide.
-  var mbViewToggle='';
-  if(d){
-    var vv=d.view||'team';
-    var vopts=[['own','Personal'],['team','My team']];
-    if(d.can_org)vopts.push(['org','Org-wide']);
-    mbViewToggle='<div style="display:flex;gap:4px;padding:9px 14px;border-bottom:1px solid var(--border)">'+vopts.map(function(o){var on=vv===o[0];return '<button onclick="setDelivView(\''+o[0]+'\')" style="padding:4px 11px;border:1px solid '+(on?'var(--accent)':'var(--border)')+';border-radius:7px;background:'+(on?'var(--accent-l)':'transparent')+';color:'+(on?'var(--accent)':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+o[1]+'</button>';}).join('')+'</div>';
-  }
   // ── Warm-up pool ──
   var isAdmin=userHasRole(u,'admin');
   if(STATE.warmup===undefined&&!STATE._warmupLoading)loadWarmup();
@@ -849,38 +820,16 @@ function renderDeliverability(){
   var dhExtra='<button onclick="refreshDomainHealth()" class="fs-11 c-text2" style="background:transparent;border:1px solid var(--border2);padding:4px 11px;border-radius:6px;cursor:pointer">↻ Re-check</button>';
   var dhSub='<div class="fs-11_5 c-text3" style="padding:10px 14px;border-bottom:1px solid var(--border)">SPF, DKIM, DMARC and blacklist status for every sending domain. Fix these <b>before</b> warming — broken authentication or a blacklisting lands you in spam no matter how well a mailbox is warmed. Cached ~15 min.</div>';
 
-  var tplRows=tpls.length?tpls.map(function(t){
-    var hasSample=t.sample&&t.sample.subject;
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)">'+
-      '<div style="flex:1;min-width:0">'+
-        '<div class="fs-13" style="font-weight:600">'+htmlEsc(t.label||t.variant)+'</div>'+
-        (hasSample?'<div class="fs-11_5 c-text3" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px">'+htmlEsc(t.sample.subject)+'</div>':'')+
-      '</div>'+
-      (hasSample?'<button onclick="previewTemplateSample(\''+t.variant+'\')" style="font-size:11px;color:var(--accent);background:transparent;border:1px solid var(--border2);padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">Preview</button>':'')+
-      '<div class="fs-12 c-text3" style="white-space:nowrap">'+t.sent+' sent · '+t.replied+' replied</div>'+
-      '<div class="fs-14" style="font-weight:700;color:'+(t.reply_rate>=5?'var(--green)':t.reply_rate>0?'var(--accent)':'var(--text3)')+';min-width:54px;text-align:right">'+t.reply_rate+'%</div>'+
-    '</div>';
-  }).join(''):'<div class="c-text3 fs-13" style="padding:14px">No sent emails with variants yet in this window.</div>';
-  var spamHtml='';
-  if(sr){ var col=sr.level==='risk'?'var(--red)':sr.level==='warn'?'var(--amber)':'var(--green)'; spamHtml='<div style="margin-top:10px;padding:10px 12px;border:1px solid '+col+';border-radius:8px">'+'<div class="fs-13" style="font-weight:700;color:'+col+'">Spam score: '+sr.score+'/100 ('+sr.level+')</div>'+(sr.warnings&&sr.warnings.length?'<ul class="fs-12 c-text2" style="margin:6px 0 0 16px">'+sr.warnings.map(function(w){return '<li>'+htmlEsc(w)+'</li>';}).join('')+'</ul>':'<div class="fs-12 c-text3" style="margin-top:4px">Looks clean.</div>')+'</div>'; }
   function card(title,inner,extra){ return '<div style="margin-bottom:20px"><div class="fs-13 c-text2" style="font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+title+(extra||'')+'</div><div style="background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+inner+'</div></div>'; }
   return '<div class="page">'+
     '<div class="ph"><div class="flex jb aic">'+
-      '<div><div class="ptitle">Deliverability & Replies</div><div class="psub">Reputation, reply rate & content health</div></div>'+
+      '<div><div class="ptitle">Deliverability</div><div class="psub">Sending health: mailboxes, warm-up and domain checks. Bounce and open rates are on each person\'s Outreach Insights.</div></div>'+
       dayFilter+
     '</div></div>'+
     statsRow+
-    card('Mailbox health (outreach cap & auto-pause)', mbViewToggle+(mbRows||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes for this scope.</div>'))+
+    card('Mailbox health (outreach cap & auto-pause)', (mbRows||'<div class="c-text3 fs-13" style="padding:14px">No active mailboxes for this scope.</div>'))+
     card('Warm-up pool'+(w&&w.pool_count?' · '+w.pool_count+' active':''), warmSub+warmRows, warmExtra)+
     card('Domain authentication & blacklists', dhSub+dhRows, dhExtra)+
-    card('Reply rate by template', tplRows)+
-    card('Spam-content checker',
-      '<div style="padding:14px">'+
-        '<div class="fs-12_5 c-text3" style="margin-bottom:10px">Paste a subject + body to check it for things that hurt deliverability before you send: spam-trigger words, too many links/images, ALL-CAPS, excess exclamation marks, subject/body length, and a missing opt-out line.</div>'+
-        '<input id="spamSubj" class="inp" placeholder="Subject" value="'+htmlEsc(STATE.spamSubj||'')+'" oninput="STATE.spamSubj=this.value" style="margin-bottom:8px">'+
-        '<textarea id="spamBody" class="inp" placeholder="Paste an email body to score it" oninput="STATE.spamBody=this.value" style="width:100%;min-height:90px;font-family:inherit">'+htmlEsc(STATE.spamBody||'')+'</textarea>'+
-        '<button onclick="runSpamCheck()" class="fs-13" style="margin-top:8px;background:var(--accent);color:#fff;border:0;padding:7px 16px;border-radius:8px;cursor:pointer">Check</button>'+spamHtml+
-      '</div>')+
   '</div>';
 }
 
