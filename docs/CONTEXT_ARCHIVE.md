@@ -6690,3 +6690,9 @@ Owner's screenshot of a new sequence: "I'm BD Lead 1." — the profile name, not
 
 ### SESSION 43, fifth round (end) — R-189 checked and fixed; both Node runs green
 Owner: "So correct that also." Checked every `fillEmail` caller: the mail-merge screens and the email-preview window have no caller and open the person's own Gmail/Outlook (profile name is the right guess there); the one live spot was `applyReminderTemplate` (Compose), which wrote the From email ID's name — or the profile name — into the text when a reminder template was picked. Now the token stays. Full suite at `94afa0f`: 233/233 on Node 22 and on Node 26.10.0. Merge still waits on the owner's go and on applying migration 062 (seven nullable `follow_ups` columns) first.
+
+### SESSION 43, close — #319 merged
+Owner: "apply database and merge". Checked nothing was `sending` (0) and the columns were absent, applied migration 062 (seven nullable `follow_ups` columns; 1,187 rows intact), waited for the last full run (234/234 on Node 22), squash-merged #319 as `b20b326`. Node 26.10.0 had passed 233/233 one commit earlier; the later commit was the small reminder-template fix with its own guard. Not watched: the Render deploy. First live sends under the new follow-up rules are the thing to look at.
+
+### SESSION 43, handoff — owner continues in Cursor
+Owner: "merge the last file too and give me handoff to cursor, since I think we are exhausting our weekly limit." Wrote `docs/CURSOR_HANDOFF.md` (who the owner is, what shipped, open items, rules, the memory protocol done by hand because Cursor has no hooks) and merged it with the docs PR (#320). Nothing else in flight.
