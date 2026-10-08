@@ -74,7 +74,7 @@ try{
 
   // ticked leads only
   calls.length=0; await toLeads({id:'boss',role:'bd_lead',roles:['bd_lead']});
-  await ev(()=>{ STATE.leadSeqSel={u0:true,u1:true,own1:true}; openAssignLeads(); }); await page.waitForSelector('.as-row',{timeout:6000});
+  await ev(()=>{ STATE.leadSeqSel={u0:true,u1:true,own1:true}; render(); }); await page.waitForTimeout(250); await ev(()=>{ openAssignLeads(); }); await page.waitForSelector('.as-row',{timeout:6000});
   t=await modalText();
   step('with leads ticked it offers only the ticked ones that are still Unassigned (the owned one is dropped)', /The leads you ticked that are still Unassigned: 2/.test(t), t.slice(0,160));
   await ev(()=>document.getElementById('as-go').click());

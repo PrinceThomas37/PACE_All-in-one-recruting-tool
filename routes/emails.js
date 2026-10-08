@@ -26,6 +26,7 @@
 // ============================================================================
 const express = require('express');
 const { renderStoredEmail } = require('../email-vars');
+const senderCompany = require('../services/sender-company');
 const { isStaleProgress, reconcileProgress } = require('../services/send-progress');
 const sendRetry = require('../services/send-retry');
 const companyDailyCap = require('../services/company-daily-cap');
@@ -151,8 +152,10 @@ router.get('/emails', auth, async (req, res) => {
     let aiFirstOn = false;
     try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1; } catch (_) {}
     const isAdmin = hasRole(req, 'admin');
+    // {{sendercompany}} is filled from the mailbox's own "sends as" — so the preview shows the real company (services/sender-company.js).
+    const companyOf = await senderCompany.companiesFor(supabase, allData.map(e => (e.sending_email_id && pinnedById[e.sending_email_id] && e.sending_email_id) || e.job?.sending_email?.id));
     allData = allData.map((e) => {
-      const mailbox = (e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null;
+      const mailbox = senderCompany.withCompany((e.sending_email_id && pinnedById[e.sending_email_id]) || e.job?.sending_email || null, companyOf);
       const isMine = e.sent_by === req.user.id;
       // What the Email page says about a failure or a scheduled retry comes
       // from send-retry.js, the same rules the send loop obeyed — no page
@@ -420,6 +423,7 @@ router.patch('/emails/:id', auth, async (req, res) => {
           .select('id,email_address,display_name').eq('id', current.sending_email_id).maybeSingle();
         if (pinned) mailbox = pinned;
       }
+      mailbox = senderCompany.withCompany(mailbox, await senderCompany.companiesFor(supabase, [mailbox && mailbox.id]));
       const rendered = renderStoredEmail(current, mailbox);
       if (updates.subject === rendered.subject) delete updates.subject;
       if (updates.body === rendered.body) delete updates.body;

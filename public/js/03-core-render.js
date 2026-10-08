@@ -801,7 +801,8 @@ var MERGE_VAR_GROUPS=[
     ['{{salary_range}}','Salary range','Raw salary range text']
   ]},
   {label:'Your details',chips:[
-    ['{{sender}}','Your name','Your display name on the sending email']
+    ['{{sender}}','Your name','Your display name on the sending email'],
+    ['{{sendercompany}}','Your company','The company the sending email ID writes for — different for each email ID']
   ]}
 ];
 var MERGE_VAR_MORE=[
@@ -860,16 +861,16 @@ function renderVarChipBar(subjId,bodyId){
       MERGE_VAR_MORE.map(function(v){return renderVarChipBtn(v[0],v[1],v[2],subjId,bodyId);}).join('')+
       '</div></div>';
   }
-  return '<div style="padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);margin-top:8px">'+
+  return '<div data-var-bar="1" style="padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);margin-top:8px">'+
     '<div class="fs-13 c-text" style="font-weight:600;margin-bottom:4px">Personalize your message</div>'+
     '<div class="fs-12 c-text3" style="margin-bottom:12px">Step 1 — choose where to add &nbsp;·&nbsp; Step 2 — click a field below</div>'+
     '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+
-      '<button type="button" class="seg-btn'+(target==='subject'?' is-on':'')+'" onclick="setVarInsertTarget(\'subject\')">① Subject line</button>'+
-      '<button type="button" class="seg-btn'+(target==='body'?' is-on':'')+'" onclick="setVarInsertTarget(\'body\')">② Email body</button>'+
-      '<span class="fs-11 c-text3" style="align-self:center">Adding to: <strong class="c-accent">'+(target==='subject'?'Subject line':'Email body')+'</strong></span>'+
+      '<button type="button" class="seg-btn'+(target==='subject'?' is-on':'')+'" data-target="subject" onclick="setVarInsertTarget(\'subject\')">① Subject line</button>'+
+      '<button type="button" class="seg-btn'+(target==='body'?' is-on':'')+'" data-target="body" onclick="setVarInsertTarget(\'body\')">② Email body</button>'+
+      '<span class="fs-11 c-text3" style="align-self:center">Adding to: <strong class="c-accent" data-var-label="1">'+(target==='subject'?'Subject line':'Email body')+'</strong></span>'+
     '</div>'+
     groupHtml+moreHtml+
-    '<button type="button" onclick="STATE.showMoreVarChips=!STATE.showMoreVarChips;render()" class="fs-11 c-accent" style="padding:4px 0;border:0;background:transparent;cursor:pointer;font-weight:600">'+
+    '<button type="button" onclick="toggleMoreVarChips()" class="fs-11 c-accent" style="padding:4px 0;border:0;background:transparent;cursor:pointer;font-weight:600">'+
       (STATE.showMoreVarChips?'▲ Hide individual skills':'▼ Show individual skills (Skill 1, 2, 3)')+
     '</button>'+
   '</div>';

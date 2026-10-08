@@ -23,6 +23,15 @@ module.exports = (ctx) => {
   const { reportingChainIds } = require('../hierarchy')(supabase);
 
   const canDesign = (req) => hasRole(req, 'admin', 'ra_lead', 'bd_lead', 'recruiter');
+  // A BD (not a lead) writes sequences of their OWN (owner, 8 Oct: "no new sequence creation option in the sequence section"): they may create
+  // one, and edit / switch on or off only the ones they made. Everything else about sequences stays with the roles above.
+  const canDesignOwn = (req) => hasRole(req, 'bd');
+  const mayChange = async (req, id) => {
+    if (canDesign(req)) return true;
+    if (!canDesignOwn(req)) return false;
+    const { data } = await withOrg(supabase.from('workflow_definitions').select('created_by').eq('id', id), req).maybeSingle();
+    return !!data && data.created_by === req.user.id;
+  };
 
   // R47-1: `recruiterCanTouchJob`/`isBDM`/`isRecruiter` for the recruiting-side
   // enroll gate below — built locally (mirrors the self-contained `withOrg`
@@ -201,8 +210,19 @@ module.exports = (ctx) => {
       if (req.query.status) q = q.eq('status', req.query.status);
       const { data, error } = await q;
       if (error) throw error;
-      (data || []).forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
-      res.json(data || []);
+      let list = data || [];
+      if (!canDesign(req) && canDesignOwn(req)) {
+        // Another BD's personal sequence is theirs; the organisation's (the seeded standard, or one a lead / admin made) is everybody's.
+        const makers = [...new Set(list.map(d => d.created_by).filter(id => id && id !== req.user.id))];
+        const orgMakers = new Set();
+        if (makers.length) {
+          const { data: us } = await supabase.from('users').select('id,role,roles').in('id', makers);
+          (us || []).forEach(u => { const rs = Array.isArray(u.roles) && u.roles.length ? u.roles : [u.role]; if (rs.some(r => ['admin', 'ra_lead', 'bd_lead'].includes(r))) orgMakers.add(u.id); });
+        }
+        list = list.filter(d => !d.created_by || d.created_by === req.user.id || orgMakers.has(d.created_by));
+      }
+      list.forEach(d => (d.steps || []).sort((a, b) => a.step_order - b.step_order));
+      res.json(list);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -260,7 +280,7 @@ module.exports = (ctx) => {
 
   router.post('/wf/definitions', auth, async (req, res) => {
     try {
-      if (!canDesign(req)) return res.status(403).json({ error: 'Forbidden' });
+      if (!canDesign(req) && !canDesignOwn(req)) return res.status(403).json({ error: 'Forbidden' });
       const b = req.body || {};
       if (!b.name) return res.status(400).json({ error: 'name required' });
       const steps = normalizeSteps(b.steps);
@@ -285,7 +305,7 @@ module.exports = (ctx) => {
 
   router.put('/wf/definitions/:id', auth, async (req, res) => {
     try {
-      if (!canDesign(req)) return res.status(403).json({ error: 'Forbidden' });
+      if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
       // C-0022: this edited any org's workflow by id. A foreign definition
       // reads exactly like a missing one — 404, never 403, same shape as
       // every other by-id fix in this pass.
@@ -321,7 +341,7 @@ module.exports = (ctx) => {
 
   router.post('/wf/definitions/:id/status', auth, async (req, res) => {
     try {
-      if (!canDesign(req)) return res.status(403).json({ error: 'Forbidden' });
+      if (!(await mayChange(req, req.params.id))) return res.status(403).json({ error: 'Forbidden' });
       const status = req.body?.status;
       if (!['draft', 'active', 'archived'].includes(status)) return res.status(400).json({ error: 'status must be draft | active | archived' });
       // The org condition goes ON the update itself — a foreign id matches

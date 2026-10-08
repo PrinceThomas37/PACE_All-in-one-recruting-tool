@@ -144,25 +144,52 @@ var PLAN_EXAMPLE={
   '{{local_line}}':'Local candidates only.','{{salary_line}}':'($95k–$110k)','{{salary_range}}':'$95k–$110k',
   '{{skill_1}}':'Bluebeam','{{skill_2}}':'Procore','{{skill_3}}':'Takeoffs'
 };
-// R-176: one wording for all my email IDs, or one each — and, with "each", which email IDs have their own (see 12-manager-users.js).
+// R-176: one wording for all my email IDs, or one each. With "each" the editor FOLLOWS the Sending email chosen above — the way the
+// signature does (owner, 8 Oct: "the template should change when the email ID above is changed, like the signature is"). So there is
+// no list of email IDs here: pick the Sending email, and the wording below is that email ID's.
 function renderWordingScopeCard(planEmails,planFromId){
   var each=planScope()==='each';
   var radio=function(v,label,hint){
     return '<label class="fd-use fd-block"><input type="radio" name="wscope" '+(planScope()===v?'checked':'')+' onclick="setWordingScope(\''+v+'\')"> <strong>'+label+'</strong><span class="fd-hint"> '+hint+'</span></label>';
   };
-  var rows='';
+  var note='';
   if(each){
-    rows='<div class="fs-12_5 c-text2" style="margin:8px 0 4px">What each of your email IDs sends:</div>'+planEmails.map(function(e){
-      var own=mailboxHasOwnWording(e.id), editing=e.id===planFromId;
-      return '<div class="fs-12_5" style="padding:3px 0">'+(editing?'<strong>':'')+htmlEsc(e.email_address)+(editing?'</strong> <span class="c-text3">(editing below)</span>':'')+' — '+
-        (own?'<span class="c-green">its own wording</span> <button class="btn btn-xs btn-outline" onclick="wordingUseMine(\''+htmlEsc(e.id)+'\')">Use my main wording again</button>'
-            :'<span class="c-text3">your main wording</span> <button class="btn btn-xs btn-outline" onclick="wordingStartFromMine(\''+htmlEsc(e.id)+'\')">Start its own from my main wording</button>')+'</div>';
-    }).join('')+'<div class="fs-12 c-text3" style="margin-top:6px">Pick the Sending email above to edit that email ID\'s wording. An email ID without its own sends your main wording — nothing is ever left blank.</div>';
+    var mb=planEmails.filter(function(e){return e.id===planFromId;})[0];
+    var who=mb?htmlEsc(mb.email_address):'this email ID';
+    note=mb&&mailboxHasOwnWording(mb.id)
+      ? '<div class="fs-12_5 c-text2" style="margin-top:8px">The wording below is for <strong>'+who+'</strong> only. <button class="btn btn-xs btn-outline" onclick="wordingUseMine(\''+htmlEsc(mb.id)+'\')">Use my main wording again</button></div>'
+      : '<div class="fs-12_5 c-text2" style="margin-top:8px"><strong>'+who+'</strong> has no wording of its own yet, so it sends your main wording (shown below). Change it and press Save to give this email ID its own.</div>';
+    note+='<div class="fs-12 c-text3" style="margin-top:4px">Pick another Sending email above and the wording below changes to that email ID\'s.</div>';
   }
   return '<div class="card cp mb3"><div class="fw6 fs-13" style="margin-bottom:6px">Wording for your email IDs</div>'+
     radio('all','One wording for all my email IDs','— what you write below goes out from every email ID (only the signature differs)')+
-    radio('each','A different wording for each email ID','— e.g. two companies, two pitches')+rows+'</div>';
+    radio('each','A different wording for each email ID','— e.g. two companies, two pitches')+note+'</div>';
 }
+// {{sendercompany}} — "Your company", said once per email ID, right here (owner, 8 Oct: "your company name section, so it can be added
+// easily for different email IDs"). It is the mailbox's own "sends as" (company, title, address — all three are needed once, because every
+// outreach email must carry the sender's postal address); changing the Sending email above shows that email ID's company.
+function renderCompanyCard(planEmails,planFromId){
+  var mb=planEmails.filter(function(e){return e.id===planFromId;})[0]; if(!mb) return '';
+  var sa=mb.sends_as||{}, d=STATE.planCompanyDraft||{}, complete=!!(sa.company&&sa.title&&sa.address);
+  var val=function(k){ return htmlEsc(d.mb===mb.id&&d[k]!==undefined?d[k]:(sa[k]||'')); };
+  var inp=function(k,ph){ return '<input class="inp fd-wide" id="pc-'+k+'" placeholder="'+ph+'" value="'+val(k)+'" oninput="planCompanyType(\''+k+'\',this.value,\''+htmlEsc(mb.id)+'\')">'; };
+  return '<div class="card cp mb3"><div class="fw6 fs-13" style="margin-bottom:2px">Your company — for '+htmlEsc(mb.email_address)+'</div>'+
+    '<div class="fs-11_5 c-text3" style="margin-bottom:8px">The company this email ID writes for. Put <b>Your company</b> in the wording (chips below) and each email ID fills in its own.'+(complete?'':' It is also needed once for the signature: the title and the postal address.')+'</div>'+
+    inp('company','Company name, e.g. VHC Staffing')+
+    (complete?'':'<div style="margin-top:6px">'+inp('title','Your job title, e.g. Recruitment Manager')+'</div><div style="margin-top:6px">'+inp('address','Company postal address')+'</div>')+
+    '<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="savePlanCompany(\''+htmlEsc(mb.id)+'\')">Save company</button></div>';
+}
+window.planCompanyType=function(k,v,mbId){ STATE.planCompanyDraft=STATE.planCompanyDraft||{}; if(STATE.planCompanyDraft.mb!==mbId) STATE.planCompanyDraft={mb:mbId}; STATE.planCompanyDraft[k]=v; };
+window.savePlanCompany=function(mbId){
+  var u=STATE.user||{}, list=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id])||[], mb=list.filter(function(e){return e.id===mbId;})[0]; if(!mb) return;
+  var sa=Object.assign({},mb.sends_as||{}), d=STATE.planCompanyDraft&&STATE.planCompanyDraft.mb===mbId?STATE.planCompanyDraft:{};
+  ['company','title','address'].forEach(function(k){ if(d[k]!==undefined) sa[k]=String(d[k]).trim(); });
+  if(!sa.company){ showToast('Say which company this email ID writes for','warning'); return; }
+  apiPut('/users/'+u.id+'/emails/'+mbId+'/sends-as',sa).then(function(r){
+    mb.sends_as=(r&&r.sends_as)||sa; STATE.planCompanyDraft=null;
+    showToast('Saved — '+mb.email_address+' writes for '+mb.sends_as.company,'success'); render();
+  }).catch(function(e){ showToast((e&&e.message)||'Could not save','error'); });
+};
 function planFromMailbox(){
   var u=STATE.user||{};
   var list=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]);
@@ -175,12 +202,13 @@ function planPreviewInner(){
   var subj=se?se.value:(planWording('tmpl_'+key+'_subject')||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'');
   var body=be?be.value:(planWording('tmpl_'+key+'_body')||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'');
   var from=planFromMailbox();
-  var vars=Object.assign({},PLAN_EXAMPLE,{'{{sender}}':from?(from.display_name||from.email_address||''):'','{{senderemail}}':from?(from.email_address||''):''});
+  var vars=Object.assign({},PLAN_EXAMPLE,{'{{sender}}':from?(from.display_name||from.email_address||''):'','{{senderemail}}':from?(from.email_address||''):'',
+    '{{sendercompany}}':from&&from.sends_as?(from.sends_as.company||''):''});
   function fill(escaped){
     return String(escaped||'').replace(/\{\{\s*([a-z_0-9]+)\s*\}\}/gi,function(m,name){
       var v=vars['{{'+name.toLowerCase()+'}}'];
       if(v===undefined) return '<span class="cmp-unset" title="Not a field this app fills">'+htmlEsc(m)+'</span>';
-      if(v==='')        return '<span class="cmp-unset" title="Nothing to fill this with — pick a sending email above">'+htmlEsc(m)+'</span>';
+      if(v==='')        return '<span class="cmp-unset" title="'+(name.toLowerCase()==='sendercompany'?'No company said for this email ID yet — add it in the box under Sending from':'Nothing to fill this with — pick a sending email above')+'">'+htmlEsc(m)+'</span>';
       return htmlEsc(v);
     });
   }
@@ -194,7 +222,28 @@ function planPreviewInner(){
     '<div class="cmp-body">'+fill(htmlEsc(body))+'</div>'+
     (sigHtml?'<div class="cmp-sig">'+sigHtml+'</div>':'');
 }
+// UNSAVED TYPING IS KEPT (owner, 8 Oct): the editor used to forget what was typed whenever the page repainted (a chip bar button, a
+// signature arriving, switching the Sending email), because boxes are drawn from the SAVED text. What is typed is kept per
+// (email ID or "all") and template, drawn back in on every repaint, and dropped on Save — or when it equals the saved text, so an old
+// copy can never hide a later saved change.
+var PLAN_BOX_IDS={outreach:['tmpl-o1-subj','tmpl-o1-body'],fu1:['tmpl-fu1-subj','tmpl-fu1-body'],fu2:['tmpl-fu2-subj','tmpl-fu2-body']};
+function planDraftScope(){ return planScope()==='each'?(STATE.planFromEmailId||''):'all'; }
+function planDraftKey(tkey){ return planDraftScope()+'|'+tkey; }
+window.planDraftFor=function(tkey){ return (STATE.planDraft||{})[planDraftKey(tkey)]||null; };
+window.planDraftCapture=function(){
+  var t=STATE.activeTmpl||'outreach', ids=PLAN_BOX_IDS[t]; if(!ids) return;
+  var se=document.getElementById(ids[0]), be=document.getElementById(ids[1]); if(!se||!be) return;
+  var k=outreachTmplApiKey(t);
+  var savedS=planWording('tmpl_'+k+'_subject')||(t==='outreach'?STATE.emailSubj:STATE[t+'Subj'])||'';
+  var savedB=planWording('tmpl_'+k+'_body')||(t==='outreach'?STATE.emailBody:STATE[t+'Body'])||'';
+  STATE.planDraft=STATE.planDraft||{};
+  if(se.value===savedS&&be.value===savedB) delete STATE.planDraft[planDraftKey(t)];
+  else STATE.planDraft[planDraftKey(t)]={ subj:se.value, body:be.value };
+};
+window.planDraftClear=function(tkey){ if(STATE.planDraft) delete STATE.planDraft[planDraftKey(tkey==='outreach'||tkey==='fu1'||tkey==='fu2'?tkey:'outreach')]; };
+window.planSetTmpl=function(key){ if(window.planDraftCapture) planDraftCapture(); STATE.activeTmpl=key; render(); };
 window.planRepaintPreview=function(){
+  planDraftCapture();
   var el=document.getElementById('plan-mail'); if(el) el.innerHTML=planPreviewInner();
 };
 
@@ -601,6 +650,7 @@ function renderEmail(){
     {key:'fu1',label:'Follow-up 1',sublabel:'Day '+fu1Day+' after outreach',color:'#ca8a04',subjVal:planWording('tmpl_fu1_subject')||STATE.fu1Subj,bodyVal:planWording('tmpl_fu1_body')||STATE.fu1Body,subjId:'tmpl-fu1-subj',bodyId:'tmpl-fu1-body'},
     {key:'fu2',label:'Follow-up 2',sublabel:'Day '+fu2Day+' after outreach',color:'#ea580c',subjVal:planWording('tmpl_fu2_subject')||STATE.fu2Subj,bodyVal:planWording('tmpl_fu2_body')||STATE.fu2Body,subjId:'tmpl-fu2-subj',bodyId:'tmpl-fu2-body'}
   ];
+  tmplDefs.forEach(function(t){ var d=planDraftFor(t.key); if(d){ t.subjVal=d.subj; t.bodyVal=d.body; } });   // unsaved typing wins until Save
   var activeTmpl=tmplDefs.find(function(t){return t.key===STATE.activeTmpl;})||tmplDefs[0];
   var planEmails=(STATE.userEmailsCache&&STATE.userEmailsCache[u.id]||[]).filter(function(e){return e.is_active;});
   var planFromId=STATE.planFromEmailId||(planEmails.find(function(e){return e.is_primary;})||planEmails[0]||{}).id;
@@ -615,7 +665,7 @@ function renderEmail(){
   }).join('');
   var tmplTabBtns=tmplDefs.map(function(t){
     var isActive=STATE.activeTmpl===t.key;
-    return '<button onclick="STATE.activeTmpl=\''+t.key+'\';render()" style="padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:2px solid '+(isActive?t.color:'var(--border)')+';background:'+(isActive?t.color:'var(--card)')+';color:'+(isActive?'#fff':'var(--text2)')+';transition:all .15s">'+t.label+'</button>';
+    return '<button onclick="planSetTmpl(\''+t.key+'\')" style="padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:2px solid '+(isActive?t.color:'var(--border)')+';background:'+(isActive?t.color:'var(--card)')+';color:'+(isActive?'#fff':'var(--text2)')+';transition:all .15s">'+t.label+'</button>';
   }).join('');
   var daySettingsHtml='';
   if(STATE.activeTmpl==='fu1'){
@@ -631,6 +681,14 @@ function renderEmail(){
         '<option value="">— select day —</option>'+dayOpts(fu2Day,fu1Day)+
       '</select>'+
       '<div class="fs-11 c-text3" style="margin-top:4px">Must be after Follow-up 1 (Day '+fu1Day+')</div>'+
+    '</div>';
+  }
+  // Same thread or a new email — per follow-up (owner, 8 Oct). Default 'same' = how follow-ups have always gone out.
+  if(STATE.activeTmpl==='fu1'||STATE.activeTmpl==='fu2'){
+    var thrKey=STATE.activeTmpl+'_thread', thr=myPlan[thrKey]==='new'?'new':'same', thrLbl=STATE.activeTmpl==='fu1'?'Follow-up 1':'Follow-up 2';
+    daySettingsHtml+='<div class="fgrp" style="margin-bottom:14px"><label class="flbl">How '+thrLbl+' is sent</label>'+
+      '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='same'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'same\')"> <strong>In the same email thread</strong><span class="fd-hint"> — a reply under your first email, so it reads as one conversation</span></label>'+
+      '<label class="fd-use fd-block"><input type="radio" name="futhread" '+(thr==='new'?'checked':'')+' onclick="setFollowupThread(\''+thrKey+'\',\'new\')"> <strong>As a new email</strong><span class="fd-hint"> — its own subject line, in a thread of its own (write a subject that stands alone, not “Re: …”)</span></label>'+
     '</div>';
   }
   var canEditTemplates=userHasAnyRole(u,'bd','bd_lead','admin');
@@ -649,6 +707,7 @@ function renderEmail(){
         '<strong>How this works:</strong> Pick your sending email → choose a message style → edit Outreach &amp; follow-ups → Save. Assigned leads use these templates automatically.'+
       '</div>'+
       renderSendingEmailCard(u.id,planEmails,planFromId,'selectPlanFromEmail')+
+      renderCompanyCard(planEmails,planFromId)+
       renderWordingScopeCard(planEmails,planFromId)+
       '<div class="card cp mb3">'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
@@ -674,7 +733,7 @@ function renderEmail(){
       '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">'+tmplTabBtns+'</div>'+
       '<div class="card cp" style="border-top:3px solid '+activeTmpl.color+'">'+
         '<div style="margin-bottom:14px">'+
-          '<div class="fs-14 c-text" style="font-weight:700">'+activeTmpl.label+'</div>'+
+          '<div class="fs-14 c-text" style="font-weight:700">'+activeTmpl.label+(planScope()==='each'&&planFrom?' <span class="c-text3" style="font-weight:400">— for '+htmlEsc(planFrom.email_address)+'</span>':'')+'</div>'+
           '<div class="fs-12 c-text3" style="margin-top:2px">'+activeTmpl.sublabel+'</div>'+
         '</div>'+
         daySettingsHtml+

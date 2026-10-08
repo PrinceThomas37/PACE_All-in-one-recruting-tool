@@ -11,7 +11,7 @@
 
   // Which leads are on offer: the ticked ones that are still Unassigned, else every Unassigned lead in the list.
   function offered(){
-    var sel=STATE.leadSeqSel||{}, ticked=Object.keys(sel).filter(function(k){return sel[k];});
+    var sel=STATE.leadSeqSel||{}, vis=STATE._leadSelVisibleIds||null, ticked=Object.keys(sel).filter(function(k){return sel[k]&&(!vis||vis.indexOf(k)>-1);});
     var open=function(j){ return j && j.stage==='Unassigned' && !j.assigned_to_bd; };
     var fromTicks=ticked.map(jobById).filter(open).map(function(j){return j.id;});
     if(ticked.length) return { ids:fromTicks, selected:true, ticked:ticked.length };

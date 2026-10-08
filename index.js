@@ -76,6 +76,8 @@ const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
 const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
+const senderCompany = require('./services/sender-company');
+const followupThread = require('./services/followup-thread');
 const { newToken: newTrackToken, injectPixel: injectTrackPixel } = require('./email-tracking');
 const { recordRefreshOutcome } = require('./mailbox-health');
 const { createEngineRunner } = require('./engine-runs');
@@ -1629,6 +1631,14 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   const senderIdentity = senderIdentityFor(sendingEmail, email.from_email);
   const filledSig = fillSignatureHtml(signatureHtml, senderIdentity);
   email = { ...email, ...renderStoredEmail(email, sendingEmail) };
+  // A follow-up its person chose to send as a NEW email (not a reply in the thread) is delivered like a first email, with its own subject.
+  if (email.followup_type === 'fu1' || email.followup_type === 'fu2') {
+    try {
+      const k = followupThread.threadKey(email.sent_by, email.followup_type);
+      const { data: tv } = await supabase.from('app_settings').select('value').eq('key', k).maybeSingle();
+      email = followupThread.forDelivery(email, { [k]: tv && tv.value });
+    } catch (_) { /* unreadable = the way it always was: a reply in the thread */ }
+  }
   const subject = email.subject;
   let htmlBody = buildHtmlEmailBody(email.body, filledSig);
   // Open tracking (R-110): only where it is switched on for this sender, and only
@@ -2128,8 +2138,16 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       if (aiFirstEmailOn && engineDraft.isFirstEmail(email) && email.template_variant !== 'ai') {
         email = await aiWriteFirstEmail(email, sendingEmail, sigTemplate);
       }
-      const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingEmail);
+      // {{sendercompany}} (8 Oct): the company the SENDING email ID writes for. No company said for it = the email is held in "Didn't send"
+      // with the reason, never sent with a hole in it; sent, the company is written into the stored text so history never shows the token.
+      const gate = await senderCompany.prepareForSend(supabase, email, sendingEmail, userEmailId);
+      if (gate.error) throw new Error(gate.error);
+      const needsCompany = gate.needs;
+      const sendingForThis = needsCompany ? gate.mailbox : sendingEmail;
+      const graph = await deliverOutboundEmail(email, userEmailId, sigTemplate, sendingForThis);
       await supabase.from('emails').update({ status: 'sent', sent_at: today() }).eq('id', email.id);
+      // Sent: the company is now part of the stored text, so history and quoted replies never show the token.
+      if (needsCompany) await supabase.from('emails').update({ subject: senderCompany.fillCompany(email.subject, sendingForThis.sends_as_company), body: senderCompany.fillCompany(email.body, sendingForThis.sends_as_company) }).eq('id', email.id);
       await persistGraphIds(email.id, graph);
       emit(EVENTS.EMAIL_SENT, { emailId: email.id, jobId: email.job_id, contactId: email.contact_id, managerId: userId, followupType: email.followup_type || 'initial', toEmail: email.to_email });
       const todayDate = today();

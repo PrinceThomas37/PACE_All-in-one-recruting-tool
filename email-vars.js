@@ -290,7 +290,9 @@ const VAR_SYNONYMS = [
   ['desig', 'designation', 'title'],
   ['ind', 'industry'],
   ['sender', 'sender_name', 'sendername', 'from_name'],
-  ['senderemail', 'sender_email', 'senderemailaddress', 'from_email']
+  ['senderemail', 'sender_email', 'senderemailaddress', 'from_email'],
+  // The company the sending email ID writes for (R-169, 8 Oct) — filled at SEND time, like the sender, from that mailbox's "sends as".
+  ['sendercompany', 'sender_company', 'mycompany', 'yourcompany']
 ];
 
 // name → [every name for the same fact, canonical first]
@@ -303,7 +305,7 @@ const VAR_GROUP = (() => {
 // Tokens that are SUPPOSED to survive queueing — the sender identity is
 // resolved at send time, from the mailbox that actually sends (see
 // DEFER_SENDER below). Everything else still in braces is a hole.
-const SEND_TIME_VARS = new Set(['sender', 'senderemail']);
+const SEND_TIME_VARS = new Set(['sender', 'senderemail', 'sendercompany']);
 
 /**
  * Resolve one `{{token}}` against a variable map, trying the token itself and
@@ -477,7 +479,9 @@ function senderIdentityFor(mailbox, fallbackAddress) {
   const emailAddress = mailbox?.email_address || fallbackAddress || '';
   return {
     displayName: mailbox?.display_name || displayNameFromAddress(emailAddress),
-    emailAddress
+    emailAddress,
+    // Only a reader that knows it attaches it (services/sender-company.js); otherwise the token is left, visibly, never blanked.
+    company: String(mailbox?.sends_as_company || '')
   };
 }
 
@@ -491,12 +495,14 @@ function senderIdentityFor(mailbox, fallbackAddress) {
  * — the pending preview, a quoted reply chain in a follow-up — shows "{{sender}}"
  * unless it is filled first. `renderStoredEmail` below is the shape to reach for.
  */
-function applySenderIdentity(text, { displayName, emailAddress } = {}) {
+function applySenderIdentity(text, { displayName, emailAddress, company } = {}) {
   const address = String(emailAddress || '');
   const name = String(displayName || '') || displayNameFromAddress(address);
-  return String(text == null ? '' : text)
+  let out = String(text == null ? '' : text)
     .replace(/{{sender}}/g, name)
     .replace(/{{senderemail}}/g, address);
+  if (company) out = out.replace(/{{sendercompany}}/g, String(company));   // no company known: the token stays, visibly
+  return out;
 }
 
 /**

@@ -15,6 +15,7 @@ const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] 
 const W = require('../services/wording-scope.js');
 const { buildPendingEmailsFromJobs } = require('../services/lead-outreach-queue.js');
 const seqT = require('../services/sequence-templates.js');
+const FT = require('../services/followup-thread.js');
 
 const A = 'Hello {{fn}}, this is the COMPANY-A pitch for the {{pos}} role — we at Alpha Staffing would love to help you hire quickly.';
 const B = 'Hi {{fn}}, Beta Recruiters here about your {{pos}} opening — a completely different pitch from a different company altogether.';
@@ -104,6 +105,18 @@ r = await call('/outreach-plan/mailboxes', 'get');
 step('saving it empty takes the text away, so that email ID falls back to the person\'s wording', r.out.mailboxes.m2.tmpl_o1_body === undefined && !store.app_settings.some(x => x.key === 'ue_m2_tmpl_o1_body'));
 r = await call('/outreach-plan/mailboxes', 'get', {}, { role: 'recruiter' });
 step('a recruiter has none of this', r.code === 403);
+
+// ── 5. same thread or a new email, per follow-up (owner, 8 Oct) ──
+const fu = { followup_type: 'fu1', sent_by: 'bd', subject: 'S' };
+step('by default a follow-up is a reply in the thread, exactly as it has always been', FT.forDelivery(fu, {}) === fu && FT.forDelivery(fu, { u_bd_fu1_thread: 'same' }) === fu && FT.forDelivery(fu, { u_bd_fu1_thread: 'banana' }) === fu);
+const nu = FT.forDelivery(fu, { u_bd_fu1_thread: 'new' });
+step('"a new email" hands the delivery a plain email (not fu1/fu2) so it goes out with its own subject — the stored row is untouched', nu.followup_type === 'reminder' && fu.followup_type === 'fu1');
+step('the choice is per follow-up and per person', FT.forDelivery({ ...fu, followup_type: 'fu2' }, { u_bd_fu1_thread: 'new' }).followup_type === 'fu2' && FT.forDelivery(fu, { u_other_fu1_thread: 'new' }) === fu);
+step('a first email is never affected', FT.forDelivery({ followup_type: null, sent_by: 'bd' }, { u_bd_fu1_thread: 'new' }).followup_type === null);
+r = await call('/outreach-plan', 'post', { key: 'fu2_thread', value: 'new' });
+step('the choice is saved for Follow-up 2', r.code === 200 && store.app_settings.some(x => x.key === 'u_bd_fu2_thread' && x.value === 'new'));
+r = await call('/outreach-plan', 'post', { key: 'fu1_thread', value: 'maybe' });
+step('…and only "same" or "new" is accepted', r.code === 400);
 
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);
 process.exit(results.every(Boolean) ? 0 : 1);

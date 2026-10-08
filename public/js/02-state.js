@@ -108,7 +108,7 @@ var STATE = {
   contacts: [],
   detailJob: null,
   industriesList: [],
-  jobsFilter: {search:"",stages:[],industries:[],dateRange:"all",dateFrom:"",dateTo:""},
+  jobsFilter: {search:"",stages:[],industries:[],assignee:"",dateRange:"all",dateFrom:"",dateTo:""},
   openDrop: null,
   assignSel: {},
   assignTargetBD: "",
