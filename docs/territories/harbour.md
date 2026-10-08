@@ -264,3 +264,6 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 42) — send window per person, logo in the signature (D-0104)
 - `services/send-window.js` (pure, injectable clock): the organisation window narrowed by `u_<id>_send_days/_send_start_hour/_send_end_hour`; `isOpen/effectiveWindow/localParts/readPrefs/checkPrefs`; days are the LEAD's local days. `index.js` `isInLeadSendWindow`/`getMinutesUntilWindowOpens` delegate to it. `email-signature.js`: `cleanSendsAs` keeps an own-bucket `logo` URL and a hex `accent`; `signatureFromSendsAs` renders a two-column table with the logo (an `<img height=56>` by address — not embedded in the mail). The start of outreach is gated in `services/lead-outreach-queue.js`; queued mail and follow-ups are not.
+
+## 2026-10-08 (Session 42) — failed emails can be closed (D-0107)
+- No server change: closing a failed email is the existing `DELETE /emails/:id` (sender-only, pending or failed only, the status rides on the delete). The page offers it on every own failed row, including ones that can never be retried (invalid address). A closed row is gone — the contact keeps its invalid mark, so the engine will not write to it again.

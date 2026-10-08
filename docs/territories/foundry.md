@@ -1164,3 +1164,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-08 (Session 42) — tests for My Setup stage 2 (D-0104)
 - New: `my-setup-routes-smoke` (32). Grown: `self-serve-mailbox-smoke` (45), `mysetup-page-smoke` (49), `finder-page-smoke` (135), `engine-draft-smoke` (+1). The page test caught two real bugs the server tests could not: formatting inside a locked chip vanished on save, and a failed logo upload left the picture in a hand-formatted signature. Full suite 217/217 on Node 22 (Node 26.10.0 run before the merge).
+
+## 2026-10-08 (Session 42) — tests for D-0107
+- New `failed-close-smoke` (10: Close/Retry per row, a teammate's row has neither, Close all is own-only, the panel disappears when empty). `mysetup-page-smoke` now asserts there is NO second Today card and that a mailbox row is details + one button (mutations: the card function put back, the Close button removed — both fail).

@@ -483,12 +483,16 @@ function renderEmail(){
     // else's row), so the button is offered only on `is_mine` rows.
     var failedList=STATE.failedEmails||[];
     var retryable=failedList.filter(function(e){return e.can_retry&&e.is_mine!==false;});
+    var mineFailed=failedList.filter(function(e){return e.is_mine!==false;});
     var failedPanel=failedList.length?(
       '<div class="failed-panel">'+
         '<div class="failed-head">'+
           '<div><div class="failed-title">Didn\'t send ('+failedList.length+')</div>'+
           '<div class="failed-sub">Temporary problems retry on their own. These need a person.</div></div>'+
-          (retryable.length?'<button class="btn btn-outline btn-sm" onclick="retryAllFailedEmails('+htmlEsc(JSON.stringify(retryable.map(function(e){return e.id;})))+')">Retry all ('+retryable.length+')</button>':'')+
+          '<div class="failed-acts">'+
+            (retryable.length?'<button class="btn btn-outline btn-sm" onclick="retryAllFailedEmails('+htmlEsc(JSON.stringify(retryable.map(function(e){return e.id;})))+')">Retry all ('+retryable.length+')</button>':'')+
+            (mineFailed.length?'<button class="btn btn-outline btn-sm" onclick="closeFailedEmails('+htmlEsc(JSON.stringify(mineFailed.map(function(e){return e.id;})))+')">Close all</button>':'')+
+          '</div>'+
         '</div>'+
         failedList.slice(0,50).map(function(e){
           var isMine=e.is_mine!==false;
@@ -500,7 +504,10 @@ function renderEmail(){
               '<div class="failed-why">'+htmlEsc(e.fail_reason||'Send failed — no reason was recorded (failed before retries existed).')+'</div>'+
               (e.retry_note?'<div class="failed-note">'+htmlEsc(e.retry_note)+'</div>':'')+
             '</div>'+
-            (e.can_retry&&isMine?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
+            (isMine?'<div class="failed-acts">'+
+              (e.can_retry?'<button class="btn btn-outline btn-sm" onclick="retryFailedEmail(\''+e.id+'\',event)">Retry</button>':'')+
+              '<button class="btn btn-outline btn-sm" title="Take this off the list. Nothing is sent." onclick="closeFailedEmails([\''+e.id+'\'])">Close</button>'+
+            '</div>':'')+
           '</div>';
         }).join('')+
         (failedList.length>50?'<div class="failed-sub" style="padding:8px 14px">Showing 50 of '+failedList.length+'.</div>':'')+

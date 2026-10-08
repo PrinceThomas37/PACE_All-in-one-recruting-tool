@@ -42,16 +42,7 @@
     return { steps:steps, done:done, total:steps.length, all:done===steps.length, boxes:boxes };
   }
 
-  // ── the calm card on Today ───────────────────────────────────────────────
-  window.renderMySetupCard = function(){
-    var u=STATE.user; if(!u || (STATE.viewingUser&&STATE.viewingUser.id!==u.id)) return '';
-    if(!canSend(u) || !((STATE.userEmailsCache||{})[u.id])) return '';       // not for people who do not send; not before it has loaded
-    var s=status(); if(s.all) return '';
-    var next=s.steps.filter(function(x){ return !x.done; })[0];
-    return '<div class="mba-card mb4"><div class="mba-head">Finish setting up your outreach · '+s.done+' of '+s.total+' done</div>'+
-      '<div class="mba-row"><div class="mba-main"><div class="mba-mail">'+esc(next.title)+'</div><div class="mba-text">'+esc(next.text)+'</div></div>'+
-      '<div class="mba-act"><button class="btn btn-sm btn-primary" onclick="goPage(\'mysetup\')">Open My Setup</button></div></div></div>';
-  };
+  // (There is no card on Today any more: the first tasks sit on the person's Reminders list and in "Needs you today" — one prompt, not two.)
 
   // PACE's first tasks for a person (a mailbox, a sequence) are put on their own list by the server, once per sign-in, and it
   // closes the ones that are done. Called at sign-in and after every step on this page.
@@ -110,13 +101,13 @@
     return isConnected(m) ? '<span class="ms-tag is-ok">Connected</span>' : '<span class="ms-tag is-warn">Not signed in yet</span>';
   }
   function platformOf(m){ return /gmail|google/i.test(m.platform||'') ? 'Gmail' : 'Outlook'; }
+  // Just the details, no explanation: who it writes as and where the signature stands.
   function writesFor(m){
     var s=m.sends_as;
-    if (!s) return '<div class="ms-for is-none"><strong>Writes for: not said yet.</strong> Emails from this mailbox use the organisation\'s standard name, title and signature. <button type="button" class="fd-pill" onclick="mySetupEdit(\''+m.id+'\')">Say who it writes for</button></div>';
+    if (!s) return '<div class="ms-for is-none"><strong>Sender &amp; signature:</strong> not set</div>';
     var bits=[s.title, s.company].filter(Boolean).map(esc).join(' · ');
     var more=[s.phone, s.website, s.address].filter(Boolean).map(esc).join(' · ');
-    return '<div class="ms-for"><strong>Writes for:</strong> '+bits+'<div class="fd-hint">'+more+'</div>'+
-      '<div class="fd-hint">'+(m.has_own_signature?'Has its own signature'+(s.logo?', with a logo.':'.'):'No signature of its own yet.')+'</div></div>';
+    return '<div class="ms-for"><strong>'+bits+'</strong>'+(more?'<div class="fd-hint">'+more+'</div>':'')+'</div>';
   }
   function boxRow(m){
     var plat=platformOf(m);
@@ -126,7 +117,7 @@
         badge(m)+'</div>'+
       writesFor(m)+
       '<div class="fd-row">'+
-        '<button class="btn btn-sm btn-outline" onclick="mySetupEdit(\''+m.id+'\')">Edit who it writes for &amp; its signature</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mySetupEdit(\''+m.id+'\')">'+(m.sends_as?'Edit sender &amp; signature':'Set up sender &amp; signature')+'</button>'+
         '<button class="btn btn-sm '+(isConnected(m)?'btn-outline':'btn-primary')+'" onclick="mySetupConnect(\''+m.id+'\')">'+(isConnected(m)?'Reconnect':'Connect '+plat)+'</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupRemove(\''+m.id+'\')">Remove</button>'+
       '</div></div>';

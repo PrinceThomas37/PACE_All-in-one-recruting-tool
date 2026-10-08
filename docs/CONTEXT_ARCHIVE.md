@@ -6646,3 +6646,6 @@ Owner paused: "update the context window, I will resume in the next chat." `CONT
 
 ### SESSION 42, after the handoff — the owner answers the three open items (D-0106)
 Company name at send time: dropped (it lives in the person's sequence). Company profile: "where will it be used?". Random-template mode / stock wording: "each user creates it; the system gives nothing". Found by reading: Random mode, the follow-up fallback and the starter all still supply Fute-pitched text. Plan proposed to the owner, nothing built.
+
+### SESSION 42, three screenshots from the owner (D-0107)
+Duplicate setup prompt (Today card + Needs-you-today row) → card removed; mailbox rows reduced to details and one button; "Didn't send" gets Close / Close all. Reproduced from the screenshots' own text, built, tested with a new `failed-close-smoke` (10) and the updated My Setup page test (48); mutations shown failing (card back; Close button removed).
