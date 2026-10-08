@@ -6713,4 +6713,7 @@ Ash Sayyad's Finder lead was left alone.
 
 **R-192** (bold, italic, underline, bullets, numbered list, link, clear formatting on New message and Reply) was not started until R-190 and R-191 were in this repo.
 
+### CURSOR, 8 Oct 2026 — formatting on New message and Reply (D-0118, R-192)
+After the wording and the dock drag were pushed, New message and Reply got the bar the owner asked for: bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Font, size, colour, highlight, and alignment are not on the bar. A paste that brings them is stripped in the box and again on the server (`services/mail-format.js`) before it can reach anyone. A message that was not formatted is still sent as plain text. Forward uses the same window, so it has the same bar. Not merged. No mail sent. The live database was not touched.
+
 Targeted tests green (see CONTEXT_WINDOW). Full suite not re-run. Node 26 not run. Not merged.

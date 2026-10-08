@@ -1,5 +1,12 @@
 # Foundry — memory
-> Last written: 2026-10-08 (Cursor, D-0117 guards) · earlier: 2026-09-28 (Session 33)
+> Last written: 2026-10-08 (Cursor, D-0118 formatting guards) · earlier: 2026-10-08 (D-0117)
+
+## 2026-10-08 — guards for the recruiting formatting bar (D-0118)
+- **New:** `test/mail-format-smoke.mjs` (10 — the marks that stay, the script and the colour that do not).
+- **Extended:** `mailbox-smoke` (a formatted reply and a formatted new message; an empty formatted reply is 400) and `mailbox-page-smoke` (the bar on Reply and on New message, bold, clear, a dirty paste). 136 and 80.
+- The D-0117 guards are unchanged.
+
+
 
 ## 2026-10-08 — guards for the longer writer, the personal switch, and the dock drag (D-0117)
 - **New:** `test/sequence-brief-smoke.mjs` (11 — length, topic refusal, variables kept, shorter note), `test/ai-first-choice-smoke.mjs` (18 — company/on/off, per mailbox, the settings routes), `test/ai-wording-ui-smoke.mjs` (9, Chrome — the buttons and the card).

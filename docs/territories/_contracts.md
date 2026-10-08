@@ -1197,3 +1197,9 @@ tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no lon
 - **harbour** — the pending-list `ai_will_write` chip uses the same function, with `aiReady: true`.
 - **surface** — Rewrite with AI and Write a variant on the sequence step and on My wording; the on/off card; a drag that does not open a parked window (R-191).
 **Blocked until answered:** no — answered in the same change.
+
+### C-0038 · harbour → surface · ANSWERED · 2026-10-08
+**Asks for:** New message and Reply edit with the recruiting formatting set, and send `formatted: true` only when the body actually contains that markup.
+**Because:** D-0118 / R-192. The owner wants bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Not a font, a size, a colour, a highlight, or alignment. The server must be the one that decides what a recipient receives.
+**Answered in the same change:** the bar is on both windows (`47-page-mailbox.js`). `routes/mailbox.js` sends a formatted body through `services/mail-format.js`, which keeps that list and drops the rest, including a script. A body that is not marked formatted still goes through `buildHtmlEmailBody` as plain text.
+**Blocked until answered:** no — answered in the same change.

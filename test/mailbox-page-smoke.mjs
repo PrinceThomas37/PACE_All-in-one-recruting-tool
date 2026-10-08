@@ -261,6 +261,44 @@ try {
     await page.evaluate(() => !!document.querySelector('#layer [data-win="mailReply"]') && !!document.querySelector('#layer .win-bar') && !(document.getElementById('mb-comp') || { innerHTML: '' }).innerHTML.trim()));
   step('It says the original will be quoted',
     (await page.evaluate(() => document.getElementById('layer').innerHTML)).includes('quoted underneath'));
+  const fmtBar = await page.evaluate(() => {
+    const bar = document.querySelector('#layer .mb-fmt');
+    return bar ? bar.innerHTML : '';
+  });
+  step('Reply offers bold, italic, underline, bullets, a numbered list, a link, and clear formatting',
+    ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbered list', 'Link', 'Clear formatting'].every(s => fmtBar.includes(s)),
+    fmtBar.slice(0, 180));
+  step('Reply does not offer a font, a size, a colour, a highlight, or alignment',
+    !/font|size|colour|color|highlight|align/i.test(fmtBar));
+  const bolded = await page.evaluate(() => {
+    const ed = document.getElementById('mb-comp-editor');
+    ed.focus();
+    ed.innerHTML = 'Hello team';
+    const range = document.createRange();
+    range.selectNodeContents(ed);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    window.mbFmt('reply', 'bold');
+    return document.getElementById('mb-comp-body').value;
+  });
+  step('Bold keeps the selected words bold in the message that will be sent',
+    /<(b|strong)>Hello team<\/(b|strong)>/i.test(bolded), bolded);
+  const cleared = await page.evaluate(() => {
+    window.mbFmt('reply', 'clear');
+    return document.getElementById('mb-comp-body').value;
+  });
+  step('Clear formatting takes the bold off', !/<(b|strong)>/i.test(cleared), cleared);
+  const pasted = await page.evaluate(() => {
+    const ed = document.getElementById('mb-comp-editor');
+    ed.innerHTML = '<font color="red" face="Arial"><span style="background:yellow">Kept</span></font><script>alert(1)</script>';
+    window.mbEditorInput('reply');
+    return document.getElementById('mb-comp-body').value;
+  });
+  step('A paste keeps the words and drops colour, highlight, font, and script',
+    pasted.includes('Kept') && !/script|color|background|face|font/i.test(pasted), pasted);
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'reply-formatting.png'), fullPage: false });
+  await page.evaluate(() => { document.getElementById('mb-comp-body').value = ''; });
 
   // The reported gap: no visible, editable subject on a reply.
   const replyFields = await page.evaluate(() => ({
@@ -461,6 +499,15 @@ try {
   step('Compose opens with To / Cc / Subject / Message',
     await page.evaluate(() => !!(document.getElementById('mb-c-to') && document.getElementById('mb-c-cc')
       && document.getElementById('mb-c-subject') && document.getElementById('mb-c-body'))));
+  step('New message has the same formatting bar, and nothing else',
+    await page.evaluate(() => {
+      const bar = document.querySelector('#layer .mb-fmt');
+      if (!bar) return false;
+      const html = bar.innerHTML;
+      const wanted = ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbered list', 'Link', 'Clear formatting'];
+      return wanted.every(s => html.includes(s)) && !/font|size|colour|color|highlight|align/i.test(html)
+        && !!document.getElementById('mb-c-editor');
+    }));
   step('Compose names the mailbox it will send from',
     (await page.evaluate(() => document.querySelector('.modal').innerHTML)).includes('priya@futeglobal.com'));
 

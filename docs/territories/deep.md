@@ -1,5 +1,8 @@
 # Deep — memory
-> Last written: 2026-10-08 (Cursor, territory map lists ai-first-choice) · earlier: 2026-09-30 (Session 35)
+> Last written: 2026-10-08 (Cursor, territory map lists mail-format) · earlier: 2026-10-08
+
+## 2026-10-08 — map only (D-0118)
+`scripts/territory-map.mjs` harbour own-list now includes `services/mail-format.js`. No migration. The live database was not touched.
 
 ## 2026-10-08 — map only (D-0117)
 `scripts/territory-map.mjs` observatory own-list now includes `services/ai-first-choice.js`. No migration. The live database was not touched. The four Find Leads unassigns from earlier today stay as they are (backup `backups.leads_unassign_finder_20261008`).

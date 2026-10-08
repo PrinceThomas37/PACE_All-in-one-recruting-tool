@@ -1,5 +1,12 @@
 # Harbour — memory
-> Last written: 2026-10-08 (Cursor, D-0117 "AI writes at send" chip) · earlier: 2026-09-30 (Session 35)
+> Last written: 2026-10-08 (Cursor, D-0118 mail formatting) · earlier: 2026-10-08 (D-0117)
+
+## 2026-10-08 — New message and Reply may carry a short list of formatting (D-0118, R-192)
+- **`services/mail-format.js` (new)** keeps bold, italic, underline, bullets, a numbered list, and an http(s) or mailto link. A font, a size, a colour, a highlight, alignment, and a script (with what is inside it) are dropped. A link that is `javascript:` is unwrapped to its words.
+- **`routes/mailbox.js`** reply, forward, and send: `formatted: true` uses that cleaner. Anything else is still plain text through `buildHtmlEmailBody`. A formatted body with no words is an empty message (400 on reply and send). A forward may still have an empty note.
+- The pending-list chip note from D-0117 is unchanged.
+
+
 
 ## 2026-10-08 — the pending-list chip uses the personal switch (D-0117, C-0037)
 - **`routes/emails.js`** sets `ai_will_write` through `ai-first-choice.shouldWriteFirst` with `aiReady: true` (the chip describes the switch, not whether a provider key exists) and only when `status === 'pending'`. Choice keys are loaded in chunks of 60 for the owners and mailbox ids on the page. A follow-up and a row already written by AI do not get the chip.

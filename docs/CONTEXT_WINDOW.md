@@ -3,7 +3,7 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-08 (Cursor, after Session 43) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
-**Highest ids:** decision D-0117 · contract C-0037 · roadmap `R-192` (next `R-193`) · next migration `063` (062 is APPLIED).
+**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-192` (next `R-193`) · next migration `063` (062 is APPLIED).
 
 ## Now
 
@@ -22,7 +22,7 @@ Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolU
 - **AI writes first emails:** same as the company / on for me / off. Per email ID only when wording is per email ID. Follow-ups stay the person's wording. The send loop and the "AI writes at send" chip both use `services/ai-first-choice.js`.
 - **Minimised windows:** drag the chip sideways along the bottom. A drag does not open it. A later click does. × closes it. The spot lasts until reload. Phone (860px and under) stays a scrolling row.
 
-**Not started:** Outlook-style formatting on New message and Reply (bold, italic, underline, bullets, numbered list, link, clear formatting). R-192. Do it after the above is in the repo. Not font, size, colour, highlight, or alignment.
+**Also on the dev branch (D-0118, R-192):** New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. A paste that brings a font, a colour, or a highlight is stripped. The send-time writer was not touched.
 
 ## Still open (do not start unasked)
 
@@ -47,7 +47,7 @@ A setting with no row reads its schema default (`config/settings.js`).
 
 ## Tests
 
-Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the short-draft repair assertion changed on purpose), `ai-first-choice-smoke` 18, `ai-wording-ui-smoke` 9, `window-dock-smoke` 30, `engine-draft-smoke` 17, `wording-scope-smoke` 45, `ai-style-smoke` 30, `sequence-builder-smoke` 31, `scope-emails-warmup-smoke` 52. Full suite not re-run (not merging). Sandbox Node 22; Render Node 26 — run Node 26 before a merge.
+Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the short-draft repair assertion changed on purpose), `ai-first-choice-smoke` 18, `ai-wording-ui-smoke` 9, `window-dock-smoke` 30, `engine-draft-smoke` 17, `wording-scope-smoke` 45, `ai-style-smoke` 30, `sequence-builder-smoke` 31, `scope-emails-warmup-smoke` 52, `mail-format-smoke` 10, `mailbox-smoke` 136, `mailbox-page-smoke` 80. Full suite not re-run (not merging). Sandbox Node 22; Render Node 26 — run Node 26 before a merge.
 
 ## How these two files stay true
 

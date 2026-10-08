@@ -1,5 +1,13 @@
 # Surface — memory
-> Last written: 2026-10-08 (Cursor, D-0117 wording buttons + dock drag) · earlier: 2026-09-30 (Session 35)
+> Last written: 2026-10-08 (Cursor, D-0118 formatting bar) · earlier: 2026-10-08 (D-0117)
+
+## 2026-10-08 — the formatting bar on New message and Reply (D-0118, R-192, C-0038)
+- **`47-page-mailbox.js`:** the box is a formatted editor. The old field ids (`#mb-c-body`, `#mb-comp-body`) stay, hidden, so a send still reads them. The bar is bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Nothing else.
+- A paste that brings a font, a colour, or a highlight is cleaned in the box, and the box is rewritten so what the person sees is what will be sent. Ordinary typing does not rewrite the box (that moved the cursor).
+- Forward uses the same window, so it has the same bar. Phone: the editor is 16px, like the other fields.
+- Formatting on New message and Reply is **in this change** (the earlier note that it was not started is out of date).
+
+
 
 ## 2026-10-08 — Rewrite / variant, the personal switch, and dragging a parked window (D-0117, R-190, R-191)
 - **Sequence step (`09-page-workflows.js`):** "Rewrite with AI" and "Write a variant" sit beside "Write with AI" and "Start from an example". Rewrite and variant need text already in the step. A refused or empty result does not replace what the person typed; the note is shown.

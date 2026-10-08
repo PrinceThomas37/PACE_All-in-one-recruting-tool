@@ -160,7 +160,7 @@ Clients page → "✉ Email this client", with document attachment.
 `routes/mailbox.js` + `public/js/47-page-mailbox.js`. The in-app mailbox over
 Graph and Gmail. **Nothing is mirrored into Postgres**
 and there is deliberately no second send path — anything that composes mail
-reuses these provider calls.
+reuses these provider calls. On the dev branch (D-0118, not live until merged): New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Font, size, colour, highlight, and alignment are not offered, and a paste that brings them is stripped before send.
 
 ### Sending an interview invitation
 **Status:** LIVE · owner `guild`

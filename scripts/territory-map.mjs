@@ -76,6 +76,8 @@ const TERRITORIES = [
           // entities Gmail leaves in previews (R-111).
           'services/followup-sender.js', 'services/open-tracking.js', 'services/ooo-return.js',
           'services/submission-email.js', 'services/html-entities.js',
+          // The only formatting a New message or Reply may carry (R-192).
+          'services/mail-format.js',
           'warmup-engine.js', 'deliverability.js', 'domain-health.js',
           'mailbox-health.js', 'mailmerge', 'routes/mailbox.js',
           'routes/emails.js', 'routes/warmup.js', 'routes/deliverability.js'],

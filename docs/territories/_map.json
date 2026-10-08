@@ -2,8 +2,8 @@
   "generated": "2026-10-08",
   "repo": "PrinceThomas37/PACE_All-in-one-recruting-tool",
   "totals": {
-    "files": 566,
-    "lines": 126818,
+    "files": 568,
+    "lines": 127257,
     "territories": 9,
     "unclaimedFiles": 14
   },
@@ -25,7 +25,7 @@
         "services/view-horizon.js"
       ],
       "files": 79,
-      "lines": 34743,
+      "lines": 34894,
       "largest": [
         {
           "f": "public/js/25-workflow-bd.js",
@@ -33,7 +33,7 @@
         },
         {
           "f": "public/js/47-page-mailbox.js",
-          "n": 1587
+          "n": 1731
         },
         {
           "f": "public/js/07-page-email.js",
@@ -44,7 +44,7 @@
           "n": 1109
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 2,
       "openOut": 0
     },
@@ -99,7 +99,7 @@
           "n": 774
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 1
     },
@@ -123,11 +123,11 @@
         "services/storage-orphans.js"
       ],
       "files": 74,
-      "lines": 4397,
+      "lines": 4399,
       "largest": [
         {
           "f": "scripts/territory-map.mjs",
-          "n": 319
+          "n": 321
         },
         {
           "f": "scripts/inline-to-classes.mjs",
@@ -142,7 +142,7 @@
           "n": 174
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 2,
       "openOut": 0
     },
@@ -184,6 +184,7 @@
         "services/ooo-return.js",
         "services/submission-email.js",
         "services/html-entities.js",
+        "services/mail-format.js",
         "warmup-engine.js",
         "deliverability.js",
         "domain-health.js",
@@ -194,8 +195,8 @@
         "routes/warmup.js",
         "routes/deliverability.js"
       ],
-      "files": 33,
-      "lines": 6034,
+      "files": 34,
+      "lines": 6202,
       "largest": [
         {
           "f": "services/mail-provider.js",
@@ -203,7 +204,7 @@
         },
         {
           "f": "routes/mailbox.js",
-          "n": 554
+          "n": 569
         },
         {
           "f": "email-vars.js",
@@ -214,7 +215,7 @@
           "n": 544
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 0
     },
@@ -347,7 +348,7 @@
           "n": 486
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 0,
       "openOut": 6
     },
@@ -414,8 +415,8 @@
         "test/",
         ".github/"
       ],
-      "files": 244,
-      "lines": 42899,
+      "files": 245,
+      "lines": 43017,
       "largest": [
         {
           "f": "test/finder-routes-smoke.mjs",
@@ -434,7 +435,7 @@
           "n": 657
         }
       ],
-      "lastTouched": "2026-10-09",
+      "lastTouched": "2026-10-08",
       "openIn": 1,
       "openOut": 0
     },
@@ -736,6 +737,14 @@
       "status": "OPEN",
       "date": "2026-09-29",
       "asks": "a ruling on ONE thing, plus a review of two new doors. (1) `PATCH /submissions/:id/stage` (and now `bulk-stage`) let ANY BD in the company move ANY submission — a job's owner is not checked, only the recruiter gate (D-0035 says interaction with a job is the owner's). Guild mirrored the single move exactly rather than invent a rule; if you want owner/chain/admin it is one row rule in `services/submission-stages.js` `MOVE_RULES` (needs the job's `bd_manager_id`). (2) New: `GET /submissions?candidate_ids=` (stage + job per person, no contact details, org-scoped, fail-closed on no ids) and `POST /submissions/bulk-stage` (org-scoped, ≤200). (3) Deliberate tightening: a role that is neither BD nor recruiter (`ra`, `ra_lead`) can no longer move a stage."
+    },
+    {
+      "id": "C-0038",
+      "from": "harbour",
+      "to": "surface",
+      "status": "ANSWERED",
+      "date": "2026-10-08",
+      "asks": "New message and Reply edit with the recruiting formatting set, and send `formatted: true` only when the body actually contains that markup."
     }
   ],
   "unclaimed": [
