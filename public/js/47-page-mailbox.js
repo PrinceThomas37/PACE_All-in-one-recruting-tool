@@ -696,7 +696,7 @@
     m.composer=c;
     if(c.sig) loadSignature();
     paintComposer();
-    setTimeout(function(){ var ta=document.getElementById('mb-comp-body'); if(ta){ ta.focus(); try{ ta.setSelectionRange(ta.value.length,ta.value.length); }catch(e){} } },30);
+    setTimeout(function(){ var ed=document.getElementById('mb-comp-editor'); if(ed) ed.focus(); },30);
     if(d) showToast('Your unsent draft for this message is back','info');
   }
   // A reply already open (on screen or minimised) comes back instead of being replaced by a blank one.
@@ -798,7 +798,7 @@
     ['to','cc','subject','body'].forEach(function(k){
       var el=document.getElementById('mb-comp-'+k); if(el) c[k]=el.value;
     });
-    if(c.mode!=='forward' && !String(c.body||'').trim()){ showToast('Write a message first','warning'); return; }
+    if(c.mode!=='forward' && mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
     if(c.mode==='forward' && !String(c.to||'').trim()){ showToast('Who are you forwarding this to?','warning'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){
@@ -811,6 +811,7 @@
       include_signature:!!c.sig,
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
     };
+    if(mbIsFormatted(c)) payload.formatted=true;
     // The mailbox and message captured when the window was opened — not whatever is selected now.
     var path='/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.msgId)+
       (c.mode==='forward'?'/forward':'/reply');
@@ -891,6 +892,141 @@
     m.compose.files.splice(i,1); paintComposeModal();
   };
 
+  // ── FORMATTING (R-192) ──────────────────────────────────────────────────────
+  // Bold, italic, underline, bullets, a numbered list, a link, and clear.
+  // The hidden field keeps the id the rest of the page already reads
+  // (#mb-c-body / #mb-comp-body). The person types in the box above it.
+  // What is stored is cleaned to that same list before it is sent; the server
+  // cleans it again (services/mail-format.js).
+  var MB_FMT_TAGS={p:1,div:1,br:1,b:1,strong:1,i:1,em:1,u:1,ul:1,ol:1,li:1,a:1};
+  function mbSafeHref(v){
+    var s=String(v||'').trim();
+    if(!s||/[\s<>"']/.test(s))return '';
+    if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s))s='mailto:'+s;
+    if(!/^(https?:\/\/|mailto:)/i.test(s))return '';
+    return s;
+  }
+  function mbCleanHtml(html){
+    var doc=new DOMParser().parseFromString('<div id="r">'+String(html||'')+'</div>','text/html');
+    var root=doc.getElementById('r');
+    function walk(node){
+      Array.prototype.slice.call(node.childNodes).forEach(function(n){
+        if(n.nodeType!==1){ if(n.nodeType!==3) n.remove(); return; }
+        var tag=n.tagName.toLowerCase();
+        if(tag==='script'||tag==='style'||tag==='iframe'||tag==='object'||tag==='embed'||tag==='link'||tag==='meta'||tag==='noscript'){ n.remove(); return; }
+        walk(n);
+        if(!MB_FMT_TAGS[tag]){
+          while(n.firstChild) node.insertBefore(n.firstChild, n);
+          n.remove();
+          return;
+        }
+        Array.prototype.slice.call(n.attributes).forEach(function(a){
+          var nm=a.name.toLowerCase();
+          if(tag==='a'&&nm==='href'){
+            var href=mbSafeHref(a.value);
+            if(href) n.setAttribute('href', href); else n.removeAttribute('href');
+          } else n.removeAttribute(a.name);
+        });
+        if(tag==='a' && !n.getAttribute('href')){
+          while(n.firstChild) node.insertBefore(n.firstChild, n);
+          n.remove();
+        }
+      });
+    }
+    walk(root);
+    return root.innerHTML;
+  }
+  function mbEditorHtml(body){
+    var s=String(body||'');
+    if(!/<\s*\/?\s*[a-z]/i.test(s)) return esc(s).replace(/\n/g,'<br>');
+    return mbCleanHtml(s);
+  }
+  function mbEditorBlank(body){
+    var s=String(body||'');
+    if(!/<\s*\/?\s*[a-z]/i.test(s)) return !s.trim();
+    var d=document.createElement('div'); d.innerHTML=s;
+    return !String(d.textContent||'').replace(/\u00a0/g,' ').trim();
+  }
+  function mbBodyBlank(v){ return mbEditorBlank(v); }
+  function mbIsFormatted(c){
+    return !!(c&&/<\s*\/?\s*(p|div|br|b|strong|i|em|u|ul|ol|li|a)\b/i.test(c.body||''));
+  }
+  function mbFmtBar(which){
+    var cmds=[['bold','Bold','<b>B</b>'],['italic','Italic','<i>I</i>'],['underline','Underline','<u>U</u>'],
+      ['insertUnorderedList','Bullets','• List'],['insertOrderedList','Numbered list','1. List'],
+      ['link','Link','Link'],['clear','Clear formatting','Clear formatting']];
+    return '<div class="sig-bar mb-fmt" onmousedown="event.preventDefault()">'+cmds.map(function(c){
+      return '<button type="button" title="'+c[1]+'" onclick="mbFmt(\''+which+'\',\''+c[0]+'\')">'+c[2]+'</button>';
+    }).join('')+'</div>';
+  }
+  function mbEditorIds(which){
+    var compose=which==='compose';
+    return { editor:compose?'mb-c-editor':'mb-comp-editor', hidden:compose?'mb-c-body':'mb-comp-body', compose:compose };
+  }
+  window.mbEditorInput=function(which){
+    var ids=mbEditorIds(which);
+    var ed=document.getElementById(ids.editor), hid=document.getElementById(ids.hidden);
+    if(!ed||!hid)return;
+    var html=mbCleanHtml(ed.innerHTML);
+    hid.value=html;
+    var bag=ids.compose?M().compose:M().composer;
+    if(bag) bag.body=html;
+    // A paste from Outlook can still be sitting in the box with colours and fonts.
+    // What is stored is already clean; show that, so the box matches what will be sent.
+    // Ordinary typing is left alone — rewriting the box on every keystroke moves the cursor.
+    if(/<\s*(font|span|script|style)\b|style\s*=|color\s*=|face\s*=|align\s*=/i.test(ed.innerHTML)){
+      ed.innerHTML=html;
+      try{
+        var range=document.createRange(); range.selectNodeContents(ed); range.collapse(false);
+        var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      }catch(e){}
+    }
+    ed.classList.toggle('is-empty', mbEditorBlank(html));
+    if(!ids.compose) draftSaveSoon();
+  };
+  window.mbEditorPaste=function(e, which){
+    var cd=e.clipboardData; if(!cd)return;
+    e.preventDefault();
+    var html=cd.getData('text/html'), text=cd.getData('text/plain')||'';
+    var insert=html?mbCleanHtml(html):esc(text).replace(/\n/g,'<br>');
+    var ids=mbEditorIds(which);
+    var ed=document.getElementById(ids.editor); if(ed) ed.focus();
+    try{ document.execCommand('insertHTML', false, insert); }catch(err){}
+    mbEditorInput(which);
+  };
+  window.mbFmt=function(which, cmd){
+    var ids=mbEditorIds(which);
+    var ed=document.getElementById(ids.editor); if(!ed)return;
+    ed.focus();
+    if(cmd==='link'){
+      var sel=window.getSelection&&window.getSelection();
+      if(!sel||sel.isCollapsed||!ed.contains(sel.anchorNode)){ showToast('Select the words you want to turn into a link first','info'); return; }
+      var url=window.prompt('Where should the link go? (for example https://www.yourcompany.com)','https://');
+      if(!url)return;
+      url=String(url).trim();
+      if(!/^(https?:\/\/|mailto:)/i.test(url)){
+        if(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(url)) url='mailto:'+url;
+        else url='https://'+url.replace(/^\/+/,'');
+      }
+      if(!mbSafeHref(url)){ showToast('That link needs to start with http://, https://, or be an email address','warning'); return; }
+      try{ document.execCommand('createLink', false, url); }catch(e){}
+    } else if(cmd==='clear'){
+      try{ document.execCommand('removeFormat', false, null); }catch(e){}
+      try{ document.execCommand('unlink', false, null); }catch(e){}
+      var sel2=window.getSelection&&window.getSelection();
+      var node=sel2&&sel2.anchorNode;
+      var el=node&&(node.nodeType===1?node:node.parentNode);
+      var list=el&&el.closest&&el.closest('ul,ol');
+      if(list&&ed.contains(list)){
+        try{ document.execCommand(list.tagName==='OL'?'insertOrderedList':'insertUnorderedList', false, null); }catch(e){}
+      }
+      ed.innerHTML=mbCleanHtml(ed.innerHTML);
+    } else {
+      try{ document.execCommand(cmd, false, null); }catch(e){}
+    }
+    mbEditorInput(which);
+  };
+
   function paintComposeModal(){
     var m=M(); var c=m.compose; if(!c)return;
     var from=(m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{};
@@ -905,7 +1041,10 @@
           '<div style="margin-bottom:12px"><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Cc <span class="c-text3">(optional — add as many as you like)</span></label>'+chipField('mb-c-cc','cc',c.cc,'mbComposeField','')+'</div>'+
           field('mb-c-subject','Subject','',c.subject,'mbComposeField(\'subject\',this.value)')+
           '<div><label class="fs-11 c-text2" style="display:block;margin-bottom:3px">Message</label>'+
-            '<textarea id="mb-c-body" class="sel" oninput="mbComposeField(\'body\',this.value)" style="min-height:180px;resize:vertical;font-size:13px;line-height:1.55">'+esc(c.body)+'</textarea></div>'+
+            mbFmtBar('compose')+
+            '<textarea id="mb-c-body" class="mb-body-store" tabindex="-1" aria-hidden="true">'+esc(c.body)+'</textarea>'+
+            '<div id="mb-c-editor" class="sel mb-editor'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" data-placeholder="Write your message…" '+
+              'oninput="mbEditorInput(\'compose\')" onpaste="mbEditorPaste(event,\'compose\')">'+mbEditorHtml(c.body)+'</div></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
           renderSigRow(c.sig,'mbComposeSetSig')+
         '</div>'+
@@ -991,15 +1130,17 @@
       var el=document.getElementById('mb-c-'+k); if(el) c[k]=el.value;
     });
     if(!String(c.to||'').trim()){ showToast('Who is this going to?','warning'); return; }
-    if(!String(c.body||'').trim()){ showToast('Write a message first','warning'); return; }
+    if(mbBodyBlank(c.body)){ showToast('Write a message first','warning'); return; }
     var total=(c.files||[]).reduce(function(n,f){return n+f.size;},0);
     if(total>MAX_ATTACH_BYTES){ showToast('Attachments are over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit','error'); return; }
     c.sending=true; paintComposeModal();
-    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/send',{
+    var sendBody={
       to:c.to, cc:c.cc, subject:c.subject, body:c.body,
       include_signature:!!c.sig,
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
-    })
+    };
+    if(mbIsFormatted(c)) sendBody.formatted=true;
+    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/send', sendBody)
       .then(function(){ showToast('Sent','success'); m.compose=null; closeModal(); })
       .catch(function(e){ c.sending=false; paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
   };
@@ -1562,8 +1703,11 @@
           (c.showCc?'<div class="mb-win-row"><label class="fs-11 c-text2">Cc</label>'+chipField('mb-comp-cc','cc',c.cc,'mbCompField','')+'</div>':'')+
           '<div class="mb-win-row"><label class="fs-11 c-text2">Subject</label>'+
             '<input id="mb-comp-subject" class="sel mb-win-grow" value="'+escAttr(c.subject||'')+'" oninput="mbCompField(\'subject\',this.value)"></div>'+
-          '<textarea id="mb-comp-body" class="sel mb-win-text" oninput="mbCompField(\'body\',this.value)" '+
-            'placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'">'+esc(c.body||'')+'</textarea>'+
+          mbFmtBar(fwd?'forward':'reply')+
+          '<textarea id="mb-comp-body" class="mb-body-store" tabindex="-1" aria-hidden="true">'+esc(c.body||'')+'</textarea>'+
+          '<div id="mb-comp-editor" class="sel mb-editor mb-win-text'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="'+(fwd?'Note':'Reply')+'" '+
+            'data-placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'" '+
+            'oninput="mbEditorInput(\'reply\')" onpaste="mbEditorPaste(event,\'reply\')">'+mbEditorHtml(c.body)+'</div>'+
           renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
           renderSigRow(c.sig,'mbCompSetSig')+
         '</div>'+

@@ -1,5 +1,13 @@
 # Deep — memory
-> Last written: 2026-09-30 (Session 35 — C-0035 (a) applied live; territory map: sent-side) · earlier: 2026-09-28 (Session 33)
+> Last written: 2026-10-08 (Cursor, territory map lists mail-format) · earlier: 2026-10-08
+
+## 2026-10-08 — map only (D-0118)
+`scripts/territory-map.mjs` harbour own-list now includes `services/mail-format.js`. No migration. The live database was not touched.
+
+## 2026-10-08 — map only (D-0117)
+`scripts/territory-map.mjs` observatory own-list now includes `services/ai-first-choice.js`. No migration. The live database was not touched. The four Find Leads unassigns from earlier today stay as they are (backup `backups.leads_unassign_finder_20261008`).
+
+
 
 ## Session 35, round 5 (2026-09-30)
 `services/bd-insights.js` added to gateway in `scripts/territory-map.mjs`. No migration.

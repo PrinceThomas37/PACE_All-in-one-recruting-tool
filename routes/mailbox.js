@@ -26,6 +26,7 @@ const express = require('express');
 const { createMailProvider, approxBytes } = require('../services/mail-provider');
 const { mailboxConnections } = require('../mailbox-health');
 const { fillSignatureHtml } = require('../email-signature');
+const mailFormat = require('../services/mail-format');
 
 // express.json() is capped at 5mb for the whole app, and base64 inflates a file
 // by about a third — so this is the real ceiling, set below the body limit with
@@ -470,16 +471,29 @@ module.exports = (ctx) => {
   // an email_tracking row. Tracking belongs to outreach — measuring whether a
   // campaign landed. Pixel-tracking a personal reply to a colleague is a
   // different thing entirely, and not one this product should do silently.
+  // A formatted body (New message / Reply toolbar) is cleaned to the recruiting
+  // set — bold, italic, underline, lists, link — and is not escaped a second
+  // time. Anything that does not say it was formatted stays plain text.
+  function outboundHtml(body, signature, formatted) {
+    if (formatted) return mailFormat.formattedEmailHtml(body, signature);
+    return buildHtmlEmailBody(body, signature, false);
+  }
+  function bodyHasWords(body, formatted) {
+    if (formatted) return !!mailFormat.visibleText(body);
+    return !!String(body || '').trim();
+  }
+
   router.post('/mailbox/:mid/messages/:id/reply', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
-    const text = String(req.body.body || '').trim();
-    if (!text) return res.status(400).json({ error: 'Message body is empty' });
+    const formatted = req.body.formatted === true;
+    const text = String(req.body.body || '');
+    if (!bodyHasWords(text, formatted)) return res.status(400).json({ error: 'Message body is empty' });
     const att = readAttachments(req.body);
     if (att.error) return res.status(att.error.status).json(att.error.body);
     try {
       const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
-      const htmlBody = buildHtmlEmailBody(text, signature, false);
+      const htmlBody = outboundHtml(text, signature, formatted);
       const r = await mail.forMailbox(mailbox).reply(req.params.id, {
         htmlBody,
         replyAll: !!req.body.reply_all,
@@ -507,7 +521,7 @@ module.exports = (ctx) => {
       const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
       // A forward with no note is normal — unlike a reply, the content is the
       // forwarded message itself, so an empty body is not an empty email.
-      const htmlBody = buildHtmlEmailBody(String(req.body.body || ''), signature, false);
+      const htmlBody = outboundHtml(String(req.body.body || ''), signature, req.body.formatted === true);
       const r = await mail.forMailbox(mailbox).forward(req.params.id, {
         htmlBody, to,
         cc: req.body.cc ? parseAddressField(req.body.cc) : null,
@@ -523,14 +537,15 @@ module.exports = (ctx) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
     const to = String(req.body.to || '').trim();
-    const text = String(req.body.body || '').trim();
+    const formatted = req.body.formatted === true;
+    const text = String(req.body.body || '');
     if (!to) return res.status(400).json({ error: 'A recipient is required' });
-    if (!text) return res.status(400).json({ error: 'Message body is empty' });
+    if (!bodyHasWords(text, formatted)) return res.status(400).json({ error: 'Message body is empty' });
     const att = readAttachments(req.body);
     if (att.error) return res.status(att.error.status).json(att.error.body);
     try {
       const signature = await signatureFor(mailbox, req.user.id, req.body.include_signature);
-      const htmlBody = buildHtmlEmailBody(text, signature, false);
+      const htmlBody = outboundHtml(text, signature, formatted);
       const subject = String(req.body.subject || '(no subject)');
       const cc = String(req.body.cc || '').trim();
       if (mailbox.platform === 'Gmail') {

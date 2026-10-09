@@ -32,6 +32,8 @@ const sendRetry = require('../services/send-retry');
 const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
 const engineDraft = require('../services/engine-draft');
+const aiFirstChoice = require('../services/ai-first-choice');
+const wordingScope = require('../services/wording-scope');
 const own = require('../services/ownership');
 const { createDb } = require('../models');
 
@@ -151,6 +153,18 @@ router.get('/emails', auth, async (req, res) => {
     // the preview pass for the final text.
     let aiFirstOn = false;
     try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1; } catch (_) {}
+    // D-0117: the badge follows the person's own choice (and, when wording is per email ID, that email ID's).
+    let aiChoiceMap = {};
+    try {
+      const owners = [...new Set(allData.map(e => e.sent_by).filter(Boolean))];
+      const mids = [...new Set(allData.map(e => e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id)).filter(Boolean))];
+      const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
+      for (const part of chunk(keys, 60)) {
+        if (!part.length) continue;
+        const { data } = await supabase.from('app_settings').select('key,value').in('key', part);
+        (data || []).forEach(r => { aiChoiceMap[r.key] = r.value; });
+      }
+    } catch (_) { aiChoiceMap = {}; }
     const isAdmin = hasRole(req, 'admin');
     // {{sendercompany}} is filled from the mailbox's own "sends as" — so the preview shows the real company (services/sender-company.js).
     const companyOf = await senderCompany.companiesFor(supabase, allData.map(e => (e.sending_email_id && pinnedById[e.sending_email_id] && e.sending_email_id) || e.job?.sending_email?.id));
@@ -166,7 +180,12 @@ router.get('/emails', auth, async (req, res) => {
         is_mine: isMine,
         retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) && (isMine || isAdmin),
         ai_written: e.template_variant === 'ai',
-        ai_will_write: aiFirstOn && e.status === 'pending' && engineDraft.isFirstEmail(e) && e.template_variant !== 'ai' };
+        ai_will_write: aiFirstChoice.shouldWriteFirst({
+          companyOn: aiFirstOn, aiReady: true, settings: aiChoiceMap, userId: e.sent_by,
+          mailboxId: e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id),
+          each: wordingScope.isEach(aiChoiceMap, e.sent_by),
+          isFirst: engineDraft.isFirstEmail(e), alreadyAi: e.template_variant === 'ai',
+        }) && e.status === 'pending' };
     });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }

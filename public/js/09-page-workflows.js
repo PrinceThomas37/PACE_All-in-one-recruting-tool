@@ -363,6 +363,8 @@ function wfEmailStepEditor(s,i){
   var ai='<div class="seq-ai">'+
     '<input class="seq-in" id="wf-ai-'+i+'" placeholder="Tell the AI what this email should do — e.g. a friendly first email offering two pre-screened estimators" value="'+htmlEsc(ui.prompt)+'" oninput="wfAiPrompt('+i+',this.value)" onkeydown="if(event.key===\'Enter\'){wfDraftAi('+i+',true);}">'+
     '<button class="btn btn-primary btn-sm" onclick="wfDraftAi('+i+',true)"'+(ui.busy?' disabled':'')+'>'+(ui.busy?'Writing…':'Write with AI')+'</button>'+
+    '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',\'rewrite\')"'+(ui.busy?' disabled':'')+' title="Rewrite the email in the box, keeping every {{variable}}">Rewrite with AI</button>'+
+    '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',\'variant\')"'+(ui.busy?' disabled':'')+' title="Another version of this email, keeping every {{variable}}">Write a variant</button>'+
     '<button class="btn btn-outline btn-sm" onclick="wfDraftAi('+i+',false)"'+(ui.busy?' disabled':'')+' title="A ready-made email to change">Start from an example</button>'+
     (ui.undo?'<button class="btn btn-outline btn-sm" onclick="wfUndoDraft('+i+')">Undo</button>':'')+
   '</div>'+(ui.note?'<div class="seq-note">'+htmlEsc(ui.note)+'</div>':'');
@@ -427,13 +429,17 @@ window.wfUndoDraft=function(i){
 window.wfDraftAi=function(i,useAi){
   var b=STATE.wfBuilder, s=b&&b.steps[i]; if(!s||!wfIsOwn(s))return;
   var ui=wfUi(s); if(ui.busy)return;
+  var mode=useAi==='rewrite'||useAi==='variant'?useAi:'write';
   var prompt=useAi?String(ui.prompt||'').trim():'';
-  if(useAi&&!prompt){ showToast('Say in a few words what this email should do — or press "Start from an example"','warning'); return; }
+  if(mode==='write'&&useAi&&!prompt){ showToast('Say in a few words what this email should do — or press "Start from an example"','warning'); return; }
+  if(mode!=='write'&&!String((s.config&&s.config.subject)||'').trim()&&!String((s.config&&s.config.body)||'').trim()){
+    showToast('Write the email first — there is nothing to change','warning'); return;
+  }
   var purpose=i===0?'first':(i===b.steps.length-1?'final':'followup');
   ui.busy=true; refreshWfBuilder();
-  apiPost('/wf/draft-email',{prompt:prompt,purpose:purpose}).then(function(r){
+  apiPost('/wf/draft-email',{prompt:prompt,purpose:purpose,mode:mode,subject:(s.config&&s.config.subject)||'',body:(s.config&&s.config.body)||''}).then(function(r){
     ui.busy=false;
-    if(!r||!r.subject||!r.body){ ui.note='Could not write that just now — try again.'; refreshWfBuilder(); return; }
+    if(!r||r.source==='refused'||(!r.subject&&!r.body)){ ui.note=(r&&r.note)||'Could not write that just now — try again.'; refreshWfBuilder(); return; }
     if(s.config.subject||s.config.body)ui.undo={subject:s.config.subject||'',body:s.config.body||''};
     s.config.subject=r.subject; s.config.body=r.body; ui.note=r.note||'';
     refreshWfBuilder();

@@ -313,7 +313,7 @@ window.planWording=function(field){
   if(planScope()==='each'&&STATE.planFromEmailId){ var mw=(STATE.mailboxWording||{})[STATE.planFromEmailId]; if(mw&&mw[field]) return mw[field]; }
   return my[field];
 };
-window.mailboxHasOwnWording=function(id){ var mw=(STATE.mailboxWording||{})[id]; return !!mw&&Object.keys(mw).some(function(k){ return !!mw[k]; }); };
+window.mailboxHasOwnWording=function(id){ var mw=(STATE.mailboxWording||{})[id]; return !!mw&&Object.keys(mw).some(function(k){ return k.indexOf('tmpl_')===0&&!!mw[k]; }); };
 var WORDING_FIELDS=['o1','fu1','fu2','fu3','fu4','fu5'].reduce(function(a,s){ return a.concat(['tmpl_'+s+'_subject','tmpl_'+s+'_body']); },[]);
 window.setWordingScope=function(scope){
   if(scope!=='all'&&scope!=='each')return;
@@ -330,7 +330,7 @@ window.wordingUseMine=function(id){
   if(!confirm('Take away the wording written for this email ID? It will send your main wording again.'))return;
   var mw=(STATE.mailboxWording||{})[id]||{};
   var saves=WORDING_FIELDS.filter(function(f){ return !!mw[f]; }).map(function(f){ return apiPost('/outreach-plan/mailbox',{mailbox_id:id,key:f,value:''}); });
-  STATE.mailboxWording=STATE.mailboxWording||{}; STATE.mailboxWording[id]={};
+  STATE.mailboxWording=STATE.mailboxWording||{}; STATE.mailboxWording[id]=mw.ai_first?{ai_first:mw.ai_first}:{};
   render();
   Promise.all(saves).then(function(){ showToast('This email ID sends your main wording again','success'); }).catch(function(e){ showToast('Save failed: '+e.message,'error'); });
 };

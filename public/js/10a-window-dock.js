@@ -85,9 +85,13 @@
 
   function trayHtml(){
     if (!D.items.length) return '';
-    return '<div id="win-tray" role="toolbar" aria-label="Minimised windows">' +
+    var spread = D.items.some(function(it){ return typeof it.x === 'number'; });
+    return '<div id="win-tray" role="toolbar" aria-label="Minimised windows"' + (spread ? ' class="win-tray-wide"' : '') + '>' +
       D.items.map(function(it){
-        return '<div class="win-chip" role="button" tabindex="0" title="Open ' + esc(it.title) + '" onclick="Dock.restore(\'' + it.id + '\')">' +
+        var placed = typeof it.x === 'number';
+        return '<div class="win-chip' + (placed ? ' win-chip-x' : '') + '" data-id="' + it.id + '" role="button" tabindex="0" title="Open ' + esc(it.title) + '"' +
+          (placed ? ' style="--chip-x:' + it.x + 'px"' : '') +
+          ' onclick="Dock.restore(\'' + it.id + '\')">' +
           '<span class="wt">' + esc(it.title) + '</span>' +
           '<button type="button" class="wx" aria-label="Close ' + esc(it.title) + '" title="Close (discards it)" onclick="event.stopPropagation();Dock.discard(\'' + it.id + '\')">×</button>' +
         '</div>';
@@ -213,9 +217,57 @@
     open: function(id){ if (STATE.page !== 'clients') goPage('clients'); window.clientsOpen(id); }
   });
 
+  // Drag a parked chip sideways along the bottom (D-0117). A drag does not open it.
+  // The spot is remembered until reload (it lives on the chip, not in storage).
+  // A phone (860px and under) keeps the scrolling row — no free drag.
+  var drag = null;
+  function phoneTray(){ return window.matchMedia && window.matchMedia('(max-width: 860px)').matches; }
+  document.addEventListener('pointerdown', function(e){
+    D.suppressClick = false;
+    if (phoneTray() || e.button) return;
+    var chip = e.target.closest && e.target.closest('#win-tray .win-chip');
+    if (!chip || (e.target.closest && e.target.closest('.wx'))) return;
+    var id = chip.getAttribute('data-id');
+    var it = D.items.filter(function(x){ return x.id === id; })[0];
+    if (!it) return;
+    var r = chip.getBoundingClientRect();
+    drag = { id: id, startX: e.clientX, chipLeft: r.left, chipWidth: r.width, moved: false, pointer: e.pointerId, chip: chip };
+    try { chip.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  document.addEventListener('pointermove', function(e){
+    if (!drag || e.pointerId !== drag.pointer) return;
+    var dx = e.clientX - drag.startX;
+    if (!drag.moved && Math.abs(dx) < 8) return;
+    var tray = document.getElementById('win-tray'); if (!tray) return;
+    if (!drag.moved) {
+      drag.moved = true;
+      tray.classList.add('win-tray-wide');
+      drag.base = drag.chipLeft - tray.getBoundingClientRect().left;
+    }
+    e.preventDefault();
+    var tr = tray.getBoundingClientRect();
+    var max = Math.max(0, tr.width - drag.chipWidth);
+    var x = Math.round(Math.max(0, Math.min(max, drag.base + (e.clientX - drag.startX))));
+    var it = D.items.filter(function(i){ return i.id === drag.id; })[0];
+    if (it) it.x = x;
+    drag.chip.classList.add('win-chip-x', 'is-drag');
+    drag.chip.style.setProperty('--chip-x', x + 'px');
+  });
+  function endDrag(e){
+    if (!drag || (e && e.pointerId !== drag.pointer)) return;
+    var moved = drag.moved;
+    if (drag.chip) drag.chip.classList.remove('is-drag');
+    drag = null;
+    if (moved) D.suppressClick = true;
+  }
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
+
   // A drawer chip reopens by record; a modal chip restores its html.
   var _restore = Dock.restore;
   Dock.restore = function(id){
+    // A drag along the bottom ends in a click. That click must not open the window.
+    if (D.suppressClick) { D.suppressClick = false; return false; }
     var it = D.items.filter(function(x){ return x.id === id; })[0];
     if (it && it.drawer) return Dock.restoreDrawer(id);
     return _restore(id);

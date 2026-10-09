@@ -1,5 +1,10 @@
 # Guild — memory
-> Last written: 2026-09-29 · Session 34: one add-to-job writer (Sourced), Tagged out of jobs, group stage move
+> Last written: 2026-10-08 (Cursor, D-0117 draft-email) · earlier: 2026-09-29
+
+## 2026-10-08 — `POST /wf/draft-email` carries the brief (D-0117, C-0037)
+- **`routes/wf.js`** passes `mode` (`write` | `rewrite` | `variant`), the current `subject` (slice 300) and `body` (slice 8000) into `sequence-draft.draft`, and asks for up to 1100 tokens. The writer itself lives in observatory. No new route and no registration-order change.
+
+
 
 ## Session 34 (2026-09-29) — "Tagged is for the database" (R-075, D-0057) and the group stage move (R-077)
 Owner's notes: *"A candidate when added to job from the candidate section or directly gets into Sourced stage. Tagged is for the database. Inside a job the stage starts from Sourced."* and *"There is no option to change the stage of the candidate by multiple selection in the candidate or the job section."*

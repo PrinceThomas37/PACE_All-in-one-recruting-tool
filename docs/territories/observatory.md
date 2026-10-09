@@ -1,5 +1,14 @@
 # Observatory — memory
-> Last written: 2026-09-30 (Session 35, R-085 sent side; R-073 rows carry an address) · earlier: 2026-09-29 (Session 34, R-071)
+> Last written: 2026-10-08 (Cursor, D-0117 Write with AI + personal first-email switch) · earlier: 2026-09-30 (Session 35)
+
+## 2026-10-08 — Write with AI follows the instruction (D-0117, R-190)
+- **`services/sequence-draft.js`** is the writer behind "Write with AI" (`POST /wf/draft-email`). The person's instruction is the brief. Default 140–200 words and 3–4 short paragraphs. A shorter ask (a word count under 140, or short / brief / one paragraph) is honoured. One repair. Still short and on topic: shipped, with the note that it came out shorter than a full email. Off topic after that repair: not shipped (`source: 'refused'`, empty subject and body) — never the ready-made candidate starter. `checkDraft` body max is 4000 characters so a full email is not refused; the 140-word floor is NOT inside `checkDraft` (starters must still pass).
+- **Rewrite with AI and Write a variant** (`draftKeeping`) must keep every `{{variable}}` exactly (subject and body compared separately). If they cannot, or the draft fails the rules or the topic, the person's own text comes back (`source: 'kept'`). Empty text: "Write the email first."
+- **`services/ai-first-choice.js` (new)** is the personal on/off: `company` | `on` | `off`. Person key `u_<userId>_ai_first`, mailbox key `ue_<mailboxId>_ai_first`. The mailbox key is read only when wording is per email ID. Missing = company. `on` forces on even if the company switch is off (a provider must still exist); `off` forces off even if the company switch is on. Follow-ups never qualify. The pending-list badge passes `aiReady: true` so it describes the switch, not whether a key exists.
+- **`services/ai-budget.js`** `sequence_draft` allowance: in 2000, out 1100. **`services/engine-draft.js` was not retuned** — it is still the short recruiting pitch at send time.
+- Pinned: `test/sequence-brief-smoke.mjs` (11), `test/ai-first-choice-smoke.mjs` (18). `sequence-email-smoke` updated on purpose (a short good draft now repairs, so the provider is called twice).
+
+
 
 ## Session 35 (2026-09-30) — the summary reads OUR replies (R-085) and "Needs you today" rows carry who to write to (R-073)
 - **`services/sent-side.js` (new, pure of I/O) reads the Sent folder of the caller's OWN mailboxes, live, when the Emails tab or the summary is asked for** (`routes/client-intel.js` `loadMessages(req, subject, {live:true})`). Replies typed in the in-app mailbox or straight from Gmail/Outlook were stored nowhere PACE reads and nothing is mirrored into Postgres, so the summary saw them write and never saw us answer. Search is by contact address; only mail actually ADDRESSED to that person counts (Gmail's search is loose); what PACE already sent (same subject, same person, within 30 min) is not counted twice; drafts skipped; ≤3 mailboxes × ≤5 addresses, ≤8 bodies per read; 5-minute per-person cache; 9-second timeout.

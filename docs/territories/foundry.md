@@ -1,5 +1,20 @@
 # Foundry — memory
-> Last written: 2026-09-28 (Session 33) · 137 suites · +send-recovery-smoke (58)
+> Last written: 2026-10-08 (Cursor, D-0118 formatting guards) · earlier: 2026-10-08 (D-0117)
+
+## 2026-10-08 — guards for the recruiting formatting bar (D-0118)
+- **New:** `test/mail-format-smoke.mjs` (10 — the marks that stay, the script and the colour that do not).
+- **Extended:** `mailbox-smoke` (a formatted reply and a formatted new message; an empty formatted reply is 400) and `mailbox-page-smoke` (the bar on Reply and on New message, bold, clear, a dirty paste). 136 and 80.
+- The D-0117 guards are unchanged.
+
+
+
+## 2026-10-08 — guards for the longer writer, the personal switch, and the dock drag (D-0117)
+- **New:** `test/sequence-brief-smoke.mjs` (11 — length, topic refusal, variables kept, shorter note), `test/ai-first-choice-smoke.mjs` (18 — company/on/off, per mailbox, the settings routes), `test/ai-wording-ui-smoke.mjs` (9, Chrome — the buttons and the card).
+- **Changed on purpose:** `sequence-email-smoke` (a short good draft now repairs, so the stub records both calls; far-too-long is 4100 characters), `engine-draft-smoke` (the send loop calls `shouldWriteFirst`, not a single company boolean), `window-dock-smoke` (desktop drag does not open; a later click does; phone stays a row).
+- Also green this round: wording-scope 45, ai-style 30, sequence-builder 31, scope-emails-warmup 52, utility-classes 7. Full suite not re-run (not merging). Node 26 not run.
+- `scripts/territory-map.mjs` observatory own-list now includes `services/ai-first-choice.js`.
+
+
 
 ## Session 33 (2026-09-28, later) — the title search, R-063, the Apollo card
 - **136 suites** (`npm test` 136/136, exit 0): +`poc-people-search-ui-smoke.mjs`
@@ -1194,3 +1209,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 - `sequence-preview-sender-smoke` (7): the builder preview never shows the profile name (shown failing with a profile-name mutation). Also updated four tests pinned to the old "two follow-ups by default" (`plan-preview-smoke`, `scroll-keep-smoke`, `wording-scope-ui-smoke`, `ai-style-ui-smoke`) and `orphan-followup-guard`'s source pattern (now `followupSteps.dayFor(settings, bdId, stepNo)`). The full Node 22 run at the D-0114 head was 227/232 for exactly these five; all five pass after the update.
 
 - `reminder-template-sender-smoke` (5): a reminder template never writes a name into the text (3 checks fail without the fix). Full suite at head `94afa0f`: **233/233 on Node 22 and on Node 26.10.0**.
+
+## 2026-10-09 — PR #322 (Cursor) fix: two tests were still typing into the store behind the new editor
+- D-0118 put a visible contenteditable (`#mb-comp-editor`, `#mb-c-editor`) in front of a hidden textarea (`#mb-comp-body`, `#mb-c-body`) that is only the store; nothing listens to the textarea. `reply-window-smoke` and `window-dock-smoke` set the textarea's value, so the draft/restore checks never saw any typing (5 + 1 failures on Node 22 AND 26 at `753f4ed`; `main` was 234/234). Both now type into the editor with real keystrokes (`keyboard.insertText`) — 13/13 and 30/30. The product was right; the tests were pinned to the old box. Lesson: when an input is replaced by a visible editor, a test must drive the visible one.
