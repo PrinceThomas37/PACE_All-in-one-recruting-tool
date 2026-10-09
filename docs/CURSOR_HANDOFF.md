@@ -59,3 +59,6 @@ Build on a dev branch → run the targeted tests → show the owner (screenshots
 The nine "territory" subagents in `.claude/agents/` are a Claude Code feature; in Cursor just respect the boundaries in `docs/territories/_contracts.md` (a territory never edits another's paths without a contract entry; `index.js` belongs to gateway).
 
 **Be proactive in plain language:** after finishing what was asked, suggest what else is worth building (product trends, high-leverage bets) as choices the owner can react to — and add each as a ROADMAP row the same turn.
+
+---
+**Update 9 Oct:** Cursor's PR #322 (Write with AI, parked-window drag, formatting on New message/Reply) is now MERGED (`3ae8ddd`) after 238/238 on Node 22 and Node 26.10.0. The four Find Leads leads are already back at Unassigned (backup `backups.leads_unassign_finder_20261008`), so open item 1 in section 5 is closed. Current state: `docs/CONTEXT_WINDOW.md`.
