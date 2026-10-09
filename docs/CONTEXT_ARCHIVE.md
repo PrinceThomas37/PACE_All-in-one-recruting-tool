@@ -6717,3 +6717,6 @@ Ash Sayyad's Finder lead was left alone.
 After the wording and the dock drag were pushed, New message and Reply got the bar the owner asked for: bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Font, size, colour, highlight, and alignment are not on the bar. A paste that brings them is stripped in the box and again on the server (`services/mail-format.js`) before it can reach anyone. A message that was not formatted is still sent as plain text. Forward uses the same window, so it has the same bar. Not merged. No mail sent. The live database was not touched.
 
 Targeted tests green (see CONTEXT_WINDOW). Full suite not re-run. Node 26 not run. Not merged.
+
+### SESSION 43, later (9 Oct) — Cursor's PR #322 tested and its two failing suites fixed
+Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. First run at `753f4ed`: 236/238 on both versions — `reply-window-smoke` and `window-dock-smoke` failed because they typed into the hidden store behind the new rich editor (D-0118). Fixed in the tests only (type into the visible editor); product code untouched. Re-run result recorded in the PR.

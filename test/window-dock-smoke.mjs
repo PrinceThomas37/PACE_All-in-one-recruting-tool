@@ -93,7 +93,9 @@ try{
   step('Compose: it names the window and offers Minimise, Full screen and Close', !!bar && /New message/.test(bar.t) && JSON.stringify(bar.btns)==='["Minimise","Full screen","Close"]');
 
   await page.fill('#mb-c-subject', 'Openings at Griffith');
-  await page.fill('#mb-c-body', 'Hi Sam, two roles open — details below.');
+  // Type the way a person does: into the visible editor (D-0118 — #mb-c-body is only the store behind it, and nothing listens to it).
+  const typeInEditor = async (t) => { await page.click('#mb-c-editor'); await page.keyboard.press('Control+A'); await page.keyboard.insertText(t); };
+  await typeInEditor('Hi Sam, two roles open — details below.');
 
   // ═══ 2. MINIMISE KEEPS EVERYTHING; THE PAGE BEHIND IS USABLE ═════════════
   await click('#layer .win-bar button[aria-label="Minimise"]');
@@ -121,7 +123,7 @@ try{
   step('Restore: what was typed is still there', back.subject==='Openings at Griffith' && /two roles open/.test(back.body||'') && back.to==='client@example.test');
 
   // ═══ 5. FULL SCREEN NEVER REBUILDS THE WINDOW ════════════════════════════
-  await page.fill('#mb-c-body', 'Typed AFTER restoring — must survive full screen.');
+  await typeInEditor('Typed AFTER restoring — must survive full screen.');
   await click('#layer .win-bar button[aria-label="Full screen"]');
   const full = await ev(()=>{ const m=document.querySelector('#layer .modal'); const r=m.getBoundingClientRect();
     return { max:!!document.querySelector('#layer .overlay.win-max'), w:Math.round(r.width), h:Math.round(r.height), vw:innerWidth, vh:innerHeight,
