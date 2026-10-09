@@ -6750,3 +6750,9 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - Owner set prices: Start $99, Pro $299, Max $599 per month, in dollars, with 20% off when billed yearly; Enterprise shows "Talk to the team" in place of a price. The 1299 figure is dropped. The price cards and the booking form's plan list now use Start, Pro, Max and Enterprise.
 - Start and Pro keep the Starter and Pro limits from `services/plans.js`. Max and Enterprise have no numeric limits on the page yet; the owner must give them.
 - The app's plan data (`services/plans.js`) still has starter, pro and business, with price null. The site's plan names therefore do not match what the app enforces. Align them, and set prices in the app, before any customer can buy.
+
+### SESSION 43, company site live on the root domain
+- The company site is deployed as the Render static site `pace-company-site` from `main` (root directory `company-site`, no build step, free static hosting per Render's pricing page). Its address: https://pace-company-site.onrender.com.
+- Custom domains on that site: `paceconsultant.in` (A record `@` → 216.24.57.1) and `www.paceconsultant.in` (CNAME → pace-company-site.onrender.com). Both verified and certificates issued. Checked from outside: `paceconsultant.in` and `www` serve the new site over HTTPS; `app.paceconsultant.in` still serves the sign-in page.
+- Render shows the custom-domain count as 2 of 2 on this service. Possible cost of $0.25 per extra domain per month depends on how Render counts domains across the workspace; check the billing page at the next invoice.
+- Still open: the owner's lawyer review of the legal pages; Max and Enterprise limits; the app's plan names and prices to match the site (`services/plans.js`); the second mailbox and the mail-host decision.
