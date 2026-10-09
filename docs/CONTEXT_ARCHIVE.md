@@ -6741,3 +6741,7 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 ### SESSION 43, company site: operator named, email-only contact (dev branch)
 - Operator on both legal pages: "Prince K Thomas, trading as PACE" (PACE inc. is not registered, so it is not used). Contact is info@paceconsultant.in only; the owner chose not to publish a home or postal address. Whether a sole trader must publish an address is for a chartered accountant to confirm.
 - Still open before publishing: whether any customer has entered Apollo or JSearch keys in the app (the lead-data line on the privacy page stays a placeholder until answered); the Render static-site plan and price; the owner's go-ahead to publish.
+
+### SESSION 43, company site: lead-data line removed (dev branch)
+- Owner: no one uses Apollo or JSearch. The lead-data sentence is removed from the Privacy page. The code still supports both; if a customer turns either on, the Privacy page must name it first.
+- Legal pages now have no placeholders. Still open before publishing: the Render static-site plan and price; the owner's go-ahead to publish; and a merge of the company-site folder to `main`, since Render reads from `main`.
