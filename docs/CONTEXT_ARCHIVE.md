@@ -6737,3 +6737,16 @@ Targeted tests green (see CONTEXT_WINDOW). Full suite not re-run. Node 26 not ru
 
 ### SESSION 43, later (9 Oct) — Cursor's PR #322 tested and its two failing suites fixed
 Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. First run at `753f4ed`: 236/238 on both versions — `reply-window-smoke` and `window-dock-smoke` failed because they typed into the hidden store behind the new rich editor (D-0118). Fixed in the tests only (type into the visible editor); product code untouched. Re-run result recorded in the PR.
+
+### SESSION 43, company site: operator named, email-only contact (dev branch)
+- Operator on both legal pages: "Prince K Thomas, trading as PACE" (PACE inc. is not registered, so it is not used). Contact is info@paceconsultant.in only; the owner chose not to publish a home or postal address. Whether a sole trader must publish an address is for a chartered accountant to confirm.
+- Still open before publishing: whether any customer has entered Apollo or JSearch keys in the app (the lead-data line on the privacy page stays a placeholder until answered); the Render static-site plan and price; the owner's go-ahead to publish.
+
+### SESSION 43, company site: lead-data line removed (dev branch)
+- Owner: no one uses Apollo or JSearch. The lead-data sentence is removed from the Privacy page. The code still supports both; if a customer turns either on, the Privacy page must name it first.
+- Legal pages now have no placeholders. Still open before publishing: the Render static-site plan and price; the owner's go-ahead to publish; and a merge of the company-site folder to `main`, since Render reads from `main`.
+
+### SESSION 43, company site: pricing set by the owner (dev branch, PR #324)
+- Owner set prices: Start $99, Pro $299, Max $599 per month, in dollars, with 20% off when billed yearly; Enterprise shows "Talk to the team" in place of a price. The 1299 figure is dropped. The price cards and the booking form's plan list now use Start, Pro, Max and Enterprise.
+- Start and Pro keep the Starter and Pro limits from `services/plans.js`. Max and Enterprise have no numeric limits on the page yet; the owner must give them.
+- The app's plan data (`services/plans.js`) still has starter, pro and business, with price null. The site's plan names therefore do not match what the app enforces. Align them, and set prices in the app, before any customer can buy.
