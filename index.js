@@ -71,6 +71,7 @@ const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
 const contactPoints = require('./services/contact-points');
 const engineDraft = require('./services/engine-draft');
+const aiFirstChoice = require('./services/ai-first-choice');
 const outreachGen = require('./services/outreach-generator');
 const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
@@ -1949,12 +1950,20 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
   ]);
   const { limits, sentToday, delays, settings } = quotaState;
-  // Checked once per run: is the owner's switch on, and is any AI provider set up?
-  let aiFirstEmailOn = false;
+  // Checked once per run: the company switch, whether any AI provider is set up,
+  // and each person's own "same as the company / on for me / off" (D-0117).
+  // Follow-ups are not in this choice — shouldWriteFirst requires a first email.
+  let companyAiFirst = false, aiReady = false;
   try {
-    aiFirstEmailOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1
-      && await aiProvider.isAvailable(supabase);
-  } catch (_) { aiFirstEmailOn = false; }
+    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1;
+    aiReady = await aiProvider.isAvailable(supabase);
+  } catch (_) { companyAiFirst = false; aiReady = false; }
+  let aiChoiceMap = {};
+  try {
+    const choiceKeys = [aiFirstChoice.personKey(userId), wordingScope.scopeKey(userId)]
+      .concat(mailboxIds.map(id => aiFirstChoice.mailboxKey(id)));
+    (await loadSettingsByKeys(choiceKeys)).forEach(r => { aiChoiceMap[r.key] = r.value; });
+  } catch (_) { aiChoiceMap = {}; }
   // D-0046: at most N first emails to one company per day. Counts what went
   // out earlier today (any sender) and is bumped below as this run sends.
   let companyCap = 0, companySentToday = {};
@@ -2139,7 +2148,11 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       const sigTemplate = resolveSignatureHtml(email._sigHtml || mailboxSignatures[userEmailId]);
       // A retry of an email the AI already wrote re-sends that text; it never
       // pays for a second draft.
-      if (aiFirstEmailOn && engineDraft.isFirstEmail(email) && email.template_variant !== 'ai') {
+      if (aiFirstChoice.shouldWriteFirst({
+        companyOn: companyAiFirst, aiReady, settings: aiChoiceMap, userId, mailboxId: userEmailId,
+        each: wordingScope.isEach(aiChoiceMap, userId),
+        isFirst: engineDraft.isFirstEmail(email), alreadyAi: email.template_variant === 'ai',
+      })) {
         email = await aiWriteFirstEmail(email, sendingEmail, sigTemplate);
       }
       // {{sendercompany}} (8 Oct): the company the SENDING email ID writes for. No company said for it = the email is held in "Didn't send"

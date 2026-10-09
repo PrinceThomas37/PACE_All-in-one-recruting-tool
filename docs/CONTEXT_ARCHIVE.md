@@ -6696,3 +6696,27 @@ Owner: "apply database and merge". Checked nothing was `sending` (0) and the col
 
 ### SESSION 43, handoff — owner continues in Cursor
 Owner: "merge the last file too and give me handoff to cursor, since I think we are exhausting our weekly limit." Wrote `docs/CURSOR_HANDOFF.md` (who the owner is, what shipped, open items, rules, the memory protocol done by hand because Cursor has no hooks) and merged it with the docs PR (#320). Nothing else in flight.
+
+### CURSOR, 8 Oct 2026 — Write with AI and the parked window (D-0117, R-190, R-191). Formatting not started.
+Rebuilt on this repo work that a machine could not push. Numbers taken from this `main`: previous highest was D-0116, R-189, C-0036, so this is D-0117, R-190, R-191, R-192, C-0037. Nothing merged. No mail sent.
+
+**Already done on the live database before this chat. Not repeated, and not touched again.** Four Find Leads leads moved Assigned → Unassigned (no email written). Backup `backups.leads_unassign_finder_20261008`. Fields cleared the same way as `releaseToPoolUpdate` (stage Unassigned; `assigned_to_bd`, `assigned_to`, `sending_email_id`, `assigned_at` cleared):
+- `b92277a4-d2ee-4ad9-bbb3-40415aa1d5ff` Business Network Consulting - BNC (BD Lead 1)
+- `a43f3e5f-ecdc-4492-8e3a-d47d02a7f9d2` Equipment One Company (BD Lead 1)
+- `52237021-141c-433f-b894-a22e1973d665` Xerxes Global (BD Lead 1)
+- `1f696520-2556-446d-ac61-80a3cdee17dd` Peak Retirement Planning, Inc. (BD Lead 2)
+Ash Sayyad's Finder lead was left alone.
+
+**R-190.** `services/sequence-draft.js` (the "Write with AI" writer, `POST /wf/draft-email`) now treats the instruction as the brief. Default 140–200 words, 3–4 short paragraphs. A shorter ask is followed. Off topic after one repair is not shipped. Still short after one repair is shipped, with a note. Rewrite with AI and Write a variant keep every `{{variable}}` or return the person's own text, never the stock starter. Personal on/off for "AI writes first emails" (`services/ai-first-choice.js`): same as the company / on for me / off, per mailbox only when wording is per email ID. Follow-ups stay the person's wording. `engine-draft.js` was not retuned.
+
+**R-191.** A minimised window's chip can be dragged sideways along the bottom. A drag does not open it. A later click does. × closes it. The spot lasts until reload. Phone (860px and under) stays a scrolling row.
+
+**R-192** (bold, italic, underline, bullets, numbered list, link, clear formatting on New message and Reply) was not started until R-190 and R-191 were in this repo.
+
+### CURSOR, 8 Oct 2026 — formatting on New message and Reply (D-0118, R-192)
+After the wording and the dock drag were pushed, New message and Reply got the bar the owner asked for: bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Font, size, colour, highlight, and alignment are not on the bar. A paste that brings them is stripped in the box and again on the server (`services/mail-format.js`) before it can reach anyone. A message that was not formatted is still sent as plain text. Forward uses the same window, so it has the same bar. Not merged. No mail sent. The live database was not touched.
+
+Targeted tests green (see CONTEXT_WINDOW). Full suite not re-run. Node 26 not run. Not merged.
+
+### SESSION 43, later (9 Oct) — Cursor's PR #322 tested and its two failing suites fixed
+Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. First run at `753f4ed`: 236/238 on both versions — `reply-window-smoke` and `window-dock-smoke` failed because they typed into the hidden store behind the new rich editor (D-0118). Fixed in the tests only (type into the visible editor); product code untouched. Re-run result recorded in the PR.

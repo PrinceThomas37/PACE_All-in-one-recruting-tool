@@ -146,7 +146,8 @@ try {
   await page.evaluate(() => window.mbOpen ? window.mbOpen('m1') : window.mbSelect('m1'));
   await page.waitForFunction(() => STATE.mailbox.message && STATE.mailbox.message.id === 'm1', { timeout: 8000 });
   const draftKeys = () => page.evaluate(() => Object.keys(localStorage).filter(k => k.indexOf('pace-mb-draft:') === 0));
-  const typeBody = (t) => page.evaluate((t) => { const el = document.getElementById('mb-comp-body'); el.value = t; el.dispatchEvent(new Event('input', { bubbles: true })); }, t);
+  // Type the way a person does: into the visible editor (D-0118 — #mb-comp-body is only the store behind it, and nothing listens to it).
+  const typeBody = async (t) => { await page.click('#mb-comp-editor'); await page.keyboard.press('Control+A'); await page.keyboard.insertText(t); };
 
   // 1. a window, on the dock
   await page.evaluate(() => window.mbReply(false));

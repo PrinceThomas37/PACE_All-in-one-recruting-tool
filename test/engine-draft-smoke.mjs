@@ -96,8 +96,9 @@ await t('a repair that fixes the draft is taken', async () => {
 
 console.log('\nEngine draft — wiring');
 const idx = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
-await t('the send loop asks AI only for first emails not already AI-written, when switched on', () => {
-  assert.match(idx, /aiFirstEmailOn && engineDraft\.isFirstEmail\(email\) && email\.template_variant !== 'ai'/);
+await t('the send loop asks AI only for first emails not already AI-written, when the person\'s choice allows it (D-0117: the company switch is no longer the only switch — changed on purpose)', () => {
+  assert.match(idx, /aiFirstChoice\.shouldWriteFirst\(\{/);
+  assert.match(idx, /isFirst: engineDraft\.isFirstEmail\(email\), alreadyAi: email\.template_variant === 'ai'/);
   assert.match(idx, /for \(let email of ordered\)/, 'loop variable must be reassignable');
 });
 await t('the draft is stored before it is sent, and unstored text is never sent', () => {

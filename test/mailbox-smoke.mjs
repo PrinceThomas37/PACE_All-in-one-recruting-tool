@@ -576,6 +576,30 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   ok('a body past the express limit is still refused, by express', r.status === 413, 'got ' + r.status);
   ok('...and still sends nothing', providerCalls === 0, 'calls=' + providerCalls);
 
+  // Formatting (R-192). A plain body is still escaped by buildHtmlEmailBody.
+  // A body marked formatted is cleaned: bold stays, a script does not, and an
+  // empty formatted box is still an empty reply.
+  graphSent.length = 0;
+  await call('POST', '/mailbox/mb-mine/messages/x/reply', {
+    formatted: true,
+    body: '<b>Hello</b> <a href="javascript:alert(1)">there</a><script>alert(1)</script><p align="center" style="color:red">team</p>',
+  });
+  sentBody = bodyOf();
+  ok('a formatted reply keeps bold and the words', /<b>Hello<\/b>/.test(sentBody) && /there/.test(sentBody) && /team/.test(sentBody), sentBody);
+  ok('a formatted reply drops the script, the javascript link, and the colour',
+    !/alert\(1\)/.test(sentBody) && !/javascript:/i.test(sentBody) && !/color:red/i.test(sentBody) && !/align=/i.test(sentBody), sentBody);
+  r = await call('POST', '/mailbox/mb-mine/messages/x/reply', { formatted: true, body: '<div><br></div>' });
+  ok('a formatted reply with no words is refused', r.status === 400, 'got ' + r.status);
+  graphSent.length = 0;
+  await call('POST', '/mailbox/mb-mine/send', {
+    to: 'a@b.c', formatted: true,
+    body: '<ul><li>One</li></ul><ol><li>Two</li></ol><i>note</i>',
+  });
+  const sentNew = graphSent.find(c => c.path === 'sendNew');
+  const sentHtml = (sentNew && sentNew.body && sentNew.body.htmlBody) || '';
+  ok('a formatted new message keeps the list, the numbers, and the italic',
+    /<ul><li>One<\/li><\/ul>/.test(sentHtml) && /<ol><li>Two<\/li><\/ol>/.test(sentHtml) && /<i>note<\/i>/.test(sentHtml), sentHtml);
+
   await new Promise(r2 => server.close(r2));
 }
 

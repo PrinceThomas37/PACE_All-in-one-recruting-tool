@@ -1,5 +1,11 @@
 # Gateway — memory
-> Last written: 2026-09-30 (Session 35, ctx for the shared mailbox rule) · earlier: 2026-09-29 (Session 33, R-076)
+> Last written: 2026-10-08 (Cursor, D-0117 personal first-email switch) · earlier: 2026-09-30 (Session 35)
+
+## 2026-10-08 — the send loop asks the personal switch (D-0117, C-0037)
+- **`index.js`** no longer treats "AI writes first emails" as one boolean (company switch AND a provider). `companyAiFirst` and `aiReady` are separate. The loop loads `ai-first-choice` keys (the person's key, the wording-scope key, and `ue_<mailboxId>_ai_first` for the mailboxes in the batch) and calls `shouldWriteFirst`. A personal "on" still needs a provider. Follow-ups and rows already marked `template_variant === 'ai'` do not qualify.
+- **`routes/settings.js`** Outreach Plan GET/POST accept `ai_first` (`company` | `on` | `off`, else 400). `POST /outreach-plan/mailbox` stores `ue_<id>_ai_first` and does not delete it when the value is empty (a bad value is 400). The mailboxes list loads those keys beside the wording keys. `ai_first` is not a wording field, so an empty signature still 400s.
+
+
 
 ## Session 35, round 5 (2026-09-30) — the ONE insights calculation (R-089)
 `services/bd-insights.js` (pure) + `routes/workflows.js` `loadBdSummary()`/`fetchAll()`; new literal `GET /insights/bd-team`, registered ABOVE `/insights/bd/:userId`. Paged reads (PostgREST caps a request at 1,000 rows, so a count past that was silently cut), errors thrown not swallowed, `emails.sent_by` (there is no `assigned_to`). Days are UTC calendar days — the one clock; change `dayKey` in the service to move it. Pinned by `test/insights-numbers-smoke.mjs`, whose fake knows the LIVE `emails` column list and answers 42703 like Postgres.

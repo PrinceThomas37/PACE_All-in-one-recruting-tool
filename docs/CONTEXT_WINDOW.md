@@ -1,179 +1,54 @@
 # PACE — where things stand *right now*
 
-> **Read this file, then `CLAUDE.md` (the rules only; the full history is `docs/CLAUDE_MD_FULL_SESSION34.md`, open it only for a "why").**
-> History lives in `docs/CONTEXT_ARCHIVE.md` — open it only when you need the reasoning behind a past decision.
+> **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
-**Updated**: 2026-10-08 (Session 43, end — handed to Cursor, see `docs/CURSOR_HANDOFF.md`) · **Last merged to `main`**: #319 (`b20b326`) after #318 and #317.
-**Highest ids:** decision D-0116 · contract C-0036 · roadmap `R-189` (next `R-190`) · next migration `063` (062 is APPLIED to the live DB).
+**Updated**: 2026-10-08 (Cursor, after Session 43) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
+**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-192` (next `R-193`) · next migration `063` (062 is APPLIED).
 
-## ▶▶▶▶▶▶▶▶▶▶▶ START HERE — NEXT CHAT (Session 43, 8 Oct, end)
-**State:** #317, #318 and #319 are MERGED (main `b20b326`). #319 = D-0113/D-0114 + the sequence-preview and reminder-template fixes (R-188, R-189). Full suite 234/234 on Node 22 at the final head; 233/233 on Node 26.10.0 one commit earlier. **Migration 062 was applied to the live DB before the merge** (seven nullable `follow_ups` columns; 1,187 rows untouched, none marked `chain_rules`). Render redeploys from `main`; the deploy was NOT watched from the sandbox and the owner has not seen the new build live. Earlier live-data change: Ash Sayyad's 38 leads were made Unassigned then restored to Assigned at the owner's word (backup `backups.leads_unassign_20261008` still exists).
-**What the two builds contain (details: archive "SESSION 43", DECISIONS D-0110/D-0111/D-0112, roadmap R-170…R-185):** imports and Find Leads start Unassigned and the first email written claims the lead; **Assign** (me / my reporting chain) with a per-email-ID split; saved Find Leads cards show the first email's state + **Email another job / person**; wording per email ID (all or each; the editor follows the Sending email); **`{{sendercompany}}`** per email ID, held if an email ID has no company; **same thread / new email** per follow-up; a BD's **own sequences**; **bulk stage change** + an **"Assigned to"** filter; the subject-reset bug fixed; readable figures, Reply all on the card, unread per mailbox.
-**FIRST — ask the owner to hard-refresh after the deploy and try:** Outreach Plan (blank start; "How many follow-ups?" starts at none; days/thread per follow-up), a new sequence's preview (name = the email ID's, with a picker), a reminder template in Compose (keeps `{{sender}}`). **D-0114 (new architecture):** default NO follow-ups; the chain is made when the first email is SENT (`services/followup-chain.js`); a `chain_rules='own'` chain sends only the person's own wording; old rows (NULL) unchanged. **Owner decisions this round:** D-0116 — admins stay in lead assignment, the RA lead's Assign Leads does NOT skip a manager's imports (nothing built). **Still open:** the four Find Leads leads at Assigned with no email (BD Lead 1 ×3, BD Lead 2 ×1) — make Unassigned? **Honest limit:** the send-loop hook that starts the chain and the engine's strict-wording switch are covered only through their pure parts — watch the first real sends. **Then the AI round the owner scheduled next:** R-177 (a person's own switch for "AI writes first emails"; today ONE admin switch, on) and R-178 ("Rewrite with AI" keeping `{{variables}}`; AI variants / "Enable AI variants"); reuse `services/ai-provider.js`, the budget, `checkDraft`. Older: D-0106 (a)–(e), R-149, R-150, per-organisation API keys (R-067) before a second customer.
-**Honest limits:** none of Session 43 has been seen on the live site; the follow-up engine and the send loop have no unit test (their new logic lives in tested pure helpers `wording-scope.followupTexts`, `followup-thread`, `sender-company.prepareForSend`); a BD's personal sequence can still be enrolled into by id; source-grep guards (`posting-and-company-cap-smoke`) broke on a longer send loop — their window was widened.
-**Working reminders that bit this session:** a test pinning old behaviour must be changed on purpose and said so; a scripted slice once clipped a comment line (re-read after scripted edits); never edit files during a full-suite run; a focus handler that repaints wipes typed text — update in place; main can move while you work (merge it in, keep both notes files).
+## Now
 
-## ▶▶▶▶▶▶▶▶▶ MY SETUP STAGE 2 (8 Oct) — MERGED as #313 with stage 1 (owner: "update the context window and archives and then merge")
-D-0104 / R-169. **What is true now:** a person with no sequence of their own cannot START outreach (leads outreach, Lead Finder first email) — individual emails, queued mail and follow-ups are unaffected; My Setup gives a starter with their own company in one click, links the AI style note, and lets them narrow sending days/hours within the org window (daily number stays admin); first-login tasks (mailbox, sequence) sit on Reminders and in "Needs you today"; the signature window is an editor (font, size, colour, bold/italic/underline, link, optional logo that can colour the name). **Merged as #313 (`3c4bb01`); the logo bucket is now CREATED (D-0105).** **Open:** (1) the owner's first real logo upload on the live app is the proof — not yet exercised; (2) not built: send-time `{{sendercompany}}`, Random-template mode still uses stock presets, organisation Company profile. **Verify live after deploy:** log in as a person with no sequence → task on Reminders; Find Leads box off; starter click; pending summary shows days. Suite 217/217 Node 22; Node 26.10.0 run before merge.
+The live site is #319. The owner has not been shown it. Do not send mail, do not touch the live database, do not merge.
 
-## ▶▶▶▶▶▶▶▶ MY SETUP — ANY PERSON SETS UP THEIR OWN OUTREACH (8 Oct, after #312 MERGED as `4593ec3`) — stage 1, MERGED in #313
-D-0103 / R-168 (stage 1 built) / R-169 (stage 2, owner's call). No migration. The owner's answers: people with no saved sequence are asked to set up their own (at login / a dashboard task); "sends as" per mailbox ("let's try it to see how it looks"); "it's not about new managers — any user"; "can the user set up their own outreach mailbox?". **Built:** any person adds/connects/removes THEIR OWN mailbox (Outlook or Gmail) — `routes/microsoft.js`/`gmail.js` connect + disconnect allow the slot's own person or an admin; a self-serve add gets the default limit and must say "sends as"; the daily-limit PATCH is admin-only (was open to the owner of the mailbox). **"Sends as"** = company, title, postal address (required), phone, website, stored `ue_<id>_sends_as`; it builds the mailbox's signature (never given Fute's Dallas address — `ensureSignatureAddress` changed) and the AI writes under it (`senderIdentity`, `aiWriteFirstEmail`). **Screen:** `public/js/69-page-mysetup.js` (page "My Setup", Setup menu for everyone; calm Today card until done). **Honest gap (R-169):** the STOCK sequence wording in `email-vars.js` still names "Fute Global LLC" for a person with no sequence of their own; the fix is a send-time `{{sendercompany}}` through every send path + a decision on whether a person with no sequence may send. **Before merging:** the owner has NOT said merge; run Node 26.10.0 (`/tmp/node26dl/...` may need re-downloading), check `emails.status='sending'` / `send_progress_*`.
+**Already done on the live database. Do not repeat.** Four Find Leads leads were moved from Assigned back to Unassigned (no email had been written). Backup: `backups.leads_unassign_finder_20261008`.
+- `b92277a4-d2ee-4ad9-bbb3-40415aa1d5ff` Business Network Consulting - BNC (BD Lead 1)
+- `a43f3e5f-ecdc-4492-8e3a-d47d02a7f9d2` Equipment One Company (BD Lead 1)
+- `52237021-141c-433f-b894-a22e1973d665` Xerxes Global (BD Lead 1)
+- `1f696520-2556-446d-ac61-80a3cdee17dd` Peak Retirement Planning, Inc. (BD Lead 2)
+Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolUpdate`.
 
-## ▶▶▶▶▶▶▶ THE OWNER'S FIRST LOOK AT THE LIVE FIND LEADS — EIGHT ITEMS (8 Oct, later) — MERGED as #312
-D-0102 / R-167 (built) / R-168 (asked, not built). No migration. (1) login page scrolls on a small laptop; (2) the JSearch key is a card in Admin → Integrations & API Keys under Apollo (routes unchanged, per-organisation); (3) that window's AI status is one sentence, detail behind "Show details", opened once by a fresh test; (4) **Sourced Leads is a tab of Find Leads** (`43-page-sourced-leads.js` only exports `srcdBody/srcdOpen/srcdCan/srcdNewCount`; one menu item "Find Leads"; `goPage('sourced')` still works); (5) calmer form (cost by the button, "More filters" fold, one usage line, no stat strip); (6) Today's cards: the server stamps a whole run with one time and sorts newest run first (`found_at`, `is_new`), the screen draws "New · found …" / "Earlier cards"; (7) "Lead Insights" → "Outreach Insights". **Not built — R-168, waiting on the owner:** a new manager / another company's mailbox must not send Fute Global's text — four hard-coded Fute defaults found (`email-vars.js` + `02-state.js`/`03-core-render.js` stock sequence text; `email-signature.js` `DEFAULT_SIGNATURE_HTML` with Fute's phone/address/site; sign-off title = the logged-in profile's designation; AI emails use `organizations.name`). Proposed: per-organisation Company profile (Fute's text loaded into Fute's), a per-mailbox "sends as", the first sequence written by the new person with a neutral starter to copy. **Before merging:** Node 26.10.0 full suite; check `emails.status='sending'` / `send_progress_*` first (Render restarts); the owner has NOT yet said merge. Full suite on Node 22 was 213/214 on the first run (night contrast of the selected pill — fixed since).
+**On the dev branch, not live (D-0117):**
+- **Write with AI** (`services/sequence-draft.js`, `POST /wf/draft-email`) follows the instruction. Default 140–200 words, 3–4 short paragraphs. If they ask for shorter, that length. A draft that misses the topic is not used. Still short after one repair: used, and the note says so. The engine writer (`engine-draft.js`) was not retuned — it is still the short recruiting pitch.
+- **Rewrite with AI** and **Write a variant** keep every `{{variable}}`. If they cannot, the person's own text comes back, never the ready-made starter. Buttons on the sequence step and on My wording.
+- **AI writes first emails:** same as the company / on for me / off. Per email ID only when wording is per email ID. Follow-ups stay the person's wording. The send loop and the "AI writes at send" chip both use `services/ai-first-choice.js`.
+- **Minimised windows:** drag the chip sideways along the bottom. A drag does not open it. A later click does. × closes it. The spot lasts until reload. Phone (860px and under) stays a scrolling row.
 
-## ▶▶▶▶▶▶ FREE JOB SOURCES — "SEARCH WITH" (8 Oct) — MIGRATION 060 APPLIED, MERGED (owner: "Merge once the changes are completed")
-Built per D-0100 (R-164/R-166): Apollo / Free job sources / Both on every search; JSearch through `services/jobs-jsearch.js`; the key is per organisation (Find Leads → Access & job sources; admin; masked). Migration 060 is applied. Not tested against the real service: the owner's first "Check my key" + a real search is the live proof — if the answer shape differs, fix `jobs-jsearch.js`. Next, owner's call: R-166 (ask the vendor in writing about a shared key; a board finder for Preferred companies; a paid contact finder).
+**Also on the dev branch (D-0118, R-192):** New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. A paste that brings a font, a colour, or a highlight is stripped. The send-time writer was not touched.
 
-## ▶▶▶▶▶ LEAD FINDER FORM, ROUND 2 (8 Oct) — MIGRATION 059 APPLIED, MERGED AS #310
-Built per D-0098 (R-165): "Name of the run", ~40 industries (pick several), tick / Select all / type job titles, posted-within slider 0–30 in the retro style, preferred companies by name (Apollo lookup, 1 credit; website paste is free). **Migration 059 is written and NOT applied** — it must be applied (owner's fresh go-ahead; use `execute_sql` in pieces with `SET lock_timeout` if the tool times out) BEFORE the code merges; also check no `emails.status='sending'` and no active `send_progress_*` before the merge (Render restarts). Node 22 + Node 26.10.0 full suites run before the merge. Open question for the owner: R-164 (job sources beyond Apollo — PACE already reads six company job-board feeds in `lead-sources/index.js`; discovery is missing).
+## Still open (do not start unasked)
 
-## ▶▶▶▶ LEAD FINDER STEPS 2+3 (Session 42) — READ THIS FIRST
-**NOW LIVE (merged #306 + #307, migration 058 applied).** Originally built on the dev branch: saved searches, nightly/Run-now Apollo search, cards (Accept/Wait/Reject), Accept window with the 3-contact picker, admin access + limits (rail item "Find Leads"). (Release steps used, for next time:) confirm with the owner (fresh go-ahead), check no emails are mid-send (`emails.status='sending'`, `send_progress_*`), apply 058 to project `teiqievahzhllojvgsku`, then merge (Render restarts), then the admin switches people on in Find Leads → Access & Apollo and presses "Check what my key can do" (~2 credits). Apollo response shapes are from docs, unverified live. Decision D-0092; roadmap R-157 (steps 2–3), R-158/159/160/161 open. Later: D-0093 (first-live-use fixes), D-0094 (Saved & past), D-0095 (send card), D-0096 (Main job + Send from), D-0097 (Find leads now + POCs/jobs). Highest ids: D-0097, roadmap R-163, next migration 059. Open with the owner: they will test the BD first-email flow; R-158/159/160/161 and the three stalled-send flaws remain.
+- Watch the first real sends under the new follow-up rules (D-0114). The send-loop hook is tested through pure helpers, not against real mail.
+- R-178's automatic "Enable AI variants" (one variant per email, unasked) is not built. The on-demand button is.
+- R-067 per-organisation API keys before a second customer. D-0106 (a)–(e), R-149 notifications, R-150 industry playbook.
+- Dead mailboxes if still dead: kristy.scott@fute-global.com, princethomasfute@gmail.com.
+- `*.onrender.com` is blocked here. A merge is a release that this sandbox cannot watch.
 
-## ▶▶▶ START HERE — `main` HAS EVERYTHING; THE OWNER ASKED TO PAUSE AND RESUME IN A NEW CHAT
-**State:** `main` = #302 + #303. 204/204 suites on Node 22 AND Node 26.10.0 at #302. The dev branch `claude/great-heisenberg-jekres` equals `main`; no PR open; nothing waits on a deploy except the owner hard-refreshing and looking.
-**What the owner has just been given (Session 41, D-0084, R-151…R-156):** "Needs you today" and client-conversation windows show only that item's own mail (the leak was `/email/history?candidate_id=` pulling lead-engine mail) and carry a "What to do" band — Reply / Chase / Follow up / **Move to <next stage>** (candidates; leads for BD/admin when the lead is loaded) / Mark completed / Not today · My Team opens on **Reports**, one **Team** tab · **Reply & Forward are a dock window** (minimise, go elsewhere, come back; a draft is kept on the DEVICE) · **visual signature editor** · **interview time zone by city** (`ivTzSearch`) · leftover old-look controls (Leads filters, stage/Valid dropdowns, Send all pending, job funnel, candidate status + ID chip, kanban) moved to the kit + **one font scale** (20 → 9 distinct sizes; `retro.css` end). Details: CONTEXT_ARCHIVE "SESSION 41", `docs/territories/surface.md` 2026-10-07.
-**FIRST THING TO DO IN THE NEW CHAT — ask the owner (plain words, then build):**
-1. *How does it look live?* Hard-refresh; try a "Needs you today" row, a Reply, the signature editor, an interview's time zone, the kanban at night. Anything still off → a screenshot (the font/look audit only measures screens it can load).
-2. **R-149 NOTIFICATIONS** (the owner's next topic; today the bell only jumps to Reminders — `04-shell-login.js` `.tb-ico`): (a) WHAT to notify — suggested: a reply came in · a send finished or some failed · a lead assigned/taken · a reminder due/overdue · an applicant applied; (b) WHERE — the bell list first (free; recommended) · an email digest from the person's own mailbox · phone push later (new cost); (c) per-person on/off by kind (recommended; D-0022). Reuse: the "needs you today" queue, reminders (`services/reminder-source.js`), the send summary, the applicants queue. Respect who-sees-what (D-0034/36) and "a screen must not advertise what does not exist".
-3. **R-150 industry playbook groundwork** (D-0083, noted not started): move the recruiting-specific hard rules (no fee %, no call ask, placeholders, one sign-off, no naming the reader's job) from `outreach-generator.js` / `sequence-draft.js` / `candidate-outreach.js` checkers + `ai-style.js styleBlock` into ONE named "Recruiting playbook" data block (no screen yet). After notifications, when a second industry is near.
-**Offered, not built (owner's call):** save reply drafts into the Gmail/Outlook **Drafts folder** (today: device only) · the rest of the retro redesign (see "NEXT CHAT — CONTINUE THE RETRO REDESIGN" below: Today in the list | record | decide layout, then Leads, Jobs, Candidates, Inbox, Admin).
-**Honest limits (repeat to the owner):** drafts are on one device; real mail speed is unmeasurable here; whether the Azure app registration must list `MailboxSettings.ReadWrite` is unverified (if an Outlook connect fails after deploy, set `MICROSOFT_EXTRA_SCOPES=` empty on Render); the live deploy has never been seen from the sandbox; self-assigned leads are in the lead's activity log, not a report column; candidate outreach's AI is not covered; brand purple on its own tint measures 3.8–4.2:1 (owner's call); some date-seeded tests may break on later dates (pin the browser clock); the roadmap artifact mirror (`NQ4HUuMfAWJk34g9Vs5EdQ`) was NOT updated for R-134…R-156 — `docs/ROADMAP.md` wins.
-**Standing rules that bit (keep):** a guard must fail when the thing is absent — show it failing; never edit files during a full-suite run; **a new paper surface must be added to the `html :where(#content :where(…))` list in `retro.css` or its text is unreadable at night**; Playwright `click()` scrolls first; write memory as work lands; merge only on the owner's word; after a squash-merge restart the dev branch from `origin/main` and push with `--force-with-lease`.
-**Session 40 in one paragraph (details in the archive):** retro look + sky header + search everything (#294); eight fixes (#295); team-work reports + "where this comes from" + Add lead + sequence builder (#297); ten a page, Sent folded into All email, faster Inbox with labels, Primary sequence (#298); dark-mode sweep, Outlook label colours, job row, RA/Admin Insights (#299); AI writing-style note, Sequence = Outreach Plan, Take leads (#300).
+## What is live
 
-## ▶ NEXT CHAT — CONTINUE THE RETRO REDESIGN (R-122) — START HERE
-The owner chose a **90s-retro look on top of the AI** and is building it with you step by step, judging by screenshots of the REAL app. Not an engineer: show pictures, ask in plain words with choices, build after they react. No helper agents without their words (D-0060).
-- **The design is `docs/design/PACE.ds`** (the owner's Headspace-style format: tokens, components, do/don't) + `docs/design/pace-design-sheet.png`. Decisions: **D-0072** (no Duck Hunt scoreboard; the WHOLE app follows day/night), **D-0073** (default for every customer; build step by step), **D-0074/D-0075** (search built; owner asked to merge 1–2 now to try it). The concepts they loved (cream paper cards, hard purple shadows, sky header, list | record | decide layout, green-screen activity log) are described in PACE.ds and the R-122 roadmap row.
-- **Where it lives:** `public/retro.css` (loaded AFTER theme.css; removing its `<link>` in index.html restores the old look). Tokens: day/night palettes restated twice like theme.css; **`--canvas`/`--shelf` are the dark grounds at night — `--bg` stays cream because it is also the groove INSIDE cards**; `--on-canvas*` for text straight on the canvas; `--sun` = the one primary action; `--st-go/stop/wait/info` muted state fills; `--mono` / `--pixel` / `--pixel-label` fonts (self-hosted in `public/fonts/`). Clock: `index.html` head script + `paceClockTheme()` / `paceSkyPhase()` in `04-shell-login.js` (same hours, pinned by `theme-clock-smoke`). Header: `renderTopbar()` → `.tb-sky` (orb/clouds/stars, clipped), `.tb-head` (pixel title + `#tb-clock`), `paceTodayChips()`, `paceSearchBox()` (63-global-search.js), `paceHeaderNew()`. Sidebar: `renderSidebar()` groups My Day / Sales / Recruiting (`GRP_CLS`), `NAV_PIXEL_ICONS`, Setup under the name card (`toggleSetup`), open by default ≥1100px and pushing `#main`.
-- **STEP 3 (remainder — the eight fixes above are done):** the shared kit — selects/filter buttons (still Session-23 rounded tan), stage pills and the blue "Contacts 1" chips, round coloured avatars (design: square), the "Needs you today" rows (their buttons overflow on a phone), drawers/modals, the login backdrop (a canvas, still blue dots — it must be TOLD the palette, `loginPalette()` in 11-bind), dashboard tile numbers (`STAGE_COLORS` blues). Then **STEP 4:** Today rebuilt in the list | record | decide layout (the concept: id tab on cards, stage trail, AI match bar as ONE masked element, Send to client / Not a fit / Needs detail, checks, CRT activity log), then **Leads** in the same pattern (company list | lead with contacts + email history + AI brief | Write email / Find contact / Release to pool), then Jobs, Candidates, Inbox, Admin. Phone version of each as you go.
-- **How to show it:** the screenshot harness from Session 39 was in the session scratchpad (gone) — rebuild from `scripts/screens-fingerprint.mjs`'s seed (enterApp + seeded STATE, light/dark via `localStorage pace-theme`, `page.clock.install` for a time of day, `pace-rail` for the sidebar). Show before/after side by side.
-- **Owner-side right now:** hard-refresh the live app and try it (new colours, sidebar, sky header, search). Their reactions decide step 3's details.
+Leads engine, ATS, outreach, candidate outreach, in-app mailbox, reminders / needs you today, public apply page, ownership, retro look, search. Billing and self-serve signup are built and **off**.
 
-## ▶ SESSION 39 (2026-10-06) — what shipped (merged in #294)
-Retro redesign **step 1** (palette, square paper, hard shadows, self-hosted fonts, **Auto/Light/Dark by the clock** — the toggle flips what's on screen; landing on the clock's mode = Auto, saved as `'system'`), **step 2** (sky top bar by clock phase, pixel titles/logo, sidebar by business with pixel icons, "Dashboard" → "Today", RA "Insights" → "My Numbers"), the **tall sky header** (date line, Today's "N NEED YOU"/"N PAST DUE" from real data only, "+ New Job"/"+ New Candidate" by desk, clouds, stars, sun/moon arc), and **R-123 search everything** (`GET /search`, `routes/search.js`: candidates/leads/jobs/clients each gated exactly like its own list, scope in SQL before the limit; the header box with ⌘K). Owner corrections folded in: night was "too much purple" → cream cards on a dark grid; the sidebar and header to match the concepts. New tests: `theme-clock-smoke` (28), `search-everything-smoke` (18), `search-box-smoke` (13); updated on purpose: `mobile-layout-smoke`, `recruiter-dashboard-smoke`, `team-structure-smoke`, `ownership-smoke`, `poc-people-search-ui-smoke`. **179/179 on Node 22 AND Node 26.**
+D-0114 on the live build: default no follow-ups; the chain is made when the first email is sent; a `chain_rules='own'` chain sends only the person's wording; older rows (NULL) keep the old behaviour.
 
-## ✅ WHAT'S LEFT (details in `docs/ROADMAP.md`)
-- **The redesign:** step 3 and step 4 above (R-122). Search over emails/notes/résumés is NOT in R-123 (owner may ask).
-- **Owner-side:** try the new look; re-assign the 37 repaired leads (R-117) if not done; share the apply link (R-008); reconnect the two dead mailboxes below if still dead.
-- **Next, owner's call:** R-121 phone text scale (now part of the redesign's step 3/4) · **R-096 Boolean search** · R-110 Stage B · R-053 contact-finder remainder.
-- **Before a SECOND customer:** **R-067** per-company API keys, **R-049** a PACE-operator role, R-016 CSV import for candidates.
-- **Known gaps (by design):** search by an extra email/phone on the Candidates list; recognising a reply from an extra address; `processPendingEmailSends` is not mounted in any test.
-
-## ⚠ HOW TO MAINTAIN THESE TWO FILES (do not skip)
-
-**This file: current state only. REWRITE it each session, keep it under ~200
-lines, delete anything no longer true.** `docs/CONTEXT_ARCHIVE.md`: everything
-that ever happened, **append-only**, written **as the work lands** (D-0024) —
-a section per round, the closing synthesis last.
-
-A **SessionStart hook** injects the working protocol and a **Stop hook** blocks
-finishing with memory unwritten (`node scripts/memory-check.mjs`, D-0027).
-
-## 📋 `docs/ROADMAP.md` — THE LIVE LIST (D-0030)
-
-Every suggestion made to the owner is a row there, **written in the same turn**.
-`PENDING` · `DOING` · `DONE` · `CHANGED` · `DROPPED`; nothing deleted;
-**`CHANGED` keeps both versions.** "What's left?" → read the file, group by who
-is blocked. Mirror every change to artifact **`NQ4HUuMfAWJk34g9Vs5EdQ`**
-(`ArtifactData`; collections `items` = open, `shipped` = finished).
-**⚠ The page shows only three `lane` values — `me`, `owner`, `decide`.** Any
-other lane is INVISIBLE (three rows were, until 2026-09-26). A finished row gets
-`status:"done"` in `items` AND a document in `shipped` (`when`, `ref`, `title`,
-`sub`; `changed` uses `was`/`now`/`why`); lower `ord` = higher on the page.
-**The file wins any disagreement.**
-
-## 🧭 `docs/territories/README.md` BEFORE ANY JOB
-
-Nine territories + `dispatch`. `DECISIONS.md` = what the owner settled (check
-before proposing); `CAPABILITIES.md` = what PACE already does (grep before
-building); `_contracts.md` = cross-border requests. **`node
-scripts/territory-map.mjs` after adding any file** — it caught three orphaned
-services on 2026-09-25 (`client-intel`, `lead-posting` → observatory;
-`company-daily-cap` → harbour).
-
-## What PACE is
-
-A recruiting **ATS + lead-management SaaS**. Fute Global is a customer. The
-owner is the product owner and end user — plain English, screenshots, the live
-app; never code or git (`CLAUDE.md`, top).
-
-## What is live right now
-
-Leads engine (import → distribute → **AI-written** first email → template
-follow-ups → reply sweep → recycle), the ATS, the outreach generator, candidate
-outreach, the in-app mailbox, reminders / "needs you today", the public apply
-page, ownership + take-over requests, failed-send retry (D-0031), the rewind
-clock, client/lead email timelines with the AI summary button, **several emails/phones per candidate and lead contact (Make main)**, **the retro look (day/night by the clock, sky header, sidebar by business), search everything (⌘K)**, **search inside a job's candidates (job page and Pipeline)**, **an expired sign-in that returns you to where you were**. Billing and
-self-serve signup built and **off**.
-
-### Session 32 added (all merged, all live) — the owner said "do all these" (D-0047)
-
-- **#246 R-037** — a **dead-mailbox warning** on all three dashboards
-  (`services/mailbox-alerts.js`, `GET /mailboxes/alerts`,
-  `60-mailbox-alerts.js`): which mailbox, why in plain words, how many emails
-  wait behind it, Reconnect for its owner. Gmail now records refresh failures
-  too. **Two are dead today:** kristy.scott@fute-global.com (Microsoft withdrew
-  permission, AADSTS65001, since 21 Jul) and probably princethomasfute@gmail.com
-  (no refresh since 24 Sep). **R-050** — the two backup tables are empty and
-  now locked (migration 049); dropping them is offered, not done. **R-039** —
-  both sending domains pass SPF/DKIM/DMARC (futeglobal.com DMARC `p=none`).
-- **#247 R-051 done** — "Your client conversations" card under "needs you
-  today" (`61-client-digest.js`, `GET /client-intel/digest`), plus a manager's
-  **facts-only** team roll-up (D-0040/D-0043: no AI, no email text).
-- **#248 R-006/R-001/R-002** — **Reports now live at the foot of the
-  Dashboard**; the Reports page and nav item are gone. Submissions are counted
-  from **stage history** (`countSubmissionsEver`) — D-0029's under-report is
-  closed on tiles, hot jobs and the report alike. **Time in stage** card
-  (`timeInStage`, stuck = 14+ days).
-- **#249** — retired `/bd-analytics/*` (R-005) and `/ai/generate-email`
-  (R-007); **Integrations card** keeps a typed key across redraws and says when
-  a tested key is unsaved (R-030 — it was wiping the box); model hints derived
-  from the provider table (R-031); **Anthropic quality model was retired**
-  (now `claude-sonnet-4-6`; that account also has **no credit**); **OpenRouter
-  free picker was choosing music models** (fixed, cache versioned);
-  **migration 050** — dropdown words unique per company (R-048); `GET /clients`
-  `can_edit` hides document Upload/Delete from non-owners (C-0029); **record
-  drawer panes were see-through** (5.5% opaque in dark) — now solid.
-
-### Live switches (read from the DB 2026-09-26 — rows that exist)
-
-| setting | value | meaning |
+| setting | value (read 2026-09-26) | meaning |
 |---|---|---|
-| `sys_client_intel_enabled` | **1** | email timeline ON |
-| `sys_client_intel_ai_enabled` | **1** | AI summary button **ON** (D-0047) |
-| `sys_engine_ai_first_email` | **1** | AI writes first emails |
-| `int_ai_active` | **groq** | Groq leads the chain (gpt-oss-20b / 120b — confirmed working) |
-| `ai_daily_token_cap` / `call_cap` | 400,000 / 400 | org's daily AI allowance |
-| `followup_send_time` | 18:30 | when follow-ups are QUEUED (IST), not sent |
-| *no row* | defaults | `company_daily_first_emails` 2, sending hours 8–16 lead-local |
+| `sys_engine_ai_first_email` | **1** | company switch: AI writes first emails. A person can now override it (D-0117, not live until merged). |
+| `int_ai_active` | **groq** | Groq leads the chain |
 
-**⚠ A setting with no row reads its schema DEFAULT** (`config/settings.js`) —
-read the default before saying what a switch is set to.
+A setting with no row reads its schema default (`config/settings.js`).
 
+## Tests
 
-## Migrations — next is **057** · 056 APPLIED 2026-10-05 (candidates + contacts `extra_emails`/`extra_phones`, alt_phone copied) · 055 APPLIED 2026-10-02 (open tracking) · 054/053 2026-09-28
-**SQL/migrations are pre-approved by the owner in principle (D-0047)** — still state a destructive customer-data change first, ask for a fresh go before touching the live DB, apply a migration BEFORE merging the code that uses it, and prove a schema change in a rolled-back probe.
+Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the short-draft repair assertion changed on purpose), `ai-first-choice-smoke` 18, `ai-wording-ui-smoke` 9, `window-dock-smoke` 30, `engine-draft-smoke` 17, `wording-scope-smoke` 45, `ai-style-smoke` 30, `sequence-builder-smoke` 31, `scope-emails-warmup-smoke` 52, `mail-format-smoke` 10, `mailbox-smoke` 136, `mailbox-page-smoke` 80. Full suite not re-run (not merging). Sandbox Node 22; Render Node 26 — run Node 26 before a merge.
 
-## 🧪 TESTS: 204 SUITES (Node 22 and Node 26.10.0 both 204/204 on #302). Newest (Session 41): `reply-window-smoke`, `signature-editor-smoke`; extended `trace-smoke`, `email-history-replies-smoke`, `interview-timezone-smoke`.
-`npm test` — read the COUNT; never pipe into `tail`. `bash test/verify-frontend.sh` too. Newest (Session 38): `contact-points-smoke`, `candidate-contact-points-routes-smoke`, `lead-contact-points-routes-smoke`, `contact-points-ui-smoke`, `lead-contact-cp-ui-smoke`, `candidate-outreach-optout-smoke`, `job-page-candidate-search-smoke` (25), `session-expiry-resume-smoke` (20), `job-page-phone-smoke` (10), `utility-classes-smoke` (7). **Every new check was run against the broken code and failed there**; a guard that cannot see the thing FAILS rather than passes.
+## How these two files stay true
 
-## Owner actions outstanding
-- Reconnect kristy.scott@fute-global.com and princethomasfute@gmail.com (dead mailboxes) if still dead; share the apply link; paste job postings on leads (R-056). Optional: drop the two empty backup tables; drop `backups.contacts_r117` once satisfied. Google sign-in still needs `GOOGLE_CLIENT_ID`/`SECRET`.
-
-## ⏸ Parked — do NOT re-raise as blocking
-`DECISIONS.md` is the authority: pricing `null`, signup off, no timezone backfill, no attachments on candidate email (D-0012), reassignment only by request (D-0036–38), documents designed later (R-052), R-057 later (D-0046), no "new version ready" notice (D-0069).
-
-## Traps that will bite you
-- **`*.onrender.com` is blocked from this sandbox** — a merge lands, a deploy is **unverified**. Check `app_settings` `cron_last_*` rows for signs of life; never claim you watched it come up.
-- **Sandbox Node 22, Render Node 26** (download `nodejs.org/dist/v26.10.0/node-v26.10.0-linux-x64.tar.xz` into the scratchpad). Works-here-fails-there → get Node 26.
-- **The top bar is a render region that repaints when its html moves** (date line, counts). Anything typed in it must live in STATE (the search box does: `STATE.gsearch`), and a focus handler must ignore `STATE._rendering` (the repaint putting focus back is not a click).
-- **A guard is vacuous until you watched it fail** — and a green suite is not a screen: look at the screenshot. A suite only covers the screens it renders (R-094's search test only opened the Pipeline page while the job page's own list had none).
-- **Registration order is load-bearing** in every router (`route-shadowing-smoke`). **Every reader of a stored email body calls `renderStoredEmail`.**
-- **A lead row opens without `render()`** — anything inside it fills its own element by id, never re-renders.
-- **A squash-merged branch conflicts with `main` on its own files** — after a merge, restart the dev branch from `origin/main` (`git checkout -B <branch> origin/main`), push with `--force-with-lease` pinned to the old remote sha.
-- **Never `git add -A`**; never pipe `git push` into `tail`. `node scripts/territory-map.mjs` regenerates `docs/territories/island.html` and `_map.json` — commit them with the change.
-- **Secrets live in `app_settings` (`int_*_api_key`)** — never echo them (query `length(value)`, never `value`).
-- **Hard-coded AI model names expire** — five so far. Check the live `ai_last_test` row's `available_models` first.
-- **This sandbox cannot measure smoothness** (software compositing) — say how it FEELS is the owner's call.
+This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCHIVE.md` is append-only. `docs/ROADMAP.md` gets a row the turn a suggestion is made. `DECISIONS.md` gets an entry the moment the owner decides; never edit an old one. `node scripts/memory-check.mjs` before finishing.

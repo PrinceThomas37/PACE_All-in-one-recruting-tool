@@ -160,7 +160,7 @@ Clients page → "✉ Email this client", with document attachment.
 `routes/mailbox.js` + `public/js/47-page-mailbox.js`. The in-app mailbox over
 Graph and Gmail. **Nothing is mirrored into Postgres**
 and there is deliberately no second send path — anything that composes mail
-reuses these provider calls.
+reuses these provider calls. On the dev branch (D-0118, not live until merged): New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. Font, size, colour, highlight, and alignment are not offered, and a paste that brings them is stripped before send.
 
 ### Sending an interview invitation
 **Status:** LIVE · owner `guild`
@@ -584,7 +584,7 @@ Activity tab (that record's submissions only, inline) and Email → All email
 - **Reports count the team's work, and every figure shows its people** (6 Oct, R-125): sent to the BD manager, sent to the client, interviews and placements, each on the day it happened — never candidates merely added. Click any tile, funnel bar, trend column, person's number, hot job, client or "stuck" chip to see exactly who it counts (and open their record). Everyone in the team is listed, including those with 0.
 - **A to-do shows where it comes from** (6 Oct, R-125): click a row in "Needs you today" or "Your client conversations" and see the rule that put it there and the emails it was worked out from (theirs and yours, newest first, a reply readable in full); a reminder says what created it. "Open the lead" is one button in that window.
 - **Add lead can add a new company and several contacts** (6 Oct, R-125): pick an existing company or add a new one (name, website, address, city, industry — it checks yours first so it is never doubled), then add as many contacts as you have; the first is the main one.
-- **Write a sequence email right in its step** (6 Oct, R-126): each email step is either a saved template (Outreach 1 / Follow-up 1 / Follow-up 2) or its own subject and email, with one-click fields (first name, role, company…), a preview for an example person (a field PACE cannot fill is marked, and saving is refused), "Edit a copy for this step", and **Write with AI** — say what the email should do and it drafts it; with no AI it says so and gives a ready-made starter. Undo puts back what was there.
+- **Write a sequence email right in its step** (6 Oct, R-126): each email step is either a saved template (Outreach 1 / Follow-up 1 / Follow-up 2) or its own subject and email, with one-click fields (first name, role, company…), a preview for an example person (a field PACE cannot fill is marked, and saving is refused), "Edit a copy for this step", and **Write with AI** — the instruction is the brief (a full email, 140–200 words, unless they ask for shorter; a draft that misses the topic is not used). **Rewrite with AI** and **Write a variant** keep every {{variable}}; if they cannot, the person's own text stays. With no AI, Write with AI says so and gives a ready-made starter. Undo puts back what was there. A person can set **AI writes first emails** to same as the company, on for me, or off (per email ID when wording is per email ID). Follow-ups stay their own wording.
 
 ## Round 3 (Session 40, R-127, D-0078 — on the branch)
 - **A job's people, ten at a time** — the candidate list inside a job shows ten with Prev/Next; "This page" ticks only what you can see.
