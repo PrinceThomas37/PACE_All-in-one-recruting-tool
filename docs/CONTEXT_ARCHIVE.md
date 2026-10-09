@@ -6737,3 +6737,7 @@ Targeted tests green (see CONTEXT_WINDOW). Full suite not re-run. Node 26 not ru
 
 ### SESSION 43, later (9 Oct) — Cursor's PR #322 tested and its two failing suites fixed
 Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. First run at `753f4ed`: 236/238 on both versions — `reply-window-smoke` and `window-dock-smoke` failed because they typed into the hidden store behind the new rich editor (D-0118). Fixed in the tests only (type into the visible editor); product code untouched. Re-run result recorded in the PR.
+
+### SESSION 43, company site: operator named, email-only contact (dev branch)
+- Operator on both legal pages: "Prince K Thomas, trading as PACE" (PACE inc. is not registered, so it is not used). Contact is info@paceconsultant.in only; the owner chose not to publish a home or postal address. Whether a sole trader must publish an address is for a chartered accountant to confirm.
+- Still open before publishing: whether any customer has entered Apollo or JSearch keys in the app (the lead-data line on the privacy page stays a placeholder until answered); the Render static-site plan and price; the owner's go-ahead to publish.
