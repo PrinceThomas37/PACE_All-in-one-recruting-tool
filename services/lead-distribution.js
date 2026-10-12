@@ -96,11 +96,13 @@ async function connectedMailboxesFor({ supabase, withOrg, userId, todayStr, who 
   const { data: all } = await (withOrg ? withOrg(q) : q);
   if (!all || !all.length) return { error: own ? 'You have no active email IDs set up yet — add one under Email IDs first.' : `${who} has no active email IDs configured` };
   const ids = all.map(e => e.id);
-  const [{ data: ms }, { data: gm }] = await Promise.all([
+  const [{ data: ms }, { data: gm }, smRes] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
     supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
+    // an app-password mailbox counts too (migration 063; a missing table reads as none)
+    supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids),
   ]);
-  const connected = new Set([...(ms || []), ...(gm || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id));
+  const connected = new Set([...(ms || []), ...(gm || []), ...((smRes && smRes.data) || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id));
   const working = all.filter(e => connected.has(e.id));
   if (!working.length) return { error: own
     ? 'None of your email IDs is connected and working — connect or reconnect one under Email IDs first.'

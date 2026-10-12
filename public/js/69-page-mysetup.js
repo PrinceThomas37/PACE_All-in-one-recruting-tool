@@ -83,6 +83,7 @@
       STATE.page='mysetup'; STATE.modal=null; render();
       if (meId()){
         loadUserEmails(meId());                                  // fresh connection state, sends-as and signatures
+        apiGet('/smtp/enabled').then(function(r){ M.smtpOn=!!(r&&r.enabled); scheduleRender(); }).catch(function(){ M.smtpOn=false; });
         apiGet('/my-setup/send-window').then(function(r){ M.win=r; M.winForm=null; scheduleRender(); }).catch(function(){});
         if (hasSequenceRole()) apiGet('/outreach-plan').then(function(p2){ loadPlan(p2); }).catch(function(){});
       }
@@ -106,7 +107,7 @@
     if (isConnected(m) && c.status && c.status!=='ok' && c.status!=='connected') return '<span class="ms-tag is-warn">Sign-in expired — reconnect</span>';
     return isConnected(m) ? '<span class="ms-tag is-ok">Connected</span>' : '<span class="ms-tag is-warn">Not signed in yet</span>';
   }
-  function platformOf(m){ return /gmail|google/i.test(m.platform||'') ? 'Gmail' : 'Outlook'; }
+  function platformOf(m){ return /smtp/i.test(m.platform||'') ? 'App password' : (/gmail|google/i.test(m.platform||'') ? 'Gmail' : 'Outlook'); }
   // Just the details, no explanation: who it writes as and where the signature stands.
   function writesFor(m){
     var s=m.sends_as;
@@ -124,7 +125,7 @@
       writesFor(m)+
       '<div class="fd-row">'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupEdit(\''+m.id+'\')">'+(m.sends_as?'Edit sender &amp; signature':'Set up sender &amp; signature')+'</button>'+
-        '<button class="btn btn-sm '+(isConnected(m)?'btn-outline':'btn-primary')+'" onclick="mySetupConnect(\''+m.id+'\')">'+(isConnected(m)?'Reconnect':'Connect '+plat)+'</button>'+
+        '<button class="btn btn-sm '+(isConnected(m)?'btn-outline':'btn-primary')+'" onclick="mySetupConnect(\''+m.id+'\')">'+(isConnected(m)?'Reconnect':(plat==='App password'?'Enter the app password':'Connect '+plat))+'</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mySetupRemove(\''+m.id+'\')">Remove</button>'+
       '</div></div>';
   }
@@ -182,7 +183,8 @@
         '<div class="fd-hint">This is yours — nobody else\'s setup is changed by what you do here.</div>'+steps+'</div>'+
       '<div class="card fd-form"><div class="fd-row fd-between"><div class="fs-14 fd-strong">Your mailboxes</div>'+
         '<span class="fd-row"><button class="btn btn-sm btn-primary" onclick="mySetupAdd(\'Microsoft\')">+ Add Outlook mailbox</button>'+
-        '<button class="btn btn-sm btn-outline" onclick="mySetupAdd(\'Gmail\')">+ Add Gmail mailbox</button></span></div>'+boxes+'</div>'+
+        '<button class="btn btn-sm btn-outline" onclick="mySetupAdd(\'Gmail\')">+ Add Gmail mailbox</button>'+
+        (M.smtpOn?'<button class="btn btn-sm btn-outline" title="For Zoho and other mail providers — you sign in with an app password" onclick="mySetupAdd(\'SMTP\')">+ Add mailbox with an app password</button>':'')+'</span></div>'+boxes+'</div>'+
       windowCard()+style });
   }
 
@@ -274,14 +276,14 @@
   function paintModal(){
     var f=M.form; if(!f){ STATE.modal=null; STATE._sigIdentityOverride=null; render(); return; }
     captureSig();
-    var plat=f.platform==='Gmail'?'Gmail':'Outlook';
+    var plat=f.platform==='Gmail'?'Gmail':(f.platform==='SMTP'?'app-password':'Outlook');
     var me=STATE.user||{};
     STATE._sigIdentityOverride={ name:f.name||me.name||'Your name', email:f.email||'you@yourcompany.com' };
     STATE.modal='<div class="modal modal-w640" onclick="event.stopPropagation()"><div class="mh"><div class="mt">'+(f.mode==='add'?'Add '+plat+' mailbox':'Who this mailbox writes for')+'</div>'+
       '<button class="btn-icon" onclick="mySetupClose()">'+ico('x',14)+'</button></div>'+
       '<div class="mb_" style="max-height:68vh;overflow:auto">'+formHtml(f)+'</div>'+
       '<div class="mf"><button class="btn btn-outline" onclick="mySetupClose()">Cancel</button>'+
-      '<button class="btn btn-primary" '+(f.busy?'disabled':'')+' onclick="mySetupSave()">'+(f.busy?'Saving…':(f.mode==='add'?'Save & connect '+plat:'Save'))+'</button></div></div>';
+      '<button class="btn btn-primary" '+(f.busy?'disabled':'')+' onclick="mySetupSave()">'+(f.busy?'Saving…':(f.mode==='add'?(f.platform==='SMTP'?'Save & continue':'Save & connect '+plat):'Save'))+'</button></div></div>';
     render();
   }
   function readForm(){
@@ -453,12 +455,13 @@
       return finish('');
     };
     if (f.mode==='add'){
-      apiPost('/users/'+me+'/emails',{ email_address:f.email, display_name:f.name||f.email, platform:f.platform==='Gmail'?'Gmail':'Microsoft', sends_as:sendsAsOf(f) }).then(function(e){
+      apiPost('/users/'+me+'/emails',{ email_address:f.email, display_name:f.name||f.email, platform:f.platform==='Gmail'?'Gmail':(f.platform==='SMTP'?'SMTP':'Microsoft'), sends_as:sendsAsOf(f) }).then(function(e){
         STATE.userEmailsCache=STATE.userEmailsCache||{}; STATE.userEmailsCache[me]=(STATE.userEmailsCache[me]||[]).concat([Object.assign({ connection:{ connected:false, status:'none' }, has_own_signature:true }, e)]);
         return done(e.id,true).then(function(){
           var plat=f.platform, note=f.logoNote; M.form=null; STATE.modal=null; STATE._sigIdentityOverride=null; render();
-          showToast(note?('Mailbox added — '+note):'Mailbox added — now sign in to it in the window that opens',note?'warning':'success');
-          if (plat==='Gmail') connectGmailUserEmail(me,e.id); else connectMicrosoftUserEmail(me,e.id);
+          showToast(note?('Mailbox added — '+note):(plat==='SMTP'?'Mailbox added — now enter its app password':'Mailbox added — now sign in to it in the window that opens'),note?'warning':'success');
+          if (plat==='SMTP') mySetupSmtpOpen(e.id);
+          else if (plat==='Gmail') connectGmailUserEmail(me,e.id); else connectMicrosoftUserEmail(me,e.id);
           mySetupSync();
         });
       }).catch(function(er){ f.busy=false; f.err=(er&&er.message)||String(er); paintModal(); });
@@ -470,8 +473,77 @@
   };
   window.mySetupConnect = function(id){
     var m=myBoxes().filter(function(x){ return x.id===id; })[0]; if(!m) return;
-    if (platformOf(m)==='Gmail') connectGmailUserEmail(meId(),id); else connectMicrosoftUserEmail(meId(),id);
+    if (platformOf(m)==='App password') mySetupSmtpOpen(id);
+    else if (platformOf(m)==='Gmail') connectGmailUserEmail(meId(),id); else connectMicrosoftUserEmail(meId(),id);
   };
+
+  // ═════ APP-PASSWORD MAILBOXES (D-0120, R-200 step b): Zoho and any provider without a sign-in button ═════
+  // The person types an app password; the SERVER tries the mail servers and checks every step (sign in to send, sign in to read,
+  // a test email to themselves that must arrive) and answers with each one. Only when sending and reading both work is anything
+  // saved — and the password is kept encrypted on the server. It is never held here beyond the moment of pressing Connect.
+  window.mySetupSmtpOpen = function(id){
+    var m=myBoxes().filter(function(x){ return x.id===id; })[0]; if(!m) return;
+    M.smtp={ id:id, email:m.email_address, info:null, showServers:false, servers:{ smtp_host:'', smtp_port:'465', imap_host:'' }, busy:false, steps:null, ok:false, limit:null, err:'' };
+    paintSmtp();
+    apiGet('/smtp/info/'+id).then(function(r){
+      if (!M.smtp||M.smtp.id!==id) return;
+      M.smtp.info=r; if (r && r.enabled && !r.servers_known) M.smtp.showServers=true; paintSmtp();
+    }).catch(function(e){ if (M.smtp&&M.smtp.id===id){ M.smtp.err=(e&&e.message)||String(e); paintSmtp(); } });
+  };
+  window.mySetupSmtpClose = function(){ M.smtp=null; STATE.modal=null; render(); loadUserEmails(meId()); };
+  function readSmtp(){
+    var s=M.smtp; if(!s) return;
+    var g=function(id){ var e=document.getElementById(id); return e?String(e.value||'').trim():null; }, v;
+    if ((v=g('ms-smtp-host'))!==null) s.servers.smtp_host=v;
+    if ((v=g('ms-smtp-port'))!==null) s.servers.smtp_port=v;
+    if ((v=g('ms-imap-host'))!==null) s.servers.imap_host=v;
+  }
+  window.mySetupSmtpServers = function(){ var s=M.smtp; if(!s) return; readSmtp(); s.showServers=!s.showServers; paintSmtp(); };
+  window.mySetupSmtpConnect = function(){
+    var s=M.smtp; if(!s||s.busy) return; readSmtp();
+    var pw=(document.getElementById('ms-smtp-pass')||{}).value||'';
+    if (!pw){ s.err='Type the app password.'; paintSmtp(); return; }
+    s.busy=true; s.err=''; s.steps=null; paintSmtp();
+    var body={ password:pw };
+    if (s.showServers && (s.servers.smtp_host||s.servers.imap_host)){ body.smtp_host=s.servers.smtp_host; body.smtp_port=Number(s.servers.smtp_port)||465; body.imap_host=s.servers.imap_host; body.imap_port=993; }
+    apiPost('/smtp/connect/'+s.id, body).then(function(r){
+      s.busy=false; s.steps=r.steps||[]; s.ok=!!r.ok; s.limit=r.daily_send_limit||null;
+      if ((r.steps||[]).some(function(x){ return x.needs_servers; })) s.showServers=true;
+      if (r.ok){ loadUserEmails(meId()); mySetupSync(); }
+      paintSmtp();
+    }).catch(function(e){ s.busy=false; s.err=(e&&e.message)||String(e); paintSmtp(); });
+  };
+  function paintSmtp(){
+    var s=M.smtp; if(!s){ STATE.modal=null; render(); return; }
+    var info=s.info, g=info&&info.guide;
+    var off = info && info.enabled===false;
+    var guide = g ? '<div class="card cp"><div class="fs-13 fd-strong">'+esc(g.title)+'</div><ol class="fs-12_5 c-text2">'+(g.steps||[]).map(function(t){ return '<li>'+esc(t)+'</li>'; }).join('')+'</ol>'+
+        (g.note?'<div class="fd-hint">'+esc(g.note)+'</div>':'')+'</div>' : '<div class="fd-hint">Loading…</div>';
+    var servers = s.showServers
+      ? '<div class="fd-grid"><div><div class="fd-label">Outgoing server (SMTP)</div><input id="ms-smtp-host" class="inp fd-wide" placeholder="e.g. smtp.example.com" value="'+esc(s.servers.smtp_host)+'"></div>'+
+        '<div><div class="fd-label">Port</div><select id="ms-smtp-port" class="sel fd-wide"><option value="465"'+(String(s.servers.smtp_port)==='465'?' selected':'')+'>465 (secure)</option><option value="587"'+(String(s.servers.smtp_port)==='587'?' selected':'')+'>587 (secure, STARTTLS)</option></select></div></div>'+
+        '<div class="fd-label">Incoming server (IMAP, port 993)</div><input id="ms-imap-host" class="inp fd-wide" placeholder="e.g. imap.example.com" value="'+esc(s.servers.imap_host)+'">'
+      : '';
+    var steps = (s.steps||[]).map(function(x){
+      return '<div class="fd-row"><span class="'+(x.ok?'c-green':'c-red')+' fd-strong">'+(x.ok?'✓':'✗')+'</span><div class="fd-grow"><div class="fs-13 fd-strong">'+esc(x.label)+'</div><div class="fs-12_5 c-text2">'+esc(x.message||'')+'</div></div></div>';
+    }).join('');
+    var ready = s.ok
+      ? '<div class="card cp"><div class="fs-14 fd-strong">✓ Mailbox ready</div><div class="fs-12_5 c-text2">'+esc(s.email)+' is connected. PACE sends from it and notices replies and bounces.'+
+        (s.limit?' It starts at '+esc(String(s.limit))+' emails a day; an admin can raise that.':'')+'</div>'+
+        '<div class="fd-hint">The in-app inbox is not available for app-password mailboxes yet — read this mailbox in its own webmail.</div></div>' : '';
+    var body = off
+      ? '<div class="card cp"><div class="fs-13 c-red" role="alert">'+esc(info.reason||'App-password mailboxes are not available on this server.')+'</div></div>'
+      : (s.ok ? steps+ready
+        : guide+'<div class="fd-label">App password for '+esc(s.email)+'</div><input id="ms-smtp-pass" class="inp fd-wide" type="password" autocomplete="off" placeholder="Paste the app password" onkeydown="if(event.key===\'Enter\'){mySetupSmtpConnect()}">'+
+          '<div class="fd-row"><button type="button" class="fd-pill" onclick="mySetupSmtpServers()">'+(s.showServers?'Hide the mail servers':'My provider needs other mail servers')+'</button></div>'+servers+
+          (steps?'<div class="fd-label">What happened</div>'+steps:'')+(s.err?'<div class="fs-13 c-red" role="alert">'+esc(s.err)+'</div>':''));
+    STATE.modal='<div class="modal modal-w640" onclick="event.stopPropagation()"><div class="mh"><div class="mt">Connect '+esc(s.email)+' with an app password</div>'+
+      '<button class="btn-icon" onclick="mySetupSmtpClose()">'+ico('x',14)+'</button></div>'+
+      '<div class="mb_" style="max-height:68vh;overflow:auto">'+body+'</div>'+
+      '<div class="mf">'+(s.ok?'<button class="btn btn-primary" onclick="mySetupSmtpClose()">Done</button>'
+        : '<button class="btn btn-outline" onclick="mySetupSmtpClose()">'+(off?'Close':'Cancel')+'</button>'+(off?'':'<button class="btn btn-primary" '+((s.busy||!info)?'disabled':'')+' onclick="mySetupSmtpConnect()">'+(s.busy?'Checking each step…':'Connect')+'</button>'))+'</div></div>';
+    render();
+  }
   window.mySetupRemove = function(id){
     var m=myBoxes().filter(function(x){ return x.id===id; })[0]; if(!m) return;
     if (!confirm('Remove '+m.email_address+'? Leads waiting on it are moved to another of your mailboxes when there is one. Nothing already sent is touched.')) return;

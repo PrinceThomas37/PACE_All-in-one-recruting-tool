@@ -66,6 +66,11 @@ const companyDailyCap = require('./services/company-daily-cap');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { createGmailDelivery, freshFollowup } = require('./services/gmail-delivery');
+// App-password mailboxes — SMTP to send, IMAP to read (D-0120, R-200 step b). Zoho and any provider without an OAuth sign-in.
+const mailboxSecret = require('./services/mailbox-secret');
+const { createSmtpStore } = require('./services/smtp-store');
+const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mailbox');
+const { createSmtpDelivery } = require('./services/smtp-delivery');
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
@@ -1638,6 +1643,27 @@ async function deliverViaGmail(email, userEmailId, htmlBody, sendingEmail) {
   return gmailDelivery.deliver(email, userEmailId, htmlBody, sendingEmail);
 }
 
+// App-password delivery (SMTP) — the third provider. It threads by Message-ID / In-Reply-To / References that PACE writes itself.
+let smtpDelivery = null;
+async function deliverViaSmtp(email, userEmailId, htmlBody, sendingEmail) {
+  if (!smtpDelivery) smtpDelivery = createSmtpDelivery({ supabase, store: smtpStore, mailbox: smtpMailbox, buildQuote: buildQuotedChainFromDb });
+  return smtpDelivery.deliver(email, userEmailId, htmlBody, sendingEmail);
+}
+
+// For the recruiter / candidate / client mail routes (routes/recruiting/outreach.js): which of these mailboxes are connected with an
+// app password, and a fresh message from one.
+async function smtpConnectedIds(ids) {
+  if (!ids || !ids.length) return new Set();
+  try {
+    const { data } = await supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids);
+    return new Set((data || []).filter(t => !t.refresh_failed).map(t => t.user_email_id));
+  } catch (_) { return new Set(); }
+}
+async function sendSmtpNewMessage(mailbox, msg) {
+  if (!smtpDelivery) smtpDelivery = createSmtpDelivery({ supabase, store: smtpStore, mailbox: smtpMailbox, buildQuote: buildQuotedChainFromDb });
+  return smtpDelivery.sendNew(mailbox, msg);
+}
+
 async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEmail) {
   // ONE identity for the whole message. The body, the subject and the signature
   // are all filled from the mailbox this send actually authenticates with, so
@@ -1666,6 +1692,9 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   const platform = (sendingEmail?.platform || 'Microsoft').toLowerCase();
   if (platform === 'gmail' || platform === 'google') {
     return deliverViaGmail(email, userEmailId, htmlBody, sendingEmail);
+  }
+  if (platform === 'smtp') {
+    return deliverViaSmtp(email, userEmailId, htmlBody, sendingEmail);
   }
   const isFollowup = followupSteps.isFollowupType(email.followup_type);
   if (!isFollowup) {
@@ -2094,6 +2123,14 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'Gmail sending is not configured on the server yet' });
       await recordSendFailure(email, 'Gmail sending is not configured on the server yet', 'Gmail sending is not configured on the server yet');
+      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      continue;
+    }
+    if (platform === 'smtp' && !mailboxSecret.isConfigured()) {
+      sendAttempts++;
+      failed++;
+      failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'App-password sending is not configured on the server yet' });
+      await recordSendFailure(email, 'App-password sending is not configured on the server yet', 'App-password sending is not configured on the server yet (MAILBOX_SECRET_KEY).');
       await setSendProgress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
@@ -2837,6 +2874,71 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
   }
 }
 
+// The NDR rule, shared by every provider's bounce sweep: a message from a mail-delivery daemon names the address that bounced, and
+// that contact is marked invalid (so it stops being mailed and its follow-ups are cancelled). `messages` are Graph-shaped.
+async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder, newestStart) {
+  let marked = 0, newest = newestStart;
+  for (const msg of messages) {
+    if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
+    if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
+    if (!isNdrMessage(msg)) continue;
+    const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
+    for (const addr of extractBounceRecipients(text, ownAddresses)) {
+      const { data: matches } = await supabase.from('contacts')
+        .select('id,email_status,job_id').ilike('email', addr).limit(10);
+      for (const c of (matches || [])) {
+        if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
+        await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
+        emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
+        emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
+        await logActivity(c.job_id, c.id, null, 'email_bounced',
+          `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
+          { source: 'ndr', mailbox: tokenRow.email_address, folder });
+        marked++;
+      }
+    }
+  }
+  return { marked, newest };
+}
+
+// App-password (SMTP/IMAP) mailboxes: the same two sweeps, reading the inbox over IMAP (read-only — nothing is moved, marked or
+// deleted). A refused password is recorded so the mailbox shows "reconnect" and is not hammered; a network hiccup is NOT a refusal.
+async function readSmtpMailbox(tokenRow, folders, since) {
+  const loaded = await smtpStore.get(tokenRow.user_email_id);
+  if (!loaded || loaded.error) return null;
+  try {
+    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: 50 });
+    await smtpStore.outcome(tokenRow.user_email_id, true);
+    return msgs;
+  } catch (e) {
+    const x = explainSmtp(e, 'imap', { host: loaded.cfg.imap.host });
+    if (x.kind === 'auth' || x.kind === 'imap_off') await smtpStore.outcome(tokenRow.user_email_id, false, x.message);
+    console.error(`[Sweep/smtp] ${tokenRow.email_address}: ${x.message}`);
+    return null;
+  }
+}
+async function sweepSmtpBounces(tokenRow, ownAddresses) {
+  const sinceKey = `bounce_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const msgs = await readSmtpMailbox(tokenRow, ['INBOX', 'Junk', 'Spam', 'Junk Email'], since);
+  if (!msgs) return 0;
+  const r = await markBouncesFromMessages(msgs, ownAddresses, tokenRow, 'smtp', since);
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: r.newest, updated_at: new Date() }, { onConflict: 'key' });
+  try { await maybeAutoPauseMailboxOnBounces(tokenRow.user_email_id, r.marked); } catch (_) {}
+  return r.marked;
+}
+async function sweepSmtpReplies(tokenRow, ownAddresses) {
+  const sinceKey = `reply_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const msgs = await readSmtpMailbox(tokenRow, ['INBOX'], since);
+  if (!msgs) return 0;
+  const { detected, newest } = await processInboundMessages(msgs, ownAddresses, tokenRow, since);
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
+  return detected;
+}
+
 async function sweepMailboxBounces(tokenRow, ownAddresses) {
   let accessToken;
   try { accessToken = await getMicrosoftToken(tokenRow.user_email_id); }
@@ -2856,26 +2958,8 @@ async function sweepMailboxBounces(tokenRow, ownAddresses) {
     let data;
     try { data = await graphMailRequest(accessToken, path); }
     catch (e) { console.error(`[BounceSweep] ${folder} list for ${tokenRow.email_address}: ${e.message}`); continue; }
-    for (const msg of (data.value || [])) {
-      if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
-      if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
-      if (!isNdrMessage(msg)) continue;
-      const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
-      for (const addr of extractBounceRecipients(text, ownAddresses)) {
-        const { data: matches } = await supabase.from('contacts')
-          .select('id,email_status,job_id').ilike('email', addr).limit(10);
-        for (const c of (matches || [])) {
-          if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
-          await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
-          emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
-          emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
-          await logActivity(c.job_id, c.id, null, 'email_bounced',
-            `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
-            { source: 'ndr', mailbox: tokenRow.email_address, folder });
-          marked++;
-        }
-      }
-    }
+    const r = await markBouncesFromMessages(data.value || [], ownAddresses, tokenRow, folder, newest);
+    marked += r.marked; newest = r.newest;
   }
   await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
 
@@ -2890,14 +2974,19 @@ async function runBounceSweep() {
     // org_id added so EMAIL_BOUNCED/CONTACT_INVALIDATED below can carry it —
     // see the C-0021 X4 note on emit() near events.js.
     const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
-    if (!tokens || !tokens.length) return 0;
+    const sm = (await smtpStore.listConnected()).filter(t => !t.refresh_failed);
+    if ((!tokens || !tokens.length) && !sm.length) return 0;
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    tokens.forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...(tokens || []), ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
     let total = 0;
-    for (const t of tokens) {
+    for (const t of (tokens || [])) {
       try { total += await sweepMailboxBounces(t, ownAddresses); }
       catch (e) { console.error(`[BounceSweep] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of sm) {
+      try { total += await sweepSmtpBounces(t, ownAddresses); }
+      catch (e) { console.error(`[BounceSweep/smtp] ${t.email_address}: ${e.message}`); }
     }
     if (total) console.log(`[BounceSweep] marked ${total} contact(s) invalid from NDRs`);
     return total;
@@ -2961,7 +3050,7 @@ async function storeConversationMessage(msg, { direction, from, tokenRow, contac
       contact_id: contactId || null,
       candidate_id: candidateId || null,
       job_id: jobId || null,
-      provider: msg._provider === 'gmail' ? 'gmail' : 'microsoft',
+      provider: msg._provider === 'gmail' ? 'gmail' : (msg._provider === 'smtp' ? 'smtp' : 'microsoft'),
       thread_key: msg.conversationId || msg.threadId || null,
       message_key: msg.id || null,
       direction,
@@ -3171,11 +3260,12 @@ async function runReplySweep() {
     const { data: msTokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
     const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address,org_id');
     const ms = msTokens || [], gm = gmTokens || [];
-    if (!ms.length && !gm.length) return 0;
+    const sm = (await smtpStore.listConnected()).filter(t => !t.refresh_failed);
+    if (!ms.length && !gm.length && !sm.length) return 0;
 
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    [...ms, ...gm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...ms, ...gm, ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
 
     let total = 0;
     for (const t of ms) {
@@ -3185,6 +3275,10 @@ async function runReplySweep() {
     for (const t of gm) {
       try { total += await sweepGmailReplies(t, ownAddresses); }
       catch (e) { console.error(`[ReplySweep/gmail] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of sm) {
+      try { total += await sweepSmtpReplies(t, ownAddresses); }
+      catch (e) { console.error(`[ReplySweep/smtp] ${t.email_address}: ${e.message}`); }
     }
     if (total) console.log(`[ReplySweep] detected ${total} repl(ies) — sequences stopped`);
     return total;
@@ -3436,6 +3530,8 @@ const MS_SCOPES   = config.microsoft.scopes;
 // Gmail / Google Workspace provider — inert until GOOGLE_CLIENT_ID/SECRET are
 // set (see config/env.js). Microsoft path is unaffected.
 const gmailProvider = createGmailProvider({ supabase, google: config.google });
+const smtpStore = createSmtpStore({ supabase });
+const smtpMailbox = createSmtpMailbox({ nodemailer: require('nodemailer'), ImapFlow: require('imapflow').ImapFlow, simpleParser: require('mailparser').simpleParser });
 
 
 
@@ -3651,6 +3747,7 @@ app.use(require('./routes/mailbox')(routeCtx));
 // route modules, which already own each provider's registered redirect URI.
 app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 app.use(require('./routes/org-domains')(routeCtx));
+app.use(require('./routes/smtp-mailbox')({ ...routeCtx, smtp: { store: smtpStore, mailbox: smtpMailbox, secret: mailboxSecret } }));
 app.use(require('./routes/plans')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor, loadSuppressedSet });
@@ -3849,6 +3946,7 @@ const recruitingOutreach = require('./routes/recruiting/outreach')(app, {
   getMailboxSignature, getMicrosoftToken, warmupLimit,
   isSendingPaused, isManagerPaused, loadMailboxDelivState, loadSuppressedSet,
   friendlySendError,
+  smtpConnectedIds, sendSmtpNewMessage,       // app-password mailboxes (D-0120, R-200 step b)
 });
 
 // ── Outreach generator (the Email page's "Generator" tab) ──────────────────

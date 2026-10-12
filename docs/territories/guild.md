@@ -805,3 +805,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - Follow-up chains (`services/followup-chain.js`, `followup-steps.js`) now begin at the first send and only for follow-ups the person turned on; old chains (`chain_rules` NULL) unchanged. The Sequences builder is untouched (a contact in an active sequence gets no chain).
+
+## 2026-10-12 (Session 44) — recruiter / candidate / client mail can send from an app-password mailbox (D-0121)
+- `routes/recruiting/outreach.js`: `recruiterSendingMailbox`, `connectedMailboxById` and `ownSendingMailboxes` count a mailbox with a working `smtp_credentials` row as connected (via `smtpConnectedIds`), and `sendMailboxNewMessage` has an SMTP branch (`sendSmtpNewMessage`). Both come from `index.js` through the module's ctx and are absent-safe in a bare test ctx.

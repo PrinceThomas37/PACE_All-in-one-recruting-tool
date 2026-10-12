@@ -16,12 +16,13 @@ async function findFallbackMailbox(supabase, userId, excludeId) {
   if (!candidates || !candidates.length) return null;
 
   const ids = candidates.map(c => c.id);
-  const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
+  const [{ data: msTokens }, { data: gmailTokens }, smtpRes] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
     supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
+    supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids),   // app-password mailboxes (migration 063)
   ]);
   const connectedIds = new Set(
-    [...(msTokens || []), ...(gmailTokens || [])]
+    [...(msTokens || []), ...(gmailTokens || []), ...((smtpRes && smtpRes.data) || [])]
       .filter(t => !t.refresh_failed)
       .map(t => t.user_email_id)
   );

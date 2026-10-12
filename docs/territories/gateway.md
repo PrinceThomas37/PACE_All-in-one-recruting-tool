@@ -1134,3 +1134,7 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 ## 2026-10-12 (Session 44) — company email setup route (R-200 step a, D-0120)
 - `routes/org-domains.js`: `GET /org/domains/:id/email-setup` (admin only; the domain must be one THIS organisation has claimed, else 404 — it is not a DNS probe). Runs `services/email-setup.js` against DNS (injectable `ctx.emailSetupResolver` for tests); `?dkim_selector=` for a provider's own DKIM name. Read-only. `smtpAvailable` is passed as false until the SMTP/IMAP connection exists.
 - Release: #325 merged to `main` (`ab93353`) 12 Oct; full suite 239/239 on Node 22 and on Node 26 (v26.11.1).
+
+## 2026-10-12 (Session 44) — `routes/smtp-mailbox.js` and the wiring (D-0121)
+- `GET /smtp/enabled`, `GET /smtp/info/:userEmailId`, `POST /smtp/connect/:userEmailId`, `GET /smtp/status/:userEmailId`, `DELETE /smtp/:userEmailId`. The slot must be the caller's own (or caller an admin) in the caller's organisation — 404 otherwise. Connect answers 200 with every step; nothing is saved unless sending AND reading work. Six tries per person per ten minutes. 503 `not_configured` with no `MAILBOX_SECRET_KEY`.
+- `index.js`: `deliverViaSmtp`, `smtpConnectedIds`, `sendSmtpNewMessage` (handed to `routes/recruiting/outreach.js`), a send-loop gate ("not configured on the server" = needs a person), the two sweeps, `msg._provider === 'smtp'` on stored conversation rows. Migration 063 must be applied BEFORE merge; the code reads a missing table as "not connected".

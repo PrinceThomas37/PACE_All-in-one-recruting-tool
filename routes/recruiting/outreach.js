@@ -36,7 +36,9 @@ module.exports = function (app, ctx) {
     getMailboxSignature, getMicrosoftToken, warmupLimit,
     isSendingPaused, isManagerPaused, loadMailboxDelivState, loadSuppressedSet,
     friendlySendError,
+    smtpConnectedIds, sendSmtpNewMessage,        // app-password mailboxes (D-0120, R-200 step b); absent in a bare test ctx
   } = ctx;
+  const smtpLive = async (ids) => (smtpConnectedIds ? smtpConnectedIds(ids) : new Set());
   // This module's own ctx never carried org helpers (unlike routeCtx), but
   // `auth()` sets `req.orgId` on every request regardless of which router
   // receives it — self-contained, no gateway change needed.
@@ -131,11 +133,13 @@ async function recruiterSendingMailbox(recruiterId) {
     .eq('user_id', recruiterId).order('is_primary', { ascending: false });
   if (!mailboxes?.length) return null;
   const ids = mailboxes.map(m => m.id);
-  const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
+  const [{ data: msTokens }, { data: gmailTokens }, smtpIds] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
-    supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids)
+    supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+    smtpLive(ids),
   ]);
   const connected = new Set([...(msTokens || []), ...(gmailTokens || [])].map(t => t.user_email_id));
+  smtpIds.forEach(i => connected.add(i));
   return mailboxes.find(m => connected.has(m.id) && m.is_active !== false) || null;
 }
 
@@ -143,6 +147,9 @@ async function recruiterSendingMailbox(recruiterId) {
 // the Microsoft/Gmail counterpart to sendMicrosoftNewMessage alone. Both
 // providers return a message + thread/conversation id in the same shape.
 async function sendMailboxNewMessage(mailbox, { to, subject, htmlBody, attachments, cc }) {
+  if (String(mailbox.platform || '').toLowerCase() === 'smtp') {
+    return sendSmtpNewMessage(mailbox, { to, cc: Array.isArray(cc) ? cc : (cc ? [cc] : undefined), subject, htmlBody, attachments });
+  }
   if (mailbox.platform === 'Gmail') {
     const r = await gmailProvider.sendNewMessage(mailbox.id, { to, cc, subject, htmlBody, attachments, fromAddress: mailbox.email_address });
     return { graphMessageId: r.messageId, conversationId: r.threadId || null, inReplyTo: null };
@@ -224,6 +231,7 @@ async function connectedMailboxById(id) {
     .select('id,email_address,display_name,is_primary,is_active,daily_send_limit,platform')
     .eq('id', id).maybeSingle();
   if (!mb || mb.is_active === false) return null;
+  if (String(mb.platform || '').toLowerCase() === 'smtp') return (await smtpLive([id])).has(id) ? mb : null;
   const tokenTable = mb.platform === 'Gmail' ? 'gmail_tokens' : 'microsoft_tokens';
   const { data: tok } = await supabase.from(tokenTable).select('user_email_id').eq('user_email_id', id).maybeSingle();
   return tok ? mb : null;
@@ -245,11 +253,13 @@ async function ownSendingMailboxes(req) {
   const mine = (rows || []).filter(m => m.is_active !== false && (!org || !m.org_id || m.org_id === org));
   if (!mine.length) return [];
   const ids = mine.map(m => m.id);
-  const [{ data: ms }, { data: gm }] = await Promise.all([
+  const [{ data: ms }, { data: gm }, smtpIds] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
     supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+    smtpLive(ids),
   ]);
   const live = new Set([...(ms || []), ...(gm || [])].map(t => t.user_email_id));
+  smtpIds.forEach(i => live.add(i));
   return mine.filter(m => live.has(m.id));
 }
 // A requested id that is not one of yours answers null — the caller then refuses.

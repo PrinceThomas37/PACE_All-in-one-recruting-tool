@@ -49,14 +49,18 @@ function deriveTokenStatus(row) {
 async function mailboxConnections(supabase, ids) {
   const out = {};
   if (!ids || !ids.length) return out;
-  let ms = [], gm = [];
+  let ms = [], gm = [], sm = [];
   try { const { data } = await supabase.from('microsoft_tokens').select('*').in('user_email_id', ids); ms = data || []; } catch (_) {}
   try { const { data } = await supabase.from('gmail_tokens').select('*').in('user_email_id', ids); gm = data || []; } catch (_) {}
+  // App-password mailboxes (migration 063): never selects the password column — only what the status needs.
+  try { const { data } = await supabase.from('smtp_credentials').select('user_email_id,refresh_failed,last_refresh_at,last_refresh_error,updated_at').in('user_email_id', ids); sm = data || []; } catch (_) {}
   const msBy = {}; ms.forEach(r => { msBy[r.user_email_id] = r; });
   const gmBy = {}; gm.forEach(r => { gmBy[r.user_email_id] = r; });
+  const smBy = {}; sm.forEach(r => { smBy[r.user_email_id] = r; });
   ids.forEach(id => {
     if (msBy[id]) out[id] = Object.assign({ platform: 'microsoft' }, deriveTokenStatus(msBy[id]));
     else if (gmBy[id]) out[id] = Object.assign({ platform: 'gmail' }, deriveTokenStatus(gmBy[id]));
+    else if (smBy[id]) out[id] = Object.assign({ platform: 'smtp' }, deriveTokenStatus(smBy[id]));
     else out[id] = { connected: false, status: 'none', platform: null };
   });
   return out;

@@ -27,9 +27,13 @@ step('pure: already the lead\'s own mailbox → null (nothing to change)', fs.pi
 const D = {
   emails: [
     R('c1', 'daniel@x.com', null, 'sent', '2026-09-01'), R('c2', 'ghost@x.com', null, 'sent', '2026-09-01'), R('c3', 'daniel@x.com', null, 'sent', '2026-09-01'),
-    R('c4', 'erin@x.com', null, 'sent', '2026-09-01'), R('c5', 'off@x.com', null, 'sent', '2026-09-01'), R('c6', 'daniel@x.com', null, 'sent', '2026-09-01'), R('c7', 'daniel@x.com', 'fu1', 'sent', '2026-09-05')],
-  user_emails: [{ id: 'mbD', email_address: 'daniel@x.com', is_active: true }, { id: 'mbE', email_address: 'erin@x.com', is_active: true }, { id: 'mbX', email_address: 'off@x.com', is_active: false }],
+    R('c4', 'erin@x.com', null, 'sent', '2026-09-01'), R('c5', 'off@x.com', null, 'sent', '2026-09-01'), R('c6', 'daniel@x.com', null, 'sent', '2026-09-01'), R('c7', 'daniel@x.com', 'fu1', 'sent', '2026-09-05'),
+    R('c8', 'zed@x.com', null, 'sent', '2026-09-01'), R('c9', 'gus@x.com', null, 'sent', '2026-09-01')],
+  user_emails: [{ id: 'mbD', email_address: 'daniel@x.com', is_active: true }, { id: 'mbE', email_address: 'erin@x.com', is_active: true }, { id: 'mbX', email_address: 'off@x.com', is_active: false },
+    { id: 'mbZ', email_address: 'zed@x.com', is_active: true, platform: 'SMTP' }, { id: 'mbG', email_address: 'gus@x.com', is_active: true, platform: 'SMTP' }],
   microsoft_tokens: [{ user_email_id: 'mbD' }, { user_email_id: 'mbX' }], gmail_tokens: [{ user_email_id: 'mbE' }],
+  // app-password mailboxes (migration 063): Zed's works; Gus's password was refused, so he does not count as connected
+  smtp_credentials: [{ user_email_id: 'mbZ', refresh_failed: false }, { user_email_id: 'mbG', refresh_failed: true }],
 };
 let failRead = false;
 const supabase = { from: (t) => { const f = []; const api = { select() { return api; }, in(k, v) { f.push(r => v.includes(r[k])); return api; }, eq(k, v) { f.push(r => r[k] === v); return api; },
@@ -45,10 +49,13 @@ const pending = [
   FU('e7', 'c1', 'mbS', null),           // a FIRST email → untouched
   FU('e8', 'c1', 'mbS', 'reminder'),     // a reminder → untouched
   FU('e9', 'c7', 'mbS'),                 // only a follow-up has been sent so far → no first sender → stays
+  FU('e10', 'c8', 'mbS'),                // Zed's is an app-password mailbox and connected → pinned
+  FU('e11', 'c9', 'mbS'),                // Gus's app password was refused → not connected → stays
 ];
 const pins = await fs.resolveFollowupPins(supabase, pending, { e6: 'mbRot' });
 step('a follow-up on a lead handed to a colleague leaves from the mailbox that started it', pins.e1 && pins.e1.id === 'mbD', JSON.stringify(Object.keys(pins)));
 step('…including a Gmail mailbox', pins.e4 && pins.e4.id === 'mbE');
+step('…and an app-password mailbox (SMTP) that is connected; one whose password was refused is left alone', pins.e10 && pins.e10.id === 'mbZ' && !pins.e11);
 step('first sender\'s mailbox gone / switched off / already the lead\'s own → no change', !pins.e2 && !pins.e5 && !pins.e3);
 step('an explicit per-email choice is never overridden', !pins.e6);
 step('first emails and reminders are never re-pointed', !pins.e7 && !pins.e8);

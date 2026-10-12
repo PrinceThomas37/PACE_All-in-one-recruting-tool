@@ -192,12 +192,13 @@ module.exports = (ctx) => {
       .select('id,daily_send_limit').eq('user_id', userId).eq('is_active', true);
     if (!userEmails || !userEmails.length) return null;
     const emailIds = userEmails.map(e => e.id);
-    const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
+    const [{ data: msTokens }, { data: gmailTokens }, smtpRes] = await Promise.all([
       D.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
       D.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
+      D.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', emailIds),   // app-password mailboxes (migration 063)
     ]);
     const connectedIds = new Set(
-      [...(msTokens || []), ...(gmailTokens || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id)
+      [...(msTokens || []), ...(gmailTokens || []), ...((smtpRes && smtpRes.data) || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id)
     );
     const connected = userEmails.filter(e => connectedIds.has(e.id));
     if (!connected.length) return null;
