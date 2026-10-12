@@ -564,14 +564,31 @@ function renderEmail(){
       // (`/emails/queue-all` is server-scoped to `sent_by=req.user.id`
       // regardless of what is shown), so the count and the confirm modal
       // must say so rather than promise a number they will not send.
-      var minePending=pending.filter(function(e){return e.is_mine!==false;});
-      var totalRecipients=pending.length;
-      var mineCount=minePending.length;
+      // "Review & send" on a Find Leads card narrows this list to that ONE lead's emails and ticks them (18-email-status-actions.js
+      // pendingView() is the one place that rule lives). "Send all pending" still means the person's whole queue — and says so.
+      var pv=pendingView();
+      var focus=pv.focus;
+      var minePending=pv.all.filter(function(e){return e.is_mine!==false;});
+      var listed=pv.list;
+      var totalRecipients=listed.length;
+      var mineCount=pv.mineAll;
       var _pPg=Math.min(STATE.pendingEmailPage||0,Math.max(0,Math.ceil(totalRecipients/20)-1));
       var _pTp=Math.max(1,Math.ceil(totalRecipients/20));
-      var pendingPaged=pending.slice(_pPg*20,(_pPg+1)*20);
+      var pendingPaged=listed.slice(_pPg*20,(_pPg+1)*20);
       var sendBlocked=!mineCount||STATE.mySendingPaused;
-      var sendAllBtn='<button class="btn btn-primary" onclick="openSendAllConfirm()"'+(sendBlocked?' disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+mineCount+')</button>';
+      var sendAllBtn='<button class="btn '+(focus?'btn-outline':'btn-primary')+'" onclick="openSendAllConfirm()"'+(sendBlocked?' disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send all pending ('+mineCount+')</button>';
+      var selBlocked=!pv.ids.length||STATE.mySendingPaused;
+      var sendSelBtn=(pv.mineInList.length?'<button class="btn btn-primary" onclick="openSendSelectedConfirm()"'+(selBlocked?' disabled':'')+(STATE.mySendingPaused?' title="Sending is paused"':'')+'>Send selected ('+pv.ids.length+')</button>':'');
+      var allTicked=pv.mineInList.length>0&&pv.mineInList.every(pv.isTicked);
+      var focusBanner=focus?(
+        '<div class="card cp mb3" role="status" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div>'+
+          '<div class="fw6 fs-13">Only '+htmlEsc(focus.label||'this lead')+'</div>'+
+          '<div class="fs-12_5 c-text2">'+(!listed.length
+            ? 'Nothing is waiting for this lead any more — it may already have gone out (see All email).'
+            : (pv.mineInList.length
+              ? (pv.mineInList.length+(pv.mineInList.length===1?' of your emails is':' of your emails are')+' waiting for this lead and ticked. Check '+(pv.mineInList.length===1?'it':'them')+', then press Send selected. Nothing else in your queue is touched.'+(listed.length>pv.mineInList.length?' A teammate\'s email is shown too — you can read it, only they can send it.':''))
+              : 'The email for this lead belongs to a teammate — you can read it here, only they can send it.'))+'</div></div>'+
+          '<button type="button" class="btn btn-outline btn-sm" onclick="clearPendingFocus()">Show all pending ('+pv.all.length+')</button></div>'):'';
 
       var pendingRows=pendingPaged.map(function(e){
         var isMine=e.is_mine!==false;
@@ -592,9 +609,10 @@ function renderEmail(){
         var capN=(STATE.pendingSummary&&STATE.pendingSummary.company_daily_cap)||2;
         var heldChip=heldIds.indexOf(e.id)>=0?'<span class="retry-chip held-chip" title="'+htmlEsc(capN+' '+(capN===1?'person':'people')+' at this company already got a first email today. This one goes tomorrow.')+'">Held · goes tomorrow</span>':'';
         var winBadge=aiBadge+((e.attempt_count>0&&e.retry_note)?'<span class="retry-chip">'+htmlEsc(e.retry_note)+'</span>':heldChip?heldChip:(tzRow2&&tzRow2.waiting_window>0&&!(tzRow2.ready_now>0))?'<span class="fs-10" style="padding:2px 7px;background:#fef3c7;color:#92400e;border-radius:6px;font-weight:600;margin-left:6px">Waiting · '+htmlEsc(leadTz)+'</span>':'<span class="fs-10 c-green" style="padding:2px 7px;background:var(--green-l);border-radius:6px;font-weight:600;margin-left:6px">Ready now</span>');
-        return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+'<td class="fs-13" style="padding:10px 12px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+ownerBadge+winBadge+'</div>'+'<div class="fs-11 c-text3">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td class="fs-12" style="padding:10px 12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span class="fs-11" style="padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
+        var tickCell='<td style="padding:10px 0 10px 12px;width:30px" onclick="event.stopPropagation()">'+(isMine?'<input type="checkbox" aria-label="Select this email to send" '+(pv.isTicked(e)?'checked ':'')+'onchange="togglePendingSel(\''+e.id+'\')">':'')+'</td>';
+        return '<tr style="border-bottom:1px solid var(--border2);cursor:pointer;background:'+rowBg+'" onclick="previewPendingEmail(\''+e.id+'\')">'+tickCell+'<td class="fs-13" style="padding:10px 12px"><div style="font-weight:500">'+htmlEsc(e.to_email)+fuBadge+ownerBadge+winBadge+'</div>'+'<div class="fs-11 c-text3">'+htmlEsc((e.contact&&e.contact.first_name?e.contact.first_name+' '+(e.contact.last_name||''):''))+'</div></td>'+'<td style="padding:10px 12px;font-size:12px;color:var(--text2)">'+htmlEsc(jname)+'</td>'+'<td class="fs-12" style="padding:10px 12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+htmlEsc(e.subject||'')+'</td>'+'<td style="padding:10px 12px;white-space:nowrap">'+(function(){var sc=e.status==='sent'?'background:var(--green-l);color:var(--green)':e.status==='failed'?'background:#fee2e2;color:#dc2626':'background:var(--amber-l);color:var(--amber)';return '<span class="fs-11" style="padding:2px 8px;'+sc+';border-radius:8px;font-weight:600">'+htmlEsc(e.status)+'</span>';})() +'</td>'+'</tr>';
       }).join('');
-      if(!pendingRows)pendingRows='<tr><td colspan="4" style="padding:40px;text-align:center;color:var(--text3)">No pending emails yet.</td></tr>';
+      if(!pendingRows)pendingRows='<tr><td colspan="5" style="padding:40px;text-align:center;color:var(--text3)">'+(focus?'Nothing pending for this lead.':'No pending emails yet.')+'</td></tr>';
 
     // Preview panel — Edit is the sender's own act (PATCH /emails/:id is
     // sender-scoped server-side), so it is offered only on the caller's own row.
@@ -660,17 +678,17 @@ function renderEmail(){
       '</div>'):'';
 
     pendingHtml='<div>'+scheduleBanner+
-      failedPanel+
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+      failedPanel+focusBanner+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap">'+
         // "pending", not "ready": what is ready NOW is the split under the tab.
-        '<div class="fs-13 c-text2">'+totalRecipients+' pending email'+(totalRecipients!==1?'s':'')+(totalRecipients!==mineCount?' · '+mineCount+' yours':'')+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
-        sendAllBtn+
+        '<div class="fs-13 c-text2">'+totalRecipients+' pending email'+(totalRecipients!==1?'s':'')+(focus?' for this lead':(totalRecipients!==mineCount?' · '+mineCount+' yours':''))+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+sendSelBtn+sendAllBtn+'</div>'+
       '</div>'+
       '<div style="display:flex;gap:14px;align-items:flex-start">'+
         '<div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+
           '<table class="fs-13" style="width:100%;border-collapse:collapse">'+
             '<thead class="c-text3 fs-11" style="background:var(--bg);text-transform:uppercase;letter-spacing:.5px">'+
-              '<tr><th style="padding:10px 12px;text-align:left">Recipient</th><th style="padding:10px 12px;text-align:left">Job</th><th style="padding:10px 12px;text-align:left">Subject</th><th style="padding:10px 12px;text-align:left">Status</th></tr>'+
+              '<tr><th style="padding:10px 0 10px 12px;width:30px">'+(pv.mineInList.length?'<input type="checkbox" aria-label="Select every one of your emails in this list" '+(allTicked?'checked ':'')+'onchange="togglePendingSelAll()">':'')+'</th><th style="padding:10px 12px;text-align:left">Recipient</th><th style="padding:10px 12px;text-align:left">Job</th><th style="padding:10px 12px;text-align:left">Subject</th><th style="padding:10px 12px;text-align:left">Status</th></tr>'+
             '</thead>'+
             '<tbody>'+pendingRows+'</tbody>'+
           '</table>'+

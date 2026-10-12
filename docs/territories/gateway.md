@@ -1127,3 +1127,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - `index.js`: after a FIRST email is marked sent, `followupChain.scheduleAfterFirstSend` makes the owner's chain (best effort); `distribute/execute` rows carry `chain_rules='own'`; `runFollowupEngine` passes `strict` to `followupTexts` for such rows. Old rows (`chain_rules` NULL) behave as before.
+
+## 2026-10-12 (Session 44) — `POST /emails/send-selected` brought level with Send all (R-193)
+- `index.js`: the route had its own shorter select (no `attempt_count`, `next_attempt_at`, `org_id`, `sent_by`, `template_variant`) and no retry-backoff filter — no screen called it, so it drifted. It now reads `PENDING_EMAIL_JOB_SELECT`, ordered, caps `email_ids` at 500, filters with `sendRetry.isDue`, answers `{ queued: 0 }` when nothing is due, and answers 500 when it fails before replying (it used to leave the request hanging). Still the caller's own `pending` rows only. Lesson: an endpoint with no caller rots; the Pending tab's "Send selected" is its first caller.

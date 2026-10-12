@@ -743,13 +743,23 @@
   function emailRow(x){
     var l=x.lead, e=l.email||{}, msg, btn='';
     if (e.sent>0) msg='✓ First email sent'+(e.from?' from '+esc(e.from):'')+(e.last_sent_at?' on '+esc(fmtDay(e.last_sent_at)):'')+'.';
-    else if (e.pending>0){ msg='✉ The first email is written and waiting in Email → Pending'+(e.from?' (from '+esc(e.from)+')':'')+'. Nothing goes out until you press Send.'; btn='<button class="btn btn-sm btn-primary" onclick="fdGoPending()">Review &amp; send</button>'; }
+    else if (e.pending>0){ msg='✉ The first email is written and waiting in Email → Pending'+(e.from?' (from '+esc(e.from)+')':'')+'. Nothing goes out until you press Send.'; btn='<button class="btn btn-sm btn-primary" title="Opens only this lead\'s email, ticked and ready — the rest of your queue is not touched" onclick="fdGoPending(\''+esc(x.id)+'\')">Review &amp; send</button>'; }
     else if (e.failed>0){ msg='⚠ The first email did not go out — it is under “Didn’t send” in Email → Pending.'; btn='<button class="btn btn-sm btn-outline" onclick="fdGoPending()">See it</button>'; }
     else { msg='No email has been written for this lead yet.'+(l.unowned?' It is Unassigned until its first email is written, or you assign it in Leads.':''); btn='<button class="btn btn-sm btn-primary" onclick="fdWriteFirst(\''+esc(l.id)+'\',this)">Write the first email</button>'; }
     return '<div class="fd-row fd-between fd-emailrow"><div class="fd-grow fs-12_5 c-text2">'+msg+'</div><div class="fd-row">'+btn+
       '<button class="btn btn-sm btn-outline" onclick="fdAnother(\''+esc(x.id)+'\')" title="Write to another person here, or about another job at this company">Email another job / person</button></div></div>';
   }
-  window.fdGoPending = function(){ STATE.emailTab='pending'; goPage('email'); if(typeof loadEmailsForCurrentUser==='function') loadEmailsForCurrentUser(); };
+  // With a history id ("Review & send"), the Pending tab opens on THAT lead's email only, ticked (owner, 12 Oct: it used to open the
+  // whole queue, with only a send-everything button). With none ("See it", for a failed one) it opens the tab as it is.
+  window.fdGoPending = function(histId){
+    var x = histId ? anItem(histId) : null, l = x && x.lead;
+    STATE.emailTab='pending';
+    STATE.pendingSel = {};
+    STATE.pendingEmailPage = 0;
+    STATE.pendingFocus = l ? { jobId:l.id, label:x.company_name } : null;
+    goPage('email');
+    if (typeof loadEmailsForCurrentUser==='function') loadEmailsForCurrentUser();
+  };
   window.fdWriteFirst = function(leadId, btn){
     if (btn) btn.disabled=true;
     apiPost('/emails/generate',{ job_ids:[leadId] }).then(function(g){

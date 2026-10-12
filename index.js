@@ -1224,14 +1224,20 @@ app.post('/emails/send-selected', auth, async (req, res) => {
     const { email_ids } = req.body;
     if (!Array.isArray(email_ids) || !email_ids.length) return res.status(400).json({ error: 'email_ids required' });
 
-    const { data: pendingEmails, error: fetchErr } = await supabase
+    // The SAME columns and the SAME "is it due" rule as Send all pending. This route had its own, shorter select list (no
+    // attempt_count / next_attempt_at / org_id / template_variant) from before the retry rules existed — nothing on screen
+    // called it, so it drifted. The Pending tab's "Send selected" now does, so it must send exactly what Send all would.
+    const { data: selectedRows, error: fetchErr } = await supabase
       .from('emails')
-      .select('id, to_email, subject, body, contact_id, job_id, from_email, followup_type, follow_up_id, job:jobs(timezone, company_id, sending_email_id, sending_email:user_emails!sending_email_id(id,email_address,display_name,platform,daily_send_limit,is_active))')
+      .select(PENDING_EMAIL_JOB_SELECT)
       .eq('sent_by', req.user.id)
       .eq('status', 'pending')
-      .in('id', email_ids);
+      .in('id', email_ids.slice(0, 500))
+      .order('created_at', { ascending: true });
     if (fetchErr) throw fetchErr;
-    if (!pendingEmails || !pendingEmails.length) return res.json({ success: true, sent: 0, failed: 0 });
+    const nowMs = Date.now();
+    const pendingEmails = (selectedRows || []).filter(e => sendRetry.isDue(e, nowMs));
+    if (!pendingEmails.length) return res.json({ success: true, queued: 0, sent: 0, failed: 0 });
 
     const totalCount = pendingEmails.length;
     const userId = req.user.id;
@@ -1260,7 +1266,11 @@ app.post('/emails/send-selected', auth, async (req, res) => {
       const left = (selectedSendsByUser.get(userId) || 1) - 1;
       if (left > 0) selectedSendsByUser.set(userId, left); else selectedSendsByUser.delete(userId);
     }
-  } catch (err) { console.error('[SendSelected] Error:', err.message); }
+  } catch (err) {
+    console.error('[SendSelected] Error:', err.message);
+    // An error before the answer was sent used to leave the request hanging for ever; the person is owed a reason.
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /emails/send-progress → extracted to routes/emails.js (mounted below).
