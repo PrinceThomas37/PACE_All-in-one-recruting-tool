@@ -6762,3 +6762,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, first-run mailbox connection (R-199) — design only
 - Owner asked for the first-run step 1 (connect an outreach mailbox) designed as a product manager would. Read the code: `public/js/69-page-mysetup.js`, `routes/my-setup.js`, `routes/gmail.js`, `routes/microsoft.js`, `config/env.js`, `services/setup-tasks.js`. Checked Google's and Microsoft's current rules on the web (Google: restricted scope = verification + security assessment; Testing mode = 100 test users and a 7-day sign-in lapse; Microsoft: unverified multi-tenant apps can be blocked from user consent). No code changed; no price quoted (sources disagree — get a quote).
+
+### SESSION 44, company onboarding and non-Google/Microsoft mailboxes (R-200) — design only
+- The owner said the company's domain is set up by PACE at purchase and employees then connect individually, and asked what happens with Zoho or any other provider. Checked the code: only Gmail and Microsoft mailboxes exist; no SMTP/IMAP path (`nodemailer` is installed, unused for mailboxes). Domain claim + auto-join and the SPF/DKIM/DMARC checks already exist. Recorded as R-200; no code changed.
