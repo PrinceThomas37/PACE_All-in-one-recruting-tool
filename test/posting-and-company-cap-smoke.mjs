@@ -104,7 +104,10 @@ const iBump = loop.indexOf('companySentToday[email.job.company_id] = ');
 const iSent = loop.indexOf("update({ status: 'sent', sent_at: today() })");
 step('the send loop asks the rule after the window check and before claiming', iWin > 0 && iCap > iWin && iClaim > iCap, [iWin, iCap, iClaim].join(','));
 step('…and counts a first email only after it was really sent', iBump > iSent && iSent > 0);
-step('the pending lists carry the lead\'s company', (SRC.match(/job:jobs\(timezone, company_id, sending_email_id/g) || []).length >= 2);
+// Send all pending and Send selected used to each paste their own column list (this asserted "at least two copies"); they now
+// share ONE (PENDING_EMAIL_JOB_SELECT, R-193), so the rule is: that list carries the company, and BOTH routes read it.
+step('the pending lists carry the lead\'s company (one shared column list, read by Send all and by Send selected)',
+  /const PENDING_EMAIL_JOB_SELECT = '[^']*job:jobs\(timezone, company_id, sending_email_id/.test(SRC) && (SRC.match(/\.select\(PENDING_EMAIL_JOB_SELECT\)/g) || []).length >= 2);
 
 const failed = results.filter(x => !x).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);
