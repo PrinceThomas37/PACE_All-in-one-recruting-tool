@@ -6765,3 +6765,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, company onboarding and non-Google/Microsoft mailboxes (R-200) — design only
 - The owner said the company's domain is set up by PACE at purchase and employees then connect individually, and asked what happens with Zoho or any other provider. Checked the code: only Gmail and Microsoft mailboxes exist; no SMTP/IMAP path (`nodemailer` is installed, unused for mailboxes). Domain claim + auto-join and the SPF/DKIM/DMARC checks already exist. Recorded as R-200; no code changed.
+
+### SESSION 44, website and design direction (R-201) — advice only
+- Owner said the website does not look good and asked where to start and where to take inspiration from; they know the message (all-in-one recruiting, AI that explains the business and helps decide) but not the look. Checked: there is no public marketing site (the logged-out page is the login box); the R-122 retro redesign is half-built (steps 1–2 live, 3–4 not), so Today is old counter tiles under the new frame; screenshots taken locally (scratchpad, not committed). Advised: choose a metaphor before colours; three directions (Morning paper — recommended, Mission control, Finish the arcade); sharpen the message to "win the client and fill the job in one place". Recorded as R-201; no code changed.
