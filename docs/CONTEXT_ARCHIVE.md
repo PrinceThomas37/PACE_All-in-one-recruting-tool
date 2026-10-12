@@ -6759,3 +6759,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, correction: the customers are recruiting firms (D-0119)
 - The owner corrected my reading of "neutral": PACE is sold to other recruiting firms; the point is that no customer is handed the owner's voice. Recorded D-0119; R-198 rewritten. The earlier "Recruiting pack / industry-neutral engine" suggestion is withdrawn. No code changed.
+
+### SESSION 44, first-run mailbox connection (R-199) — design only
+- Owner asked for the first-run step 1 (connect an outreach mailbox) designed as a product manager would. Read the code: `public/js/69-page-mysetup.js`, `routes/my-setup.js`, `routes/gmail.js`, `routes/microsoft.js`, `config/env.js`, `services/setup-tasks.js`. Checked Google's and Microsoft's current rules on the web (Google: restricted scope = verification + security assessment; Testing mode = 100 test users and a 7-day sign-in lapse; Microsoft: unverified multi-tenant apps can be blocked from user consent). No code changed; no price quoted (sources disagree — get a quote).

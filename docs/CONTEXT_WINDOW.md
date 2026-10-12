@@ -3,7 +3,7 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
-**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-198` (next `R-199`) · next migration `063` (062 is APPLIED).
+**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-199` (next `R-200`) · next migration `063` (062 is APPLIED).
 
 ## Now
 
