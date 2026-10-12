@@ -1341,3 +1341,9 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-08 (Session 43, fifth round, later) — R-189
 - `03-core-render.js`: `buildClientEmailVars` no longer falls back to the PROFILE name — no sender given leaves `{{sender}}`; `applyReminderTemplate` passes none, so a Compose reminder template keeps the token and the send fills it from the mailbox that sends. The old mail-merge (`13-`, `14-`, `10-page-modals`) and `openEmailPreviewModal` screens are unreachable (no caller) and pass the profile name on purpose (they open the person's own webmail); left alone.
+
+## 2026-10-12 (Session 44) — "Review & send" opens one lead; Send selected (R-193)
+- `18-email-status-actions.js` `pendingView()` is the ONE home of the Pending tab's narrowing and ticking: a focus (`STATE.pendingFocus = { jobId, label }`) narrows the list to one lead; with a focus the person's OWN rows start ticked, without one nothing is; a tick is `STATE.pendingSel[id]` true/false, "not stored" means that default. Only `is_mine` rows can be ticked. `openSendSelectedConfirm` names the recipients; `submitSendSelected` posts `/emails/send-selected` with exactly the ticked ids (never queue-all). A wrapper on `goPage` and `setEmailTab` drops the focus — it is for one visit.
+- `07-page-email.js` Pending (BD view): tick column + header box, a card banner (NOT `ld-box` — that box is unreadable on the Email page in the retro theme), "Send selected (n)" beside "Send all pending (N)" (the latter is the outline button while a focus is on). The banner counts only the person's own emails.
+- `68-page-finder.js` `fdGoPending(histId)` sets the focus from the saved lead; "See it" (a failed first email) still opens the tab as it is.
+- Not done: the Accept window's job pills and person details (R-197) — a real click selected every pill in a probe; waiting on the owner's exact screen.

@@ -2,8 +2,8 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
-**Updated**: 2026-10-08 (Cursor, after Session 43) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
-**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-192` (next `R-193`) · next migration `063` (062 is APPLIED).
+**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
+**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-198` (next `R-199`) · next migration `063` (062 is APPLIED).
 
 ## Now
 
@@ -23,6 +23,8 @@ Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolU
 - **Minimised windows:** drag the chip sideways along the bottom. A drag does not open it. A later click does. × closes it. The spot lasts until reload. Phone (860px and under) stays a scrolling row.
 
 **Also on the dev branch (D-0118, R-192):** New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. A paste that brings a font, a colour, or a highlight is stripped. The send-time writer was not touched.
+
+**Also on the dev branch (Session 44, R-193):** "Review & send" on a Find Leads lead opens Email → Pending on THAT lead's email only, ticked, with "Send selected (n)" (confirm names the recipients) and "Show all pending". Tick boxes on every Pending row. `POST /emails/send-selected` was brought level with Send all. **Waiting on the owner (asked 12 Oct):** several jobs in one email (R-194), multi-place search UX (R-195), which "ongoing search" to edit (R-196), the Accept-window pill / missing-details report (R-197), and the neutral-engine direction (R-198, with R-150).
 
 ## Still open (do not start unasked)
 
