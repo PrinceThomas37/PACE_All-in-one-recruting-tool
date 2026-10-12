@@ -1353,3 +1353,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-12 (Session 44) — My Setup: the app-password window (D-0121)
 - `69-page-mysetup.js`: "+ Add mailbox with an app password" appears only when `GET /smtp/enabled` says the server can store passwords; an app-password mailbox is labelled "App password" and offers "Enter the app password". The window (`mySetupSmtpOpen`) shows the provider's guide, a hidden password box, and — for a provider PACE does not know — the server boxes; each step the server returns is a ✓ or ✗ with its sentence; success ends on a "Mailbox ready" card that says the in-app inbox is not available. The password is read from the box at the moment of pressing Connect and is never kept in `STATE`. `20-email-accounts.js` labels the type "App password".
+
+## 2026-10-12 (Session 44) — "Mailbox ready" says the admin's limit (D-0122)
+- `69-page-mysetup.js`: the card now reads "Its daily limit is N emails, as set by your admin." instead of announcing a starting limit.

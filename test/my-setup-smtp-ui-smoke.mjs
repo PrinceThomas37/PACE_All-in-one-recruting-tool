@@ -99,12 +99,12 @@ try {
   step('the password is NOT left on the screen or in the page after the attempt', !m.includes(PW) && (await page.locator('#ms-smtp-pass').inputValue()) === '' && !(await page.evaluate((pw) => JSON.stringify(window.STATE.mySetup && window.STATE.mySetup.smtp || {}).includes(pw), PW)));
   step('a failed attempt is not "ready", and can be tried again', !/Mailbox ready/.test(m) && (await page.locator('.modal button', { hasText: /^Connect$/ }).count()) === 1);
 
-  await page.evaluate(() => { window.__connectAnswers.push({ ok: true, daily_send_limit: 30, steps: [ { id: 'servers', ok: true, label: 'Found your mail servers', message: 'Zoho (business) — smtppro.zoho.com' }, { id: 'smtp', ok: true, label: 'Signed in to send', message: 'The outgoing server accepted the app password.' }, { id: 'imap', ok: true, label: 'Signed in to read replies', message: 'The incoming server accepted it and the inbox opens.' }, { id: 'test', ok: true, label: 'Test email', message: 'A test email reached your inbox.' } ] }); window.__box.connection = { connected: true, status: 'ok' }; });
+  await page.evaluate(() => { window.__connectAnswers.push({ ok: true, daily_send_limit: 150, steps: [ { id: 'servers', ok: true, label: 'Found your mail servers', message: 'Zoho (business) — smtppro.zoho.com' }, { id: 'smtp', ok: true, label: 'Signed in to send', message: 'The outgoing server accepted the app password.' }, { id: 'imap', ok: true, label: 'Signed in to read replies', message: 'The incoming server accepted it and the inbox opens.' }, { id: 'test', ok: true, label: 'Test email', message: 'A test email reached your inbox.' } ] }); window.__box.connection = { connected: true, status: 'ok' }; });
   await page.locator('#ms-smtp-pass').fill(PW);
   await page.locator('.modal button', { hasText: /^Connect$/ }).click();
   await page.waitForTimeout(500);
   m = await modal();
-  step('success ends on a "Mailbox ready" card: connected, replies and bounces noticed, the starting limit, and the honest note about the in-app inbox', /Mailbox ready/.test(m) && /bea@acme\.test is connected/.test(m) && /starts at 30 emails a day/.test(m) && /in-app inbox is not available/.test(m));
+  step('success ends on a "Mailbox ready" card: connected, replies and bounces noticed, the admin-set daily limit, and the honest note about the in-app inbox', /Mailbox ready/.test(m) && /bea@acme\.test is connected/.test(m) && /daily limit is 150 emails, as set by your admin/.test(m) && /in-app inbox is not available/.test(m));
   await page.screenshot({ path: process.env.SHOT_DIR ? path.join(process.env.SHOT_DIR, 'smtp-ready.png') : '/dev/null' }).catch(() => {});
   await page.locator('.modal button', { hasText: /^Done$/ }).click();
   await page.waitForTimeout(500);

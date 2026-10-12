@@ -22,7 +22,6 @@ const presets = require('../services/smtp-presets');
 const emailSetup = require('../services/email-setup');
 const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
-const NEW_MAILBOX_DAILY_LIMIT = 30;            // a new mailbox starts low (the default is 150); an admin or lead can raise it
 const TRY_LIMIT = 6, TRY_WINDOW_MS = 10 * 60 * 1000;
 
 module.exports = (ctx) => {
@@ -141,10 +140,10 @@ module.exports = (ctx) => {
 
       // everything that matters worked: keep it (encrypted) and switch the mailbox over
       await smtp.store.save({ userEmailId: slot.id, orgId: slot.org_id || orgIdFor(req), userId: slot.user_id, email: slot.email_address, username, password, cfg: chosen, provider: prov.key });
-      const upd = { platform: 'SMTP', is_active: true };
-      if (!slot.daily_send_limit || slot.daily_send_limit >= 150) upd.daily_send_limit = NEW_MAILBOX_DAILY_LIMIT;
-      await updateSlot(slot, upd);
-      return done(true, { daily_send_limit: upd.daily_send_limit || slot.daily_send_limit });
+      // The mailbox keeps whatever daily limit it already has — the one the admin allowed. An app-password mailbox is just another kind
+      // of mailbox (owner, 12 Oct): it is not given a limit of its own.
+      await updateSlot(slot, { platform: 'SMTP', is_active: true });
+      return done(true, { daily_send_limit: slot.daily_send_limit || null });
     } catch (err) { res.status(500).json({ error: 'failed', message: 'Something went wrong while connecting. Nothing was saved.' }); }
   });
 

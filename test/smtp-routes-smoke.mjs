@@ -112,14 +112,14 @@ await run({}, async ({ call, saved, db, mail }) => {
   step('the test email is sent to the person themselves, carrying a marker', mail.log.sent.length === 1 && mail.log.sent[0].to === 'bea@acme.test' && /^[0-9a-f]{16}$/.test(mail.log.sent[0].headers['X-PACE-Test']));
   step('only now is it SAVED, with the password handed to the (encrypting) store, the chosen servers, and the org', saved.length === 1 && saved[0].password === PW && saved[0].cfg.smtp.host === 'smtppro.zoho.com' && saved[0].orgId === 'orgA' && saved[0].provider === 'zoho');
   const u = db.updates.find((x) => x.id === 'mb1');
-  step('the mailbox switches to the app-password type, is active, and starts LOW (30 a day, not the default 150)', u && u.set.platform === 'SMTP' && u.set.is_active === true && u.set.daily_send_limit === 30 && r.body.daily_send_limit === 30);
+  step('the mailbox switches to the app-password type and is active, and its daily limit is NOT touched — it is whatever the admin allowed, like any other mailbox', u && u.set.platform === 'SMTP' && u.set.is_active === true && !('daily_send_limit' in u.set) && r.body.daily_send_limit === 150);
   step('the password is in NO response', !r.text.includes(PW));
   step('the update of the mailbox row is tied to its organisation as well as its id', u.org === 'orgA');
 });
 await run({}, async ({ db, call }) => {
   db.slots.mb1.daily_send_limit = 20;
-  await call('POST', '/smtp/connect/mb1', { password: PW });
-  step('a limit an admin already set lower is NOT raised', !('daily_send_limit' in db.updates.find((x) => x.id === 'mb1').set));
+  const r20 = await call('POST', '/smtp/connect/mb1', { password: PW });
+  step('a limit an admin already set (20) is kept and reported as it is', !('daily_send_limit' in db.updates.find((x) => x.id === 'mb1').set) && r20.body.daily_send_limit === 20);
 });
 await run({ script: { smtp: (c) => (c.smtp.host === 'smtppro.zoho.com' ? { ok: false, kind: 'auth', message: 'refused' } : { ok: true }) } }, async ({ call, mail, saved }) => {
   const r = await call('POST', '/smtp/connect/mb1', { password: PW });

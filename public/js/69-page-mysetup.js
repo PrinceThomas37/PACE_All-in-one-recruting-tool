@@ -529,7 +529,7 @@
     }).join('');
     var ready = s.ok
       ? '<div class="card cp"><div class="fs-14 fd-strong">✓ Mailbox ready</div><div class="fs-12_5 c-text2">'+esc(s.email)+' is connected. PACE sends from it and notices replies and bounces.'+
-        (s.limit?' It starts at '+esc(String(s.limit))+' emails a day; an admin can raise that.':'')+'</div>'+
+        (s.limit?' Its daily limit is '+esc(String(s.limit))+' emails, as set by your admin.':'')+'</div>'+
         '<div class="fd-hint">The in-app inbox is not available for app-password mailboxes yet — read this mailbox in its own webmail.</div></div>' : '';
     var body = off
       ? '<div class="card cp"><div class="fs-13 c-red" role="alert">'+esc(info.reason||'App-password mailboxes are not available on this server.')+'</div></div>'
