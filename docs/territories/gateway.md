@@ -1141,3 +1141,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-12 (Session 44) — connect no longer sets a daily limit (D-0122)
 - `routes/smtp-mailbox.js`: a successful connect sets only `platform: 'SMTP'` and `is_active`; the mailbox keeps the daily limit the admin allowed and the answer reports it. (D-0121's 30-a-day rule is reversed.)
+
+## 2026-10-12 (Session 44) — D-0123: the admin decides every number
+`index.js`, `routes/auth.js`, `routes/finder.js`, `routes/lead-assign.js`, `routes/ownership-requests.js`, `routes/candidate-outreach.js`, `routes/recruiting/outreach.js` now take a mailbox's daily limit from `services/daily-limit.js` (admin default, 60 s cache) instead of typing 150/300. `routes/smtp-mailbox.js` reads its connect tries and window from settings (`smtp_connect_tries`, `smtp_connect_window_minutes`); the SMTP sweep reads `smtp_sweep_batch`; retry-failed and send-selected read `send_selected_max`. A new cap goes in `SETTINGS_SCHEMA`, not in a route. Pinned by `test/admin-numbers-smoke.mjs`.

@@ -25,6 +25,7 @@
 // ============================================================================
 
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const aiProvider = require('../services/ai-provider');
 const gen = require('../services/candidate-outreach');
 const matchEngine = require('../match-engine');
@@ -1031,7 +1032,7 @@ module.exports = (ctx) => {
             .select('emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
           sentToday[mailbox.id] = (log && log.emails_sent) || 0;
         }
-        const base = mailbox.daily_send_limit || 150;
+        const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase));
         const wl = warmupLimit(delivState[mailbox.id], warmupStart, warmupStep);
         const cap = wl ? Math.min(base, wl) : base;
         if (sentToday[mailbox.id] >= cap) { deferred++; continue; }

@@ -22,7 +22,7 @@ const presets = require('../services/smtp-presets');
 const emailSetup = require('../services/email-setup');
 const { reassignJobsOffMailbox } = require('../services/mailbox-reassign');
 
-const TRY_LIMIT = 6, TRY_WINDOW_MS = 10 * 60 * 1000;
+const { getSetting } = require('../config/settings');   // the tries and their window are the admin's numbers (D-0123)
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -45,9 +45,10 @@ module.exports = (ctx) => {
     if (slot.org_id) q = q.eq('org_id', slot.org_id);
     return q;
   }
-  function tooManyTries(userId, now) {
-    const t = now || Date.now(), recent = (tries.get(userId) || []).filter((x) => t - x < TRY_WINDOW_MS);
-    if (recent.length >= TRY_LIMIT) { tries.set(userId, recent); return true; }
+  async function tooManyTries(userId, now) {
+    const limit = await getSetting(supabase, 'smtp_connect_tries'), windowMs = (await getSetting(supabase, 'smtp_connect_window_minutes')) * 60 * 1000;
+    const t = now || Date.now(), recent = (tries.get(userId) || []).filter((x) => t - x < windowMs);
+    if (recent.length >= limit) { tries.set(userId, recent); return true; }
     recent.push(t); tries.set(userId, recent); return false;
   }
   async function detect(address) {
@@ -85,7 +86,7 @@ module.exports = (ctx) => {
       const b = req.body || {};
       const password = String(b.password || '');
       if (!password || password.length > 256) return res.status(400).json({ error: 'bad_password', message: 'Type the app password.' });
-      if (tooManyTries(req.user.id)) return res.status(429).json({ error: 'too_many_tries', message: 'Too many tries — wait a few minutes, then try again.' });
+      if (await tooManyTries(req.user.id)) return res.status(429).json({ error: 'too_many_tries', message: 'Too many tries — wait a few minutes, then try again.' });
 
       const username = String(b.username || slot.email_address).trim().slice(0, 254);
       const creds = { user: username, pass: password };

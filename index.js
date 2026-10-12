@@ -67,6 +67,7 @@ const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { createGmailDelivery, freshFollowup } = require('./services/gmail-delivery');
 // App-password mailboxes — SMTP to send, IMAP to read (D-0120, R-200 step b). Zoho and any provider without an OAuth sign-in.
+const dailyLimit = require('./services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const mailboxSecret = require('./services/mailbox-secret');
 const { createSmtpStore } = require('./services/smtp-store');
 const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mailbox');
@@ -453,11 +454,11 @@ function padHour(h) {
   return `${hr}:00 ${ap}`;
 }
 
-let bulkSendSettingsCache = { loadedAt: 0, delayMin: 30, delayMax: 60, domainMaxPerHour: 8, defaultDailyLimit: 300, maxPerRun: 0 };
+let bulkSendSettingsCache = { loadedAt: 0, delayMin: 30, delayMax: 60, domainMaxPerHour: 8, defaultDailyLimit: dailyLimit.DEFAULT_DAILY_SEND_LIMIT, maxPerRun: 0 };
 
 async function getBulkSendSettings() {
   if (Date.now() - bulkSendSettingsCache.loadedAt < 60000) return bulkSendSettingsCache;
-  let delayMin = 30, delayMax = 60, domainMaxPerHour = 8, defaultDailyLimit = 300, maxPerRun = 0;
+  let delayMin = 30, delayMax = 60, domainMaxPerHour = 8, defaultDailyLimit = dailyLimit.DEFAULT_DAILY_SEND_LIMIT, maxPerRun = 0;
   try {
     const { data } = await supabase.from('app_settings').select('key,value').in('key', [
       'send_delay_min_sec', 'send_delay_max_sec', 'domain_max_per_hour',
@@ -860,7 +861,7 @@ app.post('/emails/retry-failed', auth, async (req, res) => {
     // Your own failed emails; an admin may name other people's by id (the
     // Email page passes exactly the rows it is showing).
     let q = db.forRequest(req).from('emails').select(RETRY_ROW_SELECT).eq('status', 'failed');
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 500) : null;
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max')) : null;
     if (ids) q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
     if (!hasRole(req, 'admin')) q = q.eq('sent_by', req.user.id);
     const { data, error } = await q;
@@ -1237,7 +1238,7 @@ app.post('/emails/send-selected', auth, async (req, res) => {
       .select(PENDING_EMAIL_JOB_SELECT)
       .eq('sent_by', req.user.id)
       .eq('status', 'pending')
-      .in('id', email_ids.slice(0, 500))
+      .in('id', email_ids.slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max')))
       .order('created_at', { ascending: true });
     if (fetchErr) throw fetchErr;
     const nowMs = Date.now();
@@ -2519,7 +2520,8 @@ async function runFollowupEngine() {
 
     const { data: allEmails } = await supabase.from('user_emails').select('id,daily_send_limit').eq('is_active', true);
     const limitMap = {};
-    (allEmails || []).forEach(a => { limitMap[a.id] = a.daily_send_limit || 150; });
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
+    (allEmails || []).forEach(a => { limitMap[a.id] = dailyLimit.limitOf(a, dailyDefault); });
 
     const bdIdSet = [...new Set((dueFu || []).map(f => f.job?.assigned_to_bd).filter(Boolean))];
     let bdMap = {};
@@ -2603,7 +2605,7 @@ async function runFollowupEngine() {
         if (!acId) continue;
         // Don't queue follow-ups from a disabled mailbox — disabling must actually stop sends.
         if (job.sending_email?.is_active === false) { log.skipped_inactive_mailbox++; continue; }
-        const rem = (limitMap[acId] || 150) - (sentToday[acId] || 0) - (acCountDelta[acId] || 0);
+        const rem = (limitMap[acId] || dailyDefault) - (sentToday[acId] || 0) - (acCountDelta[acId] || 0);
         if (rem <= 0) { log.skipped_quota++; continue; }
         const contact = fu.contact;
         if (!contact?.email) continue;
@@ -2907,7 +2909,7 @@ async function readSmtpMailbox(tokenRow, folders, since) {
   const loaded = await smtpStore.get(tokenRow.user_email_id);
   if (!loaded || loaded.error) return null;
   try {
-    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: 50 });
+    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: await settingsConfig.getSetting(supabase, 'smtp_sweep_batch') });
     await smtpStore.outcome(tokenRow.user_email_id, true);
     return msgs;
   } catch (e) {
@@ -3816,7 +3818,7 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   const delivState = await loadMailboxDelivState([mailbox.id]);
   if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const base = mailbox.daily_send_limit || 150;
+  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase));
   const [warmupStart, warmupStep] = await Promise.all([
     settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),

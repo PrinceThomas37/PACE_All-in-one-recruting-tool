@@ -221,6 +221,26 @@ const SETTINGS_SCHEMA = [
     description: 'One request looks up one job title in one place and brings up to 10 jobs. A search with more titles or places than this is covered over several daily runs (a one-off search takes the first ones).',
     default: 3, min: 0, max: 50,
   },
+  {
+    key: 'smtp_connect_tries', label: 'App-password mailbox: connection tries per person', unit: 'tries', group: 'Email engine',
+    description: 'How many times one person may try to connect an app-password mailbox inside the time window below, before they are asked to wait. It stops guessing at passwords.',
+    default: 6, min: 1, max: 100,
+  },
+  {
+    key: 'smtp_connect_window_minutes', label: 'App-password mailbox: window for those tries', unit: 'minutes', group: 'Email engine',
+    description: 'The length of the window the tries above are counted in.',
+    default: 10, min: 1, max: 1440,
+  },
+  {
+    key: 'smtp_sweep_batch', label: 'App-password mailbox: messages read per check', unit: 'messages', group: 'Email engine',
+    description: 'The most messages read from one app-password mailbox folder each time PACE looks for replies and bounces. A busier inbox is caught up over the next checks.',
+    default: 50, min: 1, max: 200,
+  },
+  {
+    key: 'send_selected_max', label: 'Most emails sent or retried in one click', unit: 'emails', group: 'Email engine',
+    description: 'The most emails "Send selected" or "Retry" will take in a single click. Anything beyond it is left for the next click.',
+    default: 500, min: 1, max: 5000,
+  },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));

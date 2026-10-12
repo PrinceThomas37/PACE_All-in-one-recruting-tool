@@ -31,6 +31,7 @@
 //   * Literal paths are registered ABOVE the :id routes of their prefix.
 // ============================================================================
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const finder = require('../services/lead-finder');
 const leadCheck = require('../services/lead-check');
 const peopleApollo = require('../services/people-apollo');
@@ -537,8 +538,9 @@ module.exports = (ctx) => {
       const { data } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', finder.dayOf(now)).in('user_email_id', ids);
       (data || []).forEach((l) => { sent[l.user_email_id] = Number(l.emails_sent) || 0; });
     } catch (_) { /* a missing count only affects which one is suggested */ }
-    const accounts = mb.accounts.map((a) => ({ id: a.id, email_address: a.email_address, display_name: a.display_name || '', daily_limit: a.daily_send_limit || 150, sent_today: sent[a.id] || 0 }));
-    return { accounts, suggested_id: finder.suggestMailbox(mb.accounts, sent) };
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
+    const accounts = mb.accounts.map((a) => ({ id: a.id, email_address: a.email_address, display_name: a.display_name || '', daily_limit: a.daily_send_limit || dailyDefault, sent_today: sent[a.id] || 0 }));
+    return { accounts, suggested_id: finder.suggestMailbox(mb.accounts, sent, dailyDefault) };
   }
   router.get('/finder/mailboxes', auth, async (req, res) => {
     try {

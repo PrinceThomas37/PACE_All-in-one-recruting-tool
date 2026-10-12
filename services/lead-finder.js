@@ -481,11 +481,11 @@ const isDue = (card, now) => !!card && card.status === 'waiting' && !!card.wait_
  * limit, then the address (so the answer never depends on the order the database happens to return rows in).
  * `sentToday` is { mailboxId: n }. Returns an id, or null when there is none.
  */
-function suggestMailbox(accounts, sentToday) {
+function suggestMailbox(accounts, sentToday, defaultLimit) {
   const list = (accounts || []).filter((a) => a && a.id);
   if (!list.length) return null;
   const sent = (a) => Number((sentToday || {})[a.id]) || 0;
-  const limit = (a) => Number(a.daily_send_limit) || 150;
+  const limit = (a) => Number(a.daily_send_limit) || Number(defaultLimit) || 0;   // a mailbox with no number of its own counts as the admin's default
   return list.slice().sort((a, b) => sent(a) - sent(b) || limit(b) - limit(a) || String(a.email_address || '').localeCompare(String(b.email_address || '')))[0].id;
 }
 

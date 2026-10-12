@@ -20,6 +20,7 @@
 // ============================================================================
 
 const { EVENTS, on } = require('../../events');
+const dailyLimit = require('../../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const { fillTemplate } = require('../../email-vars');
 const { emailSyntaxValid } = require('../../email-validation');
 const contactPoints = require('../../services/contact-points');
@@ -343,7 +344,7 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
   const delivState = await loadMailboxDelivState([mailbox.id]);
   if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('id,emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const base = mailbox.daily_send_limit || 150;
+  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase));
   const [warmupStart, warmupStep] = await Promise.all([
     settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),

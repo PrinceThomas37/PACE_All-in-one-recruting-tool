@@ -22,6 +22,7 @@
 //   * every hand-over is written in the lead's own activity log, saying who gave it to whom.
 // ============================================================================
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const dist = require('../services/lead-distribution');
 const leadClaim = require('../services/lead-claim');
 
@@ -45,7 +46,8 @@ module.exports = (ctx) => {
   async function roomToday(accounts) {
     const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', today());
     const sent = {}; (logs || []).forEach(l => { sent[l.user_email_id] = l.emails_sent; });
-    return accounts.map(a => ({ id: a.id, email: a.email_address, name: a.display_name || '', limit: a.daily_send_limit || 150, room: Math.max(0, (a.daily_send_limit || 150) - (sent[a.id] || 0)) }));
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
+    return accounts.map(a => ({ id: a.id, email: a.email_address, name: a.display_name || '', limit: dailyLimit.limitOf(a, dailyDefault), room: Math.max(0, dailyLimit.limitOf(a, dailyDefault) - (sent[a.id] || 0)) }));
   }
 
   router.get('/leads/assign/people', auth, async (req, res) => {

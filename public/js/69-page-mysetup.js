@@ -120,7 +120,7 @@
     var plat=platformOf(m);
     return '<div class="ms-box">'+
       '<div class="fd-row fd-between"><div class="fd-grow"><div class="fs-14 fd-strong">'+esc(m.email_address)+'</div>'+
-        '<div class="fd-hint">'+plat+' · shown to recipients as “'+esc(m.display_name||m.email_address)+'” · up to '+esc(String(m.daily_send_limit||150))+' emails a day (set by an admin)</div></div>'+
+        '<div class="fd-hint">'+plat+' · shown to recipients as “'+esc(m.display_name||m.email_address)+'” · '+(m.daily_send_limit?'up to '+esc(String(m.daily_send_limit))+' emails a day':'daily limit set by an admin')+' (set by an admin)</div></div>'+
         badge(m)+'</div>'+
       writesFor(m)+
       '<div class="fd-row">'+

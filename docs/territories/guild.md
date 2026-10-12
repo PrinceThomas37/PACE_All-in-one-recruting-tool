@@ -808,3 +808,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-12 (Session 44) — recruiter / candidate / client mail can send from an app-password mailbox (D-0121)
 - `routes/recruiting/outreach.js`: `recruiterSendingMailbox`, `connectedMailboxById` and `ownSendingMailboxes` count a mailbox with a working `smtp_credentials` row as connected (via `smtpConnectedIds`), and `sendMailboxNewMessage` has an SMTP branch (`sendSmtpNewMessage`). Both come from `index.js` through the module's ctx and are absent-safe in a bare test ctx.
+
+## 2026-10-12 (Session 44) — D-0123
+Recruiter outreach (`routes/recruiting/outreach.js`) takes the sending mailbox's daily limit from `services/daily-limit.js` (admin default) rather than a typed number.

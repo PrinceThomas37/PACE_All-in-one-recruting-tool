@@ -1356,3 +1356,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-12 (Session 44) — "Mailbox ready" says the admin's limit (D-0122)
 - `69-page-mysetup.js`: the card now reads "Its daily limit is N emails, as set by your admin." instead of announcing a starting limit.
+
+## 2026-10-12 (Session 44) — D-0123
+`public/js/69-page-mysetup.js` no longer shows a made-up 150 for a mailbox with no number of its own. The numbers shown come from the server (the admin's).

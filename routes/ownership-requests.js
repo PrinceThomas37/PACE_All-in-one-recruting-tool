@@ -19,6 +19,7 @@
 // path must still go above `/ownership-requests/:id/*`, never appended below.
 // ============================================================================
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const own = require('../services/ownership');
 const { makeRecorder } = require('../services/record-history-writer');
 
@@ -207,8 +208,9 @@ module.exports = (ctx) => {
       .select('user_email_id,emails_sent').eq('send_date', todayDate).in('user_email_id', connected.map(e => e.id));
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
     const withRemaining = connected
-      .map(a => ({ ...a, remaining: (a.daily_send_limit || 150) - (sentToday[a.id] || 0) }))
+      .map(a => ({ ...a, remaining: dailyLimit.limitOf(a, dailyDefault) - (sentToday[a.id] || 0) }))
       .filter(a => a.remaining > 0);
     if (!withRemaining.length) return null;
     withRemaining.sort((a, b) => b.remaining - a.remaining || String(a.id).localeCompare(String(b.id)));
