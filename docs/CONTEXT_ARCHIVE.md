@@ -6765,3 +6765,7 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, company onboarding and non-Google/Microsoft mailboxes (R-200) — design only
 - The owner said the company's domain is set up by PACE at purchase and employees then connect individually, and asked what happens with Zoho or any other provider. Checked the code: only Gmail and Microsoft mailboxes exist; no SMTP/IMAP path (`nodemailer` is installed, unused for mailboxes). Domain claim + auto-join and the SPF/DKIM/DMARC checks already exist. Recorded as R-200; no code changed.
+
+### SESSION 44, #325 merged; company email setup checklist (R-200 step a)
+- Owner: "Option A", "Option 1 — go for this", "build in this order", and "if completed, merge". #325 (Review & send / Send selected, R-193 plus the design notes) merged as `ab93353` after 239/239 on Node 22 and on Node 26. The other items from the owner's note are NOT done and were not merged as code: they wait on answers (R-194 several jobs in one email, R-195 places, R-196 which search, R-197 pills and missing details). Not seen live: `*.onrender.com` is blocked from this sandbox.
+- Built on a fresh branch from `main`: `services/email-setup.js`, the route, the Email setup panel; D-0120. Next: step b, the SMTP/IMAP mailbox connection (a third provider across the send loop, reply sweep, threading, in-app mailbox, warm-up; encrypted password storage), then step c.

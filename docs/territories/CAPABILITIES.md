@@ -690,3 +690,5 @@ person who has not written their own (R-169).
 - **Choose how many follow-ups (0–5)** — in the Outreach Plan a person picks the number of follow-ups after the first email, the day each goes out and whether each replies in the same thread or goes as a new email; a new person starts with blank wording (D-0113).
 
 - **Follow-ups start at the first send, and only the ones you turn on** — whichever way a lead reaches you, its follow-up chain is made when its first email goes out; with none turned on, no follow-up is ever triggered, and PACE never sends follow-up wording you did not write (D-0114).
+
+- **Company email setup checklist** — under Admin → Company domains, each claimed domain has an "Email setup" panel: where the company's mail lives (found from its mail records), the exact SPF and DMARC records to paste, whether DKIM is on, whether staff can auto-join — each checked live, with "Check again" and "Copy for your IT person". The app-password connection for providers like Zoho is not built yet, and the panel says so (D-0120).

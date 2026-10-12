@@ -10,6 +10,7 @@
 // ============================================================================
 const express = require('express');
 const orgDomains = require('../services/org-domains');
+const emailSetup = require('../services/email-setup');
 
 const MISSING_TABLE = /relation .*org_domains.* does not exist|could not find the table/i;
 
@@ -126,6 +127,27 @@ module.exports = (ctx) => {
         .select('domain').eq('id', req.params.id).eq('org_id', org).maybeSingle();
       if (!row) return res.status(404).json({ error: 'Not found' });
       res.json(orgDomains.verificationInstructions(org, row.domain));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // COMPANY EMAIL SETUP (owner, 12 Oct, D-0120, R-200): the checklist a customer's admin and their IT person work through — what
+  // their mail provider is, the exact SPF / DMARC records to paste, whether DKIM is on — each CHECKED live against DNS. Only a
+  // domain THIS organisation has claimed can be asked about (this is not a DNS probe for anyone's domain), and it only reads DNS.
+  // `?dkim_selector=` is for a provider that published DKIM under its own name. Rules live in services/email-setup.js.
+  router.get('/org/domains/:id/email-setup', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+      const org = orgIdFor(req);
+      const { data: row, error } = await supabase.from('org_domains')
+        .select('id,domain,verified_at,auto_join').eq('id', req.params.id).eq('org_id', org).maybeSingle();
+      if (error && MISSING_TABLE.test(error.message || '')) return notEnabled(res);
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      const checklist = await emailSetup.buildChecklist(row, {
+        resolver: ctx.emailSetupResolver || emailSetup.makeResolver(),
+        dkimSelector: req.query.dkim_selector,
+        smtpAvailable: false,            // the app-password (SMTP/IMAP) connection is not built yet — the screen says so (R-200 step 2)
+      });
+      res.json(checklist);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

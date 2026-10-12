@@ -468,3 +468,6 @@ flows still separate correctly.
 
 ## 2026-10-08 (Session 42) — logo upload and signature HTML (D-0104)
 - The logo route is owner-or-admin; the file is checked by its first bytes (png/jpg/gif/webp, ≤200 KB), never by what the browser says; the stored address is served from a public bucket and `cleanSendsAs` accepts ONLY an address inside our own bucket (no tracking pixels from other hosts). Saved signature HTML goes through `sanitizeEmailHtml`. `/my-setup/*` act on the signed-in person only (the starter is for bd / bd_lead / admin).
+
+## 2026-10-12 (Session 44) — the email-setup route only answers for the caller's own claimed domain (D-0120)
+- `GET /org/domains/:id/email-setup` (`routes/org-domains.js`): admin only; the domain row is read `.eq('org_id', caller's org)`, so another organisation's admin, or an id that is not theirs, gets 404 and never a DNS answer — it is not a probe for anyone's domain, and it only reads public DNS. A test removes that `.eq` and watches it fail (`test/email-setup-smoke.mjs`). It does not need the domain to be VERIFIED (it reads public records and grants nothing); auto-join still requires verification, as before.

@@ -1130,3 +1130,7 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-12 (Session 44) — `POST /emails/send-selected` brought level with Send all (R-193)
 - `index.js`: the route had its own shorter select (no `attempt_count`, `next_attempt_at`, `org_id`, `sent_by`, `template_variant`) and no retry-backoff filter — no screen called it, so it drifted. It now reads `PENDING_EMAIL_JOB_SELECT`, ordered, caps `email_ids` at 500, filters with `sendRetry.isDue`, answers `{ queued: 0 }` when nothing is due, and answers 500 when it fails before replying (it used to leave the request hanging). Still the caller's own `pending` rows only. Lesson: an endpoint with no caller rots; the Pending tab's "Send selected" is its first caller.
+
+## 2026-10-12 (Session 44) — company email setup route (R-200 step a, D-0120)
+- `routes/org-domains.js`: `GET /org/domains/:id/email-setup` (admin only; the domain must be one THIS organisation has claimed, else 404 — it is not a DNS probe). Runs `services/email-setup.js` against DNS (injectable `ctx.emailSetupResolver` for tests); `?dkim_selector=` for a provider's own DKIM name. Read-only. `smtpAvailable` is passed as false until the SMTP/IMAP connection exists.
+- Release: #325 merged to `main` (`ab93353`) 12 Oct; full suite 239/239 on Node 22 and on Node 26 (v26.11.1).

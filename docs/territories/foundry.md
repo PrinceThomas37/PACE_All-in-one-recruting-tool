@@ -1215,3 +1215,7 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-12 (Session 44) — `test/pending-selection-smoke.mjs` (23)
 - Drives the real "Review & send" button and the Pending tab: one lead's emails only, ticked; a teammate's row has no tick box; Send selected posts exactly the ticked ids and never queue-all; Show all pending ticks nothing; another page/tab drops the focus; the send-selected route uses the shared select and the `isDue` rule. Mutation-checked: removing `pendingFocus` in `fdGoPending` fails 7 steps. Probe lesson (R-197): a real Playwright click selected every Accept-window job pill, so "sometimes it does not select" is not a plain handler failure.
+
+## 2026-10-12 (Session 44) — email-setup tests
+- `test/email-setup-smoke.mjs` (34): provider recognition incl. Zoho regions and lookalike hosts, SPF extended never duplicated, DMARC p=none counts, DKIM at provider/typed selectors, the IT note, and the route (admin only, other organisation's admin gets 404). Mutation-checked twice (org check removed; SPF merge removed). `test/email-setup-ui-smoke.mjs` (11): the panel, copy, check again with a typed selector. Test lesson: a function passed to `page.evaluate` as source loses its closure (`IT is not defined`) — pass data as an argument.
+- Node 26 for a merge: `https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz` downloads from this sandbox.

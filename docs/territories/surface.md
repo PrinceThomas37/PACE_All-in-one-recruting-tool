@@ -1347,3 +1347,6 @@ resulting "Ask to take over" modal after clicking through, showing
 - `07-page-email.js` Pending (BD view): tick column + header box, a card banner (NOT `ld-box` — that box is unreadable on the Email page in the retro theme), "Send selected (n)" beside "Send all pending (N)" (the latter is the outline button while a focus is on). The banner counts only the person's own emails.
 - `68-page-finder.js` `fdGoPending(histId)` sets the focus from the saved lead; "See it" (a failed first email) still opens the tab as it is.
 - Not done: the Accept window's job pills and person details (R-197) — a real click selected every pill in a probe; waiting on the owner's exact screen.
+
+## 2026-10-12 (Session 44) — Email setup panel (R-200 step a, D-0120)
+- `45-org-domains.js`: an "Email setup" button on each domain opens a panel under the domain list (`STATE.emailSetup`): items with a ✓ / ○ / i mark, the exact record with a Copy value button, a DKIM selector box when DKIM is missing, "Copy for your IT person", "Check again", Close. Nothing is decided in the browser. A connection that does not exist yet is said not to exist (a screen must not advertise it). Not fixed: the Admin header still prints "Fute Global LLC" for every organisation (`09-page-workflows.js` ~line 785) — a customer's admin would see another company's name.
