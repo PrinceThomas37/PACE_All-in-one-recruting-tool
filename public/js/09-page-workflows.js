@@ -288,7 +288,7 @@ function wfWhenLine(step, i, day){
 //   saved     ⇔  it does not. Nothing extra is stored on the step.
 // Names PACE can fill — must equal services/sequence-draft.js ALLOWED_VARS
 // (a test compares the two).
-var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','sendercompany','sender_company','mycompany','yourcompany','job_resp','company_service'];
+var WF_VARS=['fn','first_name','firstname','ln','last_name','lastname','surname','pos','position','job_title','jobtitle','role','company','client','company_name','companyname','loc','location','city_state','desig','designation','title','ind','industry','sender','sender_name','sendername','from_name','senderemail','sender_email','senderemailaddress','from_email','sendercompany','sender_company','mycompany','yourcompany','jobs','job_list','joblist','openings','positions','job_resp','company_service'];
 window.WF_VARS=WF_VARS;
 var WF_CHIPS=[['{{fn}}','First name'],['{{ln}}','Last name'],['{{pos}}','Role'],['{{company}}','Company'],['{{loc}}','Location'],['{{sender}}','Your name']];
 var WF_TEMPLATE_CHOICES=[['initial','Outreach 1 — your first email'],['fu1','Follow-up 1'],['fu2','Follow-up 2']];

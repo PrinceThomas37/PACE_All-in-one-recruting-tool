@@ -289,6 +289,8 @@ const VAR_SYNONYMS = [
   ['loc', 'location', 'city_state'],
   ['desig', 'designation', 'title'],
   ['ind', 'industry'],
+  // Every job the lead is for — one title, or a bulleted list when there are several (R-194).
+  ['jobs', 'job_list', 'joblist', 'openings', 'positions'],
   ['sender', 'sender_name', 'sendername', 'from_name'],
   ['senderemail', 'sender_email', 'senderemailaddress', 'from_email'],
   // The company the sending email ID writes for (R-169, 8 Oct) — filled at SEND time, like the sender, from that mailbox's "sends as".
@@ -369,6 +371,40 @@ function unresolvedVars(text) {
   return found;
 }
 
+// ── SEVERAL JOBS IN ONE EMAIL (R-194, owner 13 Oct) ───────────────────────────────────────────────────────────────────────────────
+// A lead can be for more than one opening (the Lead Finder keeps the main job as the lead's position and the rest as "also hiring").
+// The list is every one of them, main job first, each once.
+function jobsOf(job) {
+  const out = [], seen = new Set();
+  const add = (t) => { const v = String(t == null ? '' : t).replace(/\s+/g, ' ').trim(); const k = v.toLowerCase(); if (v && !seen.has(k)) { seen.add(k); out.push(v); } };
+  add(job && job.position);
+  const also = job && job.research && job.research.finder && job.research.finder.also_hiring;
+  (Array.isArray(also) ? also : []).forEach(add);
+  return out;
+}
+const jobsBullets = (list) => list.map((t) => '• ' + t).join('\n');
+/** What `{{jobs}}` says: the one job's title, or — with several — each on its own bulleted line, starting on a new line. */
+const jobsText = (list) => (list.length > 1 ? '\n' + jobsBullets(list) : (list[0] || ''));
+// Does the person's own template place the list itself? Then it is theirs to lay out; PACE adds nothing of its own.
+const JOBS_TOKEN = /{{\s*(jobs|job_list|joblist|openings|positions)\s*}}/i;
+/**
+ * The first email for a lead with several jobs: when the person's template did NOT use `{{jobs}}`, the bulleted list of every
+ * job is added as its own short paragraph right after the paragraph that names the main job (else after the first paragraph).
+ * One job, or a template that already places the list, is returned unchanged.
+ */
+function ensureJobsListed(filledBody, template, job) {
+  const list = jobsOf(job);
+  const body = String(filledBody == null ? '' : filledBody);
+  if (list.length < 2 || JOBS_TOKEN.test(String(template || ''))) return body;
+  const block = 'Open roles:\n' + jobsBullets(list);
+  const paras = body.split(/\n[ \t]*\n/);
+  if (paras.length < 2) return body.replace(/\s+$/, '') + '\n\n' + block;
+  let at = paras.findIndex((p, i) => i > 0 && p.toLowerCase().indexOf(list[0].toLowerCase()) >= 0);
+  if (at < 0) at = 0;                                     // after the greeting
+  paras.splice(at + 1, 0, block);
+  return paras.join('\n\n');
+}
+
 /**
  * Build merge variables from job, contact, and sender display name.
  */
@@ -396,6 +432,7 @@ function buildEmailVars({ job, contact, senderDisplayName }) {
     ln: contact?.last_name || '',
     company: job?.company?.name || '',
     pos: job?.position || '',
+    jobs: jobsText(jobsOf(job)),
     ind: job?.company?.industry || job?.industry || '',
     loc,
     desig: contact?.designation || 'Hiring Manager',
@@ -521,6 +558,8 @@ function renderStoredEmail(row, mailbox) {
 module.exports = {
   DEFAULT_TEMPLATES,
   VAR_SYNONYMS,
+  jobsOf,
+  ensureJobsListed,
   unresolvedVars,
   SEND_TIME_VARS,
   OUTREACH_VARIANTS,

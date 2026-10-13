@@ -14,6 +14,10 @@
 // the other modules call. Nothing here invents data.
 
 // BD lead stages, in the order the dashboard shows them as pills.
+// A contact's email status — the order the menu offers them in, and their names. The server's definition is services/contact-status.js
+// (test/contact-status-smoke.mjs fails if the two ever disagree). "Blocked" = the address is right, but their side rejects our mail.
+var CONTACT_STATUSES = ["valid","invalid","deactivated","blocked","out_of_office"];
+var CONTACT_STATUS_LABELS = { valid:"Valid", invalid:"Invalid", deactivated:"Deactivated", blocked:"Blocked", out_of_office:"Out of office" };
 var STAGES = ["Active","No Response","Negative","Positive","Connected","Future","Out of Office","Deactivated","Referred"];
 
 // Fallback industry list — used only when the server has not supplied one

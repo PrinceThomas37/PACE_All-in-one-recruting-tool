@@ -63,6 +63,12 @@ try {
   const sel = (q) => page.evaluate((s) => !!document.querySelector(s), q);
   const val = (id) => page.evaluate((i) => document.getElementById(i).value, id);
 
+  // R-194: the browser's own fill of {{jobs}} says exactly what the server writes
+  const jobFix = { position: 'Welder', research: { finder: { also_hiring: ['CNC Machinist', 'welder', ' Estimator '] } } };
+  const ev = require('../email-vars.js');
+  step('{{jobs}} reads the same in the browser as on the server (several jobs: bullets; one: the title)',
+    (await page.evaluate((j) => clientJobsText(j, 'Welder'), jobFix)) === ev.buildEmailVars({ job: jobFix, contact: {}, senderDisplayName: null }).jobs &&
+    (await page.evaluate(() => clientJobsText({ position: 'Welder' }, 'Welder'))) === ev.buildEmailVars({ job: { position: 'Welder' }, contact: {}, senderDisplayName: null }).jobs);
   step('the names the browser accepts are EXACTLY the names the server can fill', JSON.stringify((await page.evaluate(() => WF_VARS.slice().sort()))) === JSON.stringify(SERVER_VARS));
 
   step('the window sits ABOVE the sidebar (its left edge is not hidden under the menu)', await page.evaluate(() => { const m = document.querySelector('.seq-modal').getBoundingClientRect(); const el = document.elementFromPoint(m.left + 6, 300); return !!(el && el.closest('.overlay')); }));
