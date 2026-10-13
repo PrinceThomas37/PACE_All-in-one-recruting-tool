@@ -6852,3 +6852,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - **Label (R-218).** `06-page-leads.js` `leadFromFinder(j)` (source starts "Finder", or research.source.kind = finder) → "Lead Finder" pill replaces NEW; "Found by" in the opened row. Tests in `take-selected-ui-smoke` (22).
 - **Question from the owner, answered:** "what do you mean by button meant for note 6" — see D-0135 item 6: the notes' word after "show" was unclear; I read it as "Show job description".
 
+
+### SESSION 44, release check for PR #331 (14 Oct)
+- Full suites: Node 22 251/251; Node 26 250/251 — `take-selected-ui-smoke` timed out under the load of two parallel full runs, then passed 3/3 alone. Its waits were raised to 20 s and a full Node 26 run alone was started; the owner said "merge the changes" (14 Oct) and PR #331 is merged only when that run is clean. The owner also confirmed "Show job description" is what they meant for note 6.

@@ -53,13 +53,13 @@ try{
   await tick(['u0','u1','own1']); calls.length=0;
   if(process.env.SHOTS) await page.screenshot({path:process.env.SHOTS+'/leads-take-lead-bar.png'});
   await ev(()=>document.querySelector('#content .btn-primary[onclick="leadTakeSelected()"]').click());
-  await page.waitForFunction(()=>/You picked/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await page.waitForFunction(()=>/You picked/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   let t=await modalText();
   if(process.env.SHOTS) await page.screenshot({path:process.env.SHOTS+'/leads-take-lead-window.png'});
   step('the window says what is being taken — 2 leads, the owned one dropped — and what the day allows', /You picked 2 leads that are still Unassigned/.test(t) && /up to 25 more today/.test(t) && /bo@x\.test/.test(t) && !(await ev(()=>!!document.getElementById('take-n'))), t.slice(0,220));
   step('its button says exactly how many it will take', await btn('^Take 2 leads$'));
   await ev(()=>[...document.querySelectorAll('.modal button')].find(x=>/^Take 2 leads$/.test(x.textContent)).click());
-  await page.waitForFunction(()=>/You now own 2 leads/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await page.waitForFunction(()=>/You now own 2 leads/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   const post=calls.filter(c=>/^POST \/leads\/take /.test(c)).map(c=>JSON.parse(c.replace(/^POST \/leads\/take /,'')));
   step('it sends exactly the two Unassigned leads picked (and no "count")', post.length===1 && post[0].job_ids.join()==='u0,u1' && !('count' in post[0]), JSON.stringify(post));
   step('the ticks are cleared, and the result offers "Write the first emails"', await ev(()=>Object.keys(STATE.leadSeqSel||{}).filter(k=>STATE.leadSeqSel[k]).length===0) && await btn('Write the first emails'));
@@ -67,18 +67,18 @@ try{
   // a day that allows fewer than were picked
   status={ ...status, cap:25, taken_today:24, remaining_today:1, can_take:1 };
   await toLeads({id:'boss',role:'bd_lead',roles:['bd_lead']}); await tick(['u0','u1','u2']); calls.length=0;
-  await ev(()=>leadTakeSelected()); await page.waitForFunction(()=>/You picked/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await ev(()=>leadTakeSelected()); await page.waitForFunction(()=>/You picked/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   t=await modalText();
   step('with one left today and three picked it says so and offers to take the first one', /You picked 3 leads/.test(t) && /may take 1 more today/.test(t) && /first 1 will be taken/.test(t) && await btn('^Take 1 lead$'), t.slice(0,240));
   await ev(()=>[...document.querySelectorAll('.modal button')].find(x=>/^Take 1 lead$/.test(x.textContent)).click());
-  await page.waitForFunction(()=>/You now own 1 lead/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await page.waitForFunction(()=>/You now own 1 lead/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   const post2=calls.filter(c=>/^POST \/leads\/take /.test(c)).map(c=>JSON.parse(c.replace(/^POST \/leads\/take /,'')));
   step('…and sends only that one', post2.length===1 && post2[0].job_ids.join()==='u0', JSON.stringify(post2));
 
   // switched off / not for this person
   status={ enabled:false, cap:0, taken_today:0, remaining_today:0, can_take:0, reason:'off', message:null, mailboxes:[] };
   await toLeads({id:'boss',role:'bd_lead',roles:['bd_lead']}); await tick(['u0']);
-  await ev(()=>leadTakeSelected()); await page.waitForFunction(()=>/switched off/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await ev(()=>leadTakeSelected()); await page.waitForFunction(()=>/switched off/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   step('when an admin has switched taking off, the window says so and offers no Take button', /switched off/.test(await modalText()) && !(await btn('^Take \\d+ leads?$')));
   await ev(()=>closeModal());
   status={ enabled:true, cap:25, taken_today:0, remaining_today:25, can_take:25, reason:null, message:null, mailboxes:[{id:'b1',email:'bo@x.test',remaining:100}] };
@@ -97,7 +97,7 @@ try{
   calls.length=0;
   await ev(()=>{ document.body.insertAdjacentHTML('beforeend','<div id="__host">'+leadExpandHtml(STATE.jobs.find(j=>j.id==='u2'))+'</div>'); });
   await ev(()=>[...document.querySelectorAll('#__host button')].find(x=>/Take this lead/.test(x.textContent)).click());
-  await page.waitForFunction(()=>/You picked 1 lead that is still Unassigned/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
+  await page.waitForFunction(()=>/You picked 1 lead that is still Unassigned/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:20000});
   step('"Take this lead" on a lead\'s own panel opens the same window for just that lead', /You picked 1 lead that is still Unassigned/.test(await modalText()) && await btn('^Take 1 lead$'));
   // the label on the Leads list
   await ev(()=>{ STATE.jobs=[{id:'fl1',stage:'Unassigned',assigned_to_bd:null,position:'Role Finder',company_name:'Co F',source:'Finder · Apollo',freshness:'New'},
