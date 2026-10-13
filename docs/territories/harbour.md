@@ -308,3 +308,6 @@ The send loop's fallback for a mailbox with no `daily_send_limit` was 300 and ma
 
 ## 2026-10-13 (Session 44) — D-0124
 Send pacing is per organisation: `getBulkSendSettings(orgId)` reads `default_daily_send_limit`, `send_delay_min_sec`, `send_delay_max_sec`, `domain_max_per_hour`, `bulk_send_max_per_run` through the settings module (they had no edit screen before). Follow-up capacity computes each mailbox's default by its organisation.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+The send window the send loop obeys is the sending person's ORGANISATION's hours (then their own narrowing, D-0104). A saved company window used to be stored but not read by the loop — fixed.

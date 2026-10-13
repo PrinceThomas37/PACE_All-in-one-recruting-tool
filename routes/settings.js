@@ -14,7 +14,8 @@ const followupSteps = require('../services/followup-steps');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, orgIdFor } = ctx;
+  const { supabase, auth, hasRole } = ctx;
+  const orgOf = (req) => (ctx.orgIdFor ? ctx.orgOf(req) : undefined);   // the caller's organisation (D-0124)
 
 // ── PER-USER PREFERENCES (Session 24, D-0022) ───────────────────────────────
 // The owner: "a change in the theme in one user is reflected to other users, it
@@ -240,7 +241,7 @@ router.post('/outreach-plan/mailbox', auth, async (req, res) => {
 router.get('/admin/settings/numbers', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-    const settings = await numberSettings.getAllSettings(supabase, orgIdFor(req));
+    const settings = await numberSettings.getAllSettings(supabase, orgOf(req));
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -255,13 +256,13 @@ router.post('/admin/settings/numbers', auth, async (req, res) => {
     // Sending hours are a PAIR: a start that is not before the end would shut
     // lead sending entirely. Refuse it here, in words, rather than store it.
     if ('send_window_start_hour' in updates || 'send_window_end_hour' in updates) {
-      const s = Number('send_window_start_hour' in updates ? updates.send_window_start_hour : await numberSettings.getSetting(supabase, 'send_window_start_hour', orgIdFor(req)));
-      const e = Number('send_window_end_hour' in updates ? updates.send_window_end_hour : await numberSettings.getSetting(supabase, 'send_window_end_hour', orgIdFor(req)));
+      const s = Number('send_window_start_hour' in updates ? updates.send_window_start_hour : await numberSettings.getSetting(supabase, 'send_window_start_hour', orgOf(req)));
+      const e = Number('send_window_end_hour' in updates ? updates.send_window_end_hour : await numberSettings.getSetting(supabase, 'send_window_end_hour', orgOf(req)));
       if (!(s < e)) return res.status(400).json({ error: 'The start hour must be earlier than the stop hour.', key: 'send_window_end_hour' });
     }
-    const result = await numberSettings.setSettings(supabase, updates, orgIdFor(req));
+    const result = await numberSettings.setSettings(supabase, updates, orgOf(req));
     if (result.error) return res.status(400).json({ error: result.error, key: result.key });
-    const settings = await numberSettings.getAllSettings(supabase, orgIdFor(req));
+    const settings = await numberSettings.getAllSettings(supabase, orgOf(req));
     res.json({ success: true, settings });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

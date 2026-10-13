@@ -17,7 +17,7 @@ const wording = require('../services/wording-scope');
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, db, auth, hasRole, today, getSendWindowHours } = ctx;
+  const { supabase, db, auth, hasRole, today, getSendWindowHours, userOrgId } = ctx;
   const SEQUENCE_ROLES = ['bd', 'bd_lead', 'admin'];
 
   async function myMailboxes(userId) {
@@ -101,7 +101,7 @@ module.exports = (ctx) => {
 
   // ── sending days and hours ─────────────────────────────────────────────
   async function windowAnswer(uid) {
-    const org = await getSendWindowHours();
+    const org = await getSendWindowHours(userOrgId ? await userOrgId(uid) : undefined);
     const m = await settingsOf(uid, ['send_days', 'send_start_hour', 'send_end_hour']);
     const prefs = sendWindow.readPrefs({ days: m[`u_${uid}_send_days`], start: m[`u_${uid}_send_start_hour`], end: m[`u_${uid}_send_end_hour`] });
     return { org, prefs, effective: sendWindow.effectiveWindow(org, prefs), days: sendWindow.DAYS };
@@ -119,7 +119,7 @@ module.exports = (ctx) => {
       }
       const chk = sendWindow.checkPrefs(b);
       if (chk.error) return res.status(400).json({ error: chk.error });
-      const org = await getSendWindowHours();
+      const org = await getSendWindowHours(userOrgId ? await userOrgId(uid) : undefined);
       const eff = sendWindow.effectiveWindow(org, chk.prefs);
       if (chk.prefs.start < org.start || chk.prefs.end > org.end || eff.conflict) return res.status(400).json({ error: `Your organisation sends between ${org.start}:00 and ${org.end}:00 (the lead's time). Pick hours inside that — you can narrow it, not widen it.` });
       const { error } = await supabase.from('app_settings').upsert([

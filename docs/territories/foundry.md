@@ -1232,3 +1232,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-13 (Session 44) — D-0124
 `admin-numbers-smoke` (30) now covers company A / company B / shared isolation, clearing, bounds and the old bare key; `settings.mjs` fake answers a multi-key read `.in(col, keys)`.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+The full suite found the sending-hours regression that targeted runs did not (`send-hours-smoke` 12/15): run the whole suite after a change to a shared reader. That test lifts `getSendWindowHours` by regex from `index.js` — its pattern now allows the `orgId` parameter.

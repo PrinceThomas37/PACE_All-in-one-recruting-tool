@@ -1147,3 +1147,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-13 (Session 44) — D-0124: settings are per organisation
 `config/settings.js` `getSetting/getAllSettings/setSettings(supabase, …, orgId)`: org key `sys_<key>@<org>` → shared `sys_<key>` → legacy bare key → default. `/admin/settings/numbers` reads/writes the caller's organisation (`orgIdFor(req)`); an empty value clears the company's own number. Request-path callers pass the organisation (jobs, companies, job-orders, lead-take, emails, client-intel, poc, finder, smtp-mailbox, send-selected). The send run takes its organisation from its mailboxes (`loadMailboxQuotaState().orgId`). Engines with no requester stay deployment-wide.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+`getSendWindowHours(orgId)` and `getPersonSendWindow(userId, orgId)` in `index.js` read the organisation's window (org looked up from the person if not given); `routes/emails.js` and `routes/my-setup.js` pass it. `routes/settings.js` tolerates a context without `orgIdFor` (tests mount partial contexts).

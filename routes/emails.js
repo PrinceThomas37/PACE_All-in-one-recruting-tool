@@ -240,7 +240,7 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
     // The window the queue being counted obeys: the organisation's hours, narrowed by THAT sender's own choice (D-0104). A whole-
     // organisation view (an admin with no sender named) has no single sender, so it counts by the organisation's window.
     const whose = hasRole(req, 'admin', 'ra_lead') ? (req.query.manager_id || null) : req.user.id;
-    const sendWindow = whose && getPersonSendWindow ? await getPersonSendWindow(whose) : await getSendWindowHours();
+    const sendWindow = whose && getPersonSendWindow ? await getPersonSendWindow(whose, orgOf(req)) : await getSendWindowHours(orgOf(req));
 
     // Counts of the caller's own queue — or, for the two roles that operate
     // other people's sending, a named sender's. Never outside the organisation.

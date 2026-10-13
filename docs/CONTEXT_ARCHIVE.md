@@ -6788,3 +6788,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - Found while doing it: the default daily limit and the send-pacing numbers had NO screen at all (my earlier "Admin → Email Engine Schedule" was wrong). They are now real settings.
 - Blocked: applying migration 063 was cancelled twice by the approval step; not applied, not worked around.
 - R-202 (older caps) not yet moved — see ROADMAP.
+
+### SESSION 44, D-0124 follow-up: sending hours follow the organisation
+- The full suite caught what my targeted runs missed: sending hours an admin saved were stored under their company, but the send loop and My Setup still read the shared value, so a saved window would have been ignored. `getSendWindowHours(orgId)` / `getPersonSendWindow(userId, orgId)` now take the organisation (looked up from the person when not given); `routes/emails.js` and `routes/my-setup.js` pass it. `send-hours-smoke` fake now answers a multi-key read. Full Node 22 + Node 26 re-run in progress when this was written.

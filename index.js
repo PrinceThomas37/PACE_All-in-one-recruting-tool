@@ -387,11 +387,11 @@ function getTimezoneFromLocation(location) {
 // (R-055). Cached 60s by config/settings.js. A start that is not before the end
 // would shut sending entirely, so it falls back to the defaults (8-16) rather
 // than silently stopping every email.
-async function getSendWindowHours() {
+async function getSendWindowHours(orgId) {
   let start = 8, end = 16;
   try {
-    const s = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_start_hour')));
-    const e = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_end_hour')));
+    const s = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_start_hour', orgId || undefined)));
+    const e = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_end_hour', orgId || undefined)));
     if (Number.isFinite(s) && Number.isFinite(e) && s < e) { start = s; end = e; }
   } catch (_) {}
   return { start, end };
@@ -412,8 +412,10 @@ function isInLeadSendWindow(tz, date = new Date(), window = { start: 8, end: 16 
 
 // What the person's own mail obeys: the organisation's window, narrowed by what they chose in My Setup (nothing chosen = the
 // organisation's window unchanged). A read that fails is the organisation's window, never a closed one.
-async function getPersonSendWindow(userId) {
-  const org = await getSendWindowHours();
+async function getPersonSendWindow(userId, orgId) {
+  // the person's organisation's hours (D-0124): given, else looked up from the person
+  let orgOfPerson = orgId; if (!orgOfPerson && userId) { try { orgOfPerson = await userOrgId(userId); } catch (_) { orgOfPerson = null; } }
+  const org = await getSendWindowHours(orgOfPerson);
   if (!userId) return org;
   try {
     const { data } = await supabase.from('app_settings').select('key,value')
