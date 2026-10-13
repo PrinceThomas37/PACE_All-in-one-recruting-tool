@@ -21,13 +21,16 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "googleapis": "^128.0.0",
+    "imapflow": "^2.4.0",
     "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.9.38",
     "mammoth": "^1.8.0",
     "nodemailer": "^6.9.7",
     "pdf-parse": "^1.1.1",
     "unpdf": "^1.8.1"
   },
   "devDependencies": {
-    "playwright-core": "^1.62.1"
+    "playwright-core": "^1.62.1",
+    "smtp-server": "^3.19.21"
   }
 }

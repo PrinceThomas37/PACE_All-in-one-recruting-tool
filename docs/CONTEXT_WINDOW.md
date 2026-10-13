@@ -2,8 +2,8 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
-**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #319 (`b20b326`); #320 is docs. **Not released** since then — do not merge until the owner says so.
-**Highest ids:** decision D-0118 · contract C-0038 · roadmap `R-200` (next `R-201`) · next migration `063` (062 is APPLIED).
+**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #325 (`ab93353`, Review & send / Send selected). Merging is the release; the owner said to merge what is complete (12 Oct).
+**Highest ids:** decision D-0125 · contract C-0038 · roadmap `R-204` (next `R-205`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
 
 ## Now
 
@@ -24,7 +24,9 @@ Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolU
 
 **Also on the dev branch (D-0118, R-192):** New message and Reply have bold, italic, underline, bullets, a numbered list, a link, and clear formatting. A paste that brings a font, a colour, or a highlight is stripped. The send-time writer was not touched.
 
-**Also on the dev branch (Session 44, R-193):** "Review & send" on a Find Leads lead opens Email → Pending on THAT lead's email only, ticked, with "Send selected (n)" (confirm names the recipients) and "Show all pending". Tick boxes on every Pending row. `POST /emails/send-selected` was brought level with Send all. **Waiting on the owner (asked 12 Oct):** several jobs in one email (R-194), multi-place search UX (R-195), which "ongoing search" to edit (R-196), the Accept-window pill / missing-details report (R-197), and the neutral-engine direction (R-198, with R-150).
+**Merged in #325 (Session 44, R-193):** "Review & send" on a Find Leads lead opens Email → Pending on THAT lead's email only, ticked, with "Send selected (n)" (confirm names the recipients) and "Show all pending". Tick boxes on every Pending row. `POST /emails/send-selected` was brought level with Send all. **Waiting on the owner (asked 12 Oct):** several jobs in one email (R-194), multi-place search UX (R-195), which "ongoing search" to edit (R-196), the Accept-window pill / missing-details report (R-197), and the neutral-engine direction (R-198, with R-150).
+
+**On the dev branch, not merged (R-200, D-0120/D-0121):** (a) the Email setup checklist under Admin → Company domains (PR #326); (b) app-password mailboxes — SMTP send, IMAP replies/bounces, Zoho first (migration 063 written, NOT applied; needs `MAILBOX_SECRET_KEY` on Render; one live test owed). Next, in the owner's order: (c) the employee first-login "Mailbox ready" screen. Left out of (b): in-app inbox, warm-up, Sent-folder copy (R-201). The Admin header still prints "Fute Global LLC" for every organisation (surface.md).
 
 ## Still open (do not start unasked)
 
@@ -54,3 +56,9 @@ Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the s
 ## How these two files stay true
 
 This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCHIVE.md` is append-only. `docs/ROADMAP.md` gets a row the turn a suggestion is made. `DECISIONS.md` gets an entry the moment the owner decides; never edit an old one. `node scripts/memory-check.mjs` before finishing.
+
+**Standing rule (D-0123, owner, 12 Oct):** no number that limits a customer is typed into the code — the admin decides (mail counts, AI counts, any count). Mailbox daily limit = `services/daily-limit.js` (admin default, one fallback in `config/limits.js`); new caps go in `SETTINGS_SCHEMA`. Older caps: R-202. Settings are deployment-wide, not per organisation: R-203 (owner's call).
+
+**D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. Migration 063 STILL NOT APPLIED (apply call cancelled twice). R-202 partly open.
+
+**D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063 STILL NOT APPLIED — the apply call is cancelled by the approval step (three times).

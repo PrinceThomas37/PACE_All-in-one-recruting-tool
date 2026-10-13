@@ -40,10 +40,10 @@ const TIMELINE_SHOWN = 200;
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, withOrg, orgStamp, graphMailRequest, getMicrosoftToken, gmailProvider } = ctx;
+  const { supabase, auth, hasRole, withOrg, orgStamp, graphMailRequest, getMicrosoftToken, gmailProvider, orgIdFor } = ctx;
   const mail = createMailProvider({ graphMailRequest, getMicrosoftToken, gmailProvider });
 
-  const on = async (key) => Number(await settingsConfig.getSetting(supabase, key)) === 1;
+  const on = async (key, req) => Number(await settingsConfig.getSetting(supabase, key, req && orgIdFor ? orgIdFor(req) : undefined)) === 1;
 
   // The same ladder as routes/companies.js clientOwnerId — the rule itself is
   // own.clientOwnerFrom (services/ownership.js); these are just its inputs.
@@ -298,7 +298,7 @@ module.exports = (ctx) => {
   // ── GET the Emails tab ────────────────────────────────────────────────────
   router.get(base + '/:id/intel', auth, async (req, res) => {
     try {
-      if (!(await on('client_intel_enabled'))) return res.json({ enabled: false });
+      if (!(await on('client_intel_enabled', req))) return res.json({ enabled: false });
       const acc = await access(req, kind, req.params.id);
       if (acc.status === 404) return res.status(404).json({ error: 'Not found' });
       if (acc.status === 403) {
@@ -316,8 +316,8 @@ module.exports = (ctx) => {
       const ledger = ci.buildLedger(messages);
       const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
-      const aiOn = await on('client_intel_ai_enabled');
-      const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily'));
+      const aiOn = await on('client_intel_ai_enabled', req);
+      const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily', orgIdFor ? orgIdFor(req) : undefined));
       const used = aiOn ? await usedToday(req.user.id) : 0;
       const pb = ci.playbookFor('recruiting');
       res.json({
@@ -350,7 +350,7 @@ module.exports = (ctx) => {
   // the sender's HTML ever runs on the page.
   router.get(base + '/:id/intel/messages/:mid/full', auth, async (req, res) => {
     try {
-      if (!(await on('client_intel_enabled'))) return res.status(404).json({ error: 'Not found' });
+      if (!(await on('client_intel_enabled', req))) return res.status(404).json({ error: 'Not found' });
       const acc = await access(req, kind, req.params.id);
       if (acc.status !== 200) return res.status(acc.status === 404 ? 404 : 403).json({ error: 'Only the owner can read these emails.' });
       const rowId = String(req.params.mid || '').replace(/^in:/, '');
@@ -391,7 +391,7 @@ module.exports = (ctx) => {
   // ── POST the button ───────────────────────────────────────────────────────
   router.post(base + '/:id/summary', auth, async (req, res) => {
     try {
-      if (!(await on('client_intel_enabled')) || !(await on('client_intel_ai_enabled'))) {
+      if (!(await on('client_intel_enabled', req)) || !(await on('client_intel_ai_enabled', req))) {
         return res.status(409).json({ error: 'AI client summaries are switched off.', code: 'switched_off' });
       }
       const acc = await access(req, kind, req.params.id);
@@ -406,7 +406,7 @@ module.exports = (ctx) => {
       const saved = await savedSummary(req, acc.subject);
       const status = ci.summaryStatus(saved, messages);
       const pb = ci.playbookFor('recruiting');
-      const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily'));
+      const limit = Number(await settingsConfig.getSetting(supabase, 'client_intel_ai_per_user_daily', orgIdFor ? orgIdFor(req) : undefined));
       const used = await usedToday(req.user.id);
       const gate = ci.canGenerate({ status, usedToday: used, perUserLimit: limit, lastForcedAt: saved && saved.forced_at, force });
       if (!gate.allowed) {
@@ -483,7 +483,7 @@ module.exports = (ctx) => {
   const { reportingChainIds } = require('../hierarchy')(supabase);
   router.get('/client-intel/digest', auth, async (req, res) => {
     try {
-      if (!(await on('client_intel_enabled'))) return res.json({ enabled: false });
+      if (!(await on('client_intel_enabled', req))) return res.json({ enabled: false });
       const isAdmin = hasRole(req, 'admin');
       const chain = isAdmin ? null : await reportingChainIds(req.user.id, req.orgId);
       const scope = own.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });

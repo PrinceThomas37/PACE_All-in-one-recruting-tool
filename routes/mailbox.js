@@ -142,6 +142,11 @@ module.exports = (ctx) => {
     if (mb.is_active === false) {
       return { error: { status: 409, body: { error: 'This mailbox is switched off', code: 'mailbox_inactive' } } };
     }
+    // An app-password mailbox (SMTP/IMAP) sends and gets its replies read, but the in-app inbox is not built for it yet. Said plainly —
+    // not "reconnect", which would send the person round in circles.
+    if (String(mb.platform || '').toLowerCase() === 'smtp') {
+      return { error: { status: 409, body: { error: 'The in-app inbox is not available for app-password mailboxes yet. Read this mailbox in its own webmail — PACE still sends from it and notices replies.', code: 'not_supported' } } };
+    }
     const tokenTable = mb.platform === 'Gmail' ? 'gmail_tokens' : 'microsoft_tokens';
     const { data: tok } = await supabase.from(tokenTable)
       .select('user_email_id').eq('user_email_id', mb.id).maybeSingle();

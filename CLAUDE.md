@@ -120,6 +120,8 @@ stop-and-ask rule). This file is the rules; that one is the map — read it when
   (`window.atsReloadCandidates`, `window.bdReloadSubmissions`); a scope error is a runtime error only running
   the code finds.
 
+- **No number that limits a customer is typed into the code (D-0123, owner's standing rule for the enterprise product):** emails a day, tries, reads, rows per click, AI use, searches, people — the ADMIN decides. A new cap goes in `config/settings.js` `SETTINGS_SCHEMA` and is read with `getSetting()` where it is used; the one "admin has not chosen" fallback for a mailbox limit is `config/limits.js` (via `services/daily-limit.js`). Technical timeouts are not business limits. `test/admin-numbers-smoke.mjs` pins it. The older caps still in code are listed in R-202.
+
 **Email (three pipelines, and they stay three)**
 - `emails` (leads engine), `email_tracking` (one-off sends) and `candidate_outreach` (batches) stay separate;
   `routes/email-history.js` merges them for DISPLAY only. Never merge them for sending.

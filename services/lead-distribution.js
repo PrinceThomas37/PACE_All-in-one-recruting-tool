@@ -18,6 +18,8 @@
 // ============================================================================
 'use strict';
 
+const dailyLimit = require('./daily-limit');
+
 const FRESHNESS_ORDER = { Old: 0, Normal: 1, New: 2, '': 3 };
 
 /** Stable copy of the pool in the order leads have always been handed out. */
@@ -92,27 +94,31 @@ function dayRemaining(cap, taken) {
  */
 async function connectedMailboxesFor({ supabase, withOrg, userId, todayStr, who = 'Manager', ignoreRoom = false }) {
   const own = who === 'You';
-  const q = supabase.from('user_emails').select('id,email_address,display_name,daily_send_limit').eq('user_id', userId).eq('is_active', true);
+  const q = supabase.from('user_emails').select('id,org_id,email_address,display_name,daily_send_limit').eq('user_id', userId).eq('is_active', true);
   const { data: all } = await (withOrg ? withOrg(q) : q);
   if (!all || !all.length) return { error: own ? 'You have no active email IDs set up yet — add one under Email IDs first.' : `${who} has no active email IDs configured` };
   const ids = all.map(e => e.id);
-  const [{ data: ms }, { data: gm }] = await Promise.all([
+  // one person's mailboxes are in one organisation: that organisation's default daily limit (D-0124)
+  const dailyDefault = await dailyLimit.defaultDailyLimit(supabase, (all.find(e => e.org_id) || {}).org_id);
+  const [{ data: ms }, { data: gm }, smRes] = await Promise.all([
     supabase.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
     supabase.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', ids),
+    // an app-password mailbox counts too (migration 063; a missing table reads as none)
+    supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids),
   ]);
-  const connected = new Set([...(ms || []), ...(gm || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id));
+  const connected = new Set([...(ms || []), ...(gm || []), ...((smRes && smRes.data) || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id));
   const working = all.filter(e => connected.has(e.id));
   if (!working.length) return { error: own
     ? 'None of your email IDs is connected and working — connect or reconnect one under Email IDs first.'
     : `${who} has no connected, working email accounts — please connect or reconnect one under Email IDs` };
   // ignoreRoom: owning a lead is not sending an email — an import may be spread over a mailbox whose sending
   // limit for TODAY is used up (the emails simply go on a later day).
-  if (ignoreRoom) return { accounts: working.map(a => ({ ...a, remaining: a.daily_send_limit || 150 })) };
+  if (ignoreRoom) return { accounts: working.map(a => ({ ...a, remaining: dailyLimit.limitOf(a, dailyDefault) })), dailyDefault };
   const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', todayStr);
   const sent = {}; (logs || []).forEach(l => { sent[l.user_email_id] = l.emails_sent; });
-  const accounts = working.map(a => ({ ...a, remaining: (a.daily_send_limit || 150) - (sent[a.id] || 0) })).filter(a => a.remaining > 0);
+  const accounts = working.map(a => ({ ...a, remaining: dailyLimit.limitOf(a, dailyDefault) - (sent[a.id] || 0) })).filter(a => a.remaining > 0);
   if (!accounts.length) return { error: own ? 'All your email IDs have reached today’s sending limit.' : 'All email IDs have reached daily limit' };
-  return { accounts };
+  return { accounts, dailyDefault };
 }
 
 module.exports = { FRESHNESS_ORDER, orderPool, assignmentQueue, allocationQueue, dayRemaining, connectedMailboxesFor };

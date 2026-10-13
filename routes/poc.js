@@ -137,7 +137,7 @@ module.exports = (ctx) => {
 
   async function creditBudget(req) {
     const orgId = orgIdFor(req);
-    return { orgId, used: await creditsUsed(orgId), limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits') };
+    return { orgId, used: await creditsUsed(orgId), limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits', orgId) };
   }
 
   // ── the company's size, from Apollo (owner, 2026-09-28) ─────────────────
@@ -218,7 +218,7 @@ module.exports = (ctx) => {
       apollo: apolloOn,
       credits: {
         used: apolloOn ? await creditsUsed(orgIdFor(req)) : 0,
-        limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits'),
+        limit: await settings.getSetting(supabase, 'poc_apollo_daily_credits', orgIdFor(req)),
       },
       // Only an admin can connect Apollo, so only an admin is told how.
       is_admin: hasRole(req, 'admin'),

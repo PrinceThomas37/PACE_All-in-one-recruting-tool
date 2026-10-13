@@ -6765,3 +6765,34 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, company onboarding and non-Google/Microsoft mailboxes (R-200) — design only
 - The owner said the company's domain is set up by PACE at purchase and employees then connect individually, and asked what happens with Zoho or any other provider. Checked the code: only Gmail and Microsoft mailboxes exist; no SMTP/IMAP path (`nodemailer` is installed, unused for mailboxes). Domain claim + auto-join and the SPF/DKIM/DMARC checks already exist. Recorded as R-200; no code changed.
+
+### SESSION 44, #325 merged; company email setup checklist (R-200 step a)
+- Owner: "Option A", "Option 1 — go for this", "build in this order", and "if completed, merge". #325 (Review & send / Send selected, R-193 plus the design notes) merged as `ab93353` after 239/239 on Node 22 and on Node 26. The other items from the owner's note are NOT done and were not merged as code: they wait on answers (R-194 several jobs in one email, R-195 places, R-196 which search, R-197 pills and missing details). Not seen live: `*.onrender.com` is blocked from this sandbox.
+- Built on a fresh branch from `main`: `services/email-setup.js`, the route, the Email setup panel; D-0120. Next: step b, the SMTP/IMAP mailbox connection (a third provider across the send loop, reply sweep, threading, in-app mailbox, warm-up; encrypted password storage), then step c.
+
+### SESSION 44, step b: app-password mailboxes (SMTP/IMAP), Zoho first (R-200, D-0121) — dev branch, NOT merged
+- Built the whole path: migration 063 (written, not applied), encryption, safe server rules, the transport, store, delivery with threading, the connect route, the send-loop branch and gate, reply and bounce sweeps over IMAP, recruiter/candidate/client send, every "is it connected" rule, and the My Setup window. Tests: 59 + 35 + 17 new, two older tests updated for the new table.
+- **Found while testing (real, fixed):** nodemailer reports a connection that died MID-message with command "CONN" — the same label as a failed connect — so the first rule ("before the message = nothing sent") would have allowed a retry and a double email. Now only OS connect errors count as nothing-sent; everything else is uncertain.
+- **Owed before release:** apply migration 063 (owner's go-ahead); set `MAILBOX_SECRET_KEY` on Render (`openssl rand -hex 32`, keep a copy); one live test with a real Zoho mailbox (the IMAP wire protocol and Zoho's real servers are untested here). **Left out, said on screen:** in-app inbox, warm-up, Sent-folder copy, old-reply catch-up (R-201).
+
+### SESSION 44, correction: no special limit for app-password mailboxes (D-0122)
+- Owner: it is not a new feature, it branches out to more providers — a mailbox of any provider starts with what the admin allowed. Removed the 30-a-day rule; the tests and the "Mailbox ready" card follow.
+
+### SESSION 44, standing rule: the admin decides every number (D-0123)
+- Owner (third time of asking): since this is an enterprise product, no mail count, AI count, user count or any count is typed into the code.
+- Done: removed every literal 150/300 for a mailbox's daily limit (new `services/daily-limit.js`, `config/limits.js`); new mailboxes start at the admin's default; a mailbox with no number is held to it (the send loop's old fallback of 300 now follows the admin). Moved my SMTP numbers (tries, window, messages per check) and the Send-selected cap into `SETTINGS_SCHEMA` ("Email engine"). Test `admin-numbers-smoke` (18), mutation-checked both ways. Found on the way: five route files used the new helper before importing it — `node --check` cannot see that; the affected suites did.
+- Found, not built: admin settings are deployment-wide, not per organisation (R-203). Older hard-coded caps listed in R-202.
+
+### SESSION 44, per-organisation admin numbers (D-0124, R-203; R-202 started)
+- Owner: "yes, do all". Settings are now per company: reads and writes take the organisation (`config/settings.js`), stored as `sys_<key>@<org>`; shared value and built-in default behind it; System Settings shows whose number it is and lets a company go back to the shared one.
+- Found while doing it: the default daily limit and the send-pacing numbers had NO screen at all (my earlier "Admin → Email Engine Schedule" was wrong). They are now real settings.
+- Blocked: applying migration 063 was cancelled twice by the approval step; not applied, not worked around.
+- R-202 (older caps) not yet moved — see ROADMAP.
+
+### SESSION 44, D-0124 follow-up: sending hours follow the organisation
+- The full suite caught what my targeted runs missed: sending hours an admin saved were stored under their company, but the send loop and My Setup still read the shared value, so a saved window would have been ignored. `getSendWindowHours(orgId)` / `getPersonSendWindow(userId, orgId)` now take the organisation (looked up from the person when not given); `routes/emails.js` and `routes/my-setup.js` pass it. `send-hours-smoke` fake now answers a multi-key read. Full Node 22 + Node 26 re-run in progress when this was written.
+
+### SESSION 44, R-202: the older caps become admin settings (D-0125)
+- AI daily ceilings per company (`services/ai-budget.js getCaps(supabase, orgId)`; the Integrations screen now reads/writes the caller's company). Finder: search size, saved searches, contacts per lead, jobs per lead (`config/settings.js`, `routes/finder.js`, `services/lead-finder.js normalizeSearch(input, caps)`). `followup_max` holds a person's own follow-up count (`followup-steps.dueDates(…, adminMax)`, `/outreach-plan`). Pool-capacity fallback: whole pool, no typed number.
+- Left on purpose and recorded: plan limits (vendor data), text lengths, server timeouts, the generator's personal meter; look-back days are R-204.
+- Migration 063: apply cancelled a third time after an explicit owner yes. Not applied, not worked around.

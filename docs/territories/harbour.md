@@ -296,3 +296,21 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - The follow-up chain starts at the first real send (`services/followup-chain.js`); a new-rules chain never sends PACE's standard wording — an unwritten follow-up sends nothing. Old chains keep the stock fallback.
+
+## 2026-10-12 (Session 44) — app-password mailboxes: a third provider (D-0121, R-200 step b)
+- **Send:** `deliverOutboundEmail` hands `platform 'SMTP'` to `services/smtp-delivery.js` (`deliver`, `sendNew`). PACE writes the Message-ID (stored in `emails.graph_message_id`, root in `conversation_id`); a follow-up carries In-Reply-To / References and the earlier email quoted underneath; with nothing to answer it goes out fresh, "Re:" removed. One attempt, no pooling.
+- **Failures** map onto `services/send-retry.js` by message text: refused password → "sign-in expired" (temporary, mailbox set aside); RCPT 5xx → "recipient rejected" (permanent); other 5xx → "restricted mailbox" (needs a person); 4xx → temporary; **a dropped connection is UNCERTAIN by default** — nodemailer labels a mid-message drop as command "CONN" too (measured), so only OS connect errors and "connection timeout / greeting never received" count as "nothing sent".
+- **Sweeps:** `sweepSmtpReplies` / `sweepSmtpBounces` read the inbox (and Junk/Spam for bounces) over IMAP, read-only, and feed the SAME rules as the other providers: `processInboundMessages` and the new shared `markBouncesFromMessages`. A refused password is recorded (`smtp_credentials.refresh_failed`) and the mailbox is skipped until reconnected; a network hiccup is not a refusal.
+- **Not for SMTP mailboxes:** the in-app inbox (`routes/mailbox.js` answers 409 `not_supported`; `mail-provider.forMailbox` throws), warm-up, the client-intel catch-up. No Sent-folder copy. Remaining places that ask "which mailboxes are connected" were all taught about `smtp_credentials` (mailbox-health, lead-distribution, mailbox-reassign, followup-sender, ownership-requests, recruiting outreach).
+
+## 2026-10-12 (Session 44) — D-0123: mailbox limits are the admin's
+The send loop's fallback for a mailbox with no `daily_send_limit` was 300 and mailbox creation stamped 150; both now follow the admin's `default_daily_send_limit` (`services/daily-limit.js`; one fallback of 150 in `config/limits.js`). Lead distribution and follow-up capacity use the same helper. SMTP-mailbox sweep batch size is the admin setting `smtp_sweep_batch`.
+
+## 2026-10-13 (Session 44) — D-0124
+Send pacing is per organisation: `getBulkSendSettings(orgId)` reads `default_daily_send_limit`, `send_delay_min_sec`, `send_delay_max_sec`, `domain_max_per_hour`, `bulk_send_max_per_run` through the settings module (they had no edit screen before). Follow-up capacity computes each mailbox's default by its organisation.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+The send window the send loop obeys is the sending person's ORGANISATION's hours (then their own narrowing, D-0104). A saved company window used to be stored but not read by the loop — fixed.
+
+## 2026-10-13 (Session 44) — D-0125
+Follow-up chains are created with the company's `followup_max` as a ceiling on the person's chosen count (`followup-steps.dueDates(settings, userId, anchor, adminMax)`); chains already scheduled are untouched.

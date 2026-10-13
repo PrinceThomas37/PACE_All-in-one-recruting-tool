@@ -101,11 +101,12 @@ function postedDays(v) {
  * arrives only in `domains` (an older saved search, a caller that sends websites alone) gets an entry too, so the two
  * lists never disagree.
  */
-function normalizeCompanies(companies, domains) {
+function normalizeCompanies(companies, domains, maxCompanies) {
+  const cap = maxCompanies >= 1 ? maxCompanies : LIMITS.domains;      // the company's own number (D-0124), else the default
   const out = [], seen = new Set();
   const add = (name, domain, city, state) => {
     const d = rule.normalizeDomain(domain);
-    if (!d || seen.has(d) || out.length >= LIMITS.domains) return;
+    if (!d || seen.has(d) || out.length >= cap) return;
     seen.add(d);
     out.push({ name: txt(name).slice(0, 120) || d, domain: d, city: txt(city).slice(0, 60), state: txt(state).slice(0, 60) });
   };
@@ -113,32 +114,33 @@ function normalizeCompanies(companies, domains) {
     if (c && typeof c === 'object') add(c.name, c.domain || c.website, c.city, c.state);
     else add('', c, '', '');
   });
-  uniqueList(domains, LIMITS.domains, 120).forEach((d) => add('', d, '', ''));
+  uniqueList(domains, cap, 120).forEach((d) => add('', d, '', ''));
   return out;
 }
 
 /** A saved search, checked. { ok:true, value } or { ok:false, error } in the person's words. */
-function normalizeSearch(input) {
+function normalizeSearch(input, caps) {
   const i = input || {};
+  const L = Object.assign({}, LIMITS, caps || {});       // `caps` = the company's own numbers (D-0124); the lengths stay as they are
   const name = txt(i.name).slice(0, LIMITS.name);
   if (!name) return { ok: false, error: 'Give the search a name, so you can find it in your list later.' };
-  const titles = uniqueList(i.titles, LIMITS.titles, LIMITS.title);
+  const titles = uniqueList(i.titles, L.titles, L.title);
   if (!titles.length) return { ok: false, error: 'Add at least one job title to look for.' };
-  const locations = uniqueList(i.locations, LIMITS.locations, LIMITS.location);
+  const locations = uniqueList(i.locations, L.locations, L.location);
   if (!locations.length) return { ok: false, error: 'Add at least one place where the job is (a city, a state, or "remote").' };
   const sizes = uniqueList(i.sizes, 3, 10).map((s) => s.toLowerCase()).filter((s) => SIZE_BANDS.some((b) => b.id === s));
   // Several industries may be picked; `sector` (the first) stays for anything that still reads the one-industry column.
   const known = (id) => Object.prototype.hasOwnProperty.call(SECTORS, id);
-  const sectors = uniqueList(i.sectors, LIMITS.sectors, 30).filter(known);
+  const sectors = uniqueList(i.sectors, L.sectors, 30).filter(known);
   if (!sectors.length && known(i.sector)) sectors.push(i.sector);
-  const companies = normalizeCompanies(i.companies, i.domains);
+  const companies = normalizeCompanies(i.companies, i.domains, L.domains);
   return {
     ok: true,
     value: {
       name, sector: sectors[0] || null, sectors, titles, locations, sizes,
       source: SOURCES.includes(i.source) ? i.source : 'apollo',
       posted_days: postedDays(i.posted_days),
-      keywords: uniqueList(i.keywords, LIMITS.keywords, LIMITS.keyword),
+      keywords: uniqueList(i.keywords, L.keywords, L.keyword),
       companies, domains: companies.map((c) => c.domain),
       active: i.active !== false,
     },
@@ -245,7 +247,7 @@ const datePostedFor = (days) => { const d = postedDays(days); return d === 0 ? '
  */
 function jsearchPlan(search, now, { max = 3, rotate = false } = {}) {
   const s = search || {};
-  const places = (s.locations || []).slice(0, LIMITS.locations);
+  const places = (s.locations || []);        // already held to the company's cap when the search was saved
   const subjects = (s.companies && s.companies.length) ? s.companies.map((c) => c.name || c.domain) : (s.titles || []);
   const pairs = [];
   subjects.forEach((t) => places.forEach((l) => pairs.push((t + ' jobs in ' + l).trim())));
@@ -481,11 +483,11 @@ const isDue = (card, now) => !!card && card.status === 'waiting' && !!card.wait_
  * limit, then the address (so the answer never depends on the order the database happens to return rows in).
  * `sentToday` is { mailboxId: n }. Returns an id, or null when there is none.
  */
-function suggestMailbox(accounts, sentToday) {
+function suggestMailbox(accounts, sentToday, defaultLimit) {
   const list = (accounts || []).filter((a) => a && a.id);
   if (!list.length) return null;
   const sent = (a) => Number((sentToday || {})[a.id]) || 0;
-  const limit = (a) => Number(a.daily_send_limit) || 150;
+  const limit = (a) => Number(a.daily_send_limit) || Number(defaultLimit) || 0;   // a mailbox with no number of its own counts as the admin's default
   return list.slice().sort((a, b) => sent(a) - sent(b) || limit(b) - limit(a) || String(a.email_address || '').localeCompare(String(b.email_address || '')))[0].id;
 }
 

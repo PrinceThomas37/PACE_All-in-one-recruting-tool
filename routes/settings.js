@@ -15,6 +15,7 @@ const followupSteps = require('../services/followup-steps');
 module.exports = (ctx) => {
   const router = express.Router();
   const { supabase, auth, hasRole } = ctx;
+  const orgOf = (req) => (ctx.orgIdFor ? ctx.orgOf(req) : undefined);   // the caller's organisation (D-0124)
 
 // ── PER-USER PREFERENCES (Session 24, D-0022) ───────────────────────────────
 // The owner: "a change in the theme in one user is reflected to other users, it
@@ -170,7 +171,10 @@ router.post('/outreach-plan', auth, async (req, res) => {
     // Follow-up 1 / 2: a reply in the first email's thread ('same', the default) or a new email with its own subject ('new').
     if (/^fu[1-5]_thread$/.test(key) && !['same', 'new'].includes(String(value))) return res.status(400).json({ error: 'Choose "same" or "new".' });
     // How many follow-ups (0–5) and the day of each (1–90, whole days after the first email) — services/followup-steps.js.
-    if (key === 'fu_count' && !(Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= followupSteps.MAX)) return res.status(400).json({ error: `Choose 0 to ${followupSteps.MAX} follow-ups.` });
+    if (key === 'fu_count') {
+      const most = Math.min(followupSteps.MAX, await numberSettings.getSetting(supabase, 'followup_max', orgOf(req)));      // the company's most (D-0124)
+      if (!(Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= most)) return res.status(400).json({ error: most > 0 ? `Choose 0 to ${most} follow-ups.` : 'Your company has switched follow-ups off.' });
+    }
     if (/^fu[1-5]_day$/.test(key) && !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 90)) return res.status(400).json({ error: 'Choose a whole number of days, 1 to 90.' });
     const fullKey = `u_${uid}_${key}`;
     const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });
@@ -240,7 +244,7 @@ router.post('/outreach-plan/mailbox', auth, async (req, res) => {
 router.get('/admin/settings/numbers', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
-    const settings = await numberSettings.getAllSettings(supabase);
+    const settings = await numberSettings.getAllSettings(supabase, orgOf(req));
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -255,13 +259,13 @@ router.post('/admin/settings/numbers', auth, async (req, res) => {
     // Sending hours are a PAIR: a start that is not before the end would shut
     // lead sending entirely. Refuse it here, in words, rather than store it.
     if ('send_window_start_hour' in updates || 'send_window_end_hour' in updates) {
-      const s = Number('send_window_start_hour' in updates ? updates.send_window_start_hour : await numberSettings.getSetting(supabase, 'send_window_start_hour'));
-      const e = Number('send_window_end_hour' in updates ? updates.send_window_end_hour : await numberSettings.getSetting(supabase, 'send_window_end_hour'));
+      const s = Number('send_window_start_hour' in updates ? updates.send_window_start_hour : await numberSettings.getSetting(supabase, 'send_window_start_hour', orgOf(req)));
+      const e = Number('send_window_end_hour' in updates ? updates.send_window_end_hour : await numberSettings.getSetting(supabase, 'send_window_end_hour', orgOf(req)));
       if (!(s < e)) return res.status(400).json({ error: 'The start hour must be earlier than the stop hour.', key: 'send_window_end_hour' });
     }
-    const result = await numberSettings.setSettings(supabase, updates);
+    const result = await numberSettings.setSettings(supabase, updates, orgOf(req));
     if (result.error) return res.status(400).json({ error: result.error, key: result.key });
-    const settings = await numberSettings.getAllSettings(supabase);
+    const settings = await numberSettings.getAllSettings(supabase, orgOf(req));
     res.json({ success: true, settings });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

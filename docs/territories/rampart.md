@@ -468,3 +468,20 @@ flows still separate correctly.
 
 ## 2026-10-08 (Session 42) — logo upload and signature HTML (D-0104)
 - The logo route is owner-or-admin; the file is checked by its first bytes (png/jpg/gif/webp, ≤200 KB), never by what the browser says; the stored address is served from a public bucket and `cleanSendsAs` accepts ONLY an address inside our own bucket (no tracking pixels from other hosts). Saved signature HTML goes through `sanitizeEmailHtml`. `/my-setup/*` act on the signed-in person only (the starter is for bd / bd_lead / admin).
+
+## 2026-10-12 (Session 44) — the email-setup route only answers for the caller's own claimed domain (D-0120)
+- `GET /org/domains/:id/email-setup` (`routes/org-domains.js`): admin only; the domain row is read `.eq('org_id', caller's org)`, so another organisation's admin, or an id that is not theirs, gets 404 and never a DNS answer — it is not a probe for anyone's domain, and it only reads public DNS. A test removes that `.eq` and watches it fail (`test/email-setup-smoke.mjs`). It does not need the domain to be VERIFIED (it reads public records and grants nothing); auto-join still requires verification, as before.
+
+## 2026-10-12 (Session 44) — app passwords: encryption, SSRF, and who may connect what (D-0121)
+- **Encryption:** `services/mailbox-secret.js` AES-256-GCM, fresh IV per value, key only in `MAILBOX_SECRET_KEY` (never the database). With no key it refuses to encrypt — there is no "store it plain for now". Health reads (`mailbox-health.js`) never select `password_enc`. The password is not in any response, log or error shown to the person (the test-email error is scrubbed of it).
+- **A person types a server name and PACE connects to it — an SSRF door.** `services/smtp-presets.js safeTarget`: a real host NAME only (no IP), only ports SMTP 465/587 and IMAP 993, TLS only, EVERY address the name resolves to must be public (a single private address refuses it — rebinding), and the connection is made to the checked address with the name kept for the certificate. Tests remove the check and watch three assertions fail. `allowPrivate` / `tlsOptions` exist for tests only and are not reachable from a route.
+- Ownership as the Gmail route: own slot or admin, same organisation, else 404; six tries in ten minutes per person (a way to guess passwords against a mail server otherwise).
+
+## 2026-10-12 (Session 44) — D-0123 finding: settings are not per organisation (R-203)
+`/admin/settings/numbers` and the `sys_*` rows in the global `app_settings` table are deployment-wide: a second customer's admin could read and change numbers every customer shares. Before a second customer, settings need a per-organisation override with fallback to the deployment default. Not built — the owner's call.
+
+## 2026-10-13 (Session 44) — D-0124 closes R-203 (for requester-path numbers)
+One company's admin can no longer change another's numbers: writes are keyed by the caller's organisation. Background engines still read the shared value. A platform-owner role to edit the shared values from a screen does not exist.
+
+## 2026-10-13 (Session 44) — D-0125
+AI ceilings were shared across companies although usage was per company; now per company (R-203 extended to `ai_daily_*_cap@<org>`).

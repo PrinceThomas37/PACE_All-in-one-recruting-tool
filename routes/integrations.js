@@ -214,7 +214,7 @@ module.exports = (ctx) => {
     try {
       if (!admin(req, res)) return;
       const [caps, spent] = await Promise.all([
-        aiBudget.getCaps(supabase), aiBudget.getSpend(supabase, req.orgId),
+        aiBudget.getCaps(supabase, req.orgId), aiBudget.getSpend(supabase, req.orgId),
       ]);
       res.json({
         caps, spent, day: aiBudget.dayKey(),
@@ -244,7 +244,9 @@ module.exports = (ctx) => {
       if (!admin(req, res)) return;
       const b = req.body || {};
       const writes = [];
-      const set = (key, v) => {
+      // The ceilings belong to THIS company (D-0124): a blank goes back to the shared value.
+      const set = (baseKey, v) => {
+        const key = req.orgId ? aiBudget.orgCapKey(baseKey, req.orgId) : baseKey;
         if (v === undefined) return;
         if (v === '' || v === null) { writes.push(supabase.from('app_settings').delete().eq('key', key)); return; }
         const n = Number(v);
@@ -254,7 +256,7 @@ module.exports = (ctx) => {
       set(aiBudget.CAP_TOKENS_KEY, b.tokens);
       set(aiBudget.CAP_CALLS_KEY, b.calls);
       await Promise.all(writes);
-      res.json({ caps: await aiBudget.getCaps(supabase) });
+      res.json({ caps: await aiBudget.getCaps(supabase, req.orgId) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

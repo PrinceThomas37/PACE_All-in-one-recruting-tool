@@ -28,6 +28,7 @@ const supabase = {
       select() { return api; },
       eq(k, v) { st.key = v; return api; },
       async maybeSingle() { return { data: st.key in rows ? { value: rows[st.key] } : null }; },
+      async in(_col, keys) { return { data: keys.filter(k => k in rows).map(k => ({ key: k, value: rows[k] })) }; },   // settings are read several keys at once (D-0124)
       async upsert(list) { (Array.isArray(list) ? list : [list]).forEach(r => { rows[r.key] = r.value; }); return { error: null }; },
     };
     return api;
@@ -37,7 +38,7 @@ const freshSettings = () => { delete require.cache[require.resolve('../config/se
 
 // 1. The reader, lifted out of index.js and RUN.
 const src = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
-const m = src.match(/async function getSendWindowHours\(\) \{[\s\S]*?\n\}\n/);
+const m = src.match(/async function getSendWindowHours\((?:orgId)?\) \{[\s\S]*?\n\}\n/);
 step('index.js still defines getSendWindowHours', !!m);
 const makeReader = (settingsConfig) => new Function('supabase', 'settingsConfig', m[0] + '\nreturn getSendWindowHours;')(supabase, settingsConfig);
 

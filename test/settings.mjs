@@ -20,8 +20,9 @@ function mockSupabase(row) {
   // row: { value: '...' } | null  — the single row app_settings would return.
   return {
     from: () => ({
+      // the read asks for the organisation's key, the shared key and any legacy key in one go (D-0124); the mock answers the shared one
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: row }) }),
+        in: async (_col, keys) => ({ data: row ? [{ key: keys[0], value: row.value }] : [] }),
       }),
       upsert: async () => ({ error: null }),
     }),
@@ -59,7 +60,7 @@ function mockSupabase(row) {
 // 5. Supabase throwing → falls back to default (never breaks the caller).
 {
   const { getSetting } = freshSettings();
-  const throwing = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => { throw new Error('down'); } }) }) }) };
+  const throwing = { from: () => ({ select: () => ({ in: async () => { throw new Error('down'); } }) }) };
   const v = await getSetting(throwing, 'wf_tick_batch');
   ok('DB error falls back to default (200), does not throw', v === 200, `got ${v}`);
 }
@@ -76,7 +77,7 @@ function mockSupabase(row) {
 {
   const { getSetting } = freshSettings();
   let calls = 0;
-  const counting = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => { calls++; return { data: { value: '50' } }; } }) }) }) };
+  const counting = { from: () => ({ select: () => ({ in: async (_col, keys) => { calls++; return { data: [{ key: keys[0], value: '50' }] }; } }) }) };
   const v1 = await getSetting(counting, 'wf_max_step_failures');
   const v2 = await getSetting(counting, 'wf_max_step_failures');
   ok('cached: second read within TTL does not re-query', calls === 1 && v1 === v2, `calls=${calls} v1=${v1} v2=${v2}`);

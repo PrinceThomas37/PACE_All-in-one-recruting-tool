@@ -1130,3 +1130,26 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-12 (Session 44) — `POST /emails/send-selected` brought level with Send all (R-193)
 - `index.js`: the route had its own shorter select (no `attempt_count`, `next_attempt_at`, `org_id`, `sent_by`, `template_variant`) and no retry-backoff filter — no screen called it, so it drifted. It now reads `PENDING_EMAIL_JOB_SELECT`, ordered, caps `email_ids` at 500, filters with `sendRetry.isDue`, answers `{ queued: 0 }` when nothing is due, and answers 500 when it fails before replying (it used to leave the request hanging). Still the caller's own `pending` rows only. Lesson: an endpoint with no caller rots; the Pending tab's "Send selected" is its first caller.
+
+## 2026-10-12 (Session 44) — company email setup route (R-200 step a, D-0120)
+- `routes/org-domains.js`: `GET /org/domains/:id/email-setup` (admin only; the domain must be one THIS organisation has claimed, else 404 — it is not a DNS probe). Runs `services/email-setup.js` against DNS (injectable `ctx.emailSetupResolver` for tests); `?dkim_selector=` for a provider's own DKIM name. Read-only. `smtpAvailable` is passed as false until the SMTP/IMAP connection exists.
+- Release: #325 merged to `main` (`ab93353`) 12 Oct; full suite 239/239 on Node 22 and on Node 26 (v26.11.1).
+
+## 2026-10-12 (Session 44) — `routes/smtp-mailbox.js` and the wiring (D-0121)
+- `GET /smtp/enabled`, `GET /smtp/info/:userEmailId`, `POST /smtp/connect/:userEmailId`, `GET /smtp/status/:userEmailId`, `DELETE /smtp/:userEmailId`. The slot must be the caller's own (or caller an admin) in the caller's organisation — 404 otherwise. Connect answers 200 with every step; nothing is saved unless sending AND reading work. Six tries per person per ten minutes. 503 `not_configured` with no `MAILBOX_SECRET_KEY`.
+- `index.js`: `deliverViaSmtp`, `smtpConnectedIds`, `sendSmtpNewMessage` (handed to `routes/recruiting/outreach.js`), a send-loop gate ("not configured on the server" = needs a person), the two sweeps, `msg._provider === 'smtp'` on stored conversation rows. Migration 063 must be applied BEFORE merge; the code reads a missing table as "not connected".
+
+## 2026-10-12 (Session 44) — connect no longer sets a daily limit (D-0122)
+- `routes/smtp-mailbox.js`: a successful connect sets only `platform: 'SMTP'` and `is_active`; the mailbox keeps the daily limit the admin allowed and the answer reports it. (D-0121's 30-a-day rule is reversed.)
+
+## 2026-10-12 (Session 44) — D-0123: the admin decides every number
+`index.js`, `routes/auth.js`, `routes/finder.js`, `routes/lead-assign.js`, `routes/ownership-requests.js`, `routes/candidate-outreach.js`, `routes/recruiting/outreach.js` now take a mailbox's daily limit from `services/daily-limit.js` (admin default, 60 s cache) instead of typing 150/300. `routes/smtp-mailbox.js` reads its connect tries and window from settings (`smtp_connect_tries`, `smtp_connect_window_minutes`); the SMTP sweep reads `smtp_sweep_batch`; retry-failed and send-selected read `send_selected_max`. A new cap goes in `SETTINGS_SCHEMA`, not in a route. Pinned by `test/admin-numbers-smoke.mjs`.
+
+## 2026-10-13 (Session 44) — D-0124: settings are per organisation
+`config/settings.js` `getSetting/getAllSettings/setSettings(supabase, …, orgId)`: org key `sys_<key>@<org>` → shared `sys_<key>` → legacy bare key → default. `/admin/settings/numbers` reads/writes the caller's organisation (`orgIdFor(req)`); an empty value clears the company's own number. Request-path callers pass the organisation (jobs, companies, job-orders, lead-take, emails, client-intel, poc, finder, smtp-mailbox, send-selected). The send run takes its organisation from its mailboxes (`loadMailboxQuotaState().orgId`). Engines with no requester stay deployment-wide.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+`getSendWindowHours(orgId)` and `getPersonSendWindow(userId, orgId)` in `index.js` read the organisation's window (org looked up from the person if not given); `routes/emails.js` and `routes/my-setup.js` pass it. `routes/settings.js` tolerates a context without `orgIdFor` (tests mount partial contexts).
+
+## 2026-10-13 (Session 44) — D-0125 (R-202)
+New admin settings (Lead Finder group + Email engine): `finder_max_titles/places/companies/sectors/keywords`, `finder_max_saved_searches`, `finder_max_contacts_per_lead`, `finder_max_jobs_per_lead`, `followup_max`. `routes/finder.js` reads them per company (`searchCaps(orgId)`, `num(key, orgId)`); `routes/settings.js` holds `fu_count` to `followup_max`; the lead-ratio capacity fallback is the pool total. `routes/integrations.js` AI ceilings are per company.
