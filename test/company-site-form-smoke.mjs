@@ -149,6 +149,22 @@ try {
     mode = 'ok';
   });
 
+  await t('no organisation set yet: kept, but the page says to email instead of "sent" (D-0138)', async () => {
+    delete process.env.WEBSITE_LEADS_ORG_ID;
+    const warn = console.warn; console.warn = () => {};
+    try {
+      const before = fake.tables.jobs.length;
+      const p = await fresh();
+      await fill(p, 'nora@quill.io'); await p.click('#f-go');
+      await p.waitForSelector('#ok:not([hidden])');
+      assert.match(await p.textContent('#ok'), /did not go through.*info@paceconsultant\.in/);
+      assert.ok(!(await p.isVisible('#sent')));
+      assert.equal(fake.tables.jobs.length, before, 'no lead anywhere');
+      assert.ok(fake.tables.app_settings.some((r) => r.key === 'site_request:nora@quill.io'), 'but the request is kept');
+      await p.context().close();
+    } finally { console.warn = warn; process.env.WEBSITE_LEADS_ORG_ID = ORG; }
+  });
+
   await t('one address sending again and again gets the limiter\'s sentence', async () => {
     const p = await fresh();
     let said = '';

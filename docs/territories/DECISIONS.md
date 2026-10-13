@@ -2024,3 +2024,9 @@ vs template reply rates (Deliverability → variants) say one of them loses.
 **My call, not the owner's (flagged to them):** which organisation's lead list receives these is set per deployment (`WEBSITE_LEADS_ORG_ID` in Render). It is NOT defaulted to the first organisation, because that one is a customer's (Fute Global), and PACE's prospects (other staffing firms) must not land in a customer's pool. With nothing set, requests are kept in the app but nobody's lead list gets them.
 **Open:** which organisation (asked 13 Oct). The site must not be published with the new form until that is set.
 **Re-open when:** the owner answers, or a customer asks for the same form on their own site.
+
+### D-0138 · 2026-10-13 · STANDS · Merge the website now; until an organisation is chosen, the booking form falls back to email (R-215, R-216)
+**Their words:** *"okay merge it"* (after being asked which organisation inside PACE should receive website requests; that question was not answered).
+**Chosen:** merged on the owner's go. My call, so the merge loses nothing: the app answers "ok" ONLY when a request reached a lead list somebody works. Until `WEBSITE_LEADS_ORG_ID` is set (or if the lead cannot be made), the request is still kept, and the visitor is told plainly to email info@paceconsultant.in, with a link that opens their email app. That is no worse than the old form. The page never says "sent" for a request nobody will see.
+**Open:** which organisation (A, a company inside PACE for PACE itself, recommended; or B, Fute Global's lead list). Then the owner sets `WEBSITE_LEADS_ORG_ID` in Render, with no code change.
+**Re-open when:** the owner answers.

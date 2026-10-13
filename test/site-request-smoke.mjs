@@ -219,14 +219,38 @@ await t('the route: 400 with a sentence, the same 200 for a person and a bot, or
     assert.deepEqual(bot, { status: 200, body: { ok: true } });
     assert.equal(fake.tables.app_settings.length, 0, 'a bot stores nothing');
     delete process.env.WEBSITE_LEADS_ORG_ID;
-    assert.deepEqual(await post(REQ), { status: 200, body: { ok: true } });
+    const nowhere = await post(REQ);
+    assert.equal(nowhere.status, 503, 'kept but in nobody\'s lead list must not be "ok"');
+    assert.match(nowhere.body.error, /email info@paceconsultant\.in/);
     assert.equal(fake.tables.jobs.length, 0);
+    assert.ok(fake.tables.app_settings.some((r) => r.key === 'site_request:' + REQ.email), 'still kept');
     process.env.WEBSITE_LEADS_ORG_ID = ORG_A;
     assert.deepEqual(await post({ ...REQ, email: 'ravi@nimbus.io', agency: 'Nimbus' }), { status: 200, body: { ok: true } });
     assert.equal(fake.tables.jobs.length, 1);
     assert.equal(fake.tables.jobs[0].org_id, ORG_A);
   } finally {
     console.log = quiet; console.warn = warn;
+    if (saved === undefined) delete process.env.WEBSITE_LEADS_ORG_ID; else process.env.WEBSITE_LEADS_ORG_ID = saved;
+    server.close();
+  }
+});
+await t('the route: a lead that could not be made is a 503, never "ok" (D-0138)', async () => {
+  const express = require('express');
+  const { fake, db } = world({ __onQuery: (q) => (q.table === 'jobs' && q.op === 'insert' ? { data: null, error: { message: 'insert refused' } } : undefined) });
+  const app = express();
+  app.use(express.json());
+  app.use(require('../routes/site-requests.js')({ db }));
+  const server = await new Promise((ok) => { const s = app.listen(0, () => ok(s)); });
+  const saved = process.env.WEBSITE_LEADS_ORG_ID;
+  const err = console.error; console.error = () => {};
+  try {
+    process.env.WEBSITE_LEADS_ORG_ID = ORG_A;
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/site/walkthrough-request`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(REQ) });
+    assert.equal(res.status, 503);
+    assert.match((await res.json()).error, /info@paceconsultant\.in/);
+    assert.equal(fake.tables.app_settings.length, 1, 'the request itself is kept');
+  } finally {
+    console.error = err;
     if (saved === undefined) delete process.env.WEBSITE_LEADS_ORG_ID; else process.env.WEBSITE_LEADS_ORG_ID = saved;
     server.close();
   }

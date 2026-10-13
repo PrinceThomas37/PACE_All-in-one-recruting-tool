@@ -1175,3 +1175,6 @@ Every request is KEPT first, in `app_settings` `site_request:<email>`. It is a 5
 - a reminder, type `website_request`, for the org's oldest active admin (`role` or `roles` includes `admin`).
 
 The same email on a live lead in that org makes no second lead: the reminder goes on that lead. It is deliberately NOT defaulted to `DEFAULT_ORG_ID`, because that org is Fute Global, a customer. A failure after the request was kept is logged as `[site] … was kept but no lead was made`. CORS is the app's existing `origin:'*'`. The website wakes the free Render instance with `GET /health` on the first focus of the form.
+
+## 2026-10-13 (Session 44) — the walkthrough route says "ok" only when a lead was made (D-0138)
+`POST /site/walkthrough-request` returns `{ok:true}` only when the request reached a lead (new or existing). If it was kept but went nowhere (no `WEBSITE_LEADS_ORG_ID`, or the lead could not be made), it returns 503 with a sentence naming info@paceconsultant.in, and the site's form shows its email fallback. The log line says which of the two happened.

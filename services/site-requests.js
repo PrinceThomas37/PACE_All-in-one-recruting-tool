@@ -13,8 +13,8 @@
 // on this deployment is a CUSTOMER's (Fute Global, migration 022), so falling
 // back to it would put PACE's own prospects — other staffing firms — into a
 // customer's lead pool. With no organisation set, every request is still KEPT
-// (app_settings, the same store as /auth/signup-request) and nothing is put in
-// anybody's lead list.
+// (app_settings, the same store as /auth/signup-request), nothing is put in
+// anybody's lead list, and the route tells the visitor to email instead (D-0138).
 //
 // What a request becomes in that organisation:
 //   * a lead in the Unassigned pool (source "Website · walkthrough request"),

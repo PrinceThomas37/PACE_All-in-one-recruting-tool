@@ -1264,3 +1264,6 @@ New: `places-smoke` (15), `take-selected-ui-smoke` (18). Extended: `finder-route
 - the `index.js` wiring.
 
 Mutation-checked: removing the escaping, the deleted-lead check, the no-org guard or the honeypot each fails it. `reminder-clarity-smoke` now lists `website_request`. `company-site-form-smoke` (Chromium) runs the REAL site page against a copy of the route on another origin: the warm-up `/health`, the honeypot, validation, success, a slow first answer, the app being down (it must never say "sent"), the rate-limit sentence, and the yearly prices in whole dollars.
+
+## 2026-10-13 (Session 44) — D-0138 guards
+`site-request-smoke` is now 18 checks and `company-site-form-smoke` 10. They pin that "kept but in nobody's lead list" is a 503, never "ok": both with no organisation set (in the browser, the page must show the email fallback and not "sent") and when the lead insert fails. Mutation-checked: always answering ok fails 2.
