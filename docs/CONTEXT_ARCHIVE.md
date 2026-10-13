@@ -6821,3 +6821,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, migration 064 applied (13 Oct)
 - The owner ran `064_contact_status_blocked.sql` in the Supabase SQL editor; the live constraint was read back and lists `blocked`. Blocked is usable as soon as PR #328 is deployed.
+
+### SESSION 44, release: PR #328 merged (13 Oct)
+- Squash-merged to `main` as `4fd9048` (head `9f07baf`; full suite 248/248 on Node 22 and Node 26). Render deploys it. Contains: multi-job bulleted first email (`{{jobs}}`), place chips, search progress + edit-in-place, the window-refresh fix in the render engine, the Accept window's limits and reveal-details fix, and the Blocked email status (migration 064 already applied by the owner). Owed: the owner tries it on a real screen (how it FEELS cannot be measured here); R-205 (`MAILBOX_SECRET_KEY` on Render + one live Zoho test); R-206 (windows that close and reopen still pop).
