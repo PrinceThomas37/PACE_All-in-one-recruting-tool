@@ -479,3 +479,6 @@ flows still separate correctly.
 
 ## 2026-10-12 (Session 44) — D-0123 finding: settings are not per organisation (R-203)
 `/admin/settings/numbers` and the `sys_*` rows in the global `app_settings` table are deployment-wide: a second customer's admin could read and change numbers every customer shares. Before a second customer, settings need a per-organisation override with fallback to the deployment default. Not built — the owner's call.
+
+## 2026-10-13 (Session 44) — D-0124 closes R-203 (for requester-path numbers)
+One company's admin can no longer change another's numbers: writes are keyed by the caller's organisation. Background engines still read the shared value. A platform-owner role to edit the shared values from a screen does not exist.

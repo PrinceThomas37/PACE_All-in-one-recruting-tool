@@ -67,12 +67,12 @@ module.exports = (ctx) => {
   }
   const readCount = async (key) => { const n = Number(await readSetting(key)); return Number.isFinite(n) && n > 0 ? n : 0; };
   const orgOf = (req) => (req && (req.orgId || (req.user && req.user.org_id))) || null;
-  const num = (key) => settings.getSetting(supabase, key);
+  const num = (key, orgId) => settings.getSetting(supabase, key, orgId || undefined);   // one organisation's number (D-0124)
 
   async function accessOf(req) {
     const isAdmin = hasRole(req, 'admin');
     const a = finder.readAccess(await readSetting(finder.accessKey(req.user.id)));
-    return { enabled: isAdmin || (a.enabled && hasRole(req, ...ADDERS)), is_admin: isAdmin, daily: finder.dailyFor(a, await num('finder_cards_per_day')) };
+    return { enabled: isAdmin || (a.enabled && hasRole(req, ...ADDERS)), is_admin: isAdmin, daily: finder.dailyFor(a, await num('finder_cards_per_day', orgOf(req))) };
   }
   // The caller must be switched on; answers the 403 itself.
   async function needAccess(req, res) {
@@ -93,7 +93,7 @@ module.exports = (ctx) => {
 
   // The organisation's daily Apollo credit meter. `spend()` writes BEFORE the call is trusted: over-counting is the safe direction.
   async function budgetFor(orgId, now) {
-    const limit = await num('finder_apollo_daily_credits');
+    const limit = await num('finder_apollo_daily_credits', orgId);
     const key = finder.creditKey(orgId, now);
     const b = { orgId, limit, used: await readCount(key) };
     b.left = () => Math.max(0, b.limit - b.used);
@@ -105,7 +105,7 @@ module.exports = (ctx) => {
   // per organisation. Same rule as Apollo's meter: write the count BEFORE the call is trusted — over-counting is the safe direction.
   const jsKeyOf = (orgId) => integrations.getOrgSecret(supabase, 'jsearch', orgId);
   async function jsBudgetFor(orgId, now) {
-    const limit = await num('finder_jsearch_daily_requests');
+    const limit = await num('finder_jsearch_daily_requests', orgId);
     const key = finder.jsearchKey(orgId, now);
     const b = { orgId, limit, used: await readCount(key) };
     b.left = () => Math.max(0, b.limit - b.used);
@@ -125,7 +125,7 @@ module.exports = (ctx) => {
   async function freeSourceOrgs({ search, jsKey, jsBudget, now, oneOff }) {
     const out = { orgs: [], note: '', error: null };
     if (!jsKey) { out.note = 'Free job sources are not connected. An admin adds the JSearch key under Admin → Integrations & API Keys.'; return out; }
-    const perRun = await num('finder_jsearch_requests_per_run');
+    const perRun = await num('finder_jsearch_requests_per_run', jsBudget && jsBudget.orgId);
     if (perRun <= 0) { out.note = 'Free job sources are switched off. Ask an admin to set a number under Admin → Settings → Lead Finder.'; return out; }
     const plan = finder.jsearchPlan(search, now, { max: perRun, rotate: !oneOff });
     if (!plan.queries.length) { out.note = 'Nothing to look up in the free job sources.'; return out; }
@@ -284,10 +284,10 @@ module.exports = (ctx) => {
       res.json({
         enabled: true, is_admin: a.is_admin, daily: a.daily,
         apollo: { connected: await integrations.isConfigured(supabase, 'apollo') },
-        jobsource: { connected: !!(await jsKeyOf(orgId)), used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests'), per_run: await num('finder_jsearch_requests_per_run') },
-        credits: { used: await readCount(finder.creditKey(orgId, now)), limit: await num('finder_apollo_daily_credits') },
-        reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day') },
-        wait_days: await num('finder_wait_days'), card_days: await num('finder_card_days'),
+        jobsource: { connected: !!(await jsKeyOf(orgId)), used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests', orgId), per_run: await num('finder_jsearch_requests_per_run', orgId) },
+        credits: { used: await readCount(finder.creditKey(orgId, now)), limit: await num('finder_apollo_daily_credits', orgId) },
+        reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day', orgOf(req)) },
+        wait_days: await num('finder_wait_days', orgOf(req)), card_days: await num('finder_card_days', orgOf(req)),
         sectors: Object.keys(finder.SECTORS).map((id) => ({ id, label: finder.SECTORS[id].label, titles: finder.SECTORS[id].titles })),
         sizes: finder.SIZE_BANDS.map((b) => ({ id: b.id, label: b.label })), posted: finder.POSTED_RANGE,
         goes_to: hasRole(req, 'bd', 'bd_lead') ? 'you' : 'pool',
@@ -329,7 +329,7 @@ module.exports = (ctx) => {
       if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
       const { data, error } = await db.forRequest(req).from('users').select('id,name,email,role,roles').order('name', { ascending: true });
       if (error) throw error;
-      const dflt = await num('finder_cards_per_day');
+      const dflt = await num('finder_cards_per_day', orgOf(req));
       const out = [];
       for (const u of (data || [])) {
         const roles = [].concat(u.role || [], u.roles || []);
@@ -363,7 +363,7 @@ module.exports = (ctx) => {
   // organisation's name, shown only as "••••1234", and never sent back to the browser. Literal paths: they sit above any :id route.
   async function jobsourceStatus(orgId, now) {
     const key = await jsKeyOf(orgId);
-    return { connected: !!key, hint: key ? integrations.orgMask(key) : null, used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests'), per_run: await num('finder_jsearch_requests_per_run') };
+    return { connected: !!key, hint: key ? integrations.orgMask(key) : null, used: await readCount(finder.jsearchKey(orgId, now)), limit: await num('finder_jsearch_daily_requests', orgId), per_run: await num('finder_jsearch_requests_per_run', orgId) };
   }
   router.get('/finder/admin/jobsource', auth, async (req, res) => {
     try {
@@ -521,7 +521,7 @@ module.exports = (ctx) => {
       await housekeeping(scoped, req.user.id, now);
       const budget = await budgetFor(orgId, now);
       const jsKey = v.value.source !== 'apollo' ? await jsKeyOf(orgId) : null, jsBudget = await jsBudgetFor(orgId, now);
-      const r = await runSearch({ scoped, orgId, userId: req.user.id, search: Object.assign({ id: null }, v.value), daily: await num('finder_cards_per_run'), key, budget, now, oneOff: true, jsKey, jsBudget });
+      const r = await runSearch({ scoped, orgId, userId: req.user.id, search: Object.assign({ id: null }, v.value), daily: await num('finder_cards_per_run', orgId), key, budget, now, oneOff: true, jsKey, jsBudget });
       res.json({ results: [r], new_cards: r.cards || 0, credits: { used: budget.used, limit: budget.limit }, jobsource: { used: jsBudget.used, limit: jsBudget.limit } });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -538,7 +538,7 @@ module.exports = (ctx) => {
       const { data } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', finder.dayOf(now)).in('user_email_id', ids);
       (data || []).forEach((l) => { sent[l.user_email_id] = Number(l.emails_sent) || 0; });
     } catch (_) { /* a missing count only affects which one is suggested */ }
-    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
+    const dailyDefault = mb.dailyDefault;           // this organisation's default (D-0124)
     const accounts = mb.accounts.map((a) => ({ id: a.id, email_address: a.email_address, display_name: a.display_name || '', daily_limit: a.daily_send_limit || dailyDefault, sent_today: sent[a.id] || 0 }));
     return { accounts, suggested_id: finder.suggestMailbox(mb.accounts, sent, dailyDefault) };
   }
@@ -672,7 +672,7 @@ module.exports = (ctx) => {
           lead_gone: !!c.lead_id && !l, lead_elsewhere: !!l && !mine,
         };
       });
-      res.json({ items: out, counts, hidden: all.length - items.length, days: HISTORY_DAYS, card_days: await num('finder_card_days') });
+      res.json({ items: out, counts, hidden: all.length - items.length, days: HISTORY_DAYS, card_days: await num('finder_card_days', orgOf(req)) });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 
@@ -705,7 +705,7 @@ module.exports = (ctx) => {
   router.post('/finder/cards/:id/wait', auth, async (req, res) => {
     try {
       if (!(await needAccess(req, res))) return;
-      const until = finder.waitUntil(clock(), await num('finder_wait_days'));
+      const until = finder.waitUntil(clock(), await num('finder_wait_days', orgOf(req)));
       const { data, error } = await db.forRequest(req).from('finder_cards')
         .update({ status: 'waiting', wait_until: until, decided_at: clock() })
         .eq('id', req.params.id).eq('user_id', req.user.id).eq('status', 'new').select('id').maybeSingle();
@@ -768,7 +768,7 @@ module.exports = (ctx) => {
       payload.people = Object.assign({}, payload.people || {});
       if (payload.people[personId]) return res.json({ person: payload.people[personId], cached: true });
       const now = clock(), orgId = orgOf(req);
-      const mineKey = finder.revealKey(req.user.id, now), used = await readCount(mineKey), limit = await num('finder_reveals_per_day');
+      const mineKey = finder.revealKey(req.user.id, now), used = await readCount(mineKey), limit = await num('finder_reveals_per_day', orgOf(req));
       if (used >= limit) return res.status(429).json({ error: 'You have revealed your ' + limit + ' emails for today. More tomorrow, or ask an admin to raise it.' });
       const key = await integrations.getSecret(supabase, 'apollo');
       if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });

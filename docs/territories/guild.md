@@ -811,3 +811,6 @@ BD refused; foreign submission/candidate id → 404). Did not commit.
 
 ## 2026-10-12 (Session 44) — D-0123
 Recruiter outreach (`routes/recruiting/outreach.js`) takes the sending mailbox's daily limit from `services/daily-limit.js` (admin default) rather than a typed number.
+
+## 2026-10-13 (Session 44) — D-0124
+`routes/recruiting/job-orders.js` reads the company cooldown for the requester's organisation.

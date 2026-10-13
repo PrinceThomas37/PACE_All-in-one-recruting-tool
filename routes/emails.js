@@ -152,7 +152,7 @@ router.get('/emails', auth, async (req, res) => {
     // queued one still shows the template. Say so on the row rather than let
     // the preview pass for the final text.
     let aiFirstOn = false;
-    try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1; } catch (_) {}
+    try { aiFirstOn = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', orgOf(req))) === 1; } catch (_) {}
     // D-0117: the badge follows the person's own choice (and, when wording is per email ID, that email ID's).
     let aiChoiceMap = {};
     try {
@@ -269,7 +269,7 @@ router.get('/emails/pending-summary', auth, async (req, res) => {
     // must never say an email is held when it is not.
     let companyCap = 0, companySentToday = {};
     try {
-      companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails')) || 0;
+      companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails', orgOf(req))) || 0;
       if (companyCap > 0) {
         companySentToday = await companyDailyCap.loadSentToday(db.forRequest(req),
           rows.filter(companyDailyCap.isFirstEmail).map(r => r.job?.company_id), today());

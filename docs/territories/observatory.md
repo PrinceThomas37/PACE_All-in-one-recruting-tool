@@ -695,3 +695,6 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-12 (Session 44) — D-0123
 `routes/candidate-outreach.js` takes the mailbox daily limit from `services/daily-limit.js`. The AI budget (`services/ai-budget.js` 150000) and the generator's 150 cap are still in code: R-202.
+
+## 2026-10-13 (Session 44) — D-0124
+Client-intelligence AI-per-person limit and the on/off switches are read per organisation (`routes/client-intel.js`).

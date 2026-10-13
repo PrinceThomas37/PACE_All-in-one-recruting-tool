@@ -1359,3 +1359,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-12 (Session 44) — D-0123
 `public/js/69-page-mysetup.js` no longer shows a made-up 150 for a mailbox with no number of its own. The numbers shown come from the server (the admin's).
+
+## 2026-10-13 (Session 44) — D-0124
+System Settings (`08-page-admin.js`) shows 'Set for your company' or 'Using the shared value' under each number, and a cleared box on a company's own number goes back to the shared one.

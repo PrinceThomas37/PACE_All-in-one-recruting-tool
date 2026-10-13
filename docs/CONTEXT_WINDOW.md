@@ -3,7 +3,7 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #325 (`ab93353`, Review & send / Send selected). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0123 · contract C-0038 · roadmap `R-203` (next `R-204`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
+**Highest ids:** decision D-0124 · contract C-0038 · roadmap `R-203` (next `R-204`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
 
 ## Now
 
@@ -58,3 +58,5 @@ Targeted this round: `sequence-brief-smoke` 11, `sequence-email-smoke` 34 (the s
 This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCHIVE.md` is append-only. `docs/ROADMAP.md` gets a row the turn a suggestion is made. `DECISIONS.md` gets an entry the moment the owner decides; never edit an old one. `node scripts/memory-check.mjs` before finishing.
 
 **Standing rule (D-0123, owner, 12 Oct):** no number that limits a customer is typed into the code — the admin decides (mail counts, AI counts, any count). Mailbox daily limit = `services/daily-limit.js` (admin default, one fallback in `config/limits.js`); new caps go in `SETTINGS_SCHEMA`. Older caps: R-202. Settings are deployment-wide, not per organisation: R-203 (owner's call).
+
+**D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. Migration 063 STILL NOT APPLIED (apply call cancelled twice). R-202 partly open.

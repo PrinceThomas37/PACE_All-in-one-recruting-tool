@@ -36,6 +36,10 @@ function renderSystemSettingsModal(){
         '</label>'+
         '<input class="inp" type="number" id="sys-'+s.key+'" value="'+htmlEsc(String(s.value))+'" min="'+s.min+'" max="'+s.max+'" step="any" data-key="'+s.key+'" style="'+(err?'border-color:var(--red)':'')+'"/>'+
         '<div class="fs-11_5" style="color:'+(err?'var(--red)':'var(--text3)')+';margin-top:3px">'+htmlEsc(err||s.description)+'</div>'+
+        // Each company has its own numbers (D-0124): say whose this is, and how to go back to the shared one.
+        '<div class="fs-11 c-text3" style="margin-top:2px">'+(s.source==='organisation'
+          ? 'Set for your company. Clear the box and save to use the shared value ('+htmlEsc(String(s.shared_value))+').'
+          : 'Using the shared value. Type a number to set your company\'s own.')+'</div>'+
       '</div>';
     }).join('');
     return '<div style="margin-bottom:18px">'+
@@ -44,7 +48,7 @@ function renderSystemSettingsModal(){
     '</div>';
   }).join('');
   STATE.modal='<div class="modal modal-w480" style="max-height:88vh;overflow-y:auto">'+
-    '<div class="mh"><div><div class="mt">System Settings</div><div class="fs-12 c-text3" style="margin-top:2px">Operational numbers used across the platform. Changes apply the next time each check runs (within about a minute).</div></div>'+
+    '<div class="mh"><div><div class="mt">System Settings</div><div class="fs-12 c-text3" style="margin-top:2px">The numbers your company runs on. Changes apply the next time each check runs (within about a minute).</div></div>'+
       '<button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
     '<div class="mb_">'+body+'</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
@@ -61,6 +65,7 @@ window.saveSystemSettings=function(){
     if(!el)return;
     var raw=el.value;
     var num=parseFloat(raw);
+    if(raw===''&&s.source==='organisation'){values[s.key]='';return;}   // back to the shared value
     if(raw===''||isNaN(num)){clientErrors[s.key]='"'+s.label+'" must be a number';return;}
     if(num<s.min||num>s.max){clientErrors[s.key]='"'+s.label+'" must be between '+s.min+' and '+s.max;return;}
     if(num!==s.value)values[s.key]=num;

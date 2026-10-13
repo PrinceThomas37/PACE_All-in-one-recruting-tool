@@ -6782,3 +6782,9 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - Owner (third time of asking): since this is an enterprise product, no mail count, AI count, user count or any count is typed into the code.
 - Done: removed every literal 150/300 for a mailbox's daily limit (new `services/daily-limit.js`, `config/limits.js`); new mailboxes start at the admin's default; a mailbox with no number is held to it (the send loop's old fallback of 300 now follows the admin). Moved my SMTP numbers (tries, window, messages per check) and the Send-selected cap into `SETTINGS_SCHEMA` ("Email engine"). Test `admin-numbers-smoke` (18), mutation-checked both ways. Found on the way: five route files used the new helper before importing it — `node --check` cannot see that; the affected suites did.
 - Found, not built: admin settings are deployment-wide, not per organisation (R-203). Older hard-coded caps listed in R-202.
+
+### SESSION 44, per-organisation admin numbers (D-0124, R-203; R-202 started)
+- Owner: "yes, do all". Settings are now per company: reads and writes take the organisation (`config/settings.js`), stored as `sys_<key>@<org>`; shared value and built-in default behind it; System Settings shows whose number it is and lets a company go back to the shared one.
+- Found while doing it: the default daily limit and the send-pacing numbers had NO screen at all (my earlier "Admin → Email Engine Schedule" was wrong). They are now real settings.
+- Blocked: applying migration 063 was cancelled twice by the approval step; not applied, not worked around.
+- R-202 (older caps) not yet moved — see ROADMAP.

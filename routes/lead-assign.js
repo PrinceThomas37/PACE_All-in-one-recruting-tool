@@ -43,10 +43,9 @@ module.exports = (ctx) => {
     return (data || []).filter(u => u && u.id);
   }
 
-  async function roomToday(accounts) {
+  async function roomToday(accounts, dailyDefault) {
     const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', today());
     const sent = {}; (logs || []).forEach(l => { sent[l.user_email_id] = l.emails_sent; });
-    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
     return accounts.map(a => ({ id: a.id, email: a.email_address, name: a.display_name || '', limit: dailyLimit.limitOf(a, dailyDefault), room: Math.max(0, dailyLimit.limitOf(a, dailyDefault) - (sent[a.id] || 0)) }));
   }
 
@@ -72,7 +71,7 @@ module.exports = (ctx) => {
       if (chain && !chain.includes(uid)) return res.status(404).json({ error: 'Not found' });
       const mb = await dist.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: uid, todayStr: today(), who: 'They', ignoreRoom: true });
       if (mb.error) return res.json({ mailboxes: [], error: mb.error });
-      res.json({ mailboxes: await roomToday(mb.accounts) });
+      res.json({ mailboxes: await roomToday(mb.accounts, mb.dailyDefault) });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 

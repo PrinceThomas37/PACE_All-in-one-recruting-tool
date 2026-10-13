@@ -10,7 +10,37 @@
 // Supabase egress" history around it in index.js).
 // ============================================================================
 
+const { DEFAULT_DAILY_SEND_LIMIT } = require('./limits');
+
+// Each number belongs to an ORGANISATION (D-0124): an admin sets their own company's value; a company that has not chosen gets the
+// deployment-wide value (the row that existed before), then the default below. `legacyKey` = the bare app_settings key the number was
+// read from before it was editable, so a value already stored keeps applying.
 const SETTINGS_SCHEMA = [
+  {
+    key: 'default_daily_send_limit', legacyKey: 'default_daily_send_limit', label: 'Daily send limit for a new mailbox', unit: 'emails/day', group: 'Email engine',
+    description: 'How many emails one mailbox may send in a day when nobody has set a number for that mailbox. New mailboxes start here.',
+    default: DEFAULT_DAILY_SEND_LIMIT, min: 1, max: 5000,
+  },
+  {
+    key: 'send_delay_min_sec', legacyKey: 'send_delay_min_sec', label: 'Shortest pause between two emails from one mailbox', unit: 'seconds', group: 'Email engine',
+    description: 'Emails from one mailbox are spaced out by a random pause between this and the longest pause.',
+    default: 30, min: 1, max: 300,
+  },
+  {
+    key: 'send_delay_max_sec', legacyKey: 'send_delay_max_sec', label: 'Longest pause between two emails from one mailbox', unit: 'seconds', group: 'Email engine',
+    description: 'The upper end of the pause above. If it is set below the shortest pause, the shortest pause is used.',
+    default: 60, min: 1, max: 600,
+  },
+  {
+    key: 'domain_max_per_hour', legacyKey: 'domain_max_per_hour', label: 'Most emails to one company in an hour', unit: 'emails/hour', group: 'Email engine',
+    description: 'How many emails one mailbox may send to the same recipient company (email domain) in one hour.',
+    default: 8, min: 1, max: 100,
+  },
+  {
+    key: 'bulk_send_max_per_run', legacyKey: 'bulk_send_max_per_run', label: 'Most emails sent in one sending round', unit: 'emails (0 = no cap)', group: 'Email engine',
+    description: 'A cap on how many emails go out in a single round of the send loop, across the organisation. 0 means no cap.',
+    default: 0, min: 0, max: 100000,
+  },
   {
     key: 'company_cooldown_days', label: 'Company re-add cooldown', unit: 'days', group: 'Leads',
     description: 'How long after a company is added before an RA can add it again.',
@@ -246,37 +276,62 @@ const SETTINGS_SCHEMA = [
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));
 const APP_SETTINGS_PREFIX = 'sys_';
 const CACHE_TTL_MS = 60 * 1000;
-const cache = new Map(); // key -> { value, loadedAt }
+const cache = new Map(); // "key|org" -> { value, source, loadedAt }
 
 function clampToDefault(def, value) {
   if (!Number.isFinite(value) || value < def.min || value > def.max) return def.default;
   return value;
 }
 
-// Cached read of one numeric setting. Falls back to the schema default (the
-// previous hardcoded behaviour) if unset, invalid, or the DB is unreachable —
-// this must never be the thing that breaks the send pipeline.
-async function getSetting(supabase, key) {
+const orgKey = (key, orgId) => APP_SETTINGS_PREFIX + key + '@' + orgId;
+const okNumber = (def, raw) => {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n >= def.min && n <= def.max ? n : null;
+};
+
+// The effective value and where it came from: this organisation's own choice, else the deployment-wide value, else the built-in default.
+async function resolveSetting(supabase, key, orgId) {
   const def = SCHEMA_BY_KEY.get(key);
   if (!def) throw new Error(`Unknown setting "${key}"`);
-  const cached = cache.get(key);
-  if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) return cached.value;
-  let value = def.default;
+  const ck = key + '|' + (orgId || '');
+  const cached = cache.get(ck);
+  if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) return cached;
+  let out = { value: def.default, source: 'default' };
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', APP_SETTINGS_PREFIX + key).maybeSingle();
-    if (data && data.value !== undefined && data.value !== null && data.value !== '') {
-      value = clampToDefault(def, Number.parseFloat(data.value));
-    }
+    const keys = [APP_SETTINGS_PREFIX + key];
+    if (def.legacyKey) keys.push(def.legacyKey);
+    if (orgId) keys.push(orgKey(key, orgId));
+    const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
+    const by = {}; (data || []).forEach((r) => { by[r.key] = r.value; });
+    const own = orgId ? okNumber(def, by[orgKey(key, orgId)]) : null;
+    const shared = okNumber(def, by[APP_SETTINGS_PREFIX + key]);
+    const legacy = def.legacyKey ? okNumber(def, by[def.legacyKey]) : null;
+    if (own !== null) out = { value: own, source: 'organisation' };
+    else if (shared !== null) out = { value: shared, source: 'deployment' };
+    else if (legacy !== null) out = { value: legacy, source: 'deployment' };
   } catch (e) {
     console.warn(`[settings] failed to load "${key}", using default ${def.default}:`, e.message);
   }
-  cache.set(key, { value, loadedAt: Date.now() });
-  return value;
+  const rec = { ...out, loadedAt: Date.now() };
+  cache.set(ck, rec);
+  return rec;
 }
 
-// For the admin panel: schema + current effective value for every setting.
-async function getAllSettings(supabase) {
-  return Promise.all(SETTINGS_SCHEMA.map(async (def) => ({ ...def, value: await getSetting(supabase, def.key) })));
+// Cached read of one numeric setting for an organisation (orgId omitted = the deployment-wide value). Falls back to the schema
+// default if unset, invalid, or the DB is unreachable — this must never be the thing that breaks the send pipeline.
+async function getSetting(supabase, key, orgId) {
+  return (await resolveSetting(supabase, key, orgId)).value;
+}
+
+// For the admin panel: schema + the effective value for this organisation, where it came from, and what it would be without its
+// own choice (so the screen can say "using the shared value, 30").
+async function getAllSettings(supabase, orgId) {
+  return Promise.all(SETTINGS_SCHEMA.map(async (def) => {
+    const r = await resolveSetting(supabase, def.key, orgId);
+    const base = orgId ? await resolveSetting(supabase, def.key, null) : r;
+    return { ...def, value: r.value, source: r.source, shared_value: base.value };
+  }));
 }
 
 function validate(key, rawValue) {
@@ -288,20 +343,32 @@ function validate(key, rawValue) {
   return { value };
 }
 
-// All-or-nothing bulk write: { key: rawValue, ... }. Validates every entry
-// before writing any of them, so a bad field never leaves settings half-saved.
-async function setSettings(supabase, updates) {
+// All-or-nothing bulk write: { key: rawValue, ... }. Validates every entry before writing any of them, so a bad field never leaves
+// settings half-saved. With an orgId the values are THAT organisation's own (and '' / null removes its choice, going back to the
+// shared value); without one they are the deployment-wide values.
+async function setSettings(supabase, updates, orgId) {
   const keys = Object.keys(updates || {});
   if (!keys.length) return { error: 'No settings to update' };
-  const rows = [];
+  const rows = [], clears = [];
   for (const key of keys) {
+    if (orgId && (updates[key] === '' || updates[key] === null)) {
+      if (!SCHEMA_BY_KEY.has(key)) return { error: `Unknown setting "${key}"`, key };
+      clears.push(orgKey(key, orgId));
+      continue;
+    }
     const result = validate(key, updates[key]);
     if (result.error) return { error: result.error, key };
-    rows.push({ key: APP_SETTINGS_PREFIX + key, value: String(result.value), updated_at: new Date() });
+    rows.push({ key: orgId ? orgKey(key, orgId) : APP_SETTINGS_PREFIX + key, value: String(result.value), updated_at: new Date() });
   }
-  const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
-  if (error) throw error;
-  keys.forEach((k) => cache.delete(k));
+  if (rows.length) {
+    const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
+    if (error) throw error;
+  }
+  if (clears.length) {
+    const { error } = await supabase.from('app_settings').delete().in('key', clears);
+    if (error) throw error;
+  }
+  cache.clear();
   return { success: true };
 }
 

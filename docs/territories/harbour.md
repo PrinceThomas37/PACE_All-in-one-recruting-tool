@@ -305,3 +305,6 @@ Written by the orchestrator (the owner ruled out helper agents, D-0060); the fil
 
 ## 2026-10-12 (Session 44) — D-0123: mailbox limits are the admin's
 The send loop's fallback for a mailbox with no `daily_send_limit` was 300 and mailbox creation stamped 150; both now follow the admin's `default_daily_send_limit` (`services/daily-limit.js`; one fallback of 150 in `config/limits.js`). Lead distribution and follow-up capacity use the same helper. SMTP-mailbox sweep batch size is the admin setting `smtp_sweep_batch`.
+
+## 2026-10-13 (Session 44) — D-0124
+Send pacing is per organisation: `getBulkSendSettings(orgId)` reads `default_daily_send_limit`, `send_delay_min_sec`, `send_delay_max_sec`, `domain_max_per_hour`, `bulk_send_max_per_run` through the settings module (they had no edit screen before). Follow-up capacity computes each mailbox's default by its organisation.

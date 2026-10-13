@@ -454,28 +454,14 @@ function padHour(h) {
   return `${hr}:00 ${ap}`;
 }
 
-let bulkSendSettingsCache = { loadedAt: 0, delayMin: 30, delayMax: 60, domainMaxPerHour: 8, defaultDailyLimit: dailyLimit.DEFAULT_DAILY_SEND_LIMIT, maxPerRun: 0 };
-
-async function getBulkSendSettings() {
-  if (Date.now() - bulkSendSettingsCache.loadedAt < 60000) return bulkSendSettingsCache;
-  let delayMin = 30, delayMax = 60, domainMaxPerHour = 8, defaultDailyLimit = dailyLimit.DEFAULT_DAILY_SEND_LIMIT, maxPerRun = 0;
-  try {
-    const { data } = await supabase.from('app_settings').select('key,value').in('key', [
-      'send_delay_min_sec', 'send_delay_max_sec', 'domain_max_per_hour',
-      'default_daily_send_limit', 'bulk_send_max_per_run'
-    ]);
-    (data || []).forEach(r => {
-      const n = parseInt(r.value, 10);
-      if (r.key === 'send_delay_min_sec' && !Number.isNaN(n) && n >= 1 && n <= 300) delayMin = n;
-      if (r.key === 'send_delay_max_sec' && !Number.isNaN(n) && n >= 1 && n <= 600) delayMax = n;
-      if (r.key === 'domain_max_per_hour' && !Number.isNaN(n) && n >= 1 && n <= 100) domainMaxPerHour = n;
-      if (r.key === 'default_daily_send_limit' && !Number.isNaN(n) && n >= 1) defaultDailyLimit = n;
-      if (r.key === 'bulk_send_max_per_run' && !Number.isNaN(n) && n >= 0) maxPerRun = n;
-    });
-  } catch (_) {}
-  if (delayMax < delayMin) delayMax = delayMin;
-  bulkSendSettingsCache = { loadedAt: Date.now(), delayMin, delayMax, domainMaxPerHour, defaultDailyLimit, maxPerRun };
-  return bulkSendSettingsCache;
+// The send loop's pacing numbers for ONE organisation (D-0124): the admin's own choice, else the shared value, else the built-in
+// default — all through config/settings.js (cached, never throws). No number is typed here.
+async function getBulkSendSettings(orgId) {
+  const num = (k) => settingsConfig.getSetting(supabase, k, orgId || undefined);
+  const [delayMin, delayMaxRaw, domainMaxPerHour, defaultDailyLimit, maxPerRun] = await Promise.all([
+    num('send_delay_min_sec'), num('send_delay_max_sec'), num('domain_max_per_hour'), num('default_daily_send_limit'), num('bulk_send_max_per_run'),
+  ]);
+  return { delayMin, delayMax: Math.max(delayMin, delayMaxRaw), domainMaxPerHour, defaultDailyLimit, maxPerRun };
 }
 
 async function getMailboxDelayBounds(userEmailId, settings) {
@@ -495,11 +481,14 @@ async function getMailboxDelayBounds(userEmailId, settings) {
 }
 
 async function loadMailboxQuotaState(mailboxIds) {
-  const settings = await getBulkSendSettings();
   const limits = {}, sentToday = {}, delays = {};
   const ids = [...new Set(mailboxIds.filter(Boolean))];
+  let accounts = [];
+  if (ids.length) ({ data: accounts } = await supabase.from('user_emails').select('id,daily_send_limit,org_id').in('id', ids));
+  // One send run belongs to one person, so every mailbox in it is in one organisation: that organisation's numbers apply.
+  const orgId = ((accounts || []).find(a => a.org_id) || {}).org_id;
+  const settings = await getBulkSendSettings(orgId);
   if (ids.length) {
-    const { data: accounts } = await supabase.from('user_emails').select('id,daily_send_limit').in('id', ids);
     (accounts || []).forEach(a => { limits[a.id] = a.daily_send_limit || settings.defaultDailyLimit; });
     const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', today()).in('user_email_id', ids);
     (logs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
@@ -508,7 +497,7 @@ async function loadMailboxQuotaState(mailboxIds) {
       if (!limits[id]) limits[id] = settings.defaultDailyLimit;
     }
   }
-  return { limits, sentToday, delays, settings };
+  return { limits, sentToday, delays, settings, orgId };
 }
 
 async function loadMailboxSignatures(mailboxIds, userId) {
@@ -861,7 +850,7 @@ app.post('/emails/retry-failed', auth, async (req, res) => {
     // Your own failed emails; an admin may name other people's by id (the
     // Email page passes exactly the rows it is showing).
     let q = db.forRequest(req).from('emails').select(RETRY_ROW_SELECT).eq('status', 'failed');
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max')) : null;
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max', orgIdFor(req))) : null;
     if (ids) q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
     if (!hasRole(req, 'admin')) q = q.eq('sent_by', req.user.id);
     const { data, error } = await q;
@@ -1238,7 +1227,7 @@ app.post('/emails/send-selected', auth, async (req, res) => {
       .select(PENDING_EMAIL_JOB_SELECT)
       .eq('sent_by', req.user.id)
       .eq('status', 'pending')
-      .in('id', email_ids.slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max')))
+      .in('id', email_ids.slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max', orgIdFor(req))))
       .order('created_at', { ascending: true });
     if (fetchErr) throw fetchErr;
     const nowMs = Date.now();
@@ -1982,20 +1971,23 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     ...pendingEmails.map(e => e.job?.sending_email_id),
     ...overrideMailboxIds
   ].filter(Boolean))];
-  const [mailboxSignatures, quotaState, mailboxDeliv, warmupStart, warmupStep] = await Promise.all([
+  const [mailboxSignatures, quotaState, mailboxDeliv] = await Promise.all([
     loadMailboxSignatures(mailboxIds, userId),
     loadMailboxQuotaState(mailboxIds),
     loadMailboxDelivState(mailboxIds),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
   ]);
   const { limits, sentToday, delays, settings } = quotaState;
+  const runOrg = quotaState.orgId || undefined;      // this run's organisation: its numbers apply (D-0124)
+  const [warmupStart, warmupStep] = await Promise.all([
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_start', runOrg),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_step', runOrg),
+  ]);
   // Checked once per run: the company switch, whether any AI provider is set up,
   // and each person's own "same as the company / on for me / off" (D-0117).
   // Follow-ups are not in this choice — shouldWriteFirst requires a first email.
   let companyAiFirst = false, aiReady = false;
   try {
-    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1;
+    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', runOrg)) === 1;
     aiReady = await aiProvider.isAvailable(supabase);
   } catch (_) { companyAiFirst = false; aiReady = false; }
   let aiChoiceMap = {};
@@ -2008,7 +2000,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   // out earlier today (any sender) and is bumped below as this run sends.
   let companyCap = 0, companySentToday = {};
   try {
-    companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails')) || 0;
+    companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails', runOrg)) || 0;
     if (companyCap > 0) {
       companySentToday = await companyDailyCap.loadSentToday(supabase,
         pendingEmails.filter(companyDailyCap.isFirstEmail).map(e => e.job?.company_id), today());
@@ -2518,10 +2510,14 @@ async function runFollowupEngine() {
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
 
-    const { data: allEmails } = await supabase.from('user_emails').select('id,daily_send_limit').eq('is_active', true);
+    const { data: allEmails } = await supabase.from('user_emails').select('id,daily_send_limit,org_id').eq('is_active', true);
     const limitMap = {};
-    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
-    (allEmails || []).forEach(a => { limitMap[a.id] = dailyLimit.limitOf(a, dailyDefault); });
+    const dailyByOrg = {};                       // each organisation's own default (D-0124), asked once
+    for (const a of (allEmails || [])) {
+      const org = a.org_id || '';
+      if (!(org in dailyByOrg)) dailyByOrg[org] = await dailyLimit.defaultDailyLimit(supabase, org);
+      limitMap[a.id] = dailyLimit.limitOf(a, dailyByOrg[org]);
+    }
 
     const bdIdSet = [...new Set((dueFu || []).map(f => f.job?.assigned_to_bd).filter(Boolean))];
     let bdMap = {};
@@ -3810,7 +3806,7 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   let mailbox = job.sending_email;
   if (meta.from_mailbox_id) {
     const { data: mb } = await supabase.from('user_emails')
-      .select('id,email_address,display_name,platform,daily_send_limit,is_active').eq('id', meta.from_mailbox_id).maybeSingle();
+      .select('id,org_id,email_address,display_name,platform,daily_send_limit,is_active').eq('id', meta.from_mailbox_id).maybeSingle();
     if (mb) mailbox = mb;
   }
   if (!mailbox?.id) return { outcome: 'skipped', detail: { reason: 'no_sending_mailbox' } };
@@ -3818,7 +3814,7 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   const delivState = await loadMailboxDelivState([mailbox.id]);
   if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase));
+  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase, mailbox && mailbox.org_id));
   const [warmupStart, warmupStep] = await Promise.all([
     settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),

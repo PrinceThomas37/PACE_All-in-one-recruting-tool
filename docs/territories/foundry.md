@@ -1229,3 +1229,6 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-12 (Session 44) — D-0123
 `test/admin-numbers-smoke.mjs` (18): admin default, cache, own-number-beats-default, broken DB, finder suggestion follows the default, new numbers are bounded settings, and a source guard that no route types a daily-limit literal. Mutation-checked: a restored `|| 150` and a restored `TRY_LIMIT = 6` both fail it. Lesson: a new helper used in a file without its `require` passes `node --check`; only running the code finds it.
+
+## 2026-10-13 (Session 44) — D-0124
+`admin-numbers-smoke` (30) now covers company A / company B / shared isolation, clearing, bounds and the old bare key; `settings.mjs` fake answers a multi-key read `.in(col, keys)`.

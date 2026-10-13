@@ -1,31 +1,22 @@
 // ============================================================================
 // A MAILBOX'S DAILY SEND LIMIT — what the admin has allowed (owner, 12 Oct, D-0123).
 // ----------------------------------------------------------------------------
-// A mailbox starts with the limit the admin set as the default (app_settings `default_daily_send_limit`, edited under Admin → Email
-// Engine Schedule) and an admin can change any one mailbox's limit afterwards. A mailbox with NO number of its own is held to that
-// same default — never to a number typed into the place that checks it. Until an admin chooses, config/limits.js says what to use.
+// A mailbox starts with the limit the admin set as the default (the `default_daily_send_limit` setting in Admin → System settings, per
+// organisation) and an admin can change any one mailbox's limit afterwards. A mailbox with NO number of its own is held to that same default — never to a number typed into the place that checks it. Until an admin chooses, config/limits.js says what to use.
 //
-// One cached read (60 s), so asking is cheap anywhere. Never throws: an unreachable database gives the fallback, never a failure.
+// Read through config/settings.js (cached 60 s, per organisation). Never throws: an unreachable database gives the fallback.
 // ============================================================================
 'use strict';
 
 const { DEFAULT_DAILY_SEND_LIMIT } = require('../config/limits');
-const KEY = 'default_daily_send_limit';
-const TTL_MS = 60 * 1000;
-let cache = { at: 0, value: DEFAULT_DAILY_SEND_LIMIT };
+const { getSetting } = require('../config/settings');
 
-/** The admin's default daily limit for a mailbox. */
-async function defaultDailyLimit(supabase, now) {
-  const t = now == null ? Date.now() : now;
-  if (t - cache.at < TTL_MS) return cache.value;
-  let v = DEFAULT_DAILY_SEND_LIMIT;
+/** The default daily limit for a mailbox of this ORGANISATION (D-0124): its own choice, else the shared one, else the fallback. */
+async function defaultDailyLimit(supabase, orgId) {
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', KEY).maybeSingle();
-    const n = parseInt(data && data.value, 10);
-    if (Number.isFinite(n) && n >= 1) v = n;
-  } catch (_) { /* keep the fallback */ }
-  cache = { at: t, value: v };
-  return v;
+    const n = Math.floor(Number(await getSetting(supabase, 'default_daily_send_limit', orgId || undefined)));
+    return n >= 1 ? n : DEFAULT_DAILY_SEND_LIMIT;
+  } catch (_) { return DEFAULT_DAILY_SEND_LIMIT; }
 }
 
 /** This mailbox's limit: its own number, else the default given. */
@@ -34,6 +25,4 @@ function limitOf(mailbox, fallback) {
   return own >= 1 ? own : (Number(fallback) >= 1 ? Number(fallback) : DEFAULT_DAILY_SEND_LIMIT);
 }
 
-function resetCache() { cache = { at: -Infinity, value: DEFAULT_DAILY_SEND_LIMIT }; }
-
-module.exports = { defaultDailyLimit, limitOf, resetCache, DEFAULT_DAILY_SEND_LIMIT };
+module.exports = { defaultDailyLimit, limitOf, DEFAULT_DAILY_SEND_LIMIT };

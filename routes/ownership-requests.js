@@ -190,7 +190,7 @@ module.exports = (ctx) => {
   async function pickMailboxFor(req, userId) {
     const D = db.forRequest(req);
     const { data: userEmails } = await D.from('user_emails')
-      .select('id,daily_send_limit').eq('user_id', userId).eq('is_active', true);
+      .select('id,org_id,daily_send_limit').eq('user_id', userId).eq('is_active', true);
     if (!userEmails || !userEmails.length) return null;
     const emailIds = userEmails.map(e => e.id);
     const [{ data: msTokens }, { data: gmailTokens }, smtpRes] = await Promise.all([
@@ -208,7 +208,7 @@ module.exports = (ctx) => {
       .select('user_email_id,emails_sent').eq('send_date', todayDate).in('user_email_id', connected.map(e => e.id));
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
-    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase);
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase, (connected.find(e => e.org_id) || {}).org_id);
     const withRemaining = connected
       .map(a => ({ ...a, remaining: dailyLimit.limitOf(a, dailyDefault) - (sentToday[a.id] || 0) }))
       .filter(a => a.remaining > 0);

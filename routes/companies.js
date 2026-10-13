@@ -357,7 +357,7 @@ router.get('/companies/:id/intake', auth, async (req, res) => {
     const rows = leads || [];
     const last = rows[0];
 
-    const days = await getSetting(supabase, 'company_cooldown_days');
+    const days = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
     const state = companyCooldown.cooldownState({
       lastLeadAt: last && last.created_at, now: new Date(), days,
     });

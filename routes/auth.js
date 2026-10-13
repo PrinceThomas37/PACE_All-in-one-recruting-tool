@@ -313,8 +313,8 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       platform: platform || 'Microsoft',
       is_primary: staff ? (is_primary || false) : false,
       is_active: true,
-      // The admin's default (Admin → Email Engine Schedule), never a number typed here. Only an admin / lead may choose another.
-      daily_send_limit: staff ? (daily_send_limit || await dailyLimit.defaultDailyLimit(supabase)) : await dailyLimit.defaultDailyLimit(supabase)
+      // This organisation's default (Admin → System settings), never a number typed here. Only an admin / lead may choose another.
+      daily_send_limit: staff ? (daily_send_limit || await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))) : await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))
     }).select().single();
     if (error) throw error;
     if (sendsAsClean && !sendsAsProblem(sendsAsClean)) {

@@ -28,7 +28,7 @@ const tallyKey = (userId, day) => `self_take_${userId}_${day}`;
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, today, withOrg, logActivity } = ctx;
+  const { supabase, auth, hasRole, today, withOrg, logActivity, orgIdFor } = ctx;
 
   async function readTally(userId, day) {
     try {
@@ -39,7 +39,7 @@ module.exports = (ctx) => {
 
   async function state(req) {
     const day = today();
-    const cap = Number(await getSetting(supabase, 'self_assign_daily_cap')) || 0;
+    const cap = Number(await getSetting(supabase, 'self_assign_daily_cap', orgIdFor && orgIdFor(req))) || 0;
     const taken = await readTally(req.user.id, day);
     const remainingCap = dist.dayRemaining(cap, taken);
     const mb = await dist.connectedMailboxesFor({ supabase, withOrg: (q) => withOrg(q, req), userId: req.user.id, todayStr: day, who: 'You' });

@@ -245,7 +245,7 @@ ${text.slice(0, 12000)}`;
       // system. A company created a moment ago has no history, so it is skipped
       // rather than blocked by the lead this very request is about to make.
       if (!isNewCompany) {
-        const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
+        const cooldownDays = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
         const { data: recent } = await withOrg(supabase.from('jobs')
           .select('position,created_at,created_by,users:users!created_by(name)')
           .eq('company_id', companyId).is('deleted_at', null), req)
