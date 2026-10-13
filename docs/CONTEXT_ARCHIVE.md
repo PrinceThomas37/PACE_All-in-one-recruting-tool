@@ -6853,3 +6853,14 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
   - Then created organisation PACE `92cf97db-d216-483a-8cc4-7ecae575415b` (internal) and its info@paceconsultant.in sign-in. Afterwards: 3 organisations, 40 users, Fute Global unchanged at 38.
   - Password sign-in, because info@ is a GoDaddy mailbox. The temporary password was given to the owner only.
   - Owner to do: set `WEBSITE_LEADS_ORG_ID` in Render.
+
+### SESSION 44, the owner's handwritten notes, page three — four more changes (14 Oct; D-0140, R-219…R-222)
+- **People search on a saved card (R-219).** `routes/finder.js`: `/finder/cards/:id/people` and `/reveal` accept `accepted` cards too; the history item carries `domain`. `68-page-finder.js`: the "another" window has `fdAnFind` / `fdAnReveal`; picks are `p:<id>` keys and `anContacts` reads them all. Tests: `finder-routes-smoke` 188 (mutation-checked: saved cards refused → 2 fail), `finder-page-smoke`.
+- **Delete pending (R-220).** `18-email-status-actions.js` `openDeletePendingConfirm` / `submitDeletePending` (DELETE /emails/:id per email, partial failure reloads from the server); buttons in `07-page-email.js` (preview panel, "Delete selected (n)"). New `test/pending-delete-smoke.mjs` (12).
+- **Review window in Find Leads (R-221).** `68-page-finder.js` `reviewLead` / `fdReview` / `fdRvSave` / `fdRvSend`: GET /emails?status=pending&mine=1, first emails of that lead only, PATCH only what changed, POST /emails/send-selected. Opens right after an email is written (Accept, Write first, Another). Found on the way: an inline `//` comment I put mid-chain swallowed a `.map(` (the AI-hint step in the test caught it).
+- **Label (R-222).** `06-page-leads.js` `leadFromFinder(j)` (source starts "Finder", or research.source.kind = finder) → "Lead Finder" pill replaces NEW; "Found by" in the opened row. Tests in `take-selected-ui-smoke` (22).
+- **Question from the owner, answered:** "what do you mean by button meant for note 6" — see D-0135 item 6: the notes' word after "show" was unclear; I read it as "Show job description".
+
+
+### SESSION 44, release check for PR #331 (14 Oct)
+- Full suites: Node 22 251/251; Node 26 250/251 — `take-selected-ui-smoke` timed out under the load of two parallel full runs, then passed 3/3 alone. Its waits were raised to 20 s and a full Node 26 run alone was started; the owner said "merge the changes" (14 Oct) and PR #331 is merged only when that run is clean. The owner also confirmed "Show job description" is what they meant for note 6.

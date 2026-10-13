@@ -73,7 +73,9 @@ function renderJobs(){
     // Freshness/duplicate markers, as pills rather than three hand-rolled spans.
     var marks=(j.is_duplicate?UI.pill('DUP','warn'):'')+
       (j.freshness==='Old'?UI.pill('OLD','bad'):'')+
-      (j.freshness==='New'?UI.pill('NEW','ok'):'');
+      // A lead the Lead Finder made says so (owner, 14 Oct: "it is mentioned as new — it should be displayed as Lead Finder"); every
+      // other fresh lead keeps NEW.
+      (leadFromFinder(j)?UI.pill('Lead Finder','info'):(j.freshness==='New'?UI.pill('NEW','ok'):''));
 
     var stageCell=canChangeStageInline
       ? '<select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" '+
@@ -434,6 +436,13 @@ window.leadContactRowHtml=function(c){
   '</div>';
 };
 
+// Made by Find Leads: the source column says so, and so does the research note it was saved with.
+function leadFromFinder(j){
+  if(!j) return false;
+  if(/^finder/i.test(String(j.source||'').trim())) return true;
+  var r=j.research, src=r&&r.source;
+  return !!(src&&src.kind==='finder');
+}
 function leadExpandHtml(j){
   var cs=(typeof jobContacts==='function'?jobContacts(j.id):[])||[];
   var contactRows=cs.length?cs.map(leadContactRowHtml).join(''):'<div class="lx-empty">No contacts on this lead yet.</div>';
@@ -442,6 +451,7 @@ function leadExpandHtml(j){
   var facts=[
     ['Stage', j.stage||'—'],
     ['Industry', j.industry||j.company_ind||'—'],
+    ['Found by', leadFromFinder(j)?'Lead Finder':(j.source||'—')],
     ['Assigned to', j.assigned_bd_name||'Unassigned'],
     ['Assigned', when||'—']
   ].map(function(f){

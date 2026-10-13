@@ -697,7 +697,7 @@ module.exports = (ctx) => {
         const mine = !!l && (l.created_by === req.user.id || l.assigned_to_bd === req.user.id);
         return {
           id: c.id, search_id: c.search_id || null, company_name: c.company_name, status: c.status,
-          place: [co.city, co.state].filter(Boolean).join(', '), wait_until: c.wait_until || null, decided_at: c.decided_at || null,
+          place: [co.city, co.state].filter(Boolean).join(', '), domain: co.domain || '', wait_until: c.wait_until || null, decided_at: c.decided_at || null,
           lead: mine ? {
             id: l.id, position: l.position, stage: l.stage, unowned: !l.assigned_to_bd, contacts: (peopleBy[l.id] || []).sort((a, b) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0)), jobs: jobsOf(l),
             email: emailBy[l.id] || { pending: 0, sent: 0, failed: 0, from: '', last_sent_at: null },
@@ -778,7 +778,8 @@ module.exports = (ctx) => {
     try {
       if (!(await needAccess(req, res))) return;
       const card = await cardOf(req, req.params.id);
-      if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
+      // A saved card too: "Email another job / person" looks for more people at the company the lead was made from (owner, 14 Oct).
+      if (!card || !['new', 'accepted'].includes(card.status)) return res.status(404).json({ error: 'Card not found' });
       const key = await integrations.getSecret(supabase, 'apollo');
       if (!key) return res.status(409).json({ error: 'Apollo is not connected. An admin adds its key in Admin → Integrations.' });
       const co = (card.payload && card.payload.company) || {};
@@ -805,7 +806,7 @@ module.exports = (ctx) => {
     try {
       if (!(await needAccess(req, res))) return;
       const card = await cardOf(req, req.params.id);
-      if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
+      if (!card || !['new', 'accepted'].includes(card.status)) return res.status(404).json({ error: 'Card not found' });
       const personId = String((req.body && req.body.person_id) || '').slice(0, 80);
       if (!personId) return res.status(400).json({ error: 'Say whose email to reveal.' });
       const payload = Object.assign({}, card.payload || {});

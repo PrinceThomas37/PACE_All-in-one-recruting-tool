@@ -163,7 +163,7 @@
 
   // After the first email is written: where it is, and — for a lead with several jobs — that it lists them all (R-194).
   function firstEmailToast(nJobs){
-    return 'First email written'+(nJobs>1?' — it lists all '+nJobs+' jobs as bullets':'')+'. Open Email → Pending to preview it, edit it if you like, then press Send.';
+    return 'First email written'+(nJobs>1?' — it lists all '+nJobs+' jobs as bullets':'')+'. It is open here: read it, change it if you like, then press Send.';
   }
   // What one lead may carry comes from the server (this company's numbers); until it has answered, nothing is limited here.
   function lim(k){ var l=(F.access&&F.access.limits)||{}; return l[k]>=1?l[k]:Infinity; }
@@ -265,6 +265,7 @@
           var n=(g&&g.generated)||0;
           if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
           showToast(n?firstEmailToast(jobs.length):'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning');
+          if (n) reviewLead(r.lead_id, a.card&&a.card.company_name);
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
     }).catch(function(e){ a.busy=false; a.err=e.message; paintAccept(); });
@@ -341,7 +342,7 @@
         (seqNeeded()
           ? '<div class="ld-box is-stop" role="status"><strong>Writing the first email needs your own sequence</strong>PACE does not start outreach until you have one. <button type="button" class="fd-pill" onclick="goPage(\'mysetup\')">Open My Setup</button> — a starter with your company\'s name is one click. The lead is saved either way.</div>'
           : '')+
-        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending, where you preview it, edit it if you like, and press Send. Nothing is sent before that.</label>'
+        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdToggleWrite()"> Write the first email now — it opens right here, where you preview it, edit it if you like, and press Send (or leave it waiting in Email → Pending). Nothing is sent before that.</label>'
       : 'Into the Unassigned pool, where your lead hands it out. Nothing is emailed now.')+'</div>';
 
     var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && (!goes || !!a.mailboxId) && !(c.decision&&c.decision.blocked);
@@ -823,6 +824,8 @@
     else if (e.pending>0){ msg='✉ The first email is written and waiting in Email → Pending'+(e.from?' (from '+esc(e.from)+')':'')+'. Nothing goes out until you press Send.'; btn='<button class="btn btn-sm btn-primary" title="Opens only this lead\'s email, ticked and ready — the rest of your queue is not touched" onclick="fdGoPending(\''+esc(x.id)+'\')">Review &amp; send</button>'; }
     else if (e.failed>0){ msg='⚠ The first email did not go out — it is under “Didn’t send” in Email → Pending.'; btn='<button class="btn btn-sm btn-outline" onclick="fdGoPending()">See it</button>'; }
     else { msg='No email has been written for this lead yet.'+(l.unowned?' It is Unassigned until its first email is written, or you assign it in Leads.':''); btn='<button class="btn btn-sm btn-primary" onclick="fdWriteFirst(\''+esc(l.id)+'\',this)">Write the first email</button>'; }
+    // Read, change and send the written email right here (owner, 14 Oct: "no option to edit that email and preview it before sending").
+    if (e.pending>0) btn='<button class="btn btn-sm btn-primary" onclick="fdReview(\''+esc(x.id)+'\')" title="Read the email, change it if you like, and send it — without leaving Find Leads">Preview &amp; edit</button>'+btn.replace('btn-primary','btn-outline');
     return '<div class="fd-row fd-between fd-emailrow"><div class="fd-grow fs-12_5 c-text2">'+msg+'</div><div class="fd-row">'+btn+
       '<button class="btn btn-sm btn-outline" onclick="fdAnother(\''+esc(x.id)+'\')" title="Write to another person here, or about another job at this company">Email another job / person</button></div></div>';
   }
@@ -844,23 +847,125 @@
       var n=(g&&g.generated)||0;
       showToast(n?firstEmailToast(0):'No email could be written (check the contact\'s address)', n?'success':'warning');
       loadHistory(); if (typeof refreshJobs==='function') refreshJobs();
+      if (n) reviewLead(leadId, (function(){ var h=((F.hist&&F.hist.items)||[]).find(function(i){ return i.lead&&i.lead.id===leadId; }); return h&&h.company_name; })());
     }).catch(function(e){ showToast('Could not write the email: '+((e&&e.message)||e),'error'); if(btn) btn.disabled=false; });
   };
 
   function anItem(id){ return ((F.hist&&F.hist.items)||[]).find(function(x){ return x.id===id; }); }
+
+  // ── PREVIEW, EDIT AND SEND a saved lead's written email without leaving Find Leads ──
+  // The emails are the person's own pending ones for THAT lead (GET /emails — already scoped; PATCH /emails/:id is the sender's own act;
+  // POST /emails/send-selected is what "Send selected" in Pending calls). What the person edits is what goes out — except where the AI
+  // rewrites the first email at send time, which the window says.
+  window.fdReview = function(histId){ var x=anItem(histId); if(x&&x.lead) reviewLead(x.lead.id, x.company_name); };
+  // Opened by the "Preview & edit" button on a saved lead, and straight away when a first email has just been written.
+  function reviewLead(leadId, company){
+    var rv={ leadId:leadId, company:company||'this lead', list:null, busy:false, err:'', note:'' };
+    F.rv=rv; STATE.modal=renderReviewModal(); render();
+    apiGet('/emails?status=pending&mine=1').then(function(all){
+      if(F.rv!==rv) return;
+      // The first email only — a follow-up is never sent from here.
+      rv.list=(all||[]).filter(function(e){ return e.job_id===rv.leadId && e.is_mine!==false && (!e.followup_type || e.followup_type==='initial'); }).map(function(e){ return { id:e.id, to:e.to_email, subject:e.subject||'', body:e.body||'', ai:!!e.ai_will_write, fu:e.followup_type||'' }; });
+      STATE.modal=renderReviewModal(); render();
+    }).catch(function(e){ if(F.rv!==rv) return; rv.list=[]; rv.err=(e&&e.message)||'Could not load the email'; STATE.modal=renderReviewModal(); render(); });
+  }
+  function rvCapture(){
+    var rv=F.rv; if(!rv||!rv.list) return;
+    rv.list.forEach(function(m){ var s=document.getElementById('fd-rv-s-'+m.id), b=document.getElementById('fd-rv-b-'+m.id); if(s) m.subject=s.value; if(b) m.body=b.value; });
+  }
+  // Save only what was changed; resolves to the ids saved. A save that fails stops the whole thing and says which email.
+  function rvSave(rv){
+    var jobs=(rv.list||[]).filter(function(m){ return m.orig==null || m.orig.subject!==m.subject || m.orig.body!==m.body; });
+    return jobs.reduce(function(chain,m){
+      return chain.then(function(){ return apiFetch('PATCH','/emails/'+m.id,{ subject:m.subject, body:m.body }).then(function(){ m.orig={ subject:m.subject, body:m.body }; }); });
+    },Promise.resolve());
+  }
+  window.fdRvSave = function(){
+    var rv=F.rv; if(!rv||rv.busy||!rv.list) return; rvCapture();
+    rv.busy=true; rv.err=''; rv.note=''; STATE.modal=renderReviewModal(); render();
+    rvSave(rv).then(function(){ rv.busy=false; rv.note='Saved.'; STATE.modal=renderReviewModal(); render(); loadHistory(); })
+      .catch(function(e){ rv.busy=false; rv.err='Could not save: '+((e&&e.message)||e); STATE.modal=renderReviewModal(); render(); });
+  };
+  window.fdRvSend = function(){
+    var rv=F.rv; if(!rv||rv.busy||!rv.list||!rv.list.length) return; rvCapture();
+    var n=rv.list.length;
+    rv.busy=true; rv.err=''; rv.note=''; STATE.modal=renderReviewModal(); render();
+    rvSave(rv).then(function(){
+      return apiPost('/emails/send-selected',{ email_ids:rv.list.map(function(m){ return m.id; }) });
+    }).then(function(res){
+      F.rv=null; STATE.modal=null; render();
+      if(!res||!res.queued){ showToast('None of those could go out right now — one may be waiting to retry, or was already sent. Nothing was lost.','info'); }
+      else showToast(res.queued+' email'+(res.queued===1?'':'s')+' queued for sending','success');
+      loadHistory(); if(typeof loadEmailsForCurrentUser==='function') loadEmailsForCurrentUser();
+    }).catch(function(e){ rv.busy=false; rv.err=((e&&e.message)||e)+' (Your changes are saved; nothing was sent.)'; STATE.modal=renderReviewModal(); render(); });
+  };
+  window.fdRvClose = function(){ F.rv=null; STATE.modal=null; render(); };
+  function renderReviewModal(){
+    var rv=F.rv, body, foot;
+    if(rv.list===null){ body='<div class="fd-hint">Loading the email…</div>'; foot='<button class="btn btn-outline" onclick="fdRvClose()">Close</button>'; }
+    else if(!rv.list.length){
+      body='<div class="fs-13 c-text2">'+esc(rv.err||'There is no email waiting for this lead any more — it may have been sent, or deleted. See All email.')+'</div>';
+      foot='<button class="btn btn-outline" onclick="fdRvClose()">Close</button>';
+    } else {
+      rv.list.forEach(function(m){ if(m.orig==null) m.orig={ subject:m.subject, body:m.body }; });
+      body='<div class="fs-12_5 c-text2" style="margin-bottom:10px">This is the email exactly as it will read. Change anything you like, then press <b>Send</b> — or <b>Save</b> and send it later from Email → Pending.</div>'+
+        rv.list.map(function(m){
+          return '<div class="fd-rv-mail"><div class="fs-13"><strong>To:</strong> '+esc(m.to)+(m.fu?' <span class="fd-tag">follow-up</span>':'')+'</div>'+
+            '<label class="fd-label" for="fd-rv-s-'+esc(m.id)+'">Subject</label><input id="fd-rv-s-'+esc(m.id)+'" class="inp fd-wide" value="'+esc(m.subject)+'">'+
+            '<label class="fd-label" for="fd-rv-b-'+esc(m.id)+'">Message</label><textarea id="fd-rv-b-'+esc(m.id)+'" class="txta w100 fd-rv-body">'+esc(m.body)+'</textarea>'+
+            (m.ai?'<div class="fd-hint">The AI writes this lead\'s email just before it is sent, so what you read here is the fallback wording.</div>':'')+'</div>';
+        }).join('')+
+        (rv.err?'<div class="c-red fs-13" role="alert" style="margin-top:8px">'+esc(rv.err)+'</div>':'')+
+        (rv.note?'<div class="fs-13 c-green" role="status" style="margin-top:8px">'+esc(rv.note)+'</div>':'');
+      foot='<button class="btn btn-outline" onclick="fdRvClose()">Close</button>'+
+        '<button class="btn btn-outline" '+(rv.busy?'disabled ':'')+'onclick="fdRvSave()">Save</button>'+
+        '<button class="btn btn-primary" '+(rv.busy?'disabled ':'')+'onclick="fdRvSend()">'+(rv.busy?'Working…':'Send '+(rv.list.length===1?'it':rv.list.length+' emails'))+'</button>';
+    }
+    return '<div class="modal modal-w640" onclick="event.stopPropagation()"><div class="mh"><div class="mt">First email — '+esc(rv.company)+'</div></div><div class="mb_">'+body+'</div><div class="mf">'+foot+'</div></div>';
+  }
   window.fdAnother = function(id){
     var x=anItem(id); if(!x||!x.lead) return;
-    var an={ id:id, x:x, jobs:{}, jobQ:'', picked:{}, mFirst:'', mLast:'', mEmail:'', mTitle:'', writeNow:!seqNeeded(), mailboxes:null, mailboxId:'', busy:false, err:'' };
+    var an={ id:id, x:x, jobs:{}, jobQ:'', picked:{}, mFirst:'', mLast:'', mEmail:'', mTitle:'', titleQ:'', people:null, finding:false, revealing:null, writeNow:!seqNeeded(), mailboxes:null, mailboxId:'', busy:false, err:'' };
     F.an=an; STATE.modal=renderAnotherModal(); render();
     apiGet('/finder/mailboxes').then(function(r){ if(F.an!==an) return; an.mailboxes=(r&&r.mailboxes)||[]; an.mailboxId=(r&&r.suggested_id)||''; STATE.modal=renderAnotherModal(); render(); })
       .catch(function(){ if(F.an!==an) return; an.mailboxes=[]; });
   };
   function anCapture(){
     var an=F.an; if(!an) return;
-    ['jobQ:fd-an-job','mFirst:fd-an-fn','mLast:fd-an-ln','mEmail:fd-an-em','mTitle:fd-an-tt'].forEach(function(p){ var k=p.split(':'), el=document.getElementById(k[1]); if(el) an[k[0]]=el.value; });
+    ['jobQ:fd-an-job','mFirst:fd-an-fn','mLast:fd-an-ln','mEmail:fd-an-em','mTitle:fd-an-tt','titleQ:fd-an-titleq'].forEach(function(p){ var k=p.split(':'), el=document.getElementById(k[1]); if(el) an[k[0]]=el.value; });
   }
   window.fdAnJob = function(i){ var an=F.an; if(!an) return; var t=(an.avail||[])[i]; if(t==null) return; anCapture(); if(an.jobs[t]) delete an.jobs[t]; else an.jobs[t]=true; an.err=''; STATE.modal=renderAnotherModal(); render(); };
-  window.fdAnWho = function(k){ var an=F.an; if(!an) return; anCapture(); an.picked[k]=!an.picked[k]; an.err=''; STATE.modal=renderAnotherModal(); render(); };
+  window.fdAnWho = function(k){ var an=F.an; if(!an) return; anCapture(); if(!an.picked[k] && anPicked(an)>=lim('contacts_per_lead')){ an.err=lim('contacts_per_lead')+' people is the most one lead can carry — untick one first.'; STATE.modal=renderAnotherModal(); render(); return; } an.picked[k]=!an.picked[k]; an.err=''; STATE.modal=renderAnotherModal(); render(); };
+  // Look for more people at the company (the same free search the Accept window has); an email costs 1 credit and only a verified one is kept.
+  function anPicked(an){ return Object.keys(an.picked).filter(function(k){ return an.picked[k]; }).length + ((String(an.mEmail||'').trim()||String(an.mFirst||'').trim())?1:0); }
+  window.fdAnFind = function(){
+    var an=F.an; if(!an||an.finding) return; anCapture();
+    an.finding=true; an.err=''; STATE.modal=renderAnotherModal(); render();
+    apiPost('/finder/cards/'+an.id+'/people',{ title:an.titleQ }).then(function(r){
+      an.finding=false;
+      var fresh=(r&&r.people)||[], keep=(an.people||[]).filter(function(p){ return p.revealed || an.picked['p:'+p.id]; }), have={};
+      keep.forEach(function(p){ have[p.id]=true; });
+      ((an.x.lead&&an.x.lead.more_people)||[]).forEach(function(p){ have[p.person_id]=true; });
+      var added=fresh.filter(function(p){ return !have[p.id]; });
+      an.people=keep.concat(added);
+      if(!added.length) an.err=fresh.length?'Nobody new with those titles — the people already shown are the ones Apollo has.':'Nobody with those titles at this company. Try other titles — or add someone by hand below.';
+      STATE.modal=renderAnotherModal(); render();
+    }).catch(function(e){ an.finding=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
+  };
+  window.fdAnReveal = function(personId){
+    var an=F.an; if(!an||an.revealing) return; anCapture();
+    an.revealing=personId; an.err=''; STATE.modal=renderAnotherModal(); render();
+    apiPost('/finder/cards/'+an.id+'/reveal',{ person_id:personId }).then(function(r){
+      an.revealing=null;
+      var p=(an.people||[]).find(function(x){ return x.id===personId; }), person=(r&&r.person)||{};
+      if(p){ p.revealed=true; p.email=person.email||null; if(person.last_name) p.last_name=person.last_name; if(person.title) p.title=person.title; }
+      if(person.email && anPicked(an)<lim('contacts_per_lead')) an.picked['p:'+personId]=true;
+      if(r&&r.credits&&F.access) F.access.credits=r.credits;
+      if(F.access&&F.access.reveals) F.access.reveals.used=(F.access.reveals.used||0)+1;
+      if(r&&r.note) an.err=r.note;
+      STATE.modal=renderAnotherModal(); render();
+    }).catch(function(e){ an.revealing=null; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
+  };
   window.fdAnWrite = function(){ var an=F.an; if(!an||seqNeeded()) return; anCapture(); an.writeNow=!an.writeNow; STATE.modal=renderAnotherModal(); render(); };
   window.fdAnBox = function(id){ var an=F.an; if(!an) return; anCapture(); an.mailboxId=id; };
   window.fdAnClose = function(){ F.an=null; STATE.modal=null; render(); };
@@ -872,7 +977,8 @@
   function anContacts(an){
     var l=an.x.lead, out=[];
     (l.contacts||[]).forEach(function(c){ if(an.picked['c:'+c.id]) out.push({ contact_id:c.id }); });
-    (l.more_people||[]).forEach(function(p){ if(an.picked['p:'+p.person_id]) out.push({ person_id:p.person_id }); });
+    // People kept on the card earlier AND people found just now in this window: both are picked as "p:<id>".
+    Object.keys(an.picked).forEach(function(k){ if(an.picked[k] && k.indexOf('p:')===0) out.push({ person_id:k.slice(2) }); });
     if(String(an.mEmail||'').trim()||String(an.mFirst||'').trim()) out.push({ first_name:String(an.mFirst||'').trim(), last_name:String(an.mLast||'').trim(), designation:String(an.mTitle||'').trim(), email:String(an.mEmail||'').trim() });
     return out;
   }
@@ -892,6 +998,7 @@
           if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
           var n=(g&&g.generated)||0;
           showToast(n?firstEmailToast(jobs.length):'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning'); loadHistory();
+          if (n) reviewLead(r.lead_id, an.x.company_name);
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
     }).catch(function(e){ an.busy=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
@@ -908,6 +1015,20 @@
     }).join('')+(l.more_people||[]).map(function(p){
       return '<label class="fd-use fd-block"><input type="checkbox" '+(an.picked['p:'+p.person_id]?'checked':'')+' onclick="fdAnWho(\'p:'+esc(p.person_id)+'\')"> <strong>'+esc(p.name||'')+'</strong><span class="fd-hint"> '+esc([p.title,p.email].filter(Boolean).join(' · '))+' · found on the card</span></label>';
     }).join('');
+    var found=(an.people||[]).map(function(p){
+      var right;
+      if (p.revealed && p.email) right='<label class="fd-use"><input type="checkbox" '+(an.picked['p:'+p.id]?'checked':'')+' onclick="fdAnWho(\'p:'+esc(p.id)+'\')"> Use</label>';
+      else if (p.revealed) right='<span class="fd-hint">No verified email</span>';
+      else right='<button class="btn btn-sm btn-outline" '+(an.revealing?'disabled':'')+' onclick="fdAnReveal(\''+esc(p.id)+'\')">'+(an.revealing===p.id?'Getting…':'Get email · 1 credit')+'</button>';
+      return '<div class="fd-person"><div class="fd-person-main"><strong>'+esc((p.first_name||'')+' '+(p.last_name||p.last_name_hint||''))+'</strong><span class="fd-hint">'+esc(p.title||'')+(p.revealed&&p.email?' · '+esc(p.email):'')+'</span></div>'+right+'</div>';
+    }).join('');
+    var apolloOn=!!(F.access&&F.access.apollo&&F.access.apollo.connected), canFind=apolloOn&&!!an.x.domain;
+    var search = canFind
+      ? '<div class="fd-label" style="margin-top:12px">Find more people at this company</div>'+
+        '<div class="fd-row"><input id="fd-an-titleq" class="inp fd-grow" placeholder="Job titles, e.g. HR Manager, Plant Manager (blank = the usual suspects)" value="'+esc(an.titleQ)+'" onkeydown="if(event.key===\'Enter\'){fdAnFind()}">'+
+        '<button class="btn btn-sm btn-primary" '+(an.finding?'disabled':'')+' onclick="fdAnFind()">'+(an.finding?'Looking…':'Find people')+'</button></div>'+
+        '<div class="fd-hint">Finding people is free. An email costs 1 credit, and only a verified address is kept.</div>'+found
+      : '<div class="fd-hint" style="margin-top:12px">'+(!apolloOn?'Apollo is not connected here, so more people cannot be looked up. ':'This company\'s website is not known, so more people cannot be looked up. ')+'Add someone by hand below.</div>';
     var from='';
     if (an.writeNow){
       if (an.mailboxes===null) from='<div class="fd-hint">Loading your email IDs…</div>';
@@ -918,10 +1039,11 @@
       '<div class="fs-12_5 c-text2" style="margin-bottom:10px">This makes a <b>second lead</b> at the same company, with its own job, its own people and its own first email. The first lead ('+esc(l.position||'')+') is left alone.</div>'+
       '<div class="fd-label">The job this email is about</div>'+jobList+
       '<input id="fd-an-job" class="inp fd-wide" placeholder="Or type another job title" value="'+esc(an.jobQ)+'">'+
-      '<div class="fd-label" style="margin-top:12px">Who to write to (up to '+lim('contacts_per_lead')+')</div>'+(who||'<div class="fd-hint">No other people were kept — add one below.</div>')+
+      '<div class="fd-label" style="margin-top:12px">Who to write to (up to '+lim('contacts_per_lead')+')</div>'+(who||'<div class="fd-hint">No other people were kept.</div>')+search+
+      '<div class="fd-label" style="margin-top:12px">Or add someone by hand</div>'+
       '<div class="fd-row" style="margin-top:6px"><input id="fd-an-fn" class="inp" placeholder="First name" value="'+esc(an.mFirst)+'"><input id="fd-an-ln" class="inp" placeholder="Last name" value="'+esc(an.mLast)+'"></div>'+
       '<div class="fd-row" style="margin-top:6px"><input id="fd-an-em" class="inp fd-grow" placeholder="Their email address" value="'+esc(an.mEmail)+'"><input id="fd-an-tt" class="inp fd-grow" placeholder="Title (optional)" value="'+esc(an.mTitle)+'"></div>'+
-      '<label class="fd-use fd-block" style="margin-top:12px"><input type="checkbox" '+(an.writeNow?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdAnWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'+from+
+      '<label class="fd-use fd-block" style="margin-top:12px"><input type="checkbox" '+(an.writeNow?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdAnWrite()"> Write the first email now — it opens right here for you to read, change and send (or leave it waiting in Email → Pending). Nothing is sent until you press Send.</label>'+from+
       (an.err?'<div class="c-red fs-13" role="alert" style="margin-top:8px">'+esc(an.err)+'</div>':'')+
       '</div><div class="mf"><button class="btn btn-outline" onclick="fdAnClose()">Cancel</button><button class="btn btn-primary" '+(an.busy?'disabled ':'')+'onclick="fdAnSave()">'+(an.busy?'Saving…':'Save as another lead')+'</button></div></div>';
   }

@@ -1115,3 +1115,7 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-sugg-item.on{background:var(--accent-l)}
 @media (hover:hover) and (pointer:fine){.fd-sugg-item:hover{background:var(--accent-l)}}
 .fd-sugg-kind{font-size:11px;color:var(--text3)}
+/* Find Leads: read, edit and send a lead's first email in a window (68-page-finder.js, fdReview) */
+.fd-rv-mail{margin:0 0 14px;padding:0 0 12px;border-bottom:1px dashed var(--ctl-brd)}
+.fd-rv-mail:last-of-type{border-bottom:0}
+.fd-rv-body{min-height:240px;line-height:1.6}

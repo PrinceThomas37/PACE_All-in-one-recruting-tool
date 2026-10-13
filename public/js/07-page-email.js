@@ -631,7 +631,8 @@ function renderEmail(){
             '<div class="mt1"><strong>Subject:</strong> '+htmlEsc(pe.subject||'')+'</div>'+
           '</div>'+
           '<div class="fs-13" style="padding:14px;line-height:1.7;white-space:pre-wrap;max-height:360px;overflow-y:auto">'+htmlEsc(pe.body||'')+'</div>'+
-          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end">'+
+          (peMine?'<div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
+            '<button class="btn btn-outline btn-sm" onclick="openDeletePendingConfirm([\''+pe.id+'\'])" title="Remove this email from Pending — it will not be sent">Delete email</button>'+
             '<button class="btn btn-outline btn-sm" onclick="openEditPendingEmail(\''+pe.id+'\')">✒ Edit email</button>'+
           '</div>':'')+
           '</div>'+
@@ -682,7 +683,7 @@ function renderEmail(){
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px;flex-wrap:wrap">'+
         // "pending", not "ready": what is ready NOW is the split under the tab.
         '<div class="fs-13 c-text2">'+totalRecipients+' pending email'+(totalRecipients!==1?'s':'')+(focus?' for this lead':(totalRecipients!==mineCount?' · '+mineCount+' yours':''))+' · page '+(_pPg+1)+' of '+_pTp+'</div>'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+sendSelBtn+sendAllBtn+'</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+(pv.ids.length?'<button class="btn btn-outline" onclick="openDeletePendingConfirm()" title="Remove the ticked emails from Pending — they will not be sent">Delete selected ('+pv.ids.length+')</button>':'')+sendSelBtn+sendAllBtn+'</div>'+
       '</div>'+
       '<div style="display:flex;gap:14px;align-items:flex-start">'+
         '<div style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">'+

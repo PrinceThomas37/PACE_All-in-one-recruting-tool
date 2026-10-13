@@ -1267,3 +1267,9 @@ Mutation-checked: removing the escaping, the deleted-lead check, the no-org guar
 
 ## 2026-10-13 (Session 44) — D-0138 guards
 `site-request-smoke` is now 18 checks and `company-site-form-smoke` 10. They pin that "kept but in nobody's lead list" is a 503, never "ok": both with no organisation set (in the browser, the page must show the email fallback and not "sent") and when the lead insert fails. Mutation-checked: always answering ok fails 2.
+
+## 2026-10-14 (Session 44) — tests for page three of the notes (D-0140)
+New: `pending-delete-smoke` (12). Extended: `finder-page-smoke` (people search in the another-window, the review window: nothing-changed save sends nothing, a changed one PATCHes only that email, Send saves then sends exactly that one, follow-ups never listed), `finder-routes-smoke` (saved-card people/reveal, mutation-checked), `take-selected-ui-smoke` (Lead Finder label). The `.map(` swallowed by a `//` comment was found because a step asserted the AI hint, not only the text.
+
+## 2026-10-14 (Session 44) — a load-sensitive browser suite
+`take-selected-ui-smoke` timed out once on Node 26 when two full suites ran at the same time (a 6 s wait for a window drawn by a mocked route), and had tripped once before under the same load. It passed 3/3 alone on Node 26. Its waits are now 20 s. Rule kept: run the Node 22 and Node 26 full suites ONE AFTER THE OTHER when a result will gate a merge; a failure seen only under load is still a failure to explain, not to dismiss.

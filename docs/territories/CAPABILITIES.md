@@ -708,3 +708,8 @@ person who has not written their own (R-169).
 - **Show job description (R-214):** a lead with a job posting attached shows **Show job description** (read it, then Edit if needed) instead of going straight to the editor.
 
 - **Website walkthrough requests become leads (R-216, D-0137; on the branch, not merged):** the "Book a walkthrough" form on paceconsultant.in sends the request into PACE. It becomes a lead in the Unassigned pool (source "Website · walkthrough request") with the person as its contact, plus a reminder, that day, for the organisation's admin saying who asked. The same person asking again goes onto their existing lead. Which organisation receives them is set per deployment (`WEBSITE_LEADS_ORG_ID`). With none set, requests are kept but go into nobody's lead list. If PACE cannot be reached, the visitor is told to email info@paceconsultant.in.
+
+- **Find more people when emailing another job / person (R-219):** the "Email another job / person" window on a saved lead has the same **Find people** search and **Get email · 1 credit** as the Accept window.
+- **Delete a pending email (R-220):** open an email in Email → Pending and press **Delete email**, or tick several and press **Delete selected**. It asks first and says it will not be sent; the lead stays.
+- **Read, edit and send the first email inside Find Leads (R-221):** when a first email is written it opens in a window with its subject and message — change it, **Save**, or **Send**. A saved lead with a waiting email has **Preview & edit**.
+- **"Lead Finder" label (R-222):** leads made by Find Leads show **Lead Finder** in the Leads list instead of NEW.

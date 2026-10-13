@@ -1178,3 +1178,7 @@ The same email on a live lead in that org makes no second lead: the reminder goe
 
 ## 2026-10-13 (Session 44) — the walkthrough route says "ok" only when a lead was made (D-0138)
 `POST /site/walkthrough-request` returns `{ok:true}` only when the request reached a lead (new or existing). If it was kept but went nowhere (no `WEBSITE_LEADS_ORG_ID`, or the lead could not be made), it returns 503 with a sentence naming info@paceconsultant.in, and the site's form shows its email fallback. The log line says which of the two happened.
+
+
+## 2026-10-14 (Session 44) — saved cards can look for people (D-0140)
+`routes/finder.js`: `POST /finder/cards/:id/people` and `/reveal` accept status `new` OR `accepted` (so "email another person" can search and reveal); `GET /finder/history` items carry `domain`. Nothing else changed server-side; delete and send-selected use the existing `DELETE /emails/:id` and `POST /emails/send-selected`.
