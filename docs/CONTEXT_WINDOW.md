@@ -62,3 +62,5 @@ This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCH
 **D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. (Migration 063 was later applied by the owner — see D-0125 note.)
 
 **D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063: applied by the owner in the SQL editor on 13 Oct (the assistant's apply was cancelled five times).
+
+**Owner to-do (R-205, 13 Oct):** set a fresh `MAILBOX_SECRET_KEY` on Render, then one live Zoho mailbox test. The key pasted in chat on 13 Oct is burned — do not use it.
