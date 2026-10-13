@@ -2030,3 +2030,13 @@ vs template reply rates (Deliverability → variants) say one of them loses.
 **Chosen:** merged on the owner's go. My call, so the merge loses nothing: the app answers "ok" ONLY when a request reached a lead list somebody works. Until `WEBSITE_LEADS_ORG_ID` is set (or if the lead cannot be made), the request is still kept, and the visitor is told plainly to email info@paceconsultant.in, with a link that opens their email app. That is no worse than the old form. The page never says "sent" for a request nobody will see.
 **Open:** which organisation (A, a company inside PACE for PACE itself, recommended; or B, Fute Global's lead list). Then the owner sets `WEBSITE_LEADS_ORG_ID` in Render, with no code change.
 **Re-open when:** the owner answers.
+
+### D-0139 · 2026-10-13 · STANDS · Website requests go to a company inside PACE for PACE itself, signed in as info@paceconsultant.in (R-216; answers D-0138's open question)
+**Their words:** on "B. Fute Global's lead list": *"No"*; on "A. A separate company inside PACE, for PACE itself": *"A. info@paceconsultant.in"*.
+**Done on the live database the same day, on that answer:**
+- an organisation **PACE** (`92cf97db-d216-483a-8cc4-7ecae575415b`, kind and plan `internal`);
+- a sign-in for **info@paceconsultant.in** in it (`75731aa6-7095-429d-9e93-2130c83ecab5`).
+
+Two organisations already existed, so nobody is signed out by a third. info@ is a GoDaddy mailbox, so it signs in with a password; the owner changes the temporary one on first sign-in. It is not stored in the repo.
+**Owner to do:** set `WEBSITE_LEADS_ORG_ID` to that organisation id in Render.
+**Re-open when:** PACE takes on its own sales team, or the owner wants these leads under a different login.
