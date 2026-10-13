@@ -1347,3 +1347,21 @@ resulting "Ask to take over" modal after clicking through, showing
 - `07-page-email.js` Pending (BD view): tick column + header box, a card banner (NOT `ld-box` — that box is unreadable on the Email page in the retro theme), "Send selected (n)" beside "Send all pending (N)" (the latter is the outline button while a focus is on). The banner counts only the person's own emails.
 - `68-page-finder.js` `fdGoPending(histId)` sets the focus from the saved lead; "See it" (a failed first email) still opens the tab as it is.
 - Not done: the Accept window's job pills and person details (R-197) — a real click selected every pill in a probe; waiting on the owner's exact screen.
+
+## 2026-10-12 (Session 44) — Email setup panel (R-200 step a, D-0120)
+- `45-org-domains.js`: an "Email setup" button on each domain opens a panel under the domain list (`STATE.emailSetup`): items with a ✓ / ○ / i mark, the exact record with a Copy value button, a DKIM selector box when DKIM is missing, "Copy for your IT person", "Check again", Close. Nothing is decided in the browser. A connection that does not exist yet is said not to exist (a screen must not advertise it). Not fixed: the Admin header still prints "Fute Global LLC" for every organisation (`09-page-workflows.js` ~line 785) — a customer's admin would see another company's name.
+
+## 2026-10-12 (Session 44) — My Setup: the app-password window (D-0121)
+- `69-page-mysetup.js`: "+ Add mailbox with an app password" appears only when `GET /smtp/enabled` says the server can store passwords; an app-password mailbox is labelled "App password" and offers "Enter the app password". The window (`mySetupSmtpOpen`) shows the provider's guide, a hidden password box, and — for a provider PACE does not know — the server boxes; each step the server returns is a ✓ or ✗ with its sentence; success ends on a "Mailbox ready" card that says the in-app inbox is not available. The password is read from the box at the moment of pressing Connect and is never kept in `STATE`. `20-email-accounts.js` labels the type "App password".
+
+## 2026-10-12 (Session 44) — "Mailbox ready" says the admin's limit (D-0122)
+- `69-page-mysetup.js`: the card now reads "Its daily limit is N emails, as set by your admin." instead of announcing a starting limit.
+
+## 2026-10-12 (Session 44) — D-0123
+`public/js/69-page-mysetup.js` no longer shows a made-up 150 for a mailbox with no number of its own. The numbers shown come from the server (the admin's).
+
+## 2026-10-13 (Session 44) — D-0124
+System Settings (`08-page-admin.js`) shows 'Set for your company' or 'Using the shared value' under each number, and a cleared box on a company's own number goes back to the shared one.
+
+## 2026-10-13 (Session 44) — D-0125
+No screen code changed; the new numbers appear in System Settings automatically (the screen is generated from the schema). The follow-up count picker still offers 1–5 — a number above the company's maximum is refused in words by the server.

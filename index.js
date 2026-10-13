@@ -66,6 +66,12 @@ const companyDailyCap = require('./services/company-daily-cap');
 const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { createGmailDelivery, freshFollowup } = require('./services/gmail-delivery');
+// App-password mailboxes — SMTP to send, IMAP to read (D-0120, R-200 step b). Zoho and any provider without an OAuth sign-in.
+const dailyLimit = require('./services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
+const mailboxSecret = require('./services/mailbox-secret');
+const { createSmtpStore } = require('./services/smtp-store');
+const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mailbox');
+const { createSmtpDelivery } = require('./services/smtp-delivery');
 const { releaseInterruptedSends } = require('./services/interrupted-sends');
 const { orderPendingForSend } = require('./send-queue-order');
 const sendRetry = require('./services/send-retry');
@@ -381,11 +387,11 @@ function getTimezoneFromLocation(location) {
 // (R-055). Cached 60s by config/settings.js. A start that is not before the end
 // would shut sending entirely, so it falls back to the defaults (8-16) rather
 // than silently stopping every email.
-async function getSendWindowHours() {
+async function getSendWindowHours(orgId) {
   let start = 8, end = 16;
   try {
-    const s = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_start_hour')));
-    const e = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_end_hour')));
+    const s = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_start_hour', orgId || undefined)));
+    const e = Math.floor(Number(await settingsConfig.getSetting(supabase, 'send_window_end_hour', orgId || undefined)));
     if (Number.isFinite(s) && Number.isFinite(e) && s < e) { start = s; end = e; }
   } catch (_) {}
   return { start, end };
@@ -406,8 +412,10 @@ function isInLeadSendWindow(tz, date = new Date(), window = { start: 8, end: 16 
 
 // What the person's own mail obeys: the organisation's window, narrowed by what they chose in My Setup (nothing chosen = the
 // organisation's window unchanged). A read that fails is the organisation's window, never a closed one.
-async function getPersonSendWindow(userId) {
-  const org = await getSendWindowHours();
+async function getPersonSendWindow(userId, orgId) {
+  // the person's organisation's hours (D-0124): given, else looked up from the person
+  let orgOfPerson = orgId; if (!orgOfPerson && userId) { try { orgOfPerson = await userOrgId(userId); } catch (_) { orgOfPerson = null; } }
+  const org = await getSendWindowHours(orgOfPerson);
   if (!userId) return org;
   try {
     const { data } = await supabase.from('app_settings').select('key,value')
@@ -448,28 +456,14 @@ function padHour(h) {
   return `${hr}:00 ${ap}`;
 }
 
-let bulkSendSettingsCache = { loadedAt: 0, delayMin: 30, delayMax: 60, domainMaxPerHour: 8, defaultDailyLimit: 300, maxPerRun: 0 };
-
-async function getBulkSendSettings() {
-  if (Date.now() - bulkSendSettingsCache.loadedAt < 60000) return bulkSendSettingsCache;
-  let delayMin = 30, delayMax = 60, domainMaxPerHour = 8, defaultDailyLimit = 300, maxPerRun = 0;
-  try {
-    const { data } = await supabase.from('app_settings').select('key,value').in('key', [
-      'send_delay_min_sec', 'send_delay_max_sec', 'domain_max_per_hour',
-      'default_daily_send_limit', 'bulk_send_max_per_run'
-    ]);
-    (data || []).forEach(r => {
-      const n = parseInt(r.value, 10);
-      if (r.key === 'send_delay_min_sec' && !Number.isNaN(n) && n >= 1 && n <= 300) delayMin = n;
-      if (r.key === 'send_delay_max_sec' && !Number.isNaN(n) && n >= 1 && n <= 600) delayMax = n;
-      if (r.key === 'domain_max_per_hour' && !Number.isNaN(n) && n >= 1 && n <= 100) domainMaxPerHour = n;
-      if (r.key === 'default_daily_send_limit' && !Number.isNaN(n) && n >= 1) defaultDailyLimit = n;
-      if (r.key === 'bulk_send_max_per_run' && !Number.isNaN(n) && n >= 0) maxPerRun = n;
-    });
-  } catch (_) {}
-  if (delayMax < delayMin) delayMax = delayMin;
-  bulkSendSettingsCache = { loadedAt: Date.now(), delayMin, delayMax, domainMaxPerHour, defaultDailyLimit, maxPerRun };
-  return bulkSendSettingsCache;
+// The send loop's pacing numbers for ONE organisation (D-0124): the admin's own choice, else the shared value, else the built-in
+// default — all through config/settings.js (cached, never throws). No number is typed here.
+async function getBulkSendSettings(orgId) {
+  const num = (k) => settingsConfig.getSetting(supabase, k, orgId || undefined);
+  const [delayMin, delayMaxRaw, domainMaxPerHour, defaultDailyLimit, maxPerRun] = await Promise.all([
+    num('send_delay_min_sec'), num('send_delay_max_sec'), num('domain_max_per_hour'), num('default_daily_send_limit'), num('bulk_send_max_per_run'),
+  ]);
+  return { delayMin, delayMax: Math.max(delayMin, delayMaxRaw), domainMaxPerHour, defaultDailyLimit, maxPerRun };
 }
 
 async function getMailboxDelayBounds(userEmailId, settings) {
@@ -489,11 +483,14 @@ async function getMailboxDelayBounds(userEmailId, settings) {
 }
 
 async function loadMailboxQuotaState(mailboxIds) {
-  const settings = await getBulkSendSettings();
   const limits = {}, sentToday = {}, delays = {};
   const ids = [...new Set(mailboxIds.filter(Boolean))];
+  let accounts = [];
+  if (ids.length) ({ data: accounts } = await supabase.from('user_emails').select('id,daily_send_limit,org_id').in('id', ids));
+  // One send run belongs to one person, so every mailbox in it is in one organisation: that organisation's numbers apply.
+  const orgId = ((accounts || []).find(a => a.org_id) || {}).org_id;
+  const settings = await getBulkSendSettings(orgId);
   if (ids.length) {
-    const { data: accounts } = await supabase.from('user_emails').select('id,daily_send_limit').in('id', ids);
     (accounts || []).forEach(a => { limits[a.id] = a.daily_send_limit || settings.defaultDailyLimit; });
     const { data: logs } = await supabase.from('email_send_log').select('user_email_id,emails_sent').eq('send_date', today()).in('user_email_id', ids);
     (logs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
@@ -502,7 +499,7 @@ async function loadMailboxQuotaState(mailboxIds) {
       if (!limits[id]) limits[id] = settings.defaultDailyLimit;
     }
   }
-  return { limits, sentToday, delays, settings };
+  return { limits, sentToday, delays, settings, orgId };
 }
 
 async function loadMailboxSignatures(mailboxIds, userId) {
@@ -855,7 +852,7 @@ app.post('/emails/retry-failed', auth, async (req, res) => {
     // Your own failed emails; an admin may name other people's by id (the
     // Email page passes exactly the rows it is showing).
     let q = db.forRequest(req).from('emails').select(RETRY_ROW_SELECT).eq('status', 'failed');
-    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, 500) : null;
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter(x => typeof x === 'string').slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max', orgIdFor(req))) : null;
     if (ids) q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
     if (!hasRole(req, 'admin')) q = q.eq('sent_by', req.user.id);
     const { data, error } = await q;
@@ -1232,7 +1229,7 @@ app.post('/emails/send-selected', auth, async (req, res) => {
       .select(PENDING_EMAIL_JOB_SELECT)
       .eq('sent_by', req.user.id)
       .eq('status', 'pending')
-      .in('id', email_ids.slice(0, 500))
+      .in('id', email_ids.slice(0, await settingsConfig.getSetting(supabase, 'send_selected_max', orgIdFor(req))))
       .order('created_at', { ascending: true });
     if (fetchErr) throw fetchErr;
     const nowMs = Date.now();
@@ -1365,7 +1362,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
     const { priority_text, pool_stats, manager_id } = req.body;
     const { data: manager } = await supabase.from('users').select('id,name').eq('id', manager_id).single();
-    const capacity = pool_stats.capacity || 150;
+    const capacity = pool_stats.capacity || pool_stats.total || 0;      // no number typed here: the whole pool unless the caller says fewer
     // No provider configured (or every one of them failing) falls through to
     // buildAutoRatio below — the rules split, which is what runs today.
     // Build dynamic industry keys from what's actually in the pool
@@ -1395,7 +1392,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
       return res.json({ ...buildAutoRatio(pool_stats, capacity), ai_unusable: true, engine_model: out.model });
     }
     res.json({ ...ratio, engine: 'ai', engine_model: out.model });
-  } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || 150)); }
+  } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || req.body.pool_stats?.total || 0)); }
 });
 
 // ── Microsoft Graph threaded send (follow-ups quote prior emails like Gmail/Outlook) ──
@@ -1638,6 +1635,27 @@ async function deliverViaGmail(email, userEmailId, htmlBody, sendingEmail) {
   return gmailDelivery.deliver(email, userEmailId, htmlBody, sendingEmail);
 }
 
+// App-password delivery (SMTP) — the third provider. It threads by Message-ID / In-Reply-To / References that PACE writes itself.
+let smtpDelivery = null;
+async function deliverViaSmtp(email, userEmailId, htmlBody, sendingEmail) {
+  if (!smtpDelivery) smtpDelivery = createSmtpDelivery({ supabase, store: smtpStore, mailbox: smtpMailbox, buildQuote: buildQuotedChainFromDb });
+  return smtpDelivery.deliver(email, userEmailId, htmlBody, sendingEmail);
+}
+
+// For the recruiter / candidate / client mail routes (routes/recruiting/outreach.js): which of these mailboxes are connected with an
+// app password, and a fresh message from one.
+async function smtpConnectedIds(ids) {
+  if (!ids || !ids.length) return new Set();
+  try {
+    const { data } = await supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids);
+    return new Set((data || []).filter(t => !t.refresh_failed).map(t => t.user_email_id));
+  } catch (_) { return new Set(); }
+}
+async function sendSmtpNewMessage(mailbox, msg) {
+  if (!smtpDelivery) smtpDelivery = createSmtpDelivery({ supabase, store: smtpStore, mailbox: smtpMailbox, buildQuote: buildQuotedChainFromDb });
+  return smtpDelivery.sendNew(mailbox, msg);
+}
+
 async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEmail) {
   // ONE identity for the whole message. The body, the subject and the signature
   // are all filled from the mailbox this send actually authenticates with, so
@@ -1666,6 +1684,9 @@ async function deliverOutboundEmail(email, userEmailId, signatureHtml, sendingEm
   const platform = (sendingEmail?.platform || 'Microsoft').toLowerCase();
   if (platform === 'gmail' || platform === 'google') {
     return deliverViaGmail(email, userEmailId, htmlBody, sendingEmail);
+  }
+  if (platform === 'smtp') {
+    return deliverViaSmtp(email, userEmailId, htmlBody, sendingEmail);
   }
   const isFollowup = followupSteps.isFollowupType(email.followup_type);
   if (!isFollowup) {
@@ -1952,20 +1973,23 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
     ...pendingEmails.map(e => e.job?.sending_email_id),
     ...overrideMailboxIds
   ].filter(Boolean))];
-  const [mailboxSignatures, quotaState, mailboxDeliv, warmupStart, warmupStep] = await Promise.all([
+  const [mailboxSignatures, quotaState, mailboxDeliv] = await Promise.all([
     loadMailboxSignatures(mailboxIds, userId),
     loadMailboxQuotaState(mailboxIds),
     loadMailboxDelivState(mailboxIds),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
-    settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
   ]);
   const { limits, sentToday, delays, settings } = quotaState;
+  const runOrg = quotaState.orgId || undefined;      // this run's organisation: its numbers apply (D-0124)
+  const [warmupStart, warmupStep] = await Promise.all([
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_start', runOrg),
+    settingsConfig.getSetting(supabase, 'mailbox_warmup_step', runOrg),
+  ]);
   // Checked once per run: the company switch, whether any AI provider is set up,
   // and each person's own "same as the company / on for me / off" (D-0117).
   // Follow-ups are not in this choice — shouldWriteFirst requires a first email.
   let companyAiFirst = false, aiReady = false;
   try {
-    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email')) === 1;
+    companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', runOrg)) === 1;
     aiReady = await aiProvider.isAvailable(supabase);
   } catch (_) { companyAiFirst = false; aiReady = false; }
   let aiChoiceMap = {};
@@ -1978,7 +2002,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   // out earlier today (any sender) and is bumped below as this run sends.
   let companyCap = 0, companySentToday = {};
   try {
-    companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails')) || 0;
+    companyCap = Number(await settingsConfig.getSetting(supabase, 'company_daily_first_emails', runOrg)) || 0;
     if (companyCap > 0) {
       companySentToday = await companyDailyCap.loadSentToday(supabase,
         pendingEmails.filter(companyDailyCap.isFirstEmail).map(e => e.job?.company_id), today());
@@ -2094,6 +2118,14 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
       failed++;
       failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'Gmail sending is not configured on the server yet' });
       await recordSendFailure(email, 'Gmail sending is not configured on the server yet', 'Gmail sending is not configured on the server yet');
+      await setSendProgress(userId, { ...progressBase, current: email.to_email });
+      continue;
+    }
+    if (platform === 'smtp' && !mailboxSecret.isConfigured()) {
+      sendAttempts++;
+      failed++;
+      failDetails.push({ id: email.id, job_id: email.job_id, contact_id: email.contact_id, to: email.to_email, from: sendingEmail?.email_address || '—', error: 'App-password sending is not configured on the server yet' });
+      await recordSendFailure(email, 'App-password sending is not configured on the server yet', 'App-password sending is not configured on the server yet (MAILBOX_SECRET_KEY).');
       await setSendProgress(userId, { ...progressBase, current: email.to_email });
       continue;
     }
@@ -2380,7 +2412,8 @@ app.post('/distribute/execute', auth, async (req, res) => {
     const { data: bdSettings } = await supabase.from('app_settings').select('key,value').in('key', [`u_${manager_id}_fu_count`, ...followupSteps.STEPS.map(t => `u_${manager_id}_${t}_day`)]);
     const bdSettingsMap = {};
     (bdSettings || []).forEach(r => { bdSettingsMap[r.key] = r.value; });
-    const fuDueDates = followupSteps.dueDates(bdSettingsMap, manager_id, now);
+    const fuAdminMax = await settingsConfig.getSetting(supabase, 'followup_max', await userOrgId(manager_id) || undefined);   // the company's most (D-0124)
+    const fuDueDates = followupSteps.dueDates(bdSettingsMap, manager_id, now, fuAdminMax);
     const wantsFollowups = Object.values(fuDueDates).some(Boolean);
     const { data: assignedJobs } = await supabase.from('jobs').select('id,sending_email_id,contacts(id,email,email_status)').in('id', jobIds);
     const followUpRows = [];
@@ -2480,9 +2513,14 @@ async function runFollowupEngine() {
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
 
-    const { data: allEmails } = await supabase.from('user_emails').select('id,daily_send_limit').eq('is_active', true);
+    const { data: allEmails } = await supabase.from('user_emails').select('id,daily_send_limit,org_id').eq('is_active', true);
     const limitMap = {};
-    (allEmails || []).forEach(a => { limitMap[a.id] = a.daily_send_limit || 150; });
+    const dailyByOrg = {};                       // each organisation's own default (D-0124), asked once
+    for (const a of (allEmails || [])) {
+      const org = a.org_id || '';
+      if (!(org in dailyByOrg)) dailyByOrg[org] = await dailyLimit.defaultDailyLimit(supabase, org);
+      limitMap[a.id] = dailyLimit.limitOf(a, dailyByOrg[org]);
+    }
 
     const bdIdSet = [...new Set((dueFu || []).map(f => f.job?.assigned_to_bd).filter(Boolean))];
     let bdMap = {};
@@ -2566,7 +2604,7 @@ async function runFollowupEngine() {
         if (!acId) continue;
         // Don't queue follow-ups from a disabled mailbox — disabling must actually stop sends.
         if (job.sending_email?.is_active === false) { log.skipped_inactive_mailbox++; continue; }
-        const rem = (limitMap[acId] || 150) - (sentToday[acId] || 0) - (acCountDelta[acId] || 0);
+        const rem = (limitMap[acId] || dailyDefault) - (sentToday[acId] || 0) - (acCountDelta[acId] || 0);
         if (rem <= 0) { log.skipped_quota++; continue; }
         const contact = fu.contact;
         if (!contact?.email) continue;
@@ -2837,6 +2875,71 @@ async function maybeAutoPauseMailboxOnBounces(userEmailId, newBounces) {
   }
 }
 
+// The NDR rule, shared by every provider's bounce sweep: a message from a mail-delivery daemon names the address that bounced, and
+// that contact is marked invalid (so it stops being mailed and its follow-ups are cancelled). `messages` are Graph-shaped.
+async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder, newestStart) {
+  let marked = 0, newest = newestStart;
+  for (const msg of messages) {
+    if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
+    if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
+    if (!isNdrMessage(msg)) continue;
+    const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
+    for (const addr of extractBounceRecipients(text, ownAddresses)) {
+      const { data: matches } = await supabase.from('contacts')
+        .select('id,email_status,job_id').ilike('email', addr).limit(10);
+      for (const c of (matches || [])) {
+        if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
+        await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
+        emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
+        emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
+        await logActivity(c.job_id, c.id, null, 'email_bounced',
+          `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
+          { source: 'ndr', mailbox: tokenRow.email_address, folder });
+        marked++;
+      }
+    }
+  }
+  return { marked, newest };
+}
+
+// App-password (SMTP/IMAP) mailboxes: the same two sweeps, reading the inbox over IMAP (read-only — nothing is moved, marked or
+// deleted). A refused password is recorded so the mailbox shows "reconnect" and is not hammered; a network hiccup is NOT a refusal.
+async function readSmtpMailbox(tokenRow, folders, since) {
+  const loaded = await smtpStore.get(tokenRow.user_email_id);
+  if (!loaded || loaded.error) return null;
+  try {
+    const msgs = await smtpMailbox.fetchRecent(loaded.cfg, loaded.creds, { folders, since: new Date(since), limit: await settingsConfig.getSetting(supabase, 'smtp_sweep_batch') });
+    await smtpStore.outcome(tokenRow.user_email_id, true);
+    return msgs;
+  } catch (e) {
+    const x = explainSmtp(e, 'imap', { host: loaded.cfg.imap.host });
+    if (x.kind === 'auth' || x.kind === 'imap_off') await smtpStore.outcome(tokenRow.user_email_id, false, x.message);
+    console.error(`[Sweep/smtp] ${tokenRow.email_address}: ${x.message}`);
+    return null;
+  }
+}
+async function sweepSmtpBounces(tokenRow, ownAddresses) {
+  const sinceKey = `bounce_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const msgs = await readSmtpMailbox(tokenRow, ['INBOX', 'Junk', 'Spam', 'Junk Email'], since);
+  if (!msgs) return 0;
+  const r = await markBouncesFromMessages(msgs, ownAddresses, tokenRow, 'smtp', since);
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: r.newest, updated_at: new Date() }, { onConflict: 'key' });
+  try { await maybeAutoPauseMailboxOnBounces(tokenRow.user_email_id, r.marked); } catch (_) {}
+  return r.marked;
+}
+async function sweepSmtpReplies(tokenRow, ownAddresses) {
+  const sinceKey = `reply_sweep_since_${tokenRow.user_email_id}`;
+  const { data: sinceRow } = await supabase.from('app_settings').select('value').eq('key', sinceKey).maybeSingle();
+  const since = sinceRow?.value || new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  const msgs = await readSmtpMailbox(tokenRow, ['INBOX'], since);
+  if (!msgs) return 0;
+  const { detected, newest } = await processInboundMessages(msgs, ownAddresses, tokenRow, since);
+  await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
+  return detected;
+}
+
 async function sweepMailboxBounces(tokenRow, ownAddresses) {
   let accessToken;
   try { accessToken = await getMicrosoftToken(tokenRow.user_email_id); }
@@ -2856,26 +2959,8 @@ async function sweepMailboxBounces(tokenRow, ownAddresses) {
     let data;
     try { data = await graphMailRequest(accessToken, path); }
     catch (e) { console.error(`[BounceSweep] ${folder} list for ${tokenRow.email_address}: ${e.message}`); continue; }
-    for (const msg of (data.value || [])) {
-      if (msg.receivedDateTime && msg.receivedDateTime > newest) newest = msg.receivedDateTime;
-      if (isWarmupMessage(msg)) continue; // warm-up pool traffic — never a bounce
-      if (!isNdrMessage(msg)) continue;
-      const text = `${msg.body?.content || ''} ${msg.bodyPreview || ''}`;
-      for (const addr of extractBounceRecipients(text, ownAddresses)) {
-        const { data: matches } = await supabase.from('contacts')
-          .select('id,email_status,job_id').ilike('email', addr).limit(10);
-        for (const c of (matches || [])) {
-          if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
-          await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
-          emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
-          emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
-          await logActivity(c.job_id, c.id, null, 'email_bounced',
-            `Auto-marked invalid — bounce/NDR received for ${addr}`, null,
-            { source: 'ndr', mailbox: tokenRow.email_address, folder });
-          marked++;
-        }
-      }
-    }
+    const r = await markBouncesFromMessages(data.value || [], ownAddresses, tokenRow, folder, newest);
+    marked += r.marked; newest = r.newest;
   }
   await supabase.from('app_settings').upsert({ key: sinceKey, value: newest, updated_at: new Date() }, { onConflict: 'key' });
 
@@ -2890,14 +2975,19 @@ async function runBounceSweep() {
     // org_id added so EMAIL_BOUNCED/CONTACT_INVALIDATED below can carry it —
     // see the C-0021 X4 note on emit() near events.js.
     const { data: tokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
-    if (!tokens || !tokens.length) return 0;
+    const sm = (await smtpStore.listConnected()).filter(t => !t.refresh_failed);
+    if ((!tokens || !tokens.length) && !sm.length) return 0;
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    tokens.forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...(tokens || []), ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
     let total = 0;
-    for (const t of tokens) {
+    for (const t of (tokens || [])) {
       try { total += await sweepMailboxBounces(t, ownAddresses); }
       catch (e) { console.error(`[BounceSweep] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of sm) {
+      try { total += await sweepSmtpBounces(t, ownAddresses); }
+      catch (e) { console.error(`[BounceSweep/smtp] ${t.email_address}: ${e.message}`); }
     }
     if (total) console.log(`[BounceSweep] marked ${total} contact(s) invalid from NDRs`);
     return total;
@@ -2961,7 +3051,7 @@ async function storeConversationMessage(msg, { direction, from, tokenRow, contac
       contact_id: contactId || null,
       candidate_id: candidateId || null,
       job_id: jobId || null,
-      provider: msg._provider === 'gmail' ? 'gmail' : 'microsoft',
+      provider: msg._provider === 'gmail' ? 'gmail' : (msg._provider === 'smtp' ? 'smtp' : 'microsoft'),
       thread_key: msg.conversationId || msg.threadId || null,
       message_key: msg.id || null,
       direction,
@@ -3171,11 +3261,12 @@ async function runReplySweep() {
     const { data: msTokens } = await supabase.from('microsoft_tokens').select('user_email_id,email_address,org_id');
     const { data: gmTokens } = await supabase.from('gmail_tokens').select('user_email_id,email_address,org_id');
     const ms = msTokens || [], gm = gmTokens || [];
-    if (!ms.length && !gm.length) return 0;
+    const sm = (await smtpStore.listConnected()).filter(t => !t.refresh_failed);
+    if (!ms.length && !gm.length && !sm.length) return 0;
 
     const { data: ue } = await supabase.from('user_emails').select('email_address');
     const ownAddresses = new Set((ue || []).map(u => (u.email_address || '').toLowerCase()).filter(Boolean));
-    [...ms, ...gm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
+    [...ms, ...gm, ...sm].forEach(t => { if (t.email_address) ownAddresses.add(t.email_address.toLowerCase()); });
 
     let total = 0;
     for (const t of ms) {
@@ -3185,6 +3276,10 @@ async function runReplySweep() {
     for (const t of gm) {
       try { total += await sweepGmailReplies(t, ownAddresses); }
       catch (e) { console.error(`[ReplySweep/gmail] ${t.email_address}: ${e.message}`); }
+    }
+    for (const t of sm) {
+      try { total += await sweepSmtpReplies(t, ownAddresses); }
+      catch (e) { console.error(`[ReplySweep/smtp] ${t.email_address}: ${e.message}`); }
     }
     if (total) console.log(`[ReplySweep] detected ${total} repl(ies) — sequences stopped`);
     return total;
@@ -3436,6 +3531,8 @@ const MS_SCOPES   = config.microsoft.scopes;
 // Gmail / Google Workspace provider — inert until GOOGLE_CLIENT_ID/SECRET are
 // set (see config/env.js). Microsoft path is unaffected.
 const gmailProvider = createGmailProvider({ supabase, google: config.google });
+const smtpStore = createSmtpStore({ supabase });
+const smtpMailbox = createSmtpMailbox({ nodemailer: require('nodemailer'), ImapFlow: require('imapflow').ImapFlow, simpleParser: require('mailparser').simpleParser });
 
 
 
@@ -3651,6 +3748,7 @@ app.use(require('./routes/mailbox')(routeCtx));
 // route modules, which already own each provider's registered redirect URI.
 app.use(require('./routes/sso')({ ...routeCtx, gmailProvider, config }));
 app.use(require('./routes/org-domains')(routeCtx));
+app.use(require('./routes/smtp-mailbox')({ ...routeCtx, smtp: { store: smtpStore, mailbox: smtpMailbox, secret: mailboxSecret } }));
 app.use(require('./routes/plans')(routeCtx));
 
 require('./bd_recruiter_routes')(app, { supabase, auth, hasRole, today, orgIdFor, loadSuppressedSet });
@@ -3711,7 +3809,7 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   let mailbox = job.sending_email;
   if (meta.from_mailbox_id) {
     const { data: mb } = await supabase.from('user_emails')
-      .select('id,email_address,display_name,platform,daily_send_limit,is_active').eq('id', meta.from_mailbox_id).maybeSingle();
+      .select('id,org_id,email_address,display_name,platform,daily_send_limit,is_active').eq('id', meta.from_mailbox_id).maybeSingle();
     if (mb) mailbox = mb;
   }
   if (!mailbox?.id) return { outcome: 'skipped', detail: { reason: 'no_sending_mailbox' } };
@@ -3719,7 +3817,7 @@ wfEngine.registerChannel('email', async ({ step, enrollment, context }) => {
   const delivState = await loadMailboxDelivState([mailbox.id]);
   if (delivState[mailbox.id]?.auto_paused_at) return { outcome: 'defer', detail: { reason: 'mailbox_autopaused' } };
   const { data: sendLog } = await supabase.from('email_send_log').select('emails_sent').eq('send_date', today()).eq('user_email_id', mailbox.id).maybeSingle();
-  const base = mailbox.daily_send_limit || 150;
+  const base = dailyLimit.limitOf(mailbox, await dailyLimit.defaultDailyLimit(supabase, mailbox && mailbox.org_id));
   const [warmupStart, warmupStep] = await Promise.all([
     settingsConfig.getSetting(supabase, 'mailbox_warmup_start'),
     settingsConfig.getSetting(supabase, 'mailbox_warmup_step'),
@@ -3849,6 +3947,7 @@ const recruitingOutreach = require('./routes/recruiting/outreach')(app, {
   getMailboxSignature, getMicrosoftToken, warmupLimit,
   isSendingPaused, isManagerPaused, loadMailboxDelivState, loadSuppressedSet,
   friendlySendError,
+  smtpConnectedIds, sendSmtpNewMessage,       // app-password mailboxes (D-0120, R-200 step b)
 });
 
 // ── Outreach generator (the Email page's "Generator" tab) ──────────────────

@@ -237,7 +237,7 @@ router.post('/jobs/bulk', auth, async (req, res) => {
     // when someone is given the lead or the first email to its contact is written (services/lead-claim.js). The importer still
     // sees what they imported (created_by is sight, services/ownership.js). `for_me` from an older browser tab is ignored.
     // Filter out companies in cooldown for RA users (admin-editable — config/settings.js)
-    const cooldownDays = await getSetting(supabase, 'company_cooldown_days');
+    const cooldownDays = await getSetting(supabase, 'company_cooldown_days', orgIdFor(req));
     const cooldownDate = new Date(Date.now() - cooldownDays * 24 * 3600 * 1000).toISOString();
     const companyIds = [...new Set(jobs.map(j => j.company_id).filter(Boolean))];
     let cooledDown = new Set();
@@ -453,7 +453,7 @@ router.put('/jobs/:id', auth, async (req, res) => {
     if (reqOrg && existing.org_id && existing.org_id !== reqOrg) return res.status(404).json({ error: 'Not found' });
     const isRA = hasRole(req, 'ra') && !hasRole(req, 'admin', 'ra_lead', 'bd', 'bd_lead');
     // Admin-editable — config/settings.js.
-    const editWindowHours = await getSetting(supabase, 'ra_edit_window_hours');
+    const editWindowHours = await getSetting(supabase, 'ra_edit_window_hours', reqOrg);
     const hoursSinceCreation = (new Date() - new Date(existing.created_at)) / 3600000;
     const raCanEdit = isRA && existing.created_by === req.user.id && hoursSinceCreation <= editWindowHours;
     // Rampart review (2026-09-24, item #9): `own.canSeeLead` also admits a

@@ -58,11 +58,13 @@ async function resolveFollowupPins(supabase, pending, explicit) {
     const ids = (mbs || []).map(m => m.id);
     const connectedIds = new Set();
     if (ids.length) {
-      const [{ data: ms }, { data: gm }] = await Promise.all([
+      const [{ data: ms }, { data: gm }, sm] = await Promise.all([
         supabase.from('microsoft_tokens').select('user_email_id').in('user_email_id', ids),
         supabase.from('gmail_tokens').select('user_email_id').in('user_email_id', ids),
+        // an app-password mailbox (migration 063) is as connected as an OAuth one — a follow-up goes out from the mailbox its first email did
+        supabase.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', ids),
       ]);
-      [...(ms || []), ...(gm || [])].forEach(t => connectedIds.add(t.user_email_id));
+      [...(ms || []), ...(gm || []), ...((sm && sm.data) || []).filter(t => !t.refresh_failed)].forEach(t => connectedIds.add(t.user_email_id));
     }
     for (const e of fus) {
       const mb = pickFollowupMailbox({ firstFrom: firstBy[e.contact_id], byAddress, connectedIds, currentMailboxId: e.job && e.job.sending_email_id });

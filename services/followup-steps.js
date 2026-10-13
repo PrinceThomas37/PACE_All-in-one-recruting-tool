@@ -43,9 +43,10 @@ function dayFor(settings, userId, n) {
 function dateAfter(anchor, days) { const d = new Date(anchor); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0]; }
 
 /** The follow_ups columns a new row gets: the due date of each follow-up this person chose, null for the rest. */
-function dueDates(settings, userId, anchor) {
+function dueDates(settings, userId, anchor, adminMax) {
   const out = {};
-  const count = countFor(settings, userId);
+  // `adminMax`: the most follow-ups the person's company allows (D-0124); the person's own choice is held to it.
+  const count = Math.min(countFor(settings, userId), adminMax >= 0 ? Math.min(adminMax, MAX) : MAX);
   for (let n = 1; n <= MAX; n++) out[dueCol(n)] = n <= count ? dateAfter(anchor, dayFor(settings, userId, n)) : null;
   return out;
 }

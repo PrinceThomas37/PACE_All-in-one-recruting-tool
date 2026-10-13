@@ -1215,3 +1215,26 @@ gateway's own in-flight work. Did not commit anything, per instruction.
 
 ## 2026-10-12 (Session 44) — `test/pending-selection-smoke.mjs` (23)
 - Drives the real "Review & send" button and the Pending tab: one lead's emails only, ticked; a teammate's row has no tick box; Send selected posts exactly the ticked ids and never queue-all; Show all pending ticks nothing; another page/tab drops the focus; the send-selected route uses the shared select and the `isDue` rule. Mutation-checked: removing `pendingFocus` in `fdGoPending` fails 7 steps. Probe lesson (R-197): a real Playwright click selected every Accept-window job pill, so "sometimes it does not select" is not a plain handler failure.
+
+## 2026-10-12 (Session 44) — email-setup tests
+- `test/email-setup-smoke.mjs` (34): provider recognition incl. Zoho regions and lookalike hosts, SPF extended never duplicated, DMARC p=none counts, DKIM at provider/typed selectors, the IT note, and the route (admin only, other organisation's admin gets 404). Mutation-checked twice (org check removed; SPF merge removed). `test/email-setup-ui-smoke.mjs` (11): the panel, copy, check again with a typed selector. Test lesson: a function passed to `page.evaluate` as source loses its closure (`IT is not defined`) — pass data as an argument.
+- Node 26 for a merge: `https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz` downloads from this sandbox.
+
+## 2026-10-12 (Session 44) — tests for app-password mailboxes (D-0121)
+- `test/smtp-mailbox-smoke.mjs` (59): encryption, the safety rules, REAL sending through a local `smtp-server` over STARTTLS (threading headers, display name, text twin, failures in the send loop's vocabulary), a fake IMAP client for reading, the store, and source checks that every sweep and rule is wired. `test/smtp-routes-smoke.mjs` (35): ownership, each step, nothing saved unless it all works, no password in any response. `test/my-setup-smtp-ui-smoke.mjs` (17). Mutation-checked: private-address check removed (3 fail), password stored clear (fails), saved-even-if-reading-fails (fails), any-user-any-mailbox (2 fail).
+- **The IMAP wire protocol is NOT covered** — no IMAP server in this sandbox. A real mailbox must be tried once. `smtp-server` is a devDependency; `imapflow` and `mailparser` are new dependencies.
+- Test lessons: a fake DB that throws on an unknown table made a best-effort `try` return nothing (`followup-sender-smoke`); `models-smoke` hard-codes the tenant-table count (now 49).
+- **Node 26 caught what Node 22 did not:** Node 26 refuses an IP address as a TLS certificate name ("Setting the TLS ServerName to an IP address is not permitted"); the local test server is reached at 127.0.0.1, so the STARTTLS tests failed there only. Fixed in `services/smtp-mailbox.js` (the name is sent only when it is a host name — production always uses one). Both full suites: 244 on Node 22 and on Node 26, after the one `org-scoping-guard` finding (the mailbox row updates are now tied to the slot's organisation) was fixed.
+- 12 Oct, D-0122: `smtp-routes-smoke` and `my-setup-smtp-ui-smoke` now assert the connect does NOT touch `daily_send_limit` (an admin's 20 is kept and reported as 20).
+
+## 2026-10-12 (Session 44) — D-0123
+`test/admin-numbers-smoke.mjs` (18): admin default, cache, own-number-beats-default, broken DB, finder suggestion follows the default, new numbers are bounded settings, and a source guard that no route types a daily-limit literal. Mutation-checked: a restored `|| 150` and a restored `TRY_LIMIT = 6` both fail it. Lesson: a new helper used in a file without its `require` passes `node --check`; only running the code finds it.
+
+## 2026-10-13 (Session 44) — D-0124
+`admin-numbers-smoke` (30) now covers company A / company B / shared isolation, clearing, bounds and the old bare key; `settings.mjs` fake answers a multi-key read `.in(col, keys)`.
+
+## 2026-10-13 (Session 44) — D-0124 follow-up
+The full suite found the sending-hours regression that targeted runs did not (`send-hours-smoke` 12/15): run the whole suite after a change to a shared reader. That test lifts `getSendWindowHours` by regex from `index.js` — its pattern now allows the `orgId` parameter.
+
+## 2026-10-13 (Session 44) — D-0125
+`admin-numbers-smoke` 41: Finder caps, AI ceilings per company, follow-up ceiling, and source guards (mutation-checked: putting `slice(1, 5)` or `capacity || 150` back fails it).

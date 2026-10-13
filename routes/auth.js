@@ -5,6 +5,7 @@
 // Route paths, handler logic and behaviour are unchanged from the original.
 // ============================================================================
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a new mailbox starts at the admin's number (D-0123)
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { mailboxSignatureKey, resolveSignatureHtml, sendsAsKey, cleanSendsAs, sendsAsProblem, signatureFromSendsAs, OWN_SIGNATURE_MARK } = require('../email-signature');
@@ -312,7 +313,8 @@ router.post('/users/:id/emails', auth, async (req, res) => {
       platform: platform || 'Microsoft',
       is_primary: staff ? (is_primary || false) : false,
       is_active: true,
-      daily_send_limit: staff ? (daily_send_limit || 150) : 150
+      // This organisation's default (Admin → System settings), never a number typed here. Only an admin / lead may choose another.
+      daily_send_limit: staff ? (daily_send_limit || await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))) : await dailyLimit.defaultDailyLimit(supabase, orgIdFor(req))
     }).select().single();
     if (error) throw error;
     if (sendsAsClean && !sendsAsProblem(sendsAsClean)) {

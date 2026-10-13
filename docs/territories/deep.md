@@ -359,3 +359,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-08 (Session 43, fifth round) — D-0114
 - Migration 062 also adds `follow_ups.chain_rules text` (NULL = made before 8 Oct, `'own'` = new rules). Still NOT applied to the live database.
+
+## 2026-10-12 (Session 44) — migration 063 `smtp_credentials` (D-0121)
+- One row per app-password mailbox (`user_email_id` PK, `org_id` NOT NULL, servers, login name, `password_enc` = `v1.<iv>.<tag>.<ciphertext>`, and the same health columns as the token tables). RLS on, service policy. Registered in `models/tables.js` (49 tenant tables). **Written, NOT applied** — apply before the code that reads it is merged, with the owner's go-ahead.

@@ -19,6 +19,7 @@
 // path must still go above `/ownership-requests/:id/*`, never appended below.
 // ============================================================================
 const express = require('express');
+const dailyLimit = require('../services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
 const own = require('../services/ownership');
 const { makeRecorder } = require('../services/record-history-writer');
 
@@ -189,15 +190,16 @@ module.exports = (ctx) => {
   async function pickMailboxFor(req, userId) {
     const D = db.forRequest(req);
     const { data: userEmails } = await D.from('user_emails')
-      .select('id,daily_send_limit').eq('user_id', userId).eq('is_active', true);
+      .select('id,org_id,daily_send_limit').eq('user_id', userId).eq('is_active', true);
     if (!userEmails || !userEmails.length) return null;
     const emailIds = userEmails.map(e => e.id);
-    const [{ data: msTokens }, { data: gmailTokens }] = await Promise.all([
+    const [{ data: msTokens }, { data: gmailTokens }, smtpRes] = await Promise.all([
       D.from('microsoft_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
       D.from('gmail_tokens').select('user_email_id,refresh_failed').in('user_email_id', emailIds),
+      D.from('smtp_credentials').select('user_email_id,refresh_failed').in('user_email_id', emailIds),   // app-password mailboxes (migration 063)
     ]);
     const connectedIds = new Set(
-      [...(msTokens || []), ...(gmailTokens || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id)
+      [...(msTokens || []), ...(gmailTokens || []), ...((smtpRes && smtpRes.data) || [])].filter(t => !t.refresh_failed).map(t => t.user_email_id)
     );
     const connected = userEmails.filter(e => connectedIds.has(e.id));
     if (!connected.length) return null;
@@ -206,8 +208,9 @@ module.exports = (ctx) => {
       .select('user_email_id,emails_sent').eq('send_date', todayDate).in('user_email_id', connected.map(e => e.id));
     const sentToday = {};
     (sendLogs || []).forEach(l => { sentToday[l.user_email_id] = l.emails_sent || 0; });
+    const dailyDefault = await dailyLimit.defaultDailyLimit(supabase, (connected.find(e => e.org_id) || {}).org_id);
     const withRemaining = connected
-      .map(a => ({ ...a, remaining: (a.daily_send_limit || 150) - (sentToday[a.id] || 0) }))
+      .map(a => ({ ...a, remaining: dailyLimit.limitOf(a, dailyDefault) - (sentToday[a.id] || 0) }))
       .filter(a => a.remaining > 0);
     if (!withRemaining.length) return null;
     withRemaining.sort((a, b) => b.remaining - a.remaining || String(a.id).localeCompare(String(b.id)));

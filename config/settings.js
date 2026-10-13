@@ -10,7 +10,37 @@
 // Supabase egress" history around it in index.js).
 // ============================================================================
 
+const { DEFAULT_DAILY_SEND_LIMIT } = require('./limits');
+
+// Each number belongs to an ORGANISATION (D-0124): an admin sets their own company's value; a company that has not chosen gets the
+// deployment-wide value (the row that existed before), then the default below. `legacyKey` = the bare app_settings key the number was
+// read from before it was editable, so a value already stored keeps applying.
 const SETTINGS_SCHEMA = [
+  {
+    key: 'default_daily_send_limit', legacyKey: 'default_daily_send_limit', label: 'Daily send limit for a new mailbox', unit: 'emails/day', group: 'Email engine',
+    description: 'How many emails one mailbox may send in a day when nobody has set a number for that mailbox. New mailboxes start here.',
+    default: DEFAULT_DAILY_SEND_LIMIT, min: 1, max: 5000,
+  },
+  {
+    key: 'send_delay_min_sec', legacyKey: 'send_delay_min_sec', label: 'Shortest pause between two emails from one mailbox', unit: 'seconds', group: 'Email engine',
+    description: 'Emails from one mailbox are spaced out by a random pause between this and the longest pause.',
+    default: 30, min: 1, max: 300,
+  },
+  {
+    key: 'send_delay_max_sec', legacyKey: 'send_delay_max_sec', label: 'Longest pause between two emails from one mailbox', unit: 'seconds', group: 'Email engine',
+    description: 'The upper end of the pause above. If it is set below the shortest pause, the shortest pause is used.',
+    default: 60, min: 1, max: 600,
+  },
+  {
+    key: 'domain_max_per_hour', legacyKey: 'domain_max_per_hour', label: 'Most emails to one company in an hour', unit: 'emails/hour', group: 'Email engine',
+    description: 'How many emails one mailbox may send to the same recipient company (email domain) in one hour.',
+    default: 8, min: 1, max: 100,
+  },
+  {
+    key: 'bulk_send_max_per_run', legacyKey: 'bulk_send_max_per_run', label: 'Most emails sent in one sending round', unit: 'emails (0 = no cap)', group: 'Email engine',
+    description: 'A cap on how many emails go out in a single round of the send loop, across the organisation. 0 means no cap.',
+    default: 0, min: 0, max: 100000,
+  },
   {
     key: 'company_cooldown_days', label: 'Company re-add cooldown', unit: 'days', group: 'Leads',
     description: 'How long after a company is added before an RA can add it again.',
@@ -217,46 +247,136 @@ const SETTINGS_SCHEMA = [
     default: 6, min: 0, max: 10000,
   },
   {
+    key: 'followup_max', label: 'Most follow-ups a person may use', unit: 'follow-ups (0 = none)', group: 'Email engine',
+    description: 'Each person chooses how many follow-ups to send after the first email. This is the most they may choose. Chains already scheduled keep what they had.',
+    default: 5, min: 0, max: 5,
+  },
+  {
+    key: 'finder_max_saved_searches', label: 'Lead Finder: saved searches each person may keep', unit: 'searches', group: 'Lead Finder',
+    description: 'How many saved searches one person may have at a time. They are asked to delete one before saving another.',
+    default: 20, min: 1, max: 500,
+  },
+  {
+    key: 'finder_max_contacts_per_lead', label: 'Lead Finder: most contacts added to one lead', unit: 'contacts', group: 'Lead Finder',
+    description: 'How many people can be added as contacts when a company is accepted as a lead.',
+    default: 3, min: 1, max: 20,
+  },
+  {
+    key: 'finder_max_jobs_per_lead', label: 'Lead Finder: most jobs put on one lead or email', unit: 'jobs', group: 'Lead Finder',
+    description: 'How many open jobs one lead (or one email to a contact) may carry: the first is the main job, the rest are kept as "also hiring".',
+    default: 5, min: 1, max: 25,
+  },
+  {
+    key: 'finder_max_titles', label: 'Lead Finder: most job titles in one search', unit: 'titles', group: 'Lead Finder',
+    description: 'How many job titles one saved search may look for.',
+    default: 40, min: 1, max: 200,
+  },
+  {
+    key: 'finder_max_places', label: 'Lead Finder: most places in one search', unit: 'places', group: 'Lead Finder',
+    description: 'How many cities, states or "remote" entries one saved search may cover.',
+    default: 8, min: 1, max: 50,
+  },
+  {
+    key: 'finder_max_companies', label: 'Lead Finder: most named companies in one search', unit: 'companies', group: 'Lead Finder',
+    description: 'How many companies, chosen by name or website, one saved search may be limited to.',
+    default: 30, min: 1, max: 200,
+  },
+  {
+    key: 'finder_max_sectors', label: 'Lead Finder: most industries in one search', unit: 'industries', group: 'Lead Finder',
+    description: 'How many industries one saved search may combine.',
+    default: 8, min: 1, max: 30,
+  },
+  {
+    key: 'finder_max_keywords', label: 'Lead Finder: most keywords in one search', unit: 'keywords', group: 'Lead Finder',
+    description: 'How many extra keywords one saved search may carry.',
+    default: 8, min: 1, max: 50,
+  },
+  {
     key: 'finder_jsearch_requests_per_run', label: 'Lead Finder: most free-source requests one search run may make', unit: 'requests (0 = off)', group: 'Lead Finder',
     description: 'One request looks up one job title in one place and brings up to 10 jobs. A search with more titles or places than this is covered over several daily runs (a one-off search takes the first ones).',
     default: 3, min: 0, max: 50,
+  },
+  {
+    key: 'smtp_connect_tries', label: 'App-password mailbox: connection tries per person', unit: 'tries', group: 'Email engine',
+    description: 'How many times one person may try to connect an app-password mailbox inside the time window below, before they are asked to wait. It stops guessing at passwords.',
+    default: 6, min: 1, max: 100,
+  },
+  {
+    key: 'smtp_connect_window_minutes', label: 'App-password mailbox: window for those tries', unit: 'minutes', group: 'Email engine',
+    description: 'The length of the window the tries above are counted in.',
+    default: 10, min: 1, max: 1440,
+  },
+  {
+    key: 'smtp_sweep_batch', label: 'App-password mailbox: messages read per check', unit: 'messages', group: 'Email engine',
+    description: 'The most messages read from one app-password mailbox folder each time PACE looks for replies and bounces. A busier inbox is caught up over the next checks.',
+    default: 50, min: 1, max: 200,
+  },
+  {
+    key: 'send_selected_max', label: 'Most emails sent or retried in one click', unit: 'emails', group: 'Email engine',
+    description: 'The most emails "Send selected" or "Retry" will take in a single click. Anything beyond it is left for the next click.',
+    default: 500, min: 1, max: 5000,
   },
 ];
 
 const SCHEMA_BY_KEY = new Map(SETTINGS_SCHEMA.map((s) => [s.key, s]));
 const APP_SETTINGS_PREFIX = 'sys_';
 const CACHE_TTL_MS = 60 * 1000;
-const cache = new Map(); // key -> { value, loadedAt }
+const cache = new Map(); // "key|org" -> { value, source, loadedAt }
 
 function clampToDefault(def, value) {
   if (!Number.isFinite(value) || value < def.min || value > def.max) return def.default;
   return value;
 }
 
-// Cached read of one numeric setting. Falls back to the schema default (the
-// previous hardcoded behaviour) if unset, invalid, or the DB is unreachable —
-// this must never be the thing that breaks the send pipeline.
-async function getSetting(supabase, key) {
+const orgKey = (key, orgId) => APP_SETTINGS_PREFIX + key + '@' + orgId;
+const okNumber = (def, raw) => {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n >= def.min && n <= def.max ? n : null;
+};
+
+// The effective value and where it came from: this organisation's own choice, else the deployment-wide value, else the built-in default.
+async function resolveSetting(supabase, key, orgId) {
   const def = SCHEMA_BY_KEY.get(key);
   if (!def) throw new Error(`Unknown setting "${key}"`);
-  const cached = cache.get(key);
-  if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) return cached.value;
-  let value = def.default;
+  const ck = key + '|' + (orgId || '');
+  const cached = cache.get(ck);
+  if (cached && (Date.now() - cached.loadedAt) < CACHE_TTL_MS) return cached;
+  let out = { value: def.default, source: 'default' };
   try {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', APP_SETTINGS_PREFIX + key).maybeSingle();
-    if (data && data.value !== undefined && data.value !== null && data.value !== '') {
-      value = clampToDefault(def, Number.parseFloat(data.value));
-    }
+    const keys = [APP_SETTINGS_PREFIX + key];
+    if (def.legacyKey) keys.push(def.legacyKey);
+    if (orgId) keys.push(orgKey(key, orgId));
+    const { data } = await supabase.from('app_settings').select('key,value').in('key', keys);
+    const by = {}; (data || []).forEach((r) => { by[r.key] = r.value; });
+    const own = orgId ? okNumber(def, by[orgKey(key, orgId)]) : null;
+    const shared = okNumber(def, by[APP_SETTINGS_PREFIX + key]);
+    const legacy = def.legacyKey ? okNumber(def, by[def.legacyKey]) : null;
+    if (own !== null) out = { value: own, source: 'organisation' };
+    else if (shared !== null) out = { value: shared, source: 'deployment' };
+    else if (legacy !== null) out = { value: legacy, source: 'deployment' };
   } catch (e) {
     console.warn(`[settings] failed to load "${key}", using default ${def.default}:`, e.message);
   }
-  cache.set(key, { value, loadedAt: Date.now() });
-  return value;
+  const rec = { ...out, loadedAt: Date.now() };
+  cache.set(ck, rec);
+  return rec;
 }
 
-// For the admin panel: schema + current effective value for every setting.
-async function getAllSettings(supabase) {
-  return Promise.all(SETTINGS_SCHEMA.map(async (def) => ({ ...def, value: await getSetting(supabase, def.key) })));
+// Cached read of one numeric setting for an organisation (orgId omitted = the deployment-wide value). Falls back to the schema
+// default if unset, invalid, or the DB is unreachable — this must never be the thing that breaks the send pipeline.
+async function getSetting(supabase, key, orgId) {
+  return (await resolveSetting(supabase, key, orgId)).value;
+}
+
+// For the admin panel: schema + the effective value for this organisation, where it came from, and what it would be without its
+// own choice (so the screen can say "using the shared value, 30").
+async function getAllSettings(supabase, orgId) {
+  return Promise.all(SETTINGS_SCHEMA.map(async (def) => {
+    const r = await resolveSetting(supabase, def.key, orgId);
+    const base = orgId ? await resolveSetting(supabase, def.key, null) : r;
+    return { ...def, value: r.value, source: r.source, shared_value: base.value };
+  }));
 }
 
 function validate(key, rawValue) {
@@ -268,20 +388,32 @@ function validate(key, rawValue) {
   return { value };
 }
 
-// All-or-nothing bulk write: { key: rawValue, ... }. Validates every entry
-// before writing any of them, so a bad field never leaves settings half-saved.
-async function setSettings(supabase, updates) {
+// All-or-nothing bulk write: { key: rawValue, ... }. Validates every entry before writing any of them, so a bad field never leaves
+// settings half-saved. With an orgId the values are THAT organisation's own (and '' / null removes its choice, going back to the
+// shared value); without one they are the deployment-wide values.
+async function setSettings(supabase, updates, orgId) {
   const keys = Object.keys(updates || {});
   if (!keys.length) return { error: 'No settings to update' };
-  const rows = [];
+  const rows = [], clears = [];
   for (const key of keys) {
+    if (orgId && (updates[key] === '' || updates[key] === null)) {
+      if (!SCHEMA_BY_KEY.has(key)) return { error: `Unknown setting "${key}"`, key };
+      clears.push(orgKey(key, orgId));
+      continue;
+    }
     const result = validate(key, updates[key]);
     if (result.error) return { error: result.error, key };
-    rows.push({ key: APP_SETTINGS_PREFIX + key, value: String(result.value), updated_at: new Date() });
+    rows.push({ key: orgId ? orgKey(key, orgId) : APP_SETTINGS_PREFIX + key, value: String(result.value), updated_at: new Date() });
   }
-  const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
-  if (error) throw error;
-  keys.forEach((k) => cache.delete(k));
+  if (rows.length) {
+    const { error } = await supabase.from('app_settings').upsert(rows, { onConflict: 'key' });
+    if (error) throw error;
+  }
+  if (clears.length) {
+    const { error } = await supabase.from('app_settings').delete().in('key', clears);
+    if (error) throw error;
+  }
+  cache.clear();
   return { success: true };
 }
 

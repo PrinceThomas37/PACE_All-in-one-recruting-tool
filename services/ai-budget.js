@@ -146,10 +146,17 @@ async function readSetting(supabase, key) {
   } catch (_) { return null; }
 }
 
-async function getCaps(supabase) {
+// The organisation's own ceiling (D-0124), else the shared one an admin set before ceilings were per company, else the default.
+const orgCapKey = (key, orgId) => `${key}@${orgId}`;
+async function capFor(supabase, key, orgId, dflt) {
+  const own = orgId ? await readSetting(supabase, orgCapKey(key, orgId)) : null;
+  if (own !== null && own !== undefined && own !== '') return numOr(own, dflt);
+  return numOr(await readSetting(supabase, key), dflt);
+}
+async function getCaps(supabase, orgId) {
   return {
-    tokens: numOr(await readSetting(supabase, CAP_TOKENS_KEY), DEFAULT_DAILY_TOKENS),
-    calls: numOr(await readSetting(supabase, CAP_CALLS_KEY), DEFAULT_DAILY_CALLS),
+    tokens: await capFor(supabase, CAP_TOKENS_KEY, orgId, DEFAULT_DAILY_TOKENS),
+    calls: await capFor(supabase, CAP_CALLS_KEY, orgId, DEFAULT_DAILY_CALLS),
   };
 }
 
@@ -184,5 +191,5 @@ module.exports = {
   DEFAULT_DAILY_TOKENS, DEFAULT_DAILY_CALLS,
   CAP_TOKENS_KEY, CAP_CALLS_KEY,
   estimateTokens, trimToTokens, featureLimits, checkBudget,
-  dayKey, usageKey, getCaps, getSpend, recordSpend,
+  dayKey, usageKey, getCaps, getSpend, recordSpend, orgCapKey,
 };

@@ -854,6 +854,9 @@ function createMailProvider(ctx) {
 
   function forMailbox(mailbox) {
     if (!mailbox) throw new Error('No mailbox');
+    // An app-password mailbox (SMTP/IMAP) has no in-app inbox yet. Callers that read mail through here (the Sent-side lookup, a
+    // conversation summary) already treat a throw as "this mailbox could not be read" — which is the truth.
+    if (String(mailbox.platform || '').toLowerCase() === 'smtp') throw new Error('The in-app mailbox is not available for app-password mailboxes yet');
     return mailbox.platform === 'Gmail' ? gmailAdapter(mailbox) : microsoftAdapter(mailbox);
   }
 

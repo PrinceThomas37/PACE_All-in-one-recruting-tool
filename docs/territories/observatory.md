@@ -692,3 +692,12 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-08 (Session 42) — `services/bd-insights.js` gains `sentInMonth` and `deliveryStats` (D-0109)
 - Pure; one definition of "the emails the page calls sent", reused for the two delivery rates (one decimal; null when not measured). No AI.
+
+## 2026-10-12 (Session 44) — D-0123
+`routes/candidate-outreach.js` takes the mailbox daily limit from `services/daily-limit.js`. The AI budget (`services/ai-budget.js` 150000) and the generator's 150 cap are still in code: R-202.
+
+## 2026-10-13 (Session 44) — D-0124
+Client-intelligence AI-per-person limit and the on/off switches are read per organisation (`routes/client-intel.js`).
+
+## 2026-10-13 (Session 44) — D-0125
+`services/ai-budget.js getCaps(supabase, orgId)`: the company's own ceiling (`ai_daily_token_cap@<org>`), else the shared one, else the default; both `ai-provider.js` checks pass the org. `POST /admin/ai-budget` writes the caller's company; blank goes back to the shared value.
