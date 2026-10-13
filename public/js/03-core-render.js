@@ -332,9 +332,79 @@ function patchShell(){
   // background refresh — the "pop" the owner saw whenever anything updated.
   var modal=renderModal(), overlays=UI.renderOverlays();
   if(parts.modal!==modal||parts.overlays!==overlays){
+    var sameDrawers=parts.overlays===overlays;
     parts.modal=modal; parts.overlays=overlays;
-    putRegion(document.getElementById('layer'),modal+overlays,false);
+    var layer=document.getElementById('layer');
+    // THE SAME WINDOW, CHANGED INSIDE, IS UPDATED WHERE IT STANDS (R-197, owner 13 Oct: "the window refreshes every time I click").
+    // Rewriting the whole layer made a new `.modal` element on every click: its 0.18s pop-in animation played again (the flash)
+    // and every scroll box in it went back to the top (the jump). Only the inside of the window that is already there moves.
+    if(!(sameDrawers&&patchModalInPlace(layer,modal+overlays))) putRegion(layer,modal+overlays,false);
   }
+}
+
+// Where each scroll box inside `root` is, named by its place in the tree (the child indexes down from root), so it can be put back
+// after the inside of the window is rewritten. Only boxes that are actually scrolled are recorded.
+function _scrollsIn(root){
+  var out=[];
+  (function walk(el,path){
+    if(el.scrollTop||el.scrollLeft) out.push({ path:path.slice(), top:el.scrollTop, left:el.scrollLeft });
+    for(var i=0;i<el.children.length;i++){ path.push(i); walk(el.children[i],path); path.pop(); }
+  })(root,[]);
+  return out;
+}
+function _putScrolls(root,list){
+  list.forEach(function(r){
+    var n=root;
+    for(var i=0;i<r.path.length&&n;i++) n=n.children[r.path[i]];
+    if(n){ n.scrollTop=r.top; n.scrollLeft=r.left; }
+  });
+}
+// What makes two renderings "the same window": the same kind of panel and the same heading. A different window (a question on top
+// of a form, a different record) is a new window and is written whole, so it pops in and starts at the top, as it should.
+function _windowIdentity(modalEl){
+  var head=modalEl.firstElementChild;
+  var txt=head?(head.textContent||'').replace(/\s+/g,' ').trim().slice(0,80):'';
+  return (modalEl.getAttribute('class')||'').replace(/\s*win-\S+/g,'')+'|'+txt;
+}
+// Update the open window's inside without replacing the window. Returns false — and writes nothing — whenever it is not sure it may,
+// and the caller then writes the whole layer as before. It only acts when the layer holds ONE window (`.overlay > .modal`) and the
+// new html holds the same window; anything else in the layer (the tray of minimised windows) must be unchanged.
+function patchModalInPlace(layer,html){
+  try{
+    if(!layer||!html) return false;
+    var cur=layer.firstElementChild;
+    if(!cur||!cur.classList.contains('overlay')) return false;
+    var curModal=null; for(var i=0;i<cur.children.length;i++){ if(cur.children[i].classList.contains('modal')){ curModal=cur.children[i]; break; } }
+    if(!curModal) return false;
+    var t=document.createElement('template'); t.innerHTML=html;
+    var nxt=t.content.firstElementChild;
+    if(!nxt||!nxt.classList.contains('overlay')) return false;
+    var nxtModal=null; for(var j=0;j<nxt.children.length;j++){ if(nxt.children[j].classList.contains('modal')){ nxtModal=nxt.children[j]; break; } }
+    if(!nxtModal||cur.children.length!==nxt.children.length) return false;
+    if(_windowIdentity(curModal)!==_windowIdentity(nxtModal)) return false;
+    // everything in the layer other than this window's inside must already be what the new html says
+    for(var k=0;k<cur.children.length;k++){
+      if(cur.children[k]===curModal) continue;
+      if(cur.children[k].outerHTML!==nxt.children[k].outerHTML) return false;
+    }
+    var restOld=[],restNew=[];
+    for(var m=1;m<layer.children.length;m++) restOld.push(layer.children[m].outerHTML);
+    for(var n2=1;n2<t.content.children.length;n2++) restNew.push(t.content.children[n2].outerHTML);
+    if(restOld.join('')!==restNew.join('')) return false;
+    if(cur.getAttribute('class')!==nxt.getAttribute('class')) cur.setAttribute('class',nxt.getAttribute('class')||'');
+    var scrolls=_scrollsIn(curModal);
+    var ae=document.activeElement, fid=ae&&curModal.contains(ae)?ae.id:'';
+    var s0=fid&&typeof ae.selectionStart==='number'?ae.selectionStart:-1, s1=fid&&typeof ae.selectionEnd==='number'?ae.selectionEnd:-1;
+    if(curModal.getAttribute('class')!==nxtModal.getAttribute('class')) curModal.setAttribute('class',nxtModal.getAttribute('class')||'');
+    curModal.innerHTML=nxtModal.innerHTML;
+    // focus first, WITHOUT letting the browser scroll the box to the text field — then put every scroll box back
+    if(fid){
+      var back=document.getElementById(fid);
+      if(back&&back!==document.activeElement){ try{ back.focus({preventScroll:true}); if(s0>=0&&back.setSelectionRange) back.setSelectionRange(s0,s1); }catch(e){} }
+    }
+    _putScrolls(curModal,scrolls);
+    return true;
+  }catch(e){ return false; }
 }
 
 // Debounced render — collapses multiple rapid async render() calls into one.

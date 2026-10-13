@@ -326,6 +326,13 @@ step('a person\'s daily reveal limit stops the next one BEFORE Apollo is asked (
 await settings.setSettings(st.supabase, { finder_reveals_per_day: 30 });
 r = await call('/finder/cards/:id/reveal', 'post', 'ra2', { person_id: 'per1' }, { id: brazos });
 step('another person cannot reveal on Rhea\'s card (404)', r.code === 404);
+// R-197: a paid reveal that comes back WITHOUT a title or first name must keep what the people search said about that person
+apollo.people = [{ id: 'perT', first_name: 'Tess', last_name: '', last_name_masked: true, title: 'Plant Manager', has_email: true }];
+await call('/finder/cards/:id/people', 'post', 'ra1', { title: 'Plant Manager' }, { id: brazos });
+apollo.reveal = { ok: true, first_name: '', last_name: 'Ortega', title: '', email: 'tess@brazosmachining.example', email_verified: true };
+r = await call('/finder/cards/:id/reveal', 'post', 'ra1', { person_id: 'perT' }, { id: brazos });
+step('a reveal with no title keeps the title the search showed (the person\'s details do not go missing)', r.code === 200 && r.out.person.title === 'Plant Manager' && r.out.person.first_name === 'Tess' && r.out.person.last_name === 'Ortega' && r.out.person.email === 'tess@brazosmachining.example', JSON.stringify(r.out.person));
+
 
 // ═════ 6. Accept ═════════════════════════════════════════════════════════════════════════════════════════
 console.log('\nAccept');

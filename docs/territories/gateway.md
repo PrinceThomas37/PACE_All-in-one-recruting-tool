@@ -1153,3 +1153,6 @@ clean. `route-shadowing-smoke` 9/9, `recruiting-routes-mounted` 7/7,
 
 ## 2026-10-13 (Session 44) — D-0125 (R-202)
 New admin settings (Lead Finder group + Email engine): `finder_max_titles/places/companies/sectors/keywords`, `finder_max_saved_searches`, `finder_max_contacts_per_lead`, `finder_max_jobs_per_lead`, `followup_max`. `routes/finder.js` reads them per company (`searchCaps(orgId)`, `num(key, orgId)`); `routes/settings.js` holds `fu_count` to `followup_max`; the lead-ratio capacity fallback is the pool total. `routes/integrations.js` AI ceilings are per company.
+
+## 2026-10-13 (Session 44) — Finder access and reveal
+`GET /finder/access` now returns `limits { jobs_per_lead, contacts_per_lead, places_per_search }`. `POST /finder/cards/:id/people` keeps `payload.found[id] = {first_name, title}`; `/reveal` falls back to it when Apollo's reveal omits them.

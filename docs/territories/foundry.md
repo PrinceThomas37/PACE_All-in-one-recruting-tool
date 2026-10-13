@@ -1238,3 +1238,6 @@ The full suite found the sending-hours regression that targeted runs did not (`s
 
 ## 2026-10-13 (Session 44) — D-0125
 `admin-numbers-smoke` 41: Finder caps, AI ceilings per company, follow-up ceiling, and source guards (mutation-checked: putting `slice(1, 5)` or `capacity || 150` back fails it).
+
+## 2026-10-13 (Session 44) — new guards
+`modal-inplace-smoke` (10; with the fix removed it shows the `mIn` animation replaying), `multi-job-email-smoke` (14), `finder-page-smoke` 160 (pills limit/message/Show all, chips, progress, edit-in-place), `finder-routes-smoke` 177 (reveal keeps details). All mutation-checked.

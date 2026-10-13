@@ -317,3 +317,6 @@ Follow-up chains are created with the company's `followup_max` as a ceiling on t
 
 ## 2026-10-13 (Session 44) — released
 App-password (SMTP/IMAP) mailboxes are on `main` (#326, `73e381d`); migration 063 applied. The button stays hidden until `MAILBOX_SECRET_KEY` is set on Render. One live Zoho test is owed.
+
+## 2026-10-13 (Session 44) — multi-job first email
+The first email written for a lead with several jobs (`lead-outreach-queue.js`) lists them as bullets through the person's template; it is written as `pending` and previewed/edited in Email → Pending before Send (nothing new in the send path).

@@ -33,6 +33,7 @@ function findChromium() {
 }
 
 const ACCESS = {
+  limits: { jobs_per_lead: 3, contacts_per_lead: 3 },
   enabled: true, is_admin: false, daily: 25, apollo: { connected: true }, credits: { used: 3, limit: 300 }, reveals: { used: 1, limit: 30 },
   wait_days: 14, card_days: 5, goes_to: 'pool', jobsource: { connected: false, used: 0, limit: 10, per_run: 3 },
   sectors: [{ id: 'medical', label: 'Medical & dental', titles: ['Dental Hygienist', 'Medical Assistant', 'Phlebotomist', 'Medical Coder'] }, { id: 'it', label: 'IT & software', titles: ['Software Engineer', 'Data Analyst'] }],
@@ -93,6 +94,7 @@ try {
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
       if (/\/another$/.test(p)) return Promise.resolve({ lead_id: 'LNEW', stage: 'Unassigned', contacts: (b.contacts || []).length });
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
+      if (p === '/finder/find' && window.__holdFind) return new Promise(res => { window.__releaseFind = () => res(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } }); });
       if (p === '/finder/find') return Promise.resolve(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } });
       if (/\/unwait$/.test(p)) return Promise.resolve({ success: true });
       if (/\/(reject|wait)$/.test(p)) return Promise.resolve({ success: true, wait_until: '2026-10-21' });
@@ -223,7 +225,7 @@ try {
   step('searching again for another title ADDS to the list: the people already paid for and ticked stay, with their emails', /Hal Fox/.test(m) && /Dana/.test(m) && /dana@brazosmachining\.com/.test(m) && (await page.evaluate(() => Object.keys(window.STATE.finder.acc.picked).filter(k => window.STATE.finder.acc.picked[k]).sort().join())) === 'p1,p3,p4');
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Zed'; document.getElementById('fd-m-email').value = 'zed@brazosmachining.com'; window.fdAddManual(); });
   m = await modal();
-  step('a FOURTH contact is refused in words — a lead carries three at most', /Three contacts is the most/.test(m) && (await page.evaluate(() => window.STATE.finder.acc.manual.length)) === 0);
+  step('a FOURTH contact is refused in words — a lead carries three at most', /3 contacts is the most/.test(m) && (await page.evaluate(() => window.STATE.finder.acc.manual.length)) === 0);
 
   // add by hand
   await page.evaluate(() => { const a = window.STATE.finder.acc; Object.keys(a.picked).forEach(k => { a.picked[k] = false; }); a.picked.p1 = true; a.mdraft = null; a.err = ''; });
@@ -234,6 +236,26 @@ try {
   await page.evaluate(() => window.fdSetMain('Welder'));
   m = await modal();
   step('choosing another job as the main one moves the star', /★ Welder/.test(m) && /✓ CNC Machinist/.test(m));
+
+  // R-197: the job limit comes from the server (here 3), is counted beside the pills, and when it stops a click it says so RIGHT UNDER
+  // the pills — not at the bottom of a long window where nobody looks (the owner: "the job pills don't select").
+  await page.evaluate(() => { const c = window.STATE.finder.acc.card; c.postings = ['Estimator', 'Machinist', 'Welder', 'Forklift Driver', 'Press Operator', 'Shipping Clerk', 'Quality Tech', 'Maintenance Tech', 'Programmer', 'Inspector', 'Assembler', 'Grinder', 'Painter', 'Packer', 'Loader', 'Cleaner'].map(t => ({ title: t })); window.STATE.finder.acc.jobs = ['CNC Machinist', 'Welder']; window.STATE.finder.acc.main = 'CNC Machinist'; window.fdToggleJob('Estimator'); });
+  m = await modal();
+  step('the window says how many jobs are ticked out of how many the company allows', /3 of 3 ticked/.test(m));
+  await page.evaluate(() => window.fdToggleJob('Machinist'));
+  const under = await page.evaluate(() => {
+    const body = document.querySelector('.modal .fd-mbody'), msg = body && body.querySelector('.fd-hint.c-red[role=alert]');
+    const who = [...body.querySelectorAll('.fd-label')].find(l => /Who should we write to/.test(l.textContent));
+    return { has: !!msg, text: msg ? msg.textContent : '', before: !!(msg && who && (msg.compareDocumentPosition(who) & Node.DOCUMENT_POSITION_FOLLOWING)), full: body.querySelectorAll('.fd-pill.is-full').length, ticked: window.STATE.finder.acc.jobs.length };
+  });
+  step('a fourth job is refused WHERE THE PERSON IS LOOKING (under the pills, above the people list), with the number and what to do', under.has && /3 jobs is the most one lead can carry/.test(under.text) && under.before && under.ticked === 3, JSON.stringify(under));
+  step('the pills that cannot be added any more are dimmed', under.full > 0);
+  await page.evaluate(() => window.fdToggleJob('Estimator'));
+  step('unticking one makes room again (and the message goes)', await page.evaluate(() => window.STATE.finder.acc.jobs.length === 2 && !window.STATE.finder.acc.jobErr));
+  step('only 14 jobs are listed at first, with a button for the rest', await page.evaluate(() => { const b = document.querySelector('.modal .fd-mbody'); return [...b.querySelectorAll('.fd-pills')][0].querySelectorAll('.fd-pill').length <= 15 && /Show all 1\d+ jobs/.test(b.textContent); }));
+  await page.evaluate(() => window.fdShowAllPills());
+  step('"Show all" lists every job the company is hiring for', await page.evaluate(() => { const b = document.querySelector('.modal .fd-mbody'); return /Show fewer/.test(b.textContent) && b.querySelectorAll('.fd-pill').length > 15; }));
+  await page.evaluate(() => { window.fdShowAllPills(); window.STATE.finder.acc.jobs = ['CNC Machinist', 'Welder']; window.STATE.finder.acc.main = 'CNC Machinist'; window.STATE.finder.acc.card.postings = (window.STATE.finder.acc.card.postings || []).slice(0, 2); window.fdSetMain('Welder'); window.fdSetMain('Welder'); });
   await page.evaluate(() => { document.getElementById('fd-m-first').value = 'Sam'; document.getElementById('fd-m-email').value = 'not-an-email'; window.fdAddManual(); });
   m = await modal();
   step('a hand-added contact with a broken email is refused in words', /valid email/.test(m));
@@ -259,7 +281,7 @@ try {
   m = await modal();
   step('for a BD manager it says: straight to you', /Straight to you/.test(m));
   step('…with a "Send from" list of their own mailboxes, each with how many it has sent today, the one with fewest pre-selected', /Send from/.test(m) && /Bea &lt;bea@x\.test&gt; — 40 sent today/.test(m) && /bea\.two@x\.test&gt; — 3 sent today/.test(m) && (await page.evaluate(() => document.getElementById('fd-mailbox').value)) === 'm2');
-  step('…and offers to write the first email now — ticked, and saying plainly that nothing is sent until Send', /Write the first email now/.test(m) && /Nothing is sent until you press Send/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
+  step('…and offers to write the first email now — ticked, and saying plainly that it is previewed and edited in Pending and nothing is sent before Send', /Write the first email now/.test(m) && /you preview it, edit it if you like, and press Send/.test(m) && /Nothing is sent before that/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
   await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdPickMailbox('m1'); window.fdSave(); });
   await page.waitForTimeout(300);
   cs = await calls();
@@ -576,6 +598,39 @@ try {
   await page.evaluate(() => { window.STATE.finder.cards = JSON.parse(JSON.stringify(window.__cards.cards)); window.fdTab('cards'); });
   await page.waitForTimeout(200);
   step('on a phone nothing overflows the page sideways', await page.evaluate(() => { const c = document.getElementById('content'); return c.scrollWidth <= c.clientWidth + 1; }));
+
+  // ── R-195 / R-196: places as chips, a visible "searching", and editing the search where the results are ──────────
+  console.log('\nPlaces, progress, edit-this-search');
+  await page.evaluate(() => { window.STATE.finder.tab = 'now'; window.STATE.finder.nowForm = null; window.STATE.finder.lastFind = null; window.STATE.finder.editNow = false; window.STATE.finder.nowNote = ''; window.STATE.page = 'finder'; window.render(); });
+  await page.evaluate(() => { document.getElementById('fd-f-newtitle').value = 'Welder'; window.fdTitleAdd(); });
+  await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Texas'; window.fdPlaceAdd(); });
+  await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Austin TX, remote'; window.fdPlaceAdd(); });
+  const chips = () => page.evaluate(() => [...document.querySelectorAll('#content .fd-chip')].filter(c => c.querySelector('[aria-label^="Remove"]') && /Texas|Austin|remote|Ohio/.test(c.textContent)).map(c => c.textContent.replace('×', '').trim()));
+  step('each state or city typed becomes a visible chip (three places, one box)', (await chips()).join('|') === 'Texas|Austin TX|remote', (await chips()).join('|'));
+  step('the window counts the places (and says how many are allowed, from the company\'s number)', /3 of 8 places/.test(await html()) || /3 places/.test(await html()));
+  await page.evaluate(() => window.fdPlaceDrop(1));
+  step('a chip\'s × removes that place and leaves the others', (await chips()).join('|') === 'Texas|remote');
+
+  await page.evaluate(() => { window.__holdFind = true; window.fdFindNow(); });
+  await page.waitForTimeout(150);
+  const busy = await page.evaluate(() => { const p = document.querySelector('#content .fd-progress'); return { has: !!p, text: p ? p.textContent : '', bar: !!(p && p.querySelector('.fd-bar > span')), anim: p && p.querySelector('.fd-bar > span') ? getComputedStyle(p.querySelector('.fd-bar > span')).animationName : '', btn: [...document.querySelectorAll('#content .btn-primary')].map(b => b.textContent + ':' + b.disabled).join('|') }; });
+  step('while it searches the page SAYS so, with a moving bar and what to expect (so nobody wonders if it froze)', busy.has && /Finding leads for your search/.test(busy.text) && /up to a minute/.test(busy.text) && busy.bar && busy.anim === 'fdSlide', JSON.stringify(busy).slice(0, 220));
+  step('the button cannot be pressed twice while it works', /Finding….*:true|Finding…:true/.test(busy.btn), busy.btn);
+  await page.evaluate(() => { window.__holdFind = false; window.__releaseFind(); });
+  await page.waitForTimeout(400);
+  const done = await page.evaluate(() => ({ progress: !!document.querySelector('#content .fd-progress'), tab: window.STATE.finder.tab, last: (document.querySelector('#content .fd-lastfind') || {}).textContent || '' }));
+  step('when it finishes the bar goes, the cards are shown, and the search they came from is stated with a way to change it', !done.progress && done.tab === 'cards' && /Your last search:/.test(done.last) && /Welder/.test(done.last) && /Texas, remote/.test(done.last) && /Edit this search/.test(done.last), JSON.stringify(done).slice(0, 200));
+
+  await page.evaluate(() => window.fdEditNow());
+  step('"Edit this search" opens the SAME search in place on the results — nothing to go back and forth for', await page.evaluate(() => !!document.querySelector('#content .fd-form') && window.STATE.finder.tab === 'cards') && (await chips()).join('|') === 'Texas|remote' && /Welder/.test(await html()));
+  await page.evaluate(() => { document.getElementById('fd-f-locations').value = 'Ohio'; window.fdPlaceAdd(); document.getElementById('fd-f-newtitle').value = 'CNC Machinist'; window.fdTitleAdd(); window.__holdFind = true; window.fdFindNow(); });
+  await page.waitForTimeout(150);
+  step('searching again from the results shows the same progress, on the results page', await page.evaluate(() => !!document.querySelector('#content .fd-progress') && window.STATE.finder.tab === 'cards'));
+  await page.evaluate(() => { window.__holdFind = false; window.__releaseFind(); });
+  await page.waitForTimeout(400);
+  const again = (await calls()).filter(c => c[0] === 'POST' && c[1] === '/finder/find').pop();
+  step('the second search carries the added city and the added title together with what was already there', again && again[2].locations.join() === 'Texas,remote,Ohio' && again[2].titles.join() === 'Welder,CNC Machinist', JSON.stringify(again && again[2]).slice(0, 200));
+  step('afterwards the edit form folds away and the stated search is the new one', await page.evaluate(() => !document.querySelector('#content .fd-form') && /Ohio/.test((document.querySelector('#content .fd-lastfind') || {}).textContent || '')));
 
   await page.setViewportSize({ width: 1200, height: 900 });
   await switchRole(page, 'bd');

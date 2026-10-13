@@ -817,3 +817,6 @@ Recruiter outreach (`routes/recruiting/outreach.js`) takes the sending mailbox's
 
 ## 2026-10-13 (Session 44) — D-0125
 The Finder's accept-as-lead path holds contacts and jobs to the company's numbers (`finder_max_contacts_per_lead`, `finder_max_jobs_per_lead`).
+
+## 2026-10-13 (Session 44) — first email for a lead with several jobs
+`email-vars.js`: `jobsOf(job)` (main + `research.finder.also_hiring`, each once), merge field `{{jobs}}` (synonyms openings/job_list/joblist/positions), `ensureJobsListed(body, template, job)`. `services/lead-outreach-queue.js` calls it; one job = unchanged email.

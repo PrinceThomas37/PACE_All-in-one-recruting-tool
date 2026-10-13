@@ -161,6 +161,12 @@
   }
   function paintAccept(skipCapture){ if(!skipCapture) captureAcc(); STATE.modal = F.acc ? renderAcceptModal() : null; render(); }
 
+  // After the first email is written: where it is, and — for a lead with several jobs — that it lists them all (R-194).
+  function firstEmailToast(nJobs){
+    return 'First email written'+(nJobs>1?' — it lists all '+nJobs+' jobs as bullets':'')+'. Open Email → Pending to preview it, edit it if you like, then press Send.';
+  }
+  // What one lead may carry comes from the server (this company's numbers); until it has answered, nothing is limited here.
+  function lim(k){ var l=(F.access&&F.access.limits)||{}; return l[k]>=1?l[k]:Infinity; }
   function pickedCount(a){ return Object.keys(a.picked).filter(function(k){ return a.picked[k]; }).length + a.manual.length; }
   window.fdFindPeople = function(){
     var a=F.acc; if(!a||a.finding) return; captureAcc();
@@ -184,7 +190,7 @@
       var p=(a.people||[]).find(function(x){ return x.id===personId; });
       var person=(r&&r.person)||{};
       if (p){ p.revealed=true; p.email=person.email||null; if(person.last_name) p.last_name=person.last_name; if(person.title) p.title=person.title; }
-      if (person.email && pickedCount(a)<3) a.picked[personId]=true;
+      if (person.email && pickedCount(a)<lim('contacts_per_lead')) a.picked[personId]=true;
       if (r && r.credits && F.access) F.access.credits=r.credits;
       if (F.access && F.access.reveals) F.access.reveals.used=(F.access.reveals.used||0)+1;
       if (r && r.note) a.err=r.note;
@@ -193,29 +199,30 @@
   };
   window.fdPick = function(personId){
     var a=F.acc; if(!a) return; captureAcc();
-    if (!a.picked[personId] && pickedCount(a)>=3){ a.err='Three contacts is the most one lead can carry.'; paintAccept(true); return; }
+    if (!a.picked[personId] && pickedCount(a)>=lim('contacts_per_lead')){ a.err=lim('contacts_per_lead')+' contact'+(lim('contacts_per_lead')===1?'':'s')+' is the most one lead can carry — untick one first.'; paintAccept(true); return; }
     a.picked[personId]=!a.picked[personId]; a.err=''; paintAccept(true);
   };
   window.fdAddManual = function(){
     var a=F.acc; if(!a) return; captureAcc();
     var m=a.mdraft||{};
     if (!m.first || !m.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m.email.trim())){ a.err='A contact added by hand needs a first name and a valid email.'; paintAccept(true); return; }
-    if (pickedCount(a)>=3){ a.err='Three contacts is the most one lead can carry.'; paintAccept(true); return; }
+    if (pickedCount(a)>=lim('contacts_per_lead')){ a.err=lim('contacts_per_lead')+' contact'+(lim('contacts_per_lead')===1?'':'s')+' is the most one lead can carry — remove one first.'; paintAccept(true); return; }
     a.manual.push({ first_name:m.first.trim(), last_name:(m.last||'').trim(), designation:(m.title||'').trim(), email:m.email.trim() });
     a.mdraft=null; a.err=''; paintAccept();
   };
   window.fdDropManual = function(i){ var a=F.acc; if(!a) return; captureAcc(); a.manual.splice(i,1); paintAccept(true); };
-  // Jobs: tick as many as the lead is for (up to 5). The first is the lead's main job; the rest are saved on it as "also hiring".
+  // Jobs: tick as many as the lead is for (up to the company's number). The first is the lead's main job; the rest are saved on it as "also hiring".
   window.fdToggleJob = function(t){
     var a=F.acc; if(!a) return; captureAcc();
     var i=a.jobs.indexOf(t);
     if (i>=0) a.jobs.splice(i,1);
-    else if (a.jobs.length>=5){ a.err='Five jobs is the most one lead can carry.'; paintAccept(true); return; }
+    else if (a.jobs.length>=lim('jobs_per_lead')){ a.jobErr=lim('jobs_per_lead')+' job'+(lim('jobs_per_lead')===1?'':'s')+' is the most one lead can carry — untick one to choose this one.'; paintAccept(true); return; }
     else a.jobs.push(t);
     if (a.jobs.indexOf(a.main)<0) a.main=a.jobs[0]||'';           // the main job is always one of the ticked ones
-    a.err=''; paintAccept(true);
+    a.err=''; a.jobErr=''; paintAccept(true);
   };
   // Which ticked job the lead (and its first email) is FOR — an explicit choice, not "whichever was ticked first".
+  window.fdShowAllPills = function(){ var a=F.acc; if(!a) return; captureAcc(); a.allPills=!a.allPills; paintAccept(true); };
   window.fdSetMain = function(t){ var a=F.acc; if(!a) return; captureAcc(); if(a.jobs.indexOf(t)>=0) a.main=t; paintAccept(true); };
   window.fdPickMailbox = function(id){ var a=F.acc; if(!a) return; captureAcc(); a.mailboxId=id; paintAccept(true); };
   window.fdAddJob = function(){
@@ -223,15 +230,15 @@
     var t=String(a.jobQ||'').trim();
     if (!t) return;
     if (a.jobs.some(function(x){ return x.toLowerCase()===t.toLowerCase(); })){ a.jobQ=''; paintAccept(true); return; }
-    if (a.jobs.length>=5){ a.err='Five jobs is the most one lead can carry.'; paintAccept(true); return; }
-    a.jobs.push(t); if(!a.main) a.main=t; a.jobQ=''; a.err=''; paintAccept(true);
+    if (a.jobs.length>=lim('jobs_per_lead')){ a.jobErr=lim('jobs_per_lead')+' job'+(lim('jobs_per_lead')===1?'':'s')+' is the most one lead can carry — untick one to add this one.'; paintAccept(true); return; }
+    a.jobs.push(t); if(!a.main) a.main=t; a.jobQ=''; a.err=''; a.jobErr=''; paintAccept(true);
   };
   // Starting outreach needs a sequence of the person's OWN (owner, 8 Oct, D-0104): the box is switched off, and says where to fix it.
   function seqNeeded(){ return typeof mySetupNeedsSequence==='function' && mySetupNeedsSequence(); }
   window.fdToggleWrite = function(){ var a=F.acc; if(!a||seqNeeded()) return; captureAcc(); a.writeEmail=!a.writeEmail; paintAccept(true); };
   function jobsToSave(a){
     var out=a.jobs.slice(), q=String(a.jobQ||'').trim();
-    if (q && !out.some(function(x){ return x.toLowerCase()===q.toLowerCase(); }) && out.length<5){ out.push(q); if(!a.main) a.main=q; }
+    if (q && !out.some(function(x){ return x.toLowerCase()===q.toLowerCase(); }) && out.length<lim('jobs_per_lead')){ out.push(q); if(!a.main) a.main=q; }
     // the server takes the FIRST as the lead's job: put the chosen main job there
     var mi=out.indexOf(a.main);
     if (mi>0){ out.splice(mi,1); out.unshift(a.main); }
@@ -257,7 +264,7 @@
         apiPost('/emails/generate',{ job_ids:[r.lead_id], mailbox_id:a.mailboxId||undefined }).then(function(g){
           var n=(g&&g.generated)||0;
           if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
-          showToast(n?'First email written — read it in Email → Pending, then send':'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning');
+          showToast(n?firstEmailToast(jobs.length):'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning');
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
     }).catch(function(e){ a.busy=false; a.err=e.message; paintAccept(); });
@@ -283,11 +290,14 @@
     var titles=[]; posts.forEach(function(p){ if(titles.indexOf(p.title)<0) titles.push(p.title); });
 
     var union=titles.slice(); a.jobs.forEach(function(j){ if(union.indexOf(j)<0) union.push(j); });
+    var jobMax=lim('jobs_per_lead'), jobFull=a.jobs.length>=jobMax, shown=a.allPills?union:union.slice(0,14);
     var jobPart =
-      '<div class="fd-label">1 · Which jobs is this lead for? <span class="fd-hint">tick one or more, then choose the main one</span></div>'+
+      '<div class="fd-label">1 · Which jobs is this lead for? <span class="fd-hint">tick one or more, then choose the main one · '+a.jobs.length+(jobMax===Infinity?'':' of '+jobMax)+' ticked</span></div>'+
       (union.length
-        ? '<div class="fd-pills">'+union.slice(0,14).map(function(t){ var n=a.jobs.indexOf(t); return '<button class="fd-pill'+(n>=0?' on':'')+'" onclick="fdToggleJob(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')">'+(n>=0?(t===a.main?'★ ':'✓ '):'')+esc(t)+'</button>'; }).join('')+'</div>'
+        ? '<div class="fd-pills">'+shown.map(function(t){ var n=a.jobs.indexOf(t); return '<button class="fd-pill'+(n>=0?' on':(jobFull?' is-full':''))+'"'+(n<0&&jobFull?' title="The most one lead can carry is '+jobMax+' — untick one first"':'')+' onclick="fdToggleJob(\''+esc(t.replace(/\\/g,'\\\\').replace(/'/g,"\\'"))+'\')">'+(n>=0?(t===a.main?'★ ':'✓ '):'')+esc(t)+'</button>'; }).join('')+
+            (union.length>14?'<button type="button" class="fd-pill" onclick="fdShowAllPills()">'+(a.allPills?'Show fewer':'Show all '+union.length+' jobs')+'</button>':'')+'</div>'
         : '<div class="fd-hint">Open their jobs on the card to pick from a list, or type one below.</div>')+
+      (a.jobErr?'<div class="fd-hint c-red" role="alert">'+esc(a.jobErr)+'</div>':'')+
       '<div class="fd-row"><input id="fd-position" class="inp fd-grow" placeholder="Or type a job, e.g. CNC Machinist" value="'+esc(a.jobQ)+'" onkeydown="if(event.key===\'Enter\'){fdAddJob()}">'+
         '<button class="btn btn-sm btn-outline" onclick="fdAddJob()">Add</button></div>'+
       (a.jobs.length>1
@@ -314,7 +324,7 @@
 
     var apolloOn=!!(F.access&&F.access.apollo&&F.access.apollo.connected), canFind=apolloOn&&!!(a.card&&a.card.domain);
     var peoplePart =
-      '<div class="fd-label">2 · Who should we write to? <span class="fd-hint">up to 3 · '+pickedCount(a)+' chosen</span></div>'+
+      '<div class="fd-label">2 · Who should we write to? <span class="fd-hint">up to '+lim('contacts_per_lead')+' · '+pickedCount(a)+' chosen</span></div>'+
       (canFind
         ? '<div class="fd-row"><input id="fd-titleq" class="inp fd-grow" placeholder="Job titles, e.g. HR Manager, Plant Manager (blank = the usual suspects)" value="'+esc(a.titleQ)+'" onkeydown="if(event.key===\'Enter\'){fdFindPeople()}">'+
           '<button class="btn btn-sm btn-primary" '+(a.finding?'disabled':'')+' onclick="fdFindPeople()">'+(a.finding?'Looking…':'Find people')+'</button></div>'+
@@ -331,7 +341,7 @@
         (seqNeeded()
           ? '<div class="ld-box is-stop" role="status"><strong>Writing the first email needs your own sequence</strong>PACE does not start outreach until you have one. <button type="button" class="fd-pill" onclick="goPage(\'mysetup\')">Open My Setup</button> — a starter with your company\'s name is one click. The lead is saved either way.</div>'
           : '')+
-        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'
+        '<label class="fd-use fd-block"><input type="checkbox" '+(a.writeEmail?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdToggleWrite()"> Write the first email now — it waits in Email → Pending, where you preview it, edit it if you like, and press Send. Nothing is sent before that.</label>'
       : 'Into the Unassigned pool, where your lead hands it out. Nothing is emailed now.')+'</div>';
 
     var can = !a.busy && jobsToSave(a).length>0 && pickedCount(a)>0 && (!goes || !!a.mailboxId) && !(c.decision&&c.decision.blocked);
@@ -352,7 +362,7 @@
   var MAX_TITLES = 40, MAX_COMPANIES = 30, MAX_SECTORS = 8;
   // Where a new search looks by default: Apollo, unless the organisation has no Apollo but does have a free job-source key.
   function defaultSource(){ var a=F.access||{}; var ap=a.apollo&&a.apollo.connected, js=a.jobsource&&a.jobsource.connected; return (!ap&&js)?'free':'apollo'; }
-  function blankForm(){ return { id:null, name:'', source:defaultSource(), sectors:[], titles:[], locations:'', sizes:[], posted_days:14, keywords:'', companies:[] }; }
+  function blankForm(){ return { id:null, name:'', source:defaultSource(), sectors:[], titles:[], places:[], locations:'', sizes:[], posted_days:14, keywords:'', companies:[] }; }
   function blankCo(){ return { q:'', busy:false, list:null, note:'' }; }
   if (!F.co) F.co = blankCo();
   if (F.newTitle==null) F.newTitle='';
@@ -360,13 +370,13 @@
     var sectors=(s.sectors&&s.sectors.length)?s.sectors.slice():(s.sector?[s.sector]:[]);
     var cos=(s.companies&&s.companies.length)?s.companies.map(function(c){ return { name:c.name||c.domain, domain:c.domain, city:c.city||'', state:c.state||'' }; })
       :(s.domains||[]).map(function(d){ return { name:d, domain:d, city:'', state:'' }; });
-    return { id:s.id, name:s.name, source:s.source||'apollo', sectors:sectors, titles:(s.titles||[]).slice(), locations:(s.locations||[]).join(', '),
+    return { id:s.id, name:s.name, source:s.source||'apollo', sectors:sectors, titles:(s.titles||[]).slice(), places:(s.locations||[]).slice(), locations:'',
              sizes:(s.sizes||[]).slice(), posted_days:(s.posted_days==null?14:s.posted_days), keywords:(s.keywords||[]).join(', '), companies:cos };
   }
   // The slider's words. 0 is a real answer ("today only"), never "not set".
   function postedText(d){ d=(d==null?14:Number(d)); return d===0?'today':(d===1?'yesterday or today':'in the last '+d+' days'); }
   // The form on screen: the Daily run tab's, or the one-off Find leads now tab's (same fields, different buttons).
-  function curForm(){ return F.tab==='now' ? (F.nowForm||(F.nowForm=blankForm())) : F.form; }
+  function curForm(){ return (F.tab==='now'||F.editNow) ? (F.nowForm||(F.nowForm=blankForm())) : F.form; }
   function captureForm(){
     var f=curForm(); if(!f) return;
     var g=function(id){ var e=document.getElementById(id); return e?e.value:null; };
@@ -458,8 +468,27 @@
   window.fdCoAdd = function(i){ captureForm(); var f=curForm(); if(!f||!F.co.list||!F.co.list[i]) return; addCompany(f,F.co.list[i]); paint(true); };
   window.fdCoDrop = function(i){ captureForm(); var f=curForm(); if(!f) return; f.companies.splice(i,1); paint(true); };
 
+  // Every place the search covers: the ones already added as chips, plus anything still typed in the box (so Find works without pressing Enter).
+  function placesOf(f){
+    var out=[], seen={};
+    (f.places||[]).concat(lines(f.locations)).forEach(function(p){ var k=p.toLowerCase(); if(!seen[k]){ seen[k]=1; out.push(p); } });
+    return out;
+  }
+  window.fdPlaceAdd = function(){
+    captureForm(); var f=curForm(); if(!f) return;
+    var typed=lines(f.locations); if(!typed.length) return;
+    f.places=placesOf(f); f.locations=''; paint(true);
+    var el=document.getElementById('fd-f-locations'); if(el) el.focus();
+  };
+  window.fdPlaceDrop = function(i){ captureForm(); var f=curForm(); if(!f) return; f.places=placesOf(f); f.places.splice(i,1); paint(true); };
+  function renderPlaces(f){
+    var list=placesOf(f), max=lim('places_per_search');
+    return '<div class="fd-label">Where the job is <span class="fd-hint">'+list.length+(max===Infinity?'':' of '+max)+' '+(list.length===1?'place':'places')+' — add as many states or cities as you like</span></div>'+
+      (list.length?'<div class="fd-pills">'+list.map(function(p,i){ return '<span class="fd-chip">'+esc(p)+' <button type="button" class="fd-x" aria-label="Remove '+esc(p)+'" onclick="fdPlaceDrop('+i+')">×</button></span>'; }).join('')+'</div>':'')+
+      '<input id="fd-f-locations" class="inp fd-wide" placeholder="Type a state or city, then press Enter — e.g. Texas, Austin TX, remote" value="'+esc(f.locations)+'" onkeydown="if(event.key===\'Enter\'||event.key===\',\'){event.preventDefault();fdPlaceAdd();}">';
+  }
   function bodyOf(f){
-    return { source:f.source||'apollo', sectors:f.sectors.slice(), sector:f.sectors[0]||null, titles:f.titles.slice(), locations:lines(f.locations), sizes:f.sizes, posted_days:f.posted_days,
+    return { source:f.source||'apollo', sectors:f.sectors.slice(), sector:f.sectors[0]||null, titles:f.titles.slice(), locations:placesOf(f), sizes:f.sizes, posted_days:f.posted_days,
              keywords:lines(f.keywords), companies:f.companies, domains:f.companies.map(function(c){ return c.domain; }) };
   }
   // Find leads now: a one-off search. Nothing is saved or scheduled; the cards land in Today's cards.
@@ -474,7 +503,8 @@
       if (r && r.credits && F.access) F.access.credits=r.credits;
       if (r && r.jobsource && F.access) F.access.jobsource = Object.assign({}, F.access.jobsource, r.jobsource);
       showToast(F.nowNote,(r&&r.new_cards)?'success':'info');
-      if (r && r.new_cards){ F.tab='cards'; F.cardSearch=''; loadCards(); } else paint(true);
+      F.lastFind=summaryOf(bodyOf(f));                       // so the results can say what they were found for, and offer to change it
+      if (r && r.new_cards){ F.tab='cards'; F.cardSearch=''; F.editNow=false; loadCards(); } else paint(true);
     }).catch(function(e){ F.running=false; F.nowNote=e.message; showToast(e.message,'error'); paint(true); });
   };
   // Keep a one-off search as a daily one.
@@ -589,7 +619,7 @@
       (once?'':'<div class="fd-label">Name of the run</div><input id="fd-f-name" class="inp fd-wide" placeholder="e.g. Texas machine shops" value="'+esc(f.name)+'">')+
       renderIndustries(f)+renderTitles(f)+
       '<div class="fd-grid">'+
-        '<div><div class="fd-label">Where the job is</div><input id="fd-f-locations" class="inp fd-wide" placeholder="e.g. Texas, Austin TX, remote" value="'+esc(f.locations)+'"></div>'+
+        '<div>'+renderPlaces(f)+'</div>'+
         '<div><div class="fd-label">Posted <span id="fd-posted-out" class="fd-strong">'+esc(postedText(f.posted_days))+'</span></div>'+
           '<input id="fd-f-posted" class="fd-slider fd-wide" type="range" min="'+pr.min+'" max="'+pr.max+'" step="1" value="'+esc(f.posted_days)+'" style="--fd-pct:'+Math.round(100*(f.posted_days-pr.min)/Math.max(1,pr.max-pr.min))+'%" aria-label="How many days back jobs may have been posted" oninput="fdPostedInput(this.value)">'+
           '<div class="fd-row fd-between fd-hint"><span>Today</span><span>'+pr.max+' days</span></div></div>'+
@@ -661,7 +691,17 @@
           '<button class="btn btn-sm btn-primary" '+(blocked?'disabled title="This company cannot be added right now — see the reason above"':'')+' onclick="fdAccept(\''+c.id+'\')">Accept</button></div></div>'+
     '</div>';
   }
+  // The one-off search the cards came from, with a way to change it WITHOUT leaving the results: add a title, change the city, search again.
+  window.fdEditNow = function(){ captureForm(); F.editNow=!F.editNow; F.moreOpen=null; if(F.editNow && !F.nowForm) F.nowForm=blankForm(); paint(true); };
   function renderCards(){
+    var head='';
+    if (F.lastFind || F.editNow){
+      head='<div class="card fd-lastfind"><div class="fd-row fd-between"><span class="fd-hint">'+(F.lastFind?'Your last search: '+esc(F.lastFind):'Search again')+'</span>'+
+        '<button class="btn btn-sm btn-outline" '+(F.running?'disabled':'')+' onclick="fdEditNow()">'+(F.editNow?'Close':'Edit this search')+'</button></div></div>'+(F.editNow?renderForm('now'):'');
+    }
+    return head+renderCardsBody();
+  }
+  function renderCardsBody(){
     if (F.loading && !F.cards) return '<div class="fd-empty">Loading…</div>';
     var list=F.cards||[];
     if (!list.length){
@@ -765,7 +805,7 @@
     apiPost('/emails/generate',{ job_ids:[leadId] }).then(function(g){
       if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); if(btn) btn.disabled=false; return; }
       var n=(g&&g.generated)||0;
-      showToast(n?'First email written — read it in Email → Pending, then send':'No email could be written (check the contact\'s address)', n?'success':'warning');
+      showToast(n?firstEmailToast(0):'No email could be written (check the contact\'s address)', n?'success':'warning');
       loadHistory(); if (typeof refreshJobs==='function') refreshJobs();
     }).catch(function(e){ showToast('Could not write the email: '+((e&&e.message)||e),'error'); if(btn) btn.disabled=false; });
   };
@@ -804,7 +844,7 @@
     var jobs=anJobs(an), contacts=anContacts(an);
     if(!jobs.length){ an.err='Pick or type the job this email is about.'; STATE.modal=renderAnotherModal(); render(); return; }
     if(!contacts.length){ an.err='Pick at least one person to write to.'; STATE.modal=renderAnotherModal(); render(); return; }
-    if(contacts.length>3){ an.err='Three people is the most one lead can carry.'; STATE.modal=renderAnotherModal(); render(); return; }
+    if(contacts.length>lim('contacts_per_lead')){ an.err=lim('contacts_per_lead')+' people is the most one lead can carry.'; STATE.modal=renderAnotherModal(); render(); return; }
     an.busy=true; an.err=''; STATE.modal=renderAnotherModal(); render();
     apiPost('/finder/cards/'+an.id+'/another',{ positions:jobs, contacts:contacts }).then(function(r){
       var write=an.writeNow&&!seqNeeded(); F.an=null; STATE.modal=null; render(); loadHistory();
@@ -814,7 +854,7 @@
         apiPost('/emails/generate',{ job_ids:[r.lead_id], mailbox_id:an.mailboxId||undefined }).then(function(g){
           if (g && g.needs_sequence && g.needs_sequence.length && typeof noteNeedsSequence==='function'){ noteNeedsSequence(g); return; }
           var n=(g&&g.generated)||0;
-          showToast(n?'First email written — read it in Email → Pending, then send':'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning'); loadHistory();
+          showToast(n?firstEmailToast(jobs.length):'The lead is saved, but no email could be written (check the contact\'s address)', n?'success':'warning'); loadHistory();
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
     }).catch(function(e){ an.busy=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
@@ -841,7 +881,7 @@
       '<div class="fs-12_5 c-text2" style="margin-bottom:10px">This makes a <b>second lead</b> at the same company, with its own job, its own people and its own first email. The first lead ('+esc(l.position||'')+') is left alone.</div>'+
       '<div class="fd-label">The job this email is about</div>'+jobList+
       '<input id="fd-an-job" class="inp fd-wide" placeholder="Or type another job title" value="'+esc(an.jobQ)+'">'+
-      '<div class="fd-label" style="margin-top:12px">Who to write to (up to 3)</div>'+(who||'<div class="fd-hint">No other people were kept — add one below.</div>')+
+      '<div class="fd-label" style="margin-top:12px">Who to write to (up to '+lim('contacts_per_lead')+')</div>'+(who||'<div class="fd-hint">No other people were kept — add one below.</div>')+
       '<div class="fd-row" style="margin-top:6px"><input id="fd-an-fn" class="inp" placeholder="First name" value="'+esc(an.mFirst)+'"><input id="fd-an-ln" class="inp" placeholder="Last name" value="'+esc(an.mLast)+'"></div>'+
       '<div class="fd-row" style="margin-top:6px"><input id="fd-an-em" class="inp fd-grow" placeholder="Their email address" value="'+esc(an.mEmail)+'"><input id="fd-an-tt" class="inp fd-grow" placeholder="Title (optional)" value="'+esc(an.mTitle)+'"></div>'+
       '<label class="fd-use fd-block" style="margin-top:12px"><input type="checkbox" '+(an.writeNow?'checked':'')+(seqNeeded()?' disabled':'')+' onclick="fdAnWrite()"> Write the first email now — it waits in Email → Pending for you to read. Nothing is sent until you press Send.</label>'+from+
@@ -927,6 +967,15 @@
     if (acc.jobsource&&acc.jobsource.connected) bits.push('job sources '+(acc.jobsource.used||0)+'/'+(acc.jobsource.limit||0));
     return '<span class="fs-12 c-ink3" title="What your organisation has used today, out of its daily limits">Today: '+esc(bits.join(' · '))+'</span>';
   }
+  // While the server is searching (it can take about a minute) the page SAYS so, with a moving bar, so nobody wonders if it froze.
+  // Pure CSS motion on purpose: nothing repaints on a timer under the person's hands.
+  function searchingBox(){
+    if (!F.running) return '';
+    var what = F.running==='find' ? 'Finding leads for your search' : (F.running==='all' ? 'Running your saved searches' : 'Running this search');
+    return '<div class="card fd-progress" role="status" aria-live="polite"><div class="fd-row"><span class="fd-spin" aria-hidden="true"></span><strong>'+what+'…</strong></div>'+
+      '<div class="fd-bar" aria-hidden="true"><span></span></div>'+
+      '<div class="fd-hint">This usually takes up to a minute — it looks at the company database and the job sites. Stay on this page; the cards appear here when it is done.</div></div>';
+  }
   function renderPage(){
     var acc=F.access;
     if (!acc) return UI.page({ body:'<div class="fd-empty">Loading…</div>' });
@@ -952,7 +1001,7 @@
       : '';
     var body = F.tab==='sourced' ? srcdBody()
       : (F.tab==='admin' && acc.is_admin ? renderAdmin() : (F.tab==='now' ? renderForm('now') : (F.tab==='searches' ? renderSearches() : (F.tab==='history' ? renderHistory() : renderCards()))));
-    return UI.page({ tabs:UI.tabs(tabs, F.tab, acc.enabled?meters(acc):''), body:toolbar+body });
+    return UI.page({ tabs:UI.tabs(tabs, F.tab, acc.enabled?meters(acc):''), body:toolbar+searchingBox()+body });
   }
 
 })();

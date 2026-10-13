@@ -7,7 +7,7 @@
 // not come through here at all.
 // ============================================================================
 const { emailSyntaxValid } = require('../email-validation');
-const { buildEmailVars, fillTemplate, resolveTemplate, DEFER_SENDER, buildRotatingTemplateDeck, isRandomTemplateMode } = require('../email-vars');
+const { buildEmailVars, fillTemplate, resolveTemplate, DEFER_SENDER, buildRotatingTemplateDeck, isRandomTemplateMode, ensureJobsListed } = require('../email-vars');
 const sequenceStarter = require('./sequence-starter');
 const wording = require('./wording-scope');
 
@@ -82,7 +82,9 @@ function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap
         // different people.
         const vars = buildEmailVars({ job, contact, senderDisplayName: DEFER_SENDER });
         const subject = fillTemplate(subjTmpl, vars);
-        const body = fillTemplate(bodyTmpl, vars);
+        // A lead for several jobs lists them all, as bullets, through the person's own template ({{jobs}}) — or, if the template does
+        // not place the list, right after the paragraph naming the main job (R-194). The person reads and edits it in Pending before sending.
+        const body = ensureJobsListed(fillTemplate(bodyTmpl, vars), bodyTmpl, job);
         const resolvedSendingEmail = job.sending_email || bdPrimaryEmailMap[bd.id];
         const sendingEmailAddress = resolvedSendingEmail?.email_address || '';
         const row = {

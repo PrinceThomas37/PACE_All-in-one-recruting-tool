@@ -6803,3 +6803,9 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, owner to-do recorded (R-205)
 - Owner will set a fresh `MAILBOX_SECRET_KEY` on Render later, then do the live Zoho test; added as ROADMAP `R-205` and to CONTEXT_WINDOW. The first key was pasted in chat and is burned. The roadmap ARTIFACT (`NQ4HUuMfAWJk34g9Vs5EdQ`, collection `items`) has no rows past roughly R-19x (R-200 absent), so it was NOT written to — it is behind the file and needs a catch-up the owner has not asked for.
+
+### SESSION 44, the Find Leads batch (R-194…R-197, D-0126) — dev branch
+- Root cause of "the window refreshes on every click": `patchShell` rewrote the whole `#layer` whenever a window's html changed → new `.modal` element → `mIn` animation replayed + scroll boxes reset. `patchModalInPlace` (03-core-render.js) now updates the same window's inside; falls back to the whole rewrite for a different window or if anything else in the layer changed. `test/modal-inplace-smoke.mjs` (10) reproduces the old behaviour exactly when the fix is removed (animation `mIn` runs again).
+- Pills: the 5-job and 3-contact limits were typed in the browser (and the message was off-screen). Now `F.access.limits` from the server; counter, inline message, dimmed pills, "Show all". Reveal keeps the search's title/first name (`payload.found`).
+- Finder: place chips, progress panel (pure CSS), edit-this-search in place on the results. Multi-job email: `email-vars.js jobsOf/ensureJobsListed`, used by `services/lead-outreach-queue.js`; `test/multi-job-email-smoke.mjs` (14).
+- Every new check was mutation-checked (put the old behaviour back, watch it fail).

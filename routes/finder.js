@@ -289,6 +289,8 @@ module.exports = (ctx) => {
         credits: { used: await readCount(finder.creditKey(orgId, now)), limit: await num('finder_apollo_daily_credits', orgId) },
         reveals: { used: await readCount(finder.revealKey(req.user.id, now)), limit: await num('finder_reveals_per_day', orgOf(req)) },
         wait_days: await num('finder_wait_days', orgOf(req)), card_days: await num('finder_card_days', orgOf(req)),
+        // what one lead may carry — this company's numbers (D-0124); the window shows them, the server enforces them
+        limits: { jobs_per_lead: await num('finder_max_jobs_per_lead', orgOf(req)), contacts_per_lead: await num('finder_max_contacts_per_lead', orgOf(req)), places_per_search: await num('finder_max_places', orgOf(req)) },
         sectors: Object.keys(finder.SECTORS).map((id) => ({ id, label: finder.SECTORS[id].label, titles: finder.SECTORS[id].titles })),
         sizes: finder.SIZE_BANDS.map((b) => ({ id: b.id, label: b.label })), posted: finder.POSTED_RANGE,
         goes_to: hasRole(req, 'bd', 'bd_lead') ? 'you' : 'pool',
@@ -754,6 +756,14 @@ module.exports = (ctx) => {
       await noteApollo('finder_people_search', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
       const have = (card.payload && card.payload.people) || {};
+      // What the search itself said about each person (first name, title) is kept on the card, so a paid reveal that comes back
+      // without a title never loses it (R-197: "details about the person go missing"). Best effort: the list is shown either way.
+      try {
+        const found = Object.assign({}, (card.payload && card.payload.found) || {});
+        r.people.forEach((p) => { found[p.id] = { first_name: p.first_name || '', title: p.title || '' }; });
+        const keys = Object.keys(found); if (keys.length > 200) keys.slice(0, keys.length - 200).forEach((k) => { delete found[k]; });
+        await db.forRequest(req).from('finder_cards').update({ payload: Object.assign({}, card.payload || {}, { found }) }).eq('id', card.id);
+      } catch (_) { /* a note about the list is never why the list fails */ }
       res.json({ people: r.people.map((p) => Object.assign({}, p, { revealed: !!have[p.id], email: have[p.id] ? have[p.id].email : null })), total: r.total });
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
@@ -780,8 +790,9 @@ module.exports = (ctx) => {
       const r = await apollo.revealPerson({ key, id: personId });
       await noteApollo('finder_reveal', r);
       if (!r.ok) return res.status(502).json({ error: r.error });
+      const seen = (payload.found && payload.found[personId]) || {};      // what the search said, when the reveal says nothing
       const person = {
-        id: personId, first_name: r.first_name || '', last_name: r.last_name || '', title: r.title || '', linkedin_url: r.linkedin_url || null,
+        id: personId, first_name: r.first_name || seen.first_name || '', last_name: r.last_name || '', title: r.title || seen.title || '', linkedin_url: r.linkedin_url || null,
         email: r.email && r.email_verified ? String(r.email).toLowerCase() : null,            // D-0049: a guess is never kept
       };
       payload.people[personId] = person;
