@@ -6796,3 +6796,7 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - AI daily ceilings per company (`services/ai-budget.js getCaps(supabase, orgId)`; the Integrations screen now reads/writes the caller's company). Finder: search size, saved searches, contacts per lead, jobs per lead (`config/settings.js`, `routes/finder.js`, `services/lead-finder.js normalizeSearch(input, caps)`). `followup_max` holds a person's own follow-up count (`followup-steps.dueDates(…, adminMax)`, `/outreach-plan`). Pool-capacity fallback: whole pool, no typed number.
 - Left on purpose and recorded: plan limits (vendor data), text lengths, server timeouts, the generator's personal meter; look-back days are R-204.
 - Migration 063: apply cancelled a third time after an explicit owner yes. Not applied, not worked around.
+
+### SESSION 44, release: PR #326 merged (13 Oct)
+- Migration 063 was applied by the owner in the Supabase SQL editor after five cancelled tool attempts (cause never shown; no approval prompt ever reached the owner, so most likely the session's automatic approval layer). The table `public.smtp_credentials` was then read back (RLS on, 0 rows) before merging. Supabase usage was checked at the same time: nothing over quota (egress 2.04 of 5 GB is the one to watch).
+- PR #326 squash-merged to `main` as `73e381d` (head `014b57a`, 245/245 on Node 22 and Node 26). Render deploys it. Owed before the app-password button appears: `MAILBOX_SECRET_KEY` on Render; one live Zoho mailbox test.

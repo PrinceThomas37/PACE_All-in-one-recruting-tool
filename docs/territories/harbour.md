@@ -314,3 +314,6 @@ The send window the send loop obeys is the sending person's ORGANISATION's hours
 
 ## 2026-10-13 (Session 44) — D-0125
 Follow-up chains are created with the company's `followup_max` as a ceiling on the person's chosen count (`followup-steps.dueDates(settings, userId, anchor, adminMax)`); chains already scheduled are untouched.
+
+## 2026-10-13 (Session 44) — released
+App-password (SMTP/IMAP) mailboxes are on `main` (#326, `73e381d`); migration 063 applied. The button stays hidden until `MAILBOX_SECRET_KEY` is set on Render. One live Zoho test is owed.
