@@ -1247,3 +1247,6 @@ The full suite found the sending-hours regression that targeted runs did not (`s
 
 ## 2026-10-14 (Session 44) — tests for the owner's handwritten notes (D-0135)
 New: `places-smoke` (15), `take-selected-ui-smoke` (18). Extended: `finder-routes-smoke` (184; size-choice block, mutation-checked by turning the filter off), `lead-finder-smoke` (75), `lead-take-smoke` (37; take-by-id, mutation-checked by dropping `canSeeLead`), `finder-page-smoke` (170; place suggestions typed with the real keyboard, no spinner), `lead-intel-ui-smoke` (22; Show job description). A size filter that only works in a fake Apollo that ignores filters proves nothing — the route test's Apollo returns the same rows whatever it is asked, which is exactly why the size check had to move onto what comes back.
+
+## 2026-10-14 (Session 44) — tests for page three of the notes (D-0136)
+New: `pending-delete-smoke` (12). Extended: `finder-page-smoke` (people search in the another-window, the review window: nothing-changed save sends nothing, a changed one PATCHes only that email, Send saves then sends exactly that one, follow-ups never listed), `finder-routes-smoke` (saved-card people/reveal, mutation-checked), `take-selected-ui-smoke` (Lead Finder label). The `.map(` swallowed by a `//` comment was found because a step asserted the AI hint, not only the text.

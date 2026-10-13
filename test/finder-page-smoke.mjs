@@ -52,7 +52,7 @@ const PEOPLE = { total: 4, people: [
   { id: 'p3', first_name: 'Fay', last_name: 'Kim', title: 'Owner', revealed: false, email: null },
   { id: 'p4', first_name: 'Gus', last_name: 'Lee', title: 'Director', revealed: false, email: null },
 ] };
-const EMAILS = { p1: 'dana@brazosmachining.com', p2: null, p3: 'fay@brazosmachining.com', p4: 'gus@brazosmachining.com' };
+const EMAILS = { p1: 'dana@brazosmachining.com', p2: null, p3: 'fay@brazosmachining.com', p4: 'gus@brazosmachining.com', p9: 'hal@savedmachining.example' };
 
 let browser;
 try {
@@ -69,13 +69,14 @@ try {
     window.__calls = []; window.__access = JSON.parse(JSON.stringify(access)); window.__cards = JSON.parse(JSON.stringify(cards));
     window.__searches = [];
     window.__hist = { days: 90, card_days: 5, hidden: 3, counts: { accepted: 2, waiting: 1, rejected: 1 }, items: [
-      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', email: { pending: 1, sent: 0, failed: 0, from: 'bea@x.test', last_sent_at: null }, more_people: [{ person_id: 'pZ', name: 'Pat Quill', title: 'CFO', email: 'pat@saved.example' }], contacts: [{ id: 'c1', name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { id: 'c2', name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
+      { id: 'a1', search_id: 's1', company_name: 'Saved Machining', place: 'Waco, TX', domain: 'savedmachining.example', status: 'accepted', decided_at: '2026-10-05T10:00:00Z', lead: { id: 'L7', position: 'Welder', stage: 'Assigned', email: { pending: 1, sent: 0, failed: 0, from: 'bea@x.test', last_sent_at: null }, more_people: [{ person_id: 'pZ', name: 'Pat Quill', title: 'CFO', email: 'pat@saved.example' }], contacts: [{ id: 'c1', name: 'Dana Cole', title: 'HR Manager', email: 'dana@saved.example', primary: true }, { id: 'c2', name: 'Eli Ross', title: 'Plant Manager', email: 'eli@saved.example', primary: false }], jobs: [{ title: 'Welder', main: true }, { title: 'Estimator', also: true }, { title: 'Pipefitter', url: 'https://jobs.example/2', source: 'Indeed' }] } },
       { id: 'a2', search_id: 's2', company_name: 'Handed Co', place: '', status: 'accepted', decided_at: '2026-10-04T10:00:00Z', lead: null, lead_elsewhere: true },
       { id: 'w1', search_id: 's1', company_name: 'Parked Dental', place: '', status: 'waiting', wait_until: '2026-10-21', decided_at: '2026-10-07T10:00:00Z', lead: null },
       { id: 'r1', search_id: 's2', company_name: 'Declined Inc', place: '', status: 'rejected', decided_at: '2026-10-06T10:00:00Z', lead: null } ] };
     const rec = (m, p, b) => window.__calls.push([m, p, b]);
     window.apiGet = function (p) {
       rec('GET', p);
+      if (p.indexOf('/emails?status=pending') === 0) return Promise.resolve(JSON.parse(JSON.stringify(window.__pendingList || [])));
       if (p === '/finder/access') return Promise.resolve(window.__access);
       if (p === '/finder/cards') return Promise.resolve(window.__cards);
       if (p === '/finder/mailboxes') return Promise.resolve({ goes_to: 'you', suggested_id: 'm2', mailboxes: [{ id: 'm1', email_address: 'bea@x.test', display_name: 'Bea', sent_today: 40 }, { id: 'm2', email_address: 'bea.two@x.test', display_name: '', sent_today: 3 }] });
@@ -86,8 +87,10 @@ try {
       if (p === '/finder/diagnose') return Promise.resolve({ connected: true, ok: false, checks: [{ ok: true, text: 'Finding people by job title works (free).' }, { ok: false, text: 'This Apollo key is not allowed to search companies.' }] });
       return Promise.resolve({});
     };
+    window.apiFetch = function (m, p, b) { rec(m, p, b); return Promise.resolve({ success: true }); };
     window.apiPost = function (p, b) {
       rec('POST', p, b);
+      if (/\/emails\/send-selected$/.test(p)) return Promise.resolve({ success: true, queued: (b.email_ids || []).length });
       if (/\/postings$/.test(p)) return Promise.resolve({ postings: [{ title: 'CNC Machinist', url: 'https://x.test/1', city: 'Waco', state: 'TX', age_days: 41, source: 'LinkedIn' }, { title: 'Welder', url: '', age_days: 3, source: '' }], signals: { chips: ['2 open roles', 'Oldest open 41 days'] } });
       if (/\/people$/.test(p)) return Promise.resolve(b && b.title === 'Owner' ? { total: 1, people: [{ id: 'p9', first_name: 'Hal', last_name: 'Fox', title: 'Owner', revealed: false, email: null }] } : JSON.parse(JSON.stringify(people)));
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
@@ -281,7 +284,7 @@ try {
   m = await modal();
   step('for a BD manager it says: straight to you', /Straight to you/.test(m));
   step('…with a "Send from" list of their own mailboxes, each with how many it has sent today, the one with fewest pre-selected', /Send from/.test(m) && /Bea &lt;bea@x\.test&gt; — 40 sent today/.test(m) && /bea\.two@x\.test&gt; — 3 sent today/.test(m) && (await page.evaluate(() => document.getElementById('fd-mailbox').value)) === 'm2');
-  step('…and offers to write the first email now — ticked, and saying plainly that it is previewed and edited in Pending and nothing is sent before Send', /Write the first email now/.test(m) && /you preview it, edit it if you like, and press Send/.test(m) && /Nothing is sent before that/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
+  step('…and offers to write the first email now — ticked, and saying plainly that it opens right there to preview, edit and send, and nothing is sent before Send', /Write the first email now/.test(m) && /you preview it, edit it if you like, and press Send/.test(m) && /Nothing is sent before that/.test(m) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdToggleWrite()"]:checked')));
   await page.evaluate(() => { const a = window.STATE.finder.acc; a.jobs = ['Welder']; a.main = 'Welder'; a.manual = [{ first_name: 'Sam', last_name: '', designation: '', email: 'sam@x.com' }]; window.fdPickMailbox('m1'); window.fdSave(); });
   await page.waitForTimeout(300);
   cs = await calls();
@@ -555,12 +558,47 @@ try {
   step('E: it offers the OTHER jobs (not the lead\'s own main job) and the people — those on the lead and the one found on the card', /Estimator/.test(mh) && /Pipefitter/.test(mh) && (mh.match(/fdAnJob\(/g) || []).length === 2 && /Dana Cole/.test(mh) && /already on this lead/.test(mh) && /Pat Quill/.test(mh) && /found on the card/.test(mh));
   await page.evaluate(() => window.fdAnSave()); await page.waitForTimeout(150);
   step('E: saving with no job and no person is refused in words, nothing is sent', /Pick or type the job/.test(await modal()) && !(await calls()).some(c => /\/another$/.test(c[1])));
-  await page.evaluate(() => { window.fdAnJob(0); window.fdAnWho('c:c1'); window.fdAnWho('p:pZ'); });
+  // 14 Oct (owner): "when add another job / POC is clicked… already attached POCs are shown, new POC search is not there"
+  step('E: the window now has the people SEARCH too, beside the people already attached', /Find more people at this company/.test(mh) && /Find people/.test(mh) && /Dana Cole/.test(mh) && /Pat Quill/.test(mh));
+  await page.evaluate(() => { document.getElementById('fd-an-titleq').value = 'Owner'; window.fdAnFind(); }); await page.waitForTimeout(250);
+  mh = await modal();
+  const pc1 = (await calls()).filter(c => /\/finder\/cards\/a1\/people$/.test(c[1]));
+  step('E: Find people asks for THAT saved card\'s company with the typed titles, and lists who came back with a paid "Get email" button — the people already attached stay', pc1.length === 1 && pc1[0][2].title === 'Owner' && /Hal Fox/.test(mh) && /Get email · 1 credit/.test(mh) && /Dana Cole/.test(mh), mh.slice(0, 200));
+  await page.evaluate(() => window.fdAnReveal('p9')); await page.waitForTimeout(250);
+  mh = await modal();
+  const rv1 = (await calls()).filter(c => /\/finder\/cards\/a1\/reveal$/.test(c[1]));
+  step('E: Get email reveals that one person (one request), shows the address, and ticks them ready to use', rv1.length === 1 && rv1[0][2].person_id === 'p9' && /hal@savedmachining\.example/.test(mh) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdAnWho(\'p:p9\')"]:checked')), mh.slice(0, 260));
+  await page.evaluate(() => { window.fdAnWho('p:p9'); window.fdAnJob(0); window.fdAnWho('c:c1'); window.fdAnWho('p:pZ'); window.fdAnWho('p:p9'); });
+  await page.evaluate(() => { window.__pendingList = [{ id: 'eN', job_id: 'LNEW', to_email: 'dana@saved.example', subject: 'Welder at Saved Machining', body: 'Hi Dana,\n\nWe can help with your Estimator opening.', is_mine: true, followup_type: null }, { id: 'eF', job_id: 'LNEW', to_email: 'dana@saved.example', subject: 'Following up', body: 'FU', is_mine: true, followup_type: 'fu1' }]; return true; });
   await page.evaluate(() => window.fdAnSave()); await page.waitForTimeout(400);
   const an = (await calls()).find(c => /\/finder\/cards\/a1\/another$/.test(c[1]));
-  step('E: it sends the chosen job and exactly the people picked (one from the lead by id, one from the card by person id)', an && an[2].positions.join() === 'Estimator' && JSON.stringify(an[2].contacts) === JSON.stringify([{ contact_id: 'c1' }, { person_id: 'pZ' }]), JSON.stringify(an && an[2]));
+  step('E: it sends the chosen job and exactly the people picked (one from the lead by id, the card\'s by person id — the one found just now included)', an && an[2].positions.join() === 'Estimator' && JSON.stringify(an[2].contacts) === JSON.stringify([{ contact_id: 'c1' }, { person_id: 'p9' }, { person_id: 'pZ' }]), JSON.stringify(an && an[2]));
   step('E: …then writes its first email for THE NEW LEAD (into Pending), from the chosen email ID', (await calls()).some(c => /\/emails\/generate$/.test(c[1]) && c[2].job_ids.join() === 'LNEW'));
-  step('E: …and the window closes and the history reloads', !(await page.evaluate(() => !!window.STATE.modal)) && (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > 1);
+  // 14 Oct (owner): "when the emails are created in Lead Finder, there is no option to edit that email and preview it before sending"
+  let rvm = await modal();
+  step('E: the email just written OPENS right there to read, change and send — its subject and message, for the new lead only (a follow-up is never in it)', /First email — Saved Machining/.test(rvm) && await page.evaluate(() => document.getElementById('fd-rv-s-eN').value === 'Welder at Saved Machining' && /Estimator opening/.test(document.getElementById('fd-rv-b-eN').value) && !document.getElementById('fd-rv-s-eF')), rvm.slice(0, 200));
+  step('E: …and the history reloads behind it', (await calls()).filter(c => String(c[1]).indexOf('/finder/history') === 0).length > 1);
+  await page.evaluate(() => { window.fdRvSave(); }); await page.waitForTimeout(150);
+  step('E: Save with nothing changed sends nothing to the server (no needless edit)', !(await calls()).some(c => c[0] === 'PATCH'));
+  await page.evaluate(() => { document.getElementById('fd-rv-b-eN').value = 'Hi Dana,\n\nA shorter note about your Estimator opening.'; window.fdRvSave(); }); await page.waitForTimeout(250);
+  const pt = (await calls()).filter(c => c[0] === 'PATCH');
+  step('E: a changed message is saved on THAT email only, with its subject and new text', pt.length === 1 && pt[0][1] === '/emails/eN' && /shorter note/.test(pt[0][2].body) && pt[0][2].subject === 'Welder at Saved Machining', JSON.stringify(pt));
+  step('E: …and the window says it was saved and stays open', /Saved\./.test(await modal()));
+  await page.evaluate(() => { document.getElementById('fd-rv-b-eN').value = 'Final wording.'; window.fdRvSend(); }); await page.waitForTimeout(400);
+  const cs2 = await calls(), sent2 = cs2.filter(c => /\/emails\/send-selected$/.test(c[1]));
+  step('E: Send saves the last change first, then asks the server to send exactly that one email (never the follow-up, never the queue)', cs2.filter(c => c[0] === 'PATCH').length === 2 && sent2.length === 1 && JSON.stringify(sent2[0][2]) === JSON.stringify({ email_ids: ['eN'] }) && !cs2.some(c => /queue-all/.test(c[1])), JSON.stringify(sent2));
+  step('E: …then the window closes', !(await page.evaluate(() => !!window.STATE.modal)));
+  // the saved card itself: Preview & edit opens the same window
+  await page.evaluate(() => { window.__pendingList = [{ id: 'eL7', job_id: 'L7', to_email: 'dana@saved.example', subject: 'Welder', body: 'Original', is_mine: true, followup_type: null, ai_will_write: true }]; window.STATE.page = 'finder'; window.STATE.finder.tab = 'history'; window.render(); });
+  await page.waitForTimeout(200);
+  step('E: a saved lead with its email waiting offers "Preview & edit" (primary) beside Review & send', /Preview &amp; edit/.test(await html()) && /Review &amp; send/.test(await html()));
+  await page.evaluate(() => window.fdReview('a1')); await page.waitForTimeout(300);
+  rvm = await modal();
+  step('E: Preview & edit opens the lead\'s email, and says when the AI will rewrite it at send', /Original/.test(await page.evaluate(() => document.getElementById('fd-rv-b-eL7').value)) && /AI writes this lead/.test(rvm) && /dana@saved\.example/.test(rvm), rvm.slice(0, 200));
+  await page.evaluate(() => window.fdRvClose());
+  await page.evaluate(() => { window.__pendingList = []; window.fdReview('a1'); }); await page.waitForTimeout(250);
+  step('E: with no email waiting any more it says so instead of showing an empty form', /no email waiting for this lead any more/.test(await modal()));
+  await page.evaluate(() => window.fdRvClose());
   await page.evaluate(() => { window.STATE.page = 'finder'; window.STATE.finder.tab = 'history'; window.render(); });
   await page.evaluate(() => window.fdGoPending()); await page.waitForTimeout(200);
   step('D: Review & send goes to Email → Pending', await page.evaluate(() => window.STATE.page === 'email' && window.STATE.emailTab === 'pending'));

@@ -3,9 +3,11 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #327 (`c39fb88`, the company website look; 13 Oct) · #328 (`4fd9048`, Find Leads batch + Blocked) · #326 (`73e381d`, company email setup + app-password mailboxes + admin-set numbers per company; 13 Oct). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0135 · contract C-0038 · roadmap `R-214` (next `R-215`) · next migration `065` (064, 063 and 062 are all APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
+**Highest ids:** decision D-0136 · contract C-0038 · roadmap `R-218` (next `R-219`) · next migration `065` (064, 063 and 062 are all APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
 
 ## Now
+
+**On the dev branch, not merged (14 Oct, D-0136, R-215…R-218):** the owner's third page of notes — people search in "Email another job / person", delete a pending email, preview/edit/send a lead's first email inside Find Leads, "Lead Finder" label instead of NEW.
 
 **Merged 14 Oct (D-0135, R-210…R-214):** the owner's handwritten notes — Find Leads keeps the company size (free-source companies get their size from one Apollo lookup; Tiny 1–10 band), state/city suggestions in the place box, **Take lead** for ticked/opened Unassigned leads, spinner removed (bar only), **Show job description** instead of Edit posting. Owed: the owner tries them on a real screen.
 

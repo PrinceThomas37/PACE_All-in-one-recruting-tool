@@ -176,6 +176,10 @@ sees it without reading a file.
 | `R-212` | **Take lead for the leads you pick** (D-0135 #4): selection bar button + "Take this lead" on an opened Unassigned lead, BD / BD lead. `POST /leads/take {job_ids}`. | `DONE` (dev branch) | 14 Oct |
 | `R-213` | **Find Leads shows only the moving bar while searching** (D-0135 #5) — spinner removed. | `DONE` (dev branch) | 14 Oct |
 | `R-214` | **"Show job description" instead of "Edit posting" when a posting is attached** (D-0135 #6). | `DONE` (dev branch) | 14 Oct |
+| `R-215` | **"Email another job / person" can search for new people** (D-0136 #1). People search + paid reveal now work on a saved card too. | `DONE` (dev branch) | 14 Oct |
+| `R-216` | **Delete a pending email** — from its preview, or ticked ones (D-0136 #2). | `DONE` (dev branch) | 14 Oct |
+| `R-217` | **Preview, edit and send a lead's first email inside Find Leads** (D-0136 #3): opens when written; "Preview & edit" on a saved lead. | `DONE` (dev branch) | 14 Oct |
+| `R-218` | **Leads made by the Lead Finder are labelled "Lead Finder", not NEW** (D-0136 #4). | `DONE` (dev branch) | 14 Oct |
 
 ## ⏳ PENDING — nobody has decided
 

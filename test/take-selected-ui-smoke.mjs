@@ -4,6 +4,7 @@
 //   * it offers only the ticked leads that are still Unassigned, says how many the day allows, and sends exactly those ids
 //   * an opened lead row has "Take this lead" only while the lead is Unassigned, and only for a BD / BD lead
 //   * after a take the ticks are cleared and the window offers "Write the first emails"
+//   * (14 Oct, owner) a lead the Lead Finder made is labelled "Lead Finder" in the list, not "NEW"; any other fresh lead keeps NEW
 // Usage: node test/take-selected-ui-smoke.mjs
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 import { chromium } from 'playwright-core';
@@ -98,6 +99,17 @@ try{
   await ev(()=>[...document.querySelectorAll('#__host button')].find(x=>/Take this lead/.test(x.textContent)).click());
   await page.waitForFunction(()=>/You picked 1 lead that is still Unassigned/.test((document.querySelector('.modal')||{innerText:''}).innerText),null,{timeout:6000});
   step('"Take this lead" on a lead\'s own panel opens the same window for just that lead', /You picked 1 lead that is still Unassigned/.test(await modalText()) && await btn('^Take 1 lead$'));
+  // the label on the Leads list
+  await ev(()=>{ STATE.jobs=[{id:'fl1',stage:'Unassigned',assigned_to_bd:null,position:'Role Finder',company_name:'Co F',source:'Finder · Apollo',freshness:'New'},
+    {id:'fl2',stage:'Unassigned',assigned_to_bd:null,position:'Role Research',company_name:'Co R',source:'Import',freshness:'New',research:{source:{kind:'finder'}}},
+    {id:'im1',stage:'Unassigned',assigned_to_bd:null,position:'Role Import',company_name:'Co I',source:'Import',freshness:'New'},
+    {id:'old1',stage:'Unassigned',assigned_to_bd:null,position:'Role Old',company_name:'Co O',source:'Import',freshness:'Old'}]; STATE.leadSeqSel={}; STATE.page='leads'; STATE.modal=null; render(); });
+  await page.waitForTimeout(300);
+  const rowText=(pos)=>ev((p)=>{ const r=[...document.querySelectorAll('#content tbody tr')].find(t=>t.textContent.indexOf(p)>-1); return r?r.innerText.replace(/\s+/g,' '):''; },pos);
+  step('a lead the Lead Finder made says "Lead Finder", not NEW', /Lead Finder/i.test(await rowText('Role Finder')) && !/\bNEW\b/.test(await rowText('Role Finder')), await rowText('Role Finder'));
+  step('…also when only its research note says it came from Finder', /Lead Finder/i.test(await rowText('Role Research')) && !/\bNEW\b/.test(await rowText('Role Research')));
+  step('a fresh lead from anywhere else keeps NEW, and an old one keeps OLD', /\bNEW\b/.test(await rowText('Role Import')) && !/Lead Finder/i.test(await rowText('Role Import')) && /\bOLD\b/.test(await rowText('Role Old')));
+  step('an opened lead says who found it', await ev(()=>leadExpandHtml(STATE.jobs[0]).indexOf('Lead Finder')>-1 && leadExpandHtml(STATE.jobs[2]).indexOf('>Import<')>-1));
   step('no page errors', errs.length===0, errs.join('|').slice(0,300));
 } catch(e){ console.log('[FAIL] crashed — '+(e&&e.stack||e)); results.push(false); }
 finally{ if(browser) await browser.close(); server.close(); }

@@ -367,6 +367,15 @@ step('the card is marked accepted with the lead it became (and its postings are 
 step('the lead is logged as found by the finder', st.tables.jobs.length === 2 && (await call('/finder/cards', 'get', 'ra1')).out.cards.every((c) => c.id !== brazos));
 r = await call('/finder/cards/:id/accept', 'post', 'ra1', { position: 'CNC Machinist', contacts: [{ person_id: 'per1' }] }, { id: brazos });
 step('pressing Accept twice makes ONE lead (the second is refused)', r.code === 404 && st.tables.jobs.length === 2);
+// 14 Oct (owner): "email another job / POC… already attached POCs are shown, new POC search is not there" — the people search must work on a SAVED card
+apollo.calls.length = 0;
+r = await call('/finder/cards/:id/people', 'post', 'ra1', { title: 'HR manager' }, { id: brazos });
+step('a SAVED card can still look for more people at its company (free search, asked of Apollo once)', r.code === 200 && apollo.calls.filter((c) => c[0] === 'people').length === 1, JSON.stringify(r.out).slice(0, 120));
+const credBefore = Number((st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)) || { value: 0 }).value);
+r = await call('/finder/cards/:id/reveal', 'post', 'ra1', { person_id: 'per3' }, { id: brazos });
+step('…and a person found that way can have their email revealed on the saved card (one credit, kept on the card so "email another person" can use it)', r.code === 200 && apollo.calls.filter((c) => c[0] === 'reveal').length >= 1 && Number(st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)).value) === credBefore + 1 && !!st.tables.finder_cards.find((c) => c.id === brazos).payload.people.per3, JSON.stringify(r.out).slice(0, 160));
+r = await call('/finder/cards/:id/people', 'post', 'ra2', { title: 'HR manager' }, { id: brazos });
+step('…and still only for the card\'s own person: somebody else\'s saved card does not exist for them (404)', r.code === 404);
 r = await call('/finder/cards/:id/accept', 'post', 'ra1', { position: 'X', contacts: [{ first_name: 'A', email: 'a@b.example' }, { first_name: 'B', email: 'b@b.example' }, { first_name: 'C', email: 'c@b.example' }, { first_name: 'D', email: 'd@b.example' }] }, { id: gulf });
 step('(a card put on Wait cannot be accepted until it is back)', r.code === 404);
 
@@ -395,6 +404,7 @@ r = await call('/finder/history', 'get', 'bd1');
 let hl = r.out.items.find((x) => x.id === bdCard.id);
 step('D: a lead whose first email is written but not sent says so — 1 waiting, none sent, from which email ID', hl && hl.lead && hl.lead.email.pending === 1 && hl.lead.email.sent === 0 && hl.lead.email.from === 'bd@x.test', JSON.stringify(hl && hl.lead && hl.lead.email));
 step('D: …and says the lead is still nobody\'s (Unassigned) until that email is written for real', hl.lead.unowned === true);
+step('the history item carries the company\'s website, so "email another person" knows whether people can be looked up', typeof hl.domain === 'string');
 st.tables.emails[0].status = 'sent'; st.tables.emails[0].sent_at = '2026-10-11T15:00:00Z';
 r = await call('/finder/history', 'get', 'bd1'); hl = r.out.items.find((x) => x.id === bdCard.id);
 step('D: once it is sent, the card says sent, when, and from where', hl.lead.email.sent === 1 && hl.lead.email.pending === 0 && hl.lead.email.last_sent_at === '2026-10-11T15:00:00Z' && hl.lead.email.from === 'bd@x.test');

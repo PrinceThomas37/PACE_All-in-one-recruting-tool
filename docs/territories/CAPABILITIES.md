@@ -707,3 +707,8 @@ person who has not written their own (R-169).
 - **Take lead (R-212):** a BD or BD lead can tick leads that are still Unassigned and press **Take lead**, or open one and press **Take this lead**; it becomes theirs, from their own email IDs, within their daily limit.
 - **Show job description (R-214):** a lead with a job posting attached shows **Show job description** (read it, then Edit if needed) instead of going straight to the editor.
 
+- **Find more people when emailing another job / person (R-215):** the "Email another job / person" window on a saved lead has the same **Find people** search and **Get email · 1 credit** as the Accept window.
+- **Delete a pending email (R-216):** open an email in Email → Pending and press **Delete email**, or tick several and press **Delete selected**. It asks first and says it will not be sent; the lead stays.
+- **Read, edit and send the first email inside Find Leads (R-217):** when a first email is written it opens in a window with its subject and message — change it, **Save**, or **Send**. A saved lead with a waiting email has **Preview & edit**.
+- **"Lead Finder" label (R-218):** leads made by Find Leads show **Lead Finder** in the Leads list instead of NEW.
+

@@ -6844,3 +6844,11 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - **Take lead (R-212).** `routes/lead-take.js` accepts `job_ids` (unowned, Unassigned, not a duplicate, `canSeeLead` for the caller; same cap and mailboxes; mutation-checked — dropping the visibility rule fails 5 steps). UI: `67-take-leads.js` (`leadTakeSelected`, window variant for picked ids), bulk-bar button + "Take this lead" in `06-page-leads.js`. `test/take-selected-ui-smoke.mjs` (18), `lead-take-smoke` 37.
 - **Spinner removed (R-213)**, **Show job description (R-214)** (`59-lead-posting.js`; `lead-intel-ui-smoke` 22).
 - The owner crossed out "Remove Take leads / the number" — nothing changed there.
+
+### SESSION 44, the owner's handwritten notes, page three — four more changes (14 Oct; D-0136, R-215…R-218)
+- **People search on a saved card (R-215).** `routes/finder.js`: `/finder/cards/:id/people` and `/reveal` accept `accepted` cards too; the history item carries `domain`. `68-page-finder.js`: the "another" window has `fdAnFind` / `fdAnReveal`; picks are `p:<id>` keys and `anContacts` reads them all. Tests: `finder-routes-smoke` 188 (mutation-checked: saved cards refused → 2 fail), `finder-page-smoke`.
+- **Delete pending (R-216).** `18-email-status-actions.js` `openDeletePendingConfirm` / `submitDeletePending` (DELETE /emails/:id per email, partial failure reloads from the server); buttons in `07-page-email.js` (preview panel, "Delete selected (n)"). New `test/pending-delete-smoke.mjs` (12).
+- **Review window in Find Leads (R-217).** `68-page-finder.js` `reviewLead` / `fdReview` / `fdRvSave` / `fdRvSend`: GET /emails?status=pending&mine=1, first emails of that lead only, PATCH only what changed, POST /emails/send-selected. Opens right after an email is written (Accept, Write first, Another). Found on the way: an inline `//` comment I put mid-chain swallowed a `.map(` (the AI-hint step in the test caught it).
+- **Label (R-218).** `06-page-leads.js` `leadFromFinder(j)` (source starts "Finder", or research.source.kind = finder) → "Lead Finder" pill replaces NEW; "Found by" in the opened row. Tests in `take-selected-ui-smoke` (22).
+- **Question from the owner, answered:** "what do you mean by button meant for note 6" — see D-0135 item 6: the notes' word after "show" was unclear; I read it as "Show job description".
+

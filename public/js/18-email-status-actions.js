@@ -136,6 +136,50 @@ window.submitSendSelected=function(){
   });
 };
 
+// ── DELETE a pending email that is not wanted (owner, 14 Oct: "when a pending email is selected, there should be an option to delete that email if not required") ──
+// The server already allows it (DELETE /emails/:id — the sender's own pending or failed email, never one the send loop has claimed).
+// A confirm names what goes, and says nothing is sent and the lead stays. `ids` is the open preview's email, or every ticked one.
+window.openDeletePendingConfirm=function(ids){
+  var all=STATE.pendingEmails||[];
+  var rows=(ids||pendingView().ids).map(function(id){return all.find(function(e){return e.id===id;});}).filter(function(e){return e&&e.is_mine!==false;});
+  if(!rows.length){showToast('Tick the emails you want to delete','warning');return;}
+  STATE.deletePendingIds=rows.map(function(e){return e.id;});
+  var n=rows.length;
+  var to=rows.slice(0,8).map(function(e){
+    var co=e.job&&e.job.company&&e.job.company.name;
+    return '<div class="fs-12_5 c-text2">'+htmlEsc(e.to_email||'')+(co?' <span class="c-text3">· '+htmlEsc(co)+'</span>':'')+'</div>';
+  }).join('')+(n>8?'<div class="fs-12 c-text3">…and '+(n-8)+' more</div>':'');
+  STATE.modal='<div class="modal modal-w480">'+
+    '<div class="mh"><div class="mt">Delete '+(n===1?'this email':n+' emails')+'?</div></div>'+
+    '<div class="mb_">'+
+      '<div class="fs-13 c-text2" style="margin-bottom:10px">'+(n===1?'It is':'They are')+' removed from Pending and will <b>not</b> be sent. The lead stays where it is, so you can write a new first email for it later. This cannot be undone.</div>'+
+      '<div class="card cp">'+to+'</div>'+
+    '</div>'+
+    '<div class="mf">'+
+      '<button class="btn btn-outline" onclick="closeModal()">Keep '+(n===1?'it':'them')+'</button>'+
+      '<button class="btn btn-primary" onclick="submitDeletePending()">Delete '+(n===1?'it':'these '+n)+'</button>'+
+    '</div>'+
+  '</div>';
+  render();
+};
+window.submitDeletePending=function(){
+  var ids=(STATE.deletePendingIds||[]).slice(); STATE.deletePendingIds=null;
+  closeModal();
+  if(!ids.length) return;
+  Promise.all(ids.map(function(id){
+    return apiDelete('/emails/'+id).then(function(){return {id:id,ok:true};}).catch(function(e){return {id:id,ok:false,msg:(e&&e.message)||''};});
+  })).then(function(rs){
+    var gone={}; rs.forEach(function(r){ if(r.ok) gone[r.id]=true; });
+    STATE.pendingEmails=(STATE.pendingEmails||[]).filter(function(e){return !gone[e.id];});
+    STATE.pendingSel={}; if(STATE.previewPendingId&&gone[STATE.previewPendingId]) STATE.previewPendingId=null;
+    var bad=rs.filter(function(r){return !r.ok;});
+    if(bad.length){ showToast((Object.keys(gone).length?Object.keys(gone).length+' deleted. ':'')+bad.length+' could not be deleted: '+bad[0].msg,'error'); loadEmailsForCurrentUser(); }
+    else showToast(ids.length===1?'Email deleted':ids.length+' emails deleted','success');
+    if(typeof loadPendingSummary==='function') loadPendingSummary();
+    render();
+  });
+};
+
 window.openSendAllConfirm=function(){
   // D-0034: a bd_lead's Pending tab now includes their team's rows too, but
   // /emails/queue-all only ever queues the CALLER's own (server-scoped by
