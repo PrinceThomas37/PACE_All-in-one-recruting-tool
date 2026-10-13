@@ -247,6 +247,51 @@ const SETTINGS_SCHEMA = [
     default: 6, min: 0, max: 10000,
   },
   {
+    key: 'followup_max', label: 'Most follow-ups a person may use', unit: 'follow-ups (0 = none)', group: 'Email engine',
+    description: 'Each person chooses how many follow-ups to send after the first email. This is the most they may choose. Chains already scheduled keep what they had.',
+    default: 5, min: 0, max: 5,
+  },
+  {
+    key: 'finder_max_saved_searches', label: 'Lead Finder: saved searches each person may keep', unit: 'searches', group: 'Lead Finder',
+    description: 'How many saved searches one person may have at a time. They are asked to delete one before saving another.',
+    default: 20, min: 1, max: 500,
+  },
+  {
+    key: 'finder_max_contacts_per_lead', label: 'Lead Finder: most contacts added to one lead', unit: 'contacts', group: 'Lead Finder',
+    description: 'How many people can be added as contacts when a company is accepted as a lead.',
+    default: 3, min: 1, max: 20,
+  },
+  {
+    key: 'finder_max_jobs_per_lead', label: 'Lead Finder: most jobs put on one lead or email', unit: 'jobs', group: 'Lead Finder',
+    description: 'How many open jobs one lead (or one email to a contact) may carry: the first is the main job, the rest are kept as "also hiring".',
+    default: 5, min: 1, max: 25,
+  },
+  {
+    key: 'finder_max_titles', label: 'Lead Finder: most job titles in one search', unit: 'titles', group: 'Lead Finder',
+    description: 'How many job titles one saved search may look for.',
+    default: 40, min: 1, max: 200,
+  },
+  {
+    key: 'finder_max_places', label: 'Lead Finder: most places in one search', unit: 'places', group: 'Lead Finder',
+    description: 'How many cities, states or "remote" entries one saved search may cover.',
+    default: 8, min: 1, max: 50,
+  },
+  {
+    key: 'finder_max_companies', label: 'Lead Finder: most named companies in one search', unit: 'companies', group: 'Lead Finder',
+    description: 'How many companies, chosen by name or website, one saved search may be limited to.',
+    default: 30, min: 1, max: 200,
+  },
+  {
+    key: 'finder_max_sectors', label: 'Lead Finder: most industries in one search', unit: 'industries', group: 'Lead Finder',
+    description: 'How many industries one saved search may combine.',
+    default: 8, min: 1, max: 30,
+  },
+  {
+    key: 'finder_max_keywords', label: 'Lead Finder: most keywords in one search', unit: 'keywords', group: 'Lead Finder',
+    description: 'How many extra keywords one saved search may carry.',
+    default: 8, min: 1, max: 50,
+  },
+  {
     key: 'finder_jsearch_requests_per_run', label: 'Lead Finder: most free-source requests one search run may make', unit: 'requests (0 = off)', group: 'Lead Finder',
     description: 'One request looks up one job title in one place and brings up to 10 jobs. A search with more titles or places than this is covered over several daily runs (a one-off search takes the first ones).',
     default: 3, min: 0, max: 50,

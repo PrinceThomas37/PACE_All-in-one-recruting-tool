@@ -77,6 +77,39 @@ const src = (f) => fs.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
 step('no route or service types a daily-limit number any more', ['routes/auth.js', 'routes/finder.js', 'routes/lead-assign.js', 'routes/ownership-requests.js', 'routes/recruiting/outreach.js', 'routes/candidate-outreach.js', 'services/lead-distribution.js', 'index.js'].every((f) => !/daily_send_limit\s*\|\|\s*(150|300)\b|daily_send_limit:\s*(150|300)\b/.test(src(f))));
 step('the SMTP route holds no try-limit constant', !/TRY_LIMIT\s*=\s*6/.test(src('routes/smtp-mailbox.js')));
 
+// 5. R-202: the older caps are the company's numbers too (D-0124)
+{
+  const lf = require('../services/lead-finder.js');
+  const many = Array.from({ length: 60 }, (_, i) => 'Title ' + i);
+  const def = lf.normalizeSearch({ name: 'x', titles: many, locations: ['TX'] });
+  const small = lf.normalizeSearch({ name: 'x', titles: many, locations: ['TX'] }, { titles: 5 });
+  const big = lf.normalizeSearch({ name: 'x', titles: many, locations: ['TX'] }, { titles: 55 });
+  step('Finder: with no company number a search keeps the built-in 40 titles', def.ok && def.value.titles.length === 40);
+  step('Finder: a company that sets 5 gets 5 — and 55 gets 55 (the code does not cap it)', small.value.titles.length === 5 && big.value.titles.length === 55);
+  const places = Array.from({ length: 12 }, (_, i) => 'City' + i + ', TX');
+  step('Finder: places follow the company number', lf.normalizeSearch({ name: 'x', titles: ['a'], locations: places }, { locations: 11 }).value.locations.length === 11);
+  const comps = Array.from({ length: 40 }, (_, i) => 'site' + i + '.com');
+  step('Finder: named companies follow the company number', lf.normalizeSearch({ name: 'x', titles: ['a'], locations: ['TX'], domains: comps }, { domains: 35 }).value.companies.length === 35);
+
+  const ab = require('../services/ai-budget.js');
+  const capDb = (rows) => ({ from() { return { select() { return this; }, eq(_c, k) { this._k = k; return this; }, async maybeSingle() { return { data: this._k in rows ? { value: rows[this._k] } : null }; } }; } });
+  const rowsC = { ai_daily_token_cap: '1000', 'ai_daily_token_cap@A': '5000' };
+  step('AI ceiling: company A has its own, company B gets the shared one', (await ab.getCaps(capDb(rowsC), 'A')).tokens === 5000 && (await ab.getCaps(capDb(rowsC), 'B')).tokens === 1000);
+  step('AI ceiling: with nothing set anywhere the built-in default applies', (await ab.getCaps(capDb({}), 'A')).tokens === ab.DEFAULT_DAILY_TOKENS);
+
+  const fs2 = require('../services/followup-steps.js');
+  const person = { u_p_fu_count: '4' };
+  const due = (cap) => Object.values(fs2.dueDates(person, 'p', new Date('2026-10-13T00:00:00Z'), cap)).filter(Boolean).length;
+  step('Follow-ups: a person who chose 4 gets 4 when the company allows 5', due(5) === 4 && due(undefined) === 4);
+  step('Follow-ups: the company can hold that to 2, or to none', due(2) === 2 && due(0) === 0);
+}
+{
+  const fsx = await import('node:fs'); const rd = (f) => fsx.readFileSync(new URL('../' + f, import.meta.url), 'utf8');
+  step('Finder routes hold no saved-search / contact / job count constant', !/MAX_SEARCHES/.test(rd('routes/finder.js')) && !/contacts : \[\]\)\.slice\(0, 3\)/.test(rd('routes/finder.js')) && !/positions\.slice\(1, 5\)/.test(rd('routes/finder.js')));
+  step('The pool-capacity fallback no longer types 150', !/capacity \|\| 150/.test(rd('index.js')));
+  step('The Finder\'s search-size numbers are admin settings', ['finder_max_titles', 'finder_max_places', 'finder_max_companies', 'finder_max_sectors', 'finder_max_keywords', 'finder_max_saved_searches', 'finder_max_contacts_per_lead', 'finder_max_jobs_per_lead', 'followup_max'].every((k) => byKey[k]));
+}
+
 const p = results.filter(Boolean).length;
 console.log(`SUMMARY: ${p}/${results.length}`);
 process.exit(p === results.length ? 0 : 1);

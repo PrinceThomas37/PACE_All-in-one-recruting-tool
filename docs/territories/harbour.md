@@ -311,3 +311,6 @@ Send pacing is per organisation: `getBulkSendSettings(orgId)` reads `default_dai
 
 ## 2026-10-13 (Session 44) — D-0124 follow-up
 The send window the send loop obeys is the sending person's ORGANISATION's hours (then their own narrowing, D-0104). A saved company window used to be stored but not read by the loop — fixed.
+
+## 2026-10-13 (Session 44) — D-0125
+Follow-up chains are created with the company's `followup_max` as a ceiling on the person's chosen count (`followup-steps.dueDates(settings, userId, anchor, adminMax)`); chains already scheduled are untouched.

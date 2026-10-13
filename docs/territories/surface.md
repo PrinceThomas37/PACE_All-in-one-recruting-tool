@@ -1362,3 +1362,6 @@ resulting "Ask to take over" modal after clicking through, showing
 
 ## 2026-10-13 (Session 44) — D-0124
 System Settings (`08-page-admin.js`) shows 'Set for your company' or 'Using the shared value' under each number, and a cleared box on a company's own number goes back to the shared one.
+
+## 2026-10-13 (Session 44) — D-0125
+No screen code changed; the new numbers appear in System Settings automatically (the screen is generated from the schema). The follow-up count picker still offers 1–5 — a number above the company's maximum is refused in words by the server.

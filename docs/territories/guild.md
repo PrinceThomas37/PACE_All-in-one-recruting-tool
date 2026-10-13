@@ -814,3 +814,6 @@ Recruiter outreach (`routes/recruiting/outreach.js`) takes the sending mailbox's
 
 ## 2026-10-13 (Session 44) — D-0124
 `routes/recruiting/job-orders.js` reads the company cooldown for the requester's organisation.
+
+## 2026-10-13 (Session 44) — D-0125
+The Finder's accept-as-lead path holds contacts and jobs to the company's numbers (`finder_max_contacts_per_lead`, `finder_max_jobs_per_lead`).

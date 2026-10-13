@@ -3,7 +3,7 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #325 (`ab93353`, Review & send / Send selected). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0124 · contract C-0038 · roadmap `R-203` (next `R-204`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
+**Highest ids:** decision D-0125 · contract C-0038 · roadmap `R-204` (next `R-205`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
 
 ## Now
 
@@ -60,3 +60,5 @@ This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCH
 **Standing rule (D-0123, owner, 12 Oct):** no number that limits a customer is typed into the code — the admin decides (mail counts, AI counts, any count). Mailbox daily limit = `services/daily-limit.js` (admin default, one fallback in `config/limits.js`); new caps go in `SETTINGS_SCHEMA`. Older caps: R-202. Settings are deployment-wide, not per organisation: R-203 (owner's call).
 
 **D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. Migration 063 STILL NOT APPLIED (apply call cancelled twice). R-202 partly open.
+
+**D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063 STILL NOT APPLIED — the apply call is cancelled by the approval step (three times).

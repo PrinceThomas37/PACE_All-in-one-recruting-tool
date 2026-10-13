@@ -1362,7 +1362,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
     if (!hasRole(req, 'admin', 'ra_lead')) return res.status(403).json({ error: 'RA Lead only' });
     const { priority_text, pool_stats, manager_id } = req.body;
     const { data: manager } = await supabase.from('users').select('id,name').eq('id', manager_id).single();
-    const capacity = pool_stats.capacity || 150;
+    const capacity = pool_stats.capacity || pool_stats.total || 0;      // no number typed here: the whole pool unless the caller says fewer
     // No provider configured (or every one of them failing) falls through to
     // buildAutoRatio below — the rules split, which is what runs today.
     // Build dynamic industry keys from what's actually in the pool
@@ -1392,7 +1392,7 @@ app.post('/distribute/generate-ratio', auth, async (req, res) => {
       return res.json({ ...buildAutoRatio(pool_stats, capacity), ai_unusable: true, engine_model: out.model });
     }
     res.json({ ...ratio, engine: 'ai', engine_model: out.model });
-  } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || 150)); }
+  } catch (err) { res.json(buildAutoRatio(req.body.pool_stats, req.body.pool_stats?.capacity || req.body.pool_stats?.total || 0)); }
 });
 
 // ── Microsoft Graph threaded send (follow-ups quote prior emails like Gmail/Outlook) ──
@@ -2412,7 +2412,8 @@ app.post('/distribute/execute', auth, async (req, res) => {
     const { data: bdSettings } = await supabase.from('app_settings').select('key,value').in('key', [`u_${manager_id}_fu_count`, ...followupSteps.STEPS.map(t => `u_${manager_id}_${t}_day`)]);
     const bdSettingsMap = {};
     (bdSettings || []).forEach(r => { bdSettingsMap[r.key] = r.value; });
-    const fuDueDates = followupSteps.dueDates(bdSettingsMap, manager_id, now);
+    const fuAdminMax = await settingsConfig.getSetting(supabase, 'followup_max', await userOrgId(manager_id) || undefined);   // the company's most (D-0124)
+    const fuDueDates = followupSteps.dueDates(bdSettingsMap, manager_id, now, fuAdminMax);
     const wantsFollowups = Object.values(fuDueDates).some(Boolean);
     const { data: assignedJobs } = await supabase.from('jobs').select('id,sending_email_id,contacts(id,email,email_status)').in('id', jobIds);
     const followUpRows = [];

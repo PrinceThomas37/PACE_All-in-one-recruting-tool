@@ -297,7 +297,7 @@ async function availability(supabase, { feature, orgId } = {}) {
   try {
     const limits = budget.featureLimits(feature);
     const estimated = limits.in + limits.out + REASONING_HEADROOM;
-    const verdict = budget.checkBudget(await budget.getSpend(supabase, orgId), estimated, await budget.getCaps(supabase));
+    const verdict = budget.checkBudget(await budget.getSpend(supabase, orgId), estimated, await budget.getCaps(supabase, orgId));
     if (!verdict.allowed) return { available: false, reason: 'daily_limit' };
   } catch (_) { /* a meter that cannot be read does not block */ }
   return { available: true, reason: null };
@@ -456,7 +456,7 @@ async function complete(supabase, opts = {}) {
   const estimated = budget.estimateTokens(system) + budget.estimateTokens(prompt)
                   + maxTokens + REASONING_HEADROOM;
   const spent = await budget.getSpend(supabase, opts.orgId);
-  const verdict = budget.checkBudget(spent, estimated, await budget.getCaps(supabase));
+  const verdict = budget.checkBudget(spent, estimated, await budget.getCaps(supabase, opts.orgId));
   if (!verdict.allowed) {
     // Not an error, and not a provider problem: today's allowance is spent, so
     // the feature writes with its rules until tomorrow.

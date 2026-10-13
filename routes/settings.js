@@ -171,7 +171,10 @@ router.post('/outreach-plan', auth, async (req, res) => {
     // Follow-up 1 / 2: a reply in the first email's thread ('same', the default) or a new email with its own subject ('new').
     if (/^fu[1-5]_thread$/.test(key) && !['same', 'new'].includes(String(value))) return res.status(400).json({ error: 'Choose "same" or "new".' });
     // How many follow-ups (0–5) and the day of each (1–90, whole days after the first email) — services/followup-steps.js.
-    if (key === 'fu_count' && !(Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= followupSteps.MAX)) return res.status(400).json({ error: `Choose 0 to ${followupSteps.MAX} follow-ups.` });
+    if (key === 'fu_count') {
+      const most = Math.min(followupSteps.MAX, await numberSettings.getSetting(supabase, 'followup_max', orgOf(req)));      // the company's most (D-0124)
+      if (!(Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= most)) return res.status(400).json({ error: most > 0 ? `Choose 0 to ${most} follow-ups.` : 'Your company has switched follow-ups off.' });
+    }
     if (/^fu[1-5]_day$/.test(key) && !(Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 90)) return res.status(400).json({ error: 'Choose a whole number of days, 1 to 90.' });
     const fullKey = `u_${uid}_${key}`;
     const { error } = await supabase.from('app_settings').upsert({ key: fullKey, value: String(value), updated_at: new Date() }, { onConflict: 'key' });

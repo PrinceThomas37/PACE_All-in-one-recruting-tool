@@ -6791,3 +6791,8 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 
 ### SESSION 44, D-0124 follow-up: sending hours follow the organisation
 - The full suite caught what my targeted runs missed: sending hours an admin saved were stored under their company, but the send loop and My Setup still read the shared value, so a saved window would have been ignored. `getSendWindowHours(orgId)` / `getPersonSendWindow(userId, orgId)` now take the organisation (looked up from the person when not given); `routes/emails.js` and `routes/my-setup.js` pass it. `send-hours-smoke` fake now answers a multi-key read. Full Node 22 + Node 26 re-run in progress when this was written.
+
+### SESSION 44, R-202: the older caps become admin settings (D-0125)
+- AI daily ceilings per company (`services/ai-budget.js getCaps(supabase, orgId)`; the Integrations screen now reads/writes the caller's company). Finder: search size, saved searches, contacts per lead, jobs per lead (`config/settings.js`, `routes/finder.js`, `services/lead-finder.js normalizeSearch(input, caps)`). `followup_max` holds a person's own follow-up count (`followup-steps.dueDates(…, adminMax)`, `/outreach-plan`). Pool-capacity fallback: whole pool, no typed number.
+- Left on purpose and recorded: plan limits (vendor data), text lengths, server timeouts, the generator's personal meter; look-back days are R-204.
+- Migration 063: apply cancelled a third time after an explicit owner yes. Not applied, not worked around.

@@ -698,3 +698,6 @@ The sandbox cannot reach openrouter.ai, so the real list has not been seen here
 
 ## 2026-10-13 (Session 44) — D-0124
 Client-intelligence AI-per-person limit and the on/off switches are read per organisation (`routes/client-intel.js`).
+
+## 2026-10-13 (Session 44) — D-0125
+`services/ai-budget.js getCaps(supabase, orgId)`: the company's own ceiling (`ai_daily_token_cap@<org>`), else the shared one, else the default; both `ai-provider.js` checks pass the org. `POST /admin/ai-budget` writes the caller's company; blank goes back to the shared value.

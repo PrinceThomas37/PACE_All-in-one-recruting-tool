@@ -45,7 +45,6 @@ const { annotateContactEmailStatus, emailSyntaxValid } = require('../email-valid
 const { createDb } = require('../models');
 
 const ADDERS = ['admin', 'bd', 'bd_lead', 'ra', 'ra_lead', 'director', 'associate_director'];
-const MAX_SEARCHES = 20;
 const RERUN_GAP_MS = 60 * 1000;
 const DEFAULT_PEOPLE_TITLES = ['HR Manager', 'Human Resources', 'Talent Acquisition', 'Recruiter', 'Hiring Manager', 'Operations Manager', 'General Manager', 'Director', 'Owner', 'President'];
 
@@ -67,6 +66,8 @@ module.exports = (ctx) => {
   }
   const readCount = async (key) => { const n = Number(await readSetting(key)); return Number.isFinite(n) && n > 0 ? n : 0; };
   const orgOf = (req) => (req && (req.orgId || (req.user && req.user.org_id))) || null;
+  // How big one saved search may be — this company's numbers (D-0124).
+  const searchCaps = async (orgId) => { const [titles, locations, domains, sectors, keywords] = await Promise.all(['finder_max_titles', 'finder_max_places', 'finder_max_companies', 'finder_max_sectors', 'finder_max_keywords'].map((k) => num(k, orgId))); return { titles, locations, domains, sectors, keywords }; };
   const num = (key, orgId) => settings.getSetting(supabase, key, orgId || undefined);   // one organisation's number (D-0124)
 
   async function accessOf(req) {
@@ -411,11 +412,12 @@ module.exports = (ctx) => {
   router.post('/finder/searches', auth, async (req, res) => {
     try {
       if (!(await needAccess(req, res))) return;
-      const v = finder.normalizeSearch(req.body);
+      const v = finder.normalizeSearch(req.body, await searchCaps(orgOf(req)));
       if (!v.ok) return res.status(400).json({ error: v.error });
       const have = await mine(req);
       if (have.error) throw have.error;
-      if ((have.data || []).length >= MAX_SEARCHES) return res.status(400).json({ error: 'You can keep ' + MAX_SEARCHES + ' saved searches. Delete one first.' });
+      const maxSearches = await num('finder_max_saved_searches', orgOf(req));
+      if ((have.data || []).length >= maxSearches) return res.status(400).json({ error: 'You can keep ' + maxSearches + ' saved searches. Delete one first.' });
       const { data, error } = await db.forRequest(req).from('finder_searches').insert(Object.assign({ user_id: req.user.id }, v.value)).select().single();
       if (error) throw error;
       res.status(201).json(data);
@@ -425,7 +427,7 @@ module.exports = (ctx) => {
   router.put('/finder/searches/:id', auth, async (req, res) => {
     try {
       if (!(await needAccess(req, res))) return;
-      const v = finder.normalizeSearch(req.body);
+      const v = finder.normalizeSearch(req.body, await searchCaps(orgOf(req)));
       if (!v.ok) return res.status(400).json({ error: v.error });
       const { data, error } = await db.forRequest(req).from('finder_searches').update(Object.assign({}, v.value, { updated_at: clock() }))
         .eq('id', req.params.id).eq('user_id', req.user.id).is('deleted_at', null).select().maybeSingle();
@@ -511,7 +513,7 @@ module.exports = (ctx) => {
   router.post('/finder/find', auth, async (req, res) => {
     try {
       const access = await needAccess(req, res); if (!access) return;
-      const v = finder.normalizeSearch(Object.assign({}, req.body, { name: 'One-off search' }));
+      const v = finder.normalizeSearch(Object.assign({}, req.body, { name: 'One-off search' }), await searchCaps(orgOf(req)));
       if (!v.ok) return res.status(400).json({ error: v.error });
       const now = clock(), orgId = orgOf(req), scoped = db.forRequest(req);
       const prev = lastFind.get(req.user.id);
@@ -800,17 +802,17 @@ module.exports = (ctx) => {
       if (!card || card.status !== 'new') return res.status(404).json({ error: 'Card not found' });
       const co = (card.payload && card.payload.company) || {};
       const b = req.body || {};
-      // One or more jobs (up to 5): the first is the lead's main job, the rest are kept on it as "also hiring".
+      // One or more jobs (up to the company's number, default 5): the first is the lead's main job, the rest are kept on it as "also hiring".
       const positions = [];
       [].concat(Array.isArray(b.positions) ? b.positions : [], b.position ? [b.position] : []).forEach((t) => {
         const v = String(t || '').trim().slice(0, 200);
         if (v && !positions.some((x) => x.toLowerCase() === v.toLowerCase())) positions.push(v);
       });
       if (!positions.length) return res.status(400).json({ error: 'Pick the job this lead is for.' });
-      const position = positions[0], alsoHiring = positions.slice(1, 5);
+      const position = positions[0], alsoHiring = positions.slice(1, await num('finder_max_jobs_per_lead', orgOf(req)));
 
-      // Contacts: up to 3, each with a verified/typed email. People revealed on this card are taken from the card, never from the browser.
-      const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 3);
+      // Contacts: up to the company's number (default 3), each with a verified/typed email. People revealed on this card are taken from the card, never from the browser.
+      const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, await num('finder_max_contacts_per_lead', orgOf(req)));
       const rawContacts = [];
       for (const c of picked) {
         if (c && c.person_id) {
@@ -920,7 +922,7 @@ module.exports = (ctx) => {
         if (v && !positions.some((x) => x.toLowerCase() === v.toLowerCase())) positions.push(v);
       });
       if (!positions.length) return res.status(400).json({ error: 'Pick the job this email is about.' });
-      const position = positions[0], alsoHiring = positions.slice(1, 5);
+      const position = positions[0], alsoHiring = positions.slice(1, await num('finder_max_jobs_per_lead', orgOf(req)));
       // The same job at the same company is not "another" — it would write to the same company twice about the same thing.
       const sameCo = await scoped.from('jobs').select('id,position').eq('company_id', lead.company_id).is('deleted_at', null);
       if (sameCo.error) throw sameCo.error;
@@ -928,7 +930,7 @@ module.exports = (ctx) => {
       if (clash) return res.status(409).json({ error: 'There is already a lead for "' + position + '" at this company — pick a different job.', lead_id: clash.id });
 
       // Contacts: people already on the saved lead (copied), people found on the card whose email was revealed, or one typed in.
-      const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 3);
+      const picked = (Array.isArray(b.contacts) ? b.contacts : []).slice(0, await num('finder_max_contacts_per_lead', orgOf(req)));
       const raw = [];
       let own = null;
       for (const c of picked) {

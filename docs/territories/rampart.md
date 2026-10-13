@@ -482,3 +482,6 @@ flows still separate correctly.
 
 ## 2026-10-13 (Session 44) — D-0124 closes R-203 (for requester-path numbers)
 One company's admin can no longer change another's numbers: writes are keyed by the caller's organisation. Background engines still read the shared value. A platform-owner role to edit the shared values from a screen does not exist.
+
+## 2026-10-13 (Session 44) — D-0125
+AI ceilings were shared across companies although usage was per company; now per company (R-203 extended to `ai_daily_*_cap@<org>`).
