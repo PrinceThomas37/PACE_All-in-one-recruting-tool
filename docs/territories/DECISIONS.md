@@ -1944,3 +1944,9 @@ vs template reply rates (Deliverability → variants) say one of them loses.
 **Chosen:** the app takes the website's look (D-0123): morning by default with a night switch, cream cards and ink borders, the pixel logo, the same palette. It is a QUIETER version: pixel display type for the logo and page title only, thinner hard shadows, no sky bands or game words (no coin, press start or player) inside the app, and calm, readable text for the work itself. The six plain-words rules from D-0122 (one aim per screen, clutter put away, small pieces, done means gone, the AI organises and the person decides, a calm look) still shape the screens.
 **Still open:** whether the work text (names, notes, tables) is set in the pixel text font or a plain one; a concept with a visible switch was drawn so the owner can compare.
 **Re-open when:** the owner reviews the drawn app screen.
+
+### D-0125 · 2026-10-13 · STANDS · The app's work text is in pixel letters (closes D-0124's open choice)
+**Their words:** *"Pixel letters"* (answering "the text of the work itself, names, notes, the résumé lined up against the job, in pixel letters or plain ones?").
+**Chosen:** the app uses the website's two fonts throughout: Press Start 2P for the logo and page titles, and Pixelify Sans for everything else, including names, notes and tables. The Pixel/Plain comparison switch was removed from the APP concept.
+**Also asked:** *"You have the address right?"* No. PACE has no web address of its own; the only one is the app's `fute-lms-backend.onrender.com`, named after a customer. Name availability was checked on 13 Oct (GoDaddy lookup, no prices returned, nothing bought) and put to the owner (R-202).
+**Re-open when:** the team finds pixel text tiring over a full day (then plain text for the work only is the fallback).
