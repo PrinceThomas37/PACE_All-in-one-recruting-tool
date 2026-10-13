@@ -1371,3 +1371,7 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-13 (Session 44) — Blocked contacts
 `CONTACT_STATUSES` / `CONTACT_STATUS_LABELS` (01-constants.js) are the one browser list; both contact menus in 06-page-leads.js use it; a refused change resets the menu (`changeEmailStatus` reloads). `{{jobs}}` added to the sequence builder's accepted names (`WF_VARS`), the chip list and `clientJobsText` (03-core-render.js).
+
+## 2026-10-14 (Session 44) — the owner's handwritten notes (D-0128)
+`71-places-data.js` (new, loaded after 70 in index.html): `window.PLACES.suggest(typed, max, skip)` — reference data for the Find Leads place box (US states + cities, India states + cities, Remote). `68-page-finder.js`: `fdPlaceType/Key/Pick/Hide`, a `.fd-sugg` box drawn directly (no repaint); the spinner (`.fd-spin`) is gone, only `.fd-bar` stays. `67-take-leads.js`: `leadTakeSelected(id?)` and `openTakeLeads(ids?)` (window variant for picked ids); `06-page-leads.js`: bulk-bar **Take lead** (BD / BD lead; disabled with a reason when none is Unassigned) and **Take this lead** in `leadExpandHtml`. `59-lead-posting.js`: `leadPostingShow` — an attached posting is read first (`.lxp-read`), Edit inside it.
+

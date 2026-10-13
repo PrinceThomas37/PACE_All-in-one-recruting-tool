@@ -57,6 +57,8 @@ function renderJobs(){
   // Only ticked leads that are in the CURRENT filter count — an action never reaches a lead the person can no longer see on screen.
   var leadSelIds=leadSelectable.filter(function(j){return leadSel[j.id];}).map(function(j){return j.id;});
   var leadSelCount=leadSelIds.length;
+  // How many of the ticked leads are still Unassigned and unowned — the ones "Take lead" can take.
+  var leadTakeN=leadSelectable.filter(function(j){return leadSel[j.id]&&j.stage==='Unassigned'&&!j.assigned_to_bd;}).length;
   var leadSelHidden=Object.keys(leadSel).filter(function(k){return leadSel[k];}).length-leadSelCount;
   var _tp=Math.max(1,Math.ceil(jobs.length/20));
   var _pg=Math.min(STATE.leadsPage||0,_tp-1);
@@ -258,6 +260,7 @@ function renderJobs(){
       '<span style="display:inline-flex;align-items:center;gap:6px"><select id="bulk-stage-sel" class="sel sel-sm" aria-label="Change stage to">'+
         '<option value="">Change stage to…</option>'+bulkStages.map(function(st){return '<option value="'+st+'">'+(st==='Unassigned'?'Unassigned (release to the pool)':st)+'</option>';}).join('')+
       '</select><button class="btn btn-sm btn-outline" onclick="leadBulkStage()">Apply</button></span>'+
+      (userHasAnyRole(u,'bd','bd_lead')?(leadTakeN?'<button class="btn btn-sm btn-primary" onclick="leadTakeSelected()" title="Make the ticked Unassigned leads yours, from your own email IDs">Take '+(leadTakeN===1?'lead':leadTakeN+' leads')+'</button>':'<button class="btn btn-sm btn-outline" disabled title="Only a lead that is still Unassigned can be taken">Take lead</button>'):'')+
       '<button class="btn btn-sm btn-outline" onclick="openAssignLeads()" title="Give the ticked Unassigned leads to yourself or someone on your team">Assign selected</button>'+
       (canSequence?'<button class="btn btn-sm btn-primary" onclick="leadStartSequence()">'+UI.ic('send')+'Sequence selected</button>':'')+
       '<button class="btn btn-sm btn-outline" onclick="leadClearSel()">Clear</button>'+
@@ -468,6 +471,8 @@ function leadExpandHtml(j){
         (leadSafeUrl(j.company_web)?'<a class="ld-link" href="'+escAttr(leadSafeUrl(j.company_web))+'" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">Website ↗</a>':'')+
       '</div>':'')+
       ((j.stage==='Connected'&&userHasAnyRole(STATE.user,'admin','bd','bd_lead'))?'<div style="margin-bottom:8px">'+leadConvertBtn(j,false)+'</div>':'')+
+      // An Unassigned lead can be taken from its own panel (a BD / BD lead): it becomes theirs, in one of their email IDs.
+      ((j.stage==='Unassigned'&&!j.assigned_to_bd&&userHasAnyRole(STATE.user,'bd','bd_lead'))?'<div style="margin-bottom:8px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();leadTakeSelected(\''+j.id+'\')">Take this lead</button></div>':'')+
       '<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();openJob(\''+j.id+'\')">Open full record</button>'+
     '</div>'+
   '</div>';

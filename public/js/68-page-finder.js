@@ -485,8 +485,45 @@
     var list=placesOf(f), max=lim('places_per_search');
     return '<div class="fd-label">Where the job is <span class="fd-hint">'+list.length+(max===Infinity?'':' of '+max)+' '+(list.length===1?'place':'places')+' — add as many states or cities as you like</span></div>'+
       (list.length?'<div class="fd-pills">'+list.map(function(p,i){ return '<span class="fd-chip">'+esc(p)+' <button type="button" class="fd-x" aria-label="Remove '+esc(p)+'" onclick="fdPlaceDrop('+i+')">×</button></span>'; }).join('')+'</div>':'')+
-      '<input id="fd-f-locations" class="inp fd-wide" placeholder="Type a state or city, then press Enter — e.g. Texas, Austin TX, remote" value="'+esc(f.locations)+'" onkeydown="if(event.key===\'Enter\'||event.key===\',\'){event.preventDefault();fdPlaceAdd();}">';
+      '<div class="fd-sugg-wrap"><input id="fd-f-locations" class="inp fd-wide" autocomplete="off" placeholder="Start typing a state or city — e.g. Texas, Austin, remote" value="'+esc(f.locations)+'" '+
+        'oninput="fdPlaceType(this)" onkeydown="fdPlaceKey(event)" onblur="fdPlaceHide()">'+
+        '<div id="fd-place-sugg" class="fd-sugg" role="listbox" hidden></div></div>';
   }
+  // State and city suggestions (71-places-data.js). Typing never repaints the page: the list is drawn straight into its own box.
+  // Pick one with a click, or ↓ / ↑ and Enter; Enter with nothing highlighted still adds exactly what was typed.
+  var placeSug={ list:[], idx:-1 };
+  function drawPlaceSug(){
+    var box=document.getElementById('fd-place-sugg'); if(!box) return;
+    if(!placeSug.list.length){ box.hidden=true; box.innerHTML=''; return; }
+    box.innerHTML=placeSug.list.map(function(p,i){
+      return '<button type="button" role="option" class="fd-sugg-item'+(i===placeSug.idx?' on':'')+'" aria-selected="'+(i===placeSug.idx)+'" onmousedown="event.preventDefault();fdPlacePick('+i+')">'+esc(p.label)+'<span class="fd-sugg-kind">'+(p.kind==='state'?'state':p.kind==='city'?'city':'')+'</span></button>';
+    }).join('');
+    box.hidden=false;
+  }
+  window.fdPlaceType=function(el){
+    var f=curForm(), q=String(el.value||'').trim();
+    placeSug.idx=-1;
+    placeSug.list=(window.PLACES&&q)?window.PLACES.suggest(q,8,(f&&f.places)||[]):[];
+    drawPlaceSug();
+  };
+  window.fdPlaceKey=function(ev){
+    var n=placeSug.list.length;
+    if(ev.key==='ArrowDown'&&n){ ev.preventDefault(); placeSug.idx=(placeSug.idx+1)%n; drawPlaceSug(); }
+    else if(ev.key==='ArrowUp'&&n){ ev.preventDefault(); placeSug.idx=placeSug.idx<=0?n-1:placeSug.idx-1; drawPlaceSug(); }
+    else if(ev.key==='Escape'&&n){ ev.preventDefault(); placeSug.list=[]; drawPlaceSug(); }
+    else if(ev.key==='Enter'&&placeSug.idx>=0){ ev.preventDefault(); fdPlacePick(placeSug.idx); }
+    else if(ev.key==='Enter'||ev.key===','){ ev.preventDefault(); placeSug.list=[]; fdPlaceAdd(); }
+  };
+  window.fdPlaceHide=function(){ placeSug.list=[]; placeSug.idx=-1; drawPlaceSug(); };
+  window.fdPlacePick=function(i){
+    var pick=placeSug.list[i]; if(!pick) return;
+    var f=curForm(); if(!f) return;
+    captureForm();
+    f.places=(f.places||[]).slice();
+    if(!f.places.some(function(x){ return x.toLowerCase()===pick.label.toLowerCase(); })) f.places.push(pick.label);
+    f.locations=''; placeSug={ list:[], idx:-1 }; paint(true);
+    var el=document.getElementById('fd-f-locations'); if(el) el.focus();
+  };
   function bodyOf(f){
     return { source:f.source||'apollo', sectors:f.sectors.slice(), sector:f.sectors[0]||null, titles:f.titles.slice(), locations:placesOf(f), sizes:f.sizes, posted_days:f.posted_days,
              keywords:lines(f.keywords), companies:f.companies, domains:f.companies.map(function(c){ return c.domain; }) };
@@ -972,7 +1009,7 @@
   function searchingBox(){
     if (!F.running) return '';
     var what = F.running==='find' ? 'Finding leads for your search' : (F.running==='all' ? 'Running your saved searches' : 'Running this search');
-    return '<div class="card fd-progress" role="status" aria-live="polite"><div class="fd-row"><span class="fd-spin" aria-hidden="true"></span><strong>'+what+'…</strong></div>'+
+    return '<div class="card fd-progress" role="status" aria-live="polite"><strong>'+what+'…</strong>'+
       '<div class="fd-bar" aria-hidden="true"><span></span></div>'+
       '<div class="fd-hint">This usually takes up to a minute — it looks at the company database and the job sites. Stay on this page; the cards appear here when it is done.</div></div>';
   }

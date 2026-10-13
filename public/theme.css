@@ -840,6 +840,7 @@ tr.row-exp > td > .lx{position:sticky;left:0;box-sizing:border-box;max-width:var
 .lxp-help{font-size:12px;color:var(--text3);margin-top:3px;line-height:1.5}
 .lxp-text{width:100%;min-height:160px;margin-top:8px;resize:vertical;font-size:13px;line-height:1.5}
 .lxp-actions{display:flex;gap:8px;margin-top:8px}
+.lxp-read{white-space:pre-wrap;word-break:break-word;max-height:280px;overflow:auto;font-size:13px;line-height:1.5;color:var(--text)}
 
 /* The mailbox sign-in warning on the dashboard (60-mailbox-alerts.js, R-037).
    One card, amber stripe; drawn only when a mailbox cannot send. */
