@@ -611,10 +611,37 @@ try {
   await page.evaluate(() => window.fdPlaceDrop(1));
   step('a chip\'s × removes that place and leaves the others', (await chips()).join('|') === 'Texas|remote');
 
+  // ── 14 Oct (owner): state and city suggestions in the place box ──────────────────────────────────────────────
+  const allChips = () => page.evaluate(() => [...document.querySelectorAll('#content .fd-chip')].filter(c => c.querySelector('[aria-label^="Remove"]') && c.closest('.fd-pills') && c.closest('.fd-pills').nextElementSibling && c.closest('.fd-pills').nextElementSibling.querySelector('#fd-f-locations')).map(c => c.textContent.replace('×', '').trim()));
+  const sugg = () => page.evaluate(() => { const b = document.getElementById('fd-place-sugg'); return { hidden: !b || b.hidden, items: b ? [...b.querySelectorAll('.fd-sugg-item')].map(x => x.textContent.replace(/(state|city)$/, '').trim()) : [] }; });
+  await page.evaluate(() => { window.__renders = 0; const o = window.render; window.render = function () { window.__renders++; return o.apply(this, arguments); }; const q = window.paintPageContent; window.paintPageContent = function () { window.__renders++; return q.apply(this, arguments); }; });
+  await page.click('#fd-f-locations'); await page.keyboard.type('aus');
+  let sg = await sugg();
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/finder-place-suggestions.png' });
+  step('typing in the place box offers states and cities (Austin, Texas first), under the box', !sg.hidden && sg.items[0] === 'Austin, Texas', sg.items.join(' | '));
+  step('…typing never repaints the page (the box keeps your hand and your place)', await page.evaluate(() => window.__renders === 0 && document.activeElement && document.activeElement.id === 'fd-f-locations'));
+  await page.click('#fd-place-sugg .fd-sugg-item');
+  step('clicking a suggestion adds it as ONE chip, written "Austin, Texas" (the comma does not split it), and empties the box', (await allChips()).join('|') === 'Texas|remote|Austin, Texas' && await page.evaluate(() => document.getElementById('fd-f-locations').value === ''), (await allChips()).join('|'));
+  step('…the list closes, and the box keeps focus so the next place can be typed straight away', (await sugg()).hidden && await page.evaluate(() => document.activeElement && document.activeElement.id === 'fd-f-locations'));
+  await page.keyboard.type('ohi'); sg = await sugg();
+  step('a place already added is not offered again ("tex" shows no Texas)', (await (async () => { await page.fill('#fd-f-locations', ''); await page.keyboard.type('tex'); return (await sugg()).items.includes('Texas'); })()) === false);
+  await page.fill('#fd-f-locations', ''); await page.keyboard.type('ohi'); await page.keyboard.press('ArrowDown');
+  step('↓ highlights the first suggestion', await page.evaluate(() => { const on = document.querySelector('#fd-place-sugg .fd-sugg-item.on'); return !!on && /^Ohio/.test(on.textContent); }));
+  await page.keyboard.press('Enter');
+  step('Enter on a highlighted suggestion adds it (Ohio)', (await allChips()).join('|') === 'Texas|remote|Austin, Texas|Ohio', (await allChips()).join('|'));
+  await page.keyboard.type('Maine metro'); await page.keyboard.press('Enter');
+  step('Enter with nothing highlighted still adds exactly what was typed (a place the list does not know)', (await allChips()).join('|') === 'Texas|remote|Austin, Texas|Ohio|Maine metro', (await allChips()).join('|'));
+  await page.keyboard.type('ker'); await page.keyboard.press('Escape');
+  step('Escape closes the list and keeps what was typed', (await sugg()).hidden && await page.evaluate(() => document.getElementById('fd-f-locations').value === 'ker'));
+  await page.fill('#fd-f-locations', '');
+  while ((await allChips()).length > 2) await page.evaluate(() => window.fdPlaceDrop(2));
+  step('(tidy up) back to Texas and remote for the next steps', (await allChips()).join('|') === 'Texas|remote', (await allChips()).join('|'));
+
   await page.evaluate(() => { window.__holdFind = true; window.fdFindNow(); });
   await page.waitForTimeout(150);
-  const busy = await page.evaluate(() => { const p = document.querySelector('#content .fd-progress'); return { has: !!p, text: p ? p.textContent : '', bar: !!(p && p.querySelector('.fd-bar > span')), anim: p && p.querySelector('.fd-bar > span') ? getComputedStyle(p.querySelector('.fd-bar > span')).animationName : '', btn: [...document.querySelectorAll('#content .btn-primary')].map(b => b.textContent + ':' + b.disabled).join('|') }; });
-  step('while it searches the page SAYS so, with a moving bar and what to expect (so nobody wonders if it froze)', busy.has && /Finding leads for your search/.test(busy.text) && /up to a minute/.test(busy.text) && busy.bar && busy.anim === 'fdSlide', JSON.stringify(busy).slice(0, 220));
+  const busy = await page.evaluate(() => { const p = document.querySelector('#content .fd-progress'); return { has: !!p, text: p ? p.textContent : '', bar: !!(p && p.querySelector('.fd-bar > span')), spin: !!(p && p.querySelector('.fd-spin')), anim: p && p.querySelector('.fd-bar > span') ? getComputedStyle(p.querySelector('.fd-bar > span')).animationName : '', btn: [...document.querySelectorAll('#content .btn-primary')].map(b => b.textContent + ':' + b.disabled).join('|') }; });
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/finder-searching-bar-only.png' });
+  step('while it searches the page SAYS so, with a moving bar and what to expect (so nobody wonders if it froze)', busy.has && /Finding leads for your search/.test(busy.text) && /up to a minute/.test(busy.text) && busy.bar && busy.anim === 'fdSlide' && !busy.spin, JSON.stringify(busy).slice(0, 220));
   step('the button cannot be pressed twice while it works', /Finding….*:true|Finding…:true/.test(busy.btn), busy.btn);
   await page.evaluate(() => { window.__holdFind = false; window.__releaseFind(); });
   await page.waitForTimeout(400);

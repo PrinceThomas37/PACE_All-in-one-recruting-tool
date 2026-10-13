@@ -9,6 +9,9 @@
 //                             not see the pool, only what they are handed)
 //   POST /leads/take {count}  hand me `count` pool leads, spread over MY connected mailboxes by the
 //                             same rule the admin path uses (services/lead-distribution.js)
+//   POST /leads/take {job_ids} take THESE leads (owner, 14 Oct: "when the lead is selected, take lead should be enabled if the lead
+//                             is unassigned") — only ones that are still unowned and that I may see (canSeeLead), the same cap,
+//                             the same mailboxes, the same claim rule
 //
 // Rules, each of which is a thing a person could otherwise get wrong:
 //   * only a BD / BD lead (an admin or RA lead has Assign Leads);
@@ -28,7 +31,7 @@ const tallyKey = (userId, day) => `self_take_${userId}_${day}`;
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, today, withOrg, logActivity, orgIdFor } = ctx;
+  const { supabase, auth, hasRole, today, withOrg, logActivity, orgIdFor, ownership, reportingChainIds } = ctx;
 
   async function readTally(userId, day) {
     try {
@@ -67,7 +70,9 @@ module.exports = (ctx) => {
   router.post('/leads/take', auth, async (req, res) => {
     try {
       if (!hasRole(req, 'bd', 'bd_lead')) return res.status(403).json({ error: 'This is for BD managers — admins and RA leads use Assign Leads.' });
-      const want = Math.floor(Number(req.body && req.body.count));
+      const picked = Array.isArray(req.body && req.body.job_ids) ? [...new Set(req.body.job_ids.map(String))].slice(0, 500) : null;
+      const want = picked ? picked.length : Math.floor(Number(req.body && req.body.count));
+      if (picked && !picked.length) return res.status(400).json({ error: 'Pick the leads to take.' });
       if (!(want >= 1)) return res.status(400).json({ error: 'Say how many leads you want to take (1 or more).' });
       const st = await state(req);
       if (st.cap <= 0) return res.status(403).json({ error: 'Taking leads yourself is switched off. Ask an admin (Admin → System Settings → Leads).' });
@@ -76,14 +81,29 @@ module.exports = (ctx) => {
       const n = Math.min(want, st.remainingCap, st.capacity);
       if (n <= 0) return res.status(400).json({ error: 'None of your mailboxes has room to send today.' });
 
-      // The pool, the same pool Assign Leads draws from: unowned, Unassigned, not a flagged duplicate.
-      const { data: pool, error: pErr } = await withOrg(supabase.from('jobs')
-        .select('id,position,freshness,industry,timezone')
-        .is('deleted_at', null).eq('stage', 'Unassigned').is('assigned_to_bd', null).eq('is_duplicate', false).limit(1000), req);
-      if (pErr) throw pErr;
-      if (!pool || !pool.length) return res.json({ taken: 0, requested: want, empty: true, remaining_today: st.remainingCap, job_ids: [], message: 'There are no unassigned leads in the pool right now.' });
-
-      const chosen = dist.orderPool(pool).slice(0, n);
+      let chosen, skipped = 0;
+      if (picked) {
+        // The leads the person ticked: still Unassigned and unowned, in this company, not a duplicate, and ones they may see —
+        // a BD never reaches a pool lead they could not already see (D-0034). They are taken in the order given.
+        const { data: rows, error: jErr } = await withOrg(supabase.from('jobs')
+          .select('id,created_by,assigned_to,assigned_to_bd,stage,is_duplicate').in('id', picked).is('deleted_at', null), req);
+        if (jErr) throw jErr;
+        const chain = await reportingChainIds(req.user.id, orgIdFor(req));
+        const scope = ownership.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain });
+        const ok = new Map((rows || []).filter(j => j.stage === 'Unassigned' && !j.assigned_to_bd && !j.is_duplicate && ownership.canSeeLead(j, scope)).map(j => [j.id, j]));
+        const eligible = picked.filter(id => ok.has(id)).map(id => ok.get(id));
+        skipped = picked.length - eligible.length;
+        if (!eligible.length) return res.status(400).json({ error: 'None of those leads can be taken — they already have an owner, or you cannot see them.' });
+        chosen = eligible.slice(0, n);
+      } else {
+        // The pool, the same pool Assign Leads draws from: unowned, Unassigned, not a flagged duplicate.
+        const { data: pool, error: pErr } = await withOrg(supabase.from('jobs')
+          .select('id,position,freshness,industry,timezone')
+          .is('deleted_at', null).eq('stage', 'Unassigned').is('assigned_to_bd', null).eq('is_duplicate', false).limit(1000), req);
+        if (pErr) throw pErr;
+        if (!pool || !pool.length) return res.json({ taken: 0, requested: want, empty: true, remaining_today: st.remainingCap, job_ids: [], message: 'There are no unassigned leads in the pool right now.' });
+        chosen = dist.orderPool(pool).slice(0, n);
+      }
       const queue = dist.assignmentQueue(st.mb.accounts, chosen.length);
       const now = new Date();
       const taken = [];
@@ -103,7 +123,8 @@ module.exports = (ctx) => {
       res.json({
         taken: taken.length, requested: want, job_ids: taken,
         remaining_today: dist.dayRemaining(st.cap, st.taken + taken.length),
-        message: taken.length < want ? (taken.length ? `Took ${taken.length} of the ${want} you asked for (${n < want ? 'your daily limit or mailbox room' : 'someone else got the rest first'}).` : 'Someone else was handed those leads a moment ago — try again.') : null,
+        skipped,
+        message: taken.length < want ? (taken.length ? `Took ${taken.length} of the ${want} you asked for (${skipped ? `${skipped} already had an owner or could not be seen${n < want - skipped ? ', and the rest are over your daily limit or mailbox room' : ''}` : n < want ? 'your daily limit or mailbox room' : 'someone else got the rest first'}).` : 'Someone else was handed those leads a moment ago — try again.') : null,
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });

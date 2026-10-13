@@ -173,7 +173,7 @@ step('a person nobody has switched on is told "not enabled" (200, nothing else)'
 r = await call('/finder/searches', 'get', 'ra1');
 step('…and every other finder route refuses them with a plain 403', r.code === 403 && /not switched on/.test(r.out.error));
 r = await call('/finder/access', 'get', 'adm');
-step('an admin is always on (they set it up), with the choices to offer: the industries and three sizes', r.out.enabled && r.out.sectors.length >= 35 && r.out.sizes.length === 3 && r.out.is_admin);
+step('an admin is always on (they set it up), with the choices to offer: the industries and four sizes', r.out.enabled && r.out.sectors.length >= 35 && r.out.sizes.length === 4 && r.out.is_admin);
 r = await call('/finder/admin/users/:id', 'put', 'ra1', { enabled: true }, { id: 'ra1' });
 step('only an admin can switch people on (403 otherwise)', r.code === 403);
 r = await call('/finder/admin/users/:id', 'put', 'adm', { enabled: true, daily: 40 }, { id: 'ra1' });
@@ -713,6 +713,49 @@ const fsBoth = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
 const acme2 = fsBoth.find((c) => c.company_key === 'f'.repeat(24));
 step('Both: Apollo and the free sources are each asked once, and a company they both know is ONE card — Apollo\'s record (size) with the free source\'s jobs on it, so those jobs cost no credit', apollo.calls.filter((c) => c[0] === 'orgs').length === 1 && jsearch.calls.length === 1 && fsBoth.length === 3 && fsBoth.map((c) => c.company_name).sort().join() === 'Acme Manufacturing,Fox Foundry,Gulf Fabrication' && acme2.payload.company.employees === 80 && acme2.postings.length === 2, fsBoth.map((c) => c.company_name).join() + ' | ' + r.out.results[0].note);
 step('every card of ONE run carries the same time — the run\'s — not its own moment (that is what lets a run be shown as a group)', new Set(fsBoth.map((c) => c.created_at)).size === 1 && fsBoth[0].created_at === NOW.toISOString(), fsBoth.map((c) => c.created_at).join(' | '));
+
+// THE SIZE CHOICE IS KEPT (owner, 14 Oct: "even if <10 employee size is selected, big MNCs come up, like 3M and Synopsys"). The free job
+// sources know nothing about a company's size, so a size choice used to be ignored for everything they found.
+console.log('\nThe size choice is kept');
+const SIZEJOBS = () => [
+  { job_title: 'Welder', employer_name: 'Bigco Industries', employer_website: 'https://www.bigco.example', job_publisher: 'LinkedIn', job_apply_link: 'https://www.linkedin.com/jobs/view/9', job_posted_at_datetime_utc: daysAgo(1), job_city: 'Houston', job_state: 'Texas' },
+  { job_title: 'Welder', employer_name: 'Tiny Machine Shop', employer_website: 'https://www.tinyshop.example', job_publisher: 'Indeed', job_apply_link: 'https://www.indeed.com/viewjob?jk=9', job_posted_at_datetime_utc: daysAgo(1), job_city: 'Austin', job_state: 'Texas' },
+  { job_title: 'Welder', employer_name: 'Mystery Fab', employer_website: 'https://www.mysteryfab.example', job_publisher: 'Indeed', job_apply_link: 'https://www.indeed.com/viewjob?jk=10', job_posted_at_datetime_utc: daysAgo(1), job_city: 'Austin', job_state: 'Texas' },
+];
+st.tables.finder_cards.length = 0; jsearch.jobs = SIZEJOBS;
+apollo.orgs = [
+  { id: '1'.repeat(24), name: 'Bigco Industries', primary_domain: 'bigco.example', estimated_num_employees: 90000 },
+  { id: '2'.repeat(24), name: 'Tiny Machine Shop', primary_domain: 'tinyshop.example', estimated_num_employees: 8 },
+];
+tickMin(); apollo.calls.length = 0; jsearch.calls.length = 0;
+const cr0 = Number((st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)) || { value: 0 }).value);
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], sizes: ['micro'], posted_days: 14 });
+const sized = st.tables.finder_cards.filter((c) => c.user_id === 'ra1');
+const askedSize = apollo.calls.filter((c) => c[0] === 'orgs');
+step('free sources + a size: ONE Apollo company search asks the sizes of the companies found, by their websites (one credit, not one per company)', askedSize.length === 1 && askedSize[0][1].filters.q_organization_domains_list.sort().join() === 'bigco.example,mysteryfab.example,tinyshop.example' && !askedSize[0][1].filters.organization_num_employees_ranges, JSON.stringify(askedSize[0] && askedSize[0][1].filters));
+step('…the big company is NOT among the cards, and the answer says how many were left out', !sized.some((c) => c.company_name === 'Bigco Industries') && /1 outside the company size you chose left out/.test(r.out.results[0].note), sized.map((c) => c.company_name).join() + ' | ' + r.out.results[0].note);
+const tinyCard = sized.find((c) => c.company_name === 'Tiny Machine Shop'), mystery = sized.find((c) => c.company_name === 'Mystery Fab');
+step('…the small company stays, now with its size; one whose size nobody knows stays too and SAYS "Size not confirmed" (never guessed to fit)', tinyCard && tinyCard.payload.company.employees === 8 && tinyCard.payload.chips.includes('About 8 staff') && mystery && mystery.payload.chips.includes('Size not confirmed') && mystery.payload.company.employees == null, JSON.stringify(sized.map((c) => c.payload.chips)));
+step('…and the lookup cost one credit', Number(st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)).value) === cr0 + 1);
+
+// no size chosen: nothing is looked up, nothing is left out
+st.tables.finder_cards.length = 0; tickMin(); apollo.calls.length = 0;
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], posted_days: 14 });
+step('with NO size chosen the free sources behave as before: no Apollo call, every company kept', apollo.calls.length === 0 && st.tables.finder_cards.filter((c) => c.user_id === 'ra1').length === 3);
+
+// a size is chosen but Apollo cannot be asked
+st.tables.finder_cards.length = 0; tickMin(); apollo.calls.length = 0;
+const apolloKeyRow2 = st.tables.app_settings.find((x) => x.key === 'int_apollo_api_key'); st.tables.app_settings = st.tables.app_settings.filter((x) => x.key !== 'int_apollo_api_key');
+r = await call('/finder/find', 'post', 'ra1', { source: 'free', titles: ['Welder'], locations: ['Texas'], sizes: ['micro'], posted_days: 14 });
+step('with no Apollo to ask, the size cannot be checked — it says so, and keeps the companies (marked) rather than hiding that the choice was not applied', apollo.calls.length === 0 && /could not be checked/.test(r.out.results[0].note) && st.tables.finder_cards.filter((c) => c.user_id === 'ra1').length === 3 && st.tables.finder_cards.every((c) => c.payload.chips.includes('Size not confirmed')), r.out.results[0].note);
+st.tables.app_settings.push(apolloKeyRow2);
+
+// Apollo's own answer is checked too: a company over the chosen size is dropped even if Apollo sent it
+st.tables.finder_cards.length = 0; tickMin(); apollo.calls.length = 0;
+apollo.orgs = [{ id: '3'.repeat(24), name: 'Giant Foundry', primary_domain: 'giantfoundry.example', estimated_num_employees: 9000 }, { id: '4'.repeat(24), name: 'Small Foundry', primary_domain: 'smallfoundry.example', estimated_num_employees: 30 }];
+r = await call('/finder/find', 'post', 'ra1', { source: 'apollo', titles: ['Welder'], locations: ['Texas'], sizes: ['small'], posted_days: 14 });
+step('Apollo only: a company whose known size is outside the choice is left out even if Apollo returned it', st.tables.finder_cards.filter((c) => c.user_id === 'ra1').map((c) => c.company_name).join() === 'Small Foundry' && /1 outside the company size/.test(r.out.results[0].note), r.out.results[0].note);
+jsearch.jobs = JOBSET;
 
 // Today's cards: the NEWEST RUN first (owner, 8 Oct: "new generated cards first and then the rest of the old cards below"),
 // best match first inside a run.

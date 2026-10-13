@@ -701,3 +701,10 @@ person who has not written their own (R-169).
 - **Find Leads (R-195/196):** places are chips; a progress bar shows while it searches; "Edit this search" on the results changes the same search in place.
 
 - **Blocked contacts:** mark a contact **Blocked** when the address is right but their security team rejects our mail — PACE stops emailing them (and stops follow-ups) without calling the address invalid. (Needs a one-time database update, migration 064, before the menu can save it.)
+
+- **Find Leads keeps your company size (R-210):** pick a size and companies outside it are left out — including ones found through the free job sources, whose size PACE now looks up (one Apollo credit for the whole list). A company whose size cannot be found stays and says "Size not confirmed". New choice: Tiny 1–10.
+- **Place suggestions (R-211):** the "Where the job is" box suggests states and cities (US and India) as you type — click one, or ↓ and Enter. Typing your own still works.
+- **Take lead (R-212):** a BD or BD lead can tick leads that are still Unassigned and press **Take lead**, or open one and press **Take this lead**; it becomes theirs, from their own email IDs, within their daily limit.
+- **Show job description (R-214):** a lead with a job posting attached shows **Show job description** (read it, then Edit if needed) instead of going straight to the editor.
+
+- **Website walkthrough requests become leads (R-216, D-0137; on the branch, not merged):** the "Book a walkthrough" form on paceconsultant.in sends the request into PACE. It becomes a lead in the Unassigned pool (source "Website · walkthrough request") with the person as its contact, plus a reminder, that day, for the organisation's admin saying who asked. The same person asking again goes onto their existing lead. Which organisation receives them is set per deployment (`WEBSITE_LEADS_ORG_ID`). With none set, requests are kept but go into nobody's lead list. If PACE cannot be reached, the visitor is told to email info@paceconsultant.in.

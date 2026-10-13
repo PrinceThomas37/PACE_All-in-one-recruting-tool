@@ -202,6 +202,37 @@ module.exports = (ctx) => {
       if (f.note) notes.push(f.note);
     }
     orgs.splice(0, orgs.length, ...finder.mergeSources(orgs, freeOrgs));
+
+    // THE SIZE CHOICE IS KEPT (owner, 14 Oct: with a small size picked, big companies like 3M and Synopsys still came up). Apollo filters
+    // by size itself, but the free job sources know nothing about a company's size, so a company that came only from them has none.
+    // When a size is chosen, ONE Apollo company search (one credit, not one per company) asks for the sizes of those companies by
+    // their websites; then every company whose known size is outside the choice is left out. A company whose size nobody knows is
+    // kept and says so on its card — it is never guessed to fit.
+    if (finder.sizeRanges(search).length) {
+      const need = orgs.filter((o) => o.source === 'free' && o.employees == null && o.domain);   // Apollo's own rows were already filtered by Apollo; asking again would find nothing new
+      if (need.length) {
+        const why = !key ? 'Apollo is not connected' : (budget.left() < 1 ? 'today\'s Apollo credit limit is used' : '');
+        if (why) notes.push('The size you chose could not be checked for companies found only in the free job sources (' + why + ').');
+        else {
+          const r = await apollo.searchOrganizations({ key, filters: { q_organization_domains_list: need.slice(0, 100).map((o) => o.domain) }, page: 1, perPage: 100 });
+          await noteApollo('finder_company_size', r);
+          if (r.ok) {
+            if ((r.organizations || []).length) await budget.spend(1);
+            const byDomain = new Map();
+            (r.organizations || []).forEach((raw) => { const a = finder.normalizeOrg(raw); if (a.domain && !byDomain.has(a.domain)) byDomain.set(a.domain, a); });
+            need.forEach((o) => {
+              const a = byDomain.get(o.domain); if (!a) return;
+              ['employees', 'revenue', 'growth6', 'growth12', 'industry', 'sic', 'naics', 'founded_year', 'phone', 'linkedin_url', 'address'].forEach((k) => {
+                const have = o[k]; if (have == null || have === '' || (Array.isArray(have) && !have.length)) o[k] = a[k];
+              });
+            });
+          } else notes.push('The size you chose could not be checked for companies found only in the free job sources (' + r.error + ').');
+        }
+      }
+      const sized = finder.applySizeChoice(orgs, search);
+      out.wrongSize = sized.leftOut;
+      orgs.splice(0, orgs.length, ...sized.kept);
+    }
     out.found = orgs.length;
 
     // Leave out staffing firms, then what this person has already seen.
@@ -234,6 +265,7 @@ module.exports = (ctx) => {
     }
     return finish('Found ' + out.found + ' companies hiring. ' + out.cards + ' new card' + (out.cards === 1 ? '' : 's') + (notes.length ? ' ' + notes.join(' ') : '') +
       (out.staffing ? '; ' + out.staffing + ' staffing firm' + (out.staffing === 1 ? '' : 's') + ' left out' : '') +
+      (out.wrongSize ? '; ' + out.wrongSize + ' outside the company size you chose left out' : '') +
       (out.worked ? '; ' + out.worked + ' already in your organisation' : '') + (out.seen ? '; ' + out.seen + ' you have already seen' : '') + '.');
   }
 
