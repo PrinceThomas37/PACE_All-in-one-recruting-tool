@@ -2012,3 +2012,31 @@ vs template reply rates (Deliverability → variants) say one of them loses.
 5. *Animation.* "The animation in finding lead has a circular rotating wheel and a running bar — the running bar is enough." → spinner removed, bar kept.
 6. *Job description.* "Instead of Edit job posting in lead, if the JD is attached, show option should be there." → when a posting is attached the row says **Show job description** (read it; Hide; Edit posting inside the view). With none attached it still says Paste the job posting. *My reading of "show option":* a read-only view first — the owner may have meant something else.
 **Re-open when:** the owner meant a different button for 6, or wants unknown-size companies hidden instead of marked.
+
+### D-0136 · 2026-10-13 · STANDS · Website improvements are about PACE's features and workflows, not games (R-215)
+**Their words:** *"now how can we improve the site design, add animations and elements and make it interactive. Do not think in game perspective, think in features and workflow perspective"*
+**Chosen:** every animation and interactive element on the public site demonstrates something PACE actually does, in the order a staffing firm does it. Motion explains a step (a reply moving into its pile, a finished person leaving the list, a record lighting up its stage); there are no decorative effects and no game devices. Each demo shows only what PACE really does: the reply labels are the ones PACE's own sorting rules give, and the candidate answer page, the candidate send window and the recruiter-to-BDM rule are taken from the code.
+**Re-open when:** the owner reviews the interactive draft.
+
+### D-0137 · 2026-10-13 · STANDS · Yearly prices in whole dollars; website walkthrough requests land in PACE as leads (R-215, R-216)
+**Their words:** *"Would you rather have round numbers? Yes"* and, on "make each request land in PACE as a new lead instead. Do you want that?": *"Yes"*.
+**Chosen:** (1) The yearly price is 20% off rounded to whole dollars a month: Start $79 ($948 a year), Pro $239 ($2,868), Max $479 ($5,748). Monthly stays $99 / $299 / $599. (2) The website's "Book a walkthrough" form no longer opens the visitor's email app. It sends the request to the app, which keeps it and makes a lead in the Unassigned pool (source "Website · walkthrough request", the person as its contact), plus a reminder, due that day, for the organisation's longest-standing admin that says who asked. The same email asking again makes no second lead. If the app cannot be reached, the visitor is told plainly to email info@paceconsultant.in, and nothing claims the request was sent.
+**My call, not the owner's (flagged to them):** which organisation's lead list receives these is set per deployment (`WEBSITE_LEADS_ORG_ID` in Render). It is NOT defaulted to the first organisation, because that one is a customer's (Fute Global), and PACE's prospects (other staffing firms) must not land in a customer's pool. With nothing set, requests are kept in the app but nobody's lead list gets them.
+**Open:** which organisation (asked 13 Oct). The site must not be published with the new form until that is set.
+**Re-open when:** the owner answers, or a customer asks for the same form on their own site.
+
+### D-0138 · 2026-10-13 · STANDS · Merge the website now; until an organisation is chosen, the booking form falls back to email (R-215, R-216)
+**Their words:** *"okay merge it"* (after being asked which organisation inside PACE should receive website requests; that question was not answered).
+**Chosen:** merged on the owner's go. My call, so the merge loses nothing: the app answers "ok" ONLY when a request reached a lead list somebody works. Until `WEBSITE_LEADS_ORG_ID` is set (or if the lead cannot be made), the request is still kept, and the visitor is told plainly to email info@paceconsultant.in, with a link that opens their email app. That is no worse than the old form. The page never says "sent" for a request nobody will see.
+**Open:** which organisation (A, a company inside PACE for PACE itself, recommended; or B, Fute Global's lead list). Then the owner sets `WEBSITE_LEADS_ORG_ID` in Render, with no code change.
+**Re-open when:** the owner answers.
+
+### D-0139 · 2026-10-13 · STANDS · Website requests go to a company inside PACE for PACE itself, signed in as info@paceconsultant.in (R-216; answers D-0138's open question)
+**Their words:** on "B. Fute Global's lead list": *"No"*; on "A. A separate company inside PACE, for PACE itself": *"A. info@paceconsultant.in"*.
+**Done on the live database the same day, on that answer:**
+- an organisation **PACE** (`92cf97db-d216-483a-8cc4-7ecae575415b`, kind and plan `internal`);
+- a sign-in for **info@paceconsultant.in** in it (`75731aa6-7095-429d-9e93-2130c83ecab5`).
+
+Two organisations already existed, so nobody is signed out by a third. info@ is a GoDaddy mailbox, so it signs in with a password; the owner changes the temporary one on first sign-in. It is not stored in the repo.
+**Owner to do:** set `WEBSITE_LEADS_ORG_ID` to that organisation id in Render.
+**Re-open when:** PACE takes on its own sales team, or the owner wants these leads under a different login.

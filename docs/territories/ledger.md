@@ -171,3 +171,10 @@
 
 ## 2026-10-08 (Session 42) — (D-0104) nothing new in the plans; note
 - The signature logo is a public image address; it carries no tracking and no per-recipient data. The daily sending number stays an admin's (a person cannot raise their own).
+
+## 2026-10-13 (Session 44) — Website prices and walkthrough requests (D-0137)
+- **Yearly prices on the website** are 20% off, rounded to whole dollars a month: $79 / $239 / $479 ($948 / $2,868 / $5,748 a year). Monthly stays $99 / $299 / $599. `services/plans.js` pricing stays null (payments off); the website is the only place these numbers appear.
+- **`reminder-source.js`** has a new type, `website_request` ("Website").
+- **What a website request stores:** exactly the four fields the privacy page names (name, work email, agency, plan) plus the time. They go in `app_settings` `site_request:<email>`, and in a lead and contact in `WEBSITE_LEADS_ORG_ID`'s org when that is set. The user-agent is deliberately NOT kept.
+- **Privacy page:** it now says the request is saved in PACE rather than "sent to our inbox".
+- **Open:** the privacy page promises 12 months of retention for these requests, and nothing deletes them yet (the old mailto version had the same gap in the inbox). This is a ROADMAP row.

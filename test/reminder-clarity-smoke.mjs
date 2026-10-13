@@ -55,8 +55,9 @@ t('an unresolved sequence degrades to the generic sentence, never a guess', () =
 t('every reminder_type PACE actually writes has an explanation', () => {
   // The four writers: index.js wfReminderExecutor (bd_touch|reminder),
   // routes/recruiting/outreach.js (recruiter_task), routes/contacts.js
-  // (ooo_return), 10-page-modals.js (manual|meeting).
-  for (const type of ['bd_touch', 'reminder', 'recruiter_task', 'ooo_return', 'manual', 'meeting']) {
+  // (ooo_return), 10-page-modals.js (manual|meeting), services/site-requests.js
+  // (website_request).
+  for (const type of ['bd_touch', 'reminder', 'recruiter_task', 'ooo_return', 'manual', 'meeting', 'website_request']) {
     const d = describeReminder({ reminder_type: type });
     assert.ok(d.why && d.why.length > 20, `${type} has no sentence`);
   }

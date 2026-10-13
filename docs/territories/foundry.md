@@ -1247,3 +1247,23 @@ The full suite found the sending-hours regression that targeted runs did not (`s
 
 ## 2026-10-14 (Session 44) — tests for the owner's handwritten notes (D-0135)
 New: `places-smoke` (15), `take-selected-ui-smoke` (18). Extended: `finder-routes-smoke` (184; size-choice block, mutation-checked by turning the filter off), `lead-finder-smoke` (75), `lead-take-smoke` (37; take-by-id, mutation-checked by dropping `canSeeLead`), `finder-page-smoke` (170; place suggestions typed with the real keyboard, no spinner), `lead-intel-ui-smoke` (22; Show job description). A size filter that only works in a fake Apollo that ignores filters proves nothing — the route test's Apollo returns the same rows whatever it is asked, which is exactly why the size check had to move onto what comes back.
+
+## 2026-10-13 (Session 44) — Website walkthrough requests (R-216)
+`site-request-smoke` has 17 checks. It covers:
+- reading the form;
+- keep-first;
+- nothing in any lead list when no org is set;
+- the org-scoped lead, contact and reminder;
+- the oldest admin, found through `roles`;
+- a company reused case-insensitively, within the org only;
+- a repeat, a known contact, and a contact on a deleted lead;
+- ILIKE `_` escaping;
+- an org with no admin;
+- a failure to keep versus a failure after keeping;
+- the route over HTTP, with the env var read per request;
+- the `index.js` wiring.
+
+Mutation-checked: removing the escaping, the deleted-lead check, the no-org guard or the honeypot each fails it. `reminder-clarity-smoke` now lists `website_request`. `company-site-form-smoke` (Chromium) runs the REAL site page against a copy of the route on another origin: the warm-up `/health`, the honeypot, validation, success, a slow first answer, the app being down (it must never say "sent"), the rate-limit sentence, and the yearly prices in whole dollars.
+
+## 2026-10-13 (Session 44) — D-0138 guards
+`site-request-smoke` is now 18 checks and `company-site-form-smoke` 10. They pin that "kept but in nobody's lead list" is a 503, never "ok": both with no organisation set (in the browser, the page must show the email fallback and not "sent") and when the lead insert fails. Mutation-checked: always answering ok fails 2.

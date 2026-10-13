@@ -41,6 +41,7 @@
 //   public/js/10-page-modals.js          → 'manual' | 'meeting'
 //   routes/next-actions.js (D-0020)      → 'manager_prompt'
 //   routes/my-setup.js (D-0104)          → 'setup'
+//   services/site-requests.js (R-216)    → 'website_request'
 const SOURCES = {
   bd_touch: {
     label: 'Sequence step',
@@ -84,6 +85,12 @@ const SOURCES = {
     // D-0104: PACE puts these on a person's own list the first time they sign in, until the thing is done — a mailbox their
     // outreach goes out from, and a sequence of their own. They close by themselves when it is done.
     why: 'PACE added this to get you started: your outreach cannot go out until it is done. It closes by itself once you have done it.'
+  },
+  website_request: {
+    label: 'Website',
+    // R-216 / D-0137: services/site-requests.js puts this on the organisation's first admin's list when somebody
+    // asks for a walkthrough on the website. The note names who asked and their email.
+    why: 'Somebody asked for a walkthrough on the PACE website. Their request is the lead this reminder points to.'
   },
   manager_prompt: {
     label: 'Asked by your manager',

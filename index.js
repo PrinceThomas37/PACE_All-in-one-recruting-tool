@@ -159,6 +159,10 @@ app.use('/cron/tick', createRateLimiter({ name: 'cron', windowMs: 60 * 1000, max
 // is a free enumeration oracle.
 app.use('/auth/signup-request', createRateLimiter({ name: 'signup', windowMs: 60 * 60 * 1000, max: 10 }));
 app.use('/auth/sso/for-domain', createRateLimiter({ name: 'sso-domain', windowMs: 15 * 60 * 1000, max: 60 }));
+// The website's "Book a walkthrough" form (R-216). A person sends it once; five an hour from one address is
+// already a retry loop or a bot, and each one can make a lead and a reminder.
+app.use('/site/walkthrough-request', createRateLimiter({ name: 'site-request', windowMs: 60 * 60 * 1000, max: 5,
+  message: 'Too many requests from here. Please email info@paceconsultant.in.' }));
 
 // The pixel is NOT given a 429 — see routes/tracking.js. A mail client that
 // gets an error instead of an image shows a broken-image box to the recipient,
@@ -3730,6 +3734,8 @@ app.use(require('./routes/distribution')(routeCtx));
 app.use(require('./routes/tracking')(routeCtx));
 // Public, unauthenticated — the candidate-facing apply page.
 app.use(require('./routes/apply')(routeCtx));
+// Public, unauthenticated — the website's walkthrough requests become leads (R-216, services/site-requests.js).
+app.use(require('./routes/site-requests')(routeCtx));
 app.use(require('./routes/lead-sources')(routeCtx));
 app.use(require('./routes/next-actions')(routeCtx));
 app.use(require('./routes/email-history')(routeCtx));

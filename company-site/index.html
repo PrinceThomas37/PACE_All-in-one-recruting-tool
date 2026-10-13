@@ -41,6 +41,7 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--page);color:var(--ink);font:400 19px/1.55 'PACE Text','Pixelify Sans',system-ui,sans-serif;-webkit-text-size-adjust:100%}
 a{color:inherit}
 img{max-width:100%}
+button{font:inherit}
 .wrap{max-width:1200px;margin:0 auto;padding-inline:24px}
 .display{font-family:'Press Start 2P',monospace;font-weight:400}
 .eyebrow{font-size:17px;font-weight:600;letter-spacing:2px;color:var(--eyebrow);margin:0}
@@ -52,10 +53,13 @@ p{margin:0}
 /* buttons: square, ink border, hard shadow; they click, they do not glide */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 20px;border:3px solid #1A1033;background:var(--yellow);color:#1A1033;box-shadow:5px 5px 0 #000;font-family:'Press Start 2P',monospace;font-size:11px;line-height:1.4;text-decoration:none;cursor:pointer;transition:transform 80ms steps(2),box-shadow 80ms steps(2)}
 .btn.ghost{background:transparent;border-color:var(--outline);color:var(--outline)}
+.card .btn.ghost{border-color:#1A1033;color:#1A1033}
 .btn.small{min-height:44px;padding:0 14px;font-size:10px;box-shadow:4px 4px 0 #000}
-@media (hover:hover) and (pointer:fine){.btn:hover{transform:translate(-1px,-1px)}}
-.btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 #000}
+.btn[disabled]{opacity:.45;cursor:default}
+@media (hover:hover) and (pointer:fine){.btn:not([disabled]):hover{transform:translate(-1px,-1px)}}
+.btn:not([disabled]):active{transform:translate(2px,2px);box-shadow:2px 2px 0 #000}
 :focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.card :focus-visible{outline-color:#7A4DE0}
 .card{background:var(--card);color:#1A1033;border:3px solid #1A1033;box-shadow:6px 6px 0 var(--shadow);padding:22px;display:flex;flex-direction:column;gap:12px}
 .card h3{color:#1A1033}
 .card p,.card li{font-size:19px;line-height:1.5;color:#2A1A57}
@@ -66,8 +70,10 @@ nav.bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-bet
 .logo{font-family:'Press Start 2P',monospace;font-size:24px;color:#CDB8FF;text-shadow:2px 2px 0 #7A4DE0,4px 4px 0 #5B3BB0,6px 6px 0 #000;text-decoration:none}
 .links{display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px}
 .links a.l{font-size:19px;font-weight:600;color:var(--nav);text-decoration:none}
+.links a.l[aria-current="true"]{text-decoration:underline;text-decoration-thickness:3px;text-underline-offset:6px}
 @media (hover:hover) and (pointer:fine){.links a.l:hover{text-decoration:underline;text-underline-offset:5px}}
 .switch{display:flex;border:3px solid #1A1033;box-shadow:3px 3px 0 #000}
+#bill{align-self:flex-start}
 .switch button{min-height:38px;padding:0 10px;border:0;background:#FFF6E6;color:#1A1033;font:700 16px 'PACE Text','Pixelify Sans',sans-serif;cursor:pointer}
 .switch button+button{border-left:3px solid #1A1033}
 .switch button[aria-pressed="true"]{background:var(--yellow)}
@@ -77,32 +83,118 @@ nav.bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-bet
 .hero h1{font-size:clamp(22px,3.6vw,36px);line-height:1.45;color:var(--heading);text-shadow:4px 4px 0 var(--h1shadow)}
 .hero .accent{font-size:clamp(24px,2.6vw,30px);line-height:1.25;font-weight:700;color:var(--accent)}
 .row{display:flex;flex-wrap:wrap;gap:16px}
+/* the Today card: a working list, one person at a time */
 .screen{flex:1 1 420px;min-width:0;box-shadow:8px 8px 0 var(--shadow)}
 .screen .head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
 .screen .head .display{font-size:11px;color:#7A4DE0}
+.count{display:inline-block;font-size:17px;font-weight:700}
+.deck{min-height:244px;overflow:hidden}
 .rec{border:3px solid #1A1033;padding:14px;display:flex;flex-direction:column;gap:10px;background:#FFFDF6}
-.rec .r{display:flex;justify-content:space-between;gap:8px;font-size:17px;border-bottom:2px solid #E3D2B4;padding-bottom:6px}
-.rec .r:last-child{border-bottom:0;padding-bottom:0}
+.rec .who{display:flex;justify-content:space-between;gap:8px;font-size:21px;font-weight:700}
+.rec .who span+span{font-size:20px}
+.rec .job{font-size:17px;color:#5A4E7A}
+.rec .r{display:flex;justify-content:space-between;gap:8px;font-size:17px}
+.rec .r+.r{border-top:2px solid #E3D2B4;padding-top:6px}
+.rec .detail{font-size:16px;line-height:1.45;color:#2A1A57;background:#F3E9D2;border:2px dashed #B9A57E;padding:8px 10px}
 .met{font-weight:700;color:var(--met)} .gap{font-weight:700;color:var(--gap)}
 .decide{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.decide span{border:3px solid #1A1033;padding:12px 6px;text-align:center;font-size:16px;font-weight:700;color:#1A1033}
+.decide button{min-height:50px;border:3px solid #1A1033;padding:8px 6px;text-align:center;font:700 16px/1.2 'PACE Text','Pixelify Sans',sans-serif;color:#1A1033;cursor:pointer;box-shadow:3px 3px 0 #1A1033;transition:transform 80ms steps(2),box-shadow 80ms steps(2)}
+.decide .ok{background:#A9C98C} .decide .no{background:#D98A7E} .decide .why{background:#E6BC7A}
+.decide button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #1A1033}
+.decide .why[aria-expanded="true"]{background:#1A1033;color:#FFD36E}
+.hint{font-size:16px!important;color:#5A4E7A!important;min-height:1.5em}
+.clear{border:3px solid #1A1033;background:#FFFDF6;padding:22px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:14px;min-height:244px;justify-content:center}
+.clear .display{font-size:13px;color:#2E7D32}
+@keyframes outR{to{transform:translateX(56px);opacity:0}}
+@keyframes outL{to{transform:translateX(-56px);opacity:0}}
+@keyframes inUp{from{transform:translateY(16px);opacity:0}}
+@keyframes bump{50%{transform:scale(1.18)}}
+.go-r{animation:outR 240ms steps(4) forwards}
+.go-l{animation:outL 240ms steps(4) forwards}
+.come{animation:inUp 240ms steps(4)}
+.bump{animation:bump 240ms steps(2)}
 .horizon{position:relative;height:84px;background:var(--horizon);border-bottom:3px solid #1A1033;overflow:hidden}
 .horizon i{position:absolute;left:50%;bottom:var(--sunpos);width:92px;height:92px;margin-left:-46px;background:var(--sun);border:3px solid #1A1033}
 /* sections */
 section.band{padding-block:88px}
 section.shade{background:var(--alt);border-block:3px solid #1A1033}
-.split{display:flex;flex-wrap:wrap;align-items:center;gap:48px}
-.split>div{flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:20px}
-.crt{background:#0C0820;border:3px solid #1A1033;box-shadow:6px 6px 0 var(--shadow);padding:22px;font-size:19px;line-height:1.7;color:#9EF7A8;background-image:repeating-linear-gradient(180deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px)}
-.crt .display{font-size:10px;line-height:1.6;color:#FFD36E;margin-bottom:14px}
-.crt b{font-weight:400;color:#FFD36E}
-.crt .away{color:#CDB8FF}
-.cursor{display:inline-block;width:9px;height:18px;background:#9EF7A8;margin-left:6px;vertical-align:-3px;animation:blink 1s steps(1) infinite}
-@keyframes blink{50%{opacity:0}}
 .intro{display:flex;flex-direction:column;gap:14px;max-width:760px;margin-bottom:36px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
-.list{font-size:19px;line-height:1.7;color:#2A1A57}
-.dot{display:inline-block;width:12px;height:12px;border:2px solid #1A1033;margin-right:8px}
+/* the reply sorter */
+.crt{background:#0C0820;border:3px solid #1A1033;box-shadow:6px 6px 0 var(--shadow);padding:22px;font-size:19px;line-height:1.7;color:#9EF7A8;background-image:repeating-linear-gradient(180deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px)}
+.crt .display{font-size:10px;line-height:1.6;color:#FFD36E;margin:0}
+.crt .bar2{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.msgs{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px}
+.pile .msgs{grid-template-columns:1fr}
+.msg{display:flex;flex-direction:column;gap:2px;border:2px solid #3A2C6B;background:#140E33;padding:8px 10px;font-size:17px;line-height:1.4;color:#E8DCC6;min-width:0}
+.msg .from{font-size:14px;color:#CDB8FF;letter-spacing:.5px}
+.msg .lab{display:none;align-self:flex-start;font-size:13px;font-weight:700;letter-spacing:1px;padding:1px 6px;margin-top:4px;color:#0C0820;background:#9EF7A8}
+.sorted .msg .lab{display:inline-block}
+.piles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.pile{border:2px dashed #4A3A80;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.pile .ph{font-family:'Press Start 2P',monospace;font-size:10px;line-height:1.6;color:#FFD36E;display:flex;justify-content:space-between;gap:8px}
+.pile .sub{font-size:15px;line-height:1.4;color:#CDB8FF}
+.pile[data-p="later"] .lab{background:#FFD36E}
+.pile[data-p="away"] .msg{opacity:.6}
+.pile[data-p="away"] .lab{background:#CDB8FF}
+.crt .foot{margin-top:16px;color:#FFF6E6;font-size:18px}
+.cursor{display:inline-block;width:9px;height:18px;background:#9EF7A8;margin-left:6px;vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (max-width:860px){.piles{grid-template-columns:1fr}}
+/* outreach: a candidate's email, and the clocks */
+.mail{border:2px solid #1A1033;background:#FFFDF6;padding:12px;display:flex;flex-direction:column;gap:8px}
+.mail .subj{font-size:17px;font-weight:700;color:#1A1033}
+.mail .body{font-size:16px;line-height:1.45;color:#2A1A57}
+.mbtns{display:flex;flex-wrap:wrap;gap:8px}
+.mbtns button{min-height:44px;padding:0 12px;border:2px solid #1A1033;background:#FFF6E6;color:#1A1033;font:700 16px 'PACE Text','Pixelify Sans',sans-serif;cursor:pointer}
+.mbtns .y{background:#A9C98C}
+.mbtns button[aria-pressed="true"]{box-shadow:0 0 0 3px #7A4DE0}
+.page2{border-top:2px dashed #B9A57E;padding-top:8px;display:flex;flex-direction:column;gap:8px}
+.page2 .k{font-size:14px;font-weight:700;letter-spacing:1px;color:#5A4E7A}
+.ans{font-size:17px!important;font-weight:600;color:#1A1033!important;border-left:4px solid #7A4DE0;padding-left:10px;min-height:3em}
+.linkbtn{align-self:flex-start;background:none;border:0;padding:0;min-height:32px;font:600 16px 'PACE Text','Pixelify Sans',sans-serif;color:#5B3BB0;text-decoration:underline;cursor:pointer}
+.tz{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tz li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;border:2px solid #1A1033;background:#FFFDF6;padding:8px 10px}
+.tz .city{font-size:16px;font-weight:700;letter-spacing:1px}
+.tz .time{font-size:16px;color:#5A4E7A}
+.tz .st{grid-row:1/3;grid-column:2;font-size:14px;font-weight:700;letter-spacing:1px;padding:3px 8px;border:2px solid #1A1033;text-align:center}
+.tz .st.now{background:#A9C98C} .tz .st.wait{background:#E6BC7A}
+.small-note{font-size:15px!important;color:#5A4E7A!important}
+/* both halves: the two workflows, one step at a time */
+.tabs{display:none;flex-wrap:wrap;gap:14px;margin-bottom:22px}
+.js .tabs{display:flex}
+.tab{min-height:50px;padding:0 16px;border:3px solid #1A1033;background:#FFF6E6;color:#1A1033;font:700 17px 'PACE Text','Pixelify Sans',sans-serif;letter-spacing:1px;cursor:pointer;box-shadow:4px 4px 0 #000;display:inline-flex;align-items:center;gap:8px}
+.tab[aria-selected="true"]{background:var(--yellow)}
+.dot{display:inline-block;width:12px;height:12px;border:2px solid #1A1033}
+.flow+.flow{margin-top:24px}
+.js .flow+.flow{margin-top:0}
+.flow .fh{font-size:18px;font-weight:700;letter-spacing:2px;color:#1A1033}
+.js .flow .fh{display:none}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;position:relative}
+.step{width:100%;height:100%;min-height:68px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:8px 10px;border:3px solid #1A1033;background:#FFFDF6;color:#1A1033;font:600 16px/1.25 'PACE Text','Pixelify Sans',sans-serif;text-align:left;cursor:pointer}
+.step b{font-family:'Press Start 2P',monospace;font-weight:400;font-size:10px;color:#7A4DE0}
+.step.past{background:#EFE3CB}
+.step[aria-current="step"]{background:#1A1033;color:#FFF6E6}
+.step[aria-current="step"] b{color:#FFD36E}
+.pane{display:flex;flex-direction:column;gap:12px;border-top:2px solid #E3D2B4;padding-top:16px}
+.js .pane:not(.on){display:none}
+.js .pane.on{animation:inUp 200ms steps(3)}
+.pane .n{font-size:15px!important;font-weight:700;letter-spacing:2px;color:#7A4DE0!important}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.two>div{border:2px solid #1A1033;padding:12px;background:#FFFDF6;display:flex;flex-direction:column;gap:4px}
+.two>div.you{background:#FFF0C2}
+.two .k{font-size:14px!important;font-weight:700;letter-spacing:2px;color:#5A4E7A!important}
+.strip{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.strip .k{font-size:14px;font-weight:700;letter-spacing:1px;color:#5A4E7A;margin-right:4px}
+.chip{font-size:14px;font-weight:700;letter-spacing:1px;padding:3px 8px;border:2px solid #C9B791;color:#8A7B5C}
+.chip.lit{border-color:#1A1033;color:#1A1033;background:#A9C98C}
+.chip.now{border-color:#1A1033;color:#1A1033;background:#FFD36E}
+.flownav{display:none;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center}
+.js .flownav{display:flex}
+@media (max-width:760px){
+  .steps{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(136px,1fr);overflow-x:auto;padding-bottom:6px;scroll-snap-type:x proximity}
+  .steps li{scroll-snap-align:start}
+}
 /* plans */
 .price{font-family:'Press Start 2P',monospace;font-size:24px;line-height:1.4;color:#1A1033}
 .price.word{font-size:15px}
@@ -120,8 +212,17 @@ label{display:flex;flex-direction:column;gap:6px;font-size:17px;font-weight:600;
 input,select{font:500 18px 'PACE Text','Pixelify Sans',sans-serif;min-height:48px;padding:0 12px;border:3px solid #1A1033;background:#FFF6E6;color:#1A1033;border-radius:0}
 .formfoot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:center}
 #ok{grid-column:1/-1;text-align:center;color:var(--cta-body);font-size:18px}
+#ok a{color:var(--cta-ink)}
+.hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+.sent{width:100%;max-width:640px;display:flex;flex-direction:column;gap:12px;align-items:center;border:3px solid #1A1033;background:#FFF6E6;color:#1A1033;box-shadow:6px 6px 0 #1A1033;padding:24px 18px}
+.sent .display{font-size:13px;color:#2E7D32}
+.sent p{font-size:19px;line-height:1.5;color:#2A1A57}
+.sent b{overflow-wrap:anywhere}
 footer{border-top:2px solid var(--rule);padding:22px 24px;display:flex;flex-wrap:wrap;justify-content:center;gap:12px 28px;font-size:17px;color:var(--cta-body);background:var(--cta)}
 footer a{color:var(--cta-body)}
+/* things step up into place as you reach them; they are visible the whole time (added by the script) */
+.rv{transform:translateY(18px)}
+.rv.in{transform:none;transition:transform 400ms steps(5)}
 @media (max-width:600px){
   body{font-size:18px}
   .wrap{padding-inline:16px}
@@ -129,9 +230,12 @@ footer a{color:var(--cta-body)}
   .links{gap:10px 16px}
   .hero{padding-block:32px 56px;gap:36px}
   section.band{padding-block:64px}
-  .decide span{font-size:14px;padding:10px 4px}
+  .card{padding:16px}
+  .decide button{font-size:14px;padding:8px 4px}
+  .crt{padding:14px}
+  .msgs{grid-template-columns:1fr}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}.rv{transform:none}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -165,16 +269,23 @@ footer a{color:var(--cta-body)}
       <a class="btn ghost" href="#how">HOW IT WORKS</a>
     </div>
   </div>
-  <div class="card screen" role="img" aria-label="A picture of PACE's Today screen: a candidate lined up against what the job asks, with three answers to choose from">
-    <div class="head"><span class="display">TODAY · WAITING ON YOU</span><span style="font-size:17px;font-weight:700">2 OF 5 DONE</span></div>
-    <div class="rec">
-      <div class="r" style="border:0;padding:0"><span style="font-size:21px;font-weight:700">Priya Raman</span><span style="font-size:20px;font-weight:700">$72/hr</span></div>
-      <div style="font-size:17px;color:#5A4E7A">Senior Java Developer · Northwind Health</div>
-      <div class="r"><span>Java, 8+ years → 9 years</span><span class="met">MET</span></div>
-      <div class="r"><span>Rate up to $75 → asking $72</span><span class="met">MET</span></div>
-      <div class="r"><span>Citizen or green card → H-1B</span><span class="gap">GAP</span></div>
+  <div class="card screen" id="today" role="region" aria-label="Try it: PACE's Today list, one candidate at a time">
+    <div class="head"><span class="display">TODAY · WAITING ON YOU</span><span class="count" id="t-count">2 OF 5 DONE</span></div>
+    <div class="deck" id="t-deck" aria-live="polite">
+      <div class="rec">
+        <div class="who"><span>Priya Raman</span><span>$72/hr</span></div>
+        <div class="job">Senior Java Developer · Northwind Health</div>
+        <div class="r"><span>Java, 8+ years → 9 years</span><span class="met">MET</span></div>
+        <div class="r"><span>Rate up to $75 → asking $72</span><span class="met">MET</span></div>
+        <div class="r"><span>Citizen or green card → H-1B</span><span class="gap">GAP</span></div>
+      </div>
     </div>
-    <div class="decide"><span style="background:#A9C98C">✓ SEND</span><span style="background:#D98A7E">✕ NOT A FIT</span><span style="background:#E6BC7A">? DETAIL</span></div>
+    <div class="decide" id="t-act">
+      <button type="button" class="ok" data-act="send">✓ SEND</button>
+      <button type="button" class="no" data-act="no">✕ NOT A FIT</button>
+      <button type="button" class="why" data-act="why" aria-expanded="false">? DETAIL</button>
+    </div>
+    <p class="hint" id="t-note">Try it. These buttons work.</p>
   </div>
 </div>
 </div>
@@ -183,20 +294,35 @@ footer a{color:var(--cta-body)}
 
 <main>
 <section class="band" id="ai">
-  <div class="wrap split">
-    <div>
+  <div class="wrap">
+    <div class="intro">
       <p class="eyebrow">THE AI</p>
       <h2>IT SORTS.<br>YOU DECIDE.</h2>
-      <p class="lead">PACE reads what comes in, lines it up and puts the noise away, so the next move is easy to see.</p>
-      <p class="lead">The decisions stay yours, and so does the satisfaction of making them.</p>
+      <p class="lead">PACE reads what comes in, lines it up and puts the noise away, so the next move is easy to see. The decisions stay yours, and so does the satisfaction of making them.</p>
     </div>
-    <div class="crt" role="img" aria-label="Example: 47 replies sorted into piles, with 30 automatic replies put away">
-      <div class="display">EXAMPLE · 47 REPLIES OVERNIGHT</div>
-      <div><b>6</b> want to set up a call</div>
-      <div><b>4</b> are asking about rates</div>
-      <div><b>7</b> are not interested</div>
-      <div><b>30</b> out-of-office and automatic replies <span class="away">→ put away</span></div>
-      <div style="margin-top:14px;color:#FFF6E6">3 piles. You choose where to start.<span class="cursor" aria-hidden="true"></span></div>
+    <div class="crt" id="sorter">
+      <div class="bar2">
+        <span class="display" id="s-title">INBOX · 10 REPLIES OVERNIGHT</span>
+        <button type="button" class="btn small" id="s-go">▶ SORT THEM</button>
+      </div>
+      <ul class="msgs" id="s-raw">
+        <li class="msg" data-p="away"><span class="from">Ravi Shah · Ferngate Logistics</span><span>"I'm out of the office until 21 October with limited access to email."</span><span class="lab">OUT OF OFFICE</span></li>
+        <li class="msg" data-p="you"><span class="from">Dana Cole · Northwind Health</span><span>"Happy to chat. Can we set up a call on Thursday?"</span><span class="lab">WANTS TO TALK</span></li>
+        <li class="msg" data-p="away"><span class="from">Tom Becker · Alderbrook Bank</span><span>"Thanks, but we're not interested at the moment."</span><span class="lab">NOT INTERESTED</span></li>
+        <li class="msg" data-p="you"><span class="from">Anita Rao · Kestrelwood Energy</span><span>"What's your bill rate for a senior Java contractor?"</span><span class="lab">ASKED ABOUT RATES</span></li>
+        <li class="msg" data-p="away"><span class="from">Laura Kim · Saltmarsh Retail</span><span>"On vacation until Monday, back on the 20th."</span><span class="lab">OUT OF OFFICE</span></li>
+        <li class="msg" data-p="later"><span class="from">Mike Ortiz · Pinefold Labs</span><span>"I'm not the right person. Try Sam in talent acquisition."</span><span class="lab">POINTED TO SOMEONE ELSE</span></li>
+        <li class="msg" data-p="you"><span class="from">Grace Lin · Quillon Clinics</span><span>"Can you send over two profiles for the QA opening?"</span><span class="lab">ASKED FOR PROFILES</span></li>
+        <li class="msg" data-p="away"><span class="from">Joel Price · Tamberly Insurance</span><span>"Please remove me from your list."</span><span class="lab">ASKED TO STOP · NEVER EMAILED AGAIN</span></li>
+        <li class="msg" data-p="later"><span class="from">Neha Kapoor · Corvid Media</span><span>"Let's revisit this next quarter."</span><span class="lab">CIRCLE BACK LATER</span></li>
+        <li class="msg" data-p="you"><span class="from">Chris Walker · Hollins Ridge Partners</span><span>"Sounds good. Go ahead and send the details."</span><span class="lab">INTERESTED</span></li>
+      </ul>
+      <div class="piles" id="s-piles" hidden>
+        <div class="pile" data-p="you"><div class="ph"><span>NEEDS YOU</span><span data-n>0</span></div><p class="sub">Someone wants a call, a rate or a profile.</p><ul class="msgs"></ul></div>
+        <div class="pile" data-p="later"><div class="ph"><span>LATER</span><span data-n>0</span></div><p class="sub">Come back to these when you choose.</p><ul class="msgs"></ul></div>
+        <div class="pile" data-p="away"><div class="ph"><span>PUT AWAY</span><span data-n>0</span></div><p class="sub">Out of office, not interested, and opt-outs.</p><ul class="msgs"></ul></div>
+      </div>
+      <p class="foot" id="s-foot">In the order they arrived. Press Sort.<span class="cursor" aria-hidden="true"></span></p>
     </div>
   </div>
 </section>
@@ -223,7 +349,31 @@ footer a{color:var(--cta-body)}
       <h2>OUTREACH THAT PROTECTS YOUR NAME.</h2>
     </div>
     <div class="grid">
-      <div class="card"><h3>NEVER PUSHY</h3><p>Every opt-out is honored for good.</p></div>
+      <div class="card" id="answer">
+        <h3>NEVER PUSHY</h3>
+        <p>Candidates answer with one click, and every opt-out is honored for good. Try the email:</p>
+        <div class="mail">
+          <span class="subj">Senior Java Developer, remote</span>
+          <span class="body">Hi Arjun, a healthcare company in Boston needs a Senior Java Developer, up to $75/hr. It looks close to your last two projects.</span>
+          <div class="mbtns"><button type="button" class="y" data-ans="yes" aria-pressed="false">Yes, tell me more</button><button type="button" data-ans="no" aria-pressed="false">Not for me</button></div>
+          <div class="page2" id="ans-more" hidden>
+            <span class="k">THE ANSWER PAGE ASKS ONE MORE THING</span>
+            <div class="mbtns"><button type="button" data-ans="one" aria-pressed="false">Not this one</button><button type="button" data-ans="all" aria-pressed="false">No roles at all</button></div>
+          </div>
+        </div>
+        <p class="ans" id="ans" aria-live="polite">PACE waits for Arjun's answer.</p>
+        <button type="button" class="linkbtn" id="ans-reset" hidden>Start again</button>
+      </div>
+      <div class="card" id="clocks">
+        <h3>THEIR EVENING, NOT YOUR MORNING</h3>
+        <p>Switch it on and candidate emails wait for the candidate's weekday evening or weekend, in their own time zone.</p>
+        <ul class="tz" id="tz">
+          <li data-tz="America/New_York"><span class="city">NEW YORK</span><span class="time">&nbsp;</span><span class="st">&nbsp;</span></li>
+          <li data-tz="Europe/London"><span class="city">LONDON</span><span class="time">&nbsp;</span><span class="st">&nbsp;</span></li>
+          <li data-tz="Asia/Kolkata"><span class="city">BENGALURU</span><span class="time">&nbsp;</span><span class="st">&nbsp;</span></li>
+        </ul>
+        <p class="small-note">Live, from your clock. Weekdays 5 to 9 pm, weekends 9 am to 8 pm.</p>
+      </div>
       <div class="card"><h3>NOTHING LOST</h3><p>Failed sends retry on their own, and you're warned when a mailbox needs reconnecting.</p></div>
     </div>
   </div>
@@ -234,11 +384,47 @@ footer a{color:var(--cta-body)}
     <div class="intro">
       <p class="eyebrow">FOR STAFFING FIRMS</p>
       <h2>BOTH HALVES OF THE BUSINESS. ONE COIN.</h2>
-      <p class="lead">Most tools do one half: a CRM to find clients, or an ATS to fill roles. A staffing firm lives in both, every day.</p>
+      <p class="lead">Most tools do one half: a CRM to find clients, or an ATS to fill roles. A staffing firm lives in both, every day. Walk through each one.</p>
     </div>
-    <div class="grid">
-      <div class="card"><div style="font-size:18px;font-weight:700;letter-spacing:2px;color:#1A1033"><span class="dot" style="background:#E6BC7A" aria-hidden="true"></span>SALES</div><div class="list">Find leads from live job postings<br>Contacts for each company<br>Email outreach from your own mailbox<br>Clients and their open jobs</div></div>
-      <div class="card"><div style="font-size:18px;font-weight:700;letter-spacing:2px;color:#1A1033"><span class="dot" style="background:#CDB8FF" aria-hidden="true"></span>RECRUITING</div><div class="list">Job orders and a public apply link<br>Candidates and résumés<br>Submissions and the pipeline<br>Interviews, offers and placements</div></div>
+    <div class="tabs" role="tablist" aria-label="The two halves">
+      <button type="button" class="tab" role="tab" id="tab-sales" aria-selected="true" aria-controls="flow-sales" data-flow="flow-sales"><span class="dot" style="background:#E6BC7A" aria-hidden="true"></span>SALES · WIN THE CLIENT</button>
+      <button type="button" class="tab" role="tab" id="tab-rec" aria-selected="false" aria-controls="flow-rec" data-flow="flow-rec"><span class="dot" style="background:#CDB8FF" aria-hidden="true"></span>RECRUITING · FILL THE JOB</button>
+    </div>
+
+    <div class="card flow" id="flow-sales" role="tabpanel" aria-labelledby="tab-sales" data-lit="0,1,2,3,4" data-next="flow-rec">
+      <p class="fh"><span class="dot" style="background:#E6BC7A" aria-hidden="true"></span>SALES · WIN THE CLIENT</p>
+      <ol class="steps">
+        <li><button type="button" class="step"><b>1</b>Find who's hiring</button></li>
+        <li><button type="button" class="step"><b>2</b>Find the right person</button></li>
+        <li><button type="button" class="step"><b>3</b>Write from your mailbox</button></li>
+        <li><button type="button" class="step"><b>4</b>Replies, sorted</button></li>
+        <li><button type="button" class="step"><b>5</b>A client, with jobs</button></li>
+      </ol>
+      <div class="pane on"><p class="n">STEP 1 OF 5</p><h3>FIND WHO'S HIRING</h3><div class="two"><div><p class="k">PACE DOES</p><p>Reads live job postings and turns each hiring company into a lead. It shows what it knows and invents nothing.</p></div><div class="you"><p class="k">YOU DO</p><p>Pick the companies worth a call.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 2 OF 5</p><h3>FIND THE RIGHT PERSON</h3><div class="two"><div><p class="k">PACE DOES</p><p>Keeps four people to reach at each company and looks for the missing ones when you ask.</p></div><div class="you"><p class="k">YOU DO</p><p>Accept the right person, or say "not this person" and they are never suggested again.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 3 OF 5</p><h3>WRITE FROM YOUR OWN MAILBOX</h3><div class="two"><div><p class="k">PACE DOES</p><p>Sends your sequence from your own Gmail or Outlook, within the hours and the daily number your admin sets. An AI draft is checked before it can go.</p></div><div class="you"><p class="k">YOU DO</p><p>Write the sequence once, in your own words.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 4 OF 5</p><h3>REPLIES, SORTED</h3><div class="two"><div><p class="k">PACE DOES</p><p>Reads every reply: who wants to talk, who asked about rates, who is out of office. Anyone who asks to stop is never emailed again.</p></div><div class="you"><p class="k">YOU DO</p><p>Choose where to start.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 5 OF 5</p><h3>A CLIENT, WITH JOBS</h3><div class="two"><div><p class="k">PACE DOES</p><p>Keeps the client, its people, its open jobs and every email in one place.</p></div><div class="you"><p class="k">YOU DO</p><p>Take the job order. That is where the other half begins.</p></div></div></div>
+      <div class="strip" aria-hidden="true"><span class="k">THE LEAD:</span><span class="chip">HIRING</span><span class="chip">PERSON FOUND</span><span class="chip">EMAILED</span><span class="chip">REPLIED</span><span class="chip">CLIENT</span></div>
+      <div class="flownav"><button type="button" class="btn ghost small" data-go="prev">◀ BACK</button><button type="button" class="btn small" data-go="next">NEXT ▶</button></div>
+    </div>
+
+    <div class="card flow" id="flow-rec" role="tabpanel" aria-labelledby="tab-rec" data-lit="0,1,2,4,8">
+      <p class="fh"><span class="dot" style="background:#CDB8FF" aria-hidden="true"></span>RECRUITING · FILL THE JOB</p>
+      <ol class="steps">
+        <li><button type="button" class="step"><b>1</b>Take the job order</button></li>
+        <li><button type="button" class="step"><b>2</b>Find people</button></li>
+        <li><button type="button" class="step"><b>3</b>Reach candidates</button></li>
+        <li><button type="button" class="step"><b>4</b>Submit</button></li>
+        <li><button type="button" class="step"><b>5</b>Interview to placement</button></li>
+      </ol>
+      <div class="pane on"><p class="n">STEP 1 OF 5</p><h3>TAKE THE JOB ORDER</h3><div class="two"><div><p class="k">PACE DOES</p><p>Holds the job, the client's contact and what the role asks. One click publishes an apply link, and the client's name never appears on it.</p></div><div class="you"><p class="k">YOU DO</p><p>Decide what matters for the role.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 2 OF 5</p><h3>FIND PEOPLE</h3><div class="two"><div><p class="k">PACE DOES</p><p>Brings in applicants and your own database, and lines each résumé up against what the job asks.</p></div><div class="you"><p class="k">YOU DO</p><p>Pick who to reach.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 3 OF 5</p><h3>REACH CANDIDATES</h3><div class="two"><div><p class="k">PACE DOES</p><p>Writes to them in their evening or weekend if you switch that on. They answer with one button.</p></div><div class="you"><p class="k">YOU DO</p><p>Read the yeses.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 4 OF 5</p><h3>SUBMIT</h3><div class="two"><div><p class="k">PACE DOES</p><p>Moves each person through the stages. A recruiter sends to their BDM, and the BDM sends to the client.</p></div><div class="you"><p class="k">YOU DO</p><p>Make the call on each person.</p></div></div></div>
+      <div class="pane"><p class="n">STEP 5 OF 5</p><h3>INTERVIEW TO PLACEMENT</h3><div class="two"><div><p class="k">PACE DOES</p><p>Sends interview invites with a Teams meeting, then tracks offer, joining and placement, and how long each step took.</p></div><div class="you"><p class="k">YOU DO</p><p>Close it.</p></div></div></div>
+      <div class="strip" aria-hidden="true"><span class="k">THE CANDIDATE:</span><span class="chip">JOB OPEN</span><span class="chip">SOURCED</span><span class="chip">SCREENING</span><span class="chip">TO BDM</span><span class="chip">TO CLIENT</span><span class="chip">INTERVIEW</span><span class="chip">OFFER</span><span class="chip">JOINING</span><span class="chip">PLACED</span></div>
+      <div class="flownav"><button type="button" class="btn ghost small" data-go="prev">◀ BACK</button><button type="button" class="btn small" data-go="next">NEXT ▶</button></div>
     </div>
   </div>
 </section>
@@ -248,11 +434,15 @@ footer a{color:var(--cta-body)}
     <div class="intro">
       <p class="eyebrow">PLANS</p>
       <h2>PICK THE SIZE OF YOUR DESK.</h2>
+      <div class="switch" role="group" aria-label="Pay monthly or yearly" id="bill" hidden>
+        <button type="button" data-bill="month" aria-pressed="true">MONTHLY</button>
+        <button type="button" data-bill="year" aria-pressed="false">YEARLY · SAVE 20%</button>
+      </div>
     </div>
     <div class="grid">
-      <div class="card"><h3>START</h3><div class="price">$99</div><span class="note">per month · save 20% billed yearly</span><ul><li>5 team members</li><li>25 open jobs</li><li>1,000 candidates</li><li>3 mailboxes · 3,000 emails/mo</li></ul><a class="btn ghost small" style="border-color:#1A1033;color:#1A1033" href="#book" data-plan="Start">BOOK A WALKTHROUGH</a></div>
-      <div class="card"><h3>PRO</h3><div class="price">$299</div><span class="note">per month · save 20% billed yearly</span><ul><li>20 team members</li><li>Unlimited jobs</li><li>10,000 candidates</li><li>10 mailboxes · 20,000 emails/mo</li></ul><a class="btn small" href="#book" data-plan="Pro">BOOK A WALKTHROUGH</a></div>
-      <div class="card"><h3>MAX</h3><div class="price">$599</div><span class="note">per month · save 20% billed yearly</span><ul><li>Everything in Pro</li><li>More team members, jobs and mailboxes than Pro</li></ul><a class="btn ghost small" style="border-color:#1A1033;color:#1A1033" href="#book" data-plan="Max">BOOK A WALKTHROUGH</a></div>
+      <div class="card"><h3>START</h3><div class="price" data-m="99">$99</div><span class="note">per month · save 20% billed yearly</span><ul><li>5 team members</li><li>25 open jobs</li><li>1,000 candidates</li><li>3 mailboxes · 3,000 emails/mo</li></ul><a class="btn ghost small" href="#book" data-plan="Start">BOOK A WALKTHROUGH</a></div>
+      <div class="card"><h3>PRO</h3><div class="price" data-m="299">$299</div><span class="note">per month · save 20% billed yearly</span><ul><li>20 team members</li><li>Unlimited jobs</li><li>10,000 candidates</li><li>10 mailboxes · 20,000 emails/mo</li></ul><a class="btn small" href="#book" data-plan="Pro">BOOK A WALKTHROUGH</a></div>
+      <div class="card"><h3>MAX</h3><div class="price" data-m="599">$599</div><span class="note">per month · save 20% billed yearly</span><ul><li>Everything in Pro</li><li>More team members, jobs and mailboxes than Pro</li></ul><a class="btn ghost small" href="#book" data-plan="Max">BOOK A WALKTHROUGH</a></div>
       <div class="card"><h3>ENTERPRISE</h3><div class="price word">TALK TO THE TEAM</div><span class="note">Custom pricing</span><ul><li>Everything in Max</li><li>Limits set for your company</li></ul><a class="btn small" href="#book" data-plan="Enterprise">TALK TO THE TEAM</a></div>
     </div>
   </div>
@@ -264,14 +454,19 @@ footer a{color:var(--cta-body)}
     <p class="display coin">INSERT COIN</p>
     <h2>PLAYER 1, READY?</h2>
     <p class="lead">See PACE with your own jobs. Twenty minutes, on your real roles. We'll reply by email to set a time.</p>
-    <form id="f">
+    <form id="f" data-api="https://app.paceconsultant.in" novalidate>
       <label for="n">Your name<input id="n" required autocomplete="name" placeholder="Priya Menon"></label>
       <label for="e">Work email<input id="e" type="email" required autocomplete="email" placeholder="priya@youragency.com"></label>
       <label for="a">Agency<input id="a" required autocomplete="organization" placeholder="Your agency"></label>
       <label for="p">Plan<select id="p"><option>Not sure yet</option><option>Start</option><option>Pro</option><option>Max</option><option>Enterprise</option></select></label>
-      <div class="formfoot"><button class="btn" type="submit">▶ PRESS START · BOOK A WALKTHROUGH</button></div>
+      <div class="hp" aria-hidden="true"><label for="w">Leave this empty<input id="w" name="website" tabindex="-1" autocomplete="off"></label></div>
+      <div class="formfoot"><button class="btn" type="submit" id="f-go">▶ PRESS START · BOOK A WALKTHROUGH</button></div>
       <p id="ok" role="status" hidden></p>
     </form>
+    <div class="sent" id="sent" role="status" tabindex="-1" hidden>
+      <span class="display">REQUEST SENT</span>
+      <p>Thanks, <span id="sent-name"></span>. The PACE team has your request and will email <b id="sent-email"></b> to set a time.</p>
+    </div>
   </div>
 </section>
 
@@ -286,33 +481,340 @@ footer a{color:var(--cta-body)}
 <script>
 (function(){
   var root = document.documentElement;
-  var buttons = document.querySelectorAll('.switch button');
-  function apply(theme){
-    root.setAttribute('data-theme', theme);
-    buttons.forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-set') === theme)); });
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'night' ? '#130B2B' : '#F2EADB');
-  }
-  apply(root.getAttribute('data-theme') === 'night' ? 'night' : 'morning');
-  buttons.forEach(function(b){
-    b.addEventListener('click', function(){
-      var theme = b.getAttribute('data-set');
-      apply(theme);
-      try { localStorage.setItem('pace-site-theme', theme); } catch (e) {}
+  root.classList.add('js');
+  var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function ms(n){ return reduce ? 0 : n; }
+  function $(id){ return document.getElementById(id); }
+  function all(sel, el){ return Array.prototype.slice.call((el || document).querySelectorAll(sel)); }
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function bump(el){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  // Each piece runs on its own, so one failing never takes the rest of the page with it.
+  function run(name, fn){ try { fn(); } catch (e) { if (window.console) console.warn('PACE site: ' + name, e); } }
+
+  run('theme', function(){
+    var buttons = all('.switch button[data-set]');
+    function apply(theme){
+      root.setAttribute('data-theme', theme);
+      buttons.forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-set') === theme)); });
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', theme === 'night' ? '#130B2B' : '#F2EADB');
+    }
+    apply(root.getAttribute('data-theme') === 'night' ? 'night' : 'morning');
+    buttons.forEach(function(b){
+      b.addEventListener('click', function(){
+        var theme = b.getAttribute('data-set');
+        apply(theme);
+        try { localStorage.setItem('pace-site-theme', theme); } catch (e) {}
+      });
     });
   });
-  document.querySelectorAll('[data-plan]').forEach(function(a){
-    a.addEventListener('click', function(){ document.getElementById('p').value = a.getAttribute('data-plan'); });
+
+  // Today: one candidate at a time. Send or not a fit, and the next one comes up.
+  run('today', function(){
+    var job = 'Senior Java Developer · Northwind Health';
+    var people = [
+      { name: 'Priya Raman', rate: '$72/hr', rows: [['Java, 8+ years → 9 years','MET'],['Rate up to $75 → asking $72','MET'],['Citizen or green card → H-1B','GAP']],
+        why: "Applied through the job's apply link on Monday. Each row puts what the job asks next to what the résumé says." },
+      { name: 'Daniel Okafor', rate: '$70/hr', rows: [['Java, 8+ years → 11 years','MET'],['Rate up to $75 → asking $70','MET'],['Citizen or green card → Green card','MET']],
+        why: 'From your own database, listed under Best matches for this job.' },
+      { name: 'Meera Iyer', rate: '$81/hr', rows: [['Java, 8+ years → 6 years','GAP'],['Rate up to $75 → asking $81','GAP'],['Citizen or green card → Citizen','MET']],
+        why: 'Answered "Yes, tell me more" to your email about this role last night.' }
+    ];
+    var START_DONE = 2, TOTAL = 5;
+    var deck = $('t-deck'), count = $('t-count'), note = $('t-note'), act = $('t-act');
+    var why = act.querySelector('[data-act="why"]');
+    var i = 0, done = START_DONE, busy = false;
+    function card(p){
+      return '<div class="rec come"><div class="who"><span>' + esc(p.name) + '</span><span>' + esc(p.rate) + '</span></div>' +
+        '<div class="job">' + esc(job) + '</div>' +
+        p.rows.map(function(r){ return '<div class="r"><span>' + esc(r[0]) + '</span><span class="' + (r[1] === 'MET' ? 'met' : 'gap') + '">' + r[1] + '</span></div>'; }).join('') +
+        '<div class="detail" hidden>' + esc(p.why) + '</div></div>';
+    }
+    function render(){
+      why.setAttribute('aria-expanded', 'false');
+      if (i >= people.length) {
+        act.hidden = true;
+        deck.innerHTML = '<div class="clear come"><span class="display">ALL CLEAR</span><p>5 of 5 done. Nothing else on this job is waiting on you.</p><button type="button" class="btn small" id="t-again">START OVER</button></div>';
+        $('t-again').addEventListener('click', function(){
+          i = 0; done = START_DONE; act.hidden = false;
+          count.textContent = done + ' OF ' + TOTAL + ' DONE';
+          note.textContent = 'Try it. These buttons work.';
+          render();
+          act.querySelector('button').focus();
+        });
+        return;
+      }
+      deck.innerHTML = card(people[i]);
+    }
+    function decide(kind){
+      if (busy || i >= people.length) return;
+      busy = true;
+      var p = people[i];
+      var rec = deck.querySelector('.rec');
+      if (rec) rec.classList.add(kind === 'send' ? 'go-r' : 'go-l');
+      setTimeout(function(){
+        i++; done++;
+        count.textContent = done + ' OF ' + TOTAL + ' DONE';
+        bump(count);
+        note.textContent = kind === 'send' ? p.name + ' → submitted to your BDM.' : p.name + ': not a fit. Off your list.';
+        render();
+        if (i >= people.length) $('t-again').focus();
+        busy = false;
+      }, ms(240));
+    }
+    act.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if (!b) return;
+      var a = b.getAttribute('data-act');
+      if (a === 'why') {
+        var d = deck.querySelector('.detail'); if (!d) return;
+        d.hidden = !d.hidden;
+        why.setAttribute('aria-expanded', String(!d.hidden));
+      } else decide(a);
+    });
+    render();
+    deck.querySelector('.rec').classList.remove('come');
   });
-  // The booking request opens the visitor's own email app, addressed to info@ (no form service).
-  document.getElementById('f').addEventListener('submit', function(e){
-    e.preventDefault();
-    var v = function(id){ return document.getElementById(id).value.trim(); };
-    var ok = document.getElementById('ok');
-    var body = 'Name: ' + v('n') + '\nWork email: ' + v('e') + '\nAgency: ' + v('a') + '\nPlan: ' + v('p') + '\n\nI would like a 20-minute walkthrough on our own jobs.';
-    location.href = 'mailto:info@paceconsultant.in?subject=' + encodeURIComponent('Walkthrough request: ' + v('a')) + '&body=' + encodeURIComponent(body);
-    ok.textContent = 'Your email app should open with your request. If it does not, write to info@paceconsultant.in.';
-    ok.hidden = false;
+
+  // The AI section: ten replies, sorted into three piles with the labels PACE gives them.
+  run('sorter', function(){
+    var box = $('sorter'), raw = $('s-raw'), piles = $('s-piles'), go = $('s-go'), foot = $('s-foot'), title = $('s-title');
+    var order = all('.msg', raw);
+    var sorted = false;
+    function place(toPiles){
+      var first = order.map(function(el){ return el.getBoundingClientRect(); });
+      if (toPiles) {
+        piles.hidden = false;
+        box.classList.add('sorted');
+        order.forEach(function(el){ piles.querySelector('.pile[data-p="' + el.getAttribute('data-p') + '"] .msgs').appendChild(el); });
+        raw.hidden = true;
+        all('.pile', piles).forEach(function(p){ p.querySelector('[data-n]').textContent = p.querySelectorAll('.msg').length; });
+      } else {
+        order.forEach(function(el){ raw.appendChild(el); });
+        raw.hidden = false;
+        piles.hidden = true;
+        box.classList.remove('sorted');
+      }
+      if (reduce) return;
+      order.forEach(function(el, k){
+        var last = el.getBoundingClientRect();
+        el.style.transition = 'none';
+        el.style.transform = 'translate(' + (first[k].left - last.left) + 'px,' + (first[k].top - last.top) + 'px)';
+      });
+      void box.offsetWidth;
+      order.forEach(function(el, k){
+        el.style.transition = 'transform 480ms steps(6) ' + (k * 70) + 'ms';
+        el.style.transform = '';
+      });
+    }
+    go.addEventListener('click', function(){
+      sorted = !sorted;
+      place(sorted);
+      go.textContent = sorted ? 'UNSORT' : '▶ SORT THEM';
+      title.textContent = sorted ? 'SORTED · 3 PILES' : 'INBOX · 10 REPLIES OVERNIGHT';
+      foot.innerHTML = sorted
+        ? 'PACE sorted them. It answered none of them. You choose where to start.<span class="cursor" aria-hidden="true"></span>'
+        : 'In the order they arrived. Press Sort.<span class="cursor" aria-hidden="true"></span>';
+    });
+  });
+
+  // Never pushy: the candidate's answer, and what PACE does with it.
+  run('answer', function(){
+    var card = $('answer'), more = $('ans-more'), out = $('ans'), reset = $('ans-reset');
+    var said = {
+      yes: 'Arjun is marked Interested and shows up for you as a yes. What happens next is your call.',
+      no: 'Arjun is asked one more thing: this role, or every role?',
+      one: 'Closed for this role only. Arjun can still hear about other roles.',
+      all: "Arjun opted out of all roles. PACE won't email Arjun again."
+    };
+    function press(a){
+      all('[data-ans]', card).forEach(function(b){
+        var k = b.getAttribute('data-ans');
+        b.setAttribute('aria-pressed', String(k === a || (k === 'no' && (a === 'one' || a === 'all'))));
+      });
+      more.hidden = !(a === 'no' || a === 'one' || a === 'all');
+      out.textContent = said[a];
+      reset.hidden = false;
+    }
+    card.addEventListener('click', function(e){
+      var b = e.target.closest('[data-ans]'); if (b) press(b.getAttribute('data-ans'));
+    });
+    reset.addEventListener('click', function(){
+      all('[data-ans]', card).forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+      more.hidden = true; reset.hidden = true;
+      out.textContent = "PACE waits for Arjun's answer.";
+    });
+  });
+
+  // The candidate send window, worked out live for three cities (weekdays 5-9 pm, weekends 9 am-8 pm).
+  run('clocks', function(){
+    var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    function hourLabel(h){ return (h % 12 || 12) + (h < 12 ? ' AM' : ' PM'); }
+    function windowFor(day){ return (day === 0 || day === 6) ? [9, 20] : [17, 21]; }
+    function tick(){
+      var now = new Date();
+      all('#tz li').forEach(function(li){
+        var tz = li.getAttribute('data-tz');
+        var parts = {};
+        new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', hourCycle: 'h23', minute: '2-digit' })
+          .formatToParts(now).forEach(function(p){ parts[p.type] = p.value; });
+        var day = DAYS.indexOf(parts.weekday), h = Number(parts.hour) % 24;
+        var w = windowFor(day), st = li.querySelector('.st');
+        li.querySelector('.time').textContent = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(now);
+        if (h >= w[0] && h < w[1]) { st.textContent = 'SENDS NOW'; st.className = 'st now'; return; }
+        var label;
+        if (h < w[0]) label = hourLabel(w[0]);
+        else { var nd = (day + 1) % 7; label = DAYS[nd].toUpperCase() + ' ' + hourLabel(windowFor(nd)[0]); }
+        st.textContent = 'WAITS · ' + label; st.className = 'st wait';
+      });
+    }
+    tick();
+    setInterval(tick, 30000);
+  });
+
+  // Both halves: tabs, and five steps in each, with the record's place lighting up as you go.
+  run('flows', function(){
+    var tabs = all('.tab');
+    function pick(id, focus){
+      tabs.forEach(function(t){
+        var on = t.getAttribute('data-flow') === id;
+        t.setAttribute('aria-selected', String(on));
+        t.tabIndex = on ? 0 : -1;
+        $(t.getAttribute('data-flow')).hidden = !on;
+        if (on && focus) t.focus();
+      });
+    }
+    tabs.forEach(function(t, k){
+      t.addEventListener('click', function(){ pick(t.getAttribute('data-flow')); });
+      t.addEventListener('keydown', function(e){
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        pick(tabs[(k + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length].getAttribute('data-flow'), true);
+      });
+    });
+    all('.flow').forEach(function(flow){
+      var steps = all('.step', flow), panes = all('.pane', flow), chips = all('.chip', flow);
+      var lit = flow.getAttribute('data-lit').split(',').map(Number);
+      var prev = flow.querySelector('[data-go="prev"]'), next = flow.querySelector('[data-go="next"]');
+      var list = flow.querySelector('.steps');
+      var cur = 0, timers = [];
+      function show(n){
+        cur = n;
+        steps.forEach(function(s, k){
+          if (k === n) s.setAttribute('aria-current', 'step'); else s.removeAttribute('aria-current');
+          s.classList.toggle('past', k < n);
+        });
+        panes.forEach(function(p, k){ p.classList.toggle('on', k === n); });
+        timers.forEach(clearTimeout); timers = [];
+        chips.forEach(function(c){ c.classList.remove('lit', 'now'); });
+        chips.forEach(function(c, k){
+          if (k > lit[n]) return;
+          timers.push(setTimeout(function(){ c.classList.add(k === lit[n] ? 'now' : 'lit'); }, ms(k * 70)));
+        });
+        prev.disabled = n === 0;
+        var last = n === steps.length - 1;
+        next.textContent = !last ? 'NEXT ▶' : (flow.getAttribute('data-next') ? 'NOW FILL THE JOB ▶' : 'FROM THE TOP');
+        if (list.scrollWidth > list.clientWidth) list.scrollTo({ left: steps[n].parentNode.offsetLeft - 8, behavior: reduce ? 'auto' : 'smooth' });
+      }
+      steps.forEach(function(s, k){ s.addEventListener('click', function(){ show(k); }); });
+      prev.addEventListener('click', function(){ if (cur > 0) show(cur - 1); });
+      next.addEventListener('click', function(){
+        if (cur < steps.length - 1) return show(cur + 1);
+        var to = flow.getAttribute('data-next');
+        if (to) { pick(to, true); show(0); } else show(0);
+      });
+      show(0);
+    });
+    pick('flow-sales');
+  });
+
+  // Plans: monthly or yearly. Yearly is 20% off, rounded to whole dollars a month (owner, 13 Oct, D-0137).
+  run('plans', function(){
+    var bill = $('bill');
+    bill.hidden = false;
+    var prices = all('[data-m]');
+    function money(n){ return '$' + n.toLocaleString('en-US'); }
+    bill.addEventListener('click', function(e){
+      var b = e.target.closest('button'); if (!b) return;
+      var yearly = b.getAttribute('data-bill') === 'year';
+      all('button', bill).forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      prices.forEach(function(p){
+        var m = Number(p.getAttribute('data-m'));
+        var note = p.nextElementSibling;
+        var y = Math.round(m * 0.8);
+        if (yearly) { p.textContent = money(y); note.textContent = 'a month, billed yearly (' + money(y * 12) + ')'; }
+        else { p.textContent = money(m); note.textContent = 'per month · save 20% billed yearly'; }
+        bump(p);
+      });
+    });
+  });
+
+  // Things step in as you reach them, and the menu marks where you are.
+  run('reveal', function(){
+    if (reduce || !('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    all('main .intro, main .grid > .card, main .crt, main .tabs, main .flow').forEach(function(el){ el.classList.add('rv'); io.observe(el); });
+  });
+  run('menu', function(){
+    if (!('IntersectionObserver' in window)) return;
+    var links = all('.links a.l[href^="#"]');
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (!en.isIntersecting) return;
+        links.forEach(function(a){ if (en.target.id && a.getAttribute('href') === '#' + en.target.id) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current'); });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    all('.top, section[id]').forEach(function(s){ io.observe(s); });
+  });
+
+  run('booking', function(){
+    all('[data-plan]').forEach(function(a){
+      a.addEventListener('click', function(){ $('p').value = a.getAttribute('data-plan'); });
+    });
+    // The request goes straight into PACE as a lead (R-216). The app is on Render's free plan and sleeps when
+    // idle, so the first touch of the form wakes it, and a slow first answer is said out loud, not mistaken
+    // for a failure. Nothing is ever reported as sent unless the app said it kept it.
+    var form = $('f'), ok = $('ok'), go = $('f-go'), api = form.getAttribute('data-api');
+    var label = go.textContent, woken = false;
+    form.addEventListener('focusin', function(){
+      if (woken) return; woken = true;
+      try { fetch(api + '/health', { mode: 'cors', cache: 'no-store' }).catch(function(){}); } catch (e) {}
+    });
+    function say(html){ ok.innerHTML = html; ok.hidden = false; }
+    function fallback(){
+      var v = function(id){ return $(id).value.trim(); };
+      var body = 'Name: ' + v('n') + '\nWork email: ' + v('e') + '\nAgency: ' + v('a') + '\nPlan: ' + v('p') + '\n\nI would like a 20-minute walkthrough on our own jobs.';
+      var href = 'mailto:info@paceconsultant.in?subject=' + encodeURIComponent('Walkthrough request: ' + v('a')) + '&body=' + encodeURIComponent(body);
+      say('This did not go through. Please email <b>info@paceconsultant.in</b> and we will set a time. <a href="' + esc(href) + '">Open my email app</a>');
+    }
+    form.addEventListener('submit', function(e){
+      e.preventDefault();
+      var v = function(id){ return $(id).value.trim(); };
+      if (!v('n')) { say('Please add your name.'); $('n').focus(); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v('e'))) { say('Please enter a valid work email.'); $('e').focus(); return; }
+      if (!v('a')) { say("Please add your agency's name."); $('a').focus(); return; }
+      go.disabled = true; go.textContent = 'SENDING…'; ok.hidden = true;
+      var slow = setTimeout(function(){ say('Still sending. The first request after a quiet spell can take up to a minute.'); }, 5000);
+      var ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var stop = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 75000);
+      function done(){ clearTimeout(slow); clearTimeout(stop); go.disabled = false; go.textContent = label; }
+      fetch(api + '/site/walkthrough-request', {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'application/json' }, signal: ctrl ? ctrl.signal : undefined,
+        body: JSON.stringify({ name: v('n'), email: v('e'), agency: v('a'), plan: v('p'), website: $('w').value })
+      }).then(function(res){
+        return res.json().catch(function(){ return {}; }).then(function(body){ return { res: res, body: body }; });
+      }).then(function(r){
+        done();
+        if (r.res.ok && r.body && r.body.ok) {
+          $('sent-name').textContent = v('n').split(' ')[0];
+          $('sent-email').textContent = v('e');
+          form.hidden = true; ok.hidden = true;
+          $('sent').hidden = false; $('sent').focus();
+        } else if (r.res.status === 400 && r.body && r.body.error) say(esc(r.body.error));
+        else if (r.res.status === 429 && r.body && r.body.message) say(esc(r.body.message));
+        else fallback();
+      }).catch(function(){ done(); fallback(); });
+    });
   });
 })();
 </script>
