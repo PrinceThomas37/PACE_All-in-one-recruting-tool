@@ -6809,3 +6809,7 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - Pills: the 5-job and 3-contact limits were typed in the browser (and the message was off-screen). Now `F.access.limits` from the server; counter, inline message, dimmed pills, "Show all". Reveal keeps the search's title/first name (`payload.found`).
 - Finder: place chips, progress panel (pure CSS), edit-this-search in place on the results. Multi-job email: `email-vars.js jobsOf/ensureJobsListed`, used by `services/lead-outreach-queue.js`; `test/multi-job-email-smoke.mjs` (14).
 - Every new check was mutation-checked (put the old behaviour back, watch it fail).
+
+### SESSION 44, IN PROGRESS: a "Blocked" email status (owner, 13 Oct)
+- Owner: the email validity menu (Valid / Invalid / Deactivated / Out of office) needs **Blocked** — the address is right but the recipient's security team blocks our mail.
+- Found: `contacts.email_status` has a live CHECK allowing only those four values (read from the live database, read-only), so a new value needs **migration 064** (written, NOT applied; the owner runs it in the SQL editor). Written so far: `services/contact-status.js` (the one definition: blocked = never email, still teaches its domain's format) and `migrations/064_contact_status_blocked.sql`. NOT yet wired: the send loop, follow-ups, bounce sweep, contacts routes, the two menus in `06-page-leads.js`. The code will answer plainly until 064 is applied.
