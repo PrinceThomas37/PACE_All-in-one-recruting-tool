@@ -368,3 +368,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-13 (Session 44) — migration 064 written, not applied
 `contacts.email_status` carries a live CHECK (`contacts_email_status_check`: valid, invalid, deactivated, out_of_office). `migrations/064_contact_status_blocked.sql` widens it with `blocked`. Not applied: the owner runs it in the Supabase SQL editor (the assistant's tool calls to change the live database were cancelled by the session's approval layer). Next migration after it: 065.
+
+## 2026-10-13 (Session 44) — migration 064 (Blocked)
+`064_contact_status_blocked.sql` drops and re-adds `contacts_email_status_check` with `blocked`. WRITTEN, NOT APPLIED (owner runs it in the SQL editor). Existing rows already satisfy it. Next migration: 065.

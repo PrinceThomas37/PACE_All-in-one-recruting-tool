@@ -820,3 +820,6 @@ The Finder's accept-as-lead path holds contacts and jobs to the company's number
 
 ## 2026-10-13 (Session 44) — first email for a lead with several jobs
 `email-vars.js`: `jobsOf(job)` (main + `research.finder.also_hiring`, each once), merge field `{{jobs}}` (synonyms openings/job_list/joblist/positions), `ensureJobsListed(body, template, job)`. `services/lead-outreach-queue.js` calls it; one job = unchanged email.
+
+## 2026-10-13 (Session 44) — Blocked contacts
+Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.js`) skip every never-email status (invalid, deactivated, blocked) through `services/contact-status.js`, so a blocked contact is not offered as a recipient.

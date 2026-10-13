@@ -25,9 +25,9 @@ window.changeEmailStatus=function(cid, newStatus, email, contactName){
   } else {
     // Directly update status
     apiFetch('PATCH','/contacts/'+cid+'/email-status',{email_status:newStatus}).then(function(){
-      showToast(htmlEsc(contactName)+' marked as '+(newStatus==='valid'?'Valid':newStatus),'success');
+      showToast(htmlEsc(contactName)+' marked as '+(CONTACT_STATUS_LABELS[newStatus]||newStatus),'success');
       return refreshJobs();
-    }).catch(function(e){showToast('Failed: '+e.message,'error');});
+    }).catch(function(e){showToast('Failed: '+e.message,'error'); if(typeof refreshJobs==='function')refreshJobs();});   // the menu goes back to what is really saved
   }
 };
 

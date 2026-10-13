@@ -1368,3 +1368,6 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-13 (Session 44) — the window refresh, and the Find Leads screens
 `03-core-render.js`: `patchModalInPlace(layer, html)` — when the open window is the same one (same panel class + same heading) and nothing else in the layer changed, only its inside is rewritten; scroll boxes are put back by tree path, focus is restored without scrolling. A different window, or any other layer change, is written whole as before. `68-page-finder.js`: limits from `F.access.limits` (`lim()`), counter/inline message/dimmed pills/Show all in the Accept window; `placesOf`/chips for places; `searchingBox()` (pure-CSS bar, no timer repaint); `fdEditNow()` + `F.lastFind` on the results; `firstEmailToast`. CSS in `retro.css`: `.fd-pill.is-full`, `.fd-progress`, `.fd-bar`, `.fd-spin`.
+
+## 2026-10-13 (Session 44) — Blocked contacts
+`CONTACT_STATUSES` / `CONTACT_STATUS_LABELS` (01-constants.js) are the one browser list; both contact menus in 06-page-leads.js use it; a refused change resets the menu (`changeEmailStatus` reloads). `{{jobs}}` added to the sequence builder's accepted names (`WF_VARS`), the chip list and `clientJobsText` (03-core-render.js).

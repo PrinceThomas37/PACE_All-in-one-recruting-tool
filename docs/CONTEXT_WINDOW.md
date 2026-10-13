@@ -3,7 +3,7 @@
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
 **Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #326 (`73e381d`, company email setup + app-password mailboxes + admin-set numbers per company; 13 Oct). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0126 · contract C-0038 · roadmap `R-206` (next `R-207`) · next migration `064` (063 and 062 are both APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
+**Highest ids:** decision D-0127 · contract C-0038 · roadmap `R-207` (next `R-208`) · next migration `065` (064 is WRITTEN, not applied; 063 and 062 are both APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
 
 ## Now
 
@@ -66,3 +66,5 @@ This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCH
 **Owner to-do (R-205, 13 Oct):** set a fresh `MAILBOX_SECRET_KEY` on Render, then one live Zoho mailbox test. The key pasted in chat on 13 Oct is burned — do not use it.
 
 **D-0126 (13 Oct):** Find Leads batch (R-194…R-197) built on the dev branch — multi-job bullets email, place chips, progress panel, edit-in-place, window refresh fixed in the engine. R-206 = windows that close-and-reopen still blink.
+
+**D-0127 (13 Oct):** Blocked email status built; migration 064 (widens `contacts_email_status_check`) is written and NOT applied — owner runs it in the SQL editor.

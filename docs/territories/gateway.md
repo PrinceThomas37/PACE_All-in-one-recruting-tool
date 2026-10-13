@@ -1156,3 +1156,6 @@ New admin settings (Lead Finder group + Email engine): `finder_max_titles/places
 
 ## 2026-10-13 (Session 44) — Finder access and reveal
 `GET /finder/access` now returns `limits { jobs_per_lead, contacts_per_lead, places_per_search }`. `POST /finder/cards/:id/people` keeps `payload.found[id] = {first_name, title}`; `/reveal` falls back to it when Apollo's reveal omits them.
+
+## 2026-10-13 (Session 44) — Blocked contacts
+`routes/contacts.js`: the allowed statuses come from `services/contact-status.js`; a database CHECK refusal (23514 / `contacts_email_status_check`) is answered 409 `status_needs_update` in plain words (PUT /contacts/:id and PATCH /contacts/:id/email-status). `routes/recruiting/outreach.js` client-contact suggestions skip never-email statuses.

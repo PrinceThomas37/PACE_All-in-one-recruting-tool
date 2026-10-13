@@ -699,3 +699,5 @@ person who has not written their own (R-169).
 
 - **Several jobs in one email (R-194):** a lead for several jobs writes one email listing every job as bullets — through your own template (`{{jobs}}`) or added after the paragraph naming the main job — and you preview and edit it in Email → Pending before sending.
 - **Find Leads (R-195/196):** places are chips; a progress bar shows while it searches; "Edit this search" on the results changes the same search in place.
+
+- **Blocked contacts:** mark a contact **Blocked** when the address is right but their security team rejects our mail — PACE stops emailing them (and stops follow-ups) without calling the address invalid. (Needs a one-time database update, migration 064, before the menu can save it.)

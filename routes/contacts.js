@@ -22,6 +22,12 @@ const { addLeadContact, duplicateResponse, duplicatePayload } = require('../serv
 const contactPoints = require('../services/contact-points');
 const { classifyEmailDeliverability } = require('../email-validation');
 const { EVENTS, emit } = require('../events');
+const contactStatusRules = require('../services/contact-status');
+
+// The database only accepts the email statuses it was told about (migration 064 added "blocked"). Until that is applied, choosing
+// Blocked is answered in plain words — never as a bare database error.
+const statusRefused = (err) => !!err && (err.code === '23514' || /contacts_email_status_check/.test(String(err.message || '')));
+const STATUS_NEEDS_UPDATE = { error: 'The "Blocked" status needs a one-time database update first (migration 064). Ask whoever looks after PACE to run it, then try again.', code: 'status_needs_update' };
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -100,7 +106,7 @@ router.put('/contacts/:id', auth, async (req, res) => {
       emit(EVENTS.CONTACT_INVALIDATED, { contactId: req.params.id, jobId: existing.job_id, reason: 'manual', actorUserId: req.user.id });
     }
     res.json(data);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { if (statusRefused(err)) return res.status(409).json(STATUS_NEEDS_UPDATE); res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/contacts/:id', auth, async (req, res) => {
@@ -124,7 +130,7 @@ router.patch('/contacts/:id/email-status', auth, async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (!(await canTouchJob(req, existing.job_id))) return res.status(403).json({ error: 'Forbidden' });
     const { email_status, ooo_until } = req.body;
-    const allowed = ['valid','invalid','deactivated','out_of_office'];
+    const allowed = contactStatusRules.STATUSES;
     if (!allowed.includes(email_status)) return res.status(400).json({ error: 'Invalid status' });
     const updates = { email_status, updated_at: new Date() };
     if (email_status === 'out_of_office' && ooo_until) updates.ooo_until = ooo_until;
@@ -140,7 +146,7 @@ router.patch('/contacts/:id/email-status', auth, async (req, res) => {
       emit(EVENTS.CONTACT_INVALIDATED, { contactId: contact.id, jobId: contact.job_id, reason: 'manual', actorUserId: req.user.id });
     }
     res.json(contact);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { if (statusRefused(err)) return res.status(409).json(STATUS_NEEDS_UPDATE); res.status(500).json({ error: err.message }); }
 });
 
   return router;

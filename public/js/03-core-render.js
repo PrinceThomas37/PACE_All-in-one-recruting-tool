@@ -647,6 +647,15 @@ function findJobForLead(l,co){
       ((j.company&&j.company.name)===(co&&co.name)||j.company_name===(co&&co.name));
   })||null;
 }
+// Every job a lead is for: the main job, then the others it was saved with — each once; a bulleted list when there are several.
+function clientJobsText(job,main){
+  var out=[],seen={};
+  var add=function(t){ var v=String(t==null?'':t).replace(/\s+/g,' ').trim(), k=v.toLowerCase(); if(v&&!seen[k]){ seen[k]=1; out.push(v); } };
+  add((job&&job.position)||main);
+  var also=job&&job.research&&job.research.finder&&job.research.finder.also_hiring;
+  (Array.isArray(also)?also:[]).forEach(add);
+  return out.length>1?'\n'+out.map(function(t){ return '\u2022 '+t; }).join('\n'):(out[0]||'');
+}
 function buildClientEmailVars(l,co,sender){
   var job=findJobForLead(l,co);
   var req=(job&&job.research&&job.research.requirements)||{};
@@ -663,6 +672,7 @@ function buildClientEmailVars(l,co,sender){
   var localLine=localHint?(" Must be local to "+localHint+"."):(req.local_required&&city?(" Local to "+city+" preferred."):"");
   return{
     fn:l.fn,ln:l.ln,company:co?co.name:"",ind:co?co.ind:"",pos:l.pos||l.position,desig:l.desig,
+    jobs:clientJobsText(job,l.pos||l.position),   // every job the lead is for — the same words the server writes (email-vars.js jobsText)
     loc:loc,sender:sender||'{{sender}}',   // no sender given = the token stays; the SEND fills it from the mailbox that sends (never the profile name)
     skill_1:skills[0]||"",skill_2:skills[1]||"",skill_3:skills[2]||"",
     skills_line:formatSkillsLineClient(skills),
@@ -858,6 +868,7 @@ var MERGE_VAR_GROUPS=[
   ]},
   {label:'Job & company',chips:[
     ['{{pos}}','Job title','Open role you\'re hiring for'],
+    ['{{jobs}}','All the jobs','Every job the lead is for — a bulleted list when there are several, one title when there is one'],
     ['{{company}}','Company name','Company name'],
     ['{{loc}}','Location','Job location'],
     ['{{city}}','City','City from job location'],

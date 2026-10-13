@@ -320,3 +320,6 @@ App-password (SMTP/IMAP) mailboxes are on `main` (#326, `73e381d`); migration 06
 
 ## 2026-10-13 (Session 44) — multi-job first email
 The first email written for a lead with several jobs (`lead-outreach-queue.js`) lists them as bullets through the person's template; it is written as `pending` and previewed/edited in Email → Pending before Send (nothing new in the send path).
+
+## 2026-10-13 (Session 44) — Blocked contacts
+The send loop, follow-up queue and cancel path now ask `services/contact-status.js` (`neverEmail`, `blocksFollowups`, `sentence`) instead of listing statuses: invalid, deactivated and blocked are never emailed; out of office also pauses follow-ups. A blocked address that bounces is left Blocked.
