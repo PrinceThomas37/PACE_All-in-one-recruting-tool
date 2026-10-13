@@ -6800,3 +6800,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 ### SESSION 44, release: PR #326 merged (13 Oct)
 - Migration 063 was applied by the owner in the Supabase SQL editor after five cancelled tool attempts (cause never shown; no approval prompt ever reached the owner, so most likely the session's automatic approval layer). The table `public.smtp_credentials` was then read back (RLS on, 0 rows) before merging. Supabase usage was checked at the same time: nothing over quota (egress 2.04 of 5 GB is the one to watch).
 - PR #326 squash-merged to `main` as `73e381d` (head `014b57a`, 245/245 on Node 22 and Node 26). Render deploys it. Owed before the app-password button appears: `MAILBOX_SECRET_KEY` on Render; one live Zoho mailbox test.
+
+### SESSION 44, owner to-do recorded (R-205)
+- Owner will set a fresh `MAILBOX_SECRET_KEY` on Render later, then do the live Zoho test; added as ROADMAP `R-205` and to CONTEXT_WINDOW. The first key was pasted in chat and is burned. The roadmap ARTIFACT (`NQ4HUuMfAWJk34g9Vs5EdQ`, collection `items`) has no rows past roughly R-19x (R-200 absent), so it was NOT written to — it is behind the file and needs a catch-up the owner has not asked for.
