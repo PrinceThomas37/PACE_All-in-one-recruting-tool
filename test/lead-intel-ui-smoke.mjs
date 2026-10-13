@@ -163,6 +163,14 @@ try{
   pt=await post();
   step('posting: after saving, the row says the AI has it', /The AI has the job posting/.test(pt) && calls.includes('POST /jobs/j1/posting'), (pt||'').slice(0,80));
   step('posting: saving does not re-render the page', rendersP===0);
+  // Owner, 14 Oct: with a posting attached the row offers to SHOW it (not "Edit posting"); changing it is one more click inside the view.
+  step('posting attached: the row offers "Show job description", not "Edit posting"', /Show job description/.test(pt) && !/Edit posting/.test(pt) && !/Paste the job posting/.test(pt), (pt||'').slice(0,120));
+  await page.evaluate(()=>leadPostingShow('j1',true)); await page.waitForTimeout(80);
+  pt=await post();
+  step('posting attached: showing it reads the text and offers Hide and Edit posting', /Procore daily/.test(pt) && /Hide/.test(pt) && /Edit posting/.test(pt), (pt||'').slice(0,120));
+  await page.evaluate(()=>leadPostingEdit('j1',true)); await page.waitForTimeout(80);
+  step('posting attached: Edit posting opens the box with the text in it', await page.evaluate(()=>{ const t=document.getElementById('lxp-text-j1'); return !!t && /Procore daily/.test(t.value); }));
+  await page.evaluate(()=>leadPostingEdit('j1',false)); await page.waitForTimeout(80);
 
   // not the owner
   mode='other'; summarised=false;

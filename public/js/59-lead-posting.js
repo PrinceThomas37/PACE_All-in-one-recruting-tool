@@ -14,7 +14,7 @@
 (function(){
   'use strict';
   var THIN = 300, MAX = 8000;
-  var editing = {};
+  var editing = {}, viewing = {};
   function esc(s){ return htmlEsc(s); }
   function job(id){ return (STATE.jobs||[]).find(function(x){ return x.id===id; }); }
   function research(j){
@@ -51,12 +51,24 @@
           '</div>'+
         '</div>';
     }
+    // A posting that is attached is SHOWN first (owner, 14 Oct: "instead of Edit job posting, if the JD is attached, show option");
+    // changing it is one more click, inside the view. With nothing attached the way in is still "Paste the job posting".
+    if(b && viewing[id]){
+      return '<div class="lx-head">Job posting</div>'+
+        '<div class="lxp-card">'+
+          '<div class="lxp-read">'+esc(b)+'</div>'+
+          '<div class="lxp-actions">'+
+            '<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();leadPostingShow(\''+id+'\',false)">Hide</button>'+
+            (mine?'<button class="btn btn-outline btn-sm" onclick="event.stopPropagation();leadPostingEdit(\''+id+'\',true)">Edit posting</button>':'')+
+          '</div>'+
+        '</div>';
+    }
     var status = ok
       ? '<span class="lxp-ok">✓ The AI has the job posting</span> <span class="lxp-meta">· '+(b.split(/\s+/).length)+' words</span>'
       : '<span class="lxp-miss">The AI only knows the job title</span>';
-    var action = mine
-      ? '<button type="button" class="lxi-link" onclick="event.stopPropagation();leadPostingEdit(\''+id+'\',true)">'+(b?'Edit posting':'Paste the job posting')+'</button>'
-      : '';
+    var action = b
+      ? '<button type="button" class="lxi-link" onclick="event.stopPropagation();leadPostingShow(\''+id+'\',true)">Show job description</button>'
+      : (mine ? '<button type="button" class="lxi-link" onclick="event.stopPropagation();leadPostingEdit(\''+id+'\',true)">Paste the job posting</button>' : '');
     return '<div class="lx-head">Job posting</div>'+
       '<div class="lxp-card lxp-row">'+
         '<div class="lxp-status">'+status+
@@ -65,15 +77,16 @@
       '</div>';
   }
 
+  window.leadPostingShow=function(id,on){ viewing[id]=!!on; paint(id); };
   window.leadPostingEdit=function(id,on){
-    editing[id]=!!on; paint(id);
+    editing[id]=!!on; if(on) viewing[id]=false; paint(id);
     if(on){ var t=document.getElementById('lxp-text-'+id); if(t) t.focus(); }
   };
   window.leadPostingSave=function(id){
     var t=document.getElementById('lxp-text-'+id); if(!t) return;
     apiPost('/jobs/'+encodeURIComponent(id)+'/posting',{text:t.value}).then(function(r){
       var j=job(id); if(j&&r&&r.research) j.research=r.research;
-      editing[id]=false; paint(id);
+      editing[id]=false; viewing[id]=false; paint(id);
       showToast(r&&r.posting&&r.posting.has_posting?'Posting saved — the AI will use it for this lead\'s first email':'Saved. That is still short — the AI treats it as title-only.', r&&r.posting&&r.posting.has_posting?'success':'info');
     }).catch(function(e){ showToast('Could not save: '+(e.message||e),'error'); });
   };

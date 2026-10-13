@@ -127,6 +127,39 @@ router = require('../routes/lead-take.js')(ctx()); call = callOn(router);
 r = await call('/leads/take', 'post', {}, { count: 4 });
 step('RACE: a lead handed to someone else a moment ago is NOT taken from them — I get the other three and am told', r.out.taken === 3 && tables.jobs.find(j => j.id === 'p0').assigned_to_bd === 'bd2' && /Took 3 of the 4/.test(r.out.message), JSON.stringify(r.out).slice(0, 150));
 
+// ── 3b. TAKE THE LEAD(S) I PICKED (owner, 14 Oct: "when the lead is selected, take lead should be enabled if the lead is unassigned") ──
+const own = require('../services/ownership.js');
+tables = mkTables();
+tables.jobs = [
+  { id: 'u1', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: false, created_by: 'bd1' },     // a lead I found: I can see it
+  { id: 'u2', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: false, created_by: 'bd9' },     // someone else's pool lead: a BD does not see the pool (D-0034)
+  { id: 'u3', stage: 'Assigned', assigned_to_bd: 'bd2', deleted_at: null, is_duplicate: false, created_by: 'bd1' },      // already owned
+  { id: 'u4', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: true, created_by: 'bd1' },      // a flagged duplicate
+  { id: 'u5', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: false, created_by: 'bd1' },
+  { id: 'u6', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: false, created_by: 'bd1' },
+];
+db = makeDb(tables); logged.length = 0;
+const ctxIds = () => ({ ...ctx(), supabase: db, ownership: own, reportingChainIds: async (id) => [id], orgIdFor: () => 'o1' });
+router = require('../routes/lead-take.js')(ctxIds()); call = callOn(router);
+r = await call('/leads/take', 'post', {}, { job_ids: [] });
+step('take by id: an empty pick is refused in words', r.code === 400 && /Pick the leads/.test(r.out.error));
+r = await call('/leads/take', 'post', {}, { job_ids: ['u2', 'u3', 'u4', 'nope'] });
+step('take by id: none of those can be taken (someone else\'s pool lead, already owned, a duplicate, unknown) — said in words, nothing changed', r.code === 400 && /already have an owner, or you cannot see them/.test(r.out.error) && tables.jobs.every(j => !(j.assigned_to_bd === 'bd1')), r.out.error);
+r = await call('/leads/take', 'post', {}, { job_ids: ['u1', 'u2', 'u3'] });
+const mine2 = tables.jobs.filter(j => j.assigned_to_bd === 'bd1');
+step('take by id: of three picked only the one that is unowned and visible is taken; the others are left alone, and the answer says why', r.out.taken === 1 && mine2.map(j => j.id).join() === 'u1' && r.out.skipped === 2 && /Took 1 of the 3/.test(r.out.message) && tables.jobs.find(j => j.id === 'u2').assigned_to_bd === null && tables.jobs.find(j => j.id === 'u3').assigned_to_bd === 'bd2', JSON.stringify(r.out).slice(0, 220));
+step('…it is Assigned to me in one of MY connected mailboxes, stamped, and recorded as self-assigned — same as Take leads', mine2[0].stage === 'Assigned' && mine2[0].assigned_to === 'bd1' && ['m1', 'm2'].includes(mine2[0].sending_email_id) && mine2[0].assigned_at && logged.length === 1 && logged[0][3] === 'self_assigned');
+step('…and it counts against the same daily number (one of 25 used)', r.out.remaining_today === 24);
+r = await call('/leads/take', 'post', {}, { job_ids: ['u5', 'u6'] });
+step('take by id: two picked, both taken, no message needed', r.out.taken === 2 && !r.out.message && r.out.remaining_today === 22 && r.out.job_ids.join() === 'u5,u6');
+await settings.setSettings(db, { self_assign_daily_cap: 0 });
+tables.jobs.push({ id: 'u7', stage: 'Unassigned', assigned_to_bd: null, deleted_at: null, is_duplicate: false, created_by: 'bd1' });
+r = await call('/leads/take', 'post', {}, { job_ids: ['u7'] });
+step('take by id is switched off with the same switch as Take leads (cap 0): refused, nothing taken', r.code === 403 && /switched off/.test(r.out.error) && tables.jobs.find(j => j.id === 'u7').assigned_to_bd === null);
+await settings.setSettings(db, { self_assign_daily_cap: 25 });
+r = await call('/leads/take', 'post', { id: 'adm', roles: ['admin'] }, { job_ids: ['u7'] });
+step('an admin still goes through Assign (403) — a pick does not open a back door', r.code === 403);
+
 // ── 4. importing into my own profile ───────────────────────────────────────
 tables = mkTables(); db = makeDb(tables);
 const jobsRouter = require('../routes/jobs.js')({ supabase: db, auth: (_a, _b, n) => n(), hasRole, today: () => '2026-10-07', logActivity: async () => {}, canTouchJob: () => true,

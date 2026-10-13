@@ -153,6 +153,19 @@ step('on a tie the bigger daily limit wins, then the address — so the answer n
 step('with one mailbox it is that one; with none, nothing (never a made-up id)', F.suggestMailbox([MB[1]], {}) === 'b' && F.suggestMailbox([], {}) === null && F.suggestMailbox(null, null) === null);
 step('a missing or odd sent-today count counts as none', F.suggestMailbox(MB, { a: 'x', b: null, c: undefined }) === 'a');
 
+// ── the size choice (owner, 14 Oct: big companies came up although a small size was picked) ──
+console.log('\nThe size choice');
+const micro = F.SIZE_BANDS.find((b) => b.id === 'micro');
+step('there is a Tiny 1–10 band (Apollo\'s "1,10"), and a search can keep all four bands', micro && micro.ranges.join() === '1,10' && F.normalizeSearch({ name: 'x', titles: 'a', locations: 'b', sizes: ['micro', 'small', 'mid', 'large'] }).value.sizes.length === 4 && F.apolloFilters({ titles: ['a'], locations: ['b'], sizes: ['micro'] }, NOW).organization_num_employees_ranges.join() === '1,10');
+const tiny = { sizes: ['micro'] }, midlarge = { sizes: ['mid', 'large'] };
+step('a known headcount is in or out of the chosen bands; a size nobody knows is "unknown" — never guessed either way', F.sizeVerdict(8, tiny) === 'in' && F.sizeVerdict(10, tiny) === 'in' && F.sizeVerdict(11, tiny) === 'out' && F.sizeVerdict(90000, tiny) === 'out' && F.sizeVerdict(null, tiny) === 'unknown' && F.sizeVerdict(0, tiny) === 'unknown' && F.sizeVerdict('x', tiny) === 'unknown');
+step('with no size chosen every company is kept as it is', F.sizeVerdict(90000, {}) === 'any' && F.sizeVerdict(null, { sizes: [] }) === 'any' && F.applySizeChoice([{ employees: 90000 }, { employees: null }], {}).kept.length === 2);
+step('several bands add up (mid + large = 51 and over)', F.sizeVerdict(30, midlarge) === 'out' && F.sizeVerdict(51, midlarge) === 'in' && F.sizeVerdict(7000, midlarge) === 'in' && F.sizeVerdict(20000, midlarge) === 'out');
+const kept = F.applySizeChoice([{ name: 'Big', employees: 90000 }, { name: 'Tiny', employees: 8 }, { name: 'Who', employees: null }], tiny);
+step('applying the choice leaves out the big one, keeps the small one, and keeps — and marks — the one whose size is not known', kept.leftOut === 1 && kept.kept.map((o) => o.name).join() === 'Tiny,Who' && kept.kept[1].size_unknown === true && !kept.kept[0].size_unknown && kept.unknown === 1);
+step('a company with unknown size says so on its card, and one with a known size says that instead', F.scoreFreeOrg({ postings: [], size_unknown: true }).chips.includes('Size not confirmed') && F.scoreFreeOrg({ postings: [], employees: 8 }).chips.includes('About 8 staff') && F.scoreOrg({ employees: null, size_unknown: true }, tiny).chips.includes('Size not confirmed'));
+step('Apollo\'s own rank still rewards a company inside the chosen size (two bands too)', F.scoreOrg({ employees: 300 }, midlarge).score > F.scoreOrg({ employees: 30 }, midlarge).score);
+
 console.log('\n=== LEAD FINDER RULES SMOKE ===');
 const failed = results.filter(r => !r.ok).length;
 console.log(`\nSUMMARY: ${results.length - failed}/${results.length} passed`);

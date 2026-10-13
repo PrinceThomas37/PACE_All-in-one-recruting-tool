@@ -2,10 +2,12 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
-**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #326 (`73e381d`, company email setup + app-password mailboxes + admin-set numbers per company; 13 Oct). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0134 · contract C-0038 · roadmap `R-209` (next `R-210`) · next migration `065` (064, 063 and 062 are all APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
+**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #327 (`c39fb88`, the company website look; 13 Oct) · #328 (`4fd9048`, Find Leads batch + Blocked) · #326 (`73e381d`, company email setup + app-password mailboxes + admin-set numbers per company; 13 Oct). Merging is the release; the owner said to merge what is complete (12 Oct).
+**Highest ids:** decision D-0135 · contract C-0038 · roadmap `R-214` (next `R-215`) · next migration `065` (064, 063 and 062 are all APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
 
 ## Now
+
+**Merged 14 Oct (D-0135, R-210…R-214):** the owner's handwritten notes — Find Leads keeps the company size (free-source companies get their size from one Apollo lookup; Tiny 1–10 band), state/city suggestions in the place box, **Take lead** for ticked/opened Unassigned leads, spinner removed (bar only), **Show job description** instead of Edit posting. Owed: the owner tries them on a real screen.
 
 **Company website (R-208/R-209, D-0128–D-0134, PR #327):** `company-site/` (the page for **paceconsultant.in**; the app is **app.paceconsultant.in**) is rebuilt in the owner's chosen look: morning by default with a night switch, two self-hosted pixel fonts (digits from Press Start 2P so numbers read right), approved prices/booking/legal kept. Owner said "Go, publish it" on 13 Oct. Whether Render has a static site serving `company-site/` at the root domain is NOT confirmed (cannot reach Render or the domain from the sandbox). The app's look (D-0132/D-0133: website look toned down, pixel text) is drawn only, not built. Concepts: https://claude.ai/artifact/WrsraVt3UE4JMrnDkdWtjM.
 

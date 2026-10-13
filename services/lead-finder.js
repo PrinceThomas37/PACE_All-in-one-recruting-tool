@@ -66,6 +66,7 @@ const SECTORS = {
 
 // Size bands as Apollo spells them (employee ranges).
 const SIZE_BANDS = [
+  { id: 'micro', label: 'Tiny 1–10', ranges: ['1,10'] },
   { id: 'small', label: 'Small 11–50', ranges: ['11,50'] },
   { id: 'mid', label: 'Mid 51–500', ranges: ['51,200', '201,500'] },
   { id: 'large', label: 'Large 501+', ranges: ['501,1000', '1001,2000', '2001,5000', '5001,10000'] },
@@ -128,7 +129,7 @@ function normalizeSearch(input, caps) {
   if (!titles.length) return { ok: false, error: 'Add at least one job title to look for.' };
   const locations = uniqueList(i.locations, L.locations, L.location);
   if (!locations.length) return { ok: false, error: 'Add at least one place where the job is (a city, a state, or "remote").' };
-  const sizes = uniqueList(i.sizes, 3, 10).map((s) => s.toLowerCase()).filter((s) => SIZE_BANDS.some((b) => b.id === s));
+  const sizes = uniqueList(i.sizes, SIZE_BANDS.length, 10).map((s) => s.toLowerCase()).filter((s) => SIZE_BANDS.some((b) => b.id === s));
   // Several industries may be picked; `sector` (the first) stays for anything that still reads the one-industry column.
   const known = (id) => Object.prototype.hasOwnProperty.call(SECTORS, id);
   const sectors = uniqueList(i.sectors, L.sectors, 30).filter(known);
@@ -163,6 +164,38 @@ function apolloFilters(search, now) {
 }
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+
+/** The headcount ranges the person's size choice covers, as [low, high] pairs. No choice = no ranges (any size). */
+function sizeRanges(search) {
+  const ids = (search && search.sizes) || [];
+  return ids.reduce((a, id) => a.concat(((SIZE_BANDS.find((b) => b.id === id) || { ranges: [] }).ranges).map((r) => r.split(',').map(Number))), []);
+}
+
+/**
+ * Does a company fit the size the person chose? 'any' (no size chosen), 'in', 'out' (its known headcount is outside every chosen
+ * band), or 'unknown' (we do not know its headcount — never guessed either way). Apollo is asked to filter by size, but the job
+ * sources know nothing about a company's size, and an estimate can differ from the band Apollo filtered on — so this is the check on
+ * what actually came back (owner, 14 Oct: "even if <10 employee size is selected, big MNCs come up, like 3M and Synopsys").
+ */
+function sizeVerdict(employees, search) {
+  const ranges = sizeRanges(search);
+  if (!ranges.length) return 'any';
+  const n = num(employees);
+  if (n == null || n <= 0) return 'unknown';
+  return ranges.some(([lo, hi]) => n >= lo && n <= hi) ? 'in' : 'out';
+}
+
+/** Companies split by the size choice: the ones to keep (a company whose size is not known is kept, and marked), and how many were left out. */
+function applySizeChoice(orgs, search) {
+  const kept = []; let leftOut = 0, unknown = 0;
+  (orgs || []).forEach((o) => {
+    const v = sizeVerdict(o.employees, search);
+    if (v === 'out') { leftOut++; return; }
+    if (v === 'unknown') { o.size_unknown = true; unknown++; }
+    kept.push(o);
+  });
+  return { kept, leftOut, unknown };
+}
 
 /** One Apollo company row (either bucket) in one shape. */
 function normalizeOrg(o) {
@@ -343,6 +376,8 @@ function scoreFreeOrg(org) {
   const via = Array.from(new Set(posts.map((p) => p.source).filter(Boolean))).slice(0, 3);
   if (via.length) chips.push('Seen on ' + via.join(', '));
   if (org && org.website) score += 3;
+  if (org && org.employees != null) chips.push('About ' + org.employees.toLocaleString('en-US') + ' staff');
+  else if (org && org.size_unknown) chips.push('Size not confirmed');
   return { score: Math.round(clamp(score, 0, 100) * 10) / 10, chips };
 }
 
@@ -390,14 +425,10 @@ function scoreOrg(org, search) {
     if (o.growth12 >= 0.05) chips.push('Headcount +' + pct(o.growth12) + '% in a year');
     else if (o.growth12 <= -0.05) chips.push('Headcount ' + pct(o.growth12) + '% in a year');
   }
-  const band = (search && search.sizes && search.sizes.length === 1) ? SIZE_BANDS.find((b) => b.id === search.sizes[0]) : null;
   if (o.employees != null) {
     chips.push('About ' + o.employees.toLocaleString('en-US') + ' staff');
-    if (band) {
-      const [lo, hi] = [band.ranges[0], band.ranges[band.ranges.length - 1]].map((r, k) => Number(r.split(',')[k]));
-      if (o.employees >= lo && o.employees <= hi) score += 10;
-    }
-  }
+    if (sizeVerdict(o.employees, search) === 'in') score += 10;
+  } else if (o.size_unknown) chips.push('Size not confirmed');
   if (o.phone) score += 4;
   if (o.linkedin_url) score += 3;
   if (o.website) score += 3;
@@ -494,7 +525,7 @@ function suggestMailbox(accounts, sentToday, defaultLimit) {
 module.exports = {
   SECTORS, SIZE_BANDS, POSTED_RANGE, LIMITS, SOURCES,
   countryFor, datePostedFor, jsearchPlan, normalizeJob, titleMatches, jobsToOrgs, scoreFreeOrg, mergeSources, jsearchKey,
-  normalizeSearch, normalizeCompanies, postedDays, apolloFilters, websiteFrom, companyNameFilters, rankCompanySuggestions, normalizeOrg, isStaffingFirm, scoreOrg,
+  normalizeSearch, normalizeCompanies, postedDays, apolloFilters, sizeRanges, sizeVerdict, applySizeChoice, websiteFrom, companyNameFilters, rankCompanySuggestions, normalizeOrg, isStaffingFirm, scoreOrg,
   normalizePostings, postingSignals, factsLines, sourceOf,
   dayOf, creditKey, revealKey, accessKey, readAccess, dailyFor, waitUntil, isDue, suggestMailbox,
 };

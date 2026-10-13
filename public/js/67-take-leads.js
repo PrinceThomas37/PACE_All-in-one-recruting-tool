@@ -26,20 +26,35 @@
     }).catch(function(e){ showToast('Could not write the emails: '+((e&&e.message)||e),'error'); });
   };
 
-  window.openTakeLeads=function(){
-    STATE.takeLeads=undefined; var t=T(); t.loading=true; STATE.modal=drawModal(); render();
+  window.openTakeLeads=function(ids){
+    STATE.takeLeads=undefined; var t=T(); t.ids=(ids&&ids.length)?ids.slice():null; t.loading=true; STATE.modal=drawModal(); render();
     apiGet('/leads/take/status').then(function(st){
       t.st=st; t.loading=false; t.count=String(Math.max(1,Math.min(10,st.can_take||1)));
       STATE.modal=drawModal(); render();
     }).catch(function(e){ t.loading=false; t.err=(e&&e.message)||'Could not load'; STATE.modal=drawModal(); render(); });
   };
+  // Take the lead(s) you picked (owner, 14 Oct: "when the lead is selected, take lead should be enabled if the lead is unassigned").
+  // With an id it is that one lead (its own panel); without, the ticked ones that are still Unassigned. Only Unassigned, unowned leads
+  // are offered; the server checks it again, with the same daily limit and the same mailboxes as "Take leads".
+  var unowned=function(j){ return !!j && j.stage==='Unassigned' && !j.assigned_to_bd; };
+  window.leadTakeSelected=function(id){
+    var ids;
+    if(id){ ids=unowned(jobById(id))?[id]:[]; }
+    else {
+      var sel=STATE.leadSeqSel||{}, vis=STATE._leadSelVisibleIds||null;
+      ids=Object.keys(sel).filter(function(k){ return sel[k]&&(!vis||vis.indexOf(k)>-1)&&unowned(jobById(k)); });
+    }
+    if(!ids.length){ showToast('Only a lead that is still Unassigned can be taken','warning'); return; }
+    openTakeLeads(ids);
+  };
   window.takeLeadsCount=function(el){ T().count=el.value; };
   window.takeLeadsGo=function(){
     var t=T(); if(t.busy) return;
-    var n=Math.floor(Number(t.count)); if(!(n>=1)){ showToast('Say how many (1 or more)','warning'); return; }
+    var can=(t.st&&t.st.can_take)||0;
+    var n=t.ids?Math.min(t.ids.length,can):Math.floor(Number(t.count)); if(!(n>=1)){ showToast('Say how many (1 or more)','warning'); return; }
     t.busy=true; STATE.modal=drawModal(); render();
-    apiPost('/leads/take',{count:n}).then(function(r){
-      t.busy=false; t.result=r; STATE.modal=drawModal(); render();
+    apiPost('/leads/take',t.ids?{job_ids:t.ids.slice(0,n)}:{count:n}).then(function(r){
+      t.busy=false; t.result=r; if(t.ids) STATE.leadSeqSel={}; STATE.modal=drawModal(); render();
       if(typeof refreshJobs==='function') refreshJobs();
     }).catch(function(e){ t.busy=false; t.err=(e&&e.message)||'Could not take them'; STATE.modal=drawModal(); render(); });
   };
@@ -68,12 +83,17 @@
       var mbs=(st.mailboxes||[]).map(function(m){ return '<div class="fs-12 c-text2">✉ '+esc(m.email)+' <span class="c-text3">— room to send '+m.remaining+' today</span></div>'; }).join('');
       body=(blocked
         ? '<div class="fs-13" style="padding:10px 12px;border:2px dashed var(--glass-brd)">'+esc(WHY[st.reason]||st.message||'You cannot take leads right now.')+(st.message&&st.reason==='no_mailbox'?'<div class="fs-12 c-text3" style="margin-top:4px">'+esc(st.message)+'</div>':'')+'</div>'
-        : '<div class="fs-13 c-text2" style="margin-bottom:10px">You may take up to <b>'+can+'</b> more today (your limit is '+st.cap+' a day; you have taken '+st.taken_today+'). They are handed to you from the pool, oldest first, and spread over your connected mailboxes:</div>'+
-          '<div style="margin-bottom:12px">'+mbs+'</div>'+
-          '<label class="fs-12_5 c-text2" for="take-n">How many?</label> <input id="take-n" class="inp" type="number" min="1" max="'+can+'" value="'+esc(t.count)+'" oninput="takeLeadsCount(this)" style="width:90px;margin-left:8px">'+
+        : (t.ids
+          ? '<div class="fs-13 c-text2" style="margin-bottom:10px">You picked <b>'+t.ids.length+'</b> lead'+(t.ids.length===1?'':'s')+' that '+(t.ids.length===1?'is':'are')+' still Unassigned. '+
+            (can<t.ids.length?'You may take <b>'+can+'</b> more today (your limit is '+st.cap+' a day; you have taken '+st.taken_today+'), so the first '+can+' will be taken. ':'You may take up to <b>'+can+'</b> more today. ')+
+            'They become yours and are spread over your connected mailboxes:</div>'+
+            '<div style="margin-bottom:12px">'+mbs+'</div>'
+          : '<div class="fs-13 c-text2" style="margin-bottom:10px">You may take up to <b>'+can+'</b> more today (your limit is '+st.cap+' a day; you have taken '+st.taken_today+'). They are handed to you from the pool, oldest first, and spread over your connected mailboxes:</div>'+
+            '<div style="margin-bottom:12px">'+mbs+'</div>'+
+            '<label class="fs-12_5 c-text2" for="take-n">How many?</label> <input id="take-n" class="inp" type="number" min="1" max="'+can+'" value="'+esc(t.count)+'" oninput="takeLeadsCount(this)" style="width:90px;margin-left:8px">')+
           '<div class="fs-12 c-text3" style="margin-top:10px">Taking only makes them yours. Nothing is sent until you write the first emails and send them.</div>');
       foot='<button class="btn btn-outline" onclick="takeLeadsClose()">Cancel</button>'+
-        (blocked?'':'<button class="btn btn-primary" '+(t.busy?'disabled ':'')+'onclick="takeLeadsGo()">'+(t.busy?'Taking…':'Take leads')+'</button>');
+        (blocked?'':'<button class="btn btn-primary" '+(t.busy?'disabled ':'')+'onclick="takeLeadsGo()">'+(t.busy?'Taking…':(t.ids?('Take '+Math.min(t.ids.length,can)+' lead'+(Math.min(t.ids.length,can)===1?'':'s')):'Take leads'))+'</button>');
     }
     return '<div class="modal modal-w480"><div class="mh"><div class="mt">Take leads</div></div><div class="mb_">'+body+'</div><div class="mf">'+foot+'</div></div>';
   }
