@@ -371,3 +371,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-13 (Session 44) — migration 064 (Blocked)
 `064_contact_status_blocked.sql` drops and re-adds `contacts_email_status_check` with `blocked`. WRITTEN, NOT APPLIED (owner runs it in the SQL editor). Existing rows already satisfy it. Next migration: 065.
+
+## 2026-10-13 (Session 44) — migration 064 APPLIED
+Read back from the live database: `contacts_email_status_check` = valid, invalid, deactivated, out_of_office, blocked. Next migration: 065.

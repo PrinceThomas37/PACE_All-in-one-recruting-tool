@@ -6818,3 +6818,6 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - Wired: the send loop, follow-ups, the follow-up cancel path, the bounce sweep (a blocked address that bounces stays Blocked), the client-contact suggestions (`routes/recruiting/outreach.js`), the two contact menus (`06-page-leads.js`, one shared browser list), the contacts routes (plain 409 until migration 064 is applied). `contactStatusRules` in `index.js` replaces the inline status lists. POC format learning is unchanged on purpose (blocked still teaches).
 - Also fixed on the way: the full suite caught that my `{{jobs}}` merge field was missing from the browser's lists (`WF_VARS`, `clientJobsText`, the chip) — all three now match the server; a test holds the browser and server `{{jobs}}` text identical.
 - Tests: `contact-status-smoke` (20; mutation-checked both ways), `sequence-builder-smoke` (32).
+
+### SESSION 44, migration 064 applied (13 Oct)
+- The owner ran `064_contact_status_blocked.sql` in the Supabase SQL editor; the live constraint was read back and lists `blocked`. Blocked is usable as soon as PR #328 is deployed.
