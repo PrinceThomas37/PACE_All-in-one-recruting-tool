@@ -1159,3 +1159,16 @@ New admin settings (Lead Finder group + Email engine): `finder_max_titles/places
 
 ## 2026-10-13 (Session 44) — Blocked contacts
 `routes/contacts.js`: the allowed statuses come from `services/contact-status.js`; a database CHECK refusal (23514 / `contacts_email_status_check`) is answered 409 `status_needs_update` in plain words (PUT /contacts/:id and PATCH /contacts/:id/email-status). `routes/recruiting/outreach.js` client-contact suggestions skip never-email statuses.
+
+## 2026-10-13 (Session 44) — Website walkthrough requests (R-216, D-0137)
+`POST /site/walkthrough-request` (`routes/site-requests.js`) is PUBLIC: rate limited in `index.js` (`site-request`, 5 an hour per address, registered before the route) and mounted right after `routes/apply`. The rules live in `services/site-requests.js`:
+- `website` is a honeypot;
+- a missing name, a bad email or a missing agency is a 400 with a sentence;
+- a person, a repeat and a bot all get the same `{ok:true}`.
+
+Every request is KEPT first, in `app_settings` `site_request:<email>`. It is a 500 only if that save fails. Then, ONLY when `WEBSITE_LEADS_ORG_ID` is set (read per request), the service makes, in that org:
+- an Unassigned lead (source "Website · walkthrough request") with the person as its contact;
+- an activity line;
+- a reminder, type `website_request`, for the org's oldest active admin (`role` or `roles` includes `admin`).
+
+The same email on a live lead in that org makes no second lead: the reminder goes on that lead. It is deliberately NOT defaulted to `DEFAULT_ORG_ID`, because that org is Fute Global, a customer. A failure after the request was kept is logged as `[site] … was kept but no lead was made`. CORS is the app's existing `origin:'*'`. The website wakes the free Render instance with `GET /health` on the first focus of the form.

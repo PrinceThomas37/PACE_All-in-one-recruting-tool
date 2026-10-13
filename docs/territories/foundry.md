@@ -1244,3 +1244,20 @@ The full suite found the sending-hours regression that targeted runs did not (`s
 
 ## 2026-10-13 (Session 44) — Blocked contacts
 `contact-status-smoke` (20) lifts the real send-time helpers out of `index.js` and runs them, mounts the real contacts routes over an in-memory database with a CHECK that refuses `blocked` until "migrated", and checks the browser menu equals the server list. The full suite also caught the missing `{{jobs}}` in the browser lists (`sequence-builder-smoke`).
+
+## 2026-10-13 (Session 44) — Website walkthrough requests (R-216)
+`site-request-smoke` has 17 checks. It covers:
+- reading the form;
+- keep-first;
+- nothing in any lead list when no org is set;
+- the org-scoped lead, contact and reminder;
+- the oldest admin, found through `roles`;
+- a company reused case-insensitively, within the org only;
+- a repeat, a known contact, and a contact on a deleted lead;
+- ILIKE `_` escaping;
+- an org with no admin;
+- a failure to keep versus a failure after keeping;
+- the route over HTTP, with the env var read per request;
+- the `index.js` wiring.
+
+Mutation-checked: removing the escaping, the deleted-lead check, the no-org guard or the honeypot each fails it. `reminder-clarity-smoke` now lists `website_request`. `company-site-form-smoke` (Chromium) runs the REAL site page against a copy of the route on another origin: the warm-up `/health`, the honeypot, validation, success, a slow first answer, the app being down (it must never say "sent"), the rate-limit sentence, and the yearly prices in whole dollars.

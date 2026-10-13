@@ -212,6 +212,12 @@ label{display:flex;flex-direction:column;gap:6px;font-size:17px;font-weight:600;
 input,select{font:500 18px 'PACE Text','Pixelify Sans',sans-serif;min-height:48px;padding:0 12px;border:3px solid #1A1033;background:#FFF6E6;color:#1A1033;border-radius:0}
 .formfoot{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:center}
 #ok{grid-column:1/-1;text-align:center;color:var(--cta-body);font-size:18px}
+#ok a{color:var(--cta-ink)}
+.hp{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+.sent{width:100%;max-width:640px;display:flex;flex-direction:column;gap:12px;align-items:center;border:3px solid #1A1033;background:#FFF6E6;color:#1A1033;box-shadow:6px 6px 0 #1A1033;padding:24px 18px}
+.sent .display{font-size:13px;color:#2E7D32}
+.sent p{font-size:19px;line-height:1.5;color:#2A1A57}
+.sent b{overflow-wrap:anywhere}
 footer{border-top:2px solid var(--rule);padding:22px 24px;display:flex;flex-wrap:wrap;justify-content:center;gap:12px 28px;font-size:17px;color:var(--cta-body);background:var(--cta)}
 footer a{color:var(--cta-body)}
 /* things step up into place as you reach them; they are visible the whole time (added by the script) */
@@ -448,14 +454,19 @@ footer a{color:var(--cta-body)}
     <p class="display coin">INSERT COIN</p>
     <h2>PLAYER 1, READY?</h2>
     <p class="lead">See PACE with your own jobs. Twenty minutes, on your real roles. We'll reply by email to set a time.</p>
-    <form id="f">
+    <form id="f" data-api="https://app.paceconsultant.in" novalidate>
       <label for="n">Your name<input id="n" required autocomplete="name" placeholder="Priya Menon"></label>
       <label for="e">Work email<input id="e" type="email" required autocomplete="email" placeholder="priya@youragency.com"></label>
       <label for="a">Agency<input id="a" required autocomplete="organization" placeholder="Your agency"></label>
       <label for="p">Plan<select id="p"><option>Not sure yet</option><option>Start</option><option>Pro</option><option>Max</option><option>Enterprise</option></select></label>
-      <div class="formfoot"><button class="btn" type="submit">▶ PRESS START · BOOK A WALKTHROUGH</button></div>
+      <div class="hp" aria-hidden="true"><label for="w">Leave this empty<input id="w" name="website" tabindex="-1" autocomplete="off"></label></div>
+      <div class="formfoot"><button class="btn" type="submit" id="f-go">▶ PRESS START · BOOK A WALKTHROUGH</button></div>
       <p id="ok" role="status" hidden></p>
     </form>
+    <div class="sent" id="sent" role="status" tabindex="-1" hidden>
+      <span class="display">REQUEST SENT</span>
+      <p>Thanks, <span id="sent-name"></span>. The PACE team has your request and will email <b id="sent-email"></b> to set a time.</p>
+    </div>
   </div>
 </section>
 
@@ -715,12 +726,12 @@ footer a{color:var(--cta-body)}
     pick('flow-sales');
   });
 
-  // Plans: monthly or yearly (yearly is 20% off, shown as the monthly amount).
+  // Plans: monthly or yearly. Yearly is 20% off, rounded to whole dollars a month (owner, 13 Oct, D-0137).
   run('plans', function(){
     var bill = $('bill');
     bill.hidden = false;
     var prices = all('[data-m]');
-    function money(n){ return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function money(n){ return '$' + n.toLocaleString('en-US'); }
     bill.addEventListener('click', function(e){
       var b = e.target.closest('button'); if (!b) return;
       var yearly = b.getAttribute('data-bill') === 'year';
@@ -728,8 +739,9 @@ footer a{color:var(--cta-body)}
       prices.forEach(function(p){
         var m = Number(p.getAttribute('data-m'));
         var note = p.nextElementSibling;
-        if (yearly) { p.textContent = money(m * 0.8); note.textContent = 'a month, billed yearly (' + money(m * 0.8 * 12) + ')'; }
-        else { p.textContent = '$' + m; note.textContent = 'per month · save 20% billed yearly'; }
+        var y = Math.round(m * 0.8);
+        if (yearly) { p.textContent = money(y); note.textContent = 'a month, billed yearly (' + money(y * 12) + ')'; }
+        else { p.textContent = money(m); note.textContent = 'per month · save 20% billed yearly'; }
         bump(p);
       });
     });
@@ -759,15 +771,49 @@ footer a{color:var(--cta-body)}
     all('[data-plan]').forEach(function(a){
       a.addEventListener('click', function(){ $('p').value = a.getAttribute('data-plan'); });
     });
-    // The booking request opens the visitor's own email app, addressed to info@ (no form service).
-    $('f').addEventListener('submit', function(e){
+    // The request goes straight into PACE as a lead (R-216). The app is on Render's free plan and sleeps when
+    // idle, so the first touch of the form wakes it, and a slow first answer is said out loud, not mistaken
+    // for a failure. Nothing is ever reported as sent unless the app said it kept it.
+    var form = $('f'), ok = $('ok'), go = $('f-go'), api = form.getAttribute('data-api');
+    var label = go.textContent, woken = false;
+    form.addEventListener('focusin', function(){
+      if (woken) return; woken = true;
+      try { fetch(api + '/health', { mode: 'cors', cache: 'no-store' }).catch(function(){}); } catch (e) {}
+    });
+    function say(html){ ok.innerHTML = html; ok.hidden = false; }
+    function fallback(){
+      var v = function(id){ return $(id).value.trim(); };
+      var body = 'Name: ' + v('n') + '\nWork email: ' + v('e') + '\nAgency: ' + v('a') + '\nPlan: ' + v('p') + '\n\nI would like a 20-minute walkthrough on our own jobs.';
+      var href = 'mailto:info@paceconsultant.in?subject=' + encodeURIComponent('Walkthrough request: ' + v('a')) + '&body=' + encodeURIComponent(body);
+      say('This did not go through. Please email <b>info@paceconsultant.in</b> and we will set a time. <a href="' + esc(href) + '">Open my email app</a>');
+    }
+    form.addEventListener('submit', function(e){
       e.preventDefault();
       var v = function(id){ return $(id).value.trim(); };
-      var ok = $('ok');
-      var body = 'Name: ' + v('n') + '\nWork email: ' + v('e') + '\nAgency: ' + v('a') + '\nPlan: ' + v('p') + '\n\nI would like a 20-minute walkthrough on our own jobs.';
-      location.href = 'mailto:info@paceconsultant.in?subject=' + encodeURIComponent('Walkthrough request: ' + v('a')) + '&body=' + encodeURIComponent(body);
-      ok.textContent = 'Your email app should open with your request. If it does not, write to info@paceconsultant.in.';
-      ok.hidden = false;
+      if (!v('n')) { say('Please add your name.'); $('n').focus(); return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v('e'))) { say('Please enter a valid work email.'); $('e').focus(); return; }
+      if (!v('a')) { say("Please add your agency's name."); $('a').focus(); return; }
+      go.disabled = true; go.textContent = 'SENDING…'; ok.hidden = true;
+      var slow = setTimeout(function(){ say('Still sending. The first request after a quiet spell can take up to a minute.'); }, 5000);
+      var ctrl = ('AbortController' in window) ? new AbortController() : null;
+      var stop = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 75000);
+      function done(){ clearTimeout(slow); clearTimeout(stop); go.disabled = false; go.textContent = label; }
+      fetch(api + '/site/walkthrough-request', {
+        method: 'POST', mode: 'cors', headers: { 'Content-Type': 'application/json' }, signal: ctrl ? ctrl.signal : undefined,
+        body: JSON.stringify({ name: v('n'), email: v('e'), agency: v('a'), plan: v('p'), website: $('w').value })
+      }).then(function(res){
+        return res.json().catch(function(){ return {}; }).then(function(body){ return { res: res, body: body }; });
+      }).then(function(r){
+        done();
+        if (r.res.ok && r.body && r.body.ok) {
+          $('sent-name').textContent = v('n').split(' ')[0];
+          $('sent-email').textContent = v('e');
+          form.hidden = true; ok.hidden = true;
+          $('sent').hidden = false; $('sent').focus();
+        } else if (r.res.status === 400 && r.body && r.body.error) say(esc(r.body.error));
+        else if (r.res.status === 429 && r.body && r.body.message) say(esc(r.body.message));
+        else fallback();
+      }).catch(function(){ done(); fallback(); });
     });
   });
 })();
