@@ -67,7 +67,8 @@ const { createWarmupEngine, WARMUP_HEADER } = require('./warmup-engine');
 const { createGmailProvider } = require('./gmail-provider');
 const { createGmailDelivery, freshFollowup } = require('./services/gmail-delivery');
 // App-password mailboxes — SMTP to send, IMAP to read (D-0120, R-200 step b). Zoho and any provider without an OAuth sign-in.
-const dailyLimit = require('./services/daily-limit');            // a mailbox's limit is the admin's number (D-0123)
+const dailyLimit = require('./services/daily-limit');
+const contactStatusRules = require('./services/contact-status');            // a mailbox's limit is the admin's number (D-0123)
 const mailboxSecret = require('./services/mailbox-secret');
 const { createSmtpStore } = require('./services/smtp-store');
 const { createSmtpMailbox, explain: explainSmtp } = require('./services/smtp-mailbox');
@@ -2140,7 +2141,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
 
     const isFollowup = followupSteps.isFollowupType(email.followup_type);
 
-    // Skip recipients flagged as permanently undeliverable (invalid/deactivated) for ALL
+    // Skip recipients flagged as never-to-email (invalid / deactivated / blocked) for ALL
     // email types. Sending to addresses we already know bounce damages domain reputation.
     if (email.contact_id) {
       const contact = contactStatusById[email.contact_id];
@@ -2149,7 +2150,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         if (isFollowup) {
           await cancelBlockedFollowupSend(email, contact.email_status);
         } else {
-          await recordSendFailure(email, 'undeliverable', `Not sent — this address is marked ${contactEmailStatus(contact)}.`);
+          await recordSendFailure(email, 'undeliverable', contactStatusRules.sentence(contact.email_status));
         }
         await setSendProgress(userId, { ...progressBase, current: `${email.to_email} (skipped: ${contactEmailStatus(contact)} address)` });
         continue;
@@ -2888,7 +2889,7 @@ async function markBouncesFromMessages(messages, ownAddresses, tokenRow, folder,
       const { data: matches } = await supabase.from('contacts')
         .select('id,email_status,job_id').ilike('email', addr).limit(10);
       for (const c of (matches || [])) {
-        if (c.email_status === 'invalid' || c.email_status === 'deactivated') continue;
+        if (contactStatusRules.neverEmail(c.email_status)) continue;      // already marked (a blocked address that bounces stays Blocked)
         await supabase.from('contacts').update({ email_status: 'invalid', updated_at: new Date() }).eq('id', c.id);
         emit(EVENTS.EMAIL_BOUNCED, { contactId: c.id, jobId: c.job_id, address: addr, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
         emit(EVENTS.CONTACT_INVALIDATED, { contactId: c.id, jobId: c.job_id, reason: 'bounce', orgId: tokenRow.org_id || null });
@@ -3539,7 +3540,8 @@ const smtpMailbox = createSmtpMailbox({ nodemailer: require('nodemailer'), ImapF
 // Random delay between emails to avoid domain flagging (1–120 seconds)
 // Recipient validity (emailSyntaxValid) and domain extraction (emailDomain) are
 // shared from ./email-validation — single source of truth for both.
-const BLOCKED_FOLLOWUP_STATUSES = new Set(['invalid', 'deactivated', 'out_of_office']);
+// What each email status means for sending is defined ONCE, in services/contact-status.js (invalid, deactivated and blocked are never
+// emailed; out of office also pauses follow-ups). Nothing here lists statuses.
 
 function contactEmailStatus(contact) {
   return String(contact?.email_status || 'valid').toLowerCase();
@@ -3547,12 +3549,11 @@ function contactEmailStatus(contact) {
 
 function isFollowupEligibleContact(contact) {
   if (!contact || !emailSyntaxValid(contact.email)) return false;
-  return !BLOCKED_FOLLOWUP_STATUSES.has(contactEmailStatus(contact));
+  return !contactStatusRules.blocksFollowups(contactEmailStatus(contact));
 }
 
 function isPermanentFollowupBlock(status) {
-  const s = String(status || '').toLowerCase();
-  return s === 'invalid' || s === 'deactivated';
+  return contactStatusRules.neverEmail(status);
 }
 
 // The double-send rule moved to services/outreach-dedup.js (PURE) so the

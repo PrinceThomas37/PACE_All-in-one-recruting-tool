@@ -6796,3 +6796,28 @@ Owner asked for Node 22 and 26 on Cursor's PR #322 and to merge if they pass. Fi
 - AI daily ceilings per company (`services/ai-budget.js getCaps(supabase, orgId)`; the Integrations screen now reads/writes the caller's company). Finder: search size, saved searches, contacts per lead, jobs per lead (`config/settings.js`, `routes/finder.js`, `services/lead-finder.js normalizeSearch(input, caps)`). `followup_max` holds a person's own follow-up count (`followup-steps.dueDates(…, adminMax)`, `/outreach-plan`). Pool-capacity fallback: whole pool, no typed number.
 - Left on purpose and recorded: plan limits (vendor data), text lengths, server timeouts, the generator's personal meter; look-back days are R-204.
 - Migration 063: apply cancelled a third time after an explicit owner yes. Not applied, not worked around.
+
+### SESSION 44, release: PR #326 merged (13 Oct)
+- Migration 063 was applied by the owner in the Supabase SQL editor after five cancelled tool attempts (cause never shown; no approval prompt ever reached the owner, so most likely the session's automatic approval layer). The table `public.smtp_credentials` was then read back (RLS on, 0 rows) before merging. Supabase usage was checked at the same time: nothing over quota (egress 2.04 of 5 GB is the one to watch).
+- PR #326 squash-merged to `main` as `73e381d` (head `014b57a`, 245/245 on Node 22 and Node 26). Render deploys it. Owed before the app-password button appears: `MAILBOX_SECRET_KEY` on Render; one live Zoho mailbox test.
+
+### SESSION 44, owner to-do recorded (R-205)
+- Owner will set a fresh `MAILBOX_SECRET_KEY` on Render later, then do the live Zoho test; added as ROADMAP `R-205` and to CONTEXT_WINDOW. The first key was pasted in chat and is burned. The roadmap ARTIFACT (`NQ4HUuMfAWJk34g9Vs5EdQ`, collection `items`) has no rows past roughly R-19x (R-200 absent), so it was NOT written to — it is behind the file and needs a catch-up the owner has not asked for.
+
+### SESSION 44, the Find Leads batch (R-194…R-197, D-0126) — dev branch
+- Root cause of "the window refreshes on every click": `patchShell` rewrote the whole `#layer` whenever a window's html changed → new `.modal` element → `mIn` animation replayed + scroll boxes reset. `patchModalInPlace` (03-core-render.js) now updates the same window's inside; falls back to the whole rewrite for a different window or if anything else in the layer changed. `test/modal-inplace-smoke.mjs` (10) reproduces the old behaviour exactly when the fix is removed (animation `mIn` runs again).
+- Pills: the 5-job and 3-contact limits were typed in the browser (and the message was off-screen). Now `F.access.limits` from the server; counter, inline message, dimmed pills, "Show all". Reveal keeps the search's title/first name (`payload.found`).
+- Finder: place chips, progress panel (pure CSS), edit-this-search in place on the results. Multi-job email: `email-vars.js jobsOf/ensureJobsListed`, used by `services/lead-outreach-queue.js`; `test/multi-job-email-smoke.mjs` (14).
+- Every new check was mutation-checked (put the old behaviour back, watch it fail).
+
+### SESSION 44, IN PROGRESS: a "Blocked" email status (owner, 13 Oct)
+- Owner: the email validity menu (Valid / Invalid / Deactivated / Out of office) needs **Blocked** — the address is right but the recipient's security team blocks our mail.
+- Found: `contacts.email_status` has a live CHECK allowing only those four values (read from the live database, read-only), so a new value needs **migration 064** (written, NOT applied; the owner runs it in the SQL editor). Written so far: `services/contact-status.js` (the one definition: blocked = never email, still teaches its domain's format) and `migrations/064_contact_status_blocked.sql`. NOT yet wired: the send loop, follow-ups, bounce sweep, contacts routes, the two menus in `06-page-leads.js`. The code will answer plainly until 064 is applied.
+
+### SESSION 44, "Blocked" email status — built (D-0127; completes the in-progress note above)
+- Wired: the send loop, follow-ups, the follow-up cancel path, the bounce sweep (a blocked address that bounces stays Blocked), the client-contact suggestions (`routes/recruiting/outreach.js`), the two contact menus (`06-page-leads.js`, one shared browser list), the contacts routes (plain 409 until migration 064 is applied). `contactStatusRules` in `index.js` replaces the inline status lists. POC format learning is unchanged on purpose (blocked still teaches).
+- Also fixed on the way: the full suite caught that my `{{jobs}}` merge field was missing from the browser's lists (`WF_VARS`, `clientJobsText`, the chip) — all three now match the server; a test holds the browser and server `{{jobs}}` text identical.
+- Tests: `contact-status-smoke` (20; mutation-checked both ways), `sequence-builder-smoke` (32).
+
+### SESSION 44, migration 064 applied (13 Oct)
+- The owner ran `064_contact_status_blocked.sql` in the Supabase SQL editor; the live constraint was read back and lists `blocked`. Blocked is usable as soon as PR #328 is deployed.

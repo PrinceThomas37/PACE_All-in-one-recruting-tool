@@ -372,7 +372,7 @@ function bindJobsControls(){}
 //
 //  3. STATE.page IS NOT TOUCHED. Expanding is not navigation.
 // ══════════════════════════════════════════════════════════════════════════
-var LEAD_ES_LABELS={valid:'Valid',invalid:'Invalid',deactivated:'Deactivated',out_of_office:'Out of office'};
+var LEAD_ES_LABELS=CONTACT_STATUS_LABELS;
 
 // ONE person on a lead, as a row with the email-status control. Shared by the
 // plain contact list below and the POC finder's slots (62-poc-finder.js), so a
@@ -400,7 +400,7 @@ window.leadContactCp=function(c, kind){
 
 window.leadContactRowHtml=function(c){
   var esOpts=function(sel){
-    return ['valid','invalid','deactivated','out_of_office'].map(function(k){
+    return CONTACT_STATUSES.map(function(k){
       return '<option value="'+k+'"'+(sel===k?' selected':'')+'>'+LEAD_ES_LABELS[k]+'</option>';
     }).join('');
   };
@@ -591,8 +591,8 @@ function renderJobDetailModal(){
   var cs=jobContacts(j.id);
   var stageOpts=allStages.map(function(st){return '<option value="'+st+'"'+(j.stage===st?" selected":"")+'>'+st+'</option>';}).join("");
 
-  var emailStatusColors={valid:'var(--green)',invalid:'var(--red)',deactivated:'var(--text3)',out_of_office:'var(--amber)'};
-  var emailStatusLabels={valid:'Valid',invalid:'Invalid',deactivated:'Deactivated',out_of_office:'Out of Office'};
+  var emailStatusColors={valid:'var(--green)',invalid:'var(--red)',deactivated:'var(--text3)',blocked:'var(--red)',out_of_office:'var(--amber)'};
+  var emailStatusLabels=CONTACT_STATUS_LABELS;
   var canChangeEmailStatus=userHasAnyRole(u,'admin','bd','bd_lead');
 
   var seqSel=STATE.jobSeqSel||[];
@@ -603,7 +603,7 @@ function renderJobDetailModal(){
     var emailStatusBadge='<span class="fs-10" style="padding:2px 7px;border-radius:6px;font-weight:600;background:'+esColor+'22;color:'+esColor+'">'+esLabel+'</span>';
     var emailStatusSel=canChangeEmailStatus?
       '<select onchange="changeEmailStatus(\''+c.id+'\',this.value,\''+escHtml(c.email||'')+'\',\''+escHtml((c.first_name||'')+' '+(c.last_name||''))+'\')" class="sel sel-sm sel-inline" style="margin-top:4px">'+
-        ['valid','invalid','deactivated','out_of_office'].map(function(s){
+        CONTACT_STATUSES.map(function(s){
           return '<option value="'+s+'"'+(es===s?' selected':'')+'>'+emailStatusLabels[s]+'</option>';
         }).join('')+
       '</select>':'';

@@ -314,3 +314,12 @@ The send window the send loop obeys is the sending person's ORGANISATION's hours
 
 ## 2026-10-13 (Session 44) — D-0125
 Follow-up chains are created with the company's `followup_max` as a ceiling on the person's chosen count (`followup-steps.dueDates(settings, userId, anchor, adminMax)`); chains already scheduled are untouched.
+
+## 2026-10-13 (Session 44) — released
+App-password (SMTP/IMAP) mailboxes are on `main` (#326, `73e381d`); migration 063 applied. The button stays hidden until `MAILBOX_SECRET_KEY` is set on Render. One live Zoho test is owed.
+
+## 2026-10-13 (Session 44) — multi-job first email
+The first email written for a lead with several jobs (`lead-outreach-queue.js`) lists them as bullets through the person's template; it is written as `pending` and previewed/edited in Email → Pending before Send (nothing new in the send path).
+
+## 2026-10-13 (Session 44) — Blocked contacts
+The send loop, follow-up queue and cancel path now ask `services/contact-status.js` (`neverEmail`, `blocksFollowups`, `sentence`) instead of listing statuses: invalid, deactivated and blocked are never emailed; out of office also pauses follow-ups. A blocked address that bounces is left Blocked.

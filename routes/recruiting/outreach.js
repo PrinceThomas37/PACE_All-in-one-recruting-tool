@@ -651,7 +651,7 @@ app.get('/submissions/:id/submission-email/options', auth, async (req, res) => {
       const seen = new Set();
       (leads || []).forEach(l => (l.contacts || []).forEach(c => {
         const e = String(c.email || '').trim(); const k = e.toLowerCase();
-        if (!e || seen.has(k) || ['invalid', 'deactivated'].includes(String(c.email_status || '').toLowerCase())) return;
+        if (!e || seen.has(k) || require('../../services/contact-status').neverEmail(c.email_status)) return;
         seen.add(k); suggestions.push({ email: e, name: [c.first_name, c.last_name].filter(Boolean).join(' '), role: 'Client contact' });
       }));
     }

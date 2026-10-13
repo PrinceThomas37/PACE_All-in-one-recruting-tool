@@ -2,8 +2,8 @@
 
 > **Read this file, then `CLAUDE.md`.** History is `docs/CONTEXT_ARCHIVE.md` (open a section, never the whole file). Handoff: `docs/CURSOR_HANDOFF.md`.
 
-**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #325 (`ab93353`, Review & send / Send selected). Merging is the release; the owner said to merge what is complete (12 Oct).
-**Highest ids:** decision D-0125 · contract C-0038 · roadmap `R-204` (next `R-205`) · next migration `064` (063 is WRITTEN, not applied; 062 is APPLIED).
+**Updated**: 2026-10-12 (Session 44; Session 43 notes below still stand) · **Last merged to `main`**: #326 (`73e381d`, company email setup + app-password mailboxes + admin-set numbers per company; 13 Oct). Merging is the release; the owner said to merge what is complete (12 Oct).
+**Highest ids:** decision D-0127 · contract C-0038 · roadmap `R-207` (next `R-208`) · next migration `065` (064, 063 and 062 are all APPLIED — 063 was run by the owner in the Supabase SQL editor on 13 Oct, after the assistant's apply calls were cancelled five times by the session's approval layer).
 
 ## Now
 
@@ -26,7 +26,7 @@ Ash Sayyad's Finder lead was left alone. Cleared the same way as `releaseToPoolU
 
 **Merged in #325 (Session 44, R-193):** "Review & send" on a Find Leads lead opens Email → Pending on THAT lead's email only, ticked, with "Send selected (n)" (confirm names the recipients) and "Show all pending". Tick boxes on every Pending row. `POST /emails/send-selected` was brought level with Send all. **Waiting on the owner (asked 12 Oct):** several jobs in one email (R-194), multi-place search UX (R-195), which "ongoing search" to edit (R-196), the Accept-window pill / missing-details report (R-197), and the neutral-engine direction (R-198, with R-150).
 
-**On the dev branch, not merged (R-200, D-0120/D-0121):** (a) the Email setup checklist under Admin → Company domains (PR #326); (b) app-password mailboxes — SMTP send, IMAP replies/bounces, Zoho first (migration 063 written, NOT applied; needs `MAILBOX_SECRET_KEY` on Render; one live test owed). Next, in the owner's order: (c) the employee first-login "Mailbox ready" screen. Left out of (b): in-app inbox, warm-up, Sent-folder copy (R-201). The Admin header still prints "Fute Global LLC" for every organisation (surface.md).
+**Merged to `main` in #326 (R-200, D-0120/D-0121; migration 063 applied 13 Oct) — still owed: `MAILBOX_SECRET_KEY` on Render, one live Zoho mailbox test:** (a) the Email setup checklist under Admin → Company domains (PR #326); (b) app-password mailboxes — SMTP send, IMAP replies/bounces, Zoho first (migration 063 written, NOT applied; needs `MAILBOX_SECRET_KEY` on Render; one live test owed). Next, in the owner's order: (c) the employee first-login "Mailbox ready" screen. Left out of (b): in-app inbox, warm-up, Sent-folder copy (R-201). The Admin header still prints "Fute Global LLC" for every organisation (surface.md).
 
 ## Still open (do not start unasked)
 
@@ -59,6 +59,14 @@ This file is current state only, rewritten, under ~200 lines. `docs/CONTEXT_ARCH
 
 **Standing rule (D-0123, owner, 12 Oct):** no number that limits a customer is typed into the code — the admin decides (mail counts, AI counts, any count). Mailbox daily limit = `services/daily-limit.js` (admin default, one fallback in `config/limits.js`); new caps go in `SETTINGS_SCHEMA`. Older caps: R-202. Settings are deployment-wide, not per organisation: R-203 (owner's call).
 
-**D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. Migration 063 STILL NOT APPLIED (apply call cancelled twice). R-202 partly open.
+**D-0124 (13 Oct):** admin numbers are per organisation (`sys_<key>@<org>`); new five send-pacing settings exist. (Migration 063 was later applied by the owner — see D-0125 note.)
 
-**D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063 STILL NOT APPLIED — the apply call is cancelled by the approval step (three times).
+**D-0125 (13 Oct):** R-202 done (AI ceilings per company, Finder caps, follow-up maximum are admin settings); R-204 holds what is still typed in. Migration 063: applied by the owner in the SQL editor on 13 Oct (the assistant's apply was cancelled five times).
+
+**Owner to-do (R-205, 13 Oct):** set a fresh `MAILBOX_SECRET_KEY` on Render, then one live Zoho mailbox test. The key pasted in chat on 13 Oct is burned — do not use it.
+
+**D-0126 (13 Oct):** Find Leads batch (R-194…R-197) built on the dev branch — multi-job bullets email, place chips, progress panel, edit-in-place, window refresh fixed in the engine. R-206 = windows that close-and-reopen still blink.
+
+**D-0127 (13 Oct):** Blocked email status built; migration 064 (widens `contacts_email_status_check`) is written and NOT applied — owner runs it in the SQL editor.
+
+**Migration 064 APPLIED (13 Oct)** — the owner ran it in the Supabase SQL editor; read back from the live database: `contacts_email_status_check` now allows `blocked`. The Blocked menu saves once PR #328 is merged and deployed.

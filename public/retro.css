@@ -1028,6 +1028,16 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-pill{cursor:pointer;font-family:inherit}
 /* the selected tint is see-through; laid straight on the dark night ground it left ink-coloured text on dark (1.05:1) — keep the paper under it */
 .fd-pill.on{background:linear-gradient(var(--accent-l),var(--accent-l)),var(--card-solid);font-weight:700}
+.fd-pill.is-full{opacity:.55}
+/* the search in progress: a bar that moves by itself (no script, no repaint) and a small spinner */
+.fd-progress{margin:10px 0;display:flex;flex-direction:column;gap:6px}
+.fd-bar{position:relative;height:8px;overflow:hidden;border:2px solid var(--ctl-brd);background:var(--card-solid)}
+.fd-bar>span{position:absolute;top:0;bottom:0;left:-35%;width:35%;background:var(--accent);animation:fdSlide 1.3s ease-in-out infinite}
+@keyframes fdSlide{from{left:-35%}to{left:100%}}
+.fd-spin{display:inline-block;width:14px;height:14px;margin-right:8px;border:2px solid var(--ctl-brd);border-top-color:var(--accent);border-radius:50%;animation:fdSpin .8s linear infinite;vertical-align:-2px}
+@keyframes fdSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.fd-bar>span{animation:none;left:0;width:100%;opacity:.45}.fd-spin{animation:none}}
+.fd-lastfind{margin:10px 0}
 .fd-tag{display:inline-block;padding:0 6px;font-size:11px;font-weight:700;border:2px solid var(--ctl-brd);background:var(--card-solid)}
 .fd-posts{font-size:12.5px;line-height:1.6;flex:1;min-width:220px}
 .fd-empty{padding:34px 16px;text-align:center;color:var(--text3);font-size:13px;line-height:1.7}
