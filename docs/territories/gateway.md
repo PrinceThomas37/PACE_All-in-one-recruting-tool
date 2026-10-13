@@ -1163,6 +1163,22 @@ New admin settings (Lead Finder group + Email engine): `finder_max_titles/places
 ## 2026-10-14 (Session 44) — size choice and take-by-id (D-0135)
 `routes/finder.js` `runSearch`: after the sources are merged, when the search has a size choice, free-source companies with no size are looked up in ONE Apollo search by website (`q_organization_domains_list`, one credit, `noteApollo('finder_company_size')`), then `finder.applySizeChoice` drops known-out-of-range companies (counted in `out.wrongSize`, said in the run note) and marks unknown ones `size_unknown`. `GET /finder/access` now lists four size bands (`micro` 1–10 added). `routes/lead-take.js`: `POST /leads/take` also accepts `{ job_ids }` (unowned + Unassigned + not duplicate + `ownership.canSeeLead`; same cap and mailboxes); the answer adds `skipped`.
 
+## 2026-10-13 (Session 44) — Website walkthrough requests (R-216, D-0137)
+`POST /site/walkthrough-request` (`routes/site-requests.js`) is PUBLIC: rate limited in `index.js` (`site-request`, 5 an hour per address, registered before the route) and mounted right after `routes/apply`. The rules live in `services/site-requests.js`:
+- `website` is a honeypot;
+- a missing name, a bad email or a missing agency is a 400 with a sentence;
+- a person, a repeat and a bot all get the same `{ok:true}`.
 
-## 2026-10-14 (Session 44) — saved cards can look for people (D-0136)
+Every request is KEPT first, in `app_settings` `site_request:<email>`. It is a 500 only if that save fails. Then, ONLY when `WEBSITE_LEADS_ORG_ID` is set (read per request), the service makes, in that org:
+- an Unassigned lead (source "Website · walkthrough request") with the person as its contact;
+- an activity line;
+- a reminder, type `website_request`, for the org's oldest active admin (`role` or `roles` includes `admin`).
+
+The same email on a live lead in that org makes no second lead: the reminder goes on that lead. It is deliberately NOT defaulted to `DEFAULT_ORG_ID`, because that org is Fute Global, a customer. A failure after the request was kept is logged as `[site] … was kept but no lead was made`. CORS is the app's existing `origin:'*'`. The website wakes the free Render instance with `GET /health` on the first focus of the form.
+
+## 2026-10-13 (Session 44) — the walkthrough route says "ok" only when a lead was made (D-0138)
+`POST /site/walkthrough-request` returns `{ok:true}` only when the request reached a lead (new or existing). If it was kept but went nowhere (no `WEBSITE_LEADS_ORG_ID`, or the lead could not be made), it returns 503 with a sentence naming info@paceconsultant.in, and the site's form shows its email fallback. The log line says which of the two happened.
+
+
+## 2026-10-14 (Session 44) — saved cards can look for people (D-0140)
 `routes/finder.js`: `POST /finder/cards/:id/people` and `/reveal` accept status `new` OR `accepted` (so "email another person" can search and reveal); `GET /finder/history` items carry `domain`. Nothing else changed server-side; delete and send-selected use the existing `DELETE /emails/:id` and `POST /emails/send-selected`.
