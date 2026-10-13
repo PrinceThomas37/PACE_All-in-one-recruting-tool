@@ -1,0 +1,16 @@
+/* Self-hosted so a visitor's browser never calls a font service (both fonts: SIL Open Font License). */
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:400;font-display:swap;src:url(pixelify-sans-400.woff2) format('woff2')}
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:500;font-display:swap;src:url(pixelify-sans-500.woff2) format('woff2')}
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:600;font-display:swap;src:url(pixelify-sans-600.woff2) format('woff2')}
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:700;font-display:swap;src:url(pixelify-sans-700.woff2) format('woff2')}
+@font-face{font-family:'Press Start 2P';font-style:normal;font-weight:400;font-display:swap;src:url(press-start-2p-400.woff2) format('woff2')}
+/* 'PACE Text' = Pixelify Sans for letters, Press Start 2P for digits only. Pixelify's small digits read badly
+   (2 looks like 8, 5 like S); the heading font's digits are clear. Same two fonts, one family name. */
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:400;font-display:swap;src:url(pixelify-sans-400.woff2) format('woff2');unicode-range:U+0000-002F,U+003A-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:500;font-display:swap;src:url(pixelify-sans-500.woff2) format('woff2');unicode-range:U+0000-002F,U+003A-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:600;font-display:swap;src:url(pixelify-sans-600.woff2) format('woff2');unicode-range:U+0000-002F,U+003A-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:700;font-display:swap;src:url(pixelify-sans-700.woff2) format('woff2');unicode-range:U+0000-002F,U+003A-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:400;font-display:swap;src:url(press-start-2p-400.woff2) format('woff2');unicode-range:U+0030-0039;size-adjust:74%}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:500;font-display:swap;src:url(press-start-2p-400.woff2) format('woff2');unicode-range:U+0030-0039;size-adjust:74%}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:600;font-display:swap;src:url(press-start-2p-400.woff2) format('woff2');unicode-range:U+0030-0039;size-adjust:74%}
+@font-face{font-family:'PACE Text';font-style:normal;font-weight:700;font-display:swap;src:url(press-start-2p-400.woff2) format('woff2');unicode-range:U+0030-0039;size-adjust:74%}

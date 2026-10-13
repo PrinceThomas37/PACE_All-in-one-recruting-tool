@@ -1160,6 +1160,6 @@ New admin settings (Lead Finder group + Email engine): `finder_max_titles/places
 ## 2026-10-13 (Session 44) — Blocked contacts
 `routes/contacts.js`: the allowed statuses come from `services/contact-status.js`; a database CHECK refusal (23514 / `contacts_email_status_check`) is answered 409 `status_needs_update` in plain words (PUT /contacts/:id and PATCH /contacts/:id/email-status). `routes/recruiting/outreach.js` client-contact suggestions skip never-email statuses.
 
-## 2026-10-14 (Session 44) — size choice and take-by-id (D-0128)
+## 2026-10-14 (Session 44) — size choice and take-by-id (D-0135)
 `routes/finder.js` `runSearch`: after the sources are merged, when the search has a size choice, free-source companies with no size are looked up in ONE Apollo search by website (`q_organization_domains_list`, one credit, `noteApollo('finder_company_size')`), then `finder.applySizeChoice` drops known-out-of-range companies (counted in `out.wrongSize`, said in the run note) and marks unknown ones `size_unknown`. `GET /finder/access` now lists four size bands (`micro` 1–10 added). `routes/lead-take.js`: `POST /leads/take` also accepts `{ job_ids }` (unowned + Unassigned + not duplicate + `ownership.canSeeLead`; same cap and mailboxes); the answer adds `skipped`.
 

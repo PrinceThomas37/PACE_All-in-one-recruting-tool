@@ -1245,5 +1245,5 @@ The full suite found the sending-hours regression that targeted runs did not (`s
 ## 2026-10-13 (Session 44) — Blocked contacts
 `contact-status-smoke` (20) lifts the real send-time helpers out of `index.js` and runs them, mounts the real contacts routes over an in-memory database with a CHECK that refuses `blocked` until "migrated", and checks the browser menu equals the server list. The full suite also caught the missing `{{jobs}}` in the browser lists (`sequence-builder-smoke`).
 
-## 2026-10-14 (Session 44) — tests for the owner's handwritten notes (D-0128)
+## 2026-10-14 (Session 44) — tests for the owner's handwritten notes (D-0135)
 New: `places-smoke` (15), `take-selected-ui-smoke` (18). Extended: `finder-routes-smoke` (184; size-choice block, mutation-checked by turning the filter off), `lead-finder-smoke` (75), `lead-take-smoke` (37; take-by-id, mutation-checked by dropping `canSeeLead`), `finder-page-smoke` (170; place suggestions typed with the real keyboard, no spinner), `lead-intel-ui-smoke` (22; Show job description). A size filter that only works in a fake Apollo that ignores filters proves nothing — the route test's Apollo returns the same rows whatever it is asked, which is exactly why the size check had to move onto what comes back.
