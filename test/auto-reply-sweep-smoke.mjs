@@ -38,7 +38,7 @@ function build({ migrated, status = 'valid' }) {
   } };
   const log = { activity: [], skipped: [], emitted: [] };
   const deps = {
-    supabase, autoReply: require('../services/auto-reply.js'),
+    supabase, autoReply: require('../services/auto-reply.js'), replyDecline: require('../services/reply-decline.js'),
     isWarmupMessage: () => false, isNdrMessage: () => false, isOptOutReply: () => false,
     clientIntel: { domainOf: () => '', gateMessage: () => ({ keep: false }) },
     storeConversationMessage: async () => {}, addToSuppression: async () => {},

@@ -698,6 +698,9 @@ function createMailProvider(ctx) {
         q: q || undefined,
         maxResults: limit,
         pageToken: cursor || undefined,
+        // A search with no folder is the WHOLE mailbox — Spam and Trash too (owner, 14 Oct: "check spam and trash"); Gmail leaves them
+        // out of a search unless told. Reading a folder is unchanged.
+        includeSpamTrash: !folderId && !!q ? true : undefined,
       });
       const heads = page.messages || [];
       // metadata format: headers without bodies, which is all a list row needs

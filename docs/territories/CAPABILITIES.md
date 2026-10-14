@@ -726,4 +726,6 @@ person who has not written their own (R-169).
 - **"Already on another lead here" question (R-234):** emailing another job to a person who is already on a live lead at that company asks first, naming the lead; **Add anyway** goes ahead.
 - **Address suggestions (R-235):** type in To / Cc (new message, reply, reply all, forward) and people you have written to before, people in the open mailbox and PACE contacts are offered; arrow keys + Enter or a click take one. Admin number: "Sent emails read for address suggestions".
 - **Search across the whole mailbox (R-236):** a search looks in every folder; each result says which folder it is in; picking a folder leaves the search.
+- **A client who says no is Rejected (R-238):** "not interested", "no thank you", "we don't use agencies", "we're all set", "not hiring", or "unsubscribe / remove me" in a reply moves the lead to Rejected (an unsubscribe also stops all email to them). A reply that also asks for something, or puts it off, is left for a person.
+- **Interested replies are never taken for an unsubscribe (R-239):** the check reads what the person wrote, not our own footer quoted underneath.
 

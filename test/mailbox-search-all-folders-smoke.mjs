@@ -41,6 +41,20 @@ const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] 
   step('Gmail: a result says where it lives — Inbox, Sent; Trash beats Inbox; an archived one has none', f.a === 'INBOX' && f.b === 'SENT' && f.c === 'TRASH' && f.d === null, JSON.stringify(f));
   await gm.listMessages({ folderId: 'INBOX' });
   step('Gmail: with a folder it still filters by that label', JSON.stringify(seen[1].labelIds) === '["INBOX"]');
+  step('Gmail: a whole-mailbox search INCLUDES Spam and Trash (Gmail leaves them out unless asked)', seen[0].includeSpamTrash === true, JSON.stringify(seen[0]));
+  step('Gmail: reading one folder does not ask for them', seen[1].includeSpamTrash === undefined);
+  // and the Gmail provider itself puts it on the wire (a stand-in for the network records the address it is asked for)
+  const { createGmailProvider } = require('../gmail-provider.js');
+  const urls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => { urls.push(String(u)); return new Response(JSON.stringify({ messages: [], resultSizeEstimate: 0 }), { status: 200, headers: { 'content-type': 'application/json' } }); };
+  try {
+    const db = { from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { access_token: 'tok', expires_at: new Date(Date.now() + 3600e3).toISOString() }, error: null }) }) }) }) };
+    const real = createGmailProvider({ supabase: db, google: { clientId: 'x', clientSecret: 'y', redirectUri: 'z', scopes: 's' } });
+    await real.listMessagePage('mb', { q: 'katie', maxResults: 5, includeSpamTrash: true });
+    await real.listMessagePage('mb', { labelIds: ['INBOX'], maxResults: 5 });
+    step('the Gmail request carries includeSpamTrash=true when asked, and not otherwise', /includeSpamTrash=true/.test(urls[0]) && !/includeSpamTrash/.test(urls[1]), urls.join(' | '));
+  } finally { globalThis.fetch = realFetch; }
 }
 
 // ── 2. the page ──
@@ -62,6 +76,9 @@ const iso = (m) => new Date(Date.now() - m * 60000).toISOString();
 const me = { name: 'Priya', email: 'priya@futeglobal.com' }, katie = { name: 'Katie Simmer', email: 'katie@cargill.com' };
 const INBOX_ONLY = [{ id: 'i1', thread_id: 't1', folder_id: 'f-inbox', subject: 'Inbox item', from: { name: 'Zed', email: 'zed@x.com' }, to: [me], cc: [], date: iso(5), preview: 'hello', unread: false, platform: 'Gmail', label_ids: [] }];
 const FOUND = [
+  { id: 'sp1', thread_id: 't8', folder_id: 'f-spam', subject: 'Katie in Spam', from: katie, to: [me], cc: [], date: iso(30), preview: 'spam', unread: false, platform: 'Gmail', label_ids: [] },
+  { id: 'tr1', thread_id: 't9', folder_id: 'f-trash', subject: 'Katie in Trash', from: katie, to: [me], cc: [], date: iso(40), preview: 'trash', unread: false, platform: 'Gmail', label_ids: [] },
+  { id: 'ar1', thread_id: 't10', folder_id: null, subject: 'Katie archived', from: katie, to: [me], cc: [], date: iso(50), preview: 'old', unread: false, platform: 'Gmail', label_ids: [] },
   { id: 'i2', thread_id: 't2', folder_id: 'f-inbox', subject: 'Katie in the inbox', from: katie, to: [me], cc: [], date: iso(10), preview: 'hi', unread: false, platform: 'Gmail', label_ids: [] },
   { id: 's1', thread_id: 't3', folder_id: 'f-sent', subject: 'Sent to Katie', from: me, to: [katie], cc: [], date: iso(20), preview: 'we sent', unread: false, platform: 'Gmail', label_ids: [] },
 ];
@@ -81,7 +98,7 @@ try {
       if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 0, mailboxes: 1 });
       if (/\/labels$/.test(p)) return Promise.resolve([]);
       if (/\/signature$/.test(p)) return Promise.resolve({ html: '' });
-      if (/\/folders$/.test(p)) return Promise.resolve([{ id: 'f-inbox', name: 'Inbox', kind: 'inbox', unread: 0, total: 1 }, { id: 'f-sent', name: 'Sent', kind: 'sent', unread: 0, total: 1 }]);
+      if (/\/folders$/.test(p)) return Promise.resolve([{ id: 'f-inbox', name: 'Inbox', kind: 'inbox', unread: 0, total: 1 }, { id: 'f-sent', name: 'Sent', kind: 'sent', unread: 0, total: 1 }, { id: 'f-spam', name: 'Spam', kind: 'junk', unread: 0, total: 1 }, { id: 'f-trash', name: 'Trash', kind: 'trash', unread: 0, total: 1 }]);
       if (/\/messages\?/.test(p)) { window.__reads.push(p); return Promise.resolve({ messages: /[?&]q=/.test(p) ? found : (/folder=f-sent/.test(p) ? [] : inbox), next_cursor: null, crm: {} }); }
       return Promise.resolve({});
     };
@@ -91,13 +108,16 @@ try {
   await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 1, { timeout: 8000 });
 
   await page.evaluate(() => window.mbSearch('katie'));
-  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 2, { timeout: 8000 });
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 5, { timeout: 8000 });
   const searchRead = await page.evaluate(() => window.__reads[window.__reads.length - 1]);
   step('a search sends NO folder — the server searches every folder', /q=katie/.test(searchRead) && !/folder=/.test(searchRead), searchRead);
   const rows = await page.evaluate(() => [...document.querySelectorAll('#mb-list .mb-row')].map(r => ({ txt: r.innerText.replace(/\s+/g, ' '), chip: (r.querySelector('.mb-in-folder') || {}).textContent || '' })));
-  step('each result shows the folder it is in', rows.length === 2 && rows[0].chip === 'Inbox' && rows[1].chip === 'Sent', JSON.stringify(rows));
-  step('a Sent result shows who it went TO, not us', /To Katie Simmer/.test(rows[1].txt), rows[1].txt);
-  step('an Inbox result shows who it is from', /Katie Simmer/.test(rows[0].txt) && !/^To /.test(rows[0].txt.trim()));
+  const chipOf = (t) => (rows.find(r => r.txt.indexOf(t) > -1) || {}).chip;
+  step('each result shows the folder it is in', rows.length === 5 && chipOf('Katie in the inbox') === 'Inbox' && chipOf('Sent to Katie') === 'Sent', JSON.stringify(rows));
+  step('results from Spam and Trash are found and say so', chipOf('Katie in Spam') === 'Spam' && chipOf('Katie in Trash') === 'Trash', JSON.stringify(rows.map(r => r.chip)));
+  step('a Gmail message that was archived (in no folder) says "All Mail"', chipOf('Katie archived') === 'All Mail');
+  step('a Sent result shows who it went TO, not us', /To Katie Simmer/.test(rows.find(r => r.txt.indexOf('Sent to Katie') > -1).txt));
+  step('an Inbox result shows who it is from', /Katie Simmer/.test(rows.find(r => r.txt.indexOf('Katie in the inbox') > -1).txt));
   const menu = await page.evaluate(() => { const s = document.querySelector('#mb-toolbar select[onchange*="mbSelectFolder"]'); return s ? { sel: s.options[s.selectedIndex].textContent, n: s.options.length } : null; });
   step('the folder menu says the results are from ALL folders', menu && /All folders/.test(menu.sel), JSON.stringify(menu));
   step('the search box says it searches all folders', await page.evaluate(() => /all folders/i.test((document.querySelector('#mb-toolbar input[type="search"], #mb-toolbar input') || {}).placeholder || '')));
@@ -113,7 +133,7 @@ try {
   await page.waitForFunction(() => STATE.mailbox.folderId === 'f-inbox' && (STATE.mailbox.messages || []).some(m => m.id === 'i1'), { timeout: 8000 });
   step('the Inbox\'s own list is not poisoned by the earlier search (only its own message is there)', await page.evaluate(() => STATE.mailbox.messages.length === 1 && STATE.mailbox.messages[0].id === 'i1'));
   await page.evaluate(() => window.mbSearch('katie'));
-  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 2, { timeout: 8000 });
+  await page.waitForFunction(() => (STATE.mailbox.messages || []).length === 5, { timeout: 8000 });
   await page.evaluate(() => window.mbClearSearch());
   await page.waitForFunction(() => !STATE.mailbox.q && (STATE.mailbox.messages || []).some(m => m.id === 'i1'), { timeout: 8000 });
   step('Clear search goes back to the folder that was open', await page.evaluate(() => STATE.mailbox.folderId === 'f-inbox' && STATE.mailbox.messages.length === 1));

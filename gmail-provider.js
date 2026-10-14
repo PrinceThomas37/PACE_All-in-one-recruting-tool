@@ -306,10 +306,12 @@ function createGmailProvider(ctx) {
   // listMessages above deliberately drops the page token — the reply sweep only
   // ever wants one window. A mail client has to paginate, so this returns the
   // whole page envelope instead of overloading the sweep's helper.
-  async function listMessagePage(userEmailId, { labelIds, q, maxResults, pageToken } = {}) {
+  async function listMessagePage(userEmailId, { labelIds, q, maxResults, pageToken, includeSpamTrash } = {}) {
     const token = await getToken(userEmailId);
     const p = new URLSearchParams();
     (labelIds || []).forEach((l) => p.append('labelIds', l));
+    // Gmail leaves Spam and Trash out of a search unless asked. A search across the whole mailbox asks (14 Oct, owner).
+    if (includeSpamTrash) p.set('includeSpamTrash', 'true');
     if (q) p.set('q', q);
     if (pageToken) p.set('pageToken', pageToken);
     p.set('maxResults', String(maxResults || 25));

@@ -2069,4 +2069,10 @@ Two organisations already existed, so nobody is signed out by a third. info@ is 
 5. *Warn when the same person is already on another active lead at the same company* — **yes** (R-234). A question with "Add anyway", never a refusal (D-0110 keeps "another job" allowed).
 6. *Address auto-suggest in To / Cc* "like Gmail or Outlook" (R-235) and 7. *search all folders in a mailbox* "like Gmail" (R-236).
 **Re-open when:** the owner wants suggestions to include people the mailbox only RECEIVED from (today: sent-to, the open list and PACE's contacts), or the RA-lead window to differ from the RA's.
+### D-0143 · 2026-10-14 · STANDS · Move the four "no thanks" leads out of Connected; search includes Spam and Trash
+**The owner said (14 Oct):** *"Want me to move them? — Yes"* (the four leads at Connected whose reply was a no / unsubscribe) → moved to **Rejected** (R-237). And, on the search difference: *"Check spam and trash, check all folders in that mailbox"* → a whole-mailbox search now asks Gmail to include Spam and Trash too; results from them say so (R-236).
+**Re-open when:** the owner wants a different stage for a "no" than Rejected, or Spam/Trash left out of a search by default.
+### D-0144 · 2026-10-14 · STANDS · A client's "no" is Rejected, not Connected (R-238), and the opt-out check reads only the person's own words (R-239)
+**The owner said (14 Oct):** *"emails in which clients say not interested or unsubscribe and being changed to connected, those should be rejected."* → built (cautiously: a mixed or soft reply is left for a person). While proving it, the live data showed the opt-out check had been reading the quoted copy of our own footer, putting seven interested contacts on the do-not-email list — fixed in code; whether to take those seven back OFF the list is the owner's call (consent data), asked.
+**Re-open when:** the owner wants "not now / next quarter" replies to go to **Future**, or wants a plain "no" (no unsubscribe) to also stop all email to that person.
 
