@@ -1455,7 +1455,7 @@ async function resolveSentMessageId(accessToken, { conversationId, toEmail, fall
   return { id: fallbackId, conversationId };
 }
 
-async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, attachments, cc }) {
+async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, attachments, cc, categories }) {
   const accessToken = await getMicrosoftToken(userEmailId);
   const msg = await graphMailRequest(accessToken, '/me/messages', {
     method: 'POST',
@@ -1466,6 +1466,8 @@ async function sendMicrosoftNewMessage(userEmailId, { to, subject, htmlBody, att
       // cc arrived with the in-app mailbox (a person writing a real email
       // expects a Cc field). Every outreach caller omits it and is unchanged.
       ...((cc && cc.length) ? { ccRecipients: cc.map(a => ({ emailAddress: { address: a } })) } : {}),
+      // Labels picked in the New message window (R-244): Outlook categories, carried by the draft into Sent Items.
+      ...((categories && categories.length) ? { categories } : {}),
       ...((attachments && attachments.length) ? { attachments: attachments.map(a => ({
         '@odata.type': '#microsoft.graph.fileAttachment',
         name: a.filename, contentType: a.contentType || 'application/octet-stream', contentBytes: a.base64

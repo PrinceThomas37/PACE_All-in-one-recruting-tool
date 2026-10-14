@@ -263,6 +263,13 @@ try{
   await click('#layer .win-bar button[aria-label="Minimise"]');
   const ph = await ev(()=>{ const t=document.getElementById('win-tray'); if(!t) return null; const r=t.getBoundingClientRect(); return { l:Math.round(r.left), r:Math.round(r.right), b:Math.round(r.bottom), vw:innerWidth, vh:innerHeight }; });
   step('Phone: the tray sits inside the screen', !!ph && ph.l>=0 && ph.r<=ph.vw && ph.b<=ph.vh, JSON.stringify(ph));
+  const phRight = await ev(()=>{ const c=document.querySelector('#win-tray .win-chip').getBoundingClientRect(); return { fromRight:Math.round(innerWidth-c.right), fromLeft:Math.round(c.left) }; });
+  step('Narrow layout: the chip hugs the bottom-RIGHT, not the left', phRight.fromRight<=24 && phRight.fromLeft>phRight.fromRight, JSON.stringify(phRight));
+  // a desktop window zoomed in or narrowed to the same layout (860px and under) must do the same
+  await page.setViewportSize({ width:800, height:700 }); await page.waitForTimeout(200);
+  const narrowDesk = await ev(()=>{ const c=document.querySelector('#win-tray .win-chip').getBoundingClientRect(); return { fromRight:Math.round(innerWidth-c.right), fromLeft:Math.round(c.left), vw:innerWidth }; });
+  step('Narrow desktop window (800px): the chip is still in the bottom-right corner', narrowDesk.fromRight<=24 && narrowDesk.fromLeft>narrowDesk.fromRight, JSON.stringify(narrowDesk));
+  await page.setViewportSize({ width:390, height:800 }); await page.waitForTimeout(200);
   const phoneDrag = await ev(()=>{
     const chip=document.querySelector('#win-tray .win-chip');
     const r=chip.getBoundingClientRect();

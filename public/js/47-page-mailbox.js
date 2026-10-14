@@ -702,13 +702,14 @@
     // (10a-window-dock.js: minimise, full screen, look elsewhere in PACE, come back as left), it remembers WHICH
     // message it answers (so it can be sent from anywhere), and what is typed is also kept on this device
     // (a draft), so even closing it or reloading the page loses nothing.
-    var c={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], sig:sigPrefGet(), showCc:!!cc, sending:false,
+    var c={ mode:mode, to:to, cc:cc, subject:subject, body:'', files:[], labels:[], sig:sigPrefGet(), showCc:!!cc, sending:false,
             acct:m.activeId, msgId:x.id, from:(x.from&&(x.from.name||x.from.email))||'', savedAt:null };
     var d=draftGet(c);
     if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
     m.composer=c;
     if(c.sig) loadSignature(c.acct,true);
     loadRecipients(c.acct);
+    ensureLabels(c.acct);
     paintComposer(true);
     setTimeout(function(){ var ed=document.getElementById('mb-comp-editor'); if(ed) ed.focus(); },30);
     if(d) showToast('Your unsent draft for this message is back','info');
@@ -839,13 +840,15 @@
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
     };
     if(mbIsFormatted(c)) payload.formatted=true;
+    if((c.labels||[]).length) payload.label_ids=c.labels.map(function(l){return l.id;});
     // The mailbox and message captured when the window was opened — not whatever is selected now.
     var path='/mailbox/'+encodeURIComponent(c.acct)+'/messages/'+encodeURIComponent(c.msgId)+
       (c.mode==='forward'?'/forward':'/reply');
     if(c.mode!=='forward') payload.reply_all=(c.mode==='replyAll');
     apiPost(path,payload)
-      .then(function(){
+      .then(function(r){
         showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
+        if(r&&r.label_error) showToast('Sent, but the label could not be added: '+r.label_error,'warning');
         draftClear(c);
         // Close whichever way the window is now: on screen, or parked while the person looked elsewhere.
         if(m.composer===c){ m.composer=null; if(winOnScreen('mailReply')) closeModal(); }
@@ -867,8 +870,9 @@
     // Several new messages can be open together (R-240): whatever is on screen goes to the tray as it is, and this one
     // opens. Each carries the mailbox it was started from, so switching mailboxes later never changes who it sends as.
     if(!parkOnScreen()) return;
-    m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false, acct:m.activeId };
+    m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], labels:[], sig:sigPrefGet(), sending:false, acct:m.activeId };
     loadRecipients(m.activeId);
+    ensureLabels(m.activeId);
     if(m.compose.sig) loadSignature(m.activeId,true);
     paintComposeModal(true);
   };
@@ -1077,6 +1081,7 @@
             '<div id="mb-c-editor" class="sel mb-editor'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" data-placeholder="Write your message…" '+
               'oninput="mbEditorInput(\'compose\')" onpaste="mbEditorPaste(event,\'compose\')">'+mbEditorHtml(c.body)+'</div></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
+          '<div style="margin-bottom:12px">'+labelRowHtml('compose',c)+'</div>'+
           renderSigRow(c.sig,'mbComposeSetSig',c.acct||M().activeId)+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
@@ -1269,9 +1274,11 @@
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
     };
     if(mbIsFormatted(c)) sendBody.formatted=true;
+    if((c.labels||[]).length) sendBody.label_ids=c.labels.map(function(l){return l.id;});
     apiPost('/mailbox/'+encodeURIComponent(c.acct||m.activeId)+'/send', sendBody)
-      .then(function(){
+      .then(function(r){
         showToast('Sent','success');
+        if(r&&r.label_error) showToast('Sent, but the label could not be added: '+r.label_error,'warning');
         // Sent from the screen, or from a chip while the person looked elsewhere: close whichever it is, nothing else.
         if(m.compose===c){ m.compose=null; if(winOnScreen('mailCompose')) closeModal(); }
         else if(window.Dock) Dock.discardCtx(c);
@@ -1596,15 +1603,67 @@
     return '<div class="mb-lbls">'+shown.map(function(x){ return '<span class="mb-lbl">'+labelDot(x.id)+esc(x.name)+'</span>'; }).join('')+
       (more>0?'<span class="mb-lbl mb-lbl-more">+'+more+'</span>':'')+'</div>';
   }
-  function ensureLabels(){
-    var m=M(), acct=m.activeId; if(!acct) return;
+  function ensureLabels(forAcct){
+    var m=M(), acct=forAcct||m.activeId; if(!acct) return;
     m.labels=m.labels||{};
     if(m.labels[acct]) return;
     m.labels[acct]=[];                                   // asked once; an unreadable list is "no list"
     apiGet('/mailbox/'+enc(acct)+'/labels').then(function(d){
       m.labels[acct]=d||[]; paint();
+      paintComposer(); paintComposeModal();                // a window open meanwhile gets the list too (each repaints only if on screen)
     }).catch(function(){ /* labels are a nicety — the inbox works without the list */ });
   }
+
+  // ── LABELS ON A MESSAGE BEING WRITTEN (R-244, D-0146) ─────────────────────────
+  // Owner, 14 Oct: "i need an option to mark emails or label them before sending … add them to an existing label or a new
+  // one". Asked and answered: the REAL mailbox labels (the list under Label… in the inbox), labels only (no flag).
+  // Chosen in the New message / Reply / Forward window; applied to the sent copy by the server.
+  function winLabels(acct){ var m=M(), l=m.labels&&m.labels[acct]; return Array.isArray(l)?l:[]; }   // a label list that is not a list (an odd answer from the server) is "no labels", never a broken window
+  function labelRowHtml(which,c){
+    var m=M(), acct=c.acct||m.activeId;
+    var a=(m.accounts||[]).filter(function(x){return x.id===acct;})[0]||{};
+    if(a.platform!=='Gmail'&&a.platform!=='Microsoft') return '';   // an app-password mailbox has no labels to apply
+    var chosen=c.labels||[], have={}; chosen.forEach(function(l){ have[l.id]=1; });
+    var opts=winLabels(acct).filter(function(l){return !have[l.id];}).map(function(l){ return '<option value="'+escAttr(l.id)+'">'+esc(l.name)+'</option>'; }).join('');
+    return '<div class="mb-win-row mb-win-lbl"><label class="fs-11 c-text2">Label</label>'+
+      (chosen.length?'<span class="mb-lbls mb-lbls-win">'+chosen.map(function(l,i){
+        return '<span class="mb-lbl">'+esc(l.name)+'<button type="button" class="mb-lbl-x" aria-label="Remove label '+escAttr(l.name)+'" onclick="mbWinLabelRemove(\''+which+'\','+i+')">×</button></span>';
+      }).join('')+'</span>':'')+
+      '<select class="sel mb-lbl-pick" aria-label="Add an existing label" onchange="mbWinLabelAdd(\''+which+'\',this)">'+
+        '<option value="">'+(opts?'Add a label…':'No other labels yet')+'</option>'+opts+'</select>'+
+      '<input id="mb-lbl-new-'+which+'" class="sel mb-lbl-new" placeholder="or make a new one" aria-label="New label name" '+
+        'onkeydown="if(event.key===\'Enter\'){event.preventDefault();mbWinLabelNew(\''+which+'\')}">'+
+      '<button type="button" class="btn btn-xs btn-outline" onclick="mbWinLabelNew(\''+which+'\')">Add</button></div>';
+  }
+  function winBag(which){ var m=M(); return which==='compose'?m.compose:m.composer; }
+  function winRepaint(which){ if(which==='compose') paintComposeModal(); else paintComposer(); }
+  window.mbWinLabelAdd=function(which,sel){
+    var c=winBag(which), id=sel&&sel.value; if(!c||!id) return;
+    mbChipFlush();
+    var l=winLabels(c.acct||M().activeId).filter(function(x){return x.id===id;})[0]; if(!l) return;
+    c.labels=(c.labels||[]).concat([{id:l.id,name:l.name}]);
+    winRepaint(which);
+  };
+  window.mbWinLabelRemove=function(which,i){
+    var c=winBag(which); if(!c||!c.labels) return;
+    mbChipFlush(); c.labels.splice(i,1); winRepaint(which);
+  };
+  window.mbWinLabelNew=function(which){
+    var c=winBag(which), inp=document.getElementById('mb-lbl-new-'+which); if(!c||!inp) return;
+    var name=String(inp.value||'').trim(); if(!name) return;
+    mbChipFlush();
+    var m=M(), acct=c.acct||m.activeId;
+    var add=function(l){
+      if(!(c.labels||[]).some(function(x){return x.id===l.id;})) c.labels=(c.labels||[]).concat([{id:l.id,name:l.name||name}]);
+      if(winBag(which)===c) winRepaint(which);
+    };
+    var exists=winLabels(acct).filter(function(x){return String(x.name).toLowerCase()===name.toLowerCase();})[0];
+    if(exists) return add(exists);          // typing a name that already exists picks that one — never a duplicate
+    apiPost('/mailbox/'+enc(acct)+'/labels',{name:name}).then(function(l){
+      m.labels=m.labels||{}; m.labels[acct]=(m.labels[acct]||[]).filter(function(x){return x.id!==l.id;}).concat([{id:l.id,name:l.name||name}]);
+      add(l);
+    }).catch(function(e){ showToast('Could not make that label: '+((e&&e.message)||e),'error'); });
+  };
 
   // The initials block that identifies a correspondent at a glance.
   function mbAvatar(party,size){
@@ -1848,6 +1907,7 @@
             'data-placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'" '+
             'oninput="mbEditorInput(\'reply\')" onpaste="mbEditorPaste(event,\'reply\')">'+mbEditorHtml(c.body)+'</div>'+
           renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
+          labelRowHtml('reply',c)+
           renderSigRow(c.sig,'mbCompSetSig',c.acct)+
         '</div>'+
         '<div class="mb-win-ft">'+

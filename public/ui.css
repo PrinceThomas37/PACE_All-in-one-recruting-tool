@@ -1041,6 +1041,10 @@ select.na-act-do{padding:4px 6px;max-width:132px}
 .mb-win-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .mb-win-row>label{width:52px;flex:none}
 .mb-win-grow{flex:1;min-width:0}
+.mb-win-lbl{flex-wrap:wrap}
+.mb-lbls-win{margin-top:0}
+.mb-lbl-x{border:0;background:transparent;color:inherit;font:inherit;line-height:1;margin-left:5px;padding:0 1px;cursor:pointer}
+.mb-lbl-pick,.mb-lbl-new{width:auto;min-width:150px;flex:0 1 190px}
 .mb-win-text{width:100%;min-height:200px;resize:vertical;line-height:1.55}
 .mb-body-store{position:absolute;width:1px;height:1px;padding:0;margin:0;border:0;opacity:0;pointer-events:none;overflow:hidden}
 .mb-editor{min-height:180px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
