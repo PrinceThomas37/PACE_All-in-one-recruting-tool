@@ -118,6 +118,7 @@ try {
       if (/^\/mailbox\/unread-count/.test(p)) return Promise.resolve({ unread: 4, mailboxes: 2 });
       // The server returns the signature already FILLED — the bug this guards
       // is the raw template ({{sender}}) reaching a real recipient.
+      if (/\/labels$/.test(p)) return Promise.resolve([{ id: 'Client', name: 'Client' }, { id: 'Hot', name: 'Hot' }]);
       if (/\/signature$/.test(p)) return Promise.resolve({
         html: '<div><b>Priya Sharma</b><br>Recruitment Manager | Fute Global LLC</div>' });
       if (/\/folders$/.test(p)) return Promise.resolve(F.folders);
@@ -139,7 +140,11 @@ try {
       }
       return Promise.resolve({});
     };
-    window.apiPost = function (p, b) { window.__calls.push(['POST', p, b]); return Promise.resolve({ success: true }); };
+    window.apiPost = function (p, b) {
+      window.__calls.push(['POST', p, b]);
+      if (/\/labels$/.test(p)) return Promise.resolve({ id: 'L-' + b.name, name: b.name });
+      return Promise.resolve({ success: true });
+    };
     window.apiPatch = function (p, b) { window.__calls.push(['PATCH', p, b]); return Promise.resolve({ success: true }); };
     window.apiDelete = function (p) { window.__calls.push(['DELETE', p]); return Promise.resolve({ ok: true }); };
   }, FIXTURES);
@@ -231,6 +236,49 @@ try {
   await page.evaluate(() => { document.querySelectorAll('#win-tray .win-chip .wx').forEach(x => x.click()); });
   await page.waitForTimeout(200);
   await page.evaluate(() => { Object.keys(localStorage).filter(k => k.indexOf('pace-mb-draft:') === 0).forEach(k => localStorage.removeItem(k)); });
+
+  // 7. Labels before sending (R-244, D-0146 — owner 14 Oct: "mark emails or label them before sending … add them to an existing label or a new one")
+  await page.evaluate(() => { window.mbOpen ? window.mbOpen('m1') : window.mbSelect('m1'); });
+  await page.waitForFunction(() => STATE.mailbox.message && STATE.mailbox.message.id === 'm1', { timeout: 5000 });
+  await page.evaluate(() => window.mbReply(false));
+  await page.waitForSelector('#layer [data-win="mailReply"] .mb-win-lbl', { timeout: 5000 });
+  await page.waitForFunction(() => document.querySelectorAll('#layer [data-win="mailReply"] .mb-lbl-pick option').length > 2, { timeout: 5000 });
+  step('Reply window: has a Label row listing the mailbox\'s existing labels', await page.evaluate(() => [...document.querySelectorAll('#layer .mb-lbl-pick option')].map(o => o.textContent).join('|') === 'Add a label…|Client|Hot'));
+  await typeBody('Labelled reply');
+  await page.selectOption('#layer .mb-lbl-pick', 'Client');
+  await page.waitForTimeout(200);
+  step('choosing an existing label adds it as a chip and takes it out of the list', await page.evaluate(() => [...document.querySelectorAll('#layer .mb-win-lbl .mb-lbl')].map(x => x.textContent.replace('×', '')).join() === 'Client' && ![...document.querySelectorAll('#layer .mb-lbl-pick option')].some(o => o.value === 'Client')));
+  step('…and the words typed are still there after the label repaint', await page.evaluate(() => document.getElementById('mb-comp-editor').textContent === 'Labelled reply'));
+  await page.fill('#mb-lbl-new-reply', 'Follow up Friday');
+  await page.evaluate(() => mbWinLabelNew('reply'));
+  await page.waitForTimeout(250);
+  step('a NEW label is made in the mailbox first, then added as a chip', await page.evaluate(() => window.__calls.some(c => c[0] === 'POST' && /\/labels$/.test(c[1]) && c[2].name === 'Follow up Friday') && [...document.querySelectorAll('#layer .mb-win-lbl .mb-lbl')].length === 2));
+  await page.fill('#mb-lbl-new-reply', 'client');   // already exists (any capitals): picks it, never a duplicate
+  await page.evaluate(() => mbWinLabelNew('reply'));
+  await page.waitForTimeout(200);
+  step('typing a name that already exists picks it instead of making a second', await page.evaluate(() => document.querySelectorAll('#layer .mb-win-lbl .mb-lbl').length === 2 && window.__calls.filter(c => /\/labels$/.test(c[1] || '') && c[0] === 'POST').length === 1));
+  // minimise, come back: the labels are still chosen
+  await page.evaluate(() => Dock.minimise()); await page.waitForTimeout(200);
+  await page.evaluate(() => { document.querySelector('#win-tray .win-chip').click(); });
+  await page.waitForSelector('#layer [data-win="mailReply"] .mb-win-lbl');
+  step('minimise and come back: the chosen labels are still there', await page.evaluate(() => document.querySelectorAll('#layer .mb-win-lbl .mb-lbl').length === 2));
+  await page.evaluate(() => { document.querySelector('#layer .mb-lbl-x').click(); });
+  await page.waitForTimeout(200);
+  step('a chosen label can be taken off again', await page.evaluate(() => document.querySelectorAll('#layer .mb-win-lbl .mb-lbl').length === 1));
+  await page.evaluate(() => { window.__calls = []; window.mbSendComposer(); });
+  await page.waitForTimeout(400);
+  const lcall = await page.evaluate(() => window.__calls.find(c => /\/reply$/.test(c[1] || '')));
+  step('sending carries the chosen labels (by id) to the server', !!lcall && JSON.stringify(lcall[2].label_ids) === '["L-Follow up Friday"]', JSON.stringify(lcall && lcall[2].label_ids));
+  // New message window
+  await page.evaluate(() => mbCompose('x@example.test')); await page.waitForSelector('#layer [data-win="mailCompose"] .mb-win-lbl');
+  await page.waitForFunction(() => document.querySelectorAll('#layer [data-win="mailCompose"] .mb-lbl-pick option').length > 2, { timeout: 5000 });
+  await page.click('#mb-c-editor'); await page.keyboard.insertText('Labelled new message');
+  await page.selectOption('#layer [data-win="mailCompose"] .mb-lbl-pick', 'Hot'); await page.waitForTimeout(200);
+  step('New message window: has the same Label row and takes an existing label', await page.evaluate(() => [...document.querySelectorAll('#layer [data-win="mailCompose"] .mb-win-lbl .mb-lbl')].map(x => x.textContent.replace('×', '')).join() === 'Hot' && document.getElementById('mb-c-editor').textContent === 'Labelled new message'));
+  await page.evaluate(() => { window.__calls = []; window.mbSendCompose(); });
+  await page.waitForTimeout(400);
+  const ncall = await page.evaluate(() => window.__calls.find(c => /\/send$/.test(c[1] || '')));
+  step('New message: sending carries the label to the server', !!ncall && JSON.stringify(ncall[2].label_ids) === '["Hot"]', JSON.stringify(ncall && ncall[2]));
 
   step('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
 } catch (e) { step('suite ran', false, e && e.stack || String(e)); }

@@ -593,7 +593,7 @@ function createMailProvider(ctx) {
     // Graph builds the draft (quoting the original for us), we patch in the
     // user's text and any edits, then send. Shared by reply and forward because
     // only the endpoint and the recipient rules differ.
-    async function composeFromDraft(id, endpoint, { htmlBody, to, cc, subject, attachments, prepend }) {
+    async function composeFromDraft(id, endpoint, { htmlBody, to, cc, subject, attachments, prepend, labels }) {
       const t = await token();
       const draft = await graphMailRequest(t, `/me/messages/${encodeURIComponent(id)}/${endpoint}`, {
         method: 'POST', body: JSON.stringify({}),
@@ -612,6 +612,9 @@ function createMailProvider(ctx) {
       // A subject the user actually edited wins over Graph's automatic
       // "Re:"/"Fw:" — otherwise the field we show them does nothing.
       if (subject) patch.subject = subject;
+      // Labels chosen before sending (R-244): Outlook calls them categories and they ride on the draft, so the copy in
+      // Sent Items carries them.
+      if (labels && labels.length) patch.categories = labels;
       await graphMailRequest(t, `/me/messages/${draft.id}`, { method: 'PATCH', body: JSON.stringify(patch) });
       // Attachments are added to the draft one call at a time; Graph has no
       // batch form for the simple (<3MB) upload.
@@ -630,15 +633,15 @@ function createMailProvider(ctx) {
       return { ok: true, thread_id: full.conversationId || null };
     }
 
-    async function reply(id, { htmlBody, replyAll = false, to, cc, subject, attachments }) {
+    async function reply(id, { htmlBody, replyAll = false, to, cc, subject, attachments, labels }) {
       return composeFromDraft(id, replyAll ? 'createReplyAll' : 'createReply',
-        { htmlBody, to, cc, subject, attachments });
+        { htmlBody, to, cc, subject, attachments, labels });
     }
 
     // createForward carries the original's own attachments across for us, which
     // is the whole reason to use it rather than rebuilding the message.
-    async function forward(id, { htmlBody, to, cc, subject, attachments }) {
-      return composeFromDraft(id, 'createForward', { htmlBody, to, cc, subject, attachments });
+    async function forward(id, { htmlBody, to, cc, subject, attachments, labels }) {
+      return composeFromDraft(id, 'createForward', { htmlBody, to, cc, subject, attachments, labels });
     }
 
     // Every message in one conversation, oldest first — the thread view.
@@ -793,7 +796,16 @@ function createMailProvider(ctx) {
       return { ok: true };
     }
 
-    async function reply(msgId, { htmlBody, replyAll = false, to, cc, subject, attachments }) {
+    // Labels chosen before sending (R-244): Gmail can only label a message that EXISTS, so they are applied right after
+    // the send. The mail has already gone by then — a label that cannot be added is reported (`label_error`), never a
+    // failed send, and the send is never repeated.
+    async function labelSent(messageId, labels) {
+      if (!labels || !labels.length || !messageId) return {};
+      try { await gmailProvider.modifyLabels(id, messageId, { add: labels }); return {}; }
+      catch (e) { return { label_error: (e && e.message) || 'the label could not be added' }; }
+    }
+
+    async function reply(msgId, { htmlBody, replyAll = false, to, cc, subject, attachments, labels }) {
       const original = await getMessage(msgId, { blockRemoteImages: false });
       const rec = (to?.length || cc?.length)
         ? { to: (to || []).map(a => ({ email: a.email || a })), cc: (cc || []).map(a => ({ email: a.email || a })) }
@@ -812,14 +824,14 @@ function createMailProvider(ctx) {
         references: [original.references_header, original.message_id_header].filter(Boolean).join(' ') || undefined,
         attachments,
       });
-      return { ok: true, thread_id: r.threadId || original.thread_id || null };
+      return { ok: true, thread_id: r.threadId || original.thread_id || null, ...(await labelSent(r.messageId, labels)) };
     }
 
     // Gmail has no createForward, so the message is rebuilt: the user's note,
     // the forwarded-message envelope, then the original body. The original's
     // attachments are re-downloaded and re-attached — a forward that silently
     // drops the resume it was forwarding is worse than no forward at all.
-    async function forward(msgId, { htmlBody, to, cc, subject, attachments, maxAttachBytes }) {
+    async function forward(msgId, { htmlBody, to, cc, subject, attachments, maxAttachBytes, labels }) {
       const original = await getMessage(msgId, { blockRemoteImages: false });
       const carried = [...(attachments || [])];
       let budget = (maxAttachBytes || 0) - carried.reduce((n, a) => n + approxBytes(a.base64), 0);
@@ -844,7 +856,7 @@ function createMailProvider(ctx) {
         fromAddress: mailbox.email_address,
         attachments: carried,
       });
-      return { ok: true, thread_id: r.threadId || null };
+      return { ok: true, thread_id: r.threadId || null, ...(await labelSent(r.messageId, labels)) };
     }
 
     async function listThread(threadId) {

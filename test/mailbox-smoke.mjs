@@ -345,12 +345,15 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
     'mb-other-org':   { id: 'mb-other-org', user_id: ME, org_id: 'org-b', email_address: 'me@other.io', platform: 'Microsoft', is_active: true },
     'mb-off':         { id: 'mb-off', user_id: ME, org_id: ORG, email_address: 'off@pace.io', platform: 'Microsoft', is_active: false },
     'mb-disconnected':{ id: 'mb-disconnected', user_id: ME, org_id: ORG, email_address: 'dc@pace.io', platform: 'Microsoft', is_active: true },
+    'mb-gmail':       { id: 'mb-gmail', user_id: ME, org_id: ORG, email_address: 'me@gmail.test', display_name: 'Priya Sharma', platform: 'Gmail', is_active: true },
   };
   // Every mailbox above has a token EXCEPT mb-disconnected.
-  const TOKENS = new Set(['mb-mine', 'mb-theirs', 'mb-other-org', 'mb-off']);
+  const TOKENS = new Set(['mb-mine', 'mb-theirs', 'mb-other-org', 'mb-off', 'mb-gmail']);
 
   let providerCalls = 0;
   const graphSent = [];
+  const gmailSent = [];
+  let failLabelling = false;
   const RAW_SIGNATURE = '<div><b>{{sender}}</b><br><a href="mailto:{{senderemail}}">{{senderemail}}</a></div>';
   function fakeSupabase() {
     function builder(table) {
@@ -391,7 +394,12 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
       return { value: [], id: 'draft-1', body: { content: '<p>quoted original</p>' }, subject: 'Re: x', conversationId: 'c1' };
     },
     getMicrosoftToken: async () => 'tok',
-    gmailProvider: { isConfigured: () => true },
+    gmailProvider: {
+      isConfigured: () => true,
+      // Labels chosen before Send are applied to the sent copy AFTER the send (Gmail can only label a message that exists).
+      sendNewMessage: async (id, args) => { gmailSent.push({ fn: 'sendNew', id, args }); return { messageId: 'sent-msg-1', threadId: 't9' }; },
+      modifyLabels: async (id, m, opts) => { if (failLabelling) throw new Error('label service down'); gmailSent.push({ fn: 'modifyLabels', id, m, opts }); return {}; },
+    },
     sendMicrosoftNewMessage: async (id, args) => { providerCalls++; graphSent.push({ path: 'sendNew', body: args }); return {}; },
     // The real buildHtmlEmailBody appends the signature under the body — this
     // keeps that shape so the assertions below see what a recipient would.
@@ -544,6 +552,50 @@ const ok = (name, cond, detail = '') => results.push({ name, ok: !!cond, detail 
   ok('a data: URI prefix is stripped from the payload',
     !!cleaned && Buffer.from(cleaned.body.contentBytes, 'base64').toString() === 'hi',
     cleaned && cleaned.body.contentBytes);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 9b. LABELS CHOSEN BEFORE SEND (R-244, D-0146)
+  // Owner: "an option to mark emails or label them before sending … an existing label or a new one". Real mailbox labels:
+  // Outlook categories ride on the draft (the Sent Items copy carries them); Gmail labels the sent copy right after the send,
+  // and a label that cannot be added must NEVER turn a delivered mail into a "failed" one (the person would send it twice).
+  // ══════════════════════════════════════════════════════════════════════════
+  graphSent.length = 0;
+  r = await call('POST', '/mailbox/mb-mine/messages/x/reply', { body: 'ok', label_ids: ['Client', ' Hot ', 'Client', '', 7] });
+  const catPatch = graphSent.filter(c => c.method === 'PATCH' && c.body && c.body.categories).pop();
+  ok('Outlook reply: the chosen labels become categories on the draft, trimmed and without repeats',
+    r.status === 200 && !!catPatch && JSON.stringify(catPatch.body.categories) === JSON.stringify(['Client', 'Hot', '7']), JSON.stringify(catPatch && catPatch.body.categories));
+  ok('Outlook reply: the categories are on the draft BEFORE it is sent',
+    graphSent.findIndex(c => c.body && c.body.categories) < graphSent.findIndex(c => /\/send$/.test(c.path)));
+  graphSent.length = 0;
+  await call('POST', '/mailbox/mb-mine/messages/x/reply', { body: 'no labels' });
+  ok('Outlook reply with no labels sends no categories', !graphSent.some(c => c.body && c.body.categories));
+  graphSent.length = 0;
+  await call('POST', '/mailbox/mb-mine/messages/x/forward', { to: 'colleague@pace.io', body: 'FYI', label_ids: ['Forwarded'] });
+  ok('Outlook forward: labels become categories too', graphSent.some(c => c.method === 'PATCH' && c.body && JSON.stringify(c.body.categories) === '["Forwarded"]'));
+  graphSent.length = 0;
+  await call('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'hello', label_ids: ['Prospects'] });
+  const sn = graphSent.find(c => c.path === 'sendNew');
+  ok('Outlook new message: the labels are passed to the send as categories', !!sn && JSON.stringify(sn.body.categories) === '["Prospects"]', JSON.stringify(sn && sn.body.categories));
+  ok('...at most ten', (await (async () => { graphSent.length = 0; await call('POST', '/mailbox/mb-mine/send', { to: 'a@b.test', body: 'x', label_ids: Array.from({ length: 25 }, (_, i) => 'L' + i) }); return (graphSent.find(c => c.path === 'sendNew').body.categories || []).length; })()) === 10);
+
+  gmailSent.length = 0;
+  r = await call('POST', '/mailbox/mb-gmail/send', { to: 'a@b.test', body: 'hello', label_ids: ['Label_12', 'Label_34'] });
+  let gj = await r.json();
+  const lbl = gmailSent.find(c => c.fn === 'modifyLabels');
+  ok('Gmail new message: the sent copy is labelled with the chosen ids after sending',
+    r.status === 200 && gj.success === true && !gj.label_error && !!lbl && lbl.m === 'sent-msg-1' && JSON.stringify(lbl.opts.add) === '["Label_12","Label_34"]', JSON.stringify({ gj, lbl }));
+  ok('...and the send came first', gmailSent.findIndex(c => c.fn === 'sendNew') < gmailSent.findIndex(c => c.fn === 'modifyLabels'));
+  gmailSent.length = 0;
+  r = await call('POST', '/mailbox/mb-gmail/send', { to: 'a@b.test', body: 'hello' });
+  ok('Gmail new message with no labels makes no label call', r.status === 200 && !gmailSent.some(c => c.fn === 'modifyLabels'));
+  gmailSent.length = 0; failLabelling = true;
+  r = await call('POST', '/mailbox/mb-gmail/send', { to: 'a@b.test', body: 'hello', label_ids: ['Label_12'] });
+  gj = await r.json();
+  ok('Gmail: a label that cannot be added does NOT turn a sent mail into a failure — it says so, once',
+    r.status === 200 && gj.success === true && /label service down/.test(gj.label_error || '') && gmailSent.filter(c => c.fn === 'sendNew').length === 1, JSON.stringify(gj));
+  failLabelling = false;
+  r = await call('POST', '/mailbox/mb-theirs/send', { to: 'a@b.test', body: 'hi', label_ids: ['x'] });
+  ok("labels never let a send through someone else's mailbox", r.status === 404, 'got ' + r.status);
 
   // Oversized attachments are refused with something a person can act on.
   //

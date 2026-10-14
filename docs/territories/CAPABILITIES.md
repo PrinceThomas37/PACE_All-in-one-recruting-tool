@@ -732,3 +732,6 @@ person who has not written their own (R-169).
 
 ## Several email windows at once (Session 46, R-240, D-0145 — on the branch)
 - **New message and Reply windows can be open together.** Starting another parks the one you were writing (minimise) and opens a fresh one; each keeps its own words, mailbox and recipients. Reply on an email you already started brings that one back. The minimised windows sit bottom-right and can be dragged anywhere; a drag never opens one. Words you typed are there when you come back, however many other emails you opened meanwhile.
+
+## Label an email before you send it (Session 46, R-244, D-0146 — on the branch)
+- In New message, Reply and Forward there is a **Label** row: pick one of the mailbox's existing labels or type a new name, add as many as you like, take any off again. When you press Send, the sent copy carries them in Gmail (labels) or Outlook (categories). If a label cannot be added the email still went, and PACE tells you so.

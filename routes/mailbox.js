@@ -522,6 +522,19 @@ module.exports = (ctx) => {
     return !!String(body || '').trim();
   }
 
+  // Labels chosen in the window before Send (R-244): up to 10, trimmed, no repeats. Gmail takes label ids, Outlook takes the
+  // category name (its label id IS the name), so the browser sends whatever the label list gave it.
+  function readLabelIds(body) {
+    const raw = Array.isArray(body && body.label_ids) ? body.label_ids : [];
+    const out = [];
+    for (const x of raw) {
+      const s = String(x == null ? '' : x).trim().slice(0, 200);
+      if (s && !out.includes(s)) out.push(s);
+      if (out.length >= 10) break;
+    }
+    return out;
+  }
+
   router.post('/mailbox/:mid/messages/:id/reply', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
@@ -540,6 +553,7 @@ module.exports = (ctx) => {
         cc: req.body.cc ? parseAddressField(req.body.cc) : null,
         subject: req.body.subject ? String(req.body.subject) : null,
         attachments: att.attachments,
+        labels: readLabelIds(req.body),
       });
       recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
       res.json({ success: true, ...r });
@@ -568,6 +582,7 @@ module.exports = (ctx) => {
         subject: req.body.subject ? String(req.body.subject) : null,
         attachments: att.attachments,
         maxAttachBytes: MAX_ATTACH_BYTES,
+        labels: readLabelIds(req.body),
       });
       recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
       res.json({ success: true, ...r });
@@ -589,20 +604,29 @@ module.exports = (ctx) => {
       const htmlBody = outboundHtml(text, signature, formatted);
       const subject = String(req.body.subject || '(no subject)');
       const cc = String(req.body.cc || '').trim();
+      const labels = readLabelIds(req.body);
+      let label_error = null;
       if (mailbox.platform === 'Gmail') {
-        await gmailProvider.sendNewMessage(mailbox.id, {
+        const sent = await gmailProvider.sendNewMessage(mailbox.id, {
           to, cc: cc || undefined, subject, htmlBody,
           fromAddress: mailbox.email_address, attachments: att.attachments,
         });
+        // Gmail can only label a message that exists: after the send. The mail has gone — a label that fails is reported,
+        // never a failed send, and the send is never repeated.
+        if (labels.length && sent && sent.messageId) {
+          try { await gmailProvider.modifyLabels(mailbox.id, sent.messageId, { add: labels }); }
+          catch (e) { label_error = (e && e.message) || 'the label could not be added'; }
+        }
       } else {
         await sendMicrosoftNewMessage(mailbox.id, {
           to, subject, htmlBody,
           cc: cc ? cc.split(/[,;]/).map(x => x.trim()).filter(Boolean) : undefined,
           attachments: att.attachments,
+          categories: labels,
         });
       }
       recipientCache.delete(mailbox.id);
-      res.json({ success: true });
+      res.json({ success: true, ...(label_error ? { label_error } : {}) });
     } catch (err) { providerError(res, err); }
   });
 
