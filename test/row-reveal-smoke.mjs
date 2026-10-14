@@ -159,6 +159,12 @@ try{
   // ════════════════════════════════════════════════════════════════════════
   await page.evaluate(()=>goPage('bd_joborders'));
   await page.waitForSelector('#content tr[data-row-id="jo1"]', { timeout:8000 }).catch(()=>{});
+  // 14 Oct (owner: "when a user clicks on Jobs it opens the All Jobs view — I want My Jobs"): the page opens on MY jobs.
+  const jDefault = await page.evaluate(()=>({ view: window.STATE.bd.jobsView, mine: !!document.querySelector('#content tr[data-row-id="jo1"]'), other: !!document.querySelector('#content tr[data-row-id="jo2"]') }));
+  step('Jobs: opens on MY jobs — his own are listed, someone else\'s are not', jDefault.view==='mine' && jDefault.mine && !jDefault.other, JSON.stringify(jDefault));
+  // the rest of this suite is about the row panels, and needs the other person's job on the page too
+  await page.evaluate(()=>bdSetJobsView('all'));
+  await page.waitForSelector('#content tr[data-row-id="jo2"]', { timeout:8000 }).catch(()=>{});
   const jQuiet = await page.evaluate(()=>({
     rows: document.querySelectorAll('#content tr[data-row-id]').length,
     panels: document.querySelectorAll('#content tr.row-exp').length,

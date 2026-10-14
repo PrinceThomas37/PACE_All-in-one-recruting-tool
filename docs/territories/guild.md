@@ -823,3 +823,8 @@ The Finder's accept-as-lead path holds contacts and jobs to the company's number
 
 ## 2026-10-13 (Session 44) — Blocked contacts
 Client-contact suggestions for a recruiting email (`routes/recruiting/outreach.js`) skip every never-email status (invalid, deactivated, blocked) through `services/contact-status.js`, so a blocked contact is not offered as a recipient.
+## 2026-10-14 (Session 45) — a job's pay period (D-0141 #3)
+`job_orders.pay_period` ('hour' | 'week' | 'month' | 'year' | null; migration 065). `services/recruiting-core.js`: in `JOB_FIELDS`; `pickJobFields` stores only those four words (anything else → null; a body that does not mention it leaves the column alone). `routes/recruiting/job-orders.js` browse select carries it. `services/candidate-outreach.js` `jobFacts().payPeriod`: the job's own period wins (`payPeriodWords`); a job with none keeps the old inference (a bare under-1000 range is a rate). The public apply page does not show pay and was not touched. **Apply migration 065 before merging.**
+
+## 2026-10-14 (Session 45, later)
+`routes/recruiting/job-orders.js` `GET /job-orders/browse`: the select names `pay_period`; if the database answers "no such column" for it (migration 065 not applied) the same list is read without it, so the job board is never empty. Migration 065 is now applied on the live database. Nothing else in the recruiting domain changed; the lead-side changes (Edit lead People, same-person question) are in gateway.md and surface.md.

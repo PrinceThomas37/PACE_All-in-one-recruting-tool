@@ -65,6 +65,7 @@ function makeStore() {
       lt(c, v) { filters.push((r) => String(iso(r[c])) < String(iso(v))); return q; },
       lte(c, v) { filters.push((r) => r[c] != null && String(iso(r[c])) <= String(iso(v))); return q; },
       ilike(c, p) { filters.push((r) => like(p, r[c])); return q; },
+      contains(c, v) { filters.push((r) => Array.isArray(r[c]) && v.every((x) => r[c].includes(x))); return q; },
       order(c, o) { sort = { c, asc: !o || o.ascending !== false }; return q; },
       limit(n) { lim = n; return q; },
       update(p) { mode = 'update'; patch = p; return q; },
@@ -417,9 +418,17 @@ step('D: people found on the card with a revealed address, not yet contacts, are
 const jobsN = st.tables.jobs.length;
 r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Hygienist'], contacts: [{ person_id: 'pX' }] }, { id: bdCard.id });
 step('E: the SAME job at the same company is refused — it would write to them twice about the same thing', r.code === 409 && st.tables.jobs.length === jobsN, r.out && r.out.error);
+// 14 Oct (owner: two Cargill leads for one posting seen on two job boards): the board's own wording is not a different job
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Hygienist. Job in Springfield Example-Jobs'], contacts: [{ person_id: 'pX' }] }, { id: bdCard.id });
+step('E: the same job worded by a job board ("… Job in <town> …-Jobs") is refused too', r.code === 409 && st.tables.jobs.length === jobsN, r.out && r.out.error);
 r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant'], contacts: [{ person_id: 'pY' }] }, { id: bdCard.id });
 step('E: a person whose address was never revealed cannot be written to', r.code === 400 && /Reveal/.test(r.out.error) && st.tables.jobs.length === jobsN);
-r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant', 'Office Manager'], contacts: [{ person_id: 'pX' }, { contact_id: st.tables.contacts.find((c) => c.job_id === bdLead.id).id }] }, { id: bdCard.id });
+// 14 Oct (owner: "warn when the same person is already on another active lead at the same company" — yes): the first answer is a QUESTION
+const sameBody = { positions: ['Dental Assistant', 'Office Manager'], contacts: [{ person_id: 'pX' }, { contact_id: st.tables.contacts.find((c) => c.job_id === bdLead.id).id }] };
+r = await call('/finder/cards/:id/another', 'post', 'bd1', sameBody, { id: bdCard.id });
+step('E: a person already on another active lead at this company is ASKED about first (409), and nothing is created yet', r.code === 409 && r.out.code === 'same_person_elsewhere' && r.out.duplicate && r.out.duplicate.can_add_anyway === true && st.tables.jobs.length === jobsN, JSON.stringify(r.out).slice(0, 220));
+step('E: …the question names the person and the other lead, and says what a second lead means', /already on/.test(r.out.duplicate.message) && /second cold email/.test(r.out.duplicate.message), r.out.duplicate && r.out.duplicate.message);
+r = await call('/finder/cards/:id/another', 'post', 'bd1', Object.assign({}, sameBody, { acknowledge_repeats: true }), { id: bdCard.id });
 const second = st.tables.jobs.find((j) => j.id === (r.out && r.out.lead_id));
 step('E: another job at the same company becomes a SECOND lead — same company, new job, Unassigned, nobody\'s mailbox yet', r.code === 201 && second && second.company_id === bdLead.company_id && second.position === 'Dental Assistant' && second.stage === 'Unassigned' && !second.assigned_to_bd && !second.sending_email_id, JSON.stringify(r.out));
 step('E: …with the other job kept as "also hiring" and the people picked (a new one and one from the first lead)', second.research.finder.also_hiring.join() === 'Office Manager' && st.tables.contacts.filter((c) => c.job_id === second.id).length === 2 && st.tables.contacts.filter((c) => c.job_id === second.id)[0].email === 'pat@lonestardental.example');

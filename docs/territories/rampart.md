@@ -485,3 +485,6 @@ One company's admin can no longer change another's numbers: writes are keyed by 
 
 ## 2026-10-13 (Session 44) — D-0125
 AI ceilings were shared across companies although usage was per company; now per company (R-203 extended to `ai_daily_*_cap@<org>`).
+## 2026-10-14 (Session 45) — `canTouchJob` now admits one more person (owner's decision, D-0142 #3)
+`middleware/authorize.js` `canTouchJob` (the gate on every contact create/update/delete and follow-up route): an **RA lead** is now admitted for a lead created by someone in their reporting chain, while `now <= created_at + ra_edit_window_hours` (the admin's number, org-scoped). The rule is `services/contact-edit-window.js` `contactEditRights` — pure, and the SAME function `GET /jobs/:id/edit-rights` answers from, so what the screen offers is what the gate accepts. Unchanged: admin (own org only), creator / assignee / BD owner always. Fails closed on any error. The org filter on the job read stays on the query. Proven in `test/contact-edit-window-smoke.mjs` (inside/after window, outside the team, another org, the admin raising and lowering the window). Rampart review is owed on this change.
+

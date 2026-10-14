@@ -436,13 +436,14 @@ module.exports = function createRecruitingCore(deps) {
   const JOB_FIELDS = [
     'job_title','client','client_job_id','client_manager','end_client',
     'status','job_type','emp_level','work_auth','priority','remote','clearance',
-    'country','state','city','zip','pay_cur','pay_min','pay_max',
+    'country','state','city','zip','pay_cur','pay_min','pay_max','pay_period',
     'start_date','end_date','duration','placement_fee','req_docs',
     'primary_skills','secondary_skills','exp_min','exp_max',
     'industry','domain','degree','languages','job_category',
     'positions','job_description','posting_description','comments',
     'previous_description','previous_description_at'
   ];
+  const PAY_PERIODS = ['hour', 'week', 'month', 'year'];
   // Date/timestamp columns need null (not '') when empty, or Postgres rejects them.
   const JOB_DATE_FIELDS = ['start_date','end_date','previous_description_at'];
   function pickJobFields(src) {
@@ -452,6 +453,8 @@ module.exports = function createRecruitingCore(deps) {
       if (src[k] === undefined) return;
       let v = src[k];
       if (JOB_DATE_FIELDS.indexOf(k) > -1 && (v === '' || v === null)) { out[k] = null; return; }
+      // What the pay figures are PER (migration 065): one of four words, or nothing. Anything else is not stored.
+      if (k === 'pay_period') { const pp = String(v == null ? '' : v).trim().toLowerCase(); out[k] = PAY_PERIODS.indexOf(pp) > -1 ? pp : null; return; }
       out[k] = v;
     });
     return out;

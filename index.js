@@ -197,6 +197,7 @@ let MULTI_ORG = require('./services/provisioning').selfServeEnabled();
 require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
 const { isRecyclable } = require('./services/lead-recycle');
 const oooReturn = require('./services/ooo-return');
+const autoReply = require('./services/auto-reply');
 const followupSender = require('./services/followup-sender');
 const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
@@ -3114,7 +3115,7 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
     const from = (msg.from?.emailAddress?.address || '').toLowerCase();
     if (!from || ownAddresses.has(from)) continue; // ignore internal / our own mail
     const { data: matches } = await supabase.from('contacts')
-      .select('id,job_id,replied_at,email').ilike('email', from).limit(10);
+      .select('id,job_id,replied_at,email,email_status').ilike('email', from).limit(10);
 
     // Candidate-side match, looked up here (not just further down) so the one
     // conversation_messages row for this physical email can carry both a
@@ -3168,12 +3169,33 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       });
     }
 
+    // AN AUTOMATIC REPLY IS NOT AN ANSWER (14 Oct, owner: leads that only sent an out-of-office were marked Connected). The
+    // rule is services/auto-reply.js. Such a message is kept in the conversation and written to the lead's history, the lead
+    // gets an "Auto-replied" tag, and NOTHING else happens: no Connected, no replied_at, follow-ups carry on.
+    const auto = autoReply.classifyAutoReply(msg);
     for (const c of (matches || [])) {
       if (c.replied_at) continue; // already recorded
+      if (auto.auto) {
+        try { await supabase.from('jobs').update({ auto_replied_at: new Date() }).eq('id', c.job_id); } catch (_) {}   // the column arrives with migration 066
+        // An out-of-office that says WHEN they are back pauses the follow-ups until that day (14 Oct, owner: "yes"): the contact is
+        // marked Out of office with the return date, which is exactly what a person does by hand; the daily sweep
+        // (services/ooo-return.js) puts them back to Valid on the day and follow-ups resume. Only a contact who is plainly Valid is
+        // touched (an invalid / blocked / deactivated address is never "rescued" by an auto-reply), and a date that is not in the
+        // future, or has no return word before it, pauses nothing (services/auto-reply.js returnDate).
+        const back = auto.kind === 'out_of_office' ? autoReply.returnDate(msg) : null;
+        const paused = !!(back && (!c.email_status || c.email_status === 'valid'));
+        if (paused) {
+          try { await supabase.from('contacts').update({ email_status: 'out_of_office', ooo_until: back.date, updated_at: new Date() }).eq('id', c.id); } catch (_) {}
+        }
+        await logActivity(c.job_id, c.id, null, 'auto_reply_received', `Automatic reply from ${from} (${auto.kind === 'out_of_office' ? 'out of office' : auto.kind === 'receipt' ? 'read receipt' : 'automatic response'}) — not counted as an answer; the lead stays where it was` + (paused ? `; follow-ups are paused until they are back on ${back.date}` : ' and follow-ups continue'), null, { source: 'inbox', mailbox: tokenRow.email_address, why: auto.why, ...(paused ? { ooo_until: back.date } : {}) });
+        if (paused) await logActivity(c.job_id, c.id, null, 'ooo_set', `Marked out of office until ${back.date} — read from their automatic reply ("${back.words}")`, null, { ooo_until: back.date, auto: true });
+        continue;
+      }
       const snippet = (msg.bodyPreview || '').slice(0, 280);
       try { await supabase.from('contacts').update({ replied_at: new Date(), reply_snippet: snippet }).eq('id', c.id); } catch (_) {}
       // Stop the sequence: move the lead off "Assigned" and cancel active follow-ups.
       try { await supabase.from('jobs').update({ stage: 'Connected' }).eq('id', c.job_id).eq('stage', 'Assigned'); } catch (_) {}
+      try { await supabase.from('jobs').update({ auto_replied_at: null }).eq('id', c.job_id).not('auto_replied_at', 'is', null); } catch (_) {}   // a real answer clears the tag
       await skipActiveFollowUpsForContact(c.id);
       await logActivity(c.job_id, c.id, null, 'reply_received', `Reply received from ${from} — follow-ups stopped`, null, { source: 'inbox', mailbox: tokenRow.email_address });
       emit(EVENTS.CONTACT_REPLIED, { contactId: c.id, jobId: c.job_id, from, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
@@ -3194,7 +3216,7 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       const replyText = (msg.bodyPreview || '').slice(0, 280);
       const optedOut = isOptOutReply(replyText) || isOptOutReply(msg.body?.content || '');
       const candidateIds = new Set();
-      for (const r of candTrk) {
+      for (const r of (auto.auto ? [] : candTrk)) {   // an out-of-office is not a candidate answering
         await supabase.from('email_tracking').update({ replied_at: msg.receivedDateTime || new Date() }).eq('id', r.id);
         if (r.candidate_id) candidateIds.add(r.candidate_id);
         detected++;

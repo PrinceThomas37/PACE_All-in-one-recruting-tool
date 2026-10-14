@@ -27,6 +27,8 @@ const { createMailProvider, approxBytes } = require('../services/mail-provider')
 const { mailboxConnections } = require('../mailbox-health');
 const { fillSignatureHtml } = require('../email-signature');
 const mailFormat = require('../services/mail-format');
+const recipientSuggest = require('../services/recipient-suggest');
+const { getSetting } = require('../config/settings');
 
 // express.json() is capped at 5mb for the whole app, and base64 inflates a file
 // by about a third — so this is the real ceiling, set below the body limit with
@@ -48,6 +50,11 @@ const unreadCache = new Map(); // userId -> { at, value }
 // and never survives the action that changed it. In memory only; nothing is stored.
 const FOLDERS_TTL_MS = 30 * 1000;
 const folderCache = new Map(); // mailboxId -> { at, value }
+
+// The people a mailbox has written to (the suggestions under To / Cc). Read from its own Sent folder, held a few minutes in memory,
+// per mailbox, never stored (the in-app mailbox mirrors nothing into Postgres).
+const RECIPIENTS_TTL_MS = 10 * 60 * 1000;
+const recipientCache = new Map(); // mailboxId -> { at, value }
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -268,6 +275,33 @@ module.exports = (ctx) => {
   // ══════════════════════════════════════════════════════════════════════════
   // FOLDERS / LABELS
   // ══════════════════════════════════════════════════════════════════════════
+  // WHO YOU HAVE WRITTEN TO (14 Oct, owner): the suggestions under To / Cc. Read from this mailbox's own Sent folder; how many sent
+  // emails is the admin's number. Held 10 minutes in memory; a send drops it so the person just written to appears at once.
+  router.get('/mailbox/:mid/recipients', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try {
+      const hit = recipientCache.get(mailbox.id);
+      if (hit && Date.now() - hit.at < RECIPIENTS_TTL_MS) return res.json(hit.value);
+      const prov = mail.forMailbox(mailbox);
+      let folders = (folderCache.get(mailbox.id) || {}).value;
+      if (!folders) { folders = await prov.listFolders(); folderCache.set(mailbox.id, { at: Date.now(), value: folders }); }
+      const sent = (folders || []).find(f => f.kind === 'sent');
+      const want = Number(await getSetting(supabase, 'mailbox_recipient_lookback', orgIdFor(req))) || 100;
+      const read = [];
+      let cursor = null;
+      while (sent && read.length < want) {
+        const page = await prov.listMessages({ folderId: sent.id, cursor, limit: Math.min(50, want - read.length) });
+        read.push(...page.messages);
+        cursor = page.next_cursor;
+        if (!cursor || !page.messages.length) break;
+      }
+      const value = { recipients: recipientSuggest.collectRecipients(read, [mailbox.email_address]), read: read.length };
+      recipientCache.set(mailbox.id, { at: Date.now(), value });
+      res.json(value);
+    } catch (err) { providerError(res, err); }
+  });
+
   router.get('/mailbox/:mid/folders', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);
@@ -344,7 +378,7 @@ module.exports = (ctx) => {
       const adapter = mail.forMailbox(mailbox);
       if (req.body.read !== undefined) await adapter.setRead(req.params.id, !!req.body.read);
       if (req.body.flagged !== undefined) await adapter.setFlagged(req.params.id, !!req.body.flagged);
-      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id); recipientCache.delete(mailbox.id);
       res.json({ success: true });
     } catch (err) { providerError(res, err); }
   });
@@ -360,7 +394,7 @@ module.exports = (ctx) => {
       const r = await mail.forMailbox(mailbox).move(req.params.id, req.body.folder_id, {
         fromLabelId: req.body.from_folder_id || null,
       });
-      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id); recipientCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
   });
@@ -370,7 +404,7 @@ module.exports = (ctx) => {
     if (error) return res.status(error.status).json(error.body);
     try {
       const r = await mail.forMailbox(mailbox).archive(req.params.id);
-      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id); recipientCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
   });
@@ -383,7 +417,7 @@ module.exports = (ctx) => {
     if (error) return res.status(error.status).json(error.body);
     try {
       const r = await mail.forMailbox(mailbox).trash(req.params.id);
-      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+      unreadCache.delete(req.user.id); folderCache.delete(mailbox.id); recipientCache.delete(mailbox.id);
       res.json(r);
     } catch (err) { providerError(res, err); }
   });
@@ -450,7 +484,7 @@ module.exports = (ctx) => {
         catch (e) { results[i] = { id: ids[i], ok: false, error: String((e && e.message) || 'failed').slice(0, 160) }; }
       }
     }));
-    unreadCache.delete(req.user.id); folderCache.delete(mailbox.id);
+    unreadCache.delete(req.user.id); folderCache.delete(mailbox.id); recipientCache.delete(mailbox.id);
     const failed = results.filter(r => !r.ok).length;
     res.json({ ok: results.length - failed, failed, results });
   });
@@ -507,6 +541,7 @@ module.exports = (ctx) => {
         subject: req.body.subject ? String(req.body.subject) : null,
         attachments: att.attachments,
       });
+      recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
       res.json({ success: true, ...r });
     } catch (err) { providerError(res, err); }
   });
@@ -534,6 +569,7 @@ module.exports = (ctx) => {
         attachments: att.attachments,
         maxAttachBytes: MAX_ATTACH_BYTES,
       });
+      recipientCache.delete(mailbox.id);   // the person just written to is a suggestion from now on
       res.json({ success: true, ...r });
     } catch (err) { providerError(res, err); }
   });
@@ -565,6 +601,7 @@ module.exports = (ctx) => {
           attachments: att.attachments,
         });
       }
+      recipientCache.delete(mailbox.id);
       res.json({ success: true });
     } catch (err) { providerError(res, err); }
   });

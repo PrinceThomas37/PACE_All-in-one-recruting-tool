@@ -1119,3 +1119,10 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .fd-rv-mail{margin:0 0 14px;padding:0 0 12px;border-bottom:1px dashed var(--ctl-brd)}
 .fd-rv-mail:last-of-type{border-bottom:0}
 .fd-rv-body{min-height:240px;line-height:1.6}
+
+/* Edit lead window — the people on the lead (72-lead-edit.js) */
+.le-person{border:2px solid var(--glass-brd);padding:8px;margin:8px 0}
+.le-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
+.le-f{display:block}
+.le-notes{min-height:90px}
+@media (max-width:860px){.le-grid{grid-template-columns:1fr}}

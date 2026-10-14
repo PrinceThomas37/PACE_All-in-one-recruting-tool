@@ -40,19 +40,31 @@
   function el(id){ return document.getElementById('lx-poc-'+id); }
   function contactsOf(id){ return ((typeof jobContacts==='function'?jobContacts(id):[])||[]); }
 
+  // 14 Oct (owner: "when a lead is opened it takes time to completely load" — the plain contact list showed first and the four slots
+  // replaced it a moment later, so the panel jumped). The answer is now asked for when the pointer REACHES the row
+  // (leadPocPrefetch, below and 06-page-leads.js), so by the click it is usually here and the panel is drawn once, whole. An answer
+  // that a hover fetched a moment ago is used ONCE and not asked for again on open (a second write is the second jump); every
+  // later open asks again, as before.
+  var FRESH_MS = 15000;
   window.leadPocSlot = function(j, plainHtml){
     var id = j.id, st = C[id];
-    setTimeout(function(){ load(id); }, 0);
+    if (st && st.pre && st.data && st.at && Date.now()-st.at < FRESH_MS) st.pre = false;
+    else setTimeout(function(){ load(id); }, 0);
     return '<div id="lx-poc-'+esc(id)+'" class="lx-poc" onclick="event.stopPropagation()">'+
       (st && st.data ? inner(id) : plainHtml)+'</div>';
   };
+  window.leadPocPrefetch = function(id){
+    var st = C[id];
+    if (st && (st.busy || (st.data && st.at && Date.now()-st.at < FRESH_MS))) return;
+    load(id, true);
+  };
 
-  function load(id){
+  function load(id, pre){
     var st = C[id] || (C[id] = {});
     if (st.busy) return;
     st.busy = true;
     apiGet('/jobs/'+encodeURIComponent(id)+'/poc').then(function(d){
-      st.busy = false; if (d && d.slots) { st.data = d; paint(id); }
+      st.busy = false; if (d && d.slots) { st.data = d; st.at = Date.now(); st.pre = !!pre; paint(id); }
     }).catch(function(){ st.busy = false; /* the plain list stays — never a blank block */ });
   }
   function paint(id){ var node = el(id); if (node && C[id] && C[id].data) node.innerHTML = inner(id); }

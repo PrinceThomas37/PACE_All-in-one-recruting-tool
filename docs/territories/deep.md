@@ -374,3 +374,6 @@ file, so this is 047. **Next migration is 048.**
 
 ## 2026-10-13 (Session 44) — migration 064 APPLIED
 Read back from the live database: `contacts_email_status_check` = valid, invalid, deactivated, out_of_office, blocked. Next migration: 065.
+## 2026-10-14 (Session 45) — migrations 065 and 066 WRITTEN, NOT APPLIED
+`065_job_pay_period.sql`: `job_orders.pay_period TEXT` (nullable). `066_lead_auto_replied.sql`: `jobs.auto_replied_at TIMESTAMPTZ` (nullable). Both are one `ADD COLUMN IF NOT EXISTS`, rewrite nothing. 065 is used by explicit select lists (job-orders browse) — apply it BEFORE merging; 066 is written to degrade (no tag until applied, lead still not moved). Next migration: 067.
+

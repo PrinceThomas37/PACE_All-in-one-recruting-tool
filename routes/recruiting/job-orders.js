@@ -391,9 +391,12 @@ ${text.slice(0, 12000)}`;
   app.get('/job-orders/browse', auth, async (req, res) => {
     try {
       if (!isRecruiter(req) && !isBDM(req)) return res.status(403).json({ error: 'Recruiting roles only.' });
-      const { data: jobs, error } = await withOrg(supabase.from('job_orders')
-        .select('id,job_code,job_title,client,city,state,country,status,priority,positions,job_type,emp_level,remote,work_auth,primary_skills,secondary_skills,job_description,pay_cur,pay_min,pay_max,start_date,created_at,company:companies(id,name,industry),bd_manager:users!bd_manager_id(id,name)')
-        .is('deleted_at', null), req).order('created_at', { ascending: false });
+      // `pay_period` arrives with migration 065. Until it is applied the board must still load (without the period), so a database
+      // that answers "no such column" for it gets the same list minus that one column — never an empty job board.
+      const browseCols = (withPeriod) => 'id,job_code,job_title,client,city,state,country,status,priority,positions,job_type,emp_level,remote,work_auth,primary_skills,secondary_skills,job_description,pay_cur,pay_min,pay_max,' + (withPeriod ? 'pay_period,' : '') + 'start_date,created_at,company:companies(id,name,industry),bd_manager:users!bd_manager_id(id,name)';
+      const readBrowse = (withPeriod) => withOrg(supabase.from('job_orders').select(browseCols(withPeriod)).is('deleted_at', null), req).order('created_at', { ascending: false });
+      let { data: jobs, error } = await readBrowse(true);
+      if (error && /pay_period/.test(String(error.message || '') + String(error.details || ''))) ({ data: jobs, error } = await readBrowse(false));
       if (error) throw error;
       const list = jobs || [];
       const ids = list.map(j => j.id);

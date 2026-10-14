@@ -37,7 +37,7 @@
     // HERE and not in the DOM, because render() rebuilds #content from a string
     // — anything typed but not in STATE is lost the moment anything else
     // repaints. oninput writes through; nothing repaints per keystroke.
-    composer:null, sigHtml:null, sigLoading:false,
+    composer:null, sigCache:{}, sigBusy:{},
     unread:0, error:null,
     sel:{},            // ticked messages: id → true (the bulk bar acts on these)
     labels:{}, labelMenu:null, _pages:1
@@ -174,7 +174,9 @@
   // screen is never the one that still shows a message you deleted.
   var LIST_TTL=15000, MSG_MAX=40;
   var _lc={}, _mc={}, _mcOrder=[], _tc={}, _fc={}, _inflight={}, _hoverT=null;
-  function lkey(){ var m=M(); return [m.activeId,m.folderId||'',m.q||''].join('|'); }
+  // A search covers the WHOLE mailbox, not the folder that happens to be open (owner, 14 Oct: "search all across within that email, like
+  // Gmail") — so a searched list is remembered under '*', never under a folder it did not come from.
+  function lkey(){ var m=M(); return [m.activeId,m.q?'*':(m.folderId||''),m.q||''].join('|'); }
   function mkey(id){ return M().activeId+':'+id; }
   function mcPut(acct,id,msg){
     var k=acct+':'+id; if(!_mc[k]) _mcOrder.push(k); _mc[k]=msg;
@@ -226,8 +228,8 @@
   function listPath(cursor){
     var m=M();
     var p='/mailbox/'+enc(m.activeId)+'/messages?limit=25';
-    if(m.folderId) p+='&folder='+enc(m.folderId);
-    if(m.q) p+='&q='+enc(m.q);
+    if(m.q) p+='&q='+enc(m.q);                 // no folder: the server searches every folder of this mailbox
+    else if(m.folderId) p+='&folder='+enc(m.folderId);
     if(cursor) p+='&cursor='+enc(cursor);
     return p;
   }
@@ -572,7 +574,8 @@
   document.addEventListener('keydown',function(ev){ if(ev.key==='Escape'&&M().labelMenu) mbLabelClose(); });
 
   window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
-  window.mbSelectFolder=function(id){ var m=M(); if(m.folderId===id)return; m.folderId=id; loadMessages(); };
+  // Choosing a folder leaves the search (as Gmail does): the folder's own list comes back.
+  window.mbSelectFolder=function(id){ var m=M(); if(!id||(m.folderId===id&&!m.q))return; m.folderId=id; m.q=''; loadMessages(); };
   window.mbOpen=function(id){ loadMessage(id); };
 
   // OPEN ONE PARTICULAR EMAIL, optionally with its reply window ready (8 Oct, owner: "when Reply in the mailbox is clicked, that
@@ -694,7 +697,8 @@
     var d=draftGet(c);
     if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
     m.composer=c;
-    if(c.sig) loadSignature();
+    if(c.sig) loadSignature(c.acct,true);
+    loadRecipients(c.acct);
     paintComposer();
     setTimeout(function(){ var ed=document.getElementById('mb-comp-editor'); if(ed) ed.focus(); },30);
     if(d) showToast('Your unsent draft for this message is back','info');
@@ -725,7 +729,7 @@
   window.mbCompSetSig=function(on){
     var m=M(); if(!m.composer)return;
     m.composer.sig=!!on; sigPrefSet(!!on);
-    if(m.composer.sig) loadSignature();
+    if(m.composer.sig) loadSignature(m.composer.acct);
     paintComposer();
   };
 
@@ -752,12 +756,22 @@
   function draftSaveSoon(){ clearTimeout(_draftT); _draftT=setTimeout(draftSave,600); }
   window.mbDraftFlush=function(){ clearTimeout(_draftT); draftSave(); };
 
-  function loadSignature(){
-    var m=M(); if(m.sigHtml!==null||m.sigLoading||!m.activeId)return;
-    m.sigLoading=true;
-    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/signature')
-      .then(function(d){ m.sigHtml=(d&&d.html)||''; m.sigLoading=false; if(m.composer) paintComposer(); else paint(); })
-      .catch(function(){ m.sigHtml=''; m.sigLoading=false; });
+  // 14 Oct (owner: "the email is sent from Lisa but the signature shown is Prince's"): ONE signature was kept for the
+  // whole page and never asked again, so whichever mailbox loaded first was shown for every mailbox after it. The
+  // signature belongs to the mailbox that SENDS, so it is kept per mailbox, fetched for the sending one, and fetched
+  // again each time a window opens (a signature edited in My setup is then what the preview shows).
+  function loadSignature(acct, force){
+    var m=M(); acct=acct||m.activeId; if(!acct||m.sigBusy[acct])return;
+    if(!force&&m.sigCache[acct]!==undefined)return;
+    m.sigBusy[acct]=true;
+    var done=function(html){
+      m.sigCache[acct]=html; delete m.sigBusy[acct];
+      if(m.composer&&m.composer.acct===acct) paintComposer();
+      else if(m.compose&&m.activeId===acct) paintComposeModal();
+    };
+    apiGet('/mailbox/'+encodeURIComponent(acct)+'/signature')
+      .then(function(d){ done((d&&d.html)||''); })
+      .catch(function(){ done(''); });
   }
 
   // ── attachments ─────────────────────────────────────────────────────────────
@@ -840,7 +854,8 @@
     // being silently replaced by an empty one.
     if(window.Dock&&Dock.restoreKind('mailCompose')) return;
     m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false };
-    if(m.compose.sig) loadSignature();
+    loadRecipients(m.activeId);
+    if(m.compose.sig) loadSignature(m.activeId,true);
     paintComposeModal();
   };
   // "Email this person" from anywhere in PACE (owner, 2026-09-30: the email links on
@@ -862,7 +877,7 @@
   window.mbComposeSetSig=function(on){
     var m=M(); if(!m.compose)return;
     m.compose.sig=!!on; sigPrefSet(!!on);
-    if(m.compose.sig) loadSignature();
+    if(m.compose.sig) loadSignature(m.activeId);
     paintComposeModal();
   };
   window.mbComposePickFiles=function(){ var i=document.getElementById('mb-c-files'); if(i)i.click(); };
@@ -1046,7 +1061,7 @@
             '<div id="mb-c-editor" class="sel mb-editor'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" data-placeholder="Write your message…" '+
               'oninput="mbEditorInput(\'compose\')" onpaste="mbEditorPaste(event,\'compose\')">'+mbEditorHtml(c.body)+'</div></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
-          renderSigRow(c.sig,'mbComposeSetSig')+
+          renderSigRow(c.sig,'mbComposeSetSig',M().activeId)+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
@@ -1081,7 +1096,7 @@
       '<input type="hidden" id="'+id+'" value="'+escAttr(chipList(value).join(', '))+'">'+
       chipList(value).map(chipHtml).join('')+
       '<input type="text" class="chipf-in" autocomplete="off" placeholder="'+escAttr(chipList(value).length?'add another…':(ph||''))+'" '+
-        'onkeydown="mbChipKey(event,this)" oninput="mbChipInput(this)" onblur="mbChipCommit(this)">'+
+        'onkeydown="mbChipKey(event,this)" oninput="mbChipInput(this)" onfocus="mbChipFocus(this)" onblur="mbChipBlur(this)">'+
     '</div>';
   }
   function chipSync(box){
@@ -1103,17 +1118,106 @@
     chipSync(box);
   };
   window.mbChipKey=function(e,inp){
+    // A suggestion is taken ONLY when the person moved onto it (arrow keys): typing a whole address and pressing Enter always keeps
+    // exactly what was typed, even when a longer remembered address starts the same way.
+    var box0=inp.closest('.chipf');
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ if(sugMove(box0,e.key==='ArrowDown'?1:-1)){ e.preventDefault(); } return; }
+    if(e.key==='Escape'){ if(sugOpen(box0)){ e.preventDefault(); e.stopPropagation(); sugClose(box0); } return; }
+    if((e.key==='Enter'||e.key==='Tab')&&sugPick(box0)){ e.preventDefault(); return; }
     if(e.key==='Enter'||e.key===','||e.key===';'){ e.preventDefault(); mbChipCommit(inp); return; }
     if(e.key==='Backspace' && !inp.value){
       var box=inp.closest('.chipf'); var cs=box.querySelectorAll('.chipf-c');
       if(cs.length){ cs[cs.length-1].remove(); chipSync(box); }
     }
   };
-  window.mbChipInput=function(inp){ if(/[,;\n]/.test(inp.value)) mbChipCommit(inp); };   // a pasted list
+  window.mbChipInput=function(inp){ if(/[,;\n]/.test(inp.value)) mbChipCommit(inp); else sugShow(inp); };   // a pasted list commits; typing suggests
+  window.mbChipBlur=function(inp){ sugClose(inp.closest('.chipf')); mbChipCommit(inp); };
+  window.mbChipFocus=function(inp){ loadRecipients(suggestAcct()); };
+  window.mbChipSuggestPick=function(btn){ var box=btn.closest('.chipf'); if(box) sugTake(box,btn.getAttribute('data-e')); };
   window.mbChipRm=function(btn,e){
     if(e){ e.stopPropagation(); }
     var box=btn.closest('.chipf'); btn.parentNode.remove(); if(box) chipSync(box);
   };
+  // ── ADDRESS SUGGESTIONS (14 Oct, owner: "auto suggest if the email ID was typed previously, like Gmail or Outlook") ──────────────
+  // Three places a person can be remembered from, none of them stored by PACE: the people this mailbox has WRITTEN TO (its own Sent
+  // folder, read by GET /mailbox/:mid/recipients and held a few minutes), the people on the leads and candidates PACE already shows this
+  // person (STATE.contacts), and the people in the mailbox list on screen. The box offers up to six that start like what is typed, then
+  // those that merely contain it; people already in the box and the mailbox's own address are never offered.
+  var SUG_MAX=6;
+  function suggestAcct(){
+    var m=M(); return (m.composer&&document.querySelector('[data-win="mailReply"]'))?m.composer.acct:m.activeId;
+  }
+  function loadRecipients(acct){
+    var m=M(); if(!acct) return;
+    m.recip=m.recip||{}; var r=m.recip[acct]; 
+    if(r&&(r.busy||(r.at&&Date.now()-r.at<5*60000))) return;
+    r=m.recip[acct]=r||{list:[]}; r.busy=true;
+    apiGet('/mailbox/'+encodeURIComponent(acct)+'/recipients')
+      .then(function(d){ r.list=(d&&d.recipients)||[]; r.at=Date.now(); r.busy=false; })
+      .catch(function(){ r.busy=false; r.at=Date.now(); /* no suggestions from the Sent folder this time; the other sources still work */ });
+  }
+  function suggestPool(acct){
+    var m=M(), own={}, seen={}, pool=[];
+    (m.accounts||[]).forEach(function(a){ own[String(a.email_address||'').toLowerCase()]=1; });
+    function add(email,name,src,idx){
+      var e=String(email||'').trim().toLowerCase(); if(!e||own[e]||seen[e]||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return;
+      seen[e]=1; pool.push({ email:e, name:String(name||'').trim(), src:src, idx:idx });
+    }
+    var rec=((m.recip||{})[acct]||{}).list||[];
+    rec.forEach(function(p,i){ add(p.email,p.name,0,i); });
+    (m.messages||[]).forEach(function(x,i){ [x.from].concat(x.to||[],x.cc||[]).forEach(function(p){ if(p) add(p.email,p.name,1,i); }); });
+    (STATE.contacts||[]).forEach(function(c,i){ add(c.email,[c.first_name,c.last_name].filter(Boolean).join(' '),2,i); });
+    return pool;
+  }
+  // Lower is better: 0 the address starts with it · 1 a word of the name starts with it · 2 the address contains it · 3 the name does.
+  function suggestScore(p,t){
+    if(p.email.indexOf(t)===0) return 0;
+    var n=p.name.toLowerCase();
+    if(n&&(n.indexOf(t)===0||n.split(/[\s,.-]+/).some(function(w){ return w.indexOf(t)===0; }))) return 1;
+    if(p.email.indexOf(t)>-1) return 2;
+    if(n&&n.indexOf(t)>-1) return 3;
+    return -1;
+  }
+  window.mbSuggestFor=function(typed,have,acct){
+    var t=String(typed||'').trim().toLowerCase(); if(!t) return [];
+    var taken={}; (have||[]).forEach(function(a){ taken[String(a).toLowerCase()]=1; });
+    return suggestPool(acct).filter(function(p){ return !taken[p.email]; })
+      .map(function(p){ return { p:p, s:suggestScore(p,t) }; }).filter(function(x){ return x.s>=0; })
+      .sort(function(a,b){ return (a.s-b.s)||(a.p.src-b.p.src)||(a.p.idx-b.p.idx); })
+      .slice(0,SUG_MAX).map(function(x){ return x.p; });
+  };
+  function sugBox(box){ return box&&box.querySelector('.chipf-sug'); }
+  function sugOpen(box){ return !!sugBox(box); }
+  function sugClose(box){ var d=sugBox(box); if(d) d.remove(); }
+  function sugShow(inp){
+    var box=inp.closest('.chipf'); if(!box) return;
+    var have=Array.prototype.map.call(box.querySelectorAll('.chipf-c'),function(c){return c.getAttribute('data-a');});
+    var list=mbSuggestFor(inp.value,have,suggestAcct());
+    var d=sugBox(box);
+    if(!list.length){ if(d) d.remove(); return; }
+    if(!d){ d=document.createElement('div'); d.className='chipf-sug'; d.setAttribute('role','listbox'); box.appendChild(d); }
+    d.innerHTML=list.map(function(p){
+      return '<div class="chipf-sug-i" role="option" data-e="'+escAttr(p.email)+'" onmousedown="event.preventDefault();mbChipSuggestPick(this)">'+
+        (p.name?'<b>'+esc(p.name)+'</b> <span class="c-text3">'+esc(p.email)+'</span>':'<b>'+esc(p.email)+'</b>')+'</div>';
+    }).join('');
+  }
+  function sugMove(box,dir){
+    var d=sugBox(box); if(!d) return false;
+    var items=Array.prototype.slice.call(d.querySelectorAll('.chipf-sug-i')); if(!items.length) return false;
+    var at=items.findIndex(function(x){ return x.classList.contains('on'); });
+    items.forEach(function(x){ x.classList.remove('on'); });
+    var next=at<0?(dir>0?0:items.length-1):(at+dir+items.length)%items.length;
+    items[next].classList.add('on'); items[next].scrollIntoView&&items[next].scrollIntoView({block:'nearest'});
+    return true;
+  }
+  function sugPick(box){
+    var d=sugBox(box), on=d&&d.querySelector('.chipf-sug-i.on'); if(!on) return false;
+    sugTake(box,on.getAttribute('data-e')); return true;
+  }
+  function sugTake(box,email){
+    var inp=box.querySelector('.chipf-in'); if(!inp||!email) return;
+    sugClose(box); inp.value=email; mbChipCommit(inp); inp.focus();
+  }
   // Anything typed but not yet committed counts — a send must never lose it.
   window.mbChipField=chipField;   // reused by the submission-email section (33-stage-modal.js)
   window.mbChipFlush=function(){ Array.prototype.forEach.call(document.querySelectorAll('.chipf-in'),function(i){ if(i.value) mbChipCommit(i); }); };
@@ -1389,15 +1493,16 @@
       ? '<span class="fs-12_5 c-ink3">Loading folders…</span>'
       : (folders.length
         ? '<select class="seq-sel" style="max-width:230px" onchange="mbSelectFolder(this.value)">'+
+            (m.q?'<option value="" selected>All folders — search results</option>':'')+
             folders.map(function(f){
-              return '<option value="'+escAttr(f.id)+'"'+(f.id===m.folderId?' selected':'')+'>'+
+              return '<option value="'+escAttr(f.id)+'"'+(!m.q&&f.id===m.folderId?' selected':'')+'>'+
                 esc(f.name)+(f.unread?' ('+f.unread+')':'')+'</option>';
             }).join('')+
           '</select>'
         : '');
 
     return UI.toolbar({
-      search:{ value:m.q||'', placeholder:'Search this mailbox…', onkeydown:'mbSearchKey(event)' },
+      search:{ value:m.q||'', placeholder:'Search all folders in this mailbox…', onkeydown:'mbSearchKey(event)' },
       icons:[
         { icon:'x', title:'Clear search', onclick:'mbClearSearch()', off:!m.q },
         { sep:true },
@@ -1416,7 +1521,7 @@
     var body;
     if(m.listLoading&&m.messages===null) body='<div class="dt-empty">Loading messages…</div>';
     else if(m.error&&!all.length)        body='<div class="dt-empty" style="color:var(--red)">'+esc(m.error)+'</div>';
-    else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'”':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
+    else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'” in any folder':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
     else body=selectHead(rows)+rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
 
     return '<div class="mb-list'+(wide?' wide':'')+'" id="mb-list">'+
@@ -1482,7 +1587,9 @@
   function renderRow(x, active){
     var m=M();
     // In Sent and Drafts the useful name is the recipient, not us.
-    var folder=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
+    // While searching, a row belongs to the folder it LIVES in (not the open one) — a Sent result shows who it went to, and says where it is.
+    var rowFolder=m.q&&x.folder_id?x.folder_id:m.folderId;
+    var folder=(m.folders||[]).filter(function(f){return f.id===rowFolder;})[0];
     var outbound=folder&&(folder.kind==='sent'||folder.kind==='drafts');
     var party=outbound?((x.to||[])[0]||{}):(x.from||{});
     var partyEmail=party.email||'';
@@ -1500,6 +1607,7 @@
         '<div class="mb-subj">'+esc(x.subject||'(no subject)')+'</div>'+
         '<div class="mb-prev">'+esc(x.preview||'')+
           (x.has_attachments?' <span title="Has attachments">📎</span>':'')+'</div>'+
+        (m.q&&folder?'<span class="pill mute mb-in-folder" title="This result is in '+escAttr(folder.name)+'">'+esc(folder.name)+'</span>':'')+
         labelChips(x.label_ids,2)+
       '</div>'+
     '</div>';
@@ -1667,8 +1775,8 @@
 
   // The signature picker. Off by default and remembered, with the real filled
   // signature shown when it is on — so what you pick is what the recipient gets.
-  function renderSigRow(on, setFn){
-    var m=M();
+  function renderSigRow(on, setFn, acct){
+    var m=M(); var sig=m.sigCache[acct], busy=!!m.sigBusy[acct]||sig===undefined;
     return '<div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
       '<label class="fs-11 c-text2" style="padding-top:5px">Signature</label>'+
       '<select class="sel" style="width:auto;font-size:12px;padding:4px 8px" onchange="'+setFn+'(this.value===\'1\')">'+
@@ -1677,8 +1785,8 @@
       '</select>'+
       (on
         ? '<div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;background:var(--card);max-height:120px;overflow:auto">'+
-            (m.sigLoading?'<span class="fs-11 c-text3">Loading…</span>'
-              : (m.sigHtml?m.sigHtml:'<span class="fs-11 c-text3">No signature saved for this mailbox.</span>'))+
+            (busy?'<span class="fs-11 c-text3">Loading…</span>'
+              : (sig?sig:'<span class="fs-11 c-text3">No signature saved for this mailbox.</span>'))+
           '</div>'
         : '')+
     '</div>';
@@ -1709,7 +1817,7 @@
             'data-placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'" '+
             'oninput="mbEditorInput(\'reply\')" onpaste="mbEditorPaste(event,\'reply\')">'+mbEditorHtml(c.body)+'</div>'+
           renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
-          renderSigRow(c.sig,'mbCompSetSig')+
+          renderSigRow(c.sig,'mbCompSetSig',c.acct)+
         '</div>'+
         '<div class="mb-win-ft">'+
           '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+

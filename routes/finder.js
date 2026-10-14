@@ -39,6 +39,8 @@ const integrations = require('../config/integrations');
 const jobsJsearch = require('../services/jobs-jsearch');
 const settings = require('../config/settings');
 const contactPoints = require('../services/contact-points');
+const leadContacts = require('../services/lead-contacts');          // the one "already added" rule — also behind the same-person warning
+const jobTitle = require('../services/job-title');                // the same job worded two ways by two job boards is one job
 const leadDistribution = require('../services/lead-distribution');
 const poc = require('../services/poc-targets');
 const { annotateContactEmailStatus, emailSyntaxValid } = require('../email-validation');
@@ -50,7 +52,7 @@ const DEFAULT_PEOPLE_TITLES = ['HR Manager', 'Human Resources', 'Talent Acquisit
 
 module.exports = (ctx) => {
   const router = express.Router();
-  const { supabase, auth, hasRole, logActivity, getTimezoneFromLocation, withOrg } = ctx;
+  const { supabase, auth, hasRole, logActivity, getTimezoneFromLocation, withOrg, ownership, reportingChainIds, orgIdFor } = ctx;
   const db = ctx.db || createDb(supabase);
   const apollo = ctx.apollo || peopleApollo;               // tests hand in a fake Apollo
   const jsearch = ctx.jsearch || jobsJsearch;              // …and a fake job-search service
@@ -970,7 +972,9 @@ module.exports = (ctx) => {
       // The same job at the same company is not "another" — it would write to the same company twice about the same thing.
       const sameCo = await scoped.from('jobs').select('id,position').eq('company_id', lead.company_id).is('deleted_at', null);
       if (sameCo.error) throw sameCo.error;
-      const clash = (sameCo.data || []).find((j) => String(j.position || '').trim().toLowerCase() === position.toLowerCase());
+      // Compared as the ROLE, not letter for letter (14 Oct, owner: two Cargill leads, "Quality Assurance Technician. Job in Johnson
+      // Fifty States-Jobs" and "… Job in Nemaha Gecko Jobs" — one posting seen on two boards) — services/job-title.js.
+      const clash = (sameCo.data || []).find((j) => jobTitle.sameJob(j.position, position));
       if (clash) return res.status(409).json({ error: 'There is already a lead for "' + position + '" at this company — pick a different job.', lead_id: clash.id });
 
       // Contacts: people already on the saved lead (copied), people found on the card whose email was revealed, or one typed in.
@@ -995,6 +999,30 @@ module.exports = (ctx) => {
       const contacts = raw.map((r) => contactPoints.tidyImportedContact(r).contact);
       const bad = contacts.find((c) => !c.first_name || !c.email || !emailSyntaxValid(c.email));
       if (bad) return res.status(400).json({ error: 'Each contact needs a first name and a valid email.' });
+
+      // THE SAME PERSON ON ANOTHER ACTIVE LEAD AT THIS COMPANY (14 Oct, owner: "warn" — yes). Not a refusal: a second job is often meant for
+      // the same person. But it is a second cold email to somebody PACE is already talking to, so the person is asked first, by name,
+      // naming the other lead (only if they may see it). They answer by sending the same request again with `acknowledge_repeats: true`.
+      // The people are matched by the same lookup and rule as "Add contact" (services/lead-contacts.js).
+      if (b.acknowledge_repeats !== true && lead.company_id) {
+        const found = [];
+        const seenPeople = new Map(), allJobs = {};
+        for (const c of contacts) {
+          const ex = await leadContacts.lookupExisting({ db, req, jobId: lead.id, companyId: lead.company_id, email: c.email, emails: [c.email].concat(c.extra_emails || []) });
+          ex.people.forEach((p) => seenPeople.set(p.id, p));
+          Object.assign(allJobs, ex.jobs);
+        }
+        const repeats = leadContacts.repeatsAtCompany(contacts, [...seenPeople.values()], allJobs, lead.company_id);
+        if (repeats.length) {
+          const isAdmin = hasRole(req, 'admin');
+          const chain = isAdmin || !reportingChainIds ? null : await reportingChainIds(req.user.id, orgOf(req));
+          const scope = ownership ? ownership.viewScope({ role: req.user.role, roles: req.user.roles, userId: req.user.id, chainIds: chain }) : null;
+          const visibleIds = new Set(repeats.map((r) => r.job).filter((j) => scope && ownership.canSeeLead(j, scope)).map((j) => j.id));
+          let companyName = null;
+          if (lead.company_id) { const co = await scoped.from('companies').select('id,name').eq('id', lead.company_id).maybeSingle(); companyName = (co.data && co.data.name) || null; }
+          return res.status(409).json(leadContacts.warningPayload({ repeats, visibleIds, companyName, position }));
+        }
+      }
 
       const baseRes = lead.research || {};
       const posts = Array.isArray(baseRes.finder && baseRes.finder.postings) ? baseRes.finder.postings : [];

@@ -713,3 +713,17 @@ person who has not written their own (R-169).
 - **Delete a pending email (R-220):** open an email in Email → Pending and press **Delete email**, or tick several and press **Delete selected**. It asks first and says it will not be sent; the lead stays.
 - **Read, edit and send the first email inside Find Leads (R-221):** when a first email is written it opens in a window with its subject and message — change it, **Save**, or **Send**. A saved lead with a waiting email has **Preview & edit**.
 - **"Lead Finder" label (R-222):** leads made by Find Leads show **Lead Finder** in the Leads list instead of NEW.
+- **Label window no longer flashes (R-223):** ticking a label, creating one, or pressing a button in the mailbox's label window updates it where it stands — no replayed pop-in, no jump back to the top of the list.
+- **A reply shows the right signature (R-224):** the signature preview in Reply / New message is the one of the mailbox the email is sent from, and a signature changed in My setup shows the next time a window opens.
+- **Pay says what it is per (R-225):** the New Job / Edit job form has Hourly / Weekly / Monthly / Yearly beside the range; it prints as "USD 22–26 /hr" everywhere, and candidate emails say "an hour / a week / a month / a year" from it. A lead whose posting says "per hour" arrives with Hourly chosen. *(Needs migration 065.)*
+- **Opening a lead is one draw (R-227):** resting the pointer on a lead row fetches its people and emails, so the opened row is complete at once.
+- **Automatic replies are not answers (R-228):** an out-of-office or "we received your message" reply leaves the lead where it was and tags it **Auto-replied**; only a person's reply moves it to Connected. *(Tag needs migration 066.)*
+- **Edit lead (R-229):** admin, RA lead and the BD owner chain get **Edit lead** in the opened row (title, location, Found by, job link, pay, industry, notes). RAs keep their own 24-hour Edit. A value plainly in the wrong field — a company description under Found by — is moved to Notes on import, create and edit, and the person is told.
+- **Jobs opens on My Jobs (R-230).**
+- **Leads that only sent an out-of-office or read receipt were cleaned up (R-231)** — moved back to Assigned with the Auto-replied tag; backup kept in the database.
+- **Out-of-office with a return date pauses follow-ups (R-232):** "returning Monday, October 12th" marks the contact Out of office until that day; follow-ups resume by themselves. Read receipts are never treated as answers.
+- **RA lead can edit the people on a lead their team made (R-233),** inside the admin's "RA self-edit window" (Admin → System settings → Leads). The Edit lead window shows a **People** section when allowed, and says when the time closed when not.
+- **"Already on another lead here" question (R-234):** emailing another job to a person who is already on a live lead at that company asks first, naming the lead; **Add anyway** goes ahead.
+- **Address suggestions (R-235):** type in To / Cc (new message, reply, reply all, forward) and people you have written to before, people in the open mailbox and PACE contacts are offered; arrow keys + Enter or a click take one. Admin number: "Sent emails read for address suggestions".
+- **Search across the whole mailbox (R-236):** a search looks in every folder; each result says which folder it is in; picking a folder leaves the search.
+

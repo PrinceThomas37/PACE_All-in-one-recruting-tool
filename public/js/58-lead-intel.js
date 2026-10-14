@@ -41,17 +41,28 @@
   }
 
   window.leadIntelSlot = function(j){
-    var id = j.id;
-    setTimeout(function(){ load(id); }, 0);
+    var id = j.id, st = C[id];
+    // What is already known is drawn in the SAME turn the panel is inserted (a microtask runs before the browser paints), so the
+    // panel does not open without its Emails section and grow a moment later; then it is refreshed unless it is fresh.
+    if (st && st.data) Promise.resolve().then(function(){ paint(id); });
+    if (st && st.pre && st.data && st.at && Date.now()-st.at < FRESH_MS) st.pre = false;   // a hover fetched it a moment ago: used once
+    else setTimeout(function(){ load(id); }, 0);
     return '<div id="lx-intel-'+esc(id)+'" class="lx-intel" onclick="event.stopPropagation()"></div>';
   };
+  // Asked for when the pointer reaches the row (06-page-leads.js), so the click finds it.
+  window.leadIntelPrefetch = function(id){
+    var st = C[id] || (C[id] = { open:{}, full:{} });
+    if (st.busy2 || (st.data && st.at && Date.now()-st.at < FRESH_MS)) return;
+    st.busy2 = true;
+    apiGet('/leads/'+encodeURIComponent(id)+'/intel').then(function(d){ st.data = d || { enabled:false }; st.at = Date.now(); st.pre = true; st.busy2 = false; paint(id); })
+      .catch(function(){ st.busy2 = false; });
+  };
+  var FRESH_MS = 15000;
 
   function load(id){
     var st = C[id] || (C[id] = { open:{}, full:{} });
-    // Show what we already have at once, then refresh — a reply that arrived
-    // since the row was last opened must appear without reloading the page.
-    if (st.data) paint(id);
-    apiGet('/leads/'+encodeURIComponent(id)+'/intel').then(function(d){ st.data = d || { enabled:false }; paint(id); })
+    if (st.busy2) return;
+    apiGet('/leads/'+encodeURIComponent(id)+'/intel').then(function(d){ st.data = d || { enabled:false }; st.at = Date.now(); paint(id); })
       .catch(function(){ if (!st.data) st.data = { enabled:false }; paint(id); });
   }
 

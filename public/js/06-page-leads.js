@@ -75,7 +75,10 @@ function renderJobs(){
       (j.freshness==='Old'?UI.pill('OLD','bad'):'')+
       // A lead the Lead Finder made says so (owner, 14 Oct: "it is mentioned as new — it should be displayed as Lead Finder"); every
       // other fresh lead keeps NEW.
-      (leadFromFinder(j)?UI.pill('Lead Finder','info'):(j.freshness==='New'?UI.pill('NEW','ok'):''));
+      (leadFromFinder(j)?UI.pill('Lead Finder','info'):(j.freshness==='New'?UI.pill('NEW','ok'):''))+
+      // Only an automatic reply so far (out of office, "we got your message"): not Connected, but worth knowing — set by the reply
+      // sweep (services/auto-reply.js), cleared when a person answers. Shown while the lead is still waiting at Assigned.
+      (j.auto_replied_at&&j.stage==='Assigned'?'<span class="pill mute" title="They sent an automatic reply (out of office or similar). A person has not answered yet, so the lead stays Assigned.">Auto-replied</span>':'');
 
     var stageCell=canChangeStageInline
       ? '<select onchange="changeJobStage(\''+j.id+'\',this.value);event.stopPropagation()" onclick="event.stopPropagation()" '+
@@ -451,7 +454,7 @@ function leadExpandHtml(j){
   var facts=[
     ['Stage', j.stage||'—'],
     ['Industry', j.industry||j.company_ind||'—'],
-    ['Found by', leadFromFinder(j)?'Lead Finder':(j.source||'—')],
+    ['Found by', leadFromFinder(j)?'Lead Finder':(j.source?(j.source.length>60?j.source.slice(0,57).trimEnd()+'…':j.source):'—')],
     ['Assigned to', j.assigned_bd_name||'Unassigned'],
     ['Assigned', when||'—']
   ].map(function(f){
@@ -483,6 +486,8 @@ function leadExpandHtml(j){
       ((j.stage==='Connected'&&userHasAnyRole(STATE.user,'admin','bd','bd_lead'))?'<div style="margin-bottom:8px">'+leadConvertBtn(j,false)+'</div>':'')+
       // An Unassigned lead can be taken from its own panel (a BD / BD lead): it becomes theirs, in one of their email IDs.
       ((j.stage==='Unassigned'&&!j.assigned_to_bd&&userHasAnyRole(STATE.user,'bd','bd_lead'))?'<div style="margin-bottom:8px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();leadTakeSelected(\''+j.id+'\')">Take this lead</button></div>':'')+
+      // A manager or RA lead can correct the lead itself afterwards (72-lead-edit.js); an RA has their own 24-hour Edit.
+      ((window.canEditLead&&canEditLead(j))?'<button class="btn btn-outline btn-sm lx-open" style="margin-bottom:6px" onclick="event.stopPropagation();openLeadEdit(\''+j.id+'\')">Edit lead</button>':'')+
       '<button class="btn btn-outline btn-sm lx-open" onclick="event.stopPropagation();openJob(\''+j.id+'\')">Open full record</button>'+
     '</div>'+
   '</div>';
@@ -497,6 +502,34 @@ window.leadRowToggle=function(id,ev){
     return j?leadExpandHtml(j):null;
   }, 'lead-exp');
 };
+
+// THE PANEL IS FETCHED WHEN THE POINTER REACHES THE ROW (14 Oct, owner: opening a lead "takes time to completely load"). The people and
+// the emails are read from the server only after the panel opens, so each arrived late and the panel grew. Resting on a row for a
+// moment (or touching it) starts both reads, so by the click they are usually here and the panel is drawn once, whole. One timer,
+// one row at a time, and only a row of THIS list: moving across the table asks for nothing.
+(function(){
+  var timer=null, pending='';
+  function rowId(ev){
+    var tr=ev.target&&ev.target.closest&&ev.target.closest('tr[data-row-id]');
+    if(!tr||String(tr.getAttribute('onclick')||'').indexOf('leadRowToggle(')!==0) return '';
+    return tr.getAttribute('data-row-id')||'';
+  }
+  function go(id){
+    if(window.leadPocPrefetch) leadPocPrefetch(id);
+    if(window.leadIntelPrefetch) leadIntelPrefetch(id);
+  }
+  document.addEventListener('pointerover',function(ev){
+    var id=rowId(ev); if(!id||id===pending) return;
+    pending=id; clearTimeout(timer);
+    timer=setTimeout(function(){ go(id); },90);
+  },true);
+  // Leaving for anything that is not a lead row cancels the wait; moving between rows simply replaces it.
+  document.addEventListener('pointerout',function(ev){
+    var to=ev.relatedTarget, tr=to&&to.closest&&to.closest('tr[data-row-id]');
+    if(!tr){ clearTimeout(timer); pending=''; }
+  },true);
+  document.addEventListener('touchstart',function(ev){ var id=rowId(ev); if(id) go(id); },{capture:true,passive:true});
+})();
 
 function openJob(id){ STATE.detailJob=id; STATE.jobSeqSel=[]; STATE.modal={type:"jobDetail",id:id}; render(); if(typeof loadJobEnrollments==='function')loadJobEnrollments(id); }
 window.jobToggleSeqSel=function(cid){ STATE.jobSeqSel=STATE.jobSeqSel||[]; var i=STATE.jobSeqSel.indexOf(cid); if(i>-1)STATE.jobSeqSel.splice(i,1); else STATE.jobSeqSel.push(cid); render(); };

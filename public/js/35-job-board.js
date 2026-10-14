@@ -156,7 +156,7 @@
     var id = STATE.jb.modalJob; if (!id) return '';
     var j = (STATE.jb.list||[]).find(function(x){ return x.id===id; }); if (!j) return '';
     var loc = [j.city,j.state,j.country].filter(Boolean).join(', ');
-    var pay = (j.pay_min||j.pay_max) ? ((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')) : '';
+    var pay = jobPayText(j,'');
 
     function dr(lbl,val){ return val?'<div class="fs-12_5" style="margin-bottom:4px"><span class="c-text3">'+lbl+': </span>'+esc(val)+'</div>':''; }
 

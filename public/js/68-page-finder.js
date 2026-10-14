@@ -989,7 +989,8 @@
     if(!contacts.length){ an.err='Pick at least one person to write to.'; STATE.modal=renderAnotherModal(); render(); return; }
     if(contacts.length>lim('contacts_per_lead')){ an.err=lim('contacts_per_lead')+' people is the most one lead can carry.'; STATE.modal=renderAnotherModal(); render(); return; }
     an.busy=true; an.err=''; STATE.modal=renderAnotherModal(); render();
-    apiPost('/finder/cards/'+an.id+'/another',{ positions:jobs, contacts:contacts }).then(function(r){
+    apiPost('/finder/cards/'+an.id+'/another',{ positions:jobs, contacts:contacts, acknowledge_repeats:an.ackRepeats===true }).then(function(r){
+      an.ackRepeats=false;
       var write=an.writeNow&&!seqNeeded(); F.an=null; STATE.modal=null; render(); loadHistory();
       if (typeof refreshJobs==='function') refreshJobs();
       showToast('Saved as another lead — Unassigned until its first email is written','success');
@@ -1001,7 +1002,20 @@
           if (n) reviewLead(r.lead_id, an.x.company_name);
         }).catch(function(e){ showToast('The lead is saved, but the email could not be written: '+((e&&e.message)||e),'warning'); });
       }
-    }).catch(function(e){ an.busy=false; an.err=e.message; STATE.modal=renderAnotherModal(); render(); });
+    }).catch(function(e){
+      an.busy=false;
+      // The same person is already on another active lead at this company: ask, by name — "Add anyway" sends the same request again.
+      var dup=e&&e.body&&e.body.code==='same_person_elsewhere'&&e.body.duplicate;
+      if(dup){
+        an.err=''; STATE.modal=renderAnotherModal(); render();
+        showAlreadyAdded(dup,{
+          onAddAnyway:function(){ an.ackRepeats=true; STATE.modal=renderAnotherModal(); render(); fdAnSave(); },
+          onClose:function(){ STATE.modal=renderAnotherModal(); render(); }
+        });
+        return;
+      }
+      an.err=e.message; STATE.modal=renderAnotherModal(); render();
+    });
   };
   function renderAnotherModal(){
     var an=F.an, l=an.x.lead, mainT=String(l.position||'').toLowerCase();

@@ -2048,3 +2048,25 @@ Two organisations already existed, so nobody is signed out by a third. info@ is 
 3. *Preview and edit in Find Leads.* "When the emails are created in Lead Finder, there is no option to edit that email and preview it before sending. I think it was asked for earlier." It was asked for (R-194) and I answered it only in Email → Pending — which the owner could not find from Find Leads. → the written email now **opens right there** (a window: To, Subject, Message, **Save**, **Send**) the moment it is written (Accept, "Write the first email", "Email another job / person"), and a saved lead with its email waiting has a **Preview & edit** button. Only the first email (never a follow-up); an AI-written-at-send email says its text here is the fallback.
 4. *Label.* "In the lead section, the lead created by the user is mentioned as New. It should be displayed as 'Lead Finder'." → a lead the Lead Finder made shows a **Lead Finder** pill in the Leads list instead of NEW, and "Found by" in its opened row. Other fresh leads keep NEW.
 **Re-open when:** the owner wants the Lead Finder label as a column or a filter, or Send from the Find Leads window to ask for a confirm.
+
+### D-0141 · 2026-10-14 · STANDS · Eight changes from the owner's fourth page of notes (mailbox, reply, jobs, leads)
+**The owner said (14 Oct, screenshots and two recordings):**
+1. *The quick refresh in the mailbox* — "when labels are clicked and any button is clicked in that window". → the label window (an overlay) was rewritten on every click, replaying its pop-in; it is now updated where it stands (R-223).
+2. *Reply signature preview* — "the email is sent from Lisa but the signature shown is different … I think the preview is crashed". → the SEND was right; the preview kept one signature for the whole page. Now per sending mailbox (R-224).
+3. *Pay period* — "I don't have the option to choose yearly, hourly, weekly pay when creating a job". → Hourly / Weekly / Monthly / Yearly on the job (R-225; migration 065).
+4. *A job created again for the same company in Lead Finder* — "is it okay; does both come under the same company details?" → by design (D-0110) a second lead shares the company record but is its own job with its own copy of the contacts. The two Cargill rows were one posting seen on two boards, so the "same job" check now ignores job-board wording (R-226).
+5. *A lead takes time to load completely* (recording) → people and emails are fetched when the pointer rests on the row; the server reads them together (R-227).
+6. *An automatic reply marks a lead Connected* — "Connected is when the client is interested in reviewing profiles or our terms … maybe for autoreplies we can create an 'autoreplied' tag". → an automatic reply no longer moves the lead; it gets an **Auto-replied** tag (R-228; migration 066). Follow-ups carry on (pausing until the return date is offered, R-232).
+7. *Wrong information in a wrong field; edit for manager and lead RA, not RA* → a value that is plainly in the wrong field (a description in Found by) is moved to Notes on import/create/edit and said out loud; **Edit lead** for admin, RA lead and the BD owner chain (R-229). Editing a lead's PEOPLE for an RA lead is a permission change, offered (R-233).
+8. *Jobs opens All Jobs instead of My Jobs* → opens My Jobs (R-230).
+**Re-open when:** the owner wants contacts editable by RA leads (R-233), follow-ups paused during an out-of-office (R-232), or the clean-up of leads already marked Connected (R-231).
+### D-0142 · 2026-10-14 · STANDS · The owner's answers to the four offers, and two more notes (mailbox)
+**The owner said (14 Oct):**
+1. *"Change the database too"* → migrations 065 and 066 applied to the live database (both one nullable column; read back afterwards).
+2. *Clean up leads wrongly marked Connected* — **yes** (R-231). Only leads whose reply was an automatic reply or a read receipt move back; leads a person answered, or set to Connected by hand, stay.
+3. *Should an RA lead edit a lead's contacts?* — **"within 24 hours, who the admin set it up in the admin panel"** (R-233). Read as: yes, for leads their team made, for as long as the admin's existing "RA self-edit window" (default 24 h) — the same number, not a new one. This changes `canTouchJob` (Rampart's gate) for one role only; admin, creators and owners keep what they had.
+4. *Pause follow-ups until the return date when an auto-reply says when* — **yes** (R-232).
+5. *Warn when the same person is already on another active lead at the same company* — **yes** (R-234). A question with "Add anyway", never a refusal (D-0110 keeps "another job" allowed).
+6. *Address auto-suggest in To / Cc* "like Gmail or Outlook" (R-235) and 7. *search all folders in a mailbox* "like Gmail" (R-236).
+**Re-open when:** the owner wants suggestions to include people the mailbox only RECEIVED from (today: sent-to, the open list and PACE's contacts), or the RA-lead window to differ from the RA's.
+

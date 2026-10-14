@@ -16,6 +16,8 @@ const express = require('express');
 const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, titleSimilarity } = require('../jd-parser');
 const { annotateContactEmailStatus } = require('../email-validation');
+const contactEditWindow = require('../services/contact-edit-window');   // who may edit a lead's people, and until when (14 Oct)
+const leadFields = require('../services/lead-fields');   // a value in the wrong field is moved, and said so (14 Oct)
 const contactPoints = require('../services/contact-points');
 const { getSetting } = require('../config/settings');
 const { fillPatch } = require('../services/lead-fill');
@@ -217,6 +219,23 @@ router.get('/jobs/:id', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// WHAT MAY THIS PERSON EDIT ON THIS LEAD? (owner, 14 Oct) The Edit lead window asks before it offers the People section, using the SAME
+// rule canTouchJob enforces on every contact write (services/contact-edit-window.js) — never a button the server would refuse.
+router.get('/jobs/:id/edit-rights', auth, async (req, res) => {
+  try {
+    const { data, error } = await withOrg(supabase.from('jobs').select('id,org_id,created_by,created_at,assigned_to,assigned_to_bd,stage').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
+    if (error) throw error;
+    const reqOrg = orgIdFor(req);
+    if (!data || (reqOrg && data.org_id && data.org_id !== reqOrg)) return res.status(404).json({ error: 'Not found' });
+    const scope = await scopeFor(req);
+    if (!own.canSeeLead(data, scope)) return res.status(404).json({ error: 'Not found' });
+    const hours = await getSetting(supabase, 'ra_edit_window_hours', reqOrg || data.org_id);
+    const team = hasRole(req, 'ra_lead') ? await reportingChainIds(req.user.id, reqOrg || data.org_id) : [];
+    const r = contactEditWindow.contactEditRights({ isAdmin: hasRole(req, 'admin'), isRaLead: hasRole(req, 'ra_lead'), userId: req.user.id, job: data, teamIds: team, windowHours: hours, now: new Date() });
+    res.json({ contacts: r.allowed, via: r.via, window_hours: hours, contacts_until: r.until });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 function cleanImportExtra(x) {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
   const out = {};
@@ -253,6 +272,7 @@ router.post('/jobs/bulk', auth, async (req, res) => {
       const days = Math.floor((new Date() - new Date(ref)) / 86400000);
       if (days <= 3) return 'New'; if (days <= 10) return 'Normal'; return 'Old';
     }
+    let tidiedLeads = 0;
     const jobRows = filteredJobs.map(j => {
       const research = buildResearchFromLeadData({
         notes: j.notes,
@@ -283,6 +303,14 @@ router.post('/jobs/bulk', auth, async (req, res) => {
         industry: j.industry || null,
         ...orgStamp(req)
       };
+      // A column filed under the wrong heading (a company description under "Found by") is moved to the notes, kept word for word.
+      const tidy = leadFields.tidyLeadFields({ source: row.source, job_url: row.job_url, salary_range: row.salary_range, location: row.location, position: row.position, notes: row.notes });
+      if (tidy.moved.length) {
+        tidiedLeads++;
+        Object.assign(row, tidy.fields);
+        if (!row.source) row.source = 'Import';
+        if (!row.position) row.position = '(unknown)';
+      }
       // Columns the importer did not recognise, kept as written (bounded:
       // 40 columns, 500 chars each) so nothing in the owner's sheet is lost.
       const extra = cleanImportExtra(j.import_extra);
@@ -340,7 +368,8 @@ router.post('/jobs/bulk', auth, async (req, res) => {
     const invalidContacts = contactRows.filter(c => c.email_status === 'invalid').length;
     res.status(201).json({ imported: insertedJobs.length, contacts: contactRows.length, invalidEmails: invalidContacts, skipped,
       owned: false, job_ids: [],
-      contactFixes, contactFixesNote: contactPoints.describeImportFixes(contactFixes) });
+      contactFixes, contactFixesNote: contactPoints.describeImportFixes(contactFixes),
+      tidied: tidiedLeads, tidiedNote: tidiedLeads ? tidiedLeads + (tidiedLeads === 1 ? ' lead had' : ' leads had') + ' a value in the wrong column (for example a description under "Found by") — moved to the lead\'s Notes, nothing lost.' : '' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -386,8 +415,11 @@ router.post('/jobs/fill-missing', auth, async (req, res) => {
 
 router.post('/jobs', auth, async (req, res) => {
   try {
-    const { company_id, position, location, source, job_url, stage, notes, assigned_to, is_duplicate, duplicate_of, contacts, salary_range, job_created_date, job_opened_date, bdm_assigned_name, industry: jobIndustry, research } = req.body;
+    let { company_id, position, location, source, job_url, stage, notes, assigned_to, is_duplicate, duplicate_of, contacts, salary_range, job_created_date, job_opened_date, bdm_assigned_name, industry: jobIndustry, research } = req.body;
     if (!company_id || !position) return res.status(400).json({ error: 'company_id and position required' });
+    // A paragraph in Found by, a link in Pay…: moved to where it belongs, kept word for word in Notes (services/lead-fields.js).
+    const tidy = leadFields.tidyLeadFields({ source, job_url, salary_range, location, position, notes });
+    ({ source, job_url, salary_range, location, position, notes } = tidy.fields);
     // THE ADD RULE (D-0090, services/lead-decision.js) — block an RA from adding a company that is already
     // in this organisation under another record (same website / LinkedIn page / name), that has an active
     // lead or open job order, or that is inside the admin-set cooldown (config/settings.js). It used to be
@@ -441,7 +473,7 @@ router.post('/jobs', auth, async (req, res) => {
     }
     await logActivity(job.id, null, req.user.id, 'job_created', `Job created: ${position}`, null, { position, stage: job.stage });
     if (research) persistLearnedSkills(jobIndustry, research);
-    res.status(201).json(job);
+    res.status(201).json(tidy.moved.length ? Object.assign({}, job, { moved: tidy.moved, moved_sentence: leadFields.movedSentence(tidy.moved) }) : job);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -474,7 +506,11 @@ router.put('/jobs/:id', auth, async (req, res) => {
       || raCanEdit;
     if (!canEdit) return res.status(403).json({ error: 'Forbidden' });
     if (isRA && !raCanEdit) return res.status(403).json({ error: `Edit window has expired (${editWindowHours} hours)` });
-    const { position, location, source, job_url, stage, notes, assigned_to, assigned_to_bd, sending_email_id, salary_range, job_created_date, industry: jobIndustry, research } = req.body;
+    let { position, location, source, job_url, stage, notes, assigned_to, assigned_to_bd, sending_email_id, salary_range, job_created_date, industry: jobIndustry, research } = req.body;
+    // The same check as on create: only the fields this edit actually sent are looked at, and what is moved is added to the notes
+    // that are on the lead (or that this edit is writing).
+    const tidy = leadFields.tidyLeadFields({ position, location, source, job_url, salary_range, notes: notes !== undefined ? notes : existing.notes });
+    if (tidy.moved.length) { ({ position, location, source, job_url, salary_range } = tidy.fields); notes = tidy.fields.notes; }
     const updates = { updated_at: new Date() };
     if (position !== undefined) updates.position = position;
     if (location !== undefined) {
@@ -538,7 +574,7 @@ router.put('/jobs/:id', auth, async (req, res) => {
       await logActivity(data.id, null, req.user.id, 'job_updated', 'Job updated', null, null);
     }
     if (research !== undefined) persistLearnedSkills(jobIndustry || data.industry || existing.industry, research);
-    res.json(data);
+    res.json(tidy.moved.length ? Object.assign({}, data, { moved: tidy.moved, moved_sentence: leadFields.movedSentence(tidy.moved) }) : data);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
