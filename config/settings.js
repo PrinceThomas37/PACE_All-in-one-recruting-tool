@@ -47,8 +47,13 @@ const SETTINGS_SCHEMA = [
     default: 21, min: 0, max: 365,
   },
   {
+    key: 'mailbox_recipient_lookback', label: 'Sent emails read for address suggestions', unit: 'emails', group: 'Email engine',
+    description: 'When someone types in the To or Cc box of a new message, reply or forward, PACE suggests people they have written to before. This is how many of the most recent emails in that mailbox\'s Sent folder it reads to find them (nothing is stored). A bigger number remembers more people but takes longer the first time.',
+    default: 100, min: 20, max: 500,
+  },
+  {
     key: 'ra_edit_window_hours', label: 'RA self-edit window', unit: 'hours', group: 'Leads',
-    description: 'How long an RA can edit a lead they created before the edit window closes.',
+    description: 'How long an RA can edit a lead they created before the edit window closes. The same window applies to an RA lead editing the people (contacts) on a lead their team made.',
     default: 24, min: 1, max: 720,
   },
   {

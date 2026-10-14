@@ -124,6 +124,56 @@ function duplicatePayload(dup, opts) {
   };
 }
 
+// ── THE SAME PERSON ON ANOTHER ACTIVE LEAD AT THIS COMPANY — A WARNING, NOT A REFUSAL (owner, 14 Oct: "warn when the same person is
+// already on another active lead at the same company" — yes) ──────────────────────────────────────────────────────────────────────
+// "Email another job" (routes/finder.js /another) deliberately writes about a second job at a company, often to the same person. The one
+// add path above REFUSES a repeated address; this path may not refuse (D-0110), but it must not stay silent: a second lead is a
+// second cold email to somebody PACE is already talking to. So before the second lead is made the person is told, by name, which
+// lead the person is already on — and decides. Same lookup (`lookupExisting`) and same matching (`findDuplicate`) as the pop-up above.
+//
+// `repeatsAtCompany` is PURE: given the people about to be added, the people at that company (lookupExisting's `people`), and its
+// leads (`jobs`), it returns who is already on a LIVE lead there — a lead that is Rejected or Future is not being worked, so it does not
+// count. An address match is certain; a name match is "may be the same person". `warningPayload` words it, and names the other lead
+// only for a viewer who may see it (D-0034) — otherwise "a colleague's lead", never its title.
+const INACTIVE_LEAD_STAGES = ['Rejected', 'Future'];
+function repeatsAtCompany(newPeople, people, jobs, companyId) {
+  const out = [];
+  (newPeople || []).forEach((p) => {
+    const hit = findDuplicate(p, people, { jobId: null, companyId });
+    if (!hit || hit.where === 'elsewhere') return;
+    const job = (jobs || {})[hit.contact.job_id];
+    if (!job || job.deleted_at || INACTIVE_LEAD_STAGES.indexOf(job.stage) > -1) return;
+    out.push({ person: p, hit, job });
+  });
+  return out;
+}
+function warningPayload({ repeats, visibleIds, companyName, position }) {
+  const vis = visibleIds instanceof Set ? visibleIds : new Set(visibleIds || []);
+  const lines = repeats.map(({ person, hit, job }) => {
+    const c = hit.contact || {};
+    const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || [person.first_name, person.last_name].filter(Boolean).join(' ') || 'This person';
+    const addr = hit.address || c.email || person.email || '';
+    const where = vis.has(job.id) ? `the "${job.position || 'untitled'}" lead (${job.stage || 'active'})` : "a colleague's active lead";
+    return hit.match === 'email'
+      ? `${name}${addr ? ' (' + addr + ')' : ''} is already on ${where} at ${companyName || 'this company'}.`
+      : `Someone named ${name} is already on ${where} at ${companyName || 'this company'} — it may be the same person.`;
+  });
+  const first = repeats[0], fc = first.hit.contact || {};
+  const fname = [fc.first_name, fc.last_name].filter(Boolean).join(' ') || 'This person';
+  const message = lines.join(' ') + ` A second lead${position ? ' for "' + position + '"' : ''} means a second cold email to them. Create it anyway?`;
+  const seen = vis.has(first.job.id);
+  return {
+    error: message, code: 'same_person_elsewhere',
+    duplicate: {
+      match: first.hit.match, where: 'company', title: repeats.length > 1 ? 'Already on other leads here' : 'Already on another lead here', message,
+      can_add_anyway: true,
+      person: seen ? { name: fname, email: fc.email || null, title: fc.designation || null } : null,
+      lead: seen ? { id: first.job.id, position: first.job.position || null, company: companyName || null } : null,
+    },
+    repeats: repeats.map(({ person, hit, job }) => ({ email: person.email || null, match: hit.match, lead_id: vis.has(job.id) ? job.id : null })),
+  };
+}
+
 class DuplicateContactError extends Error {
   constructor(dup) { super('This person is already added.'); this.code = 'duplicate_contact'; this.duplicate = dup; }
 }
@@ -250,4 +300,5 @@ module.exports = {
   addLeadContact, lookupExisting, duplicateResponse,
   // pure
   findDuplicate, duplicatePayload, personKey, emailKey, DuplicateContactError, ContactPointError,
+  repeatsAtCompany, warningPayload, INACTIVE_LEAD_STAGES,
 };

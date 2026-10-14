@@ -2060,4 +2060,13 @@ Two organisations already existed, so nobody is signed out by a third. info@ is 
 7. *Wrong information in a wrong field; edit for manager and lead RA, not RA* → a value that is plainly in the wrong field (a description in Found by) is moved to Notes on import/create/edit and said out loud; **Edit lead** for admin, RA lead and the BD owner chain (R-229). Editing a lead's PEOPLE for an RA lead is a permission change, offered (R-233).
 8. *Jobs opens All Jobs instead of My Jobs* → opens My Jobs (R-230).
 **Re-open when:** the owner wants contacts editable by RA leads (R-233), follow-ups paused during an out-of-office (R-232), or the clean-up of leads already marked Connected (R-231).
+### D-0142 · 2026-10-14 · STANDS · The owner's answers to the four offers, and two more notes (mailbox)
+**The owner said (14 Oct):**
+1. *"Change the database too"* → migrations 065 and 066 applied to the live database (both one nullable column; read back afterwards).
+2. *Clean up leads wrongly marked Connected* — **yes** (R-231). Only leads whose reply was an automatic reply or a read receipt move back; leads a person answered, or set to Connected by hand, stay.
+3. *Should an RA lead edit a lead's contacts?* — **"within 24 hours, who the admin set it up in the admin panel"** (R-233). Read as: yes, for leads their team made, for as long as the admin's existing "RA self-edit window" (default 24 h) — the same number, not a new one. This changes `canTouchJob` (Rampart's gate) for one role only; admin, creators and owners keep what they had.
+4. *Pause follow-ups until the return date when an auto-reply says when* — **yes** (R-232).
+5. *Warn when the same person is already on another active lead at the same company* — **yes** (R-234). A question with "Add anyway", never a refusal (D-0110 keeps "another job" allowed).
+6. *Address auto-suggest in To / Cc* "like Gmail or Outlook" (R-235) and 7. *search all folders in a mailbox* "like Gmail" (R-236).
+**Re-open when:** the owner wants suggestions to include people the mailbox only RECEIVED from (today: sent-to, the open list and PACE's contacts), or the RA-lead window to differ from the RA's.
 

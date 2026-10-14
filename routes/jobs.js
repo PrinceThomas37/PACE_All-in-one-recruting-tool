@@ -16,6 +16,7 @@ const express = require('express');
 const { releaseToPoolUpdate } = require('../services/outreach-cycle');
 const { parseJobDescription, buildResearchFromLeadData, normalizeJobTitle, titleSimilarity } = require('../jd-parser');
 const { annotateContactEmailStatus } = require('../email-validation');
+const contactEditWindow = require('../services/contact-edit-window');   // who may edit a lead's people, and until when (14 Oct)
 const leadFields = require('../services/lead-fields');   // a value in the wrong field is moved, and said so (14 Oct)
 const contactPoints = require('../services/contact-points');
 const { getSetting } = require('../config/settings');
@@ -215,6 +216,23 @@ router.get('/jobs/:id', auth, async (req, res) => {
     const scope = await scopeFor(req);
     if (!own.canSeeLead(data, scope)) return res.status(404).json({ error: 'Not found' });
     res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// WHAT MAY THIS PERSON EDIT ON THIS LEAD? (owner, 14 Oct) The Edit lead window asks before it offers the People section, using the SAME
+// rule canTouchJob enforces on every contact write (services/contact-edit-window.js) — never a button the server would refuse.
+router.get('/jobs/:id/edit-rights', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('jobs').select('id,org_id,created_by,created_at,assigned_to,assigned_to_bd,stage').eq('id', req.params.id).is('deleted_at', null).maybeSingle();
+    if (error) throw error;
+    const reqOrg = orgIdFor(req);
+    if (!data || (reqOrg && data.org_id && data.org_id !== reqOrg)) return res.status(404).json({ error: 'Not found' });
+    const scope = await scopeFor(req);
+    if (!own.canSeeLead(data, scope)) return res.status(404).json({ error: 'Not found' });
+    const hours = await getSetting(supabase, 'ra_edit_window_hours', reqOrg || data.org_id);
+    const team = hasRole(req, 'ra_lead') ? await reportingChainIds(req.user.id, reqOrg || data.org_id) : [];
+    const r = contactEditWindow.contactEditRights({ isAdmin: hasRole(req, 'admin'), isRaLead: hasRole(req, 'ra_lead'), userId: req.user.id, job: data, teamIds: team, windowHours: hours, now: new Date() });
+    res.json({ contacts: r.allowed, via: r.via, window_hours: hours, contacts_until: r.until });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

@@ -3115,7 +3115,7 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
     const from = (msg.from?.emailAddress?.address || '').toLowerCase();
     if (!from || ownAddresses.has(from)) continue; // ignore internal / our own mail
     const { data: matches } = await supabase.from('contacts')
-      .select('id,job_id,replied_at,email').ilike('email', from).limit(10);
+      .select('id,job_id,replied_at,email,email_status').ilike('email', from).limit(10);
 
     // Candidate-side match, looked up here (not just further down) so the one
     // conversation_messages row for this physical email can carry both a
@@ -3177,7 +3177,18 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       if (c.replied_at) continue; // already recorded
       if (auto.auto) {
         try { await supabase.from('jobs').update({ auto_replied_at: new Date() }).eq('id', c.job_id); } catch (_) {}   // the column arrives with migration 066
-        await logActivity(c.job_id, c.id, null, 'auto_reply_received', `Automatic reply from ${from} (${auto.kind === 'out_of_office' ? 'out of office' : 'automatic response'}) — not counted as an answer; the lead stays where it was and follow-ups continue`, null, { source: 'inbox', mailbox: tokenRow.email_address, why: auto.why });
+        // An out-of-office that says WHEN they are back pauses the follow-ups until that day (14 Oct, owner: "yes"): the contact is
+        // marked Out of office with the return date, which is exactly what a person does by hand; the daily sweep
+        // (services/ooo-return.js) puts them back to Valid on the day and follow-ups resume. Only a contact who is plainly Valid is
+        // touched (an invalid / blocked / deactivated address is never "rescued" by an auto-reply), and a date that is not in the
+        // future, or has no return word before it, pauses nothing (services/auto-reply.js returnDate).
+        const back = auto.kind === 'out_of_office' ? autoReply.returnDate(msg) : null;
+        const paused = !!(back && (!c.email_status || c.email_status === 'valid'));
+        if (paused) {
+          try { await supabase.from('contacts').update({ email_status: 'out_of_office', ooo_until: back.date, updated_at: new Date() }).eq('id', c.id); } catch (_) {}
+        }
+        await logActivity(c.job_id, c.id, null, 'auto_reply_received', `Automatic reply from ${from} (${auto.kind === 'out_of_office' ? 'out of office' : auto.kind === 'receipt' ? 'read receipt' : 'automatic response'}) — not counted as an answer; the lead stays where it was` + (paused ? `; follow-ups are paused until they are back on ${back.date}` : ' and follow-ups continue'), null, { source: 'inbox', mailbox: tokenRow.email_address, why: auto.why, ...(paused ? { ooo_until: back.date } : {}) });
+        if (paused) await logActivity(c.job_id, c.id, null, 'ooo_set', `Marked out of office until ${back.date} — read from their automatic reply ("${back.words}")`, null, { ooo_until: back.date, auto: true });
         continue;
       }
       const snippet = (msg.bodyPreview || '').slice(0, 280);

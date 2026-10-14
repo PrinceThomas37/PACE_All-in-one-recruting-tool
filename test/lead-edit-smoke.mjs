@@ -40,13 +40,15 @@ const mk = (id, over) => Object.assign({ id, company_id: 'co1', company: { name:
   contacts: [{ id: 'c-' + id, job_id: id, first_name: 'Deb', last_name: 'Beaty', designation: 'Director', email: 'deb@vvp.com', is_primary: true, email_status: 'valid' }] }, over || {});
 const JOBS = [mk('L1'), mk('L2', { assigned_to_bd: 'someone-else', source: 'LinkedIn', position: 'Planner' }), mk('L3', { source: 'Indeed', position: 'Analyst', auto_replied_at: new Date(NOW).toISOString() }),
   mk('L4', { source: 'Indeed', position: 'Associate', stage: 'Connected', auto_replied_at: new Date(NOW).toISOString() })];
-const calls = []; let putStatus = 200;
+const calls = []; let putStatus = 200, contactStatus = 200, rights = { contacts: true, via: 'admin', window_hours: 24, contacts_until: null };
 const reply = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 async function api(route) {
   const req = route.request(), p = new URL(req.url()).pathname, m = req.method();
   let body = null; try { body = req.postDataJSON(); } catch (_) {}
   calls.push({ m, p, body });
   if (m === 'GET' && p === '/jobs') return reply(route, JOBS);
+  if (m === 'GET' && /^\/jobs\/L\d\/edit-rights$/.test(p)) return reply(route, rights);
+  if (m === 'PUT' && /^\/contacts\/c-L\d$/.test(p)) return contactStatus === 200 ? reply(route, Object.assign({ id: p.split('/').pop() }, body)) : reply(route, { error: 'Forbidden' }, contactStatus);
   if (m === 'PUT' && /^\/jobs\/L\d$/.test(p)) {
     if (putStatus !== 200) return reply(route, { error: 'Forbidden' }, putStatus);
     return reply(route, Object.assign({}, JOBS[0], body, { moved: [{ field: 'source', to: 'notes', text: 'Company Description Venture Visionary Partners is a regis…', why: 'x' }], moved_sentence: 'Moved "Company Description Venture Visionary Partners is a regis…" from Found by to Notes — it was in the wrong place.' }));
@@ -107,6 +109,44 @@ try {
   await page.waitForSelector('#le-source'); await page.click('#le-save'); await page.waitForTimeout(400);
   step('a refused save stays open and says why', await page.evaluate(() => !!document.getElementById('le-source') && /Forbidden/.test(document.querySelector('.modal').innerText)));
   putStatus = 200;
+  await page.evaluate(() => leadEditClose());
+
+  // ── the people on the lead (an RA lead's window, set by the admin) ──
+  await load('ra_lead');
+  rights = { contacts: true, via: 'ra_lead_window', window_hours: 24, contacts_until: new Date(NOW + 5 * 3600000).toISOString() };
+  await open('L1');
+  await page.evaluate(() => openLeadEdit('L1'));
+  await page.waitForSelector('#le-p0-email', { timeout: 4000 });
+  const ppl = await page.evaluate(() => ({ first: document.getElementById('le-p0-first_name').value, email: document.getElementById('le-p0-email').value, txt: document.querySelector('.modal').innerText }));
+  step('an RA lead inside the window is offered the people on the lead, prefilled', ppl.first === 'Deb' && ppl.email === 'deb@vvp.com');
+  step('…and is told it lasts until a time, that it is 24 hours, and that the admin set it', /until/.test(ppl.txt) && /24 hours/.test(ppl.txt) && /set by your admin/.test(ppl.txt), ppl.txt.slice(-200));
+  await page.fill('#le-p0-email', 'deborah@vvp.com');
+  calls.length = 0;
+  await page.click('#le-save'); await page.waitForTimeout(600);
+  const cput = calls.filter(c => c.m === 'PUT' && /^\/contacts\//.test(c.p));
+  step('Save sends ONLY the person who changed, and ONLY the field that changed', cput.length === 1 && cput[0].p === '/contacts/c-L1' && JSON.stringify(cput[0].body) === '{"email":"deborah@vvp.com"}', JSON.stringify(cput));
+  step('…and the window closes when everything is saved', await page.evaluate(() => !document.getElementById('le-source')));
+
+  await page.evaluate(() => openLeadEdit('L1'));
+  await page.waitForSelector('#le-p0-email');
+  await page.fill('#le-p0-last_name', 'Beatty');
+  contactStatus = 403;
+  await page.click('#le-save'); await page.waitForTimeout(600);
+  const refused = await page.evaluate(() => ({ open: !!document.getElementById('le-source'), txt: document.querySelector('.modal').innerText }));
+  step('a refused person keeps the window open and names who, saying the lead itself was saved', refused.open && /The lead was saved, but Deb Beaty could not be/.test(refused.txt), refused.txt.slice(-200));
+  contactStatus = 200;
+  await page.evaluate(() => leadEditClose());
+
+  rights = { contacts: false, via: null, window_hours: 24, contacts_until: new Date(NOW - 3600000).toISOString() };
+  await page.evaluate(() => openLeadEdit('L1'));
+  await page.waitForSelector('#le-source'); await page.waitForTimeout(300);
+  const closed = await page.evaluate(() => ({ inputs: !!document.getElementById('le-p0-email'), txt: document.querySelector('.modal').innerText }));
+  step('after the window the people are NOT editable, and it says when it closed and who set it', !closed.inputs && /closed on/.test(closed.txt) && /set by your admin/.test(closed.txt), closed.txt.slice(-220));
+  await page.evaluate(() => leadEditClose());
+  rights = { contacts: false };
+  await page.evaluate(() => openLeadEdit('L1'));
+  await page.waitForSelector('#le-source'); await page.waitForTimeout(300);
+  step('with no right at all there is no People section and no mention of one', await page.evaluate(() => !document.getElementById('le-p0-email') && !/People on this lead/.test(document.querySelector('.modal').innerText)));
   await page.evaluate(() => leadEditClose());
 
   // ── the tag ──

@@ -95,7 +95,10 @@ try {
       if (/\/people$/.test(p)) return Promise.resolve(b && b.title === 'Owner' ? { total: 1, people: [{ id: 'p9', first_name: 'Hal', last_name: 'Fox', title: 'Owner', revealed: false, email: null }] } : JSON.parse(JSON.stringify(people)));
       if (/\/emails\/generate$/.test(p)) return Promise.resolve({ generated: 1 });
       if (/\/reveal$/.test(p)) { const e = emails[b.person_id]; return Promise.resolve({ person: { id: b.person_id, first_name: 'X', last_name: 'Y', title: 'T', email: e }, note: e ? null : 'Apollo has no verified email for this person.', credits: { used: 4, limit: 300 } }); }
-      if (/\/another$/.test(p)) return Promise.resolve({ lead_id: 'LNEW', stage: 'Unassigned', contacts: (b.contacts || []).length });
+      if (/\/another$/.test(p)) {
+        if (window.__repeat && !b.acknowledge_repeats) { const e = new Error('repeat'); e.status = 409; e.body = { code: 'same_person_elsewhere', error: 'x', duplicate: { match: 'email', where: 'company', title: 'Already on another lead here', message: 'Dana Cole (dana@saved.example) is already on the "Foreman" lead (Assigned) at Saved Machining. A second lead for "Estimator" means a second cold email to them. Create it anyway?', can_add_anyway: true, person: { name: 'Dana Cole', email: 'dana@saved.example', title: null }, lead: { id: 'L9', position: 'Foreman', company: 'Saved Machining' } } }; return Promise.reject(e); }
+        return Promise.resolve({ lead_id: 'LNEW', stage: 'Unassigned', contacts: (b.contacts || []).length });
+      }
       if (/\/accept$/.test(p)) return Promise.resolve({ lead_id: 'L1', goes_to: window.__access.goes_to, contacts: (b.contacts || []).length });
       if (p === '/finder/find' && window.__holdFind) return new Promise(res => { window.__releaseFind = () => res(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } }); });
       if (p === '/finder/find') return Promise.resolve(window.__findResp || { results: [{ search_id: null, note: 'Found 5 companies hiring. 3 new cards.', cards: 3 }], new_cards: 3, credits: { used: 5, limit: 300 } });
@@ -570,6 +573,18 @@ try {
   step('E: Get email reveals that one person (one request), shows the address, and ticks them ready to use', rv1.length === 1 && rv1[0][2].person_id === 'p9' && /hal@savedmachining\.example/.test(mh) && await page.evaluate(() => !!document.querySelector('.modal input[type=checkbox][onclick="fdAnWho(\'p:p9\')"]:checked')), mh.slice(0, 260));
   await page.evaluate(() => { window.fdAnWho('p:p9'); window.fdAnJob(0); window.fdAnWho('c:c1'); window.fdAnWho('p:pZ'); window.fdAnWho('p:p9'); });
   await page.evaluate(() => { window.__pendingList = [{ id: 'eN', job_id: 'LNEW', to_email: 'dana@saved.example', subject: 'Welder at Saved Machining', body: 'Hi Dana,\n\nWe can help with your Estimator opening.', is_mine: true, followup_type: null }, { id: 'eF', job_id: 'LNEW', to_email: 'dana@saved.example', subject: 'Following up', body: 'FU', is_mine: true, followup_type: 'fu1' }]; return true; });
+  // 14 Oct (owner: "warn when the same person is already on another active lead at the same company" — yes)
+  await page.evaluate(() => { window.__repeat = true; window.fdAnSave(); }); await page.waitForTimeout(350);
+  let dupm = await modal();
+  step('E: when the same person is already on another live lead there, the person is ASKED first — a pop-up naming them and the other lead', /Already on another lead here/.test(dupm) && /Dana Cole/.test(dupm) && /Foreman/.test(dupm) && /Add anyway/.test(dupm), dupm.slice(0, 200));
+  step('E: …nothing is written yet (no email generated)', !(await calls()).some(c => /\/emails\/generate$/.test(c[1]) && c[2].job_ids.join() === 'LNEW'));
+  await page.evaluate(() => window.dupClose()); await page.waitForTimeout(200);
+  step('E: "Don\'t add" brings the window back with the choices still in it', /Find more people at this company/.test(await modal()) && await page.evaluate(() => !!document.querySelector('.modal-w480, .modal')));
+  await page.evaluate(() => { window.fdAnSave(); }); await page.waitForTimeout(300);
+  await page.evaluate(() => window.dupAddAnyway()); await page.waitForTimeout(450);
+  const anCalls = (await calls()).filter(c => /\/finder\/cards\/a1\/another$/.test(c[1]));
+  step('E: "Add anyway" sends the SAME request again, now saying the repeat was seen', anCalls.length >= 3 && anCalls[anCalls.length - 1][2].acknowledge_repeats === true && anCalls[0][2].acknowledge_repeats === false, JSON.stringify(anCalls.map(c => c[2].acknowledge_repeats)));
+  await page.evaluate(() => { window.__repeat = false; });
   await page.evaluate(() => window.fdAnSave()); await page.waitForTimeout(400);
   const an = (await calls()).find(c => /\/finder\/cards\/a1\/another$/.test(c[1]));
   step('E: it sends the chosen job and exactly the people picked (one from the lead by id, the card\'s by person id — the one found just now included)', an && an[2].positions.join() === 'Estimator' && JSON.stringify(an[2].contacts) === JSON.stringify([{ contact_id: 'c1' }, { person_id: 'p9' }, { person_id: 'pZ' }]), JSON.stringify(an && an[2]));

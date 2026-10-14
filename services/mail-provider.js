@@ -252,6 +252,11 @@ function normalizeGraphMessage(m, { folderId } = {}) {
 // Gmail delivers headers as a list and everything else as labels, so this reads
 // more like parsing than mapping. `format=metadata` is enough for a list row;
 // `format=full` adds the body, handled by extractGmailBody below.
+const GMAIL_FOLDER_ORDER = ['TRASH', 'SPAM', 'DRAFT', 'INBOX', 'SENT'];
+function gmailFolderOf(labels) {
+  const set = new Set(labels || []);
+  return GMAIL_FOLDER_ORDER.find((l) => set.has(l)) || null;
+}
 function normalizeGmailMessage(m, { folderId } = {}) {
   if (!m) return null;
   const h = {};
@@ -260,7 +265,9 @@ function normalizeGmailMessage(m, { folderId } = {}) {
   return {
     id: m.id,
     thread_id: m.threadId || null,
-    folder_id: folderId || null,
+    // A search runs over the WHOLE mailbox (no folderId), so a result must say where it lives: Gmail has no folders, only labels, so the
+    // system label it carries is the folder (Trash and Spam win over Inbox; an archived message has none).
+    folder_id: folderId || gmailFolderOf(labels),
     subject: h.subject || '',
     from: parseAddress(h.from),
     to: parseAddressList(h.to),

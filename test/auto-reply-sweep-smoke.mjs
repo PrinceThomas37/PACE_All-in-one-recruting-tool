@@ -19,12 +19,12 @@ const src = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 const m = src.match(/async function processInboundMessages\([\s\S]*?\n\}\n/);
 step('index.js still defines processInboundMessages', !!m);
 
-function build({ migrated }) {
+function build({ migrated, status = 'valid' }) {
   const ORG = 'org-a', JOB = uid(), CT = uid();
   const fake = createFakeDb({
     tables: {
       jobs: [{ id: JOB, org_id: ORG, stage: 'Assigned', ...(migrated ? { auto_replied_at: null } : {}) }],
-      contacts: [{ id: CT, org_id: ORG, job_id: JOB, email: 'jcoffman@thomaselectricalinc.com', replied_at: null }],
+      contacts: [{ id: CT, org_id: ORG, job_id: JOB, email: 'jcoffman@thomaselectricalinc.com', replied_at: null, email_status: status, ooo_until: null }],
       email_tracking: [], emails: [],
     },
   });
@@ -72,6 +72,33 @@ for (const migrated of [true, false]) {
   step(tag + 'then a person answering moves it to Connected', job().stage === 'Connected', job().stage);
   step(tag + '…stamps the reply and stops the follow-ups', !!ct().replied_at && log.skipped.length === 1);
   if (migrated) step('…and clears the Auto-replied tag', job().auto_replied_at == null);
+}
+// ── an out-of-office that says WHEN they are back pauses the follow-ups until then ──
+{
+  const { fn, fake, log, CT, JOB } = build({ migrated: true });
+  const ct = () => fake.tables.contacts.find(r => r.id === CT);
+  await fn([auto], new Set(['me@futeglobal.com']), tokenRow, '2026-10-01T00:00:00Z');
+  step('"returning Monday, October 12th, 2026" marks the contact Out of office until 2026-10-12', ct().email_status === 'out_of_office' && ct().ooo_until === '2026-10-12', JSON.stringify([ct().email_status, ct().ooo_until]));
+  step('…and the history says why, with the words it read', log.activity.some(a => a.type === 'ooo_set' && /2026-10-12/.test(a.text) && /returning Monday/.test(a.text)));
+  step('…the lead itself still did not move', fake.tables.jobs.find(r => r.id === JOB).stage === 'Assigned');
+}
+{
+  const { fn, fake, log, CT } = build({ migrated: true });
+  const past = Object.assign({}, auto, { id: 'p1', subject: 'Automatic reply: x', body: { contentType: 'text', content: 'I am currently out of office without access to phone or email. I will return September 10th, 2026' } });
+  await fn([past], new Set(['me@futeglobal.com']), tokenRow, '2026-10-01T00:00:00Z');
+  const c = fake.tables.contacts.find(r => r.id === CT);
+  step('a return date already in the past pauses nothing', c.email_status === 'valid' && !c.ooo_until && !log.activity.some(a => a.type === 'ooo_set'));
+}
+for (const st of ['invalid', 'blocked', 'deactivated']) {
+  const { fn, fake, CT } = build({ migrated: true, status: st });
+  await fn([auto], new Set(['me@futeglobal.com']), tokenRow, '2026-10-01T00:00:00Z');
+  step('a ' + st + ' contact is never rescued by an auto-reply (status unchanged)', fake.tables.contacts.find(r => r.id === CT).email_status === st);
+}
+{
+  const { fn, fake, JOB } = build({ migrated: true });
+  const receipt = { id: 'r1', subject: 'Read: No Hire No Fee | Physician Assistant', from, receivedDateTime: '2026-10-08T22:02:00Z', bodyPreview: 'Your message was read', body: { contentType: 'text', content: 'Your message\n\n To: James Hu\n Subject: x\n Sent: Thursday\n\n was read on Thursday, October 8, 2026 2:56:00 PM (UTC-08:00).' } };
+  await fn([receipt], new Set(['me@futeglobal.com']), tokenRow, '2026-10-01T00:00:00Z');
+  step('a read receipt does not move the lead to Connected', fake.tables.jobs.find(r => r.id === JOB).stage === 'Assigned');
 }
 const bad = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - bad}/${results.length} passed`);

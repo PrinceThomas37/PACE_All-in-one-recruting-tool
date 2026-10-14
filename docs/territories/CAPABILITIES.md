@@ -720,4 +720,10 @@ person who has not written their own (R-169).
 - **Automatic replies are not answers (R-228):** an out-of-office or "we received your message" reply leaves the lead where it was and tags it **Auto-replied**; only a person's reply moves it to Connected. *(Tag needs migration 066.)*
 - **Edit lead (R-229):** admin, RA lead and the BD owner chain get **Edit lead** in the opened row (title, location, Found by, job link, pay, industry, notes). RAs keep their own 24-hour Edit. A value plainly in the wrong field — a company description under Found by — is moved to Notes on import, create and edit, and the person is told.
 - **Jobs opens on My Jobs (R-230).**
+- **Leads that only sent an out-of-office or read receipt were cleaned up (R-231)** — moved back to Assigned with the Auto-replied tag; backup kept in the database.
+- **Out-of-office with a return date pauses follow-ups (R-232):** "returning Monday, October 12th" marks the contact Out of office until that day; follow-ups resume by themselves. Read receipts are never treated as answers.
+- **RA lead can edit the people on a lead their team made (R-233),** inside the admin's "RA self-edit window" (Admin → System settings → Leads). The Edit lead window shows a **People** section when allowed, and says when the time closed when not.
+- **"Already on another lead here" question (R-234):** emailing another job to a person who is already on a live lead at that company asks first, naming the lead; **Add anyway** goes ahead.
+- **Address suggestions (R-235):** type in To / Cc (new message, reply, reply all, forward) and people you have written to before, people in the open mailbox and PACE contacts are offered; arrow keys + Enter or a click take one. Admin number: "Sent emails read for address suggestions".
+- **Search across the whole mailbox (R-236):** a search looks in every folder; each result says which folder it is in; picking a folder leaves the search.
 

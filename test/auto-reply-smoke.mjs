@@ -7,7 +7,7 @@
 // Usage: node test/auto-reply-smoke.mjs
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { classifyAutoReply, isAutoReply } = require('../services/auto-reply.js');
+const { classifyAutoReply, isAutoReply, returnDate } = require('../services/auto-reply.js');
 const results = [];
 const ok = (n, c, d = '') => { results.push(!!c); console.log((c ? '[PASS] ' : '[FAIL] ') + n + (c ? '' : ' — ' + d)); };
 const msg = (subject, body, headers, type) => ({ subject, body: { contentType: type || 'text', content: body }, bodyPreview: String(body).slice(0, 300),
@@ -40,6 +40,26 @@ const people = {
 };
 for (const [name, m] of Object.entries(people)) ok('a person is not automatic: ' + name, !isAutoReply(m), JSON.stringify(classifyAutoReply(m)));
 ok('null is not automatic and does not throw', !isAutoReply(null));
+// ── a read receipt is a machine too (found on the live data: "Read: No Hire No Fee…" had made a lead Connected) ──
+const receipt = msg('Read: No Hire No Fee | Physician Assistant in South San Francisco, CA', 'Your message\n\n To: James Hu\n Subject: No Hire No Fee | Physician Assistant\n Sent: Thursday, October 8, 2026 12:26:33 PM\n\n was read on Thursday, October 8, 2026 2:56:00 PM (UTC-08:00).');
+ok('a read receipt is automatic, and says so', classifyAutoReply(receipt).auto && classifyAutoReply(receipt).kind === 'receipt');
+ok('a person whose reply merely begins with "Read:" is not a receipt', !isAutoReply(msg('Read: the candidate list', 'I read it. Send me two more profiles please.')));
+
+// ── WHEN THEY ARE BACK (the live out-of-offices, run for real) ──
+const at = (body, recv) => ({ subject: '', receivedDateTime: recv, body: { contentType: 'text', content: body } });
+const rd = (b, r) => { const x = returnDate(at(b, r)); return x && x.date; };
+ok('Thomas Electrical: "returning Monday, October 12th, 2026" → 2026-10-12', rd('I am currently out of the office, returning Monday, October 12th, 2026. If your matter is urgent, please contact Nicole.', '2026-10-09T15:41:00Z') === '2026-10-12');
+ok('Venture Visionary: "returning Tuesday, October 13th" (no year) → 2026-10-13', rd('Please know that I am currently out of the office, returning Tuesday, October 13th.', '2026-10-05T14:03:00Z') === '2026-10-13');
+ok('Rand: "once I return on Oct 7th" → 2026-10-07', rd('I will be out of the office Oct 5th and 6th. I\'ll respond to emails once I return on Oct 7th.', '2026-10-05T14:03:00Z') === '2026-10-07');
+ok('Target Machine: the "back in office" date, not the "closed" date → 2026-10-13', rd('We will be closed on Monday 10/12/2026 for Columbus Day. We will be back in office on Tuesday 10/13/2026.', '2026-10-12T16:57:00Z') === '2026-10-13');
+ok('"back Monday" read on a Wednesday → the NEXT Monday', rd('I am away until I am back Monday.', '2026-10-14T10:00:00Z') === '2026-10-19');
+ok('"back Monday" read on a Monday → a week later, never today', rd('I am away and back Monday.', '2026-10-12T10:00:00Z') === '2026-10-19');
+ok('a month/day well behind us means next year ("return January 5" read in December)', rd('I am away. I return January 5.', '2026-12-20T10:00:00Z') === '2027-01-05');
+ok('Envita: a return date that is ALREADY past ("September 10th" on 9 Oct) pauses nothing', rd('I am currently out of office without access to phone or email. I will return September 10th, 2026', '2026-10-09T14:39:00Z') === null);
+ok('3 Tier Alaska: "no longer with the company" has no return date', rd('Emily Banks is no longer with 3 Tier Alaska. Please direct any inquiries to accounting@3tieralaska.com.', '2026-09-29T16:31:00Z') === null);
+ok('a date with no return word before it is not a return date ("Meeting on October 20th")', rd('I am out of the office. Our meeting is on October 20th.', '2026-10-14T10:00:00Z') === null);
+ok('a date more than four months away is not believed', rd('Out of office, returning March 3rd.', '2026-10-14T10:00:00Z') === null);
+ok('no message and no text do not throw', returnDate(null) === null && returnDate(at('', '2026-10-14T10:00:00Z')) === null);
 const bad = results.filter(r => !r).length;
 console.log(`\nSUMMARY: ${results.length - bad}/${results.length} passed`);
 process.exit(bad ? 1 : 0);

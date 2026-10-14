@@ -703,4 +703,6 @@ Client-intelligence AI-per-person limit and the on/off switches are read per org
 `services/ai-budget.js getCaps(supabase, orgId)`: the company's own ceiling (`ai_daily_token_cap@<org>`), else the shared one, else the default; both `ai-provider.js` checks pass the org. `POST /admin/ai-budget` writes the caller's company; blank goes back to the shared value.
 ## 2026-10-14 (Session 45) — candidate emails use the job's real pay period (D-0141 #3)
 `services/candidate-outreach.js` `jobFacts().payPeriod` reads `job_orders.pay_period` first (`payPeriodWords`: hour → " an hour", week → " a week", month → " a month", year → " a year"); only a job with none keeps the old inference (a range entirely under 1000 is called hourly, anything bigger says nothing). A figure under 1000 that the job says is YEARLY is no longer called hourly. The figures themselves, and `checkCandidateDraft`'s invented-pay rule, are unchanged. Separately: `services/auto-reply.js` is NOT the conversation-intel intent matcher (`conversation-intel.js` `out_of_office` intent is a loose word match used for the "needs you today" queue and is unchanged) — the reply sweep asks the stricter rule first.
+## 2026-10-14 (Session 45, later)
+No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read receipts) is rule-only text matching, not a model call.
 

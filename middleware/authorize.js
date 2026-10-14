@@ -39,7 +39,7 @@ module.exports = function createAuthorize({ supabase }) {
   // which matches orgIdFor()'s deliberate default-org behaviour for internal
   // callers rather than silently denying them.
   async function canTouchJob(req, job_id) {
-    let q = supabase.from('jobs').select('created_by,assigned_to,assigned_to_bd,org_id').eq('id', job_id);
+    let q = supabase.from('jobs').select('created_by,assigned_to,assigned_to_bd,org_id,created_at').eq('id', job_id);
     const org = req && req.orgId;
     if (org) q = q.eq('org_id', org);
     // .single() (not .maybeSingle()) deliberately: it is what the original used,
@@ -47,7 +47,21 @@ module.exports = function createAuthorize({ supabase }) {
     const { data } = await q.single();
     if (!data) return false;
     if (hasRole(req, 'admin')) return true;
-    return data.created_by === req.user.id || data.assigned_to === req.user.id || data.assigned_to_bd === req.user.id;
+    if (data.created_by === req.user.id || data.assigned_to === req.user.id || data.assigned_to_bd === req.user.id) return true;
+    // An RA lead may edit the people on a lead their team made, inside the admin-set window (services/contact-edit-window.js —
+    // the SAME rule GET /jobs/:id/edit-rights offers the Edit lead window, so the screen never offers what this would refuse).
+    if (hasRole(req, 'ra_lead')) {
+      try {
+        const { getSetting } = require('../config/settings');
+        const { reportingChainIds } = require('../hierarchy')(supabase);
+        const hours = await getSetting(supabase, 'ra_edit_window_hours', org || data.org_id);
+        const team = await reportingChainIds(req.user.id, org || data.org_id);
+        return require('../services/contact-edit-window').contactEditRights({
+          isAdmin: false, isRaLead: true, userId: req.user.id, job: data, teamIds: team, windowHours: hours, now: new Date(),
+        }).allowed;
+      } catch (_) { return false; }   // when in doubt, no edit
+    }
+    return false;
   }
 
   // Reusable role-gate middleware for routes that only need a role check.

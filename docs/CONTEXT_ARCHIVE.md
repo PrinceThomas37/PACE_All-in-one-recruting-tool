@@ -6883,4 +6883,14 @@ The owner sent eight notes with screenshots and two screen recordings; all eight
 - **8 Jobs opens on My Jobs (R-230).** Default tab changed; `row-reveal-smoke` asserts it.
 - **Owed / offered:** apply migrations 065 and 066 (needs the owner's go; 065 BEFORE merge); R-231 clean up leads already wrongly Connected; R-232 pause follow-ups until the return date; R-233 contacts editable by RA leads; R-234 same person on two leads at one company.
 - **Session 45, test follow-up (14 Oct):** the first full Node 22 run found one suite broken by the My Jobs default — `job-row-panel-smoke` (seeded jobs have no owner, so My Jobs was empty). Fixed in its setup, not in the product: the owner asked for My Jobs. The full Node 22 run and the Node 26 run were still in progress when this was written; their results go in PR #333 and the next archive entry.
+## Session 45 (14 Oct 2026), later in the day — the owner's answers and two more notes (D-0142, R-231…R-236)
+The owner said "okay merge it", "change the data base too", answered the four offers (yes to all; the RA-lead contact edit "within 24 hours, which the admin set up"), and added two notes (address suggestions; search all folders).
+- **Database:** migrations 065 and 066 applied through the Supabase tool and read back (`job_orders.pay_period` text, `jobs.auto_replied_at` timestamptz). The job board's browse query also falls back without `pay_period` if the column is ever missing.
+- **R-231 clean-up:** of 23 Connected leads, 7 were an auto-reply or a read receipt (Thomas Electrical, Envita, Venture Visionary, Rand Property, 3 Tier Alaska, Target Machine, Human Longevity) — backed up, moved to Assigned, tagged, contacts' replied marks cleared. 16 stay (a person answered or set the stage). Observation, not acted on: leads sitting in Connected whose reply was "not interested"/"unsubscribe" (Phillips, Tessmer, ARC, Elevate) are mis-staged by the old rule; offered.
+- **R-232 return date:** `returnDate()` in `services/auto-reply.js`; the five live out-of-offices all had dates already in the past, so none would have paused anything today.
+- **R-233 RA lead edits people:** `services/contact-edit-window.js` + `canTouchJob` + `GET /jobs/:id/edit-rights` + People section. Security-sensitive: recorded in `rampart.md`; review owed.
+- **R-234:** the existing "already added" rule (`lead-contacts.js`) is the one source; "another job" asks, never refuses.
+- **R-235 suggestions:** the project rule that the in-app mailbox mirrors nothing into Postgres decided the design — read from the Sent folder on demand, cached 10 min in memory, look-back is an admin number.
+- **R-236 search:** the providers already searched the whole mailbox when given no folder; the page was the one sending the folder.
+- **Process:** the first full Node 22 run hit the 30-minute default background limit and was killed (not failed). Re-run with the maximum timeout.
 

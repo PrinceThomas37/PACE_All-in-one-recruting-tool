@@ -41,6 +41,9 @@ function plainStart(msg) {
   return t.replace(/\s+/g, ' ').trim().slice(0, FIRST_CHARS);
 }
 
+// A read receipt ("Read: <subject>", "Your message … was read on …") is a machine saying the email was opened — not a person answering.
+const SUBJECT_RECEIPT = /^\s*(?:(?:re|fw|fwd)\s*:\s*)*(?:read|not read)\s*:\s*\S/i;
+const BODY_RECEIPT = /^\s*your message\b[\s\S]{0,400}?\bwas (?:read|displayed|deleted without being read)\b/i;
 const SUBJECT_AUTO = /^\s*(?:(?:re|fw|fwd)\s*:\s*)*(?:automatic(?:ally)?\s+(?:reply|response|generated)|auto[\s-]?(?:reply|response|generated|submitted)|autoreply|auto:|out of (?:the )?office|out-of-office|\booo\b|away from (?:the )?office|vacation (?:reply|response|auto)|i am (?:currently )?(?:out of|away)|i'?m (?:currently )?(?:out of|away))/i;
 
 const BODY_SAYS_AUTO = /\b(?:this is an?\s+)?(?:automatic|automated|auto)[\s-]?(?:reply|response|message|generated (?:reply|response|message|email))\b|\bthis (?:email|message|mailbox) is (?:automatically|auto)[\s-]?(?:generated|sent|monitored)\b|\bdo not reply to this (?:email|message)\b/i;
@@ -63,6 +66,7 @@ function classifyAutoReply(msg) {
   const away = BODY_AWAY.test(start);
   const kindOf = () => (/\bout of (?:the )?office|\booo\b|away from|on (?:\w+ )?leave|vacation|holiday|out of town|travell?ing|returning/i.test(subject + ' ' + start) ? 'out_of_office' : 'auto_reply');
 
+  if (SUBJECT_RECEIPT.test(subject) && BODY_RECEIPT.test(start)) return { auto: true, why: 'receipt', kind: 'receipt' };
   if (headerAuto) return { auto: true, why: 'header', kind: kindOf() };
   if (SUBJECT_AUTO.test(subject)) return { auto: true, why: 'subject', kind: kindOf() };
   if (BODY_SAYS_AUTO.test(start)) return { auto: true, why: 'body', kind: kindOf() };
@@ -72,4 +76,58 @@ function classifyAutoReply(msg) {
 
 const isAutoReply = (msg) => classifyAutoReply(msg).auto;
 
-module.exports = { classifyAutoReply, isAutoReply, plainStart };
+// ── WHEN IS THEY BACK? (owner, 14 Oct: "pause follow-ups until the return date when an auto-reply says when") ──
+// Reads "returning Monday, October 12th, 2026", "once I return on Oct 7th", "back in office on Tuesday 10/13/2026", "back Monday".
+// Returns { date: 'YYYY-MM-DD', words } or null. Never guesses: a date that is not after the day the message arrived (an auto-reply
+// that says "I will return September 10th" on 9 Oct) or is more than MAX_AHEAD_DAYS away, or a sentence with no return word before
+// the date, gives null — and then nothing is paused.
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const WEEKDAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const MAX_AHEAD_DAYS = 120;
+const MON = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const KEY = '(?:return(?:ing|s|ed)?|back|until|resum(?:e|es|ing)|re-?open(?:s|ing)?)\\b';
+const DATE_A = MON + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?';
+const DATE_B = '(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?' + MON + '\\b(?:,?\\s+(\\d{4}))?';
+const DATE_C = '(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?';
+const dayNum = (d) => Math.floor(d.getTime() / 86400000);
+const iso = (y, m, d) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+
+function returnDate(msg) {
+  if (!msg) return null;
+  const text = plainStart(msg);
+  const recv = new Date(msg.receivedDateTime || Date.now());
+  if (isNaN(recv)) return null;
+  const today = Date.UTC(recv.getUTCFullYear(), recv.getUTCMonth(), recv.getUTCDate());
+  let hit = null;
+  const tries = [
+    [new RegExp(KEY + '[^.]{0,50}?' + DATE_A, 'i'), (m) => ({ mon: MONTHS[m[1].slice(0, 3).toLowerCase()], day: +m[2], year: m[3] ? +m[3] : null })],
+    [new RegExp(KEY + '[^.]{0,50}?' + DATE_B, 'i'), (m) => ({ mon: MONTHS[m[2].slice(0, 3).toLowerCase()], day: +m[1], year: m[3] ? +m[3] : null })],
+    [new RegExp(KEY + '[^.]{0,50}?' + DATE_C, 'i'), (m) => ({ mon: +m[1] - 1, day: +m[2], year: m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : null })],
+  ];
+  for (const [re, pick] of tries) {
+    const m = re.exec(text);
+    if (!m) continue;
+    const c = pick(m);
+    if (!(c.mon >= 0 && c.mon <= 11 && c.day >= 1 && c.day <= 31)) continue;
+    let year = c.year == null ? recv.getUTCFullYear() : c.year;
+    let when = Date.UTC(year, c.mon, c.day);
+    // no year written: a month/day already well behind us means next year ("return January 5" read in December)
+    if (c.year == null && when < today - 60 * 86400000) when = Date.UTC(year + 1, c.mon, c.day);
+    hit = { when, words: m[0] };
+    break;
+  }
+  if (!hit) {
+    const w = new RegExp('(?:return(?:ing|s)?|back)\\b[^.]{0,30}?\\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\\b', 'i').exec(text);
+    if (w) {
+      const want = WEEKDAYS[w[1].toLowerCase()], have = recv.getUTCDay();
+      hit = { when: today + (((want - have + 7) % 7) || 7) * 86400000, words: w[0] };   // the NEXT such day, never today
+    }
+  }
+  if (!hit) return null;
+  const ahead = (hit.when - today) / 86400000;
+  if (!(ahead > 0 && ahead <= MAX_AHEAD_DAYS)) return null;
+  const d = new Date(hit.when);
+  return { date: iso(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()), words: hit.words.slice(0, 80) };
+}
+
+module.exports = { classifyAutoReply, isAutoReply, plainStart, returnDate };
