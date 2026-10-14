@@ -37,7 +37,7 @@
       leadSel:{},
       jobFilter:{state:"",status:"",job_type:"",priority:"",remote:""},
       jobFilterOpen:false,
-      jobsView:'all',
+      jobsView:'mine',
       _filterDocBound:false,
       _convertQueue:null
     };
@@ -193,7 +193,7 @@
     // transitive). Shown only to a user who actually leads a team.
     var teamIds=(window.reportingSubtree?reportingSubtree(STATE.user.id):[]).map(function(t){return t.id;});
     var team=teamIds.length?all.filter(function(j){return j.bd_manager&&teamIds.indexOf(j.bd_manager.id)>-1;}):[];
-    var view=STATE.bd.jobsView||'all';
+    var view=STATE.bd.jobsView||'mine';
     if(view==='team'&&!teamIds.length)view='all';
     var base=view==='mine'?mine:view==='team'?team:all;
     var rows=base.filter(function(j){
@@ -257,7 +257,7 @@
       var recs=j.recruiters||[];
       var recNames=recs.length?recs.map(function(r){return r.recruiter?r.recruiter.name:uName(r.recruiter_id);}).join(', '):'<span class="c-text3">Unassigned</span>';
       var loc=[j.city,j.state].filter(Boolean).join(', ');
-      var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
+      var pay=jobPayText(j,'—');
       // D-0014/D-0048: the row OPENS IN PLACE — it used to leave the page for
       // the full job, which made the same click do something different here
       // than on Leads. The full job is the panel's "Open full job" button.
@@ -451,7 +451,7 @@
   };
   function jobRowFacts(j){
     var canOwn=j.poc_visible!==false;   // the owner, their manager, or admin (D-0035)
-    var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
+    var pay=jobPayText(j,'—');
     var opened='—';
     if(j.created_at){
       var d=new Date(j.created_at);
@@ -541,7 +541,7 @@
   // NEW JOB FORM — tabbed
   // ════════════════════════════════════════════════════════════════════════════
   window.bdOpenNewJob=function(leadId){
-    var f={tab:'details',status:'Active',pay_cur:'USD',remote:'No',clearance:'No',
+    var f={tab:'details',status:'Active',pay_cur:'USD',pay_period:'',remote:'No',clearance:'No',
       job_title:'',client:'',client_job_id:'',client_manager:'',end_client:'',
       job_type:'',emp_level:'',work_auth:'',priority:'Normal',
       country:'United States',state:'',city:'',zip:'',
@@ -579,6 +579,8 @@
         var sk=(req.skills||[]).filter(function(x){return x&&String(x).toLowerCase()!=='title';});
         if(sk.length&&!f.primary_skills)f.primary_skills=sk.join(', ');
         if(lead.salary_range&&!f.comments)f.comments='Posted salary: '+lead.salary_range;
+        // The posting often says what its pay is per ("$22 - $26 per hour"): offered, never silent — the person can change it.
+        if(lead.salary_range&&!f.pay_period)f.pay_period=payPeriodFromText(lead.salary_range);
       }
     }
     STATE.bd.form=f;
@@ -603,7 +605,7 @@
     var f={ tab:'details', _editId:jid, source_lead_id:null, lead_code:j.lead_code||'',
       recruiter_ids:(j.recruiters||[]).map(function(r){ return (r.recruiter&&r.recruiter.id)||r.recruiter_id; }).filter(Boolean) };
     ['job_title','client','client_job_id','client_manager','end_client','status','job_type','emp_level',
-     'work_auth','priority','remote','clearance','country','state','city','zip','pay_cur','pay_min','pay_max',
+     'work_auth','priority','remote','clearance','country','state','city','zip','pay_cur','pay_min','pay_max','pay_period',
      'start_date','end_date','duration','placement_fee','req_docs','primary_skills','secondary_skills',
      'exp_min','exp_max','industry','domain','degree','languages','job_category','positions',
      'job_description','comments'].forEach(function(k){
@@ -613,6 +615,7 @@
     });
     if(!f.pay_cur) f.pay_cur='USD';
     if(!f.status) f.status='Active';
+    f._payWas=f.pay_period||'';       // so clearing a period that WAS set can be told from never having chosen one
     STATE.bd.form=f;
     renderNewJobModal();
   };
@@ -844,7 +847,12 @@
       '<div style="margin-top:6px">'+fld('Pay Rate (Min–Max)',
         '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="sel" style="max-width:90px;flex:0 0 auto" onchange="bdFormSet(\'pay_cur\',this.value)">'+['USD','CAD','GBP','EUR','INR'].map(function(c){return '<option'+(f.pay_cur===c?' selected':'')+'>'+c+'</option>';}).join("")+'</select>'+
         '<input class="sel" placeholder="Min" value="'+esc(f.pay_min)+'" oninput="bdFormSet(\'pay_min\',this.value)">'+
-        '<input class="sel" placeholder="Max" value="'+esc(f.pay_max)+'" oninput="bdFormSet(\'pay_max\',this.value)"></div>')+
+        '<input class="sel" placeholder="Max" value="'+esc(f.pay_max)+'" oninput="bdFormSet(\'pay_max\',this.value)">'+
+        // per what? — owner 14 Oct: "I don't have the option to choose yearly, hourly or weekly pay"
+        '<select class="sel" aria-label="Pay is per" style="max-width:130px;flex:0 0 auto" onchange="bdFormSet(\'pay_period\',this.value)">'+
+          '<option value=""'+(f.pay_period?'':' selected')+'>Per…</option>'+
+          PAY_PERIODS.map(function(x){return '<option value="'+x[0]+'"'+(f.pay_period===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')+
+        '</select></div>')+
       '</div>'+
       jdBlockHTML(f);
     } else if(f.tab==='client'){
@@ -954,6 +962,13 @@
   window.bdFormRemoveRec=function(rid){STATE.bd.form.recruiter_ids=(STATE.bd.form.recruiter_ids||[]).filter(function(x){return x!==rid;});renderNewJobModal();};
   window.bdCancelNewJob=function(){STATE.bd._convertQueue=null;closeModal();};
 
+  // The pay period travels only when it means something: chosen, or cleared from one that was set. An empty "never chosen" is left
+  // out of the request altogether, so saving a job that has no period never touches the column.
+  function bdPayPeriodBody(body,f){
+    delete body._payWas;
+    if(!f.pay_period) { if(f._payWas) body.pay_period=null; else delete body.pay_period; }
+    return body;
+  }
   window.bdSaveNewJob=function(){
     var f=STATE.bd.form;
     if(!(f.job_title||'').trim()){showToast('Job Title is required','error');STATE.bd.form.tab='details';renderNewJobModal();return;}
@@ -978,6 +993,7 @@
       // convert-from-lead: flat body with job fields
       body=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined,
         job_url:undefined,_jdPrev:undefined,_jdBusy:undefined});
+      bdPayPeriodBody(body,f);
       apiPost('/job-orders/from-lead/'+f.source_lead_id,body).then(function(jo){
         bdAfterSave(jo,f);
       }).catch(function(e){showToast('Failed to create job: '+e.message,'error');});
@@ -993,6 +1009,7 @@
         address:f.address||{},contacts:pocPayload('bd')};
       var job=Object.assign({},f,{recruiter_ids:undefined,tab:undefined,source_lead_id:undefined,lead_code:undefined,
         job_url:undefined,_jdPrev:undefined,_jdBusy:undefined});
+      bdPayPeriodBody(job,f);
       apiPost('/job-orders',{lead:lead,job:job}).then(function(jo){
         bdAfterSave(jo,f);
       }).catch(function(e){
@@ -1012,6 +1029,7 @@
     var body=Object.assign({},f);
     delete body.tab; delete body._editId; delete body.recruiter_ids;
     delete body.source_lead_id; delete body.lead_code; delete body._jdPrev; delete body._jdBusy; delete body.job_url;
+    bdPayPeriodBody(body,f);
     apiPut('/job-orders/'+id,body).then(function(jo){
       var arr=STATE.bd.jobOrders=STATE.bd.jobOrders||[];
       var idx=arr.findIndex(function(x){return x.id===id;});
@@ -1139,7 +1157,7 @@
     var subs=STATE.bd.submissions||[];
     var pending=subs.filter(function(s){return s.job_order_id===j.id&&s.stage==='Submitted to BDM';});
     var loc=[j.city,j.state,j.zip].filter(Boolean).join(', ');
-    var pay=(j.pay_min||j.pay_max)?((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')):'—';
+    var pay=jobPayText(j,'—');
 
     var recChips=recs.map(function(r){
       var ru=r.recruiter||{name:uName(r.recruiter_id)};

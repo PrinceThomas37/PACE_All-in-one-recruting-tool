@@ -392,7 +392,7 @@ ${text.slice(0, 12000)}`;
     try {
       if (!isRecruiter(req) && !isBDM(req)) return res.status(403).json({ error: 'Recruiting roles only.' });
       const { data: jobs, error } = await withOrg(supabase.from('job_orders')
-        .select('id,job_code,job_title,client,city,state,country,status,priority,positions,job_type,emp_level,remote,work_auth,primary_skills,secondary_skills,job_description,pay_cur,pay_min,pay_max,start_date,created_at,company:companies(id,name,industry),bd_manager:users!bd_manager_id(id,name)')
+        .select('id,job_code,job_title,client,city,state,country,status,priority,positions,job_type,emp_level,remote,work_auth,primary_skills,secondary_skills,job_description,pay_cur,pay_min,pay_max,pay_period,start_date,created_at,company:companies(id,name,industry),bd_manager:users!bd_manager_id(id,name)')
         .is('deleted_at', null), req).order('created_at', { ascending: false });
       if (error) throw error;
       const list = jobs || [];

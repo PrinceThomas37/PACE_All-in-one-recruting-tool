@@ -417,6 +417,9 @@ step('D: people found on the card with a revealed address, not yet contacts, are
 const jobsN = st.tables.jobs.length;
 r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Hygienist'], contacts: [{ person_id: 'pX' }] }, { id: bdCard.id });
 step('E: the SAME job at the same company is refused — it would write to them twice about the same thing', r.code === 409 && st.tables.jobs.length === jobsN, r.out && r.out.error);
+// 14 Oct (owner: two Cargill leads for one posting seen on two job boards): the board's own wording is not a different job
+r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Hygienist. Job in Springfield Example-Jobs'], contacts: [{ person_id: 'pX' }] }, { id: bdCard.id });
+step('E: the same job worded by a job board ("… Job in <town> …-Jobs") is refused too', r.code === 409 && st.tables.jobs.length === jobsN, r.out && r.out.error);
 r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant'], contacts: [{ person_id: 'pY' }] }, { id: bdCard.id });
 step('E: a person whose address was never revealed cannot be written to', r.code === 400 && /Reveal/.test(r.out.error) && st.tables.jobs.length === jobsN);
 r = await call('/finder/cards/:id/another', 'post', 'bd1', { positions: ['Dental Assistant', 'Office Manager'], contacts: [{ person_id: 'pX' }, { contact_id: st.tables.contacts.find((c) => c.job_id === bdLead.id).id }] }, { id: bdCard.id });

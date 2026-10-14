@@ -332,13 +332,15 @@ function patchShell(){
   // background refresh — the "pop" the owner saw whenever anything updated.
   var modal=renderModal(), overlays=UI.renderOverlays();
   if(parts.modal!==modal||parts.overlays!==overlays){
-    var sameDrawers=parts.overlays===overlays;
     parts.modal=modal; parts.overlays=overlays;
     var layer=document.getElementById('layer');
     // THE SAME WINDOW, CHANGED INSIDE, IS UPDATED WHERE IT STANDS (R-197, owner 13 Oct: "the window refreshes every time I click").
     // Rewriting the whole layer made a new `.modal` element on every click: its 0.18s pop-in animation played again (the flash)
     // and every scroll box in it went back to the top (the jump). Only the inside of the window that is already there moves.
-    if(!(sameDrawers&&patchModalInPlace(layer,modal+overlays))) putRegion(layer,modal+overlays,false);
+    // 14 Oct (owner: "the quick refresh when labels are clicked and any button in that window is clicked"): this used to run only
+    // when the overlays were unchanged, so a window that IS an overlay (the mailbox label picker) was rewritten on every click and
+    // flashed. patchModalInPlace decides for itself, and writes nothing, whenever it is not sure the same window is still there.
+    if(!patchModalInPlace(layer,modal+overlays)) putRegion(layer,modal+overlays,false);
   }
 }
 

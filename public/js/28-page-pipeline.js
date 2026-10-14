@@ -31,7 +31,7 @@
   // controls (assign recruiter, approvals, posting JD).
   function renderJobSummaryCard(j){
     var loc = [j.city,j.state,j.country,j.zip].filter(Boolean).join(', ');
-    var pay = (j.pay_min||j.pay_max) ? ((j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')) : '';
+    var pay = jobPayText(j,'');
     var exp = (j.exp_min||j.exp_max) ? ((j.exp_min||'0')+'–'+(j.exp_max||'?')+' yrs') : '';
     function dr(lbl,val){ return val?'<div class="fs-12_5" style="margin-bottom:4px"><span class="c-text3">'+esc(lbl)+': </span>'+esc(val)+'</div>':''; }
     var bdName = j.bd_manager && j.bd_manager.name;

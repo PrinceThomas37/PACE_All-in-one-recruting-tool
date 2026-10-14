@@ -39,6 +39,7 @@ const integrations = require('../config/integrations');
 const jobsJsearch = require('../services/jobs-jsearch');
 const settings = require('../config/settings');
 const contactPoints = require('../services/contact-points');
+const jobTitle = require('../services/job-title');                // the same job worded two ways by two job boards is one job
 const leadDistribution = require('../services/lead-distribution');
 const poc = require('../services/poc-targets');
 const { annotateContactEmailStatus, emailSyntaxValid } = require('../email-validation');
@@ -970,7 +971,9 @@ module.exports = (ctx) => {
       // The same job at the same company is not "another" — it would write to the same company twice about the same thing.
       const sameCo = await scoped.from('jobs').select('id,position').eq('company_id', lead.company_id).is('deleted_at', null);
       if (sameCo.error) throw sameCo.error;
-      const clash = (sameCo.data || []).find((j) => String(j.position || '').trim().toLowerCase() === position.toLowerCase());
+      // Compared as the ROLE, not letter for letter (14 Oct, owner: two Cargill leads, "Quality Assurance Technician. Job in Johnson
+      // Fifty States-Jobs" and "… Job in Nemaha Gecko Jobs" — one posting seen on two boards) — services/job-title.js.
+      const clash = (sameCo.data || []).find((j) => jobTitle.sameJob(j.position, position));
       if (clash) return res.status(409).json({ error: 'There is already a lead for "' + position + '" at this company — pick a different job.', lead_id: clash.id });
 
       // Contacts: people already on the saved lead (copied), people found on the card whose email was revealed, or one typed in.

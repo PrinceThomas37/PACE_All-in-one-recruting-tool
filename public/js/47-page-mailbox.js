@@ -37,7 +37,7 @@
     // HERE and not in the DOM, because render() rebuilds #content from a string
     // — anything typed but not in STATE is lost the moment anything else
     // repaints. oninput writes through; nothing repaints per keystroke.
-    composer:null, sigHtml:null, sigLoading:false,
+    composer:null, sigCache:{}, sigBusy:{},
     unread:0, error:null,
     sel:{},            // ticked messages: id → true (the bulk bar acts on these)
     labels:{}, labelMenu:null, _pages:1
@@ -694,7 +694,7 @@
     var d=draftGet(c);
     if(d){ c.to=d.to; c.cc=d.cc; c.subject=d.subject; c.body=d.body; c.showCc=!!d.cc; c.restored=true; }
     m.composer=c;
-    if(c.sig) loadSignature();
+    if(c.sig) loadSignature(c.acct,true);
     paintComposer();
     setTimeout(function(){ var ed=document.getElementById('mb-comp-editor'); if(ed) ed.focus(); },30);
     if(d) showToast('Your unsent draft for this message is back','info');
@@ -725,7 +725,7 @@
   window.mbCompSetSig=function(on){
     var m=M(); if(!m.composer)return;
     m.composer.sig=!!on; sigPrefSet(!!on);
-    if(m.composer.sig) loadSignature();
+    if(m.composer.sig) loadSignature(m.composer.acct);
     paintComposer();
   };
 
@@ -752,12 +752,22 @@
   function draftSaveSoon(){ clearTimeout(_draftT); _draftT=setTimeout(draftSave,600); }
   window.mbDraftFlush=function(){ clearTimeout(_draftT); draftSave(); };
 
-  function loadSignature(){
-    var m=M(); if(m.sigHtml!==null||m.sigLoading||!m.activeId)return;
-    m.sigLoading=true;
-    apiGet('/mailbox/'+encodeURIComponent(m.activeId)+'/signature')
-      .then(function(d){ m.sigHtml=(d&&d.html)||''; m.sigLoading=false; if(m.composer) paintComposer(); else paint(); })
-      .catch(function(){ m.sigHtml=''; m.sigLoading=false; });
+  // 14 Oct (owner: "the email is sent from Lisa but the signature shown is Prince's"): ONE signature was kept for the
+  // whole page and never asked again, so whichever mailbox loaded first was shown for every mailbox after it. The
+  // signature belongs to the mailbox that SENDS, so it is kept per mailbox, fetched for the sending one, and fetched
+  // again each time a window opens (a signature edited in My setup is then what the preview shows).
+  function loadSignature(acct, force){
+    var m=M(); acct=acct||m.activeId; if(!acct||m.sigBusy[acct])return;
+    if(!force&&m.sigCache[acct]!==undefined)return;
+    m.sigBusy[acct]=true;
+    var done=function(html){
+      m.sigCache[acct]=html; delete m.sigBusy[acct];
+      if(m.composer&&m.composer.acct===acct) paintComposer();
+      else if(m.compose&&m.activeId===acct) paintComposeModal();
+    };
+    apiGet('/mailbox/'+encodeURIComponent(acct)+'/signature')
+      .then(function(d){ done((d&&d.html)||''); })
+      .catch(function(){ done(''); });
   }
 
   // ── attachments ─────────────────────────────────────────────────────────────
@@ -840,7 +850,7 @@
     // being silently replaced by an empty one.
     if(window.Dock&&Dock.restoreKind('mailCompose')) return;
     m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false };
-    if(m.compose.sig) loadSignature();
+    if(m.compose.sig) loadSignature(m.activeId,true);
     paintComposeModal();
   };
   // "Email this person" from anywhere in PACE (owner, 2026-09-30: the email links on
@@ -862,7 +872,7 @@
   window.mbComposeSetSig=function(on){
     var m=M(); if(!m.compose)return;
     m.compose.sig=!!on; sigPrefSet(!!on);
-    if(m.compose.sig) loadSignature();
+    if(m.compose.sig) loadSignature(m.activeId);
     paintComposeModal();
   };
   window.mbComposePickFiles=function(){ var i=document.getElementById('mb-c-files'); if(i)i.click(); };
@@ -1046,7 +1056,7 @@
             '<div id="mb-c-editor" class="sel mb-editor'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" data-placeholder="Write your message…" '+
               'oninput="mbEditorInput(\'compose\')" onpaste="mbEditorPaste(event,\'compose\')">'+mbEditorHtml(c.body)+'</div></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
-          renderSigRow(c.sig,'mbComposeSetSig')+
+          renderSigRow(c.sig,'mbComposeSetSig',M().activeId)+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
           '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
@@ -1667,8 +1677,8 @@
 
   // The signature picker. Off by default and remembered, with the real filled
   // signature shown when it is on — so what you pick is what the recipient gets.
-  function renderSigRow(on, setFn){
-    var m=M();
+  function renderSigRow(on, setFn, acct){
+    var m=M(); var sig=m.sigCache[acct], busy=!!m.sigBusy[acct]||sig===undefined;
     return '<div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">'+
       '<label class="fs-11 c-text2" style="padding-top:5px">Signature</label>'+
       '<select class="sel" style="width:auto;font-size:12px;padding:4px 8px" onchange="'+setFn+'(this.value===\'1\')">'+
@@ -1677,8 +1687,8 @@
       '</select>'+
       (on
         ? '<div style="flex:1;min-width:200px;border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;background:var(--card);max-height:120px;overflow:auto">'+
-            (m.sigLoading?'<span class="fs-11 c-text3">Loading…</span>'
-              : (m.sigHtml?m.sigHtml:'<span class="fs-11 c-text3">No signature saved for this mailbox.</span>'))+
+            (busy?'<span class="fs-11 c-text3">Loading…</span>'
+              : (sig?sig:'<span class="fs-11 c-text3">No signature saved for this mailbox.</span>'))+
           '</div>'
         : '')+
     '</div>';
@@ -1709,7 +1719,7 @@
             'data-placeholder="'+(fwd?'Add a note (optional)…':'Write your reply…')+'" '+
             'oninput="mbEditorInput(\'reply\')" onpaste="mbEditorPaste(event,\'reply\')">'+mbEditorHtml(c.body)+'</div>'+
           renderAttachRow(c.files,'mbPickFiles()','mbRemoveFile','mb-comp-files','mbFilesChosen(this)')+
-          renderSigRow(c.sig,'mbCompSetSig')+
+          renderSigRow(c.sig,'mbCompSetSig',c.acct)+
         '</div>'+
         '<div class="mb-win-ft">'+
           '<span class="fs-11 c-text3" id="mb-comp-saved" title="Closing this window keeps your draft on this device. Discard deletes it.">'+(c.restored?'Draft restored from this device':(c.savedAt?'Draft saved on this device':'Your words are kept on this device as you type'))+'</span>'+

@@ -18,6 +18,25 @@
 // (test/contact-status-smoke.mjs fails if the two ever disagree). "Blocked" = the address is right, but their side rejects our mail.
 var CONTACT_STATUSES = ["valid","invalid","deactivated","blocked","out_of_office"];
 var CONTACT_STATUS_LABELS = { valid:"Valid", invalid:"Invalid", deactivated:"Deactivated", blocked:"Blocked", out_of_office:"Out of office" };
+// What a job's pay figures are PER (migration 065, owner 14 Oct: "no option to choose hourly, weekly, yearly"). The server's list is
+// services/recruiting-core.js PAY_PERIODS; the ids are the stored words, the short form is what a row prints after the range.
+var PAY_PERIODS = [["hour","Hourly","/hr"],["week","Weekly","/wk"],["month","Monthly","/mo"],["year","Yearly","/yr"]];
+// "USD 22–26 /hr" — or `empty` when the job has no pay at all. One place, so a row can never print the range without its period.
+function jobPayText(j, empty){
+  j = j || {};
+  if(!(j.pay_min||j.pay_max)) return empty==null ? '' : empty;
+  var per = PAY_PERIODS.filter(function(x){ return x[0]===j.pay_period; })[0];
+  return (j.pay_cur||'USD')+' '+(j.pay_min||'?')+'–'+(j.pay_max||'?')+(per?' '+per[2]:'');
+}
+// Words in a posting's own pay text ("$22 - $26 per hour", "120k a year") → the period id, or '' when it does not say.
+function payPeriodFromText(t){
+  t = String(t||'').toLowerCase();
+  if(/(\bper\s+hour\b|\/\s*h(ou)?r\b|\ban\s+hour\b|\bhourly\b|\bph\b)/.test(t)) return 'hour';
+  if(/(\bper\s+week\b|\/\s*(wk|week)\b|\bweekly\b)/.test(t)) return 'week';
+  if(/(\bper\s+month\b|\/\s*(mo|month)\b|\bmonthly\b)/.test(t)) return 'month';
+  if(/(\bper\s+(year|annum)\b|\/\s*(yr|year)\b|\bannual(ly)?\b|\ba\s+year\b|\bp\.?a\.?\b|\byearly\b)/.test(t)) return 'year';
+  return '';
+}
 var STAGES = ["Active","No Response","Negative","Positive","Connected","Future","Out of Office","Deactivated","Referred"];
 
 // Fallback industry list — used only when the server has not supplied one

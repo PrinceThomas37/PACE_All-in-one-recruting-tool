@@ -706,6 +706,7 @@ window.doImportProcess=function(toProcess,dupEmailMap){
       if(res.invalidEmails)summary+=' '+res.invalidEmails+' of them '+(res.invalidEmails>1?'have':'has')+' no valid email address and will not be emailed.';
       // What the server tidied in the sheet's contacts (R-014): said, never done silently.
       if(res.contactFixesNote)summary+=' Tidied: '+res.contactFixesNote+'.';
+      if(res.tidiedNote)summary+=' '+res.tidiedNote;
       var logs=[
         '\u2713 Batch complete',
         'Jobs imported: '+res.imported,

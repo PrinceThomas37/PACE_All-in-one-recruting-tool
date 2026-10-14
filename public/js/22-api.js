@@ -65,6 +65,7 @@ function normaliseJob(j){
     bdm_assigned_name:j.bdm_assigned_name||'',
     sending_email_id:j.sending_email_id||null,sending_email:sa.email_address||'',sending_display:sa.display_name||'',
     research:(function(){var r=parseResearchObject(j.research);return Object.keys(r).length?r:null;})(),
+    auto_replied_at:j.auto_replied_at||null,
     created_date:j.created_date,created_at:j.created_at};
 }
 function flattenContacts(jobs){var out=[];jobs.forEach(function(j){(j.contacts||[]).forEach(function(c){out.push({id:c.id,job_id:c.job_id,first_name:c.first_name,last_name:c.last_name||'',designation:c.designation||'',email:c.email||'',phone:c.phone||'',extra_emails:Array.isArray(c.extra_emails)?c.extra_emails:[],extra_phones:Array.isArray(c.extra_phones)?c.extra_phones:[],linkedin:c.linkedin||'',is_primary:!!c.is_primary,email_status:c.email_status||'valid',ooo_until:c.ooo_until||null});});});return out;}

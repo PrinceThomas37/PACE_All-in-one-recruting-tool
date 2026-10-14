@@ -77,24 +77,27 @@ module.exports = (ctx) => {
   // people on the company's other leads (format + "already on file" only), the
   // four slots filled from what is on file, and the learned email format.
   async function leadContext(req, lead) {
-    let company = null;
-    if (lead.company_id) {
-      const { data } = await db.forRequest(req).from('companies')
-        .select('id,name,website,size_band,employee_count,size_source,size_checked_at,apollo_org_id').eq('id', lead.company_id).maybeSingle();
-      company = data || null;
-    }
-    const { data: contacts } = await db.forRequest(req).from('contacts')
-      .select('id,first_name,last_name,designation,email,email_status,is_primary').eq('job_id', lead.id);
+    // Company, the lead's own people, and the company's other leads are three independent reads: together, not in a line.
+    const none = Promise.resolve({ data: null });
+    const [compRes, contactsRes, sibsRes] = await Promise.all([
+      lead.company_id
+        ? db.forRequest(req).from('companies')
+            .select('id,name,website,size_band,employee_count,size_source,size_checked_at,apollo_org_id').eq('id', lead.company_id).maybeSingle()
+        : none,
+      db.forRequest(req).from('contacts')
+        .select('id,first_name,last_name,designation,email,email_status,is_primary').eq('job_id', lead.id),
+      lead.company_id
+        ? db.forRequest(req).from('jobs').select('id').eq('company_id', lead.company_id).is('deleted_at', null).limit(50)
+        : none,
+    ]);
+    const company = (compRes && compRes.data) || null;
+    const contacts = contactsRes && contactsRes.data;
     let siblings = [];
-    if (lead.company_id) {
-      const { data: sibs } = await db.forRequest(req).from('jobs')
-        .select('id').eq('company_id', lead.company_id).is('deleted_at', null).limit(50);
-      const ids = (sibs || []).map(s => s.id).filter(x => x !== lead.id);
-      if (ids.length) {
-        const { data: more } = await db.forRequest(req).from('contacts')
-          .select('first_name,last_name,email,email_status').in('job_id', ids).limit(300);
-        siblings = more || [];
-      }
+    const ids = ((sibsRes && sibsRes.data) || []).map(s => s.id).filter(x => x !== lead.id);
+    if (ids.length) {
+      const { data: more } = await db.forRequest(req).from('contacts')
+        .select('first_name,last_name,email,email_status').in('job_id', ids).limit(300);
+      siblings = more || [];
     }
     const targets = poc.pocTargets({ position: lead.position, industry: lead.industry }, company && company.size_band);
     const filled = poc.fillSlots(targets, contacts || []);
@@ -226,10 +229,17 @@ module.exports = (ctx) => {
   }
 
   async function payload(req, lead) {
-    const cx = await leadContext(req, lead);
-    const { data: waiting } = await db.forRequest(req).from('poc_suggestions')
-      .select('id,slot_key,first_name,last_name,title,email,email_confidence,email_source,source,linkedin_url,created_at')
-      .eq('job_id', lead.id).eq('status', 'suggested').order('created_at', { ascending: true });
+    // The five reads do not depend on one another, so they run together (14 Oct, owner: a lead "takes time to completely load" —
+    // they used to wait in a line, each one a round trip to the database).
+    const [cx, waitingRes, finder, canEdit] = await Promise.all([
+      leadContext(req, lead),
+      db.forRequest(req).from('poc_suggestions')
+        .select('id,slot_key,first_name,last_name,title,email,email_confidence,email_source,source,linkedin_url,created_at')
+        .eq('job_id', lead.id).eq('status', 'suggested').order('created_at', { ascending: true }),
+      finderState(req),
+      canTouchJob(req, lead.id),
+    ]);
+    const waiting = waitingRes && waitingRes.data;
     return {
       lead_id: lead.id,
       company_id: lead.company_id || null,
@@ -257,9 +267,9 @@ module.exports = (ctx) => {
         learned_from: cx.format.learned_from,
         example: cx.format.pattern ? poc.emailFor('Jane', 'Smith', cx.format) : null,
       },
-      finder: await finderState(req),
+      finder,
       estimate: { sizing: sizingCost(cx), per_person: 1 },
-      can_edit: await canTouchJob(req, lead.id),
+      can_edit: canEdit,
     };
   }
 

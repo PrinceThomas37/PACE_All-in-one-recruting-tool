@@ -1273,3 +1273,6 @@ New: `pending-delete-smoke` (12). Extended: `finder-page-smoke` (people search i
 
 ## 2026-10-14 (Session 44) — a load-sensitive browser suite
 `take-selected-ui-smoke` timed out once on Node 26 when two full suites ran at the same time (a 6 s wait for a window drawn by a mocked route), and had tripped once before under the same load. It passed 3/3 alone on Node 26. Its waits are now 20 s. Rule kept: run the Node 22 and Node 26 full suites ONE AFTER THE OTHER when a result will gate a merge; a failure seen only under load is still a failure to explain, not to dismiss.
+## 2026-10-14 (Session 45) — new guards (D-0141)
+`mailbox-no-flash-smoke` (marks the live window element and checks it survives a click — failed 4 checks before the fix), `mailbox-signature-per-account-smoke` (failed 4 of 7 on the old code), `auto-reply-smoke` + `auto-reply-sweep-smoke` (the real sweep lifted from `index.js`; 11 failures with the check disabled), `lead-fields-smoke` + `lead-fields-routes-smoke` (9 failures on the old `routes/jobs.js`), `job-title-smoke`, `job-pay-period-smoke`, `lead-open-prefetch-smoke` (first-frame probe: click, then only microtasks), `lead-edit-smoke`. `row-reveal-smoke` now asserts the Jobs page opens on My Jobs and then switches to All Jobs.
+

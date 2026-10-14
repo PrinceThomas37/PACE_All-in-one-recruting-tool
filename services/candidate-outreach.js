@@ -91,13 +91,18 @@ function jobFacts(jobOrder) {
     // be unambiguous: no full-time annual salary is a three-digit number, so
     // under 1000 is a rate and nothing else. Above that we say nothing rather
     // than guess, which is the same rule invented_pay enforces on the writer.
-    payPeriod: payFigures(min, max).every(n => n > 0 && n < 1000) ? ' an hour' : '',
+    // The job's own pay period (migration 065, owner 14 Oct) wins; an older job with none keeps the inference above.
+    payPeriod: payPeriodWords(j.pay_period) || (payFigures(min, max).every(n => n > 0 && n < 1000) ? ' an hour' : ''),
     payFigures: payFiguresIn(pay),
     description: txt(j.job_description),
     workAuth: txt(j.work_auth),
     clearance: txt(j.clearance),
   };
 }
+
+// What the job order says the figures are PER. '' when nobody chose one (then the caller may infer, or say nothing).
+const PAY_PERIOD_WORDS = { hour: ' an hour', week: ' a week', month: ' a month', year: ' a year' };
+function payPeriodWords(p) { return PAY_PERIOD_WORDS[txt(p).toLowerCase()] || ''; }
 
 // "No" -> "on site", "Yes" -> "remote", "Hybrid" -> "hybrid". Anything we do
 // not recognise is returned as typed (a recruiter writing "2 days in office"
