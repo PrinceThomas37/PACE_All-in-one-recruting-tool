@@ -54,7 +54,7 @@ try{
   const page=await ctx.newPage(); page.on('pageerror',e=>errs.push(String(e)));
   await page.goto(BASE+'/'); await waitForLogin(page); await enterApp(page,'bd');
   const ev=(f,a)=>page.evaluate(f,a);
-  await ev(()=>{ STATE.bd=STATE.bd||{}; STATE.bd.loading=false; STATE.bd.jobOrders=['jo-1','jo-2','jo-3'].map((id,i)=>({id,job_code:'JO-'+(i+1),job_title:['Estimator','Safety Manager','Foreman'][i],client:'Northwind',status:'Active',city:'Hartford',state:'CT',job_type:'Full-time',positions:2,created_at:new Date().toISOString(),poc_visible:true,recruiters:[],apply_count:0})); STATE.page='bd_joborders'; render(); });
+  await ev(()=>{ STATE.bd=STATE.bd||{}; STATE.bd.loading=false; STATE.bd.jobOrders=['jo-1','jo-2','jo-3'].map((id,i)=>({id,job_code:'JO-'+(i+1),job_title:['Estimator','Safety Manager','Foreman'][i],client:'Northwind',status:'Active',city:'Hartford',state:'CT',job_type:'Full-time',positions:2,created_at:new Date().toISOString(),poc_visible:true,recruiters:[],apply_count:0})); STATE.bd.jobsView='all'; STATE.page='bd_joborders'; render(); });
   await page.waitForSelector('tr[data-row-id="jo-1"]',{timeout:8000});
   await page.click('tr[data-row-id="jo-1"]');
   await page.waitForFunction(()=>/Taylor Ray/.test((document.querySelector('.lx-job')||{}).innerText||''),null,{timeout:8000});
