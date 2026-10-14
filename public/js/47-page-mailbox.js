@@ -1618,7 +1618,7 @@
   // Owner, 14 Oct: "i need an option to mark emails or label them before sending … add them to an existing label or a new
   // one". Asked and answered: the REAL mailbox labels (the list under Label… in the inbox), labels only (no flag).
   // Chosen in the New message / Reply / Forward window; applied to the sent copy by the server.
-  function winLabels(acct){ var m=M(); return (m.labels&&m.labels[acct])||[]; }
+  function winLabels(acct){ var m=M(), l=m.labels&&m.labels[acct]; return Array.isArray(l)?l:[]; }   // a label list that is not a list (an odd answer from the server) is "no labels", never a broken window
   function labelRowHtml(which,c){
     var m=M(), acct=c.acct||m.activeId;
     var a=(m.accounts||[]).filter(function(x){return x.id===acct;})[0]||{};

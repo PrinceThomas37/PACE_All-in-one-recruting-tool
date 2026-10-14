@@ -280,6 +280,12 @@ try {
   const ncall = await page.evaluate(() => window.__calls.find(c => /\/send$/.test(c[1] || '')));
   step('New message: sending carries the label to the server', !!ncall && JSON.stringify(ncall[2].label_ids) === '["Hot"]', JSON.stringify(ncall && ncall[2]));
 
+  // A label list that is not a list (found by mailbox-page-smoke, whose stub answers {}) must not break the window.
+  await page.evaluate(() => { STATE.mailbox.labels['mb1'] = {}; window.mbReply(false); });
+  await page.waitForSelector('#layer [data-win="mailReply"] .mb-win-lbl', { timeout: 5000 });
+  step('a label list that is not a list shows "No other labels yet" and the window still opens', await page.evaluate(() => /No other labels yet/.test(document.querySelector('#layer .mb-lbl-pick option').textContent)));
+  await page.evaluate(() => window.mbCancelComposer());
+
   step('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
 } catch (e) { step('suite ran', false, e && e.stack || String(e)); }
 finally { if (browser) await browser.close(); server.close(); }
