@@ -101,7 +101,10 @@ try{
   await click('#layer .win-bar button[aria-label="Minimise"]');
   step('Minimise: the window leaves the screen', !(await modalOpen()));
   const chips = await tray();
-  step('Minimise: it parks on a tray chip named for the window', chips.length===1 && /New message/.test(chips[0]), JSON.stringify(chips));
+  step('Minimise: it parks on a tray chip named for the window (and what it is about)', chips.length===1 && /^New: Openings at Griffith/.test(chips[0]), JSON.stringify(chips));
+  // R-240 (owner, 14 Oct): "the default position of the minimised window is left bottom, I want that in right bottom".
+  const corner = await ev(()=>{ const r=document.querySelector('#win-tray .win-chip').getBoundingClientRect(); return { fromRight:Math.round(innerWidth-r.right), fromBottom:Math.round(innerHeight-r.bottom), vw:innerWidth }; });
+  step('Minimise: the chip sits in the bottom-RIGHT corner', corner.fromRight<=24 && corner.fromBottom<=24, JSON.stringify(corner));
   await ev(()=>goPage('clients')); await page.waitForTimeout(500);
   const pageNow = await ev(()=>({ page:STATE.page, chip:!!document.querySelector('#win-tray .win-chip'), blocked: !!document.querySelector('#layer .overlay') }));
   step('Minimise: you can go and look at anything — the page changes, the chip stays, nothing blocks the screen', pageNow.page==='clients' && pageNow.chip && !pageNow.blocked, JSON.stringify(pageNow));
@@ -121,6 +124,9 @@ try{
     to:(document.getElementById('mb-c-to')||{}).value, tray:document.querySelectorAll('#win-tray .win-chip').length }));
   step('Restore: the window comes back', back.open && back.tray===0, JSON.stringify(back));
   step('Restore: what was typed is still there', back.subject==='Openings at Griffith' && /two roles open/.test(back.body||'') && back.to==='client@example.test');
+  // The box a person SEES, not the hidden store behind it — a guard on the store alone passed while the screen came back blank.
+  const seen = await ev(()=>(document.getElementById('mb-c-editor')||{}).textContent);
+  step('Restore: the message box a person sees still shows what was typed', /two roles open/.test(seen||''), JSON.stringify(seen));
 
   // ═══ 5. FULL SCREEN NEVER REBUILDS THE WINDOW ════════════════════════════
   await typeInEditor('Typed AFTER restoring — must survive full screen.');
@@ -136,9 +142,9 @@ try{
 
   // ═══ 6. CLOSING A PARKED WINDOW DISCARDS IT AND ITS DRAFT ════════════════
   await click('#layer .win-bar button[aria-label="Minimise"]');
-  const kept = await ev(()=>!!STATE.mailbox.compose);
+  const kept = await ev(()=>Dock.parked('mailCompose').length===1 && !!Dock.parked('mailCompose')[0].ctx);   // the chip holds the window's own draft
   await click('#win-tray .win-chip .wx');
-  const gone = await ev(()=>({ chips:document.querySelectorAll('#win-tray .win-chip').length, draft:!!STATE.mailbox.compose, modal:!!document.querySelector('#layer .modal') }));
+  const gone = await ev(()=>({ chips:document.querySelectorAll('#win-tray .win-chip').length, draft:Dock.parked('mailCompose').length>0 || !!STATE.mailbox.compose, modal:!!document.querySelector('#layer .modal') }));
   step('Close (parked): the draft was kept while parked', kept);
   step('Close (parked): closing the chip discards the window AND its draft — no ghost', gone.chips===0 && !gone.draft && !gone.modal, JSON.stringify(gone));
 
@@ -147,16 +153,33 @@ try{
   await click('#layer .win-bar button[aria-label="Close"]');
   step('Close: the bar\'s × closes the window', !(await modalOpen()) && (await tray()).length===0);
 
-  // ═══ 8. ONE NEW MESSAGE AT A TIME: "New message" while one is parked ═════
+  // ═══ 8. SEVERAL NEW MESSAGES AT ONCE (R-240) ═══════════════════════════
+  // Owner, 14 Oct: "i cannot open multiple compose or reply window at one time". Each window keeps its OWN draft.
+  const typeIn = async (t) => { await page.click('#mb-c-editor'); await page.keyboard.press('Control+A'); await page.keyboard.insertText(t); };
+  const seenNow = () => ev(()=>({ subject:(document.getElementById('mb-c-subject')||{}).value, to:(document.getElementById('mb-c-to')||{}).value, text:(document.getElementById('mb-c-editor')||{}).textContent,
+    chips:[...document.querySelectorAll('#win-tray .win-chip .wt')].map(x=>x.textContent) }));
   await ev(()=>mbCompose('first@example.test'));
-  await page.fill('#mb-c-subject', 'First draft');
-  await click('#layer .win-bar button[aria-label="Minimise"]');
-  await ev(()=>mbCompose('second@example.test'));
+  await page.fill('#mb-c-subject', 'First draft'); await typeIn('Body of the FIRST message');
+  await ev(()=>mbCompose('second@example.test'));          // does NOT replace or recall the first: it opens a new one
   await page.waitForTimeout(300);
-  const again = await ev(()=>({ subject:(document.getElementById('mb-c-subject')||{}).value, to:(document.getElementById('mb-c-to')||{}).value, chips:document.querySelectorAll('#win-tray .win-chip').length }));
-  step('New message while one is parked: brings the parked draft back instead of silently replacing it',
-    again.subject==='First draft' && again.to==='first@example.test' && again.chips===0, JSON.stringify(again));
+  const two = await seenNow();
+  step('Second New message: opens a NEW blank window and parks the first on the tray', two.to==='second@example.test' && two.subject==='' && two.chips.length===1 && /First draft/.test(two.chips[0]), JSON.stringify(two));
+  await page.fill('#mb-c-subject', 'Second draft'); await typeIn('Body of the SECOND message');
+  await ev(()=>mbCompose('third@example.test')); await page.waitForTimeout(250);
+  const three = await seenNow();
+  step('Third New message: three windows at once (one open, two on the tray)', three.chips.length===2, JSON.stringify(three));
   await click('#layer .win-bar button[aria-label="Close"]');
+  const chipClick = async (re) => ev((src)=>{ const c=[...document.querySelectorAll('#win-tray .win-chip')].find(x=>new RegExp(src).test(x.textContent)); if(!c) return false; c.click(); return true; }, re);
+  await chipClick('First draft'); await page.waitForTimeout(300);
+  const f1 = await seenNow();
+  step('Bring the FIRST back: its own subject, address and words — not the other draft\'s', f1.subject==='First draft' && f1.to==='first@example.test' && f1.text==='Body of the FIRST message', JSON.stringify(f1));
+  step('…and the second one is on the tray, untouched', f1.chips.length===1 && /Second draft/.test(f1.chips[0]), JSON.stringify(f1.chips));
+  await chipClick('Second draft'); await page.waitForTimeout(300);
+  const f2 = await seenNow();
+  step('Bring the SECOND back: its own words, and the first is parked again', f2.text==='Body of the SECOND message' && f2.subject==='Second draft' && f2.chips.length===1 && /First draft/.test(f2.chips[0]), JSON.stringify(f2));
+  await click('#layer .win-bar button[aria-label="Close"]');
+  await click('#win-tray .win-chip .wx');
+  step('…and everything can be closed', !(await modalOpen()) && (await tray()).length===0);
 
   // ═══ 9. SEVERAL AT ONCE, AND SWAP ════════════════════════════════════════
   await ev(()=>mbCompose('swap@example.test'));
@@ -201,27 +224,30 @@ try{
   step('Client record: from another page, the chip takes you to the record again', reopened.open && reopened.page==='clients' && reopened.chips===0, JSON.stringify(reopened));
   await ev(()=>clientsBack());
 
-  // ═══ 11b. DRAG THE CHIP ALONG THE BOTTOM — A DRAG DOES NOT OPEN IT ═══════
+  // ═══ 11b. DRAG THE CHIP ANYWHERE — A DRAG DOES NOT OPEN IT (R-240) ══════
   await page.setViewportSize({ width:1440, height:900 });
   await ev(()=>mbCompose('drag@example.test'));
   await page.waitForTimeout(250);
   await click('#layer .win-bar button[aria-label="Minimise"]');
-  const before = await ev(()=>{ const c=document.querySelector('#win-tray .win-chip'); const r=c.getBoundingClientRect(); return { left:r.left, open:!!document.querySelector('#layer .modal') }; });
+  const before = await ev(()=>{ const c=document.querySelector('#win-tray .win-chip'); const r=c.getBoundingClientRect(); return { left:r.left, top:r.top, open:!!document.querySelector('#layer .modal') }; });
   await ev(()=>{
     const chip=document.querySelector('#win-tray .win-chip');
     const r=chip.getBoundingClientRect();
-    const fire=(type,x)=>chip.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:r.top+8,pointerId:1,button:0}));
-    fire('pointerdown', r.left+12);
-    fire('pointermove', r.left+220);
-    fire('pointerup', r.left+220);
+    const fire=(type,x,y)=>chip.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:1,button:0}));
+    fire('pointerdown', r.left+12, r.top+8);
+    fire('pointermove', r.left-300, r.top-250);      // left AND up — not just along the bottom
+    fire('pointerup', r.left-300, r.top-250);
     chip.click();
   });
   const dragged = await ev(()=>{
     const c=document.querySelector('#win-tray .win-chip'); const r=c.getBoundingClientRect();
     const it=(STATE.dock&&STATE.dock.items||[])[0];
-    return { left:Math.round(r.left), x:it&&it.x, open:!!document.querySelector('#layer .modal'), wide:document.getElementById('win-tray').classList.contains('win-tray-wide') };
+    return { left:Math.round(r.left), top:Math.round(r.top), x:it&&it.x, y:it&&it.y, open:!!document.querySelector('#layer .modal') };
   });
-  step('Drag: the chip moves along the bottom and the window stays closed', !before.open && !dragged.open && dragged.left > before.left + 80 && typeof dragged.x === 'number', JSON.stringify({ before, dragged }));
+  step('Drag: the chip moves anywhere (left and up) and the window stays closed', !before.open && !dragged.open && dragged.left < before.left - 200 && dragged.top < before.top - 150 && typeof dragged.x==='number' && typeof dragged.y==='number', JSON.stringify({ before, dragged }));
+  await ev(()=>{ goPage('dashboard'); }); await page.waitForTimeout(300);
+  const stays = await ev(()=>{ const r=document.querySelector('#win-tray .win-chip').getBoundingClientRect(); return { left:Math.round(r.left), top:Math.round(r.top) }; });
+  step('Drag: the chip stays where it was put when the page changes', Math.abs(stays.left-dragged.left)<=2 && Math.abs(stays.top-dragged.top)<=2, JSON.stringify({ dragged, stays }));
   await click('#win-tray .win-chip');
   step('Drag: a later click still opens it', await modalOpen());
   await click('#layer .win-bar button[aria-label="Minimise"]');

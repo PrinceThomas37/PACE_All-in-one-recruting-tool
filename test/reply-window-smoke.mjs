@@ -128,6 +128,10 @@ try {
         if (/folder=f-junk/.test(p)) return Promise.resolve({ messages: [], next_cursor: null, crm: {} });
         return Promise.resolve(F.messages);
       }
+      if (/\/messages\/m2/.test(p)) {   // a second email to answer (several reply windows at once)
+        var m2 = JSON.parse(JSON.stringify(F.message)); m2.id = 'm2'; m2.subject = 'Second thread'; m2.from = { name: 'Ben Ray', email: 'ben.ray@example.test' };
+        return Promise.resolve(m2);
+      }
       if (/\/messages\/m1/.test(p)) {
         var m = JSON.parse(JSON.stringify(F.message));
         if (/images=show/.test(p)) { m.body_html = m.body_html.replace('data-blocked-src', 'src'); m.has_remote_images = false; }
@@ -160,7 +164,7 @@ try {
   await page.evaluate(() => { Dock.minimise(); });
   await page.evaluate(() => { window.mbOpen ? window.mbOpen('m2') : window.mbSelect('m2'); });
   await page.waitForTimeout(300);
-  step('selecting a different message does NOT reset the reply in progress', await page.evaluate(() => STATE.mailbox.composer && STATE.mailbox.composer.body.indexOf('Friday 3pm is confirmed') === 0));
+  step('selecting a different message does NOT reset the reply in progress (the chip holds the draft)', await page.evaluate(() => { const p = Dock.parked('mailReply')[0]; return !!p && !!p.ctx && p.ctx.body.indexOf('Friday 3pm is confirmed') === 0; }));
 
   // 3. minimise, go elsewhere in the app, come back
   step('the minimised reply sits in the tray as a chip', await page.evaluate(() => Dock.parkedKinds().indexOf('mailReply') >= 0 && !!document.querySelector('#win-tray .win-chip')));
@@ -170,6 +174,7 @@ try {
   await page.evaluate(() => { document.querySelector('#win-tray .win-chip').click(); });
   await page.waitForSelector('#layer [data-win="mailReply"] #mb-comp-body', { timeout: 5000 });
   step('bringing it back puts the words back exactly as left', await page.evaluate(() => document.getElementById('mb-comp-body').value === 'Friday 3pm is confirmed — profiles this afternoon.'), await page.evaluate(() => document.getElementById('mb-comp-body').value));
+  step('…and the box a person SEES shows them too (not only the hidden store)', await page.evaluate(() => document.getElementById('mb-comp-editor').textContent === 'Friday 3pm is confirmed — profiles this afternoon.'), await page.evaluate(() => document.getElementById('mb-comp-editor').textContent));
 
   // 4. send answers message m1 (the one it was opened on), though m2 is selected
   await page.evaluate(() => { window.__calls = []; window.mbSendComposer(); });
@@ -196,14 +201,36 @@ try {
   await page.waitForTimeout(200);
   step('Discard closes the window AND deletes the draft', !(await page.evaluate(() => document.querySelector('#layer [data-win="mailReply"]'))) && (await draftKeys()).length === 0);
 
-  // 6. a second reply never replaces words that are already typed
+  // 6. Several windows at once (R-240, owner 14 Oct: "i cannot open multiple compose or reply window at one time")
   await page.evaluate(() => window.mbReply(false));
   await page.waitForSelector('#mb-comp-body');
   await typeBody('first');
-  await page.evaluate(() => window.mbForward());
+  await page.evaluate(() => window.mbReply(false));        // the SAME email again: brings the one started back, never a second blank answer
   await page.waitForTimeout(200);
-  step('asking for a Forward while a reply has words keeps the reply (and says so)', await page.evaluate(() => STATE.mailbox.composer.mode === 'reply' && document.getElementById('mb-comp-body').value === 'first'));
-  await page.evaluate(() => window.mbCancelComposer());
+  step('Reply again on the same email: no second window — the one already started stays (and says so)', await page.evaluate(() => Dock.parked('mailReply').length === 0 && document.getElementById('mb-comp-editor').textContent === 'first'));
+  await page.evaluate(() => window.mbForward());           // a Forward is a different piece of writing: its own window, the reply is parked with its words
+  await page.waitForTimeout(300);
+  step('Forward while a reply has words: opens its OWN window and parks the reply with its words', await page.evaluate(() => STATE.mailbox.composer.mode === 'forward' && Dock.parked('mailReply').length === 1 && Dock.parked('mailReply')[0].ctx.body === 'first'));
+  await page.evaluate(() => { window.mbOpen ? window.mbOpen('m2') : window.mbSelect('m2'); });
+  await page.waitForFunction(() => STATE.mailbox.message && STATE.mailbox.message.id === 'm2', { timeout: 5000 });
+  await page.evaluate(() => window.mbReply(false));
+  await page.waitForTimeout(300);
+  await typeBody('answer to the SECOND email');
+  step('Reply to a DIFFERENT email: a third window, each on its own email', await page.evaluate(() => STATE.mailbox.composer.msgId === 'm2' && Dock.parked('mailReply').length === 2 && Dock.parked('mailReply').map(p => p.ctx.msgId + ':' + p.ctx.mode).sort().join() === 'm1:forward,m1:reply'));
+  // bring the first reply back: its words, in the box a person SEES
+  await page.evaluate(() => { const c = [...document.querySelectorAll('#win-tray .win-chip')].find(x => /Reply/.test(x.textContent) && !/Forward/.test(x.textContent)); if (c) c.click(); });
+  await page.waitForTimeout(300);
+  const back1 = await page.evaluate(() => ({ seen: document.getElementById('mb-comp-editor').textContent, id: STATE.mailbox.composer.msgId, mode: STATE.mailbox.composer.mode, parked: Dock.parked('mailReply').length }));
+  step('Bringing a reply back shows ITS words, on ITS email — and the other two stay parked', back1.seen === 'first' && back1.id === 'm1' && back1.mode === 'reply' && back1.parked === 2, JSON.stringify(back1));
+  // send answers the email the window belongs to, even from a different selected email
+  await page.evaluate(() => { window.__calls = []; window.mbSendComposer(); });
+  await page.waitForTimeout(400);
+  const call6 = await page.evaluate(() => window.__calls.find(c => /\/reply$/.test(c[1] || '')));
+  step('Sending a reply that was parked answers ITS email (m1), not the selected one (m2)', !!call6 && /\/messages\/m1\/reply$/.test(call6[1]) && call6[2].body === 'first', JSON.stringify(call6 && call6[1]));
+  step('…and only that window closed — the other two are still parked', await page.evaluate(() => !document.querySelector('#layer [data-win="mailReply"]') && Dock.parked('mailReply').length === 2));
+  await page.evaluate(() => { document.querySelectorAll('#win-tray .win-chip .wx').forEach(x => x.click()); });
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { Object.keys(localStorage).filter(k => k.indexOf('pace-mb-draft:') === 0).forEach(k => localStorage.removeItem(k)); });
 
   step('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
 } catch (e) { step('suite ran', false, e && e.stack || String(e)); }

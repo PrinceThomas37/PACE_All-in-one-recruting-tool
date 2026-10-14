@@ -662,6 +662,16 @@
   function sigPrefGet(){ try{ return localStorage.getItem(sigPrefKey())==='1'; }catch(e){ return false; } }
   function sigPrefSet(on){ try{ localStorage.setItem(sigPrefKey(), on?'1':'0'); }catch(e){} }
 
+  // Is THIS kind of window the one on screen? An async repaint (a signature or a file arriving) must never open a
+  // window the person closed or minimised — it repaints only a window that is actually showing.
+  function winOnScreen(kind){ return typeof STATE.modal==='string' && STATE.modal.indexOf('data-win="'+kind+'"')>=0; }
+  // Several windows can be open at once (R-240): before a new one opens, whatever is on screen is minimised to the tray,
+  // never replaced. False = it could not be (the tray is full) and the caller must not open another.
+  function parkOnScreen(){
+    if(!(window.Dock&&typeof STATE.modal==='string'&&Dock.parkable())) return true;
+    return Dock.minimise();
+  }
+
   function addrLine(list){ return (list||[]).map(function(a){return a.email;}).filter(Boolean).join(', '); }
 
   function openComposer(mode){
@@ -699,26 +709,24 @@
     m.composer=c;
     if(c.sig) loadSignature(c.acct,true);
     loadRecipients(c.acct);
-    paintComposer();
+    paintComposer(true);
     setTimeout(function(){ var ed=document.getElementById('mb-comp-editor'); if(ed) ed.focus(); },30);
     if(d) showToast('Your unsent draft for this message is back','info');
   }
-  // A reply already open (on screen or minimised) comes back instead of being replaced by a blank one.
-  function replyWindowOpen(){
-    return (typeof STATE.modal==='string'&&STATE.modal.indexOf('data-win="mailReply"')>=0)||(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0);
-  }
+  // Replies to DIFFERENT emails can be open together, each with its own draft (R-240, owner 14 Oct). A second Reply on an
+  // email that already has one open (on screen or minimised) brings THAT one back — never a second blank answer to the
+  // same person, and never a draft written over.
   window.mbReply=function(all){ mbOpenReplyWindow(all?'replyAll':'reply'); };
   window.mbForward=function(){ mbOpenReplyWindow('forward'); };
   function mbOpenReplyWindow(mode){
-    var m=M();
-    if(m.composer&&replyWindowOpen()){
-      // Words already typed are never replaced by a blank window: bring that one back and say so.
-      if(String(m.composer.body||'').trim()){
-        if(window.Dock) Dock.restoreKind('mailReply');
-        showToast('You already have a reply open — send it or discard it first','info'); return;
-      }
-      if(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0) Dock.discardKind('mailReply');   // an empty one is simply replaced
+    var m=M(); var x=m.message; if(!x)return;
+    var key=draftKey({acct:m.activeId,msgId:x.id,mode:mode});
+    if(winOnScreen('mailReply')&&m.composer&&draftKey(m.composer)===key){
+      showToast('You already have this reply open','info'); return;
     }
+    var held=window.Dock?Dock.parked('mailReply').filter(function(p){ return p.ctx&&draftKey(p.ctx)===key; })[0]:null;
+    if(held){ Dock.restore(held.id); showToast('You already have a reply open to this email — here it is','info'); return; }
+    if(!parkOnScreen()) return;
     openComposer(mode);
   }
   // Discard = the draft is deleted too. Closing the window (×) keeps the draft on this device.
@@ -767,7 +775,7 @@
     var done=function(html){
       m.sigCache[acct]=html; delete m.sigBusy[acct];
       if(m.composer&&m.composer.acct===acct) paintComposer();
-      else if(m.compose&&m.activeId===acct) paintComposeModal();
+      else if(m.compose&&(m.compose.acct||m.activeId)===acct) paintComposeModal();
     };
     apiGet('/mailbox/'+encodeURIComponent(acct)+'/signature')
       .then(function(d){ done((d&&d.html)||''); })
@@ -778,7 +786,7 @@
   var MAX_ATTACH_BYTES=3.5*1024*1024;
   window.mbPickFiles=function(){ var i=document.getElementById('mb-comp-files'); if(i)i.click(); };
   window.mbFilesChosen=function(input){
-    var m=M(); if(!m.composer||!input.files||!input.files.length)return;
+    var m=M(); var c=m.composer; if(!c||!input.files||!input.files.length)return;
     var files=Array.prototype.slice.call(input.files);
     var pending=files.length;
     files.forEach(function(f){
@@ -787,7 +795,7 @@
         // readAsDataURL gives "data:<type>;base64,<payload>" — the server wants
         // the payload, and strips the prefix defensively too.
         var b64=String(r.result||'').replace(/^data:[^;]*;base64,/,'');
-        m.composer.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size, base64:b64 });
+        c.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size, base64:b64 });
         if(--pending===0) afterFiles();
       };
       r.onerror=function(){ if(--pending===0) afterFiles(); showToast('Could not read '+f.name,'error'); };
@@ -795,11 +803,11 @@
     });
     input.value='';
     function afterFiles(){
-      var total=m.composer.files.reduce(function(n,f){return n+f.size;},0);
+      var total=c.files.reduce(function(n,f){return n+f.size;},0);
       if(total>MAX_ATTACH_BYTES){
         showToast('That is over the '+(MAX_ATTACH_BYTES/1048576).toFixed(1)+' MB limit — remove something or send a link instead','warning');
       }
-      paintComposer();
+      if(m.composer===c) paintComposer();   // the window may have been minimised while the file was read: it repaints from its draft when it comes back
     }
   };
   window.mbRemoveFile=function(i){ var m=M(); if(!m.composer)return; m.composer.files.splice(i,1); paintComposer(); };
@@ -835,7 +843,8 @@
         showToast(c.mode==='forward'?'Forwarded':'Reply sent','success');
         draftClear(c);
         // Close whichever way the window is now: on screen, or parked while the person looked elsewhere.
-        if(m.composer===c){ m.composer=null; if(window.Dock&&Dock.parkedKinds().indexOf('mailReply')>=0) Dock.discardKind('mailReply'); else closeModal(); }
+        if(m.composer===c){ m.composer=null; if(winOnScreen('mailReply')) closeModal(); }
+        else if(window.Dock) Dock.discardCtx(c);
         paint();
       })
       .catch(function(e){
@@ -850,13 +859,13 @@
   window.mbCompose=function(prefillTo){
     var m=M();
     if(!m.activeId){ showToast('Connect a mailbox first','warning'); return; }
-    // One new message at a time: a draft parked in the tray comes back rather than
-    // being silently replaced by an empty one.
-    if(window.Dock&&Dock.restoreKind('mailCompose')) return;
-    m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false };
+    // Several new messages can be open together (R-240): whatever is on screen goes to the tray as it is, and this one
+    // opens. Each carries the mailbox it was started from, so switching mailboxes later never changes who it sends as.
+    if(!parkOnScreen()) return;
+    m.compose={ to:prefillTo||'', cc:'', subject:'', body:'', files:[], sig:sigPrefGet(), sending:false, acct:m.activeId };
     loadRecipients(m.activeId);
     if(m.compose.sig) loadSignature(m.activeId,true);
-    paintComposeModal();
+    paintComposeModal(true);
   };
   // "Email this person" from anywhere in PACE (owner, 2026-09-30: the email links on
   // candidate rows opened the computer's mail program instead of PACE). Opens the
@@ -867,7 +876,7 @@
     var go=function(){
       if(!m.activeId){ showToast('Connect a mailbox first — Email → Accounts','warning'); return; }
       mbCompose(to);
-      if(subject&&m.compose&&!m.compose.subject){ m.compose.subject=subject; paintComposeModal(); }
+      if(subject&&m.compose&&!m.compose.subject){ m.compose.subject=subject; paintComposeModal(true); }
     };
     if(m.activeId) return go();
     apiGet('/mailbox/accounts').then(function(d){ m.accounts=d||[]; pickAccount(m.accounts); go(); })
@@ -877,24 +886,25 @@
   window.mbComposeSetSig=function(on){
     var m=M(); if(!m.compose)return;
     m.compose.sig=!!on; sigPrefSet(!!on);
-    if(m.compose.sig) loadSignature(m.activeId);
+    if(m.compose.sig) loadSignature(m.compose.acct||m.activeId);
     paintComposeModal();
   };
   window.mbComposePickFiles=function(){ var i=document.getElementById('mb-c-files'); if(i)i.click(); };
   window.mbComposeFilesChosen=function(input){
-    var m=M(); if(!m.compose||!input.files||!input.files.length)return;
+    var m=M(); var c=m.compose; if(!c||!input.files||!input.files.length)return;
     var files=Array.prototype.slice.call(input.files); var pending=files.length;
-    ['to','cc','subject','body'].forEach(function(k){
-      var el=document.getElementById('mb-c-'+k); if(el) m.compose[k]=el.value;
+    ['to','cc','subject'].forEach(function(k){
+      var el=document.getElementById('mb-c-'+k); if(el) c[k]=el.value;
     });
+    var again=function(){ if(--pending===0&&m.compose===c) paintComposeModal(); };   // minimised meanwhile: it repaints from its draft when it comes back
     files.forEach(function(f){
       var r=new FileReader();
       r.onload=function(){
-        m.compose.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size,
+        c.files.push({ name:f.name, type:f.type||'application/octet-stream', size:f.size,
           base64:String(r.result||'').replace(/^data:[^;]*;base64,/,'') });
-        if(--pending===0) paintComposeModal();
+        again();
       };
-      r.onerror=function(){ if(--pending===0) paintComposeModal(); };
+      r.onerror=again;
       r.readAsDataURL(f);
     });
     input.value='';
@@ -1042,11 +1052,12 @@
     mbEditorInput(which);
   };
 
-  function paintComposeModal(){
-    var m=M(); var c=m.compose; if(!c)return;
-    var from=(m.accounts||[]).filter(function(a){return a.id===m.activeId;})[0]||{};
-    var html=
-      '<div class="modal modal-w640" data-win="mailCompose" onclick="event.stopPropagation()">'+
+  // The window's html, drawn from ITS draft (so a minimised one is redrawn from what is in it, never from a copy made
+  // before the typing). paintComposeModal puts it on screen; only a window that is on screen is repainted, unless it is opening.
+  function composeHtml(c){
+    var m=M();
+    var from=(m.accounts||[]).filter(function(a){return a.id===(c.acct||m.activeId);})[0]||{};
+    return '<div class="modal modal-w640" data-win="mailCompose" onclick="event.stopPropagation()">'+
         '<div style="padding:16px 20px;border-bottom:1px solid var(--border)">'+
           '<div class="mhd">New message</div>'+
           '<div class="fs-11_5 c-text3" style="margin-top:2px">From '+esc(from.email_address||'')+'</div>'+
@@ -1061,21 +1072,30 @@
             '<div id="mb-c-editor" class="sel mb-editor'+(mbEditorBlank(c.body)?' is-empty':'')+'" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message" data-placeholder="Write your message…" '+
               'oninput="mbEditorInput(\'compose\')" onpaste="mbEditorPaste(event,\'compose\')">'+mbEditorHtml(c.body)+'</div></div>'+
           renderAttachRow(c.files,'mbComposePickFiles()','mbComposeRemoveFile','mb-c-files','mbComposeFilesChosen(this)')+
-          renderSigRow(c.sig,'mbComposeSetSig',M().activeId)+
+          renderSigRow(c.sig,'mbComposeSetSig',c.acct||M().activeId)+
         '</div>'+
         '<div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">'+
-          '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn btn-outline" onclick="mbCancelCompose()">Cancel</button>'+
           '<button class="btn btn-primary" id="mb-c-send" onclick="mbSendCompose()"'+(c.sending?' disabled':'')+'>'+(c.sending?'Sending…':'Send')+'</button>'+
         '</div>'+
       '</div>';
-    // Minimised (10a-window-dock.js): a repaint from a signature or an attachment
-    // finishing must update the parked window, never open it over the page.
-    if(window.Dock&&Dock.updateParked('mailCompose',html))return;
-    STATE.modal=html;
+  }
+  function paintComposeModal(open){
+    var c=M().compose; if(!c)return;
+    if(!open&&!winOnScreen('mailCompose'))return;   // closed or minimised: a late signature/file never opens it over the page
+    STATE.modal=composeHtml(c);
     render();
   }
-  // Closing the parked window's chip discards the draft with it — no ghost.
-  if(window.Dock) Dock.onDiscard('mailCompose',function(){ M().compose=null; });
+  // Cancel: the window and its draft go (the tray chip's × does the same for a minimised one).
+  window.mbCancelCompose=function(){ M().compose=null; closeModal(); };
+  // Minimise hands the window's own draft to its chip and empties the slot; bringing it back puts it in the slot and
+  // redraws it from the draft. Two new messages are two drafts.
+  if(window.Dock) Dock.onPark('mailCompose',{
+    take:function(){ var m=M(), c=m.compose; m.compose=null; return c; },
+    put:function(c){ M().compose=c; },
+    render:composeHtml,
+    title:function(c){ var t=String(c.subject||'').trim()||String(c.to||'').split(',')[0].trim(); return t?'New: '+t:'New message'; }
+  });
   // ── ADDRESS CHIPS (R-093) ─────────────────────────────────────────────────
   // Owner: "once one email is added into the CC row … there is no option to add
   // another". The box always took a comma-separated list, but nothing said so.
@@ -1244,9 +1264,14 @@
       attachments:(c.files||[]).map(function(f){return {filename:f.name,content_type:f.type,base64:f.base64};})
     };
     if(mbIsFormatted(c)) sendBody.formatted=true;
-    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/send', sendBody)
-      .then(function(){ showToast('Sent','success'); m.compose=null; closeModal(); })
-      .catch(function(e){ c.sending=false; paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
+    apiPost('/mailbox/'+encodeURIComponent(c.acct||m.activeId)+'/send', sendBody)
+      .then(function(){
+        showToast('Sent','success');
+        // Sent from the screen, or from a chip while the person looked elsewhere: close whichever it is, nothing else.
+        if(m.compose===c){ m.compose=null; if(winOnScreen('mailCompose')) closeModal(); }
+        else if(window.Dock) Dock.discardCtx(c);
+      })
+      .catch(function(e){ c.sending=false; if(m.compose===c) paintComposeModal(); showToast('Send failed: '+e.message,'error'); });
   };
 
   window.mbOpenCrm=function(email,ev){
@@ -1794,13 +1819,13 @@
   }
 
   // The reply / forward window. Same fields and handlers as before (mb-comp-*), now a modal on the dock.
-  function paintComposer(){
-    var m=M(); var c=m.composer; if(!c)return;
+  // Same split as the new-message window: the html is drawn from the draft; only a window on screen is repainted.
+  function composerHtml(c){
+    var m=M();
     var fwd=c.mode==='forward';
     var title=fwd?'Forward':(c.mode==='replyAll'?'Reply all':'Reply')+(c.from?' to '+c.from:'');
     var from=(m.accounts||[]).filter(function(a){return a.id===c.acct;})[0]||{};
-    var html=
-      '<div class="modal modal-w640" data-win="mailReply" onclick="event.stopPropagation()">'+
+    return '<div class="modal modal-w640" data-win="mailReply" onclick="event.stopPropagation()">'+
         '<div class="mb-win-hd">'+
           '<div class="mhd">'+esc(title)+'</div>'+
           '<div class="fs-11_5 c-text3">From '+esc(from.email_address||'')+(fwd?' · attachments on the original are carried over':' · the original is quoted underneath automatically')+'</div>'+
@@ -1828,12 +1853,19 @@
           '</span>'+
         '</div>'+
       '</div>';
-    // Minimised: a repaint (a signature or file finishing) updates the parked window, it never pops open over the page.
-    if(window.Dock&&Dock.updateParked('mailReply',html))return;
-    STATE.modal=html;
+  }
+  function paintComposer(open){
+    var c=M().composer; if(!c)return;
+    if(!open&&!winOnScreen('mailReply'))return;
+    STATE.modal=composerHtml(c);
     render();
   }
-  // The chip's × on a parked reply: the window goes, the draft stays on this device.
-  if(window.Dock) Dock.onDiscard('mailReply',function(){ M().composer=null; });
+  // Minimise: the draft is written to this device first, then handed to the chip. The chip's × closes that window; its
+  // draft stays on this device (Discard in the window is what deletes it).
+  if(window.Dock) Dock.onPark('mailReply',{
+    take:function(){ if(window.mbDraftFlush) mbDraftFlush(); var m=M(), c=m.composer; m.composer=null; return c; },
+    put:function(c){ M().composer=c; },
+    render:composerHtml
+  });
 
 })();
