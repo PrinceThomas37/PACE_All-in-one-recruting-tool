@@ -6893,4 +6893,4 @@ The owner said "okay merge it", "change the data base too", answered the four of
 - **R-235 suggestions:** the project rule that the in-app mailbox mirrors nothing into Postgres decided the design — read from the Sent folder on demand, cached 10 min in memory, look-back is an admin number.
 - **R-236 search:** the providers already searched the whole mailbox when given no folder; the page was the one sending the folder.
 - **Process:** the first full Node 22 run hit the 30-minute default background limit and was killed (not failed). Re-run with the maximum timeout.
-
+- **Session 45, full-run finding (14 Oct):** the second full Node 22 run caught `org-scoping-guard-smoke` failing — my new `GET /jobs/:id/edit-rights` read `jobs` without `withOrg()` (it had checked the org by hand afterwards). Fixed to the guarded form; 14/14 again. The run was still in progress when this was written; later suites ran on the fixed file.

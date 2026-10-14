@@ -223,7 +223,7 @@ router.get('/jobs/:id', auth, async (req, res) => {
 // rule canTouchJob enforces on every contact write (services/contact-edit-window.js) — never a button the server would refuse.
 router.get('/jobs/:id/edit-rights', auth, async (req, res) => {
   try {
-    const { data, error } = await supabase.from('jobs').select('id,org_id,created_by,created_at,assigned_to,assigned_to_bd,stage').eq('id', req.params.id).is('deleted_at', null).maybeSingle();
+    const { data, error } = await withOrg(supabase.from('jobs').select('id,org_id,created_by,created_at,assigned_to,assigned_to_bd,stage').eq('id', req.params.id).is('deleted_at', null), req).maybeSingle();
     if (error) throw error;
     const reqOrg = orgIdFor(req);
     if (!data || (reqOrg && data.org_id && data.org_id !== reqOrg)) return res.status(404).json({ error: 'Not found' });
