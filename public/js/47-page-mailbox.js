@@ -721,11 +721,16 @@
   function mbOpenReplyWindow(mode){
     var m=M(); var x=m.message; if(!x)return;
     var key=draftKey({acct:m.activeId,msgId:x.id,mode:mode});
-    if(winOnScreen('mailReply')&&m.composer&&draftKey(m.composer)===key){
-      showToast('You already have this reply open','info'); return;
-    }
+    var onScreen=winOnScreen('mailReply')&&m.composer&&draftKey(m.composer)===key?m.composer:null;
     var held=window.Dock?Dock.parked('mailReply').filter(function(p){ return p.ctx&&draftKey(p.ctx)===key; })[0]:null;
-    if(held){ Dock.restore(held.id); showToast('You already have a reply open to this email — here it is','info'); return; }
+    var have=onScreen||(held&&held.ctx);
+    if(have){
+      if(!String(have.body||'').trim()&&have.mode!==mode){
+        // Nothing typed yet and the person now wants Reply all (or the other way round): the empty window is swapped, not kept.
+        if(onScreen){ m.composer=null; closeModal(); } else Dock.discardCtx(held.ctx);
+      } else if(onScreen){ showToast('You already have this reply open','info'); return; }
+      else { Dock.restore(held.id); showToast('You already have a reply open to this email — here it is','info'); return; }
+    }
     if(!parkOnScreen()) return;
     openComposer(mode);
   }
