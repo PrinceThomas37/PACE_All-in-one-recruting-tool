@@ -729,3 +729,6 @@ person who has not written their own (R-169).
 - **A client who says no is Rejected (R-238):** "not interested", "no thank you", "we don't use agencies", "we're all set", "not hiring", or "unsubscribe / remove me" in a reply moves the lead to Rejected (an unsubscribe also stops all email to them). A reply that also asks for something, or puts it off, is left for a person.
 - **Interested replies are never taken for an unsubscribe (R-239):** the check reads what the person wrote, not our own footer quoted underneath.
 
+
+## Several email windows at once (Session 46, R-240, D-0145 — on the branch)
+- **New message and Reply windows can be open together.** Starting another parks the one you were writing (minimise) and opens a fresh one; each keeps its own words, mailbox and recipients. Reply on an email you already started brings that one back. The minimised windows sit bottom-right and can be dragged anywhere; a drag never opens one. Words you typed are there when you come back, however many other emails you opened meanwhile.

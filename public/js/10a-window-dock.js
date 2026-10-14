@@ -22,19 +22,26 @@
 //    the modal: it repaints only when it changed.
 //  * A window that paints itself asynchronously (the mailbox composer paints when a
 //    signature or an attachment finishes loading) must NOT pop open over the page
-//    while parked. It calls Dock.updateParked(kind, html) first; if that answers
-//    true the html went to the chip and nothing opened.
+//    while parked. The mailbox paints only a window that is on screen (a parked one is
+//    redrawn from its own draft when it comes back — see onPark below). Dock.updateParked
+//    is the older way for a window with no draft object: html straight to the chip.
 //  * Not parkable: an alert dialog (role="alertdialog" — a question that needs an
 //    answer), anything marked data-nowin, and modals held as objects
 //    (jobDetail/addJob/addContact) rather than a string.
 //  * Drawers (a candidate or client record) are parked by REOPENING: the chip
 //    remembers which record and opens it again — a record is data, not a form.
 //
+//  * SEVERAL WINDOWS OF ONE KIND (two new messages, replies to different emails) need one draft each. A kind
+//    registers Dock.onPark(kind, { take, put, render, title }): on minimise `take()` hands the window's OWN draft
+//    object to the chip (and empties the page's single slot); on bring-back `put(ctx)` puts it back and `render(ctx)`
+//    draws the window afresh from it — so what comes back is what was typed, never a copy drawn before the typing.
+//  * The tray sits bottom-right; a chip drags ANYWHERE on screen and a drag never opens it (R-240).
+//
 // Nothing here talks to the server, so nothing here can lose or send anything.
 (function () {
   var MAX_PARKED = 6;
   var D = STATE.dock = STATE.dock || { items: [], max: false, seq: 0 };
-  var hooks = { discard: {}, drawer: {} };
+  var hooks = { discard: {}, drawer: {}, park: {} };
 
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -57,19 +64,32 @@
     } catch (_) { return 'Window'; }
   }
 
+  function short(t){ t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > 42 ? t.slice(0, 41) + '…' : (t || 'Window'); }
+
   // What is typed into the live window, in document order. Nothing else holds it.
   function snapshot(){
-    var box = document.querySelector('#layer .modal'); if (!box) return { fields: [], scroll: 0 };
+    var box = document.querySelector('#layer .modal'); if (!box) return { fields: [], edits: [], scroll: 0 };
     var out = [];
     box.querySelectorAll('input,textarea,select').forEach(function(el){
       var type = (el.type || '').toLowerCase();
       if (type === 'file' || type === 'button' || type === 'submit') { out.push(null); return; }
       out.push({ v: el.value, c: !!el.checked });
     });
-    return { fields: out, scroll: box.scrollTop };
+    // A rich-text box (the message body) is not an input: its words live only in the DOM, and the html parked
+    // with the window was drawn BEFORE they were typed. Without this the body comes back blank.
+    var edits = [];
+    box.querySelectorAll('[contenteditable="true"]').forEach(function(el){ edits.push(el.innerHTML); });
+    return { fields: out, edits: edits, scroll: box.scrollTop };
   }
   function applySnapshot(snap){
     var box = document.querySelector('#layer .modal'); if (!box || !snap) return;
+    var eds = box.querySelectorAll('[contenteditable="true"]');
+    if (snap.edits && eds.length === snap.edits.length) {
+      eds.forEach(function(el, i){
+        el.innerHTML = snap.edits[i];
+        el.classList.toggle('is-empty', !String(el.textContent || '').replace(/\u00a0/g, ' ').trim());
+      });
+    }
     var els = box.querySelectorAll('input,textarea,select');
     // Only when the window has the same shape as when it was parked; a different
     // one (it was rebuilt while parked) keeps its own values rather than being
@@ -85,12 +105,11 @@
 
   function trayHtml(){
     if (!D.items.length) return '';
-    var spread = D.items.some(function(it){ return typeof it.x === 'number'; });
-    return '<div id="win-tray" role="toolbar" aria-label="Minimised windows"' + (spread ? ' class="win-tray-wide"' : '') + '>' +
+    return '<div id="win-tray" role="toolbar" aria-label="Minimised windows">' +
       D.items.map(function(it){
-        var placed = typeof it.x === 'number';
+        var placed = typeof it.x === 'number' && typeof it.y === 'number';
         return '<div class="win-chip' + (placed ? ' win-chip-x' : '') + '" data-id="' + it.id + '" role="button" tabindex="0" title="Open ' + esc(it.title) + '"' +
-          (placed ? ' style="--chip-x:' + it.x + 'px"' : '') +
+          (placed ? ' style="--chip-x:' + it.x + 'px;--chip-y:' + it.y + 'px"' : '') +
           ' onclick="Dock.restore(\'' + it.id + '\')">' +
           '<span class="wt">' + esc(it.title) + '</span>' +
           '<button type="button" class="wx" aria-label="Close ' + esc(it.title) + '" title="Close (discards it)" onclick="event.stopPropagation();Dock.discard(\'' + it.id + '\')">×</button>' +
@@ -128,8 +147,10 @@
     minimise: function(){
       if (!parkable(STATE.modal)) return false;
       if (D.items.length >= MAX_PARKED) { showToast('Close one of the minimised windows first (' + MAX_PARKED + ' at most)', 'error'); return false; }
-      var snap = snapshot(), html = STATE.modal;
-      D.items.push({ id: 'w' + (++D.seq), kind: kindOf(html), title: titleOf(html), html: html, fields: snap.fields, scroll: snap.scroll, max: D.max });
+      var snap = snapshot(), html = STATE.modal, kind = kindOf(html), h = hooks.park[kind];
+      var ctx = h && h.take ? h.take() : undefined;     // the window's own draft goes with its chip
+      var title = (h && h.title && ctx && h.title(ctx)) || titleOf(html);
+      D.items.push({ id: 'w' + (++D.seq), kind: kind, title: short(title), html: html, ctx: ctx, fields: snap.fields, edits: snap.edits, scroll: snap.scroll, max: D.max });
       STATE.modal = null; D.max = false; render();
       return true;
     },
@@ -142,9 +163,14 @@
         if (!Dock.minimise()) return false;
         i = D.items.findIndex(function(x){ return x.id === id; });
       }
-      var it = D.items.splice(i, 1)[0];
+      var it = D.items.splice(i, 1)[0], ph = it.kind && hooks.park[it.kind];
+      if (ph && it.ctx) {
+        ph.put(it.ctx);
+        var fresh = ph.render ? ph.render(it.ctx) : '';
+        if (fresh) { it.html = fresh; it.fields = []; it.edits = []; }   // drawn from the draft itself: nothing stale to re-fill
+      }
       STATE.modal = it.html; D.max = !!it.max; render();
-      applySnapshot({ fields: it.fields, scroll: it.scroll });
+      applySnapshot({ fields: it.fields, edits: it.edits, scroll: it.scroll });
       return true;
     },
     restoreKind: function(kind){
@@ -165,6 +191,14 @@
       if (it) Dock.discard(it.id);
     },
     onDiscard: function(kind, fn){ hooks.discard[kind] = fn; },
+    onPark: function(kind, h){ hooks.park[kind] = h; },
+    // The parked windows of one kind, each with the draft it holds.
+    parked: function(kind){ return D.items.filter(function(x){ return x.kind === kind; }).map(function(x){ return { id: x.id, ctx: x.ctx, title: x.title }; }); },
+    // A window finished (its send went through) while it sat on the tray: take that chip away, whichever it is.
+    discardCtx: function(ctx){
+      var i = D.items.findIndex(function(x){ return ctx && x.ctx === ctx; }); if (i < 0) return false;
+      D.items.splice(i, 1); render(); return true;
+    },
     // The window on screen, closed.
     close: function(){ D.max = false; closeModal(); },
     // Live-element class toggle — see the header: never a render().
@@ -176,7 +210,7 @@
     // its chip and the caller must stop.
     updateParked: function(kind, html){
       var it = D.items.filter(function(x){ return x.kind === kind; })[0]; if (!it) return false;
-      it.html = html; it.title = titleOf(html); it.fields = []; render();
+      it.html = html; it.title = titleOf(html); it.fields = []; it.edits = []; render();
       return true;
     },
 
@@ -217,9 +251,8 @@
     open: function(id){ if (STATE.page !== 'clients') goPage('clients'); window.clientsOpen(id); }
   });
 
-  // Drag a parked chip sideways along the bottom (D-0117). A drag does not open it.
-  // The spot is remembered until reload (it lives on the chip, not in storage).
-  // A phone (860px and under) keeps the scrolling row — no free drag.
+  // Drag a parked chip ANYWHERE on screen (R-240). A drag does not open it. The spot is remembered until reload
+  // (it lives on the chip, not in storage). A phone (860px and under) keeps the scrolling row — no free drag.
   var drag = null;
   function phoneTray(){ return window.matchMedia && window.matchMedia('(max-width: 860px)').matches; }
   document.addEventListener('pointerdown', function(e){
@@ -231,27 +264,22 @@
     var it = D.items.filter(function(x){ return x.id === id; })[0];
     if (!it) return;
     var r = chip.getBoundingClientRect();
-    drag = { id: id, startX: e.clientX, chipLeft: r.left, chipWidth: r.width, moved: false, pointer: e.pointerId, chip: chip };
+    drag = { id: id, startX: e.clientX, startY: e.clientY, left: r.left, top: r.top, w: r.width, h: r.height, moved: false, pointer: e.pointerId, chip: chip };
     try { chip.setPointerCapture(e.pointerId); } catch (_) {}
   });
   document.addEventListener('pointermove', function(e){
     if (!drag || e.pointerId !== drag.pointer) return;
-    var dx = e.clientX - drag.startX;
-    if (!drag.moved && Math.abs(dx) < 8) return;
-    var tray = document.getElementById('win-tray'); if (!tray) return;
-    if (!drag.moved) {
-      drag.moved = true;
-      tray.classList.add('win-tray-wide');
-      drag.base = drag.chipLeft - tray.getBoundingClientRect().left;
-    }
+    var dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    drag.moved = true;
     e.preventDefault();
-    var tr = tray.getBoundingClientRect();
-    var max = Math.max(0, tr.width - drag.chipWidth);
-    var x = Math.round(Math.max(0, Math.min(max, drag.base + (e.clientX - drag.startX))));
+    var x = Math.round(Math.max(0, Math.min(window.innerWidth - drag.w, drag.left + dx)));
+    var y = Math.round(Math.max(0, Math.min(window.innerHeight - drag.h, drag.top + dy)));
     var it = D.items.filter(function(i){ return i.id === drag.id; })[0];
-    if (it) it.x = x;
+    if (it) { it.x = x; it.y = y; }
     drag.chip.classList.add('win-chip-x', 'is-drag');
     drag.chip.style.setProperty('--chip-x', x + 'px');
+    drag.chip.style.setProperty('--chip-y', y + 'px');
   });
   function endDrag(e){
     if (!drag || (e && e.pointerId !== drag.pointer)) return;
