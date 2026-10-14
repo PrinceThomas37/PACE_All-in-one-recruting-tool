@@ -26,7 +26,7 @@ function headerMap(msg) {
 }
 
 // Tags out, entities flattened, whitespace collapsed — enough to read the opening of an HTML email as words.
-function plainStart(msg) {
+function plainStart(msg, maxChars) {
   const raw = (msg && msg.body && msg.body.content) || (msg && msg.bodyPreview) || '';
   const type = String((msg && msg.body && msg.body.contentType) || '').toLowerCase();
   let t = String(raw);
@@ -38,7 +38,7 @@ function plainStart(msg) {
   t = t.split(/\r?\n/).filter((line) => !/^\s*>/.test(line)).join('\n');
   const cut = t.search(/\n\s*(?:on .{5,120} wrote:|-{2,}\s*original message\s*-{2,}|from:\s.+\n\s*(?:sent|date):)/i);
   if (cut > 0) t = t.slice(0, cut);
-  return t.replace(/\s+/g, ' ').trim().slice(0, FIRST_CHARS);
+  return t.replace(/\s+/g, ' ').trim().slice(0, maxChars || FIRST_CHARS);
 }
 
 // A read receipt ("Read: <subject>", "Your message … was read on …") is a machine saying the email was opened — not a person answering.

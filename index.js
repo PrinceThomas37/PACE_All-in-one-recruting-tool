@@ -198,6 +198,7 @@ require('./services/provisioning').onOrgCreated(() => { MULTI_ORG = true; });
 const { isRecyclable } = require('./services/lead-recycle');
 const oooReturn = require('./services/ooo-return');
 const autoReply = require('./services/auto-reply');
+const replyDecline = require('./services/reply-decline');
 const followupSender = require('./services/followup-sender');
 const { cycleStartOf, blocksRegeneration, releaseToPoolUpdate } = require('./services/outreach-cycle');
 // One door to every AI provider (Anthropic, Groq, OpenRouter, self-hosted
@@ -3173,6 +3174,7 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
     // rule is services/auto-reply.js. Such a message is kept in the conversation and written to the lead's history, the lead
     // gets an "Auto-replied" tag, and NOTHING else happens: no Connected, no replied_at, follow-ups carry on.
     const auto = autoReply.classifyAutoReply(msg);
+    const newText = autoReply.plainStart(msg, 3000);   // the person's own words, quotes cut (an opt-out is judged on this alone)
     for (const c of (matches || [])) {
       if (c.replied_at) continue; // already recorded
       if (auto.auto) {
@@ -3193,13 +3195,25 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       }
       const snippet = (msg.bodyPreview || '').slice(0, 280);
       try { await supabase.from('contacts').update({ replied_at: new Date(), reply_snippet: snippet }).eq('id', c.id); } catch (_) {}
-      // Stop the sequence: move the lead off "Assigned" and cancel active follow-ups.
-      try { await supabase.from('jobs').update({ stage: 'Connected' }).eq('id', c.job_id).eq('stage', 'Assigned'); } catch (_) {}
+      // Stop the sequence: move the lead off "Assigned" and cancel active follow-ups. A person who says NO — "not interested", "no thanks",
+      // "we don't use agencies", or asks to be unsubscribed / removed — is Rejected, not Connected (14 Oct, owner: those had been
+      // landing in Connected). The rule is services/reply-decline.js; it is cautious: a mixed ("not this one, but send me others") or
+      // soft ("not now, next quarter") reply is left for a person and stays Connected as before. An opt-out is a no whatever else is said.
+      // Judged on what the PERSON wrote, never on the quoted copy of our own email underneath it: our footer says "just reply
+      // 'unsubscribe'", and the old check read the whole body — so "Yes, please send them over" quoting that footer was an opt-out,
+      // the person went onto the do-not-email list, and (now) would have been Rejected. Found on the live data, 14 Oct.
+      const optedOutReply = isOptOutReply(newText);
+      const declined = optedOutReply ? { decline: true, why: 'unsubscribe' } : replyDecline.classifyDecline(msg);
+      const newStage = declined.decline ? 'Rejected' : 'Connected';
+      try { await supabase.from('jobs').update({ stage: newStage }).eq('id', c.job_id).eq('stage', 'Assigned'); } catch (_) {}
+      if (declined.decline) {
+        await logActivity(c.job_id, c.id, null, 'stage_change', `Stage: Assigned → Rejected — ${from} ${declined.why === 'unsubscribe' ? 'asked to be unsubscribed or removed' : 'said no (not interested)'}`, { stage: 'Assigned' }, { stage: 'Rejected', source: 'reply' });
+      }
       try { await supabase.from('jobs').update({ auto_replied_at: null }).eq('id', c.job_id).not('auto_replied_at', 'is', null); } catch (_) {}   // a real answer clears the tag
       await skipActiveFollowUpsForContact(c.id);
       await logActivity(c.job_id, c.id, null, 'reply_received', `Reply received from ${from} — follow-ups stopped`, null, { source: 'inbox', mailbox: tokenRow.email_address });
       emit(EVENTS.CONTACT_REPLIED, { contactId: c.id, jobId: c.job_id, from, mailbox: tokenRow.email_address, orgId: tokenRow.org_id || null });
-      if (isOptOutReply(snippet) || isOptOutReply(msg.body?.content || '')) {
+      if (optedOutReply) {
         await addToSuppression(from, 'unsubscribe', 'reply', null, null, tokenRow && tokenRow.org_id);
         emit(EVENTS.CONTACT_UNSUBSCRIBED, { contactId: c.id, jobId: c.job_id, email: from, orgId: tokenRow.org_id || null });
       }
@@ -3213,8 +3227,7 @@ async function processInboundMessages(messages, ownAddresses, tokenRow, since) {
       // isOptOutReply takes TEXT, not a message — check the same two fields the
       // contact path checks, since the preview alone often truncates before the
       // "unsubscribe" line.
-      const replyText = (msg.bodyPreview || '').slice(0, 280);
-      const optedOut = isOptOutReply(replyText) || isOptOutReply(msg.body?.content || '');
+      const optedOut = isOptOutReply(newText);   // the candidate's own words only — never the quote of our email
       const candidateIds = new Set();
       for (const r of (auto.auto ? [] : candTrk)) {   // an out-of-office is not a candidate answering
         await supabase.from('email_tracking').update({ replied_at: msg.receivedDateTime || new Date() }).eq('id', r.id);

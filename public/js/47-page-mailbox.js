@@ -1588,7 +1588,7 @@
     var m=M();
     // In Sent and Drafts the useful name is the recipient, not us.
     // While searching, a row belongs to the folder it LIVES in (not the open one) — a Sent result shows who it went to, and says where it is.
-    var rowFolder=m.q&&x.folder_id?x.folder_id:m.folderId;
+    var rowFolder=m.q?x.folder_id:m.folderId;      // a searched message with no folder (Gmail's archive) belongs to NO open folder — never the one that happens to be open
     var folder=(m.folders||[]).filter(function(f){return f.id===rowFolder;})[0];
     var outbound=folder&&(folder.kind==='sent'||folder.kind==='drafts');
     var party=outbound?((x.to||[])[0]||{}):(x.from||{});
@@ -1607,7 +1607,8 @@
         '<div class="mb-subj">'+esc(x.subject||'(no subject)')+'</div>'+
         '<div class="mb-prev">'+esc(x.preview||'')+
           (x.has_attachments?' <span title="Has attachments">📎</span>':'')+'</div>'+
-        (m.q&&folder?'<span class="pill mute mb-in-folder" title="This result is in '+escAttr(folder.name)+'">'+esc(folder.name)+'</span>':'')+
+        // Gmail keeps an archived message in no folder at all — in a search it is "All Mail", not unlabelled.
+        (m.q&&(folder||(x.platform==='Gmail'&&!x.folder_id))?(function(){ var nm=folder?folder.name:'All Mail'; return '<span class="pill mute mb-in-folder" title="This result is in '+escAttr(nm)+'">'+esc(nm)+'</span>'; })():'')+
         labelChips(x.label_ids,2)+
       '</div>'+
     '</div>';
