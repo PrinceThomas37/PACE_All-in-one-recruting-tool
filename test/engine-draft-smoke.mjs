@@ -117,6 +117,24 @@ await t('the draft happens after the claim and before delivery', () => {
   const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
   assert.ok(claim > 0 && draft > claim && send > draft);
 });
+await t('R-259: a TAUGHT follow-up is written after the claim and before delivery, stored first, on its own budget line', () => {
+  const claim = idx.indexOf("from('emails').update({ status: 'sending' })");
+  const fu = idx.indexOf('email = await aiWriteFollowup(');
+  const send = idx.indexOf('const graph = await deliverOutboundEmail(email, userEmailId');
+  assert.ok(claim > 0 && fu > claim && send > fu);
+  const gate = idx.slice(idx.lastIndexOf('} else if (aiReady && isFollowup', fu), fu);
+  assert.match(gate, /email\.template_variant !== 'ai'/, 'a retry never pays for a second draft');
+  assert.match(gate, /aiTeach\.followupFor\(aiChoiceMap\[aiTeach\.key\(userId\)\]/, 'only a follow-up the person taught');
+  assert.match(gate, /aiFirstChoice\.allows\(/, 'the same company switch and personal choice as the first email');
+  const fn = idx.slice(idx.indexOf('async function aiWriteFollowup'), idx.indexOf('function retryNote'));
+  assert.match(fn, /feature: 'engine_followup'/);
+  assert.match(fn, /update\(upd\)\.eq\('id', email\.id\)[\s\S]*if \(error\) return email;/);
+  assert.match(fn, /if \(!res\.body\) \{[\s\S]*return email;/, 'no draft = the backup follow-up, unchanged');
+});
+await t('R-259: the first email carries the person\'s answers as instructions', () => {
+  const fn = idx.slice(idx.indexOf('async function aiWriteFirstEmail'), idx.indexOf('async function aiWriteFollowup'));
+  assert.match(fn, /aiStyle\.styleBlock\(c\.styleNote\) \+ aiTeach\.firstBlock\(c\.teach\)/);
+});
 await t('the sender\'s title (from the sending mailbox\'s "sends as") reaches the draft input; none given = empty, as before', () => {
   const withTitle = D.engineInput({ job, contact, sender: { ...sender, title: 'Vice President' } });
   assert.equal(withTitle.sender.title, 'Vice President');

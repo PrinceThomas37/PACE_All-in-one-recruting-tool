@@ -2150,3 +2150,11 @@ Owner, on mock v5: "I need a better UI though, this looks very basic and old sch
 ### D-0154 — The look is "PACE's look, refined"; start building (15 Oct 2026)
 
 Owner, on four directions drawn on PACE's real layout: **direction D ("today's look, refined") is the right look**: keep the sky header, pixel PACE logo, pixel-font labels and the yellow action button, with thinner borders, smaller shadows and softer corners. "The button UI and font has to match a bit" (closer to today's buttons and fonts) — "that's the right direction". The other three (Calm, Warm, Bold) are scrapped. This narrows D-0153: not a new look, the current one refined. Then: "now start building" (R-258, the "I write it" path, in this look).
+
+### D-0155 — The sequence screen matches the app; no new look rolls out (15 Oct 2026)
+
+Owner, shown the sequence screen next to the rest of PACE and told "rolling the look out" would mean polishing every page for a change they could not see: "do the reverse, change this window to match the app UI … the font and buttons, I want those to match the UI." The sequence screen now uses the app's own pieces: square cards with the ink edge and hard shadow, the app's buttons for every action (the underlined text links became buttons), the app's inputs, and plain text inside the page (pixel font only in the header and the rail, as everywhere). **Reverses D-0153 and D-0154's rollout**: there is no "refined look" to spread; nothing else changes.
+
+### D-0156 — Build "AI writes each one" now; no "ask for a call" ending (15 Oct 2026)
+
+Owner: "create the AI thing" (R-259), after being told it only pays off with a funded AI key (free tier: roughly 25 emails a day, then every lead gets the backup). Built as designed in D-0151/D-0152 (teach by picks and one-liners; the backup email; follow-ups written by AI), with one change I made and the owner has not yet seen: the mock's ending "Ask for a short call" is **not offered**, because PACE's checker rejects any AI email that asks for a call or meeting — every lead would have received the backup. The two endings are "Offer to send resumes" and "Ask a yes-or-no question".

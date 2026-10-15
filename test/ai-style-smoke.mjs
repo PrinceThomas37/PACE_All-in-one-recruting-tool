@@ -116,7 +116,7 @@ step('a sequence step\'s "Write with AI" sends the designer\'s note to the provi
 // index.js, one is a 500-line route), so this fails if the note is ever unplugged from them.
 const idx = fs.readFileSync(new URL('../index.js', import.meta.url), 'utf8');
 const og = fs.readFileSync(new URL('../routes/outreach-generator.js', import.meta.url), 'utf8');
-step('(source) the lead engine\'s FIRST email asks the note of the mailbox\'s owner and sends it with the prompt', /aiStyle\.effectiveFor\(supabase, \{ userId: ownerId/.test(idx) && /system: system \+ aiStyle\.styleBlock\(styleNote\)/.test(idx));
+step('(source) the lead engine\'s FIRST email asks the note of the mailbox\'s owner and sends it with the prompt', /aiStyle\.effectiveFor\(supabase, \{ userId: ownerId/.test(idx) && /system: system \+ aiStyle\.styleBlock\(c\.styleNote\) \+ aiTeach\.firstBlock\(c\.teach\)/.test(idx) && /styleNote = await aiStyle\.effectiveFor/.test(idx));
 step('(source) the Compose generator adds the note at BOTH places it drafts', (og.match(/aiStyle\.styleBlock\(await styleNoteOf\(req\)\)/g) || []).length === 2);
 
 console.log(`\nSUMMARY: ${results.filter(Boolean).length}/${results.length} passed`);
