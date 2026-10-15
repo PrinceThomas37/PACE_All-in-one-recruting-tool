@@ -706,3 +706,7 @@ Client-intelligence AI-per-person limit and the on/off switches are read per org
 ## 2026-10-14 (Session 45, later)
 No prompt, scorer or AI change. `services/auto-reply.js` (return dates, read receipts) is rule-only text matching, not a model call.
 
+
+## 2026-10-15 (Session 47) — design only, no code: the AI writer's style will come from the user's own first email (R-246, D-0147)
+- Today `buildSystemPrompt` (rules 1–17, `ANGLE_BRIEF`) is the owner's house style applied to every customer; `ai-style.js`'s 700-character note cannot override "never ask for a call or meeting". The owner kept "AI writes first emails" ON for new companies and wants it to learn the user.
+- Plan (not built): split the **safety rules** (nothing invented, no blank, one sign-off, no leftover field — fixed and machine-checked) from the **style rules** (company switches); the user's own first email replaces `rulesDraft` as `style_reference`; with no brief and no example the AI buttons stay quiet. `why-hiring`'s angle is not passed to the writer (R-252). Evidence (D-0147): AI first emails 18/789 replied in a week vs 5/141 for templates — too few to tell; 0 of 1,317 AI emails used a stand-in phrase vs 37 of 310 template ones.
