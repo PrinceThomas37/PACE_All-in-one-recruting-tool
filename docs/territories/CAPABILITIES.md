@@ -736,7 +736,7 @@ person who has not written their own (R-169).
 ## Label an email before you send it (Session 46, R-244, D-0146 — on the branch)
 - In New message, Reply and Forward there is a **Label** row: pick one of the mailbox's existing labels or type a new name, add as many as you like, take any off again. When you press Send, the sent copy carries them in Gmail (labels) or Outlook (categories). If a label cannot be added the email still went, and PACE tells you so.
 
-## Write your first sequence, in My Setup (Session 47, R-258, D-0150 … D-0154 — on the branch)
+## Write your first sequence, in My Setup (Session 47, R-258, D-0150 … D-0154 — live 15 Oct)
 - **My Setup → "Write my sequence"** opens a two-step screen (Write → Start) in PACE's refined look. The old "Use the starter" button (another company's wording) is gone from My Setup.
 - **First, how the first email is written:** "I write it" (your email, filled in for each lead) or "AI writes each one" (PACE's AI writes each lead's first email from its job description; what you write becomes the **backup** that goes out on a day the AI cannot write).
 - **"Add a detail"** is a plain-words menu: their first name, company, job title, the city the job is in, their industry, top skills from the job, and pay "if known" — a lead without pay loses the whole sentence that held it. Details show as highlighted words; the live preview fills them for one of your own leads (or an example lead, said so).
