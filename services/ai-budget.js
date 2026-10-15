@@ -93,6 +93,11 @@ const FEATURES = {
   // "Try it on a sample" under a person's writing instructions (services/ai-style.js, D-0082): one
   // first-email draft for an invented lead, so the person sees what their note does before saving.
   style_sample:    { label: 'Writing-style sample',  in: 3000, out: 800,  tier: 'quality' },
+  // "AI writes each one" (R-259, D-0151): each FOLLOW-UP of a person who taught the AI, written at send time from the first email
+  // that really went out and the posting (services/ai-teach.js). A follow-up is under 85 words, so the answer ceiling is small.
+  engine_followup: { label: 'Engine follow-ups',     in: 3000, out: 500,  tier: 'quality' },
+  // "Show me what a lead gets" on the sequence screen in AI mode: one first email and its first follow-up for one real lead.
+  sequence_test:   { label: 'Sequence test emails',  in: 3000, out: 800,  tier: 'quality' },
 };
 // An unnamed caller gets the tightest sensible allowance rather than no limit.
 const DEFAULT_FEATURE = { label: 'Other', in: 1000, out: 500, tier: 'fast' };

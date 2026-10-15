@@ -33,6 +33,8 @@ const companyDailyCap = require('../services/company-daily-cap');
 const settingsConfig = require('../config/settings');
 const engineDraft = require('../services/engine-draft');
 const aiFirstChoice = require('../services/ai-first-choice');
+const aiTeach = require('../services/ai-teach');
+const followupSteps = require('../services/followup-steps');
 const wordingScope = require('../services/wording-scope');
 const own = require('../services/ownership');
 const { createDb } = require('../models');
@@ -158,7 +160,7 @@ router.get('/emails', auth, async (req, res) => {
     try {
       const owners = [...new Set(allData.map(e => e.sent_by).filter(Boolean))];
       const mids = [...new Set(allData.map(e => e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id)).filter(Boolean))];
-      const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
+      const keys = owners.flatMap(id => [aiFirstChoice.personKey(id), wordingScope.scopeKey(id), aiTeach.key(id)]).concat(mids.map(aiFirstChoice.mailboxKey));
       for (const part of chunk(keys, 60)) {
         if (!part.length) continue;
         const { data } = await supabase.from('app_settings').select('key,value').in('key', part);
@@ -180,12 +182,16 @@ router.get('/emails', auth, async (req, res) => {
         is_mine: isMine,
         retry_note: sendRetry.describeRetry(e), can_retry: sendRetry.canRetryByHand(e) && (isMine || isAdmin),
         ai_written: e.template_variant === 'ai',
-        ai_will_write: aiFirstChoice.shouldWriteFirst({
+        ai_will_write: (aiFirstChoice.shouldWriteFirst({
           companyOn: aiFirstOn, aiReady: true, settings: aiChoiceMap, userId: e.sent_by,
           mailboxId: e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id),
           each: wordingScope.isEach(aiChoiceMap, e.sent_by),
           isFirst: engineDraft.isFirstEmail(e), alreadyAi: e.template_variant === 'ai',
-        }) && e.status === 'pending' };
+        }) || (followupSteps.isFollowupType(e.followup_type) && e.template_variant !== 'ai'      // R-259: a follow-up its sender taught the AI
+          && !!aiTeach.followupFor(aiChoiceMap[aiTeach.key(e.sent_by)], followupSteps.stepNumber(e.followup_type))
+          && aiFirstChoice.allows({ companyOn: aiFirstOn, choice: aiFirstChoice.resolveChoice(aiChoiceMap, { userId: e.sent_by,
+            mailboxId: e.sending_email_id || (e.job && e.job.sending_email && e.job.sending_email.id), each: wordingScope.isEach(aiChoiceMap, e.sent_by) }) }))
+        ) && e.status === 'pending' };
     });
     res.json(allData);
   } catch (err) { res.status(500).json({ error: err.message }); }

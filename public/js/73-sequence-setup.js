@@ -4,8 +4,10 @@
 //      picked from a plain-words menu (shown as highlighted words, stored as {{merge fields}}), may ask AI for VERSIONS of it (the
 //      engine picks one at random per lead), and adds follow-ups (N days after the first email, only if no reply).
 //   2. START — the first email exactly as one of their own leads would get it (built on the server, R-256), then save and turn on.
-// "AI writes each one" sets the person's AI first-email choice on; the email they write becomes the BACKUP that goes out on a
-// day the AI cannot write (owner, D-0151). Every rule is on the server (routes/my-setup.js); this file asks and shows.
+// "AI writes each one" sets the person's AI first-email choice on and TEACHES the AI by picks and one-liners (owner, D-0151, R-259):
+// what the email is for, what it may use from the job, how it ends, how long, optionally an email of theirs for its sound, and per
+// follow-up what it does plus one line it must say. The emails they write become the BACKUP that goes out on a day the AI cannot
+// write. Every rule is on the server (routes/my-setup.js, services/ai-teach.js); this file asks and shows.
 //
 // THE EDITORS SURVIVE REPAINTS. The page registers its own painter: the page is rewritten only when its SHAPE changes (a button,
 // a step, a follow-up added) — never because a letter was typed — and the live preview is updated in place. A repaint on a
@@ -34,7 +36,9 @@
 
   var Q = STATE.seqSetup = STATE.seqSetup || null;
   function fresh(){ return { loaded:false, err:'', step:1, mode:null, first:{subject:'',body:'',versions:[]}, fus:[], max:5, sample:null,
-    menu:'', busy:'', msg:{}, stuck:false, offer:'', preview:null, saved:false, saving:false }; }
+    menu:'', busy:'', msg:{}, stuck:false, offer:'', preview:null, aitest:null, saved:false, saving:false,
+    teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{} }; }
+  function teachFu(i){ while(Q.teach.fus.length<=i) Q.teach.fus.push({angle:Q.teach.fus.length?'detail':'nudge',note:''}); return Q.teach.fus[i]; }
 
   // ── text with details ↔ the editor's html ──────────────────────────────────
   function chipHtml(k){ return '<span class="sq-chip'+(isOptional(k)?' is-opt':'')+'" contenteditable="false" data-k="'+esc(k)+'">'+esc(labelOf(k))+'</span>'; }
@@ -93,6 +97,8 @@
         versions:((r.first&&r.first.versions)||[]).map(function(v){ return {subject:v.subject||'', body:v.body||''}; }) };
       Q.fus=(r.followups||[]).map(function(f){ return { day:f.day, subject:f.subject||'', body:tokensToHtml(f.body), versions:(f.versions||[]).map(function(v){ return {subject:v.subject||'',body:v.body||''}; }) }; });
       if(!Q.fus.length && Q.max>0 && !hasWords(r.first&&r.first.body)) Q.fus=[{ day:DEFAULT_DAYS[0], subject:'', body:'', versions:[] }];   // D-0147: the box starts at 1
+      if(r.teach) Q.teach=r.teach; Q.opts=r.teach_options||null;
+      Q.fus.forEach(function(_,i){ teachFu(i); });
       paint(true);
     }).catch(function(e){ Q.loaded=true; Q.err=(e&&e.message)||String(e); paint(true); });
   };
@@ -110,7 +116,12 @@
     saveEditors();
     return { mode:Q.mode,
       first:{ subject:htmlToTokens(Q.first.subject).replace(/\n/g,' ').trim(), body:htmlToTokens(Q.first.body).trim(), versions:Q.mode==='template'?Q.first.versions:[] },
-      followups:Q.fus.map(function(f){ return { day:Number(f.day), subject:f.subject, body:htmlToTokens(f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }) };
+      followups:Q.fus.map(function(f){ return { day:Number(f.day), subject:f.subject, body:htmlToTokens(f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }),
+      teach:teachPayload() };
+  }
+  function teachPayload(){
+    var t=Q.teach; return { purpose:t.purpose, use:t.use.slice(), end:t.end, len:t.len, voice:t.voice,
+      fus:Q.fus.map(function(_,i){ var f=teachFu(i); return {angle:f.angle, note:f.note}; }) };
   }
 
   // ── the page ───────────────────────────────────────────────────────────────
@@ -126,7 +137,7 @@
   function versionsHtml(slot, list, skel){
     var first=slot==='first', room=2-list.length, busy=!!Q.busy;
     var h=list.map(function(v,i){
-      return '<div class="sq-ver"><div class="sq-ver-h"><span>Version '+(i+2)+'</span><button type="button" class="sq-link" data-sq="rmv" data-slot="'+slot+'" data-i="'+i+'">Remove</button></div>'+
+      return '<div class="sq-ver"><div class="sq-ver-h"><span>Version '+(i+2)+'</span><button type="button" class="btn btn-sm btn-outline" data-sq="rmv" data-slot="'+slot+'" data-i="'+i+'">Remove</button></div>'+
         '<div class="sq-ver-t">'+(skel?'':esc((first?'Subject: '+fill(v.subject||htmlToTokens(Q.first.subject))+'\n\n':'')+fill(v.body)))+'</div></div>';
     }).join('');
     if(room>0) h+='<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="vary" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+
@@ -160,28 +171,48 @@
       '<div class="sq-mbody'+(m.body?'':' is-empty')+'">'+esc(m.body||emptyNote||'')+'</div>'+
       '<div class="sq-msig">Your signature is added from your mailbox.</div></div>';
   }
+  // A row of choices. multi: several may be on (aria-pressed); otherwise exactly one.
+  function picksHtml(group, list, isOn, extra){
+    return '<div class="sq-picks" role="group">'+(list||[]).map(function(o){
+      return '<button type="button" class="sq-pick" data-sq="pick" data-g="'+group+'" data-k="'+o.k+'"'+(extra||'')+' aria-pressed="'+!!isOn(o.k)+'">'+esc(o.label)+'</button>'; }).join('')+'</div>';
+  }
+  function detailsHtml(id, summary, inner){ return '<details class="sq-dd" data-open="'+id+'"'+(Q.open[id]?' open':'')+'><summary>'+esc(summary)+'</summary><div>'+inner+'</div></details>'; }
+  function teachCard(skel){
+    var t=Q.teach, o=Q.opts||{use:[],ends:[],lens:[]};
+    return '<div class="card sq-card"><h2 class="sq-h2">Teach the AI</h2><p class="sq-sub">A few answers. For every lead, the AI writes the email from its job description with them.</p>'+
+      '<label class="sq-lbl" for="sq-purpose">What is this email for? One line.</label>'+
+      '<input id="sq-purpose" class="sq-inp" maxlength="200" placeholder="e.g. I have pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(t.purpose))+'">'+
+      '<span class="sq-lbl">What can it use from the job?</span>'+picksHtml('use',o.use,function(k){ return t.use.indexOf(k)>=0; })+
+      '<p class="sq-hint">It always uses their name, the job title and the city.</p>'+
+      '<span class="sq-lbl">How should it end?</span>'+picksHtml('end',o.ends,function(k){ return t.end===k; })+
+      '<p class="sq-hint">It never asks for a call or a meeting — PACE\'s checks stop that in every email.</p>'+
+      '<span class="sq-lbl">How long?</span>'+picksHtml('len',o.lens,function(k){ return t.len===k; })+
+      detailsHtml('voice','Optional: paste an email you have sent, so it sounds like you',
+        '<textarea id="sq-voice" class="sq-ta" maxlength="1500" placeholder="Any email you wrote yourself. The AI copies how it sounds, never what it says.">'+(skel?'':esc(t.voice))+'</textarea>')+
+      msgHtml('teach')+
+      '<p class="sq-hint">Uses one AI credit for each email it writes, follow-ups included.</p></div>';
+  }
   function writeStep(skel){
     var ai=Q.mode==='ai', busy=!!Q.busy;
     if(!Q.mode) return modeCards();
     var h=modeCards();
-    if(ai) h+='<div class="card sq-card"><h2 class="sq-h2">The AI writes each first email</h2>'+
-      '<p class="sq-sub">For every lead, from its job description, in the voice of your writing-style note (My Setup → How the AI writes for you). Each one uses AI credits.</p></div>';
+    if(ai) h+=teachCard(skel);
     h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
-      (ai?'<p class="sq-sub">Goes out instead on a day the AI cannot write (for example when your company\'s AI credits run out).</p>':'')+
+      (ai?'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>':'')+
       '<label class="sq-lbl" for="sq-subj">Subject</label>'+editor('sq-subj',Q.first.subject,'A short subject line',true,skel)+
       '<label class="sq-lbl" for="sq-body">Message</label>'+editor('sq-body',Q.first.body,'Write it the way you would write to one person: why you are writing, what you can offer, and one question.',false,skel)+
-      '<div class="sq-row">'+menuHtml('first')+'<button type="button" class="sq-link" data-sq="stuck">Stuck? Draft it with AI</button></div>'+
-      '<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
-        '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+esc(Q.offer)+'">'+
+      '<div class="sq-row">'+menuHtml('first')+(ai?'<button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
+        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>')+'</div>'+
+      (ai?'':'<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
+        '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
         '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
-        (Q.undo?'<button type="button" class="sq-link" data-sq="undo">Undo</button>':'')+'</div></div>'+
+        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
       msgHtml('first')+(ai?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
     Q.fus.forEach(function(f,i){
       var min=i?Number(Q.fus[i-1].day)+1:1;
-      h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="sq-link" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
+      h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="btn btn-sm btn-outline" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
         '<p class="sq-sub">Sent <select class="sq-sel" data-sq-day="'+i+'" aria-label="Days after the first email">'+dayOptions(f.day,min)+'</select> after the first email, only if they have not replied.</p>'+
-        editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
-        '<div class="sq-row">'+menuHtml('fu'+i)+'<button type="button" class="sq-link" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button></div>'+
+        (ai?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
         msgHtml('fu'+i)+(ai?'':versionsHtml(String(i),f.versions,skel))+'</div>';
     });
     if(Q.fus.length<Q.max) h+='<div><button type="button" class="btn btn-outline" data-sq="addfu">+ '+(Q.fus.length?'Add another follow-up':'Add a follow-up')+'</button></div>';
@@ -190,24 +221,63 @@
       '<div id="sq-pv">'+previewMail(skel)+'</div></div>';
     return h;
   }
+  function fuEditorHtml(f,i,skel){
+    var busy=!!Q.busy;
+    return editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
+      '<div class="sq-row">'+menuHtml('fu'+i)+'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button></div>';
+  }
+  function fuTeachHtml(i,skel){
+    var f=teachFu(i), o=Q.opts||{angles:[]};
+    return '<span class="sq-lbl">What should it do?</span>'+picksHtml('angle',o.angles,function(k){ return f.angle===k; },' data-i="'+i+'"')+
+      '<label class="sq-lbl" for="sq-fnote'+i+'">Anything it must say? One line, optional.</label>'+
+      '<input id="sq-fnote'+i+'" class="sq-inp" data-fnote="'+i+'" maxlength="160" placeholder="e.g. mention I can share resumes today" value="'+(skel?'':esc(f.note))+'">';
+  }
+  function mailBox(m){
+    return '<div class="sq-mail"><div class="sq-mrow"><b>TO</b><span>'+esc(m.to.name+(m.to.company?' · '+m.to.company:''))+'</span></div>'+
+      '<div class="sq-msub">'+esc(m.subject)+'</div><div class="sq-mbody">'+esc(m.body)+'</div><div class="sq-msig">Your signature is added from your mailbox.</div></div>';
+  }
+  // Why the AI did not write the test, in the person's words — and what that lead would get instead (the backup, always).
+  function aiWhy(r){
+    if(r.ai===false) return r.reason==='daily_limit'?'Your company\'s AI allowance for today is used up. On a day like this, every lead gets your backup email.'
+      :'No AI is set up for your company yet, so every lead would get your backup email. An admin connects one under Admin → AI.';
+    if(r.reason==='missing_contact_or_company') return 'This lead has no first name or company, so the AI cannot write for it. It would get your backup email.';
+    if(r.reason==='draft_rejected') return 'The AI\'s email did not pass PACE\'s checks, so this lead would get your backup email. Try again, or change your answers.';
+    return 'The AI could not write just now, so this lead would get your backup email.';
+  }
+  function aiTestHtml(){
+    var r=Q.aitest, p=Q.preview; if(!r) return '';
+    if(r.error) return '<p class="sq-warn">'+esc(r.error)+'</p>';
+    var h='';
+    if(r.written){
+      h+='<div class="sq-tagrow"><span class="sq-tag is-ai">Written by AI</span></div>'+mailBox({to:r.to,subject:r.subject,body:r.body})+
+        '<p class="sq-hint">Written for this lead from its job description, with your answers'+(r.example?' (an example lead: you have no leads of your own yet)':'')+'. Each lead gets its own.</p>';
+      if(r.followup&&r.followup.written&&Q.fus[0]) h+='<span class="sq-lbl">Follow-up 1, '+Q.fus[0].day+' days later if no reply</span>'+mailBox({to:r.to,subject:'Re: '+r.subject,body:r.followup.body});
+      else if(r.followup&&Q.fus[0]) h+='<p class="sq-hint">The AI\'s follow-up did not pass PACE\'s checks this time; that lead would get your backup follow-up.</p>';
+      if(p&&!p.error) h+=detailsHtml('backup','On a day the AI cannot write, '+(r.to.name||'this lead').split(' ')[0]+' gets this instead',mailBox(p));
+    } else {
+      h+='<p class="sq-warn">'+esc(aiWhy(r))+'</p>';
+      if(p&&!p.error) h+='<div class="sq-tagrow"><span class="sq-tag">Your backup</span></div>'+mailBox(p);
+    }
+    if(r.read) h+=detailsHtml('read','See what the AI read','<div class="sq-ver-t">'+esc(r.read)+'</div>');
+    return h;
+  }
   function startStep(){
     var p=Q.preview, ai=Q.mode==='ai';
-    if(Q.saved) return '<div class="card sq-card"><div class="sq-ok"><b>Your sequence is on.</b> Leads assigned to you now go out by themselves'+(ai?' — the AI writes each first email, and your backup goes on a day it cannot':'')+'. Follow-ups stop when someone replies.</div>'+
+    if(Q.saved) return '<div class="card sq-card"><div class="sq-ok"><b>Your sequence is on.</b> Leads assigned to you now go out by themselves'+(ai?' — the AI writes each email for that lead, and your backup goes on a day it cannot':'')+'. Follow-ups stop when someone replies.</div>'+
       '<div class="sq-row"><button type="button" class="btn btn-primary" onclick="goPage(\'mysetup\')">Back to My Setup</button></div></div>';
-    var mail='';
-    if(p&&p.error) mail='<p class="sq-hint">'+esc(p.error)+'</p>';
+    var mail='', shown=false;
+    if(ai){ mail=aiTestHtml(); shown=!!(Q.aitest&&!Q.aitest.error); }
+    else if(p&&p.error) mail='<p class="sq-hint">'+esc(p.error)+'</p>';
     else if(p){
-      mail='<div class="sq-tagrow"><span class="sq-tag">'+(ai?'Your backup':'Your email')+'</span></div>'+
-        '<div class="sq-mail"><div class="sq-mrow"><b>TO</b><span>'+esc(p.to.name+(p.to.company?' · '+p.to.company:''))+'</span></div>'+
-        '<div class="sq-msub">'+esc(p.subject)+'</div><div class="sq-mbody">'+esc(p.body)+'</div><div class="sq-msig">Your signature is added from your mailbox.</div></div>'+
+      shown=true;
+      mail='<div class="sq-tagrow"><span class="sq-tag">Your email</span></div>'+mailBox(p)+
         '<p class="sq-hint">'+(p.versions>1?'Version '+p.version+' of '+p.versions+', picked at random — the same way each lead gets one. ':'')+(p.example?'An example lead: you have no leads of your own yet.':'Built the way PACE builds it for this lead of yours.')+'</p>'+
-        (ai?'<p class="sq-hint">With "AI writes each one", this lead gets an AI-written email; this backup goes only on a day the AI cannot write.</p>':'')+
         (p.missing&&p.missing.length?'<p class="sq-warn">These details could not be filled: '+esc(p.missing.join(', '))+'.</p>':'');
     }
-    return '<div class="card sq-card"><h2 class="sq-h2">Try it, then turn it on</h2><p class="sq-sub">See exactly what one of your leads would get. If it looks right, turn it on.</p>'+
-      '<div class="sq-row"><button type="button" class="btn btn-outline" data-sq="test"'+(Q.busy?' disabled':'')+'>'+(Q.busy==='test'?'Building…':(p?'Show another':'Show me what a lead gets'))+'</button></div>'+mail+'</div>'+
-      '<div class="card sq-card"><div class="sq-row sq-between"><div><h2 class="sq-h4">Turn it on</h2><p class="sq-hint">'+(p&&!p.error?'Leads you are given will go out automatically.':'Available after you look at one.')+'</p></div>'+
-      '<button type="button" class="btn btn-primary" data-sq="save"'+(p&&!p.error&&!Q.saving?'':' disabled')+'>'+(Q.saving?'Saving…':'Save and turn it on')+'</button></div>'+msgHtml('save')+'</div>';
+    return '<div class="card sq-card"><h2 class="sq-h2">Try it, then turn it on</h2><p class="sq-sub">'+(ai?'The AI writes the email one of your leads would get, from that lead\'s job description. Uses AI credits.':'See exactly what one of your leads would get.')+' If it looks right, turn it on.</p>'+
+      '<div class="sq-row"><button type="button" class="btn btn-outline" data-sq="test"'+(Q.busy?' disabled':'')+'>'+(Q.busy==='test'?(ai?'Writing…':'Building…'):(shown?(ai?'Write another':'Show another'):'Show me what a lead gets'))+'</button></div>'+mail+'</div>'+
+      '<div class="card sq-card"><div class="sq-row sq-between"><div><h2 class="sq-h4">Turn it on</h2><p class="sq-hint">'+(shown?'Leads you are given will go out automatically.':'Available after you look at one.')+'</p></div>'+
+      '<button type="button" class="btn btn-primary" data-sq="save"'+(shown&&!Q.saving?'':' disabled')+'>'+(Q.saving?'Saving…':'Save and turn it on')+'</button></div>'+msgHtml('save')+'</div>';
   }
   function renderPage(skel){
     if(!Q) Q=STATE.seqSetup=fresh();
@@ -244,7 +314,7 @@
   function placeCaret(r){ var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
   function onEdit(ed){
     if(!ed.querySelector('.sq-chip') && ed.textContent.replace(/​/g,'').trim()==='' && !/<br/.test(ed.innerHTML.replace(/<br data-dummy[^>]*>/g,'').replace(/<br>$/,''))) ed.innerHTML='';
-    saveEditors(); Q.preview=null; Q.undo=null;
+    saveEditors(); Q.preview=null; Q.aitest=null; Q.undo=null;
     refreshPreview();
   }
   function insertNewline(ed){
@@ -280,8 +350,15 @@
   function closeMenu(){ if(!Q||!Q.menu) return; Q.menu=''; document.querySelectorAll('.sq-menu').forEach(function(m){ m.hidden=true; }); document.querySelectorAll('[data-sq="menu"]').forEach(function(b){ b.setAttribute('aria-expanded','false'); }); }
 
   // ── AI help (the server holds every draft to its checker) ─────────────────
+  // The backup, from the answers (AI mode): what it is for, how it ends, how long — kept general, since it goes to any lead.
+  function answersPrompt(){
+    var t=Q.teach, o=Q.opts||{ends:[],lens:[]};
+    var lab=function(list,k){ for(var i=0;i<list.length;i++) if(list[i].k===k) return list[i].label.toLowerCase(); return k; };
+    return t.purpose.trim()+'. It is the backup email, sent when the AI cannot write one for the lead, so keep it general to any job. End: '+lab(o.ends,t.end)+'. Length: '+lab(o.lens,t.len)+'.';
+  }
   function draftFirst(){
     saveEditors();
+    if(Q.mode==='ai'){ if(Q.teach.purpose.trim().length<5){ say('first','Say in one line what the email is for first (under Teach the AI).'); return repaint(); } Q.offer=answersPrompt(); }
     if(!Q.offer.trim()){ say('first','Write a sentence first — PACE does not write from nothing.'); return repaint(); }
     Q.undo=(hasWords(htmlToTokens(Q.first.body))||hasWords(htmlToTokens(Q.first.subject)))?{subject:Q.first.subject,body:Q.first.body,versions:Q.first.versions}:null;
     Q.busy='draft'; say('first',''); repaint();
@@ -330,8 +407,12 @@
     var b=payload();
     if(!b.first.subject || b.first.body.length<20){ Q.preview={error:Q.mode==='ai'?'Write your backup email first — go back one step.':'Write your first email first — go back one step.'}; return repaint(); }
     Q.busy='test'; repaint();
-    apiPost('/my-setup/sequence/preview',{subject:b.first.subject, body:b.first.body, versions:b.first.versions}).then(function(r){ Q.busy=''; Q.preview=r; repaint(); })
-      .catch(function(e){ Q.busy=''; Q.preview={error:(e&&e.message)||String(e)}; repaint(); });
+    var backup=apiPost('/my-setup/sequence/preview',{subject:b.first.subject, body:b.first.body, versions:b.first.versions}).then(function(r){ Q.preview=r; })
+      .catch(function(e){ Q.preview={error:(e&&e.message)||String(e)}; });
+    if(Q.mode!=='ai'){ backup.then(function(){ Q.busy=''; repaint(); }); return; }
+    // AI mode: the AI writes for a real lead with the answers on screen; the backup is shown beside it, as that lead's fallback.
+    Promise.all([backup, apiPost('/my-setup/sequence/ai-test',{teach:b.teach}).then(function(r){ Q.aitest=r; })
+      .catch(function(e){ Q.aitest={error:(e&&e.message)||String(e)}; })]).then(function(){ Q.busy=''; repaint(); });
   }
   function save(){
     Q.saving=true; say('save',''); repaint();
@@ -352,16 +433,22 @@
     var a=el.getAttribute('data-sq'), i=Number(el.getAttribute('data-i'));
     if(a==='menu'){ var id=el.getAttribute('data-menu'), open=Q.menu!==id; closeMenu(); if(open){ Q.menu=id; var m=el.parentNode.querySelector('.sq-menu'); if(m) m.hidden=false; el.setAttribute('aria-expanded','true'); } return; }
     if(a==='ins'){ var fid=Q.menu==='first'?(rangeField==='sq-subj'?'sq-subj':'sq-body'):'sq-'+Q.menu; var k=el.getAttribute('data-k'); closeMenu(); insertChip(fid,k); return; }
-    if(a==='mode'){ saveEditors(); Q.mode=el.getAttribute('data-mode'); Q.preview=null; repaint(); return; }
+    if(a==='mode'){ saveEditors(); Q.mode=el.getAttribute('data-mode'); Q.preview=null; Q.aitest=null; repaint(); return; }
+    if(a==='pick'){ var g=el.getAttribute('data-g'), pk=el.getAttribute('data-k'), T=Q.teach;
+      if(g==='use'){ var at=T.use.indexOf(pk); if(at>=0) T.use.splice(at,1); else T.use.push(pk); }
+      else if(g==='end') T.end=pk; else if(g==='len') T.len=pk; else if(g==='angle') teachFu(i).angle=pk;
+      Q.aitest=null; paint(true); return; }
     if(a==='stuck'){ Q.stuck=!Q.stuck; repaint(); return; }
     if(a==='draft'){ if(!Q.busy) draftFirst(); return; }
     if(a==='undo'){ if(Q.undo){ Q.first.subject=Q.undo.subject; Q.first.body=Q.undo.body; Q.first.versions=Q.undo.versions||[]; } Q.undo=null; say('first',''); paint(true); return; }
     if(a==='fudraft'){ if(!Q.busy) draftFollowup(i); return; }
     if(a==='vary'){ if(!Q.busy) vary(el.getAttribute('data-slot')); return; }
     if(a==='rmv'){ saveEditors(); var sl=el.getAttribute('data-slot'); (sl==='first'?Q.first.versions:Q.fus[Number(sl)].versions).splice(i,1); Q.preview=null; paint(true); return; }
-    if(a==='addfu'){ saveEditors(); var last=Q.fus.length?Number(Q.fus[Q.fus.length-1].day):0; var d=DEFAULT_DAYS[Q.fus.length]||last+7; if(d<=last) d=last+4; Q.fus.push({day:d,subject:'',body:'',versions:[]}); paint(true); return; }
-    if(a==='rmfu'){ saveEditors(); Q.fus.splice(i,1); for(var j=1;j<Q.fus.length;j++) if(Number(Q.fus[j].day)<=Number(Q.fus[j-1].day)) Q.fus[j].day=Number(Q.fus[j-1].day)+1; paint(true); return; }
-    if(a==='next'){ saveEditors(); var p=payload(); if(!p.first.subject||p.first.body.length<20){ say('first',Q.mode==='ai'?'Write your backup email first: a subject and a few lines.':'Write your first email first: a subject and a few lines.'); return repaint(); }
+    if(a==='addfu'){ saveEditors(); var last=Q.fus.length?Number(Q.fus[Q.fus.length-1].day):0; var d=DEFAULT_DAYS[Q.fus.length]||last+7; if(d<=last) d=last+4; Q.fus.push({day:d,subject:'',body:'',versions:[]}); teachFu(Q.fus.length-1); paint(true); return; }
+    if(a==='rmfu'){ saveEditors(); Q.fus.splice(i,1); Q.teach.fus.splice(i,1); for(var j=1;j<Q.fus.length;j++) if(Number(Q.fus[j].day)<=Number(Q.fus[j-1].day)) Q.fus[j].day=Number(Q.fus[j-1].day)+1; paint(true); return; }
+    if(a==='next'){ saveEditors(); var p=payload();
+      if(Q.mode==='ai'&&Q.teach.purpose.trim().length<5){ say('teach','Say in one line what the email is for, so the AI knows what to write.'); return repaint(); }
+      if(!p.first.subject||p.first.body.length<20){ say('first',Q.mode==='ai'?'Write your backup email first: a subject and a few lines.':'Write your first email first: a subject and a few lines.'); return repaint(); }
       var empty=p.followups.findIndex(function(f){ return f.body.length<5; }); if(empty>=0){ say('fu'+empty,'This follow-up has no text yet. Write it, or remove it.'); return repaint(); }
       Q.step=2; Q.preview=null; paint(true); var pb=document.querySelector('.pg-body'); if(pb) pb.scrollTop=0; return; }
     if(a==='back'){ Q.step=1; Q.saved=false; paint(true); return; }
@@ -371,6 +458,9 @@
   document.addEventListener('input',function(ev){
     var t=ev.target; if(!t.closest||!t.closest('#sq-root')) return;
     if(t.id==='sq-offer'){ Q.offer=t.value; return; }
+    if(t.id==='sq-purpose'){ Q.teach.purpose=t.value; Q.aitest=null; if(Q.msg.teach){ Q.msg.teach=''; var mt=t.parentNode.querySelector('.sq-hint[aria-live]'); if(mt) mt.remove(); } return; }
+    if(t.id==='sq-voice'){ Q.teach.voice=t.value; Q.aitest=null; return; }
+    var fn=t.getAttribute('data-fnote'); if(fn!=null){ teachFu(Number(fn)).note=t.value; Q.aitest=null; return; }
     if(t.classList.contains('sq-ed')) onEdit(t);
   });
   document.addEventListener('change',function(ev){
@@ -391,5 +481,7 @@
     if(t.classList.contains('is-one')) txt=txt.replace(/\s*\n+\s*/g,' ');
     insertPlain(t,txt); onEdit(t);
   });
+  // A <details> stays as the person left it across repaints.
+  document.addEventListener('toggle',function(ev){ var d=ev.target; if(!Q||!d||!d.getAttribute||!d.closest||!d.closest('#sq-root')) return; var id=d.getAttribute('data-open'); if(id) Q.open[id]=d.open; },true);
   ['keyup','mouseup','focusin'].forEach(function(evn){ document.addEventListener(evn,function(ev){ var t=ev.target&&ev.target.closest?ev.target.closest('.sq-ed'):null; if(t) remember(t); }); });
 })();

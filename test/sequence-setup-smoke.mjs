@@ -6,6 +6,9 @@
 //     the AI first email off and "AI writes each one" turns it on, PACE's stock rotation is switched off, an unknown {{detail}}
 //     is refused, and the test email is built by the same fill as a real lead's
 //   * AI help with no AI available gives the person's text back, never an error and never a silent swap
+//   * R-259, teaching the AI by picks: "AI writes each one" needs what the email is for; the answers are saved, read back, and
+//     cleared by "I write it"; they become the first-email writer's instructions; a taught follow-up is written by AI, held to the
+//     house checker, and anything else (no AI, a rejected draft, an untaught step) leaves the person's backup follow-up
 // Usage: node test/sequence-setup-smoke.mjs
 import http from 'node:http';
 import { createRequire } from 'node:module';
@@ -16,6 +19,8 @@ const jwt = require('jsonwebtoken');
 const ev = require('../email-vars.js');
 const versions = require('../services/sequence-versions.js');
 const { buildPendingEmailsFromJobs } = require('../services/lead-outreach-queue.js');
+const teachMod = require('../services/ai-teach.js');
+const gen = require('../services/outreach-generator.js');
 
 const results = [];
 const step = (n, ok, d = '') => { results.push(!!ok); console.log((ok ? '[PASS] ' : '[FAIL] ') + n + (d ? ' — ' + d : '')); };
@@ -110,11 +115,47 @@ r = await call('POST', '/my-setup/sequence/preview', 'bd1', { subject: good.firs
 step('…and the other version when the draw says so', r.out.version === 2 && r.out.body.startsWith('Hello Dana'));
 
 r = await call('PUT', '/my-setup/sequence', 'bd1', Object.assign({}, good, { mode: 'ai' }));
+step('"AI writes each one" without saying what the email is for is refused', r.code === 400 && /what the email is for/.test(r.out.error), JSON.stringify(r.out));
+const teachIn = { purpose: 'I have pre-screened welders ready now', use: ['skills', 'pay', 'call'], end: 'call', len: 'medium', voice: 'Hey, quick one.', fus: [{ angle: 'detail', note: 'say I can share resumes today' }, { angle: 'last' }, { angle: 'nudge' }] };
+r = await call('PUT', '/my-setup/sequence', 'bd1', Object.assign({}, good, { mode: 'ai', teach: teachIn }));
+const savedTeach = JSON.parse(setting('u_bd1_ai_teach') || 'null');
+step('the answers are saved; a pick PACE does not offer (a call) is dropped; one answer set per follow-up', r.code === 200 && savedTeach && savedTeach.purpose === teachIn.purpose && savedTeach.use.join(',') === 'skills,pay' && savedTeach.end === 'resumes' && savedTeach.len === 'medium' && savedTeach.fus.length === 2 && savedTeach.fus[0].note === 'say I can share resumes today', JSON.stringify(savedTeach));
+step('…and read back for the screen, with the choices it offers', (await call('GET', '/my-setup/sequence', 'bd1')).out.teach.purpose === teachIn.purpose && (await call('GET', '/my-setup/sequence', 'bd1')).out.teach_options.ends.length === 2);
+r = await call('POST', '/my-setup/sequence/ai-test', 'bd1', { teach: teachIn });
+step('the AI test with no AI set up says so, and names the lead the backup would go to', r.code === 200 && r.out.ai === false && r.out.reason === 'not_configured' && r.out.to.name === 'Dana Lee', JSON.stringify(r.out).slice(0, 200));
+step('the AI test without a purpose is refused', (await call('POST', '/my-setup/sequence/ai-test', 'bd1', { teach: {} })).code === 400);
+r = await call('PUT', '/my-setup/sequence', 'bd1', Object.assign({}, good, { mode: 'ai', teach: teachIn }));
 step('"AI writes each one" turns the AI first email ON, keeps the email as the backup, drops first-email versions', r.code === 200 && setting('u_bd1_ai_first') === 'on' && setting('u_bd1_tmpl_o1_body') === good.first.body && setting('u_bd1_tmpl_o1_v2_body') === '');
 step('…and reads back as the AI choice', (await call('GET', '/my-setup/sequence', 'bd1')).out.mode === 'ai');
+r = await call('PUT', '/my-setup/sequence', 'bd1', good);
+step('"I write it" clears the answers, so no follow-up of theirs is AI-written any more', r.code === 200 && setting('u_bd1_ai_teach') === '' && !teachMod.followupFor(setting('u_bd1_ai_teach'), 1));
 
 r = await call('POST', '/my-setup/sequence/draft', 'bd1', { mode: 'variant', purpose: 'first', subject: 'Your {{pos}} opening', body: 'Hi {{fn}}, my own words.' });
 step('a version asked for with no AI available gives the person\'s text back and says so', r.code === 200 && r.out.source === 'kept' && r.out.body === 'Hi {{fn}}, my own words.' && !!r.out.note, JSON.stringify(r.out));
+
+console.log('\nTeaching the AI: the instructions and the follow-up writer');
+const tb = teachMod.firstBlock({ purpose: 'I have pre-screened welders', use: ['skills'], end: 'yesno', len: 'short', voice: 'Hey Sam' });
+step('the answers become the first email\'s instructions: purpose, what to use and not use, the ending, the length, the voice', tb.includes('"I have pre-screened welders"') && tb.includes('top skills') && /Do not mention:.*pay/.test(tb) && tb.includes('yes-or-no') && tb.includes('70 to 100') && tb.includes('Hey Sam') && /never a request for a call/i.test(tb));
+step('nobody taught it → no instructions added', teachMod.firstBlock(null) === '' && teachMod.firstBlock({ use: ['skills'] }) === '');
+const T2 = { purpose: 'welders', fus: [{ angle: 'detail', note: 'resumes today' }] };
+step('only a follow-up the person taught is AI-written', teachMod.shouldWriteFollowup({ aiReady: true, allowed: true, teach: T2, step: 1 }) && !teachMod.shouldWriteFollowup({ aiReady: true, allowed: true, teach: T2, step: 2 })
+  && !teachMod.shouldWriteFollowup({ aiReady: true, allowed: false, teach: T2, step: 1 }) && !teachMod.shouldWriteFollowup({ aiReady: true, allowed: true, teach: T2, step: 1, alreadyAi: true }) && !teachMod.shouldWriteFollowup({ aiReady: false, allowed: true, teach: T2, step: 1 }));
+const input = { contact_first_name: 'Pat', company: 'Acme', job_title: 'Welder', location: 'Austin, TX', job_description: 'Welder, MIG and TIG, night shift, $30/hr.', outreach_type: 'first', sender: { name: 'Sam Rep', email: 's@x.com' } };
+const firstEmail = { subject: 'Welders for Acme', body: 'Hi Pat,\n\nI have welders ready. Want resumes?\n\nThanks,' };
+const goodFu = JSON.stringify({ subject: 'Re', email: 'Hi Pat,\n\nOne more thing from the posting: the role is on the night shift, and my welders are fine with nights. I can share resumes today.\n\nWould a few help?\n\nThanks,' });
+const callFu = JSON.stringify({ subject: 'Re', email: 'Hi Pat,\n\nI have welders who know MIG and TIG for the night shift role.\n\nCould we set up a quick call this week?\n\nThanks,' });
+let asked = [];
+let out = await teachMod.writeFollowup({ gen, teach: T2, step: 1, input, firstEmail, omitSignOff: true, complete: async (sys, p) => { asked.push(p); return { text: goodFu }; } });
+step('a taught follow-up is written, told what to do and the person\'s line, from the first email that went out', !!out.body && out.body.includes('night shift') && asked[0].includes('Add ONE detail') && asked[0].includes('resumes today') && asked[0].includes('I have welders ready'), JSON.stringify(out));
+asked = [];
+out = await teachMod.writeFollowup({ gen, teach: T2, step: 1, input, firstEmail, omitSignOff: true, complete: async () => { asked.push(1); return { text: callFu }; } });
+step('one that asks for a call is repaired once, then thrown away — the backup follow-up goes', !out.body && out.skipped === 'draft_rejected' && out.violations.includes('meeting_ask') && asked.length === 2, JSON.stringify(out));
+out = await teachMod.writeFollowup({ gen, teach: T2, step: 1, input, firstEmail, omitSignOff: true, complete: async () => null });
+step('no AI today → the backup follow-up goes', out.skipped === 'ai_unavailable');
+out = await teachMod.writeFollowup({ gen, teach: T2, step: 2, input, firstEmail, omitSignOff: true, complete: async () => { throw new Error('must not be called'); } });
+step('an untaught follow-up never calls the AI', out.skipped === 'not_taught');
+out = await teachMod.writeFollowup({ gen, teach: T2, step: 1, input, firstEmail: null, omitSignOff: true, complete: async () => { throw new Error('must not be called'); } });
+step('no first email on record → no AI call, the backup goes', out.skipped === 'no_first_email');
 
 server.close();
 const failed = results.filter((x) => !x).length;

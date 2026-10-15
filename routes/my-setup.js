@@ -8,6 +8,7 @@
 //   PUT  /my-setup/sequence           save it: how the first email is written, the emails, their versions, the follow-ups
 //   POST /my-setup/sequence/preview   the first email exactly as a real lead of theirs would get it (R-256)
 //   POST /my-setup/sequence/draft     AI help: draft from one sentence, or write a version keeping every detail
+//   POST /my-setup/sequence/ai-test   "AI writes each one": the AI writes the first email and follow-up 1 for one real lead (R-259)
 // Everything is the CALLER's own: no id in any path, so nobody can reach another person's setup through here.
 // The rules are in services/sequence-starter.js, services/setup-tasks.js, services/send-window.js (all pure).
 // ============================================================================
@@ -23,6 +24,10 @@ const versions = require('../services/sequence-versions');
 const sequenceDraft = require('../services/sequence-draft');
 const aiProvider = require('../services/ai-provider');
 const aiFirst = require('../services/ai-first-choice');
+const aiTeach = require('../services/ai-teach');
+const aiStyle = require('../services/ai-style');
+const engineDraft = require('../services/engine-draft');
+const outreachGen = require('../services/outreach-generator');
 const settingsConfig = require('../config/settings');
 const { buildEmailVars, fillTemplate, unresolvedVars, DEFER_SENDER } = require('../email-vars');
 
@@ -149,7 +154,7 @@ module.exports = (ctx) => {
   // (services/sequence-versions.js) and the engine picks one at random per lead.
   const SLOTS = ['o1'].concat(followupSteps.STEPS);
   const seqKeys = (uid) => {
-    const k = [`u_${uid}_fu_count`, aiFirst.personKey(uid)];
+    const k = [`u_${uid}_fu_count`, aiFirst.personKey(uid), aiTeach.key(uid)];
     SLOTS.forEach((sl) => { k.push(`u_${uid}_tmpl_${sl}_subject`, `u_${uid}_tmpl_${sl}_body`); });
     followupSteps.STEPS.forEach((t) => k.push(`u_${uid}_${t}_day`));
     return k.concat(versions.neededKeys([uid]));
@@ -176,6 +181,9 @@ module.exports = (ctx) => {
           versions: versions.extraVersions(m, uid, t).map((v) => ({ subject: v.subject, body: v.body })),
         })),
         followup_max: max,
+        // "AI writes each one": the person's answers (R-259) and the choices the screen offers — the server's lists, not the page's.
+        teach: aiTeach.normalize(m[aiTeach.key(uid)]),
+        teach_options: aiTeach.options(),
         // The lead the screen's live preview fills in: one of the person's own, else an example (said so on screen).
         sample: await (async () => {
           const lead = await sampleLead(req);
@@ -210,6 +218,11 @@ module.exports = (ctx) => {
       const texts = [fSubj, fBody].concat(...(first.versions || []).map((v) => [v.subject, v.body]), ...fus.map((f) => [f.subject, f.body].concat(...(f.versions || []).map((v) => [v.subject, v.body]))));
       const unknown = [...new Set([].concat(...texts.map((t) => unresolvedVars(String(t || '')).filter((k) => !sequenceDraft.ALLOWED_VARS.has(k)))))];
       if (unknown.length) return res.status(400).json({ error: 'PACE cannot fill ' + unknown.map((k) => '{{' + k + '}}').join(', ') + '. Use "Add a detail" instead.' });
+      // "AI writes each one" needs the AI taught (R-259): at least what the email is for. "I write it" clears the answers, so no
+      // follow-up of theirs is AI-written any more.
+      const teach = aiTeach.normalize(b.teach);
+      if (mode === 'ai') { const why = aiTeach.problem(teach); if (why) return res.status(400).json({ error: why }); }
+      teach.fus = teach.fus.slice(0, fus.length);
 
       const now = new Date();
       const rows = [
@@ -218,6 +231,7 @@ module.exports = (ctx) => {
         { key: aiFirst.personKey(uid), value: mode === 'ai' ? 'on' : 'off' },
         // The person's own words (and versions) are what goes out: PACE's stock rotation, if it was on, is turned off.
         { key: `u_${uid}_random_template_mode`, value: 'false' },
+        { key: aiTeach.key(uid), value: mode === 'ai' ? JSON.stringify(teach) : '' },
       ].concat(versions.rowsFor(uid, 'o1', mode === 'template' ? first.versions : []));
       followupSteps.STEPS.forEach((t, i) => {
         const f = fus[i];
@@ -267,6 +281,53 @@ module.exports = (ctx) => {
         to: { name: [lead.contact.first_name, lead.contact.last_name].filter(Boolean).join(' '), company: (lead.job.company && lead.job.company.name) || '', email: lead.contact.email },
         example: lead.example, missing,
       });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // "Show me what a lead gets" in AI mode (R-259): the AI writes the first email and follow-up 1 for one real lead of the person's,
+  // with the answers ON SCREEN (not yet saved), the same writer and checker the send uses. No AI today, or a draft the checker
+  // rejected: said plainly, and the backup is what that lead would get. A few tries an hour per person — each one is two AI calls.
+  const TEST_LIMIT = 6, TEST_WINDOW_MS = 60 * 60 * 1000, testLog = new Map();
+  async function orgName(req) {
+    try { const { data } = await supabase.from('organizations').select('name').eq('id', req.orgId).maybeSingle(); return (data && data.name) || ''; }
+    catch (_) { return ''; }
+  }
+  router.post('/my-setup/sequence/ai-test', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
+      const uid = req.user.id, b = req.body || {};
+      const teach = aiTeach.normalize(b.teach);
+      const why = aiTeach.problem(teach);
+      if (why) return res.status(400).json({ error: why });
+      const lead = await sampleLead(req);
+      const to = { name: [lead.contact.first_name, lead.contact.last_name].filter(Boolean).join(' '), company: (lead.job.company && lead.job.company.name) || '', email: lead.contact.email };
+      const posting = engineDraft.postingOf(lead.job);
+      const base = { to, example: lead.example, read: posting.slice(0, 4000) };
+      const avail = await aiProvider.availability(supabase, { feature: 'sequence_test', orgId: req.orgId }).catch(() => ({ available: false, reason: 'not_configured' }));
+      if (!avail.available) return res.json(Object.assign(base, { ai: false, reason: avail.reason }));
+      const now = Date.now(), log = (testLog.get(uid) || []).filter((t) => now - t < TEST_WINDOW_MS);
+      if (log.length >= TEST_LIMIT) return res.status(429).json({ error: `That is ${TEST_LIMIT} tests this hour — try again a little later.` });
+      testLog.set(uid, log.concat(now));
+      const style = await aiStyle.effectiveFor(supabase, { userId: uid, orgId: req.orgId }).catch(() => '');
+      const boxes = await myMailboxes(uid);
+      const companyName = (await myCompany(boxes)) || (await orgName(req)) || outreachGen.DEFAULT_COMPANY;
+      const input = engineDraft.engineInput({ job: lead.job, contact: lead.contact, sender: { name: req.user.name || 'You', email: req.user.email || '' } });
+      const complete = (system, prompt) => aiProvider.complete(supabase, { system, prompt, maxTokens: 800, orgId: req.orgId, feature: 'sequence_test' });
+      const first = await engineDraft.draftFirstEmail({
+        gen: outreachGen, input, companyName, omitSignOff: true,
+        complete: (system, prompt) => complete(system + aiStyle.styleBlock(style) + aiTeach.firstBlock(teach), prompt),
+      });
+      if (!first.body) return res.json(Object.assign(base, { ai: true, written: false, reason: first.skipped, violations: first.violations || [] }));
+      const unsender = (t) => String(t || '').split('{{senderemail}}').join(req.user.email || '').split('{{sender}}').join(req.user.name || 'You');
+      const out = Object.assign(base, { ai: true, written: true, subject: unsender(first.subject), body: unsender(first.body) });
+      if (aiTeach.followupFor(teach, 1)) {
+        const fu = await aiTeach.writeFollowup({
+          gen: outreachGen, teach, step: 1, input, firstEmail: { subject: out.subject, body: out.body }, omitSignOff: true,
+          complete: (system, prompt) => complete(system + aiStyle.styleBlock(style), prompt),
+        });
+        out.followup = fu.body ? { written: true, body: fu.body } : { written: false, reason: fu.skipped };
+      }
+      res.json(out);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

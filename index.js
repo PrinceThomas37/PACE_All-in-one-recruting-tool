@@ -85,6 +85,7 @@ const leadDistribution = require('./services/lead-distribution');
 const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
 const sequenceVersions = require('./services/sequence-versions');
+const aiTeach = require('./services/ai-teach');
 const senderCompany = require('./services/sender-company');
 const followupThread = require('./services/followup-thread');
 const followupSteps = require('./services/followup-steps');
@@ -1857,44 +1858,59 @@ async function orgNameFor(orgId) {
   return name;
 }
 
+// Everything the send-time writers need about one email: the lead, who signs it, and how its sender wants the AI to write
+// (their style note, D-0082, and their answers on the sequence screen, R-259). Each part that cannot be read is "none".
+async function aiWriterContext(email, sendingEmail) {
+  const [jobRes, contactRes, companyName] = await Promise.all([
+    supabase.from('jobs').select('position,location,research,company:companies(name,location)').eq('id', email.job_id).maybeSingle(),
+    email.contact_id
+      ? supabase.from('contacts').select('first_name,designation').eq('id', email.contact_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    orgNameFor(email.org_id),
+  ]);
+  const who = senderIdentityFor(sendingEmail, email.from_email);
+  // The sending mailbox's own company and title ("sends as"), when it says them — else the organisation's name and no title, as before.
+  let sendsAs = null;
+  try {
+    if (sendingEmail && sendingEmail.id) {
+      const { data: sa } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(sendingEmail.id)).maybeSingle();
+      if (sa && sa.value) sendsAs = cleanSendsAs(JSON.parse(sa.value));
+    }
+  } catch (_) { sendsAs = null; }
+  let ownerId = email.sent_by || null;
+  try {
+    if (sendingEmail && sendingEmail.id) {
+      const { data: mb } = await supabase.from('user_emails').select('user_id').eq('id', sendingEmail.id).maybeSingle();
+      if (mb && mb.user_id) ownerId = mb.user_id;          // the mailbox's owner is the one whose name is on it
+    }
+  } catch (_) { /* keep sent_by */ }
+  let styleNote = '';
+  try { styleNote = await aiStyle.effectiveFor(supabase, { userId: ownerId, orgId: email.org_id }); } catch (_) { styleNote = ''; }
+  let teach = null;
+  try {
+    if (ownerId) {
+      const { data: tr } = await supabase.from('app_settings').select('value').eq('key', aiTeach.key(ownerId)).maybeSingle();
+      teach = tr && tr.value ? aiTeach.normalize(tr.value) : null;
+    }
+  } catch (_) { teach = null; }
+  const input = engineDraft.engineInput({
+    job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
+    sender: { name: who.displayName, email: who.emailAddress, title: sendsAs && sendsAs.title || '' },
+  });
+  return { input, who, sendsAs, companyName: (sendsAs && sendsAs.company) || companyName, styleNote, teach };
+}
+
 async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
   try {
-    const [jobRes, contactRes, companyName] = await Promise.all([
-      supabase.from('jobs').select('position,location,research,company:companies(name,location)').eq('id', email.job_id).maybeSingle(),
-      email.contact_id
-        ? supabase.from('contacts').select('first_name,designation').eq('id', email.contact_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      orgNameFor(email.org_id),
-    ]);
-    const who = senderIdentityFor(sendingEmail, email.from_email);
-    // The sending mailbox's own company and title ("sends as"), when it says them — else the organisation's name and no title, as before.
-    let sendsAs = null;
-    try {
-      if (sendingEmail && sendingEmail.id) {
-        const { data: sa } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(sendingEmail.id)).maybeSingle();
-        if (sa && sa.value) sendsAs = cleanSendsAs(JSON.parse(sa.value));
-      }
-    } catch (_) { sendsAs = null; }
-    let styleNote = '';
-    try {
-      let ownerId = email.sent_by || null;
-      if (sendingEmail && sendingEmail.id) {
-        const { data: mb } = await supabase.from('user_emails').select('user_id').eq('id', sendingEmail.id).maybeSingle();
-        if (mb && mb.user_id) ownerId = mb.user_id;          // the mailbox's owner is the one whose name is on it
-      }
-      styleNote = await aiStyle.effectiveFor(supabase, { userId: ownerId, orgId: email.org_id });
-    } catch (_) { styleNote = ''; }
-    const input = engineDraft.engineInput({
-      job: jobRes && jobRes.data, contact: contactRes && contactRes.data,
-      sender: { name: who.displayName, email: who.emailAddress, title: sendsAs && sendsAs.title || '' },
-    });
+    const c = await aiWriterContext(email, sendingEmail);
+    const input = c.input;
     const res = await engineDraft.draftFirstEmail({
-      gen: outreachGen, input, companyName: (sendsAs && sendsAs.company) || companyName,
+      gen: outreachGen, input, companyName: c.companyName,
       omitSignOff: !!String(sigTemplate || '').trim(),
-      // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js).
-      // Read once per email; a note that cannot be read is "no note", never a reason not to send.
+      // D-0082: the person whose mailbox sends this email can tell the AI how to write it (services/ai-style.js), and R-259: the
+      // answers they gave on the sequence screen (services/ai-teach.js). Read once per email; one that cannot be read is "none".
       complete: (system, prompt) => aiProvider.complete(supabase, {
-        system: system + aiStyle.styleBlock(styleNote), prompt, maxTokens: 800, orgId: email.org_id,
+        system: system + aiStyle.styleBlock(c.styleNote) + aiTeach.firstBlock(c.teach), prompt, maxTokens: 800, orgId: email.org_id,
         feature: input && input.thin_posting ? 'engine_first_email_thin' : 'engine_first_email',
       }),
     });
@@ -1911,6 +1927,43 @@ async function aiWriteFirstEmail(email, sendingEmail, sigTemplate) {
     return { ...email, ...upd };
   } catch (e) {
     console.log(`[EngineAI] template kept for ${email.to_email}: ${e.message}`);
+    return email;
+  }
+}
+
+// ── AI WRITES A FOLLOW-UP (R-259, D-0151) ───────────────────────────────
+// For a person who taught the AI this follow-up on the sequence screen: written at send time from the first email that REALLY went
+// out (AI-written or not) and the posting, held to the house checker, and stored before it is sent. Anything else — not taught, no
+// first email on record, no AI today, a rejected draft — sends the person's own backup follow-up unchanged. Never throws or blocks.
+async function aiWriteFollowup(email, sendingEmail, sigTemplate) {
+  try {
+    const step = followupSteps.stepNumber(email.followup_type);
+    const c = await aiWriterContext(email, sendingEmail);
+    if (!aiTeach.followupFor(c.teach, step)) return email;
+    const { data: firstRows } = await supabase.from('emails').select('subject,body,followup_type,sent_at')
+      .eq('job_id', email.job_id).eq('contact_id', email.contact_id).eq('status', 'sent').order('sent_at', { ascending: true }).limit(10);
+    const firstRow = (firstRows || []).find((r) => engineDraft.isFirstEmail(r));
+    // What the lead actually read: the stored text with the sender's name put back, and no html.
+    const plain = (t) => String(t || '').split('{{senderemail}}').join(c.who.emailAddress || '').split('{{sender}}').join(c.who.displayName || '')
+      .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
+    const res = await aiTeach.writeFollowup({
+      gen: outreachGen, teach: c.teach, step, input: c.input,
+      firstEmail: firstRow ? { subject: plain(firstRow.subject), body: plain(firstRow.body) } : null,
+      omitSignOff: !!String(sigTemplate || '').trim(),
+      complete: (system, prompt) => aiProvider.complete(supabase, {
+        system: system + aiStyle.styleBlock(c.styleNote), prompt, maxTokens: 500, orgId: email.org_id, feature: 'engine_followup',
+      }),
+    });
+    if (!res.body) {
+      console.log(`[EngineAI] backup follow-up kept for ${email.to_email}: ${res.skipped}${res.violations ? ' ' + res.violations.join(',') : ''}`);
+      return email;
+    }
+    const upd = { body: engineDraft.deferSender(res.body, c.input && c.input.sender), template_variant: 'ai' };
+    const { error } = await supabase.from('emails').update(upd).eq('id', email.id);
+    if (error) return email;
+    return { ...email, ...upd };
+  } catch (e) {
+    console.log(`[EngineAI] backup follow-up kept for ${email.to_email}: ${e.message}`);
     return email;
   }
 }
@@ -1996,7 +2049,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   ]);
   // Checked once per run: the company switch, whether any AI provider is set up,
   // and each person's own "same as the company / on for me / off" (D-0117).
-  // Follow-ups are not in this choice — shouldWriteFirst requires a first email.
+  // The same choice gates a follow-up the person TAUGHT the AI (R-259, aiWriteFollowup); an untaught follow-up is never AI-written.
   let companyAiFirst = false, aiReady = false;
   try {
     companyAiFirst = Number(await settingsConfig.getSetting(supabase, 'engine_ai_first_email', runOrg)) === 1;
@@ -2004,7 +2057,7 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
   } catch (_) { companyAiFirst = false; aiReady = false; }
   let aiChoiceMap = {};
   try {
-    const choiceKeys = [aiFirstChoice.personKey(userId), wordingScope.scopeKey(userId)]
+    const choiceKeys = [aiFirstChoice.personKey(userId), wordingScope.scopeKey(userId), aiTeach.key(userId)]
       .concat(mailboxIds.map(id => aiFirstChoice.mailboxKey(id)));
     (await loadSettingsByKeys(choiceKeys)).forEach(r => { aiChoiceMap[r.key] = r.value; });
   } catch (_) { aiChoiceMap = {}; }
@@ -2206,6 +2259,13 @@ async function processPendingEmailSends(userId, pendingEmails, opts = {}) {
         isFirst: engineDraft.isFirstEmail(email), alreadyAi: email.template_variant === 'ai',
       })) {
         email = await aiWriteFirstEmail(email, sendingEmail, sigTemplate);
+      } else if (aiReady && isFollowup && email.template_variant !== 'ai'
+        && aiTeach.followupFor(aiChoiceMap[aiTeach.key(userId)], followupSteps.stepNumber(email.followup_type)) && aiFirstChoice.allows({
+        companyOn: companyAiFirst,
+        choice: aiFirstChoice.resolveChoice(aiChoiceMap, { userId, mailboxId: userEmailId, each: wordingScope.isEach(aiChoiceMap, userId) }),
+      })) {
+        // R-259: a follow-up the sender taught the AI is written for this lead; untaught, it is their own follow-up as before.
+        email = await aiWriteFollowup(email, sendingEmail, sigTemplate);
       }
       // {{sendercompany}} (8 Oct): the company the SENDING email ID writes for. No company said for it = the email is held in "Didn't send"
       // with the reason, never sent with a hole in it; sent, the company is written into the stored text so history never shows the token.
