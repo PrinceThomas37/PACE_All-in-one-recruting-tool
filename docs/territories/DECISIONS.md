@@ -2142,3 +2142,7 @@ Owner, answering the full detail list and two open questions:
 ### D-0152 — Mock v5 approved as the design; pay's sentence is dropped when missing (15 Oct 2026)
 
 Owner on mock v5 (https://claude.ai/artifact/63chan7L76bJ919Z4aQehd): "this looks good". And yes: in a template, when a lead has no pay, the whole sentence holding the pay is left out. The three-screen journey (Who → Write with the "I write it" / "AI writes each one" choice → test and turn on), teaching the AI by picks and one-liners, and the backup email are the design to build. Build order not yet chosen.
+
+### D-0153 — PACE gets a new look, starting with the sequence screens (15 Oct 2026)
+
+Owner, on mock v5: "I need a better UI though, this looks very basic and old school." Offered two paths (new look for these screens only, or a new look for all of PACE, starting here and spreading over time); the owner chose **the new look becomes PACE's look**, starting with the sequence-setup screens. This retires the "PACE Retro" look (pixel fonts, cream cards, ink borders, hard shadows; `docs/design/PACE.ds`) as the target. Next step: 2–3 visual directions of the same screen for the owner to pick from, BEFORE building R-258.
