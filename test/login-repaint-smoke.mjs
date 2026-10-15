@@ -85,14 +85,20 @@ try {
   ev = await events();
   step('sign-in is one spinner then the app — nothing is painted twice', JSON.stringify(ev.filter((x, i) => x !== ev[i - 1])) === JSON.stringify(ev) && ev.filter(x => x === 'SPINNER').length === 1 && !ev.includes('LOGIN'), JSON.stringify(ev));
 
-  console.log('\nA late "your session expired" from the OLD session');
-  // sign out again, sign in as the new person quickly, while an old-token call is still to be answered with 401
+  console.log('\nA late "your session expired" from the OLD session, after the next person has signed in');
+  // a second duplicated tab: the old session has a call in flight that the server will answer with 401 after the new person is in
+  const page2 = await ctx.newPage();
+  await page2.addInitScript((u) => { if (!sessionStorage.getItem('__seeded')) { sessionStorage.setItem('__seeded', '1'); sessionStorage.setItem('fg_token', 'tok-old'); sessionStorage.setItem('fg_user', JSON.stringify(u)); } }, USERS.old);
   mode = 'late-answers';
-  await page.evaluate(() => { STATE.token = 'tok-old'; });                 // act as the old session for one call
-  await page.evaluate(() => { apiGet('/emails?status=sent').catch(() => {}); });
-  await page.evaluate(() => { STATE.token = 'tok-new'; });                 // …then the new person's session is what the tab holds
-  await page.waitForTimeout(2800);
-  step('the old 401 does not sign the new person out', await page.evaluate(() => !!STATE.user && STATE.user.name === 'New Manager' && !!STATE.token));
+  await page2.goto('http://127.0.0.1:' + PORT + '/');
+  await page2.waitForFunction(() => window.STATE && STATE.user && !STATE.loading && document.getElementById('sidebar'), null, { timeout: 15000 });
+  await page2.evaluate(() => { apiGet('/emails?status=sent').catch(() => {}); });      // old token, answered 401 in ~2.2 s
+  await page2.evaluate(() => window.signOut());
+  await page2.waitForSelector('#login-email');
+  await page2.fill('#login-email', 'new.manager@x.test'); await page2.fill('#login-pass', 'secret-pass');
+  await page2.evaluate(() => window.doLogin());
+  await page2.waitForTimeout(3600);                                                      // the old 401 lands in here
+  step('the old session\'s late 401 does not sign the new person out', await page2.evaluate(() => !!STATE.user && STATE.user.name === 'New Manager' && !!STATE.token && !!document.getElementById('sidebar')));
 } catch (e) { step('the probe ran to the end', false, String(e && e.message || e)); }
 finally { if (browser) await browser.close(); server.close(); }
 const failed = results.filter(x => !x).length;

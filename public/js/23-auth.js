@@ -16,6 +16,7 @@ window.doLogin=function(){
   var em=(document.getElementById('login-email')||{}).value||'';
   var pw=(document.getElementById('login-pass')||{}).value||'';
   if(!em||!pw){var e=document.getElementById('login-err');if(e){e.textContent='Enter email and password';e.style.display='block';}return;}
+  endSessionCalls();
   STATE.token=null;STATE.user=null;STATE.loginNotice=null;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');
   STATE.loading=true;render();
@@ -84,6 +85,7 @@ window.doLogout=function(){
   // Drop the cached theme with the session. It is the previous PERSON's choice,
   // and the next one to sign in at this desk gets their own (D-0022).
   try{ localStorage.removeItem('pace-theme'); }catch(e){}
+  endSessionCalls();
   if(window.stopBackgroundPoll)stopBackgroundPoll();
   if(window.stopProgressPoll)stopProgressPoll();
   STATE.loading=false;STATE.user=null;STATE.token=null;STATE.loginNotice=null;
