@@ -130,10 +130,10 @@
       '</div></div>';
   }
   function stepActions(x){
+    // R-258 (D-0148): the starter (another company's voice) is gone from here; a person writes their own, with AI help if stuck.
     if (x.id==='sequence') return x.done
-      ? '<button class="btn btn-sm btn-outline" onclick="mySetupOpenSequence()">Open it</button>'
-      : '<span class="fd-row"><button class="btn btn-sm btn-primary" onclick="mySetupStarter()" title="The standard wording with your company\'s name in it, saved as YOUR sequence — edit it afterwards">Use the starter</button>'+
-        '<button class="btn btn-sm btn-outline" onclick="mySetupOpenSequence()">Write my own</button></span>';
+      ? '<button class="btn btn-sm btn-outline" onclick="openSequenceSetup()">Open it</button>'
+      : '<button class="btn btn-sm btn-primary" onclick="openSequenceSetup()">Write my sequence</button>';
     if (x.id==='mailbox' && !x.done) return '<button class="btn btn-sm btn-primary" onclick="mySetupAdd(\'Microsoft\')">Add a mailbox</button>';
     return '';
   }

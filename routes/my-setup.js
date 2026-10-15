@@ -4,6 +4,10 @@
 //   POST /my-setup/sync               put / close the person's setup tasks (mailbox, sequence) — idempotent
 //   GET  /my-setup/send-window        the organisation's hours, the person's choice, what applies
 //   PUT  /my-setup/send-window        narrow it (days, start, stop) or { reset:true }
+//   GET  /my-setup/sequence           the person's sequence as the "Write your first sequence" screen edits it (R-258)
+//   PUT  /my-setup/sequence           save it: how the first email is written, the emails, their versions, the follow-ups
+//   POST /my-setup/sequence/preview   the first email exactly as a real lead of theirs would get it (R-256)
+//   POST /my-setup/sequence/draft     AI help: draft from one sentence, or write a version keeping every detail
 // Everything is the CALLER's own: no id in any path, so nobody can reach another person's setup through here.
 // The rules are in services/sequence-starter.js, services/setup-tasks.js, services/send-window.js (all pure).
 // ============================================================================
@@ -14,6 +18,13 @@ const sendWindow = require('../services/send-window');
 const { sendsAsKey, cleanSendsAs } = require('../email-signature');
 const { mailboxConnections } = require('../mailbox-health');
 const wording = require('../services/wording-scope');
+const followupSteps = require('../services/followup-steps');
+const versions = require('../services/sequence-versions');
+const sequenceDraft = require('../services/sequence-draft');
+const aiProvider = require('../services/ai-provider');
+const aiFirst = require('../services/ai-first-choice');
+const settingsConfig = require('../config/settings');
+const { buildEmailVars, fillTemplate, unresolvedVars, DEFER_SENDER } = require('../email-vars');
 
 module.exports = (ctx) => {
   const router = express.Router();
@@ -129,6 +140,150 @@ module.exports = (ctx) => {
       ], { onConflict: 'key' });
       if (error) throw error;
       res.json(await windowAnswer(uid));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // ── the sequence screen (R-258, D-0150 … D-0154) ───────────────────────
+  // The SAME stores the engine already reads: u_<id>_tmpl_<slot>_subject/body, u_<id>_fu_count, u_<id>_fu<N>_day, and the person's
+  // AI first-email choice (u_<id>_ai_first): "I write it" = off, "AI writes each one" = on. Versions live beside each email
+  // (services/sequence-versions.js) and the engine picks one at random per lead.
+  const SLOTS = ['o1'].concat(followupSteps.STEPS);
+  const seqKeys = (uid) => {
+    const k = [`u_${uid}_fu_count`, aiFirst.personKey(uid)];
+    SLOTS.forEach((sl) => { k.push(`u_${uid}_tmpl_${sl}_subject`, `u_${uid}_tmpl_${sl}_body`); });
+    followupSteps.STEPS.forEach((t) => k.push(`u_${uid}_${t}_day`));
+    return k.concat(versions.neededKeys([uid]));
+  };
+  async function followupMax(req) {
+    try { const v = Number(await settingsConfig.getSetting(supabase, 'followup_max', req.orgId || undefined)); return Number.isInteger(v) && v >= 0 ? Math.min(v, followupSteps.MAX) : followupSteps.MAX; }
+    catch (_) { return followupSteps.MAX; }
+  }
+  router.get('/my-setup/sequence', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
+      const uid = req.user.id;
+      const { data } = await supabase.from('app_settings').select('key,value').in('key', seqKeys(uid));
+      const m = {}; (data || []).forEach((r) => { m[r.key] = r.value; });
+      const own = (sl, part) => String(m[`u_${uid}_tmpl_${sl}_${part}`] || '');
+      const max = await followupMax(req);
+      const count = Math.min(followupSteps.countFor(m, uid), max);
+      const mode = aiFirst.normalize(m[aiFirst.personKey(uid)]) === 'on' ? 'ai' : (sequenceStarter.hasOwnSequence(m, uid) ? 'template' : null);
+      res.json({
+        mode,
+        first: { subject: own('o1', 'subject'), body: own('o1', 'body'), versions: versions.extraVersions(m, uid, 'o1').map((v) => ({ subject: v.subject, body: v.body })) },
+        followups: followupSteps.STEPS.slice(0, count).map((t, i) => ({
+          day: followupSteps.dayFor(m, uid, i + 1), subject: own(t, 'subject'), body: own(t, 'body'),
+          versions: versions.extraVersions(m, uid, t).map((v) => ({ subject: v.subject, body: v.body })),
+        })),
+        followup_max: max,
+        // The lead the screen's live preview fills in: one of the person's own, else an example (said so on screen).
+        sample: await (async () => {
+          const lead = await sampleLead(req);
+          const vars = buildEmailVars({ job: lead.job, contact: lead.contact, senderDisplayName: DEFER_SENDER });
+          Object.keys(vars).forEach((k) => { if (vars[k] === null) delete vars[k]; });
+          return { vars, example: lead.example, name: [lead.contact.first_name, lead.contact.last_name].filter(Boolean).join(' '), company: (lead.job.company && lead.job.company.name) || '', email: lead.contact.email };
+        })(),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  router.put('/my-setup/sequence', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
+      const uid = req.user.id, b = req.body || {};
+      const mode = b.mode === 'ai' ? 'ai' : (b.mode === 'template' ? 'template' : null);
+      if (!mode) return res.status(400).json({ error: 'Choose how your first email is written.' });
+      const clean = (x, n) => String(x == null ? '' : x).replace(/\r/g, '').slice(0, n);
+      const first = b.first || {};
+      const fSubj = clean(first.subject, 300).trim(), fBody = clean(first.body, 6000).trim();
+      if (!fSubj || fBody.length < 20) return res.status(400).json({ error: mode === 'ai' ? 'Write your backup email first: a subject and a few lines.' : 'Write your first email: a subject and a few lines.' });
+      const fus = Array.isArray(b.followups) ? b.followups : [];
+      const max = await followupMax(req);
+      if (fus.length > max) return res.status(400).json({ error: `Your company allows up to ${max} follow-up${max === 1 ? '' : 's'}.` });
+      for (let i = 0; i < fus.length; i++) {
+        const d = Number(fus[i] && fus[i].day);
+        if (!Number.isInteger(d) || d < 1 || d > 90) return res.status(400).json({ error: `Follow-up ${i + 1}: pick a number of days between 1 and 90.` });
+        if (i > 0 && d <= Number(fus[i - 1].day)) return res.status(400).json({ error: `Follow-up ${i + 1} must go out after follow-up ${i}.` });
+        if (clean(fus[i].body, 6000).trim().length < 5) return res.status(400).json({ error: `Follow-up ${i + 1} has no text yet.` });
+      }
+      // Every detail in the text must be one PACE can fill — a check, not a hope (unknown {{names}} would ship raw).
+      const texts = [fSubj, fBody].concat(...(first.versions || []).map((v) => [v.subject, v.body]), ...fus.map((f) => [f.subject, f.body].concat(...(f.versions || []).map((v) => [v.subject, v.body]))));
+      const unknown = [...new Set([].concat(...texts.map((t) => unresolvedVars(String(t || '')).filter((k) => !sequenceDraft.ALLOWED_VARS.has(k)))))];
+      if (unknown.length) return res.status(400).json({ error: 'PACE cannot fill ' + unknown.map((k) => '{{' + k + '}}').join(', ') + '. Use "Add a detail" instead.' });
+
+      const now = new Date();
+      const rows = [
+        { key: `u_${uid}_tmpl_o1_subject`, value: fSubj }, { key: `u_${uid}_tmpl_o1_body`, value: fBody },
+        { key: `u_${uid}_fu_count`, value: String(fus.length) },
+        { key: aiFirst.personKey(uid), value: mode === 'ai' ? 'on' : 'off' },
+        // The person's own words (and versions) are what goes out: PACE's stock rotation, if it was on, is turned off.
+        { key: `u_${uid}_random_template_mode`, value: 'false' },
+      ].concat(versions.rowsFor(uid, 'o1', mode === 'template' ? first.versions : []));
+      followupSteps.STEPS.forEach((t, i) => {
+        const f = fus[i];
+        if (!f) { rows.push(...versions.rowsFor(uid, t, [])); return; }        // a follow-up taken away keeps its wording, loses its versions
+        rows.push({ key: `u_${uid}_${t}_day`, value: String(Number(f.day)) },
+          { key: `u_${uid}_tmpl_${t}_subject`, value: clean(f.subject, 300).trim() || ('Re: ' + fSubj) },
+          { key: `u_${uid}_tmpl_${t}_body`, value: clean(f.body, 6000).trim() },
+          ...versions.rowsFor(uid, t, f.versions));
+      });
+      const { error } = await supabase.from('app_settings').upsert(rows.map((r) => Object.assign(r, { updated_at: now })), { onConflict: 'key' });
+      if (error) throw error;
+      res.json({ ok: true, mode, followups: fus.length });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // One of the person's own leads with a contact, filled the way the engine fills a first email. None yet: an example lead, said so.
+  const EXAMPLE = { job: { position: 'Senior Java Developer', location: 'Dallas, TX', industry: 'Healthcare', salary_range: '$140k to $160k',
+    company: { name: 'Acme Health', industry: 'Healthcare' }, research: { requirements: { skills: ['Java', 'Spring Boot', 'HL7'] } } },
+    contact: { first_name: 'Dana', last_name: 'Lee', email: 'dana@acmehealth.example' } };
+  async function sampleLead(req) {
+    try {
+      const { data } = await db.forRequest(req).from('jobs').select(ctx.JOB_SELECT).eq('assigned_to_bd', req.user.id).order('created_at', { ascending: false }).limit(25);
+      for (const job of data || []) {
+        const c = (job.contacts || []).find((x) => x && x.first_name && x.email);
+        if (c) return { job, contact: c, example: false };
+      }
+    } catch (_) { /* no lead to show is not a failure: the example is used */ }
+    return Object.assign({ example: true }, EXAMPLE);
+  }
+  router.post('/my-setup/sequence/preview', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
+      const b = req.body || {}, uid = req.user.id;
+      const lead = await sampleLead(req);
+      const vars = buildEmailVars({ job: lead.job, contact: lead.contact, senderDisplayName: DEFER_SENDER });
+      // The engine's own choice: version 1 or one of the versions, at random (services/sequence-versions.js).
+      const settings = {};
+      (Array.isArray(b.versions) ? b.versions : []).slice(0, 2).forEach((v, i) => {
+        settings[versions.key(uid, 'o1', i + 2, 'subject')] = String((v && v.subject) || '');
+        settings[versions.key(uid, 'o1', i + 2, 'body')] = String((v && v.body) || '');
+      });
+      const pick = versions.pick(settings, uid, 'o1', { subject: String(b.subject || ''), body: String(b.body || '') }, Number.isFinite(Number(b.rand)) ? Number(b.rand) : Math.random());
+      const subject = fillTemplate(pick.subject, vars), body = fillTemplate(pick.body, vars);
+      const missing = unresolvedVars(subject + '\n' + body);
+      res.json({
+        subject, body, version: Number(pick.id.replace('own_v', '')), versions: 1 + versions.extraVersions(settings, uid, 'o1').length,
+        to: { name: [lead.contact.first_name, lead.contact.last_name].filter(Boolean).join(' '), company: (lead.job.company && lead.job.company.name) || '', email: lead.contact.email },
+        example: lead.example, missing,
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  // AI help, held to the same checker as the sequence builder's (services/sequence-draft.js): "draft" from one sentence, or a
+  // "variant" that keeps every {{detail}}. No AI, nothing left today, or a broken draft: the person's text or a starter, said so.
+  router.post('/my-setup/sequence/draft', auth, async (req, res) => {
+    try {
+      if (!hasRole(req, ...SEQUENCE_ROLES)) return res.status(403).json({ error: 'Only managers and admins write an outreach sequence.' });
+      const b = req.body || {};
+      const mode = b.mode === 'variant' ? 'variant' : 'draft';
+      const result = await sequenceDraft.draft({
+        prompt: String(b.prompt || '').trim().slice(0, 600),
+        purpose: sequenceDraft.purposeOf(b.purpose), mode,
+        subject: String(b.subject || '').slice(0, 300), body: String(b.body || '').slice(0, 8000),
+        complete: (system, user) => aiProvider.complete(supabase, { feature: 'sequence_draft', orgId: req.orgId, maxTokens: 1100, system, prompt: user }),
+      });
+      res.json(result);
     } catch (err) { res.status(500).json({ error: err.message }); }
   });
 

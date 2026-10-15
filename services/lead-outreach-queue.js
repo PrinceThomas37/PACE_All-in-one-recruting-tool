@@ -10,6 +10,7 @@ const { emailSyntaxValid } = require('../email-validation');
 const { buildEmailVars, fillTemplate, resolveTemplate, DEFER_SENDER, buildRotatingTemplateDeck, isRandomTemplateMode, ensureJobsListed } = require('../email-vars');
 const sequenceStarter = require('./sequence-starter');
 const wording = require('./wording-scope');
+const versions = require('./sequence-versions');
 
 function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap, tmplSettings, alreadyOutreached) {
   const tasksByBd = {};
@@ -69,12 +70,18 @@ function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap
         const ownWording = wording.mailboxHasOwnSequence(tmplSettings, bd.id, mbId);
         const rIdx = rotating.indexOf(task);
         const variant = deck && rIdx >= 0 ? deck[rIdx] : null;
-        const subjTmpl = variant
+        let subjTmpl = variant
           ? variant.o1.subject
           : resolveTemplate(ownWording ? wording.mailboxOwn(tmplSettings, bd.id, mbId, 'tmpl_o1_subject') : tmplSettings[`u_${bd.id}_tmpl_o1_subject`], 'o1_subject');
-        const bodyTmpl = variant
+        let bodyTmpl = variant
           ? variant.o1.body
           : resolveTemplate(ownWording ? wording.mailboxOwn(tmplSettings, bd.id, mbId, 'tmpl_o1_body') : tmplSettings[`u_${bd.id}_tmpl_o1_body`], 'o1_body');
+        // R-258: the person's own first email may have versions (written once, with AI's help); each lead gets one at random.
+        let versionId = null;
+        if (!variant && !ownWording) {
+          const v = versions.pick(tmplSettings, bd.id, 'o1', { subject: subjTmpl, body: bodyTmpl }, Math.random());
+          if (v.id !== 'own_v1') { subjTmpl = v.subject; bodyTmpl = v.body; versionId = v.id; }
+        }
         // Leave {{sender}} in the queued text. Which mailbox sends this row is
         // decided at SEND time (the lead's mailbox can change, or a sequence can
         // rotate it), and the signature is filled from that same mailbox — so
@@ -99,6 +106,7 @@ function buildPendingEmailsFromJobs(jobs, callerUserId, bdMap, bdPrimaryEmailMap
           status: 'pending'
         };
         if (variant?.id) row.template_variant = variant.id;
+        else if (versionId) row.template_variant = versionId;
         emailsToInsert.push(row);
       } catch (e) {
         console.error(`[GenerateEmails] contact error (${contact.email}):`, e.message);

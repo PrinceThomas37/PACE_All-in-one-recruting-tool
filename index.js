@@ -84,6 +84,7 @@ const aiStyle = require('./services/ai-style');
 const leadDistribution = require('./services/lead-distribution');
 const leadClaim = require('./services/lead-claim');
 const wordingScope = require('./services/wording-scope');
+const sequenceVersions = require('./services/sequence-versions');
 const senderCompany = require('./services/sender-company');
 const followupThread = require('./services/followup-thread');
 const followupSteps = require('./services/followup-steps');
@@ -1090,7 +1091,7 @@ async function generateEmailsForJobs(job_ids, callerUserId) {
   const wordingMailboxIds = [...new Set([...(bdEmailRows || []).map(e => e.id), ...jobs.map(j => j.sending_email_id)])].filter(Boolean);
   const tmplKeys = allBdIds.flatMap(id => [
     `u_${id}_tmpl_o1_subject`, `u_${id}_tmpl_o1_body`, `u_${id}_random_template_mode`
-  ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds));
+  ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds), sequenceVersions.neededKeys(allBdIds, ['o1']));
   const tmplRows = await loadSettingsByKeys(tmplKeys);
   const tmplSettings = {};
   (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
@@ -1187,7 +1188,7 @@ app.post('/emails/generate', auth, async (req, res) => {
     const wordingMailboxIds = [...new Set([...(bdEmailRows || []).map(e => e.id), ...jobs.map(j => j.sending_email_id)])].filter(Boolean);
     const tmplKeys = allBdIds.flatMap(id => [
       `u_${id}_tmpl_o1_subject`, `u_${id}_tmpl_o1_body`, `u_${id}_random_template_mode`
-    ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds));
+    ]).concat(wordingScope.neededKeys(allBdIds, wordingMailboxIds), sequenceVersions.neededKeys(allBdIds, ['o1']));
     const tmplRows = await loadSettingsByKeys(tmplKeys);
     const tmplSettings = {};
     (tmplRows || []).forEach(r => { tmplSettings[r.key] = r.value; });
@@ -2657,6 +2658,11 @@ async function runFollowupEngine() {
         } else {
           subjTmpl = fuText.subject;
           bodyTmpl = fuText.body;
+          // R-258: versions of the person's own follow-up (not of an email ID's own wording); each lead gets one at random.
+          if (!fuText.own) {
+            const v = sequenceVersions.pick(settings, bdId, fuType, { subject: subjTmpl, body: bodyTmpl }, Math.random());
+            if (v.id !== 'own_v1') { subjTmpl = v.subject; bodyTmpl = v.body; variantId = v.id; }
+          }
         }
         // Follow-ups 3–5 have no stock wording: one the person never wrote is skipped (and stays due), never queued as an empty email.
         if (!String(subjTmpl || '').trim() || !String(bodyTmpl || '').trim()) { log.skipped_no_text = (log.skipped_no_text || 0) + 1; continue; }

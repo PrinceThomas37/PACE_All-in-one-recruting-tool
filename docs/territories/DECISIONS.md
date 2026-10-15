@@ -2146,3 +2146,7 @@ Owner on mock v5 (https://claude.ai/artifact/63chan7L76bJ919Z4aQehd): "this look
 ### D-0153 — PACE gets a new look, starting with the sequence screens (15 Oct 2026)
 
 Owner, on mock v5: "I need a better UI though, this looks very basic and old school." Offered two paths (new look for these screens only, or a new look for all of PACE, starting here and spreading over time); the owner chose **the new look becomes PACE's look**, starting with the sequence-setup screens. This retires the "PACE Retro" look (pixel fonts, cream cards, ink borders, hard shadows; `docs/design/PACE.ds`) as the target. Next step: 2–3 visual directions of the same screen for the owner to pick from, BEFORE building R-258.
+
+### D-0154 — The look is "PACE's look, refined"; start building (15 Oct 2026)
+
+Owner, on four directions drawn on PACE's real layout: **direction D ("today's look, refined") is the right look**: keep the sky header, pixel PACE logo, pixel-font labels and the yellow action button, with thinner borders, smaller shadows and softer corners. "The button UI and font has to match a bit" (closer to today's buttons and fonts) — "that's the right direction". The other three (Calm, Warm, Bold) are scrapped. This narrows D-0153: not a new look, the current one refined. Then: "now start building" (R-258, the "I write it" path, in this look).

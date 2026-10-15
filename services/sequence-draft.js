@@ -38,7 +38,7 @@ const { VAR_SYNONYMS } = require('../email-vars');
 
 // Every merge name PACE can fill (any synonym of a known fact) plus the two the
 // built-in templates already use.
-const ALLOWED_VARS = new Set([].concat(...VAR_SYNONYMS, ['job_resp', 'company_service']));
+const ALLOWED_VARS = new Set([].concat(...VAR_SYNONYMS, ['job_resp', 'company_service', 'city', 'pay']));   // city + pay: the My Setup detail menu (R-258)
 // What the builder offers as one-click chips, with the plain name the person sees.
 const CHIPS = [
   { v: '{{fn}}', label: 'First name' },

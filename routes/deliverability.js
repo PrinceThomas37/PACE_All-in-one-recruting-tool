@@ -36,7 +36,7 @@ const isBadId = (err) => !!err && err.code === '22P02';
 
 // Human-readable label for a template_variant id, shown next to the raw id
 // in the reply-rate table so PDs/BDs see a real name instead of "v1".
-const VARIANT_LABELS = { v1: 'Style 1', v2: 'Style 2', v3: 'Style 3', v4: 'Style 4', v5: 'Style 5', default: 'Default template' };
+const VARIANT_LABELS = { v1: 'Style 1', v2: 'Style 2', v3: 'Style 3', v4: 'Style 4', v5: 'Style 5', own_v1: 'Your email', own_v2: 'Your email, version 2', own_v3: 'Your email, version 3', ai: 'Written by AI', default: 'Default template' };
 
 module.exports = (ctx) => {
   const router = express.Router();
