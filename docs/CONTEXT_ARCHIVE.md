@@ -6955,3 +6955,9 @@ The owner said "okay merge it", "change the data base too", answered the four of
 - **Bugs found by tests before the owner saw them:** a repaint read stale editors over an AI answer (R-258); a source check in `ai-style-smoke` broke on the R-259 refactor (only the full run caught it). **Found by the owner's process, not tests:** Render silently did not deploy #340.
 - **Still unproven:** a real AI-written first email or follow-up from the live app (no funded key in the sandbox). The owner's first live test is the proof.
 - **Next session starts with:** the owner's reaction to the live screen and a screenshot of a real AI email; R-260, R-255 wait on the owner's go.
+
+## 2026-10-15 (Session 48) — a new user could not sign in; admins can now set a password (R-262)
+- **Owner report:** "i created a new user, but i am not able to login." **Cause (read from code, not guessed):** the Add-user window had no password box and `POST /users` therefore made a random 24-character password nobody knew; the window said "no password is created" and sent people to Microsoft / Google, which only admit listed test users (Google testing mode) or the one configured tenant (Microsoft). No admin reset existed anywhere.
+- **Fix:** Add-user has an optional "Sign-in password" (min 8); the user's profile has "Sign-in password → Set password" (`PUT /users/:id/password`, admin only, same organisation only — another company's id is a 404, hash never returned). `routes/auth.js`, `public/js/12-manager-users.js`, `public/js/09-page-workflows.js`. No migration.
+- **Not built (needs a migration, owner's call):** forcing a change of password at first sign-in; a password-reset email. Said plainly to the owner.
+- **Test:** `test/user-password-smoke.mjs` (16; removing the admin check makes 2 fail). The fake db projects rows to the route's select, as CLAUDE.md requires.
