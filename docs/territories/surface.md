@@ -1415,3 +1415,6 @@ No screen code changed; the new numbers appear in System Settings automatically 
 
 ## 2026-10-15 (Session 48) — Add user / profile password (R-262)
 `12-manager-users.js`: optional `#u-pw` in the Add-user window (text no longer says "no password is created"); `adminSetPassword(userId)`. `09-page-workflows.js`: a "Sign-in password" card (`#ud-pw`) on the user detail page.
+
+## 2026-10-15 (Session 48, later) — login repaints (R-263)
+`render()` order is now: loading (spinner, skipped when `#app-loading` already stands) → no user (login; skipped when the html equals `window._loginHtml` and `#login-email` is in the DOM) → the app. `apiFetch` never answers a call whose token is no longer the tab's. Never write the login screen twice, and never let an old session's answer touch a new one. Test `login-repaint-smoke`.

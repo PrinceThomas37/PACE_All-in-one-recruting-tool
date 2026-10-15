@@ -1302,3 +1302,6 @@ New: `pending-delete-smoke` (12). Extended: `finder-page-smoke` (people search i
 
 ## 2026-10-15 (Session 48) — `user-password-smoke` (R-262)
 New `test/user-password-smoke.mjs` (16 checks): add user with / without a password and real sign-in through `POST /auth/login`, admin-only `PUT /users/:id/password`, short password refused, another company's user is a 404, hash never in an answer. Its fake db projects rows to the route's select (a first draft that did not leaked `password_hash` and gave a false failure). Mutation checked: removing the admin check makes 2 checks fail. Full-suite result recorded in the archive once the run finishes.
+
+## 2026-10-15 (Session 48, later) — `login-repaint-smoke` (R-263)
+Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repaints (LOGIN/SPINNER/SHELL). A "duplicated tab" is seeded through `addInitScript` into sessionStorage. Mutation-checked: with the four source files reverted, 6 of 7 checks fail (7 login repaints).

@@ -13,7 +13,12 @@ var API_URL=(function(){var h=window.location.hostname;if(h===''||h==='localhost
 // and only when we actually HAD a session to lose (the login call itself has none).
 var SESSION_EXPIRED_MSG='Your session expired — please sign in again.';
 function isExpiredAnswer(status,msg){return status===401&&/^(Invalid token|No token|Your session is out of date)/i.test(String(msg||''));}
-function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().then(function(d){if(!r.ok){if(hadSession&&isExpiredAnswer(r.status,d&&d.error)&&window.sessionExpired){window.sessionExpired();var x=new Error(SESSION_EXPIRED_MSG);x.status=401;x.expired=true;x.body=d;throw x;}var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
+function apiFetch(method,path,body){var headers={'Content-Type':'application/json'};if(STATE.token)headers['Authorization']='Bearer '+STATE.token;var hadSession=!!STATE.token,sentToken=STATE.token;return fetch(API_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
+  // AN ANSWER FOR A SESSION THAT IS OVER IS NEVER DELIVERED. Somebody signed out (or a different person signed in) while this
+  // call was in flight: its .then() would repaint the login screen over what the next person is typing, write the LAST person's
+  // data into the new session, and a late 401 would sign the NEW person out. The call simply never answers.
+  if(hadSession&&STATE.token!==sentToken)return new Promise(function(){});
+  return r.json().then(function(d){if(!r.ok){if(hadSession&&isExpiredAnswer(r.status,d&&d.error)&&window.sessionExpired){window.sessionExpired();var x=new Error(SESSION_EXPIRED_MSG);x.status=401;x.expired=true;x.body=d;throw x;}var e=new Error(d.error||('HTTP '+r.status));e.status=r.status;e.body=d;throw e;}return d;});});}
 function apiGet(p){return apiFetch('GET',p);}
 function apiPost(p,b){return apiFetch('POST',p,b);}
 function apiPut(p,b){return apiFetch('PUT',p,b);}

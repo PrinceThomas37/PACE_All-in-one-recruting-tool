@@ -84,7 +84,9 @@ window.doLogout=function(){
   // Drop the cached theme with the session. It is the previous PERSON's choice,
   // and the next one to sign in at this desk gets their own (D-0022).
   try{ localStorage.removeItem('pace-theme'); }catch(e){}
-  STATE.user=null;STATE.token=null;STATE.loginNotice=null;
+  if(window.stopBackgroundPoll)stopBackgroundPoll();
+  if(window.stopProgressPoll)stopProgressPoll();
+  STATE.loading=false;STATE.user=null;STATE.token=null;STATE.loginNotice=null;
   sessionStorage.removeItem('fg_token');sessionStorage.removeItem('fg_user');sessionStorage.removeItem('fg_resume');
   STATE.jobs=[];STATE.contacts=[];STATE.page='login';render();
 };

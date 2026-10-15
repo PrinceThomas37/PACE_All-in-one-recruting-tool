@@ -263,15 +263,24 @@ function paintPageContent(){
 function render(){
   var root=document.getElementById("app");
   if(!root)return;
-  if(!STATE.user){_resetShell();root.innerHTML=renderLogin();bindLogin();return;}
+  // Loading comes FIRST: pressing Log In sets loading while there is still no user, and that used to repaint the login form
+  // blank (and restart its background) for the whole wait. It shows the spinner, as it does once the person is known.
   if(STATE.loading){
+    if(root.firstElementChild&&root.firstElementChild.id==='app-loading')return;   // already showing it: rewriting only restarts the spinner
     _resetShell();
-    root.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg)">'+
+    root.innerHTML='<div id="app-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:14px;background:var(--bg)">'+
       '<div style="width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div>'+
       '<div class="fs-13_5 c-text3">Loading your data...</div>'+
       '<style>@keyframes spin{to{transform:rotate(360deg)}}</style>'+
     '</div>';
     return;
+  }
+  if(!STATE.user){
+    // A repaint that would say what the login screen already says does nothing: no typed text lost, no background restarted.
+    var _lh=renderLogin();
+    if(window._loginHtml===_lh&&root.querySelector('#login-email'))return;
+    window._loginHtml=_lh;
+    _resetShell();root.innerHTML=_lh;bindLogin();return;
   }
   // Save focus/cursor state so we can restore it after DOM rebuild
   var _ae=document.activeElement;
