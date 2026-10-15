@@ -2130,3 +2130,11 @@ Owner, answering "who writes the words at the moment an email goes out, you or t
 - The owner asked whether per-candidate AI would make the app slow or load the engine. Answer given: AI calls are waits on the AI provider in the background send queue, not work on PACE's server, so screens do not slow down; the real limits are the AI provider's speed limits and cost.
 - The owner asked for the full list of lead details to choose which go back into the "Add a detail" menu (answer pending).
 Reverses nothing; settles the open choice in R-257 (it was mine to recommend a default; the owner made it the user's choice).
+
+### D-0151 — Details in the menu, pay, teaching the AI, and what happens when AI credits run out (15 Oct 2026)
+
+Owner, answering the full detail list and two open questions:
+- **"I write it" menu adds industry and top skills** (to first name, company, job title, city). Fill rates on the live data: industry 95%, skills 91%.
+- **Pay:** if it is in the lead's details, a template can use it; if it is only in the job description, the AI can take it from there. (My design for templates: pay is marked "if known", and when a lead has no pay the whole sentence holding it is left out, never sent half-empty. Owner to confirm on the mock.)
+- **When AI credits run out mid-day, the remaining emails go out using the user's own email** (in the mock: the "backup email", required before turning AI writing on, written by the user or by AI from their answers).
+- **Teaching the AI must be by choosing options and one-liners, not by writing an email** — for the first email AND the follow-ups. Owner: "That also has to be designed." Mock v5: one line for what the email is for; tap what it may use from the job (top skills, why the role is hard to fill, pay if the job says, on-site or remote, industry); how it should end; short or a bit longer; optional pasted email for their voice; per follow-up: a gentle nudge / one more detail from the job / a last check-in, plus an optional one-line "anything it must say".
