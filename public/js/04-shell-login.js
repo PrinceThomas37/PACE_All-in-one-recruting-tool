@@ -184,7 +184,7 @@ function renderSidebar(){
   navItems=navItems.filter(function(n){ if(seen[n.id])return false; seen[n.id]=true; return true; });
 
   function navRow(n){
-    var active=(STATE.page===n.id?" active":"")+" "+GRP_CLS[n.grp];
+    var active=((STATE.page===n.id||(n.id==="mysetup"&&STATE.page==="seqsetup"))?" active":"")+" "+GRP_CLS[n.grp];
     var badge=n.badge&&n.badge>0?'<span class="nav-badge">'+n.badge+'</span>':"";
     // R-122: a pixel icon per item (9x9, drawn in the text colour). Every item
     // has its OWN — the collapsed rail is icons only (nav-icons-smoke).
@@ -263,7 +263,7 @@ function renderSidebar(){
 function renderTopbar(){
   var u=STATE.user;
   var remBadge=STATE.reminders.filter(function(r){return r.user_id===u.id&&r.status==="pending";}).length||null;
-  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Outreach Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads",mysetup:"My Setup"};
+  var pageTitles={dashboard:"Today",mailbox:"Inbox",bd_pipeline:"Candidates",myteam:"My Team",leads:"Leads",assign:"Assign Leads",bd_joborders:"Jobs",bd_myjobs:"My Jobs",bd_jodetail:"Job",bd_kanban:"Job White-board",job_board:"All Jobs",clients:"Clients",applicants:"Candidates",email:"Email",admin:"Admin",deliverability:"Deliverability",emailaccounts:"Email Accounts",managerusers:"Manager Users",insights:"Insights",bdinsights:"Outreach Insights",bdleadinsights:"Team Insights",reports:"Reports",profile:"My Profile",reminders:"Reminders",sourced:"Sourced Leads",finder:"Find Leads",mysetup:"My Setup",seqsetup:"My Setup"};
 
   // The count beside the page title. Each page owns its own number, so this is
   // a lookup rather than something the shell can compute — a page with nothing

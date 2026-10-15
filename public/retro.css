@@ -1126,3 +1126,70 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .le-f{display:block}
 .le-notes{min-height:90px}
 @media (max-width:860px){.le-grid{grid-template-columns:1fr}}
+
+/* ── WRITE YOUR FIRST SEQUENCE (R-258, D-0154): PACE's look, refined ─────────
+   The direction the owner chose: today's palette, fonts and buttons, with
+   thinner edges, smaller shadows and softer corners. Scoped to .sq so the rest
+   of the app is untouched until it moves over. Every colour is a token, so the
+   night palette and the sky themes apply as they do everywhere. */
+.sq{display:flex;flex-direction:column;gap:14px;max-width:880px;margin:0 auto;width:100%}
+.sq-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sq-eyebrow{font-family:var(--pixel-label);font-size:12px;letter-spacing:1px;color:var(--cv-text3);text-transform:uppercase}
+.sq-h1{margin:2px 0 0;font-size:22px;font-weight:800;color:var(--cv-text)}
+.sq-steps{display:flex;gap:6px;margin:0;padding:0;list-style:none;font-family:var(--pixel-label);font-size:12px}
+.sq-steps li{padding:5px 10px;border:1.5px solid var(--ctl-brd);border-radius:4px;background:var(--card-solid);color:var(--text3)}
+.sq-steps li.is-on{background:var(--accent);color:#fff}
+.sq-steps li.is-done{background:var(--st-go);color:var(--text)}
+.sq .sq-card{border:1.5px solid var(--ctl-brd);border-radius:8px;box-shadow:3px 3px 0 var(--hard);padding:18px;display:flex;flex-direction:column;gap:6px;background:var(--card-solid)}
+.sq-h2{margin:0;font-size:17px;font-weight:800;color:var(--text)}
+.sq-h4{margin:0;font-size:15px;font-weight:800;color:var(--text)}
+.sq-sub{margin:0;color:var(--text2);font-size:14px}
+.sq-hint{margin:2px 0 0;color:var(--text3);font-size:13px}
+.sq-warn{margin:6px 0 0;color:var(--red);font-size:13px}
+.sq-lbl{display:block;margin:10px 0 4px;font-family:var(--pixel-label);font-size:12px;letter-spacing:.5px;color:var(--text3);text-transform:uppercase}
+.sq-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px}
+.sq-between{justify-content:space-between;margin-top:0}
+.sq-nav{display:flex;justify-content:space-between;gap:12px;margin-top:4px}
+.sq-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+.sq-choice{display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;color:var(--text);background:var(--card-solid);border:1.5px solid var(--ctl-brd);border-radius:8px;padding:14px 16px;cursor:pointer}
+.sq-choice b{font-size:15px;font-weight:800}
+.sq-choice span{font-size:13px;color:var(--text2)}
+.sq-choice[aria-checked="true"]{background:var(--sun);color:var(--on-sun);box-shadow:3px 3px 0 var(--hard)}
+.sq-choice[aria-checked="true"] span{color:var(--on-sun)}
+.sq-ed,.sq-inp,.sq-sel{width:100%;box-sizing:border-box;border:1.5px solid var(--ctl-brd);border-radius:6px;background:var(--bg);color:var(--text);padding:10px 12px;font:inherit;font-size:15px;line-height:1.55}
+.sq-sel{width:auto;padding:5px 8px;font-size:14px}
+.sq-ed{min-height:140px;white-space:pre-wrap;overflow-wrap:anywhere}
+.sq-ed.is-one{min-height:0;white-space:nowrap;overflow-x:auto;overflow-y:hidden}
+.sq-ed:empty::before{content:attr(data-ph);color:var(--text3);white-space:pre-line;pointer-events:none}
+.sq-ed:focus,.sq-inp:focus,.sq-sel:focus,.sq-choice:focus-visible,.sq-link:focus-visible,.sq-it:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.sq-chip{display:inline;padding:1px 6px;margin:0 1px;border-radius:4px;background:var(--purple-l);color:var(--text);font-weight:700;cursor:default}
+.sq-chip.is-opt{background:var(--amber-l)}
+.sq-link{background:none;border:0;padding:6px 2px;font:inherit;font-size:14px;font-weight:700;color:var(--accent);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.sq-link[disabled]{opacity:.5;cursor:not-allowed}
+.sq-menuwrap{position:relative;display:inline-block}
+.sq-menu{position:absolute;z-index:30;left:0;top:calc(100% + 6px);width:min(360px,calc(100vw - 32px));background:var(--card-solid);border:1.5px solid var(--ctl-brd);border-radius:8px;box-shadow:3px 3px 0 var(--hard);overflow:hidden}
+.sq-it{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;border:0;border-top:1px solid var(--border);background:transparent;color:var(--text);padding:10px 12px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;min-height:44px}
+.sq-it:first-child{border-top:0}
+.sq-it small{display:block;font-weight:400;font-size:12px;color:var(--text3)}
+.sq-ex{font-weight:400;font-size:13px;color:var(--text3);text-align:right}
+@media (hover:hover) and (pointer:fine){.sq-it:hover{background:var(--accent-l)}}
+.sq-ver{border:1px solid var(--border2);border-radius:6px;background:var(--bg);padding:10px 12px;margin-top:8px}
+.sq-ver-h{display:flex;justify-content:space-between;align-items:center;font-family:var(--pixel-label);font-size:12px;color:var(--text3)}
+.sq-ver-t{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;color:var(--text)}
+.sq-mail{border:1.5px solid var(--ctl-brd);border-radius:6px;background:var(--bg);margin-top:8px;overflow:hidden}
+.sq-mrow{display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2)}
+.sq-mrow b{font-family:var(--pixel-label);font-weight:400;color:var(--text3)}
+.sq-msub{padding:10px 12px;font-weight:800;border-bottom:1px solid var(--border);color:var(--text);overflow-wrap:anywhere}
+.sq-mbody{padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;min-height:100px;color:var(--text)}
+.sq-msub.is-empty,.sq-mbody.is-empty{color:var(--text3);font-weight:400}
+.sq-msig{padding:8px 12px;border-top:1px dashed var(--border2);font-size:12px;color:var(--text3)}
+.sq-tagrow{margin-top:10px}
+.sq-tag{display:inline-block;font-family:var(--pixel-label);font-size:11px;padding:3px 8px;border:1.5px solid var(--ctl-brd);border-radius:4px;background:var(--st-go);color:var(--text)}
+.sq-ok{padding:12px 14px;border:1.5px solid var(--ctl-brd);border-radius:6px;background:var(--st-go);color:var(--text)}
+.sq-stuck{margin-top:4px}
+.sq-stuck[hidden],.sq-menu[hidden]{display:none}
+@media (max-width:560px){
+  .sq-choices{grid-template-columns:1fr}
+  .sq .sq-card{padding:14px}
+  .sq-menu{position:fixed;left:16px;right:16px;bottom:16px;top:auto;width:auto}
+}

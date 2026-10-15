@@ -70,7 +70,8 @@ try{
   await ev(()=>goPage('mysetup')); await page.waitForTimeout(500);
   t=await txt();
   step('three steps — connect ✓, say who each writes for, write your first sequence — and the sequence says what it gates (leads outreach, the Finder\'s first email) and what it does not (individual emails)', /Your outreach setup · 1 of 3 done/.test(t) && /Connect your mailbox/.test(t) && /1 mailbox connected/.test(t) && /will not start outreach for your leads/.test(t) && /Individual emails are not affected/.test(t));
-  step('the sequence step offers the starter (one click) or writing your own', /Use the starter/.test(t) && /Write my own/.test(t));
+  // R-258 / D-0148: the starter (another company's wording) is gone; the step opens "Write your first sequence".
+  step('the sequence step opens "Write my sequence" — no starter in someone else\'s words', /Write my sequence/.test(t) && !/Use the starter/.test(t));
   step('each mailbox is listed with its state, its sender details (just "not set" when empty — no explanation), ONE edit button, and the daily limit as the admin\'s', /bd@fute\.test/.test(t) && /Connected/.test(t) && /Sender & signature: not set/.test(t) && !/standard name, title and signature/.test(t) && !/Say who it writes for/.test(t) && (await ev(()=>[...document.querySelectorAll('#content button')].filter(b=>/sender & signature/i.test(b.textContent)).length))===1 && /set by an admin/.test(t));
   step('sending days and hours are on the page, with the organisation\'s window and the line that the daily number stays with the admin', /Sending days and hours/.test(t) && /8 AM – 4 PM/.test(t) && /narrow that, not widen it/.test(t) && /stays with your admin/.test(t));
   step('the AI writing-style note is one click away', /How the AI writes for you/.test(t) && /Open my writing style/.test(t));

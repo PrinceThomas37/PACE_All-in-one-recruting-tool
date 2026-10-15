@@ -341,9 +341,28 @@ function resolveVar(vars, key) {
   return null;
 }
 
+// ── A DETAIL WHOSE SENTENCE GOES WHEN IT IS MISSING (owner, 15 Oct 2026, D-0151 / D-0152) ─────────────────────────────────────────
+// Pay is known on about one lead in four. "The pay is {{pay}}." for a lead without pay must not go out as "The pay is ." — the whole
+// sentence holding the detail is left out instead. Only the details listed here behave like this; every other detail is unchanged.
+const SENTENCE_DROPS_WHEN_EMPTY = ['pay'];
+function dropEmptyDetailSentences(tmpl, map) {
+  const t = String(tmpl == null ? '' : tmpl);
+  const empty = SENTENCE_DROPS_WHEN_EMPTY.filter((k) => !String(map[k] == null ? '' : map[k]).trim());
+  if (!empty.length) return t;
+  const token = new RegExp('{{\\s*(' + empty.join('|') + ')\\s*}}');
+  const lines = t.split('\n'), out = [];
+  lines.forEach((line) => {
+    if (!token.test(line)) { out.push(line); return; }
+    const sentences = line.match(/[^.!?]*[.!?]+[ \t]*|[^.!?]+$/g) || [line];
+    const kept = sentences.filter((x) => !token.test(x)).join('').replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
+    if (kept) out.push(kept);                             // a line that held only that sentence goes, line and all
+  });
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}
+
 function fillTemplate(tmpl, vars) {
   const map = vars || {};
-  const filled = String(tmpl == null ? '' : tmpl).replace(/{{(\w+)}}/g, (m, k) => {
+  const filled = dropEmptyDetailSentences(tmpl, map).replace(/{{(\w+)}}/g, (m, k) => {
     const hit = resolveVar(map, k);
     if (!hit) return m;                      // unknown variable — left visible, never silently blanked
     if (hit.defer) return `{{${hit.defer}}}`; // send-time token, normalised to the name the send path fills
@@ -447,6 +466,7 @@ function buildEmailVars({ job, contact, senderDisplayName }) {
     company_service: formatCompanyService(companyExpertise || job?.company?.industry || job?.industry || ''),
     salary_range: salaryDisplay,
     salary_line: salaryLine,
+    pay: salaryDisplay,                          // D-0151: in a template, a missing pay drops its whole sentence (fillTemplate)
     local_line: localLine,
     city
   };
