@@ -99,7 +99,8 @@ async function mailboxHasSendsAs(mailboxId) {
   try { const { data } = await supabase.from('app_settings').select('value').eq('key', sendsAsKey(mailboxId)).maybeSingle(); return !!(data && data.value && Object.keys(cleanSendsAs(JSON.parse(data.value))).length); } catch (_) { return false; }
 }
 
-const USER_COLS = 'id,name,email,role,roles,employee_id,designation,platform,is_active,created_at,manager_id';
+const MIN_PASSWORD_LENGTH = 8;
+const USER_COLS ='id,name,email,role,roles,employee_id,designation,platform,is_active,created_at,manager_id';
 
 router.get('/users', auth, async (req, res) => {
   try {
@@ -171,6 +172,9 @@ router.post('/users', auth, async (req, res) => {
     // join, because an admin adding colleagues is the other way to fill them.
     const seatGate = await entitlements.gate(supabase, req, 'seats', { orgIdFor });
     if (seatGate.blocked) return res.status(seatGate.status).json(seatGate.body);
+    if (password && String(password).length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: 'Password must be at least ' + MIN_PASSWORD_LENGTH + ' characters' });
+    }
     const userRoles = roles || (role ? [role] : ['ra']);
     // Every new user used to get the SAME password, 'Fute@2024' — hard-coded in
     // this file, shown in the admin UI, and never forced to change. Anyone who
@@ -212,6 +216,24 @@ router.put('/users/:id', auth, async (req, res) => {
     const { data, error } = await supabase.from('users').update(updates).eq('id', id).select(USER_COLS).single();
     if (error) throw error;
     res.json({ ...data, roles: data.roles || (data.role ? [data.role] : []) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// An admin sets (or resets) a colleague's sign-in password. Admin only, same
+// organisation only (a miss is a 404), never returned, never logged.
+router.put('/users/:id/password', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (!(await guardUser(req, res, req.params.id))) return;
+    const pw = req.body && req.body.password;
+    if (typeof pw !== 'string' || pw.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: 'Password must be at least ' + MIN_PASSWORD_LENGTH + ' characters' });
+    }
+    const hash = await bcrypt.hash(pw, 10);
+    const { error } = await supabase.from('users')
+      .update({ password_hash: hash, updated_at: new Date() }).eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

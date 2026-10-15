@@ -960,8 +960,9 @@ window.openAddUser=function(){
         '<div class="fgrp"><label class="flbl">Role</label><select class="sel" id="u-role">'+roleOpts+'</select></div>'+
         '<div class="fgrp"><label class="flbl">Platform</label><select class="sel" id="u-plt"><option>Gmail</option><option>Outlook</option></select></div>'+
       '</div>'+
+      '<div class="fgrp mb3"><label class="flbl">Sign-in password</label><input class="inp" id="u-pw" type="password" autocomplete="new-password" placeholder="At least 8 characters"/></div>'+
       '<div class="fs-12 c-text3" style="padding:8px 10px;background:var(--bg);border-radius:var(--r);line-height:1.5">'+
-        'They sign in with <strong>Continue with Microsoft</strong> or <strong>Google</strong> using this email address — no password is created or shared.'+
+        'Give them this password to sign in with their email. Or leave it empty and they use <strong>Continue with Microsoft</strong> or <strong>Google</strong> with this email. You can set a new password later from their profile.'+
       '</div>'+
     '</div>'+
     '<div class="mf"><button class="btn btn-outline" onclick="closeModal()">Cancel</button>'+
@@ -992,7 +993,9 @@ window.saveUser=function(existingId){
   var eid=(document.getElementById('u-eid')||{}).value||'';
   var desig=(document.getElementById('u-desig')||{}).value||'';
   var plt=(document.getElementById('u-plt')||{}).value||'Gmail';
-  var payload={name:name,email:email,role:role,employee_id:eid||undefined,designation:desig||undefined,platform:plt};
+  var pw=(document.getElementById('u-pw')||{}).value||'';
+  if(pw&&pw.length<8){showToast('Password must be at least 8 characters','warning');return;}
+  var payload={name:name,email:email,role:role,employee_id:eid||undefined,designation:desig||undefined,platform:plt,password:pw||undefined};
   apiPost('/users',payload).then(function(u){
     STATE.users.push(normaliseUser(u));
     closeModal();
@@ -1022,6 +1025,16 @@ window.changePassword=function(){
   if(n!==c){showToast("Passwords don't match","warning");return;}
   showToast("Password updated","success");
 }
+
+window.adminSetPassword=function(userId){
+  var el=document.getElementById('ud-pw');
+  var pw=(el||{}).value||'';
+  if(pw.length<8){showToast('Password must be at least 8 characters','warning');return;}
+  apiPut('/users/'+userId+'/password',{password:pw}).then(function(){
+    if(el)el.value='';
+    showToast('Password set — share it with them privately','success');
+  }).catch(function(e){showToast('Failed: '+e.message,'error');});
+};
 
 window.setAdminView=function(v){STATE.adminView=v;render();}
 

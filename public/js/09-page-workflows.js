@@ -1057,6 +1057,15 @@ function renderAdminUserDetail(userId){
         '</div>'+
       '</div>'+
 
+      '<div class="card" style="padding:18px;margin-bottom:16px">'+
+        '<div class="fs-12 c-text3" style="font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Sign-in password</div>'+
+        '<div class="fs-12 c-text3 mb3">Set or reset the password this person signs in with. It is never shown again after you save.</div>'+
+        '<div style="display:flex;gap:8px;align-items:center">'+
+          '<input class="inp" id="ud-pw" type="password" autocomplete="new-password" placeholder="New password, at least 8 characters"/>'+
+          '<button onclick="adminSetPassword(\''+userId+'\')" class="btn btn-primary">Set password</button>'+
+        '</div>'+
+      '</div>'+
+
       ccCard+
       (userHasRole(usr,'recruiter')?recruiterJobOrdersCard(userId):'')+
 
