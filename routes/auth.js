@@ -126,6 +126,31 @@ router.get('/users', auth, async (req, res) => {
 // hierarchy, not a fixed role ladder); admin-only to change. Rejects a cycle
 // (setting someone's manager to one of their own reports, direct or
 // transitive) and self-management.
+// Deactivated people (admin only): the ones "Deactivate" took off the roster, so an admin can bring one back. Literal path, above every
+// '/users/:id…' route. Nothing about them is returned beyond what the roster already shows.
+router.get('/users/deactivated', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    const { data, error } = await withOrg(supabase.from('users')
+      .select('id,name,email,role,roles,deleted_at').not('deleted_at', 'is', null), req).order('deleted_at', { ascending: false });
+    if (error) throw error;
+    res.json((data || []).map(u => ({ ...u, roles: u.roles || (u.role ? [u.role] : []) })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Bring a deactivated person back: they can sign in again, and appear on the roster, with everything they had (nothing was erased).
+router.post('/users/:id/reactivate', auth, async (req, res) => {
+  try {
+    if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
+    if (!(await guardUser(req, res, req.params.id))) return;
+    const { data, error } = await supabase.from('users')
+      .update({ deleted_at: null, is_active: true, updated_at: new Date() })
+      .eq('id', req.params.id).select(USER_COLS).single();
+    if (error) throw error;
+    res.json({ ...data, roles: data.roles || (data.role ? [data.role] : []) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.put('/users/:id/manager', auth, async (req, res) => {
   try {
     if (!hasRole(req, 'admin')) return res.status(403).json({ error: 'Admin only' });
