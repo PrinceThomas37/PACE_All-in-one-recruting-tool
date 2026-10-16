@@ -494,3 +494,6 @@ AI ceilings were shared across companies although usage was per company; now per
 
 ## 2026-10-16 (Session 49) — reactivate a deactivated user (R-264)
 `GET /users/deactivated` and `POST /users/:id/reactivate` in `routes/auth.js` (gateway-owned file, rampart-reviewed): admin only; `withOrg`/`guardUser` keep it to the caller's company (another company = 404); the select list is explicit so no `password_hash` leaves. Deactivate still erases nothing. A real delete / erase is not built (owner's call).
+
+## 2026-10-16 (Session 49, later) — owner asked to see existing passwords: declined (R-265)
+Passwords stay one-way (`password_hash`, bcrypt). "Admin can see a user's password" was NOT built: a readable copy turns one database leak or one stolen admin login into every account, in a product sold to other companies. The substitute is the admin setting a new password (R-262) and seeing what they typed (eye).

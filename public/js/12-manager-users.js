@@ -939,6 +939,18 @@ window.toggleBDAssign=function(role){
   var wrap=document.getElementById("u-bd-wrap");
   if(wrap)wrap.style.display=role==="ra"?"":"none";
 };
+// A password box with an eye: while the admin is typing (or checking) a password they are giving someone, they can see it.
+// Only what is TYPED in the box is shown — a saved password is a one-way hash and can never be read back (not even by an admin).
+window.pwBox=function(id,placeholder){
+  return '<div class="pw-wrap"><input class="inp" id="'+id+'" data-keep-typed="1" type="password" autocomplete="new-password" placeholder="'+htmlEsc(placeholder||'')+'"/>'+
+    '<button type="button" class="pw-eye" aria-label="Show password" title="Show / hide password" onclick="togglePwVisible(\''+id+'\',this)">'+
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div>';
+};
+window.togglePwVisible=function(id,btn){
+  var i=document.getElementById(id); if(!i) return;
+  var show=i.type==='password'; i.type=show?'text':'password';
+  if(btn){ btn.classList.toggle('is-on',show); btn.setAttribute('aria-label',show?'Hide password':'Show password'); }
+};
 window.openAddUser=function(){
   var managers=STATE.users.filter(function(x){return x.role==='bd'||x.role==='bd_lead'||x.role==='admin';});
   var roleOpts=['ra','ra_lead','bd','bd_lead','associate_director','director','admin','recruiter'].map(function(r){
@@ -960,7 +972,7 @@ window.openAddUser=function(){
         '<div class="fgrp"><label class="flbl">Role</label><select class="sel" id="u-role">'+roleOpts+'</select></div>'+
         '<div class="fgrp"><label class="flbl">Platform</label><select class="sel" id="u-plt"><option>Gmail</option><option>Outlook</option></select></div>'+
       '</div>'+
-      '<div class="fgrp mb3"><label class="flbl">Sign-in password</label><input class="inp" id="u-pw" type="password" autocomplete="new-password" placeholder="At least 8 characters"/></div>'+
+      '<div class="fgrp mb3"><label class="flbl">Sign-in password</label>'+pwBox('u-pw','At least 8 characters')+'</div>'+
       '<div class="fs-12 c-text3" style="padding:8px 10px;background:var(--bg);border-radius:var(--r);line-height:1.5">'+
         'Give them this password to sign in with their email. Or leave it empty and they use <strong>Continue with Microsoft</strong> or <strong>Google</strong> with this email. You can set a new password later from their profile.'+
       '</div>'+

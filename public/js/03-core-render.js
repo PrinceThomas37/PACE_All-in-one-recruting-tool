@@ -295,6 +295,9 @@ function render(){
   var pageEl=content?content.querySelector(".page"):null;
   var pageScroll=pageEl?pageEl.scrollTop:0;
   var winScroll=window.scrollY||0;
+  // A box marked data-keep-typed (a password someone is typing) keeps its text through ANY repaint — a list arriving late must not wipe it.
+  var _kept={};
+  document.querySelectorAll('input[data-keep-typed]').forEach(function(el){ if(el.id&&el.value) _kept[el.id]=el.value; });
   // Signal to blur handlers that this blur is from a DOM rebuild, not user action
   STATE._rendering=true;
   // Same page, shell already standing → patch the regions that moved. A page
@@ -307,6 +310,7 @@ function render(){
   STATE._rendering=false;
   bindApp();
   startClock();
+  Object.keys(_kept).forEach(function(id){ var el=document.getElementById(id); if(el&&el.hasAttribute('data-keep-typed')&&!el.value) el.value=_kept[id]; });
   // Restore scroll positions after re-render
   var newContent=document.getElementById("content");
   if(newContent){
