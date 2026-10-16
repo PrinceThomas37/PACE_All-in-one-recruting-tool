@@ -491,3 +491,6 @@ AI ceilings were shared across companies although usage was per company; now per
 
 ## 2026-10-15 (Session 48) — admin sets a colleague's password (R-262)
 `PUT /users/:id/password` in `routes/auth.js` (admin only, `guardUser` so another org = 404, min 8 via `MIN_PASSWORD_LENGTH`, hash never returned). `POST /users` now refuses a password under 8. Without a password a new user is still SSO-only (random unknown hash). Not built: forced change at first login (needs a column), reset email. Test: `user-password-smoke`.
+
+## 2026-10-16 (Session 49) — reactivate a deactivated user (R-264)
+`GET /users/deactivated` and `POST /users/:id/reactivate` in `routes/auth.js` (gateway-owned file, rampart-reviewed): admin only; `withOrg`/`guardUser` keep it to the caller's company (another company = 404); the select list is explicit so no `password_hash` leaves. Deactivate still erases nothing. A real delete / erase is not built (owner's call).

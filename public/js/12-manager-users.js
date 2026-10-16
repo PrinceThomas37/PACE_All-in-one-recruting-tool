@@ -980,6 +980,28 @@ window.removeUser=function(id,fromDetail){
     showToast("User deactivated","success");render();
   }).catch(function(e){showToast("Failed: "+e.message,"error");});
 };
+// Deactivated people, with a way back (admin only). Deactivating erased nothing, so reactivating returns the person as they were.
+window.openDeactivatedUsers=function(){
+  STATE.modal='<div class="modal modal-w420"><div class="mh"><div class="mt">Deactivated users</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div>'+
+    '<div class="mb"><div class="fs-13 c-text3">Loading…</div></div></div>';
+  render();
+  apiGet('/users/deactivated').then(function(rows){
+    var body=(rows||[]).length?(rows||[]).map(function(u){
+      return '<div class="flex jb aic" style="padding:8px 0;border-bottom:1px solid var(--border)"><div><div class="fw6 fs-13">'+htmlEsc(u.name||'')+'</div><div class="fs-12 c-text3">'+htmlEsc(u.email||'')+'</div></div>'+
+        '<button class="btn btn-sm btn-primary" onclick="reactivateUser(\''+htmlEsc(u.id)+'\')">Reactivate</button></div>';
+    }).join(''):'<div class="fs-13 c-text3">No one is deactivated.</div>';
+    STATE.modal='<div class="modal modal-w420"><div class="mh"><div class="mt">Deactivated users</div><button class="btn-icon" onclick="closeModal()">'+ico('x',14)+'</button></div><div class="mb">'+body+'</div></div>';
+    render();
+  }).catch(function(e){ showToast('Failed: '+((e&&e.message)||e),'error'); closeModal(); });
+};
+window.reactivateUser=function(id){
+  if(!confirm('Reactivate this user? They will be able to sign in again.'))return;
+  apiPost('/users/'+id+'/reactivate',{}).then(function(u){
+    STATE.users=(STATE.users||[]).filter(function(x){return x.id!==id;}).concat([normaliseUser(u)]);
+    showToast('User reactivated','success');
+    openDeactivatedUsers();
+  }).catch(function(e){ showToast('Failed: '+((e&&e.message)||e),'error'); });
+};
 window.unassignRA=function(id){
   STATE.users=STATE.users.map(function(u){return u.id===id?Object.assign({},u,{bdm:null}):u;});
   showToast("RA unassigned","info");render();
