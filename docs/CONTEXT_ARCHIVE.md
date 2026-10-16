@@ -6975,3 +6975,8 @@ The owner said "okay merge it", "change the data base too", answered the four of
 - **Test:** `test/user-deactivated-smoke.mjs` (12; fake db projects rows to the select; widening the select to `*` makes the hash checks fail).
 - **Not built (owner's call):** a real delete and an erase-personal-details step.
 - **Owner said "yes and merge it fast"** — scoped to reactivate only, because delete/erase need a decision on leads and history.
+
+## 2026-10-16 (Session 49, later) — eye on the admin password boxes (R-265)
+- **Owner ask:** an eye icon so an admin can see each user's password and the one being typed. **Done:** the typed one (`pwBox`, `togglePwVisible` in `12-manager-users.js`; used by Add user and the profile's Set password; styles `.pw-wrap`/`.pw-eye` in `ui.css`). **Not done, said plainly:** an existing user's password cannot be shown — `users.password_hash` is a bcrypt hash. Storing it readable would be a security regression (database access or one stolen admin login = every account). The profile text now says to read it off the eye before leaving the page.
+- **Test:** `test/password-eye-smoke.mjs` (11, real Chromium; breaking the toggle fails 3).
+- **Found by the new test, fixed:** the profile loads the person's email IDs after it opens and then repaints, so a password typed in the meantime vanished (one run in twelve under load). `render()` in `03-core-render.js` now keeps the text of any input marked `data-keep-typed` (the `pwBox` inputs) through every repaint. Reintroducing the bug makes the test fail.
