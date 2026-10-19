@@ -2186,3 +2186,11 @@ Owner, answering the ten questions on R-266…R-283:
 ### D-0159 — The new builder holds many named sequences (19 Oct 2026)
 
 Asked: the new builder stores ONE sequence per person; the old screen let a person keep many named ones. Owner chose **many named sequences**: the new builder gets a name and a list, "+ New sequence" adds another (for leads or for candidates), and the sending engine must know which sequence each lead is on. A structural change (R-269/R-270): existing sequences keep running untouched (D-0158).
+
+### D-0160 — Build the Today and Outreach Insights layouts as drawn (19 Oct 2026)
+
+Owner, on https://claude.ai/artifact/DF9nDByMp9grLCrBT2ggCo: "keep the layout as drawn". Today (BD Manager): four action numbers (replies waiting, emails out today / limit, new leads today, interviews today), ONE "Needs you" list (Needs you today + client conversations merged, filter chips), today's schedule, pipeline as linked counts, "Your team today" (only people who need a nudge). Charts move to Reports; the recruiting tiles and the second banner leave Today. Outreach Insights: sequence + date filters, five numbers once, one line chart (emailed / opened / replied, daily/weekly), a per-sequence table. Rule: each number lives in one place (R-278).
+
+### D-0161 — "My wording" and "AI style" move into the new builder (19 Oct 2026)
+
+Asked whether to remove the Email → Sequence sub-tabs "My wording" and "AI style" (the owner thought rewriting / teaching the AI covered them). Explained: "My wording" is the 8 Oct request (R-176, D-0111) for a DIFFERENT email per email ID of one person (two company identities) — AI rewriting cannot know which company an email ID speaks for. Owner chose: **remove both sub-tabs; the new builder gets "Same email for all my email IDs / A different one for each" (a tab per email ID), and AI style's writing instructions move into the builder's AI help. Nothing existing is lost** (R-285).

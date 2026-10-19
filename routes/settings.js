@@ -212,7 +212,8 @@ router.get('/outreach-plan/mailboxes', auth, async (req, res) => {
       const m = /^ue_([^_]+(?:-[^_]+)*)_(tmpl_.+|ai_first)$/.exec(r.key);
       if (m && out[m[1]] && String(r.value || '').trim()) out[m[1]][m[2]] = r.value;
     });
-    res.json({ mailboxes: out });
+    // The addresses too, so a screen can name each email ID (the new builder's per-email-ID tabs, R-285).
+    res.json({ mailboxes: out, emails: (boxes || []).map(b => ({ id: b.id, email: b.email_address })) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 router.post('/outreach-plan/mailbox', auth, async (req, res) => {

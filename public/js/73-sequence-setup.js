@@ -46,7 +46,8 @@
   var Q = STATE.seqSetup = STATE.seqSetup || null;
   function fresh(){ return { loaded:false, err:'', step:1, mode:null, first:{subject:'',body:'',versions:[]}, fus:[], max:5, sample:null,
     menu:'', busy:'', msg:{}, stuck:false, offer:'', preview:null, aitest:null, saved:false, saving:false,
-    teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{}, target:null }; }
+    teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{}, target:null,
+    scope:'all', mbs:[], mbText:{}, mbTab:'person', personSave:null }; }
   function teachFu(i){ while(Q.teach.fus.length<=i) Q.teach.fus.push({angle:Q.teach.fus.length?'detail':'nudge',note:''}); return Q.teach.fus[i]; }
 
   // ── text with details ↔ the editor's html ──────────────────────────────────
@@ -109,8 +110,57 @@
       if(r.teach) Q.teach=r.teach; Q.opts=r.teach_options||null;
       Q.fus.forEach(function(_,i){ teachFu(i); });
       paint(true);
+      loadPerId();
     }).catch(function(e){ Q.loaded=true; Q.err=(e&&e.message)||String(e); paint(true); });
   };
+  // ── ONE EMAIL FOR ALL MY EMAIL IDS, OR ONE EACH (R-176 → moved here by D-0161, R-285) ─────────────────────────────────────────
+  // Your outreach may say something different from each email ID (two company identities). An email ID with no text of its own
+  // uses the main wording. Saved through the same endpoints the old "My wording" tab used (routes/settings.js), so nothing moves.
+  var SLOTS=['o1','fu1','fu2','fu3','fu4','fu5'];
+  function loadPerId(){
+    Promise.all([apiGet('/outreach-plan').catch(function(){ return {}; }), apiGet('/outreach-plan/mailboxes').catch(function(){ return null; })]).then(function(r){
+      var plan=r[0]||{}, mb=r[1];
+      Q.scope=String(plan.tmpl_scope||'all')==='each'?'each':'all';
+      Q.mbs=(mb&&mb.emails)||[];
+      Q.mbText={};
+      Q.mbs.forEach(function(m){ var own=(mb&&mb.mailboxes&&mb.mailboxes[m.id])||{}; var t={};
+        SLOTS.forEach(function(sl){ t[sl]={ subject:own['tmpl_'+sl+'_subject']||'', body:own['tmpl_'+sl+'_body']||'' }; }); Q.mbText[m.id]=t; });
+      Q.mbOrig=JSON.parse(JSON.stringify(Q.mbText));
+      if(STATE.page==='seqsetup') paint(true);
+    });
+  }
+  // Show another email ID's wording in the same editors: what is on screen goes back where it came from first.
+  function stashTab(){
+    saveEditors();
+    if(Q.mbTab==='person'){ Q.personSave={ subject:Q.first.subject, body:Q.first.body, fus:Q.fus.map(function(f){ return {subject:f.subject, body:f.body}; }) }; return; }
+    var t=Q.mbText[Q.mbTab]; if(!t) return;
+    t.o1={ subject:htmlToTokens(Q.first.subject).replace(/\n/g,' ').trim(), body:htmlToTokens(Q.first.body).trim() };
+    Q.fus.forEach(function(f,i){ t[SLOTS[i+1]]={ subject:String(f.subject||''), body:htmlToTokens(f.body).trim() }; });
+  }
+  function showTab(tab){
+    stashTab(); Q.mbTab=tab;
+    if(tab==='person'){ var p=Q.personSave||{}; Q.first.subject=p.subject||''; Q.first.body=p.body||''; (p.fus||[]).forEach(function(x,i){ if(Q.fus[i]){ Q.fus[i].subject=x.subject; Q.fus[i].body=x.body; } }); }
+    else { var t=Q.mbText[tab]||{}; Q.first.subject=tokensToHtml((t.o1||{}).subject); Q.first.body=tokensToHtml((t.o1||{}).body);
+      Q.fus.forEach(function(f,i){ var x=t[SLOTS[i+1]]||{}; f.subject=x.subject||''; f.body=tokensToHtml(x.body); }); }
+    Q.preview=null; paint(true);
+  }
+  // The person's own wording, wherever the editors are showing an email ID's.
+  function personTexts(){
+    if(Q.mbTab==='person') return null;
+    var p=Q.personSave||{subject:'',body:'',fus:[]};
+    return { subject:p.subject, body:p.body, fus:p.fus };
+  }
+  function perIdHtml(){
+    if(named()||!Q.mbs||Q.mbs.length<2) return '';
+    var each=Q.scope==='each';
+    var tabs=each?'<div class="sq-mbtabs" role="tablist">'+[{id:'person',email:'Main wording (any email ID without its own)'}].concat(Q.mbs).map(function(m){
+      var on=Q.mbTab===m.id; return '<button type="button" role="tab" class="sq-mbtab'+(on?' on':'')+'" aria-selected="'+on+'" data-sq="mbtab" data-mb="'+esc(m.id)+'">'+esc(m.email)+'</button>'; }).join('')+'</div>'+
+      (Q.mbTab!=='person'?'<p class="sq-hint">What '+esc((Q.mbs.filter(function(m){ return m.id===Q.mbTab; })[0]||{}).email||'')+' sends. Leave an email empty and it uses the main wording.</p>':''):'';
+    return '<div class="card sq-card"><span class="sq-lbl">Your email IDs</span><div class="sq-choices" role="radiogroup" aria-label="One email for all email IDs or one each">'+
+      '<button type="button" class="sq-choice" role="radio" aria-checked="'+!each+'" data-sq="scope" data-scope="all"><b>Same email from all my email IDs</b><span>One wording, whichever email ID sends it.</span></button>'+
+      '<button type="button" class="sq-choice" role="radio" aria-checked="'+each+'" data-sq="scope" data-scope="each"><b>A different one for each</b><span>For example when your email IDs write for different companies.</span></button>'+
+      '</div>'+tabs+'</div>';
+  }
   // ── NAMED SEQUENCES (R-269/R-270, D-0158/D-0159) ──────────────────────────────────────────────────────────────────
   // The same screen makes and edits a person's named sequences — for leads or for candidates on a job — stored as workflow
   // definitions (services/sequence-v2.js), so the engine that already sends them keeps doing so. Every "+ New sequence",
@@ -158,9 +208,11 @@
   }
   function payload(){
     saveEditors();
+    var pt=(typeof personTexts==='function')?personTexts():null;   // showing an email ID's wording: the main wording is the saved copy
+    var fs=pt?pt.subject:Q.first.subject, fb=pt?pt.body:Q.first.body;
     return { mode:Q.mode,
-      first:{ subject:htmlToTokens(Q.first.subject).replace(/\n/g,' ').trim(), body:htmlToTokens(Q.first.body).trim(), versions:Q.mode==='template'?Q.first.versions:[] },
-      followups:Q.fus.map(function(f){ return { day:Number(f.day), subject:f.subject, body:htmlToTokens(f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }),
+      first:{ subject:htmlToTokens(fs).replace(/\n/g,' ').trim(), body:htmlToTokens(fb).trim(), versions:Q.mode==='template'?Q.first.versions:[] },
+      followups:Q.fus.map(function(f,i){ var p=pt&&pt.fus[i]; return { day:Number(f.day), subject:p?p.subject:f.subject, body:htmlToTokens(p?p.body:f.body).trim(), versions:Q.mode==='template'?f.versions:[] }; }),
       teach:teachPayload() };
   }
   function teachPayload(){
@@ -251,6 +303,7 @@
     var cand=named()&&Q.target.cand;
     var h=named()?nameCard(skel)+(cand?modeCards():''):modeCards();
     if(ai&&!named()) h+=teachCard(skel);
+    h+=perIdHtml();
     h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
       (ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
         :'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>'):'')+
@@ -262,16 +315,18 @@
         '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
         '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
-      msgHtml('first')+(ai||cand?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
+      msgHtml('first')+(ai||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
     Q.fus.forEach(function(f,i){
       var min=i?Number(Q.fus[i-1].day)+1:1;
       h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="btn btn-sm btn-outline" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
         '<p class="sq-sub">Sent <select class="sq-sel" data-sq-day="'+i+'" aria-label="Days after the first email">'+dayOptions(f.day,min)+'</select> after the first email, only if they have not replied.</p>'+
         (ai&&!named()?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
-        msgHtml('fu'+i)+(ai||cand?'':versionsHtml(String(i),f.versions,skel))+'</div>';
+        msgHtml('fu'+i)+(ai||cand||Q.mbTab!=='person'?'':versionsHtml(String(i),f.versions,skel))+'</div>';
     });
     if(Q.fus.length<Q.max) h+='<div><button type="button" class="btn btn-outline" data-sq="addfu">+ '+(Q.fus.length?'Add another follow-up':'Add a follow-up')+'</button></div>';
     var who=cand?'candidate':'lead';
+    // How the AI writes for you (the old "AI style" tab, D-0161): your note for every email the AI writes in your name.
+    if(!named()&&typeof renderAiStyleCard==='function') h+=detailsHtml('aistyle','How the AI writes for you — your note for every email it writes in your name',renderAiStyleCard());
     h+='<div class="card sq-card"><h2 class="sq-h4">'+(ai?'Your backup, filled in for ':'Your email, filled in for ')+esc((Q.sample&&Q.sample.name)||'a '+who)+'</h2>'+
       (Q.sample&&Q.sample.example?'<p class="sq-hint">An example '+who+(cand?'.':' — you have no leads of your own yet.')+'</p>':'')+
       '<div id="sq-pv">'+previewMail(skel)+'</div></div>';
@@ -526,12 +581,22 @@
   function save(){
     if(named()) return saveNamed();
     Q.saving=true; say('save',''); repaint();
-    apiPut('/my-setup/sequence', payload()).then(function(){
+    apiPut('/my-setup/sequence', payload()).then(function(){ return savePerId(); }).then(function(){
       Q.saving=false; Q.saved=true;
       apiGet('/outreach-plan').then(function(p){ STATE.myOutreachPlan=p||{}; scheduleRender(); }).catch(function(){});
       if(typeof mySetupSync==='function') mySetupSync();
       repaint();
     }).catch(function(e){ Q.saving=false; say('save',(e&&e.message)||String(e)); repaint(); });
+  }
+
+  function savePerId(){
+    if(named()||!Q.mbs||Q.mbs.length<2) return Promise.resolve();
+    if(Q.mbTab!=='person') stashTab();
+    var calls=[apiPost('/outreach-plan',{key:'tmpl_scope', value:Q.scope})];
+    Object.keys(Q.mbText||{}).forEach(function(id){ var now=Q.mbText[id], was=(Q.mbOrig||{})[id]||{};
+      SLOTS.forEach(function(sl){ ['subject','body'].forEach(function(part){ var v=String((now[sl]||{})[part]||''), o=String((was[sl]||{})[part]||'');
+        if(v!==o) calls.push(apiPost('/outreach-plan/mailbox',{ mailbox_id:id, key:'tmpl_'+sl+'_'+part, value:v })); }); }); });
+    return Promise.all(calls).then(function(){ Q.mbOrig=JSON.parse(JSON.stringify(Q.mbText)); });
   }
 
   // ── events (delegated once; everything is scoped to #sq-root) ─────────────
@@ -563,6 +628,8 @@
       var empty=p.followups.findIndex(function(f){ return f.body.length<5; }); if(empty>=0){ say('fu'+empty,'This follow-up has no text yet. Write it, or remove it.'); return repaint(); }
       Q.step=2; Q.preview=null; paint(true); var pb=document.querySelector('.pg-body'); if(pb) pb.scrollTop=0; return; }
     if(a==='back'){ Q.step=1; Q.saved=false; paint(true); return; }
+    if(a==='scope'){ var sc=el.getAttribute('data-scope'); if(sc==='all'&&Q.mbTab!=='person') showTab('person'); Q.scope=sc; paint(true); return; }
+    if(a==='mbtab'){ var mbt=el.getAttribute('data-mb'); if(mbt!==Q.mbTab) showTab(mbt); return; }
     if(a==='cancel'){ var back=named()?Q.target.back:'mysetup'; if(back==='seqsetup') back='email'; goPage(back); return; }
     if(a==='test'){ if(!Q.busy) test(); return; }
     if(a==='save'){ if(!Q.saving) save(); return; }

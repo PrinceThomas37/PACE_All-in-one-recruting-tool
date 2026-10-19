@@ -413,7 +413,8 @@ wfEngine.registerChannel('candidate_email', async ({ step, enrollment, context }
       submission_id: submission.id, job_order_id: job_order?.id || null, recruiter_id: recruiterId,
       action: 'sequence_email_sent', note: `${step.name}: emailed ${candidate.email}`
     });
-    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId, tracked: true, written_by: writtenBy } };
+    // the tracking token: Outreach Insights finds which sequence sent this email by it (R-278)
+    return { outcome: 'done', detail: { to: candidate.email, graph_message_id: r.graphMessageId, tracked: true, written_by: writtenBy, token } };
   } catch (e) { return { outcome: 'failed', detail: { error: e.message } }; }
 }, { entity_types: ['submission', 'candidate'], label: 'Email the candidate', domains: ['recruiting'] });
 

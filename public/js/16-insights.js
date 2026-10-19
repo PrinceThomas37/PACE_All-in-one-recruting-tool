@@ -269,6 +269,9 @@ function renderBDInsights(){
   var view=(canTeam&&STATE.bdInsightsView==='team')?'team':'personal';
   var toggle=ivToggle(canTeam,view);
   if(view==='team') return '<div class="page">'+toggle+renderTeamInsightsBody()+'</div>';
+  // Personal: how your SEQUENCES are doing — each number once (owner, 19 Oct, D-0160, R-278). The funnel, stage breakdown and
+  // industry bars below repeated the same stage counts; leads by stage now live on Today ("Your pipeline") and in Reports.
+  return renderOutreachInsights(toggle);
 
   if(!d){
     return '<div class="page">'+toggle+'<div class="ph"><div class="ptitle">Outreach Insights</div><div class="psub">Loading your performance data…</div></div>'+
@@ -416,4 +419,64 @@ function renderTeamInsightsBody(){
       '<div class="rep-tablehead"><div class="rep-ttl" style="margin:0">BD Manager performance</div><span class="rep-sub" style="margin:0">click a row for detail</span></div>'+
       (bdTeamStatus(tTeam)||board)+
     '</div>';
+}
+
+// ════════════════════════════════════════════════════════════════
+// OUTREACH INSIGHTS — sequence analytics (R-278, D-0160; drawn at https://claude.ai/artifact/DF9nDByMp9grLCrBT2ggCo)
+// Five numbers once, one line chart (emailed / opened / replied, by day or week), one row per sequence. The server counts
+// (GET /insights/outreach → services/outreach-insights.js); this page only draws.
+// ════════════════════════════════════════════════════════════════
+function oiState(){ return STATE.oi||(STATE.oi={ from:'', to:'', bucket:'day', seq:'all', data:null, loading:false, err:'' }); }
+function loadOutreachInsights(){
+  var o=oiState(); o.loading=true; o.err='';
+  var tz=(insightsTzQ()||'').replace(/^\?/,'');
+  var q=['bucket='+encodeURIComponent(o.bucket),'seq='+encodeURIComponent(o.seq)];
+  if(o.from) q.push('from='+o.from); if(o.to) q.push('to='+o.to); if(tz) q.push(tz);
+  apiGet('/insights/outreach?'+q.join('&')).then(function(d){ o.data=d; o.loading=false; if(!o.from){ o.from=d.from; o.to=d.to; } if(STATE.page==='bdinsights') render(); })
+    .catch(function(e){ o.loading=false; o.err=(e&&e.message)||'Could not load'; if(STATE.page==='bdinsights') render(); });
+}
+window.oiSet=function(k,v){ var o=oiState(); o[k]=v; loadOutreachInsights(); render(); };
+function oiNum(v,suffix){ return v==null?'—':(typeof v==='number'?v.toLocaleString('en-US'):v)+(v==null?'':(suffix||'')); }
+function oiChart(series,bucket){
+  var W=1140,H=300,L=44,R=1130,T=20,B=260;
+  var max=Math.max(1,series.reduce(function(m,p){ return Math.max(m,p.emailed,p.opened,p.replied); },0));
+  var step=series.length>1?(R-L)/(series.length-1):0;
+  var x=function(i){ return L+i*step; }, y=function(v){ return B-(v/max)*(B-T); };
+  function line(k,cls){ return '<polyline class="oi-line '+cls+'" fill="none" points="'+series.map(function(p,i){ return x(i).toFixed(1)+','+y(p[k]).toFixed(1); }).join(' ')+'"></polyline>'; }
+  var grid=[0,0.25,0.5,0.75,1].map(function(f){ var v=Math.round(max*f), yy=y(v); return '<line class="oi-grid" x1="'+L+'" y1="'+yy+'" x2="'+R+'" y2="'+yy+'"></line><text class="oi-ax" x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end">'+v+'</text>'; }).join('');
+  var every=Math.max(1,Math.ceil(series.length/8));
+  var labels=series.map(function(p,i){ if(i%every&&i!==series.length-1) return ''; var d=new Date(p.key+'T00:00:00Z'); return '<text class="oi-ax" x="'+x(i)+'" y="'+(B+20)+'" text-anchor="middle">'+(bucket==='week'?'wk ':'')+d.toLocaleDateString('en-US',{day:'numeric',month:'short',timeZone:'UTC'})+'</text>'; }).join('');
+  // a point per day with its counts in a tooltip — hovering a day shows that day's numbers
+  var hits=series.map(function(p,i){ return '<circle class="oi-hit" cx="'+x(i)+'" cy="'+y(p.emailed)+'" r="6"><title>'+p.key+': '+p.emailed+' emailed, '+p.opened+' opened, '+p.replied+' replied</title></circle>'; }).join('');
+  return '<svg class="oi-chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Emailed, opened and replied '+(bucket==='week'?'each week':'each day')+'">'+grid+
+    '<line class="oi-axis" x1="'+L+'" y1="'+B+'" x2="'+R+'" y2="'+B+'"></line>'+labels+line('emailed','oi-emailed')+line('opened','oi-opened')+line('replied','oi-replied')+hits+'</svg>';
+}
+function renderOutreachInsights(toggle){
+  var o=oiState();
+  if(!o.data&&!o.loading&&!o.err) loadOutreachInsights();
+  var d=o.data, t=(d&&d.totals)||{};
+  var choices=(d&&d.choices)||[{id:'all',name:'All sequences'}];
+  var controls='<div class="oi-controls">'+
+    '<label class="oi-f"><span>Sequence</span><select class="sel" onchange="oiSet(\'seq\',this.value)">'+choices.map(function(c){ return '<option value="'+escAttr(c.id)+'"'+(o.seq===c.id?' selected':'')+'>'+htmlEsc(c.name)+'</option>'; }).join('')+'</select></label>'+
+    '<label class="oi-f"><span>From</span><input type="date" class="inp" value="'+escAttr(o.from)+'" onchange="oiSet(\'from\',this.value)"></label>'+
+    '<label class="oi-f"><span>To</span><input type="date" class="inp" value="'+escAttr(o.to)+'" onchange="oiSet(\'to\',this.value)"></label></div>';
+  var head='<div class="oi-head"><div><div class="ptitle">Outreach Insights</div><div class="psub">How your sequences are doing. Each number appears once on this page.</div></div>'+controls+'</div>';
+  if(o.err&&!d) return '<div class="page">'+toggle+head+'<div class="card cp c-red fs-13">Could not load: '+htmlEsc(o.err)+'</div></div>';
+  var tiles=[
+    [oiNum(t.people),'People emailed',(t.emailed!=null?oiNum(t.emailed)+' emails':'')],
+    [oiNum(t.opened_rate,'%'),'Opened','of tracked emails'],
+    [oiNum(t.replied_rate,'%'),'Replied',(t.replied!=null?oiNum(t.replied)+' people':'')],
+    [oiNum(t.interested),'Interested','Connected or In discussion'],
+    [oiNum(t.bounced_rate,'%'),'Bounced','bad addresses']
+  ].map(function(x){ return '<div class="oi-tile"><span class="oi-n">'+(d?x[0]:'—')+'</span><span class="oi-l">'+x[1]+'</span><span class="oi-s">'+(d?x[2]:'')+'</span></div>'; }).join('');
+  var legend='<div class="oi-legend"><span><i class="oi-key oi-emailed"></i>Emailed</span><span><i class="oi-key oi-opened"></i>Opened</span><span><i class="oi-key oi-replied"></i>Replied</span></div>';
+  var buckets='<div class="oi-seg" role="group" aria-label="By day or week">'+[['day','Daily'],['week','Weekly']].map(function(b){ return '<button type="button" class="oi-segb'+(o.bucket===b[0]?' on':'')+'" aria-pressed="'+(o.bucket===b[0])+'" onclick="oiSet(\'bucket\',\''+b[0]+'\')">'+b[1]+'</button>'; }).join('')+'</div>';
+  var chart='<div class="card oi-card"><div class="oi-chart-head">'+legend+buckets+'</div>'+
+    (d?(d.series&&d.series.length?oiChart(d.series,d.bucket):'<div class="fs-13 c-text3">Nothing was sent in these dates.</div>'):'<div class="fs-13 c-text3">Loading…</div>')+'</div>';
+  var rows=((d&&d.sequences)||[]).map(function(r){
+    return '<tr><td class="fw6">'+htmlEsc(r.name)+(r.candidates?' <span class="c-text3">(candidates)</span>':'')+'</td><td>'+oiNum(r.people)+'</td><td>'+oiNum(r.emailed)+'</td><td>'+oiNum(r.opened_rate,'%')+'</td><td>'+oiNum(r.replied_rate,'%')+'</td><td>'+oiNum(r.interested)+'</td><td>'+oiNum(r.bounced_rate,'%')+'</td></tr>';
+  }).join('');
+  var table='<div class="card oi-card" data-oi-table><div class="td-h">BY SEQUENCE</div>'+(rows?'<div class="td-scroll"><table class="td-table oi-table"><thead><tr><th>Sequence</th><th>People</th><th>Emailed</th><th>Opened</th><th>Replied</th><th>Interested</th><th>Bounced</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    :'<div class="fs-13 c-text3">'+(d?'No sequence sent anything in these dates.':'Loading…')+'</div>')+'</div>';
+  return '<div class="page oi">'+toggle+head+'<div class="oi-tiles" data-oi-tiles>'+tiles+'</div>'+chart+table+'</div>';
 }
