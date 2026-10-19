@@ -1162,6 +1162,10 @@ body.ui-kit .tb-new.is-off{opacity:.55;filter:grayscale(1);box-shadow:none;curso
 .sq-between{justify-content:space-between;margin-top:0}
 .sq-nav{display:flex;justify-content:space-between;gap:12px;margin-top:4px}
 .sq-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+/* R-286: a follow-up's "same thread / new email" choice and the Rewrite / spam-check row, kept from the old My wording tab. */
+.sq-thread{margin:4px 0 12px}
+.sq-thread .sq-choice{padding:10px 12px}
+.sq-tools{margin-top:6px}
 .sq-choice{display:flex;flex-direction:column;gap:3px;text-align:left;font:inherit;color:var(--text);background:var(--card);border:2px solid var(--ctl-brd);border-radius:0;padding:14px 16px;cursor:pointer}
 .sq-choice b{font-size:15px;font-weight:700}
 .sq-choice span{font-size:13px;color:var(--text2)}

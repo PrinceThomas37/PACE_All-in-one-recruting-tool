@@ -105,7 +105,7 @@
       Q.loaded=true; Q.mode=r.mode||null; Q.max=r.followup_max==null?5:r.followup_max; Q.sample=r.sample||null;
       Q.first={ subject:tokensToHtml(r.first&&r.first.subject), body:tokensToHtml(r.first&&r.first.body),
         versions:((r.first&&r.first.versions)||[]).map(function(v){ return {subject:v.subject||'', body:v.body||''}; }) };
-      Q.fus=(r.followups||[]).map(function(f){ return { day:f.day, subject:f.subject||'', body:tokensToHtml(f.body), versions:(f.versions||[]).map(function(v){ return {subject:v.subject||'',body:v.body||''}; }) }; });
+      Q.fus=(r.followups||[]).map(function(f){ return { day:f.day, subject:f.subject||'', body:tokensToHtml(f.body), thread:f.thread==='new'?'new':'same', versions:(f.versions||[]).map(function(v){ return {subject:v.subject||'',body:v.body||''}; }) }; });
       if(!Q.fus.length && Q.max>0 && !hasWords(r.first&&r.first.body)) Q.fus=[{ day:DEFAULT_DAYS[0], subject:'', body:'', versions:[] }];   // D-0147: the box starts at 1
       if(r.teach) Q.teach=r.teach; Q.opts=r.teach_options||null;
       Q.fus.forEach(function(_,i){ teachFu(i); });
@@ -204,7 +204,7 @@
   function saveEditors(){
     var g=function(id){ var e=document.getElementById(id); return e?e.innerHTML:null; };
     var s=g('sq-subj'), b=g('sq-body'); if(s!==null) Q.first.subject=s; if(b!==null) Q.first.body=b;
-    Q.fus.forEach(function(f,i){ var e=g('sq-fu'+i); if(e!==null) f.body=e; });
+    Q.fus.forEach(function(f,i){ var e=g('sq-fu'+i); if(e!==null) f.body=e; var fs=g('sq-fusubj'+i); if(fs!==null) f.subject=htmlToTokens(fs).replace(/\n/g,' ').trim(); });
   }
   function payload(){
     saveEditors();
@@ -315,11 +315,13 @@
         '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
         '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
+      (cand?'':toolsHtml('first'))+
       msgHtml('first')+(ai||cand||Q.mbTab!=='person'?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
     Q.fus.forEach(function(f,i){
       var min=i?Number(Q.fus[i-1].day)+1:1;
       h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="btn btn-sm btn-outline" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
         '<p class="sq-sub">Sent <select class="sq-sel" data-sq-day="'+i+'" aria-label="Days after the first email">'+dayOptions(f.day,min)+'</select> after the first email, only if they have not replied.</p>'+
+        fuThreadHtml(f,i,skel)+
         (ai&&!named()?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
         msgHtml('fu'+i)+(ai||cand||Q.mbTab!=='person'?'':versionsHtml(String(i),f.versions,skel))+'</div>';
     });
@@ -332,10 +334,37 @@
       '<div id="sq-pv">'+previewMail(skel)+'</div></div>';
     return h;
   }
+  function fuThreadHtml(f,i,skel){
+    // Same thread or a new email — per follow-up (owner, 8 Oct; kept from the old My wording tab, R-286). A new email needs a
+    // subject of its own; in the thread it answers under the first email's subject.
+    var thr=named()?'':'<div class="sq-choices sq-thread" role="radiogroup" aria-label="How follow-up '+(i+1)+' is sent">'+
+      '<button type="button" class="sq-choice" role="radio" aria-checked="'+(f.thread!=='new')+'" data-sq="futhread" data-i="'+i+'" data-thr="same"><b>In the same email thread</b><span>A reply under your first email, so it reads as one conversation.</span></button>'+
+      '<button type="button" class="sq-choice" role="radio" aria-checked="'+(f.thread==='new')+'" data-sq="futhread" data-i="'+i+'" data-thr="new"><b>As a new email</b><span>Its own subject line, in a thread of its own.</span></button></div>'+
+      (f.thread==='new'?'<label class="sq-lbl" for="sq-fusubj'+i+'">Subject</label>'+editor('sq-fusubj'+i,tokensToHtml(f.subject),'A subject that stands alone — not “Re: …”',true,skel):'');
+    return thr;
+  }
   function fuEditorHtml(f,i,skel){
-    var busy=!!Q.busy;
+    var busy=!!Q.busy, cand=named()&&Q.target.cand;
     return editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
-      '<div class="sq-row">'+menuHtml('fu'+i)+(named()&&Q.target.cand?'':'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>';
+      '<div class="sq-row">'+menuHtml('fu'+i)+(cand?'':'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>'+
+      (cand?'':toolsHtml(String(i)));
+  }
+  // "Rewrite with AI" and "Check for spam triggers" on an email already written (the old My wording tab's two buttons, R-286).
+  // slot: 'first' or a follow-up's index.
+  function toolsHtml(slot){
+    var busy=!!Q.busy, sp=(Q.spam||{})[slot];
+    var box='';
+    if(sp){
+      var lvl=sp.level==='risk'?'is-risk':sp.level==='warn'?'is-warn':'is-ok';
+      box='<div class="seq-spam-box '+lvl+'" role="status"><div class="fs-13 fw6">Spam score '+esc(String(sp.score))+'/100 — '+esc(String(sp.level))+'</div>'+
+        (sp.warnings&&sp.warnings.length?'<ul class="fs-12 c-text2">'+sp.warnings.map(function(w){ return '<li>'+esc(w)+'</li>'; }).join('')+'</ul>':'<div class="fs-12 c-text3">Looks clean.</div>')+
+        '<div class="fs-11 c-text3">Checked as written just now — press the button again after you edit.</div></div>';
+    }
+    return '<div class="sq-row sq-tools">'+
+      '<button type="button" class="btn btn-sm btn-outline" data-sq="rewrite" data-slot="'+slot+'"'+(busy?' disabled':'')+'>'+(Q.busy==='rewrite'+slot?'Rewriting…':'Rewrite with AI')+'</button>'+
+      ((Q.rwUndo||{}).slot===slot?'<button type="button" class="btn btn-sm btn-outline" data-sq="rwundo" data-slot="'+slot+'">Undo the rewrite</button>':'')+
+      '<button type="button" class="btn btn-sm btn-outline" data-sq="spam" data-slot="'+slot+'" title="Looks for spam-trigger words, too many links, ALL-CAPS and other things that send mail to junk. Nothing is saved or sent.">Check for spam triggers</button>'+
+    '</div>'+box;
   }
   function fuTeachHtml(i,skel){
     var f=teachFu(i), o=Q.opts||{angles:[]};
@@ -607,7 +636,7 @@
     var el=t.closest('[data-sq]'); if(!el) return;
     var a=el.getAttribute('data-sq'), i=Number(el.getAttribute('data-i'));
     if(a==='menu'){ var id=el.getAttribute('data-menu'), open=Q.menu!==id; closeMenu(); if(open){ Q.menu=id; var m=el.parentNode.querySelector('.sq-menu'); if(m) m.hidden=false; el.setAttribute('aria-expanded','true'); } return; }
-    if(a==='ins'){ var fid=Q.menu==='first'?(rangeField==='sq-subj'?'sq-subj':'sq-body'):'sq-'+Q.menu; var k=el.getAttribute('data-k'); closeMenu(); insertChip(fid,k); return; }
+    if(a==='ins'){ var fid=Q.menu==='first'?(rangeField==='sq-subj'?'sq-subj':'sq-body'):(rangeField==='sq-fusubj'+String(Q.menu).slice(2)?rangeField:'sq-'+Q.menu); var k=el.getAttribute('data-k'); closeMenu(); insertChip(fid,k); return; }
     if(a==='mode'){ saveEditors(); Q.mode=el.getAttribute('data-mode'); Q.preview=null; Q.aitest=null; repaint(); return; }
     if(a==='pick'){ var g=el.getAttribute('data-g'), pk=el.getAttribute('data-k'), T=Q.teach;
       if(g==='use'){ var at=T.use.indexOf(pk); if(at>=0) T.use.splice(at,1); else T.use.push(pk); }
@@ -619,7 +648,42 @@
     if(a==='fudraft'){ if(!Q.busy) draftFollowup(i); return; }
     if(a==='vary'){ if(!Q.busy) vary(el.getAttribute('data-slot')); return; }
     if(a==='rmv'){ saveEditors(); var sl=el.getAttribute('data-slot'); (sl==='first'?Q.first.versions:Q.fus[Number(sl)].versions).splice(i,1); Q.preview=null; paint(true); return; }
-    if(a==='addfu'){ saveEditors(); var last=Q.fus.length?Number(Q.fus[Q.fus.length-1].day):0; var d=DEFAULT_DAYS[Q.fus.length]||last+7; if(d<=last) d=last+4; Q.fus.push({day:d,subject:'',body:'',versions:[]}); teachFu(Q.fus.length-1); paint(true); return; }
+    if(a==='futhread'){
+      saveEditors(); var thr=el.getAttribute('data-thr')==='new'?'new':'same'; if(!Q.fus[i]||Q.fus[i].thread===thr) return;
+      Q.fus[i].thread=thr; paint(true);
+      apiPost('/outreach-plan',{key:'fu'+(i+1)+'_thread',value:thr}).then(function(){
+        Q.msg['fu'+i]=thr==='new'?'This follow-up goes out as a new email with its own subject.':'This follow-up replies in the same thread.'; paint(true);
+      }).catch(function(e){ Q.msg['fu'+i]='Could not save that: '+((e&&e.message)||e); paint(true); });
+      return;
+    }
+    if(a==='rewrite'||a==='rwundo'||a==='spam'){
+      saveEditors();
+      var slot=el.getAttribute('data-slot'), first=slot==='first', fu=first?null:Q.fus[Number(slot)];
+      var subjTok=first?htmlToTokens(Q.first.subject).replace(/\n/g,' ').trim():String(fu.subject||'');
+      var bodyTok=htmlToTokens(first?Q.first.body:fu.body).trim();
+      var mkey=first?'first':'fu'+slot;
+      if(a==='rwundo'){ var u=Q.rwUndo; if(!u||u.slot!==slot) return; if(first){ Q.first.subject=u.subject; Q.first.body=u.body; } else { fu.subject=u.subject; fu.body=u.body; } Q.rwUndo=null; Q.msg[mkey]=''; paint(true); return; }
+      if(!hasWords(bodyTok)&&!hasWords(subjTok)){ Q.msg[mkey]='Write the email first — there is nothing to '+(a==='spam'?'check':'rewrite')+'.'; paint(true); return; }
+      if(a==='spam'){
+        apiPost('/emails/spam-check',{subject:subjTok,body:bodyTok}).then(function(res){ Q.spam=Q.spam||{}; Q.spam[slot]=res; paint(true); })
+          .catch(function(e){ Q.msg[mkey]='Could not check it: '+((e&&e.message)||e); paint(true); });
+        return;
+      }
+      Q.busy='rewrite'+slot; paint(true);
+      apiPost(draftUrl(),{prompt:'',purpose:first?'first':'followup',mode:'rewrite',subject:subjTok,body:bodyTok}).then(function(r){
+        Q.busy='';
+        if(!r||r.source==='refused'||(!r.subject&&!r.body&&r.source!=='kept')){ Q.msg[mkey]=(r&&r.note)||'Could not rewrite it just now.'; paint(true); return; }
+        if(r.source!=='kept'){
+          Q.rwUndo={ slot:slot, subject:first?Q.first.subject:fu.subject, body:first?Q.first.body:fu.body };
+          if(first){ Q.first.subject=tokensToHtml(r.subject||''); Q.first.body=tokensToHtml(r.body||''); }
+          else { if(fu.thread==='new'&&r.subject) fu.subject=r.subject; fu.body=tokensToHtml(r.body||''); }
+          Q.preview=null;
+        }
+        Q.msg[mkey]=r.note||'Rewritten — read it through, then save.'; paint(true);
+      }).catch(function(e){ Q.busy=''; Q.msg[mkey]='Could not reach the writer: '+((e&&e.message)||e); paint(true); });
+      return;
+    }
+    if(a==='addfu'){ saveEditors(); var last=Q.fus.length?Number(Q.fus[Q.fus.length-1].day):0; var d=DEFAULT_DAYS[Q.fus.length]||last+7; if(d<=last) d=last+4; Q.fus.push({day:d,subject:'',body:'',thread:'same',versions:[]}); teachFu(Q.fus.length-1); paint(true); return; }
     if(a==='rmfu'){ saveEditors(); Q.fus.splice(i,1); Q.teach.fus.splice(i,1); for(var j=1;j<Q.fus.length;j++) if(Number(Q.fus[j].day)<=Number(Q.fus[j-1].day)) Q.fus[j].day=Number(Q.fus[j-1].day)+1; paint(true); return; }
     if(a==='next'){ saveEditors(); var p=payload();
       if(named()&&!String(Q.target.name||'').trim()){ say('name','Give the sequence a name.'); return repaint(); }

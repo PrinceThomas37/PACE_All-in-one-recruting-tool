@@ -148,6 +148,10 @@ try {
     window.goPage = (p) => { __opened.push('page:' + p); }; __opened.length = 0; render();
   });
   await page.waitForTimeout(300);
+  // Today (D-0160) says each thing once: while the to-do list already carries this lead, its conversation is not listed again.
+  step('a conversation the to-do list already carries is not listed twice on Today', await page.evaluate(() => document.querySelectorAll('.cd-row[title]').length === 0));
+  await page.evaluate(() => { STATE.nextActions = Object.assign({}, STATE.nextActions, { items: STATE.nextActions.items.filter(x => x.job_id !== 'job-1' && x.entity_id !== 'job-1') }); render(); });
+  await page.waitForTimeout(200);
   await page.evaluate(() => document.querySelector('.cd-row[title]').click()); await wait();
   d = await drawer();
   step('a client conversation of yours opens the emails behind it', d && d.title.indexOf('Estimator · Pinpoint') === 0 && /written in the last 60 days/.test(d.hint) && d.rows.length === 2 && d.rows[0].chips.includes('the reply you owe') && d.actions.join() === 'Open the lead', JSON.stringify(d));
@@ -169,8 +173,9 @@ try {
   d = await drawer();
   step('with the lead not loaded there is NO stage control (never one that cannot act)', !/Move to/.test(d.taskBtns.join()) && await page.evaluate(() => !document.querySelector('.ev-task-acts select')));
   await close();
-  await page.evaluate(() => { const r = [...document.querySelectorAll('.cd-person .cd-row')][0]; r.click(); }); await wait();
-  step('a teammate\'s conversation stays facts-only — no emails, it just opens the lead list (D-0040)', await page.evaluate(() => !document.querySelector('.ev-drawer') && __opened.includes('page:leads')));
+  // A teammate's conversation (D-0040: facts only, never their emails): on the manager's Today (D-0160) it is a COUNT in
+  // "Your team today", not a row — so there is nothing of theirs to open at all.
+  step('a teammate\'s conversation is never a row you can open on Today (counts only — D-0040, D-0160)', await page.evaluate(() => !document.querySelector('.cd-person .cd-row') && !/Dev · Globex/.test(document.getElementById('content').innerText)));
 
   // 6b. a candidate whose reply reads as interest: the window offers the stage move itself
   await page.evaluate(() => {
