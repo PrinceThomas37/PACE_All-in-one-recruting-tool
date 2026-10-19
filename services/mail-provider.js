@@ -318,20 +318,32 @@ function extractGmailBody(payload) {
   return { html: textToHtml(text), isHtml: false };
 }
 
-function gmailAttachments(payload, out = []) {
+// WHICH ATTACHMENTS ARE "INLINE" (hidden from the attachment list) — R-274, owner 19 Oct: a resume sent "from Yahoo Mail
+// for iPhone" showed in Gmail and not in PACE. PACE used to hide every part carrying a Content-ID, taking it for a signature
+// logo; Apple's and Yahoo's phone apps put a Content-ID on REAL attachments too. A part is inline only when it is an image
+// the email's own HTML actually shows (`cid:` + its id). Everything else is listed, as Gmail and Outlook list it.
+function cidOf(v) { return String(v || '').trim().replace(/^<|>$/g, '').toLowerCase(); }
+function isInlinePart({ contentType, contentId }, html) {
+  const cid = cidOf(contentId);
+  if (!cid || !/^image\//i.test(String(contentType || ''))) return false;
+  const body = String(html || '').toLowerCase();
+  return body.includes('cid:' + cid) || body.includes('cid:' + encodeURIComponent(cid).toLowerCase());
+}
+
+function gmailAttachments(payload, out = [], html = null) {
   if (!payload) return out;
+  if (html == null) html = extractGmailBody(payload).html || '';
   if (payload.filename && payload.body?.attachmentId) {
+    const cidHeader = (payload.headers || []).find(h => /^content-id$/i.test(h.name || ''));
     out.push({
       id: payload.body.attachmentId,
       name: payload.filename,
       content_type: payload.mimeType || 'application/octet-stream',
       size: payload.body.size || 0,
-      // Gmail marks inline parts with a Content-Id; those are signature logos,
-      // not things the user attached.
-      inline: (payload.headers || []).some(h => /^content-id$/i.test(h.name || '')),
+      inline: isInlinePart({ contentType: payload.mimeType, contentId: cidHeader && cidHeader.value }, html),
     });
   }
-  (payload.parts || []).forEach(p => gmailAttachments(p, out));
+  (payload.parts || []).forEach(p => gmailAttachments(p, out, html));
   return out;
 }
 
@@ -496,7 +508,9 @@ function createMailProvider(ctx) {
           attachments = (a.value || []).map(x => ({
             id: x.id, name: x.name || 'attachment',
             content_type: x.contentType || 'application/octet-stream',
-            size: x.size || 0, inline: !!x.isInline,
+            // Outlook's own isInline is set on phone-app attachments too (R-274). Its Content-ID is not in this list (asking
+            // for it means downloading every file), so: hidden only when it is an IMAGE and the body shows embedded images.
+            size: x.size || 0, inline: !!x.isInline && /^image\//i.test(String(x.contentType || '')) && /cid:/i.test(raw),
           }));
         } catch (_) { /* an unreadable attachment list must not hide the message */ }
       }
@@ -894,7 +908,7 @@ module.exports = {
   parseAddress, parseAddressList,
   sanitizeEmailHtml, hasRemoteImages, textToHtml,
   normalizeGraphMessage, normalizeGmailMessage,
-  extractGmailBody, gmailAttachments,
+  extractGmailBody, gmailAttachments, isInlinePart,
   replyRecipients, replySubject, forwardSubject, quoteBlock, forwardHeaderBlock,
   approxBytes,
 };
