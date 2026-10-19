@@ -1425,3 +1425,6 @@ No screen code changed; the new numbers appear in System Settings automatically 
 ## 2026-10-16 (Session 49, later) — password eye (R-265)
 `pwBox(id, placeholder)` (12-manager-users.js) renders a password input with an eye; `togglePwVisible` flips it. Used by Add user (`u-pw`) and the profile's Set password (`ud-pw`). Classes `.pw-wrap`, `.pw-eye` in `ui.css`. Only typed text is revealed; there is no route that returns a saved password and none should be added.
 `render()` (03-core-render.js) keeps the typed text of any `input[data-keep-typed]` through a repaint; `pwBox` sets it. Use it for any box where losing typed text would cost the person something.
+
+## 2026-10-19 (Session 49, later) — mailbox daily limit (R-266)
+- surface: R-266 — limit box per mailbox on the user profile (`saveMailboxLimit`, `openMailboxLimitChanges` in `12-manager-users.js`), My Setup "Lower daily limit"; Add email ID window has no typed default.

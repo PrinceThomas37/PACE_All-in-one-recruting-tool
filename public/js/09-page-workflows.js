@@ -789,7 +789,7 @@ function renderAdmin(){
         (isAdmin?integrationsBtn:'')+
         (isAdmin?sysSettingsBtn:'')+
         (isAdmin?'<button class="btn btn-sm" onclick="openPurgePending(\'all\')" style="background:transparent;color:var(--red);border:1px solid #fca5a5">Delete pending (all managers)…</button>':'')+
-        (isAdmin?'<button class="btn btn-sm btn-outline" onclick="openDeactivatedUsers()">Deactivated users</button>':'')+
+        (isAdmin?'<button class="btn btn-sm btn-outline" onclick="openDeactivatedUsers()">Deactivated users</button>':'')+(isAdmin?'<button class="btn btn-sm btn-outline" onclick="openMailboxLimitChanges()">Limit changes</button>':'')+
         '<button class="btn btn-primary btn-sm" onclick="openAddUser()">'+ico('plus',13)+'Add user</button>'+
       '</div>'+
     '</div></div>'+
@@ -1023,6 +1023,8 @@ function renderAdminUserDetail(userId){
       (e.is_primary?'<span class="fs-10 c-amber" style="padding:2px 7px;background:var(--amber-l);border-radius:6px;font-weight:600">Primary</span>':'')+
       '<span class="fs-10" style="padding:2px 7px;border-radius:6px;font-weight:600;background:'+(e.is_active?'var(--green-l)':'var(--red-l)')+';color:'+(e.is_active?'var(--green)':'var(--red)')+'">'+( e.is_active?'Active':'Inactive')+'</span>'+
       connBtn+
+      '<span class="fs-11 c-text3">Daily limit</span><input class="inp fs-12" type="number" min="1" id="lim-'+e.id+'" data-keep-typed="1" value="'+htmlEsc(String(e.daily_send_limit||''))+'" placeholder="default" style="width:80px"/>'+
+      '<button class="btn btn-sm btn-outline" onclick="saveMailboxLimit(\''+userId+'\',\''+e.id+'\',document.getElementById(\'lim-'+e.id+'\').value)">Save</button>'+
       '<button onclick="toggleUserEmailActive(\''+userId+'\',\''+e.id+'\','+(e.is_active?'false':'true')+')" style="font-size:11px;color:'+(e.is_active?'var(--red)':'var(--green)')+';background:transparent;border:0;cursor:pointer">'+(e.is_active?'Deactivate':'Activate')+'</button>'+
       (e.is_primary?'':'<button onclick="setPrimaryEmail(\''+userId+'\',\''+e.id+'\')" style="font-size:11px;color:var(--text3);background:transparent;border:0;cursor:pointer">Set Primary</button>')+
       '<button onclick="deleteUserEmail(\''+userId+'\',\''+e.id+'\')" style="font-size:11px;color:var(--red);background:transparent;border:0;cursor:pointer">✕</button>'+

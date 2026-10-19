@@ -1305,3 +1305,6 @@ New `test/user-password-smoke.mjs` (16 checks): add user with / without a passwo
 
 ## 2026-10-15 (Session 48, later) — `login-repaint-smoke` (R-263)
 Chromium + route-mocked slow API; a MutationObserver on `#app` counts full repaints (LOGIN/SPINNER/SHELL). A "duplicated tab" is seeded through `addInitScript` into sessionStorage. Mutation-checked: with the four source files reverted, 6 of 7 checks fail (7 login repaints).
+
+## 2026-10-19 (Session 49, later) — new test (R-266)
+- foundry: `test/user-mailbox-limit-smoke.mjs` (22) pins who may change a mailbox limit and the change log; removing the lower-only check fails 4. `mysetup-page-smoke` still pins the words "set by an admin" on My Setup, so the wording keeps them.
