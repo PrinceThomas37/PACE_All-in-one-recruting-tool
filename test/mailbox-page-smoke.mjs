@@ -115,6 +115,9 @@ try {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await waitForLogin(page);
   await enterApp(page, 'recruiter');
+  // This suite is about the single-email list (the provider's /messages read). Conversations are the default since R-271
+  // and have their own suite (mailbox-threads-ui-smoke); this is the person's own "Single emails" choice, not a bypass.
+  await page.evaluate(() => { STATE.mailView = 'messages'; });
 
   await page.evaluate((F) => {
     window.__calls = [];
@@ -268,8 +271,10 @@ try {
   step('Reply offers bold, italic, underline, bullets, a numbered list, a link, and clear formatting',
     ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbered list', 'Link', 'Clear formatting'].every(s => fmtBar.includes(s)),
     fmtBar.slice(0, 180));
-  step('Reply does not offer a font, a size, a colour, a highlight, or alignment',
-    !/font|size|colour|color|highlight|align/i.test(fmtBar));
+  // 19 Oct (owner, R-273): the full Saleshandy bar — this used to assert the OPPOSITE (R-192); the owner reversed it.
+  const FULL_BAR = ['Font', 'Text size', 'Text colour', 'Highlight', 'Align left', 'Centre', 'Align right', 'Less indent', 'More indent', 'Remove link', 'Image'];
+  step('Reply also offers a font, a size, a text colour, a highlight, alignment, indent, remove-link and an image (R-273)',
+    FULL_BAR.every(s => fmtBar.includes(s)), FULL_BAR.filter(s => !fmtBar.includes(s)).join(', '));
   const bolded = await page.evaluate(() => {
     const ed = document.getElementById('mb-comp-editor');
     ed.focus();
@@ -499,15 +504,14 @@ try {
   step('Compose opens with To / Cc / Subject / Message',
     await page.evaluate(() => !!(document.getElementById('mb-c-to') && document.getElementById('mb-c-cc')
       && document.getElementById('mb-c-subject') && document.getElementById('mb-c-body'))));
-  step('New message has the same formatting bar, and nothing else',
-    await page.evaluate(() => {
+  step('New message has the same formatting bar as Reply',
+    await page.evaluate((full) => {
       const bar = document.querySelector('#layer .mb-fmt');
       if (!bar) return false;
       const html = bar.innerHTML;
-      const wanted = ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbered list', 'Link', 'Clear formatting'];
-      return wanted.every(s => html.includes(s)) && !/font|size|colour|color|highlight|align/i.test(html)
-        && !!document.getElementById('mb-c-editor');
-    }));
+      const wanted = ['Bold', 'Italic', 'Underline', 'Bullets', 'Numbered list', 'Link', 'Clear formatting'].concat(full);
+      return wanted.every(s => html.includes(s)) && !!document.getElementById('mb-c-editor');
+    }, FULL_BAR));
   step('Compose names the mailbox it will send from',
     (await page.evaluate(() => document.querySelector('.modal').innerHTML)).includes('priya@futeglobal.com'));
 

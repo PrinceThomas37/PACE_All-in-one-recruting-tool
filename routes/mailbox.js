@@ -339,6 +339,98 @@ module.exports = (ctx) => {
     } catch (err) { providerError(res, err); }
   });
 
+  // ── CONVERSATIONS (R-271) and ALL INBOXES (R-272) ─────────────────────────
+  // The folder list (cached as above) tells a conversation which folders do not count (Trash, Junk — unless that is the
+  // folder being read) and where Sent is (Outlook reads it to bring a conversation we just answered to the top).
+  async function folderFacts(mailbox, prov, folderId) {
+    let folders = (folderCache.get(mailbox.id) || {}).value;
+    if (!folders) { folders = await prov.listFolders(); folderCache.set(mailbox.id, { at: Date.now(), value: folders }); }
+    const kindOf = (k) => (folders || []).filter(f => f.kind === k);
+    return {
+      hidden: kindOf('trash').concat(kindOf('junk')).map(f => f.id).filter(id => id !== folderId),
+      sentId: (kindOf('sent')[0] || {}).id || null,
+      inboxId: (kindOf('inbox')[0] || {}).id || null,
+    };
+  }
+  async function withCrm(req, rows) {
+    const addresses = [];
+    for (const r of rows) {
+      if (r.party && r.party.email) addresses.push(r.party.email);
+      if (r.from && r.from.email) addresses.push(r.from.email);
+    }
+    return crmLinksFor(req, addresses);
+  }
+
+  router.get('/mailbox/:mid/conversations', auth, async (req, res) => {
+    const { mailbox, error } = await ownedMailbox(req, req.params.mid);
+    if (error) return res.status(error.status).json(error.body);
+    try {
+      const limit = Math.min(50, Math.max(5, parseInt(req.query.limit, 10) || 25));
+      const prov = mail.forMailbox(mailbox);
+      const folderId = req.query.q ? null : (req.query.folder || null);
+      const facts = await folderFacts(mailbox, prov, folderId);
+      const page = await prov.listConversations({
+        folderId, q: req.query.q || null, cursor: req.query.cursor || null, limit,
+        hidden: facts.hidden, sentId: facts.sentId,
+      });
+      res.json({ ...page, crm: await withCrm(req, page.conversations) });
+    } catch (err) { providerError(res, err); }
+  });
+
+  // ALL INBOXES (R-272, the owner's teammate: "all inbox option like we have on Gmail … the system shows which email is for
+  // which email ID"). The inbox of every mailbox the caller can open — each through ownedMailbox(), the only door in, so
+  // nothing here reaches a mailbox the per-mailbox screen could not — merged newest first, every row carrying the
+  // address it belongs to. A mailbox that cannot be read just now is named in `skipped`, never silently missing.
+  // The cursor is each mailbox's own next page; a mailbox with nothing more drops out of the next page.
+  router.get('/mailbox-all/inbox', auth, async (req, res) => {
+    try {
+      const limit = Math.min(50, Math.max(5, parseInt(req.query.limit, 10) || 25));
+      const threads = req.query.view !== 'messages';
+      let cur = null;
+      if (req.query.cursor) {
+        try { cur = JSON.parse(Buffer.from(String(req.query.cursor), 'base64').toString('utf8')) || {}; }
+        catch (_) { return res.status(400).json({ error: 'That page could not be read — refresh the inbox' }); }
+      }
+      const { data: rows } = await supabase.from('user_emails')
+        .select('id,email_address').eq('user_id', req.user.id).eq('is_active', true)
+        .order('is_primary', { ascending: false });
+      const skipped = [];
+      const pages = await Promise.all((rows || []).map(async (row) => {
+        if (cur && !cur[row.id]) return null;                       // that mailbox had nothing more
+        const { mailbox, error } = await ownedMailbox(req, row.id);
+        if (error) { skipped.push({ id: row.id, email: row.email_address, reason: error.body.error }); return null; }
+        try {
+          const prov = mail.forMailbox(mailbox);
+          const pre = await folderFacts(mailbox, prov, null);
+          if (!pre.inboxId) return null;
+          const facts = await folderFacts(mailbox, prov, pre.inboxId);
+          const cursor = cur ? cur[row.id] : null;
+          // A search reaches every folder of every mailbox, as a search in one mailbox does (14 Oct).
+          const q = req.query.q ? String(req.query.q) : null;
+          const page = threads
+            ? await prov.listConversations({ folderId: q ? null : pre.inboxId, q, cursor, limit, hidden: q ? [] : facts.hidden, sentId: facts.sentId })
+            : await prov.listMessages({ folderId: q ? null : pre.inboxId, q, cursor, limit });
+          const items = (threads ? page.conversations : page.messages).map(x => ({
+            ...x, mailbox_id: mailbox.id, mailbox_email: mailbox.email_address, list_folder_id: pre.inboxId,
+          }));
+          return { id: mailbox.id, items, next: page.next_cursor || null };
+        } catch (err) {
+          skipped.push({ id: row.id, email: row.email_address, reason: 'could not be read just now — try Refresh' });
+          return null;
+        }
+      }));
+      const live = pages.filter(Boolean);
+      const items = live.flatMap(p => p.items).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      const next = {}; live.forEach(p => { if (p.next) next[p.id] = p.next; });
+      res.json({
+        [threads ? 'conversations' : 'messages']: items,
+        next_cursor: Object.keys(next).length ? Buffer.from(JSON.stringify(next), 'utf8').toString('base64') : null,
+        mailboxes: live.length, skipped,
+        crm: await withCrm(req, items),
+      });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
   router.get('/mailbox/:mid/messages/:id', auth, async (req, res) => {
     const { mailbox, error } = await ownedMailbox(req, req.params.mid);
     if (error) return res.status(error.status).json(error.body);

@@ -319,6 +319,19 @@ function createGmailProvider(ctx) {
     return { messages: r.messages || [], nextPageToken: r.nextPageToken || null, resultSizeEstimate: r.resultSizeEstimate || 0 };
   }
 
+  // Conversations, newest activity first (threads.list orders a thread by its newest message, ours included) — the inbox's
+  // "show as threads" (R-271). Same envelope as listMessagePage, with `threads` in place of `messages`.
+  async function listThreadPage(userEmailId, { labelIds, q, maxResults, pageToken } = {}) {
+    const token = await getToken(userEmailId);
+    const p = new URLSearchParams();
+    (labelIds || []).forEach((l) => p.append('labelIds', l));
+    if (q) p.set('q', q);
+    if (pageToken) p.set('pageToken', pageToken);
+    p.set('maxResults', String(maxResults || 25));
+    const r = await api(token, `/threads?${p}`);
+    return { threads: r.threads || [], nextPageToken: r.nextPageToken || null };
+  }
+
   // Gmail has folders only in the sense that it has labels. labels.list is one
   // call and carries no counts; labels.get carries counts and is one call per
   // label — hence the two functions, and the caller decides how many counts are
@@ -375,7 +388,7 @@ function createGmailProvider(ctx) {
     sendNewMessage, sendThreadReply, listMessages, getMessage, modifyLabels,
     normalizeMessage, signInAuthorizeUrl, SIGNIN_SCOPES,
     // In-app mailbox reads (services/mail-provider.js)
-    listMessagePage, listLabels, getLabel, createLabel, getThread, getAttachment, trashMessage,
+    listMessagePage, listThreadPage, listLabels, getLabel, createLabel, getThread, getAttachment, trashMessage,
     // Exported for testing — header encoding is easy to get subtly wrong.
     encodeMimeHeader, encodeAddressHeader,
   };

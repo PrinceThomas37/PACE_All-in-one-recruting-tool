@@ -206,11 +206,13 @@
   window.mySetupStarter = function(){
     apiPost('/my-setup/sequence/starter',{}).then(function(r){
       loadPlan(Object.assign({}, STATE.myOutreachPlan||{}, r.plan||{}));
-      showToast('Your sequence is saved — it uses '+r.company+'. Edit the wording any time on the Email page.','success'); mySetupSync();
+      showToast('Your sequence is saved — it uses '+r.company+'. Change the wording any time: Your sequence → Open it.','success'); mySetupSync();
     }).catch(function(e){ showToast((e&&e.message)||String(e),'warning'); });
   };
-  window.mySetupOpenSequence = function(){ STATE.emailTab='sequence'; STATE.seqView='wording'; goPage('email'); };
-  window.mySetupOpenStyle = function(){ STATE.emailTab='sequence'; STATE.seqView='style'; goPage('email'); };
+  // The wording and the AI's writing style live in the sequence builder now (D-0161) — the old Email → Sequence sub-tabs are gone,
+  // so these open the builder (the style one with its "How the AI writes for you" section already open).
+  window.mySetupOpenSequence = function(){ openSequenceSetup(); };
+  window.mySetupOpenStyle = function(){ openSequenceSetup(); if(STATE.seqSetup){ STATE.seqSetup.open=STATE.seqSetup.open||{}; STATE.seqSetup.open.aistyle=true; } };
 
   // ═════ THE WINDOW: add a mailbox, or change who one writes for and what its signature looks like ═════
   var FIELDS=[ ['company','Company it writes for','e.g. Acme Talent LLC',true], ['title','Your job title','e.g. Vice President',true],

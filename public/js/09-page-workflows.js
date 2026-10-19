@@ -440,7 +440,8 @@ window.wfEditMyWording=function(i){
   var k=(s.config&&s.config.template_key)||'initial';
   STATE.activeTmpl=({initial:'outreach',o1:'outreach',fu1:'fu1',fu2:'fu2'})[k]||'outreach';
   STATE.wfBuilder=null; closeModal();
-  STATE.seqView='wording'; STATE.emailTab='sequence'; goPage('email');
+  // The person's own wording is edited in the sequence builder now (D-0161); the old Email → My wording tab is gone.
+  openSequenceSetup();
 };
 window.wfCopyTemplate=function(i){
   var s=STATE.wfBuilder&&STATE.wfBuilder.steps[i]; if(!s)return;

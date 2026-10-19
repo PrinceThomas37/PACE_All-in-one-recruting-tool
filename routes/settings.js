@@ -37,6 +37,8 @@ const ALLOWED_PREFS = {
   theme: ['light', 'dark', 'system'],
   // How many leads one page of the Leads list shows — the person's own choice (owner, 19 Oct, R-280).
   leads_per_page: [10, 20, 50],
+  // The inbox as conversations or as single emails — the person's own choice; conversations unless they chose (R-271, D-0162).
+  mail_view: ['threads', 'messages'],
 };
 
 router.get('/me/preferences', auth, async (req, res) => {

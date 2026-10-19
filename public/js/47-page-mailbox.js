@@ -176,18 +176,33 @@
   var _lc={}, _mc={}, _mcOrder=[], _tc={}, _fc={}, _inflight={}, _hoverT=null;
   // A search covers the WHOLE mailbox, not the folder that happens to be open (owner, 14 Oct: "search all across within that email, like
   // Gmail") — so a searched list is remembered under '*', never under a folder it did not come from.
-  function lkey(){ var m=M(); return [m.activeId,m.q?'*':(m.folderId||''),m.q||''].join('|'); }
+  // CONVERSATIONS OR SINGLE EMAILS (R-271), and ALL INBOXES (R-272). The view is the person's own choice (saved with their
+  // preferences; conversations unless they chose); All inboxes is a list over every email ID they can open, each row carrying
+  // the mailbox it belongs to — opening a row switches to that mailbox for the message itself, the list stays.
+  function threaded(){ return (STATE.mailView||'threads')!=='messages'; }
+  function lkey(){ var m=M(); return m.all ? ['*all',threaded()?'t':'m',m.q||''].join('|') : [m.activeId,m.q?'*':(m.folderId||''),m.q||'',threaded()?'t':'m'].join('|'); }
+  // The mailbox a row (or a message id inside one) belongs to: its own in All inboxes, otherwise the open one.
+  function rowOf(id){ return (M().messages||[]).filter(function(x){ return x.id===id||(x.message_ids||[]).indexOf(id)>=0; })[0]||null; }
+  function acctOf(id){ var r=rowOf(id); return (r&&r.mailbox_id)||M().activeId; }
+  // What a row stands for: one message, or every message of its conversation (for Archive, those in the folder being read).
+  function idsOf(x, action){
+    if(!x) return [];
+    if(!x.message_ids) return [x.id];
+    if(action==='archive') return (x.in_folder&&x.in_folder.length)?x.in_folder:x.message_ids;
+    if(action==='read') return (x.unread_ids&&x.unread_ids.length)?x.unread_ids:[x.id];
+    return x.message_ids;
+  }
   function mkey(id){ return M().activeId+':'+id; }
   function mcPut(acct,id,msg){
     var k=acct+':'+id; if(!_mc[k]) _mcOrder.push(k); _mc[k]=msg;
     while(_mcOrder.length>MSG_MAX){ delete _mc[_mcOrder.shift()]; }
   }
   function listCachePut(){
-    var m=M(); if(!m.activeId||m.messages===null) return;
+    var m=M(); if((!m.activeId&&!m.all)||m.messages===null) return;
     _lc[lkey()]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
   }
   function cacheDropAccount(acct){
-    Object.keys(_lc).forEach(function(k){ if(k.indexOf(acct+'|')===0) delete _lc[k]; });
+    Object.keys(_lc).forEach(function(k){ if(k.indexOf(acct+'|')===0||k.indexOf('*all|')===0) delete _lc[k]; });
     delete _fc[acct];
   }
   function cacheForget(acct,id){ delete _mc[acct+':'+id]; }
@@ -227,7 +242,13 @@
 
   function listPath(cursor){
     var m=M();
-    var p='/mailbox/'+enc(m.activeId)+'/messages?limit=25';
+    if(m.all){
+      var a='/mailbox-all/inbox?view='+(threaded()?'threads':'messages');
+      if(m.q) a+='&q='+enc(m.q);
+      if(cursor) a+='&cursor='+enc(cursor);
+      return a;
+    }
+    var p='/mailbox/'+enc(m.activeId)+(threaded()?'/conversations':'/messages')+'?limit=25';
     if(m.q) p+='&q='+enc(m.q);                 // no folder: the server searches every folder of this mailbox
     else if(m.folderId) p+='&folder='+enc(m.folderId);
     if(cursor) p+='&cursor='+enc(cursor);
@@ -235,7 +256,7 @@
   }
 
   function loadMessages(cursor){
-    var m=M(); if(!m.activeId)return;
+    var m=M(); if(!m.activeId&&!m.all)return;
     var key=lkey();
     if(!cursor){
       m.sel={}; m.labelMenu=null; m._pages=1;
@@ -273,20 +294,29 @@
     var next=function(){
       var mm=M(); if(mm.activeId!==acct) { _warmed[acct]=false; return; }   // moved on: a later visit may warm it
       var id=ids.shift(); if(!id) return;
-      var key=[acct,id,''].join('|');
+      var key=[acct,id,'',threaded()?'t':'m'].join('|');
       if(_lc[key]||(typeof document!=='undefined'&&document.hidden)) return next();
-      apiGet('/mailbox/'+enc(acct)+'/messages?limit=25&folder='+enc(id)).then(function(d){
-        if(!_lc[key]) _lc[key]={at:Date.now(),messages:(d.messages||[]).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},d.crm||{})};
+      apiGet('/mailbox/'+enc(acct)+(threaded()?'/conversations':'/messages')+'?limit=25&folder='+enc(id)).then(function(d){
+        if(!_lc[key]) _lc[key]={at:Date.now(),messages:rowsOf(d).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},d.crm||{})};
       }).catch(function(){}).then(function(){ setTimeout(next,WARM_GAP); });
     };
     setTimeout(next,WARM_GAP);
   }
   window.mbWarmFolders=warmFolders;
 
+  // A conversations answer carries `conversations`, a single-email one `messages` — one list either way. A conversation
+  // already on screen is not added twice when a later page brings it again (Outlook can: it reads Sent on the first page).
+  function rowsOf(d){ return (d&&(d.conversations||d.messages))||[]; }
+  function appendRows(have,more){
+    var seen={}; (have||[]).forEach(function(x){ seen[(x.mailbox_id||'')+'|'+(x.message_ids?x.thread_id||x.id:x.id)]=1; });
+    return (have||[]).concat((more||[]).filter(function(x){ return !seen[(x.mailbox_id||'')+'|'+(x.message_ids?x.thread_id||x.id:x.id)]; }));
+  }
   function fetchList(key,cursor,quiet){
     var m=M(), acct=m.activeId;
     apiGet(listPath(cursor)).then(function(d){
-      if(M().activeId!==acct || lkey()!==key) return;          // they moved on while this was in flight
+      if(lkey()!==key) return;                                   // they moved on while this was in flight (the key names the mailbox, or All inboxes)
+      d=Object.assign({},d,{messages:rowsOf(d)});
+      if(m.all) m.skipped=(d&&d.skipped)||[];
       if(quiet){
         // Replace what is on screen only while nothing has been done with it — a list the person
         // is ticking, paging or reading is never rewritten under their hands.
@@ -299,7 +329,7 @@
         _lc[key]={at:Date.now(),messages:(d.messages||[]).slice(),nextCursor:d.next_cursor||null,crm:Object.assign({},m.crm||{})};
         return;
       }
-      m.messages=cursor?(m.messages||[]).concat(d.messages||[]):(d.messages||[]);
+      m.messages=cursor?appendRows(m.messages,d.messages):(d.messages||[]);
       m.nextCursor=d.next_cursor||null;
       if(cursor) m._pages=(m._pages||1)+1;
       m.crm=Object.assign(m.crm||{}, d.crm||{});
@@ -307,12 +337,12 @@
       if(!cursor) _lc[key]={at:Date.now(),messages:m.messages.slice(),nextCursor:m.nextCursor,crm:Object.assign({},m.crm||{})};
       paint();
       if(!cursor) deepOpen();
-      if(!cursor&&!m.q){
+      if(!cursor&&!m.q&&!m.all){
         var cur=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
         if(cur&&cur.kind==='inbox') warmFolders(acct);
       }
     }).catch(function(e){
-      if(M().activeId!==acct || lkey()!==key) return;
+      if(lkey()!==key) return;
       if(quiet) return;                                          // a failed refresh behind the screen says nothing
       m.listLoading=false; m.error=e.message;
       if(!cursor) m.messages=[];
@@ -332,7 +362,7 @@
   window.mbHover=function(id){
     clearTimeout(_hoverT);
     try{ if(!(window.matchMedia&&matchMedia('(hover:hover) and (pointer:fine)').matches)) return; }catch(e){ return; }
-    var acct=M().activeId; if(!acct) return;
+    var acct=acctOf(id); if(!acct) return;
     _hoverT=setTimeout(function(){ if(!_mc[acct+':'+id]) fetchMessage(acct,id,false).catch(function(){}); },180);
   };
   window.mbHoverEnd=function(){ clearTimeout(_hoverT); };
@@ -400,13 +430,22 @@
   }
 
   function markRead(id, read, quiet){
-    var m=M();
-    (m.messages||[]).forEach(function(x){ if(x.id===id) x.unread=!read; });
+    var m=M(), acct=acctOf(id);
+    // A conversation row is unread while ANY of its messages is: opening it reads them all (below); this message
+    // is taken off its list either way.
+    (m.messages||[]).forEach(function(x){
+      if(x.id===id&&!x.message_ids) x.unread=!read;
+      else if(x.message_ids&&x.message_ids.indexOf(id)>=0){
+        x.unread_ids=(x.unread_ids||[]).filter(function(u){ return u!==id; }).concat(read?[]:[id]);
+        x.unread=x.unread_ids.length>0;
+      }
+    });
     if(m.message&&m.message.id===id) m.message.unread=!read;
-    var cm=_mc[m.activeId+':'+id]; if(cm) cm.unread=!read;
+    var cm=_mc[acct+':'+id]; if(cm) cm.unread=!read;
+    (m.thread||[]).forEach(function(t){ if(t.id===id) t.unread=!read; });
     listCachePut();
     if(!quiet) paint();
-    apiPatch('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id),{read:!!read})
+    apiPatch('/mailbox/'+encodeURIComponent(acct)+'/messages/'+encodeURIComponent(id),{read:!!read})
       .then(function(){ refreshUnread(true); })
       .catch(function(){ /* the list is a view of the server, not the truth */ });
   }
@@ -415,7 +454,7 @@
   // trashing from the reading pane should feel instant.
   function removeFromList(id){
     var m=M();
-    m.messages=(m.messages||[]).filter(function(x){return x.id!==id;});
+    m.messages=(m.messages||[]).filter(function(x){return x.id!==id&&(x.message_ids||[]).indexOf(id)<0;});
     if(m.selectedId===id){ m.selectedId=null; m.message=null; }
     if(m.sel) delete m.sel[id];
     cacheForget(m.activeId,id); cacheDropAccount(m.activeId); listCachePut();   // other folders' counts and lists are now older than this action
@@ -477,33 +516,51 @@
   }
   function applyLocal(acct,okIds,action,labelId){
     var m=M(), set={}; okIds.forEach(function(id){ set[id]=1; });
+    var hit=function(x){ return x&&(set[x.id]||(x.message_ids||[]).some(function(id){ return set[id]; })); };
     function touch(x){
-      if(!x||!set[x.id]) return;
+      if(!hit(x)) return;
       if(action==='read') x.unread=false; else if(action==='unread') x.unread=true;
       else if(action==='label'){ x.label_ids=(x.label_ids||[]).filter(function(l){return l!==labelId;}).concat([labelId]); }
       else if(action==='unlabel'){ x.label_ids=(x.label_ids||[]).filter(function(l){return l!==labelId;}); }
     }
     (m.messages||[]).forEach(touch); touch(m.message);
     okIds.forEach(function(id){ touch(_mc[acct+':'+id]); });
+    if(action==='read'||action==='unread') (m.messages||[]).forEach(function(x){ if(hit(x)&&x.message_ids){ x.unread_ids=action==='read'?[]:[x.id]; } });
     if(action==='trash'||action==='archive'){
-      m.messages=(m.messages||[]).filter(function(x){return !set[x.id];});
-      if(m.selectedId&&set[m.selectedId]){ m.selectedId=null; m.message=null; }
+      var gone=false;
+      (m.messages||[]).forEach(function(x){ if(hit(x)){ delete m.sel[x.id]; if(x.id===m.selectedId||(x.message_ids||[]).indexOf(m.selectedId)>=0) gone=true; } });
+      m.messages=(m.messages||[]).filter(function(x){return !hit(x);});
+      if(m.selectedId&&(set[m.selectedId]||gone)){ m.selectedId=null; m.message=null; m.thread=null; m.threadId=null; }
       okIds.forEach(function(id){ cacheForget(acct,id); delete m.sel[id]; });
     }
   }
   window.mbBulk=function(action,labelId,idsOverride){
-    var m=M(), acct=m.activeId;
-    var ids=idsOverride||Object.keys(m.sel||{});
-    if(!ids.length||m.bulkBusy) return Promise.resolve();
+    var m=M();
+    var picked=idsOverride||Object.keys(m.sel||{});
+    if(!picked.length||m.bulkBusy) return Promise.resolve();
+    // A ticked conversation stands for its messages; in All inboxes each goes to its own mailbox. The count said back is
+    // of what was ticked (conversations or emails), never of the messages underneath.
+    var byAcct={}, rowsDone={};
+    picked.forEach(function(id){
+      var row=rowOf(id), acct=(row&&row.mailbox_id)||m.activeId;
+      (row&&row.id===id?idsOf(row,action):[id]).forEach(function(mid){ (byAcct[acct]=byAcct[acct]||[]).push(mid); });
+    });
     m.bulkBusy=true; paint();
-    return bulkRequest(acct,ids,action,labelId).then(function(results){
-      if(M().activeId!==acct){ return; }
-      var okIds=results.filter(function(r){return r.ok;}).map(function(r){return r.id;});
-      var failed=results.length-okIds.length;
-      applyLocal(acct,okIds,action,labelId);
-      cacheDropAccount(acct); listCachePut();
+    var accts=Object.keys(byAcct), results=[], listKey=lkey();
+    return accts.reduce(function(p,acct){
+      return p.then(function(){ return bulkRequest(acct,byAcct[acct],action,labelId).then(function(r){
+        var okIds=r.filter(function(x){return x.ok;}).map(function(x){return x.id;});
+        applyLocal(acct,okIds,action,labelId); cacheDropAccount(acct);
+        results=results.concat(r);
+      }); });
+    },Promise.resolve()).then(function(){
+      if(lkey()!==listKey){ m.bulkBusy=false; return; }
+      var okSet={}; results.forEach(function(r){ if(r.ok) okSet[r.id]=1; });
+      var okRows=picked.filter(function(id){ var row=rowOf(id)||{id:id}; return idsOf(row,action).some(function(x){ return okSet[x]; }) || okSet[id]; });
+      var failed=picked.length-okRows.length;
+      listCachePut();
       m.bulkBusy=false;
-      var n=okIds.length;
+      var n=okRows.length;
       var msg={ trash:'Moved '+n+' to Trash — still recoverable in your mailbox', archive:'Archived '+n,
         read:'Marked '+n+' as read', unread:'Marked '+n+' as unread', label:'Labelled '+n, unlabel:'Label removed from '+n }[action]||('Done for '+n);
       if(failed) showToast(msg+' · '+failed+' could not be changed — try those again','warning');
@@ -573,10 +630,32 @@
   UI.registerOverlay('mb-labels',drawLabelMenu);
   document.addEventListener('keydown',function(ev){ if(ev.key==='Escape'&&M().labelMenu) mbLabelClose(); });
 
-  window.mbSelectAccount=function(id){ var m=M(); if(m.activeId===id)return; m.activeId=id; m.q=''; loadFolders(); };
+  // '*' is All inboxes (R-272): every email ID's inbox in one list. Picking one email ID goes back to that mailbox alone.
+  window.mbSelectAccount=function(id){
+    var m=M();
+    if(id==='*'){ if(m.all) return; m.all=true; m.q=''; loadMessages(); return; }
+    if(m.activeId===id&&!m.all)return;
+    m.all=false; m.activeId=id; m.q=''; loadFolders();
+  };
   // Choosing a folder leaves the search (as Gmail does): the folder's own list comes back.
-  window.mbSelectFolder=function(id){ var m=M(); if(!id||(m.folderId===id&&!m.q))return; m.folderId=id; m.q=''; loadMessages(); };
-  window.mbOpen=function(id){ loadMessage(id); };
+  window.mbSelectFolder=function(id){ var m=M(); if(!id||(m.folderId===id&&!m.q&&!m.all))return; m.all=false; m.folderId=id; m.q=''; loadMessages(); };
+  // Conversations or single emails (R-271) — saved as the person's own preference, on every device they use.
+  window.mbSetView=function(v){
+    v=v==='messages'?'messages':'threads';
+    if((STATE.mailView||'threads')===v) return;
+    STATE.mailView=v;
+    if(STATE.token&&typeof apiFetch==='function') apiFetch('PUT','/me/preferences',{mail_view:v}).catch(function(){});
+    window.mbViewChanged();
+  };
+  window.mbViewChanged=function(){ var m=M(); if(STATE.page!=='mailbox'||(!m.activeId&&!m.all)) return; loadMessages(); };
+  window.mbOpen=function(id){
+    var m=M(), row=rowOf(id);
+    // In All inboxes the message is read from the mailbox it belongs to; the list stays as it is.
+    if(m.all&&row&&row.mailbox_id&&row.mailbox_id!==m.activeId){ m.activeId=row.mailbox_id; m.thread=null; m.threadId=null; ensureLabels(); }
+    loadMessage(id);
+    // Opening a conversation reads it — every unread message in it, not only the newest.
+    if(row&&row.unread_ids) row.unread_ids.slice().forEach(function(u){ if(u!==id) markRead(u,true,true); });
+  };
 
   // OPEN ONE PARTICULAR EMAIL, optionally with its reply window ready (8 Oct, owner: "when Reply in the mailbox is clicked, that
   // particular email doesn't open — the mailbox does, and the user does not know what to do"). The buttons that mean "answer THIS
@@ -595,7 +674,8 @@
   }
   function deepAfterOpen(id){
     var m=M(); m._deepQ=''; if(m._replyWhen!==id) return;
-    m._replyWhen=null; mbOpenReplyWindow('reply');
+    var mode=m._replyMode||'reply';
+    m._replyWhen=null; m._replyMode=null; mbOpenReplyWindow(mode);
   }
   function deepFailed(id){
     var m=M(); if(m._replyWhen!==id && !m._deepQ) return;
@@ -605,7 +685,7 @@
   }
   window.mbOpenMessage=function(acct,id,opts){
     opts=opts||{};
-    var m=M(); _deep={ acct:acct, id:id, reply:!!opts.reply, q:opts.q||'' };
+    var m=M(); _deep={ acct:acct, id:id, reply:!!opts.reply, q:opts.q||'' }; m.all=false;
     var known=(m.accounts||[]).some(function(a){ return a.id===acct && a.readable; });
     if(known && m.activeId!==acct){ m.activeId=acct; m.q=''; m.messages=null; m.selectedId=null; m.message=null; goPage('mailbox'); loadFolders(); return; }
     if(!known) m.activeId=acct;                                // accounts not loaded yet: pickAccount keeps this pick, then the list opens it
@@ -638,17 +718,21 @@
       .then(function(d){ m.message=d; m.msgLoading=false; paint(); })
       .catch(function(e){ m.msgLoading=false; showToast('Could not load images: '+e.message,'error'); paint(); });
   };
+  // On a conversation, Archive and Delete act on the conversation (as in Gmail), through the same one-request-per-50 path.
+  function convRowFor(id){ var r=rowOf(id); return r&&r.message_ids?r:null; }
   window.mbArchive=function(id,ev){
     if(ev&&ev.stopPropagation)ev.stopPropagation();
-    var m=M();
-    apiPost('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id)+'/archive',{})
+    var m=M(), conv=convRowFor(id);
+    if(conv) return mbBulk('archive',null,[conv.id]);
+    apiPost('/mailbox/'+encodeURIComponent(acctOf(id))+'/messages/'+encodeURIComponent(id)+'/archive',{})
       .then(function(){ showToast('Archived','success'); removeFromList(id); })
       .catch(function(e){ showToast('Could not archive: '+e.message,'error'); });
   };
   window.mbTrash=function(id,ev){
     if(ev&&ev.stopPropagation)ev.stopPropagation();
-    var m=M();
-    apiDelete('/mailbox/'+encodeURIComponent(m.activeId)+'/messages/'+encodeURIComponent(id))
+    var m=M(), conv=convRowFor(id);
+    if(conv) return mbBulk('trash',null,[conv.id]);
+    apiDelete('/mailbox/'+encodeURIComponent(acctOf(id))+'/messages/'+encodeURIComponent(id))
       // Said out loud on purpose: this moved the real message in the real
       // mailbox, and the user needs to know where to find it again.
       .then(function(){ showToast('Moved to Trash — still recoverable in your mailbox','success'); removeFromList(id); })
@@ -718,6 +802,14 @@
   // email that already has one open (on screen or minimised) brings THAT one back — never a second blank answer to the
   // same person, and never a draft written over.
   window.mbReply=function(all){ mbOpenReplyWindow(all?'replyAll':'reply'); };
+  // From a message further up the conversation: open it, then its reply window (the reply quotes and threads on IT).
+  window.mbReplyTo=function(id,mode,ev){
+    if(ev&&ev.stopPropagation) ev.stopPropagation();
+    var m=M();
+    if(m.message&&m.message.id===id) return mbOpenReplyWindow(mode);
+    m._replyWhen=id; m._replyMode=mode;
+    loadMessage(id);
+  };
   window.mbForward=function(){ mbOpenReplyWindow('forward'); };
   function mbOpenReplyWindow(mode){
     var m=M(); var x=m.message; if(!x)return;
@@ -932,7 +1024,32 @@
   // (#mb-c-body / #mb-comp-body). The person types in the box above it.
   // What is stored is cleaned to that same list before it is sent; the server
   // cleans it again (services/mail-format.js).
-  var MB_FMT_TAGS={p:1,div:1,br:1,b:1,strong:1,i:1,em:1,u:1,ul:1,ol:1,li:1,a:1};
+  // R-273 (owner, 19 Oct): the Saleshandy bar — font, size, colour, highlight, alignment, indent, image. Each is a style
+  // from the same short list the server keeps (services/mail-format.js); a style on our own words is left exactly as the
+  // browser wrote it, so cleaning while typing never moves the cursor.
+  var MB_FMT_TAGS={p:1,div:1,br:1,b:1,strong:1,i:1,em:1,u:1,ul:1,ol:1,li:1,a:1,span:1,blockquote:1,img:1};
+  var MB_FONTS=['Arial','Georgia','Times New Roman','Verdana','Tahoma','Trebuchet MS','Courier New'];
+  var MB_FONT_OK=MB_FONTS.map(function(f){return f.toLowerCase();}).concat(['helvetica','times','courier','sans-serif','serif','monospace']);
+  var MB_SIZES=[['small','Small'],['medium','Normal'],['large','Large'],['x-large','Huge']];
+  var MB_COLOUR=/^(#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)|transparent)$/i;
+  var MB_STYLE_ON={span:['font-family','font-size','color','background-color'],p:['text-align'],div:['text-align'],li:['text-align']};
+  var MB_STYLE_OK={
+    'font-family':function(v){ return v.split(',').every(function(f){ return MB_FONT_OK.indexOf(f.trim().replace(/^["']|["']$/g,'').toLowerCase())>=0; }); },
+    'font-size':function(v){ return ['x-small','small','medium','large','x-large','xx-large'].indexOf(v.toLowerCase())>=0||(/^\d{1,2}(\.\d)?px$/.test(v)&&parseFloat(v)>=9&&parseFloat(v)<=40); },
+    'color':function(v){ return MB_COLOUR.test(v); },
+    'background-color':function(v){ return MB_COLOUR.test(v); },
+    'text-align':function(v){ return ['left','center','right','justify'].indexOf(v.toLowerCase())>=0; }
+  };
+  function mbKeepStyle(tag, style){
+    var allowed=MB_STYLE_ON[tag]||[], kept=[], dropped=false;
+    String(style||'').split(';').forEach(function(d){
+      var at=d.indexOf(':'); if(at<0){ if(d.trim()) dropped=true; return; }
+      var prop=d.slice(0,at).trim().toLowerCase(), val=d.slice(at+1).trim();
+      if(allowed.indexOf(prop)>=0&&!/[<>\\]|url\s*\(|expression/i.test(val)&&MB_STYLE_OK[prop](val)) kept.push(prop+': '+val);
+      else dropped=true;
+    });
+    return { style:kept.join('; ')+(kept.length?';':''), changed:dropped };
+  }
   function mbSafeHref(v){
     var s=String(v||'').trim();
     if(!s||/[\s<>"']/.test(s))return '';
@@ -954,13 +1071,30 @@
           n.remove();
           return;
         }
+        if(tag==='img'){
+          // An image goes by its web address, https only (what the server sends too).
+          var src=String(n.getAttribute('src')||'').trim();
+          if(!/^https:\/\/[^\s<>"']+$/i.test(src)){ n.remove(); return; }
+        }
         Array.prototype.slice.call(n.attributes).forEach(function(a){
           var nm=a.name.toLowerCase();
           if(tag==='a'&&nm==='href'){
             var href=mbSafeHref(a.value);
             if(href) n.setAttribute('href', href); else n.removeAttribute('href');
+          } else if(tag==='img'&&(nm==='src'||nm==='alt')){
+            /* kept */
+          } else if(nm==='style'&&MB_STYLE_ON[tag]){
+            var k=mbKeepStyle(tag,a.value);
+            if(!k.style) n.removeAttribute('style'); else if(k.changed) n.setAttribute('style',k.style);
+          } else if(nm==='style'&&tag==='blockquote'){
+            /* an indent: the server gives it one fixed look */
           } else n.removeAttribute(a.name);
         });
+        if(tag==='span'&&!n.getAttribute('style')){
+          while(n.firstChild) node.insertBefore(n.firstChild, n);
+          n.remove();
+          return;
+        }
         if(tag==='a' && !n.getAttribute('href')){
           while(n.firstChild) node.insertBefore(n.firstChild, n);
           n.remove();
@@ -983,16 +1117,67 @@
   }
   function mbBodyBlank(v){ return mbEditorBlank(v); }
   function mbIsFormatted(c){
-    return !!(c&&/<\s*\/?\s*(p|div|br|b|strong|i|em|u|ul|ol|li|a)\b/i.test(c.body||''));
+    return !!(c&&/<\s*\/?\s*(p|div|br|b|strong|i|em|u|ul|ol|li|a|span|blockquote|img)\b/i.test(c.body||''));
   }
+  var MB_SVG={
+    alignLeft:'M4 6h16 M4 10h10 M4 14h16 M4 18h10', alignCenter:'M4 6h16 M7 10h10 M4 14h16 M7 18h10', alignRight:'M4 6h16 M10 10h10 M4 14h16 M10 18h10',
+    outdent:'M4 6h16 M11 10h9 M11 14h9 M4 18h16 M8 9l-3 3 3 3', indent:'M4 6h16 M11 10h9 M11 14h9 M4 18h16 M5 9l3 3-3 3',
+    image:'M4 5h16v14H4z M4 16l5-5 4 4 3-3 4 4 M15 9h.01', unlink:'M9 15l-2 2a3 3 0 0 1-4-4l2-2 M15 9l2-2a3 3 0 0 1 4 4l-2 2 M4 4l16 16'
+  };
+  function mbSvg(k){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+    MB_SVG[k].split(' M').map(function(seg,i){ return '<path d="'+(i?'M'+seg:seg)+'"/>'; }).join('')+'</svg>'; }
   function mbFmtBar(which){
-    var cmds=[['bold','Bold','<b>B</b>'],['italic','Italic','<i>I</i>'],['underline','Underline','<u>U</u>'],
-      ['insertUnorderedList','Bullets','• List'],['insertOrderedList','Numbered list','1. List'],
-      ['link','Link','Link'],['clear','Clear formatting','Clear formatting']];
-    return '<div class="sig-bar mb-fmt" onmousedown="event.preventDefault()">'+cmds.map(function(c){
-      return '<button type="button" title="'+c[1]+'" onclick="mbFmt(\''+which+'\',\''+c[0]+'\')">'+c[2]+'</button>';
-    }).join('')+'</div>';
+    var w='\''+which+'\'';
+    var b=function(cmd,title,inner){ return '<button type="button" title="'+title+'" aria-label="'+title+'" onclick="mbFmt('+w+',\''+cmd+'\')">'+inner+'</button>'; };
+    var sep='<span class="sig-bar-sep" aria-hidden="true"></span>';
+    // A select or a colour picker takes the focus from the message, so the selection is remembered first (mbFmtKeep)
+    // and put back before the change is made.
+    return '<div class="sig-bar mb-fmt" onmousedown="if(event.target.tagName!==\'SELECT\'&&event.target.tagName!==\'INPUT\'&&event.target.tagName!==\'OPTION\')event.preventDefault();mbFmtKeep('+w+')">'+
+      '<select class="mb-fmt-sel" title="Font" aria-label="Font" onchange="mbFmtVal('+w+',\'fontName\',this.value);this.selectedIndex=0">'+
+        '<option value="">Font</option>'+MB_FONTS.map(function(f){ return '<option value="'+f+'" style="font-family:'+f+'">'+f+'</option>'; }).join('')+'</select>'+
+      '<select class="mb-fmt-sel" title="Text size" aria-label="Text size" onchange="mbFmtVal('+w+',\'size\',this.value);this.selectedIndex=0">'+
+        '<option value="">Size</option>'+MB_SIZES.map(function(z){ return '<option value="'+z[0]+'">'+z[1]+'</option>'; }).join('')+'</select>'+
+      sep+b('bold','Bold','<b>B</b>')+b('italic','Italic','<i>I</i>')+b('underline','Underline','<u>U</u>')+
+      '<label class="mb-fmt-col" title="Text colour"><span class="mb-fmt-a">A</span><input type="color" value="#c00000" aria-label="Text colour" onchange="mbFmtVal('+w+',\'foreColor\',this.value)"></label>'+
+      '<label class="mb-fmt-col" title="Highlight"><span class="mb-fmt-hl">ab</span><input type="color" value="#fff59d" aria-label="Highlight colour" onchange="mbFmtVal('+w+',\'hiliteColor\',this.value)"></label>'+
+      b('clear','Clear formatting','<span class="mb-fmt-tx">T<sub>x</sub></span>')+sep+
+      b('justifyLeft','Align left',mbSvg('alignLeft'))+b('justifyCenter','Centre',mbSvg('alignCenter'))+b('justifyRight','Align right',mbSvg('alignRight'))+sep+
+      b('insertUnorderedList','Bullets','• List')+b('insertOrderedList','Numbered list','1. List')+
+      b('outdent','Less indent',mbSvg('outdent'))+b('indent','More indent',mbSvg('indent'))+sep+
+      b('link','Link','Link')+b('unlink','Remove link',mbSvg('unlink'))+b('image','Image (by its web address)',mbSvg('image'))+
+    '</div>';
   }
+  // The selection inside the message, kept while a menu or colour picker has the focus.
+  var _mbRange={};
+  window.mbFmtKeep=function(which){
+    var ed=document.getElementById(mbEditorIds(which).editor), sel=window.getSelection&&window.getSelection();
+    if(ed&&sel&&sel.rangeCount&&ed.contains(sel.anchorNode)) _mbRange[which]=sel.getRangeAt(0).cloneRange();
+  };
+  function mbFmtRestore(which, ed){
+    ed.focus();
+    var r=_mbRange[which], sel=window.getSelection&&window.getSelection();
+    if(r&&sel&&ed.contains(r.startContainer)){ sel.removeAllRanges(); sel.addRange(r); }
+  }
+  window.mbFmtVal=function(which, cmd, value){
+    if(!value) return;
+    var ed=document.getElementById(mbEditorIds(which).editor); if(!ed) return;
+    mbFmtRestore(which, ed);
+    var sel=window.getSelection&&window.getSelection();
+    if(!sel||sel.isCollapsed){ showToast('Select the words first','info'); return; }
+    try{ document.execCommand('styleWithCSS', false, true); }catch(e){}
+    if(cmd==='size'){
+      // execCommand's sizes are 1–7; the words a person picks are written as the size itself, on a span.
+      try{ document.execCommand('fontSize', false, '7'); }catch(e){}
+      Array.prototype.slice.call(ed.querySelectorAll('font[size="7"], span[style*="xxx-large"]')).forEach(function(el){
+        var sp=document.createElement('span'); sp.setAttribute('style','font-size: '+value+';');
+        while(el.firstChild) sp.appendChild(el.firstChild);
+        el.parentNode.replaceChild(sp, el);
+      });
+    } else {
+      try{ document.execCommand(cmd, false, value); }catch(e){}
+    }
+    mbEditorInput(which);
+  };
   function mbEditorIds(which){
     var compose=which==='compose';
     return { editor:compose?'mb-c-editor':'mb-comp-editor', hidden:compose?'mb-c-body':'mb-comp-body', compose:compose };
@@ -1005,10 +1190,10 @@
     hid.value=html;
     var bag=ids.compose?M().compose:M().composer;
     if(bag) bag.body=html;
-    // A paste from Outlook can still be sitting in the box with colours and fonts.
-    // What is stored is already clean; show that, so the box matches what will be sent.
-    // Ordinary typing is left alone — rewriting the box on every keystroke moves the cursor.
-    if(/<\s*(font|span|script|style)\b|style\s*=|color\s*=|face\s*=|align\s*=/i.test(ed.innerHTML)){
+    // Something in the box that will not be sent (a pasted <font>, a style off the list): show what WILL be sent, so the
+    // box matches the email. Our own formatting cleans to itself, so ordinary typing never rewrites the box (which would
+    // move the cursor).
+    if(html!==ed.innerHTML){
       ed.innerHTML=html;
       try{
         var range=document.createRange(); range.selectNodeContents(ed); range.collapse(false);
@@ -1044,9 +1229,21 @@
       }
       if(!mbSafeHref(url)){ showToast('That link needs to start with http://, https://, or be an email address','warning'); return; }
       try{ document.execCommand('createLink', false, url); }catch(e){}
+    } else if(cmd==='image'){
+      // By its web address: a picture pasted in as data is blocked by most mail programs, and an attachment is the paperclip.
+      var src=window.prompt('Paste the web address of the image (it must start with https://)','https://');
+      if(!src) return;
+      src=String(src).trim();
+      if(!/^https:\/\/[^\s<>"']+$/i.test(src)){ showToast('The image address must start with https://','warning'); return; }
+      try{ document.execCommand('insertImage', false, src); }catch(e){}
     } else if(cmd==='clear'){
       try{ document.execCommand('removeFormat', false, null); }catch(e){}
       try{ document.execCommand('unlink', false, null); }catch(e){}
+      // removeFormat leaves a highlight behind in some browsers: the spans inside the selection go too.
+      try{
+        var rs=window.getSelection(), rr=rs&&rs.rangeCount&&rs.getRangeAt(0);
+        if(rr) Array.prototype.slice.call(ed.querySelectorAll('span[style]')).forEach(function(sp){ if(rr.intersectsNode(sp)) sp.removeAttribute('style'); });
+      }catch(e){}
       var sel2=window.getSelection&&window.getSelection();
       var node=sel2&&sel2.anchorNode;
       var el=node&&(node.nodeType===1?node:node.parentNode);
@@ -1056,6 +1253,8 @@
       }
       ed.innerHTML=mbCleanHtml(ed.innerHTML);
     } else {
+      // Alignment as a style on the line (what the server keeps), not the old align="" attribute.
+      if(/^justify/.test(cmd)){ try{ document.execCommand('styleWithCSS', false, true); }catch(e){} }
       try{ document.execCommand(cmd, false, null); }catch(e){}
     }
     mbEditorInput(which);
@@ -1467,9 +1666,12 @@
     var list=m.messages||[];
     var unread=list.filter(function(x){return x.unread;}).length;
     var folder=(m.folders||[]).filter(function(f){return f.id===m.folderId;})[0];
-    var right=folder
+    var noun=threaded()?' conversations':' emails';
+    var right=m.all
+      ? '<span class="fs-12 c-ink3">All inboxes'+(list.length?' · '+list.length+noun+' loaded':'')+'</span>'
+      : folder
       ? '<span class="fs-12 c-ink3">'+esc(folder.name)+
-        (list.length?' · '+list.length+' loaded':'')+'</span>'
+        (list.length?' · '+list.length+noun+' loaded':'')+'</span>'
       : '';
     return UI.tabs([
       { id:'all',    label:'All',    n:list.length, onclick:"mbSetFilter('all')" },
@@ -1516,9 +1718,11 @@
   function renderTopBar(readable){
     var m=M();
     var accountPicker = readable.length>1
-      ? '<select class="seq-sel" style="max-width:280px" onchange="mbSelectAccount(this.value)">'+
+      ? '<select class="seq-sel" style="max-width:280px" onchange="mbSelectAccount(this.value)" aria-label="Which email ID">'+
+          // R-272: every email ID together, each row labelled with the one it arrived at.
+          '<option value="*"'+(m.all?' selected':'')+'>All inboxes ('+readable.length+' email IDs)</option>'+
           readable.map(function(a){
-            return '<option value="'+escAttr(a.id)+'"'+(a.id===m.activeId?' selected':'')+'>'+
+            return '<option value="'+escAttr(a.id)+'"'+(!m.all&&a.id===m.activeId?' selected':'')+'>'+
               esc(a.email_address)+(a.platform==='Gmail'?' · Gmail':' · Outlook')+unreadNote(a.id)+'</option>';
           }).join('')+
         '</select>'
@@ -1526,7 +1730,9 @@
         '<span class="c-ink3" style="font-weight:400"> · '+esc((readable[0]||{}).platform==='Gmail'?'Gmail':'Outlook')+'</span></div>';
 
     var folders=m.folders||[];
-    var folderPicker = m.foldersLoading
+    var folderPicker = m.all
+      ? '<span class="fs-12_5 c-ink3">'+(m.q?'Every folder of every email ID':'The inbox of every email ID')+'</span>'
+      : m.foldersLoading
       ? '<span class="fs-12_5 c-ink3">Loading folders…</span>'
       : (folders.length
         ? '<select class="seq-sel" style="max-width:230px" onchange="mbSelectFolder(this.value)">'+
@@ -1538,14 +1744,20 @@
           '</select>'
         : '');
 
+    // Conversations (the newest message either way, ours included) or every email on its own line (R-271).
+    var t=threaded();
+    var viewSwitch='<span class="mb-view" role="group" aria-label="Show mail as">'+
+      '<button type="button" class="seg-btn'+(t?' is-on':'')+'" aria-pressed="'+t+'" title="Each conversation is one row: your replies join it, and it shows the newest message either way" onclick="mbSetView(\'threads\')">Conversations</button>'+
+      '<button type="button" class="seg-btn'+(!t?' is-on':'')+'" aria-pressed="'+(!t)+'" title="Every email on its own row" onclick="mbSetView(\'messages\')">Single emails</button>'+
+    '</span>';
     return UI.toolbar({
-      search:{ value:m.q||'', placeholder:'Search all folders in this mailbox…', onkeydown:'mbSearchKey(event)' },
+      search:{ value:m.q||'', placeholder:m.all?'Search all folders of every email ID…':'Search all folders in this mailbox…', onkeydown:'mbSearchKey(event)' },
       icons:[
         { icon:'x', title:'Clear search', onclick:'mbClearSearch()', off:!m.q },
         { sep:true },
         { icon:'refresh', title:'Refresh', onclick:'mbRefresh()' }
       ],
-      right: folderPicker + accountPicker +
+      right: viewSwitch + folderPicker + accountPicker +
         '<button class="btn btn-primary btn-sm" onclick="mbCompose()">'+UI.ic('plus')+'Compose</button>'
     }).replace('id="mb-search-placeholder"','');
   }
@@ -1559,7 +1771,9 @@
     if(m.listLoading&&m.messages===null) body='<div class="dt-empty">Loading messages…</div>';
     else if(m.error&&!all.length)        body='<div class="dt-empty" style="color:var(--red)">'+esc(m.error)+'</div>';
     else if(!rows.length)                body='<div class="dt-empty">'+(m.q?'Nothing matched “'+esc(m.q)+'” in any folder':(m.filter==='unread'?'Nothing unread here':'Nothing here'))+'</div>';
-    else body=selectHead(rows)+rows.map(function(x){ return renderRow(x, m.selectedId===x.id); }).join('');
+    else body=selectHead(rows)+rows.map(function(x){ return renderRow(x, m.selectedId===x.id||!!(x.message_ids&&x.message_ids.indexOf(m.selectedId)>=0)); }).join('');
+    // An email ID All inboxes could not read is said, never silently left out.
+    if(m.all&&(m.skipped||[]).length) body='<div class="mb-skipped">Not shown: '+m.skipped.map(function(k){ return '<b>'+esc(k.email)+'</b> ('+esc(k.reason)+')'; }).join(' · ')+'</div>'+body;
 
     return '<div class="mb-list'+(wide?' wide':'')+'" id="mb-list">'+
       body+
@@ -1677,25 +1891,34 @@
     var m=M();
     // In Sent and Drafts the useful name is the recipient, not us.
     // While searching, a row belongs to the folder it LIVES in (not the open one) — a Sent result shows who it went to, and says where it is.
-    var rowFolder=m.q?x.folder_id:m.folderId;      // a searched message with no folder (Gmail's archive) belongs to NO open folder — never the one that happens to be open
-    var folder=(m.folders||[]).filter(function(f){return f.id===rowFolder;})[0];
-    var outbound=folder&&(folder.kind==='sent'||folder.kind==='drafts');
-    var party=outbound?((x.to||[])[0]||{}):(x.from||{});
+    var rowFolder=m.q?x.folder_id:(m.all?x.list_folder_id:m.folderId);      // a searched message with no folder (Gmail's archive) belongs to NO open folder — never the one that happens to be open
+    // In All inboxes the folders on hand are one mailbox's: a row from another is read as its inbox (it came from there).
+    var folder=(m.all&&x.mailbox_id!==m.activeId)?null:(m.folders||[]).filter(function(f){return f.id===rowFolder;})[0];
+    var conv=!!x.message_ids;
+    var outbound=!conv&&folder&&(folder.kind==='sent'||folder.kind==='drafts');
+    var party=conv?(x.party||x.from||{}):(outbound?((x.to||[])[0]||{}):(x.from||{}));
     var partyEmail=party.email||'';
     var picked=!!((m.sel||{})[x.id]);
+    // A conversation names who wrote in it ("me, Ray") and how many messages it holds; the line under the subject is its
+    // newest message, marked "You:" when that was ours.
+    var whoText=conv&&(x.participants||[]).length ? x.participants.join(', ')+(x.more_participants?' +'+x.more_participants:'') : ((outbound?'To ':'')+who(party));
+    var count=conv&&x.count>1?'<span class="mb-count" title="'+x.count+(x.count_capped?' or more':'')+' messages in this conversation">'+x.count+(x.count_capped?'+':'')+'</span>':'';
     return '<div class="mb-row'+(active?' on':'')+(x.unread?' unread':'')+(picked?' picked':'')+'" onclick="mbOpen(\''+escAttr(x.id)+'\')" '+
       'onmouseenter="mbHover(\''+escAttr(x.id)+'\')" onmouseleave="mbHoverEnd()">'+
       '<label class="mb-chk" title="Select" onclick="event.stopPropagation()"><input type="checkbox" '+(picked?'checked ':'')+'onclick="mbSel(\''+escAttr(x.id)+'\',event)" aria-label="Select this email"></label>'+
       mbAvatar(party,28)+
       '<div class="mb-row-b">'+
         '<div class="mb-row-t">'+
-          '<div class="mb-who">'+(outbound?'To ':'')+esc(who(party))+'</div>'+
+          '<div class="mb-who">'+esc(whoText)+count+'</div>'+
           (crmChip(partyEmail)||'')+
           '<div class="mb-when">'+esc(fmtWhen(x.date))+'</div>'+
         '</div>'+
         '<div class="mb-subj">'+esc(x.subject||'(no subject)')+'</div>'+
-        '<div class="mb-prev">'+esc(x.preview||'')+
+        '<div class="mb-prev">'+(conv&&x.latest_mine?'<span class="mb-you">You: </span>':'')+esc(x.preview||'')+
           (x.has_attachments?' <span title="Has attachments">📎</span>':'')+'</div>'+
+        (conv&&x.has_draft?'<span class="mb-draft-tag">Draft</span>':'')+
+        // R-272: which email ID this arrived at.
+        (m.all&&x.mailbox_email?'<span class="pill mute mb-acct" title="In the inbox of '+escAttr(x.mailbox_email)+'">'+esc(x.mailbox_email)+'</span>':'')+
         // Gmail keeps an archived message in no folder at all — in a search it is "All Mail", not unlabelled.
         (m.q&&(folder||(x.platform==='Gmail'&&!x.folder_id))?(function(){ var nm=folder?folder.name:'All Mail'; return '<span class="pill mute mb-in-folder" title="This result is in '+escAttr(nm)+'">'+esc(nm)+'</span>'; })():'')+
         labelChips(x.label_ids,2)+
@@ -1725,7 +1948,8 @@
       labelChips(x.label_ids,6)+
       '<div class="mb-acts">'+
         '<button class="btn btn-sm btn-primary" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
-        ((x.to||[]).length+(x.cc||[]).length>1?'<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>':'')+
+        // Reply all on every message (owner, 19 Oct): with only one other person on it, it answers that one person.
+        '<button class="btn btn-sm btn-outline" onclick="mbReply(true)">Reply all</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbArchive(\''+escAttr(x.id)+'\',event)">Archive</button>'+
         '<button class="btn btn-sm btn-outline" onclick="mbToggleRead(\''+escAttr(x.id)+'\',event)">'+(x.unread?'Mark read':'Mark unread')+'</button>'+
@@ -1753,13 +1977,19 @@
           '<span class="kebab" title="Reply" onclick="mbReply(false)">'+UI.ic('reply')+'</span>'+
           // 8 Oct (owner: "no reply all option in inboxes"): the card's own icons had Reply and Forward only; Reply all
           // sat in the bar above the message and was missed. Same rule as that bar: only when someone else was on it.
-          ((x.to||[]).length+(x.cc||[]).length>1?'<span class="kebab mb-replyall" title="Reply all" onclick="mbReply(true)">'+UI.ic('reply')+'<span class="fs-12">all</span></span>':'')+
+          '<span class="kebab mb-replyall" title="Reply all" onclick="mbReply(true)">'+UI.ic('reply')+'<span class="fs-12">all</span></span>'+
           '<span class="kebab" title="Forward" onclick="mbForward()">'+UI.ic('right')+'</span>'+
         '</div>'+
       '</div>'+
       renderBlockedImagesBar(x)+
       renderAttachments(x)+
       renderBody(x)+
+      // Where the eye is when the message has been read (Saleshandy's layout, owner 19 Oct).
+      '<div class="mb-msg-foot">'+
+        '<button class="btn btn-sm btn-outline" onclick="mbReply(false)">'+UI.ic('reply')+'Reply</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mbReply(true)">'+UI.ic('reply')+'Reply all</button>'+
+        '<button class="btn btn-sm btn-outline" onclick="mbForward()">Forward</button>'+
+      '</div>'+
     '</div>';
   }
 
@@ -1774,6 +2004,12 @@
           '<div class="mb-collapsed">'+esc(t.preview||'(no preview)')+'</div>'+
         '</div>'+
         '<div class="mb-msg-when">'+esc(fmtWhen(t.date))+'</div>'+
+        // Answer THIS message of the conversation, not only the open one.
+        '<div class="mb-msg-ico">'+
+          '<span class="kebab" title="Reply to this message" onclick="mbReplyTo(\''+escAttr(t.id)+'\',\'reply\',event)">'+UI.ic('reply')+'</span>'+
+          '<span class="kebab mb-replyall" title="Reply all to this message" onclick="mbReplyTo(\''+escAttr(t.id)+'\',\'replyAll\',event)">'+UI.ic('reply')+'<span class="fs-12">all</span></span>'+
+          '<span class="kebab" title="Forward this message" onclick="mbReplyTo(\''+escAttr(t.id)+'\',\'forward\',event)">'+UI.ic('right')+'</span>'+
+        '</div>'+
       '</div>'+
     '</div>';
   }

@@ -91,6 +91,9 @@ try {
   page.on('pageerror', e => pageErrors.push(String(e)));
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await waitForLogin(page); await enterApp(page, 'recruiter');
+  // This suite is about the single-email list (the provider's /messages read). Conversations are the default since R-271
+  // and have their own suite (mailbox-threads-ui-smoke); this is the person's own "Single emails" choice, not a bypass.
+  await page.evaluate(() => { STATE.mailView = 'messages'; });
   await page.evaluate(([inbox, found]) => {
     window.__reads = [];
     window.apiGet = function (p) {

@@ -3,7 +3,12 @@
 // ----------------------------------------------------------------------------
 // The owner asked for the Outlook tools a recruiting email actually uses:
 // bold, italic, underline, bullets, a numbered list, a link, and clear
-// formatting. Not a font, a size, a colour, a highlight, or alignment.
+// formatting. 19 Oct (owner, comparing with Saleshandy, R-273): the full bar —
+// font, size, text colour, highlight, alignment, indent, and an image by its
+// web address. Each of those is a STYLE, and a style is the other way hostile
+// HTML gets in, so only a short list survives: the property names below, each
+// with a value that matches its own pattern. Anything else is dropped and the
+// words are kept.
 //
 // The mailbox send path used to escape the whole body as plain text
 // (buildHtmlEmailBody in index.js). That stays the path for anything that
@@ -14,7 +19,50 @@
 // the one a recipient is protected by.
 // ============================================================================
 
-const ALLOWED = new Set(['p', 'div', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'a']);
+const ALLOWED = new Set(['p', 'div', 'br', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'li', 'a', 'span', 'blockquote', 'img']);
+
+// ── the styles that may go out ───────────────────────────────────────────────
+const FONTS = ['arial', 'helvetica', 'georgia', 'times new roman', 'times', 'verdana', 'tahoma', 'trebuchet ms',
+  'courier new', 'courier', 'sans-serif', 'serif', 'monospace'];
+const SIZE_WORDS = ['x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'];
+const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+)\s*)?\)|transparent)$/i;
+const STYLE_RULES = {
+  'font-family': (v) => v.split(',').map(f => f.trim().replace(/^["']|["']$/g, '').toLowerCase()).every(f => FONTS.includes(f)),
+  'font-size': (v) => SIZE_WORDS.includes(v.toLowerCase()) || (/^\d{1,2}(\.\d)?px$/.test(v) && parseFloat(v) >= 9 && parseFloat(v) <= 40),
+  color: (v) => COLOUR.test(v),
+  'background-color': (v) => COLOUR.test(v),
+  'text-align': (v) => ['left', 'center', 'right', 'justify'].includes(v.toLowerCase()),
+};
+// Which tag may carry which of them: the words (span) carry font and colour; a line (p, div, li) carries its alignment.
+const STYLE_ON = {
+  span: ['font-family', 'font-size', 'color', 'background-color'],
+  p: ['text-align'], div: ['text-align'], li: ['text-align'],
+};
+function cleanStyle(tag, raw) {
+  const m = String(raw).match(/\bstyle\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+  if (!m) return '';
+  const allowed = STYLE_ON[tag] || [];
+  const kept = [];
+  for (const decl of String(m[1] != null ? m[1] : m[2]).replace(/&quot;/g, '"').replace(/&#39;/g, "'").split(';')) {
+    const at = decl.indexOf(':');
+    if (at < 0) continue;
+    const prop = decl.slice(0, at).trim().toLowerCase();
+    const val = decl.slice(at + 1).trim().replace(/\s*!important$/i, '');
+    if (!allowed.includes(prop) || /[<>\\]|url\s*\(|expression/i.test(val) || !STYLE_RULES[prop](val)) continue;
+    kept.push(prop + ':' + val);
+  }
+  return kept.join(';');
+}
+// An image goes out by its web address only (https) — nothing pasted in as data, nothing from a script.
+function readSrc(tag) {
+  const m = String(tag).match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i);
+  const s = m ? String(m[1] || m[2] || m[3] || '').trim() : '';
+  return /^https:\/\/[^\s<>"']+$/i.test(s) ? s : '';
+}
+function readAlt(tag) {
+  const m = String(tag).match(/\balt\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+  return m ? String(m[1] || m[2] || '').slice(0, 200) : '';
+}
 const DROP_WITH_CONTENT = new Set(['script', 'style', 'iframe', 'object', 'embed', 'noscript']);
 
 const SHELL_OPEN = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#0F172A">';
@@ -54,10 +102,12 @@ function sanitizeMailHtml(input) {
   const out = [];
   const stack = [];
 
+  // A span that carried nothing is on the stack as 'span:none' — it is closed without writing anything.
   function closeThrough(name) {
-    const at = stack.lastIndexOf(name);
+    let at = -1;
+    for (let k = stack.length - 1; k >= 0; k--) { if (stack[k] === name || stack[k] === name + ':none') { at = k; break; } }
     if (at < 0) return;
-    while (stack.length > at) out.push('</' + stack.pop() + '>');
+    while (stack.length > at) { const t = stack.pop(); if (!/:none$/.test(t)) out.push('</' + t + '>'); }
   }
 
   while (i < src.length) {
@@ -105,6 +155,25 @@ function sanitizeMailHtml(input) {
       out.push('<br>');
       continue;
     }
+    if (name === 'img') {
+      const src = readSrc(raw);
+      if (src) out.push('<img src="' + escapeAttr(src) + '" alt="' + escapeAttr(readAlt(raw)) + '" style="max-width:100%;height:auto">');
+      continue;
+    }
+    if (name === 'blockquote') {
+      // Indent. One fixed look, whatever the browser wrote.
+      out.push('<blockquote style="margin:0 0 0 40px;border:none;padding:0">');
+      if (!selfClose) stack.push('blockquote');
+      continue;
+    }
+    if (STYLE_ON[name]) {
+      const st = cleanStyle(name, raw);
+      // A span with nothing left to say is not kept (its words are).
+      if (name === 'span' && !st) { if (!selfClose) stack.push('span:none'); continue; }
+      out.push('<' + name + (st ? ' style="' + escapeAttr(st) + '"' : '') + '>');
+      if (!selfClose) stack.push(name);
+      continue;
+    }
     if (name === 'a') {
       const href = readHref(raw);
       // No usable address: keep the words, do not leave an empty link.
@@ -116,7 +185,7 @@ function sanitizeMailHtml(input) {
     out.push('<' + name + '>');
     if (!selfClose) stack.push(name);
   }
-  while (stack.length) out.push('</' + stack.pop() + '>');
+  while (stack.length) { const t = stack.pop(); if (!/:none$/.test(t)) out.push('</' + t + '>'); }
   return out.join('');
 }
 
