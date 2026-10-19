@@ -2202,3 +2202,7 @@ Offered three defaults; owner: "Okay work on batch 4 and ask me if any clarity i
 ### D-0163 — Scheduled emails on the free server; the new table (19 Oct 2026)
 
 Told the owner a scheduled email cannot be on time on Render's free plan (the server sleeps; the GitHub wake-up arrives every 3–5 hours, so a 7:00 email can go at 10:30). Offered: build it and say so honestly / a free outside pinger every 10 min (risks the 750-hour budget) / a paid always-on instance. Owner: **"I will pay for server when I push it into production and live for other user."** So: build schedule send now; until the paid server, the schedule box says plainly that it goes on time while PACE is in use and otherwise when the server next wakes. No outside pinger. The new scheduled-sends table: **"Yes, add it at release"** — applied to the live database right before the release that uses it, after testing (this is that go-ahead; it covers this one table only).
+
+### D-0164 — Batches 3 and 4 approved for release; R-287 later (19 Oct 2026)
+
+Shown nine screenshots (Today, Outreach Insights, the job beside the candidate, the builder's follow-up choices, conversations, All inboxes, the full bar + Schedule, the Scheduled and Draft tabs). Owner: "Is anything off before it goes live? Nothing. Push it live." and "merge all the changes that's completed". Migration 067 applied before the merge (D-0163's go-ahead). R-287 (continue a Gmail / Outlook draft inside PACE): **"yes, build it later"** — PENDING, not now.
