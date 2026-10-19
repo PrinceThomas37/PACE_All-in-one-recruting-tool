@@ -212,9 +212,10 @@ module.exports = (ctx) => {
     // kept and says so on its card — it is never guessed to fit.
     if (finder.sizeRanges(search).length) {
       const need = orgs.filter((o) => o.source === 'free' && o.employees == null && o.domain);   // Apollo's own rows were already filtered by Apollo; asking again would find nothing new
+      let sizeChecked = true;   // R-276: unknown-size free companies are left out only when the lookup really ran
       if (need.length) {
         const why = !key ? 'Apollo is not connected' : (budget.left() < 1 ? 'today\'s Apollo credit limit is used' : '');
-        if (why) notes.push('The size you chose could not be checked for companies found only in the free job sources (' + why + ').');
+        if (why) { sizeChecked = false; notes.push('The size you chose could not be checked for companies found only in the free job sources (' + why + ').'); }
         else {
           const r = await apollo.searchOrganizations({ key, filters: { q_organization_domains_list: need.slice(0, 100).map((o) => o.domain) }, page: 1, perPage: 100 });
           await noteApollo('finder_company_size', r);
@@ -228,11 +229,11 @@ module.exports = (ctx) => {
                 const have = o[k]; if (have == null || have === '' || (Array.isArray(have) && !have.length)) o[k] = a[k];
               });
             });
-          } else notes.push('The size you chose could not be checked for companies found only in the free job sources (' + r.error + ').');
+          } else { sizeChecked = false; notes.push('The size you chose could not be checked for companies found only in the free job sources (' + r.error + ').'); }
         }
       }
-      const sized = finder.applySizeChoice(orgs, search);
-      out.wrongSize = sized.leftOut;
+      const sized = finder.applySizeChoice(orgs, search, { checked: sizeChecked });
+      out.wrongSize = sized.leftOut; out.sizeUnknown = sized.unknown;
       orgs.splice(0, orgs.length, ...sized.kept);
     }
     out.found = orgs.length;
@@ -268,6 +269,7 @@ module.exports = (ctx) => {
     return finish('Found ' + out.found + ' companies hiring. ' + out.cards + ' new card' + (out.cards === 1 ? '' : 's') + (notes.length ? ' ' + notes.join(' ') : '') +
       (out.staffing ? '; ' + out.staffing + ' staffing firm' + (out.staffing === 1 ? '' : 's') + ' left out' : '') +
       (out.wrongSize ? '; ' + out.wrongSize + ' outside the company size you chose left out' : '') +
+      (out.sizeUnknown ? '; ' + out.sizeUnknown + ' left out because their size is not known' : '') +
       (out.worked ? '; ' + out.worked + ' already in your organisation' : '') + (out.seen ? '; ' + out.seen + ' you have already seen' : '') + '.');
   }
 

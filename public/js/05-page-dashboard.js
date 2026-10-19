@@ -53,6 +53,15 @@ function renderDashboard(){
   if(!isViewingOther&&typeof loadOwnershipWaiting==='function'&&STATE.otWaiting===undefined)loadOwnershipWaiting();
   if(!isViewingOther&&typeof loadOwnershipMine==='function'&&STATE.otMine===undefined)loadOwnershipMine();
 
+  // A NEW SALES MANAGER WHO HAS NOT SET UP YET sees only "Finish your setup" (owner, 19 Oct, R-283: "a fresh manager sees the
+  // things that are not relevant for him … before setting up their profile" → no recruiting tiles, just the setup card until
+  // they have written a sequence). Whether setup is owed is the SERVER's answer (POST /my-setup/sync, the same call My Setup
+  // makes; it keeps the setup reminders right too). Admins are never held here: they run the organisation from day one.
+  if(!isViewingOther&&isSetupHeld(u)){
+    if(STATE.setupOwed===undefined)loadSetupOwed();
+    else if(STATE.setupOwed&&STATE.setupOwed.indexOf('sequence')>=0)return renderSetupDashboard(u,STATE.setupOwed);
+  }
+
   // Recruiters live in the recruiting workflow (jobs, candidates, interviews) —
   // lead-gen widgets are someone else's desk. Give them their own dashboard.
   if(isPureRecruiter(u))return withDashReports(renderRecruiterDashboard(u),isViewingOther);
@@ -73,6 +82,38 @@ function renderDashboard(){
   // demo's generated data, so for every real login it rendered a wall of
   // zeroes. It went with the demo data.
   return withDashReports(renderIndividualDashboard(u),isViewingOther);
+}
+
+// ── THE SETUP-ONLY TODAY (R-283) ─────────────────────────────────────────
+function isSetupHeld(u){ return userHasAnyRole(u,'bd','bd_lead')&&!userHasRole(u,'admin'); }
+function loadSetupOwed(){
+  STATE.setupOwed=null;   // asked once per visit; null = asking (the normal Today shows meanwhile, nothing is hidden on a guess)
+  apiPost('/my-setup/sync',{}).then(function(r){ STATE.setupOwed=(r&&r.owed)||[]; if(STATE.page==='dashboard')render(); })
+    .catch(function(){ STATE.setupOwed=[]; });   // unknown = the ordinary Today: never lock a person out of their desk on an error
+}
+var SETUP_STEP_TEXT={
+  mailbox:{t:'Connect your outreach mailbox',d:'The Outlook or Gmail mailbox your emails go out from.'},
+  sequence:{t:'Write your first sequence',d:'The first email and the follow-ups your leads receive. A starter with your company\'s name is one click.'}
+};
+function renderSetupDashboard(u,owed){
+  var hour=new Date().getHours();
+  var greet=hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
+  var steps=['mailbox','sequence'].filter(function(k){ return owed.indexOf(k)>=0; }).map(function(k,i){
+    var x=SETUP_STEP_TEXT[k];
+    return '<li class="setup-step"><span class="setup-step-n">'+(i+1)+'</span><div><div class="fw6">'+htmlEsc(x.t)+'</div><div class="fs-13 c-text3">'+htmlEsc(x.d)+'</div></div></li>';
+  }).join('');
+  return '<div class="page">'+
+    '<div class="banner">'+
+      '<div class="banner-name">'+greet+', '+htmlEsc(String(u.name||'').split(' ')[0])+' 👋</div>'+
+      '<div class="banner-sub">'+htmlEsc(roleLabel(u.role))+'</div>'+
+    '</div>'+
+    '<div class="card cp mb4 setup-card" data-setup-card>'+
+      '<div class="fw6 fs-16">Finish your setup</div>'+
+      '<div class="fs-13 c-text3 mb3">Your Today page fills in once this is done. Until you have a sequence, PACE does not start outreach for your leads.</div>'+
+      '<ol class="setup-steps">'+steps+'</ol>'+
+      '<button class="btn btn-primary" onclick="goPage(\'mysetup\')">Open My Setup</button>'+
+    '</div>'+
+  '</div>';
 }
 
 // ── REPORTS, ON THE DASHBOARD (R-006) ─────────────────────────────────────

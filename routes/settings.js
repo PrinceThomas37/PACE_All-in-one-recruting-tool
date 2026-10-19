@@ -33,7 +33,11 @@ module.exports = (ctx) => {
 // shows up this becomes a real `user_preferences` row — that is D-0022's
 // "Re-open when".
 const PREF_KEY = (userId) => `pref_${userId}`;
-const ALLOWED_PREFS = { theme: ['light', 'dark', 'system'] };
+const ALLOWED_PREFS = {
+  theme: ['light', 'dark', 'system'],
+  // How many leads one page of the Leads list shows — the person's own choice (owner, 19 Oct, R-280).
+  leads_per_page: [10, 20, 50],
+};
 
 router.get('/me/preferences', auth, async (req, res) => {
   try {

@@ -62,7 +62,7 @@ window.reminderClosed=function(rid){
   if(!rid)return;
   // Every screen that lists reminders reads this: the Reminders page, the
   // Dashboard card, the rail badge, the Email page's out-of-office card.
-  STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent'}):r;});
+  STATE.reminders=(STATE.reminders||[]).map(function(r){return r.id===rid?Object.assign({},r,{status:'sent',updated_at:new Date().toISOString()}):r;});
   // "Needs you today" is a separate list with its own copy of the row. Take it
   // out now — the server has already said yes, so waiting on a re-read to show
   // it would be a lie about a fact we hold — then re-read to reconcile.
@@ -123,7 +123,14 @@ function renderReminders(){
   var myReminders=(STATE.reminders||[]).filter(function(r){return r.user_id===u.id;});
   var due=myReminders.filter(function(r){return r.status==='pending'&&r.return_date<=today;});
   var upcoming=myReminders.filter(function(r){return r.status==='pending'&&r.return_date>today;});
-  var sent=myReminders.filter(function(r){return r.status==='sent';});
+  // "Recently dismissed" means the last 7 days (owner, 19 Oct, R-281): older ones leave the list — never deleted, only
+  // not shown. The moment of dismissal is the row's updated_at (every close stamps it); a row with none falls back to its date.
+  var DISMISSED_DAYS=7, dismissedSince=Date.now()-DISMISSED_DAYS*864e5;
+  var sent=myReminders.filter(function(r){
+    if(r.status!=='sent') return false;
+    var t=Date.parse(r.updated_at||r.return_date||'');
+    return isFinite(t)&&t>=dismissedSince;
+  }).sort(function(a,b){ return String(b.updated_at||b.return_date||'').localeCompare(String(a.updated_at||a.return_date||'')); });
 
   function daysUntil(d){return Math.ceil((new Date(d)-new Date(today))/86400000);}
 

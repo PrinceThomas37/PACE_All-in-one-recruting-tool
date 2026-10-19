@@ -28,7 +28,9 @@ const iso = (v) => (v instanceof Date ? v.toISOString() : v);
 let uid = 0;
 function makeStore() {
   const st = { calls: [], failures: {}, tables: {
-    app_settings: [{ key: 'int_apollo_api_key', value: 'KEY-123' }],
+    // Everyone here starts explicitly switched OFF by an admin, so the "who may use it" rules below are tested as written. A person
+    // with NOTHING stored is ON since R-283 (owner, 19 Oct) — that has its own step.
+    app_settings: [{ key: 'int_apollo_api_key', value: 'KEY-123' }].concat(['ra1', 'ra2', 'bd1', 'ra9'].map((id) => ({ key: finder.accessKey(id), value: JSON.stringify({ enabled: false }) }))),
     organizations: [{ id: 'o1' }, { id: 'o2' }],
     users: [
       { id: 'adm', org_id: 'o1', name: 'Ada Admin', email: 'ada@x.test', role: 'admin', roles: ['admin'] },
@@ -169,8 +171,13 @@ function makeJsearch() {
 // ═════ 1. who may use it ═══════════════════════════════════════════════════════════════════════════════
 console.log('\nWho may use it');
 let { st, apollo, router, call } = boot();
+const offRow = st.tables.app_settings.find((x) => x.key === finder.accessKey('ra1'));
+st.tables.app_settings = st.tables.app_settings.filter((x) => x !== offRow);
 let r = await call('/finder/access', 'get', 'ra1');
-step('a person nobody has switched on is told "not enabled" (200, nothing else)', r.code === 200 && r.out.enabled === false && Object.keys(r.out).length <= 2);
+step('R-283: a person NOBODY has switched on or off has the Lead Finder ON (owner, 19 Oct: everyone, for now)', r.code === 200 && r.out.enabled === true, JSON.stringify(r.out).slice(0, 120));
+st.tables.app_settings.push(offRow);
+r = await call('/finder/access', 'get', 'ra1');
+step('a person an admin switched OFF is told "not enabled" (200, nothing else)', r.code === 200 && r.out.enabled === false && Object.keys(r.out).length <= 2);
 r = await call('/finder/searches', 'get', 'ra1');
 step('…and every other finder route refuses them with a plain 403', r.code === 403 && /not switched on/.test(r.out.error));
 r = await call('/finder/access', 'get', 'adm');
@@ -754,7 +761,8 @@ const askedSize = apollo.calls.filter((c) => c[0] === 'orgs');
 step('free sources + a size: ONE Apollo company search asks the sizes of the companies found, by their websites (one credit, not one per company)', askedSize.length === 1 && askedSize[0][1].filters.q_organization_domains_list.sort().join() === 'bigco.example,mysteryfab.example,tinyshop.example' && !askedSize[0][1].filters.organization_num_employees_ranges, JSON.stringify(askedSize[0] && askedSize[0][1].filters));
 step('…the big company is NOT among the cards, and the answer says how many were left out', !sized.some((c) => c.company_name === 'Bigco Industries') && /1 outside the company size you chose left out/.test(r.out.results[0].note), sized.map((c) => c.company_name).join() + ' | ' + r.out.results[0].note);
 const tinyCard = sized.find((c) => c.company_name === 'Tiny Machine Shop'), mystery = sized.find((c) => c.company_name === 'Mystery Fab');
-step('…the small company stays, now with its size; one whose size nobody knows stays too and SAYS "Size not confirmed" (never guessed to fit)', tinyCard && tinyCard.payload.company.employees === 8 && tinyCard.payload.chips.includes('About 8 staff') && mystery && mystery.payload.chips.includes('Size not confirmed') && mystery.payload.company.employees == null, JSON.stringify(sized.map((c) => c.payload.chips)));
+step('…the small company stays, now with its size', tinyCard && tinyCard.payload.company.employees === 8 && tinyCard.payload.chips.includes('About 8 staff'), JSON.stringify(sized.map((c) => c.payload.chips)));
+step('R-276: one whose size Apollo was ASKED and could not tell is left out (owner, 19 Oct: "leave them out") — and the answer says how many', !mystery && /1 left out because their size is not known/.test(r.out.results[0].note), r.out.results[0].note);
 step('…and the lookup cost one credit', Number(st.tables.app_settings.find((x) => x.key === 'finder_credits_o1_' + finder.dayOf(NOW)).value) === cr0 + 1);
 
 // no size chosen: nothing is looked up, nothing is left out
@@ -803,7 +811,7 @@ st.tables.app_settings.push(apolloKeyRow);
 
 // the nightly run
 tickMin(); st.tables.finder_cards.length = 0; jsearch.calls.length = 0;
-await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Nightly free', source: 'free', titles: ['Welder'], locations: ['Texas'] }));
+await call('/finder/searches', 'post', 'ra1', Object.assign({}, SEARCH, { name: 'Nightly free', source: 'free', titles: ['Welder'], locations: ['Texas'], sizes: [] }));   // no size: this step is about the key and the meter
 const sumF = await router.runDue();
 step('the nightly sweep runs a free search with its own organisation\'s key and meter', sumF.searches >= 1 && jsearch.calls.length >= 1 && jsearch.calls.every((c) => c.key === 'JS-KEY-ABCDEFGH1234') && st.tables.finder_cards.some((c) => c.user_id === 'ra1' && c.company_name === 'Acme Mfg'), JSON.stringify(sumF));
 
