@@ -30,14 +30,23 @@
   var MORE={ ln:'last name', desig:'their title', loc:'location', jobs:'all the jobs', skills_line:'skills phrase', salary_line:'salary',
     salary_range:'salary range', company_service:'project area', local_line:'local rule', skill_1:'skill 1', skill_2:'skill 2', skill_3:'skill 3',
     sender:'your name', senderemail:'your email', sendercompany:'your company' };
-  function labelOf(k){ for(var i=0;i<DETAILS.length;i++) if(DETAILS[i].k===k) return DETAILS[i].label; return MORE[k]||k; }
-  function isOptional(k){ for(var i=0;i<DETAILS.length;i++) if(DETAILS[i].k===k) return !!DETAILS[i].optional; return false; }
+  // A candidate sequence fills from the candidate and the job (routes/recruiting/outreach.js buildCandidateVars) — its own menu (R-270).
+  var CAND_DETAILS=[
+    {k:'first_name', label:'first name', menu:'Their first name'},
+    {k:'title', label:'their title', menu:'Their current title'},
+    {k:'location', label:'their location', menu:'Where they are'},
+    {k:'position', label:'job title', menu:'The job title'},
+    {k:'client', label:'client', menu:'The client'}
+  ];
+  function details(){ return Q&&Q.target&&Q.target.cand?CAND_DETAILS:DETAILS; }
+  function labelOf(k){ var d=details(); for(var i=0;i<d.length;i++) if(d[i].k===k) return d[i].label; return MORE[k]||k; }
+  function isOptional(k){ var d=details(); for(var i=0;i<d.length;i++) if(d[i].k===k) return !!d[i].optional; return false; }
   var DEFAULT_DAYS=[3,7,14,21,28];
 
   var Q = STATE.seqSetup = STATE.seqSetup || null;
   function fresh(){ return { loaded:false, err:'', step:1, mode:null, first:{subject:'',body:'',versions:[]}, fus:[], max:5, sample:null,
     menu:'', busy:'', msg:{}, stuck:false, offer:'', preview:null, aitest:null, saved:false, saving:false,
-    teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{} }; }
+    teach:{purpose:'',use:['skills','hard','pay'],end:'resumes',len:'short',voice:'',fus:[]}, opts:null, open:{}, target:null }; }
   function teachFu(i){ while(Q.teach.fus.length<=i) Q.teach.fus.push({angle:Q.teach.fus.length?'detail':'nudge',note:''}); return Q.teach.fus[i]; }
 
   // ── text with details ↔ the editor's html ──────────────────────────────────
@@ -102,6 +111,41 @@
       paint(true);
     }).catch(function(e){ Q.loaded=true; Q.err=(e&&e.message)||String(e); paint(true); });
   };
+  // ── NAMED SEQUENCES (R-269/R-270, D-0158/D-0159) ──────────────────────────────────────────────────────────────────
+  // The same screen makes and edits a person's named sequences — for leads or for candidates on a job — stored as workflow
+  // definitions (services/sequence-v2.js), so the engine that already sends them keeps doing so. Every "+ New sequence",
+  // "Add to sequence" and "Start sequence → build a new one" lands here (09-page-workflows.js wfOpenBuilder).
+  // opts: { id, entity_type: 'contact'|'submission'|'candidate', enrollAfter: {entity_type, items}, back: page to return to }
+  var CAND_EXAMPLE={ first_name:'Jordan', full_name:'Jordan Reyes', title:'Site Engineer', location:'Houston, TX', position:'Project Engineer', client:'Acme Construction', company:'Acme Construction', job_code:'' };
+  window.openSequenceBuilder = function(opts){
+    opts=opts||{};
+    var et=opts.entity_type||'contact', cand=(et==='submission'||et==='candidate');
+    Q = STATE.seqSetup = fresh();
+    Q.target={ id:opts.id||null, entity:et, cand:cand, name:'', enrollAfter:opts.enrollAfter||null, back:opts.back||STATE.page||'email' };
+    Q.mode='template';
+    goPage('seqsetup');
+    var def=opts.id?((STATE.wf&&STATE.wf.defs)||[]).find(function(d){ return d.id===opts.id; }):null;
+    if(def){
+      Q.target.name=def.name||'';
+      var st=(def.steps||[]).slice().sort(function(a,b){ return a.step_order-b.step_order; });
+      var c0=(st[0]&&st[0].config)||{};
+      Q.mode=c0.ai?'ai':'template';
+      Q.first={ subject:tokensToHtml(c0.subject), body:tokensToHtml(c0.body), versions:(c0.versions||[]).map(function(v){ return {subject:v.subject||'', body:v.body||''}; }) };
+      var day=0;
+      Q.fus=st.slice(1).map(function(x){ var c=x.config||{}; day+=Number(x.delay_days)||1; return { day:day, subject:c.subject||'', body:tokensToHtml(c.body), versions:(c.versions||[]).map(function(v){ return {subject:v.subject||'',body:v.body||''}; }) }; });
+    } else Q.fus=[{ day:DEFAULT_DAYS[0], subject:'', body:'', versions:[] }];
+    Q.fus.forEach(function(_,i){ teachFu(i); });
+    if(cand){ Q.loaded=true; Q.sample={ vars:CAND_EXAMPLE, example:true, name:CAND_EXAMPLE.full_name, company:'' }; paint(true); return; }
+    // A lead sequence fills from one of the person's own leads, when they have one (the same sample "Your outreach" uses).
+    apiGet('/my-setup/sequence').then(function(r){ Q.sample=r.sample||null; Q.max=r.followup_max==null?5:r.followup_max; })
+      .catch(function(){ Q.sample={ vars:{fn:'Dana',company:'Acme Health',pos:'Senior Java Developer',city:'Dallas',ind:'Healthcare'}, example:true, name:'Dana Lee', company:'Acme Health' }; })
+      .then(function(){ Q.loaded=true; paint(true); });
+  };
+  function named(){ return !!(Q&&Q.target); }
+  // "Draft it with AI" / versions: My Setup's writer for the people who write outreach (bd, bd_lead, admin); the sequence
+  // designers' writer for an RA lead or recruiter making a named sequence. Same writer and checker behind both (sequence-draft.js).
+  function draftUrl(){ return (typeof userHasAnyRole==='function'&&!userHasAnyRole(STATE.user,'bd','bd_lead','admin'))?'/wf/draft-email':'/my-setup/sequence/draft'; }
+
   var _prevGoPage = window.goPage;
   window.goPage = function(p){
     if(p==='seqsetup'){ STATE.page='seqsetup'; STATE.modal=null; if(!Q) Q=STATE.seqSetup=fresh(); render(); return; }
@@ -128,7 +172,7 @@
   function menuHtml(id){
     var v=(Q.sample&&Q.sample.vars)||{};
     return '<span class="sq-menuwrap"><button type="button" class="btn btn-sm btn-outline" data-sq="menu" data-menu="'+id+'" aria-haspopup="true" aria-expanded="'+(Q.menu===id)+'">Add a detail ▾</button>'+
-      '<div class="sq-menu" role="menu"'+(Q.menu===id?'':' hidden')+'>'+DETAILS.map(function(d){
+      '<div class="sq-menu" role="menu"'+(Q.menu===id?'':' hidden')+'>'+details().map(function(d){
         var ex=v[d.k]; return '<button type="button" class="sq-it" role="menuitem" data-sq="ins" data-k="'+d.k+'"><span>'+esc(d.menu)+(d.optional?'<small>Its sentence is left out when a lead does not have it</small>':'')+'</span><span class="sq-ex">'+esc(ex||'not known for this lead')+'</span></button>';
       }).join('')+'</div></span>';
   }
@@ -152,8 +196,11 @@
     function c(m,t,l){ return '<button type="button" class="sq-choice" role="radio" aria-checked="'+(Q.mode===m)+'" data-sq="mode" data-mode="'+m+'"><b>'+t+'</b><span>'+l+'</span></button>'; }
     return '<div class="card sq-card"><h2 class="sq-h2">How should your first email be written?</h2>'+
       '<div class="sq-choices" role="radiogroup" aria-label="How your first email is written">'+
-      c('template','I write it','Your email, filled in for each lead. AI can add versions so leads do not all get the same words.')+
-      c('ai','AI writes each one','A new email for every lead from their job description. Uses AI credits.')+'</div></div>';
+      (Q.target&&Q.target.cand
+        ? c('template','I write it','Your email, filled in for each candidate.')+
+          c('ai','AI writes each one','An email for every candidate from the job and their resume. Uses AI credits; the email you write goes when it cannot.')
+        : c('template','I write it','Your email, filled in for each lead. AI can add versions so leads do not all get the same words.')+
+          c('ai','AI writes each one','A new email for every lead from their job description. Uses AI credits.'))+'</div></div>';
   }
   function stepsHtml(){
     var names=['Write','Start'];
@@ -192,39 +239,48 @@
       msgHtml('teach')+
       '<p class="sq-hint">Uses one AI credit for each email it writes, follow-ups included.</p></div>';
   }
+  function nameCard(skel){
+    var t=Q.target;
+    return '<div class="card sq-card"><label class="sq-lbl" for="sq-name">Name this sequence</label>'+
+      '<input id="sq-name" class="sq-inp" maxlength="120" placeholder="'+(t.cand?'e.g. Site engineers — Houston':'e.g. Java developers — healthcare clients')+'" value="'+(skel?'':esc(t.name))+'">'+
+      '<p class="sq-hint">For: <b>'+(t.cand?'candidates on a job':'leads')+'</b>. Follow-ups stop by themselves when someone replies.</p>'+msgHtml('name')+'</div>';
+  }
   function writeStep(skel){
     var ai=Q.mode==='ai', busy=!!Q.busy;
     if(!Q.mode) return modeCards();
-    var h=modeCards();
-    if(ai) h+=teachCard(skel);
+    var cand=named()&&Q.target.cand;
+    var h=named()?nameCard(skel)+(cand?modeCards():''):modeCards();
+    if(ai&&!named()) h+=teachCard(skel);
     h+='<div class="card sq-card"><h2 class="sq-h2">'+(ai?'Your backup email':'Your first email')+'</h2>'+
-      (ai?'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>':'')+
+      (ai?(named()?'<p class="sq-sub">Goes out instead whenever the AI\'s email for a candidate does not pass PACE\'s checks, or the AI cannot write that day.</p>'
+        :'<p class="sq-sub">Goes out instead on a day the AI cannot write — for example when your company\'s AI credits run out. Write it, or let AI write it from your answers.</p>'):'')+
       '<label class="sq-lbl" for="sq-subj">Subject</label>'+editor('sq-subj',Q.first.subject,'A short subject line',true,skel)+
       '<label class="sq-lbl" for="sq-body">Message</label>'+editor('sq-body',Q.first.body,'Write it the way you would write to one person: why you are writing, what you can offer, and one question.',false,skel)+
-      '<div class="sq-row">'+menuHtml('first')+(ai?'<button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
-        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>')+'</div>'+
-      (ai?'':'<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
+      '<div class="sq-row">'+menuHtml('first')+(cand?'':(ai?'<button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Write it from my answers')+'</button>'+
+        (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':''):'<button type="button" class="btn btn-sm btn-outline" data-sq="stuck">Stuck? Draft it with AI</button>'))+'</div>'+
+      (ai||cand?'':'<div class="sq-stuck"'+(Q.stuck?'':' hidden')+'><label class="sq-lbl" for="sq-offer">What do you offer? One sentence.</label>'+
         '<input id="sq-offer" class="sq-inp" placeholder="e.g. pre-screened Java developers in the job\'s city" value="'+(skel?'':esc(Q.offer))+'">'+
         '<div class="sq-row"><button type="button" class="btn btn-sm btn-outline" data-sq="draft"'+(busy?' disabled':'')+'>'+(Q.busy==='draft'?'Writing…':'Draft it with AI')+'</button>'+
         (Q.undo?'<button type="button" class="btn btn-sm btn-outline" data-sq="undo">Undo</button>':'')+'</div></div>')+
-      msgHtml('first')+(ai?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
+      msgHtml('first')+(ai||cand?'':versionsHtml('first',Q.first.versions,skel))+'</div>';
     Q.fus.forEach(function(f,i){
       var min=i?Number(Q.fus[i-1].day)+1:1;
       h+='<div class="card sq-card"><div class="sq-row sq-between"><h2 class="sq-h2">Follow-up'+(Q.fus.length>1?' '+(i+1):'')+'</h2><button type="button" class="btn btn-sm btn-outline" data-sq="rmfu" data-i="'+i+'">Remove</button></div>'+
         '<p class="sq-sub">Sent <select class="sq-sel" data-sq-day="'+i+'" aria-label="Days after the first email">'+dayOptions(f.day,min)+'</select> after the first email, only if they have not replied.</p>'+
-        (ai?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
-        msgHtml('fu'+i)+(ai?'':versionsHtml(String(i),f.versions,skel))+'</div>';
+        (ai&&!named()?fuTeachHtml(i,skel)+detailsHtml('fu'+i,'Backup follow-up, for a day the AI cannot write',fuEditorHtml(f,i,skel)):fuEditorHtml(f,i,skel))+
+        msgHtml('fu'+i)+(ai||cand?'':versionsHtml(String(i),f.versions,skel))+'</div>';
     });
     if(Q.fus.length<Q.max) h+='<div><button type="button" class="btn btn-outline" data-sq="addfu">+ '+(Q.fus.length?'Add another follow-up':'Add a follow-up')+'</button></div>';
-    h+='<div class="card sq-card"><h2 class="sq-h4">'+(ai?'Your backup, filled in for ':'Your email, filled in for ')+esc((Q.sample&&Q.sample.name)||'a lead')+'</h2>'+
-      (Q.sample&&Q.sample.example?'<p class="sq-hint">An example lead — you have no leads of your own yet.</p>':'')+
+    var who=cand?'candidate':'lead';
+    h+='<div class="card sq-card"><h2 class="sq-h4">'+(ai?'Your backup, filled in for ':'Your email, filled in for ')+esc((Q.sample&&Q.sample.name)||'a '+who)+'</h2>'+
+      (Q.sample&&Q.sample.example?'<p class="sq-hint">An example '+who+(cand?'.':' — you have no leads of your own yet.')+'</p>':'')+
       '<div id="sq-pv">'+previewMail(skel)+'</div></div>';
     return h;
   }
   function fuEditorHtml(f,i,skel){
     var busy=!!Q.busy;
     return editor('sq-fu'+i,f.body,'A short nudge. Remind them what you asked.',false,skel)+
-      '<div class="sq-row">'+menuHtml('fu'+i)+'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button></div>';
+      '<div class="sq-row">'+menuHtml('fu'+i)+(named()&&Q.target.cand?'':'<button type="button" class="btn btn-sm btn-outline" data-sq="fudraft" data-i="'+i+'"'+(busy?' disabled':'')+'>'+(Q.busy==='fudraft'+i?'Writing…':'Write one with AI from my first email')+'</button>')+'</div>';
   }
   function fuTeachHtml(i,skel){
     var f=teachFu(i), o=Q.opts||{angles:[]};
@@ -261,7 +317,27 @@
     if(r.read) h+=detailsHtml('read','See what the AI read','<div class="sq-ver-t">'+esc(r.read)+'</div>');
     return h;
   }
+  // Step 2 for a named sequence: what one person gets, then save (and start it for the people ticked, if any).
+  function namedStartStep(){
+    var t=Q.target, ai=Q.mode==='ai', who=t.cand?'candidate':'lead', ea=t.enrollAfter, n=ea&&ea.items?ea.items.length:0;
+    var noun=n===1?who:who+'s';
+    if(Q.saved) return '<div class="card sq-card"><div class="sq-ok"><b>'+esc(t.name)+' is saved and on.</b> '+
+      (Q.savedStarted?'It has started for '+Q.savedStarted+' '+(Q.savedStarted===1?who:who+'s')+'. ':'Start it for '+who+'s from their list: tick them, then "Add to sequence". ')+
+      'Follow-ups stop by themselves when someone replies.</div>'+
+      '<div class="sq-row"><button type="button" class="btn btn-primary" data-sq="cancel">Done</button></div></div>';
+    var b=payload(), v=Q.first.versions.length;
+    var mail='<div class="sq-tagrow"><span class="sq-tag">'+(ai?'Your backup':'Your email')+'</span></div>'+
+      mailBox({to:{name:(Q.sample&&Q.sample.name)||'', company:(Q.sample&&Q.sample.company)||''}, subject:fill(b.first.subject), body:fill(b.first.body).trim()})+
+      '<p class="sq-hint">'+(ai?'With AI on, each '+who+' gets an email written for them from the job and their resume; this one goes when that email does not pass PACE\'s checks. ':'')+
+      (v?'Each '+who+' gets one of '+(v+1)+' versions, picked at random. ':'')+(Q.sample&&Q.sample.example?'Filled in for an example '+who+'.':'')+'</p>';
+    var fus=Q.fus.length?'<p class="sq-hint">Then '+Q.fus.map(function(f){ return 'a follow-up on day '+f.day; }).join(', ')+' — each only if they have not replied.</p>':'';
+    return '<div class="card sq-card"><h2 class="sq-h2">What a '+who+' gets</h2>'+mail+fus+'</div>'+
+      '<div class="card sq-card"><div class="sq-row sq-between"><div><h2 class="sq-h4">'+(n?'Save and start':'Save')+'</h2><p class="sq-hint">'+
+        (n?'Starts now for the '+n+' '+noun+' you ticked.':'Saved and switched on; you start it for '+who+'s from their list.')+'</p></div>'+
+      '<button type="button" class="btn btn-primary" data-sq="save"'+(Q.saving?' disabled':'')+'>'+(Q.saving?'Saving…':(n?'Save and start for '+n+' '+noun:'Save sequence'))+'</button></div>'+msgHtml('save')+'</div>';
+  }
   function startStep(){
+    if(named()) return namedStartStep();
     var p=Q.preview, ai=Q.mode==='ai';
     if(Q.saved) return '<div class="card sq-card"><div class="sq-ok"><b>Your sequence is on.</b> Leads assigned to you now go out by themselves'+(ai?' — the AI writes each email for that lead, and your backup goes on a day it cannot':'')+'. Follow-ups stop when someone replies.</div>'+
       '<div class="sq-row"><button type="button" class="btn btn-primary" onclick="goPage(\'mysetup\')">Back to My Setup</button></div></div>';
@@ -283,12 +359,13 @@
     if(!Q) Q=STATE.seqSetup=fresh();
     var body;
     if(!Q.loaded) body='<div class="card sq-card"><p class="sq-hint">Loading your sequence…</p></div>';
-    else if(Q.err) body='<div class="card sq-card"><p class="sq-warn">'+esc(Q.err)+'</p><div class="sq-row"><button class="btn btn-outline" onclick="goPage(\'mysetup\')">Back to My Setup</button></div></div>';
+    else if(Q.err) body='<div class="card sq-card"><p class="sq-warn">'+esc(Q.err)+'</p><div class="sq-row"><button class="btn btn-outline" data-sq="cancel">Back</button></div></div>';
     else body=(Q.step===1?writeStep(skel):startStep());
     var nav=Q.loaded&&!Q.err&&!Q.saved?'<div class="sq-nav">'+
-      (Q.step>1?'<button type="button" class="btn btn-outline" data-sq="back">Back</button>':'<button type="button" class="btn btn-outline" onclick="goPage(\'mysetup\')">Cancel</button>')+
+      (Q.step>1?'<button type="button" class="btn btn-outline" data-sq="back">Back</button>':'<button type="button" class="btn btn-outline" data-sq="cancel">Cancel</button>')+
       (Q.step===1?'<button type="button" class="btn btn-primary" data-sq="next"'+(Q.mode?'':' disabled')+'>Continue</button>':'<span></span>')+'</div>':'';
-    return UI.page({ body:'<div id="sq-root" class="sq"><div class="sq-head"><div><div class="sq-eyebrow">My Setup</div><h1 class="sq-h1">Write your first sequence</h1></div>'+stepsHtml()+'</div>'+body+nav+'</div>' });
+    var eyebrow=named()?'Sequences':'My Setup', title=named()?((Q.target.id?'Edit sequence':'New sequence')+' — '+(Q.target.cand?'candidates':'leads')):'Write your first sequence';
+    return UI.page({ body:'<div id="sq-root" class="sq"><div class="sq-head"><div><div class="sq-eyebrow">'+eyebrow+'</div><h1 class="sq-h1">'+esc(title)+'</h1></div>'+stepsHtml()+'</div>'+body+nav+'</div>' });
   }
   var _lastSkel=null;
   function paint(force){
@@ -362,7 +439,7 @@
     if(!Q.offer.trim()){ say('first','Write a sentence first — PACE does not write from nothing.'); return repaint(); }
     Q.undo=(hasWords(htmlToTokens(Q.first.body))||hasWords(htmlToTokens(Q.first.subject)))?{subject:Q.first.subject,body:Q.first.body,versions:Q.first.versions}:null;
     Q.busy='draft'; say('first',''); repaint();
-    apiPost('/my-setup/sequence/draft',{mode:'write', purpose:'first', prompt:Q.offer}).then(function(r){
+    apiPost(draftUrl(),{mode:'write', purpose:'first', prompt:Q.offer}).then(function(r){
       Q.busy='';
       if(r&&r.body){ Q.first.body=tokensToHtml(r.body); if(r.subject) Q.first.subject=tokensToHtml(r.subject); Q.first.versions=[]; Q.preview=null; }
       else Q.undo=null;
@@ -377,7 +454,7 @@
     if(hasWords(htmlToTokens(Q.fus[i].body))){ say('fu'+i,'This follow-up already has words. Clear it first if you want a new one.'); return repaint(); }
     Q.busy='fudraft'+i; say('fu'+i,''); repaint();
     var prompt='A short follow-up, '+Q.fus[i].day+' days after my first email, to someone who has not replied. Remind them of my question. My first email said: '+first.replace(/\s+/g,' ').slice(0,420);
-    apiPost('/my-setup/sequence/draft',{mode:'write', purpose:(i===Q.fus.length-1&&i>0?'final':'followup'), prompt:prompt}).then(function(r){
+    apiPost(draftUrl(),{mode:'write', purpose:(i===Q.fus.length-1&&i>0?'final':'followup'), prompt:prompt}).then(function(r){
       Q.busy='';
       if(r&&r.body&&r.source==='ai'){ Q.fus[i].body=tokensToHtml(r.body); Q.fus[i].versions=[]; }
       say('fu'+i, r&&r.source==='ai'?'':((r&&r.note)||'The AI could not write it just now.')+' Nothing was changed.');
@@ -394,7 +471,7 @@
     Q.busy='vary'+slot; say('vary'+slot,''); repaint();
     var got=0, note='';
     function one(){
-      return apiPost('/my-setup/sequence/draft',{mode:'variant', purpose:first?'first':'followup', subject:subject||'(follow-up)', body:body}).then(function(r){
+      return apiPost(draftUrl(),{mode:'variant', purpose:first?'first':'followup', subject:subject||'(follow-up)', body:body}).then(function(r){
         if(r&&r.source==='ai'&&r.body){ list.push({subject:first?(r.subject||subject):'', body:r.body}); got++; }
         else note=(r&&r.note)||'The AI could not write a version just now.';
       });
@@ -414,7 +491,40 @@
     Promise.all([backup, apiPost('/my-setup/sequence/ai-test',{teach:b.teach}).then(function(r){ Q.aitest=r; })
       .catch(function(e){ Q.aitest={error:(e&&e.message)||String(e)}; })]).then(function(){ Q.busy=''; repaint(); });
   }
+  // A named sequence is saved as a workflow definition: day N of a follow-up becomes "N − previous day" after the step before.
+  function namedSteps(b){
+    var t=Q.target, cand=t.cand, ch=cand?'candidate_email':'email';
+    var clean=function(o){ Object.keys(o).forEach(function(k){ if(o[k]===undefined) delete o[k]; }); return o; };
+    var steps=[{ name:'First email', channel:ch, delay_days:0, config:clean({ builder:'v2', subject:b.first.subject, body:b.first.body,
+      versions:cand?undefined:b.first.versions, template_key:cand?undefined:'initial', ai:(cand&&Q.mode==='ai')?true:undefined }) }];
+    var prev=0;
+    b.followups.forEach(function(f,i){
+      steps.push({ name:'Follow-up '+(i+1), channel:ch, delay_days:Math.max(1,f.day-prev), config:clean({ builder:'v2',
+        subject:String(f.subject||'').trim()||('Re: '+b.first.subject), body:f.body, versions:cand?undefined:f.versions,
+        template_key:cand?undefined:'fu'+Math.min(5,i+1), thread:cand?undefined:true }) });
+      prev=f.day;
+    });
+    return steps;
+  }
+  function saveNamed(){
+    var t=Q.target, b=payload();
+    if(!String(t.name||'').trim()){ Q.step=1; say('name','Give the sequence a name first.'); return paint(true); }
+    Q.saving=true; say('save',''); repaint();
+    var body={ name:String(t.name).trim(), steps:namedSteps(b) };
+    var req=t.id?apiPut('/wf/definitions/'+t.id, body)
+      :apiPost('/wf/definitions', Object.assign(body,{ description:'', domain:t.cand?'recruiting':'sales', entity_type:t.entity }));
+    req.then(function(res){
+      var id=t.id||(res&&res.id);
+      return (t.id?Promise.resolve():apiPost('/wf/definitions/'+id+'/status',{status:'active'})).then(function(){
+        t.id=id;
+        var ea=t.enrollAfter;
+        if(ea&&ea.items&&ea.items.length&&typeof wfEnrollSelectionInto==='function'){ wfEnrollSelectionInto(id, ea.entity_type||t.entity, ea.items); Q.savedStarted=ea.items.length; t.enrollAfter=null; }
+        Q.saving=false; Q.saved=true; STATE.wf=undefined; repaint();
+      });
+    }).catch(function(e){ Q.saving=false; say('save',(e&&e.message)||String(e)); repaint(); });
+  }
   function save(){
+    if(named()) return saveNamed();
     Q.saving=true; say('save',''); repaint();
     apiPut('/my-setup/sequence', payload()).then(function(){
       Q.saving=false; Q.saved=true;
@@ -447,17 +557,20 @@
     if(a==='addfu'){ saveEditors(); var last=Q.fus.length?Number(Q.fus[Q.fus.length-1].day):0; var d=DEFAULT_DAYS[Q.fus.length]||last+7; if(d<=last) d=last+4; Q.fus.push({day:d,subject:'',body:'',versions:[]}); teachFu(Q.fus.length-1); paint(true); return; }
     if(a==='rmfu'){ saveEditors(); Q.fus.splice(i,1); Q.teach.fus.splice(i,1); for(var j=1;j<Q.fus.length;j++) if(Number(Q.fus[j].day)<=Number(Q.fus[j-1].day)) Q.fus[j].day=Number(Q.fus[j-1].day)+1; paint(true); return; }
     if(a==='next'){ saveEditors(); var p=payload();
-      if(Q.mode==='ai'&&Q.teach.purpose.trim().length<5){ say('teach','Say in one line what the email is for, so the AI knows what to write.'); return repaint(); }
+      if(named()&&!String(Q.target.name||'').trim()){ say('name','Give the sequence a name.'); return repaint(); }
+      if(Q.mode==='ai'&&!named()&&Q.teach.purpose.trim().length<5){ say('teach','Say in one line what the email is for, so the AI knows what to write.'); return repaint(); }
       if(!p.first.subject||p.first.body.length<20){ say('first',Q.mode==='ai'?'Write your backup email first: a subject and a few lines.':'Write your first email first: a subject and a few lines.'); return repaint(); }
       var empty=p.followups.findIndex(function(f){ return f.body.length<5; }); if(empty>=0){ say('fu'+empty,'This follow-up has no text yet. Write it, or remove it.'); return repaint(); }
       Q.step=2; Q.preview=null; paint(true); var pb=document.querySelector('.pg-body'); if(pb) pb.scrollTop=0; return; }
     if(a==='back'){ Q.step=1; Q.saved=false; paint(true); return; }
+    if(a==='cancel'){ var back=named()?Q.target.back:'mysetup'; if(back==='seqsetup') back='email'; goPage(back); return; }
     if(a==='test'){ if(!Q.busy) test(); return; }
     if(a==='save'){ if(!Q.saving) save(); return; }
   });
   document.addEventListener('input',function(ev){
     var t=ev.target; if(!t.closest||!t.closest('#sq-root')) return;
     if(t.id==='sq-offer'){ Q.offer=t.value; return; }
+    if(t.id==='sq-name'&&Q.target){ Q.target.name=t.value; if(Q.msg.name){ Q.msg.name=''; } return; }
     if(t.id==='sq-purpose'){ Q.teach.purpose=t.value; Q.aitest=null; if(Q.msg.teach){ Q.msg.teach=''; var mt=t.parentNode.querySelector('.sq-hint[aria-live]'); if(mt) mt.remove(); } return; }
     if(t.id==='sq-voice'){ Q.teach.voice=t.value; Q.aitest=null; return; }
     var fn=t.getAttribute('data-fnote'); if(fn!=null){ teachFu(Number(fn)).note=t.value; Q.aitest=null; return; }
